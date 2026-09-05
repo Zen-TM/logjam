@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { fetchAuthSession } from "aws-amplify/auth";
 import type { StandaloneFile, ThemeSchemeId, TripLogCustomFieldDef, NotificationPreferences, MediaItem, MediaLinkedType, CanyonMergePolicy, ElevationProfile, SharableEntityType, FileSendStatus, FileSendSourceKind } from "@logjam/shared";
 import { formatTripCanyonNames } from "@logjam/shared";
+import type { BulkShareItem, FriendShareRow, FriendShares } from "@logjam/shared";
 import { ApiError } from "./errors/ApiError";
 import { messageFromError } from "./errors/messageFromError";
 
@@ -1434,30 +1435,33 @@ export function declineFileSend(fileSendId: string): Promise<void> {
 // list helper also serves /canyons/shared, where recipient rows would expose the
 // owner's other recipients to a sharee.
 
-export type TFriendShareRow = {
-  canyonId: string;
-  name: string;
-  sharedAt: string;
-};
-
-export type TFriendShares = {
-  // Canyons I own that this friend can see.
-  sharedWithThem: TFriendShareRow[];
-  // Canyons this friend owns that I can see. Read-only in bulk — see
-  // FriendSharingSection.
-  sharedWithYou: TFriendShareRow[];
-};
+// The row shape is `FriendShareRow` in shared/src/sharing.ts — (entityType,
+// entityId, name, sharedAt), the same pair a bulk share speaks, because the
+// payload covers every shareable kind and not just canyons. THIS panel still
+// renders canyons only (it filters on `entityType`), so waypoint/route/topo/
+// GeoPDF shares are visible on Logjam GPS and not here yet.
+export type TFriendShareRow = FriendShareRow;
+export type TFriendShares = FriendShares;
 
 export function getFriendShares(friendshipId: string): Promise<TFriendShares> {
   return apiFetch<TFriendShares>(`/friends/${friendshipId}/shares`);
 }
 
-/** Revoke every canyon I own that is shared with this friend. Friendship survives. */
+/**
+ * Revoke what I own that is shared with this friend. Friendship survives.
+ *
+ * `items` NAMES what to revoke, and this panel always passes the canyon rows it
+ * is showing: the endpoint's no-body form means "everything, both tables", and
+ * a panel whose confirm counts canyons must not silently revoke the item shares
+ * it never listed.
+ */
 export function unshareAllWithFriend(
   friendshipId: string,
+  items: BulkShareItem[],
 ): Promise<{ revokedCount: number }> {
   return apiFetch<{ revokedCount: number }>(`/friends/${friendshipId}/shares`, {
     method: "DELETE",
+    body: { items: items.map(({ entityType, entityId }) => ({ entityType, entityId })) },
   });
 }
 

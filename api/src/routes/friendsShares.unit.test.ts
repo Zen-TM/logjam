@@ -12,6 +12,7 @@ import {
   ownedSharesToFriendWhere,
   receivedSharesFromFriendWhere,
   resolveFriendCounterpart,
+  selectRequested,
 } from "./friends";
 
 const findUnique = (
@@ -148,5 +149,52 @@ describe("resolveFriendCounterpart — the friendship membership check", () => {
     await expect(
       resolveFriendCounterpart(FRIENDSHIP_ID, ME),
     ).rejects.toMatchObject({ statusCode: 400 });
+  });
+});
+
+// The subset arm of the bulk revoke (a phone multi-select picks 3 of 11). The
+// dangerous shapes are the two ends: a request that names nothing must not be
+// read as naming everything, and a request that names something the caller does
+// not own must not widen the set it was intersected with.
+describe("selectRequested — what a bulk revoke body may narrow", () => {
+  const MINE = [
+    { entityType: "canyon", entityId: "c1" },
+    { entityType: "canyon", entityId: "c2" },
+    { entityType: "waypoint", entityId: "w1" },
+  ];
+
+  it("leaves the set whole when the request named no items", () => {
+    expect(selectRequested(MINE, null)).toEqual(MINE);
+  });
+
+  // The bug this pins: reading `[]` as "all" would turn a client that computed
+  // an empty selection into an unshare-everything.
+  it("revokes NOTHING for an explicitly empty item list", () => {
+    expect(selectRequested(MINE, [])).toEqual([]);
+  });
+
+  it("narrows to the named items", () => {
+    expect(
+      selectRequested(MINE, [
+        { entityType: "canyon", entityId: "c2" },
+        { entityType: "waypoint", entityId: "w1" },
+      ]),
+    ).toEqual([MINE[1], MINE[2]]);
+  });
+
+  // The body is a filter, never a source: an id the caller does not own is not
+  // in the set being narrowed, so it cannot be added by asking for it.
+  it("cannot introduce a row that was not in the caller's own set", () => {
+    expect(
+      selectRequested(MINE, [{ entityType: "canyon", entityId: "someone-elses" }]),
+    ).toEqual([]);
+  });
+
+  // Type and id are one key: the same uuid as a waypoint and as a canyon are
+  // different rows in different tables.
+  it("matches on entityType AND entityId, not the id alone", () => {
+    expect(
+      selectRequested(MINE, [{ entityType: "route", entityId: "c1" }]),
+    ).toEqual([]);
   });
 });

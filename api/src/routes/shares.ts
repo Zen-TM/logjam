@@ -20,56 +20,17 @@ import { resolveUser } from "../lib/resolveUser";
 import { normalizeUserUiPreferences } from "@logjam/shared";
 import { sendPushToUser } from "../services/push";
 import {
-  hasCanyonInheritedAccess,
   loadEntityRole,
   parseSharableEntityType,
   requireEntityOwner,
 } from "../lib/shareAccess";
 import {
-  directShareRevokeTombstones,
-  writeTombstones,
-} from "../lib/syncTombstones";
+  revokeDirectShares,
+  touchSharedForDelta,
+} from "../lib/revokeDirectShares";
 import type { SharableEntityType } from "@logjam/shared";
 
 const router = Router();
-
-/**
- * Waypoints and routes ride delta sync, so revoking one needs a tombstone or
- * the recipient's mirror keeps it forever. Topo and GeoPDF jobs are fetched
- * through their own list endpoints and reconcile on the next fetch.
- */
-function syncedEntityType(
-  entityType: SharableEntityType,
-): "waypoint" | "route" | null {
-  return entityType === "waypoint" || entityType === "route" ? entityType : null;
-}
-
-/**
- * Bump the shared row's `updatedAt` so a GRANT actually reaches the recipient.
- *
- * The delta's shared-row visibility is a WHERE-restriction layered on
- * `updatedAt > since`, so granting visibility moves no watermark and the row is
- * simply absent from the recipient's next page — until the owner happens to
- * edit it. routes/sharing.ts hit this exact trap on canyons; the fix is the
- * same. Jobs are excluded because they are not delta-synced at all.
- */
-async function touchForDelta(
-  tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
-  entityType: SharableEntityType,
-  entityId: string,
-): Promise<void> {
-  if (entityType === "waypoint") {
-    await tx.waypoint.update({
-      where: { id: entityId },
-      data: { updatedAt: new Date() },
-    });
-  } else if (entityType === "route") {
-    await tx.route.update({
-      where: { id: entityId },
-      data: { updatedAt: new Date() },
-    });
-  }
-}
 
 // ── POST /shares ──────────────────────────────────────────────
 // Share one item with one friend. Body: { entityType, entityId, sharedWithUserId }
@@ -144,7 +105,7 @@ router.post("/", requireAuth, async (req: AuthenticatedRequest, res: Response) =
         sharedWithId: sharedWithUserId,
       },
     });
-    await touchForDelta(tx, entityType, entityId);
+    await touchSharedForDelta(tx, entityType, [entityId]);
     if (notifyRecipient) {
       // Reference IDs ONLY — never a waypoint/route name or any coordinate in
       // a notification payload (PRIV-005). Display strings are resolved from
@@ -208,48 +169,13 @@ router.delete(
     });
     if (!share) throw new AppError(404, "Share not found");
 
-    const synced = syncedEntityType(entityType);
-    // A direct revoke must not tombstone a recipient who still sees the entity
-    // through a shared canyon: a waypoint/route can be visible for two reasons,
-    // and revoking the direct arm leaves the canyon arm standing. Only a
-    // recipient left with NO path gets a tombstone. Read before the transaction
-    // — the revoke deletes no canyon row, so this visibility is stable across it.
-    const stillVisible =
-      synced !== null &&
-      (await hasCanyonInheritedAccess(targetUserId, synced, entityId));
-
-    await prisma.$transaction(async (tx) => {
-      await tx.share.delete({ where: { id: share.id } });
-      // Purge the recipient's residual notification, as canyon revoke does —
-      // the read-time filter would already hide it, but revocation should
-      // remove the row rather than leave it at rest (PRIV-001).
-      await tx.notification.deleteMany({
-        where: {
-          userId: targetUserId,
-          type: "item_shared",
-          payload: { path: ["entityId"], equals: entityId },
-        },
-      });
-      if (synced) {
-        // Bump the row's updatedAt so the owner's OTHER devices re-pull it and
-        // refresh their now-stale sharedCount, and so a still-visible recipient
-        // re-delivers it through the canyon arm (grant does the same).
-        await touchForDelta(tx, entityType, entityId);
-        if (!stillVisible) {
-          // Visibility revoked with no delete anywhere: without this the
-          // recipient's mirror keeps the row forever. Same transaction as the
-          // revoke it records (sync tombstone rule).
-          await writeTombstones(
-            tx,
-            directShareRevokeTombstones({
-              entityType: synced,
-              entityId,
-              userIds: [targetUserId],
-            }),
-          );
-        }
-      }
-    });
+    // Everything the revoke has to do — the row, the recipient's residual
+    // notification, the delta bump and the conditional tombstone — is
+    // lib/revokeDirectShares.ts, shared with the per-friend bulk revoke
+    // (DELETE /friends/:id/shares). One row here, a list there.
+    await revokeDirectShares([
+      { entityType, entityId, sharedWithId: targetUserId },
+    ]);
 
     res.status(204).send();
   },

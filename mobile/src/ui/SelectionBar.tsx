@@ -1,5 +1,5 @@
 // The contextual bar a multi-select swaps into the rail's SegmentedControl slot.
-// Cancel / count / select-all / delete, fixed to SEGMENTED_CONTROL_HEIGHT so the
+// Cancel / count / select-all / destroy, fixed to SEGMENTED_CONTROL_HEIGHT so the
 // rail's height cannot differ between the two states and the list below does not
 // jump (the bug the Saved screen fixed in 2026-08-24 — see its selectionBar note).
 import { StyleSheet, Text, View } from "react-native";
@@ -15,6 +15,8 @@ export function SelectionBar({
   onClear,
   onSelectAll,
   onDelete,
+  deleteIcon = "trash-2",
+  deleteLabel = "Delete the selected items",
 }: {
   /** The words between the close and the buttons — "3 canyons selected". */
   countLabel: string;
@@ -36,7 +38,19 @@ export function SelectionBar({
   extra?: React.ReactNode;
   onClear: () => void;
   onSelectAll: () => void;
+  /**
+   * The bar's ONE destructive slot. Delete on every list of things the user
+   * owns — hence the defaults — but the slot is the shape of the action, not
+   * the word: the per-friend sharing screen puts "unshare these" and "remove my
+   * access" here, which are destructive in the same way (irreversible from this
+   * screen) and destructive of something else entirely (a grant, not a record).
+   * Naming it delete there would have promised to destroy the canyon.
+   */
   onDelete: () => void;
+  /** Glyph for that slot. Feather; `trash-2` unless the verb is not deletion. */
+  deleteIcon?: React.ComponentProps<typeof IconButton>["icon"];
+  /** Screen-reader label for it — REQUIRED to change with the icon. */
+  deleteLabel?: string;
 }) {
   return (
     <View style={styles.bar}>
@@ -53,8 +67,8 @@ export function SelectionBar({
       ) : null}
       {extra}
       <IconButton
-        icon="trash-2"
-        accessibilityLabel="Delete the selected items"
+        icon={deleteIcon}
+        accessibilityLabel={deleteLabel}
         color={theme.warning}
         filled
         onPress={onDelete}

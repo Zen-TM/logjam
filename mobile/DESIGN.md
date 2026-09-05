@@ -987,12 +987,24 @@ which subsystem is talking.
   Dimming is paired with `pointerEvents="none"` in both cases — a control that
   looks unavailable but still answers a tap is the same lie in a new place.
 
-  The bar reads `× | N selected · size | select-all · delete`, and it carries
+  The bar reads `× | N selected · size | select-all · destroy`, and it carries
   only verbs that are BETTER in
   bulk than one at a time. "Show on map" was in the first cut and came out:
   flying to the union of five extents is not what any of the five meant, and
   the single-item verb already does the thing the user wanted. Reference:
   `saved/SavedScreen.tsx`.
+  - **The last slot is the screen's ONE irreversible verb, and its glyph and
+    label follow that verb — it is not always delete.** On every list of things
+    the user owns it is delete, which is why `trash-2` and "Delete the selected
+    items" are the defaults (`deleteIcon` / `deleteLabel` on `ui/SelectionBar`).
+    The per-friend sharing screen (`sharing/FriendSharesScreen.tsx`) puts
+    "unshare these from bob" (`user-minus`) and "remove my access"
+    (`eye-off`) there instead: same shape — one destructive verb, confirmed,
+    with nothing else in the slot — acting on a GRANT rather than on a record.
+    A trash can there would have promised to destroy the canyon, which is the
+    one thing that screen must never appear to do; it offers no delete at all,
+    in the bar or in a row's sheet, because deleting reaches every other friend
+    the row is shared with and the screen is scoped to one person.
   - **The checkbox is `ui/SelectionMark`, and it takes the ⋯ button's box.**
     Three screens had hand-rolled the same 40pt box around the same 22pt
     `circle`/`check-circle`, and the fourth (Account sync issues) shipped

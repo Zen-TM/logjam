@@ -157,6 +157,98 @@ export type BulkShareResult = {
   ineligible: number;
 };
 
+// ── The per-friend sharing audit ─────────────────────────────────────────────
+//
+// "What does Bob see, and how do I take it back?" — the question sharing is
+// never authored from, because a share is granted per item from that item's own
+// sheet. GET /friends/:id/shares answers it from the PERSON's side, in both
+// directions, and DELETE /friends/:id/shares is the bulk revoke of the forward
+// one.
+//
+// A ROW IS NOT A CANYON. The payload used to be canyon-only (`canyonId`), which
+// made the surface understate itself the moment direct item sharing shipped:
+// waypoints, routes, LiDAR topos and GeoPDFs live in the `Share` table, and a
+// friend holding six of them saw an audit screen that said "nothing shared".
+// The row therefore carries the same (entityType, entityId) pair the bulk share
+// speaks, so the two halves of the feature cannot disagree about what a
+// shareable thing is.
+//
+// WHAT IT STILL DOES NOT SAY: a shared canyon carries its canyon-level notes,
+// its canyon-level media and its linked route with it, and a waypoint linked to
+// it inherits visibility with no `Share` row of its own. Those are not rows
+// here and cannot be revoked individually — unsharing the CANYON is what takes
+// them back. Every surface listing these rows has to say so, or the user
+// unshares three waypoints and believes the friend is blind.
+
+/**
+ * One thing one friend can see, in either direction.
+ *
+ * `name` is nullable because a job may be untitled (a LiDAR topo with no name,
+ * a GeoPDF whose config carried no title) — `shareRowTitle` is the one place
+ * that decides what an untitled row is called.
+ */
+export type FriendShareRow = {
+  entityType: BulkShareItemType;
+  entityId: string;
+  name: string | null;
+  sharedAt: string;
+  /**
+   * RECEIVED ROWS ONLY: this row is ALSO visible through a canyon its owner
+   * shared, so dropping its direct share would change nothing — the canyon arm
+   * survives and the next delta pull brings the row straight back.
+   *
+   * The SERVER answers this, because only the server can. A client deriving it
+   * from its own mirror is right only once the mirror has pulled the linked
+   * row: on a phone that had not yet synced, the same waypoint offered a Remove
+   * that would silently undo itself (seen on device, 2026-09-05).
+   */
+  alsoViaCanyon?: true;
+};
+
+export type FriendShares = {
+  /** Things I own that this friend can see. Mine to revoke, in bulk or one at a time. */
+  sharedWithThem: FriendShareRow[];
+  /** Things this friend owns that I can see. Theirs to withdraw; mine to drop. */
+  sharedWithYou: FriendShareRow[];
+};
+
+/**
+ * The kind, lower-case, as it reads mid-sentence — "canyon", "topo", "GeoPDF".
+ *
+ * Feeds `removeShareConfirm`'s `kindLabel` and the row subtitles on both
+ * clients, so a kind cannot be worded two ways on two screens. A
+ * `Record<BulkShareItemType, …>` on purpose: a sixth shareable kind cannot be
+ * added without naming it here.
+ */
+export const SHARE_KIND_LABEL: Record<BulkShareItemType, string> = {
+  canyon: "canyon",
+  waypoint: "waypoint",
+  route: "route",
+  topoJob: "topo",
+  geoPdfJob: "GeoPDF",
+};
+
+/** What an audit row is called, untitled jobs included. */
+export function shareRowTitle(row: FriendShareRow): string {
+  return row.name ?? `Untitled ${SHARE_KIND_LABEL[row.entityType]}`;
+}
+
+/**
+ * Whether a row someone else shared with me can be COPIED into my own account.
+ *
+ * Canyons only, because `POST /canyons/:id/copy` is the only copy the API has.
+ *
+ * TODO: waypoints and routes deserve the same verb — a shared waypoint you want
+ * to keep can currently only be removed, never kept. That needs
+ * `POST /waypoints/:id/copy` and `POST /routes/:id/copy` (read via
+ * shareAccess, create as the caller) plus the local mirror insert, so it is a
+ * feature of its own rather than a widening of this predicate. Jobs stay
+ * uncopyable regardless: they are S3 artefacts with a quota charge, not rows.
+ */
+export function isCopyableSharedRow(row: FriendShareRow): boolean {
+  return row.entityType === "canyon";
+}
+
 // ── Getting rid of something shared WITH you ─────────────────────────────────
 //
 // The recipient's half of both share tables. `DELETE /canyons/:id/share/me` and

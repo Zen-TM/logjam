@@ -31,6 +31,7 @@ import {
 } from "@logjam/shared";
 import { getEnv } from "../lib/env";
 import { getParam } from "../lib/getParam";
+import { geoPdfTitle } from "../lib/geoPdfTitle";
 import { launchFargateTask } from "../lib/ecsRunTask";
 import { assertHasStorageQuota } from "../lib/storageQuota";
 import { assertHasEgressQuota } from "../lib/egressQuota";
@@ -66,18 +67,6 @@ const PRESIGN_TTL_SECONDS = 86400; // 24h
 // Server-side cap on the GeoPDF list. X-Total-Count carries the true total so
 // the client can show a truncation caption when this cap bites (UX-002).
 const GEO_PDF_LIST_CAP = 50;
-
-// The map title from a job's config (config.elements.title), trimmed, or null.
-function geoPdfTitle(config: unknown): string | null {
-  if (config && typeof config === "object" && "elements" in config) {
-    const elements = (config as { elements?: unknown }).elements;
-    if (elements && typeof elements === "object" && "title" in elements) {
-      const title = (elements as { title?: unknown }).title;
-      if (typeof title === "string" && title.trim().length > 0) return title.trim();
-    }
-  }
-  return null;
-}
 
 // Derive a human download filename from the job's title, falling back to a
 // date-stamped name. The stored S3 key stays the generic logjam-export.pdf

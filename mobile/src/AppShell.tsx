@@ -49,6 +49,7 @@ import { readAreaPickerStart, setPickedArea } from "./map/pickedArea";
 import { setPickedPoint } from "./map/pickedPoint";
 import { ConsentGate } from "./screens/ConsentGate";
 import { FriendsScreen } from "./screens/FriendsScreen";
+import { FriendSharesScreen } from "./sharing/FriendSharesScreen";
 import { MoreScreen } from "./screens/MoreScreen";
 import { NotificationsScreen } from "./screens/NotificationsScreen";
 import { SettingsScreen, type SettingsPage } from "./screens/SettingsScreen";
@@ -199,6 +200,10 @@ type MoreStackParams = {
   MoreTripDetail: { trip: MirrorTrip };
   Account: undefined;
   Friends: undefined;
+  // The per-friend sharing audit, pushed from a friend's overflow sheet. Params
+  // rather than a fetch: the friendship id and the username are all the screen
+  // needs, and both are already in the row that opened it.
+  FriendShares: { friendshipId: string; username: string };
   SyncIssues: undefined;
   Settings: undefined;
   // Settings sub-pages. One route each rather than one parameterised route: a
@@ -1052,7 +1057,26 @@ export function AppShell({
                 )}
               </MoreStack.Screen>
               <MoreStack.Screen name="Friends" options={{ headerShown: false }}>
-                {({ navigation }) => <FriendsScreen onBack={() => navigation.goBack()} />}
+                {({ navigation }) => (
+                  <FriendsScreen
+                    onBack={() => navigation.goBack()}
+                    onOpenShares={(friend) => navigation.navigate("FriendShares", friend)}
+                  />
+                )}
+              </MoreStack.Screen>
+              <MoreStack.Screen name="FriendShares" options={{ headerShown: false }}>
+                {({ navigation, route }) => (
+                  <FriendSharesScreen
+                    friendshipId={route.params.friendshipId}
+                    username={route.params.username}
+                    onBack={() => navigation.goBack()}
+                    // Inside the More stack, like the inbox's own canyon route,
+                    // so Back returns to the sharing list.
+                    onOpenCanyon={(canyonId) =>
+                      navigation.navigate("MoreCanyonDetail", { canyonId })
+                    }
+                  />
+                )}
               </MoreStack.Screen>
               <MoreStack.Screen name="SyncIssues" options={{ headerShown: false }}>
                 {({ navigation }) => (

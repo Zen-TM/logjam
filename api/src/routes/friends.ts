@@ -5,7 +5,13 @@ import { canyonIdOfMedia } from "../lib/mediaLink";
 import { AppError } from "../middleware/errorHandler";
 import { friendsSearchLimiter } from "../middleware/rateLimit";
 import { getParam } from "../lib/getParam";
-import { normalizeUserUiPreferences } from "@logjam/shared";
+import {
+  normalizeUserUiPreferences,
+  isSharableEntityType,
+  type BulkShareItem,
+  type FriendShareRow,
+  type SharableEntityType,
+} from "@logjam/shared";
 import { resolveUser } from "../lib/resolveUser";
 import { sendPushToUser } from "../services/push";
 import { logger } from "../lib/logger";
@@ -18,7 +24,18 @@ import {
   snapshotWaypointVisibility,
   writeWaypointVisibilityLoss,
 } from "../lib/waypointLink";
-import { revokeAllSharesBetween } from "../lib/shareAccess";
+import {
+  filterOwnedEntityIds,
+  hasCanyonInheritedAccess,
+  revokeAllSharesBetween,
+} from "../lib/shareAccess";
+import { parseBulkShareItems } from "../lib/bulkShare";
+import { geoPdfTitle } from "../lib/geoPdfTitle";
+import {
+  revokeDirectShares,
+  syncedEntityType,
+  type DirectShareRevocation,
+} from "../lib/revokeDirectShares";
 
 async function wantsInAppNotification(
   userId: string,
@@ -458,6 +475,199 @@ export function receivedSharesFromFriendWhere(userId: string, friendId: string) 
   return { sharedWithId: userId, canyon: { ownerId: friendId } };
 }
 
+/** A `Share` row bound for the audit list, before its name is looked up. */
+type DirectShareRef = {
+  entityType: SharableEntityType;
+  entityId: string;
+  sharedAt: Date;
+};
+
+/**
+ * Direct `Share` rows (waypoint / route / LiDAR topo / GeoPDF) that one person
+ * can see and ANOTHER person owns — the non-canyon half of both directions.
+ *
+ * WHY IT IS NOT ONE WHERE CLAUSE, unlike the canyon pair above: `Share` is
+ * polymorphic with no foreign key (see `directlySharedIds` in
+ * lib/shareAccess.ts), so `canyon: { ownerId }` has no equivalent — Prisma
+ * cannot join through `entityId`. Filtering on the row's own `sharedById` would
+ * be one query, and is exactly what the canyon helpers refuse to do: it trusts
+ * a denormalised value instead of deriving from ownership. So the ownership arm
+ * is a second pass through `filterOwnedEntityIds`, the batch owner check the
+ * bulk share already runs — four extra queries at most, whatever the list
+ * length, and a row the `ownerId` does not own cannot enter the result or be
+ * revoked by the bulk delete that reuses this.
+ *
+ * ponytail: reads the recipient's whole received-share set before narrowing by
+ * owner. Fine at personal-account scale (tens of rows, the same assumption
+ * `directlySharedIds` documents); if that stops holding, the upgrade path is a
+ * `sharedById` index used as a PREFILTER with the ownership check kept as the
+ * decision.
+ */
+async function directSharesBetween(args: {
+  ownerId: string;
+  sharedWithId: string;
+}): Promise<DirectShareRef[]> {
+  const rows = await prisma.share.findMany({
+    where: { sharedWithId: args.sharedWithId },
+    select: { entityType: true, entityId: true, createdAt: true },
+  });
+
+  const idsByType = new Map<SharableEntityType, string[]>();
+  const refs: DirectShareRef[] = [];
+  for (const row of rows) {
+    if (!isSharableEntityType(row.entityType)) {
+      // Unwritable through any route (POST /shares and /bulk-share both parse
+      // the vocabulary first), so this is a corrupt row rather than a case.
+      // Skipped rather than thrown: one bad row must not 500 an audit screen
+      // whose whole job is to show the user what is shared.
+      logger.warn(
+        { entityType: row.entityType },
+        "share_row_unknown_entity_type",
+      );
+      continue;
+    }
+    const entityType = row.entityType;
+    refs.push({ entityType, entityId: row.entityId, sharedAt: row.createdAt });
+    idsByType.set(entityType, [
+      ...(idsByType.get(entityType) ?? []),
+      row.entityId,
+    ]);
+  }
+
+  const ownedByType = new Map<SharableEntityType, Set<string>>();
+  await Promise.all(
+    [...idsByType].map(async ([entityType, ids]) => {
+      ownedByType.set(
+        entityType,
+        await filterOwnedEntityIds(args.ownerId, entityType, ids),
+      );
+    }),
+  );
+
+  return refs.filter((ref) =>
+    ownedByType.get(ref.entityType)?.has(ref.entityId) ?? false,
+  );
+}
+
+/**
+ * Put a name on each direct-share row. One query per type present, and only
+ * over the ids that survived the ownership filter.
+ *
+ * A name can come back null — a LiDAR topo saved without one, a GeoPDF whose
+ * config carried no title. `shareRowTitle` (shared/src/sharing.ts) is what
+ * turns that into words, on both clients, rather than each surface inventing
+ * its own "Untitled".
+ */
+async function nameDirectShares(
+  refs: DirectShareRef[],
+  /**
+   * The user these rows are shared WITH, when that user is the caller — i.e.
+   * the received direction. Given, each waypoint/route row is checked for a
+   * surviving canyon arm and marked `alsoViaCanyon`, because a Remove on such a
+   * row would appear to work and be undone by the next delta pull. Omitted for
+   * the forward direction, where the question is meaningless: they are the
+   * caller's own rows.
+   */
+  inheritedForUserId?: string,
+): Promise<FriendShareRow[]> {
+  const idsByType = new Map<SharableEntityType, string[]>();
+  for (const ref of refs) {
+    idsByType.set(ref.entityType, [
+      ...(idsByType.get(ref.entityType) ?? []),
+      ref.entityId,
+    ]);
+  }
+
+  const nameById = new Map<string, string | null>();
+  const key = (entityType: SharableEntityType, entityId: string) =>
+    `${entityType}:${entityId}`;
+
+  await Promise.all(
+    [...idsByType].map(async ([entityType, ids]) => {
+      if (entityType === "geoPdfJob") {
+        // No `name` column at all — the label is buried in the render config.
+        const jobs = await prisma.geoPdfJob.findMany({
+          where: { id: { in: ids } },
+          select: { id: true, config: true },
+        });
+        for (const job of jobs) {
+          nameById.set(key(entityType, job.id), geoPdfTitle(job.config));
+        }
+        return;
+      }
+      const rows =
+        entityType === "waypoint"
+          ? await prisma.waypoint.findMany({
+              where: { id: { in: ids } },
+              select: { id: true, name: true },
+            })
+          : entityType === "route"
+            ? await prisma.route.findMany({
+                where: { id: { in: ids } },
+                select: { id: true, name: true },
+              })
+            : await prisma.topoJob.findMany({
+                where: { id: { in: ids } },
+                select: { id: true, name: true },
+              });
+      for (const row of rows) {
+        nameById.set(key(entityType, row.id), row.name ?? null);
+      }
+    }),
+  );
+
+  // Only the two delta-synced kinds can have a canyon arm at all (a job has no
+  // canyon link), so this is at most one query per waypoint/route in a list
+  // that is tens of rows long.
+  const alsoViaCanyon = new Set<string>();
+  if (inheritedForUserId !== undefined) {
+    await Promise.all(
+      refs.map(async (ref) => {
+        const synced = syncedEntityType(ref.entityType);
+        if (synced === null) return;
+        if (await hasCanyonInheritedAccess(inheritedForUserId, synced, ref.entityId)) {
+          alsoViaCanyon.add(key(ref.entityType, ref.entityId));
+        }
+      }),
+    );
+  }
+
+  return refs.map((ref) => ({
+    entityType: ref.entityType,
+    entityId: ref.entityId,
+    name: nameById.get(key(ref.entityType, ref.entityId)) ?? null,
+    sharedAt: ref.sharedAt.toISOString(),
+    ...(alsoViaCanyon.has(key(ref.entityType, ref.entityId))
+      ? { alsoViaCanyon: true as const }
+      : {}),
+  }));
+}
+
+/** Newest grant first, whatever kind it is — the order both clients render. */
+function byNewestShare(rows: FriendShareRow[]): FriendShareRow[] {
+  return [...rows].sort((a, b) => b.sharedAt.localeCompare(a.sharedAt));
+}
+
+/**
+ * Narrow a set of audit rows to the ones a request named, or leave it whole
+ * when it named none.
+ *
+ * "No items" means ALL — the bulk revoke's original contract, which Logjam
+ * Web's "Unshare all" still uses. An EMPTY array is not the same thing and
+ * revokes nothing: a client that computed a list and came up with none must
+ * not be read as having asked for everything.
+ */
+export function selectRequested<T extends { entityType: string; entityId: string }>(
+  rows: T[],
+  requested: BulkShareItem[] | null,
+): T[] {
+  if (requested === null) return rows;
+  const wanted = new Set(
+    requested.map((item) => `${item.entityType}:${item.entityId}`),
+  );
+  return rows.filter((row) => wanted.has(`${row.entityType}:${row.entityId}`));
+}
+
 // Resolve a friendship the caller is a member of, and return the other party's
 // id. 403 (not 404) for a non-member mirrors DELETE /friends/:id and
 // /:id/accept — the anti-oracle 404 rule is scoped to canyon ids, and no canyon
@@ -481,7 +691,8 @@ export async function resolveFriendCounterpart(
 }
 
 // ── GET /friends/:id/shares ───────────────────────────────────
-// Both directions of the sharing relationship with one friend, in one trip.
+// Both directions of the sharing relationship with one friend, in one trip,
+// across BOTH share tables.
 router.get(
   "/:id/shares",
   requireAuth,
@@ -492,46 +703,77 @@ router.get(
       user.id,
     );
 
-    // Minimal projection: no coords, no notes — an audit list needs a label.
+    // Minimal projection: a label and a date. No coords, no notes — an audit
+    // list needs to name the thing, not carry it.
     const select = {
       id: true,
       canyon: { select: { id: true, name: true } },
       createdAt: true,
     };
 
-    const [theirs, mine] = await Promise.all([
-      // Canyons I own that this friend can see.
-      prisma.canyonShare.findMany({
-        where: ownedSharesToFriendWhere(user.id, friendId),
-        select,
-        orderBy: { createdAt: "desc" },
-      }),
-      // Canyons this friend owns that I can see.
-      prisma.canyonShare.findMany({
-        where: receivedSharesFromFriendWhere(user.id, friendId),
-        select,
-        orderBy: { createdAt: "desc" },
-      }),
-    ]);
+    const [canyonsTheirs, canyonsMine, directTheirs, directMine] =
+      await Promise.all([
+        // Canyons I own that this friend can see.
+        prisma.canyonShare.findMany({
+          where: ownedSharesToFriendWhere(user.id, friendId),
+          select,
+          orderBy: { createdAt: "desc" },
+        }),
+        // Canyons this friend owns that I can see.
+        prisma.canyonShare.findMany({
+          where: receivedSharesFromFriendWhere(user.id, friendId),
+          select,
+          orderBy: { createdAt: "desc" },
+        }),
+        // The same two questions of the `Share` table.
+        directSharesBetween({ ownerId: user.id, sharedWithId: friendId }),
+        directSharesBetween({ ownerId: friendId, sharedWithId: user.id }),
+      ]);
 
-    const shape = (rows: typeof theirs) =>
-      rows.map((r) => ({
-        canyonId: r.canyon.id,
-        name: r.canyon.name,
-        sharedAt: r.createdAt,
+    const shapeCanyons = (rows: typeof canyonsTheirs): FriendShareRow[] =>
+      rows.map((row) => ({
+        entityType: "canyon" as const,
+        entityId: row.canyon.id,
+        name: row.canyon.name,
+        sharedAt: row.createdAt.toISOString(),
       }));
 
-    res.json({ sharedWithThem: shape(theirs), sharedWithYou: shape(mine) });
+    const [itemsTheirs, itemsMine] = await Promise.all([
+      nameDirectShares(directTheirs),
+      nameDirectShares(directMine, user.id),
+    ]);
+
+    res.json({
+      sharedWithThem: byNewestShare([
+        ...shapeCanyons(canyonsTheirs),
+        ...itemsTheirs,
+      ]),
+      sharedWithYou: byNewestShare([...shapeCanyons(canyonsMine), ...itemsMine]),
+    });
   },
 );
 
 // ── DELETE /friends/:id/shares ────────────────────────────────
-// "Unshare all" — revoke every canyon I OWN that is shared with this friend.
-// One direction only, by design: it never touches what the friend shares with
+// "Unshare all with this friend" — or unshare the ones named in the body.
+//
+// ONE DIRECTION ONLY, by design: it never touches what the friend shares with
 // me (that is their grant to withdraw, or mine to drop one row at a time via
-// DELETE /canyons/:id/share/me). The friendship itself survives — that is the
-// difference from DELETE /friends/:id, which revokes both directions and is
-// the existing bulk lever if you want the person gone entirely.
+// DELETE /canyons/:id/share/me and DELETE /shares/:type/:id/me). The friendship
+// itself survives — that is the difference from DELETE /friends/:id, which
+// revokes both directions and is the existing bulk lever if you want the person
+// gone entirely.
+//
+// Body: `{ items?: [{ entityType, entityId }] }`. Absent means everything I own
+// that this friend can see, across both tables — the original contract, still
+// what Logjam Web's "Unshare all" relies on. Present means those of my grants
+// and no others, which is what a phone multi-select needs: the subset it lets
+// the user pick is the subset it must revoke, and it must not become "all"
+// through a client bug (see `selectRequested`).
+//
+// Ids in the body authorize NOTHING. Both arms intersect the request with a set
+// derived from the caller's own ownership, so an id belonging to a stranger's
+// canyon is simply absent from that set — the response is a count, so it cannot
+// report back whether the id existed (SEC-001's anti-oracle rule).
 router.delete(
   "/:id/shares",
   requireAuth,
@@ -542,13 +784,30 @@ router.delete(
       user.id,
     );
 
-    // Collect before deleting so each revoked canyon's residual
-    // canyon_shared notification can be purged too (PRIV-001), exactly as
-    // DELETE /friends/:id does.
-    const revoked = await prisma.canyonShare.findMany({
+    const body = req.body ?? {};
+    // Reuses the bulk-share parser: same vocabulary, same 200-item cap, same
+    // 413 (api/CLAUDE.md's bulk rule), and one place that decides what an item
+    // reference looks like on the wire.
+    const requested =
+      body.items === undefined || body.items === null
+        ? null
+        : parseBulkShareItems(body.items);
+
+    // Collect before deleting so each revoked canyon's residual canyon_shared
+    // notification can be purged too (PRIV-001), exactly as DELETE /friends/:id
+    // does.
+    const allCanyonShares = await prisma.canyonShare.findMany({
       where: ownedSharesToFriendWhere(user.id, friendId),
       select: { id: true, canyonId: true },
     });
+    const revoked = selectRequested(
+      allCanyonShares.map((row) => ({
+        ...row,
+        entityType: "canyon",
+        entityId: row.canyonId,
+      })),
+      requested,
+    );
 
     if (revoked.length > 0) {
       // The friend's mirror must forget each canyon + its canyon-level media;
@@ -617,13 +876,39 @@ router.delete(
       });
     }
 
-    // Count only — never the canyon names/coords that were revoked (PRIV-005).
+    // The `Share` table's half. Everything a direct revoke has to do — the row,
+    // the recipient's notification, the delta bump, the tombstone only where no
+    // canyon arm survives — is lib/revokeDirectShares.ts, shared with the
+    // single revoke in routes/shares.ts.
+    const directRevocations: DirectShareRevocation[] = selectRequested(
+      await directSharesBetween({ ownerId: user.id, sharedWithId: friendId }),
+      requested,
+    ).map((ref) => ({
+      entityType: ref.entityType,
+      entityId: ref.entityId,
+      sharedWithId: friendId,
+    }));
+    const itemsRevokedCount = await revokeDirectShares(directRevocations);
+
+    // Counts only — never the names/coords of what was revoked (PRIV-005).
     logger.info(
-      { userId: user.id, revokedCount: revoked.length },
+      {
+        userId: user.id,
+        revokedCount: revoked.length,
+        itemsRevokedCount,
+        subset: requested !== null,
+      },
       "shares_bulk_revoked",
     );
 
-    res.json({ revokedCount: revoked.length });
+    res.json({
+      // One number, because one action: the client's sentence says "N things
+      // are no longer shared with Bob" and does not care which table they
+      // came from.
+      revokedCount: revoked.length + itemsRevokedCount,
+      canyonsRevokedCount: revoked.length,
+      itemsRevokedCount,
+    });
   },
 );
 

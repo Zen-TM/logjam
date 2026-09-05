@@ -77,7 +77,20 @@ type FriendItem =
   | { kind: "friend"; key: string; username: string; friendshipId: string }
   | { kind: "request"; key: string; username: string; requestId: string };
 
-export function FriendsScreen({ onBack }: { onBack: () => void }) {
+export function FriendsScreen({
+  onBack,
+  onOpenShares,
+}: {
+  onBack: () => void;
+  /**
+   * Open the per-friend sharing audit — "what does this person see?". Pushed by
+   * the caller so Back returns to this list. It is reached from the friend's
+   * overflow sheet rather than from the row: this screen's per-row actions live
+   * behind that sheet on purpose (§7), and a row that navigated would put a
+   * revoke one mis-tap from the tap that opens it.
+   */
+  onOpenShares: (friend: { friendshipId: string; username: string }) => void;
+}) {
   const { accountState } = useAccountState();
   const guestBlock = useMemo(
     () => capabilityScreenBlock("friends", accountState),
@@ -307,12 +320,27 @@ export function FriendsScreen({ onBack }: { onBack: () => void }) {
         title={menuItem?.username ?? ""}
       >
         {menuItem?.kind === "friend" ? (
-          <Row
-            icon="user-minus"
-            hue={theme.warning}
-            title="Remove friend"
-            onPress={() => confirmRemove(menuItem)}
-          />
+          <View style={styles.menuBody}>
+            <Row
+              icon="share-2"
+              title="Shared items"
+              subtitle="What they can see, and what they share with you"
+              onPress={() => {
+                const friend = menuItem;
+                setMenuItem(null);
+                onOpenShares({
+                  friendshipId: friend.friendshipId,
+                  username: friend.username,
+                });
+              }}
+            />
+            <Row
+              icon="user-minus"
+              hue={theme.warning}
+              title="Remove friend"
+              onPress={() => confirmRemove(menuItem)}
+            />
+          </View>
         ) : null}
         {menuItem?.kind === "request" ? (
           <View style={styles.menuBody}>

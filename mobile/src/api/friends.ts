@@ -6,6 +6,8 @@
 //
 // PRIVACY: every response here is username-only (server-enforced — no email on
 // friends joins). Search is capped server-side (min 3 chars, ≤10 results).
+import type { BulkShareItem, FriendShares } from "@logjam/shared";
+
 import { apiFetch } from "./apiFetch";
 
 export type Friend = { id: string; username: string; friendshipId: string };
@@ -67,4 +69,51 @@ export function shareCanyon(canyonId: string, sharedWithUserId: string): Promise
 
 export function unshareCanyon(canyonId: string, userId: string): Promise<void> {
   return apiFetch<void>(`/canyons/${canyonId}/share/${userId}`, { method: "DELETE" });
+}
+
+// ── The per-friend sharing audit ─────────────────────────────
+// "What does this friend see, and what do they let me see?" — both directions
+// of both share tables, in one request. The screen is FriendSharesScreen.
+
+/** Everything shared either way with one friend, newest grant first. */
+export function getFriendShares(friendshipId: string): Promise<FriendShares> {
+  return apiFetch<FriendShares>(`/friends/${friendshipId}/shares`);
+}
+
+/**
+ * Revoke grants I made to this friend. `items` is the selection — passing it is
+ * how a multi-select of 3 out of 11 revokes 3.
+ *
+ * OMITTING IT MEANS EVERYTHING, which is the endpoint's older contract and is
+ * NOT what any screen here wants: this app always knows which rows it is
+ * acting on, and "all" is just the case where the user selected them all. The
+ * parameter is therefore required.
+ */
+export function unshareWithFriend(
+  friendshipId: string,
+  items: BulkShareItem[],
+): Promise<{
+  revokedCount: number;
+  canyonsRevokedCount: number;
+  itemsRevokedCount: number;
+}> {
+  return apiFetch(`/friends/${friendshipId}/shares`, {
+    method: "DELETE",
+    body: {
+      items: items.map(({ entityType, entityId }) => ({ entityType, entityId })),
+    },
+  });
+}
+
+/**
+ * Keep a canyon a friend shared: copies the record (and its linked route) into
+ * my own account, server-side. The copy is MINE — editable, and unaffected if
+ * the friend later revokes the share.
+ *
+ * The new canyon reaches this device through the next delta pull, so callers
+ * `requestSync()` afterwards rather than inserting into the mirror themselves
+ * (there is no local id to insert: the server mints it).
+ */
+export function copySharedCanyon(canyonId: string): Promise<{ id: string }> {
+  return apiFetch<{ id: string }>(`/canyons/${canyonId}/copy`, { method: "POST" });
 }

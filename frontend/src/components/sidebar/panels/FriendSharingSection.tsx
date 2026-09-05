@@ -6,7 +6,7 @@ import ConfirmDialog from "../../dialogs/ConfirmDialog";
 import { ErrorBanner } from "../../feedback/ErrorBanner";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
-import { removeShareConfirm } from "@logjam/shared";
+import { removeShareConfirm, shareRowTitle } from "@logjam/shared";
 import type { TFriend, TFriendShares, TFriendShareRow } from "../../../canyonUtils";
 import {
   getFriendShares,
@@ -69,11 +69,25 @@ function FriendSharingSection({
 
   useEffect(load, [load]);
 
+  // Canyon rows only: both section labels below say "Canyons", and the payload
+  // now also carries waypoint/route/topo/GeoPDF shares (listed on Logjam GPS).
+  // Filtering here rather than widening the sections keeps this panel's wording
+  // true — and its Unshare all passes `theirs`, so it revokes exactly what it
+  // showed.
+  const theirs = (shares?.sharedWithThem ?? []).filter(
+    (row) => row.entityType === "canyon",
+  );
+  const mine = (shares?.sharedWithYou ?? []).filter(
+    (row) => row.entityType === "canyon",
+  );
+
   async function handleUnshareOne(row: TFriendShareRow) {
     setBusy(true);
     try {
-      await unshareCanyonWith(row.canyonId, friend.id);
-      toast.success(`${row.name} is no longer shared with ${friend.username}.`);
+      await unshareCanyonWith(row.entityId, friend.id);
+      toast.success(
+        `${shareRowTitle(row)} is no longer shared with ${friend.username}.`,
+      );
       load();
       onSharesChanged();
     } catch (err) {
@@ -87,7 +101,7 @@ function FriendSharingSection({
   async function handleUnshareAll() {
     setBusy(true);
     try {
-      const { revokedCount } = await unshareAllWithFriend(friend.friendshipId);
+      const { revokedCount } = await unshareAllWithFriend(friend.friendshipId, theirs);
       toast.success(
         revokedCount === 1
           ? `1 canyon is no longer shared with ${friend.username}.`
@@ -109,8 +123,8 @@ function FriendSharingSection({
   async function handleRemoveMyAccess(row: TFriendShareRow) {
     setBusy(true);
     try {
-      await unshareCanyonWith(row.canyonId, "me");
-      toast.success(`You no longer have access to ${row.name}.`);
+      await unshareCanyonWith(row.entityId, "me");
+      toast.success(`You no longer have access to ${shareRowTitle(row)}.`);
       setPending(null);
       load();
       onSharesChanged();
@@ -121,9 +135,6 @@ function FriendSharingSection({
       setBusy(false);
     }
   }
-
-  const theirs = shares?.sharedWithThem ?? [];
-  const mine = shares?.sharedWithYou ?? [];
 
   return (
     <div className={classes.root}>
@@ -151,9 +162,9 @@ function FriendSharingSection({
             <>
               <div className={classes.shareList}>
                 {theirs.map((row) => (
-                  <div key={row.canyonId} className={classes.shareRow}>
-                    <span className={classes.canyonName} title={row.name}>
-                      {row.name}
+                  <div key={row.entityId} className={classes.shareRow}>
+                    <span className={classes.canyonName} title={shareRowTitle(row)}>
+                      {shareRowTitle(row)}
                     </span>
                     <button
                       className={classes.unshareButton}
@@ -186,9 +197,9 @@ function FriendSharingSection({
           ) : (
             <div className={classes.shareList}>
               {mine.map((row) => (
-                <div key={row.canyonId} className={classes.shareRow}>
-                  <span className={classes.canyonName} title={row.name}>
-                    {row.name}
+                <div key={row.entityId} className={classes.shareRow}>
+                  <span className={classes.canyonName} title={shareRowTitle(row)}>
+                    {shareRowTitle(row)}
                   </span>
                   <button
                     className={classes.unshareButton}
@@ -246,7 +257,7 @@ function FriendSharingSection({
           pending?.kind === "remove-mine"
             ? removeShareConfirm({
                 kindLabel: "canyon",
-                itemName: pending.row.name,
+                itemName: shareRowTitle(pending.row),
                 ownerName: friend.username,
               }).title
             : ""
@@ -257,7 +268,7 @@ function FriendSharingSection({
               {
                 removeShareConfirm({
                   kindLabel: "canyon",
-                  itemName: pending.row.name,
+                  itemName: shareRowTitle(pending.row),
                   ownerName: friend.username,
                 }).body
               }
