@@ -7,7 +7,7 @@
 /** Where a tapped notification sends the user — or that it sends them nowhere. */
 export type NotificationTapTarget =
   | { kind: "blocked" }
-  | { kind: "canyon"; canyonId: string }
+  | { kind: "place"; placeId: string }
   | { kind: "inbox" };
 
 /**
@@ -15,10 +15,10 @@ export type NotificationTapTarget =
  * has no home anywhere else, so the draft beats the payload: a notification tap
  * is only a second way to leave the map, and it is refused the same way the tab
  * bar refuses one — answered with the Alert rather than silently ignored.
- * Without that precedence a push landed the user in CanyonDetail with the pen
+ * Without that precedence a push landed the user in PlaceDetail with the pen
  * still armed and nothing on screen saying so.
  *
- * Below the draft it is just the payload: a canyonId goes to that canyon, and
+ * Below the draft it is just the payload: a placeId goes to that place, and
  * everything else — no id, an id that is not a string, a payload that is not an
  * object — falls back to the inbox, where every notification is listed anyway.
  *
@@ -32,7 +32,7 @@ export function notificationTapTarget(args: {
   routeEditing: boolean;
 }): NotificationTapTarget {
   if (args.routeEditing) return { kind: "blocked" };
-  const canyonId = (args.data as { canyonId?: unknown } | null | undefined)?.canyonId;
-  if (typeof canyonId === "string") return { kind: "canyon", canyonId };
+  const placeId = (args.data as { placeId?: unknown } | null | undefined)?.placeId;
+  if (typeof placeId === "string") return { kind: "place", placeId };
   return { kind: "inbox" };
 }

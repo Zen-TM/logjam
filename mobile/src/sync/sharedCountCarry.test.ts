@@ -39,7 +39,7 @@ const { upsertWaypoint, upsertRoute } = await import("./mirrorStore");
 const waypointRow = {
   id: "wp-1",
   ownerId: "u1",
-  canyonIds: [],
+  placeIds: [],
   tags: [],
   syncRole: "owner" as const,
   name: "Carpark",
@@ -55,7 +55,7 @@ const waypointRow = {
 const routeRow = {
   id: "rt-1",
   ownerId: "u1",
-  canyonId: null,
+  placeId: null,
   name: "Descent",
   color: "#ff0000",
   points: [

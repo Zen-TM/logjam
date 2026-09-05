@@ -55,7 +55,7 @@ function layerComponent(
 /**
  * The full basemap layer stack for one flavor, bound to `sourceID` and pinned
  * at layerIndex `startIndex..startIndex+count-1` (keeps the basemap band
- * below topo overlays and canyon layers across source remounts).
+ * below topo overlays and place layers across source remounts).
  */
 // MEMOISED, and it matters more here than anywhere else on the map: MLRN
 // memoises none of its layer components, and each one re-runs `transformStyle`

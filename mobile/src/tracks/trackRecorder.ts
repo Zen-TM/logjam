@@ -468,7 +468,7 @@ export async function continueTrackRecording(track: Track): Promise<void> {
  *
  * ORDER IS THE SAFETY PROPERTY. The row is finished FIRST and never touched
  * again, so a backup that cannot be written or queued costs the user nothing
- * but a retry: someone who has just walked a canyon must not lose their track
+ * but a retry: someone who has just walked a place must not lose their track
  * because an upload could not be enqueued. The failure is still loud — it
  * arrives as a `TrackBackupError`, which says the track is saved and the backup
  * is not, and `retryTrackBackup` runs the same work again.

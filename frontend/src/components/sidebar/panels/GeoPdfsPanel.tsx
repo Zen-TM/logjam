@@ -10,7 +10,7 @@ import {
   shareEntityWith,
   unshareEntityWith,
   type TFriend,
-} from "../../../canyonUtils";
+} from "../../../placeUtils";
 import { messageFromError } from "../../../errors/messageFromError";
 import { useToast } from "../../feedback/ToastProvider";
 import { JobRibbonStack, JobRibbon, minutesEta } from "../../feedback/JobRibbon";
@@ -375,7 +375,7 @@ function GeoPdfsPanel({
                       </button>
                     </>
                   )}
-                  {/* The recipient's half of that pair. A GeoPDF has no canyon
+                  {/* The recipient's half of that pair. A GeoPDF has no place
                       to inherit visibility from, so a row that is not yours is
                       always yours to remove. */}
                   {job.syncRole !== "owner" && (

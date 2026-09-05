@@ -1,7 +1,7 @@
 import { Router, Response } from "express";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
-import { canyonIdOfMedia } from "../lib/mediaLink";
+import { placeIdOfMedia } from "../lib/mediaLink";
 import { AppError } from "../middleware/errorHandler";
 import { friendsSearchLimiter } from "../middleware/rateLimit";
 import { getParam } from "../lib/getParam";
@@ -26,7 +26,7 @@ import {
 } from "../lib/waypointLink";
 import {
   filterOwnedEntityIds,
-  hasCanyonInheritedAccess,
+  hasPlaceInheritedAccess,
   revokeAllSharesBetween,
 } from "../lib/shareAccess";
 import { parseBulkShareItems } from "../lib/bulkShare";
@@ -312,56 +312,56 @@ router.delete(
       friendship.requesterId === user.id || friendship.addresseeId === user.id;
     if (!isMember) throw new AppError(403, "Access denied");
 
-    // Remove the friendship and any canyon shares between the two users
+    // Remove the friendship and any place shares between the two users
     const otherId =
       friendship.requesterId === user.id
         ? friendship.addresseeId
         : friendship.requesterId;
 
     // Collect the shares being revoked BEFORE deleting them, so we can also
-    // purge each recipient's canyon_shared notification for the now-unshared
-    // canyon (PRIV-001). Unfriend revokes shares in both directions, so the
+    // purge each recipient's place_shared notification for the now-unshared
+    // place (PRIV-001). Unfriend revokes shares in both directions, so the
     // notification purge targets both users' recipient rows.
-    const revokedShares = await prisma.canyonShare.findMany({
+    const revokedShares = await prisma.placeShare.findMany({
       where: {
         OR: [
           { sharedById: user.id, sharedWithId: otherId },
           { sharedById: otherId, sharedWithId: user.id },
         ],
       },
-      select: { id: true, canyonId: true, sharedById: true, sharedWithId: true },
+      select: { id: true, placeId: true, sharedById: true, sharedWithId: true },
     });
 
-    // Canyon-level media ids of every canyon whose share is being revoked —
-    // each sharee's mirror must forget the canyon AND its media (sync
+    // Place-level media ids of every place whose share is being revoked —
+    // each sharee's mirror must forget the place AND its media (sync
     // tombstone fan-out, written in the same transaction below).
-    const revokedCanyonIds = revokedShares.map((s) => s.canyonId);
-    const revokedCanyonMedia =
-      revokedCanyonIds.length > 0
+    const revokedPlaceIds = revokedShares.map((s) => s.placeId);
+    const revokedPlaceMedia =
+      revokedPlaceIds.length > 0
         ? await prisma.media.findMany({
-            where: { linkedType: "canyon", linkedId: { in: revokedCanyonIds } },
+            where: { linkedType: "place", linkedId: { in: revokedPlaceIds } },
             select: { id: true, linkedType: true, linkedId: true },
           })
         : [];
-    const mediaIdsByCanyon = new Map<string, string[]>();
-    for (const m of revokedCanyonMedia) {
-      const canyonId = canyonIdOfMedia(m);
-      if (canyonId === null) continue;
-      const list = mediaIdsByCanyon.get(canyonId) ?? [];
+    const mediaIdsByPlace = new Map<string, string[]>();
+    for (const m of revokedPlaceMedia) {
+      const placeId = placeIdOfMedia(m);
+      if (placeId === null) continue;
+      const list = mediaIdsByPlace.get(placeId) ?? [];
       list.push(m.id);
-      mediaIdsByCanyon.set(canyonId, list);
+      mediaIdsByPlace.set(placeId, list);
     }
-    // A linked route rides with the shared canyon record, so unfriending
+    // A linked route rides with the shared place record, so unfriending
     // revokes it too.
     const revokedRoutes =
-      revokedCanyonIds.length > 0
+      revokedPlaceIds.length > 0
         ? await prisma.route.findMany({
-            where: { canyonId: { in: revokedCanyonIds } },
-            select: { id: true, canyonId: true },
+            where: { placeId: { in: revokedPlaceIds } },
+            select: { id: true, placeId: true },
           })
         : [];
-    const routeIdByCanyon = new Map(
-      revokedRoutes.map((route) => [route.canyonId!, route.id]),
+    const routeIdByPlace = new Map(
+      revokedRoutes.map((route) => [route.placeId!, route.id]),
     );
     const unfriendTombstones = [
       ...friendshipDeleteTombstones({
@@ -370,12 +370,12 @@ router.delete(
       }),
       ...revokedShares.flatMap((s) =>
         shareRevokeTombstones({
-          canyonOwnerId: s.sharedById,
+          placeOwnerId: s.sharedById,
           shareeId: s.sharedWithId,
           shareId: s.id,
-          canyonId: s.canyonId,
-          canyonMediaIds: mediaIdsByCanyon.get(s.canyonId) ?? [],
-          routeId: routeIdByCanyon.get(s.canyonId) ?? null,
+          placeId: s.placeId,
+          placeMediaIds: mediaIdsByPlace.get(s.placeId) ?? [],
+          routeId: routeIdByPlace.get(s.placeId) ?? null,
         }),
       ),
     ];
@@ -387,15 +387,15 @@ router.delete(
       const waypointVisibility = await snapshotWaypointVisibility(
         tx,
         (
-          await tx.canyonWaypoint.findMany({
-            where: { canyonId: { in: revokedCanyonIds } },
+          await tx.placeWaypoint.findMany({
+            where: { placeId: { in: revokedPlaceIds } },
             select: { waypointId: true },
           })
         ).map((link) => link.waypointId),
       );
       await writeTombstones(tx, unfriendTombstones);
-      // Revoke any canyons shared between these two users
-      await tx.canyonShare.deleteMany({
+      // Revoke any places shared between these two users
+      await tx.placeShare.deleteMany({
         where: {
           OR: [
             { sharedById: user.id, sharedWithId: otherId },
@@ -405,19 +405,19 @@ router.delete(
       });
       // Every OTHER share type between the two users: direct per-item Shares
       // (waypoint / route / topo job / GeoPDF job) in both directions, plus
-      // file sends the recipient has not taken yet. Canyon shares are the
+      // file sends the recipient has not taken yet. Place shares are the
       // block above; this is the rest of the same promise — unfriending takes
-      // back all live access, not just canyons.
+      // back all live access, not just places.
       await revokeAllSharesBetween(tx, user.id, otherId);
       await writeWaypointVisibilityLoss(tx, waypointVisibility);
-      // Drop the recipient's residual canyon_shared notifications for each
-      // canyon whose share was just revoked.
+      // Drop the recipient's residual place_shared notifications for each
+      // place whose share was just revoked.
       for (const s of revokedShares) {
         await tx.notification.deleteMany({
           where: {
             userId: s.sharedWithId,
-            type: "canyon_shared",
-            payload: { path: ["canyonId"], equals: s.canyonId },
+            type: "place_shared",
+            payload: { path: ["placeId"], equals: s.placeId },
           },
         });
       }
@@ -439,40 +439,40 @@ router.delete(
 // ── Sharing audit (fix 24) ────────────────────────────────────
 //
 // "What does Bob see, and how do I take it all back?" Sharing is authored
-// per-canyon, so the per-person view had no surface; these two routes are it.
+// per-place, so the per-person view had no surface; these two routes are it.
 //
 // `:id` is a FRIENDSHIP id, matching every other `/friends/:id/*` route
 // (accept / decline / DELETE). That is also the authorization anchor: shares
-// only ever exist between friends (POST /canyons/:id/share enforces it), so
+// only ever exist between friends (POST /places/:id/share enforces it), so
 // resolving the friendship and asserting membership is the whole check.
 //
-// ACCESS DECISION — why these do NOT call lib/canyonAccess.ts:
-// those helpers answer "what is my role on THIS canyon" and exist to vet an
-// arbitrary caller-supplied canyon id. These routes accept no canyon id: the
-// set is derived from the caller's own ownership via `canyon: { ownerId }`,
-// so a canyon the caller can't see is simply absent and there is no id to
-// vet. Same pattern (and same rationale) as GET /canyons/tracks and GET
-// /canyons. Filtering on the canyon's `ownerId` rather than the share's
+// ACCESS DECISION — why these do NOT call lib/placeAccess.ts:
+// those helpers answer "what is my role on THIS place" and exist to vet an
+// arbitrary caller-supplied place id. These routes accept no place id: the
+// set is derived from the caller's own ownership via `place: { ownerId }`,
+// so a place the caller can't see is simply absent and there is no id to
+// vet. Same pattern (and same rationale) as GET /places/tracks and GET
+// /places. Filtering on the place's `ownerId` rather than the share's
 // `sharedById` is deliberate: it derives from ownership directly instead of
 // trusting that `sharedById` still equals the owner.
 //
 // EMAIL: these responses join no User rows at all — the friend's identity is
-// already known from the friendship, and canyon rows carry no user fields. The
+// already known from the friendship, and place rows carry no user fields. The
 // username-only rule for /friends is therefore structural here, not a `select`
 // that could drift (see the `select` below: id/name/createdAt only).
 
 /**
- * Canyons I OWN that are shared with `friendId`. Deriving the set from the
- * canyon's `ownerId` (not the share's `sharedById`) is what makes it
- * impossible to list or revoke a share on a canyon the caller doesn't own.
+ * Places I OWN that are shared with `friendId`. Deriving the set from the
+ * place's `ownerId` (not the share's `sharedById`) is what makes it
+ * impossible to list or revoke a share on a place the caller doesn't own.
  */
 export function ownedSharesToFriendWhere(userId: string, friendId: string) {
-  return { sharedWithId: friendId, canyon: { ownerId: userId } };
+  return { sharedWithId: friendId, place: { ownerId: userId } };
 }
 
-/** Canyons `friendId` owns that are shared with me. The mirror image. */
+/** Places `friendId` owns that are shared with me. The mirror image. */
 export function receivedSharesFromFriendWhere(userId: string, friendId: string) {
-  return { sharedWithId: userId, canyon: { ownerId: friendId } };
+  return { sharedWithId: userId, place: { ownerId: friendId } };
 }
 
 /** A `Share` row bound for the audit list, before its name is looked up. */
@@ -484,13 +484,13 @@ type DirectShareRef = {
 
 /**
  * Direct `Share` rows (waypoint / route / LiDAR topo / GeoPDF) that one person
- * can see and ANOTHER person owns — the non-canyon half of both directions.
+ * can see and ANOTHER person owns — the non-place half of both directions.
  *
- * WHY IT IS NOT ONE WHERE CLAUSE, unlike the canyon pair above: `Share` is
+ * WHY IT IS NOT ONE WHERE CLAUSE, unlike the place pair above: `Share` is
  * polymorphic with no foreign key (see `directlySharedIds` in
- * lib/shareAccess.ts), so `canyon: { ownerId }` has no equivalent — Prisma
+ * lib/shareAccess.ts), so `place: { ownerId }` has no equivalent — Prisma
  * cannot join through `entityId`. Filtering on the row's own `sharedById` would
- * be one query, and is exactly what the canyon helpers refuse to do: it trusts
+ * be one query, and is exactly what the place helpers refuse to do: it trusts
  * a denormalised value instead of deriving from ownership. So the ownership arm
  * is a second pass through `filterOwnedEntityIds`, the batch owner check the
  * bulk share already runs — four extra queries at most, whatever the list
@@ -563,7 +563,7 @@ async function nameDirectShares(
   /**
    * The user these rows are shared WITH, when that user is the caller — i.e.
    * the received direction. Given, each waypoint/route row is checked for a
-   * surviving canyon arm and marked `alsoViaCanyon`, because a Remove on such a
+   * surviving place arm and marked `alsoViaPlace`, because a Remove on such a
    * row would appear to work and be undone by the next delta pull. Omitted for
    * the forward direction, where the question is meaningless: they are the
    * caller's own rows.
@@ -616,17 +616,17 @@ async function nameDirectShares(
     }),
   );
 
-  // Only the two delta-synced kinds can have a canyon arm at all (a job has no
-  // canyon link), so this is at most one query per waypoint/route in a list
+  // Only the two delta-synced kinds can have a place arm at all (a job has no
+  // place link), so this is at most one query per waypoint/route in a list
   // that is tens of rows long.
-  const alsoViaCanyon = new Set<string>();
+  const alsoViaPlace = new Set<string>();
   if (inheritedForUserId !== undefined) {
     await Promise.all(
       refs.map(async (ref) => {
         const synced = syncedEntityType(ref.entityType);
         if (synced === null) return;
-        if (await hasCanyonInheritedAccess(inheritedForUserId, synced, ref.entityId)) {
-          alsoViaCanyon.add(key(ref.entityType, ref.entityId));
+        if (await hasPlaceInheritedAccess(inheritedForUserId, synced, ref.entityId)) {
+          alsoViaPlace.add(key(ref.entityType, ref.entityId));
         }
       }),
     );
@@ -637,8 +637,8 @@ async function nameDirectShares(
     entityId: ref.entityId,
     name: nameById.get(key(ref.entityType, ref.entityId)) ?? null,
     sharedAt: ref.sharedAt.toISOString(),
-    ...(alsoViaCanyon.has(key(ref.entityType, ref.entityId))
-      ? { alsoViaCanyon: true as const }
+    ...(alsoViaPlace.has(key(ref.entityType, ref.entityId))
+      ? { alsoViaPlace: true as const }
       : {}),
   }));
 }
@@ -670,7 +670,7 @@ export function selectRequested<T extends { entityType: string; entityId: string
 
 // Resolve a friendship the caller is a member of, and return the other party's
 // id. 403 (not 404) for a non-member mirrors DELETE /friends/:id and
-// /:id/accept — the anti-oracle 404 rule is scoped to canyon ids, and no canyon
+// /:id/accept — the anti-oracle 404 rule is scoped to place ids, and no place
 // id is accepted here.
 export async function resolveFriendCounterpart(
   friendshipId: string,
@@ -707,20 +707,20 @@ router.get(
     // list needs to name the thing, not carry it.
     const select = {
       id: true,
-      canyon: { select: { id: true, name: true } },
+      place: { select: { id: true, name: true } },
       createdAt: true,
     };
 
-    const [canyonsTheirs, canyonsMine, directTheirs, directMine] =
+    const [placesTheirs, placesMine, directTheirs, directMine] =
       await Promise.all([
-        // Canyons I own that this friend can see.
-        prisma.canyonShare.findMany({
+        // Places I own that this friend can see.
+        prisma.placeShare.findMany({
           where: ownedSharesToFriendWhere(user.id, friendId),
           select,
           orderBy: { createdAt: "desc" },
         }),
-        // Canyons this friend owns that I can see.
-        prisma.canyonShare.findMany({
+        // Places this friend owns that I can see.
+        prisma.placeShare.findMany({
           where: receivedSharesFromFriendWhere(user.id, friendId),
           select,
           orderBy: { createdAt: "desc" },
@@ -730,11 +730,11 @@ router.get(
         directSharesBetween({ ownerId: friendId, sharedWithId: user.id }),
       ]);
 
-    const shapeCanyons = (rows: typeof canyonsTheirs): FriendShareRow[] =>
+    const shapePlaces = (rows: typeof placesTheirs): FriendShareRow[] =>
       rows.map((row) => ({
-        entityType: "canyon" as const,
-        entityId: row.canyon.id,
-        name: row.canyon.name,
+        entityType: "place" as const,
+        entityId: row.place.id,
+        name: row.place.name,
         sharedAt: row.createdAt.toISOString(),
       }));
 
@@ -745,10 +745,10 @@ router.get(
 
     res.json({
       sharedWithThem: byNewestShare([
-        ...shapeCanyons(canyonsTheirs),
+        ...shapePlaces(placesTheirs),
         ...itemsTheirs,
       ]),
-      sharedWithYou: byNewestShare([...shapeCanyons(canyonsMine), ...itemsMine]),
+      sharedWithYou: byNewestShare([...shapePlaces(placesMine), ...itemsMine]),
     });
   },
 );
@@ -758,7 +758,7 @@ router.get(
 //
 // ONE DIRECTION ONLY, by design: it never touches what the friend shares with
 // me (that is their grant to withdraw, or mine to drop one row at a time via
-// DELETE /canyons/:id/share/me and DELETE /shares/:type/:id/me). The friendship
+// DELETE /places/:id/share/me and DELETE /shares/:type/:id/me). The friendship
 // itself survives — that is the difference from DELETE /friends/:id, which
 // revokes both directions and is the existing bulk lever if you want the person
 // gone entirely.
@@ -772,7 +772,7 @@ router.get(
 //
 // Ids in the body authorize NOTHING. Both arms intersect the request with a set
 // derived from the caller's own ownership, so an id belonging to a stranger's
-// canyon is simply absent from that set — the response is a count, so it cannot
+// place is simply absent from that set — the response is a count, so it cannot
 // report back whether the id existed (SEC-001's anti-oracle rule).
 router.delete(
   "/:id/shares",
@@ -793,48 +793,48 @@ router.delete(
         ? null
         : parseBulkShareItems(body.items);
 
-    // Collect before deleting so each revoked canyon's residual canyon_shared
+    // Collect before deleting so each revoked place's residual place_shared
     // notification can be purged too (PRIV-001), exactly as DELETE /friends/:id
     // does.
-    const allCanyonShares = await prisma.canyonShare.findMany({
+    const allPlaceShares = await prisma.placeShare.findMany({
       where: ownedSharesToFriendWhere(user.id, friendId),
-      select: { id: true, canyonId: true },
+      select: { id: true, placeId: true },
     });
     const revoked = selectRequested(
-      allCanyonShares.map((row) => ({
+      allPlaceShares.map((row) => ({
         ...row,
-        entityType: "canyon",
-        entityId: row.canyonId,
+        entityType: "place",
+        entityId: row.placeId,
       })),
       requested,
     );
 
     if (revoked.length > 0) {
-      // The friend's mirror must forget each canyon + its canyon-level media;
+      // The friend's mirror must forget each place + its place-level media;
       // the owner's mirror forgets the share rows (sync tombstones, same
       // transaction as the revoke).
-      const canyonMedia = await prisma.media.findMany({
+      const placeMedia = await prisma.media.findMany({
         where: {
-          linkedType: "canyon",
-          linkedId: { in: revoked.map((r) => r.canyonId) },
+          linkedType: "place",
+          linkedId: { in: revoked.map((r) => r.placeId) },
         },
         select: { id: true, linkedType: true, linkedId: true },
       });
-      const mediaIdsByCanyon = new Map<string, string[]>();
-      for (const m of canyonMedia) {
-        const canyonId = canyonIdOfMedia(m);
-        if (canyonId === null) continue;
-        const list = mediaIdsByCanyon.get(canyonId) ?? [];
+      const mediaIdsByPlace = new Map<string, string[]>();
+      for (const m of placeMedia) {
+        const placeId = placeIdOfMedia(m);
+        if (placeId === null) continue;
+        const list = mediaIdsByPlace.get(placeId) ?? [];
         list.push(m.id);
-        mediaIdsByCanyon.set(canyonId, list);
+        mediaIdsByPlace.set(placeId, list);
       }
-      // A linked route rides with the shared canyon record.
+      // A linked route rides with the shared place record.
       const revokedRoutes = await prisma.route.findMany({
-        where: { canyonId: { in: revoked.map((r) => r.canyonId) } },
-        select: { id: true, canyonId: true },
+        where: { placeId: { in: revoked.map((r) => r.placeId) } },
+        select: { id: true, placeId: true },
       });
-      const routeIdByCanyon = new Map(
-        revokedRoutes.map((route) => [route.canyonId!, route.id]),
+      const routeIdByPlace = new Map(
+        revokedRoutes.map((route) => [route.placeId!, route.id]),
       );
       // Interactive: see the unfriend path above — the waypoint diff must read
       // the world after the share rows are gone.
@@ -842,8 +842,8 @@ router.delete(
         const waypointVisibility = await snapshotWaypointVisibility(
           tx,
           (
-            await tx.canyonWaypoint.findMany({
-              where: { canyonId: { in: revoked.map((r) => r.canyonId) } },
+            await tx.placeWaypoint.findMany({
+              where: { placeId: { in: revoked.map((r) => r.placeId) } },
               select: { waypointId: true },
             })
           ).map((link) => link.waypointId),
@@ -851,16 +851,16 @@ router.delete(
         await tx.syncTombstone.createMany({
           data: revoked.flatMap((r) =>
             shareRevokeTombstones({
-              canyonOwnerId: user.id,
+              placeOwnerId: user.id,
               shareeId: friendId,
               shareId: r.id,
-              canyonId: r.canyonId,
-              canyonMediaIds: mediaIdsByCanyon.get(r.canyonId) ?? [],
-              routeId: routeIdByCanyon.get(r.canyonId) ?? null,
+              placeId: r.placeId,
+              placeMediaIds: mediaIdsByPlace.get(r.placeId) ?? [],
+              routeId: routeIdByPlace.get(r.placeId) ?? null,
             }),
           ),
         });
-        await tx.canyonShare.deleteMany({
+        await tx.placeShare.deleteMany({
           where: { id: { in: revoked.map((r) => r.id) } },
         });
         await writeWaypointVisibilityLoss(tx, waypointVisibility);
@@ -868,8 +868,8 @@ router.delete(
           await tx.notification.deleteMany({
             where: {
               userId: friendId,
-              type: "canyon_shared",
-              payload: { path: ["canyonId"], equals: r.canyonId },
+              type: "place_shared",
+              payload: { path: ["placeId"], equals: r.placeId },
             },
           });
         }
@@ -878,7 +878,7 @@ router.delete(
 
     // The `Share` table's half. Everything a direct revoke has to do — the row,
     // the recipient's notification, the delta bump, the tombstone only where no
-    // canyon arm survives — is lib/revokeDirectShares.ts, shared with the
+    // place arm survives — is lib/revokeDirectShares.ts, shared with the
     // single revoke in routes/shares.ts.
     const directRevocations: DirectShareRevocation[] = selectRequested(
       await directSharesBetween({ ownerId: user.id, sharedWithId: friendId }),
@@ -906,7 +906,7 @@ router.delete(
       // are no longer shared with Bob" and does not care which table they
       // came from.
       revokedCount: revoked.length + itemsRevokedCount,
-      canyonsRevokedCount: revoked.length,
+      placesRevokedCount: revoked.length,
       itemsRevokedCount,
     });
   },

@@ -17,7 +17,7 @@
 // behaves and the only way to answer "how high is it at the 3 km mark".
 //
 // Columns are scaled between the profile's own min and max, not from sea
-// level: a canyon between 700 and 840 m drawn from zero is a flat bar.
+// level: a place between 700 and 840 m drawn from zero is a flat bar.
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   PanResponder,

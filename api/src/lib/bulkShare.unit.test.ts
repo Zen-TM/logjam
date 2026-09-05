@@ -40,9 +40,9 @@ describe("parseBulkShareItems", () => {
     ).toThrow(AppError);
   });
 
-  it("admits canyon, which /shares does not", () => {
-    expect(parseBulkShareItems([{ entityType: "canyon", entityId: "c1" }])).toEqual([
-      { entityType: "canyon", entityId: "c1" },
+  it("admits place, which /shares does not", () => {
+    expect(parseBulkShareItems([{ entityType: "place", entityId: "c1" }])).toEqual([
+      { entityType: "place", entityId: "c1" },
     ]);
   });
 
@@ -68,7 +68,7 @@ describe("planBulkShare", () => {
   const items: BulkShareItem[] = [
     { entityType: "waypoint", entityId: "w1" },
     { entityType: "route", entityId: "r1" },
-    { entityType: "canyon", entityId: "c1" },
+    { entityType: "place", entityId: "c1" },
   ];
 
   it("grants the cross product when everything is owned and nothing is shared", () => {
@@ -78,7 +78,7 @@ describe("planBulkShare", () => {
       ownedIdsByType: owned([
         ["waypoint", ["w1"]],
         ["route", ["r1"]],
-        ["canyon", ["c1"]],
+        ["place", ["c1"]],
       ]),
       existingPairKeys: new Set(),
     });
@@ -95,7 +95,7 @@ describe("planBulkShare", () => {
       ownedIdsByType: owned([
         ["waypoint", ["w1"]],
         ["route", []],
-        ["canyon", ["c1"]],
+        ["place", ["c1"]],
       ]),
       existingPairKeys: new Set(),
     });
@@ -112,11 +112,11 @@ describe("planBulkShare", () => {
       ownedIdsByType: owned([
         ["waypoint", ["w1"]],
         ["route", ["r1"]],
-        ["canyon", ["c1"]],
+        ["place", ["c1"]],
       ]),
       existingPairKeys: new Set([
         sharePairKey("waypoint", "w1", "bob"),
-        sharePairKey("canyon", "c1", "carol"),
+        sharePairKey("place", "c1", "carol"),
       ]),
     });
     expect(plan.result).toEqual({ granted: 4, alreadyShared: 2, ineligible: 0 });
@@ -132,7 +132,7 @@ describe("planBulkShare", () => {
       ownedIdsByType: owned([
         ["waypoint", ["w1"]],
         ["route", ["r1"]],
-        ["canyon", ["c1"]],
+        ["place", ["c1"]],
       ]),
       // r1 is fully shared already — its watermark must NOT move, or every
       // recipient re-pulls a row that did not change.
@@ -142,7 +142,7 @@ describe("planBulkShare", () => {
       ]),
     });
     expect(plan.touchedIdsByType.get("waypoint")).toEqual(["w1"]);
-    expect(plan.touchedIdsByType.get("canyon")).toEqual(["c1"]);
+    expect(plan.touchedIdsByType.get("place")).toEqual(["c1"]);
     expect(plan.touchedIdsByType.has("route")).toBe(false);
   });
 

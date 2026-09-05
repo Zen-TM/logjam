@@ -5,7 +5,7 @@ import {
   ALICE_SUB,
   BOB_SUB,
   CAROL_SUB,
-  SHARED_CANYON_ID,
+  SHARED_PLACE_ID,
   as,
 } from "./_actors";
 
@@ -16,7 +16,7 @@ const CLIENT = { "x-logjam-client": "mobile/0.1.0-test" } as const;
 
 // Waypoint CRUD + share/ownership boundary. An UNLINKED waypoint is
 // owner-private (non-owners get 404, never 403 — SEC-001 anti-oracle); one
-// linked to a shared canyon is visible to that canyon's sharees, read-only,
+// linked to a shared place is visible to that place's sharees, read-only,
 // and an owner-only mutation they attempt is 403 rather than 404.
 // Requires `make dev` (API on :8080, AUTH_MODE=fake).
 // Synthetic coords only (committed-fixture rule).
@@ -75,7 +75,7 @@ describe("waypoints CRUD", () => {
     expect(badLat.status).toBe(400);
   });
 
-  it("rejects a canyonId the caller does not own without confirming existence", async () => {
+  it("rejects a placeId the caller does not own without confirming existence", async () => {
     const res = await request(API_URL)
       .post("/waypoints")
       .set(as(ALICE_SUB))
@@ -83,13 +83,13 @@ describe("waypoints CRUD", () => {
         name: "x",
         latitude: -33.65,
         longitude: 150.25,
-        canyonIds: ["00000000-0000-4000-8000-000000000000"],
+        placeIds: ["00000000-0000-4000-8000-000000000000"],
       });
     // Same 400 for nonexistent and foreign ids (owner-scoped lookup).
     expect(res.status).toBe(400);
   });
 
-  it("round-trips tags and canyon links", async () => {
+  it("round-trips tags and place links", async () => {
     const res = await request(API_URL)
       .post("/waypoints")
       .set(as(ALICE_SUB))
@@ -98,21 +98,21 @@ describe("waypoints CRUD", () => {
         latitude: -33.65,
         longitude: 150.25,
         tags: ["carpark", "Water"],
-        canyonIds: [SHARED_CANYON_ID],
+        placeIds: [SHARED_PLACE_ID],
       });
     expect(res.status).toBe(201);
     expect(res.body.tags).toEqual(["carpark", "Water"]);
-    expect(res.body.canyonIds).toEqual([SHARED_CANYON_ID]);
+    expect(res.body.placeIds).toEqual([SHARED_PLACE_ID]);
     expect(res.body.syncRole).toBe("owner");
 
     // null empties both lists; undefined would have left them alone.
     const cleared = await request(API_URL)
       .patch(`/waypoints/${res.body.id as string}`)
       .set(as(ALICE_SUB))
-      .send({ tags: null, canyonIds: null });
+      .send({ tags: null, placeIds: null });
     expect(cleared.status).toBe(200);
     expect(cleared.body.tags).toEqual([]);
-    expect(cleared.body.canyonIds).toEqual([]);
+    expect(cleared.body.placeIds).toEqual([]);
 
     await request(API_URL)
       .delete(`/waypoints/${res.body.id as string}`)
@@ -134,8 +134,8 @@ describe("waypoints CRUD", () => {
 });
 
 describe("waypoints share boundary", () => {
-  // A waypoint LINKED to a shared canyon is part of that shared record (the
-  // same visibility canyon-level media and linked routes have). Everything
+  // A waypoint LINKED to a shared place is part of that shared record (the
+  // same visibility place-level media and linked routes have). Everything
   // below is the recipient's perspective, which mocked-Prisma unit tests
   // cannot reach.
   async function linkedWaypoint(): Promise<string> {
@@ -146,7 +146,7 @@ describe("waypoints share boundary", () => {
         name: "Shared carpark",
         latitude: -33.67,
         longitude: 150.27,
-        canyonIds: [SHARED_CANYON_ID],
+        placeIds: [SHARED_PLACE_ID],
       });
     expect(res.status).toBe(201);
     return res.body.id as string;
@@ -194,43 +194,43 @@ describe("waypoints share boundary", () => {
     await request(API_URL).delete(`/waypoints/${id}`).set(as(ALICE_SUB));
   });
 
-  it("scopes canyonIds to what the recipient may see", async () => {
-    // Alice files one carpark under a canyon bob has, and one he does not.
-    const privateCanyon = await request(API_URL)
-      .post("/canyons")
+  it("scopes placeIds to what the recipient may see", async () => {
+    // Alice files one carpark under a place bob has, and one he does not.
+    const privatePlace = await request(API_URL)
+      .post("/places")
       .set(as(ALICE_SUB))
-      .send({ name: "Unshared canyon", latitude: -33.68, longitude: 150.28 });
-    expect(privateCanyon.status).toBe(201);
+      .send({ name: "Unshared place", latitude: -33.68, longitude: 150.28 });
+    expect(privatePlace.status).toBe(201);
 
     const created = await request(API_URL)
       .post("/waypoints")
       .set(as(ALICE_SUB))
       .send({
-        name: "Two-canyon carpark",
+        name: "Two-place carpark",
         latitude: -33.67,
         longitude: 150.27,
-        canyonIds: [SHARED_CANYON_ID, privateCanyon.body.id],
+        placeIds: [SHARED_PLACE_ID, privatePlace.body.id],
       });
     expect(created.status).toBe(201);
-    expect(created.body.canyonIds).toHaveLength(2);
+    expect(created.body.placeIds).toHaveLength(2);
 
-    // Bob learns only about the canyon he was actually shared on — the link
+    // Bob learns only about the place he was actually shared on — the link
     // list must not leak the existence of the other one.
     const read = await request(API_URL)
       .get(`/waypoints/${created.body.id as string}`)
       .set(as(BOB_SUB));
     expect(read.status).toBe(200);
-    expect(read.body.canyonIds).toEqual([SHARED_CANYON_ID]);
+    expect(read.body.placeIds).toEqual([SHARED_PLACE_ID]);
 
     await request(API_URL)
       .delete(`/waypoints/${created.body.id as string}`)
       .set(as(ALICE_SUB));
     await request(API_URL)
-      .delete(`/canyons/${privateCanyon.body.id as string}`)
+      .delete(`/places/${privatePlace.body.id as string}`)
       .set(as(ALICE_SUB));
   });
 
-  it("unlinking the last shared canyon tombstones the sharee", async () => {
+  it("unlinking the last shared place tombstones the sharee", async () => {
     const id = await linkedWaypoint();
 
     const before = await request(API_URL)
@@ -243,7 +243,7 @@ describe("waypoints share boundary", () => {
     const unlink = await request(API_URL)
       .patch(`/waypoints/${id}`)
       .set(as(ALICE_SUB))
-      .send({ canyonIds: [] });
+      .send({ placeIds: [] });
     expect(unlink.status).toBe(200);
 
     // The row is still very much alive for alice — but bob must be told to
@@ -291,12 +291,12 @@ describe("waypoints ownership boundary", () => {
 });
 
 describe("trip updatedAt watermark (stage8 §3.1 trap)", () => {
-  it("a canyonIds-only PATCH bumps the trip's updatedAt", async () => {
-    const canyon = await request(API_URL)
-      .post("/canyons")
+  it("a placeIds-only PATCH bumps the trip's updatedAt", async () => {
+    const place = await request(API_URL)
+      .post("/places")
       .set(as(ALICE_SUB))
-      .send({ name: "Watermark canyon", latitude: -33.66, longitude: 150.26 });
-    expect(canyon.status).toBe(201);
+      .send({ name: "Watermark place", latitude: -33.66, longitude: 150.26 });
+    expect(place.status).toBe(201);
 
     const trip = await request(API_URL)
       .post("/trips")
@@ -312,18 +312,18 @@ describe("trip updatedAt watermark (stage8 §3.1 trap)", () => {
     const patch = await request(API_URL)
       .patch(`/trips/${trip.body.id as string}`)
       .set(as(ALICE_SUB))
-      .send({ canyonIds: [canyon.body.id] });
+      .send({ placeIds: [place.body.id] });
     expect(patch.status).toBe(200);
     const after = new Date(patch.body.updatedAt as string).getTime();
     // The link change MUST move the row past the delta watermark.
     expect(after).toBeGreaterThan(before);
 
-    // teardown (canyon delete backfills the trip name; delete trip too)
+    // teardown (place delete backfills the trip name; delete trip too)
     await request(API_URL)
       .delete(`/trips/${trip.body.id as string}`)
       .set(as(ALICE_SUB));
     await request(API_URL)
-      .delete(`/canyons/${canyon.body.id as string}`)
+      .delete(`/places/${place.body.id as string}`)
       .set(as(ALICE_SUB));
   });
 });

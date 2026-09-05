@@ -13,7 +13,7 @@
 // WRITE failure is an error, and `lastWriteError` is how the surface that asked
 // for the write tells the user their preference didn't stick.
 //
-// PRIVACY: device preferences only — no canyon names, no coordinates, no
+// PRIVACY: device preferences only — no place names, no coordinates, no
 // account identifiers. App-private storage like every other database here.
 import type * as SQLiteModule from "expo-sqlite";
 

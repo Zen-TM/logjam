@@ -12,13 +12,13 @@ const prisma = new PrismaClient({ adapter });
 // Rich synthetic seed (operator-trust plan, Part A).
 //
 // Goal: realistic volume + edge cases so prod data is never needed to develop
-// or debug. Canyons are well-published NSW classics (drawn from the public
-// canyon list) or deliberately fabricated; ALL trip logs are fabricated.
+// or debug. Places are well-published NSW classics (drawn from the public
+// place list) or deliberately fabricated; ALL trip logs are fabricated.
 //
 // Test invariants this seed MUST preserve (see api/src/__tests__/_actors.ts):
 //   - alice/bob/carol ids + cognito subs (below).
-//   - CANYON_IDS[0] === SHARED_CANYON_ID, alice-owned, shared with bob, has >=1
-//     trip log. CANYON_IDS[1] also shared with bob. carol is shared NOTHING and
+//   - PLACE_IDS[0] === SHARED_PLACE_ID, alice-owned, shared with bob, has >=1
+//     trip log. PLACE_IDS[1] also shared with bob. carol is shared NOTHING and
 //     is NOT alice's friend (sharing.test.ts asserts a 403 for share->carol).
 //   - alice<->bob accepted friendship; carol->alice pending request.
 // New data uses fresh ids and never mutates those invariants.
@@ -34,9 +34,9 @@ const ALICE_COGNITO_ID = "fake-alice-sub";
 const BOB_COGNITO_ID = "fake-bob-sub";
 const CAROL_COGNITO_ID = "fake-carol-sub";
 
-// Stable anchor canyon ids referenced by the integration suite.
-const CANYON_IDS = [
-  cid(1), // SHARED_CANYON_ID (shared w/ bob)
+// Stable anchor place ids referenced by the integration suite.
+const PLACE_IDS = [
+  cid(1), // SHARED_PLACE_ID (shared w/ bob)
   cid(2), // shared w/ bob
   cid(3),
   cid(4),
@@ -54,16 +54,16 @@ const wpid = (n: number) => seedId("6", n);
 const rtid = (n: number) => seedId("7", n);
 
 /**
- * The one canyon BOB shares WITH ALICE. Alice is the fake-auth dev user, so
+ * The one place BOB shares WITH ALICE. Alice is the fake-auth dev user, so
  * without an incoming share every sharee-perspective surface in the phone app
  * is unreachable in dev — a read-only row, a "From bob" mark, a refused edit.
  * Bob's "Coin Slot" (seedId("2", 2)); see the share block in main().
  */
-const BOB_SHARED_CANYON_ID = seedId("2", 2);
+const BOB_SHARED_PLACE_ID = seedId("2", 2);
 
 // Route geometries, [lon, lat]. Short and plausible rather than traced: a
 // route's own validation caps length, and dev only needs a line that draws.
-// These sit on the canyons they are linked to, so "Show on map" lands on them.
+// These sit on the places they are linked to, so "Show on map" lands on them.
 const CLAUSTRAL_LINE: [number, number][] = [
   [150.4033, -33.5603],
   [150.4041, -33.5611],
@@ -92,7 +92,7 @@ const ALICE_TRIP_FIELD_DEFS = [
   { key: "wetsuit", label: "Wetsuit", type: "boolean" },
 ];
 
-type SeedCanyon = {
+type SeedPlace = {
   id: string;
   ownerId: string;
   name: string;
@@ -119,13 +119,13 @@ const sandstone = (wetsuit?: number, sources?: [string, string][]): Prisma.Input
   ...(sources ? { sources } : {}),
 });
 
-const ALICE_CANYONS: SeedCanyon[] = [
+const ALICE_PLACES: SeedPlace[] = [
   // --- anchors (ids referenced by tests) ---
-  { id: CANYON_IDS[0], ownerId: ALICE_ID, name: "Grand Canyon", latitude: -33.6563, longitude: 150.3179, numAbseils: 1, longestAbseil: 20, vGrade: 2, aGrade: 2, commitment: 3, quality: 3.4, hours: 3, attributes: sandstone(3) },
-  { id: CANYON_IDS[1], ownerId: ALICE_ID, name: "Claustral Canyon", latitude: -33.5603, longitude: 150.4033, numAbseils: 6, longestAbseil: 15, vGrade: 3, aGrade: 3, commitment: 3, quality: 4.9, hours: 9, attributes: sandstone(5) },
-  { id: CANYON_IDS[2], ownerId: ALICE_ID, name: "Empress Falls", latitude: -33.72, longitude: 150.3625, numAbseils: 1, longestAbseil: 28, vGrade: 3, aGrade: 2, commitment: 2, quality: 3, hours: 2.5, altNames: ["Valley-of-the-Waters"], attributes: sandstone(4) },
-  { id: CANYON_IDS[3], ownerId: ALICE_ID, name: "Hidden Slot", latitude: -33.701, longitude: 150.302, quality: 3, notes: "Fabricated test canyon — not a real location.", attributes: sandstone() },
-  { id: CANYON_IDS[4], ownerId: ALICE_ID, name: "Deep Pass", latitude: -33.3396, longitude: 150.3076, numAbseils: 0, vGrade: 1, aGrade: 2, quality: 2, hours: 3, attributes: sandstone(1) },
+  { id: PLACE_IDS[0], ownerId: ALICE_ID, name: "Grand Canyon", latitude: -33.6563, longitude: 150.3179, numAbseils: 1, longestAbseil: 20, vGrade: 2, aGrade: 2, commitment: 3, quality: 3.4, hours: 3, attributes: sandstone(3) },
+  { id: PLACE_IDS[1], ownerId: ALICE_ID, name: "Claustral Canyon", latitude: -33.5603, longitude: 150.4033, numAbseils: 6, longestAbseil: 15, vGrade: 3, aGrade: 3, commitment: 3, quality: 4.9, hours: 9, attributes: sandstone(5) },
+  { id: PLACE_IDS[2], ownerId: ALICE_ID, name: "Empress Falls", latitude: -33.72, longitude: 150.3625, numAbseils: 1, longestAbseil: 28, vGrade: 3, aGrade: 2, commitment: 2, quality: 3, hours: 2.5, altNames: ["Valley-of-the-Waters"], attributes: sandstone(4) },
+  { id: PLACE_IDS[3], ownerId: ALICE_ID, name: "Hidden Slot", latitude: -33.701, longitude: 150.302, quality: 3, notes: "Fabricated test place — not a real location.", attributes: sandstone() },
+  { id: PLACE_IDS[4], ownerId: ALICE_ID, name: "Deep Pass", latitude: -33.3396, longitude: 150.3076, numAbseils: 0, vGrade: 1, aGrade: 2, quality: 2, hours: 3, attributes: sandstone(1) },
 
   // --- more published classics ---
   { id: cid(6), ownerId: ALICE_ID, name: "Butterbox Canyon", latitude: -33.6304, longitude: 150.397, numAbseils: 11, longestAbseil: 20, vGrade: 4, aGrade: 2, commitment: 4, quality: 3.9, hours: 6.5, altNames: ["Mt Hay"], attributes: sandstone(5, [["OzUltimate", "https://ozultimate.com/canyoning/track_notes/mt_hay.htm"]]) },
@@ -153,24 +153,24 @@ const ALICE_CANYONS: SeedCanyon[] = [
   { id: cid(25), ownerId: ALICE_ID, name: "Sarcophagus Canyon", latitude: -33.5693, longitude: 150.3235, numAbseils: 7, longestAbseil: 25, vGrade: 3, aGrade: 1, quality: 2.8, hours: 8, ropeWikiId: 90025, ropeWikiSnapshot: { name: "Sarcophagus", region: "Blue Mountains", quality: 2.8, rating: "3C1", rappels: 7, fetchedAt: "2025-11-02T00:00:00.000Z" }, attributes: sandstone() },
   { id: cid(26), ownerId: ALICE_ID, name: "Bowens Creek North (Lower)", latitude: -33.5215, longitude: 150.3932, numAbseils: 3, longestAbseil: 12, vGrade: 2, aGrade: 2, commitment: 3, quality: 3.4, hours: 6, altNames: ["Gobsmacker"], attributes: sandstone(5) },
   { id: cid(27), ownerId: ALICE_ID, name: "Crayfish Creek", latitude: -33.5976, longitude: 150.3037, numAbseils: 0, vGrade: 1, aGrade: 2, quality: 1.5, hours: 7, attributes: sandstone() },
-  // second fabricated canyon
-  { id: cid(28), ownerId: ALICE_ID, name: "Test Gorge", latitude: -33.55, longitude: 150.28, numAbseils: 2, longestAbseil: 10, quality: 2, notes: "Fabricated canyon for local development.", attributes: sandstone() },
+  // second fabricated place
+  { id: cid(28), ownerId: ALICE_ID, name: "Test Gorge", latitude: -33.55, longitude: 150.28, numAbseils: 2, longestAbseil: 10, quality: 2, notes: "Fabricated place for local development.", attributes: sandstone() },
 ];
 
 // bob owns a fork of alice's shared Grand Canyon + two of his own.
-const BOB_CANYONS: SeedCanyon[] = [
-  { id: seedId("2", 1), ownerId: BOB_ID, name: "Grand Canyon (copy)", latitude: -33.6563, longitude: 150.3179, numAbseils: 1, longestAbseil: 20, vGrade: 2, aGrade: 2, commitment: 3, quality: 3.4, hours: 3, forkedFromId: CANYON_IDS[0], attributes: sandstone(3) },
+const BOB_PLACES: SeedPlace[] = [
+  { id: seedId("2", 1), ownerId: BOB_ID, name: "Grand Canyon (copy)", latitude: -33.6563, longitude: 150.3179, numAbseils: 1, longestAbseil: 20, vGrade: 2, aGrade: 2, commitment: 3, quality: 3.4, hours: 3, forkedFromId: PLACE_IDS[0], attributes: sandstone(3) },
   { id: seedId("2", 2), ownerId: BOB_ID, name: "Coin Slot", latitude: -33.1224, longitude: 150.3297, numAbseils: 5, longestAbseil: 35, vGrade: 3, aGrade: 1, commitment: 4, quality: 4, hours: 3.5, attributes: sandstone(2) },
   { id: seedId("2", 3), ownerId: BOB_ID, name: "Galah Canyon", latitude: -33.2514, longitude: 150.3037, numAbseils: 8, longestAbseil: 30, quality: 4, hours: 10, attributes: sandstone(4) },
 ];
 
-// carol owns her own canyons (and is shared nothing of alice's — the stranger).
-const CAROL_CANYONS: SeedCanyon[] = [
+// carol owns her own places (and is shared nothing of alice's — the stranger).
+const CAROL_PLACES: SeedPlace[] = [
   { id: seedId("3", 1), ownerId: CAROL_ID, name: "Pipeline Canyon", latitude: -33.1658, longitude: 150.2634, numAbseils: 10, longestAbseil: 25, quality: 4, hours: 7, attributes: sandstone(4) },
   { id: seedId("3", 2), ownerId: CAROL_ID, name: "Surefire Canyon", latitude: -33.2286, longitude: 150.2926, numAbseils: 5, longestAbseil: 15, quality: 4.5, hours: 12, attributes: sandstone(4) },
 ];
 
-const ALL_CANYONS = [...ALICE_CANYONS, ...BOB_CANYONS, ...CAROL_CANYONS];
+const ALL_PLACES = [...ALICE_PLACES, ...BOB_PLACES, ...CAROL_PLACES];
 
 // Deterministic fabricated trip-log generator.
 const PARTIES = [
@@ -202,7 +202,7 @@ function tripDate(seed: number): Date {
 }
 
 type SeedTrip = {
-  canyonId: string | null;
+  placeId: string | null;
   userId: string;
   date: Date;
   displayName?: string;
@@ -214,16 +214,16 @@ function buildTrips(): SeedTrip[] {
   const trips: SeedTrip[] = [];
   let seed = 0;
 
-  // alice: 3-4 trips per canyon, with rotating parties/notes and occasional
+  // alice: 3-4 trips per place, with rotating parties/notes and occasional
   // custom fields.
-  for (const canyon of ALICE_CANYONS) {
+  for (const place of ALICE_PLACES) {
     const count = 3 + (seed % 2); // 3 or 4
     for (let i = 0; i < count; i++) {
       seed++;
       const party = PARTIES[seed % PARTIES.length];
       const withFields = seed % 3 === 0;
       trips.push({
-        canyonId: canyon.id,
+        placeId: place.id,
         userId: ALICE_ID,
         date: tripDate(seed),
         notes: `${NOTE_TEMPLATES[seed % NOTE_TEMPLATES.length]} Party: ${party.join(", ")}.`,
@@ -238,24 +238,24 @@ function buildTrips(): SeedTrip[] {
     }
   }
 
-  // alice: named no-canyon trips (displayName set, canyonId null).
-  for (const name of ["Newnes weekend (multi-canyon)", "Kanangra exploratory", "Wollangambe float", "Rescue practice day"]) {
+  // alice: named no-place trips (displayName set, placeId null).
+  for (const name of ["Newnes weekend (multi-place)", "Kanangra exploratory", "Wollangambe float", "Rescue practice day"]) {
     seed++;
     trips.push({
-      canyonId: null,
+      placeId: null,
       userId: ALICE_ID,
       date: tripDate(seed),
       displayName: name,
-      notes: `${NOTE_TEMPLATES[seed % NOTE_TEMPLATES.length]} (No single canyon — logged by name.)`,
+      notes: `${NOTE_TEMPLATES[seed % NOTE_TEMPLATES.length]} (No single place — logged by name.)`,
     });
   }
 
-  // bob: trips on his own canyons + one named no-canyon trip.
-  for (const canyon of BOB_CANYONS) {
+  // bob: trips on his own places + one named no-place trip.
+  for (const place of BOB_PLACES) {
     for (let i = 0; i < 3; i++) {
       seed++;
       trips.push({
-        canyonId: canyon.id,
+        placeId: place.id,
         userId: BOB_ID,
         date: tripDate(seed),
         notes: `${NOTE_TEMPLATES[seed % NOTE_TEMPLATES.length]} Party: ${PARTIES[seed % PARTIES.length].join(", ")}.`,
@@ -263,14 +263,14 @@ function buildTrips(): SeedTrip[] {
     }
   }
   seed++;
-  trips.push({ canyonId: null, userId: BOB_ID, date: tripDate(seed), displayName: "Canyoning festival 2024", notes: "Three canyons in a day. Logged as one entry." });
+  trips.push({ placeId: null, userId: BOB_ID, date: tripDate(seed), displayName: "Canyoning festival 2024", notes: "Three places in a day. Logged as one entry." });
 
-  // carol: trips on her own canyons.
-  for (const canyon of CAROL_CANYONS) {
+  // carol: trips on her own places.
+  for (const place of CAROL_PLACES) {
     for (let i = 0; i < 3; i++) {
       seed++;
       trips.push({
-        canyonId: canyon.id,
+        placeId: place.id,
         userId: CAROL_ID,
         date: tripDate(seed),
         notes: `${NOTE_TEMPLATES[seed % NOTE_TEMPLATES.length]} Party: ${PARTIES[seed % PARTIES.length].join(", ")}.`,
@@ -290,14 +290,14 @@ async function main() {
   // Guarded by src/lib/seedWipe.unit.test.ts.
   await prisma.$transaction([
     prisma.share.deleteMany(),
-    prisma.canyonShare.deleteMany(),
+    prisma.placeShare.deleteMany(),
     prisma.friendship.deleteMany(),
     prisma.media.deleteMany(),
     prisma.tripLog.deleteMany(),
-    prisma.canyonWaypoint.deleteMany(),
+    prisma.placeWaypoint.deleteMany(),
     prisma.waypoint.deleteMany(),
     prisma.route.deleteMany(),
-    prisma.canyon.deleteMany(),
+    prisma.place.deleteMany(),
     prisma.customFieldDef.deleteMany(),
     prisma.notification.deleteMany(),
     prisma.topoJob.deleteMany(),
@@ -339,32 +339,32 @@ async function main() {
   const carolPending = await prisma.friendship.create({ data: { requesterId: CAROL_ID, addresseeId: ALICE_ID, status: "pending" } });
   await prisma.friendship.create({ data: { requesterId: BOB_ID, addresseeId: CAROL_ID, status: "accepted" } });
 
-  // Canyons. Forks reference an existing id, so insert non-forks first.
-  for (const c of ALL_CANYONS.filter((c) => !c.forkedFromId)) {
-    await prisma.canyon.create({ data: canyonCreate(c) });
+  // Places. Forks reference an existing id, so insert non-forks first.
+  for (const c of ALL_PLACES.filter((c) => !c.forkedFromId)) {
+    await prisma.place.create({ data: placeCreate(c) });
   }
-  for (const c of ALL_CANYONS.filter((c) => c.forkedFromId)) {
-    await prisma.canyon.create({ data: canyonCreate(c) });
+  for (const c of ALL_PLACES.filter((c) => c.forkedFromId)) {
+    await prisma.place.create({ data: placeCreate(c) });
   }
 
   // Shares: anchors 0 & 1 (invariant) + two more, all alice->bob. carol gets none.
-  await prisma.canyonShare.createMany({
-    data: [CANYON_IDS[0], CANYON_IDS[1], cid(6), cid(9)].map((canyonId) => ({
-      canyonId,
+  await prisma.placeShare.createMany({
+    data: [PLACE_IDS[0], PLACE_IDS[1], cid(6), cid(9)].map((placeId) => ({
+      placeId,
       sharedById: ALICE_ID,
       sharedWithId: BOB_ID,
     })),
   });
 
-  // ONE bob->alice canyon share, so the dev user has an INCOMING share and not
+  // ONE bob->alice place share, so the dev user has an INCOMING share and not
   // only outgoing ones. Without it alice can never see a row she does not own,
   // and every sharee-perspective surface in the phone app — a read-only
   // waypoint, a "From bob" mark, a refused delete — is unreachable in dev.
   // Deliberately bob's "Coin Slot" and not his FORK of Grand Canyon, which
-  // would sit next to alice's own copy of the same canyon and read as a bug.
-  await prisma.canyonShare.create({
+  // would sit next to alice's own copy of the same place and read as a bug.
+  await prisma.placeShare.create({
     data: {
-      canyonId: BOB_SHARED_CANYON_ID,
+      placeId: BOB_SHARED_PLACE_ID,
       sharedById: BOB_ID,
       sharedWithId: ALICE_ID,
     },
@@ -377,10 +377,10 @@ async function main() {
   // The set covers every combination the row builders branch on:
   //   owned, unshared            → no mark
   //   owned + a DIRECT share     → the fan-out glyph. sharedCount comes from
-  //                                `shares`, never from the canyon share, so a
-  //                                waypoint on a shared canyon has no count.
-  //   received via canyon share  → "From bob": the owner resolves through the
-  //                                mirrored canyon_shares row.
+  //                                `shares`, never from the place share, so a
+  //                                waypoint on a shared place has no count.
+  //   received via place share  → "From bob": the owner resolves through the
+  //                                mirrored place_shares row.
   //   received via direct share  → "Shared with you". Direct shares are not a
   //                                delta entity, so no owner name reaches the
   //                                phone — this is the fallback, exercised.
@@ -394,21 +394,21 @@ async function main() {
     ],
   });
 
-  // Links are what make a waypoint part of a canyon record — and for wpid(4)
-  // they are what carries it to alice through bob's canyon share.
-  await prisma.canyonWaypoint.createMany({
+  // Links are what make a waypoint part of a place record — and for wpid(4)
+  // they are what carries it to alice through bob's place share.
+  await prisma.placeWaypoint.createMany({
     data: [
-      { canyonId: CANYON_IDS[0], waypointId: wpid(1) },
-      { canyonId: CANYON_IDS[1], waypointId: wpid(2) },
-      { canyonId: BOB_SHARED_CANYON_ID, waypointId: wpid(4) },
+      { placeId: PLACE_IDS[0], waypointId: wpid(1) },
+      { placeId: PLACE_IDS[1], waypointId: wpid(2) },
+      { placeId: BOB_SHARED_PLACE_ID, waypointId: wpid(4) },
     ],
   });
 
   await prisma.route.createMany({
     data: [
-      { id: rtid(1), ownerId: ALICE_ID, canyonId: CANYON_IDS[1], name: "Claustral through-trip", color: TRACK_COLORS[3], points: CLAUSTRAL_LINE, anchors: [0, CLAUSTRAL_LINE.length - 1] },
-      { id: rtid(2), ownerId: ALICE_ID, canyonId: null, name: "Du Faur Head approach", color: TRACK_COLORS[4], points: DU_FAUR_LINE, anchors: Prisma.DbNull },
-      { id: rtid(3), ownerId: BOB_ID, canyonId: BOB_SHARED_CANYON_ID, name: "Coin Slot approach", color: TRACK_COLORS[5], points: COIN_SLOT_LINE, anchors: [0, COIN_SLOT_LINE.length - 1] },
+      { id: rtid(1), ownerId: ALICE_ID, placeId: PLACE_IDS[1], name: "Claustral through-trip", color: TRACK_COLORS[3], points: CLAUSTRAL_LINE, anchors: [0, CLAUSTRAL_LINE.length - 1] },
+      { id: rtid(2), ownerId: ALICE_ID, placeId: null, name: "Du Faur Head approach", color: TRACK_COLORS[4], points: DU_FAUR_LINE, anchors: Prisma.DbNull },
+      { id: rtid(3), ownerId: BOB_ID, placeId: BOB_SHARED_PLACE_ID, name: "Coin Slot approach", color: TRACK_COLORS[5], points: COIN_SLOT_LINE, anchors: [0, COIN_SLOT_LINE.length - 1] },
     ],
   });
 
@@ -439,10 +439,10 @@ async function main() {
         date: t.date,
         displayName: t.displayName,
         notes: t.notes,
-        types: enforceCanyoningTag([], Boolean(t.canyonId)),
+        types: enforceCanyoningTag([], Boolean(t.placeId)),
         ...(t.customFields ? { customFields: t.customFields } : {}),
-        ...(t.canyonId
-          ? { canyons: { create: [{ canyonId: t.canyonId, position: 0 }] } }
+        ...(t.placeId
+          ? { places: { create: [{ placeId: t.placeId, position: 0 }] } }
           : {}),
       },
     });
@@ -452,15 +452,15 @@ async function main() {
   // load; the rows exist to populate media-list code paths).
   //
   // Covers all three parent states, because they behave differently and only
-  // the first one used to exist: a photo ATTACHED to a canyon (dies with it), a
-  // standalone import LINKED as a canyon's way (survives the canyon, and is the
+  // the first one used to exist: a photo ATTACHED to a place (dies with it), a
+  // standalone import LINKED as a place's way (survives the place, and is the
   // shape a sharee sees), and an unlinked recording (owner-private, in Saved
   // and nowhere else). A seed with only attachments leaves every standalone
   // path untested by the integration suite.
   await prisma.media.createMany({
     data: [
-      { id: seedId("4", 1), ownerId: ALICE_ID, linkedType: "canyon", linkedId: CANYON_IDS[0], s3KeyDisplay: "media/seed/grand-1.jpg", s3KeyThumbnail: "media/seed/grand-1-thumb.jpg", mediaType: "image/jpeg", filename: "grand-canyon.jpg", fileSizeBytes: BigInt(2_048_000) },
-      { id: seedId("4", 2), ownerId: ALICE_ID, linkedType: "canyon", linkedId: CANYON_IDS[1], s3KeyDisplay: "media/seed/claustral.gpx", mediaType: "application/gpx+xml", filename: "claustral-track.gpx", fileSizeBytes: BigInt(48_000), color: TRACK_COLORS[0], origin: "import", metadata: { bbox: [150.32, -33.42, 150.38, -33.36], featureCount: 1, positionCount: 812 } },
+      { id: seedId("4", 1), ownerId: ALICE_ID, linkedType: "place", linkedId: PLACE_IDS[0], s3KeyDisplay: "media/seed/grand-1.jpg", s3KeyThumbnail: "media/seed/grand-1-thumb.jpg", mediaType: "image/jpeg", filename: "grand-place.jpg", fileSizeBytes: BigInt(2_048_000) },
+      { id: seedId("4", 2), ownerId: ALICE_ID, linkedType: "place", linkedId: PLACE_IDS[1], s3KeyDisplay: "media/seed/claustral.gpx", mediaType: "application/gpx+xml", filename: "claustral-track.gpx", fileSizeBytes: BigInt(48_000), color: TRACK_COLORS[0], origin: "import", metadata: { bbox: [150.32, -33.42, 150.38, -33.36], featureCount: 1, positionCount: 812 } },
       { id: seedId("4", 3), ownerId: ALICE_ID, linkedType: "none", linkedId: null, s3KeyDisplay: "media/seed/du-faur.kml", mediaType: "application/vnd.google-earth.kml+xml", filename: "du-faur-approach.kml", displayName: "Du Faur approach", fileSizeBytes: BigInt(21_000), color: TRACK_COLORS[1], origin: "import", metadata: { bbox: [150.29, -33.45, 150.34, -33.41], featureCount: 3, positionCount: 240 } },
       { id: seedId("4", 4), ownerId: ALICE_ID, linkedType: "none", linkedId: null, s3KeyDisplay: "media/seed/recording-2026-08-02.gpx", mediaType: "application/gpx+xml", filename: "Wollangambe, 2 Aug.gpx", displayName: "Wollangambe, 2 Aug", fileSizeBytes: BigInt(184_000), color: TRACK_COLORS[2], origin: "track", metadata: { bbox: [150.25, -33.52, 150.31, -33.47], distanceM: 7420, durationMs: 19_800_000, elevationGainM: 265, elevationLossM: 310, pointCount: 6_140, startedAt: "2026-08-02T22:05:00.000Z", endedAt: "2026-08-03T03:35:00.000Z" } },
     ],
@@ -469,8 +469,8 @@ async function main() {
   // Notifications (payloads are enriched server-side from the referenced ids).
   await prisma.notification.createMany({
     data: [
-      { userId: BOB_ID, type: "canyon_shared", payload: { canyonId: CANYON_IDS[0], sharedById: ALICE_ID }, read: false },
-      { userId: BOB_ID, type: "canyon_shared", payload: { canyonId: CANYON_IDS[1], sharedById: ALICE_ID }, read: true },
+      { userId: BOB_ID, type: "place_shared", payload: { placeId: PLACE_IDS[0], sharedById: ALICE_ID }, read: false },
+      { userId: BOB_ID, type: "place_shared", payload: { placeId: PLACE_IDS[1], sharedById: ALICE_ID }, read: true },
       { userId: ALICE_ID, type: "friend_request", payload: { friendshipId: carolPending.id, requesterUsername: "carol" }, read: false },
     ],
   });
@@ -479,15 +479,15 @@ async function main() {
   // behind it renders nothing / breaks the map UI. Submit a real LiDAR ZIP in
   // dev to exercise the topo flow end-to-end instead.
 
-  const canyonCount = ALL_CANYONS.length;
+  const placeCount = ALL_PLACES.length;
   console.log(
-    `Seed complete: 3 users, ${canyonCount} canyons (1 fork), 5 canyon shares ` +
+    `Seed complete: 3 users, ${placeCount} places (1 fork), 5 place shares ` +
       `(1 incoming to alice), 3 direct shares, ${trips.length} trip logs, ` +
       `5 waypoints, 3 routes, 4 media, 3 notifications, 0 topo jobs`,
   );
 }
 
-function canyonCreate(c: SeedCanyon): Prisma.CanyonCreateInput {
+function placeCreate(c: SeedPlace): Prisma.PlaceCreateInput {
   return {
     id: c.id,
     name: c.name,

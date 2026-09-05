@@ -8,7 +8,7 @@ import {
 import {
   updateUserPreferences,
   type CustomFieldEntityKind,
-} from "../../../canyonUtils";
+} from "../../../placeUtils";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
 import DeleteCustomFieldDialog from "../../dialogs/DeleteCustomFieldDialog";
 import AddCustomFieldDialog from "../../dialogs/AddCustomFieldDialog";
@@ -20,10 +20,10 @@ import classes from "./AccountPanel.module.css";
 // Entity → the User.uiPreferences key its defs persist under, and copy nouns.
 const ENTITY_META: Record<
   CustomFieldEntityKind,
-  { prefsKey: "tripLogCustomFields" | "canyonCustomFields"; rowNoun: string }
+  { prefsKey: "tripLogCustomFields" | "placeCustomFields"; rowNoun: string }
 > = {
   "trip-log": { prefsKey: "tripLogCustomFields", rowNoun: "trip" },
-  canyon: { prefsKey: "canyonCustomFields", rowNoun: "canyon" },
+  place: { prefsKey: "placeCustomFields", rowNoun: "place" },
 };
 
 function customFieldTypeName(type: TripLogCustomFieldDef["type"]): string {
@@ -32,7 +32,7 @@ function customFieldTypeName(type: TripLogCustomFieldDef["type"]): string {
 
 /**
  * Account-panel section for managing one family of custom fields (trip-log or
- * canyon). Lists the definitions, renames them inline (keeping the field `key`
+ * place). Lists the definitions, renames them inline (keeping the field `key`
  * stable, with an impact-count confirm), deletes them via the shared
  * DeleteCustomFieldDialog (server strips values from every row), and creates new
  * ones via AddCustomFieldDialog. Rename/delete/create all persist through the

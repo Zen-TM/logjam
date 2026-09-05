@@ -21,9 +21,9 @@ const waypoint: BulkShareCandidate = {
   key: "w1",
   share: { entityType: "waypoint", entityId: "w1" },
 };
-const canyon: BulkShareCandidate = {
+const place: BulkShareCandidate = {
   key: "c1",
-  share: { entityType: "canyon", entityId: "c1" },
+  share: { entityType: "place", entityId: "c1" },
 };
 const track: BulkShareCandidate = { key: "t1", sendCopy };
 /** Nothing waiting in the outbox — the ordinary case for most of these. */
@@ -37,10 +37,10 @@ const theirs: BulkShareCandidate = {
 
 describe("planBulkShareSelection", () => {
   it("sorts a mixed selection into the two verbs and the leftovers", () => {
-    const plan = planBulkShareSelection([waypoint, track, region, canyon], ALL_SYNCED);
+    const plan = planBulkShareSelection([waypoint, track, region, place], ALL_SYNCED);
     expect(plan.shares).toEqual([
       { entityType: "waypoint", entityId: "w1" },
-      { entityType: "canyon", entityId: "c1" },
+      { entityType: "place", entityId: "c1" },
     ]);
     expect(plan.copies).toEqual([track]);
     expect(plan.skipped).toEqual([{ candidate: region, reason: "not-shareable" }]);
@@ -71,7 +71,7 @@ describe("bulkShareTitle", () => {
   });
 
   it("says Share when nothing leaves for good", () => {
-    expect(bulkShareTitle(planBulkShareSelection([waypoint, canyon], ALL_SYNCED))).toBe("Share 2 items");
+    expect(bulkShareTitle(planBulkShareSelection([waypoint, place], ALL_SYNCED))).toBe("Share 2 items");
   });
 
   it("counts what can be acted on, not what was picked", () => {
@@ -114,7 +114,7 @@ describe("bulkShareTriageLine", () => {
 
   it("names all three reasons, and the unsynced one as temporary", () => {
     const line = bulkShareTriageLine(
-      planBulkShareSelection([waypoint, canyon, region, theirs], new Set(["c1"])),
+      planBulkShareSelection([waypoint, place, region, theirs], new Set(["c1"])),
     );
     expect(line).toBe(
       "1 of 4 can be shared — skipping 1 shared with you, 1 not synced yet and 1 can't be shared.",
@@ -132,7 +132,7 @@ describe("bulkShareTriageLine", () => {
 describe("bulkShareConfirm", () => {
   it("states each verb in its OWN words, copies last", () => {
     const confirm = bulkShareConfirm(
-      planBulkShareSelection([waypoint, canyon, track], ALL_SYNCED),
+      planBulkShareSelection([waypoint, place, track], ALL_SYNCED),
       3,
     );
     expect(confirm?.title).toBe("Send to 3 friends?");

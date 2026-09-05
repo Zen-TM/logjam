@@ -46,7 +46,7 @@ type ReviewCandidatePayload = {
   ropeWikiId: number;
   rw: RopeWikiCanyon;
   candidates: {
-    canyonId: string;
+    placeId: string;
     name: string;
     latitude: number;
     longitude: number;
@@ -59,7 +59,7 @@ async function applyAutoLinkAndCreate(
   ownerId: string,
   parsed: RopeWikiCanyon[],
   proposals: DedupeProposal[],
-  existingByCanyonId: Map<string, import("@prisma/client").Canyon>,
+  existingByPlaceId: Map<string, import("@prisma/client").Place>,
 ): Promise<{
   imported: number;
   autoLinked: number;
@@ -72,7 +72,7 @@ async function applyAutoLinkAndCreate(
   const toReview = proposals.filter((p) => p.tier === "review");
 
   if (toCreate.length > 0) {
-    await prisma.canyon.createMany({
+    await prisma.place.createMany({
       data: toCreate.map((p) => {
         const c = withOzUltimate(parsedByRwId.get(p.ropeWikiId)!);
         return {
@@ -100,16 +100,16 @@ async function applyAutoLinkAndCreate(
     const updates = toAutoLink.map((p) => {
       const rawFresh = parsedByRwId.get(p.ropeWikiId);
       if (!rawFresh)
-        throw new AppError(500, `Missing parsed RopeWiki canyon for id ${p.ropeWikiId}`);
-      if (!p.bestCanyonId)
-        throw new AppError(500, `Auto-link proposal for RopeWiki id ${p.ropeWikiId} has no bestCanyonId`);
-      const existing = existingByCanyonId.get(p.bestCanyonId);
+        throw new AppError(500, `Missing parsed RopeWiki place for id ${p.ropeWikiId}`);
+      if (!p.bestPlaceId)
+        throw new AppError(500, `Auto-link proposal for RopeWiki id ${p.ropeWikiId} has no bestPlaceId`);
+      const existing = existingByPlaceId.get(p.bestPlaceId);
       if (!existing)
-        throw new AppError(500, `Missing existing canyon for id ${p.bestCanyonId}`);
+        throw new AppError(500, `Missing existing place for id ${p.bestPlaceId}`);
       const fresh = withOzUltimate(rawFresh, existing.altNames);
       const merged = mergeFillNulls(existing, fresh);
       const { ropeWikiOwnedFields, ...mergedFields } = merged;
-      return prisma.canyon.update({
+      return prisma.place.update({
         where: { id: existing.id },
         data: {
           ...mergedFields,
@@ -125,16 +125,16 @@ async function applyAutoLinkAndCreate(
   const review: ReviewCandidatePayload[] = toReview.map((p) => {
     const rw = parsedByRwId.get(p.ropeWikiId);
     if (!rw)
-      throw new AppError(500, `Missing parsed RopeWiki canyon for id ${p.ropeWikiId}`);
+      throw new AppError(500, `Missing parsed RopeWiki place for id ${p.ropeWikiId}`);
     return {
       ropeWikiId: p.ropeWikiId,
       rw,
       candidates: p.candidates.map((s) => {
-        const existing = existingByCanyonId.get(s.canyonId);
+        const existing = existingByPlaceId.get(s.placeId);
         if (!existing)
-          throw new AppError(500, `Missing existing canyon for id ${s.canyonId}`);
+          throw new AppError(500, `Missing existing place for id ${s.placeId}`);
         return {
-          canyonId: existing.id,
+          placeId: existing.id,
           name: existing.name,
           latitude: existing.latitude,
           longitude: existing.longitude,
@@ -153,7 +153,7 @@ async function applyAutoLinkAndCreate(
 }
 
 // POST /ropewiki/import — first-pass import. Auto-links high-confidence
-// matches against the user's existing canyons, inserts no-match rows, and
+// matches against the user's existing places, inserts no-match rows, and
 // returns mid-confidence rows for client-side review (no mutation for
 // those). Already-linked RopeWiki rows are skipped.
 router.post(
@@ -165,21 +165,21 @@ router.post(
 
     const fresh = req.query.fresh === "true";
     const {
-      canyons: parsed,
+      places: parsed,
       errors: parseErrors,
       sourceUpdatedAt,
     } = await getRopeWikiCanyons(fresh);
 
-    const allUserCanyons = await prisma.canyon.findMany({
+    const allUserPlaces = await prisma.place.findMany({
       where: { ownerId: user.id },
     });
     const linkedRwIds = new Set(
-      allUserCanyons
+      allUserPlaces
         .filter((c) => c.ropeWikiId !== null)
         .map((c) => c.ropeWikiId!),
     );
-    const candidatePool = allUserCanyons.filter((c) => c.ropeWikiId === null);
-    const existingByCanyonId = new Map(candidatePool.map((c) => [c.id, c]));
+    const candidatePool = allUserPlaces.filter((c) => c.ropeWikiId === null);
+    const existingByPlaceId = new Map(candidatePool.map((c) => [c.id, c]));
 
     const toProcess = parsed.filter((c) => !linkedRwIds.has(c.ropeWikiId));
     const skipped = parsed.length - toProcess.length;
@@ -189,7 +189,7 @@ router.post(
       user.id,
       toProcess,
       proposals,
-      existingByCanyonId,
+      existingByPlaceId,
     );
 
     res.json({
@@ -206,7 +206,7 @@ router.post(
 type ApplyDecision = {
   ropeWikiId: number;
   action: "link" | "create" | "skip";
-  targetCanyonId?: string;
+  targetPlaceId?: string;
 };
 
 // Cap decisions per request: each one does a target lookup plus a chunked
@@ -216,8 +216,8 @@ type ApplyDecision = {
 const APPLY_DECISION_LIMIT = 2000;
 
 // POST /ropewiki/import/apply — resolve review-tier decisions returned from
-// /import. Each decision either links the RopeWiki canyon onto an existing
-// user canyon (fill-nulls merge), creates a new canyon, or skips.
+// /import. Each decision either links the RopeWiki place onto an existing
+// user place (fill-nulls merge), creates a new place, or skips.
 router.post(
   "/import/apply",
   requireAuth,
@@ -242,31 +242,31 @@ router.post(
       ) {
         throw new AppError(400, `Invalid decision at index ${i}`);
       }
-      if (d.action === "link" && typeof d.targetCanyonId !== "string") {
+      if (d.action === "link" && typeof d.targetPlaceId !== "string") {
         throw new AppError(
           400,
-          `link decision at index ${i} missing targetCanyonId`,
+          `link decision at index ${i} missing targetPlaceId`,
         );
       }
       return {
         ropeWikiId: d.ropeWikiId,
         action: d.action,
-        targetCanyonId: d.targetCanyonId,
+        targetPlaceId: d.targetPlaceId,
       };
     });
 
     const {
-      canyons: parsed,
+      places: parsed,
       errors: parseErrors,
       sourceUpdatedAt,
     } = await getRopeWikiCanyons(false);
     const parsedByRwId = new Map(parsed.map((c) => [c.ropeWikiId, c]));
 
     const targetIds = normalized
-      .filter((d) => d.action === "link" && d.targetCanyonId)
-      .map((d) => d.targetCanyonId!);
+      .filter((d) => d.action === "link" && d.targetPlaceId)
+      .map((d) => d.targetPlaceId!);
     const targets = targetIds.length
-      ? await prisma.canyon.findMany({
+      ? await prisma.place.findMany({
           where: { id: { in: targetIds }, ownerId: user.id },
         })
       : [];
@@ -278,7 +278,7 @@ router.post(
     const errors: string[] = [...parseErrors];
 
     const toCreateRows: RopeWikiCanyon[] = [];
-    const updates: ReturnType<typeof prisma.canyon.update>[] = [];
+    const updates: ReturnType<typeof prisma.place.update>[] = [];
 
     for (const d of normalized) {
       const fresh = parsedByRwId.get(d.ropeWikiId);
@@ -297,14 +297,14 @@ router.post(
         continue;
       }
       // link
-      const target = targetById.get(d.targetCanyonId!);
+      const target = targetById.get(d.targetPlaceId!);
       if (!target) {
-        errors.push(`Target canyon ${d.targetCanyonId} not owned by user`);
+        errors.push(`Target place ${d.targetPlaceId} not owned by user`);
         continue;
       }
       if (target.ropeWikiId !== null) {
         errors.push(
-          `Target canyon ${target.id} already linked to a RopeWiki page`,
+          `Target place ${target.id} already linked to a RopeWiki page`,
         );
         continue;
       }
@@ -312,7 +312,7 @@ router.post(
       const merged = mergeFillNulls(target, freshWithOz);
       const { ropeWikiOwnedFields, ...mergedFields } = merged;
       updates.push(
-        prisma.canyon.update({
+        prisma.place.update({
           where: { id: target.id },
           data: {
             ...mergedFields,
@@ -324,7 +324,7 @@ router.post(
     }
 
     if (toCreateRows.length > 0) {
-      await prisma.canyon.createMany({
+      await prisma.place.createMany({
         data: toCreateRows.map((rawC) => {
           const c = withOzUltimate(rawC);
           return {
@@ -357,7 +357,7 @@ router.post(
   },
 );
 
-// POST /ropewiki/refresh — re-fetch CSV and update non-edited canyons, add new ones
+// POST /ropewiki/refresh — re-fetch CSV and update non-edited places, add new ones
 router.post(
   "/refresh",
   requireAuth,
@@ -367,23 +367,23 @@ router.post(
 
     const fresh = req.query.fresh === "true";
     const {
-      canyons: parsed,
+      places: parsed,
       errors: parseErrors,
       sourceUpdatedAt,
     } = await getRopeWikiCanyons(fresh);
 
-    // Load all existing RopeWiki-sourced canyons for this user
-    const existingCanyons = await prisma.canyon.findMany({
+    // Load all existing RopeWiki-sourced places for this user
+    const existingPlaces = await prisma.place.findMany({
       where: { ownerId: user.id, ropeWikiId: { not: null } },
     });
     const existingByRwId = new Map(
-      existingCanyons.map((c) => [c.ropeWikiId!, c]),
+      existingPlaces.map((c) => [c.ropeWikiId!, c]),
     );
 
     type RefreshUpdate = {
       id: string;
       previousUpdatedAt: Date;
-      canyonData: Partial<{
+      placeData: Partial<{
         name: string;
         latitude: number;
         longitude: number;
@@ -397,7 +397,7 @@ router.post(
         attributes: object;
       }>;
       newSnapshot: RopeWikiSnapshot;
-      canyonDataChanged: boolean;
+      placeDataChanged: boolean;
     };
 
     const toCreate: typeof parsed = [];
@@ -438,9 +438,9 @@ router.post(
         toUpdate.push({
           id: existing.id,
           previousUpdatedAt: existing.updatedAt,
-          canyonData: {},
+          placeData: {},
           newSnapshot: legacySnapshot,
-          canyonDataChanged: false,
+          placeDataChanged: false,
         });
         continue;
       }
@@ -454,7 +454,7 @@ router.post(
       };
 
       // Per-field: check user edits and RopeWiki upstream changes.
-      const canyonData: Record<string, unknown> = {};
+      const placeData: Record<string, unknown> = {};
       const newOwnedFields: RopeWikiOwnableField[] =
         effectiveOwnership === "*" ? [...ROPE_WIKI_OWNABLE_FIELDS] : [...effectiveOwnership];
 
@@ -470,7 +470,7 @@ router.post(
             if (idx !== -1) newOwnedFields.splice(idx, 1);
           } else if (freshVal !== snapshotVal) {
             // RopeWiki changed this field and user hasn't touched it — update.
-            canyonData[field] = freshVal;
+            placeData[field] = freshVal;
           }
         }
         // user-owned fields: never overwrite.
@@ -486,7 +486,7 @@ router.post(
       }
       const sourcesChanged = !attributesSourcesEqual(existingAttrs, { sources: mergedSources.length ? mergedSources : undefined });
       if (sourcesChanged) {
-        canyonData["attributes"] = {
+        placeData["attributes"] = {
           ...(existing.attributes as object ?? {}),
           sources: mergedSources.length ? mergedSources : undefined,
         };
@@ -497,7 +497,7 @@ router.post(
         ropeWikiOwnedFields: newOwnedFields,
       };
 
-      const canyonDataChanged = Object.keys(canyonData).length > 0;
+      const placeDataChanged = Object.keys(placeData).length > 0;
       const ownershipChanged =
         effectiveOwnership === "*"
           ? newOwnedFields.length !== ROPE_WIKI_OWNABLE_FIELDS.length
@@ -508,7 +508,7 @@ router.post(
         effectiveSnapshot,
       );
 
-      if (!canyonDataChanged && !ownershipChanged && !snapshotValuesChanged) {
+      if (!placeDataChanged && !ownershipChanged && !snapshotValuesChanged) {
         unchanged++;
         continue;
       }
@@ -516,43 +516,43 @@ router.post(
       toUpdate.push({
         id: existing.id,
         previousUpdatedAt: existing.updatedAt,
-        canyonData,
+        placeData,
         newSnapshot,
-        canyonDataChanged,
+        placeDataChanged,
       });
     }
 
     // Run dedupe on the "new from RopeWiki" rows against user's non-RW
-    // canyons. Auto-link high confidence, return review tier, create the rest.
+    // places. Auto-link high confidence, return review tier, create the rest.
     let autoLinkedFromRefresh = 0;
     let review: ReviewCandidatePayload[] = [];
     if (toCreate.length > 0) {
-      const candidatePool = await prisma.canyon.findMany({
+      const candidatePool = await prisma.place.findMany({
         where: { ownerId: user.id, ropeWikiId: null },
       });
-      const existingByCanyonId = new Map(candidatePool.map((c) => [c.id, c]));
+      const existingByPlaceId = new Map(candidatePool.map((c) => [c.id, c]));
       const proposals = buildProposals(toCreate, candidatePool);
       const result = await applyAutoLinkAndCreate(
         user.id,
         toCreate,
         proposals,
-        existingByCanyonId,
+        existingByPlaceId,
       );
       autoLinkedFromRefresh = result.autoLinked;
       review = result.review;
     }
 
-    const updated = toUpdate.filter((u) => u.canyonDataChanged).length;
+    const updated = toUpdate.filter((u) => u.placeDataChanged).length;
 
     // Chunked transaction updates (different data per row → can't updateMany)
     const allUpdates = toUpdate.map((u) =>
-      prisma.canyon.update({
+      prisma.place.update({
         where: { id: u.id },
         data: {
-          ...u.canyonData,
+          ...u.placeData,
           ropeWikiSnapshot: u.newSnapshot,
           // Don't bump updatedAt if only snapshot/ownership changed (no user-visible data changed).
-          ...(u.canyonDataChanged ? {} : { updatedAt: u.previousUpdatedAt }),
+          ...(u.placeDataChanged ? {} : { updatedAt: u.previousUpdatedAt }),
         },
       }),
     );
@@ -566,7 +566,7 @@ router.post(
       review,
       updated,
       unchanged,
-      userEdited: toUpdate.filter((u) => !u.canyonDataChanged).length,
+      userEdited: toUpdate.filter((u) => !u.placeDataChanged).length,
       errors: parseErrors,
       sourceUpdatedAt,
     });

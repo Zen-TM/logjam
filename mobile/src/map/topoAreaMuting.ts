@@ -17,7 +17,7 @@
 // behaviour in SavedScreen.
 //
 // DEVICE-scoped in `prefsDb`, like the other map view preferences. PRIVACY: a
-// jobId is an opaque UUID — no canyon name, no coordinate — and this store is
+// jobId is an opaque UUID — no place name, no coordinate — and this store is
 // app-private like every other database here.
 import { readPref, writePref } from "../prefsDb";
 

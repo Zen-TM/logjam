@@ -13,8 +13,8 @@ import {
 } from "./syncClient.js";
 import { pushOpDependencies, type SyncPushOp } from "./sync.js";
 
-const CANYON_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
-const CANYON_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const PLACE_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const PLACE_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const TRIP_A = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const WP_A = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 
@@ -35,14 +35,14 @@ function entry(
 describe("planOutboxEnqueue (§8.2 coalescing)", () => {
   it("update folds into a still-queued create for the same row", () => {
     const create = op({
-      entity: "canyon",
+      entity: "place",
       op: "create",
-      id: CANYON_A,
+      id: PLACE_A,
       fields: { name: "X", latitude: -33.6, longitude: 150.2 },
     });
     const plan = planOutboxEnqueue(
       [entry(1, create)],
-      op({ entity: "canyon", op: "update", id: CANYON_A, fields: { notes: "n" } }),
+      op({ entity: "place", op: "update", id: PLACE_A, fields: { notes: "n" } }),
     );
     expect(plan).toEqual({
       dropSeqs: [],
@@ -53,11 +53,11 @@ describe("planOutboxEnqueue (§8.2 coalescing)", () => {
 
   it("update merges into the queue-TAIL update on the same row, later fields win", () => {
     const entries = [
-      entry(1, op({ entity: "canyon", op: "update", id: CANYON_A, fields: { notes: "old", quality: 3 } })),
+      entry(1, op({ entity: "place", op: "update", id: PLACE_A, fields: { notes: "old", quality: 3 } })),
     ];
     const plan = planOutboxEnqueue(
       entries,
-      op({ entity: "canyon", op: "update", id: CANYON_A, fields: { notes: "new" } }),
+      op({ entity: "place", op: "update", id: PLACE_A, fields: { notes: "new" } }),
     );
     expect(plan.mergeIntoSeq).toBe(1);
     expect(plan.mergedFields).toEqual({ notes: "new", quality: 3 });
@@ -65,12 +65,12 @@ describe("planOutboxEnqueue (§8.2 coalescing)", () => {
 
   it("update does NOT merge across an intervening op (would reorder)", () => {
     const entries = [
-      entry(1, op({ entity: "canyon", op: "update", id: CANYON_A, fields: { notes: "a" } })),
+      entry(1, op({ entity: "place", op: "update", id: PLACE_A, fields: { notes: "a" } })),
       entry(2, op({ entity: "waypoint", op: "create", id: WP_A, fields: { name: "w" } })),
     ];
     const plan = planOutboxEnqueue(
       entries,
-      op({ entity: "canyon", op: "update", id: CANYON_A, fields: { quality: 4 } }),
+      op({ entity: "place", op: "update", id: PLACE_A, fields: { quality: 4 } }),
     );
     expect(plan.mergeIntoSeq).toBeUndefined();
     expect(plan.append).toBeDefined();
@@ -79,11 +79,11 @@ describe("planOutboxEnqueue (§8.2 coalescing)", () => {
   it("update never merges into an inflight or parked op", () => {
     for (const state of ["inflight", "blocked"] as const) {
       const entries = [
-        entry(1, op({ entity: "canyon", op: "update", id: CANYON_A, fields: { notes: "a" } }), state),
+        entry(1, op({ entity: "place", op: "update", id: PLACE_A, fields: { notes: "a" } }), state),
       ];
       const plan = planOutboxEnqueue(
         entries,
-        op({ entity: "canyon", op: "update", id: CANYON_A, fields: { notes: "b" } }),
+        op({ entity: "place", op: "update", id: PLACE_A, fields: { notes: "b" } }),
       );
       expect(plan.mergeIntoSeq).toBeUndefined();
       expect(plan.append).toBeDefined();
@@ -92,12 +92,12 @@ describe("planOutboxEnqueue (§8.2 coalescing)", () => {
 
   it("delete after queued create drops the whole lineage, enqueues nothing", () => {
     const entries = [
-      entry(1, op({ entity: "canyon", op: "create", id: CANYON_A, fields: { name: "X" } })),
-      entry(2, op({ entity: "canyon", op: "update", id: CANYON_A, fields: { notes: "n" } })),
+      entry(1, op({ entity: "place", op: "create", id: PLACE_A, fields: { name: "X" } })),
+      entry(2, op({ entity: "place", op: "update", id: PLACE_A, fields: { notes: "n" } })),
     ];
     const plan = planOutboxEnqueue(
       entries,
-      op({ entity: "canyon", op: "delete", id: CANYON_A }),
+      op({ entity: "place", op: "delete", id: PLACE_A }),
     );
     expect(plan.dropSeqs).toEqual([1, 2]);
     expect(plan.append).toBeUndefined();
@@ -105,9 +105,9 @@ describe("planOutboxEnqueue (§8.2 coalescing)", () => {
 
   it("delete after queued updates drops the updates, keeps the delete", () => {
     const entries = [
-      entry(1, op({ entity: "canyon", op: "update", id: CANYON_A, fields: { notes: "n" } })),
+      entry(1, op({ entity: "place", op: "update", id: PLACE_A, fields: { notes: "n" } })),
     ];
-    const del = op({ entity: "canyon", op: "delete", id: CANYON_A });
+    const del = op({ entity: "place", op: "delete", id: PLACE_A });
     const plan = planOutboxEnqueue(entries, del);
     expect(plan.dropSeqs).toEqual([1]);
     expect(plan.append).toBe(del);
@@ -120,12 +120,12 @@ describe("planOutboxEnqueue (§8.2 coalescing)", () => {
     const entries = [
       entry(
         1,
-        op({ entity: "canyon", op: "create", id: CANYON_A, fields: { name: "X" } }),
+        op({ entity: "place", op: "create", id: PLACE_A, fields: { name: "X" } }),
         "queued",
         1,
       ),
     ];
-    const del = op({ entity: "canyon", op: "delete", id: CANYON_A });
+    const del = op({ entity: "place", op: "delete", id: PLACE_A });
     const plan = planOutboxEnqueue(entries, del);
     expect(plan.dropSeqs).toEqual([1]);
     expect(plan.append).toBe(del);
@@ -133,11 +133,11 @@ describe("planOutboxEnqueue (§8.2 coalescing)", () => {
 
   it("delete does not cancel an inflight create (server may have applied it)", () => {
     const entries = [
-      entry(1, op({ entity: "canyon", op: "create", id: CANYON_A, fields: { name: "X" } }), "inflight"),
+      entry(1, op({ entity: "place", op: "create", id: PLACE_A, fields: { name: "X" } }), "inflight"),
     ];
     const plan = planOutboxEnqueue(
       entries,
-      op({ entity: "canyon", op: "delete", id: CANYON_A }),
+      op({ entity: "place", op: "delete", id: PLACE_A }),
     );
     expect(plan.dropSeqs).toEqual([]);
     expect(plan.append).toBeDefined();
@@ -188,9 +188,9 @@ describe("planOutboxEnqueue (§8.2 coalescing)", () => {
 describe("selectFlushBatch (§8.3 dependency closure)", () => {
   it("takes queued ops in seq order up to max", () => {
     const entries = [
-      entry(1, op({ entity: "canyon", op: "create", id: CANYON_A, fields: {} })),
+      entry(1, op({ entity: "place", op: "create", id: PLACE_A, fields: {} })),
       entry(2, op({ entity: "waypoint", op: "create", id: WP_A, fields: {} })),
-      entry(3, op({ entity: "canyon", op: "update", id: CANYON_A, fields: {} })),
+      entry(3, op({ entity: "place", op: "update", id: PLACE_A, fields: {} })),
     ];
     const { ready, deferred } = selectFlushBatch(entries, 2);
     expect(ready.map((e) => e.seq)).toEqual([1, 2]);
@@ -199,10 +199,10 @@ describe("selectFlushBatch (§8.3 dependency closure)", () => {
 
   it("defers ops depending on a parked op's entity, transitively", () => {
     const entries = [
-      entry(1, op({ entity: "canyon", op: "create", id: CANYON_A, fields: {} }), "blocked"),
-      entry(2, op({ entity: "tripLog", op: "create", id: TRIP_A, fields: { canyonIds: [CANYON_A] } })),
+      entry(1, op({ entity: "place", op: "create", id: PLACE_A, fields: {} }), "blocked"),
+      entry(2, op({ entity: "tripLog", op: "create", id: TRIP_A, fields: { placeIds: [PLACE_A] } })),
       entry(3, op({ entity: "tripLog", op: "update", id: TRIP_A, fields: { notes: "n" } })),
-      entry(4, op({ entity: "waypoint", op: "create", id: WP_A, fields: { canyonId: CANYON_B } })),
+      entry(4, op({ entity: "waypoint", op: "create", id: WP_A, fields: { placeId: PLACE_B } })),
     ];
     const { ready, deferred } = selectFlushBatch(entries, 50);
     expect(ready.map((e) => e.seq)).toEqual([4]);
@@ -211,8 +211,8 @@ describe("selectFlushBatch (§8.3 dependency closure)", () => {
 
   it("deadRemote parks block dependents too", () => {
     const entries = [
-      entry(1, op({ entity: "canyon", op: "update", id: CANYON_A, fields: {} }), "deadRemote"),
-      entry(2, op({ entity: "waypoint", op: "create", id: WP_A, fields: { canyonId: CANYON_A } })),
+      entry(1, op({ entity: "place", op: "update", id: PLACE_A, fields: {} }), "deadRemote"),
+      entry(2, op({ entity: "waypoint", op: "create", id: WP_A, fields: { placeId: PLACE_A } })),
     ];
     const { ready, deferred } = selectFlushBatch(entries, 50);
     expect(ready).toEqual([]);
@@ -226,8 +226,8 @@ describe("selectFlushBatch (§8.3 dependency closure)", () => {
     // the dependent first is how one flaky 503 turns into a real sync issue on
     // a different row.
     const entries = [
-      entry(1, op({ entity: "canyon", op: "create", id: CANYON_A, fields: {} }), "retrying"),
-      entry(2, op({ entity: "tripLog", op: "create", id: TRIP_A, fields: { canyonIds: [CANYON_A] } })),
+      entry(1, op({ entity: "place", op: "create", id: PLACE_A, fields: {} }), "retrying"),
+      entry(2, op({ entity: "tripLog", op: "create", id: TRIP_A, fields: { placeIds: [PLACE_A] } })),
     ];
     const { ready, deferred } = selectFlushBatch(entries, 50);
     expect(ready).toEqual([]);
@@ -236,8 +236,8 @@ describe("selectFlushBatch (§8.3 dependency closure)", () => {
 
   it("a delete of the blocked row itself stays ready (discard path)", () => {
     const entries = [
-      entry(1, op({ entity: "canyon", op: "update", id: CANYON_A, fields: {} }), "blocked"),
-      entry(2, op({ entity: "canyon", op: "delete", id: CANYON_A })),
+      entry(1, op({ entity: "place", op: "update", id: PLACE_A, fields: {} }), "blocked"),
+      entry(2, op({ entity: "place", op: "delete", id: PLACE_A })),
     ];
     const { ready } = selectFlushBatch(entries, 50);
     expect(ready.map((e) => e.seq)).toEqual([2]);
@@ -263,29 +263,29 @@ describe("filterSelfConflicts (§6 over-report contract)", () => {
   });
 
   it("compares arrays structurally", () => {
-    const base = { canyonIds: ["a", "b"] };
+    const base = { placeIds: ["a", "b"] };
     expect(
-      filterSelfConflicts([{ field: "canyonIds", serverValue: ["a", "b"] }], base),
+      filterSelfConflicts([{ field: "placeIds", serverValue: ["a", "b"] }], base),
     ).toEqual([]);
     expect(
-      filterSelfConflicts([{ field: "canyonIds", serverValue: ["b", "a"] }], base),
-    ).toEqual([{ field: "canyonIds", serverValue: ["b", "a"] }]);
+      filterSelfConflicts([{ field: "placeIds", serverValue: ["b", "a"] }], base),
+    ).toEqual([{ field: "placeIds", serverValue: ["b", "a"] }]);
   });
 });
 
 describe("collectDirtyFields + rebaseRow (§8.5)", () => {
   it("merges pending op fields in seq order; server fields not dirty track the server", () => {
     const entries = [
-      entry(1, op({ entity: "canyon", op: "update", id: CANYON_A, fields: { notes: "first", quality: 3 } })),
-      entry(2, op({ entity: "canyon", op: "update", id: CANYON_A, fields: { notes: "second" } })),
-      entry(3, op({ entity: "canyon", op: "update", id: CANYON_B, fields: { notes: "other row" } })),
+      entry(1, op({ entity: "place", op: "update", id: PLACE_A, fields: { notes: "first", quality: 3 } })),
+      entry(2, op({ entity: "place", op: "update", id: PLACE_A, fields: { notes: "second" } })),
+      entry(3, op({ entity: "place", op: "update", id: PLACE_B, fields: { notes: "other row" } })),
     ];
-    const dirty = collectDirtyFields(entries, "canyon", CANYON_A);
+    const dirty = collectDirtyFields(entries, "place", PLACE_A);
     expect(dirty).toEqual({ notes: "second", quality: 3 });
 
-    const server = { id: CANYON_A, name: "Server name", notes: "server", quality: 5 };
+    const server = { id: PLACE_A, name: "Server name", notes: "server", quality: 5 };
     expect(rebaseRow(server, dirty)).toEqual({
-      id: CANYON_A,
+      id: PLACE_A,
       name: "Server name",
       notes: "second",
       quality: 3,
@@ -334,12 +334,12 @@ describe("computeBackoffMs", () => {
 });
 
 describe("pushOpDependencies (shared single source)", () => {
-  it("update/delete depend on own row; canyon refs extracted from fields", () => {
+  it("update/delete depend on own row; place refs extracted from fields", () => {
     expect(
-      pushOpDependencies(op({ entity: "tripLog", op: "update", id: TRIP_A, fields: { canyonIds: [CANYON_A] } })),
-    ).toEqual([TRIP_A, CANYON_A]);
+      pushOpDependencies(op({ entity: "tripLog", op: "update", id: TRIP_A, fields: { placeIds: [PLACE_A] } })),
+    ).toEqual([TRIP_A, PLACE_A]);
     expect(
-      pushOpDependencies(op({ entity: "waypoint", op: "create", id: WP_A, fields: { canyonId: CANYON_B } })),
-    ).toEqual([CANYON_B]);
+      pushOpDependencies(op({ entity: "waypoint", op: "create", id: WP_A, fields: { placeId: PLACE_B } })),
+    ).toEqual([PLACE_B]);
   });
 });

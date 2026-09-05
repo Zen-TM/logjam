@@ -3,8 +3,8 @@ import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
 vi.mock("../services/prisma", () => ({
   default: {
     share: { findUnique: vi.fn(), findMany: vi.fn() },
-    canyonShare: { findFirst: vi.fn() },
-    canyonWaypoint: { findFirst: vi.fn() },
+    placeShare: { findFirst: vi.fn() },
+    placeWaypoint: { findFirst: vi.fn() },
     waypoint: { findUnique: vi.fn() },
     route: { findUnique: vi.fn(), findFirst: vi.fn() },
     topoJob: { findUnique: vi.fn() },
@@ -22,8 +22,8 @@ import {
 
 const mocked = prisma as unknown as {
   share: { findUnique: Mock; findMany: Mock };
-  canyonShare: { findFirst: Mock };
-  canyonWaypoint: { findFirst: Mock };
+  placeShare: { findFirst: Mock };
+  placeWaypoint: { findFirst: Mock };
   waypoint: { findUnique: Mock };
   route: { findUnique: Mock; findFirst: Mock };
   topoJob: { findUnique: Mock };
@@ -40,14 +40,14 @@ const ALL_TYPES = ["waypoint", "route", "topoJob", "geoPdfJob"] as const;
 beforeEach(() => {
   mocked.share.findUnique.mockReset().mockResolvedValue(null);
   mocked.share.findMany.mockReset().mockResolvedValue([]);
-  mocked.canyonShare.findFirst.mockReset().mockResolvedValue(null);
-  mocked.canyonWaypoint.findFirst.mockReset().mockResolvedValue(null);
+  mocked.placeShare.findFirst.mockReset().mockResolvedValue(null);
+  mocked.placeWaypoint.findFirst.mockReset().mockResolvedValue(null);
   mocked.waypoint.findUnique
     .mockReset()
     .mockResolvedValue({ id: "wp-1", ownerId: OWNER });
   mocked.route.findUnique
     .mockReset()
-    .mockResolvedValue({ id: "rt-1", ownerId: OWNER, canyonId: null });
+    .mockResolvedValue({ id: "rt-1", ownerId: OWNER, placeId: null });
   mocked.route.findFirst.mockReset().mockResolvedValue(null);
   mocked.topoJob.findUnique
     .mockReset()

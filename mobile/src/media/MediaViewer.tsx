@@ -22,7 +22,7 @@ import type { MirrorMedia } from "../sync/mirrorStore";
 import { IconButton } from "../ui";
 
 /**
- * Full-screen viewer for a trip's or canyon's attachments.
+ * Full-screen viewer for a trip's or place's attachments.
  *
  * Paged, not single-item: you arrive from one thumbnail but you are looking
  * through a set, so it swipes horizontally between items and offers arrows for

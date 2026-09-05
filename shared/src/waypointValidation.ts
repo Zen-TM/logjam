@@ -1,20 +1,20 @@
 // Single source of truth for waypoint field caps + validation, shared by the
 // API (routes/waypoints.ts) and the mobile client (outbox validation before
-// enqueue). Mirrors canyonValidation.ts's payload-validator shape.
+// enqueue). Mirrors placeValidation.ts's payload-validator shape.
 
 import {
   isValidLatitude,
   isValidLongitude,
   LATITUDE_RANGE,
   LONGITUDE_RANGE,
-} from "./canyonValidation.js";
+} from "./placeValidation.js";
 
 export const WAYPOINT_NAME_MAX_LENGTH = 120;
 export const WAYPOINT_NOTES_MAX_LENGTH = 10_000;
 export const WAYPOINT_SYMBOL_MAX_LENGTH = 64;
 export const WAYPOINT_TAG_MAX_LENGTH = 40;
 export const MAX_TAGS_PER_WAYPOINT = 12;
-export const MAX_CANYONS_PER_WAYPOINT = 20;
+export const MAX_PLACES_PER_WAYPOINT = 20;
 
 /**
  * Built-in tag suggestions. Exactly the TRIP_TYPE_SUGGESTIONS contract: the UI
@@ -37,7 +37,7 @@ export type WaypointFieldPayload = {
   symbol?: unknown;
   notes?: unknown;
   tags?: unknown;
-  canyonIds?: unknown;
+  placeIds?: unknown;
 };
 
 /**
@@ -85,34 +85,34 @@ export function normalizeWaypointTags(
 }
 
 /**
- * Shape-check a canyonIds list. Only the SHAPE — whether the caller may link to
- * those canyons is an owner-scoped lookup that belongs on the server (see
- * resolveWaypointCanyonIds), and the answer is deliberately indistinguishable
- * from "no such canyon" so the endpoint is not an existence oracle.
+ * Shape-check a placeIds list. Only the SHAPE — whether the caller may link to
+ * those places is an owner-scoped lookup that belongs on the server (see
+ * resolveWaypointPlaceIds), and the answer is deliberately indistinguishable
+ * from "no such place" so the endpoint is not an existence oracle.
  *
  * undefined → undefined (leave unchanged); null → [] (unlinks everything).
  */
-export function normalizeWaypointCanyonIds(
+export function normalizeWaypointPlaceIds(
   value: unknown,
-): { canyonIds: string[] | undefined } | { error: string } {
-  if (value === undefined) return { canyonIds: undefined };
-  if (value === null) return { canyonIds: [] };
+): { placeIds: string[] | undefined } | { error: string } {
+  if (value === undefined) return { placeIds: undefined };
+  if (value === null) return { placeIds: [] };
   if (!Array.isArray(value)) {
-    return { error: "canyonIds must be an array of strings or null" };
+    return { error: "placeIds must be an array of strings or null" };
   }
-  const canyonIds: string[] = [];
+  const placeIds: string[] = [];
   for (const item of value) {
     if (typeof item !== "string") {
-      return { error: "canyonIds must be an array of strings" };
+      return { error: "placeIds must be an array of strings" };
     }
-    if (!canyonIds.includes(item)) canyonIds.push(item);
+    if (!placeIds.includes(item)) placeIds.push(item);
   }
-  if (canyonIds.length > MAX_CANYONS_PER_WAYPOINT) {
+  if (placeIds.length > MAX_PLACES_PER_WAYPOINT) {
     return {
-      error: `At most ${MAX_CANYONS_PER_WAYPOINT} canyons per waypoint`,
+      error: `At most ${MAX_PLACES_PER_WAYPOINT} places per waypoint`,
     };
   }
-  return { canyonIds };
+  return { placeIds };
 }
 
 /**
@@ -128,7 +128,7 @@ export function validateWaypointPayload(
   payload: WaypointFieldPayload,
   opts: { requireCore: boolean },
 ): string | null {
-  const { name, latitude, longitude, elevation, symbol, notes, tags, canyonIds } =
+  const { name, latitude, longitude, elevation, symbol, notes, tags, placeIds } =
     payload;
 
   if (opts.requireCore || name !== undefined) {
@@ -170,8 +170,8 @@ export function validateWaypointPayload(
 
   const normalizedTags = normalizeWaypointTags(tags);
   if ("error" in normalizedTags) return normalizedTags.error;
-  const normalizedCanyonIds = normalizeWaypointCanyonIds(canyonIds);
-  if ("error" in normalizedCanyonIds) return normalizedCanyonIds.error;
+  const normalizedPlaceIds = normalizeWaypointPlaceIds(placeIds);
+  if ("error" in normalizedPlaceIds) return normalizedPlaceIds.error;
 
   return null;
 }

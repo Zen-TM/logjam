@@ -7,15 +7,15 @@ import { buildPushMessages, pushTitleFor, tokensToPrune } from "./push";
 describe("buildPushMessages — privacy invariant", () => {
   it("builds one message per token with a static generic title", () => {
     const messages = buildPushMessages(["ExponentPushToken[a]", "ExponentPushToken[b]"], {
-      type: "canyon_shared",
-      canyonId: "c1",
+      type: "place_shared",
+      placeId: "c1",
       notificationId: "n1",
     });
     expect(messages).toHaveLength(2);
-    expect(messages[0].title).toBe("A canyon was shared with you");
+    expect(messages[0].title).toBe("A place was shared with you");
     expect(messages[0].data).toEqual({
-      type: "canyon_shared",
-      canyonId: "c1",
+      type: "place_shared",
+      placeId: "c1",
       notificationId: "n1",
     });
   });
@@ -26,7 +26,7 @@ describe("buildPushMessages — privacy invariant", () => {
     for (const type of [
       "friend_request",
       "friend_request_accepted",
-      "canyon_shared",
+      "place_shared",
       "topo_complete",
       "topo_failed",
       "topo_export_complete",
@@ -55,14 +55,14 @@ describe("buildPushMessages — privacy invariant", () => {
   it("throws loudly on a non-whitelisted data key (no free-text smuggling)", () => {
     expect(() =>
       buildPushMessages(["t"], {
-        type: "canyon_shared",
+        type: "place_shared",
         // @ts-expect-error — deliberately illegal key
-        canyonName: "Secret Canyon",
+        placeName: "Secret Place",
       }),
-    ).toThrow(/not allowed: canyonName/);
+    ).toThrow(/not allowed: placeName/);
     expect(() =>
       buildPushMessages(["t"], {
-        type: "canyon_shared",
+        type: "place_shared",
         // @ts-expect-error — deliberately illegal key
         latitude: -33.7,
       }),

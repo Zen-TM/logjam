@@ -2,14 +2,14 @@
 //
 // Mostly authored on the phone, where you are standing on the spot. The web's
 // job is the desk work: finding one among hundreds, renaming it, filing it
-// under canyons, and adding the ones you read off a guide rather than walked to.
+// under places, and adding the ones you read off a guide rather than walked to.
 //
 // SEARCH AND TAGS, not a flat list. That is the one structural difference from
 // RoutesPanel: routes are a handful of things you recognise by shape, while
 // waypoints are many small things you arrive looking for one of. The narrowing
 // logic is pure and tested (waypointFilter.ts).
 //
-// A waypoint linked to a canyon shared WITH you arrives read-only — the API
+// A waypoint linked to a place shared WITH you arrives read-only — the API
 // refuses the write, so the UI must not offer it. Those are listed apart, as
 // RoutesPanel does with shared routes.
 //
@@ -34,10 +34,10 @@ import {
   ownerUsername,
   shareEntityWith,
   unshareEntityWith,
-  type TCanyon,
+  type TPlace,
   type TFriend,
   type TWaypoint,
-} from "../../../canyonUtils";
+} from "../../../placeUtils";
 
 type WaypointsPanelProps = {
   waypoints: TWaypoint[];
@@ -45,8 +45,8 @@ type WaypointsPanelProps = {
   error: string | null;
   /** Refetch, for the load-failure banner. */
   onRetry: () => void;
-  /** Owned + shared — for naming the canyons a waypoint is filed under. */
-  canyons: TCanyon[];
+  /** Owned + shared — for naming the places a waypoint is filed under. */
+  places: TPlace[];
   /** Friends an owned waypoint can be shared with. */
   friends: TFriend[];
   currentUserId: string | null;
@@ -60,7 +60,7 @@ type WaypointsPanelProps = {
       name: string;
       notes: string | null;
       tags: string[] | null;
-      canyonIds: string[] | null;
+      placeIds: string[] | null;
     }>,
   ) => Promise<void>;
   onDelete: (waypoint: TWaypoint) => Promise<void>;
@@ -68,12 +68,12 @@ type WaypointsPanelProps = {
    *  dialog rather than a form wedged into this browsing surface. */
   onAdd: () => void;
   /**
-   * Open a canyon's detail panel. Only used by a waypoint that is here because
-   * it is LINKED to a shared canyon: it has no share row of its own to drop, so
-   * the row points at the canyon that brought it instead of offering a Remove
+   * Open a place's detail panel. Only used by a waypoint that is here because
+   * it is LINKED to a shared place: it has no share row of its own to drop, so
+   * the row points at the place that brought it instead of offering a Remove
    * that would do nothing (shared/src/sharing.ts).
    */
-  onOpenCanyon: (canyonId: string) => void;
+  onOpenPlace: (placeId: string) => void;
 };
 
 export default function WaypointsPanel({
@@ -81,7 +81,7 @@ export default function WaypointsPanel({
   loading,
   error,
   onRetry,
-  canyons,
+  places,
   friends,
   currentUserId,
   selectedId,
@@ -90,7 +90,7 @@ export default function WaypointsPanel({
   onUpdate,
   onDelete,
   onAdd,
-  onOpenCanyon,
+  onOpenPlace,
 }: WaypointsPanelProps): React.JSX.Element {
   const [query, setQuery] = useState("");
   const [tag, setTag] = useState<string | null>(null);
@@ -115,7 +115,7 @@ export default function WaypointsPanel({
     <WaypointRow
       key={waypoint.id}
       waypoint={waypoint}
-      canyons={canyons}
+      places={places}
       friends={friends}
       expanded={waypoint.id === selectedId}
       onToggle={() => onSelect(waypoint.id === selectedId ? null : waypoint.id)}
@@ -123,7 +123,7 @@ export default function WaypointsPanel({
       onUpdate={(data) => onUpdate(waypoint.id, data)}
       onDelete={() => onDelete(waypoint)}
       onRemovedShare={onRetry}
-      onOpenCanyon={onOpenCanyon}
+      onOpenPlace={onOpenPlace}
       allWaypoints={waypoints}
     />
   );
@@ -206,7 +206,7 @@ export default function WaypointsPanel({
 
 function WaypointRow({
   waypoint,
-  canyons,
+  places,
   friends,
   allWaypoints,
   expanded,
@@ -215,10 +215,10 @@ function WaypointRow({
   onUpdate,
   onDelete,
   onRemovedShare,
-  onOpenCanyon,
+  onOpenPlace,
 }: {
   waypoint: TWaypoint;
-  canyons: TCanyon[];
+  places: TPlace[];
   friends: TFriend[];
   allWaypoints: TWaypoint[];
   expanded: boolean;
@@ -229,23 +229,23 @@ function WaypointRow({
       name: string;
       notes: string | null;
       tags: string[] | null;
-      canyonIds: string[] | null;
+      placeIds: string[] | null;
     }>,
   ) => Promise<void>;
   onDelete: () => Promise<void>;
   /** Re-pull the list — the removed row is not the caller's to see any more. */
   onRemovedShare: () => void;
-  onOpenCanyon: (canyonId: string) => void;
+  onOpenPlace: (placeId: string) => void;
 }): React.JSX.Element {
   const readOnly = waypoint.syncRole === "shared";
-  // `canyonIds` is server-scoped to canyons this user can see, so a non-empty
+  // `placeIds` is server-scoped to places this user can see, so a non-empty
   // list on a shared row means it is here BECAUSE of one of them.
   const visibility = sharedRowVisibility({
     syncRole: waypoint.syncRole,
-    visibleLinkedCanyonIds: waypoint.canyonIds,
+    visibleLinkedPlaceIds: waypoint.placeIds,
   });
-  const viaCanyons = canyons.filter((canyon) =>
-    waypoint.canyonIds.includes(canyon.id),
+  const viaPlaces = places.filter((place) =>
+    waypoint.placeIds.includes(place.id),
   );
   const color = waypointColor(waypoint);
   const position = `${waypoint.latitude.toFixed(5)}, ${waypoint.longitude.toFixed(5)}`;
@@ -295,11 +295,11 @@ function WaypointRow({
           {readOnly ? (
             <div className={classes.sharedFooter}>
               <span className={classes.caption}>
-                {visibility === "via-canyon"
-                  ? // Naming the canyon is the whole point: it is the thing the
+                {visibility === "via-place"
+                  ? // Naming the place is the whole point: it is the thing the
                     // user has to act on, since this row carries no share of
                     // its own to drop.
-                    `Shared with you as part of ${viaCanyons.map((canyon) => canyon.name).join(", ")} — only its owner can change it.`
+                    `Shared with you as part of ${viaPlaces.map((place) => place.name).join(", ")} — only its owner can change it.`
                   : "Shared with you — only its owner can change it."}
               </span>
               {visibility === "direct" ? (
@@ -311,14 +311,14 @@ function WaypointRow({
                   onRemoved={onRemovedShare}
                 />
               ) : (
-                viaCanyons.map((canyon) => (
+                viaPlaces.map((place) => (
                   <button
-                    key={canyon.id}
+                    key={place.id}
                     type="button"
-                    className={classes.viaCanyonButton}
-                    onClick={() => onOpenCanyon(canyon.id)}
+                    className={classes.viaPlaceButton}
+                    onClick={() => onOpenPlace(place.id)}
                   >
-                    Open {canyon.name}
+                    Open {place.name}
                   </button>
                 ))
               )}
@@ -326,7 +326,7 @@ function WaypointRow({
           ) : (
             <EditableDetail
               waypoint={waypoint}
-              canyons={canyons}
+              places={places}
               friends={friends}
               allWaypoints={allWaypoints}
               onUpdate={onUpdate}
@@ -341,14 +341,14 @@ function WaypointRow({
 
 function EditableDetail({
   waypoint,
-  canyons,
+  places,
   friends,
   allWaypoints,
   onUpdate,
   onDelete,
 }: {
   waypoint: TWaypoint;
-  canyons: TCanyon[];
+  places: TPlace[];
   friends: TFriend[];
   allWaypoints: TWaypoint[];
   onUpdate: (
@@ -356,7 +356,7 @@ function EditableDetail({
       name: string;
       notes: string | null;
       tags: string[] | null;
-      canyonIds: string[] | null;
+      placeIds: string[] | null;
     }>,
   ) => Promise<void>;
   onDelete: () => Promise<void>;
@@ -375,8 +375,8 @@ function EditableDetail({
     return [...used].sort((a, b) => a.localeCompare(b));
   }, [allWaypoints]);
 
-  const ownedCanyons = canyons.filter((canyon) => canyon.ownerId === waypoint.ownerId);
-  const linked = new Set(waypoint.canyonIds);
+  const ownedPlaces = places.filter((place) => place.ownerId === waypoint.ownerId);
+  const linked = new Set(waypoint.placeIds);
 
   const commitName = () => {
     const trimmed = name.trim();
@@ -469,32 +469,32 @@ function EditableDetail({
         </button>
       </div>
 
-      <div className={classes.fieldLabel}>Linked canyons</div>
-      {/* Linking to a canyon you have SHARED publishes this position to its
-          recipients — a linked waypoint follows canyon-level media. The warning
+      <div className={classes.fieldLabel}>Linked places</div>
+      {/* Linking to a place you have SHARED publishes this position to its
+          recipients — a linked waypoint follows place-level media. The warning
           is on the label rather than behind a confirm because the checkbox list
           makes the state visible at a glance. */}
       <span className={classes.caption}>
-        Anyone you share a canyon with can see the waypoints linked to it.
+        Anyone you share a place with can see the waypoints linked to it.
       </span>
-      {ownedCanyons.length === 0 ? (
-        <span className={classes.caption}>You have no canyons to link to.</span>
+      {ownedPlaces.length === 0 ? (
+        <span className={classes.caption}>You have no places to link to.</span>
       ) : (
-        <div className={classes.canyonList}>
-          {ownedCanyons.map((canyon) => (
-            <label key={canyon.id} className={classes.canyonRow}>
+        <div className={classes.placeList}>
+          {ownedPlaces.map((place) => (
+            <label key={place.id} className={classes.placeRow}>
               <input
                 type="checkbox"
-                checked={linked.has(canyon.id)}
+                checked={linked.has(place.id)}
                 onChange={() =>
                   void onUpdate({
-                    canyonIds: linked.has(canyon.id)
-                      ? waypoint.canyonIds.filter((id) => id !== canyon.id)
-                      : [...waypoint.canyonIds, canyon.id],
+                    placeIds: linked.has(place.id)
+                      ? waypoint.placeIds.filter((id) => id !== place.id)
+                      : [...waypoint.placeIds, place.id],
                   })
                 }
               />
-              <span className={classes.canyonName}>{canyon.name}</span>
+              <span className={classes.placeName}>{place.name}</span>
             </label>
           ))}
         </div>

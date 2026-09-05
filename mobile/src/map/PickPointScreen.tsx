@@ -1,7 +1,7 @@
 // "Select on map" — put a marker where the thing is, and hand the coordinates
 // back to the form that asked.
 //
-// TWO forms ask: adding a canyon (Canyons tab) and typing a waypoint from a
+// TWO forms ask: adding a place (Places tab) and typing a waypoint from a
 // coordinate (Saved tab). One screen, because "where is it" is the same
 // question and a second copy is how the two would end up with different
 // basemaps and different reference layers.
@@ -11,7 +11,7 @@
 // whole app, so a map drawn behind it would be invisible. Navigating away is
 // what lets the map have the screen — and the form is not lost, because
 // the host screen keeps its sheet mounted and re-opens it in the state the user
-// left it (see `resuming` in `CanyonEditSheet`).
+// left it (see `resuming` in `PlaceEditSheet`).
 //
 // WHAT IT DRAWS, and why that list:
 //
@@ -20,7 +20,7 @@
 //     topo, a creek junction on the imagery and a track on the vector map are
 //     three different ways to be sure, and switching between them is the whole
 //     reason this screen is not just a coordinate field.
-//   Your own things — canyons, waypoints and ways, all on. They are
+//   Your own things — places, waypoints and ways, all on. They are
 //     the reference that answers "is this the one I already have?" and "does
 //     this line go where I think it does".
 //   NOT GeoPDFs, and not the topo overlay band. A GeoPDF is an opaque sheet of
@@ -30,9 +30,9 @@
 //     count. Neither is worth a switch here: a picker that needs configuring
 //     before it can be used is a second screen wearing one screen's clothes.
 //
-// PRIVACY: canyon names and coordinates are drawn from the local mirror and
+// PRIVACY: place names and coordinates are drawn from the local mirror and
 // never leave the device. The picked point is returned in memory
-// (`pickedPoint.ts`) and reaches the server only if the user saves the canyon,
+// (`pickedPoint.ts`) and reaches the server only if the user saves the place,
 // through the outbox's authed push like any other write.
 import { useCallback, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -50,7 +50,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { config } from "../config";
 import { fontSize, fontWeight, radius, scrim, spacing, theme } from "../theme";
 import { Button } from "../ui";
-import { useMirrorCanyons, useMirrorRoutes, useMirrorWaypoints } from "../sync/useSyncQueries";
+import { useMirrorPlaces, useMirrorRoutes, useMirrorWaypoints } from "../sync/useSyncQueries";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
 import { useConnectivity } from "./connectivity";
 import { useTracks } from "../tracks/useTracks";
@@ -62,9 +62,9 @@ import { useBasemapAssets } from "./basemap/basemapAssets";
 import { ProtomapsLayers } from "./basemap/ProtomapsLayers";
 import { buildShellStyle } from "./basemap/shellStyle";
 import {
-  CanyonPinsLayer,
-  toCanyonFeatureCollection,
-} from "./CanyonPinsLayer";
+  PlacePinsLayer,
+  toPlaceFeatureCollection,
+} from "./PlacePinsLayer";
 import { readLastMapCamera } from "./lastCamera";
 import { DEFAULT_CENTER, DEFAULT_ZOOM } from "./mapChrome";
 import { ResolvedSource, sourceIdFor } from "./ResolvedSource";
@@ -101,11 +101,11 @@ export function PickPointScreen({
    *  marker already placed, so "nudge what I typed" is one drag. */
   initialPoint: PickedPoint | null;
   /**
-   * What is being placed, for the hint: "Tap where the canyon is". Naming the
+   * What is being placed, for the hint: "Tap where the place is". Naming the
    * thing matters because the screen is reached from two different forms and
    * arrives with no other context on it.
    */
-  subject: "canyon" | "waypoint";
+  subject: "place" | "waypoint";
   /**
    * The waypoint being MOVED, which must not draw itself.
    *
@@ -144,7 +144,7 @@ export function PickPointScreen({
 
   // Saved regions count here exactly as they do on the map: a picker that only
   // worked with signal would be useless at the trailhead, which is where a
-  // canyon most often gets added.
+  // place most often gets added.
   const { artifacts } = useMapArtifacts();
   const connectivity = useConnectivity();
   const ctx: ResolveContext = useMemo(
@@ -156,20 +156,20 @@ export function PickPointScreen({
     [basemapId, ctx],
   );
 
-  const canyons = useMirrorCanyons();
+  const places = useMirrorPlaces();
   const ownedFc = useMemo(
     () =>
-      toCanyonFeatureCollection(
-        (canyons.data ?? []).filter((canyon) => canyon.syncRole === "owner"),
+      toPlaceFeatureCollection(
+        (places.data ?? []).filter((place) => place.syncRole === "owner"),
       ),
-    [canyons.data],
+    [places.data],
   );
   const sharedFc = useMemo(
     () =>
-      toCanyonFeatureCollection(
-        (canyons.data ?? []).filter((canyon) => canyon.syncRole === "shared"),
+      toPlaceFeatureCollection(
+        (places.data ?? []).filter((place) => place.syncRole === "shared"),
       ),
-    [canyons.data],
+    [places.data],
   );
 
   const mirrorWaypoints = useMirrorWaypoints();
@@ -257,7 +257,7 @@ export function PickPointScreen({
         )}
 
         {/* Reference only — none of these is pressable here, because every tap
-            on this screen means "the canyon is there". */}
+            on this screen means "the place is there". */}
         <TrackMapLayers
           tracks={tracks}
           waypoints={waypoints}
@@ -267,10 +267,10 @@ export function PickPointScreen({
           onTrackPress={noop}
         />
         <RoutesLayer routes={routes.data ?? EMPTY_ROUTES} hiddenRouteId={null} />
-        <CanyonPinsLayer ownedFc={ownedFc} sharedFc={sharedFc} idPrefix="pick-" />
+        <PlacePinsLayer ownedFc={ownedFc} sharedFc={sharedFc} idPrefix="pick-" />
 
         {/* The dropped point: a ringed dot in the accent — the same cursor the
-            map draws for "here is where you pointed", not a canyon pin. Nothing
+            map draws for "here is where you pointed", not a place pin. Nothing
             has been saved yet, and a pin would say otherwise. */}
         {markerShape ? (
           <GeoJSONSource id="pick-point" data={markerShape}>

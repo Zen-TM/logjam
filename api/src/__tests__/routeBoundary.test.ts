@@ -5,20 +5,20 @@ import {
   ALICE_SUB,
   BOB_SUB,
   CAROL_SUB,
-  SHARED_CANYON_ID,
+  SHARED_PLACE_ID,
   as,
 } from "./_actors";
 
 // Route visibility boundary, from the RECIPIENT and STRANGER sides.
 //
 // Requires `make dev` (Postgres + API on :8080) with AUTH_MODE=fake. Seed
-// baseline: alice owns SHARED_CANYON_ID and shares it with bob; carol is
+// baseline: alice owns SHARED_PLACE_ID and shares it with bob; carol is
 // shared nothing.
 //
-// The rule under test: a route follows canyon-level MEDIA visibility, not the
+// The rule under test: a route follows place-level MEDIA visibility, not the
 // owner-private waypoint rule.
 //   - unlinked route            → owner-private, invisible to everyone else;
-//   - linked to a shared canyon → visible to the sharee, READ-ONLY;
+//   - linked to a shared place → visible to the sharee, READ-ONLY;
 //   - unlinked again            → sharee visibility is revoked with NO delete
 //                                 anywhere, so only a tombstone carries it.
 // Every test cleans up the routes it creates so the seed is left intact.
@@ -34,12 +34,12 @@ const created: { id: string; sub: string }[] = [];
 async function createRoute(
   sub: string,
   name: string,
-  canyonId?: string,
+  placeId?: string,
 ): Promise<string> {
   const res = await request(API_URL)
     .post("/routes")
     .set(as(sub))
-    .send({ name, points: LINE, ...(canyonId && { canyonId }) });
+    .send({ name, points: LINE, ...(placeId && { placeId }) });
   expect(res.status).toBe(201);
   created.push({ id: res.body.id as string, sub });
   return res.body.id as string;
@@ -76,12 +76,12 @@ describe("route visibility — unlinked routes are owner-private", () => {
   });
 });
 
-describe("route visibility — linked to a shared canyon", () => {
+describe("route visibility — linked to a shared place", () => {
   it("the sharee can read it, and it appears in their list", async () => {
     const routeId = await createRoute(
       ALICE_SUB,
       "Shared approach",
-      SHARED_CANYON_ID,
+      SHARED_PLACE_ID,
     );
 
     const bob = await request(API_URL).get(`/routes/${routeId}`).set(as(BOB_SUB));
@@ -91,7 +91,7 @@ describe("route visibility — linked to a shared canyon", () => {
     const list = await request(API_URL).get("/routes").set(as(BOB_SUB));
     expect(list.body.some((r: { id: string }) => r.id === routeId)).toBe(true);
 
-    // Carol is shared nothing — the canyon link must not leak to her.
+    // Carol is shared nothing — the place link must not leak to her.
     const carol = await request(API_URL)
       .get(`/routes/${routeId}`)
       .set(as(CAROL_SUB));
@@ -102,7 +102,7 @@ describe("route visibility — linked to a shared canyon", () => {
     const routeId = await createRoute(
       ALICE_SUB,
       "Read-only for bob",
-      SHARED_CANYON_ID,
+      SHARED_PLACE_ID,
     );
 
     const patch = await request(API_URL)
@@ -134,7 +134,7 @@ describe("route visibility — linked to a shared canyon", () => {
     const routeId = await createRoute(
       ALICE_SUB,
       "About to be unlinked",
-      SHARED_CANYON_ID,
+      SHARED_PLACE_ID,
     );
     expect(
       (await request(API_URL).get(`/routes/${routeId}`).set(as(BOB_SUB))).status,
@@ -143,9 +143,9 @@ describe("route visibility — linked to a shared canyon", () => {
     const unlink = await request(API_URL)
       .patch(`/routes/${routeId}`)
       .set(as(ALICE_SUB))
-      .send({ canyonId: null });
+      .send({ placeId: null });
     expect(unlink.status).toBe(200);
-    expect(unlink.body.canyonId).toBeNull();
+    expect(unlink.body.placeId).toBeNull();
 
     // Bob loses it...
     expect(
@@ -156,21 +156,21 @@ describe("route visibility — linked to a shared canyon", () => {
       .get(`/routes/${routeId}`)
       .set(as(ALICE_SUB));
     expect(alice.status).toBe(200);
-    expect(alice.body.canyonId).toBeNull();
+    expect(alice.body.placeId).toBeNull();
   });
 });
 
-describe("one route per canyon — linking displaces, never destroys", () => {
+describe("one route per place — linking displaces, never destroys", () => {
   it("displaces the incumbent to standalone and names it in the response", async () => {
-    const first = await createRoute(ALICE_SUB, "Original approach", SHARED_CANYON_ID);
+    const first = await createRoute(ALICE_SUB, "Original approach", SHARED_PLACE_ID);
     const second = await createRoute(ALICE_SUB, "Better approach");
 
     const link = await request(API_URL)
       .patch(`/routes/${second}`)
       .set(as(ALICE_SUB))
-      .send({ canyonId: SHARED_CANYON_ID });
+      .send({ placeId: SHARED_PLACE_ID });
     expect(link.status).toBe(200);
-    expect(link.body.canyonId).toBe(SHARED_CANYON_ID);
+    expect(link.body.placeId).toBe(SHARED_PLACE_ID);
     // The UI needs the displaced name to say which route moved.
     expect(link.body.displacedRoute).toEqual({
       id: first,
@@ -182,17 +182,17 @@ describe("one route per canyon — linking displaces, never destroys", () => {
       .get(`/routes/${first}`)
       .set(as(ALICE_SUB));
     expect(incumbent.status).toBe(200);
-    expect(incumbent.body.canyonId).toBeNull();
+    expect(incumbent.body.placeId).toBeNull();
   });
 
-  it("rejects linking to a canyon the caller does not own", async () => {
+  it("rejects linking to a place the caller does not own", async () => {
     const routeId = await createRoute(BOB_SUB, "Bob's line");
-    // Bob can SEE SHARED_CANYON_ID (alice shares it) but does not own it, so
+    // Bob can SEE SHARED_PLACE_ID (alice shares it) but does not own it, so
     // the association must be refused.
     const res = await request(API_URL)
       .patch(`/routes/${routeId}`)
       .set(as(BOB_SUB))
-      .send({ canyonId: SHARED_CANYON_ID });
+      .send({ placeId: SHARED_PLACE_ID });
     expect(res.status).toBe(400);
   });
 });

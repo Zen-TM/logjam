@@ -30,7 +30,7 @@ afterEach(() => {
 // needs CSV quoting for its embedded comma.
 const VALID_CSV = [
   "pageid,location,coords,quality,rating,longest,min time,number of rappels",
-  '12345,Test Canyon,"33° 33′ 3.82″ S, 150° 24′ 6.13″ E",4,3B (v3a2 III),50 feet,4-6 hours,3-5',
+  '12345,Test Place,"33° 33′ 3.82″ S, 150° 24′ 6.13″ E",4,3B (v3a2 III),50 feet,4-6 hours,3-5',
   'notanum,Bad Page,"33° 1′ 1″ S, 150° 1′ 1″ E",3,,,,',
   "222,No Coords,,2,,,,",
 ].join("\n");
@@ -38,11 +38,11 @@ const VALID_CSV = [
 describe("fetchAndParseRopeWiki", () => {
   it("parses a valid row across every derived field", async () => {
     mockFetchCsv(VALID_CSV);
-    const { canyons, errors } = await fetchAndParseRopeWiki();
-    expect(canyons).toHaveLength(1);
-    const c = canyons[0];
+    const { places, errors } = await fetchAndParseRopeWiki();
+    expect(places).toHaveLength(1);
+    const c = places[0];
     expect(c.ropeWikiId).toBe(12345);
-    expect(c.name).toBe("Test Canyon");
+    expect(c.name).toBe("Test Place");
     // DMS → decimal degrees (S/negative lat, E/positive lon).
     expect(c.latitude).toBeCloseTo(-33.55106, 4);
     expect(c.longitude).toBeCloseTo(150.40170, 4);
@@ -102,22 +102,22 @@ describe("fetchAndParseRopeWiki — field parser branches", () => {
         `3,Bare,"${COORD}",,,100,,`,
       ),
     );
-    const { canyons } = await fetchAndParseRopeWiki();
-    expect(canyons.map((c) => c.longestAbseil)).toEqual([9.1, 18, 30.5]);
+    const { places } = await fetchAndParseRopeWiki();
+    expect(places.map((c) => c.longestAbseil)).toEqual([9.1, 18, 30.5]);
   });
 
   it("parses min time as a single value and as a range mean", async () => {
     mockFetchCsv(
       rows(`1,Single,"${COORD}",,,,2 hours,`, `2,Range,"${COORD}",,,,3-5 hours,`),
     );
-    const { canyons } = await fetchAndParseRopeWiki();
-    expect(canyons.map((c) => c.hours)).toEqual([2, 4]);
+    const { places } = await fetchAndParseRopeWiki();
+    expect(places.map((c) => c.hours)).toEqual([2, 4]);
   });
 
   it("takes the first number of a rappel-count range", async () => {
     mockFetchCsv(rows(`1,Rappels,"${COORD}",,,,,4-8`));
-    const { canyons } = await fetchAndParseRopeWiki();
-    expect(canyons[0].numAbseils).toBe(4);
+    const { places } = await fetchAndParseRopeWiki();
+    expect(places[0].numAbseils).toBe(4);
   });
 
   it("extracts grade, aid, and Roman-numeral commitment from rating markup", async () => {
@@ -128,50 +128,50 @@ describe("fetchAndParseRopeWiki — field parser branches", () => {
         `3,NoParens,"${COORD}",,no grade here,,,`,
       ),
     );
-    const { canyons } = await fetchAndParseRopeWiki();
-    expect({ v: canyons[0].vGrade, a: canyons[0].aGrade, c: canyons[0].commitment }).toEqual({ v: 2, a: 1, c: 4 });
-    expect({ v: canyons[1].vGrade, a: canyons[1].aGrade, c: canyons[1].commitment }).toEqual({ v: 3, a: 2, c: 6 });
-    expect({ v: canyons[2].vGrade, a: canyons[2].aGrade, c: canyons[2].commitment }).toEqual({ v: null, a: null, c: null });
+    const { places } = await fetchAndParseRopeWiki();
+    expect({ v: places[0].vGrade, a: places[0].aGrade, c: places[0].commitment }).toEqual({ v: 2, a: 1, c: 4 });
+    expect({ v: places[1].vGrade, a: places[1].aGrade, c: places[1].commitment }).toEqual({ v: 3, a: 2, c: 6 });
+    expect({ v: places[2].vGrade, a: places[2].aGrade, c: places[2].commitment }).toEqual({ v: null, a: null, c: null });
   });
 
   it("rejects out-of-range quality as null", async () => {
     mockFetchCsv(rows(`1,Good,"${COORD}",4,,,,`, `2,Bad,"${COORD}",6,,,,`));
-    const { canyons } = await fetchAndParseRopeWiki();
-    expect(canyons.map((c) => c.quality)).toEqual([4, null]);
+    const { places } = await fetchAndParseRopeWiki();
+    expect(places.map((c) => c.quality)).toEqual([4, null]);
   });
 
   it("preserves a decimal quality instead of rounding", async () => {
     mockFetchCsv(rows(`1,Half,"${COORD}",3.5,,,,`));
-    const { canyons } = await fetchAndParseRopeWiki();
-    expect(canyons[0].quality).toBe(3.5);
+    const { places } = await fetchAndParseRopeWiki();
+    expect(places[0].quality).toBe(3.5);
   });
 
   it("prefers max time over min time for hours", async () => {
     const H = "pageid,location,coords,quality,rating,longest,min time,number of rappels,max time";
     mockFetchCsv([H, `1,Both,"${COORD}",,,,4 hours,,7 hours`].join("\n"));
-    const { canyons } = await fetchAndParseRopeWiki();
-    expect(canyons[0].hours).toBe(7);
+    const { places } = await fetchAndParseRopeWiki();
+    expect(places[0].hours).toBe(7);
   });
 
   it("falls back to min time when max time is empty", async () => {
     const H = "pageid,location,coords,quality,rating,longest,min time,number of rappels,max time";
     mockFetchCsv([H, `1,MinOnly,"${COORD}",,,,3 hours,,`].join("\n"));
-    const { canyons } = await fetchAndParseRopeWiki();
-    expect(canyons[0].hours).toBe(3);
+    const { places } = await fetchAndParseRopeWiki();
+    expect(places[0].hours).toBe(3);
   });
 
   it("parses non-breaking-space format like '5\\u00a0hr'", async () => {
     const H = "pageid,location,coords,quality,rating,longest,min time,number of rappels,max time";
     mockFetchCsv([H, `1,Nbsp,"${COORD}",,,,,,5 hr`].join("\n"));
-    const { canyons } = await fetchAndParseRopeWiki();
-    expect(canyons[0].hours).toBe(5);
+    const { places } = await fetchAndParseRopeWiki();
+    expect(places[0].hours).toBe(5);
   });
 });
 
-function sampleCanyon(overrides: Partial<RopeWikiCanyon> = {}): RopeWikiCanyon {
+function samplePlace(overrides: Partial<RopeWikiCanyon> = {}): RopeWikiCanyon {
   return {
     ropeWikiId: 1,
-    name: "Canyon",
+    name: "Place",
     latitude: -33.5,
     longitude: 150.3,
     numAbseils: 5,
@@ -188,45 +188,45 @@ function sampleCanyon(overrides: Partial<RopeWikiCanyon> = {}): RopeWikiCanyon {
 
 describe("snapshotFromCreate", () => {
   it("marks all fields as RopeWiki-owned", () => {
-    const snap = snapshotFromCreate(sampleCanyon());
+    const snap = snapshotFromCreate(samplePlace());
     expect(snap.ropeWikiOwnedFields).toBe("*");
-    expect(snap.name).toBe("Canyon");
+    expect(snap.name).toBe("Place");
     expect(snap.numAbseils).toBe(5);
   });
 });
 
 describe("snapshotFromLink", () => {
   it("carries the supplied ownership mask", () => {
-    const snap = snapshotFromLink(sampleCanyon(), ["vGrade", "hours"]);
+    const snap = snapshotFromLink(samplePlace(), ["vGrade", "hours"]);
     expect(snap.ropeWikiOwnedFields).toEqual(["vGrade", "hours"]);
   });
 });
 
 describe("isRopeWikiOwned", () => {
   it("returns true for any field when ownership is '*'", () => {
-    const snap = snapshotFromCreate(sampleCanyon());
+    const snap = snapshotFromCreate(samplePlace());
     expect(isRopeWikiOwned(snap, "vGrade")).toBe(true);
     expect(isRopeWikiOwned(snap, "hours")).toBe(true);
   });
 
   it("respects an explicit field list", () => {
-    const snap = snapshotFromLink(sampleCanyon(), ["vGrade"]);
+    const snap = snapshotFromLink(samplePlace(), ["vGrade"]);
     expect(isRopeWikiOwned(snap, "vGrade")).toBe(true);
     expect(isRopeWikiOwned(snap, "hours")).toBe(false);
   });
 });
 
 describe("snapshotsEqual", () => {
-  const base: RopeWikiSnapshot = snapshotFromCreate(sampleCanyon());
+  const base: RopeWikiSnapshot = snapshotFromCreate(samplePlace());
 
   it("is true for structurally identical snapshots regardless of source order", () => {
-    const a = snapshotFromCreate(sampleCanyon({ attributes: { sources: [["A", "u1"], ["B", "u2"]] } }));
-    const b = snapshotFromCreate(sampleCanyon({ attributes: { sources: [["B", "u2"], ["A", "u1"]] } }));
+    const a = snapshotFromCreate(samplePlace({ attributes: { sources: [["A", "u1"], ["B", "u2"]] } }));
+    const b = snapshotFromCreate(samplePlace({ attributes: { sources: [["B", "u2"], ["A", "u1"]] } }));
     expect(snapshotsEqual(a, b)).toBe(true);
   });
 
   it("is false when a scalar differs", () => {
-    const other = snapshotFromCreate(sampleCanyon({ vGrade: 5 }));
+    const other = snapshotFromCreate(samplePlace({ vGrade: 5 }));
     expect(snapshotsEqual(base, other)).toBe(false);
   });
 });

@@ -6,8 +6,8 @@ import {
   NO_TYPE_FILTER_VALUE,
   type TripLogCustomFieldDef,
 } from "@logjam/shared";
-import type { TCanyon, TTripLog } from "../../../canyonUtils";
-import { tripTitle } from "../../../canyonUtils";
+import type { TPlace, TTripLog } from "../../../placeUtils";
+import { tripTitle } from "../../../placeUtils";
 import TripLogViewDialog from "../../dialogs/TripLogViewDialog";
 import TripLogDialog from "../../dialogs/TripLogDialog";
 import classes from "./TripLogsPanel.module.css";
@@ -20,11 +20,11 @@ function TripLogsPanel({
   onRefetchAnalytics,
   customFieldDefs,
   onCustomFieldDefsChange,
-  canyons,
+  places,
   onPickCoords,
   pickingCoords,
   onQuotaChanged,
-  onRefetchCanyons,
+  onRefetchPlaces,
   onOpenUnifiedImport,
 }: {
   tripLogs: TTripLog[];
@@ -35,14 +35,14 @@ function TripLogsPanel({
   onRefetchAnalytics: () => void;
   customFieldDefs: TripLogCustomFieldDef[];
   onCustomFieldDefsChange: (defs: TripLogCustomFieldDef[]) => void;
-  canyons: TCanyon[];
+  places: TPlace[];
   onPickCoords: (onPicked: (lat: number, lng: number) => void) => void;
   pickingCoords: boolean;
   onQuotaChanged: () => void;
-  onRefetchCanyons: () => void;
+  onRefetchPlaces: () => void;
   onOpenUnifiedImport: () => void;
 }) {
-  // Ephemeral filters — session-scoped, matching the canyon search. They survive
+  // Ephemeral filters — session-scoped, matching the place search. They survive
   // the panel's unmount-on-close (and a tab switch) so a mid-task filter isn't
   // retyped, but they're gone next session: a date range remembered for a month
   // hides trips the user never asked to hide (UX finding 5).
@@ -82,10 +82,10 @@ function TripLogsPanel({
         <input
           type="text"
           className={classes.searchInput}
-          placeholder="Search by canyon or trip name..."
+          placeholder="Search by place or trip name..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          aria-label="Search trip logs by canyon or trip name"
+          aria-label="Search trip logs by place or trip name"
         />
         <div className={classes.dateRow}>
           <label className={classes.dateField}>
@@ -138,7 +138,7 @@ function TripLogsPanel({
                 setShowViewDialog(true);
               }}
             >
-              <span className={classes.canyonName}>{tripTitle(trip)}</span>
+              <span className={classes.placeName}>{tripTitle(trip)}</span>
               <span className={classes.tripDate}>
                 {new Date(trip.date).toLocaleDateString("en-AU", {
                   year: "numeric",
@@ -221,13 +221,13 @@ function TripLogsPanel({
             onRefetchTripLogs();
             onRefetchAnalytics();
           }}
-          canyons={canyons}
+          places={places}
           tripLog={editingTripLog}
           customFieldDefs={customFieldDefs}
           onCustomFieldDefsChange={onCustomFieldDefsChange}
           existingTripTypes={existingTripTypes}
           onPickCoords={onPickCoords}
-          onCanyonCreated={onRefetchCanyons}
+          onPlaceCreated={onRefetchPlaces}
         />
       )}
 
@@ -241,12 +241,12 @@ function TripLogsPanel({
           onRefetchAnalytics();
           onQuotaChanged();
         }}
-        canyons={canyons}
+        places={places}
         customFieldDefs={customFieldDefs}
         onCustomFieldDefsChange={onCustomFieldDefsChange}
         existingTripTypes={existingTripTypes}
         onPickCoords={onPickCoords}
-        onCanyonCreated={onRefetchCanyons}
+        onPlaceCreated={onRefetchPlaces}
       />
     </div>
   );

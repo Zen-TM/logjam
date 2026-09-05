@@ -613,7 +613,7 @@ export async function expireCompletedGeoPdfJobs(
       expired += 1;
     } catch (err) {
       // Scrub before logging: an S3/Prisma error can embed the result key, and
-      // the result key can name a canyon (root privacy rule).
+      // the result key can name a place (root privacy rule).
       logger.error(
         { ...safeErrorForLog(err), id: row.id },
         "geo_pdf_expiry_failed",

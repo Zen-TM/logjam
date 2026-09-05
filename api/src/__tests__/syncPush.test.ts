@@ -48,24 +48,24 @@ describe("sync push — request contract", () => {
 });
 
 describe("sync push — FIFO batch lifecycle", () => {
-  it("create canyon → trip linking it → waypoint on it; replay is alreadyApplied; delete wins", async () => {
-    const canyonId = randomUUID();
+  it("create place → trip linking it → waypoint on it; replay is alreadyApplied; delete wins", async () => {
+    const placeId = randomUUID();
     const tripId = randomUUID();
     const waypointId = randomUUID();
     const ops = [
       {
-        opId: "op-canyon",
-        entity: "canyon",
+        opId: "op-place",
+        entity: "place",
         op: "create",
-        id: canyonId,
-        fields: { name: "Push canyon", latitude: -33.61, longitude: 150.21 },
+        id: placeId,
+        fields: { name: "Push place", latitude: -33.61, longitude: 150.21 },
       },
       {
         opId: "op-trip",
         entity: "tripLog",
         op: "create",
         id: tripId,
-        fields: { date: "2026-07-10", canyonIds: [canyonId] },
+        fields: { date: "2026-07-10", placeIds: [placeId] },
       },
       {
         opId: "op-wp",
@@ -76,7 +76,7 @@ describe("sync push — FIFO batch lifecycle", () => {
           name: "Push anchor",
           latitude: -33.62,
           longitude: 150.22,
-          canyonId,
+          placeId,
         },
       },
     ];
@@ -92,7 +92,7 @@ describe("sync push — FIFO batch lifecycle", () => {
     // REST route, not a parallel dialect).
     const tripRow = first.body.results[1].row;
     expect(tripRow.types).toContain("canyoning");
-    expect(tripRow.canyons.map((c: { id: string }) => c.id)).toEqual([canyonId]);
+    expect(tripRow.places.map((c: { id: string }) => c.id)).toEqual([placeId]);
 
     // Whole-batch replay (network drop after apply): everything idempotent.
     const replay = await push(ALICE_SUB, ops);
@@ -106,7 +106,7 @@ describe("sync push — FIFO batch lifecycle", () => {
     const deletes = [
       { opId: "d-wp", entity: "waypoint", op: "delete", id: waypointId },
       { opId: "d-trip", entity: "tripLog", op: "delete", id: tripId },
-      { opId: "d-canyon", entity: "canyon", op: "delete", id: canyonId },
+      { opId: "d-place", entity: "place", op: "delete", id: placeId },
     ];
     const del = await push(ALICE_SUB, deletes);
     expect(del.body.results.map((r: { status: string }) => r.status)).toEqual([
@@ -121,14 +121,14 @@ describe("sync push — FIFO batch lifecycle", () => {
   });
 
   it("a rejected create fails its dependents (dependencyFailed), independents still apply", async () => {
-    const badCanyonId = randomUUID();
+    const badPlaceId = randomUUID();
     const goodWaypointId = randomUUID();
     const res = await push(ALICE_SUB, [
       {
-        opId: "bad-canyon",
-        entity: "canyon",
+        opId: "bad-place",
+        entity: "place",
         op: "create",
-        id: badCanyonId,
+        id: badPlaceId,
         // latitude out of range → rejected 400
         fields: { name: "Bad", latitude: 95, longitude: 150.2 },
       },
@@ -137,7 +137,7 @@ describe("sync push — FIFO batch lifecycle", () => {
         entity: "tripLog",
         op: "create",
         id: randomUUID(),
-        fields: { date: "2026-07-11", canyonIds: [badCanyonId] },
+        fields: { date: "2026-07-11", placeIds: [badPlaceId] },
       },
       {
         opId: "independent-wp",
@@ -179,20 +179,20 @@ describe("sync push — FIFO batch lifecycle", () => {
 
 describe("sync push — conflicts (§6)", () => {
   it("stale base + server-differing field → appliedWithConflict, last flush wins, receipt carries the overwritten value", async () => {
-    const canyonId = randomUUID();
+    const placeId = randomUUID();
     await push(ALICE_SUB, [
       {
         opId: "c",
-        entity: "canyon",
+        entity: "place",
         op: "create",
-        id: canyonId,
-        fields: { name: "Conflict canyon", latitude: -33.64, longitude: 150.24 },
+        id: placeId,
+        fields: { name: "Conflict place", latitude: -33.64, longitude: 150.24 },
       },
     ]);
 
     // "Web" edit bumps updatedAt and sets notes.
     const webEdit = await request(API_URL)
-      .patch(`/canyons/${canyonId}`)
+      .patch(`/places/${placeId}`)
       .set(as(ALICE_SUB))
       .send({ notes: "web edit" });
     expect(webEdit.status).toBe(200);
@@ -202,9 +202,9 @@ describe("sync push — conflicts (§6)", () => {
     const res = await push(ALICE_SUB, [
       {
         opId: "u",
-        entity: "canyon",
+        entity: "place",
         op: "update",
-        id: canyonId,
+        id: placeId,
         baseUpdatedAt: staleBase,
         fields: { notes: "phone edit", quality: 4 },
       },
@@ -227,9 +227,9 @@ describe("sync push — conflicts (§6)", () => {
     const fresh = await push(ALICE_SUB, [
       {
         opId: "u2",
-        entity: "canyon",
+        entity: "place",
         op: "update",
-        id: canyonId,
+        id: placeId,
         baseUpdatedAt: result.row.updatedAt,
         fields: { notes: "second phone edit" },
       },
@@ -237,7 +237,7 @@ describe("sync push — conflicts (§6)", () => {
     expect(fresh.body.results[0].status).toBe("applied");
 
     await push(ALICE_SUB, [
-      { opId: "d", entity: "canyon", op: "delete", id: canyonId },
+      { opId: "d", entity: "place", op: "delete", id: placeId },
     ]);
   });
 
@@ -245,7 +245,7 @@ describe("sync push — conflicts (§6)", () => {
     const res = await push(ALICE_SUB, [
       {
         opId: "ghost",
-        entity: "canyon",
+        entity: "place",
         op: "update",
         id: randomUUID(),
         fields: { notes: "too late" },
@@ -258,13 +258,13 @@ describe("sync push — conflicts (§6)", () => {
 
 describe("sync push — ownership boundary", () => {
   it("foreign update/create-replay both read as 404-rejected, indistinguishable from nonexistent", async () => {
-    const canyonId = randomUUID();
+    const placeId = randomUUID();
     await push(ALICE_SUB, [
       {
         opId: "c",
-        entity: "canyon",
+        entity: "place",
         op: "create",
-        id: canyonId,
+        id: placeId,
         fields: { name: "Alice push", latitude: -33.66, longitude: 150.26 },
       },
     ]);
@@ -272,9 +272,9 @@ describe("sync push — ownership boundary", () => {
     const bobUpdate = await push(BOB_SUB, [
       {
         opId: "steal-u",
-        entity: "canyon",
+        entity: "place",
         op: "update",
-        id: canyonId,
+        id: placeId,
         fields: { notes: "bob was here" },
       },
     ]);
@@ -284,28 +284,28 @@ describe("sync push — ownership boundary", () => {
     const bobCreate = await push(BOB_SUB, [
       {
         opId: "steal-c",
-        entity: "canyon",
+        entity: "place",
         op: "create",
-        id: canyonId,
+        id: placeId,
         fields: { name: "Bob claim", latitude: -33.67, longitude: 150.27 },
       },
     ]);
     expect(bobCreate.body.results[0].status).toBe("rejected");
     expect(bobCreate.body.results[0].error.code).toBe(404);
 
-    // Bob deleting alice's canyon: alreadyApplied (goal state "not there"
+    // Bob deleting alice's place: alreadyApplied (goal state "not there"
     // from bob's view) — and the row must SURVIVE.
     const bobDelete = await push(BOB_SUB, [
-      { opId: "steal-d", entity: "canyon", op: "delete", id: canyonId },
+      { opId: "steal-d", entity: "place", op: "delete", id: placeId },
     ]);
     expect(bobDelete.body.results[0].status).toBe("alreadyApplied");
     const stillThere = await request(API_URL)
-      .get(`/canyons/${canyonId}`)
+      .get(`/places/${placeId}`)
       .set(as(ALICE_SUB));
     expect(stillThere.status).toBe(200);
 
     await push(ALICE_SUB, [
-      { opId: "d", entity: "canyon", op: "delete", id: canyonId },
+      { opId: "d", entity: "place", op: "delete", id: placeId },
     ]);
   });
 });

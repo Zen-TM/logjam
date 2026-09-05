@@ -9,7 +9,7 @@
 // screen changed once already: this ran inside `screens/ReceivedFilesScreen.tsx`
 // until the inbox absorbed it, and the pipeline is not what changed.
 //
-// PRIVACY: `filename` is user text and routinely names a canyon. It reaches the
+// PRIVACY: `filename` is user text and routinely names a place. It reaches the
 // import and the on-screen label; it is never logged.
 import * as FileSystem from "expo-file-system/legacy";
 

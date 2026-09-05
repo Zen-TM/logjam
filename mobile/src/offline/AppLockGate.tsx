@@ -5,7 +5,7 @@
 //
 // The lock is UNCONDITIONAL on the preference. It used to arm only once
 // downloaded map data existed, on the theory that an empty device had nothing
-// worth gating — which was never true: the sync mirror holds canyon names and
+// worth gating — which was never true: the sync mirror holds place names and
 // coordinates from the first sync after sign-in, and trips, notes and photos
 // with them. "Nothing downloaded" is not "nothing sensitive", so the data hooks
 // that used to decide this are gone rather than reworded.

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Trash2, FileDown, Play, ImageOff } from "lucide-react";
 import { mediaCategory, type MediaItem } from "@logjam/shared";
-import { deleteMedia } from "../../canyonUtils";
+import { deleteMedia } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import { ErrorBanner } from "../feedback/ErrorBanner";
 import ConfirmDialog from "../dialogs/ConfirmDialog";
@@ -31,7 +31,7 @@ export default function MediaGallery({
   const [error, setError] = useState<string | null>(null);
   // FEUI-007: one-tap Trash2 permanently deletes the S3 object with no
   // recovery. Route through the same ConfirmDialog every other destructive
-  // surface uses (e.g. the track-card delete in CanyonDetailPanel).
+  // surface uses (e.g. the track-card delete in PlaceDetailPanel).
   const [pendingDelete, setPendingDelete] = useState<MediaItem | null>(null);
   // Thumbnails that failed to load (e.g. a 404'd S3 object) — MOBILE-5. Tracked
   // by id so a broken thumb shows a labelled fallback instead of the browser's
@@ -51,7 +51,7 @@ export default function MediaGallery({
       onDeleted(id);
       // Only close the confirm on success — an error leaves it open (with the
       // banner inside) so the user sees why and can retry, matching the
-      // track-card delete in CanyonDetailPanel.
+      // track-card delete in PlaceDetailPanel.
       setPendingDelete(null);
     } catch (err) {
       console.error(err);

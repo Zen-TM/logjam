@@ -9,7 +9,7 @@
 // hold the points, the stats and the resumable state. This is the other half,
 // deduped by `track.mediaId` at the call site.
 //
-// PRIVACY: media rows carry canyon-area coordinates in their metadata bbox.
+// PRIVACY: media rows carry place-area coordinates in their metadata bbox.
 // Nothing here logs a row, a name or an extent.
 import { useEffect, useState } from "react";
 

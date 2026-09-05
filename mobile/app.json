@@ -112,8 +112,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Logjam attaches photos from your library to canyons and trips.",
-          "cameraPermission": "Logjam lets you take photos to attach to canyons and trips.",
+          "photosPermission": "Logjam attaches photos from your library to places and trips.",
+          "cameraPermission": "Logjam lets you take photos to attach to places and trips.",
           "microphonePermission": false
         }
       ],

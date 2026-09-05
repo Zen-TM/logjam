@@ -38,8 +38,8 @@ export function isOutboxEntity(value: string): value is OutboxEntity {
  */
 export function outboxMirrorTable(entity: OutboxEntity): string | null {
   switch (entity) {
-    case "canyon":
-      return "canyons";
+    case "place":
+      return "places";
     case "tripLog":
       return "trip_logs";
     case "waypoint":

@@ -1,9 +1,9 @@
-// External place-name geocoder for the map-pick flows (canyon location, topo /
+// External place-name geocoder for the map-pick flows (place location, topo /
 // GeoPDF extent). Used only to help the user recentre the map on a place they
 // type — e.g. "Newnes Plateau".
 //
 // PRIVACY: the only thing sent to the external service (OpenStreetMap Nominatim)
-// is the user-typed place string. No canyon names, coordinates, or account data
+// is the user-typed place string. No place names, coordinates, or account data
 // ever leave the app through this path. Results bias toward NSW, Australia.
 
 export interface GeocodeResult {

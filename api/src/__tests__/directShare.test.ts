@@ -4,7 +4,7 @@ import { API_URL, ALICE_SUB, BOB_SUB, CAROL_SUB, BOB_ID, as } from "./_actors";
 
 // Direct per-item sharing (Share model + /shares) from the RECIPIENT's side —
 // the perspective mocked-Prisma unit tests structurally cannot reach, and the
-// sibling of shareBoundary.test.ts for canyons.
+// sibling of shareBoundary.test.ts for places.
 //
 // Requires `make dev`. Seed baseline: alice and bob are friends; carol is a
 // stranger to alice's items. Synthetic coords only.
@@ -242,14 +242,14 @@ describe("delete cascade", () => {
 });
 
 // A route can be visible to a recipient for TWO reasons — a direct Share row,
-// or a link to a canyon shared with them. Revoking the direct arm must not
-// tombstone a recipient who keeps the canyon arm (finding 2), and must still
+// or a link to a place shared with them. Revoking the direct arm must not
+// tombstone a recipient who keeps the place arm (finding 2), and must still
 // re-deliver the row to the OWNER so their other devices refresh sharedCount
 // (finding 6).
-describe("revoke with a surviving canyon arm", () => {
-  async function createCanyon(sub: string, name: string): Promise<string> {
+describe("revoke with a surviving place arm", () => {
+  async function createPlace(sub: string, name: string): Promise<string> {
     const res = await request(API_URL)
-      .post("/canyons")
+      .post("/places")
       .set(as(sub))
       .send({ name, latitude: -33.7, longitude: 150.3 });
     expect(res.status).toBe(201);
@@ -259,7 +259,7 @@ describe("revoke with a surviving canyon arm", () => {
   async function createLinkedRoute(
     sub: string,
     name: string,
-    canyonId: string,
+    placeId: string,
   ): Promise<string> {
     const res = await request(API_URL)
       .post("/routes")
@@ -270,27 +270,27 @@ describe("revoke with a surviving canyon arm", () => {
           [150.1, -33.1],
           [150.2, -33.2],
         ],
-        canyonId,
+        placeId,
       });
     expect(res.status).toBe(201);
     return res.body.id as string;
   }
 
-  it("does not tombstone a recipient who still sees the route through a shared canyon", async () => {
-    const canyonId = await createCanyon(ALICE_SUB, "revoke guard canyon");
+  it("does not tombstone a recipient who still sees the route through a shared place", async () => {
+    const placeId = await createPlace(ALICE_SUB, "revoke guard place");
     try {
-      const canyonShare = await request(API_URL)
-        .post(`/canyons/${canyonId}/share`)
+      const placeShare = await request(API_URL)
+        .post(`/places/${placeId}/share`)
         .set(as(ALICE_SUB))
         .send({ sharedWithUserId: BOB_ID });
-      expect(canyonShare.status).toBe(201);
+      expect(placeShare.status).toBe(201);
 
       const routeId = await createLinkedRoute(
         ALICE_SUB,
         "linked + direct",
-        canyonId,
+        placeId,
       );
-      // Direct share layered on top of the canyon inheritance.
+      // Direct share layered on top of the place inheritance.
       expect((await share(ALICE_SUB, routeId, BOB_ID)).status).toBe(201);
 
       const before = await request(API_URL)
@@ -319,7 +319,7 @@ describe("revoke with a surviving canyon arm", () => {
       );
       expect(tombstoned).toBe(false);
     } finally {
-      await request(API_URL).delete(`/canyons/${canyonId}`).set(as(ALICE_SUB));
+      await request(API_URL).delete(`/places/${placeId}`).set(as(ALICE_SUB));
     }
   });
 });

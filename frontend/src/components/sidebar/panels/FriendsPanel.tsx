@@ -10,7 +10,7 @@ import type {
   TFriendRequest,
   TFileSendInboxRow,
   TSearchUser,
-} from "../../../canyonUtils";
+} from "../../../placeUtils";
 import {
   searchUsers,
   sendFriendRequest,
@@ -20,7 +20,7 @@ import {
   getFileSendInbox,
   acceptFileSend,
   declineFileSend,
-} from "../../../canyonUtils";
+} from "../../../placeUtils";
 
 function FriendsPanel({
   friends,
@@ -62,7 +62,7 @@ function FriendsPanel({
     // its results must not overwrite "abelin"'s). Same race class MapSearchBox
     // guards with an AbortController; `searchUsers`/`apiFetch` don't take a
     // signal, so this mirrors the cancelled-flag guard used for the same race
-    // in canyonUtils.ts's fetch hooks instead.
+    // in placeUtils.ts's fetch hooks instead.
     let cancelled = false;
     searchTimerRef.current = setTimeout(() => {
       searchUsers(friendSearch)
@@ -367,7 +367,7 @@ function FriendsPanel({
         title="Remove Friend"
         message={
           <>
-            Remove {showRemoveConfirm?.username}? Shared canyons between you will
+            Remove {showRemoveConfirm?.username}? Shared places between you will
             be unshared.
           </>
         }

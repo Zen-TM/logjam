@@ -1,12 +1,12 @@
 // Snap a drawn segment to nearby trails and creeks.
 //
-// The problem: a canyoner drawing an approach wants the line to follow the
+// The problem: a placeer drawing an approach wants the line to follow the
 // actual track, not cut across a gully. Between two tapped points, if both sit
 // near mapped ways, walk the ways instead of drawing a straight line.
 //
 // WHY THIS IS BUILT HERE AND NOT CALLED OUT TO A SERVICE. OSRM, Valhalla and
 // GraphHopper each need a preprocessed regional graph behind a running server,
-// a public instance would send canyon coordinates off-account, and none of them
+// a public instance would send place coordinates off-account, and none of them
 // route along waterways at all — which for canyoning is half the point. The
 // line data is already on the device inside the vector basemap, so the graph is
 // built from that, in memory, per segment. No server, works offline, and the
@@ -26,7 +26,7 @@
 //
 // PRIVACY: the inputs are wilderness coordinates. Nothing here logs.
 
-import { haversineMeters } from "./canyonGeo.js";
+import { haversineMeters } from "./placeGeo.js";
 import type { RoutePoint } from "./routeValidation.js";
 
 /**

@@ -4,13 +4,13 @@
 // Definitions are rows in `custom_field_defs` (they used to be an array inside
 // `User.uiPreferences`; see the 20260905100000 migration for why they moved).
 // The VALUES they describe are still keyed by `key` on the owning rows:
-// `TripLog.customFields` at the top level, `Canyon.attributes.customFields`
+// `TripLog.customFields` at the top level, `Place.attributes.customFields`
 // nested inside the free-form blob.
 //
 // That split is the whole reason this module exists. Deleting a definition
 // must ALSO strip the now-orphaned values from every row that carried one, in
 // one transaction — preserving them would leave them to silently resurface if
-// a later field slugged to the same key, and (for canyons) leak the orphans
+// a later field slugged to the same key, and (for places) leak the orphans
 // into exports. Every write path routes through here so no caller can perform
 // half of a delete: the REST route, the whole-list PATCH on /users/me, and the
 // sync push handler all call `deleteFieldDef`.
@@ -54,9 +54,9 @@ function isJsonObject(
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-// Extract the customFields record from a canyon's attributes blob, or null when
-// the canyon has no custom-field values at all. Exported for unit testing.
-export function canyonCustomFieldsRecord(
+// Extract the customFields record from a place's attributes blob, or null when
+// the place has no custom-field values at all. Exported for unit testing.
+export function placeCustomFieldsRecord(
   attributes: Prisma.JsonValue | null,
 ): Record<string, unknown> | null {
   if (!isJsonObject(attributes)) return null;
@@ -71,7 +71,7 @@ export function canyonCustomFieldsRecord(
 // Per-entity config isolating the storage-shape differences. The row type stays
 // INSIDE each config: `pendingStrips` loads the rows carrying a value for `key`
 // and returns one thunk per row that removes it, so callers never see a
-// trip-log row or a canyon row and the two shapes need no common type.
+// trip-log row or a place row and the two shapes need no common type.
 //
 // Thunks rather than `PrismaPromise`s because the delete runs as an INTERACTIVE
 // transaction (it also writes a tombstone), and a promise built from the global
@@ -85,7 +85,7 @@ type StripThunk = (tx: Prisma.TransactionClient) => Promise<unknown>;
 type EntityConfig = {
   /** URL segment of the REST route, and the response key names, which stay
    *  entity-specific to match the contract the web already consumes. */
-  segment: "trip-log" | "canyon";
+  segment: "trip-log" | "place";
   countResponseKey: string;
   removedResponseKey: string;
   pendingStrips: (userId: string, key: string) => Promise<StripThunk[]>;
@@ -130,27 +130,27 @@ const tripLogEntity: EntityConfig = {
   },
 };
 
-const canyonEntity: EntityConfig = {
-  segment: "canyon",
-  countResponseKey: "canyonCount",
-  removedResponseKey: "removedFromCanyonCount",
+const placeEntity: EntityConfig = {
+  segment: "place",
+  countResponseKey: "placeCount",
+  removedResponseKey: "removedFromPlaceCount",
   pendingStrips: async (userId, key) => {
-    const rows = await prisma.canyon.findMany({
+    const rows = await prisma.place.findMany({
       where: { ownerId: userId },
       select: { id: true, attributes: true },
     });
     return rows
-      .filter((row) => hasValue(canyonCustomFieldsRecord(row.attributes), key))
+      .filter((row) => hasValue(placeCustomFieldsRecord(row.attributes), key))
       .map((row): StripThunk => {
         // Preserve every other attribute (notably `sources`) — only the one
         // customFields entry is removed.
         const attributes = isJsonObject(row.attributes) ? row.attributes : {};
         const nextFields = {
-          ...(canyonCustomFieldsRecord(row.attributes) ?? {}),
+          ...(placeCustomFieldsRecord(row.attributes) ?? {}),
         };
         delete nextFields[key];
         return (tx) =>
-          tx.canyon.update({
+          tx.place.update({
             where: { id: row.id },
             data: {
               attributes: {
@@ -169,7 +169,7 @@ const canyonEntity: EntityConfig = {
  */
 const ENTITY_CONFIGS: Record<CustomFieldEntity, EntityConfig> = {
   tripLog: tripLogEntity,
-  canyon: canyonEntity,
+  place: placeEntity,
 };
 
 export function entityConfig(entity: CustomFieldEntity): EntityConfig {
@@ -179,7 +179,7 @@ export function entityConfig(entity: CustomFieldEntity): EntityConfig {
 /** The two REST segments, for routers that mount one path per entity. */
 export const ENTITY_BY_SEGMENT: Record<string, CustomFieldEntity> = {
   "trip-log": "tripLog",
-  canyon: "canyon",
+  place: "place",
 };
 
 // ── reads ────────────────────────────────────────────────────────────────────
@@ -202,12 +202,12 @@ export async function defsForUserResponse(
   userId: string,
 ): Promise<{
   tripLogCustomFields: TripLogCustomFieldDef[];
-  canyonCustomFields: TripLogCustomFieldDef[];
+  placeCustomFields: TripLogCustomFieldDef[];
 }> {
   const rows = await loadDefRows(userId);
   return {
     tripLogCustomFields: customFieldDefsFromRows(rows, "tripLog"),
-    canyonCustomFields: customFieldDefsFromRows(rows, "canyon"),
+    placeCustomFields: customFieldDefsFromRows(rows, "place"),
   };
 }
 
@@ -442,7 +442,7 @@ export async function deleteFieldDefByKey(
  * moved, delete (with the value strip) what the caller dropped.
  *
  * This exists because the web edits definitions as a list — `PATCH /users/me`
- * with `{ canyonCustomFields: [...] }` is what every dialog in the frontend
+ * with `{ placeCustomFields: [...] }` is what every dialog in the frontend
  * sends, and rewriting all of them to row-grain REST buys nothing while a
  * single browser tab is the only writer. Mobile does NOT use this path: it
  * pushes per-row ops through the sync engine, where the row grain is what

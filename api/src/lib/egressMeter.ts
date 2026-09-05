@@ -24,7 +24,7 @@ import {
  *
  * WHY LOGS AND NOT THE REQUEST PATH: the API hands out presigned GET URLs far
  * more often than they are fetched — lib/mediaPresign.ts signs one per photo on
- * every canyon read, and the exports list re-signs all 50 rows on every poll —
+ * every place read, and the exports list re-signs all 50 rows on every poll —
  * so charging when a URL is minted would over-count enormously. The access log
  * is the only record of bytes that actually moved.
  *
@@ -176,7 +176,7 @@ async function notifyThreshold(
   });
   if (existing) return;
 
-  // Payload carries no keys, filenames or canyon references — just the two
+  // Payload carries no keys, filenames or place references — just the two
   // numbers needed to render the message. BigInt is stringified because JSON
   // columns cannot hold it and the values exceed Number's safe range in
   // principle.

@@ -1,0 +1,127 @@
+export type PlaceFieldRole =
+  | "name"
+  | "latitude"
+  | "longitude"
+  | "altNames"
+  | "notes"
+  | "numAbseils"
+  | "longestAbseil"
+  | "hours"
+  | "vGrade"
+  | "aGrade"
+  | "commitment"
+  | "quality"
+  | "sources"
+  | `attr:${string}`
+  | "new-attr"
+  | "discard";
+
+// Integer grades with valid ranges
+export const GRADE_RANGES: Partial<Record<PlaceFieldRole, [number, number]>> = {
+  vGrade: [1, 7],
+  aGrade: [1, 7],
+  commitment: [1, 6],
+  quality: [1, 5],
+  numAbseils: [0, 999],
+};
+
+// Roles that map to integer fields on Place
+export const INT_ROLES = new Set<PlaceFieldRole>(["vGrade", "aGrade", "commitment", "numAbseils"]);
+
+// Roles that map to float fields (quality is a decimal 1-5)
+export const FLOAT_ROLES = new Set<PlaceFieldRole>(["latitude", "longitude", "longestAbseil", "hours", "quality"]);
+
+const ROLE_ALIASES: Record<string, PlaceFieldRole> = {};
+
+function registerAliases(role: PlaceFieldRole, aliases: string[]) {
+  for (const a of aliases) {
+    ROLE_ALIASES[normalize(a)] = role;
+  }
+}
+
+// Exported so detectFileKind.ts (kind detection, run before column-role
+// assignment) shares this exact normalization instead of keeping its own
+// hand-copied version — the two drifted once already when camelCase splitting
+// was added here for IMPORT-4 and detectFileKind's copy never got it
+// (FECO-004): a `latDD`/`lonDD` file failed kind detection with no override.
+export function normalize(s: string): string {
+  // Split camelCase / letter-digit runs before lowercasing so the app's own
+  // template headers (altNames, numAbseils, longestAbseil, vGrade…) collapse to
+  // the same spaced tokens as the human-readable aliases below (IMPORT-4).
+  return s
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .toLowerCase()
+    .replace(/[\s_-]+/g, " ")
+    .trim();
+}
+
+registerAliases("name", ["name", "place", "place name", "location", "place", "site"]);
+registerAliases("latitude", ["lat", "latitude", "y", "lat_dd", "latitude_dd"]);
+registerAliases("longitude", ["lng", "lon", "long", "longitude", "x", "lon_dd", "lng_dd", "longitude_dd"]);
+registerAliases("altNames", ["alt names", "alt name", "alternative names", "alternative name", "aka", "aliases", "other names"]);
+registerAliases("notes", ["notes", "comments", "comment", "description", "note", "details", "remarks", "info"]);
+registerAliases("numAbseils", ["raps", "abseils", "pitches", "num abseils", "number abseils", "num raps", "number of pitches", "number of abseils"]);
+registerAliases("longestAbseil", ["longest rap", "longest abseil", "longest pitch", "max rap", "max abseil", "longest abseil m", "longest rap m"]);
+registerAliases("hours", ["time", "duration", "hours", "trip time", "trip duration", "time hrs", "hours hrs"]);
+registerAliases("vGrade", ["v grade", "v", "vgrade", "vertical grade", "v_grade"]);
+registerAliases("aGrade", ["a grade", "a", "agrade", "aquatic grade", "a_grade", "water grade"]);
+registerAliases("commitment", ["commitment", "commit"]);
+registerAliases("quality", ["quality", "stars", "rating", "qual"]);
+registerAliases("sources", ["sources", "source", "refs", "references", "links", "urls"]);
+
+// An `attr:<key>` header is the convention the CSV exporter emits for a
+// place's custom-attribute values. Recognising it here lets an exported file
+// re-import its custom fields with no manual mapping. The key after the prefix
+// is preserved verbatim (case included) because it IS the attribute storage
+// key — buildPlaceInput does `attrs[role.slice(5)] = value`. Deliberately
+// strict (literal `attr:` prefix) so an ordinary column like "attribute" or
+// "attributes" is NOT swept up.
+function parseAttrHeader(header: string): string | null {
+  const match = header.match(/^attr:(.+)$/i);
+  if (!match) return null;
+  const key = match[1].trim();
+  return key.length > 0 ? key : null;
+}
+
+export function detectPlaceColumns(
+  headers: string[],
+): Record<string, PlaceFieldRole> {
+  const result: Record<string, PlaceFieldRole> = {};
+  for (const header of headers) {
+    const attrKey = parseAttrHeader(header);
+    if (attrKey) {
+      result[header] = `attr:${attrKey}`;
+      continue;
+    }
+    const n = normalize(header);
+    result[header] = ROLE_ALIASES[n] ?? "discard";
+  }
+  return result;
+}
+
+export const ROLE_LABELS: Record<string, string> = {
+  name: "Name",
+  latitude: "Latitude",
+  longitude: "Longitude",
+  altNames: "Alternative Names",
+  notes: "Notes",
+  numAbseils: "Pitches",
+  longestAbseil: "Longest Pitch (m)",
+  hours: "Hours",
+  vGrade: "V Grade",
+  aGrade: "A Grade",
+  commitment: "Commitment",
+  quality: "Quality",
+  sources: "Sources",
+  "new-attr": "New custom attribute",
+  discard: "Discard column",
+};
+
+export const ALL_ASSIGNABLE_ROLES: PlaceFieldRole[] = [
+  "name", "latitude", "longitude", "altNames", "notes",
+  "numAbseils", "longestAbseil", "hours",
+  "vGrade", "aGrade", "commitment", "quality",
+  "sources", "new-attr", "discard",
+];
+
+export const REQUIRED_ROLES: PlaceFieldRole[] = ["name", "latitude", "longitude"];

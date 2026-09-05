@@ -19,7 +19,7 @@
 // wherever it is listed); re-listing downloads here would be a second place for
 // them to go stale.
 //
-// PRIVACY: five booleans. No canyon names, no regions named.
+// PRIVACY: five booleans. No place names, no regions named.
 import { useCallback, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
@@ -66,7 +66,7 @@ const METERED_ROWS: {
   },
   {
     job: "sync",
-    title: "Syncing trips and canyons",
+    title: "Syncing trips and places",
     subtitle: "Usually a few kilobytes.",
   },
   // MOT-006: media PUTs (up to 30 MB an image, 500 MB a video) used to ride

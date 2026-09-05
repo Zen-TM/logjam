@@ -3,7 +3,7 @@
 // never persisted). Policy: thumbnails for everything visible are cached
 // eagerly after each pull (small); full-res display files lazily on view.
 //
-// PRIVACY: cached blobs are canyon photos — app-private storage only
+// PRIVACY: cached blobs are place photos — app-private storage only
 // (documentDirectory, covered by allowBackup=false), paths tracked in the
 // mirror so tombstone apply deletes them with their rows.
 import * as FileSystem from "expo-file-system/legacy";

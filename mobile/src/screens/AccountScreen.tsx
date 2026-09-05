@@ -78,7 +78,7 @@ function GuestAccountScreen({ onBack }: { onBack: () => void }) {
   const startLinking = () => {
     const message = counts ? linkConfirmationMessage(counts) : null;
     // Nothing recorded yet — there is nothing to warn about, so don't make
-    // them dismiss a dialog about their zero canyons.
+    // them dismiss a dialog about their zero places.
     if (!message) {
       linkAccount();
       return;
@@ -106,12 +106,12 @@ function GuestAccountScreen({ onBack }: { onBack: () => void }) {
         <Row
           icon="upload-cloud"
           title="Backed up"
-          subtitle="Your canyons and trips survive a lost phone"
+          subtitle="Your places and trips survive a lost phone"
         />
         <Row
           icon="users"
           title="Sharing"
-          subtitle="Share individual canyons with friends"
+          subtitle="Share individual places with friends"
         />
         <Row
           icon="layers"
@@ -365,7 +365,7 @@ function UsernameForm({
         autoCapitalize="none"
       />
       <Text style={styles.formHint}>
-        Friends search this name when they share a canyon with you.
+        Friends search this name when they share a place with you.
       </Text>
       {error ? <ErrorBanner message={error} /> : null}
       <Button
@@ -509,8 +509,8 @@ function DeleteAccountForm({
     <View style={styles.form}>
       <Text style={styles.danger}>This can&apos;t be undone.</Text>
       <Text style={styles.formHint}>
-        Your canyons, trips, notes, photos and shares are deleted from the server
-        and from this phone. Canyons other people copied from you stay theirs.
+        Your places, trips, notes, photos and shares are deleted from the server
+        and from this phone. Places other people copied from you stay theirs.
       </Text>
       <TextField
         label={`Type ${username} to confirm`}

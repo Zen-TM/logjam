@@ -90,7 +90,7 @@ export async function toMediaItems(rows: MediaRow[]): Promise<MediaItem[]> {
 }
 
 // Presigns a batch of rows and groups the resulting DTOs by linkedId — used to
-// attach per-trip media when reading a canyon or a list of trip logs. Rows with
+// attach per-trip media when reading a place or a list of trip logs. Rows with
 // no parent (standalone files) belong to no group and are skipped; they reach
 // the client through the delta pull and the Saved list, never as somebody's
 // attachments.

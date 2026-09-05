@@ -6,7 +6,7 @@
 //    foreign ids at all (stronger than 404-not-403: no id slot to probe).
 // 2. A sharee's delta never contains trip logs, trip media, or co-sharee
 //    rows; user joins are username-only (never email).
-// 3. Unshare and canyon-delete emit the SAME sharee signal (a `canyon`
+// 3. Unshare and place-delete emit the SAME sharee signal (a `place`
 //    tombstone) — deliberately indistinguishable.
 // 4. Logging: counts and cursor timestamps only — never row contents.
 import { Router, Response, NextFunction } from "express";
@@ -32,9 +32,9 @@ import {
   SYNC_PUSH_MAX_OPS,
   SYNC_PUSH_OPS_BY_ENTITY,
   pushOpDependencies,
-  validateCanyonPayload,
+  validatePlacePayload,
   validateRoutePayload,
-  normalizeWaypointCanyonIds,
+  normalizeWaypointPlaceIds,
   normalizeWaypointTags,
   validateWaypointPayload,
   parseRouteColor,
@@ -48,18 +48,18 @@ import {
   parseDisplayName,
   parseTripTypes,
   resolvePatchedTripTypes,
-  resolveTripCanyonIds,
+  resolveTripPlaceIds,
   serializeTrip,
-  tripCanyonsInclude,
+  tripPlacesInclude,
 } from "./tripLogsGlobal";
-import { validateCanyonTextFields } from "./canyons";
+import { validatePlaceTextFields } from "./places";
 import {
   assertValidDef,
   createFieldDef,
   deleteFieldDef,
   updateFieldDef,
 } from "../lib/customFieldDefs";
-import { deleteCanyonsCascade, deleteTripsCascade } from "../lib/bulkDelete";
+import { deletePlacesCascade, deleteTripsCascade } from "../lib/bulkDelete";
 import {
   directShareRevokeTombstones,
   routeDeleteTombstones,
@@ -67,14 +67,14 @@ import {
   writeTombstones,
 } from "../lib/syncTombstones";
 import {
-  applyRouteCanyonLink,
-  canyonShareeIds,
+  applyRoutePlaceLink,
+  placeShareeIds,
   parseAnchorsOrNull,
-  resolveRouteCanyonId,
+  resolveRoutePlaceId,
 } from "../lib/routeLink";
 import {
-  applyWaypointCanyonLinks,
-  resolveWaypointCanyonIds,
+  applyWaypointPlaceLinks,
+  resolveWaypointPlaceIds,
   serializeOwnWaypoint,
   serializeWaypointFor,
   snapshotWaypointVisibility,
@@ -202,12 +202,12 @@ router.get(
         resetRequired: true,
         changes: {
           customFieldDefs: [],
-          canyons: [],
+          places: [],
           tripLogs: [],
           waypoints: [],
           routes: [],
           media: [],
-          canyonShares: [],
+          placeShares: [],
           friendships: [],
         },
         tombstones: [],
@@ -223,11 +223,11 @@ router.get(
 
     // Visibility sets, computed ONCE per request (§4.5). Never an id from the
     // request.
-    const sharedCanyonRows = await prisma.canyonShare.findMany({
+    const sharedPlaceRows = await prisma.placeShare.findMany({
       where: { sharedWithId: user.id },
-      select: { canyonId: true },
+      select: { placeId: true },
     });
-    const sharedCanyonIds = sharedCanyonRows.map((row) => row.canyonId);
+    const sharedPlaceIds = sharedPlaceRows.map((row) => row.placeId);
     // Direct per-item shares — the second, independent source of visibility
     // (lib/shareAccess.ts). Share.entityId is polymorphic so there is no
     // relation filter to express this with; the ids come back as a set.
@@ -291,10 +291,10 @@ router.get(
       return rows;
     }
 
-    // Definitions lead the budget order: a canyon's and a trip's stored values
+    // Definitions lead the budget order: a place's and a trip's stored values
     // are keyed by them, so a client applying an early page has the labels
     // before the rows that need them. Always the caller's own — definitions
-    // belong to one account and are never shared, so unlike a canyon there is
+    // belong to one account and are never shared, so unlike a place there is
     // no visibility set to intersect and no `syncRole` on the row.
     const customFieldDefs = await fill(
       "customFieldDefs",
@@ -309,16 +309,16 @@ router.get(
       (row) => row.updatedAt,
     );
 
-    const canyons = await fill(
-      "canyons",
+    const places = await fill(
+      "places",
       (after, take) =>
-        prisma.canyon.findMany({
+        prisma.place.findMany({
           where: {
             AND: [
               {
                 OR: [
                   { ownerId: user.id },
-                  { id: { in: sharedCanyonIds } },
+                  { id: { in: sharedPlaceIds } },
                 ],
               },
               keysetWhere("updatedAt", since, after),
@@ -339,13 +339,13 @@ router.get(
           },
           orderBy: [{ updatedAt: "asc" }, { id: "asc" }],
           take,
-          include: tripCanyonsInclude,
+          include: tripPlacesInclude,
         }),
       (row) => row.updatedAt,
     );
 
-    // Own waypoints, waypoints LINKED to a canyon shared with me (the same
-    // visibility canyon-level media and linked routes have), and waypoints
+    // Own waypoints, waypoints LINKED to a place shared with me (the same
+    // visibility place-level media and linked routes have), and waypoints
     // shared with me DIRECTLY. An unlinked, unshared waypoint of another owner
     // can never match.
     const waypoints = await fill(
@@ -358,8 +358,8 @@ router.get(
                 OR: [
                   { ownerId: user.id },
                   {
-                    canyonLinks: {
-                      some: { canyonId: { in: sharedCanyonIds } },
+                    placeLinks: {
+                      some: { placeId: { in: sharedPlaceIds } },
                     },
                   },
                   { id: { in: directWaypointIds } },
@@ -375,8 +375,8 @@ router.get(
       (row) => row.updatedAt,
     );
 
-    // Owned routes, routes LINKED to a canyon shared with me (a linked route is
-    // part of the shared canyon record), and routes shared with me DIRECTLY. An
+    // Owned routes, routes LINKED to a place shared with me (a linked route is
+    // part of the shared place record), and routes shared with me DIRECTLY. An
     // unlinked, unshared route of another owner can never match.
     const routes = await fill(
       "routes",
@@ -387,7 +387,7 @@ router.get(
               {
                 OR: [
                   { ownerId: user.id },
-                  { canyonId: { in: sharedCanyonIds } },
+                  { placeId: { in: sharedPlaceIds } },
                   { id: { in: directRouteIds } },
                 ],
               },
@@ -409,21 +409,21 @@ router.get(
             AND: [
               {
                 // Own media — including standalone files (imports, recorded
-                // tracks), which have no parent at all — plus canyon-level
-                // media of canyons shared with me, exactly what a sharee can
-                // already fetch via GET /canyons/:id. Trip media of other
+                // tracks), which have no parent at all — plus place-level
+                // media of places shared with me, exactly what a sharee can
+                // already fetch via GET /places/:id. Trip media of other
                 // owners can never match (its linkedType is "tripLog"), and
                 // neither can anyone else's standalone files ("none").
                 OR: [
                   { ownerId: user.id },
                   {
-                    linkedType: "canyon",
-                    linkedId: { in: sharedCanyonIds },
+                    linkedType: "place",
+                    linkedId: { in: sharedPlaceIds },
                   },
                 ],
               },
               // Keysets on updatedAt, not createdAt. A media row used to be
-              // immutable; linking a file to a canyon and unlinking it again
+              // immutable; linking a file to a place and unlinking it again
               // mutates one, and a createdAt keyset would never redeliver it —
               // the other device would show a stale parent forever.
               keysetWhere("updatedAt", since, after),
@@ -435,10 +435,10 @@ router.get(
       (row) => row.updatedAt,
     );
 
-    const canyonShares = await fill(
-      "canyonShares",
+    const placeShares = await fill(
+      "placeShares",
       (after, take) =>
-        prisma.canyonShare.findMany({
+        prisma.placeShare.findMany({
           where: {
             AND: [
               // Caller is sharer or sharee — a sharee can never enumerate
@@ -553,12 +553,12 @@ router.get(
         hasMore,
         counts: {
           customFieldDefs: customFieldDefs.length,
-          canyons: canyons.length,
+          places: places.length,
           tripLogs: tripLogs.length,
           waypoints: waypoints.length,
           routes: routes.length,
           media: media.length,
-          canyonShares: canyonShares.length,
+          placeShares: placeShares.length,
           friendships: friendships.length,
           tombstones: tombstones.length,
         },
@@ -583,12 +583,12 @@ router.get(
 
     // Ids delivered as live rows in this same page, by tombstone entityType.
     const liveIds = new Map<string, Set<string>>([
-      ["canyon", new Set(canyons.map((row) => row.id))],
+      ["place", new Set(places.map((row) => row.id))],
       ["tripLog", new Set(tripLogs.map((row) => row.id))],
       ["waypoint", new Set(waypoints.map((row) => row.id))],
       ["route", new Set(routes.map((row) => row.id))],
       ["media", new Set(media.map((row) => row.id))],
-      ["canyonShare", new Set(canyonShares.map((row) => row.id))],
+      ["placeShare", new Set(placeShares.map((row) => row.id))],
       ["friendship", new Set(friendships.map((row) => row.id))],
     ]);
 
@@ -601,25 +601,25 @@ router.get(
       resetRequired: false,
       changes: {
         customFieldDefs,
-        canyons: canyons.map((canyon) => ({
-          syncRole: canyon.ownerId === user.id ? "owner" : "shared",
-          ...canyon,
+        places: places.map((place) => ({
+          syncRole: place.ownerId === user.id ? "owner" : "shared",
+          ...place,
         })),
         tripLogs: tripLogs.map(serializeTrip),
         // syncRole tells the client whether this is its own waypoint or one
-        // seen through a canyon share — a 'shared' waypoint is read-only there.
-        // canyonIds is SCOPED: a sharee given the carpark must not learn which
-        // other canyons the owner filed it under.
+        // seen through a place share — a 'shared' waypoint is read-only there.
+        // placeIds is SCOPED: a sharee given the carpark must not learn which
+        // other places the owner filed it under.
         waypoints: waypoints.map((waypoint) =>
           serializeWaypointFor(
             waypoint,
             user.id,
-            new Set(sharedCanyonIds),
+            new Set(sharedPlaceIds),
             waypointShareCounts,
           ),
         ),
         // Geometry travels INLINE (no blob leg). syncRole tells the client
-        // whether this is its own route or one seen through a canyon share —
+        // whether this is its own route or one seen through a place share —
         // a 'shared' route is read-only there.
         routes: routes.map((route) => {
           const isOwner = route.ownerId === user.id;
@@ -651,7 +651,7 @@ router.get(
           createdAt: row.createdAt,
           updatedAt: row.updatedAt,
         })),
-        canyonShares,
+        placeShares,
         friendships: friendships.map((f) => ({
           id: f.id,
           status: f.status,
@@ -666,7 +666,7 @@ router.get(
       // exists now. The client applies every upsert and then every tombstone,
       // with no per-item ordering, so shipping both meant the delete won —
       // unshare at 09:00, re-share at 09:05, edit at 09:06, and the 09:10
-      // pull deleted the canyon, its cached media and its blobs. Same shape
+      // pull deleted the place, its cached media and its blobs. Same shape
       // for any delete-then-recreate under one id.
       tombstones: tombstones
         .filter((t) => !liveIds.get(t.entityType)?.has(t.entityId))
@@ -702,7 +702,7 @@ type PushOpResult = {
 // Per-entity field whitelists. An unknown key is a per-op 400 (`rejected`),
 // never silently dropped (§10.4) — the client parks the op visibly instead
 // of losing a field a newer app version wrote.
-const CANYON_FIELDS = new Set([
+const PLACE_FIELDS = new Set([
   "name",
   "altNames",
   "latitude",
@@ -723,7 +723,7 @@ const TRIP_FIELDS = new Set([
   "types",
   "notes",
   "customFields",
-  "canyonIds",
+  "placeIds",
 ]);
 const WAYPOINT_FIELDS = new Set([
   "name",
@@ -733,20 +733,20 @@ const WAYPOINT_FIELDS = new Set([
   "symbol",
   "notes",
   "tags",
-  "canyonIds",
+  "placeIds",
   // Legacy single-link field from before waypoints went many-to-many. Still
   // accepted because an outbox op can outlive the client that queued it: a
   // phone that queued a waypoint offline, then took the app update before it
   // ever regained signal, would otherwise have that op REJECTED on the first
   // flush and land the user in the sync-issues shelf for a rename they made in
-  // a gorge. Normalised into canyonIds below; never written.
-  "canyonId",
+  // a gorge. Normalised into placeIds below; never written.
+  "placeId",
 ]);
 // `color` is client-settable, but only to a value from TRACK_COLORS (see
 // parseRouteColor): routes share one palette with legacy track media so the map
 // reads as one thing, and a free-text colour would reach every style expression
 // that draws a route.
-const ROUTE_FIELDS = new Set(["name", "points", "anchors", "canyonId", "color"]);
+const ROUTE_FIELDS = new Set(["name", "points", "anchors", "placeId", "color"]);
 
 function assertKnownFields(
   fields: Record<string, unknown>,
@@ -886,9 +886,9 @@ async function createAlreadyTombstoned(
   return tombstone !== null;
 }
 
-async function applyCanyonOp(userId: string, op: PushOp): Promise<PushOpResult> {
+async function applyPlaceOp(userId: string, op: PushOp): Promise<PushOpResult> {
   if (op.op === "delete") {
-    const deleted = await deleteCanyonsCascade(userId, [op.id]);
+    const deleted = await deletePlacesCascade(userId, [op.id]);
     // Row already gone (or never visible): idempotent success — a delete's
     // goal state is "not there" (§8.1), and distinguishing foreign from
     // missing would be an oracle.
@@ -896,30 +896,30 @@ async function applyCanyonOp(userId: string, op: PushOp): Promise<PushOpResult> 
   }
 
   const fields = op.fields ?? {};
-  assertKnownFields(fields, CANYON_FIELDS);
+  assertKnownFields(fields, PLACE_FIELDS);
   // Same two validators the REST twins run, in the same order — REST/sync
   // divergence here is the SEC-001 failure mode, and a mistyped free-text field
   // that reaches Prisma throws a non-AppError, which the per-op catch re-throws
   // and 500s the WHOLE batch (a poison pill that never drains).
   const validationError =
-    validateCanyonPayload(fields, { requireCoords: op.op === "create" }) ??
-    validateCanyonTextFields(fields);
+    validatePlacePayload(fields, { requireCoords: op.op === "create" }) ??
+    validatePlaceTextFields(fields);
   if (validationError) throw new AppError(400, validationError);
 
   if (op.op === "create") {
     if (!fields.name || fields.latitude === undefined || fields.longitude === undefined) {
       throw new AppError(400, "name, latitude, and longitude are required");
     }
-    const existing = await prisma.canyon.findUnique({ where: { id: op.id } });
+    const existing = await prisma.place.findUnique({ where: { id: op.id } });
     if (existing) {
       if (existing.ownerId !== userId)
-        throw new AppError(404, "Canyon not found");
+        throw new AppError(404, "Place not found");
       return { opId: op.opId, status: "alreadyApplied", row: existing };
     }
-    if (await createAlreadyTombstoned(userId, "canyon", op.id)) {
+    if (await createAlreadyTombstoned(userId, "place", op.id)) {
       return { opId: op.opId, status: "alreadyApplied" };
     }
-    const canyon = await prisma.canyon.create({
+    const place = await prisma.place.create({
       data: {
         id: op.id,
         ownerId: userId,
@@ -938,23 +938,23 @@ async function applyCanyonOp(userId: string, op: PushOp): Promise<PushOpResult> 
         attributes: (fields.attributes ?? {}) as Prisma.InputJsonValue,
       },
     });
-    return { opId: op.opId, status: "applied", row: canyon };
+    return { opId: op.opId, status: "applied", row: place };
   }
 
   // update
-  const canyon = await prisma.canyon.findUnique({ where: { id: op.id } });
+  const place = await prisma.place.findUnique({ where: { id: op.id } });
   // Deleted-or-foreign → the same 404 the REST PATCH gives (client parks as
   // deadRemote; delete-wins per §6).
-  if (!canyon || canyon.ownerId !== userId)
-    throw new AppError(404, "Canyon not found");
+  if (!place || place.ownerId !== userId)
+    throw new AppError(404, "Place not found");
 
   const conflicts = conflictReceipts(
     op.baseUpdatedAt,
-    canyon.updatedAt,
+    place.updatedAt,
     fields,
-    canyon as unknown as Record<string, unknown>,
+    place as unknown as Record<string, unknown>,
   );
-  const updated = await prisma.canyon.update({
+  const updated = await prisma.place.update({
     where: { id: op.id },
     data: {
       ...(fields.name !== undefined && { name: fields.name as string }),
@@ -1010,7 +1010,7 @@ async function applyTripOp(userId: string, op: PushOp): Promise<PushOpResult> {
     if (!fields.date) throw new AppError(400, "date is required");
     const existing = await prisma.tripLog.findUnique({
       where: { id: op.id },
-      include: tripCanyonsInclude,
+      include: tripPlacesInclude,
     });
     if (existing) {
       if (existing.userId !== userId)
@@ -1024,14 +1024,14 @@ async function applyTripOp(userId: string, op: PushOp): Promise<PushOpResult> {
     if (await createAlreadyTombstoned(userId, "tripLog", op.id)) {
       return { opId: op.opId, status: "alreadyApplied" };
     }
-    const resolvedCanyonIds = await resolveTripCanyonIds(
+    const resolvedPlaceIds = await resolveTripPlaceIds(
       userId,
-      fields.canyonIds,
+      fields.placeIds,
     );
     const trimmedDisplayName = parseDisplayName(fields.displayName) ?? null;
     const parsedTypes = enforceCanyoningTag(
       parseTripTypes(fields.types) ?? [],
-      resolvedCanyonIds.length > 0,
+      resolvedPlaceIds.length > 0,
     );
     const trip = await prisma.tripLog.create({
       data: {
@@ -1042,14 +1042,14 @@ async function applyTripOp(userId: string, op: PushOp): Promise<PushOpResult> {
         types: parsedTypes,
         notes: (fields.notes as string | null | undefined) ?? null,
         customFields: (fields.customFields ?? {}) as Prisma.InputJsonValue,
-        canyons: {
-          create: resolvedCanyonIds.map((canyonId, position) => ({
-            canyonId,
+        places: {
+          create: resolvedPlaceIds.map((placeId, position) => ({
+            placeId,
             position,
           })),
         },
       },
-      include: tripCanyonsInclude,
+      include: tripPlacesInclude,
     });
     return { opId: op.opId, status: "applied", row: serializeTrip(trip) };
   }
@@ -1058,14 +1058,14 @@ async function applyTripOp(userId: string, op: PushOp): Promise<PushOpResult> {
   // canyoning-tag enforcement, same watermark force-touch).
   const trip = await prisma.tripLog.findUnique({
     where: { id: op.id },
-    include: { canyons: { orderBy: { position: "asc" }, select: { canyonId: true } } },
+    include: { places: { orderBy: { position: "asc" }, select: { placeId: true } } },
   });
   if (!trip || trip.userId !== userId)
     throw new AppError(404, "Trip log not found");
 
-  const resolvedCanyonIds =
-    fields.canyonIds !== undefined
-      ? await resolveTripCanyonIds(userId, fields.canyonIds)
+  const resolvedPlaceIds =
+    fields.placeIds !== undefined
+      ? await resolveTripPlaceIds(userId, fields.placeIds)
       : undefined;
   const trimmedDisplayName = parseDisplayName(fields.displayName);
   const parsedTypes = parseTripTypes(fields.types);
@@ -1073,8 +1073,8 @@ async function applyTripOp(userId: string, op: PushOp): Promise<PushOpResult> {
     resolvePatchedTripTypes({
       parsedTypes,
       storedTypes: trip.types,
-      resolvedCanyonIds,
-      storedHasLinkedCanyon: trip.canyons.length > 0,
+      resolvedPlaceIds,
+      storedHasLinkedPlace: trip.places.length > 0,
     });
 
   const currentForConflicts: Record<string, unknown> = {
@@ -1083,7 +1083,7 @@ async function applyTripOp(userId: string, op: PushOp): Promise<PushOpResult> {
     types: trip.types,
     notes: trip.notes,
     customFields: trip.customFields,
-    canyonIds: trip.canyons.map((link) => link.canyonId),
+    placeIds: trip.places.map((link) => link.placeId),
   };
   // Normalize the incoming date for comparison so equal instants don't owe a
   // receipt over format differences.
@@ -1114,11 +1114,11 @@ async function applyTripOp(userId: string, op: PushOp): Promise<PushOpResult> {
         displayName: trimmedDisplayName,
       }),
       ...(typesChanged && { types: effectiveTypes }),
-      ...(resolvedCanyonIds !== undefined && {
-        canyons: {
+      ...(resolvedPlaceIds !== undefined && {
+        places: {
           deleteMany: {},
-          create: resolvedCanyonIds.map((canyonId, position) => ({
-            canyonId,
+          create: resolvedPlaceIds.map((placeId, position) => ({
+            placeId,
             position,
           })),
         },
@@ -1126,7 +1126,7 @@ async function applyTripOp(userId: string, op: PushOp): Promise<PushOpResult> {
         updatedAt: new Date(),
       }),
     },
-    include: tripCanyonsInclude,
+    include: tripPlacesInclude,
   });
   return conflicts.length > 0
     ? {
@@ -1179,24 +1179,24 @@ async function applyWaypointOp(
   });
   if (validationError) throw new AppError(400, validationError);
 
-  // Owner-scoped association — foreign canyon id ≡ nonexistent (same rule as
+  // Owner-scoped association — foreign place id ≡ nonexistent (same rule as
   // routes/waypoints.ts, which shares the resolver).
-  // A legacy op carries `canyonId` (string or null) where a current one carries
-  // `canyonIds`. null meant "unlink", which is the empty list.
-  const canyonIdsField =
-    fields.canyonIds !== undefined
-      ? fields.canyonIds
-      : fields.canyonId === undefined
+  // A legacy op carries `placeId` (string or null) where a current one carries
+  // `placeIds`. null meant "unlink", which is the empty list.
+  const placeIdsField =
+    fields.placeIds !== undefined
+      ? fields.placeIds
+      : fields.placeId === undefined
         ? undefined
-        : fields.canyonId === null
+        : fields.placeId === null
           ? []
-          : [fields.canyonId];
-  const parsedCanyonIds = normalizeWaypointCanyonIds(canyonIdsField);
-  if ("error" in parsedCanyonIds) throw new AppError(400, parsedCanyonIds.error);
-  const resolvedCanyonIds =
-    parsedCanyonIds.canyonIds === undefined
+          : [fields.placeId];
+  const parsedPlaceIds = normalizeWaypointPlaceIds(placeIdsField);
+  if ("error" in parsedPlaceIds) throw new AppError(400, parsedPlaceIds.error);
+  const resolvedPlaceIds =
+    parsedPlaceIds.placeIds === undefined
       ? undefined
-      : await resolveWaypointCanyonIds(userId, parsedCanyonIds.canyonIds);
+      : await resolveWaypointPlaceIds(userId, parsedPlaceIds.placeIds);
   const parsedTags = normalizeWaypointTags(fields.tags);
   if ("error" in parsedTags) throw new AppError(400, parsedTags.error);
 
@@ -1229,8 +1229,8 @@ async function applyWaypointOp(
         notes: (fields.notes as string | null | undefined) ?? null,
         tags: parsedTags.tags ?? [],
         // New row: linking can only ADD viewers, so no revocation is possible.
-        canyonLinks: {
-          create: (resolvedCanyonIds ?? []).map((canyonId) => ({ canyonId })),
+        placeLinks: {
+          create: (resolvedPlaceIds ?? []).map((placeId) => ({ placeId })),
         },
       },
       include: waypointSyncInclude,
@@ -1257,10 +1257,10 @@ async function applyWaypointOp(
   const updated = await prisma.$transaction(async (tx) => {
     // Same transaction as the field update: a link change is a visibility
     // change and its tombstones must not be able to land without it.
-    if (resolvedCanyonIds !== undefined) {
-      await applyWaypointCanyonLinks(tx, {
+    if (resolvedPlaceIds !== undefined) {
+      await applyWaypointPlaceLinks(tx, {
         waypointId: op.id,
-        canyonIds: resolvedCanyonIds,
+        placeIds: resolvedPlaceIds,
       });
     }
     return tx.waypoint.update({
@@ -1307,9 +1307,9 @@ async function applyRouteOp(
       return { opId: op.opId, status: "alreadyApplied" };
     }
     await prisma.$transaction(async (tx) => {
-      // Sharees of the linked canyon must forget it too. Read before delete.
+      // Sharees of the linked place must forget it too. Read before delete.
       const shareeIds =
-        route.canyonId === null ? [] : await canyonShareeIds(tx, route.canyonId);
+        route.placeId === null ? [] : await placeShareeIds(tx, route.placeId);
       // Direct recipients likewise — read before the rows go, so the tombstone
       // fan-out and the Share cleanup match the REST DELETE (routes.ts).
       const directIds = await directShareeIds(tx, "route", op.id);
@@ -1346,7 +1346,7 @@ async function applyRouteOp(
     points = parsed.points;
     anchors = parseAnchorsOrNull(fields.anchors, parsed.points.length);
   }
-  const resolvedCanyonId = await resolveRouteCanyonId(userId, fields.canyonId);
+  const resolvedPlaceId = await resolveRoutePlaceId(userId, fields.placeId);
 
   if (op.op === "create") {
     const existing = await prisma.route.findUnique({ where: { id: op.id } });
@@ -1361,8 +1361,8 @@ async function applyRouteOp(
       let assignedColor = color;
       if (!assignedColor) {
         const existingRoutes = await tx.route.findMany({
-          where: resolvedCanyonId
-            ? { OR: [{ ownerId: userId }, { canyonId: resolvedCanyonId }] }
+          where: resolvedPlaceId
+            ? { OR: [{ ownerId: userId }, { placeId: resolvedPlaceId }] }
             : { ownerId: userId },
           select: { color: true },
         });
@@ -1373,7 +1373,7 @@ async function applyRouteOp(
         data: {
           id: op.id,
           ownerId: userId,
-          canyonId: null,
+          placeId: null,
           name: (fields.name as string).trim(),
           color: assignedColor,
           points: points!,
@@ -1382,11 +1382,11 @@ async function applyRouteOp(
       });
       // Link through the shared helper so displacement + its tombstones have
       // exactly one implementation (lib/routeLink.ts).
-      if (resolvedCanyonId) {
-        await applyRouteCanyonLink(tx, {
+      if (resolvedPlaceId) {
+        await applyRoutePlaceLink(tx, {
           routeId: route.id,
-          canyonId: resolvedCanyonId,
-          currentCanyonId: null,
+          placeId: resolvedPlaceId,
+          currentPlaceId: null,
         });
         return tx.route.findUniqueOrThrow({ where: { id: route.id } });
       }
@@ -1419,11 +1419,11 @@ async function applyRouteOp(
         },
       });
     }
-    if (resolvedCanyonId !== undefined) {
-      await applyRouteCanyonLink(tx, {
+    if (resolvedPlaceId !== undefined) {
+      await applyRoutePlaceLink(tx, {
         routeId: op.id,
-        canyonId: resolvedCanyonId,
-        currentCanyonId: route.canyonId,
+        placeId: resolvedPlaceId,
+        currentPlaceId: route.placeId,
       });
     }
     return tx.route.findUniqueOrThrow({ where: { id: op.id } });
@@ -1484,7 +1484,7 @@ async function applyCustomFieldDefOp(
   op: PushOp,
 ): Promise<PushOpResult> {
   if (op.op === "delete") {
-    // Strips the orphaned values off every trip log / canyon that carried one
+    // Strips the orphaned values off every trip log / place that carried one
     // and writes the tombstone, in one transaction (lib/customFieldDefs.ts).
     // A definition already gone is idempotent success — a delete's goal state
     // is "not there" (§8.1).
@@ -1612,8 +1612,8 @@ router.post(
       try {
         let result: PushOpResult;
         switch (op.entity) {
-          case "canyon":
-            result = await applyCanyonOp(user.id, op);
+          case "place":
+            result = await applyPlaceOp(user.id, op);
             break;
           case "tripLog":
             result = await applyTripOp(user.id, op);

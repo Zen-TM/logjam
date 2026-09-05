@@ -10,7 +10,7 @@
 // The closing section is not a setting — it is an answer. "What of mine is on
 // this device, and what protects it?" is a fair question to have about an
 // offline app, and leaving it unanswered doesn't make the answer better. It
-// states WHAT KINDS of data are held and names no canyon and no coordinate
+// states WHAT KINDS of data are held and names no place and no coordinate
 // (§11).
 import { useCallback, useState } from "react";
 import { StyleSheet, Text } from "react-native";
@@ -95,8 +95,8 @@ export function PrivacySettingsScreen() {
           title="Send crash reports"
           // Names what is scrubbed, because "anonymous" alone is a claim the
           // user has no way to check and this app's whole premise is that
-          // canyon locations don't leave it (scrubEvent.ts does the work).
-          subtitle="Canyon names and coordinates are removed before sending. Takes effect next launch."
+          // place locations don't leave it (scrubEvent.ts does the work).
+          subtitle="Place names and coordinates are removed before sending. Takes effect next launch."
           value={crashReports}
           ready
           onToggle={toggleCrashReports}
@@ -122,7 +122,7 @@ export function PrivacySettingsScreen() {
 
         <SectionHeader label="What's on this phone" />
         <Text style={styles.note}>
-          {"Your canyons, trips, notes, photos and maps are stored on this device, " +
+          {"Your places, trips, notes, photos and maps are stored on this device, " +
             "outside your phone's cloud backup. The app lock protects them if " +
             "someone else uses your phone."}
         </Text>

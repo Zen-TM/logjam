@@ -63,15 +63,15 @@ import classes from "./Map.module.css";
 import MapSearchBox from "./MapSearchBox";
 import { MOBILE_MAX_WIDTH_PX } from "../../useIsMobile";
 import type {
-  TCanyon,
+  TPlace,
   TFilters,
-  CanyonTrack,
+  PlaceTrack,
   StandaloneTrack,
   TRoute,
   TWaypoint,
-} from "../../canyonUtils";
+} from "../../placeUtils";
 import type { GeoJsonPolygonal } from "../../topoLayerTypes";
-import { passesFilters, isCanyonDoneByViewer } from "../../canyonUtils";
+import { passesFilters, isPlaceDoneByViewer } from "../../placeUtils";
 import { fetchTrackGeoJSON } from "../media/trackGeo";
 import { useToast } from "../feedback/ToastProvider";
 import { messageFromError } from "../../errors/messageFromError";
@@ -145,32 +145,32 @@ function collectLngLatPairs(node: unknown): [number, number][] {
   return node.flatMap(collectLngLatPairs);
 }
 
-function applyCanyonThemePaint(map: maplibregl.Map) {
-  const owned = readCssVar("--owned-canyon-color", "#f97316");
-  const completed = readCssVar("--completed-canyon-color", "#22c55e");
-  const shared = readCssVar("--shared-canyon-color", "#629bf8");
+function applyPlaceThemePaint(map: maplibregl.Map) {
+  const owned = readCssVar("--owned-place-color", "#f97316");
+  const completed = readCssVar("--completed-place-color", "#22c55e");
+  const shared = readCssVar("--shared-place-color", "#629bf8");
   const label = readCssVar("--theme-text-primary", "#ffffff");
   const halo = readCssVar("--theme-bonus-2", "#1a1a1a");
 
-  if (map.getLayer("canyon-circles")) {
-    // Completed (owned + logged trip) canyons render green; the rest stay orange.
-    map.setPaintProperty("canyon-circles", "circle-color", [
+  if (map.getLayer("place-circles")) {
+    // Completed (owned + logged trip) places render green; the rest stay orange.
+    map.setPaintProperty("place-circles", "circle-color", [
       "case",
       ["==", ["get", "done"], true],
       completed,
       owned,
     ]);
   }
-  if (map.getLayer("shared-canyon-circles")) {
-    map.setPaintProperty("shared-canyon-circles", "circle-color", shared);
+  if (map.getLayer("shared-place-circles")) {
+    map.setPaintProperty("shared-place-circles", "circle-color", shared);
   }
-  if (map.getLayer("canyon-labels")) {
-    map.setPaintProperty("canyon-labels", "text-color", label);
-    map.setPaintProperty("canyon-labels", "text-halo-color", halo);
+  if (map.getLayer("place-labels")) {
+    map.setPaintProperty("place-labels", "text-color", label);
+    map.setPaintProperty("place-labels", "text-halo-color", halo);
   }
-  if (map.getLayer("shared-canyon-labels")) {
-    map.setPaintProperty("shared-canyon-labels", "text-color", label);
-    map.setPaintProperty("shared-canyon-labels", "text-halo-color", halo);
+  if (map.getLayer("shared-place-labels")) {
+    map.setPaintProperty("shared-place-labels", "text-color", label);
+    map.setPaintProperty("shared-place-labels", "text-halo-color", halo);
   }
 }
 
@@ -274,7 +274,7 @@ function protomapsLayerIds(map: maplibregl.Map): string[] {
 /**
  * A lat/lng box. An ALIAS of the shared `RegionBbox`, not a second declaration:
  * the same four numbers are the offline-region plan's input, the topo job's
- * extent and the canyon filter's area, and three structurally-identical types
+ * extent and the place filter's area, and three structurally-identical types
  * meant three places to fix the day one of them grew a fifth field.
  */
 export type TBbox = RegionBbox;
@@ -318,12 +318,12 @@ function iconSizeInterp(sizeZ18: number): maplibregl.ExpressionSpecification {
   ];
 }
 
-// Canyon map labels: ellipsize a name past this length so a pathological
+// Place map labels: ellipsize a name past this length so a pathological
 // long name (e.g. a 250-char single token that can't line-wrap) can't render
-// as one full-map-width label (CANYON-7). The detail-panel header truncates
+// as one full-map-width label (PLACE-7). The detail-panel header truncates
 // separately via CSS.
 const MAX_LABEL_CHARS = 40;
-const CANYON_LABEL_FIELD: maplibregl.ExpressionSpecification = [
+const PLACE_LABEL_FIELD: maplibregl.ExpressionSpecification = [
   "case",
   [">", ["length", ["get", "name"]], MAX_LABEL_CHARS],
   ["concat", ["slice", ["get", "name"], 0, MAX_LABEL_CHARS], "…"],
@@ -498,19 +498,19 @@ function previewDraft(map: maplibregl.Map, draft: RouteDraft): void {
 
 function Map({
   filters,
-  canyons,
-  sharedCanyons,
-  selectCanyon,
+  places,
+  sharedPlaces,
+  selectPlace,
   pickingCoords,
   waypoints,
   showWaypoints,
   onSelectWaypoint,
   onCoordsPicked,
   onCancelPickCoords,
-  showOwnedCanyons,
-  showSharedCanyons,
-  showCanyonTracks,
-  canyonTracks,
+  showOwnedPlaces,
+  showSharedPlaces,
+  showPlaceTracks,
+  placeTracks,
   standaloneTracks,
   showRoutes,
   routes,
@@ -549,15 +549,15 @@ function Map({
   initialView,
   topoFlyTarget,
   onTopoFlyConsumed,
-  flyToCanyon,
-  onFlyToCanyonConsumed,
+  flyToPlace,
+  onFlyToPlaceConsumed,
   sidebarOpen,
   onTopoSourceUnavailable,
 }: {
   filters: TFilters;
-  canyons: TCanyon[];
-  sharedCanyons: TCanyon[];
-  selectCanyon: (id: string | null) => void;
+  places: TPlace[];
+  sharedPlaces: TPlace[];
+  selectPlace: (id: string | null) => void;
   pickingCoords: boolean;
   /** Marked points, drawn when the Waypoints layer is on. */
   waypoints: TWaypoint[];
@@ -565,16 +565,16 @@ function Map({
   onSelectWaypoint: (id: string) => void;
   onCoordsPicked: (lat: number, lng: number) => void;
   onCancelPickCoords: () => void;
-  showOwnedCanyons: boolean;
-  showSharedCanyons: boolean;
-  showCanyonTracks: boolean;
-  canyonTracks: CanyonTrack[];
+  showOwnedPlaces: boolean;
+  showSharedPlaces: boolean;
+  showPlaceTracks: boolean;
+  placeTracks: PlaceTrack[];
   // Standalone files (the user's own imports and recorded tracks) currently
   // toggled onto the map, already resolved to a presigned URL. Same
-  // fetch-and-parse treatment as canyonTracks; the list IS the visibility, so
+  // fetch-and-parse treatment as placeTracks; the list IS the visibility, so
   // there is no separate layer toggle.
   standaloneTracks: StandaloneTrack[];
-  // User-authored routes. Geometry arrives inline, so unlike canyonTracks
+  // User-authored routes. Geometry arrives inline, so unlike placeTracks
   // there is nothing to fetch and parse per feature.
   showRoutes: boolean;
   routes: TRoute[];
@@ -614,7 +614,7 @@ function Map({
   onAreaSelected: (ids: string[]) => void;
   selectingBbox?: boolean;
   onBboxSelected?: (bbox: TBbox) => void;
-  /** The Canyons filter's "area on map" mode — the third box-draw on this map. */
+  /** The Places filter's "area on map" mode — the third box-draw on this map. */
   selectingFilterArea?: boolean;
   onFilterAreaSelected?: (bbox: TBbox) => void;
   topoLayers?: {
@@ -658,8 +658,8 @@ function Map({
   // collectLngLatPairs walks either to its [lng,lat] leaf positions.
   topoFlyTarget?: GeoJsonPolygonal | null;
   onTopoFlyConsumed?: () => void;
-  flyToCanyon?: { lat: number; lng: number } | null;
-  onFlyToCanyonConsumed?: () => void;
+  flyToPlace?: { lat: number; lng: number } | null;
+  onFlyToPlaceConsumed?: () => void;
   sidebarOpen?: boolean;
   // Fired once per topo overlay entry (jobId-layerName) whose PMTiles source
   // failed to load (e.g. the S3 object is gone). The entry's layers/source are
@@ -694,10 +694,10 @@ function Map({
     : "";
 
   // Keep refs up to date for use inside event handlers
-  const selectCanyonRef = useRef(selectCanyon);
+  const selectPlaceRef = useRef(selectPlace);
   useEffect(() => {
-    selectCanyonRef.current = selectCanyon;
-  }, [selectCanyon]);
+    selectPlaceRef.current = selectPlace;
+  }, [selectPlace]);
 
   // True whenever any coord-pick mode is active — read by once-on-load layer
   // handlers to suppress marker selection during picking.
@@ -708,8 +708,8 @@ function Map({
       selectingArea ||
       (selectingFilterArea ?? false) ||
       // The topo bbox draw belongs here too and was missing: without it, the
-      // click that anchors a corner over a canyon marker also opened that
-      // canyon's panel behind the box being drawn.
+      // click that anchors a corner over a place marker also opened that
+      // place's panel behind the box being drawn.
       (selectingBbox ?? false) ||
       (selectingGeoPdfExtent ?? false);
   }, [
@@ -945,7 +945,7 @@ function Map({
     map.on("load", () => {
       // Add all base layers. Raster entries are one source + one layer each;
       // the Protomaps vector entry is one source plus the whole generated
-      // style set, all added here so the basemap band sits below every canyon,
+      // style set, all added here so the basemap band sits below every place,
       // route and topo layer added later in this handler.
       BASE_LAYERS.forEach((layer) => {
         // Follow the ACTIVE layer, not index 0. The toggle effect below would
@@ -982,23 +982,23 @@ function Map({
         attribution: DEM_ATTRIBUTION_HTML,
       });
 
-      // Owned canyon GeoJSON source (starts empty)
-      map.addSource("canyons", {
+      // Owned place GeoJSON source (starts empty)
+      map.addSource("places", {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
       });
 
-      // Canyon track (GPX/KML) line source + layer. Added before the canyon
+      // Place track (GPX/KML) line source + layer. Added before the place
       // circle markers so the markers paint on top and stay clickable. Hidden
-      // until the "Canyon Tracks" layer is toggled on.
-      map.addSource("canyon-tracks", {
+      // until the "Place Tracks" layer is toggled on.
+      map.addSource("place-tracks", {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
       });
       map.addLayer({
-        id: "canyon-tracks-lines",
+        id: "place-tracks-lines",
         type: "line",
-        source: "canyon-tracks",
+        source: "place-tracks",
         layout: {
           visibility: "none",
           "line-cap": "round",
@@ -1016,9 +1016,9 @@ function Map({
       });
 
       // Standalone files: the user's own imports and the tracks Logjam GPS
-      // recorded. Same source/layer shape as canyon-tracks — a different origin
+      // recorded. Same source/layer shape as place-tracks — a different origin
       // for the list, the same line on the map. No zoom floor, for the same
-      // reason canyon tracks have none: a track file is the thing you came to
+      // reason place tracks have none: a track file is the thing you came to
       // look at, not incidental detail. Visibility is the list itself (an
       // untoggled file is not in the source), so this layer stays visible.
       map.addSource("standalone-tracks", {
@@ -1041,7 +1041,7 @@ function Map({
         },
       });
 
-      // User-authored routes. Same treatment as canyon-tracks (below the
+      // User-authored routes. Same treatment as place-tracks (below the
       // markers so pins stay clickable), but the geometry is already in hand —
       // no per-feature fetch. Hidden until the "Routes" layer is toggled on.
       map.addSource("routes", {
@@ -1089,7 +1089,7 @@ function Map({
       // colour IS the information (waypointColor, shared with mobile so a
       // carpark is the same blue on both), and an icon set would need sprite
       // work for four tags. Above the route lines so a pin sitting on a line
-      // stays clickable, below the canyon markers so a canyon still wins.
+      // stays clickable, below the place markers so a place still wins.
       map.addSource("waypoints", {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
@@ -1242,17 +1242,17 @@ function Map({
         },
       });
 
-      // Shared canyon GeoJSON source (starts empty)
-      map.addSource("shared-canyons", {
+      // Shared place GeoJSON source (starts empty)
+      map.addSource("shared-places", {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
       });
 
-      // Owned canyon circle markers (orange)
+      // Owned place circle markers (orange)
       map.addLayer({
-        id: "canyon-circles",
+        id: "place-circles",
         type: "circle",
-        source: "canyons",
+        source: "places",
         paint: {
           "circle-radius": ["interpolate", ["linear"], ["zoom"], 7, 4, 14, 10],
           "circle-color": readCssVar("--theme-bonus-3", "#f97316"),
@@ -1261,11 +1261,11 @@ function Map({
         },
       });
 
-      // Shared canyon circle markers (blue)
+      // Shared place circle markers (blue)
       map.addLayer({
-        id: "shared-canyon-circles",
+        id: "shared-place-circles",
         type: "circle",
-        source: "shared-canyons",
+        source: "shared-places",
         paint: {
           "circle-radius": ["interpolate", ["linear"], ["zoom"], 7, 4, 14, 10],
           "circle-color": readCssVar("--theme-accent", "#3b82f6"),
@@ -1274,14 +1274,14 @@ function Map({
         },
       });
 
-      // Owned canyon name labels visible at zoom 9+
+      // Owned place name labels visible at zoom 9+
       map.addLayer({
-        id: "canyon-labels",
+        id: "place-labels",
         type: "symbol",
-        source: "canyons",
+        source: "places",
         minzoom: 9,
         layout: {
-          "text-field": CANYON_LABEL_FIELD,
+          "text-field": PLACE_LABEL_FIELD,
           "text-font": ["Noto Sans Medium"],
           "text-size": 12,
           "text-offset": [0, 1.2],
@@ -1294,14 +1294,14 @@ function Map({
         },
       });
 
-      // Shared canyon name labels visible at zoom 9+
+      // Shared place name labels visible at zoom 9+
       map.addLayer({
-        id: "shared-canyon-labels",
+        id: "shared-place-labels",
         type: "symbol",
-        source: "shared-canyons",
+        source: "shared-places",
         minzoom: 9,
         layout: {
-          "text-field": CANYON_LABEL_FIELD,
+          "text-field": PLACE_LABEL_FIELD,
           "text-font": ["Noto Sans Medium"],
           "text-size": 12,
           "text-offset": [0, 1.2],
@@ -1314,18 +1314,18 @@ function Map({
         },
       });
 
-      applyCanyonThemePaint(map);
+      applyPlaceThemePaint(map);
 
-      // Click to select canyon
-      map.on("click", "canyon-circles", (e) => {
+      // Click to select place
+      map.on("click", "place-circles", (e) => {
         if (pickModeRef.current) return;
         if (!e.features?.length) return;
         const feature = e.features[0];
         const id = feature.properties?.id as string;
         if (feature.geometry.type !== "Point") return;
         const [lng, lat] = feature.geometry.coordinates as [number, number];
-        selectCanyonRef.current(id);
-        // Guard flyTo against an out-of-range legacy marker (CANYON-1) so a
+        selectPlaceRef.current(id);
+        // Guard flyTo against an out-of-range legacy marker (PLACE-1) so a
         // click still selects it instead of throwing "Invalid LngLat".
         if (isValidLatitude(lat) && isValidLongitude(lng)) {
           setTimeout(() => {
@@ -1334,15 +1334,15 @@ function Map({
         }
       });
 
-      map.on("click", "shared-canyon-circles", (e) => {
+      map.on("click", "shared-place-circles", (e) => {
         if (pickModeRef.current) return;
         if (!e.features?.length) return;
         const feature = e.features[0];
         const id = feature.properties?.id as string;
         if (feature.geometry.type !== "Point") return;
         const [lng, lat] = feature.geometry.coordinates as [number, number];
-        selectCanyonRef.current(id);
-        // Guard flyTo against an out-of-range legacy marker (CANYON-1).
+        selectPlaceRef.current(id);
+        // Guard flyTo against an out-of-range legacy marker (PLACE-1).
         if (isValidLatitude(lat) && isValidLongitude(lng)) {
           setTimeout(() => {
             map.flyTo({ center: [lng, lat], zoom: 16, duration: 1500 });
@@ -1350,18 +1350,18 @@ function Map({
         }
       });
 
-      map.on("mouseenter", "canyon-circles", () => {
+      map.on("mouseenter", "place-circles", () => {
         if (pickModeRef.current) return;
         map.getCanvas().style.cursor = "pointer";
       });
-      map.on("mouseleave", "canyon-circles", () => {
+      map.on("mouseleave", "place-circles", () => {
         map.getCanvas().style.cursor = "";
       });
-      map.on("mouseenter", "shared-canyon-circles", () => {
+      map.on("mouseenter", "shared-place-circles", () => {
         if (pickModeRef.current) return;
         map.getCanvas().style.cursor = "pointer";
       });
-      map.on("mouseleave", "shared-canyon-circles", () => {
+      map.on("mouseleave", "shared-place-circles", () => {
         map.getCanvas().style.cursor = "";
       });
 
@@ -1372,7 +1372,7 @@ function Map({
     return () => {
       map.remove();
       mapRef.current = null;
-      // Reset mapLoaded so the canyon update effect re-runs when the map
+      // Reset mapLoaded so the place update effect re-runs when the map
       // reinitialises (required in React Strict Mode, which mounts twice).
       setMapLoaded(false);
     };
@@ -1383,7 +1383,7 @@ function Map({
 
     const map = mapRef.current;
     const onThemeChange = () => {
-      applyCanyonThemePaint(map);
+      applyPlaceThemePaint(map);
     };
 
     window.addEventListener("logjam-theme-change", onThemeChange);
@@ -1410,7 +1410,7 @@ function Map({
       // `getBounds` returns the axis-aligned box around the view, so a rotated
       // or pitched map reports MORE ground than is on screen. "Filter to the
       // current view" is a coarse convenience, and reporting slightly more than
-      // is visible errs towards keeping canyons rather than hiding them.
+      // is visible errs towards keeping places rather than hiding them.
       const bounds = map.getBounds();
       onMapBoundsChangeRef.current?.({
         west: bounds.getWest(),
@@ -1427,11 +1427,11 @@ function Map({
     };
   }, [mapLoaded]);
 
-  // Update canyon GeoJSON when data or filters change
+  // Update place GeoJSON when data or filters change
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
 
-    const toFeatureCollection = (list: TCanyon[], isOwned: boolean) => ({
+    const toFeatureCollection = (list: TPlace[], isOwned: boolean) => ({
       type: "FeatureCollection" as const,
       features: list.map((c) => ({
         type: "Feature" as const,
@@ -1442,37 +1442,37 @@ function Map({
         properties: {
           id: c.id,
           name: c.name,
-          done: isCanyonDoneByViewer(c, isOwned),
+          done: isPlaceDoneByViewer(c, isOwned),
         },
       })),
     });
 
     const ownedSource = mapRef.current.getSource(
-      "canyons",
+      "places",
     ) as maplibregl.GeoJSONSource;
     if (ownedSource) {
       ownedSource.setData(
         toFeatureCollection(
-          canyons.filter((c) => passesFilters(c, filters, true)),
+          places.filter((c) => passesFilters(c, filters, true)),
           true,
         ),
       );
     }
 
     const sharedSource = mapRef.current.getSource(
-      "shared-canyons",
+      "shared-places",
     ) as maplibregl.GeoJSONSource;
     if (sharedSource) {
       sharedSource.setData(
         toFeatureCollection(
-          sharedCanyons.filter((c) => passesFilters(c, filters, false)),
+          sharedPlaces.filter((c) => passesFilters(c, filters, false)),
           false,
         ),
       );
     }
-  }, [canyons, sharedCanyons, filters, mapLoaded]);
+  }, [places, sharedPlaces, filters, mapLoaded]);
 
-  // Fetch + parse canyon track files into the line layer when enabled. Parsing
+  // Fetch + parse place track files into the line layer when enabled. Parsing
   // is client-side (the API never echoes track contents — privacy rule); parsed
   // GeoJSON is cached by mediaId so toggling/re-renders don't refetch.
   // Keyed by mediaId. Plain object (not a JS Map) — `Map` is this component's name.
@@ -1484,7 +1484,7 @@ function Map({
   //
   // The cached `url` is stored alongside each promise: `track.displayUrl` is a
   // PRESIGNED URL that rotates on refetch (e.g. after the old one expires and
-  // the canyon media reloads). Keying only by mediaId would pin a stale/expired
+  // the place media reloads). Keying only by mediaId would pin a stale/expired
   // URL forever, so one 403 would never retry even once a fresh working URL
   // arrives. On lookup we discard the entry when the URL has rotated; same-URL
   // failures stay cached (no retry spam).
@@ -1499,7 +1499,7 @@ function Map({
   const failedTrackToastedRef = useRef<Set<string>>(new Set());
 
   // Fetch + parse a set of track files into features for one of the track
-  // layers. Shared by both: a canyon's attached track and a standalone file are
+  // layers. Shared by both: a place's attached track and a standalone file are
   // the same file treated the same way, differing only in the id stamped on
   // the features and in which source the caller drops them.
   const loadTrackSource = useCallback(
@@ -1515,7 +1515,7 @@ function Map({
       const cache = trackGeoCacheRef.current;
       const collections = await Promise.all(
         entries.map((entry) => {
-          // Keyed by id AND stamp: a standalone file LINKED to a canyon appears
+          // Keyed by id AND stamp: a standalone file LINKED to a place appears
           // in both lists with different stamps, and one cache entry per key
           // keeps each layer's features stamped for its own layer.
           const cacheKey = `${entry.mediaId}|${JSON.stringify(entry.stamp)}`;
@@ -1530,7 +1530,7 @@ function Map({
             ).catch((err: unknown) => {
               // One bad track must not blank the whole layer. The thrown error
               // carries only the HTTP status — never log the presigned URL,
-              // whose canyon-name-derived filename must stay out of logs
+              // whose place-name-derived filename must stay out of logs
               // (privacy rule).
               console.error(err);
               if (!failedTrackToastedRef.current.has(entry.mediaId)) {
@@ -1551,20 +1551,20 @@ function Map({
   );
 
   useEffect(() => {
-    if (!mapLoaded || !mapRef.current || !showCanyonTracks) return;
+    if (!mapLoaded || !mapRef.current || !showPlaceTracks) return;
     let cancelled = false;
     void (async () => {
       const features = await loadTrackSource(
-        canyonTracks.map((track) => ({
+        placeTracks.map((track) => ({
           mediaId: track.mediaId,
           color: track.color,
           displayUrl: track.displayUrl,
-          stamp: { canyonId: track.canyonId },
+          stamp: { placeId: track.placeId },
         })),
-        "Couldn't load a canyon track file.",
+        "Couldn't load a place track file.",
       );
       if (cancelled) return;
-      const source = mapRef.current?.getSource("canyon-tracks") as
+      const source = mapRef.current?.getSource("place-tracks") as
         | maplibregl.GeoJSONSource
         | undefined;
       source?.setData({ type: "FeatureCollection", features });
@@ -1572,7 +1572,7 @@ function Map({
     return () => {
       cancelled = true;
     };
-  }, [showCanyonTracks, canyonTracks, mapLoaded, loadTrackSource]);
+  }, [showPlaceTracks, placeTracks, mapLoaded, loadTrackSource]);
 
   // Standalone files. The list is the visibility: whatever the user has toggled
   // on is what gets fetched and drawn.
@@ -1626,7 +1626,7 @@ function Map({
   }, [pickingCoords, mapLoaded]);
 
   // Area selection: the same drawn box as the topo picker and the filter, ending
-  // in the canyons it covers rather than in the box itself.
+  // in the places it covers rather than in the box itself.
   const onAreaSelectedRef = useRef(onAreaSelected);
   useEffect(() => {
     onAreaSelectedRef.current = onAreaSelected;
@@ -1646,7 +1646,7 @@ function Map({
         [Math.max(northWest.x, southEast.x), Math.max(northWest.y, southEast.y)],
       ];
       const features = map.queryRenderedFeatures(pixels, {
-        layers: ["canyon-circles", "shared-canyon-circles"],
+        layers: ["place-circles", "shared-place-circles"],
       });
       const ids = [
         ...new Set(
@@ -1662,39 +1662,39 @@ function Map({
   // user who draws one expecting the other gets the wrong outcome. The plan is
   // to fold bulk actions into a selection mode over the FILTERED list (draw a
   // box -> filter -> select all -> share/export/delete), which subsumes this
-  // mode entirely; `SelectedCanyonsDialog` already takes ids and has add/remove
+  // mode entirely; `SelectedPlacesDialog` already takes ids and has add/remove
   // props, so it is an entry-point rewiring rather than a rewrite. Deferred to
   // the web UI rework rather than done alongside the filter.
   useBoxDraw({ map: drawableMap, enabled: selectingArea, onBox: handleAreaBox });
 
-  // Toggle canyon layer visibility
+  // Toggle place layer visibility
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
     const vis = (show: boolean) => (show ? "visible" : "none");
     mapRef.current.setLayoutProperty(
-      "canyon-circles",
+      "place-circles",
       "visibility",
-      vis(showOwnedCanyons),
+      vis(showOwnedPlaces),
     );
     mapRef.current.setLayoutProperty(
-      "canyon-labels",
+      "place-labels",
       "visibility",
-      vis(showOwnedCanyons),
+      vis(showOwnedPlaces),
     );
     mapRef.current.setLayoutProperty(
-      "shared-canyon-circles",
+      "shared-place-circles",
       "visibility",
-      vis(showSharedCanyons),
+      vis(showSharedPlaces),
     );
     mapRef.current.setLayoutProperty(
-      "shared-canyon-labels",
+      "shared-place-labels",
       "visibility",
-      vis(showSharedCanyons),
+      vis(showSharedPlaces),
     );
     mapRef.current.setLayoutProperty(
-      "canyon-tracks-lines",
+      "place-tracks-lines",
       "visibility",
-      vis(showCanyonTracks),
+      vis(showPlaceTracks),
     );
     // The route being drawn stays visible even with the Routes layer off —
     // hiding your own in-progress work would read as the tool being broken.
@@ -1710,9 +1710,9 @@ function Map({
     }
   }, [
     showWaypoints,
-    showOwnedCanyons,
-    showSharedCanyons,
-    showCanyonTracks,
+    showOwnedPlaces,
+    showSharedPlaces,
+    showPlaceTracks,
     showRoutes,
     drawingRoute,
     mapLoaded,
@@ -2158,7 +2158,7 @@ function Map({
     onBox: handleTopoBox,
   });
 
-  // The Canyons filter's area. Same gesture, same helper; it differs from the
+  // The Places filter's area. Same gesture, same helper; it differs from the
   // topo picker only in who receives the box.
   const onFilterAreaSelectedRef = useRef(onFilterAreaSelected);
   useEffect(() => {
@@ -2593,14 +2593,14 @@ function Map({
       if (owned.length > 0) afterLayerId = owned[0];
     }
 
-    // Move canyon marker layers above all topo layers so they remain visible
-    const canyonLayers = [
-      "canyon-circles",
-      "shared-canyon-circles",
-      "canyon-labels",
-      "shared-canyon-labels",
+    // Move place marker layers above all topo layers so they remain visible
+    const placeLayers = [
+      "place-circles",
+      "shared-place-circles",
+      "place-labels",
+      "shared-place-labels",
     ];
-    for (const cid of canyonLayers) {
+    for (const cid of placeLayers) {
       if (map.getLayer(cid)) {
         map.moveLayer(cid);
       }
@@ -2652,33 +2652,33 @@ function Map({
     onTopoFlyConsumedRef.current?.();
   }, [topoFlyTarget, mapLoaded]);
 
-  const onFlyToCanyonConsumedRef = useRef(onFlyToCanyonConsumed);
+  const onFlyToPlaceConsumedRef = useRef(onFlyToPlaceConsumed);
   useEffect(() => {
-    onFlyToCanyonConsumedRef.current = onFlyToCanyonConsumed;
-  }, [onFlyToCanyonConsumed]);
+    onFlyToPlaceConsumedRef.current = onFlyToPlaceConsumed;
+  }, [onFlyToPlaceConsumed]);
 
   useEffect(() => {
-    if (!flyToCanyon || !mapLoaded || !mapRef.current) return;
-    // Defensive guard (CANYON-1): an out-of-range record must not crash the app.
+    if (!flyToPlace || !mapLoaded || !mapRef.current) return;
+    // Defensive guard (PLACE-1): an out-of-range record must not crash the app.
     // MapLibre's flyTo throws "Invalid LngLat" for lat outside [-90,90] (or
     // lng outside [-180,180]), which previously escaped to the RootErrorBoundary
     // and made the record unmanageable — you couldn't even open it to fix or
-    // delete it. Skip the fly-to (still selecting the canyon) so the detail
+    // delete it. Skip the fly-to (still selecting the place) so the detail
     // panel opens and the record can be edited/deleted. Validation now blocks
     // such records at creation; this covers any that already exist.
-    if (isValidLatitude(flyToCanyon.lat) && isValidLongitude(flyToCanyon.lng)) {
+    if (isValidLatitude(flyToPlace.lat) && isValidLongitude(flyToPlace.lng)) {
       mapRef.current.flyTo({
-        center: [flyToCanyon.lng, flyToCanyon.lat],
+        center: [flyToPlace.lng, flyToPlace.lat],
         zoom: 16,
         duration: 1500,
       });
     } else {
-      // Don't log the coordinates themselves (privacy rule: no canyon coords in
+      // Don't log the coordinates themselves (privacy rule: no place coords in
       // logs/errors) — just note the fly-to was skipped.
-      console.warn("Skipping fly-to: canyon coordinates out of range");
+      console.warn("Skipping fly-to: place coordinates out of range");
     }
-    onFlyToCanyonConsumedRef.current?.();
-  }, [flyToCanyon, mapLoaded]);
+    onFlyToPlaceConsumedRef.current?.();
+  }, [flyToPlace, mapLoaded]);
 
   // GeoPDF extent selection: ref for overlay rectangle
   const geoPdfFrameRef = useRef<HTMLDivElement>(null);

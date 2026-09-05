@@ -3,7 +3,7 @@
 The house style for the Logjam RN app. **Reference implementations:
 `src/saved/SavedScreen.tsx`** (inventory: hero metric, categories, per-item
 actions), **`src/logs/`** (records: chronology, multi-axis filtering, a
-create/edit form in a sheet) and **`src/canyons/`** (a collection: a partition
+create/edit form in a sheet) and **`src/places/`** (a collection: a partition
 rail, a filter sheet over a shared predicate, cross-entity actions) and
 **`src/screens/`** (the More hub and its sub-pages: a hero that reports app state,
 a plain settings list, and preference writes that are online-only). When a rule
@@ -24,9 +24,9 @@ Every screen leads with the single question its user actually opened it to
 answer, and answers it before any list appears.
 
 - Saved → "what have I actually got on this phone, and what is it costing me?"
-- Canyons → "how far through my list am I, and what's left?" (a count and a
+- Places → "how far through my list am I, and what's left?" (a count and a
   three-way tick-list meter: done / to do / shared with me)
-- A canyon → "what am I walking into?"
+- A place → "what am I walking into?"
 - Logs → "what have I done?" (a count, a twelve-month activity spark, a
   chronological list)
 - A trip → "what did I do that day?"
@@ -95,7 +95,7 @@ BottomSheet(s)      acquisition + per-item actions
   floating actions, and badges only while something is true (a filter withholding
   pins, a route being shown, a download running). Anything that can live behind the
   layers sheet lives behind the layers sheet. A badge for a layer the user chose to
-  leave ON is not that: the canyon-routes coverage note moved onto its own row in
+  leave ON is not that: the place-routes coverage note moved onto its own row in
   the sheet, because a permanent chip is a permanent tax on the thing the map is for.
 - **Chrome for a RUNNING JOB is a light, not a readout — and the top edge is a
   PAIR.** Track recording used to pin a four-number card to the top notice stack
@@ -144,7 +144,7 @@ BottomSheet(s)      acquisition + per-item actions
   say about a spot — position, elevation, distance and bearing from you — with
   "navigate here" and "drop a waypoint" under them. Press-and-hold keeps its
   existing meaning, "something goes HERE", and its sheet offers the five things
-  that can — waypoint, navigate-to, route from here, measure from here, canyon.
+  that can — waypoint, navigate-to, route from here, measure from here, place.
   **That sheet and the Settings → Map long-press preference are ONE vocabulary**:
   the preference's options are the sheet's rows, with `Ask` meaning "show the
   sheet". Adding an action means adding it in both places, or the setting is a
@@ -341,7 +341,7 @@ BottomSheet(s)      acquisition + per-item actions
   MAGNETIC — numbers only.** The map, the location arrow and the navigate-to chip
   stay true in both settings, because they are drawn against a true-north map and
   a magnetic arrow on a true map is simply a wrong arrow. The switch exists
-  because a canyoner transfers a bearing onto a plate compass, where true north is
+  because a placeer transfers a bearing onto a plate compass, where true north is
   the wrong number by ~12.5°. In magnetic the tape carries an "M": the default
   gets no mark (every pixel of chrome is terrain), a non-default that silently
   reads 12° low gets one.
@@ -396,7 +396,7 @@ retrospective decoration — isn't competing with a hunt for one trip.
 "under 30 m" is friendlier than the desktop's operator + number, and strictly
 less capable — which is a downgrade, not a simplification. Lead with the three
 or four answers people actually pick, and put the full control one tap behind a
-`Custom` chip (see `ThresholdFilter` in `CanyonFilterSheet`). The draft rule
+`Custom` chip (see `ThresholdFilter` in `PlaceFilterSheet`). The draft rule
 matters: opening Custom must NOT commit a value, or "under 0" applies the
 instant you tap it and the list empties for no reason the user can see.
 
@@ -425,7 +425,7 @@ whole kind off. Each kind is now ONE row — its glyph and hue, a live count
 ("4 of 4 shown"), a master switch, and a chevron that opens its files underneath.
 
 - The master switch's value is "any of them visible"; flipping it writes every
-  item in the kind. Kinds with exactly one thing behind them (canyon routes, and
+  item in the kind. Kinds with exactly one thing behind them (place routes, and
   the user's own drawn routes) are the same row without the disclosure.
 - **A control that is the same for every item in a kind belongs to the KIND.**
   GeoPDF opacity was five identical 5-step rails stacked; it is now one rail under
@@ -484,9 +484,9 @@ tallies), it shows what exists before you touch it, and it keeps a long screen
 one screen tall.
 
 - The first chip is **All**, a flat list across every category.
-- **Prefer a rail whose buckets PARTITION the list.** Canyons uses done / to do /
-  shared, which is a partition because a shared canyon structurally cannot be
-  "done" (a trip only links to its own owner's canyons). Every row is in exactly
+- **Prefer a rail whose buckets PARTITION the list.** Places uses done / to do /
+  shared, which is a partition because a shared place structurally cannot be
+  "done" (a trip only links to its own owner's places). Every row is in exactly
   one bucket, the tallies sum to All, and the user never has to work out what a
   combination of two axes would show. When the natural axes overlap, pick the one
   that partitions and push the rest into the filter sheet.
@@ -509,7 +509,7 @@ means a new kind is one object literal, not a design decision.
 is what it is regardless of the user's theme, and remapping the hues per scheme
 would collapse them into that scheme's narrow range. All four schemes are dark,
 so mid-light muted hues work on every one. New hues: mid-light, muted, drawn
-from the NSW canyon palette (rock, scrub, water, heath). Never a saturated web
+from the NSW place palette (rock, scrub, water, heath). Never a saturated web
 primary.
 
 `region` intentionally aliases the active scheme's `accent`, so the biggest and
@@ -534,13 +534,13 @@ the same rule one step further out: with no rows in the tab at all there is
 nothing to narrow, so it is absent and the empty panel gets the whole body. A
 tab whose rows are all filtered OUT by the search (as against holding none to
 begin with) says so — "No tracks match that", not a bare empty list — same
-pattern as `useCanyonPicker`'s "No canyon of yours matches that." Both controls
+pattern as `usePlacePicker`'s "No place of yours matches that." Both controls
 narrow the on-device mirror, so both work with no signal; a narrowing control
 that needs the network does not belong here.
 
-**When a thing has no kinds, its STATE is the category.** Canyons are all the
-same sort of object, so `canyonHue` keys off done / to do / shared instead
-(`CANYON_STATUS_META` in `src/canyons/canyonMeta.ts`), and `done` takes the
+**When a thing has no kinds, its STATE is the category.** Places are all the
+same sort of object, so `placeHue` keys off done / to do / shared instead
+(`PLACE_STATUS_META` in `src/places/placeMeta.ts`), and `done` takes the
 scheme accent for the same reason `region` does — the accent belongs on the state
 the screen is celebrating. The identity still appears in both places the rule
 requires: the row's icon tile and its rail chip.
@@ -550,7 +550,7 @@ requires: the row's icon tile and its rail chip.
 The inbox is a genuine vocabulary of kinds, so it gets the glyph+hue treatment —
 but every hue in `notificationHue` POINTS AT an existing one (`src/theme.ts`). A
 topo notification wears the same eucalypt a topo overlay wears in Saved; a
-canyon-share wears the same heath a shared canyon wears on the Canyons rail. The
+place-share wears the same heath a shared place wears on the Places rail. The
 inbox is where you first hear about a thing, and recognising it again where it
 lives is what makes the inbox part of the app instead of a log of unrelated
 events. Adding a kind means naming an existing hue; if the thing it refers to has
@@ -716,7 +716,7 @@ because each was a bug once:
   behind a long list leaves the handle as the only exit — and the handle means
   *discard*, not *done*.
 - **A sub-mode backs out to its parent, not out of the sheet.** When a sheet
-  swaps content (form → date picker → canyon picker), route the drag and the
+  swaps content (form → date picker → place picker), route the drag and the
   backdrop tap to "return to the form" while a sub-mode is open. Otherwise the
   gesture that means "go back one step" throws away everything the user typed.
   The sheet's title changes with the mode, so which step you are on is never a
@@ -802,7 +802,7 @@ size of a suburb that changed no decision and hid the map under itself.
 **A marker that has stopped knowing where it is SAYS SO, and it says it by
 going grey.** The arrow is the one thing on this map a person acts on directly,
 and until 2026-09-05 it looked identical whether the fix behind it was three
-seconds or three hours old — a slot canyon takes the sky away, the watcher
+seconds or three hours old — a slot place takes the sky away, the watcher
 simply stops being called, and the last position stays drawn in the user's own
 colour. It now falls back to a grey arrow (same artwork, desaturated fill)
 whenever nothing has arrived for `FIX_STALE_MS` or the fix is wider than
@@ -817,8 +817,8 @@ teach the user to dismiss the message that matters. Rule and thresholds:
 `src/map/gpsSignal.ts`, tested.
 
 **A choice that leads to a form parks the target and opens it from
-`onClosed`.** The map's press-and-hold sheet ("waypoint or canyon?") can't mount
-the canyon form directly — see the never-two-sheets rule above — so it stores the
+`onClosed`.** The map's press-and-hold sheet ("waypoint or place?") can't mount
+the place form directly — see the never-two-sheets rule above — so it stores the
 point in a ref, closes, and the `onClosed` callback opens the form with it. Same
 shape as launching a system window from a sheet, and the same reason.
 
@@ -872,7 +872,7 @@ which subsystem is talking.
   Rows stay clean and a mis-tap can't destroy anything.
   - **The body OPENS, the `⋯` ACTS — on every list row, people included.** A row
     whose tap opened its own action sheet was a second grammar for the same card:
-    a canyon, a track and a saved region all navigate on a tap, so a friend that
+    a place, a track and a saved region all navigate on a tap, so a friend that
     answered with a menu instead made the Friends tab read as a different app.
     A friend's row now opens their sharing screen (`FriendsScreen` → `FriendShares`,
     read-only, so the tap is never a destructive near-miss) and the `⋯` keeps
@@ -910,10 +910,10 @@ which subsystem is talking.
 - **One kind, one options sheet, rendered by BOTH surfaces — and the only row
   they may differ by is "Show on map".** A route (`routes/RouteOptionsSheet`), a
   track (`tracks/TrackOptionsSheet`), an import (`imports/ImportOptionsSheet`),
-  a waypoint (`map/WaypointSheet`) and a canyon
-  (`canyons/CanyonOptionsSheet`) each have exactly one verb list, mounted by
+  a waypoint (`map/WaypointSheet`) and a place
+  (`places/PlaceOptionsSheet`) each have exactly one verb list, mounted by
   `map/MapScreen` and by the list surface that also offers it —
-  `saved/SavedScreen`, or `canyons/CanyonsScreen` for a canyon. Sharing only the sub-mode
+  `saved/SavedScreen`, or `places/PlacesScreen` for a place. Sharing only the sub-mode
   BODIES is not enough and was tried: the waypoint bodies were shared while the
   rows around them drifted, so Saved had no "Navigate to this waypoint" and the
   map had no "Show on map". Saved leads the list with
@@ -922,47 +922,47 @@ which subsystem is talking.
   map-visibility toggle included — appears on both. Two corollaries. A row must
   never be conditional on a CALLBACK the caller might not pass: that is how the
   map's route sheet ended up with no Rename at all, so a verb whose panel fits
-  in the sheet (rename, share, send a copy, stats, a waypoint's tags and canyon
+  in the sheet (rename, share, send a copy, stats, a waypoint's tags and place
   links) is a sub-mode of the sheet and not the caller's business. And a verb
   that genuinely needs the map (arming the draw tool, starting the recorder,
   pointing the bearing line at a waypoint) is still PRESENT on the Saved surface
   and hands over as a navigation param keyed on a nonce — see "Continue
   recording", a route's "Edit" and "Navigate to this waypoint".
-  - **A tapped PIN opens the same verb list a tapped line does.** A canyon pin
+  - **A tapped PIN opens the same verb list a tapped line does.** A place pin
     used to go straight to the detail screen, which made the map's answer to
-    "what can I do with this canyon" one verb out of six, and made the pin the
+    "what can I do with this place" one verb out of six, and made the pin the
     only drawn thing whose tap meant something different from its ⋯. It opens
-    the options sheet now, with **"Open canyon" as the first row** because that
+    the options sheet now, with **"Open place" as the first row** because that
     is what the tap used to do. The two verbs needing a FORM (a trip, an edit)
     stay the CALLER's: a form is a sheet of its own, so the options sheet
     closes and the form opens (§6), and both screens mount `TripEditSheet` and
-    `CanyonEditSheet` themselves. Share stays a sub-mode INSIDE the sheet.
+    `PlaceEditSheet` themselves. Share stays a sub-mode INSIDE the sheet.
   - **A sub-mode resets on the sheet's OPEN EDGE, not only in its own close.**
     A list surface drops its sheet from outside — a tab blur, a filter change,
     a navigation handoff — and none of those run the sheet's `close()`. Reset in
     an effect keyed on `visible` (`map/WaypointSheet` keys on `[autoEdit,
     visible]`, which is also how a fresh drop lands in its form), or the next
     item opens inside the last one's picker. That has shipped twice.
-- **"Which canyon?" is ONE panel, and it is a sub-mode of the sheet that owns
-  the verb.** A canyon holds at most one route, and three kinds can now fill
+- **"Which place?" is ONE panel, and it is a sub-mode of the sheet that owns
+  the verb.** A place holds at most one route, and three kinds can now fill
   that slot from their own options sheet — a drawn route, a recorded track
-  (converted to a route first), an imported file (copied in as canyon media).
-  `canyons/useCanyonPicker.tsx` returns `{ header, body }`, the shape
+  (converted to a route first), an imported file (copied in as place media).
+  `places/usePlacePicker.tsx` returns `{ header, body }`, the shape
   `useSharePanel` established, so each sheet renders it in place instead of
   closing itself to open a second sheet — which is what the route's own
-  `LinkCanyonSheet` used to do, and what two more near-copies of a canyon list
+  `LinkPlaceSheet` used to do, and what two more near-copies of a place list
   would have become. The picker reads the MIRROR (so it works with no signal),
-  offers only canyons the user OWNS (the API refuses the rest), and states the
+  offers only places the user OWNS (the API refuses the rest), and states the
   promise for the kind being attached, chosen by the panel and never argued as
   a prop.
   - **What displacing the incumbent costs is ONE decision, not five.**
-    `canyons/routeSlot.ts` answers which occupant is in the slot, the sentence
+    `places/routeSlot.ts` answers which occupant is in the slot, the sentence
     for displacing it (a drawn route is unlinked and kept; an attached file is
     deleted and cannot be got back), and the order the swap is written in —
     link first and remove second, so a failed removal shows both rather than
-    losing the file, EXCEPT file-over-file, where the API's one-track-per-canyon
+    losing the file, EXCEPT file-over-file, where the API's one-track-per-place
     409 means the incumbent must go first or nothing lands at all.
-    `canyons/fillRouteSlot.ts` is the only thing that acts on that, and every
+    `places/fillRouteSlot.ts` is the only thing that acts on that, and every
     source goes through it. Five call sites each choosing what to warn about is
     how one of them silently deletes a file; `routeSlot.test.ts` pins the
     occupant, the sentence and the order.
@@ -974,7 +974,7 @@ which subsystem is talking.
 - **A status pill that repeats the row's own subtitle costs the TITLE.** Every
   row on Account sync issues carried one ("Needs a decision", "Replaced") beside
   the ⋯, and between them they squeezed the one thing the user scans for — the
-  name of the canyon or file that failed — into an ellipsis. The subtitle
+  name of the place or file that failed — into an ellipsis. The subtitle
   already said the cause and the rail already said which kind, so the pills went
   and the title got the width. A pill earns its place by saying something no
   other part of the row says.
@@ -1041,7 +1041,7 @@ which subsystem is talking.
     "unshare these from bob" (`user-minus`) and "remove my access"
     (`eye-off`) there instead: same shape — one destructive verb, confirmed,
     with nothing else in the slot — acting on a GRANT rather than on a record.
-    A trash can there would have promised to destroy the canyon, which is the
+    A trash can there would have promised to destroy the place, which is the
     one thing that screen must never appear to do; it offers no delete at all,
     in the bar or in a row's sheet, because deleting reaches every other friend
     the row is shared with and the screen is scoped to one person.
@@ -1088,7 +1088,7 @@ which subsystem is talking.
       "3 selected · 1 unread". One derivation per screen —
       `selectionCountLabel` in `screens/syncIssueDisplay.ts`.
     - **A verb the group cannot perform on a row is decided BEFORE the bar is
-      drawn, not at the tap.** A lost value whose canyon has since been deleted
+      drawn, not at the tap.** A lost value whose place has since been deleted
       cannot be restored — the write would be refused and would park as a NEW
       stuck op, which is a recovery action manufacturing the problem it recovers
       from. The block is resolved when the list is built (`restoreBlock` on each
@@ -1113,7 +1113,7 @@ which subsystem is talking.
   - **A bulk confirm counts BOTH consequences, and reads as English in every
     combination.** A mixed selection of files and synced records is two different
     deletes ("deleted from this phone" vs "removed from every device on your
-    account, and from anyone you shared their canyons with"), so the dialog says
+    account, and from anyone you shared their places with"), so the dialog says
     each with its own count rather than picking the sentence that is true for the
     majority. Counts that vary independently make copy assembled from clauses
     read like a filled-in template ("1 item is… 4 of them are…"), so the whole
@@ -1134,7 +1134,7 @@ which subsystem is talking.
   cheap to extend to a new kind.
 - **A verb the API would refuse is ABSENT from the descriptor, not disabled in
   the screen.** `AssetActions.rename` and `.delete` are optional and omitted for
-  a route or waypoint shared through someone else's canyon (the API's writes are
+  a route or waypoint shared through someone else's place (the API's writes are
   owner-only), so a surface cannot offer them: rendering branches on the verb
   existing, and the multi-select refuses to pick a row with no delete. Before
   this, `rename` was an `async () => undefined` stub and `delete` was always
@@ -1145,7 +1145,7 @@ which subsystem is talking.
   absence is `SHARED_READ_ONLY_HINT`, written once.
 - **Picking people is ONE panel, and the promise is the first thing in it.**
   `useSharePanel` (`src/sharing/SharePanel.tsx`) is what Saved's item sheet,
-  the route sheet, the track sheet, the waypoint sheet and the canyon
+  the route sheet, the track sheet, the waypoint sheet and the place
   screen all render, in both of its modes — a live revocable Share and a
   permanent Send a copy. It opens with a tinted banner saying which promise
   this is (accent + eye, or warning + triangle), then an always-present search
@@ -1163,14 +1163,14 @@ which subsystem is talking.
     because the honest-looking alternative is to hide a verb that cannot work.
 - **A switch that LOWERS a guard costs an authentication; raising it is free.**
   The app-lock toggle (Settings → Privacy and security) is what stands between someone
-  holding this unlocked phone and the canyon coordinates on it, so turning it off
+  holding this unlocked phone and the place coordinates on it, so turning it off
   goes through the device authenticator and a cancelled prompt springs the switch
   back on (`appLockPreference.ts`, fail-closed on any error). Without that
   asymmetry the switch is a one-tap bypass of the thing it controls. It is also
   DEVICE-scoped, not account-scoped: it is a claim about one handset's physical
   security, and syncing it would quietly unlock the user's other phone.
 - **A destructive confirm describes what THIS entity loses.** Discarding a parked
-  canyon edit keeps the typing on the conflict shelf; discarding a parked upload
+  place edit keeps the typing on the conflict shelf; discarding a parked upload
   does not (its "fields" are a filename and two cache paths) and instead deletes
   the copy waiting on the device. One sentence for both was simply false for one of
   them — see `discardExplanation`.
@@ -1180,12 +1180,12 @@ which subsystem is talking.
 - **The confirm copy for an entity is written ONCE, as a
   `{ confirmTitle, confirmBody }` descriptor, and every surface offering the verb
   reads it from there.** `saved/assetActions.ts` holds it for the saved kinds,
-  `canyons/canyonDeleteConfirm.ts` for a canyon (it takes the linked-trip count,
+  `places/placeDeleteConfirm.ts` for a place (it takes the linked-trip count,
   because that sentence is per-instance). This is the enforcement of the rule
-  above it: the canyon copy was duplicated byte-for-byte across the list and the
+  above it: the place copy was duplicated byte-for-byte across the list and the
   detail screen, and the map's waypoint sheet had *drifted* — it said only
   "Delete this waypoint?" while Saved said the delete reaches every device on the
-  account and everyone the linked canyons are shared with. A second surface for
+  account and everyone the linked places are shared with. A second surface for
   an existing verb imports the descriptor; it never retypes the sentence.
 - **A navigation row's subtitle is live STATE, never an explanation.** More's rows
   used to read "Notifications, shares and requests" and "Conflicts that need your
@@ -1222,7 +1222,7 @@ which subsystem is talking.
   tab drops an in-progress rename — a form that survives the thing it was
   editing being scrolled out of view is a stale prompt, not a resumed task.
 - **One form per entity, create and edit.** `TripEditSheet` and
-  `CanyonEditSheet` are each the same component in both modes: same fields, same
+  `PlaceEditSheet` are each the same component in both modes: same fields, same
   validation, with only the sheet title and the submit label differing. Two forms
   drift, and the one the user reaches less often is the one that rots.
 - **Name a thing OVER the work, not in front of it.** The region download asks
@@ -1266,23 +1266,23 @@ which subsystem is talking.
   own vector basemap; the OSM-family sources aren't listed at all. Compare the
   layers sheet, where they ARE listed and DO grey out offline — there the row is
   still the way to select them when online, so the reason belongs in its subtitle.
-- **A server-side cap is a UI rule, not an error to discover.** A canyon takes
+- **A server-side cap is a UI rule, not an error to discover.** A place takes
   exactly one route (the API answers a second with 409), so the strip never
   offers a SECOND one: with no panel that can replace what is there, the add
   tile disappears at the limit and the line beside it says what the limit is. An
   affordance that exists only to fail parks a dead op in the outbox, where the
   user can't see the reason.
   - **A cap of one is a REPLACE affordance, not a missing Add.** Where the slot
-    does have a panel that can displace its occupant (a canyon's, below), the
-    tile stays and becomes "Replace" — "one per canyon, press and hold the tile
+    does have a panel that can displace its occupant (a place's, below), the
+    tile stays and becomes "Replace" — "one per place, press and hold the tile
     to delete it, then add another" is a two-step the user has to be told, and
     the only way to be told it was to want the thing it prevents.
-- **One slot, one panel — "Add a way".** A canyon's single route slot can be
+- **One slot, one panel — "Add a way".** A place's single route slot can be
   filled five ways (a route you drew · an import from Saved · a recorded track,
   converted to a route · a .gpx/.kml off the phone · one drawn on the map), and
   which of them existed used to depend on how you arrived: the media strip's
   source sheet offered three, the slot's own ⋯ offered "Replace with another
-  route" and meant it. `canyons/AddWaySheet.tsx` is that panel, opened from the
+  route" and meant it. `places/AddWaySheet.tsx` is that panel, opened from the
   empty slot AND from the replace row, so adding and replacing are the same
   question. ("Way" is this codebase's umbrella word for route-or-track in prose
   and labels; the `Route` and `Track` TYPES stay distinct.)
@@ -1290,17 +1290,17 @@ which subsystem is talking.
     sources have not chosen a file when the row is tapped — the phone's picker
     has not opened, the pen has not been armed — so confirming a deletion there
     is agreeing to something the user can still walk away from. Every source
-    goes through `canyons/fillRouteSlot.ts` at the moment it actually writes,
+    goes through `places/fillRouteSlot.ts` at the moment it actually writes,
     the map's pen included: its confirm is raised when the drawn route is saved,
     which is also the only reading of the slot that is current by then.
 
 - **A picker over an OPTIONAL value keeps an explicit "not recorded" stop.** The
-  grade rails in `CanyonEditSheet` lead with `—`. Most imported canyons have gaps,
+  grade rails in `PlaceEditSheet` lead with `—`. Most imported places have gaps,
   and a picker you can't get back out of turns "I don't know" into a wrong answer
   the user can't retract.
 - **A cross-entity shortcut hands off to the real form, pre-filled — it never
-  reimplements it.** "Log a trip here" on a canyon opens `TripEditSheet` with
-  that canyon already linked (`initialCanyons`). Seeding is keyed on the sheet
+  reimplements it.** "Log a trip here" on a place opens `TripEditSheet` with
+  that place already linked (`initialPlaces`). Seeding is keyed on the sheet
   OPENING, not on the prop: callers build that array inline, so a new identity
   every render would re-seed the form under the user mid-edit.
 - **An edit pushes only the fields that changed.** Diff against the entity you
@@ -1313,10 +1313,10 @@ which subsystem is talking.
   needs a connection to edit them (an offline edit to a shared list would need
   merge rules for a list they could be reordering in a browser at the same
   time) — but a GUEST has no such blob, keeps their own list on the device, and
-  can add, rename and delete a field in a canyon with no signal.
+  can add, rename and delete a field in a place with no signal.
   `customFields/fieldDefsStore.ts` owns that branch and
   `capabilities.fieldDefsBlockedReason` owns the reason string; no screen
-  re-derives either. Both entity forms (`TripEditSheet`, `CanyonEditSheet`) and
+  re-derives either. Both entity forms (`TripEditSheet`, `PlaceEditSheet`) and
   Settings reach the same editor as a MODE of their own sheet.
 - **A destructive action reports the part the user can't see.** Deleting a
   custom field also clears its value from every trip that had one, so the
@@ -1354,13 +1354,13 @@ which subsystem is talking.
   says what to do, and repeating the pitch beside every empty strip turns the
   page into a tutorial.
 - **A screen that hides content on another screen's behalf says so THERE, and the
-  dismissal is the off switch.** The Canyons filter can restrict the map to its
+  dismissal is the off switch.** The Places filter can restrict the map to its
   own result (opt-in — the web forces it). While that is on, the map carries a
-  pill counting what's missing ("Showing 5 of 28 canyons"), and clearing the pill
+  pill counting what's missing ("Showing 5 of 28 places"), and clearing the pill
   turns the option off rather than just hiding the warning. A map that silently
   drops pins is a map you stop trusting; a warning you can dismiss without fixing
   the cause is one you learn to ignore. State crossing screens like this lives in
-  a small module store (`canyonMapFilter.ts`), not a context — it has to outlive
+  a small module store (`placeMapFilter.ts`), not a context — it has to outlive
   the screen that set it.
 - **A screen whose every action is a LOCAL write is not disabled offline.** Sync
   issues stays fully live with no signal: reads come from SQLite, Discard and
@@ -1383,7 +1383,7 @@ which subsystem is talking.
   retries them — an error tone here would teach the user to distrust a map that is
   as complete as it can be.
 - **A layer that draws part of the picture says which part is missing.** The
-  canyon-routes layer draws every route file this phone actually has; when some
+  place-routes layer draws every route file this phone actually has; when some
   aren't cached it says so ("12 drawn · 3 not downloaded yet") rather than quietly
   rendering three quarters of the answer. Same rule as the withheld-pins pill, one
   level down. Where it says so depends on how long it is true: a transient fact gets
@@ -1477,7 +1477,7 @@ screen. One themed surface, reused three times, no native dependency.
 field-spec-driven `Modal` edit form, never installed anywhere — was deleted
 (2026-08-13) rather than kept "in case": sitting in the barrel, it offered a
 future screen author a 50/50 choice between it and the sheet-based forms every
-current screen uses, against §6's one-modal-surface rule. `CanyonEditSheet` and
+current screen uses, against §6's one-modal-surface rule. `PlaceEditSheet` and
 `TripEditSheet` are the worked examples of an entity form.
 
 The kit is presentation only. A shared component that owns permissions, file
@@ -1506,7 +1506,7 @@ Never a banner, never per-row.
 never answered. A second pill counts unflushed outbox rows — "10 waiting to
 sync" — and drains as they flush. Pair it with the offline pill rather than
 hiding it when online: work can be queued because the server is down, not just
-because you are in a canyon.
+because you are in a place.
 
 **"What can't I do right now?"** Network-only actions are **disabled with the
 reason in place of their subtitle** ("Needs a connection"), never hidden. Know
@@ -1514,14 +1514,14 @@ which those are:
 
 | Works offline | Needs a connection |
 |---|---|
-| Reading trips, canyons, notes, fields | An ACCOUNT's custom field DEFINITIONS (a guest's are local) |
+| Reading trips, places, notes, fields | An ACCOUNT's custom field DEFINITIONS (a guest's are local) |
 | Logging, editing, deleting a trip | Downloading regions, topo overlays, GeoPDFs |
-| Adding, editing, deleting a canyon | Sharing a canyon (and reading who it's shared with) |
+| Adding, editing, deleting a place | Sharing a place (and reading who it's shared with) |
 | Attaching photos, videos, routes, tracks | Full-res media not yet downloaded |
 | Viewing anything already cached | RopeWiki / file import (web only) |
 | Picking a theme (device copy) | Data export (web only — needs a share sheet) |
 | Rendering a saved offline region | Saving a new region (Wi-Fi unless opted in) |
-| Canyon routes already cached | Canyon routes never opened on this phone |
+| Place routes already cached | Place routes never opened on this phone |
 | Turning the app lock on/off | Fetching what an auto-download found (Wi-Fi by default) |
 | Every Display, Map, Offline and Privacy preference | Notification prefs, an account's field DEFINITIONS |
 | — | Username, email, account deletion |
@@ -1608,21 +1608,21 @@ coordinates, bboxes or derived location detail**, however useful it would look.
 When a label would have to leak location to be informative, the generic label
 wins.
 
-**A coordinate belongs on a detail screen, never in a list.** Canyon detail shows
+**A coordinate belongs on a detail screen, never in a list.** Place detail shows
 the position, because that IS the answer to the question the screen exists for and
-the user asked for that canyon by name. A list is different: it is what ends up in
-a screenshot, and a screen full of name-plus-position pairs is the canyon
+the user asked for that place by name. A list is different: it is what ends up in
+a screenshot, and a screen full of name-plus-position pairs is the place
 database this app exists not to publish.
 
 **A "distance from me" figure is derived location detail.** A nearest-first sort
-with per-row distances was designed and REJECTED for the Canyons screen for that
+with per-row distances was designed and REJECTED for the Places screen for that
 reason: it pairs each name with roughly where it is, in the one view most likely to
 be shared, and it buys a convenience the map already provides. Don't re-propose it
 without deciding to change this rule first.
 
 **Failure copy is ours, not the error's.** A caught error goes to `console.error`
 and the user gets a sentence we wrote ("Couldn't save this trip."). Interpolating
-an error message into a toast is how a canyon name reaches a screenshot.
+an error message into a toast is how a place name reaches a screenshot.
 
 **A calendar day is the user's, not UTC's.** Date-only values are stored as UTC
 midnight, but "today" for a picker or a default must come from the LOCAL clock
@@ -1631,7 +1631,7 @@ hours of every AEST morning — the user cannot log the trip they just got back
 from.
 
 **A privacy guard survives being useful.** The Sync issues screen exists to show
-you the field values the server refused — and a parked canyon create carries
+you the field values the server refused — and a parked place create carries
 latitude/longitude. `previewValue` in `src/screens/syncIssueDisplay.ts` refuses to
 render those two fields whatever the op holds, and it lives in its own pure module
 with its own test for exactly that reason: this is the page most likely to end up
@@ -1641,7 +1641,7 @@ screenshotted into a bug report.
 half-written trip in `localStorage`; mobile deliberately has no equivalent —
 form state lives in component state and goes out only through the outbox's
 authed push. The OS doesn't reclaim a foreground sheet the way a browser evicts
-a tab, so the draft would be a persistent copy of canyon names and notes bought
+a tab, so the draft would be a persistent copy of place names and notes bought
 for no benefit.
 
 ## 12. Theme: chosen at any time, applied at launch
@@ -1663,7 +1663,7 @@ What the implementation must keep true:
   synchronously at module evaluation from `prefsDb` (its own tiny
   `logjam-prefs.db`, opened with `openDatabaseSync` — everything else here is
   async, and this has to answer before the first `await` exists). No network, so
-  the app opens in the user's colours in a canyon.
+  the app opens in the user's colours in a place.
 - **The account's copy is what follows the user.** Settings PATCHes
   `themeSchemeId`, and `AppShell` mirrors the account value back onto the device
   whenever they differ — so a scheme picked in the browser is what this phone
@@ -1707,5 +1707,5 @@ in review.
   `the server` are our terms, not the user's. `link`, `sync`, `bound` and
   `lands here` are established product words and stay.
 - **Empty and zero states: one short declarative sentence, lead with the
-  action.** `Log a trip at a canyon and it moves here.`, not a four-feature
+  action.** `Log a trip at a place and it moves here.`, not a four-feature
   pitch.

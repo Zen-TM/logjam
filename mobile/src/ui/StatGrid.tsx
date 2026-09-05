@@ -12,7 +12,7 @@ export type Stat = {
   onPress?: () => void;
 };
 
-// Two-column grid of labelled stat cards — the Canyon-detail Overview
+// Two-column grid of labelled stat cards — the Place-detail Overview
 // (Grade / Length / Abseils / Longest drop / Water / Rating). Each cell is a
 // warm card with an uppercase eyebrow label above the value. Odd counts leave
 // the last cell half-width, which reads fine.

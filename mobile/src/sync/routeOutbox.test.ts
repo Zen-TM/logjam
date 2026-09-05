@@ -115,26 +115,26 @@ describe("createRouteLocal", () => {
     });
   });
 
-  it("omits canyonId from the op when the route is standalone", async () => {
+  it("omits placeId from the op when the route is standalone", async () => {
     await createRouteLocal({ name: "Standalone", points: [[150, -33], [151, -34]] });
     const op = find("INSERT INTO outbox")!;
     const fields = op.args.find(
       (arg) => typeof arg === "string" && arg.includes("points"),
     );
-    expect(JSON.parse(fields as string)).not.toHaveProperty("canyonId");
+    expect(JSON.parse(fields as string)).not.toHaveProperty("placeId");
   });
 
-  it("carries canyonId through when linking at create time", async () => {
+  it("carries placeId through when linking at create time", async () => {
     await createRouteLocal({
       name: "Linked",
       points: [[150, -33], [151, -34]],
-      canyonId: "canyon-1",
+      placeId: "place-1",
     });
     const op = find("INSERT INTO outbox")!;
     const fields = op.args.find(
       (arg) => typeof arg === "string" && arg.includes("points"),
     );
-    expect(JSON.parse(fields as string)).toMatchObject({ canyonId: "canyon-1" });
+    expect(JSON.parse(fields as string)).toMatchObject({ placeId: "place-1" });
   });
 
   it("returns a client-minted id, so the op needs no remapping on flush", async () => {
@@ -181,7 +181,7 @@ describe("UPDATE_TARGETS", () => {
     const target = UPDATE_TARGETS.route!;
     expect(target.table).toBe("routes");
     expect(Object.keys(target.columns)).toEqual(
-      expect.arrayContaining(["name", "points", "canyonId", "color", "anchors"]),
+      expect.arrayContaining(["name", "points", "placeId", "color", "anchors"]),
     );
   });
 

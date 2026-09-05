@@ -8,7 +8,7 @@
 // engine as thrown exceptions and the Sentry scrubber owns redaction.
 import {
   collectDirtyFields,
-  parseSyncDeltaCanyonRow,
+  parseSyncDeltaPlaceRow,
   parseSyncDeltaCustomFieldDefRow,
   parseSyncDeltaFriendshipRow,
   parseSyncDeltaMediaRow,
@@ -32,12 +32,12 @@ import { loadOutboxRows, rowToEntry } from "./outbox";
 import {
   applyTombstone,
   notifyMirrorChanged,
-  upsertCanyon,
+  upsertPlace,
   upsertCustomFieldDef,
   upsertFriendship,
   upsertMedia,
   upsertShare,
-  rebasePendingCanyonLinks,
+  rebasePendingPlaceLinks,
   upsertTrip,
   upsertWaypoint,
   upsertRoute,
@@ -70,10 +70,10 @@ export async function loadOutboxEntries(): Promise<OutboxEntry[]> {
  * the server instead of by our own schema.
  *
  * So a bad row is dropped, named (fields only — never values; these rows carry
- * canyon names and coordinates), and the rest of the page applies. The cursor
+ * place names and coordinates), and the rest of the page applies. The cursor
  * advances past it, which means a dropped row is not retried: that is the
  * deliberate trade. A row the client cannot read is a server-side defect, and
- * one unreadable canyon is a far better outcome than a device that never syncs
+ * one unreadable place is a far better outcome than a device that never syncs
  * again.
  */
 function parsedRows<Row>(
@@ -180,7 +180,7 @@ export async function runDeltaPull(currentUserId: string): Promise<DeltaPullResu
         parseSyncDeltaCustomFieldDefRow,
         skipped,
       ),
-      canyons: parsedRows(raw.canyons ?? [], parseSyncDeltaCanyonRow, skipped),
+      places: parsedRows(raw.places ?? [], parseSyncDeltaPlaceRow, skipped),
       tripLogs: parsedRows(raw.tripLogs ?? [], parseSyncDeltaTripRow, skipped),
       waypoints: parsedRows(
         raw.waypoints ?? [],
@@ -189,8 +189,8 @@ export async function runDeltaPull(currentUserId: string): Promise<DeltaPullResu
       ),
       routes: parsedRows(raw.routes ?? [], parseSyncDeltaRouteRow, skipped),
       media: parsedRows(raw.media ?? [], parseSyncDeltaMediaRow, skipped),
-      canyonShares: parsedRows(
-        raw.canyonShares ?? [],
+      placeShares: parsedRows(
+        raw.placeShares ?? [],
         parseSyncDeltaShareRow,
         skipped,
       ),
@@ -222,20 +222,20 @@ export async function runDeltaPull(currentUserId: string): Promise<DeltaPullResu
     );
     const db = await getSyncDb();
     await applyPage(db, async () => {
-      // Definitions first, matching the server's budget order: the canyon and
+      // Definitions first, matching the server's budget order: the place and
       // trip rows below carry values keyed by them, so a page never leaves a
       // value on screen with no label to render it under.
       for (const row of changes.customFieldDefs) {
         const { effective, dirtyNames } = rebase(row, "customFieldDef", outbox);
         await upsertCustomFieldDef(db, effective, dirtyNames);
       }
-      for (const row of changes.canyons) {
-        const { effective, dirtyNames } = rebase(row, "canyon", outbox);
-        await upsertCanyon(db, effective, dirtyNames);
+      for (const row of changes.places) {
+        const { effective, dirtyNames } = rebase(row, "place", outbox);
+        await upsertPlace(db, effective, dirtyNames);
       }
       for (const row of changes.tripLogs) {
         const rebased = rebase(row, "tripLog", outbox);
-        const { effective, dirtyNames } = await rebasePendingCanyonLinks(
+        const { effective, dirtyNames } = await rebasePendingPlaceLinks(
           db,
           rebased.effective,
           rebased.dirtyNames,
@@ -251,7 +251,7 @@ export async function runDeltaPull(currentUserId: string): Promise<DeltaPullResu
         await upsertRoute(db, effective, dirtyNames);
       }
       for (const row of changes.media) await upsertMedia(db, row);
-      for (const row of changes.canyonShares) {
+      for (const row of changes.placeShares) {
         await upsertShare(db, row, currentUserId);
       }
       for (const row of changes.friendships) await upsertFriendship(db, row);
@@ -261,12 +261,12 @@ export async function runDeltaPull(currentUserId: string): Promise<DeltaPullResu
 
       changedRows +=
         changes.customFieldDefs.length +
-        changes.canyons.length +
+        changes.places.length +
         changes.tripLogs.length +
         changes.waypoints.length +
         changes.routes.length +
         changes.media.length +
-        changes.canyonShares.length +
+        changes.placeShares.length +
         changes.friendships.length +
         tombstones.length;
 
@@ -278,7 +278,7 @@ export async function runDeltaPull(currentUserId: string): Promise<DeltaPullResu
     });
 
     if (skipped.length > 0) {
-      // Field-name detail only — these rows carry canyon names and coordinates.
+      // Field-name detail only — these rows carry place names and coordinates.
       console.error(
         `sync: dropped ${skipped.length} unreadable row(s) from a delta page`,
         skipped,

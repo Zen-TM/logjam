@@ -19,7 +19,7 @@ function form(overrides: Partial<TripDraftForm> = {}): TripDraftForm {
   return {
     date: "2026-07-14",
     notes: "Cold swims, one hang re-rigged.",
-    selectedCanyonIds: ["canyon-1"],
+    selectedPlaceIds: ["place-1"],
     displayNameInput: "",
     selectedTypes: ["canyoning"],
     fieldValues: { water: "high" },
@@ -39,7 +39,7 @@ describe("tripFormFingerprint", () => {
     const a: TripDraftForm = {
       date: "2026-07-14",
       notes: "n",
-      selectedCanyonIds: [],
+      selectedPlaceIds: [],
       displayNameInput: "",
       selectedTypes: [],
       fieldValues: {},
@@ -50,7 +50,7 @@ describe("tripFormFingerprint", () => {
       fieldValues: {},
       selectedTypes: [],
       displayNameInput: "",
-      selectedCanyonIds: [],
+      selectedPlaceIds: [],
       notes: "n",
       date: "2026-07-14",
     } as TripDraftForm;
@@ -96,7 +96,7 @@ describe("serializeTripDraft", () => {
     expect(parsed!.mode).toBe("create");
   });
 
-  it("round-trips a pending inline canyon create", () => {
+  it("round-trips a pending inline place create", () => {
     const withCreate = form({
       creating: { name: "Unnamed", latitude: "-33.1", longitude: "150.2" },
     });
@@ -169,7 +169,7 @@ describe("parseTripDraft", () => {
     ["date", 20260714],
     ["notes", null],
     ["displayNameInput", { a: 1 }],
-    ["selectedCanyonIds", "canyon-1"],
+    ["selectedPlaceIds", "place-1"],
     ["selectedTypes", [1, 2]],
     ["fieldValues", ["water"]],
     ["creating", "yes"],
@@ -179,9 +179,9 @@ describe("parseTripDraft", () => {
     expect(parseTripDraft(JSON.stringify(record), NOW)).toBeNull();
   });
 
-  it("returns null when the canyon id array holds non-strings", () => {
+  it("returns null when the place id array holds non-strings", () => {
     const record = JSON.parse(validRaw());
-    record.form.selectedCanyonIds = ["ok", 7];
+    record.form.selectedPlaceIds = ["ok", 7];
     expect(parseTripDraft(JSON.stringify(record), NOW)).toBeNull();
   });
 

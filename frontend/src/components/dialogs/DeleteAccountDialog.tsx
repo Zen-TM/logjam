@@ -13,7 +13,7 @@ import {
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import { deleteUser } from "aws-amplify/auth";
-import { deleteAccount } from "../../canyonUtils";
+import { deleteAccount } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import { ErrorBanner } from "../feedback/ErrorBanner";
 
@@ -103,7 +103,7 @@ function DeleteAccountDialog({
       </DialogTitle>
       <DialogContent dividers sx={{ borderColor: "rgba(255,255,255,0.1)", display: "flex", flexDirection: "column", gap: 2 }}>
         <Typography sx={{ color: "var(--theme-text-primary)", fontSize: "var(--text-sm)" }}>
-          This will permanently delete your account and all associated data — canyons, trip logs,
+          This will permanently delete your account and all associated data — places, trip logs,
           media, and settings. This action cannot be undone.
         </Typography>
         <Typography sx={{ color: "var(--theme-text-muted)", fontSize: "var(--text-sm)" }}>

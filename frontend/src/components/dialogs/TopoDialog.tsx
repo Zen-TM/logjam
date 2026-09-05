@@ -32,7 +32,7 @@ import {
   fetchComputeEstimate,
   fetchCurrentUser,
   putToPresignedUrl,
-} from "../../canyonUtils";
+} from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import { ErrorBanner } from "../feedback/ErrorBanner";
 import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
@@ -108,7 +108,7 @@ export type TopoJob = {
   createdAt: string;
   updatedAt: string;
   /** Owner-only: absent from a job shared WITH the user, because raw bucket
-   *  keys can name a canyon (see serializeTopoJobFor in api/routes/topoJobs). */
+   *  keys can name a place (see serializeTopoJobFor in api/routes/topoJobs). */
   s3OutputKeys?:
     | { name: string; mbtilesKey: string; pmtilesKey: string | null }[]
     | null;

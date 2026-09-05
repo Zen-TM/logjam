@@ -4,18 +4,18 @@ import { Feather } from "@expo/vector-icons";
 import {
   CANYONING_TRIP_TYPE,
   enforceCanyoningTag,
-  formatTripCanyonNames,
-  MAX_CANYONS_PER_TRIP,
+  formatTripPlaceNames,
+  MAX_PLACES_PER_TRIP,
   TRIP_TYPE_SUGGESTIONS,
   type TripLogCustomFieldDef,
 } from "@logjam/shared";
 
 import { fontSize, fontWeight, radius, spacing, surface, theme, withAlpha } from "../theme";
-import type { MirrorCanyon, MirrorTrip } from "../sync/mirrorStore";
+import type { MirrorPlace, MirrorTrip } from "../sync/mirrorStore";
 import {
   createTripLocal,
   updateTripLocal,
-  type TripCanyonLink,
+  type TripPlaceLink,
 } from "../sync/outbox";
 import {
   BottomSheet,
@@ -43,20 +43,20 @@ import { tripTypeLabel, tripTypeMeta } from "./tripTypeMeta";
  * Log or edit a trip — one sheet for both, because the fields are identical and
  * a second form would drift.
  *
- * The date picker and the canyon picker are MODES of this sheet, not sheets of
+ * The date picker and the place picker are MODES of this sheet, not sheets of
  * their own (DESIGN.md §6: never open a second sheet from the first). The
  * header title changes with the mode, so the user always knows which step they
  * are on, and there is exactly one animation per tap.
  *
- * PRIVACY: canyon names are the sensitive payload here. They stay in component
+ * PRIVACY: place names are the sensitive payload here. They stay in component
  * state and go out only through the outbox's authed push — nothing is logged,
  * and there is no autosaved draft (the web's localStorage draft has no mobile
  * equivalent: the OS doesn't evict this form mid-edit the way a browser tab
  * gets reclaimed).
  */
-type Mode = "form" | "date" | "canyons" | "fields" | "fieldForm";
+type Mode = "form" | "date" | "places" | "fields" | "fieldForm";
 
-/** The `canyoning` tag is locked on while a canyon is linked — the server
+/** The `canyoning` tag is locked on while a place is linked — the server
  *  force-adds it, so the picker shows it selected and not toggleable. */
 const CANYONING_LOCKED = new Set([CANYONING_TRIP_TYPE]);
 
@@ -67,8 +67,8 @@ export function TripEditSheet({
   visible,
   onClose,
   trip,
-  canyons,
-  initialCanyons,
+  places,
+  initialPlaces,
   existingTypes,
   onSaved,
   onFailed,
@@ -78,13 +78,13 @@ export function TripEditSheet({
   onClose: () => void;
   /** null/undefined = log a new trip. */
   trip?: MirrorTrip | null;
-  canyons: MirrorCanyon[];
+  places: MirrorPlace[];
   /**
-   * Pre-linked canyons for a NEW trip, so "log a trip here" arrives with the
-   * canyon already attached. Ignored when editing — an existing trip's links
+   * Pre-linked places for a NEW trip, so "log a trip here" arrives with the
+   * place already attached. Ignored when editing — an existing trip's links
    * are its own.
    */
-  initialCanyons?: TripCanyonLink[];
+  initialPlaces?: TripPlaceLink[];
   /** Types across the user's own history, unioned with the seed vocabulary. */
   existingTypes: string[];
   onSaved: (message: string) => void;
@@ -99,13 +99,13 @@ export function TripEditSheet({
   const editing = trip != null;
   const [mode, setMode] = useState<Mode>("form");
   const [dateKey, setDateKey] = useState(todayDateKey);
-  const [selected, setSelected] = useState<TripCanyonLink[]>([]);
+  const [selected, setSelected] = useState<TripPlaceLink[]>([]);
   const [displayName, setDisplayName] = useState("");
   const [types, setTypes] = useState<string[]>([]);
   const [notes, setNotes] = useState("");
   const [customTypes, setCustomTypes] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
-  const [canyonSearch, setCanyonSearch] = useState("");
+  const [placeSearch, setPlaceSearch] = useState("");
   const [dateTarget, setDateTarget] = useState<DateTarget>({ kind: "trip" });
   // Custom-field VALUES are held as strings while editing (like the web form)
   // and coerced to their declared type on save.
@@ -121,12 +121,12 @@ export function TripEditSheet({
   useEffect(() => {
     if (!visible) return;
     setMode("form");
-    setCanyonSearch("");
+    setPlaceSearch("");
     setCustomTypes([]);
     setSaving(false);
     setDateKey(trip ? toDateKey(new Date(trip.date)) : todayDateKey());
     setSelected(
-      trip ? trip.canyons.map((link) => ({ ...link })) : (initialCanyons ?? []),
+      trip ? trip.places.map((link) => ({ ...link })) : (initialPlaces ?? []),
     );
     setDisplayName(trip?.displayName ?? "");
     setTypes(trip?.types ?? []);
@@ -134,24 +134,24 @@ export function TripEditSheet({
     setDateTarget({ kind: "trip" });
     setEditingField(null);
     setFieldValues(fieldValueStrings(trip?.customFields));
-    // Deliberately keyed on the sheet OPENING, not on `initialCanyons`: callers
+    // Deliberately keyed on the sheet OPENING, not on `initialPlaces`: callers
     // build that array inline, so a new identity every render would re-seed the
     // form under the user mid-edit.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trip, visible]);
 
-  // Linking a canyon means "I did that canyon", so the API force-tags
+  // Linking a place means "I did that place", so the API force-tags
   // `canyoning` on save. Mirror that into the selection so the chip reads
-  // SELECTED the moment a canyon is linked — and it is LOCKED (see
+  // SELECTED the moment a place is linked — and it is LOCKED (see
   // CANYONING_LOCKED) rather than toggleable, because the server re-adds it on
   // save anyway, so a chip the user could "deselect" would be a lie.
-  // enforceCanyoningTag only ever force-ADDS, so unlinking the last canyon
-  // leaves an existing `canyoning` alone (a canyon-less trip can still be
-  // canyoning) — and with no canyon linked the chip is a normal toggle.
-  const hasLinkedCanyon = selected.length > 0;
+  // enforceCanyoningTag only ever force-ADDS, so unlinking the last place
+  // leaves an existing `canyoning` alone (a place-less trip can still be
+  // canyoning) — and with no place linked the chip is a normal toggle.
+  const hasLinkedPlace = selected.length > 0;
   useEffect(() => {
-    setTypes((prev) => enforceCanyoningTag(prev, hasLinkedCanyon));
-  }, [hasLinkedCanyon]);
+    setTypes((prev) => enforceCanyoningTag(prev, hasLinkedPlace));
+  }, [hasLinkedPlace]);
 
   const typeOptions: ChipOption[] = useMemo(() => {
     const vocabulary = [
@@ -188,17 +188,17 @@ export function TripEditSheet({
     [typeOptions],
   );
 
-  const toggleCanyon = useCallback(
-    (canyon: MirrorCanyon) => {
+  const togglePlace = useCallback(
+    (place: MirrorPlace) => {
       setSelected((current) => {
-        if (current.some((link) => link.id === canyon.id)) {
-          return current.filter((link) => link.id !== canyon.id);
+        if (current.some((link) => link.id === place.id)) {
+          return current.filter((link) => link.id !== place.id);
         }
-        if (current.length >= MAX_CANYONS_PER_TRIP) {
-          onFailed(`A trip can have at most ${MAX_CANYONS_PER_TRIP} canyons.`);
+        if (current.length >= MAX_PLACES_PER_TRIP) {
+          onFailed(`A trip can have at most ${MAX_PLACES_PER_TRIP} places.`);
           return current;
         }
-        return [...current, { id: canyon.id, name: canyon.name }];
+        return [...current, { id: place.id, name: place.name }];
       });
     },
     [onFailed],
@@ -208,7 +208,7 @@ export function TripEditSheet({
     setSaving(true);
     const trimmedName = displayName.trim();
     const trimmedNotes = notes.trim();
-    // The canyoning tag a linked canyon implies — applied here so the chips the
+    // The canyoning tag a linked place implies — applied here so the chips the
     // user just saw are exactly what the server will store (shared derivation).
     const effectiveTypes = enforceCanyoningTag(types, selected.length > 0);
     const isoDate = `${dateKey}T00:00:00.000Z`;
@@ -232,10 +232,10 @@ export function TripEditSheet({
         if (
           !sameOrder(
             selected.map((link) => link.id),
-            trip.canyons.map((link) => link.id),
+            trip.places.map((link) => link.id),
           )
         ) {
-          changes.canyons = selected;
+          changes.places = selected;
         }
         if (Object.keys(changes).length === 0) {
           onClose();
@@ -250,14 +250,14 @@ export function TripEditSheet({
           notes: trimmedNotes || null,
           types: effectiveTypes,
           customFields: effectiveCustomFields,
-          canyons: selected,
+          places: selected,
         });
         onSaved("Trip logged.");
       }
       onClose();
     } catch (err) {
       // The message is ours, not the error's: an error string could carry a
-      // canyon name into a toast (and from there a screenshot).
+      // place name into a toast (and from there a screenshot).
       console.error(err);
       onFailed("Couldn't save this trip.");
     } finally {
@@ -277,14 +277,14 @@ export function TripEditSheet({
     types,
   ]);
 
-  const derivedTitle = formatTripCanyonNames(selected.map((link) => link.name));
+  const derivedTitle = formatTripPlaceNames(selected.map((link) => link.name));
   const title =
     mode === "date"
       ? dateTarget.kind === "trip"
         ? "Trip date"
         : (customFieldDefs.find((def) => def.key === dateTarget.key)?.label ?? "Date")
-      : mode === "canyons"
-        ? "Canyons on this trip"
+      : mode === "places"
+        ? "Places on this trip"
         : mode === "fields"
           ? "Your trip fields"
           : mode === "fieldForm"
@@ -304,7 +304,7 @@ export function TripEditSheet({
           : () => setMode(mode === "fieldForm" ? "fields" : "form")
       }
       title={title}
-      // Pinned, because the canyon list is longer than the sheet: a Done button
+      // Pinned, because the place list is longer than the sheet: a Done button
       // that scrolls out of reach leaves the handle as the only exit.
       footer={
         mode === "form" ? (
@@ -367,13 +367,13 @@ export function TripEditSheet({
         />
       ) : null}
 
-      {mode === "canyons" ? (
-        <CanyonPicker
-          canyons={canyons}
+      {mode === "places" ? (
+        <PlacePicker
+          places={places}
           selected={selected}
-          search={canyonSearch}
-          onSearch={setCanyonSearch}
-          onToggle={toggleCanyon}
+          search={placeSearch}
+          onSearch={setPlaceSearch}
+          onToggle={togglePlace}
         />
       ) : null}
 
@@ -388,13 +388,13 @@ export function TripEditSheet({
           />
           <Row
             icon="map-pin"
-            title={derivedTitle ?? "No canyons linked"}
+            title={derivedTitle ?? "No places linked"}
             subtitle={
-              selected.length === 1 ? "1 canyon" : `${selected.length} canyons`
+              selected.length === 1 ? "1 place" : `${selected.length} places`
             }
             titleNumberOfLines={2}
             right={<Feather name="chevron-right" size={20} color={theme.textMuted} />}
-            onPress={() => setMode("canyons")}
+            onPress={() => setMode("places")}
           />
 
           <View style={styles.field}>
@@ -418,7 +418,7 @@ export function TripEditSheet({
             onToggle={toggleType}
             onAdd={addType}
             addPlaceholder="Other"
-            disabledValues={hasLinkedCanyon ? CANYONING_LOCKED : undefined}
+            disabledValues={hasLinkedPlace ? CANYONING_LOCKED : undefined}
           />
 
           <View style={styles.field}>
@@ -462,37 +462,37 @@ export function TripEditSheet({
   );
 }
 
-/** Order-sensitive comparison — a trip's canyon order drives its derived title. */
+/** Order-sensitive comparison — a trip's place order drives its derived title. */
 function sameOrder(a: string[], b: string[]): boolean {
   return a.length === b.length && a.every((value, index) => value === b[index]);
 }
 
 /**
- * Searchable multi-select over the canyon library. Selected canyons pin to the
+ * Searchable multi-select over the place library. Selected places pin to the
  * top in selection order, because that order is what the derived trip title
  * reads — "Claustral and Ranon" is a different title from "Ranon and Claustral".
  */
-function CanyonPicker({
-  canyons,
+function PlacePicker({
+  places,
   selected,
   search,
   onSearch,
   onToggle,
 }: {
-  canyons: MirrorCanyon[];
-  selected: TripCanyonLink[];
+  places: MirrorPlace[];
+  selected: TripPlaceLink[];
   search: string;
   onSearch: (next: string) => void;
-  onToggle: (canyon: MirrorCanyon) => void;
+  onToggle: (place: MirrorPlace) => void;
 }) {
   const selectedIds = new Set(selected.map((link) => link.id));
   const query = search.trim().toLowerCase();
-  const matches = canyons.filter(
-    (canyon) => !selectedIds.has(canyon.id) && canyon.name.toLowerCase().includes(query),
+  const matches = places.filter(
+    (place) => !selectedIds.has(place.id) && place.name.toLowerCase().includes(query),
   );
   const pinned = selected
-    .map((link) => canyons.find((canyon) => canyon.id === link.id))
-    .filter((canyon): canyon is MirrorCanyon => canyon != null);
+    .map((link) => places.find((place) => place.id === link.id))
+    .filter((place): place is MirrorPlace => place != null);
 
   return (
     <View style={styles.pickerBody}>
@@ -502,9 +502,9 @@ function CanyonPicker({
           style={styles.searchInput}
           value={search}
           onChangeText={onSearch}
-          placeholder="Search your canyons"
+          placeholder="Search your places"
           placeholderTextColor={theme.textMuted}
-          accessibilityLabel="Search your canyons"
+          accessibilityLabel="Search your places"
           autoCapitalize="none"
         />
       </View>
@@ -512,36 +512,36 @@ function CanyonPicker({
       {pinned.length > 0 ? (
         <>
           <SectionHeader label={`On this trip · ${pinned.length}`} />
-          {pinned.map((canyon, index) => (
+          {pinned.map((place, index) => (
             <Row
-              key={canyon.id}
+              key={place.id}
               icon="check"
               hue={theme.accent}
-              title={canyon.name}
+              title={place.name}
               subtitle={`${index + 1} of ${pinned.length}`}
-              onPress={() => onToggle(canyon)}
-              accessibilityLabel={`Remove ${canyon.name} from this trip`}
+              onPress={() => onToggle(place)}
+              accessibilityLabel={`Remove ${place.name} from this trip`}
             />
           ))}
         </>
       ) : null}
 
-      <SectionHeader label={query ? "Matches" : "Your canyons"} />
+      <SectionHeader label={query ? "Matches" : "Your places"} />
       {matches.length === 0 ? (
         <Text style={styles.hint}>
-          {canyons.length === 0
-            ? "No canyons saved on this device yet. You can log the trip now and link a canyon later."
+          {places.length === 0
+            ? "No places saved on this device yet. You can log the trip now and link a place later."
             : "Nothing matches that name."}
         </Text>
       ) : (
-        matches.map((canyon) => (
+        matches.map((place) => (
           <Row
-            key={canyon.id}
+            key={place.id}
             icon="plus"
             hue={theme.bonus1}
-            title={canyon.name}
-            onPress={() => onToggle(canyon)}
-            accessibilityLabel={`Add ${canyon.name} to this trip`}
+            title={place.name}
+            onPress={() => onToggle(place)}
+            accessibilityLabel={`Add ${place.name} to this trip`}
           />
         ))
       )}

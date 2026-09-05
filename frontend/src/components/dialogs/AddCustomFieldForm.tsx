@@ -17,11 +17,11 @@ import { ErrorBanner } from "../feedback/ErrorBanner";
 import classes from "./AddCustomFieldForm.module.css";
 
 /**
- * "New Custom Field" sub-form, shared between CanyonDialog and TripLogDialog
+ * "New Custom Field" sub-form, shared between PlaceDialog and TripLogDialog
  * (UX-002: bordered box treatment for both; UX-003: shared field/select
  * styling so the type-select dropdown icon matches between dialogs).
  *
- * Bounds (min/max) are opt-in via the `bounds` prop group. Both CanyonDialog
+ * Bounds (min/max) are opt-in via the `bounds` prop group. Both PlaceDialog
  * and TripLogDialog pass it. The bounds row only renders for integer/float
  * types.
  */
@@ -60,7 +60,7 @@ function AddCustomFieldForm({
 
   // This sub-form renders inside the host dialog's <form>, so a bare Enter in
   // any of its single-line inputs would submit the *dialog* — saving the trip
-  // or canyon the user is still filling in, which is not what "Enter" means
+  // or place the user is still filling in, which is not what "Enter" means
   // while you're typing a field label. Swallow it and run the sub-form's own
   // primary action instead, guarded by the same condition as the Add button so
   // Enter can't add a field the button wouldn't.

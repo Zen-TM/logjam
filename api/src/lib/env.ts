@@ -168,7 +168,9 @@ const baseSchema = z.object({
   // Fleet-wide full-resync lever (stage8 §10.5): bump when server-side data
   // changes shape without moving updatedAt (e.g. a migration rewriting rows).
   // Clients whose cursor was minted under a different epoch get resetRequired.
-  SYNC_EPOCH: z.coerce.number().int().positive().default(1),
+  // 2: the places rework renames every canyon row and empties the tombstone
+  // log, so no pre-rework cursor can be resumed (plan §4 step 14).
+  SYNC_EPOCH: z.coerce.number().int().positive().default(2),
 
   // Read at module load by services/prisma.ts (not via getEnv(), which would
   // run before boot.ts resolves DB credentials) — declared here so the values

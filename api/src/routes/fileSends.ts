@@ -231,7 +231,7 @@ router.post(
           include: { recipients: { select: { userId: true, status: true } } },
         });
         // IDs ONLY in the payload — never the filename, which is user text and
-        // routinely names a canyon (PRIV-005). The sender's username AND the
+        // routinely names a place (PRIV-005). The sender's username AND the
         // filename are both resolved from the live rows at read time in
         // notifications.ts, which is also what makes them vanish when the send
         // is declined or expires.

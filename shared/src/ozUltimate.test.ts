@@ -14,7 +14,7 @@ describe("matchOzUltimateUrl", () => {
     );
   });
 
-  it("matches via the canyonAltNames param against a gazetteer altName", () => {
+  it("matches via the placeAltNames param against a gazetteer altName", () => {
     // "Foo Canyon" matches nothing in the gazetteer by its primary name, but
     // its alt name "Wheengee Whungee" matches Whungee Wheengee Canyon's
     // altNames entry.

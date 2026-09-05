@@ -6,7 +6,7 @@
 // row parks blocked with a 400 nothing in the app surfaces.
 //
 // `prefix` is one hex digit naming the owner/space: "0" users, "1" alice's
-// canyons, "2" bob's, "3" carol's, "4" media, "5" custom field definitions,
+// places, "2" bob's, "3" carol's, "4" media, "5" custom field definitions,
 // "6" waypoints, "7" routes, "8" direct (per-item) shares.
 // SEED_ID_PREFIXES below is the declaration; src/lib/seedIds.unit.test.ts
 // iterates it, so a prefix used here without joining the list fails the guard.

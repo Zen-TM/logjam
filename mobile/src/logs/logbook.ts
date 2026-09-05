@@ -13,7 +13,7 @@
 
 export type LogbookTrip = {
   date: string;
-  canyons: { id: string; name: string }[];
+  places: { id: string; name: string }[];
 };
 
 /** "Sun 15 Mar 2026" — a logbook entry's own line; the year group supplies context. */
@@ -64,9 +64,9 @@ export function groupTripsByYear<T extends { date: string }>(
     .map(([year, yearTrips]) => ({ year, trips: yearTrips }));
 }
 
-/** Distinct canyons across a trip set — "how much of the library have I done". */
-export function distinctCanyonCount(trips: LogbookTrip[]): number {
-  return new Set(trips.flatMap((trip) => trip.canyons.map((canyon) => canyon.id))).size;
+/** Distinct places across a trip set — "how much of the library have I done". */
+export function distinctPlaceCount(trips: LogbookTrip[]): number {
+  return new Set(trips.flatMap((trip) => trip.places.map((place) => place.id))).size;
 }
 
 export type MonthBucket = { label: string; count: number; current: boolean };

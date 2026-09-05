@@ -53,13 +53,13 @@ describe("getRopeWikiCanyons — S3 snapshot source", () => {
   it("parses the real-format snapshot and reports the source timestamp", async () => {
     mockS3Object(SAMPLE_CSV);
 
-    const { canyons, errors, sourceUpdatedAt } = await getRopeWikiCanyons();
+    const { places, errors, sourceUpdatedAt } = await getRopeWikiCanyons();
 
     expect(errors).toEqual([]);
-    expect(canyons).toHaveLength(3);
+    expect(places).toHaveLength(3);
     expect(sourceUpdatedAt).toEqual(LAST_MODIFIED);
 
-    const claustral = canyons.find((c) => c.name === "Claustral Canyon");
+    const claustral = places.find((c) => c.name === "Claustral Canyon");
     expect(claustral).toBeDefined();
     expect(claustral!.ropeWikiId).toBe(11672);
     // 33° 33' 33.12" S, 150° 24' 11.88" E
@@ -91,7 +91,7 @@ describe("getRopeWikiCanyons — S3 snapshot source", () => {
     const second = await getRopeWikiCanyons();
 
     expect(s3Send).toHaveBeenCalledTimes(1);
-    expect(second.canyons).toEqual(first.canyons);
+    expect(second.places).toEqual(first.places);
     expect(second.sourceUpdatedAt).toEqual(LAST_MODIFIED);
   });
 
@@ -125,7 +125,7 @@ describe("getRopeWikiCanyons — S3 snapshot source", () => {
     await expect(getRopeWikiCanyons()).rejects.toThrow();
 
     mockS3Object(SAMPLE_CSV);
-    expect((await getRopeWikiCanyons()).canyons).toHaveLength(3);
+    expect((await getRopeWikiCanyons()).places).toHaveLength(3);
   });
 });
 
@@ -136,10 +136,10 @@ describe("getRopeWikiCanyons — fresh=true live path", () => {
       vi.fn().mockResolvedValue({ ok: true, status: 200, text: async () => SAMPLE_CSV }),
     );
 
-    const { canyons, sourceUpdatedAt } = await getRopeWikiCanyons(true);
+    const { places, sourceUpdatedAt } = await getRopeWikiCanyons(true);
 
     expect(s3Send).not.toHaveBeenCalled();
-    expect(canyons).toHaveLength(3);
+    expect(places).toHaveLength(3);
     expect(sourceUpdatedAt).toBeInstanceOf(Date);
   });
 

@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// resolveWaypointCanyonIds reaches the prisma singleton at module scope; the
+// resolveWaypointPlaceIds reaches the prisma singleton at module scope; the
 // visibility logic under test never does — it works on the caller's tx.
 vi.mock("../services/prisma", () => ({ default: {} }));
 
 import {
-  applyWaypointCanyonLinks,
+  applyWaypointPlaceLinks,
   serializeWaypointFor,
-  snapshotCanyonWaypointVisibility,
+  snapshotPlaceWaypointVisibility,
   snapshotWaypointVisibility,
   writeWaypointVisibilityLoss,
 } from "./waypointLink";
@@ -22,20 +22,20 @@ import type { Prisma } from "@prisma/client";
  * for unit tests anyway.
  */
 function fakeTx(
-  links: { canyonId: string; waypointId: string }[],
-  shares: { canyonId: string; sharedWithId: string }[],
+  links: { placeId: string; waypointId: string }[],
+  shares: { placeId: string; sharedWithId: string }[],
 ) {
   const tombstones: { userId: string; entityType: string; entityId: string }[] =
     [];
   const matches = (
-    link: { canyonId: string; waypointId: string },
+    link: { placeId: string; waypointId: string },
     where: Record<string, unknown>,
   ): boolean => {
     const byWaypoint = where.waypointId as
       | string
       | { in?: string[]; notIn?: string[] }
       | undefined;
-    const byCanyon = where.canyonId as
+    const byPlace = where.placeId as
       | string
       | { in?: string[]; notIn?: string[] }
       | undefined;
@@ -49,20 +49,20 @@ function fakeTx(
       if (clause.notIn) return !clause.notIn.includes(value);
       return true;
     };
-    return test(link.waypointId, byWaypoint) && test(link.canyonId, byCanyon);
+    return test(link.waypointId, byWaypoint) && test(link.placeId, byPlace);
   };
 
   const tx = {
-    canyonWaypoint: {
+    placeWaypoint: {
       findMany: async ({ where }: { where: Record<string, unknown> }) =>
         links
           .filter((link) => matches(link, where))
           .map((link) => ({
             waypointId: link.waypointId,
-            canyonId: link.canyonId,
-            canyon: {
+            placeId: link.placeId,
+            place: {
               shares: shares
-                .filter((share) => share.canyonId === link.canyonId)
+                .filter((share) => share.placeId === link.placeId)
                 .map((share) => ({ sharedWithId: share.sharedWithId })),
             },
           })),
@@ -75,12 +75,12 @@ function fakeTx(
       createMany: async ({
         data,
       }: {
-        data: { canyonId: string; waypointId: string }[];
+        data: { placeId: string; waypointId: string }[];
       }) => {
         for (const row of data) {
           const exists = links.some(
             (link) =>
-              link.canyonId === row.canyonId &&
+              link.placeId === row.placeId &&
               link.waypointId === row.waypointId,
           );
           if (!exists) links.push({ ...row });
@@ -107,15 +107,15 @@ const revokedUsers = (
     .map((row) => row.userId);
 
 describe("snapshotWaypointVisibility", () => {
-  it("collects every sharee that any linked canyon grants", async () => {
+  it("collects every sharee that any linked place grants", async () => {
     const { tx } = fakeTx(
       [
-        { canyonId: "canyonA", waypointId: "carpark" },
-        { canyonId: "canyonB", waypointId: "carpark" },
+        { placeId: "placeA", waypointId: "carpark" },
+        { placeId: "placeB", waypointId: "carpark" },
       ],
       [
-        { canyonId: "canyonA", sharedWithId: "bob" },
-        { canyonId: "canyonB", sharedWithId: "carol" },
+        { placeId: "placeA", sharedWithId: "bob" },
+        { placeId: "placeB", sharedWithId: "carol" },
       ],
     );
     const snapshot = await snapshotWaypointVisibility(tx, ["carpark"]);
@@ -130,65 +130,65 @@ describe("snapshotWaypointVisibility", () => {
 });
 
 describe("writeWaypointVisibilityLoss (the many-to-many guard)", () => {
-  it("does NOT revoke when a second shared canyon still reaches it", async () => {
-    // Bob is shared on BOTH canyons the carpark is linked to. Unlinking one of
-    // them costs him nothing — the naive "sharees of the canyon we just left"
+  it("does NOT revoke when a second shared place still reaches it", async () => {
+    // Bob is shared on BOTH places the carpark is linked to. Unlinking one of
+    // them costs him nothing — the naive "sharees of the place we just left"
     // rule would have deleted the carpark from his mirror.
     const { tx, tombstones } = fakeTx(
       [
-        { canyonId: "canyonA", waypointId: "carpark" },
-        { canyonId: "canyonB", waypointId: "carpark" },
+        { placeId: "placeA", waypointId: "carpark" },
+        { placeId: "placeB", waypointId: "carpark" },
       ],
       [
-        { canyonId: "canyonA", sharedWithId: "bob" },
-        { canyonId: "canyonB", sharedWithId: "bob" },
+        { placeId: "placeA", sharedWithId: "bob" },
+        { placeId: "placeB", sharedWithId: "bob" },
       ],
     );
 
-    await applyWaypointCanyonLinks(tx, {
+    await applyWaypointPlaceLinks(tx, {
       waypointId: "carpark",
-      canyonIds: ["canyonB"],
+      placeIds: ["placeB"],
     });
 
     expect(revokedUsers(tombstones, "carpark")).toEqual([]);
   });
 
-  it("revokes when the unlinked canyon was the last path", async () => {
+  it("revokes when the unlinked place was the last path", async () => {
     const { tx, tombstones } = fakeTx(
       [
-        { canyonId: "canyonA", waypointId: "carpark" },
-        { canyonId: "canyonB", waypointId: "carpark" },
+        { placeId: "placeA", waypointId: "carpark" },
+        { placeId: "placeB", waypointId: "carpark" },
       ],
       [
-        { canyonId: "canyonA", sharedWithId: "bob" },
-        { canyonId: "canyonB", sharedWithId: "carol" },
+        { placeId: "placeA", sharedWithId: "bob" },
+        { placeId: "placeB", sharedWithId: "carol" },
       ],
     );
 
-    await applyWaypointCanyonLinks(tx, {
+    await applyWaypointPlaceLinks(tx, {
       waypointId: "carpark",
-      canyonIds: ["canyonB"],
+      placeIds: ["placeB"],
     });
 
-    // Bob loses his only path; Carol still holds canyonB.
+    // Bob loses his only path; Carol still holds placeB.
     expect(revokedUsers(tombstones, "carpark")).toEqual(["bob"]);
   });
 
   it("revokes every viewer when the last link goes", async () => {
     const { tx, tombstones, links } = fakeTx(
       [
-        { canyonId: "canyonA", waypointId: "carpark" },
-        { canyonId: "canyonB", waypointId: "carpark" },
+        { placeId: "placeA", waypointId: "carpark" },
+        { placeId: "placeB", waypointId: "carpark" },
       ],
       [
-        { canyonId: "canyonA", sharedWithId: "bob" },
-        { canyonId: "canyonB", sharedWithId: "carol" },
+        { placeId: "placeA", sharedWithId: "bob" },
+        { placeId: "placeB", sharedWithId: "carol" },
       ],
     );
 
     // Empty list is the "unlink everything" path — the one an empty `notIn`
     // would silently turn into a no-op.
-    await applyWaypointCanyonLinks(tx, { waypointId: "carpark", canyonIds: [] });
+    await applyWaypointPlaceLinks(tx, { waypointId: "carpark", placeIds: [] });
 
     expect(links).toEqual([]);
     expect(revokedUsers(tombstones, "carpark").sort()).toEqual(["bob", "carol"]);
@@ -196,16 +196,16 @@ describe("writeWaypointVisibilityLoss (the many-to-many guard)", () => {
 
   it("writes nothing when a link is ADDED", async () => {
     const { tx, tombstones } = fakeTx(
-      [{ canyonId: "canyonA", waypointId: "carpark" }],
+      [{ placeId: "placeA", waypointId: "carpark" }],
       [
-        { canyonId: "canyonA", sharedWithId: "bob" },
-        { canyonId: "canyonB", sharedWithId: "carol" },
+        { placeId: "placeA", sharedWithId: "bob" },
+        { placeId: "placeB", sharedWithId: "carol" },
       ],
     );
 
-    await applyWaypointCanyonLinks(tx, {
+    await applyWaypointPlaceLinks(tx, {
       waypointId: "carpark",
-      canyonIds: ["canyonA", "canyonB"],
+      placeIds: ["placeA", "placeB"],
     });
 
     expect(revokedUsers(tombstones, "carpark")).toEqual([]);
@@ -213,54 +213,54 @@ describe("writeWaypointVisibilityLoss (the many-to-many guard)", () => {
 
   it("ignores waypoints nobody could see, so an unshared edit is silent", async () => {
     const { tx, tombstones } = fakeTx(
-      [{ canyonId: "canyonA", waypointId: "secret" }],
+      [{ placeId: "placeA", waypointId: "secret" }],
       [],
     );
 
-    await applyWaypointCanyonLinks(tx, {
+    await applyWaypointPlaceLinks(tx, {
       waypointId: "secret",
-      canyonIds: [],
+      placeIds: [],
     });
 
     expect(tombstones).toEqual([]);
   });
 });
 
-describe("snapshotCanyonWaypointVisibility", () => {
+describe("snapshotPlaceWaypointVisibility", () => {
   let fixture: ReturnType<typeof fakeTx>;
 
   beforeEach(() => {
     fixture = fakeTx(
       [
-        { canyonId: "canyonA", waypointId: "carpark" },
-        { canyonId: "canyonB", waypointId: "carpark" },
-        { canyonId: "canyonA", waypointId: "exit" },
+        { placeId: "placeA", waypointId: "carpark" },
+        { placeId: "placeB", waypointId: "carpark" },
+        { placeId: "placeA", waypointId: "exit" },
       ],
       [
-        { canyonId: "canyonA", sharedWithId: "bob" },
-        { canyonId: "canyonB", sharedWithId: "bob" },
+        { placeId: "placeA", sharedWithId: "bob" },
+        { placeId: "placeB", sharedWithId: "bob" },
       ],
     );
   });
 
-  it("covers every waypoint the canyon carries", async () => {
-    const snapshot = await snapshotCanyonWaypointVisibility(
+  it("covers every waypoint the place carries", async () => {
+    const snapshot = await snapshotPlaceWaypointVisibility(
       fixture.tx,
-      "canyonA",
+      "placeA",
     );
     expect([...snapshot.keys()].sort()).toEqual(["carpark", "exit"]);
   });
 
-  it("survives a canyon delete: only the waypoint that loses its last path is revoked", async () => {
-    // Exactly the shape of the canyon-delete site — snapshot, cascade the link
+  it("survives a place delete: only the waypoint that loses its last path is revoked", async () => {
+    // Exactly the shape of the place-delete site — snapshot, cascade the link
     // rows away, then diff.
-    const before = await snapshotCanyonWaypointVisibility(fixture.tx, "canyonA");
-    await fixture.tx.canyonWaypoint.deleteMany({
-      where: { canyonId: "canyonA" },
+    const before = await snapshotPlaceWaypointVisibility(fixture.tx, "placeA");
+    await fixture.tx.placeWaypoint.deleteMany({
+      where: { placeId: "placeA" },
     });
     await writeWaypointVisibilityLoss(fixture.tx, before);
 
-    // The carpark survives in Bob's mirror via canyonB; the exit does not.
+    // The carpark survives in Bob's mirror via placeB; the exit does not.
     expect(revokedUsers(fixture.tombstones, "carpark")).toEqual([]);
     expect(revokedUsers(fixture.tombstones, "exit")).toEqual(["bob"]);
   });
@@ -277,8 +277,8 @@ describe("serializeWaypointFor sharedCount (owner-private cardinality)", () => {
     id: "wp-1",
     ownerId: OWNER,
     name: "Carpark",
-    canyonId: null,
-    canyonLinks: [{ canyonId: "canyon-1" }],
+    placeId: null,
+    placeLinks: [{ placeId: "place-1" }],
   } as unknown as Parameters<typeof serializeWaypointFor>[0];
 
   it("gives the owner the count of people they shared it with", () => {
@@ -300,7 +300,7 @@ describe("serializeWaypointFor sharedCount (owner-private cardinality)", () => {
     const row = serializeWaypointFor(
       waypoint,
       SHAREE,
-      new Set(["canyon-1"]),
+      new Set(["place-1"]),
       new Map([["wp-1", 3]]),
     );
     expect(row.syncRole).toBe("shared");

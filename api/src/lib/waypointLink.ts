@@ -1,14 +1,14 @@
-// Waypoint ↔ canyon linking. The sibling of lib/routeLink.ts, and it exists
+// Waypoint ↔ place linking. The sibling of lib/routeLink.ts, and it exists
 // for the same reason: a link is a VISIBILITY change, so it has to write
 // tombstones, and there are two write paths (PATCH /waypoints/:id and the sync
 // push handler) that must not drift.
 //
 // The difference from routes is the whole difficulty. A route belongs to at
-// most one canyon, so unlinking it always revokes the sharees of that canyon.
-// A waypoint is many-to-many — one carpark serves three canyons off the same
+// most one place, so unlinking it always revokes the sharees of that place.
+// A waypoint is many-to-many — one carpark serves three places off the same
 // trailhead — so a user may be able to see one waypoint through SEVERAL shared
-// canyons at once. Unlinking it from one of them revokes nothing for that user;
-// the other path is still open. Tombstoning on the naive "sharees of the canyon
+// places at once. Unlinking it from one of them revokes nothing for that user;
+// the other path is still open. Tombstoning on the naive "sharees of the place
 // we just left" rule would delete a waypoint from a mirror that is still
 // entitled to it, and the row would not come back until the next full reset.
 //
@@ -22,7 +22,7 @@ import prisma from "../services/prisma";
 import { writeTombstones, waypointRevokeTombstones } from "./syncTombstones";
 
 /**
- * Who can see which waypoints through a canyon share, at one instant.
+ * Who can see which waypoints through a place share, at one instant.
  * waypointId → the sharee user ids. Never includes the owner, who sees their
  * own waypoints unconditionally and must never be tombstoned for one.
  */
@@ -33,7 +33,7 @@ export type WaypointVisibilitySnapshot = Map<string, Set<string>>;
  * caller's transaction:
  *
  *   const before = await snapshotWaypointVisibility(tx, ids);
- *   ...the destructive write (unlink / share revoke / canyon delete)...
+ *   ...the destructive write (unlink / share revoke / place delete)...
  *   await writeWaypointVisibilityLoss(tx, before);
  *
  * Snapshot first because the rows that granted sight are what the write
@@ -48,29 +48,29 @@ export async function snapshotWaypointVisibility(
     waypointIds.map((id) => [id, new Set<string>()]),
   );
   if (waypointIds.length === 0) return snapshot;
-  const links = await tx.canyonWaypoint.findMany({
+  const links = await tx.placeWaypoint.findMany({
     where: { waypointId: { in: waypointIds } },
     select: {
       waypointId: true,
-      canyon: { select: { shares: { select: { sharedWithId: true } } } },
+      place: { select: { shares: { select: { sharedWithId: true } } } },
     },
   });
   for (const link of links) {
     const viewers = snapshot.get(link.waypointId);
     if (!viewers) continue;
-    for (const share of link.canyon.shares) viewers.add(share.sharedWithId);
+    for (const share of link.place.shares) viewers.add(share.sharedWithId);
   }
   return snapshot;
 }
 
-/** Snapshot every waypoint linked to `canyonId` — the set a canyon delete or a
+/** Snapshot every waypoint linked to `placeId` — the set a place delete or a
  * share revocation puts at risk. Call BEFORE the write. */
-export async function snapshotCanyonWaypointVisibility(
+export async function snapshotPlaceWaypointVisibility(
   tx: Prisma.TransactionClient,
-  canyonId: string,
+  placeId: string,
 ): Promise<WaypointVisibilitySnapshot> {
-  const links = await tx.canyonWaypoint.findMany({
-    where: { canyonId },
+  const links = await tx.placeWaypoint.findMany({
+    where: { placeId },
     select: { waypointId: true },
   });
   return snapshotWaypointVisibility(
@@ -84,7 +84,7 @@ export async function snapshotCanyonWaypointVisibility(
  * users who lost their last path to each waypoint. Call AFTER the write.
  *
  * This is the m2m guard: a user who still reaches the waypoint through another
- * shared canyon is absent from the result and keeps their mirrored copy.
+ * shared place is absent from the result and keeps their mirrored copy.
  */
 export async function writeWaypointVisibilityLoss(
   tx: Prisma.TransactionClient,
@@ -106,32 +106,32 @@ export async function writeWaypointVisibilityLoss(
 }
 
 /**
- * Replace a waypoint's canyon links with `canyonIds`, emitting tombstones for
+ * Replace a waypoint's place links with `placeIds`, emitting tombstones for
  * exactly the users the change costs.
  *
  * The caller must already have verified that the waypoint is owned by the
- * caller and that every canyon in `canyonIds` is too (resolveWaypointCanyonIds
+ * caller and that every place in `placeIds` is too (resolveWaypointPlaceIds
  * below) — an owner-scoped lookup belongs in the route layer, not here.
  */
-export async function applyWaypointCanyonLinks(
+export async function applyWaypointPlaceLinks(
   tx: Prisma.TransactionClient,
-  args: { waypointId: string; canyonIds: string[] },
+  args: { waypointId: string; placeIds: string[] },
 ): Promise<void> {
-  const { waypointId, canyonIds } = args;
+  const { waypointId, placeIds } = args;
 
   const before = await snapshotWaypointVisibility(tx, [waypointId]);
 
   // Explicit empty case: an empty `notIn` is a footgun to rely on, and this is
   // the "unlink everything" path, which is exactly when it must not misfire.
-  await tx.canyonWaypoint.deleteMany({
+  await tx.placeWaypoint.deleteMany({
     where:
-      canyonIds.length === 0
+      placeIds.length === 0
         ? { waypointId }
-        : { waypointId, canyonId: { notIn: canyonIds } },
+        : { waypointId, placeId: { notIn: placeIds } },
   });
-  if (canyonIds.length > 0) {
-    await tx.canyonWaypoint.createMany({
-      data: canyonIds.map((canyonId) => ({ canyonId, waypointId })),
+  if (placeIds.length > 0) {
+    await tx.placeWaypoint.createMany({
+      data: placeIds.map((placeId) => ({ placeId, waypointId })),
       skipDuplicates: true,
     });
   }
@@ -140,26 +140,26 @@ export async function applyWaypointCanyonLinks(
 }
 
 /**
- * Resolve a canyonIds list to link: every id must be a canyon OWNED by the
+ * Resolve a placeIds list to link: every id must be a place OWNED by the
  * caller. The owner-scoped lookup makes a foreign id indistinguishable from a
- * nonexistent one (no existence oracle), mirroring resolveRouteCanyonId.
+ * nonexistent one (no existence oracle), mirroring resolveRoutePlaceId.
  *
  * The shape is already validated in shared/waypointValidation.ts; this is the
  * authorization half, which only the server can answer.
  */
-export async function resolveWaypointCanyonIds(
+export async function resolveWaypointPlaceIds(
   userId: string,
-  canyonIds: string[],
+  placeIds: string[],
 ): Promise<string[]> {
-  if (canyonIds.length === 0) return [];
-  const owned = await prisma.canyon.findMany({
-    where: { id: { in: canyonIds }, ownerId: userId },
+  if (placeIds.length === 0) return [];
+  const owned = await prisma.place.findMany({
+    where: { id: { in: placeIds }, ownerId: userId },
     select: { id: true },
   });
-  if (owned.length !== canyonIds.length) {
-    throw new AppError(400, "Canyon not found");
+  if (owned.length !== placeIds.length) {
+    throw new AppError(400, "Place not found");
   }
-  return canyonIds;
+  return placeIds;
 }
 
 // ── Wire shape ───────────────────────────────────────────────────────────────
@@ -168,7 +168,7 @@ export async function resolveWaypointCanyonIds(
 // serializer is exactly how SEC-001 happened.
 
 export const waypointInclude = {
-  canyonLinks: { select: { canyonId: true } },
+  placeLinks: { select: { placeId: true } },
 } satisfies Prisma.WaypointInclude;
 
 export type WaypointWithLinks = Prisma.WaypointGetPayload<{
@@ -176,18 +176,18 @@ export type WaypointWithLinks = Prisma.WaypointGetPayload<{
 }>;
 
 /**
- * Serialize for `userId`. `canyonIds` is SCOPED to canyons the caller can see:
+ * Serialize for `userId`. `placeIds` is SCOPED to places the caller can see:
  * a sharee given the carpark must not learn, from its link list, the existence
- * of every other canyon the owner filed it under — the same rule that keeps
+ * of every other place the owner filed it under — the same rule that keeps
  * owner-private aggregates off sharee-reachable payloads.
  *
- * `sharedCanyonIds` is ignored for an owner (who sees all their own links), so
+ * `sharedPlaceIds` is ignored for an owner (who sees all their own links), so
  * owner-only callers may pass an empty set.
  */
 export function serializeWaypointFor(
   waypoint: WaypointWithLinks,
   userId: string,
-  sharedCanyonIds: Set<string>,
+  sharedPlaceIds: Set<string>,
   /**
    * Direct-share recipient counts, keyed by waypoint id — see shareCountsFor.
    * OMITTED (not zero) when absent, because the write paths below have no map
@@ -197,13 +197,13 @@ export function serializeWaypointFor(
    */
   sharedCounts?: Map<string, number>,
 ) {
-  const { canyonLinks, canyonId: _legacyCanyonId, ...fields } = waypoint;
+  const { placeLinks, placeId: _legacyPlaceId, ...fields } = waypoint;
   const isOwner = waypoint.ownerId === userId;
-  const ids = canyonLinks.map((link) => link.canyonId);
+  const ids = placeLinks.map((link) => link.placeId);
   return {
     ...fields,
     syncRole: isOwner ? ("owner" as const) : ("shared" as const),
-    canyonIds: isOwner ? ids : ids.filter((id) => sharedCanyonIds.has(id)),
+    placeIds: isOwner ? ids : ids.filter((id) => sharedPlaceIds.has(id)),
     // Owner-only: a share fan-out is owner-private derived cardinality (root
     // CLAUDE.md). Telling a recipient how many OTHER people hold the thing
     // they were given leaks the owner's sharing behaviour.

@@ -11,7 +11,7 @@ import {
 
 /**
  * Small, centered confirmation dialog for destructive actions. Extracted from
- * the custom-field-delete confirm in CanyonDialog so every delete surface
+ * the custom-field-delete confirm in PlaceDialog so every delete surface
  * (LiDAR/GeoPDF panels, custom fields) shares one shape. Deliberately not
  * fullScreen on mobile — small confirms stay centered.
  */

@@ -1,12 +1,12 @@
 import { describe, it, expect } from "vitest";
-import type { Canyon } from "@prisma/client";
+import type { Place } from "@prisma/client";
 import { buildProposals, mergeFillNulls } from "./ropewikiDedupe";
 import type { RopeWikiCanyon } from "./ropewiki";
 
-function canyon(overrides: Partial<Canyon> = {}): Canyon {
+function place(overrides: Partial<Place> = {}): Place {
   return {
     id: "c1",
-    name: "Test Canyon",
+    name: "Test Place",
     altNames: [],
     latitude: -33.5,
     longitude: 150.3,
@@ -19,13 +19,13 @@ function canyon(overrides: Partial<Canyon> = {}): Canyon {
     hours: null,
     attributes: null,
     ...overrides,
-  } as unknown as Canyon;
+  } as unknown as Place;
 }
 
 function rwCanyon(overrides: Partial<RopeWikiCanyon> = {}): RopeWikiCanyon {
   return {
     ropeWikiId: 100,
-    name: "Test Canyon",
+    name: "Test Place",
     latitude: -33.5,
     longitude: 150.3,
     numAbseils: 5,
@@ -42,31 +42,31 @@ function rwCanyon(overrides: Partial<RopeWikiCanyon> = {}): RopeWikiCanyon {
 
 describe("buildProposals", () => {
   it("auto-links an exact name match at the same location", () => {
-    const [p] = buildProposals([rwCanyon()], [canyon()]);
+    const [p] = buildProposals([rwCanyon()], [place()]);
     expect(p.tier).toBe("autoLink");
-    expect(p.bestCanyonId).toBe("c1");
+    expect(p.bestPlaceId).toBe("c1");
     expect(p.candidates[0].nameMatch).toBe(true);
     expect(p.candidates[0].distanceMeters).toBeLessThan(250);
   });
 
-  it("returns the create tier when no existing canyon is nearby", () => {
-    const far = canyon({ id: "far", latitude: -34.5, longitude: 151.5 });
+  it("returns the create tier when no existing place is nearby", () => {
+    const far = place({ id: "far", latitude: -34.5, longitude: 151.5 });
     const [p] = buildProposals([rwCanyon()], [far]);
     expect(p.tier).toBe("create");
     expect(p.candidates).toEqual([]);
-    expect(p.bestCanyonId).toBeNull();
+    expect(p.bestPlaceId).toBeNull();
   });
 
   it("reviews a near match with a different name", () => {
-    const existing = canyon({ name: "Completely Different Place" });
+    const existing = place({ name: "Completely Different Place" });
     const [p] = buildProposals([rwCanyon()], [existing]);
     // Within auto-link distance but no name match → review, not autoLink.
     expect(p.tier).toBe("review");
-    expect(p.bestCanyonId).toBeNull();
+    expect(p.bestPlaceId).toBeNull();
   });
 
-  it("demotes the lower-scoring row when two rows auto-link the same canyon", () => {
-    const target = canyon();
+  it("demotes the lower-scoring row when two rows auto-link the same place", () => {
+    const target = place();
     const closer = rwCanyon({ ropeWikiId: 1, latitude: -33.5, longitude: 150.3 });
     const farther = rwCanyon({ ropeWikiId: 2, latitude: -33.5008, longitude: 150.3 });
     const proposals = buildProposals([closer, farther], [target]);
@@ -76,11 +76,11 @@ describe("buildProposals", () => {
     expect(autoLinked).toHaveLength(1);
     expect(autoLinked[0].ropeWikiId).toBe(1); // closest wins
     expect(byId[2].tier).toBe("review");
-    expect(byId[2].bestCanyonId).toBeNull();
+    expect(byId[2].bestPlaceId).toBeNull();
   });
 
   it("prefers an alt-name match", () => {
-    const existing = canyon({ name: "Other", altNames: ["Test Canyon"] });
+    const existing = place({ name: "Other", altNames: ["Test Place"] });
     const [p] = buildProposals([rwCanyon()], [existing]);
     expect(p.candidates[0].nameMatch).toBe(true);
   });
@@ -88,7 +88,7 @@ describe("buildProposals", () => {
 
 describe("mergeFillNulls", () => {
   it("fills only null scalar fields and preserves existing user data", () => {
-    const existing = canyon({ vGrade: 2, numAbseils: null, hours: null });
+    const existing = place({ vGrade: 2, numAbseils: null, hours: null });
     const merged = mergeFillNulls(existing, rwCanyon());
     expect(merged.vGrade).toBe(2); // user value preserved
     expect(merged.numAbseils).toBe(5); // null filled from RopeWiki
@@ -97,7 +97,7 @@ describe("mergeFillNulls", () => {
   });
 
   it("reports exactly the fields RopeWiki contributed", () => {
-    const existing = canyon({ vGrade: 2, quality: 5 }); // these two are non-null
+    const existing = place({ vGrade: 2, quality: 5 }); // these two are non-null
     const merged = mergeFillNulls(existing, rwCanyon());
     expect(merged.ropeWikiOwnedFields).not.toContain("vGrade");
     expect(merged.ropeWikiOwnedFields).not.toContain("quality");
@@ -106,7 +106,7 @@ describe("mergeFillNulls", () => {
   });
 
   it("unions sources by URL, preserving existing entries", () => {
-    const existing = canyon({ attributes: { sources: [["OzUltimate", "http://oz/1"]] } });
+    const existing = place({ attributes: { sources: [["OzUltimate", "http://oz/1"]] } });
     const merged = mergeFillNulls(existing, rwCanyon());
     const sources = (merged.attributes as { sources: [string, string][] }).sources;
     const urls = sources.map(([, u]) => u);
@@ -115,7 +115,7 @@ describe("mergeFillNulls", () => {
   });
 
   it("does not duplicate a source already present by URL", () => {
-    const existing = canyon({ attributes: { sources: [["RopeWiki", "http://rw/100"]] } });
+    const existing = place({ attributes: { sources: [["RopeWiki", "http://rw/100"]] } });
     const merged = mergeFillNulls(existing, rwCanyon());
     const sources = (merged.attributes as { sources: [string, string][] }).sources;
     expect(sources.filter(([, u]) => u === "http://rw/100")).toHaveLength(1);

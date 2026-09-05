@@ -5,7 +5,7 @@ import {
   updateUserPreferences,
   exportUserData,
   type TUser,
-} from "../../../canyonUtils";
+} from "../../../placeUtils";
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,
   formatCredits,
@@ -33,17 +33,17 @@ function AccountPanel({
   currentUser,
   customFieldDefs,
   onCustomFieldDefsChange,
-  canyonCustomFieldDefs,
-  onCanyonCustomFieldDefsChange,
+  placeCustomFieldDefs,
+  onPlaceCustomFieldDefsChange,
 }: {
   currentUser: TUser | null;
   // Custom trip-log field definitions (App-level state, shared with the trip
   // dialogs so a create/rename/delete here is immediately visible there).
   customFieldDefs: TripLogCustomFieldDef[];
   onCustomFieldDefsChange: (defs: TripLogCustomFieldDef[]) => void;
-  // Custom canyon field definitions (App-level state, shared with CanyonDialog).
-  canyonCustomFieldDefs: TripLogCustomFieldDef[];
-  onCanyonCustomFieldDefsChange: (defs: TripLogCustomFieldDef[]) => void;
+  // Custom place field definitions (App-level state, shared with PlaceDialog).
+  placeCustomFieldDefs: TripLogCustomFieldDef[];
+  onPlaceCustomFieldDefsChange: (defs: TripLogCustomFieldDef[]) => void;
 }) {
   const { signOut } = useAuth();
   const toast = useToast();
@@ -352,7 +352,7 @@ function AccountPanel({
               onChange={() => handleToggleNotif("shareInApp")}
               disabled={notifSaving}
             />
-            <span className={classes.notifLabel}>In-app notification when a canyon is shared with me</span>
+            <span className={classes.notifLabel}>In-app notification when a place is shared with me</span>
           </label>
         </div>
       )}
@@ -388,13 +388,13 @@ function AccountPanel({
       />
 
       <CustomFieldSection
-        entity="canyon"
-        sectionLabel="Custom canyon fields"
-        tooltip="Extra fields you've added to canyons (e.g. Water Level). Renaming keeps existing values; deleting removes the field and its values from all canyons."
-        emptyText="No custom canyon fields yet. Add one below or from a canyon."
+        entity="place"
+        sectionLabel="Custom place fields"
+        tooltip="Extra fields you've added to places (e.g. Water Level). Renaming keeps existing values; deleting removes the field and its values from all places."
+        emptyText="No custom place fields yet. Add one below or from a place."
         loading={!currentUser}
-        defs={canyonCustomFieldDefs}
-        onDefsChange={onCanyonCustomFieldDefsChange}
+        defs={placeCustomFieldDefs}
+        onDefsChange={onPlaceCustomFieldDefsChange}
       />
 
       <span className={classes.sectionLabel}>Your data</span>

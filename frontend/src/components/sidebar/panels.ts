@@ -1,6 +1,6 @@
 export type PanelId =
   | "layers"
-  | "canyons"
+  | "places"
   | "geopdfs"
   | "lidar"
   | "routes"
@@ -10,7 +10,7 @@ export type PanelId =
   | "friends"
   | "notifications"
   | "account"
-  | "canyon-detail"
-  // Opened programmatically from a map click, like canyon-detail — never a
+  | "place-detail"
+  // Opened programmatically from a map click, like place-detail — never a
   // nav item (NavItemId excludes both).
   | "route-detail";

@@ -32,7 +32,7 @@ import { useIsMobile } from "../../useIsMobile";
  *
  * A dialog rather than a form inside the panel: this is an authoring step with
  * its own commit, and the panel is a browsing surface. It also frees the map —
- * "pick it on the map" needs the whole viewport, and the same trick CanyonDialog
+ * "pick it on the map" needs the whole viewport, and the same trick PlaceDialog
  * uses applies here, with App hiding the dialog while the pick is armed
  * (`open={... && !pickingCoords}`). The component stays mounted throughout, so
  * the fields typed before the pick survive it and the picked coordinates land

@@ -29,9 +29,9 @@ describe("API smoke tests (fake auth)", () => {
     expect(res.body.username).toBe("alice");
   });
 
-  it("GET /canyons returns alice's canyons", async () => {
+  it("GET /places returns alice's places", async () => {
     const res = await request(API_URL)
-      .get("/canyons")
+      .get("/places")
       .set("Authorization", "Bearer fake-token");
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);

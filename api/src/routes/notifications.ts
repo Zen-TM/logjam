@@ -12,10 +12,10 @@ const router = Router();
 const NOTIFICATIONS_LIST_CAP = 500;
 
 // Notification payloads store ONLY reference IDs — no denormalised plaintext
-// canyon names or usernames (PRIV-005). Display strings are resolved from the
+// place names or usernames (PRIV-005). Display strings are resolved from the
 // live rows at read time below:
 //   friend_request / friend_request_accepted: payload.friendshipId (+ counterpart username)
-//   canyon_shared:                            payload.canyonId, payload.sharedById (+ canyonName, sharedByUsername)
+//   place_shared:                            payload.placeId, payload.sharedById (+ placeName, sharedByUsername)
 //   item_shared:                              payload.entityType, payload.entityId, payload.sharedById (+ sharedByUsername)
 //   file_sent:                                payload.fileSendId, payload.sentById (+ sentByUsername, filename, fileSendStatus)
 //     — filename is resolved from the live send while one exists. The single
@@ -24,11 +24,11 @@ const NOTIFICATIONS_LIST_CAP = 500;
 //       copy of it (lib/fileSendReaper.ts), because the recipient is owed the
 //       name of the file they missed. Nothing else ever writes it.
 //   topo_complete / topo_failed / *_export:   self-only refs (jobId, jobName, footprint)
-// When the referenced canyon/share/friendship is gone (share revoked, canyon
+// When the referenced place/share/friendship is gone (share revoked, place
 // deleted, friendship removed, or the other user's account deleted), there is
 // nothing to resolve, so the notification is dropped at read time and never
 // leaks a stale name (PRIV-001/003). Opportunistic row deletion on revoke/
-// delete (sharing.ts, friends.ts, canyons.ts, users.ts) is the primary
+// delete (sharing.ts, friends.ts, places.ts, users.ts) is the primary
 // cleanup; this read-time drop is the fallback.
 function payloadString(payload: unknown, key: string): string | null {
   if (payload && typeof payload === "object" && !Array.isArray(payload)) {
@@ -59,7 +59,7 @@ router.get(
     ]);
 
     const friendshipIds = new Set<string>();
-    const canyonIds = new Set<string>();
+    const placeIds = new Set<string>();
     const sharerIds = new Set<string>();
     const sharedItems: { entityType: string; entityId: string }[] = [];
     const fileSendIds = new Set<string>();
@@ -67,9 +67,9 @@ router.get(
       if (n.type === "friend_request" || n.type === "friend_request_accepted") {
         const id = payloadString(n.payload, "friendshipId");
         if (id) friendshipIds.add(id);
-      } else if (n.type === "canyon_shared") {
-        const id = payloadString(n.payload, "canyonId");
-        if (id) canyonIds.add(id);
+      } else if (n.type === "place_shared") {
+        const id = payloadString(n.payload, "placeId");
+        if (id) placeIds.add(id);
         const sharedById = payloadString(n.payload, "sharedById");
         if (sharedById) sharerIds.add(sharedById);
       } else if (n.type === "file_sent") {
@@ -90,11 +90,11 @@ router.get(
       }
     }
 
-    // Resolve display strings (canyon names, usernames) from the LIVE rows at
+    // Resolve display strings (place names, usernames) from the LIVE rows at
     // read time. Nothing is persisted in the payload (PRIV-005), so a revoked
-    // share, deleted canyon, or removed friendship simply has no row to resolve
+    // share, deleted place, or removed friendship simply has no row to resolve
     // and the notification is dropped below (PRIV-001/003).
-    const [existingFriendships, existingCanyons, sharerUsers] = await Promise.all([
+    const [existingFriendships, existingPlaces, sharerUsers] = await Promise.all([
       friendshipIds.size > 0
         ? prisma.friendship.findMany({
             where: { id: { in: [...friendshipIds] } },
@@ -115,9 +115,9 @@ router.get(
               addressee: { id: string; username: string };
             }[],
           ),
-      canyonIds.size > 0
-        ? prisma.canyon.findMany({
-            where: { id: { in: [...canyonIds] } },
+      placeIds.size > 0
+        ? prisma.place.findMany({
+            where: { id: { in: [...placeIds] } },
             select: { id: true, name: true },
           })
         : Promise.resolve([] as { id: string; name: string }[]),
@@ -130,12 +130,12 @@ router.get(
     ]);
 
     const friendshipById = new Map(existingFriendships.map((f) => [f.id, f]));
-    const canyonById = new Map(existingCanyons.map((c) => [c.id, c]));
+    const placeById = new Map(existingPlaces.map((c) => [c.id, c]));
     const sharerById = new Map(sharerUsers.map((u) => [u.id, u]));
 
     // Which item_shared notifications still have a live Share row for this
     // recipient. A revoked share resolves to nothing and the notification is
-    // dropped below (PRIV-001/003), mirroring the canyon_shared rule.
+    // dropped below (PRIV-001/003), mirroring the place_shared rule.
     const liveShares =
       sharedItems.length > 0
         ? await prisma.share.findMany({
@@ -147,20 +147,20 @@ router.get(
       liveShares.map((row) => `${row.entityType}:${row.entityId}:${user.id}`),
     );
 
-    // The canyon twin of liveShareKeys. The canyon row OUTLIVES its share (it
-    // stays alive under its owner), so "the canyon still exists" is not the
+    // The place twin of liveShareKeys. The place row OUTLIVES its share (it
+    // stays alive under its owner), so "the place still exists" is not the
     // same question as "this recipient may still see its name" — checking only
     // existence made the documented read-time fallback unable to catch a
-    // revoked canyon share (APIR-012/PRIV-103).
-    const liveCanyonShares =
-      canyonIds.size > 0
-        ? await prisma.canyonShare.findMany({
-            where: { sharedWithId: user.id, canyonId: { in: [...canyonIds] } },
-            select: { canyonId: true },
+    // revoked place share (APIR-012/PRIV-103).
+    const livePlaceShares =
+      placeIds.size > 0
+        ? await prisma.placeShare.findMany({
+            where: { sharedWithId: user.id, placeId: { in: [...placeIds] } },
+            select: { placeId: true },
           })
         : [];
-    const liveCanyonShareIds = new Set(
-      liveCanyonShares.map((row) => row.canyonId),
+    const livePlaceShareIds = new Set(
+      livePlaceShares.map((row) => row.placeId),
     );
 
     // Which file_sent notifications still have a live, non-declined recipient
@@ -285,7 +285,7 @@ router.get(
         ];
       }
       if (n.type === "item_shared") {
-        // Dropped when the share is gone, exactly as canyon_shared is: the
+        // Dropped when the share is gone, exactly as place_shared is: the
         // revoke deletes the row opportunistically, and this is the fallback.
         const entityType = payloadString(n.payload, "entityType");
         const entityId = payloadString(n.payload, "entityId");
@@ -303,12 +303,12 @@ router.get(
           },
         ];
       }
-      if (n.type === "canyon_shared") {
-        const id = payloadString(n.payload, "canyonId");
-        const canyon = id ? canyonById.get(id) : undefined;
-        // Both halves: the canyon must still exist AND still be shared with
+      if (n.type === "place_shared") {
+        const id = payloadString(n.payload, "placeId");
+        const place = id ? placeById.get(id) : undefined;
+        // Both halves: the place must still exist AND still be shared with
         // this recipient, exactly as item_shared requires a live Share row.
-        if (!canyon || !liveCanyonShareIds.has(canyon.id)) return [];
+        if (!place || !livePlaceShareIds.has(place.id)) return [];
         const sharedById = payloadString(n.payload, "sharedById");
         const sharer = sharedById ? sharerById.get(sharedById) : undefined;
         return [
@@ -316,7 +316,7 @@ router.get(
             ...n,
             payload: {
               ...(n.payload as object),
-              canyonName: canyon.name,
+              placeName: place.name,
               ...(sharer ? { sharedByUsername: sharer.username } : {}),
             },
           },

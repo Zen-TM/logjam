@@ -41,7 +41,7 @@ const router = Router();
 
 const env = getEnv();
 const TOPO_BUCKET = env.S3_BUCKET_TOPO ?? "";
-/** A job's user-facing label. Same ceiling canyon names use. */
+/** A job's user-facing label. Same ceiling place names use. */
 export const TOPO_JOB_NAME_MAX_LENGTH = 200;
 
 // ── One job view, three surfaces ──────────────────────────────────────────
@@ -57,7 +57,7 @@ export const TOPO_JOB_NAME_MAX_LENGTH = 200;
 //   - userId NEVER leaves this file. A recipient has no business learning the
 //     owner's internal id; the derived syncRole is the whole answer they need.
 //   - s3OutputKeys is owner-only. It names raw bucket keys, and a key can name
-//     a canyon (root privacy rule) — so it is stripped for a recipient even on
+//     a place (root privacy rule) — so it is stripped for a recipient even on
 //     the detail endpoint that owners use to poll for outputs.
 //
 // A new column reaches clients by being added to TOPO_JOB_SELECT, which forces
@@ -332,7 +332,7 @@ router.post(
         });
       } catch (launchErr) {
         // Do not leak the raw AWS error to the client or the job row; log the
-        // reason server-side (no canyon coords/names involved here).
+        // reason server-side (no place coords/names involved here).
         logger.error(
           { jobId, reason: String(launchErr) },
           "topo_runtask_failed",

@@ -13,15 +13,15 @@
 // `onShowOnMap` is the ONE row they may differ by.
 //
 // MODES of one sheet rather than a stack of sheets (DESIGN.md §6): the body
-// swaps between the verb list, the rename form, the tag picker and the canyon
+// swaps between the verb list, the rename form, the tag picker and the place
 // picker, and the sheet itself never closes underneath the user. The last three
 // bodies live in waypoints/waypointSheetBodies.tsx, where the Saved tab's
 // CREATE form also reads the edit form.
 //
 // PRIVACY: a waypoint's whole payload is a coordinate, so linking one to a
-// canyon that is already shared PUBLISHES it to that canyon's recipients. That
-// is the documented rule (a linked waypoint follows canyon-level media), but it
-// is not a rule anyone should meet by accident — the canyon picker names who
+// place that is already shared PUBLISHES it to that place's recipients. That
+// is the documented rule (a linked waypoint follows place-level media), but it
+// is not a rule anyone should meet by accident — the place picker names who
 // gains sight before the first such link is written. Coordinates render here
 // because this is a DETAIL surface the user opened for this exact point (§11);
 // copying them is an explicit tap, and the clipboard is the user's own.
@@ -35,17 +35,17 @@ import {
   messageFromError,
 } from "@logjam/shared";
 
-import { assetHue, canyonHue, fontSize, spacing, theme } from "../theme";
+import { assetHue, placeHue, fontSize, spacing, theme } from "../theme";
 import { BottomSheet, Row, StatGrid, type Stat } from "../ui";
 import { deleteWaypointLocal, updateWaypointLocal } from "../sync/outbox";
 import { waypointActions } from "../saved/assetActions";
 import type { Bbox } from "../saved/bboxOfPoints";
 import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
 import { useConnectivity } from "./connectivity";
-import { useMirrorCanyons, useMirrorWaypoints } from "../sync/useSyncQueries";
+import { useMirrorPlaces, useMirrorWaypoints } from "../sync/useSyncQueries";
 import {
-  WaypointCanyonFilter,
-  WaypointCanyonsBody,
+  WaypointPlaceFilter,
+  WaypointPlacesBody,
   WaypointFormBody,
   type WaypointFormDraft,
   WaypointSubModeHeader,
@@ -53,7 +53,7 @@ import {
 } from "../waypoints/waypointSheetBodies";
 import type { MirrorWaypoint } from "../sync/mirrorStore";
 
-type Mode = "actions" | "edit" | "tags" | "canyons" | "share";
+type Mode = "actions" | "edit" | "tags" | "places" | "share";
 
 export function WaypointSheet({
   waypoint,
@@ -64,7 +64,7 @@ export function WaypointSheet({
   picked = null,
   onPickOnMap,
   onShowOnMap,
-  onOpenCanyon,
+  onOpenPlace,
   onClose,
   onNavigate,
   onInfo,
@@ -101,11 +101,11 @@ export function WaypointSheet({
    */
   onShowOnMap?: (bbox: Bbox) => void;
   /**
-   * Open the canyon a SHARED waypoint came with. A waypoint linked to someone
-   * else's shared canyon has no share row of its own to drop, so the canyon is
+   * Open the place a SHARED waypoint came with. A waypoint linked to someone
+   * else's shared place has no share row of its own to drop, so the place is
    * where getting rid of it happens (saved/assetActions.ts).
    */
-  onOpenCanyon?: (canyonId: string, name: string) => void;
+  onOpenPlace?: (placeId: string, name: string) => void;
   onClose: () => void;
   /**
    * Start navigating to it. Present on BOTH surfaces: the map owns the bearing
@@ -120,9 +120,9 @@ export function WaypointSheet({
   const [mode, setMode] = useState<Mode>(autoEdit ? "edit" : "actions");
   const online = useConnectivity() === "online";
   const [busy, setBusy] = useState(false);
-  const [canyonQuery, setCanyonQuery] = useState("");
+  const [placeQuery, setPlaceQuery] = useState("");
 
-  const canyons = useMirrorCanyons();
+  const places = useMirrorPlaces();
   const waypoints = useMirrorWaypoints();
 
   // EVERY sub-mode resets when the sheet closes. This component stays mounted
@@ -138,18 +138,18 @@ export function WaypointSheet({
   // return from the picker.
   useEffect(() => {
     setMode(visible && autoEdit ? "edit" : "actions");
-    setCanyonQuery("");
+    setPlaceQuery("");
   }, [autoEdit, visible]);
 
   // One descriptor for every verb on this sheet, same source as Saved
   // (saved/assetActions.ts). `share` and `delete` are both absent on a
-  // waypoint seen through someone else's canyon.
+  // waypoint seen through someone else's place.
   const actions = waypoint ? waypointActions(waypoint) : null;
   // A waypoint dropped on the trail reaches the server only when the outbox
   // flushes; until then the live-share verb dims and says so.
   const shareRowProps = useShareRowProps(online, actions?.share?.entityId);
   // THE sharing panel, identical to the one Saved, the route sheet and the
-  // canyon screen render — the hook is called unconditionally (a closed sheet
+  // place screen render — the hook is called unconditionally (a closed sheet
   // passes a null target and issues no request).
   const share = useSharePanel({
     target: actions?.share
@@ -163,7 +163,7 @@ export function WaypointSheet({
 
   const close = () => {
     setMode("actions");
-    setCanyonQuery("");
+    setPlaceQuery("");
     onClose();
   };
 
@@ -184,12 +184,12 @@ export function WaypointSheet({
       .finally(() => setBusy(false));
   };
 
-  const linkedNames = (canyons.data ?? [])
-    .filter((canyon) => waypoint.canyonIds.includes(canyon.id))
-    .map((canyon) => canyon.name);
-  // The shared canyons this waypoint arrived WITH, if that is why it is here.
-  const viaCanyons = (canyons.data ?? []).filter((canyon) =>
-    (actions?.sharedViaCanyonIds ?? []).includes(canyon.id),
+  const linkedNames = (places.data ?? [])
+    .filter((place) => waypoint.placeIds.includes(place.id))
+    .map((place) => place.name);
+  // The shared places this waypoint arrived WITH, if that is why it is here.
+  const viaPlaces = (places.data ?? []).filter((place) =>
+    (actions?.sharedViaPlaceIds ?? []).includes(place.id),
   );
 
   const position = `${waypoint.latitude.toFixed(5)}, ${waypoint.longitude.toFixed(5)}`;
@@ -232,7 +232,7 @@ export function WaypointSheet({
     // The copy comes from the same descriptor the Saved tab's sheet uses
     // (DESIGN.md §7): this surface used to say only "Delete this waypoint?",
     // which left out that the delete reaches every device on the account and
-    // anyone the linked canyons are shared with.
+    // anyone the linked places are shared with.
     // Absent on a waypoint shared with this user, which is exactly when the
     // button below is not rendered — this guard is the type-level half of that.
     const removal = waypointActions(waypoint).delete;
@@ -301,8 +301,8 @@ export function WaypointSheet({
       ? "Edit waypoint"
       : mode === "tags"
         ? "Tags"
-        : mode === "canyons"
-          ? "Linked canyons"
+        : mode === "places"
+          ? "Linked places"
           : mode === "share"
             ? share.title
             : waypoint.name;
@@ -317,9 +317,9 @@ export function WaypointSheet({
       onBack={mode === "actions" ? undefined : () => setMode("actions")}
       footer={mode === "share" ? share.footer : undefined}
       header={
-        mode === "canyons" ? (
-          <WaypointSubModeHeader hint="Waypoints are visible to people you share the canyon with.">
-            <WaypointCanyonFilter value={canyonQuery} onChangeText={setCanyonQuery} />
+        mode === "places" ? (
+          <WaypointSubModeHeader hint="Waypoints are visible to people you share the place with.">
+            <WaypointPlaceFilter value={placeQuery} onChangeText={setPlaceQuery} />
           </WaypointSubModeHeader>
         ) : undefined
       }
@@ -327,12 +327,12 @@ export function WaypointSheet({
       {mode === "actions" ? (
         <View style={styles.body}>
           <StatGrid stats={stats} />
-          {/* Why it is here, when it is here because of a canyon. The linked-
-              canyons row above is owner-only, so without this a sharee had no
-              way to find out which canyon brought the point. */}
-          {viaCanyons.length > 0 ? (
+          {/* Why it is here, when it is here because of a place. The linked-
+              places row above is owner-only, so without this a sharee had no
+              way to find out which place brought the point. */}
+          {viaPlaces.length > 0 ? (
             <Text style={styles.hint}>
-              {`Came with ${viaCanyons.map((canyon) => canyon.name).join(", ")}.`}
+              {`Came with ${viaPlaces.map((place) => place.name).join(", ")}.`}
             </Text>
           ) : null}
           {waypoint.notes ? <Text style={styles.notes}>{waypoint.notes}</Text> : null}
@@ -364,7 +364,7 @@ export function WaypointSheet({
           />
           {/* A shared waypoint's ONE verb, and where it isn't one: a direct
               share is the recipient's to drop, an inherited one ends at its
-              canyon. Both live outside the `readOnly` block below, which is
+              place. Both live outside the `readOnly` block below, which is
               where every OWNER verb lives. */}
           {actions?.removeShare ? (
             <Row
@@ -376,18 +376,18 @@ export function WaypointSheet({
               onPress={confirmRemoveShare}
             />
           ) : null}
-          {onOpenCanyon
-            ? viaCanyons.map((canyon) => (
+          {onOpenPlace
+            ? viaPlaces.map((place) => (
                 <Row
-                  key={canyon.id}
+                  key={place.id}
                   icon="map-pin"
-                  title={`Open ${canyon.name}`}
-                  subtitle="Remove that shared canyon to stop seeing this."
-                  hue={canyonHue.shared}
+                  title={`Open ${place.name}`}
+                  subtitle="Remove that shared place to stop seeing this."
+                  hue={placeHue.shared}
                   disabled={busy}
                   onPress={() => {
                     close();
-                    onOpenCanyon(canyon.id, canyon.name);
+                    onOpenPlace(place.id, place.name);
                   }}
                 />
               ))
@@ -413,14 +413,14 @@ export function WaypointSheet({
               />
               <Row
                 icon="link-2"
-                title="Linked canyons"
+                title="Linked places"
                 subtitle={linkedNames.length ? linkedNames.join(", ") : "Not linked"}
                 hue={assetHue.route}
                 disabled={busy}
-                onPress={() => setMode("canyons")}
+                onPress={() => setMode("places")}
               />
               {/* Owner-only by construction: waypointActions omits `share` on
-                  a waypoint reached through someone else's canyon, and this
+                  a waypoint reached through someone else's place, and this
                   whole block is already behind `readOnly`. Offered HERE as
                   well as in Saved because a waypoint is most often looked at
                   on the map, and a verb that exists on one surface and not the
@@ -471,10 +471,10 @@ export function WaypointSheet({
 
       {mode === "share" ? share.body : null}
 
-      {mode === "canyons" ? (
-        <WaypointCanyonsBody
+      {mode === "places" ? (
+        <WaypointPlacesBody
           waypoint={waypoint}
-          query={canyonQuery}
+          query={placeQuery}
           onWrite={write}
         />
       ) : null}

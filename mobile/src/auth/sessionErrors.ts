@@ -29,6 +29,6 @@ export function classifySessionError(err: unknown): SessionFailure {
   // Deliberately fail-open to "transient": an unknown failure keeps the
   // session rather than kicking a user out mid-trip. The cost of a wrong
   // "transient" is a retried request; the cost of a wrong "rejected" is a
-  // bricked app in a canyon.
+  // bricked app in a place.
   return "transient";
 }

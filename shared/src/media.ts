@@ -3,7 +3,7 @@ import type { MediaMetadata, MediaOrigin } from "./mediaMetadata.js";
 // Media (object storage) shared types + validation.
 //
 // A media row is ONE uploaded file belonging to one account. It may hang off a
-// Canyon or a TripLog, or off nothing at all — a `"none"` row is the user's own
+// Place or a TripLog, or off nothing at all — a `"none"` row is the user's own
 // standalone file (an import they brought in, a track they recorded), which is
 // what lets those sync at all. Each image/video stores two S3 objects — a
 // full-res "display" copy and a client-generated "thumbnail"; track files
@@ -11,12 +11,12 @@ import type { MediaMetadata, MediaOrigin } from "./mediaMetadata.js";
 // server-side validation and client-side rendering (image → <img>,
 // video → <video>, track → line on the map + download).
 //
-// A standalone file becomes a canyon's way by having its PARENT set, never by
+// A standalone file becomes a place's way by having its PARENT set, never by
 // being copied (api/src/routes/media.ts, PATCH /:id/link). Linking and
 // unlinking are therefore visibility changes on one file, and unlinking a
-// shared canyon's way must tombstone it for that canyon's sharees.
+// shared place's way must tombstone it for that place's sharees.
 
-export type MediaLinkedType = "canyon" | "tripLog" | "none";
+export type MediaLinkedType = "place" | "tripLog" | "none";
 export type MediaCategory = "image" | "video" | "track";
 
 export const IMAGE_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
@@ -49,9 +49,9 @@ export const MEDIA_EXTENSION_BY_MIME: Record<string, string> = {
   "application/geo+json": "geojson",
 };
 
-// Palette assigned to canyon/trip-log tracks at upload time and reused for the
+// Palette assigned to place/trip-log tracks at upload time and reused for the
 // track card icon and the map track layer. Hand-picked to be perceptually
-// distinct and legible on the map, avoiding the canyon-marker colours
+// distinct and legible on the map, avoiding the place-marker colours
 // (#f97316 owned, #629bf8 shared) and the topo layer tints.
 export const TRACK_COLORS = [
   "#e6194b", // red
@@ -146,7 +146,7 @@ export interface MediaItem {
   // Assigned only for track (GPX/KML/GeoJSON) media; null for image/video.
   // Drives the track card icon tint and the map track layer colour.
   color: string | null;
-  /** How a standalone file came to exist; null for canyon/trip attachments. */
+  /** How a standalone file came to exist; null for place/trip attachments. */
   origin: MediaOrigin | null;
   /** User-facing label; null falls back to `filename`. See mediaDisplayName. */
   displayName: string | null;
@@ -192,8 +192,8 @@ export interface StandaloneFile {
   color: string | null;
   origin: MediaOrigin;
   metadata: MediaMetadata;
-  /** The canyon it is linked to as that canyon's way, or null. */
-  linkedCanyonId: string | null;
+  /** The place it is linked to as that place's way, or null. */
+  linkedPlaceId: string | null;
   createdAt: string;
   updatedAt: string;
 }

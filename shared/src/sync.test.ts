@@ -3,7 +3,7 @@ import {
   decodeSyncCursor,
   encodeSyncCursor,
   isUuidV4,
-  parseSyncDeltaCanyonRow,
+  parseSyncDeltaPlaceRow,
   parseSyncDeltaTombstone,
   parseSyncDeltaTripRow,
   parseSyncDeltaWaypointRow,
@@ -63,7 +63,7 @@ describe("sync cursor codec", () => {
     const encoded = encodeSyncCursor({
       v: 1,
       ts: "2026-07-24T01:00:00.000Z",
-      k: { canyons: ["2026-07-24T00:00:00.000Z", "x".repeat(37)] },
+      k: { places: ["2026-07-24T00:00:00.000Z", "x".repeat(37)] },
     });
     expect(encoded).toMatch(/^[A-Za-z0-9_-]+$/);
   });
@@ -99,10 +99,10 @@ describe("sync cursor codec", () => {
 describe("SYNC_ENTITY_TYPES", () => {
   it("covers the eight synced entities", () => {
     expect(SYNC_ENTITY_TYPES).toEqual([
-      "canyon",
+      "place",
       "tripLog",
       "media",
-      "canyonShare",
+      "placeShare",
       "friendship",
       "waypoint",
       "route",
@@ -133,14 +133,14 @@ describe("parseSyncDeltaTombstone", () => {
   });
 
   it("still rejects a malformed SHAPE", () => {
-    expect(() => parseSyncDeltaTombstone({ type: "canyon" })).toThrow(SyncRowError);
+    expect(() => parseSyncDeltaTombstone({ type: "place" })).toThrow(SyncRowError);
     expect(() => parseSyncDeltaTombstone({ type: 7, id: "x" })).toThrow(SyncRowError);
     expect(() => parseSyncDeltaTombstone(null)).toThrow(SyncRowError);
   });
 });
 
 describe("delta row parsers", () => {
-  const canyon = {
+  const place = {
     id: "c1",
     ownerId: "u1",
     syncRole: "owner",
@@ -167,10 +167,10 @@ describe("delta row parsers", () => {
     userId: "u1",
     date: "2026-01-01T00:00:00.000Z",
     displayName: null,
-    types: ["canyon"],
+    types: ["place"],
     notes: null,
     customFields: {},
-    canyons: [{ id: "c1", name: "Claustral" }],
+    places: [{ id: "c1", name: "Claustral" }],
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   };
@@ -178,7 +178,7 @@ describe("delta row parsers", () => {
     id: "w1",
     ownerId: "u1",
     syncRole: "shared",
-    canyonIds: ["c1"],
+    placeIds: ["c1"],
     name: "Carpark",
     latitude: -33.5,
     longitude: 150.4,
@@ -191,7 +191,7 @@ describe("delta row parsers", () => {
   };
 
   it("accepts well-formed rows and preserves unknown extra keys", () => {
-    expect(parseSyncDeltaCanyonRow({ ...canyon, futureField: 1 })).toMatchObject({
+    expect(parseSyncDeltaPlaceRow({ ...place, futureField: 1 })).toMatchObject({
       id: "c1",
       futureField: 1,
     });
@@ -201,22 +201,22 @@ describe("delta row parsers", () => {
 
   it("rejects non-objects", () => {
     for (const value of [null, undefined, 7, "row", []]) {
-      expect(() => parseSyncDeltaCanyonRow(value)).toThrow(SyncRowError);
+      expect(() => parseSyncDeltaPlaceRow(value)).toThrow(SyncRowError);
     }
   });
 
   it("rejects a missing or wrongly-typed field, naming it", () => {
     expect(() =>
-      parseSyncDeltaCanyonRow({ ...canyon, latitude: "-33.5" }),
+      parseSyncDeltaPlaceRow({ ...place, latitude: "-33.5" }),
     ).toThrow(/latitude/);
-    const { name: _dropped, ...noName } = canyon;
-    expect(() => parseSyncDeltaCanyonRow(noName)).toThrow(/name/);
+    const { name: _dropped, ...noName } = place;
+    expect(() => parseSyncDeltaPlaceRow(noName)).toThrow(/name/);
     // Required-but-nullable stays required: undefined is not null.
-    expect(() => parseSyncDeltaCanyonRow({ ...canyon, notes: undefined })).toThrow(
+    expect(() => parseSyncDeltaPlaceRow({ ...place, notes: undefined })).toThrow(
       /notes/,
     );
-    expect(() => parseSyncDeltaTripRow({ ...trip, canyons: [{ id: "c1" }] })).toThrow(
-      /canyons/,
+    expect(() => parseSyncDeltaTripRow({ ...trip, places: [{ id: "c1" }] })).toThrow(
+      /places/,
     );
     expect(() =>
       parseSyncDeltaWaypointRow({ ...waypoint, syncRole: "editor" }),
@@ -228,7 +228,7 @@ describe("delta row parsers", () => {
 
   it("never puts field VALUES in the message (they are names and coords)", () => {
     try {
-      parseSyncDeltaCanyonRow({ ...canyon, latitude: "-33.5", name: 7 });
+      parseSyncDeltaPlaceRow({ ...place, latitude: "-33.5", name: 7 });
       throw new Error("expected a throw");
     } catch (err) {
       const message = (err as Error).message;

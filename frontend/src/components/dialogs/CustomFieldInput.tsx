@@ -31,7 +31,7 @@ export function customFieldValueError(
 }
 
 /**
- * A single custom-field input, shared between CanyonDialog and TripLogDialog
+ * A single custom-field input, shared between PlaceDialog and TripLogDialog
  * (UX-002/UX-003: shared TextField styling so both dialogs' custom-field
  * inputs are pixel-identical).
  *

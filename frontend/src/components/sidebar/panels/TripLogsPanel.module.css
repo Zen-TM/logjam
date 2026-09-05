@@ -118,7 +118,7 @@
   background: color-mix(in srgb, var(--theme-text-primary) 9%, transparent);
 }
 
-.canyonName {
+.placeName {
   font-size: var(--text-sm);
   font-weight: 600;
 }

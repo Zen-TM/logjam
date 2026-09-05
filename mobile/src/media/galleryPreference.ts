@@ -2,7 +2,7 @@
 // Privacy and security).
 //
 // DEVICE-scoped and OFF by default, and the default is a privacy decision
-// rather than a taste one. A photo taken inside Logjam is canyon evidence: it
+// rather than a taste one. A photo taken inside Logjam is place evidence: it
 // lives in app-private storage, excluded from cloud backup, behind the app lock
 // (mobile/CLAUDE.md, Privacy). Copying it to the shared gallery hands it to
 // every other app on the handset with media access, to the phone's own photo

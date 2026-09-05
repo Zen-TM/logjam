@@ -1,4 +1,4 @@
-// Direct, per-item sharing — the non-canyon sibling of routes/sharing.ts.
+// Direct, per-item sharing — the non-place sibling of routes/sharing.ts.
 //
 // A Share row is a LIVE, REVOCABLE view of a record the sender still owns:
 // waypoints, routes, LiDAR topo jobs, GeoPDF jobs. Recipients read and export;
@@ -59,7 +59,7 @@ router.post("/", requireAuth, async (req: AuthenticatedRequest, res: Response) =
     throw new AppError(400, "You already own this item");
   }
 
-  // Friends only — same rule canyon sharing enforces, and checked BEFORE the
+  // Friends only — same rule place sharing enforces, and checked BEFORE the
   // target-user lookup so an unknown id and an existing non-friend get the
   // same 403 rather than 404-vs-403 (PRIV-101).
   const friendship = await prisma.friendship.findFirst({
@@ -136,7 +136,7 @@ router.post("/", requireAuth, async (req: AuthenticatedRequest, res: Response) =
 
 // ── DELETE /shares/:entityType/:entityId/:userId ──────────────
 // Revoke. Callable by the owner, or by the recipient removing their own access
-// ("me" alias, matching the canyon revoke).
+// ("me" alias, matching the place revoke).
 router.delete(
   "/:entityType/:entityId/:userId",
   requireAuth,
@@ -183,7 +183,7 @@ router.delete(
 
 // ── GET /shares/:entityType/:entityId ─────────────────────────
 // Who this item is shared with. Owner only — a recipient must never be able to
-// enumerate co-recipients (the §4.6.1 rule canyon shares already follow).
+// enumerate co-recipients (the §4.6.1 rule place shares already follow).
 router.get(
   "/:entityType/:entityId",
   requireAuth,

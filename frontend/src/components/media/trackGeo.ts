@@ -3,15 +3,15 @@
 // rule), so we fetch the presigned S3 URL directly with raw fetch (not
 // apiFetch, whose base URL + auth are for our own API, not S3).
 //
-// One parser for both track sources: a canyon's attached track and a standalone
+// One parser for both track sources: a place's attached track and a standalone
 // file (the user's own import or a recorded GPS track) differ only in which id
 // gets stamped on the features, so the caller passes that stamp rather than
-// this file knowing about canyons.
+// this file knowing about places.
 
 import { gpx, kml } from "@tmcw/togeojson";
 
 /** Extra feature properties the caller needs back out of the map layer —
- * `{ canyonId }` for a canyon's track, `{ mediaId }` for a standalone file. */
+ * `{ placeId }` for a place's track, `{ mediaId }` for a standalone file. */
 export type TrackFeatureStamp = Record<string, string>;
 
 const GEOMETRY_TYPES = new Set([

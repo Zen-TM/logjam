@@ -57,7 +57,7 @@ describe("topo-jobs route (fake auth)", () => {
 
       // A stranger gets 404, NOT 403. This assertion used to expect 403 and
       // its comment called the oracle intended behaviour — it was the same
-      // existence oracle the canyon routes closed (root CLAUDE.md): a 403
+      // existence oracle the place routes closed (root CLAUDE.md): a 403
       // confirms the job id is real to someone with no right to know it, while
       // a 404 is indistinguishable from a job that never existed. Direct
       // sharing routed this endpoint through lib/shareAccess, which bakes the

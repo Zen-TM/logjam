@@ -10,7 +10,7 @@ plan + staged execution: `.claude/mobile-plan/` (local, not committed).
 
 Stage 0 (scaffold, spikes, min-version lever, CI), Stage 1 (Cognito auth,
 apiFetch, read-only browse screens, Sentry scrubber), Stage 2 (map core:
-raster + Protomaps vector basemaps, canyon overlay + labels, raster + vector
+raster + Protomaps vector basemaps, place overlay + labels, raster + vector
 topo overlays with the user vectorStyle), Stage 3 (push, delivery gated on
 operator FCM), and Stage 4a-core (offline Protomaps regions: `src/offline/`
 registry + downloads + app lock, `/basemap/region-clip` API) are built.
@@ -94,7 +94,7 @@ such call on `onDidFinishLoadingMap`, and prefer the bounds carried on
 
 **A source's press bubbles to the MAP in MLRN 11.** MLRN 10 let a source's
 `onPress` consume the tap; MLRN 11 emits it on the source AND on the `Map`
-(documented on `MapProps.onPress`). Tapping a canyon, route, track, import or
+(documented on `MapProps.onPress`). Tapping a place, route, track, import or
 waypoint therefore also ran the map's handler and opened the "This point" sheet
 on top of the one the user asked for — and with a point tool armed it placed a point
 at the same tap. Every pressable source handler calls `stopSourcePress(event)`
@@ -438,9 +438,9 @@ feature — a user who thinks a sent file can be taken back has been misled by
 the UI, not by the API.
 
 - **Share** — a LIVE, revocable view of a server-backed row the sender still
-  owns: waypoints, routes, LiDAR topo jobs, GeoPDF jobs, and canyons. The
-  recipient can view and export, never edit. `POST /shares` (canyons keep their
-  own `/canyons/:id/share`).
+  owns: waypoints, routes, LiDAR topo jobs, GeoPDF jobs, and places. The
+  recipient can view and export, never edit. `POST /shares` (places keep their
+  own `/places/:id/share`).
 - **Send a copy** — a FILE handed over. Once accepted it is the recipient's own,
   editable, permanent, and there is NO revocation: imports, recorded tracks
   (serialised to GPX at send time) and GeoPDF imports. `POST /file-sends/*`,
@@ -453,23 +453,23 @@ screen hiding it — `share` is absent on a row shared WITH you, `sendCopy` is
 absent on an import with no retained original and on an empty recording.
 
 **Every surface renders ONE panel** — `useSharePanel` in `src/sharing/
-SharePanel.tsx`, for both verbs and every kind, canyons included. It returns
-`{ title, body, footer }` (plus the `sharing` state the canyon screen's
+SharePanel.tsx`, for both verbs and every kind, places included. It returns
+`{ title, body, footer }` (plus the `sharing` state the place screen's
 at-a-glance section reads) and the caller spreads those onto the sheet it
 already owns, because a sheet's primary action belongs in `BottomSheet`'s
 pinned `footer` (DESIGN.md §6) and nothing may open a second sheet. Which verb
-it shows follows `target`: `entity`/`canyon` grant a live view (tap acts
+it shows follows `target`: `entity`/`place` grant a live view (tap acts
 immediately — it is revocable), `copy` ticks a box and waits for the footer
 button (a send cannot be undone). The promise banner states which one it is —
 accent + eye for Share, warning + triangle for Send a copy — above an
 always-present search field and the friend rows. Do not hand-roll a picker.
 
-**The promise is NOT a prop.** Both sentences (`SHARE_BLURB`, and the canyon's
+**The promise is NOT a prop.** Both sentences (`SHARE_BLURB`, and the place's
 own, which names notes and photos and says trip logs stay private) live in
 SharePanel.tsx and are chosen by target kind, as is the revoke confirm. A
-canyon is shared from TWO components — its detail page and
-`canyons/CanyonOptionsSheet.tsx` (a sub-mode of the per-canyon sheet, which the
-Canyons list AND a tapped map pin both render) — and a wording argument at each
+place is shared from TWO components — its detail page and
+`places/PlaceOptionsSheet.tsx` (a sub-mode of the per-place sheet, which the
+Places list AND a tapped map pin both render) — and a wording argument at each
 call site is how those drift. The verb ROWS
 carry no subtitle for the same reason: the panel states the promise where the
 user is about to act on it, rather than twice in two voices.
@@ -515,7 +515,7 @@ KML extracted from it (`writeAsStringAsync` is UTF-8 and would corrupt a zip).
 points and polygons, and naming it for lines promised something the type does
 not guarantee. **"Way" is the umbrella term for route-or-track** in prose and
 labels only; the `Route` and `Track` types stay distinct everywhere. It names
-one panel: `canyons/AddWaySheet.tsx`, every way of filling a canyon's single
+one panel: `places/AddWaySheet.tsx`, every way of filling a place's single
 route slot, opened from the empty slot and from the replace row alike.
 
 **A received copy is labelled `Copy` with "from <sender>" in its subtitle, never
@@ -983,14 +983,14 @@ review, not by CI.
 
 ## Privacy (design constraint — see root CLAUDE.md)
 
-Going offline puts canyon coords/names **on the device**. Every stage's privacy
+Going offline puts place coords/names **on the device**. Every stage's privacy
 note is mandatory. Non-negotiables:
 
 - All local data in **app-private storage, excluded from cloud backup**
   (`allowBackup=false` Android; `NSURLIsExcludedFromBackupKey` iOS data dirs).
 - **App lock** (biometric/PIN) gates the whole UI whenever the user has it on —
   **unconditionally**, not only once downloads exist. The old data-armed condition
-  was wrong on its own terms: the sync mirror holds canyon names and coordinates
+  was wrong on its own terms: the sync mirror holds place names and coordinates
   from the first sync after sign-in, so "nothing downloaded" never meant "nothing
   sensitive". The asymmetry stands: turning it OFF requires the device
   authenticator and fails closed, turning it on is free, and the pref is
@@ -1035,7 +1035,7 @@ note is mandatory. Non-negotiables:
   library's has to be BLOCKED (`tools:node="remove"`, as app.json already does
   for SYSTEM_ALERT_WINDOW; `plugins/withSensorLogging.js` does it for this one).
   Audit with `aapt2 dump permissions <apk>` on the BUILT artifact, never app.json.
-- **No canyon names/coords in push payloads** — opaque IDs only; fetch details over
+- **No place names/coords in push payloads** — opaque IDs only; fetch details over
   the authed API on tap.
 - Crash/error reporter scrubs coords/names (mirror `api/src/lib/logger.ts`) — wired
   from day one, before any reporter ships.
@@ -1106,7 +1106,7 @@ the client checks against. `keys/` is gitignored and holds the RSA private key;
 it must also live in an EAS secret (`EXPO_UPDATES_PRIVATE_KEY`) so
 `eas update --private-key-path` can sign. Without signing, every launch would run
 whatever JS the Expo account served — the app's largest remote-code path, inside
-the app lock and on top of the canyon mirror. Two consequences that bite later:
+the app lock and on top of the place mirror. Two consequences that bite later:
 the certificate is embedded at BUILD time, so rotating it needs a new build and
 reinstall, not an update; and **losing the private key means no OTA at all until
 a fresh build ships a new certificate.** Back it up where you back up the

@@ -6,7 +6,7 @@ import classes from "./MatchReview.module.css";
 export type ReviewDecision =
   | { kind: "link"; id: string }
   | { kind: "create" }
-  | { kind: "noCanyon" }
+  | { kind: "noPlace" }
   | { kind: "skip" };
 
 export type ReviewItemOption = {
@@ -21,7 +21,7 @@ export type ReviewItem = {
   options: ReviewItemOption[];
   allowCreate: boolean;
   allowSkip: boolean;
-  allowNoCanyon: boolean;
+  allowNoPlace: boolean;
   decision: ReviewDecision;
 };
 
@@ -29,7 +29,7 @@ export type MatchReviewProps = {
   items: ReviewItem[];
   onChange: (index: number, decision: ReviewDecision) => void;
   /** Optional extra content rendered inside each item, below its options (e.g.
-   * an inline create-canyon form for the item whose decision is "create"). */
+   * an inline create-place form for the item whose decision is "create"). */
   renderItemExtra?: (index: number, item: ReviewItem) => React.ReactNode;
 };
 
@@ -62,18 +62,18 @@ function MatchReview({ items, onChange, renderItemExtra }: MatchReviewProps): Re
     }
   }
 
-  function handleSetAllRemainingNoCanyon(): void {
+  function handleSetAllRemainingNoPlace(): void {
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
-      if (!item.allowNoCanyon) continue;
+      if (!item.allowNoPlace) continue;
       // "Remaining" = items that are still on their initial guess or have no link options
       const hasGuess = item.options.some((o) => o.isGuess);
       const isUntouched =
         isGuessDecision(item) ||
-        (item.decision.kind === "noCanyon" && !hasGuess) ||
+        (item.decision.kind === "noPlace" && !hasGuess) ||
         (item.decision.kind === "create" && item.options.length === 0);
       if (isUntouched) {
-        onChange(i, { kind: "noCanyon" });
+        onChange(i, { kind: "noPlace" });
       }
     }
   }
@@ -90,12 +90,12 @@ function MatchReview({ items, onChange, renderItemExtra }: MatchReviewProps): Re
   }
 
   const hasAnyGuess = items.some((item) => item.options.some((o) => o.isGuess));
-  const hasAnyNoCanyon = items.some((item) => item.allowNoCanyon);
+  const hasAnyNoPlace = items.some((item) => item.allowNoPlace);
   const hasAnySkip = items.some((item) => item.allowSkip);
 
   return (
     <div className={classes.container}>
-      {(hasAnyGuess || hasAnyNoCanyon || hasAnySkip) && (
+      {(hasAnyGuess || hasAnyNoPlace || hasAnySkip) && (
         <Box className={classes.bulkActions}>
           {hasAnyGuess && (
             <Button
@@ -111,18 +111,18 @@ function MatchReview({ items, onChange, renderItemExtra }: MatchReviewProps): Re
               Accept all guesses
             </Button>
           )}
-          {hasAnyNoCanyon && (
+          {hasAnyNoPlace && (
             <Button
               variant="outlined"
               size="small"
-              onClick={handleSetAllRemainingNoCanyon}
+              onClick={handleSetAllRemainingNoPlace}
               sx={{
                 color: "var(--theme-text-muted)",
                 borderColor: "var(--theme-text-muted)",
                 textTransform: "none",
               }}
             >
-              Set all remaining to No canyon
+              Set all remaining to No place
             </Button>
           )}
           {hasAnySkip && (
@@ -186,23 +186,23 @@ function MatchReview({ items, onChange, renderItemExtra }: MatchReviewProps): Re
                   checked={item.decision.kind === "create"}
                   onChange={() => onChange(index, { kind: "create" })}
                 />
-                <span className={classes.optionLabel}>Create as new canyon</span>
+                <span className={classes.optionLabel}>Create as new place</span>
               </label>
             )}
 
-            {item.allowNoCanyon && (
+            {item.allowNoPlace && (
               <label
                 className={classes.option}
-                htmlFor={`match-review-${index}-nocanyon`}
+                htmlFor={`match-review-${index}-noplace`}
               >
                 <input
-                  id={`match-review-${index}-nocanyon`}
+                  id={`match-review-${index}-noplace`}
                   type="radio"
                   name={`match-review-${index}`}
-                  checked={item.decision.kind === "noCanyon"}
-                  onChange={() => onChange(index, { kind: "noCanyon" })}
+                  checked={item.decision.kind === "noPlace"}
+                  onChange={() => onChange(index, { kind: "noPlace" })}
                 />
-                <span className={classes.optionLabel}>No canyon</span>
+                <span className={classes.optionLabel}>No place</span>
               </label>
             )}
 

@@ -6,7 +6,7 @@
 // gallery, without the live mini-map.
 //
 // The tiles are BUNDLED, not fetched. Fetching them at display time meant the
-// list was blank offline (the one place a canyoner is most likely to be opening
+// list was blank offline (the one place a placeer is most likely to be opening
 // it), cost a request every time the sheet opened, and could not include the
 // OSM-family sources at all: their servers answer an unattributed client with an
 // "Access blocked" image, which is a worse icon than no icon. One committed

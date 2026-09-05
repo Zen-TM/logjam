@@ -1,4 +1,4 @@
-// Pure pagination-dot model for the canyon slideshow. A canyon can have many
+// Pure pagination-dot model for the place slideshow. A place can have many
 // photos, so the dot strip must never overflow: we render at most `maxDots`
 // dots as a window centred on the active slide, shrinking the window-edge dots
 // when more slides exist beyond them (the common carousel-pagination pattern).

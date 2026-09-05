@@ -5,13 +5,13 @@
 //
 // Policy (§5):
 //  - Full-coverage artifacts (topo overlays, imports): local-first ALWAYS once
-//    downloaded — connectivity flaps never remount a mid-canyon overlay.
+//    downloaded — connectivity flaps never remount a mid-place overlay.
 //  - Subset-coverage artifacts (basemap regions): remote online, local
 //    region(s) offline.
 //  - OSM-family basemaps are online-only by policy; offline they resolve to
 //    "unavailable" and the picker greys them out.
 //
-// Privacy: artifacts carry region bboxes (canyon-area coordinates). Never log
+// Privacy: artifacts carry region bboxes (place-area coordinates). Never log
 // a MapArtifact path or bbox; resolver results carry no bbox provenance
 // beyond the bounds MapLibre needs.
 import {
@@ -153,7 +153,7 @@ function localArtifactSource(
     // planner. Declaring 256 for both didn't move the map — z/x/y pin the
     // geography — but it made MapLibre pick a tile z one level deeper than it
     // should, so an import hit its maxZoom a level early and overzoomed:
-    // blurry at exactly the zoom a canyoner reads it at.
+    // blurry at exactly the zoom a placeer reads it at.
     ...(artifact.sourceType === "raster" && {
       tileSize:
         artifact.kind === "geopdf-import"

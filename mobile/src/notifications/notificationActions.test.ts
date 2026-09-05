@@ -14,7 +14,7 @@ describe("notificationActions", () => {
     expect(
       notificationActions(notification("friend_request_accepted", { friendshipId: "f1" })),
     ).toBeNull();
-    expect(notificationActions(notification("canyon_shared", { canyonId: "c1" }))).toBeNull();
+    expect(notificationActions(notification("place_shared", { placeId: "c1" }))).toBeNull();
   });
 
   it("offers accept + decline on a friend request", () => {

@@ -33,21 +33,21 @@ const GEOJSON = JSON.stringify({
 });
 
 describe("parseTrackGeoJSON", () => {
-  it("parses GPX into a LineString feature tagged with colour + canyonId", () => {
-    const fc = parseTrackGeoJSON(GPX, "#e6194b", { canyonId: "canyon-1" });
+  it("parses GPX into a LineString feature tagged with colour + placeId", () => {
+    const fc = parseTrackGeoJSON(GPX, "#e6194b", { placeId: "place-1" });
     expect(fc.type).toBe("FeatureCollection");
     const line = fc.features.find((f) => f.geometry.type === "LineString");
     expect(line).toBeTruthy();
     expect(line?.properties?.color).toBe("#e6194b");
-    expect(line?.properties?.canyonId).toBe("canyon-1");
+    expect(line?.properties?.placeId).toBe("place-1");
   });
 
-  it("parses KML into a LineString feature tagged with colour + canyonId", () => {
-    const fc = parseTrackGeoJSON(KML, "#3cb44b", { canyonId: "canyon-2" });
+  it("parses KML into a LineString feature tagged with colour + placeId", () => {
+    const fc = parseTrackGeoJSON(KML, "#3cb44b", { placeId: "place-2" });
     const line = fc.features.find((f) => f.geometry.type === "LineString");
     expect(line).toBeTruthy();
     expect(line?.properties?.color).toBe("#3cb44b");
-    expect(line?.properties?.canyonId).toBe("canyon-2");
+    expect(line?.properties?.placeId).toBe("place-2");
   });
 
   it("parses a GeoJSON FeatureCollection tagged with colour + mediaId", () => {
@@ -86,7 +86,7 @@ describe("parseTrackGeoJSON", () => {
   });
 
   it("throws on an unrecognised root element", () => {
-    expect(() => parseTrackGeoJSON("<foo></foo>", null, { canyonId: "c" })).toThrow(
+    expect(() => parseTrackGeoJSON("<foo></foo>", null, { placeId: "c" })).toThrow(
       /Unrecognised track format/,
     );
   });

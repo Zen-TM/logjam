@@ -1,7 +1,7 @@
 /**
  * The server's REST response shapes, as both clients see them.
  *
- * These lived twice — `frontend/src/canyonUtils.ts` and `mobile/src/api/types.ts`
+ * These lived twice — `frontend/src/placeUtils.ts` and `mobile/src/api/types.ts`
  * — as two hand-maintained copies of one contract kept in step by a comment.
  * They are declared here once; both clients re-export them from their old
  * homes, so every existing import keeps working and neither copy can drift.
@@ -10,7 +10,7 @@
  * row shapes are a different contract and live in `sync.ts` — a mirror row is
  * not a REST response (different endpoints, different visibility scoping).
  */
-import type { CanyonMergePolicy } from "./mergeCanyon.js";
+import type { PlaceMergePolicy } from "./mergePlace.js";
 import type { MediaItem } from "./media.js";
 import type {
   NotificationPreferences,
@@ -18,12 +18,12 @@ import type {
 } from "./themeSchemes.js";
 import type { TripLogCustomFieldDef } from "./tripLogFields.js";
 
-export type TCanyonAttributes = {
+export type TPlaceAttributes = {
   sources?: [string, string][];
   customFields?: Record<string, unknown>;
 };
 
-export type TCanyon = {
+export type TPlace = {
   id: string;
   ownerId: string;
   name: string;
@@ -38,22 +38,22 @@ export type TCanyon = {
   quality: number | null;
   hours: number | null;
   notes: string | null;
-  attributes: TCanyonAttributes;
+  attributes: TPlaceAttributes;
   ropeWikiId: number | null;
   createdAt: string;
   updatedAt: string;
-  // Populated only by the canyon-detail endpoint (GET /canyons/:id), not the list.
+  // Populated only by the place-detail endpoint (GET /places/:id), not the list.
   media?: MediaItem[];
-  // Populated only by the OWNED list (GET /canyons) — never by GET /canyons/shared
+  // Populated only by the OWNED list (GET /places) — never by GET /places/shared
   // and never by the detail endpoint. `shares` powers the "shared by me" filter +
   // the card badge; `tripLogLinks` the completion filter + per-row trip count.
   //
-  // Optional because on a canyon shared WITH you these counts are absent by
+  // Optional because on a place shared WITH you these counts are absent by
   // design, not zero: the trip tally is the owner's private trip-list
   // cardinality and `shares` is their fan-out to other people, so the API
-  // withholds both (see canyonListInclude in api/src/routes/canyons.ts). Absent
+  // withholds both (see placeListInclude in api/src/routes/places.ts). Absent
   // means "not yours to know" — so never coalesce it to 0 and present that as an
-  // answer about a shared canyon. Gate every read on ownership.
+  // answer about a shared place. Gate every read on ownership.
   _count?: { tripLogLinks: number; shares: number };
 };
 
@@ -78,17 +78,17 @@ export type TUser = {
   uiPreferences?: {
     themeSchemeId?: ThemeSchemeId;
     tripLogCustomFields?: TripLogCustomFieldDef[];
-    canyonCustomFields?: TripLogCustomFieldDef[];
+    placeCustomFields?: TripLogCustomFieldDef[];
     notifications?: NotificationPreferences;
     autoDownloadGeoPdfs?: boolean;
-    importMergePolicy?: CanyonMergePolicy;
+    importMergePolicy?: PlaceMergePolicy;
   } | null;
 };
 
 export type TTripLog = {
   id: string;
   // Ordered — order is meaningful, drives the derived title (see tripTitle).
-  canyons: { id: string; name: string }[];
+  places: { id: string; name: string }[];
   userId: string;
   date: string;
   displayName: string | null;
@@ -96,7 +96,7 @@ export type TTripLog = {
   notes: string | null;
   customFields: Record<string, unknown>;
   createdAt: string;
-  // Populated by the per-canyon trip endpoints (GET /canyons/:id/trips[/:id]).
+  // Populated by the per-place trip endpoints (GET /places/:id/trips[/:id]).
   media?: MediaItem[];
 };
 

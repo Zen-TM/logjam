@@ -10,7 +10,7 @@
 // kept a second, private list in `sync_state`, and `adoptLocalFieldDefs` had to
 // carry it up on link. Definitions are rows now, so both halves are gone:
 // defining, renaming and deleting a field works with no signal for anyone, and
-// a guest's definitions reach their new account the same way their canyons do
+// a guest's definitions reach their new account the same way their places do
 // — the outbox flushes.
 //
 // The VALUES were always local for both, and still are.
@@ -25,12 +25,12 @@ import {
   type TripLogCustomFieldDef,
 } from "@logjam/shared";
 
-import type { TCanyonAttributes } from "../api/types";
-import { listMirrorCanyons, listMirrorCustomFieldDefs, listMirrorTrips } from "../sync/mirrorStore";
+import type { TPlaceAttributes } from "../api/types";
+import { listMirrorPlaces, listMirrorCustomFieldDefs, listMirrorTrips } from "../sync/mirrorStore";
 import {
   createCustomFieldDefLocal,
   deleteCustomFieldDefLocal,
-  updateCanyonLocal,
+  updatePlaceLocal,
   updateCustomFieldDefLocal,
   updateTripLocal,
 } from "../sync/outbox";
@@ -137,7 +137,7 @@ async function removeFieldDefById(
     if (entity === "tripLog") {
       await updateTripLocal(row.id, { customFields: remaining });
     } else {
-      await updateCanyonLocal(row.id, {
+      await updatePlaceLocal(row.id, {
         attributes: { ...row.attributes, customFields: remaining },
       });
     }
@@ -155,7 +155,7 @@ async function rowsWithFieldValue(
   entity: CustomFieldEntity,
   key: string,
 ): Promise<
-  { id: string; values: Record<string, unknown>; attributes: TCanyonAttributes }[]
+  { id: string; values: Record<string, unknown>; attributes: TPlaceAttributes }[]
 > {
   if (entity === "tripLog") {
     const trips = await listMirrorTrips();
@@ -163,18 +163,18 @@ async function rowsWithFieldValue(
       .filter((trip) => trip.customFields?.[key] !== undefined)
       .map((trip) => ({ id: trip.id, values: trip.customFields ?? {}, attributes: {} }));
   }
-  const canyons = await listMirrorCanyons();
-  return canyons
-    // A canyon shared WITH this user is read-only, and its owner's fields are
+  const places = await listMirrorPlaces();
+  return places
+    // A place shared WITH this user is read-only, and its owner's fields are
     // not this user's to strip.
     .filter(
-      (canyon) =>
-        canyon.syncRole === "owner" &&
-        canyon.attributes?.customFields?.[key] !== undefined,
+      (place) =>
+        place.syncRole === "owner" &&
+        place.attributes?.customFields?.[key] !== undefined,
     )
-    .map((canyon) => ({
-      id: canyon.id,
-      values: canyon.attributes?.customFields ?? {},
-      attributes: canyon.attributes ?? {},
+    .map((place) => ({
+      id: place.id,
+      values: place.attributes?.customFields ?? {},
+      attributes: place.attributes ?? {},
     }));
 }

@@ -10,7 +10,7 @@ const AUTH = { Authorization: "Bearer fake-token" } as const;
 
 const TAG = `CH003-bulk-${Date.now()}`;
 
-// Bulk-imported trips are canyon-less with a displayName, so they surface via
+// Bulk-imported trips are place-less with a displayName, so they surface via
 // the global list search filter — use that to collect ids and clean up.
 async function deleteTripsBySearch(term: string): Promise<void> {
   const list = await request(API_URL).get("/trips").query({ search: term }).set(AUTH);
@@ -33,13 +33,13 @@ describe("POST /trips/bulk (import, fake auth = alice)", () => {
     const res = await request(API_URL)
       .post("/trips/bulk")
       .set(AUTH)
-      .send({ trips: [{ sourceCanyonName: "x", date: "2024-01-01" }] });
+      .send({ trips: [{ sourcePlaceName: "x", date: "2024-01-01" }] });
     expect(res.status).toBe(400);
   });
 
   it("rejects more than the import cap with 413 (SEC-001)", async () => {
     const trips = Array.from({ length: 2001 }, (_, i) => ({
-      sourceCanyonName: "x",
+      sourcePlaceName: "x",
       date: "2024-01-01",
       displayName: `${TAG}-overflow-${i}`,
     }));
@@ -53,8 +53,8 @@ describe("POST /trips/bulk (import, fake auth = alice)", () => {
   it("imports new rows, then re-importing the same rows updates rather than duplicates (idempotent)", async () => {
     const name = `${TAG}-idem`;
     const trips = [
-      { sourceCanyonName: name, date: "2024-05-01", notes: "first", displayName: name },
-      { sourceCanyonName: name, date: "2024-05-02", notes: "second", displayName: name },
+      { sourcePlaceName: name, date: "2024-05-01", notes: "first", displayName: name },
+      { sourcePlaceName: name, date: "2024-05-02", notes: "second", displayName: name },
     ];
     try {
       const first = await request(API_URL)
@@ -66,7 +66,7 @@ describe("POST /trips/bulk (import, fake auth = alice)", () => {
       expect(first.body.updated).toBe(0);
       expect(first.body.errors).toEqual([]);
 
-      // Same importKey inputs (sourceCanyonName + date + notes + customFields)
+      // Same importKey inputs (sourcePlaceName + date + notes + customFields)
       // → the second call must update in place, not create duplicates.
       const second = await request(API_URL)
         .post("/trips/bulk")
@@ -84,14 +84,14 @@ describe("POST /trips/bulk (import, fake auth = alice)", () => {
     }
   });
 
-  it("reports a per-row error for a canyon the importer does not own (no throw)", async () => {
-    // carol owns this canyon; alice imports a row pointing at it.
-    const carolCanyon = await request(API_URL)
-      .post("/canyons")
+  it("reports a per-row error for a place the importer does not own (no throw)", async () => {
+    // carol owns this place; alice imports a row pointing at it.
+    const carolPlace = await request(API_URL)
+      .post("/places")
       .set(as(CAROL_SUB))
       .send({ name: `${TAG}-carol`, latitude: -33.7, longitude: 150.3 });
-    expect(carolCanyon.status).toBe(201);
-    const carolCanyonId = carolCanyon.body.id as string;
+    expect(carolPlace.status).toBe(201);
+    const carolPlaceId = carolPlace.body.id as string;
     const name = `${TAG}-foreign`;
     try {
       const res = await request(API_URL)
@@ -100,23 +100,23 @@ describe("POST /trips/bulk (import, fake auth = alice)", () => {
         .send({
           importBatchId: `${name}-batch`,
           trips: [
-            { sourceCanyonName: name, canyonId: carolCanyonId, date: "2024-06-01", displayName: name },
+            { sourcePlaceName: name, placeId: carolPlaceId, date: "2024-06-01", displayName: name },
           ],
         });
       expect(res.status).toBe(200);
       expect(res.body.imported).toBe(0);
       expect(res.body.errors).toHaveLength(1);
-      expect(res.body.errors[0].error).toBe("not the canyon owner");
+      expect(res.body.errors[0].error).toBe("not the place owner");
     } finally {
       await deleteTripsBySearch(name);
-      await request(API_URL).delete(`/canyons/${carolCanyonId}`).set(as(CAROL_SUB));
+      await request(API_URL).delete(`/places/${carolPlaceId}`).set(as(CAROL_SUB));
     }
   });
 
   it("a row with types creates a trip with those types; re-importing the same importKey with different types updates it (types is not part of the hash)", async () => {
     const name = `${TAG}-type`;
     const trips = [
-      { sourceCanyonName: name, date: "2024-07-01", displayName: name, types: ["canyoning"] },
+      { sourcePlaceName: name, date: "2024-07-01", displayName: name, types: ["canyoning"] },
     ];
     try {
       const first = await request(API_URL)
@@ -130,7 +130,7 @@ describe("POST /trips/bulk (import, fake auth = alice)", () => {
       expect(list1.body.length).toBe(1);
       expect(list1.body[0].types).toEqual(["canyoning"]);
 
-      // Same sourceCanyonName/date/notes/customFields → same importKey — the
+      // Same sourcePlaceName/date/notes/customFields → same importKey — the
       // contract requires `types` NOT be part of the hash, so this changes
       // only the types field via an update, never a duplicate row.
       const second = await request(API_URL)
@@ -162,8 +162,8 @@ describe("POST /trips/bulk (import, fake auth = alice)", () => {
         .send({
           importBatchId: `${name}-batch`,
           trips: [
-            { sourceCanyonName: name, date: "2024-07-05", displayName: name, types: ["x".repeat(41)] },
-            { sourceCanyonName: goodName, date: "2024-07-06", displayName: goodName },
+            { sourcePlaceName: name, date: "2024-07-05", displayName: name, types: ["x".repeat(41)] },
+            { sourcePlaceName: goodName, date: "2024-07-06", displayName: goodName },
           ],
         });
       expect(res.status).toBe(200);
@@ -176,14 +176,14 @@ describe("POST /trips/bulk (import, fake auth = alice)", () => {
     }
   });
 
-  it("a row with canyonId links a join row visible in canyons[]", async () => {
-    const canyonName = `${TAG}-linked-canyon`;
-    const canyonRes = await request(API_URL)
-      .post("/canyons")
+  it("a row with placeId links a join row visible in places[]", async () => {
+    const placeName = `${TAG}-linked-place`;
+    const placeRes = await request(API_URL)
+      .post("/places")
       .set(AUTH)
-      .send({ name: canyonName, latitude: -33.7, longitude: 150.3 });
-    expect(canyonRes.status).toBe(201);
-    const canyonId = canyonRes.body.id as string;
+      .send({ name: placeName, latitude: -33.7, longitude: 150.3 });
+    expect(placeRes.status).toBe(201);
+    const placeId = placeRes.body.id as string;
     const name = `${TAG}-linked-trip`;
     try {
       const res = await request(API_URL)
@@ -192,7 +192,7 @@ describe("POST /trips/bulk (import, fake auth = alice)", () => {
         .send({
           importBatchId: `${name}-batch`,
           trips: [
-            { canyonId, sourceCanyonName: canyonName, date: "2024-07-02", displayName: name },
+            { placeId, sourcePlaceName: placeName, date: "2024-07-02", displayName: name },
           ],
         });
       expect(res.status).toBe(200);
@@ -200,25 +200,25 @@ describe("POST /trips/bulk (import, fake auth = alice)", () => {
 
       const list = await request(API_URL).get("/trips").query({ search: name }).set(AUTH);
       expect(list.body.length).toBe(1);
-      expect(list.body[0].canyons).toEqual([{ id: canyonId, name: canyonName }]);
+      expect(list.body[0].places).toEqual([{ id: placeId, name: placeName }]);
     } finally {
       await deleteTripsBySearch(name);
-      await request(API_URL).delete(`/canyons/${canyonId}`).set(AUTH);
+      await request(API_URL).delete(`/places/${placeId}`).set(AUTH);
     }
   });
 
   // APIR-003: POST /trips and PATCH /trips/:id force the `canyoning` tag onto
-  // any canyon-linked trip ("maintained on every write"); the bulk importer
-  // linked canyons without it, so a CSV row with no types imported untagged and
+  // any place-linked trip ("maintained on every write"); the bulk importer
+  // linked places without it, so a CSV row with no types imported untagged and
   // stayed that way until someone re-saved it through PATCH.
-  it("force-tags a canyon-linked imported row as canyoning", async () => {
-    const canyonName = `${TAG}-tag-canyon`;
-    const canyonRes = await request(API_URL)
-      .post("/canyons")
+  it("force-tags a place-linked imported row as canyoning", async () => {
+    const placeName = `${TAG}-tag-place`;
+    const placeRes = await request(API_URL)
+      .post("/places")
       .set(AUTH)
-      .send({ name: canyonName, latitude: -33.71, longitude: 150.31 });
-    expect(canyonRes.status).toBe(201);
-    const canyonId = canyonRes.body.id as string;
+      .send({ name: placeName, latitude: -33.71, longitude: 150.31 });
+    expect(placeRes.status).toBe(201);
+    const placeId = placeRes.body.id as string;
     const name = `${TAG}-tag-trip`;
     try {
       const res = await request(API_URL)
@@ -228,7 +228,7 @@ describe("POST /trips/bulk (import, fake auth = alice)", () => {
           importBatchId: `${name}-batch`,
           trips: [
             // No `types` at all — the tag must be added by the server.
-            { canyonId, sourceCanyonName: canyonName, date: "2024-07-03", displayName: name },
+            { placeId, sourcePlaceName: placeName, date: "2024-07-03", displayName: name },
           ],
         });
       expect(res.status).toBe(200);
@@ -237,7 +237,7 @@ describe("POST /trips/bulk (import, fake auth = alice)", () => {
       expect(list.body[0].types).toContain("canyoning");
     } finally {
       await deleteTripsBySearch(name);
-      await request(API_URL).delete(`/canyons/${canyonId}`).set(AUTH);
+      await request(API_URL).delete(`/places/${placeId}`).set(AUTH);
     }
   });
 
@@ -252,7 +252,7 @@ describe("POST /trips/bulk (import, fake auth = alice)", () => {
       .send({
         importBatchId: `${name}-batch`,
         trips: [
-          { sourceCanyonName: name, date: "2024-07-04", displayName: "x".repeat(201) },
+          { sourcePlaceName: name, date: "2024-07-04", displayName: "x".repeat(201) },
         ],
       });
     expect(res.status).toBe(200);

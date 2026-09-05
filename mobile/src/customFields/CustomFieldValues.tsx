@@ -1,5 +1,5 @@
 // The user's own fields, as inputs on an entity form — one implementation for
-// trips and canyons, because the two forms ask the same question of the same
+// trips and places, because the two forms ask the same question of the same
 // definition list and a second copy would drift the moment a type is added.
 //
 // Values are held as STRINGS while editing (like the web's forms) and coerced

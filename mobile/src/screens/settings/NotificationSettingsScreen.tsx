@@ -53,7 +53,7 @@ const NOTIFICATION_ROWS: {
   { key: "exportEmail", title: "A topo export finishes or fails", group: "email" },
   { key: "geoPdfEmail", title: "A GeoPDF finishes or fails", group: "email" },
   { key: "friendRequestInApp", title: "Friend requests", group: "inApp" },
-  { key: "shareInApp", title: "A canyon is shared with me", group: "inApp" },
+  { key: "shareInApp", title: "A place is shared with me", group: "inApp" },
 ];
 
 export function NotificationSettingsScreen() {

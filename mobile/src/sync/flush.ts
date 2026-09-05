@@ -6,7 +6,7 @@ import {
   collectDirtyFields,
   filterSelfConflicts,
   isTransientSyncError,
-  parseSyncDeltaCanyonRow,
+  parseSyncDeltaPlaceRow,
   parseSyncDeltaTripRow,
   parseSyncDeltaWaypointRow,
   selectFlushBatch,
@@ -32,7 +32,7 @@ import {
   type MediaOpRow,
   type MediaOpOutcome,
 } from "./mediaUpload";
-import { upsertCanyon, upsertTrip, upsertWaypoint } from "./mirrorStore";
+import { upsertPlace, upsertTrip, upsertWaypoint } from "./mirrorStore";
 import { getSyncDb, notifyMirrorChanged } from "./syncDb";
 
 /**
@@ -52,7 +52,7 @@ export type FlushSummary = {
 };
 
 /** Flush to drain (or until only parked/deferred ops remain). Serialized by
- * the sync engine — never call concurrently. Push ops (canyon/trip/waypoint/
+ * the sync engine — never call concurrently. Push ops (place/trip/waypoint/
  * notification) go through POST /sync/push in dependency-closure batches;
  * media ops run their own three-phase / REST flow (§7.1, §8.3 interleave). */
 export async function flushOutbox(): Promise<FlushSummary> {
@@ -221,7 +221,7 @@ async function applyOpResult(
           : {};
         // The server's own confirmed row is the name's source, and this is the
         // only moment it is guaranteed to be in hand: the mirror row can be
-        // deleted later, taking with it the only answer to "which canyon was
+        // deleted later, taking with it the only answer to "which place was
         // this?" for a shelf entry the user may read weeks from now.
         const confirmed = result.row as
           | { name?: string | null; displayName?: string | null }
@@ -306,16 +306,16 @@ async function applyConfirmedRow(
   };
 
   switch (entry.op.entity) {
-    case "canyon": {
+    case "place": {
       // Push results return the raw row (no syncRole); only own rows are
       // pushable, so the caller is the owner.
-      const base = parseSyncDeltaCanyonRow(
+      const base = parseSyncDeltaPlaceRow(
         typeof serverRow === "object" && serverRow !== null
           ? { syncRole: "owner", ...serverRow }
           : serverRow,
       );
       const { effective, dirtyNames } = rebased(base);
-      await upsertCanyon(db, effective, dirtyNames);
+      await upsertPlace(db, effective, dirtyNames);
       break;
     }
     case "tripLog": {
@@ -341,7 +341,7 @@ async function applyConfirmedRow(
 // REST DELETE. Sequential (the spec allows concurrency 2 — a modest field
 // photo count doesn't need it, and sequential keeps ordering trivial). A
 // media create waits until its linked entity has no pending outbox op (§7.2
-// dependency): a still-queued or blocked canyon/trip create for the same
+// dependency): a still-queued or blocked place/trip create for the same
 // linkedId would send the upload into a guaranteed 404.
 
 /**
@@ -442,7 +442,7 @@ function runMediaOp(row: MediaOpRow & { op: string }): Promise<MediaOpOutcome> {
 /** A media create must wait for its linked entity's create to fully flush:
  * an outbox row still targeting linkedId means the row may not exist
  * server-side yet. PARKED ops don't count — a parked link is never going to
- * flush on its own, and counting it left the photos of a blocked canyon
+ * flush on its own, and counting it left the photos of a blocked place
  * create sitting queued forever: never uploaded, never parked, and so never
  * shown in Sync Issues either. */
 async function isLinkPending(

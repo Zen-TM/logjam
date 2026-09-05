@@ -11,7 +11,7 @@ import {
 
 // Build a pino logger using the SAME redact paths the app logger uses, but
 // writing to an in-memory buffer so we can assert what actually gets censored.
-// This guards the CLAUDE.md privacy rule: canyon coords/names must never reach
+// This guards the CLAUDE.md privacy rule: place coords/names must never reach
 // logs in plain text.
 function captureLog(obj: unknown): Record<string, unknown> {
   const lines: string[] = [];
@@ -25,9 +25,9 @@ function captureLog(obj: unknown): Record<string, unknown> {
 }
 
 describe("logger redaction", () => {
-  it("censors canyon coordinates and name in a request body", () => {
+  it("censors place coordinates and name in a request body", () => {
     const out = captureLog({
-      req: { body: { latitude: -33.5, longitude: 150.3, name: "Secret Canyon", notes: "beta" } },
+      req: { body: { latitude: -33.5, longitude: 150.3, name: "Secret Place", notes: "beta" } },
     });
     const body = (out.req as { body: Record<string, unknown> }).body;
     expect(body.latitude).toBe("[redacted]");
@@ -36,7 +36,7 @@ describe("logger redaction", () => {
     expect(body.notes).toBe("[redacted]");
   });
 
-  it("censors nested canyon coordinates via wildcard paths", () => {
+  it("censors nested place coordinates via wildcard paths", () => {
     const out = captureLog({ anything: { latitude: -33.5, longitude: 150.3, coords: [1, 2] } });
     const nested = out.anything as Record<string, unknown>;
     expect(nested.latitude).toBe("[redacted]");
@@ -54,21 +54,21 @@ describe("logger redaction", () => {
   });
 
   it("leaves non-sensitive fields intact", () => {
-    const out = captureLog({ req: { body: { id: "canyon-1" } } });
+    const out = captureLog({ req: { body: { id: "place-1" } } });
     const body = (out.req as { body: Record<string, unknown> }).body;
-    expect(body.id).toBe("canyon-1");
+    expect(body.id).toBe("place-1");
   });
 
   // PRIV-001 defence-in-depth: array-shaped bulk-import/create payloads carry
   // user-typed names the coordinate wildcards can't reach. No log site emits
   // these today (unproven hardening), but the redact paths must censor them if
   // one ever does.
-  it("censors array-shaped bulk-import canyon names/coords", () => {
+  it("censors array-shaped bulk-import place names/coords", () => {
     const out = captureLog({
       req: {
         body: {
           rows: [
-            { data: { name: "Secret Canyon", latitude: -33.5, longitude: 150.3, altNames: ["X"], notes: "beta" } },
+            { data: { name: "Secret Place", latitude: -33.5, longitude: 150.3, altNames: ["X"], notes: "beta" } },
           ],
         },
       },
@@ -125,20 +125,20 @@ describe("redactTilePathPatterns", () => {
 });
 
 // Guards the SEC-001 (DoD) boundary: pino redact paths cannot scrub free text
-// inside err.message/err.stack, and Prisma renders user-supplied canyon
+// inside err.message/err.stack, and Prisma renders user-supplied place
 // name/coords into a validation error's message. safeErrorForLog must drop the
 // rendered argument block before it can reach logs.
 describe("safeErrorForLog", () => {
-  it("strips a Prisma rendered-args block carrying canyon name/coords", () => {
+  it("strips a Prisma rendered-args block carrying place name/coords", () => {
     const err = new Error(
-      "Invalid `prisma.canyon.createMany()` invocation\n\n" +
+      "Invalid `prisma.place.createMany()` invocation\n\n" +
         "Argument `notes`: Invalid value provided. Expected String or Null, provided Int.\n" +
-        '{ name: "Secret Slot Canyon", latitude: -33.7, longitude: 150.3, notes: 12345 }',
+        '{ name: "Secret Slot Place", latitude: -33.7, longitude: 150.3, notes: 12345 }',
     );
     err.name = "PrismaClientValidationError";
     const safe = safeErrorForLog(err);
     expect(safe.name).toBe("PrismaClientValidationError");
-    expect(safe.message).not.toMatch(/Secret Slot Canyon/);
+    expect(safe.message).not.toMatch(/Secret Slot Place/);
     expect(safe.message).not.toMatch(/-33\.7|150\.3/);
     expect(safe.message).toContain("[redacted-args]");
     // The reason line survives so the throw site is still diagnosable.
@@ -201,7 +201,7 @@ describe("safeErrorForLog", () => {
 });
 
 // PRIV-109: the query string carries user search terms (?search= is matched
-// against canyon NAMES in GET /trips), and no redact path can reach inside a
+// against place NAMES in GET /trips), and no redact path can reach inside a
 // URL string.
 describe("serializeRequestForLog", () => {
   it("logs the path without the query string", () => {
@@ -215,8 +215,8 @@ describe("serializeRequestForLog", () => {
   });
 
   it("keeps a query-free path intact and never emits a body", () => {
-    const out = serializeRequestForLog({ id: "req-2", method: "POST", url: "/canyons" });
-    expect(out.url).toBe("/canyons");
+    const out = serializeRequestForLog({ id: "req-2", method: "POST", url: "/places" });
+    expect(out.url).toBe("/places");
     expect(out).not.toHaveProperty("body");
   });
 });
@@ -225,7 +225,7 @@ describe("serializeRequestForLog", () => {
 // safeErrorForLog" was a comment until this test: 21 sites had drifted past it
 // by the 2026-08-28 review (APIC-001). Pino's redact.paths only censor
 // structured keys — they cannot reach free text inside err.message/err.stack,
-// where Prisma renders user-supplied canyon names and coordinates.
+// where Prisma renders user-supplied place names and coordinates.
 describe("no raw err reaches a log site", () => {
   function sourceFiles(dir: string): string[] {
     return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {

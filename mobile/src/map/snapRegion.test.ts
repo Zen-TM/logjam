@@ -3,7 +3,7 @@ import { describe, it, expect } from "vitest";
 import { regionCovering } from "./snapRegion";
 import type { MapArtifact } from "./sourceResolver";
 
-// Synthetic coordinates only — no real canyon locations in a committed test.
+// Synthetic coordinates only — no real place locations in a committed test.
 const region = (over: Partial<MapArtifact>): MapArtifact => ({
   id: "r1",
   kind: "basemap-region",

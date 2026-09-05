@@ -7,7 +7,7 @@ needed). Sends are best-effort — callers create the in-app notification first,
 so a failure here is logged and swallowed, never raised.
 
 PRIVACY (hard rule): push payloads transit Apple/Google/Expo servers in
-plaintext. NEVER put canyon names, coordinates, usernames, or any free text in
+plaintext. NEVER put place names, coordinates, usernames, or any free text in
 a push. Titles are static per type; data carries the notification type and
 opaque IDs only. Keep PUSH_TITLES and ALLOWED_DATA_KEYS in sync with
 api/src/services/push.ts.
@@ -26,7 +26,7 @@ EXPO_PUSH_BATCH_LIMIT = 100
 PUSH_TITLES = {
     "friend_request": "New friend request",
     "friend_request_accepted": "Friend request accepted",
-    "canyon_shared": "A canyon was shared with you",
+    "place_shared": "A place was shared with you",
     "topo_complete": "Topo processing complete",
     "topo_failed": "Topo processing failed",
     "topo_export_complete": "Topo export finished",
@@ -39,7 +39,7 @@ ALLOWED_DATA_KEYS = {
     "type",
     "notificationId",
     "friendshipId",
-    "canyonId",
+    "placeId",
     "jobId",
     "exportId",
     "geoPdfJobId",

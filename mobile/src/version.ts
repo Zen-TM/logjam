@@ -30,7 +30,7 @@ export type UpgradeEnforcement = "none" | "warn" | "block";
  *
  * The gate used to have one outcome — block the whole app — and it re-checks on
  * foreground after an offline start, so that block can now land on a user
- * standing in a canyon: a dead app holding their offline maps and their
+ * standing in a place: a dead app holding their offline maps and their
  * in-progress track, whose only remedy is a Play Store they cannot reach.
  *
  * So the hard block is reserved for the one connection where the remedy is

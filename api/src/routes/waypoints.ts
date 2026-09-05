@@ -1,7 +1,7 @@
 // Field waypoints (Stage 8 server model for the Stage 7 mobile capture).
 //
 // Visibility has TWO sources and lib/shareAccess.ts is the only place they are
-// combined: a waypoint LINKED to a shared canyon is part of that shared record
+// combined: a waypoint LINKED to a shared place is part of that shared record
 // (exactly as a linked Route is), and a waypoint shared DIRECTLY is visible to
 // each Share recipient. An unlinked, unshared waypoint is owner-private. Either
 // way a non-owner may read and export, never edit. Every LINK change goes
@@ -18,7 +18,7 @@ import { AppError } from "../middleware/errorHandler";
 import { getParam } from "../lib/getParam";
 import { resolveUser } from "../lib/resolveUser";
 import {
-  normalizeWaypointCanyonIds,
+  normalizeWaypointPlaceIds,
   normalizeWaypointTags,
   validateWaypointPayload,
 } from "@logjam/shared";
@@ -35,8 +35,8 @@ import {
   requireShareOwner,
 } from "../lib/shareAccess";
 import {
-  applyWaypointCanyonLinks,
-  resolveWaypointCanyonIds,
+  applyWaypointPlaceLinks,
+  resolveWaypointPlaceIds,
   serializeWaypointFor,
   snapshotWaypointVisibility,
   waypointInclude,
@@ -51,16 +51,16 @@ import { Prisma } from "@prisma/client";
 const router = Router();
 
 // Hard cap on the list; true total rides X-Total-Count (UX-001 — matches
-// /canyons and /trips).
+// /places and /trips).
 const LIST_TAKE = 500;
 
-/** Canyon ids shared WITH `userId` — the set that grants sight of a waypoint. */
-async function sharedCanyonIdSet(userId: string): Promise<Set<string>> {
-  const shares = await prisma.canyonShare.findMany({
+/** Place ids shared WITH `userId` — the set that grants sight of a waypoint. */
+async function sharedPlaceIdSet(userId: string): Promise<Set<string>> {
+  const shares = await prisma.placeShare.findMany({
     where: { sharedWithId: userId },
-    select: { canyonId: true },
+    select: { placeId: true },
   });
-  return new Set(shares.map((share) => share.canyonId));
+  return new Set(shares.map((share) => share.placeId));
 }
 
 /**
@@ -74,7 +74,7 @@ async function loadVisibleWaypoint(
 ): Promise<{
   waypoint: WaypointWithLinks;
   role: "owner" | "shared";
-  sharedCanyonIds: Set<string>;
+  sharedPlaceIds: Set<string>;
 }> {
   const waypoint = await prisma.waypoint.findUnique({
     where: { id },
@@ -82,17 +82,17 @@ async function loadVisibleWaypoint(
   });
   if (!waypoint) throw new AppError(404, "Waypoint not found");
   if (waypoint.ownerId === userId) {
-    return { waypoint, role: "owner", sharedCanyonIds: new Set() };
+    return { waypoint, role: "owner", sharedPlaceIds: new Set() };
   }
-  // The role comes from shareAccess (direct share OR canyon link), never from
+  // The role comes from shareAccess (direct share OR place link), never from
   // re-reading the links here — the two arms must not be able to disagree.
   const role = await getWaypointRole(userId, waypoint);
   // No path at all → 404, so the status never confirms the id exists.
   if (role === "none") throw new AppError(404, "Waypoint not found");
-  // Still needed to SCOPE the serialized canyonIds: a directly-shared waypoint
-  // must not leak which canyons the owner filed it under.
-  const sharedCanyonIds = await sharedCanyonIdSet(userId);
-  return { waypoint, role: "shared", sharedCanyonIds };
+  // Still needed to SCOPE the serialized placeIds: a directly-shared waypoint
+  // must not leak which places the owner filed it under.
+  const sharedPlaceIds = await sharedPlaceIdSet(userId);
+  return { waypoint, role: "shared", sharedPlaceIds };
 }
 
 /** Owner-only mutation guard: 404 for a stranger, 403 for a sharee. */
@@ -105,15 +105,15 @@ async function requireWaypointOwner(
   return waypoint;
 }
 
-/** Shape-check then authorize a canyonIds list, or throw the first error. */
-async function parseCanyonIds(
+/** Shape-check then authorize a placeIds list, or throw the first error. */
+async function parsePlaceIds(
   userId: string,
   value: unknown,
 ): Promise<string[] | undefined> {
-  const parsed = normalizeWaypointCanyonIds(value);
+  const parsed = normalizeWaypointPlaceIds(value);
   if ("error" in parsed) throw new AppError(400, parsed.error);
-  if (parsed.canyonIds === undefined) return undefined;
-  return resolveWaypointCanyonIds(userId, parsed.canyonIds);
+  if (parsed.placeIds === undefined) return undefined;
+  return resolveWaypointPlaceIds(userId, parsed.placeIds);
 }
 
 /** Shape-check a tag list, or throw. */
@@ -129,16 +129,16 @@ router.get(
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await resolveUser(req.user!.sub);
-    const sharedCanyonIds = await sharedCanyonIdSet(user.id);
-    // Own waypoints, those linked to a canyon shared WITH me (the same
-    // visibility canyon-level media has), and those shared with me directly.
+    const sharedPlaceIds = await sharedPlaceIdSet(user.id);
+    // Own waypoints, those linked to a place shared WITH me (the same
+    // visibility place-level media has), and those shared with me directly.
     // An unlinked, unshared waypoint of another owner can never match.
     const where: Prisma.WaypointWhereInput = {
       OR: [
         { ownerId: user.id },
         {
-          canyonLinks: {
-            some: { canyonId: { in: [...sharedCanyonIds] } },
+          placeLinks: {
+            some: { placeId: { in: [...sharedPlaceIds] } },
           },
         },
         { id: { in: await directlySharedIds(user.id, "waypoint") } },
@@ -155,7 +155,7 @@ router.get(
     ]);
     res.set("X-Total-Count", String(total));
     res.json(
-      rows.map((row) => serializeWaypointFor(row, user.id, sharedCanyonIds)),
+      rows.map((row) => serializeWaypointFor(row, user.id, sharedPlaceIds)),
     );
   },
 );
@@ -166,11 +166,11 @@ router.get(
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await resolveUser(req.user!.sub);
-    const { waypoint, sharedCanyonIds } = await loadVisibleWaypoint(
+    const { waypoint, sharedPlaceIds } = await loadVisibleWaypoint(
       user.id,
       getParam(req.params.id),
     );
-    res.json(serializeWaypointFor(waypoint, user.id, sharedCanyonIds));
+    res.json(serializeWaypointFor(waypoint, user.id, sharedPlaceIds));
   },
 );
 
@@ -188,8 +188,8 @@ router.post(
     });
     if (validationError) throw new AppError(400, validationError);
     const tags = parseTags((req.body ?? {}).tags);
-    const canyonIds =
-      (await parseCanyonIds(user.id, (req.body ?? {}).canyonIds)) ?? [];
+    const placeIds =
+      (await parsePlaceIds(user.id, (req.body ?? {}).placeIds)) ?? [];
 
     // Optional client-minted id (Stage 8 §3.5): own-id replay → 200 with the
     // existing row; foreign id → 404 (see lib/clientSuppliedId.ts).
@@ -221,8 +221,8 @@ router.post(
           tags: tags ?? [],
           // A brand-new waypoint has no prior visibility, so linking it can
           // only ADD viewers — no tombstone diff is possible here, which is why
-          // this is a nested create rather than applyWaypointCanyonLinks.
-          canyonLinks: { create: canyonIds.map((canyonId) => ({ canyonId })) },
+          // this is a nested create rather than applyWaypointPlaceLinks.
+          placeLinks: { create: placeIds.map((placeId) => ({ placeId })) },
         },
         include: waypointInclude,
       });
@@ -251,7 +251,7 @@ router.post(
 
 // ── PATCH /waypoints/:id ──────────────────────────────────────
 // Field-sparse update; elevation/symbol/notes accept explicit null to clear,
-// and canyonIds/tags accept null to empty the list. Owner only — a sharee sees
+// and placeIds/tags accept null to empty the list. Owner only — a sharee sees
 // the waypoint but may never edit it (403, not 404: they can see it already).
 router.patch(
   "/:id",
@@ -268,14 +268,14 @@ router.patch(
     });
     if (validationError) throw new AppError(400, validationError);
     const tags = parseTags((req.body ?? {}).tags);
-    const canyonIds = await parseCanyonIds(user.id, (req.body ?? {}).canyonIds);
+    const placeIds = await parsePlaceIds(user.id, (req.body ?? {}).placeIds);
 
     const updated = await prisma.$transaction(async (tx) => {
-      // Links first: applyWaypointCanyonLinks writes the revocation tombstones
+      // Links first: applyWaypointPlaceLinks writes the revocation tombstones
       // for whoever this change costs, and must ride the same transaction as
       // the change it records (sync tombstone rule).
-      if (canyonIds !== undefined) {
-        await applyWaypointCanyonLinks(tx, { waypointId: id, canyonIds });
+      if (placeIds !== undefined) {
+        await applyWaypointPlaceLinks(tx, { waypointId: id, placeIds });
       }
       return tx.waypoint.update({
         where: { id },

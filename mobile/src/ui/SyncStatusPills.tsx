@@ -1,7 +1,7 @@
 // The offline / "N waiting to sync" pill pair, carried in the hero of every
 // list screen (DESIGN.md §10).
 //
-// One component because it was three identical copies — Canyons, Logs and
+// One component because it was three identical copies — Places, Logs and
 // Saved — and guest mode gave the duplication teeth: **"3 waiting to sync" is a
 // lie to a guest.** Nothing is waiting; there is no account for it to be
 // waiting on, and the outbox rows behind that count are the permanent state of

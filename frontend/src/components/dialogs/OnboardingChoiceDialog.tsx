@@ -13,7 +13,7 @@ import {
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
-import { importFromRopeWiki } from "../../canyonUtils";
+import { importFromRopeWiki } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import { ErrorBanner } from "../feedback/ErrorBanner";
 
@@ -49,7 +49,7 @@ function OnboardingChoiceDialog({
       onLoaded();
       const skipped = res.skipped + res.errors.length;
       setLoadedSummary(
-        `${res.imported} canyon${res.imported !== 1 ? "s" : ""} loaded` +
+        `${res.imported} place${res.imported !== 1 ? "s" : ""} loaded` +
           (skipped > 0 ? `, ${skipped} skipped` : ""),
       );
       setRopewikiState("done");
@@ -108,7 +108,7 @@ function OnboardingChoiceDialog({
               startIcon={<CheckCircleIcon />}
               sx={{ textTransform: "none", justifyContent: "flex-start" }}
             >
-              NSW canyon database (RopeWiki) loaded
+              NSW place database (RopeWiki) loaded
             </Button>
           ) : (
             <Button
@@ -119,7 +119,7 @@ function OnboardingChoiceDialog({
               startIcon={loading ? <CircularProgress size={18} color="inherit" /> : undefined}
               sx={{ textTransform: "none", justifyContent: "flex-start" }}
             >
-              {loading ? "Importing…" : "Load the NSW canyon database (RopeWiki) — recommended"}
+              {loading ? "Importing…" : "Load the NSW place database (RopeWiki) — recommended"}
             </Button>
           )}
 
@@ -142,11 +142,11 @@ function OnboardingChoiceDialog({
               color: "var(--theme-accent)",
             }}
           >
-            Import my own files (canyons or logbook)
+            Import my own files (places or logbook)
           </Button>
           <Typography variant="caption" sx={{ color: "var(--theme-text-muted)", pl: 0.5 }}>
-            A canyon list needs name, latitude and longitude (grades and notes are
-            optional). A logbook needs a canyon name and a date (notes optional).
+            A place list needs name, latitude and longitude (grades and notes are
+            optional). A logbook needs a place name and a date (notes optional).
           </Typography>
         </Box>
       </DialogContent>

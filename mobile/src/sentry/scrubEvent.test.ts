@@ -25,7 +25,7 @@ describe("redactTilePathPatterns", () => {
     expect(redactTilePathPatterns("plain error message")).toBe("plain error message");
   });
 
-  // The consent sheet promises reports are "scrubbed of canyon names and
+  // The consent sheet promises reports are "scrubbed of place names and
   // coordinates". Keyed redaction can only reach a coordinate that is still a
   // field; once it has been interpolated into a message (or a console line,
   // which Sentry captures as a breadcrumb through this same filter) this
@@ -51,7 +51,7 @@ describe("redactTilePathPatterns", () => {
 
 describe("stripArgsBlock", () => {
   it("drops a rendered args block", () => {
-    const msg = "Invalid invocation\n\n{ name: 'Secret Canyon', latitude: -33.7 }";
+    const msg = "Invalid invocation\n\n{ name: 'Secret Place', latitude: -33.7 }";
     expect(stripArgsBlock(msg)).toBe("Invalid invocation\n[redacted-args]");
   });
 
@@ -63,17 +63,17 @@ describe("stripArgsBlock", () => {
 describe("scrubStructure", () => {
   it("censors coordinate and name keys at any depth", () => {
     const input = {
-      canyon: { name: "Secret", latitude: -33.7, longitude: 150.3, safe: "ok" },
+      place: { name: "Secret", latitude: -33.7, longitude: 150.3, safe: "ok" },
       list: [{ notes: "private", other: 1 }],
     };
     expect(scrubStructure(input)).toEqual({
-      canyon: { name: "[redacted]", latitude: "[redacted]", longitude: "[redacted]", safe: "ok" },
+      place: { name: "[redacted]", latitude: "[redacted]", longitude: "[redacted]", safe: "ok" },
       list: [{ notes: "[redacted]", other: 1 }],
     });
   });
 
   it("scrubs URLs inside string values", () => {
-    expect(scrubStructure({ url: "https://api.logjamnsw.com/canyons/abc" })).toEqual({
+    expect(scrubStructure({ url: "https://api.logjamnsw.com/places/abc" })).toEqual({
       url: "[redacted-url]",
     });
   });
@@ -104,10 +104,10 @@ describe("scrubEvent", () => {
       message: "fetch https://cdn.example.com/master/hydro/12/24/13.pbf failed",
       exception: {
         values: [
-          { type: "Error", value: "Invalid input\n{ name: 'Hidden Canyon' }" },
+          { type: "Error", value: "Invalid input\n{ name: 'Hidden Place' }" },
         ],
       },
-      request: { url: "https://api.logjamnsw.com/canyons" },
+      request: { url: "https://api.logjamnsw.com/places" },
       user: { id: "abc" },
       extra: { latitude: -33.7, harmless: true },
     };
@@ -124,8 +124,8 @@ describe("scrubEvent", () => {
       breadcrumbs: [
         {
           category: "fetch",
-          message: "GET https://api.logjamnsw.com/canyons/xyz 200",
-          data: { url: "https://api.logjamnsw.com/canyons/xyz", status_code: 200 },
+          message: "GET https://api.logjamnsw.com/places/xyz 200",
+          data: { url: "https://api.logjamnsw.com/places/xyz", status_code: 200 },
         },
       ],
     };
@@ -150,7 +150,7 @@ describe("scrubEvent", () => {
                   filename: "http://10.0.2.2:8081/index.bundle?platform=android",
                   function: "recordFix",
                   context_line: "log(`fix at -33.56213, 150.40171`)",
-                  vars: { name: "Hidden Canyon", latitude: -33.7, count: 2 },
+                  vars: { name: "Hidden Place", latitude: -33.7, count: 2 },
                 },
               ],
             },
@@ -180,7 +180,7 @@ describe("scrubBreadcrumb", () => {
     const crumb = {
       category: "xhr",
       message: "tile 14/9821/6032 load",
-      data: { name: "Secret Canyon" },
+      data: { name: "Secret Place" },
     };
     const scrubbed = scrubBreadcrumb(crumb);
     expect(scrubbed.message).toBe("tile [redacted-tile] load");

@@ -373,7 +373,7 @@ export function SavedScreen({
   onRecordTrack,
   onDrawRoute,
   onNavigateToWaypoint,
-  onOpenCanyon,
+  onOpenPlace,
   initialFilter,
   initialHighlight,
 }: {
@@ -414,7 +414,7 @@ export function SavedScreen({
    *  `onContinueRecording` is. */
   onRecordTrack: () => void;
   /** Arm the pen on the map with nothing linked — a route drawn from here
-   *  belongs to no canyon until the user says otherwise. */
+   *  belongs to no place until the user says otherwise. */
   onDrawRoute: () => void;
   /**
    * Start navigating to a waypoint. Handed to the MAP for the same reason
@@ -424,12 +424,12 @@ export function SavedScreen({
    */
   onNavigateToWaypoint: (waypointId: string) => void;
   /**
-   * Open a canyon's detail screen. Used by the waypoint and route sheets for
-   * ONE case: a row that is on this phone because it is linked to a canyon
+   * Open a place's detail screen. Used by the waypoint and route sheets for
+   * ONE case: a row that is on this phone because it is linked to a place
    * shared with the user has no share of its own to hand back, so the sheet
-   * sends them to the canyon, which is where that share ends.
+   * sends them to the place, which is where that share ends.
    */
-  onOpenCanyon: (canyonId: string, name: string) => void;
+  onOpenPlace: (placeId: string, name: string) => void;
   /**
    * Land on one category rather than "All". The map's layer sheet points at
    * this screen for region management ("3 saved areas ›"), and dropping the
@@ -842,7 +842,7 @@ export function SavedScreen({
   // --- Drawn routes (synced records, not device files) ---
   const routes = useMirrorRoutes();
   const waypoints = useMirrorWaypoints();
-  // Who shared each incoming canyon with this user — the name on a received
+  // Who shared each incoming place with this user — the name on a received
   // row's pill. Mirror-backed, so it reads the same with no signal.
   const shareOwners = useMirrorIncomingShareOwners();
   // One field for every tab (item 8) — the waypoint TAG rail stays a
@@ -1027,7 +1027,7 @@ export function SavedScreen({
         ...(job?.syncRole === "shared"
           ? {
               sharedWithYou: true as const,
-              // A topo has no canyon above it, so a shared one is always a
+              // A topo has no place above it, so a shared one is always a
               // DIRECT share the recipient can hand back. The downloaded layers
               // go with it: keeping tiles for an overlay this account can no
               // longer be granted leaves a card that cannot be re-downloaded
@@ -1139,8 +1139,8 @@ export function SavedScreen({
         ...shareMark({
           syncRole: route.syncRole,
           sharedCount: route.sharedCount,
-          canyonIds: [route.canyonId],
-          ownersByCanyon: shareOwners.data ?? {},
+          placeIds: [route.placeId],
+          ownersByPlace: shareOwners.data ?? {},
         }),
         ...routeActions(route),
       });
@@ -1163,8 +1163,8 @@ export function SavedScreen({
         ...shareMark({
           syncRole: waypoint.syncRole,
           sharedCount: waypoint.sharedCount,
-          canyonIds: waypoint.canyonIds,
-          ownersByCanyon: shareOwners.data ?? {},
+          placeIds: waypoint.placeIds,
+          ownersByPlace: shareOwners.data ?? {},
         }),
         // Notes are searchable but never rendered in the row — a note can hold
         // anything, and this is a list surface.
@@ -1721,7 +1721,7 @@ export function SavedScreen({
   const showImportSheet = menuImport !== null;
   // THE sharing panel: one component for both verbs and every kind, the same
   // one the route sheet, the track sheet, the map's waypoint sheet and the
-  // canyon screen render. Which verb it is showing follows the sub-mode, and
+  // place screen render. Which verb it is showing follows the sub-mode, and
   // the wording follows from that — a copy cannot be taken back, a share can.
   const sharePanel = useSharePanel({
     target:
@@ -2247,7 +2247,7 @@ export function SavedScreen({
         </View>
       </BottomSheet>
 
-      {/* Share the whole selection — the same sheet the Canyons screen opens,
+      {/* Share the whole selection — the same sheet the Places screen opens,
           so the two cannot word a bulk share differently. */}
       <BulkShareSheet
         visible={bulkShareOpen}
@@ -2604,7 +2604,7 @@ export function SavedScreen({
         }}
         onClose={closeItemSheet}
         onNavigate={(waypoint) => onNavigateToWaypoint(waypoint.id)}
-        onOpenCanyon={onOpenCanyon}
+        onOpenPlace={onOpenPlace}
         onInfo={info}
         onError={fail}
       />
@@ -2623,7 +2623,7 @@ export function SavedScreen({
           closeItemSheet();
           if (routeId) onEditRoute(routeId);
         }}
-        onOpenCanyon={onOpenCanyon}
+        onOpenPlace={onOpenPlace}
         onInfo={info}
         onError={fail}
       />
@@ -2665,7 +2665,7 @@ function EmptyPanel({
   action: { label: string; onPress: () => void } | null;
   /** The tab has rows, but a search/tag narrowed all of them out — a
    *  different message from the tab genuinely holding nothing (item 8), same
-   *  pattern as `useCanyonPicker`'s "No canyon of yours matches that." */
+   *  pattern as `usePlacePicker`'s "No place of yours matches that." */
   searching: boolean;
 }) {
   // An empty panel is where someone works out whether a feature is missing or
@@ -2682,7 +2682,7 @@ function EmptyPanel({
     },
     all: {
       title: "Nothing saved yet",
-      hint: "Canyons need maps that work with no signal. Save a region before you leave town.",
+      hint: "Places need maps that work with no signal. Save a region before you leave town.",
     },
     region: {
       title: "No offline basemap",
@@ -2730,7 +2730,7 @@ function EmptyPanel({
 
 /**
  * The Share sub-mode of the per-item sheet: who has this item, and who else
- * could. Sits beside the canyon detail screen's Shared-with section on the same
+ * could. Sits beside the place detail screen's Shared-with section on the same
  * `useSharing` hook, so "what does unsharing mean" is worded once (DESIGN.md §7).
  *
  * Mounted only while the sub-mode is open, which is what makes the hook's load

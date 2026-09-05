@@ -3,7 +3,7 @@
 //
 // A hub is a menu, and a menu is not very interesting. What makes this screen
 // worth opening is the ONE question it can answer that no other screen owns:
-// "is my work safe?" (DESIGN.md §10). Every other tab is about canyons, trips or
+// "is my work safe?" (DESIGN.md §10). Every other tab is about places, trips or
 // maps; this is the only place that can be about the app itself, so the hero is
 // the sync answer in a sentence and the menu sits under it.
 //
@@ -18,7 +18,7 @@
 // ("Notifications, shares and requests" told the user nothing they couldn't read
 // off the title). Where there is no state to report, there is no subtitle — §7.
 //
-// PRIVACY: counts, a username, a storage figure. No canyon names, no coordinates.
+// PRIVACY: counts, a username, a storage figure. No place names, no coordinates.
 import { Feather } from "@expo/vector-icons";
 import { StyleSheet, Text, View } from "react-native";
 

@@ -4,7 +4,7 @@ import {
   CURRENT_CONSENT_VERSION,
   PENDING_CONSENT_STORAGE_KEY,
 } from "../consent";
-import { recordConsent, type TUser } from "../canyonUtils";
+import { recordConsent, type TUser } from "../placeUtils";
 import { messageFromError } from "../errors/messageFromError";
 import { ErrorBanner } from "./feedback/ErrorBanner";
 import BrandMark from "./brand/BrandMark";

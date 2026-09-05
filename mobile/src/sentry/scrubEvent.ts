@@ -1,7 +1,7 @@
 // Privacy scrubber for crash/error reports (pure — vitest-tested; the Sentry
 // binding lives in initSentry.ts).
 //
-// Mirrors api/src/lib/logger.ts: no canyon coordinates or names may leave the
+// Mirrors api/src/lib/logger.ts: no place coordinates or names may leave the
 // device in a crash report (root CLAUDE.md privacy rule). Three layers:
 //   1. redactTilePathPatterns semantics — strip URLs, decimal lat/lng pairs
 //      and z/x/y tile triples from every free-text field (a tile index at z18
@@ -48,7 +48,7 @@ export function scrubMessage(message: string): string {
   return redactTilePathPatterns(stripArgsBlock(message));
 }
 
-// Keys whose values could carry canyon coordinates or names. Mirrors the
+// Keys whose values could carry place coordinates or names. Mirrors the
 // intent of logger.ts redactPaths; matched case-insensitively at any depth.
 const SENSITIVE_KEYS = new Set([
   "latitude",

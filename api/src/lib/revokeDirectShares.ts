@@ -17,8 +17,8 @@
 //
 // STEP 4 IS THE WHOLE REASON THIS IS NOT A `deleteMany`. A waypoint or route
 // can be visible for two unrelated reasons (lib/shareAccess.ts): a direct
-// `Share` row, or a link to a canyon shared with that recipient. Revoking the
-// direct arm leaves the canyon arm standing, so tombstoning unconditionally
+// `Share` row, or a link to a place shared with that recipient. Revoking the
+// direct arm leaves the place arm standing, so tombstoning unconditionally
 // would tell the recipient to forget a row the next delta pull re-delivers —
 // and the row would flicker out and back on every sweep.
 //
@@ -35,7 +35,7 @@ import type { Prisma } from "@prisma/client";
 import type { SharableEntityType } from "@logjam/shared";
 
 import prisma from "../services/prisma";
-import { hasCanyonInheritedAccess } from "./shareAccess";
+import { hasPlaceInheritedAccess } from "./shareAccess";
 import { directShareRevokeTombstones, writeTombstones } from "./syncTombstones";
 
 /** One (thing, recipient) grant to take back. */
@@ -66,7 +66,7 @@ export function revocationKey(revocation: DirectShareRevocation): string {
  */
 export function revocationsNeedingTombstones(
   revocations: DirectShareRevocation[],
-  /** Keys (from `revocationKey`) whose recipient still sees the row via a shared canyon. */
+  /** Keys (from `revocationKey`) whose recipient still sees the row via a shared place. */
   stillVisible: ReadonlySet<string>,
 ): DirectShareRevocation[] {
   return revocations.filter(
@@ -109,7 +109,7 @@ export async function touchSharedForDelta(
  * than failing the batch, because a list built a minute ago may name one.
  *
  * The inherited-visibility reads happen BEFORE the transaction, deliberately:
- * this deletes no canyon row, so a recipient's canyon arm cannot change across
+ * this deletes no place row, so a recipient's place arm cannot change across
  * it.
  */
 export async function revokeDirectShares(
@@ -123,7 +123,7 @@ export async function revokeDirectShares(
       const synced = syncedEntityType(revocation.entityType);
       if (synced === null) return;
       if (
-        await hasCanyonInheritedAccess(
+        await hasPlaceInheritedAccess(
           revocation.sharedWithId,
           synced,
           revocation.entityId,

@@ -59,25 +59,25 @@ describe("conflictReceipts (§6 detection, arrival-order resolution)", () => {
       conflictReceipts(
         BASE,
         new Date(LATER),
-        { canyonIds: ["a", "b"] },
-        { canyonIds: ["a", "b"] },
+        { placeIds: ["a", "b"] },
+        { placeIds: ["a", "b"] },
       ),
     ).toEqual([]);
     expect(
       conflictReceipts(
         BASE,
         new Date(LATER),
-        { canyonIds: ["a", "b"] },
-        { canyonIds: ["b", "a"] },
+        { placeIds: ["a", "b"] },
+        { placeIds: ["b", "a"] },
       ),
-    ).toEqual([{ field: "canyonIds", serverValue: ["b", "a"] }]);
+    ).toEqual([{ field: "placeIds", serverValue: ["b", "a"] }]);
   });
 });
 
 describe("parsePushOp", () => {
   const valid = {
     opId: "op-1",
-    entity: "canyon",
+    entity: "place",
     op: "update",
     id: "a2f6f30c-1f9d-4c07-8b3e-2f5d6a7b8c9d",
     baseUpdatedAt: BASE,
@@ -90,7 +90,7 @@ describe("parsePushOp", () => {
 
   it("rejects unknown entity, invalid op-for-entity, bad id, bad baseUpdatedAt", () => {
     expect(() => parsePushOp({ ...valid, entity: "media" }, 0)).toThrow(AppError);
-    expect(() => parsePushOp({ ...valid, entity: "canyonShare" }, 0)).toThrow(
+    expect(() => parsePushOp({ ...valid, entity: "placeShare" }, 0)).toThrow(
       AppError,
     );
     expect(() =>
@@ -113,33 +113,33 @@ describe("parsePushOp", () => {
 
 describe("opDependencies (§8.3 dependency closure)", () => {
   const id = "a2f6f30c-1f9d-4c07-8b3e-2f5d6a7b8c9d";
-  const canyonA = "b2f6f30c-1f9d-4c07-8b3e-2f5d6a7b8c9d";
-  const canyonB = "c2f6f30c-1f9d-4c07-8b3e-2f5d6a7b8c9d";
+  const placeA = "b2f6f30c-1f9d-4c07-8b3e-2f5d6a7b8c9d";
+  const placeB = "c2f6f30c-1f9d-4c07-8b3e-2f5d6a7b8c9d";
 
-  it("creates depend only on referenced canyons", () => {
+  it("creates depend only on referenced places", () => {
     expect(
       opDependencies({
         opId: "x",
         entity: "tripLog",
         op: "create",
         id,
-        fields: { canyonIds: [canyonA, canyonB] },
+        fields: { placeIds: [placeA, placeB] },
       }),
-    ).toEqual([canyonA, canyonB]);
+    ).toEqual([placeA, placeB]);
     expect(
       opDependencies({
         opId: "x",
         entity: "waypoint",
         op: "create",
         id,
-        fields: { canyonId: canyonA },
+        fields: { placeId: placeA },
       }),
-    ).toEqual([canyonA]);
+    ).toEqual([placeA]);
   });
 
   it("updates and deletes depend on their own target row", () => {
     expect(
-      opDependencies({ opId: "x", entity: "canyon", op: "delete", id }),
+      opDependencies({ opId: "x", entity: "place", op: "delete", id }),
     ).toEqual([id]);
     expect(
       opDependencies({
@@ -147,8 +147,8 @@ describe("opDependencies (§8.3 dependency closure)", () => {
         entity: "tripLog",
         op: "update",
         id,
-        fields: { canyonIds: [canyonA] },
+        fields: { placeIds: [placeA] },
       }),
-    ).toEqual([id, canyonA]);
+    ).toEqual([id, placeA]);
   });
 });

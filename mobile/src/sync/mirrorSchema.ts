@@ -4,11 +4,11 @@
 // this file: the CREATE statements, both wipes, and the schema-version reset.
 // That is the point — `routes` was added to the schema and never joined
 // MIRROR_TABLES, so sign-out left the previous user's route geometry (their
-// coordinates through canyons) on the phone, and a forced resync left stale
+// coordinates through places) on the phone, and a forced resync left stale
 // rows behind. A list maintained beside the DDL drifts from it; a list the DDL
 // is BUILT from cannot.
 //
-// PRIVACY: mirror rows carry canyon names and coordinates. The wipe derived
+// PRIVACY: mirror rows carry place names and coordinates. The wipe derived
 // here is the privacy boundary between two users of one phone
 // (mobile/CLAUDE.md) — a new table must be unable to escape it.
 
@@ -77,9 +77,9 @@ export const SYNC_TABLES: readonly TableSchema[] = [
       at: "TEXT NOT NULL",
       // The name of the row this value belongs to, captured WHEN IT IS SHELVED
       // rather than read from the mirror at display time. The mirror row can be
-      // deleted afterwards, and then the only thing left saying which canyon a
+      // deleted afterwards, and then the only thing left saying which place a
       // rescued paragraph of notes came from is gone with it — every such entry
-      // read "Your notes on a canyon". Added after the table shipped, so it
+      // read "Your notes on a place". Added after the table shipped, so it
       // reaches existing installs through `ensureLocalColumns` (syncDb.ts), not
       // the mirror's drop-and-rebuild lever.
       entity_name: "TEXT",
@@ -92,7 +92,7 @@ export const SYNC_TABLES: readonly TableSchema[] = [
   // SQL; dirty_fields_json lists the locally-dirty field names for
   // rebase-on-pull.
   {
-    name: "canyons",
+    name: "places",
     kind: "mirror",
     columns: {
       id: "TEXT PRIMARY KEY",
@@ -127,7 +127,7 @@ export const SYNC_TABLES: readonly TableSchema[] = [
       types_json: "TEXT",
       notes: "TEXT",
       custom_fields_json: "TEXT",
-      canyons_json: "TEXT NOT NULL DEFAULT '[]'",
+      places_json: "TEXT NOT NULL DEFAULT '[]'",
       created_at: "TEXT",
       updated_at: "TEXT",
       extra_json: "TEXT",
@@ -138,7 +138,7 @@ export const SYNC_TABLES: readonly TableSchema[] = [
     // Custom field DEFINITIONS. A mirror table like any other, which is the
     // whole point of moving them off the user record: defining, renaming and
     // deleting a field is now the same offline-capable write path as creating
-    // a canyon, for a guest and for a linked user alike.
+    // a place, for a guest and for a linked user alike.
     //
     // No owner_id / sync_role: definitions belong to one account and are never
     // shared, so every row here is the user's own and always editable.
@@ -150,7 +150,7 @@ export const SYNC_TABLES: readonly TableSchema[] = [
     kind: "mirror",
     columns: {
       id: "TEXT PRIMARY KEY",
-      // "tripLog" | "canyon".
+      // "tripLog" | "place".
       entity: "TEXT NOT NULL",
       // The slug the stored values are keyed by. Stable across a rename.
       key: "TEXT NOT NULL",
@@ -173,14 +173,14 @@ export const SYNC_TABLES: readonly TableSchema[] = [
   },
   {
     // owner_id + sync_role mirror the routes table: a waypoint linked to a
-    // canyon shared with this user arrives here read-only. Canyon links are
-    // many-to-many and live in canyon_ids_json — there is no canyon_id column.
+    // place shared with this user arrives here read-only. Place links are
+    // many-to-many and live in place_ids_json — there is no place_id column.
     name: "waypoints",
     kind: "mirror",
     columns: {
       id: "TEXT PRIMARY KEY",
       owner_id: "TEXT",
-      canyon_ids_json: "TEXT",
+      place_ids_json: "TEXT",
       tags_json: "TEXT",
       sync_role: "TEXT",
       // Owner rows only: how many people it is directly shared with, for
@@ -209,7 +209,7 @@ export const SYNC_TABLES: readonly TableSchema[] = [
     columns: {
       id: "TEXT PRIMARY KEY",
       owner_id: "TEXT",
-      canyon_id: "TEXT",
+      place_id: "TEXT",
       name: "TEXT NOT NULL",
       color: "TEXT",
       points_json: "TEXT NOT NULL",
@@ -221,12 +221,12 @@ export const SYNC_TABLES: readonly TableSchema[] = [
       extra_json: "TEXT",
       dirty_fields_json: "TEXT",
     },
-    indexes: [{ name: "routes_canyon", on: "routes(canyon_id)" }],
+    indexes: [{ name: "routes_place", on: "routes(place_id)" }],
   },
   {
     // Every file this account owns. `linked_id` is NULL on a standalone file
     // (`linked_type = 'none'`): an import the user brought in or a track they
-    // recorded, which belongs to no canyon. That is the row that makes those
+    // recorded, which belongs to no place. That is the row that makes those
     // two things sync at all.
     //
     // `metadata_json` carries the stats (bbox, distance, counts) so the Saved
@@ -261,11 +261,11 @@ export const SYNC_TABLES: readonly TableSchema[] = [
     ],
   },
   {
-    name: "canyon_shares",
+    name: "place_shares",
     kind: "mirror",
     columns: {
       id: "TEXT PRIMARY KEY",
-      canyon_id: "TEXT NOT NULL",
+      place_id: "TEXT NOT NULL",
       direction: "TEXT NOT NULL",
       counterpart_user_id: "TEXT",
       counterpart_username: "TEXT",

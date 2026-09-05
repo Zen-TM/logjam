@@ -2,7 +2,7 @@
 // validation/caps and the short-lived opaque-token store. Kept free of
 // express/S3 so the privacy-relevant logic is unit-testable.
 //
-// PRIVACY: a region bbox is canyon-area knowledge. It exists transiently in
+// PRIVACY: a region bbox is place-area knowledge. It exists transiently in
 // the POST body (redacted from logs — see redactPaths in lib/logger.ts) and
 // in this process's memory until the clip is streamed or expires. It must
 // never appear in URLs, filenames, error messages, or persisted storage.

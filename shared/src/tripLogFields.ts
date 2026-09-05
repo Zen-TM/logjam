@@ -4,11 +4,11 @@
  * used to be spelled separately in `mobile/src/api/queries.ts` and in the
  * `entityConfigs` of `api/src/routes/customFields.ts`.
  *
- * The Place rework replaces `"canyon"` with a reference to a user-created
+ * The Place rework replaces `"place"` with a reference to a user-created
  * place type; until then these are the only two values `CustomFieldDef.entity`
  * may hold, and `isCustomFieldEntity` is the gate that says so.
  */
-export const CUSTOM_FIELD_ENTITIES = ["tripLog", "canyon"] as const;
+export const CUSTOM_FIELD_ENTITIES = ["tripLog", "place"] as const;
 
 export type CustomFieldEntity = (typeof CUSTOM_FIELD_ENTITIES)[number];
 
@@ -29,7 +29,7 @@ export type TripLogCustomFieldDef = {
   type: TripLogCustomFieldType;
   // Optional inclusive bounds, only meaningful (and only valid) for
   // integer/float fields. Present together or not at all. When set, the
-  // canyon filter renders a double-ended range slider instead of op+value.
+  // place filter renders a double-ended range slider instead of op+value.
   min?: number;
   max?: number;
 };
@@ -163,7 +163,7 @@ export function renameCustomFieldLabel(
 }
 
 /**
- * Raw form state for the "Add Custom Field" sub-form. Both CanyonDialog and
+ * Raw form state for the "Add Custom Field" sub-form. Both PlaceDialog and
  * TripLogDialog feed this into `buildCustomFieldDef` to get a validated
  * `TripLogCustomFieldDef` or a user-facing error string.
  */

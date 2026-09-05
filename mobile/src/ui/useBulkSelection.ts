@@ -1,6 +1,6 @@
 // Multi-select over a list of cards — the "press and hold one, tap to toggle,
 // the rail becomes cancel / select-all / delete" interaction first shipped in
-// SavedScreen, now shared by Canyons and Logs (and any other card list).
+// SavedScreen, now shared by Places and Logs (and any other card list).
 //
 // The screen owns the DELETE (confirm copy + the actual mutation), because
 // what a delete costs differs per kind — this hook owns only the selection:
@@ -19,7 +19,7 @@ export function useBulkSelection<Item>({
   items: Item[];
   /** The item's stable key (its id, or `region:<id>` for registry rows). */
   keyOf: (item: Item) => string;
-  /** False for a row a selection has nothing to do to (a shared canyon the
+  /** False for a row a selection has nothing to do to (a shared place the
    *  user may not delete) — it is greyed out instead of pickable. */
   isDeletable: (item: Item) => boolean;
 }) {

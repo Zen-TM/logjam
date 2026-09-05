@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  MAX_CANYONS_PER_WAYPOINT,
+  MAX_PLACES_PER_WAYPOINT,
   MAX_TAGS_PER_WAYPOINT,
-  normalizeWaypointCanyonIds,
+  normalizeWaypointPlaceIds,
   normalizeWaypointTags,
   validateWaypointPayload,
   WAYPOINT_NAME_MAX_LENGTH,
@@ -155,28 +155,28 @@ describe("normalizeWaypointTags", () => {
   });
 });
 
-describe("normalizeWaypointCanyonIds", () => {
+describe("normalizeWaypointPlaceIds", () => {
   it("distinguishes undefined (unchanged) from null (unlink all)", () => {
-    expect(normalizeWaypointCanyonIds(undefined)).toEqual({
-      canyonIds: undefined,
+    expect(normalizeWaypointPlaceIds(undefined)).toEqual({
+      placeIds: undefined,
     });
-    expect(normalizeWaypointCanyonIds(null)).toEqual({ canyonIds: [] });
+    expect(normalizeWaypointPlaceIds(null)).toEqual({ placeIds: [] });
   });
 
   it("dedupes exactly, leaving authorization to the server", () => {
-    expect(normalizeWaypointCanyonIds(["a", "a", "b"])).toEqual({
-      canyonIds: ["a", "b"],
+    expect(normalizeWaypointPlaceIds(["a", "a", "b"])).toEqual({
+      placeIds: ["a", "b"],
     });
   });
 
   it.each([
-    [42, "canyonIds must be an array of strings or null"],
-    [[7], "canyonIds must be an array of strings"],
+    [42, "placeIds must be an array of strings or null"],
+    [[7], "placeIds must be an array of strings"],
     [
-      Array.from({ length: MAX_CANYONS_PER_WAYPOINT + 1 }, (_, i) => `c${i}`),
-      `At most ${MAX_CANYONS_PER_WAYPOINT} canyons per waypoint`,
+      Array.from({ length: MAX_PLACES_PER_WAYPOINT + 1 }, (_, i) => `c${i}`),
+      `At most ${MAX_PLACES_PER_WAYPOINT} places per waypoint`,
     ],
-  ])("rejects bad canyonIds %#", (value, error) => {
-    expect(normalizeWaypointCanyonIds(value)).toEqual({ error });
+  ])("rejects bad placeIds %#", (value, error) => {
+    expect(normalizeWaypointPlaceIds(value)).toEqual({ error });
   });
 });

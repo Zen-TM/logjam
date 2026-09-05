@@ -30,7 +30,7 @@ describe("outboxMirrorTable", () => {
   });
 
   it("maps the tables a create can orphan", () => {
-    expect(outboxMirrorTable("canyon")).toBe("canyons");
+    expect(outboxMirrorTable("place")).toBe("places");
     expect(outboxMirrorTable("tripLog")).toBe("trip_logs");
     expect(outboxMirrorTable("waypoint")).toBe("waypoints");
     expect(outboxMirrorTable("media")).toBe("media");
@@ -44,8 +44,8 @@ describe("outboxMirrorTable", () => {
 describe("isOutboxEntity", () => {
   it("accepts what the outbox holds and rejects the rest", () => {
     expect(isOutboxEntity("media")).toBe(true);
-    expect(isOutboxEntity("canyon")).toBe(true);
-    expect(isOutboxEntity("canyons")).toBe(false);
+    expect(isOutboxEntity("place")).toBe(true);
+    expect(isOutboxEntity("places")).toBe(false);
     expect(isOutboxEntity("")).toBe(false);
   });
 });

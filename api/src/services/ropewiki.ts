@@ -5,7 +5,7 @@ import { AppError } from "../middleware/errorHandler";
 
 const ROPEWIKI_CSV_URL =
   "https://ropewiki.com/index.php?title=Special:Ask" +
-  "&x=-5B-5BCategory%3ACanyons-5D-5D-20-5B-5BLocated-20in-20region" +
+  "&x=-5B-5BCategory%3APlaces-5D-5D-20-5B-5BLocated-20in-20region" +
   ".Located-20in-20regions%3A%3AX-7C-7CNew-20South-20Wales-5D-5D" +
   "%2F-3FHas-20pageid%3DPAGEID%2F-3FHas-20name%3DLocation%2F-3FHas-20" +
   "coordinates%3DCoords%2F-3FLocated-20in-20region%3DRegion%2F-3FHas-20user" +
@@ -34,8 +34,8 @@ export type RopeWikiCanyon = {
   };
 };
 
-// Scalar fields that RopeWiki may own on a linked canyon.
-// name/latitude/longitude are always user-owned on link (Canyon requires them).
+// Scalar fields that RopeWiki may own on a linked place.
+// name/latitude/longitude are always user-owned on link (Place requires them).
 export type RopeWikiOwnableField =
   | "numAbseils"
   | "longestAbseil"
@@ -55,7 +55,7 @@ export const ROPE_WIKI_OWNABLE_FIELDS: RopeWikiOwnableField[] = [
   "hours",
 ];
 
-// Snapshot stored alongside the canyon to detect user edits on refresh.
+// Snapshot stored alongside the place to detect user edits on refresh.
 // Values are always the RopeWiki upstream values at last sync time.
 // ropeWikiOwnedFields lists scalar fields RopeWiki contributed on link.
 // "*" means all fields are RopeWiki-owned (fresh create, no pre-existing data).
@@ -74,7 +74,7 @@ export type RopeWikiSnapshot = {
   ropeWikiOwnedFields: RopeWikiOwnableField[] | "*";
 };
 
-// For canyons created fresh from RopeWiki — all fields are RopeWiki-owned.
+// For places created fresh from RopeWiki — all fields are RopeWiki-owned.
 export function snapshotFromCreate(c: RopeWikiCanyon): RopeWikiSnapshot {
   return {
     name: c.name,
@@ -92,7 +92,7 @@ export function snapshotFromCreate(c: RopeWikiCanyon): RopeWikiSnapshot {
   };
 }
 
-// For canyons linked from an existing local canyon — only null-filled fields
+// For places linked from an existing local place — only null-filled fields
 // are RopeWiki-owned. The caller supplies the ownership mask (from mergeFillNulls).
 export function snapshotFromLink(
   c: RopeWikiCanyon,
@@ -296,7 +296,7 @@ function parseQuality(value: string): number | null {
 }
 
 /**
- * Fetch the NSW canyon CSV straight from RopeWiki.
+ * Fetch the NSW place CSV straight from RopeWiki.
  *
  * As of 2026-08-30 this cannot succeed from a server: RopeWiki sits behind a
  * Cloudflare managed challenge that 403s every non-browser client on every
@@ -305,7 +305,7 @@ function parseQuality(value: string): number | null {
  * hand-uploaded S3 snapshot by default and only comes here on ?fresh=true.
  */
 export async function fetchAndParseRopeWiki(): Promise<{
-  canyons: RopeWikiCanyon[];
+  places: RopeWikiCanyon[];
   errors: string[];
 }> {
   const response = await fetch(ROPEWIKI_CSV_URL, {
@@ -328,9 +328,9 @@ export async function fetchAndParseRopeWiki(): Promise<{
   return parseRopeWikiCsv(await response.text());
 }
 
-/** Parse a RopeWiki Special:Ask CSV export into canyons plus per-row errors. */
+/** Parse a RopeWiki Special:Ask CSV export into places plus per-row errors. */
 export function parseRopeWikiCsv(csvText: string): {
-  canyons: RopeWikiCanyon[];
+  places: RopeWikiCanyon[];
   errors: string[];
 } {
   const records: string[][] = parse(csvText, {
@@ -375,7 +375,7 @@ export function parseRopeWikiCsv(csvText: string): {
   const maxTimeCol = optionalCol("max time");
   const timeCol = optionalCol("min time", "time");
 
-  const canyons: RopeWikiCanyon[] = [];
+  const places: RopeWikiCanyon[] = [];
   const errors: string[] = [];
 
   for (let i = 1; i < records.length; i++) {
@@ -414,7 +414,7 @@ export function parseRopeWikiCsv(csvText: string): {
       const minTimeRaw = timeCol >= 0 ? row[timeCol] || "" : "";
       const hours = parseHours(maxTimeRaw) ?? parseHours(minTimeRaw);
 
-      canyons.push({
+      places.push({
         ropeWikiId: pageId,
         name,
         latitude: coords.latitude,
@@ -439,5 +439,5 @@ export function parseRopeWikiCsv(csvText: string): {
     }
   }
 
-  return { canyons, errors };
+  return { places, errors };
 }

@@ -6,12 +6,12 @@ import {
   BOB_SUB,
   CAROL_SUB,
   BOB_ID,
-  SHARED_CANYON_ID,
+  SHARED_PLACE_ID,
   as,
 } from "./_actors";
 
 // Stage 8 §11 mandatory privacy-boundary suite for GET /sync/delta.
-// Requires `make dev`. Seed baseline: alice owns SHARED_CANYON_ID, shared
+// Requires `make dev`. Seed baseline: alice owns SHARED_PLACE_ID, shared
 // with bob; carol is shared nothing. Synthetic coords only.
 
 const CLIENT = { "x-logjam-client": "mobile/0.1.0-test" } as const;
@@ -69,13 +69,13 @@ describe("sync delta — request contract", () => {
 });
 
 describe("sync delta — owner view", () => {
-  it("initial pull returns alice's canyons/trips and advances the cursor", async () => {
+  it("initial pull returns alice's places/trips and advances the cursor", async () => {
     const { changes, cursor } = await fullPull(ALICE_SUB);
-    const canyons = changes.canyons as { id: string; syncRole: string }[];
-    expect(canyons.some((c) => c.id === SHARED_CANYON_ID)).toBe(true);
+    const places = changes.places as { id: string; syncRole: string }[];
+    expect(places.some((c) => c.id === SHARED_PLACE_ID)).toBe(true);
     expect(
-      canyons
-        .filter((c) => c.id === SHARED_CANYON_ID)
+      places
+        .filter((c) => c.id === SHARED_PLACE_ID)
         .every((c) => c.syncRole === "owner"),
     ).toBe(true);
     expect((changes.tripLogs as unknown[]).length).toBeGreaterThan(0);
@@ -105,14 +105,14 @@ describe("sync delta — owner view", () => {
 });
 
 describe("sync delta — sharee view (bob)", () => {
-  it("contains the shared canyon (role shared) + its canyon media, zero foreign trips/trip-media", async () => {
+  it("contains the shared place (role shared) + its place media, zero foreign trips/trip-media", async () => {
     const { changes } = await fullPull(BOB_SUB);
-    const canyons = changes.canyons as {
+    const places = changes.places as {
       id: string;
       syncRole: string;
       ownerId: string;
     }[];
-    const shared = canyons.find((c) => c.id === SHARED_CANYON_ID);
+    const shared = places.find((c) => c.id === SHARED_PLACE_ID);
     expect(shared).toBeTruthy();
     expect(shared!.syncRole).toBe("shared");
 
@@ -132,14 +132,14 @@ describe("sync delta — sharee view (bob)", () => {
         .filter((m) => m.linkedType === "tripLog")
         .every((m) => bobTripIds.has(m.linkedId)),
     ).toBe(true);
-    for (const canyon of canyons.filter((c) => c.syncRole === "shared")) {
-      expect((canyon as Record<string, unknown>)._count).toBeUndefined();
+    for (const place of places.filter((c) => c.syncRole === "shared")) {
+      expect((place as Record<string, unknown>)._count).toBeUndefined();
     }
   });
 
   it("cannot enumerate co-sharees and never sees an email anywhere", async () => {
     const { changes } = await fullPull(BOB_SUB);
-    const shares = changes.canyonShares as {
+    const shares = changes.placeShares as {
       sharedById: string;
       sharedWithId: string;
     }[];
@@ -157,79 +157,79 @@ describe("sync delta — sharee view (bob)", () => {
 describe("sync delta — stranger view (carol)", () => {
   it("contains nothing of alice's", async () => {
     const { changes } = await fullPull(CAROL_SUB);
-    const canyonIds = (changes.canyons as { id: string }[]).map((c) => c.id);
-    expect(canyonIds).not.toContain(SHARED_CANYON_ID);
+    const placeIds = (changes.places as { id: string }[]).map((c) => c.id);
+    expect(placeIds).not.toContain(SHARED_PLACE_ID);
     const json = JSON.stringify(changes);
-    expect(json).not.toContain(SHARED_CANYON_ID);
+    expect(json).not.toContain(SHARED_PLACE_ID);
   });
 });
 
 describe("sync delta — revocation signals", () => {
-  it("unshare emits a canyon tombstone to the sharee; canyon-delete emits the identical signal", async () => {
-    // Alice creates a canyon and shares it with bob.
+  it("unshare emits a place tombstone to the sharee; place-delete emits the identical signal", async () => {
+    // Alice creates a place and shares it with bob.
     const created = await request(API_URL)
-      .post("/canyons")
+      .post("/places")
       .set(as(ALICE_SUB))
-      .send({ name: "Tombstone canyon", latitude: -33.69, longitude: 150.29 });
+      .send({ name: "Tombstone place", latitude: -33.69, longitude: 150.29 });
     expect(created.status).toBe(201);
-    const canyonId = created.body.id as string;
+    const placeId = created.body.id as string;
     const share = await request(API_URL)
-      .post(`/canyons/${canyonId}/share`)
+      .post(`/places/${placeId}/share`)
       .set(as(ALICE_SUB))
       .send({ sharedWithUserId: BOB_ID });
     expect(share.status).toBe(201);
 
-    // Bob syncs to a steady-state cursor that has seen the canyon.
+    // Bob syncs to a steady-state cursor that has seen the place.
     const bobBefore = await fullPull(BOB_SUB);
     expect(
-      (bobBefore.changes.canyons as { id: string }[]).some(
-        (c) => c.id === canyonId,
+      (bobBefore.changes.places as { id: string }[]).some(
+        (c) => c.id === placeId,
       ),
     ).toBe(true);
 
-    // UNSHARE → bob's next delta: canyon tombstone, no canyon row.
+    // UNSHARE → bob's next delta: place tombstone, no place row.
     const revoke = await request(API_URL)
-      .delete(`/canyons/${canyonId}/share/${BOB_ID}`)
+      .delete(`/places/${placeId}/share/${BOB_ID}`)
       .set(as(ALICE_SUB));
     expect(revoke.status).toBe(204);
 
     const afterUnshare = await fullPull(BOB_SUB, bobBefore.cursor);
     expect(
       afterUnshare.tombstones.some(
-        (t) => t.type === "canyon" && t.id === canyonId,
+        (t) => t.type === "place" && t.id === placeId,
       ),
     ).toBe(true);
     expect(
-      (afterUnshare.changes.canyons as { id: string }[]).some(
-        (c) => c.id === canyonId,
+      (afterUnshare.changes.places as { id: string }[]).some(
+        (c) => c.id === placeId,
       ),
     ).toBe(false);
 
-    // Re-share, then DELETE the canyon → the sharee-visible signal must be
-    // indistinguishable from the unshare (a bare canyon tombstone).
+    // Re-share, then DELETE the place → the sharee-visible signal must be
+    // indistinguishable from the unshare (a bare place tombstone).
     const reshare = await request(API_URL)
-      .post(`/canyons/${canyonId}/share`)
+      .post(`/places/${placeId}/share`)
       .set(as(ALICE_SUB))
       .send({ sharedWithUserId: BOB_ID });
     expect(reshare.status).toBe(201);
     const bobMid = await fullPull(BOB_SUB, afterUnshare.cursor);
 
     const del = await request(API_URL)
-      .delete(`/canyons/${canyonId}`)
+      .delete(`/places/${placeId}`)
       .set(as(ALICE_SUB));
     expect(del.status).toBe(204);
 
     const afterDelete = await fullPull(BOB_SUB, bobMid.cursor);
     expect(
       afterDelete.tombstones.some(
-        (t) => t.type === "canyon" && t.id === canyonId,
+        (t) => t.type === "place" && t.id === placeId,
       ),
     ).toBe(true);
     // Signal shape parity: same tombstone type, no extra sharee-visible rows
     // that would distinguish delete from unshare.
     expect(
-      (afterDelete.changes.canyons as { id: string }[]).some(
-        (c) => c.id === canyonId,
+      (afterDelete.changes.places as { id: string }[]).some(
+        (c) => c.id === placeId,
       ),
     ).toBe(false);
   });
@@ -247,7 +247,7 @@ describe("sync meta", () => {
 
 describe("media download-urls boundary", () => {
   it("returns URLs for visible media, silently omits foreign ids", async () => {
-    // A media id bob can see: canyon-level media on the shared canyon (if
+    // A media id bob can see: place-level media on the shared place (if
     // any); build one deterministic case instead: alice attaches media via
     // presign+confirm is heavy — use omission check only with a fake id.
     const res = await request(API_URL)

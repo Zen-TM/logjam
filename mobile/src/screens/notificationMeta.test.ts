@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { TNotification } from "../api/types";
-import { notificationCanyonId, notificationMeta } from "./notificationLabel";
+import { notificationPlaceId, notificationMeta } from "./notificationLabel";
 import { notificationHue } from "../theme";
 
 function notification(
@@ -20,7 +20,7 @@ function notification(
 describe("notificationMeta", () => {
   it("borrows the hue of the thing the notification is about", () => {
     // The point of the vocabulary: the same colour here and where it lives.
-    expect(notificationMeta(notification("canyon_shared")).hue).toBe(notificationHue.share);
+    expect(notificationMeta(notification("place_shared")).hue).toBe(notificationHue.share);
     expect(notificationMeta(notification("topo_complete")).hue).toBe(notificationHue.topo);
     expect(notificationMeta(notification("geo_pdf_complete")).hue).toBe(notificationHue.geoPdf);
     expect(notificationMeta(notification("friend_request")).kind).toBe("people");
@@ -52,15 +52,15 @@ describe("notificationMeta", () => {
   });
 });
 
-describe("notificationCanyonId", () => {
-  it("finds the canyon a share points at", () => {
-    expect(notificationCanyonId(notification("canyon_shared", { canyonId: "c1" }))).toBe("c1");
+describe("notificationPlaceId", () => {
+  it("finds the place a share points at", () => {
+    expect(notificationPlaceId(notification("place_shared", { placeId: "c1" }))).toBe("c1");
   });
 
   it("is null for anything without a usable id", () => {
-    expect(notificationCanyonId(notification("topo_complete"))).toBeNull();
-    expect(notificationCanyonId(notification("canyon_shared", { canyonId: "" }))).toBeNull();
-    expect(notificationCanyonId(notification("canyon_shared", { canyonId: 7 }))).toBeNull();
+    expect(notificationPlaceId(notification("topo_complete"))).toBeNull();
+    expect(notificationPlaceId(notification("place_shared", { placeId: "" }))).toBeNull();
+    expect(notificationPlaceId(notification("place_shared", { placeId: 7 }))).toBeNull();
   });
 });
 
@@ -77,8 +77,8 @@ it("gives a received file its own kind, distinct from a share", () => {
   });
   const share = notificationMeta({
     id: "n2",
-    type: "canyon_shared",
-    payload: { canyonId: "c1" },
+    type: "place_shared",
+    payload: { placeId: "c1" },
     read: false,
     createdAt: "2026-08-30T00:00:00Z",
   });

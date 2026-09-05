@@ -71,7 +71,7 @@ const { keepBothShelfValue, listShelfEntries, restoreShelfValue, retryWithoutFie
 function shelfRow(overrides: Row = {}): Row {
   return {
     id: 1,
-    entity: "canyon",
+    entity: "place",
     entity_id: "c1",
     field: "notes",
     shelved_json: JSON.stringify("Exit track overgrown past the second crossing."),
@@ -95,7 +95,7 @@ describe("the mergeable-field list", () => {
     // list knew about would throw from inside the transaction the user's tap
     // opened. The two lists must agree (root CLAUDE.md).
     for (const field of mergeableTextFields()) {
-      const writable = ["canyon", "tripLog", "waypoint", "route"].some((entity) =>
+      const writable = ["place", "tripLog", "waypoint", "route"].some((entity) =>
         canRestoreField(entity, field),
       );
       expect(writable, `${field} is mergeable but not writable`).toBe(true);
@@ -103,10 +103,10 @@ describe("the mergeable-field list", () => {
   });
 
   it("refuses the fields where joining two values makes nonsense", () => {
-    expect(canKeepBothField("canyon", "notes")).toBe(true);
-    // A two-line canyon name is a broken canyon name; a grade is a number.
-    expect(canKeepBothField("canyon", "name")).toBe(false);
-    expect(canKeepBothField("canyon", "vGrade")).toBe(false);
+    expect(canKeepBothField("place", "notes")).toBe(true);
+    // A two-line place name is a broken place name; a grade is a number.
+    expect(canKeepBothField("place", "name")).toBe(false);
+    expect(canKeepBothField("place", "vGrade")).toBe(false);
   });
 });
 
@@ -137,7 +137,7 @@ describe("restoreShelfValue", () => {
     await restoreShelfValue(1);
     expect(writes).toEqual([
       {
-        entity: "canyon",
+        entity: "place",
         id: "c1",
         field: "notes",
         value: "Exit track overgrown past the second crossing.",
@@ -182,7 +182,7 @@ describe("keepBothShelfValue", () => {
 describe("retryWithoutFields", () => {
   const parkedRow = {
     seq: 9,
-    entity: "canyon",
+    entity: "place",
     op: "update",
     entity_id: "c1",
     state: "blocked",

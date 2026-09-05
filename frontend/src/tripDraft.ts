@@ -7,7 +7,7 @@
  * evicting the tab, a phone call, a flat battery. Between them, "I typed it and
  * it's gone" has no path left.
  *
- * Deliberately narrow, because the payload is the sensitive one (canyon names
+ * Deliberately narrow, because the payload is the sensitive one (place names
  * and notes) sitting in a store that any script on the origin can read and that
  * outlives the session:
  *
@@ -44,7 +44,7 @@ const TRIP_DRAFT_VERSION = 1;
 export type TripDraftForm = {
   date: string;
   notes: string;
-  selectedCanyonIds: string[];
+  selectedPlaceIds: string[];
   displayNameInput: string;
   selectedTypes: string[];
   fieldValues: Record<string, string>;
@@ -75,7 +75,7 @@ export function tripFormFingerprint(form: TripDraftForm): string {
   return JSON.stringify({
     date: form.date,
     notes: form.notes,
-    selectedCanyonIds: form.selectedCanyonIds,
+    selectedPlaceIds: form.selectedPlaceIds,
     displayNameInput: form.displayNameInput,
     selectedTypes: form.selectedTypes,
     fieldValues: form.fieldValues,
@@ -163,7 +163,7 @@ export function parseTripDraft(raw: string | null, now: Date): TripDraft | null 
     typeof f.date !== "string" ||
     typeof f.notes !== "string" ||
     typeof f.displayNameInput !== "string" ||
-    !isStringArray(f.selectedCanyonIds) ||
+    !isStringArray(f.selectedPlaceIds) ||
     !isStringArray(f.selectedTypes) ||
     !isStringRecord(f.fieldValues)
   ) {
@@ -179,7 +179,7 @@ export function parseTripDraft(raw: string | null, now: Date): TripDraft | null 
     form: {
       date: f.date,
       notes: f.notes,
-      selectedCanyonIds: f.selectedCanyonIds,
+      selectedPlaceIds: f.selectedPlaceIds,
       displayNameInput: f.displayNameInput,
       selectedTypes: f.selectedTypes,
       fieldValues: f.fieldValues,
@@ -226,7 +226,7 @@ export function writeTripDraft(form: TripDraftForm, savedAt: Date): TripDraftWri
     return { status: "saved" };
   } catch (err) {
     // QuotaExceededError, or storage disabled. `err` carries no draft content,
-    // so logging it can't leak canyon names.
+    // so logging it can't leak place names.
     return { status: "failed", error: err };
   }
 }

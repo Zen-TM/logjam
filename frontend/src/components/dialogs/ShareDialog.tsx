@@ -1,9 +1,9 @@
 // The friend-picker for SHARING — a live, read-only view of something the
 // owner keeps and can revoke at any time.
 //
-// One dialog for canyons and for the four direct-share types (waypoint, route,
+// One dialog for places and for the four direct-share types (waypoint, route,
 // topoJob, geoPdfJob), because "who can see this, and take it back" is one
-// interaction. The endpoints differ — canyons keep /canyons/:id/share, the rest
+// interaction. The endpoints differ — places keep /places/:id/share, the rest
 // use /shares — so the three calls arrive as props rather than being switched
 // on a type here.
 //
@@ -22,7 +22,7 @@ import {
 import classes from "./ShareDialog.module.css";
 import { useToast } from "../feedback/ToastProvider";
 import { messageFromError } from "../../errors/messageFromError";
-import type { TFriend } from "../../canyonUtils";
+import type { TFriend } from "../../placeUtils";
 
 /** Enough of a share row to list and revoke it. Both endpoints return this. */
 export type ShareRecipientRow = {
@@ -40,9 +40,9 @@ function ShareDialog({
   share,
   unshare,
 }: {
-  /** Dialog heading, e.g. `Share ${canyon.name}`. */
+  /** Dialog heading, e.g. `Share ${place.name}`. */
   title: string;
-  /** What the recipient gets, in the caller's own words — a canyon share and a
+  /** What the recipient gets, in the caller's own words — a place share and a
    *  route share do not grant the same things. */
   blurb: React.ReactNode;
   friends: TFriend[];

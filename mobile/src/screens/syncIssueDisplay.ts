@@ -7,7 +7,7 @@
 // The screen's job is to answer five questions per row, in order: which of my
 // things, what was I trying to do, why did it fail, can I fix it, and what
 // happens if I ignore it. Everything below exists to answer one of them.
-import { invalidCanyonFields, isTransientSyncError } from "@logjam/shared";
+import { invalidPlaceFields, isTransientSyncError } from "@logjam/shared";
 
 import type { ParkedOp, ShelfEntry } from "../sync/syncIssues";
 import { relativeTime } from "./syncHealth";
@@ -15,13 +15,13 @@ import { relativeTime } from "./syncHealth";
 /**
  * The kinds, in the user's words. Lower case because every string here is a
  * SENTENCE about the user's thing ("Couldn't upload …", "Your notes on a
- * canyon") rather than a label — the capitalised `Attachment`/`Canyon` labels
- * this replaces only ever appeared in the old `Canyon “X” — update` row title.
+ * place") rather than a label — the capitalised `Attachment`/`Place` labels
+ * this replaces only ever appeared in the old `Place “X” — update` row title.
  * Media is "photo or file" because that is what the user attached; "attachment"
  * is our word for the row that carries it.
  */
 const ENTITY_NOUN: Record<string, string> = {
-  canyon: "canyon",
+  place: "place",
   tripLog: "trip",
   waypoint: "waypoint",
   route: "route",
@@ -31,7 +31,7 @@ const ENTITY_NOUN: Record<string, string> = {
 
 /**
  * Field names in the user's words. The shelf stores the PROTOCOL field name,
- * which is a column to us and nothing at all to the reader — "Canyon · vGrade"
+ * which is a column to us and nothing at all to the reader — "Place · vGrade"
  * was the whole of a row's title. Anything not listed falls back to the raw
  * name rather than being hidden: an unlabelled field is a copy gap, not a
  * reason to withhold what the user typed.
@@ -52,7 +52,7 @@ const FIELD_LABEL: Record<string, string> = {
   displayName: "title",
   types: "trip type",
   customFields: "custom fields",
-  canyonIds: "linked canyons",
+  placeIds: "linked places",
   elevation: "elevation",
   symbol: "symbol",
   tags: "tags",
@@ -63,7 +63,7 @@ const FIELD_LABEL: Record<string, string> = {
 
 /**
  * Fields whose VALUE must never be rendered, whatever the op happens to carry.
- * A parked canyon create holds latitude/longitude, and this screen is exactly the
+ * A parked place create holds latitude/longitude, and this screen is exactly the
  * kind of page that ends up in a screenshot attached to a bug report — which is
  * the reason DESIGN.md §11 keeps coordinates off lists entirely.
  */
@@ -172,7 +172,7 @@ export function opAdvice(op: ParkedOp): IssueAdvice {
  * Whether "Recreate" will actually recreate something, rather than quietly
  * discarding (`recreateFromDeadRemote` falls back to a discard for anything it
  * cannot rebuild). The row used to be offered for EVERY deadRemote op with the
- * subtitle "Saves what you typed as a new one" — which for a canyon or a trip
+ * subtitle "Saves what you typed as a new one" — which for a place or a trip
  * was a button that deleted the change instead.
  *
  * Waypoints only, and only with a position: a waypoint's op carries its whole
@@ -184,10 +184,10 @@ export function canRecreate(op: ParkedOp): boolean {
   if (op.entity === "waypoint") {
     return typeof op.fields?.latitude === "number" && typeof op.fields?.longitude === "number";
   }
-  // A canyon UPDATE carries only what it dirtied — never coordinates — so the
+  // A place UPDATE carries only what it dirtied — never coordinates — so the
   // rebuild needs the phone's own copy of the row, which survives only until
   // the next delta pull applies the tombstone.
-  if (op.entity === "canyon") return op.hasLocalRow;
+  if (op.entity === "place") return op.hasLocalRow;
   return false;
 }
 
@@ -196,7 +196,7 @@ export function canRecreate(op: ParkedOp): boolean {
  * tell — the whole of "send the rest".
  *
  * We can tell because the range rules are in `shared/` and the client runs the
- * same ones (`invalidCanyonFields`). No message parsing: the server's sentence
+ * same ones (`invalidPlaceFields`). No message parsing: the server's sentence
  * is English for a person, and a client that read it would break the day
  * someone reworded it.
  *
@@ -205,9 +205,9 @@ export function canRecreate(op: ParkedOp): boolean {
  * nothing rather than re-send an edit that will park again.
  */
 export function rejectedFields(op: ParkedOp): string[] {
-  if (op.state !== "blocked" || op.entity !== "canyon" || !op.fields) return [];
+  if (op.state !== "blocked" || op.entity !== "place" || !op.fields) return [];
   if (op.error && isTransientSyncError(op.error.code)) return [];
-  return invalidCanyonFields(op.fields);
+  return invalidPlaceFields(op.fields);
 }
 
 /**
@@ -270,7 +270,7 @@ export function opChanges(op: ParkedOp): OpChange[] {
  * A field's value with its unit, where the number alone is a riddle.
  *
  * "Trip time: 6" is not a fact about anything, and the rest of the app never
- * shows these bare either (the canyon screen labels them HOURS and LONGEST
+ * shows these bare either (the place screen labels them HOURS and LONGEST
  * DROP). Only the fields whose unit is not in their own name are listed — an
  * abseil count is a count.
  */
@@ -292,9 +292,9 @@ function fieldValueText(field: string, value: unknown): string {
  * Waypoints, routes and media are absent deliberately: none has a screen that
  * can be pushed from here, and a row that navigates nowhere is worse than none.
  */
-export function opTarget(op: ParkedOp): { kind: "canyon" | "trip"; id: string } | null {
+export function opTarget(op: ParkedOp): { kind: "place" | "trip"; id: string } | null {
   if (op.op === "delete") return null;
-  if (op.entity === "canyon") return { kind: "canyon", id: op.entityId };
+  if (op.entity === "place") return { kind: "place", id: op.entityId };
   if (op.entity === "tripLog") return { kind: "trip", id: op.entityId };
   return null;
 }

@@ -94,8 +94,8 @@ function pairsFor(t) {
     // bonus usages (bonus1 = outline-bonus1 btn text)
     { name: "bonus1 text on primary (outline-bonus1 btn)", fg: t.bonus1, bg: t.primary, min: 4.5 },
     // map markers (non-text UI, 1.4.11)
-    { name: "owned-canyon marker on primary (UI)", fg: OWNED_MARKER, bg: t.primary, min: 3 },
-    { name: "shared-canyon marker on primary (UI)", fg: SHARED_MARKER, bg: t.primary, min: 3 },
+    { name: "owned-place marker on primary (UI)", fg: OWNED_MARKER, bg: t.primary, min: 3 },
+    { name: "shared-place marker on primary (UI)", fg: SHARED_MARKER, bg: t.primary, min: 3 },
   ];
 }
 

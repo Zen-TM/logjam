@@ -12,12 +12,12 @@ const API_URL = process.env.API_URL ?? "http://localhost:8080";
 const AUTH = { Authorization: "Bearer fake-token" } as const;
 
 describe("GET /notifications (fake auth = alice)", () => {
-  it("drops a canyon_shared notification whose referenced canyon no longer exists (PRIV-001)", async () => {
+  it("drops a place_shared notification whose referenced place no longer exists (PRIV-001)", async () => {
     const notification = await prisma.notification.create({
       data: {
         userId: ALICE_ID,
-        type: "canyon_shared",
-        payload: { canyonId: NONEXISTENT_ID, sharedById: BOB_ID },
+        type: "place_shared",
+        payload: { placeId: NONEXISTENT_ID, sharedById: BOB_ID },
         read: false,
       },
     });
@@ -52,28 +52,28 @@ describe("GET /notifications (fake auth = alice)", () => {
     }
   });
 
-  // "Live" means a live SHARE, not merely a live canyon (APIR-012/PRIV-103).
-  // This fixture used to own the canyon as ALICE and create no CanyonShare at
+  // "Live" means a live SHARE, not merely a live place (APIR-012/PRIV-103).
+  // This fixture used to own the place as ALICE and create no PlaceShare at
   // all — an impossible state that only resolved because the old read-time
-  // fallback checked canyon existence. Bob owns it and shares it, as the
+  // fallback checked place existence. Bob owns it and shares it, as the
   // notification claims.
-  it("resolves canyonName and sharedByUsername for a live canyon_shared notification", async () => {
-    const canyon = await prisma.canyon.create({
+  it("resolves placeName and sharedByUsername for a live place_shared notification", async () => {
+    const place = await prisma.place.create({
       data: {
         ownerId: BOB_ID,
-        name: "CH-002 notification canyon",
+        name: "CH-002 notification place",
         latitude: -33.7,
         longitude: 150.3,
       },
     });
-    const share = await prisma.canyonShare.create({
-      data: { canyonId: canyon.id, sharedById: BOB_ID, sharedWithId: ALICE_ID },
+    const share = await prisma.placeShare.create({
+      data: { placeId: place.id, sharedById: BOB_ID, sharedWithId: ALICE_ID },
     });
     const notification = await prisma.notification.create({
       data: {
         userId: ALICE_ID,
-        type: "canyon_shared",
-        payload: { canyonId: canyon.id, sharedById: BOB_ID },
+        type: "place_shared",
+        payload: { placeId: place.id, sharedById: BOB_ID },
         read: false,
       },
     });
@@ -82,12 +82,12 @@ describe("GET /notifications (fake auth = alice)", () => {
       expect(res.status).toBe(200);
       const found = res.body.find((n: { id: string }) => n.id === notification.id);
       expect(found).toBeDefined();
-      expect(found.payload.canyonName).toBe("CH-002 notification canyon");
+      expect(found.payload.placeName).toBe("CH-002 notification place");
       expect(found.payload.sharedByUsername).toBe("bob");
 
-      // The other half of the same rule: revoke the share, leave the canyon
+      // The other half of the same rule: revoke the share, leave the place
       // alive, and the name must stop resolving.
-      await prisma.canyonShare.delete({ where: { id: share.id } });
+      await prisma.placeShare.delete({ where: { id: share.id } });
       const after = await request(API_URL).get("/notifications").set(AUTH);
       expect(after.status).toBe(200);
       expect(
@@ -95,8 +95,8 @@ describe("GET /notifications (fake auth = alice)", () => {
       ).toBe(false);
     } finally {
       await prisma.notification.deleteMany({ where: { id: notification.id } });
-      await prisma.canyonShare.deleteMany({ where: { canyonId: canyon.id } });
-      await prisma.canyon.delete({ where: { id: canyon.id } });
+      await prisma.placeShare.deleteMany({ where: { placeId: place.id } });
+      await prisma.place.delete({ where: { id: place.id } });
     }
   });
 

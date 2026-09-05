@@ -33,7 +33,7 @@ import { BottomSheet, Row, SectionHeader } from "../ui";
 import { MediaViewer } from "./MediaViewer";
 
 /**
- * Attachment strip for a canyon or a trip — the one media surface, used by both
+ * Attachment strip for a place or a trip — the one media surface, used by both
  * detail screens.
  *
  * Not in `src/ui`: it owns picker permissions, file copying and outbox writes,
@@ -50,7 +50,7 @@ import { MediaViewer } from "./MediaViewer";
  *
  * PRIVACY: a photo is location evidence and a recorded track IS precise
  * location history. Nothing here leaves the device except through the outbox's
- * authed upload; the error paths carry no filenames, canyon names or
+ * authed upload; the error paths carry no filenames, place names or
  * coordinates.
  */
 
@@ -83,7 +83,7 @@ async function saveToGalleryIfWanted(uri: string): Promise<void> {
     if (!permission.granted) return;
     await MediaLibrary.saveToLibraryAsync(uri);
   } catch (err) {
-    // No filename, no path: this is media on a canyon.
+    // No filename, no path: this is media on a place.
     console.error("Gallery copy failed", err instanceof Error ? err.name : "unknown");
   }
 }
@@ -115,7 +115,7 @@ export function MediaStrip({
    * that never finishes reads as a bug rather than as a queue.
    */
   online?: boolean;
-  linkedType: "canyon" | "tripLog";
+  linkedType: "place" | "tripLog";
   linkedId: string;
   /** All attachments for the row; this strip shows only its own `kind`. */
   media: MirrorMedia[];
@@ -125,8 +125,8 @@ export function MediaStrip({
    * How many attachments this strip accepts. At the limit the add tile is
    * replaced by a line saying so, rather than left there to fail on upload.
    *
-   * A canyon takes exactly ONE route: the API rejects a second with 409 "This
-   * canyon already has a track" (`api/src/routes/media.ts`), and a rejected
+   * A place takes exactly ONE route: the API rejects a second with 409 "This
+   * place already has a track" (`api/src/routes/media.ts`), and a rejected
    * upload would sit in the outbox as a dead push. Photos are uncapped.
    */
   limit?: number;
@@ -139,8 +139,8 @@ export function MediaStrip({
    */
   onShowRoute?: (item: MirrorMedia) => void;
   /**
-   * The canyon route slot's own panel ("Add a way"), owned by the canyon screen
-   * — a canyon's slot can be filled five ways, three of which are not media at
+   * The place route slot's own panel ("Add a way"), owned by the place screen
+   * — a place's slot can be filled five ways, three of which are not media at
    * all, so this strip does not try to offer them. Given, the add tile opens
    * that panel instead of this component's own source sheet, and the tile
    * survives the limit as "Replace". A TRIP has no slot and no limit, passes
@@ -247,7 +247,7 @@ export function MediaStrip({
       const asset = result.assets[0];
       // The gallery copy happens BEFORE the attach, and its failure is never
       // allowed to cost the attachment: the photo the user actually asked for
-      // is the one going onto the canyon, and a refused media permission must
+      // is the one going onto the place, and a refused media permission must
       // not take that with it (Settings → Privacy and security).
       if (source === "camera") await saveToGalleryIfWanted(asset.uri);
       await attach({
@@ -367,7 +367,7 @@ export function MediaStrip({
                   ? "Add a photo or video"
                   : onAddWay
                     ? atLimit
-                      ? "Replace this canyon's route"
+                      ? "Replace this place's route"
                       : "Add a way"
                     : "Add a route"
               }
@@ -405,8 +405,8 @@ export function MediaStrip({
               {limit !== 1
                 ? `This holds up to ${limit} attachments.`
                 : onAddWay
-                  ? "One route per canyon."
-                  : "One route per canyon. Press and hold to replace it."}
+                  ? "One route per place."
+                  : "One route per place. Press and hold to replace it."}
             </Text>
           ) : null}
         </View>

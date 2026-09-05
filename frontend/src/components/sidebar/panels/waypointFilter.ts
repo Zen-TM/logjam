@@ -5,7 +5,7 @@
 // Saved tab does on its local mirror, so the two behave the same way for the
 // same typing.
 
-import type { TWaypoint } from "../../../canyonUtils";
+import type { TWaypoint } from "../../../placeUtils";
 
 /** A tag and how many waypoints carry it. */
 export type TagTally = { tag: string; count: number };

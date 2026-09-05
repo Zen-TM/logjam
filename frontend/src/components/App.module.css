@@ -79,7 +79,7 @@
   gap: 0.75rem;
   z-index: 10;
   /* Keep the bar inside the viewport — with three buttons it otherwise
-     overflows and clips at the screen edges on narrow widths (CANYON-11). */
+     overflows and clips at the screen edges on narrow widths (PLACE-11). */
   max-width: calc(100vw - 2rem);
   flex-wrap: wrap;
   justify-content: center;

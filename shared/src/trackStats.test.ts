@@ -361,7 +361,7 @@ describe("noise rejection (random walk, not sawtooth)", () => {
     expect(stats.elevationGainM).toBeLessThan(200);
   });
 
-  it("a real walk under canyon-grade noise reads close to the truth", () => {
+  it("a real walk under place-grade noise reads close to the truth", () => {
     // 60 min at 1.2 m/s = 4.32 km, climbing 400 m, on 30 m fixes.
     // Before: 32.45 km and 9472 m.
     const stats = computeTrackStats(
@@ -424,7 +424,7 @@ describe("rejectTrackFix drift and plausibility gates", () => {
     ).toBe("too-close");
   });
 
-  it("rejects a teleport no canyoner can walk", () => {
+  it("rejects a teleport no placeer can walk", () => {
     // 500 m in 10 s = 50 m/s — a re-acquired fix, not movement.
     expect(
       rejectTrackFix(
@@ -456,7 +456,7 @@ describe("rejectTrackFix drift and plausibility gates", () => {
   });
 
   it("refuses the same speed from fixes too coarse to demonstrate it", () => {
-    // The identical movement, measured by two 30 m fixes: at canyon-grade
+    // The identical movement, measured by two 30 m fixes: at place-grade
     // accuracy that is a jittering phone, not a vehicle, and this is what stops
     // the vehicle allowance from becoming a drift allowance.
     expect(

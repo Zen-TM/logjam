@@ -7,7 +7,7 @@ import { seedId, cid, SEED_ID_PREFIXES } from "../../prisma/seedIds";
 // The dev seed used to hand-mint version-nibble-0 ids
 // ("10000000-0000-0000-0000-000000000001"), which mobile's sync push rejects
 // at the envelope with 400 "id must be a UUIDv4" (parsePushOp,
-// src/routes/sync.ts) — so NO seeded canyon could sync ANY edit from the
+// src/routes/sync.ts) — so NO seeded place could sync ANY edit from the
 // phone, silently, because the local mirror still updated and the UI looked
 // right. The rule was a comment until this test.
 describe("hand-minted seed ids", () => {

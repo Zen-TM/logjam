@@ -3,7 +3,7 @@
 // short-lived opaque token — no S3 write, no presigned URL, no bbox in any
 // URL or log line.
 //
-// PRIVACY BOUNDARY (root CLAUDE.md): the request bbox is canyon-area
+// PRIVACY BOUNDARY (root CLAUDE.md): the request bbox is place-area
 // knowledge. It lives in the POST *body* only (redacted via redactPaths in
 // lib/logger.ts), is never interpolated into error messages, filenames, or
 // the GET URL, and the clipped file is deleted on send or after a 120 s TTL.

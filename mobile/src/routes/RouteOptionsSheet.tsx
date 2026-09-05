@@ -24,13 +24,13 @@ import { useEffect, useState } from "react";
 import { Alert, StyleSheet, View } from "react-native";
 import { messageFromError } from "@logjam/shared";
 
-import { assetHue, canyonHue, theme } from "../theme";
+import { assetHue, placeHue, theme } from "../theme";
 import { BottomSheet, RenameForm, Row } from "../ui";
 import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
 import { useConnectivity } from "../map/connectivity";
 import { routeActions } from "../saved/assetActions";
-import { useCanyonPicker } from "../canyons/useCanyonPicker";
-import { useMirrorCanyons } from "../sync/useSyncQueries";
+import { usePlacePicker } from "../places/usePlacePicker";
+import { useMirrorPlaces } from "../sync/useSyncQueries";
 import { updateRouteLocal } from "../sync/outbox";
 import type { MirrorRoute } from "../sync/mirrorStore";
 import { exportRoute, ExportUnsupportedError } from "../fileExport";
@@ -42,7 +42,7 @@ export function RouteOptionsSheet({
   onClose,
   onShowOnMap,
   onEdit,
-  onOpenCanyon,
+  onOpenPlace,
   onInfo,
   onError,
   allowNetwork = true,
@@ -51,11 +51,11 @@ export function RouteOptionsSheet({
   visible: boolean;
   onClose: () => void;
   /**
-   * Open the canyon a SHARED route came with. Not a share verb of its own: a
-   * route on this phone because its canyon is shared has no share row to drop,
-   * and the canyon's screen is where that ends (saved/assetActions.ts).
+   * Open the place a SHARED route came with. Not a share verb of its own: a
+   * route on this phone because its place is shared has no share row to drop,
+   * and the place's screen is where that ends (saved/assetActions.ts).
    */
-  onOpenCanyon?: (canyonId: string, name: string) => void;
+  onOpenPlace?: (placeId: string, name: string) => void;
   /**
    * Fly the map to this route. Saved-only — the map surface omits it, because
    * the user got here by tapping the line and is already looking at it
@@ -97,20 +97,20 @@ export function RouteOptionsSheet({
   }, [visible]);
   const online = useConnectivity() === "online";
 
-  // The canyons this phone can see, so a shared route can tell a share of its
+  // The places this phone can see, so a shared route can tell a share of its
   // own from one it inherited (assetActions.routeActions says why).
-  const canyons = useMirrorCanyons();
-  const visibleCanyonIds = (canyons.data ?? []).map((canyon) => canyon.id);
-  const actions = route ? routeActions(route, visibleCanyonIds) : null;
-  const viaCanyons = (canyons.data ?? []).filter((canyon) =>
-    (actions?.sharedViaCanyonIds ?? []).includes(canyon.id),
+  const places = useMirrorPlaces();
+  const visiblePlaceIds = (places.data ?? []).map((place) => place.id);
+  const actions = route ? routeActions(route, visiblePlaceIds) : null;
+  const viaPlaces = (places.data ?? []).filter((place) =>
+    (actions?.sharedViaPlaceIds ?? []).includes(place.id),
   );
   // Declared AFTER `actions`, which it now reads: the route's own id. A route
   // drawn in the field is not on the server until the outbox flushes, and the
   // verb dims with the reason rather than firing a grant at a row that isn't
   // there.
   const shareRowProps = useShareRowProps(online, actions?.share?.entityId);
-  // THE sharing panel — the same one Saved, the waypoint sheet and the canyon
+  // THE sharing panel — the same one Saved, the waypoint sheet and the place
   // screen render. Called unconditionally; a closed sheet passes a null target
   // and issues no request.
   const share = useSharePanel({
@@ -123,21 +123,21 @@ export function RouteOptionsSheet({
     active: sharing,
   });
 
-  // THE canyon picker, as a sub-mode of this sheet rather than a second sheet
+  // THE place picker, as a sub-mode of this sheet rather than a second sheet
   // the caller had to remember to mount (DESIGN.md §6). Same panel a track's
   // and an import's options render.
-  const canyonPicker = useCanyonPicker({
+  const placePicker = usePlacePicker({
     source: "route",
     active: linking,
-    currentCanyonId: route?.canyonId ?? null,
+    currentPlaceId: route?.placeId ?? null,
     ignoreRouteId: route?.id ?? null,
     onUnlink: () =>
-      updateRouteLocal(route!.id, { canyonId: null }).then(() =>
+      updateRouteLocal(route!.id, { placeId: null }).then(() =>
         onInfo("Route unlinked."),
       ),
-    attach: (canyonId, canyonName) =>
-      updateRouteLocal(route!.id, { canyonId }).then(() =>
-        onInfo(`Route linked to ${canyonName}.`),
+    attach: (placeId, placeName) =>
+      updateRouteLocal(route!.id, { placeId }).then(() =>
+        onInfo(`Route linked to ${placeName}.`),
       ),
     onDone: () => {
       setLinking(false);
@@ -240,23 +240,23 @@ export function RouteOptionsSheet({
           : renaming
             ? "Rename route"
             : linking
-              ? route.canyonId
-                ? "Change linked canyon"
-                : "Link to a canyon"
+              ? route.placeId
+                ? "Change linked place"
+                : "Link to a place"
               : route.name
       }
       // A sub-mode REPLACES the verb list rather than expanding inside it —
-      // same shape as the waypoint sheet and the canyon sheet. Shown inline the
+      // same shape as the waypoint sheet and the place sheet. Shown inline the
       // share panel pushed "Delete route" below the friend picker, which put a
       // destructive verb in the middle of a sharing flow.
       onBack={leaveSubMode ?? undefined}
       footer={sharing ? share.footer : undefined}
-      header={linking ? canyonPicker.header : undefined}
+      header={linking ? placePicker.header : undefined}
     >
       {sharing && actions.share ? (
         share.body
       ) : linking ? (
-        canyonPicker.body
+        placePicker.body
       ) : renaming && actions.rename ? (
         <View style={styles.body}>
           <RenameForm
@@ -315,7 +315,7 @@ export function RouteOptionsSheet({
           <Row
             // No subtitle: the sheet it opens says the same thing, and saying
             // it twice makes the row taller for no new information.
-            title={route.canyonId ? "Change linked canyon" : "Link to a canyon"}
+            title={route.placeId ? "Change linked place" : "Link to a place"}
             icon="link"
             hue={assetHue.route}
             disabled={busy}
@@ -350,7 +350,7 @@ export function RouteOptionsSheet({
           />
         ) : null}
         {/* `actions.share` is absent on a route reached through someone else's
-            canyon, so the verb is withheld rather than offered and refused
+            place, so the verb is withheld rather than offered and refused
             with a 403. The panel behind it is a sub-mode of THIS sheet. */}
         {actions.share ? (
           <Row
@@ -364,7 +364,7 @@ export function RouteOptionsSheet({
         ) : null}
         {/* A route is a synced record, so this removes it from the ACCOUNT —
             "from device" would promise the copy on another phone survives.
-            A route shared through someone else's canyon carries no delete
+            A route shared through someone else's place carries no delete
             descriptor at all (the API's delete is owner-only), so the verb is
             absent rather than offered and refused. */}
         {actions.delete ? (
@@ -389,20 +389,20 @@ export function RouteOptionsSheet({
             onPress={confirmRemoveShare}
           />
         ) : null}
-        {/* Nothing to remove here — this route came with a canyon. Say which,
+        {/* Nothing to remove here — this route came with a place. Say which,
             and go there, rather than offering a verb the server would refuse. */}
-        {viaCanyons.length > 0 && onOpenCanyon
-          ? viaCanyons.map((canyon) => (
+        {viaPlaces.length > 0 && onOpenPlace
+          ? viaPlaces.map((place) => (
               <Row
-                key={canyon.id}
-                title={`Open ${canyon.name}`}
-                subtitle="This route came with that shared canyon — remove it there."
+                key={place.id}
+                title={`Open ${place.name}`}
+                subtitle="This route came with that shared place — remove it there."
                 icon="map-pin"
-                hue={canyonHue.shared}
+                hue={placeHue.shared}
                 disabled={busy}
                 onPress={() => {
                   close();
-                  onOpenCanyon(canyon.id, canyon.name);
+                  onOpenPlace(place.id, place.name);
                 }}
               />
             ))

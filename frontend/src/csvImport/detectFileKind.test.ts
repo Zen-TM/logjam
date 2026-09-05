@@ -2,17 +2,17 @@ import { describe, it, expect } from "vitest";
 import { detectFileKind } from "./detectFileKind";
 
 describe("detectFileKind", () => {
-  it("classifies a file with latitude+longitude as a canyon list", () => {
-    expect(detectFileKind(["Name", "Latitude", "Longitude"])).toBe("canyon");
+  it("classifies a file with latitude+longitude as a place list", () => {
+    expect(detectFileKind(["Name", "Latitude", "Longitude"])).toBe("place");
   });
 
   it("recognises lat/lng abbreviations", () => {
-    expect(detectFileKind(["canyon", "lat", "lng"])).toBe("canyon");
-    expect(detectFileKind(["site", "y", "x"])).toBe("canyon");
+    expect(detectFileKind(["place", "lat", "lng"])).toBe("place");
+    expect(detectFileKind(["site", "y", "x"])).toBe("place");
   });
 
   it("classifies a file with a date and name (no coords) as a logbook", () => {
-    expect(detectFileKind(["Canyon", "Date", "Notes"])).toBe("triplog");
+    expect(detectFileKind(["Place", "Date", "Notes"])).toBe("triplog");
   });
 
   it("recognises date/name aliases", () => {
@@ -20,12 +20,12 @@ describe("detectFileKind", () => {
     expect(detectFileKind(["place", "visited"])).toBe("triplog");
   });
 
-  it("prefers canyon when coords AND a date are both present", () => {
-    // A canyon list that also happens to carry a date column is still a canyon
+  it("prefers place when coords AND a date are both present", () => {
+    // A place list that also happens to carry a date column is still a place
     // list — coords are the strong signal.
     expect(
       detectFileKind(["Name", "Latitude", "Longitude", "Date"]),
-    ).toBe("canyon");
+    ).toBe("place");
   });
 
   it("returns unknown when neither coords nor (date+name) are present", () => {
@@ -37,7 +37,7 @@ describe("detectFileKind", () => {
   });
 
   it("returns unknown for a name column with no date and no coords", () => {
-    expect(detectFileKind(["Canyon", "Notes"])).toBe("unknown");
+    expect(detectFileKind(["Place", "Notes"])).toBe("unknown");
   });
 
   it("returns unknown for empty headers", () => {
@@ -45,11 +45,11 @@ describe("detectFileKind", () => {
   });
 
   // FECO-004: detectFileKind used to keep its own copy of the header
-  // normalizer, which never got the camelCase-splitting fix canyonColumns.ts
+  // normalizer, which never got the camelCase-splitting fix placeColumns.ts
   // added for IMPORT-4 — so a `latDD`/`lonDD` file (with no override, since an
   // unknown-kind file never becomes a LoadedFile) failed detection outright.
-  // Now both share canyonColumns.ts's `normalize`.
+  // Now both share placeColumns.ts's `normalize`.
   it("recognises camelCase coordinate headers (latDD/lonDD) — FECO-004", () => {
-    expect(detectFileKind(["Name", "latDD", "lonDD"])).toBe("canyon");
+    expect(detectFileKind(["Name", "latDD", "lonDD"])).toBe("place");
   });
 });

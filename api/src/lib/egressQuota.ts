@@ -10,7 +10,7 @@ import type { DbClient } from "./storageQuota";
  * access logs — the only place real transferred bytes are recorded. Nothing on
  * the request path can measure them: the API mints a presigned URL far more
  * often than anyone fetches it (lib/mediaPresign.ts signs one per photo on
- * every canyon read), so counting at mint time would over-charge by an order
+ * every place read), so counting at mint time would over-charge by an order
  * of magnitude.
  *
  * The consequence is that this meter LAGS. Access-log delivery is best-effort
@@ -53,9 +53,9 @@ export async function getEgressUsage(userId: string, db: DbClient = prisma) {
  * Which of `userIds` are out of download allowance, in one query.
  *
  * For list responses that mint many presigned URLs across several owners
- * (a canyon's media, a trip log's photos). Those degrade rather than fail: the
+ * (a place's media, a trip log's photos). Those degrade rather than fail: the
  * list still renders and the affected items come back with null URLs, because
- * 429-ing an entire canyon read over one owner's exhausted allowance would be
+ * 429-ing an entire place read over one owner's exhausted allowance would be
  * a far worse outcome than some images not loading.
  */
 export async function exhaustedEgressOwnerIds(
@@ -88,7 +88,7 @@ export async function exhaustedEgressOwnerIds(
  * Throws 429 when `userId` has exhausted their monthly download allowance.
  *
  * Called with the OWNER of the bytes about to be served, which is not always
- * the caller: a sharee downloading a shared canyon's photos spends the canyon
+ * the caller: a sharee downloading a shared place's photos spends the place
  * owner's allowance, because the owner is who S3 attributes the object to.
  * Gating on the caller instead would leave the owner's allowance drainable by
  * anyone they had shared with.

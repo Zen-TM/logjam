@@ -1,6 +1,6 @@
 // Map layers for recorded tracks + waypoints (Stage 7). Rendered inside
 // Map; sources are unpinned so they draw above the basemap/overlay bands —
-// mount this BEFORE the canyon sources so canyons stay on top.
+// mount this BEFORE the place sources so places stay on top.
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { GeoJSONSource, Layer } from "@maplibre/maplibre-react-native";
 import type { RecordedTrackPoint } from "@logjam/shared";
@@ -10,7 +10,7 @@ import { listTrackPoints, type Track, type Waypoint } from "./tracksDb";
 import { trackPointsToFeature } from "./trackGeoJson";
 import { stopSourcePress } from "../map/sourcePress";
 
-const WAYPOINT_COLOR = "#f97316"; // matches the owned-canyon orange family
+const WAYPOINT_COLOR = "#f97316"; // matches the owned-place orange family
 
 /** Where on the map a press landed — passed through so a caller can place a
  *  point there when a tool is armed (the layer swallowed the press first). */

@@ -21,16 +21,16 @@ export const ALICE_ID = "00000000-0000-4000-8000-000000000001";
 export const BOB_ID = "00000000-0000-4000-8000-000000000002";
 export const CAROL_ID = "00000000-0000-4000-8000-000000000003";
 
-// Seed canyon IDs (all alice-owned). Canyons 0 and 1 are shared with bob;
+// Seed place IDs (all alice-owned). Places 0 and 1 are shared with bob;
 // carol is shared nothing (the stranger).
-export const SHARED_CANYON_ID = "10000000-0000-4000-8000-000000000001";
+export const SHARED_PLACE_ID = "10000000-0000-4000-8000-000000000001";
 
 // Well-formed UUIDv4 that no seeded row uses — the "unknown id" probe, so a
 // 404 assertion is testing not-found and not id-format rejection.
 export const NONEXISTENT_ID = "99999999-9999-4999-8999-999999999999";
 
 // Header bundle authenticating the request as `sub`. Usage:
-//   request(API_URL).get("/canyons").set(as(BOB_SUB))
+//   request(API_URL).get("/places").set(as(BOB_SUB))
 export function as(sub: string): Record<string, string> {
   return { Authorization: "Bearer fake-token", "x-fake-sub": sub };
 }

@@ -4,7 +4,7 @@
 // Every "save maps offline" run writes a `dem-region` MBTiles of terrarium
 // tiles at DEM_TILE_ZOOM (regionTileDownload.ts). This reads them back, so a
 // route profile, a point's height and a track's gain/loss keep working in a
-// canyon with no signal — the trip the download exists for.
+// place with no signal — the trip the download exists for.
 //
 // The maths is the server sampler's, imported rather than re-derived
 // (shared/src/demTiles.ts): same zoom, same pixel address, same no-data rule,

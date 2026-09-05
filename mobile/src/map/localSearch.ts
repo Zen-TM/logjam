@@ -5,12 +5,12 @@
 // box, and ordering built inline in a render is ordering nobody checks.
 //
 // The rule is deliberately dumb — case-insensitive substring, prefix matches
-// first — because the corpus is one person's canyons and waypoints, not a
+// first — because the corpus is one person's places and waypoints, not a
 // document index. Fuzzy matching over forty rows buys nothing and starts
 // answering "Claustral" with "Coal Mine".
 //
 // PRIVACY: this runs entirely on the device against the local mirror. It is
-// what lets the search box answer a canyon name at all — sending one to
+// what lets the search box answer a place name at all — sending one to
 // Nominatim is exactly the thing the privacy rules forbid (see MapSearchBar).
 
 /** Shortest query that searches saved items. Lower than the geocoder's own
@@ -31,7 +31,7 @@ export type LocalSearchCandidate<T> = {
  *
  * "Best" is: a title that STARTS with the query, then a title that contains it,
  * then a match that was only in the alternates. Ties keep the caller's order,
- * which is the order the kinds were composed in — so canyons come before
+ * which is the order the kinds were composed in — so places come before
  * waypoints for an equally good match, which is the order someone looking at a
  * map wants.
  */

@@ -32,7 +32,7 @@ export async function writeTombstones(
 
 /** Deleting a custom field DEFINITION. Definitions are never shared — they
  * belong to one account — so the fan-out is the owner alone. The values the
- * definition described are stripped from the owner's trip logs / canyons in
+ * definition described are stripped from the owner's trip logs / places in
  * the same transaction, and those rows' own `updatedAt` bumps carry the strip
  * to other devices; this tombstone is only about the definition row. */
 export function customFieldDefDeleteTombstones(args: {
@@ -60,47 +60,47 @@ export function tripDeleteTombstones(args: {
   ];
 }
 
-/** DELETE /canyons/:id (and each row of the bulk cascade): the owner forgets
- * the canyon, its media and every revoked share row; each sharee forgets the
- * canyon and its canyon-level media. A sharee's signal here is deliberately
- * identical to an unshare (canyon tombstone) — continued-existence oracle
+/** DELETE /places/:id (and each row of the bulk cascade): the owner forgets
+ * the place, its media and every revoked share row; each sharee forgets the
+ * place and its place-level media. A sharee's signal here is deliberately
+ * identical to an unshare (place tombstone) — continued-existence oracle
  * closed (§4.6.3). */
-export function canyonDeleteTombstones(args: {
+export function placeDeleteTombstones(args: {
   ownerId: string;
-  canyonId: string;
-  /** Media DESTROYED with the canyon — its own attachments (photos, videos).
+  placeId: string;
+  /** Media DESTROYED with the place — its own attachments (photos, videos).
    * The owner forgets these as well as the sharees. */
   mediaIds: string[];
   shares: { id: string; sharedWithId: string }[];
-  /** The canyon's linked route, if it had one. The ROUTE ITSELF SURVIVES —
-   * Route.canyonId is SetNull, so deleting a canyon unlinks its route rather
+  /** The place's linked route, if it had one. The ROUTE ITSELF SURVIVES —
+   * Route.placeId is SetNull, so deleting a place unlinks its route rather
    * than destroying it. Only the sharees lose sight of it; the owner keeps it
    * as a standalone route and gets no tombstone. */
   routeId?: string | null;
   /** Standalone files (an import, a recorded track) that were linked as this
-   * canyon's way. Same shape of survival as `routeId`: the file lives on in
+   * place's way. Same shape of survival as `routeId`: the file lives on in
    * the owner's Saved list, so the OWNER GETS NO TOMBSTONE — one here would
    * make every device delete the user's own file — and only the sharees, who
-   * could see it solely through this canyon, are told to forget it. */
+   * could see it solely through this place, are told to forget it. */
   unlinkedMediaIds?: string[];
 }): TombstoneRow[] {
-  const { ownerId, canyonId, mediaIds, shares, routeId } = args;
+  const { ownerId, placeId, mediaIds, shares, routeId } = args;
   const unlinkedMediaIds = args.unlinkedMediaIds ?? [];
   const rows: TombstoneRow[] = [
-    { userId: ownerId, entityType: "canyon", entityId: canyonId },
+    { userId: ownerId, entityType: "place", entityId: placeId },
     ...mediaIds.map(
       (id): TombstoneRow => ({ userId: ownerId, entityType: "media", entityId: id }),
     ),
     ...shares.map(
       (share): TombstoneRow => ({
         userId: ownerId,
-        entityType: "canyonShare",
+        entityType: "placeShare",
         entityId: share.id,
       }),
     ),
   ];
   for (const share of shares) {
-    rows.push({ userId: share.sharedWithId, entityType: "canyon", entityId: canyonId });
+    rows.push({ userId: share.sharedWithId, entityType: "place", entityId: placeId });
     for (const id of mediaIds) {
       rows.push({ userId: share.sharedWithId, entityType: "media", entityId: id });
     }
@@ -114,10 +114,10 @@ export function canyonDeleteTombstones(args: {
   return rows;
 }
 
-/** PATCH /media/:id/link, unlinking a standalone file from a canyon (a way
+/** PATCH /media/:id/link, unlinking a standalone file from a place (a way
  * being replaced, or detached outright). The file survives — the owner keeps it
- * in Saved and gets NO tombstone — but every current sharee of that canyon
- * could see it only through the canyon, so each must forget it. The mirror of
+ * in Saved and gets NO tombstone — but every current sharee of that place
+ * could see it only through the place, so each must forget it. The mirror of
  * a link, which needs no tombstone at all: a sharee simply gains a row on their
  * next delta. */
 export function mediaUnlinkTombstones(args: {
@@ -132,8 +132,8 @@ export function mediaUnlinkTombstones(args: {
   }));
 }
 
-/** DELETE /media/:id: the owner forgets it; if it was canyon-level media of a
- * shared canyon, every current sharee forgets it too. */
+/** DELETE /media/:id: the owner forgets it; if it was place-level media of a
+ * shared place, every current sharee forgets it too. */
 export function mediaDeleteTombstones(args: {
   ownerId: string;
   mediaId: string;
@@ -148,31 +148,31 @@ export function mediaDeleteTombstones(args: {
   ];
 }
 
-/** Share revocation (DELETE /canyons/:id/share/:userId, unshare-all, and the
- * per-share leg of unfriend): the sharee loses the whole canyon record — the
- * same `canyon` tombstone a canyon-delete would emit (§4.6.3) — plus its
- * canyon-level media; the canyon owner forgets the share row. */
+/** Share revocation (DELETE /places/:id/share/:userId, unshare-all, and the
+ * per-share leg of unfriend): the sharee loses the whole place record — the
+ * same `place` tombstone a place-delete would emit (§4.6.3) — plus its
+ * place-level media; the place owner forgets the share row. */
 export function shareRevokeTombstones(args: {
-  canyonOwnerId: string;
+  placeOwnerId: string;
   shareeId: string;
   shareId: string;
-  canyonId: string;
-  canyonMediaIds: string[];
-  /** The canyon's linked route, if any — the sharee loses it along with the
-   * canyon record. Owner-side nothing changes; the route is still linked. */
+  placeId: string;
+  placeMediaIds: string[];
+  /** The place's linked route, if any — the sharee loses it along with the
+   * place record. Owner-side nothing changes; the route is still linked. */
   routeId?: string | null;
 }): TombstoneRow[] {
-  const { canyonOwnerId, shareeId, shareId, canyonId, canyonMediaIds, routeId } =
+  const { placeOwnerId, shareeId, shareId, placeId, placeMediaIds, routeId } =
     args;
   return [
-    { userId: shareeId, entityType: "canyon", entityId: canyonId },
-    ...canyonMediaIds.map(
+    { userId: shareeId, entityType: "place", entityId: placeId },
+    ...placeMediaIds.map(
       (id): TombstoneRow => ({ userId: shareeId, entityType: "media", entityId: id }),
     ),
     ...(routeId
       ? [{ userId: shareeId, entityType: "route" as const, entityId: routeId }]
       : []),
-    { userId: canyonOwnerId, entityType: "canyonShare", entityId: shareId },
+    { userId: placeOwnerId, entityType: "placeShare", entityId: shareId },
   ];
 }
 
@@ -194,8 +194,8 @@ export function friendshipDeleteTombstones(args: {
 }
 
 /** DELETE /routes/:id: the owner forgets it; if it was LINKED to a shared
- * canyon, every current sharee of that canyon forgets it too (a linked route
- * follows canyon-level media visibility, not the owner-private waypoint rule).
+ * place, every current sharee of that place forgets it too (a linked route
+ * follows place-level media visibility, not the owner-private waypoint rule).
  * `shareeIds` is empty for an unlinked route. */
 export function routeDeleteTombstones(args: {
   ownerId: string;
@@ -211,8 +211,8 @@ export function routeDeleteTombstones(args: {
   ];
 }
 
-/** Route UNLINKED from a canyon (including the incumbent displaced by a new
- * link): the sharees of that canyon lose sight of it, but the OWNER keeps it —
+/** Route UNLINKED from a place (including the incumbent displaced by a new
+ * link): the sharees of that place lose sight of it, but the OWNER keeps it —
  * it survives as a standalone route. This is the sync-era trap of the linking
  * rule: visibility is revoked with no delete anywhere, so without these rows a
  * sharee's mirror would keep the route forever. */
@@ -227,7 +227,7 @@ export function routeUnlinkTombstones(args: {
 }
 
 /** DELETE /waypoints/:id: the owner forgets it, and so does everyone who could
- * see it through a canyon share (a linked waypoint follows canyon-level media
+ * see it through a place share (a linked waypoint follows place-level media
  * visibility, exactly as a linked route does). `shareeIds` is empty for an
  * unlinked waypoint, which is the owner-private case. */
 export function waypointDeleteTombstones(args: {
@@ -245,12 +245,12 @@ export function waypointDeleteTombstones(args: {
 }
 
 /** A waypoint that specific users can no longer see, with no delete anywhere:
- * it was unlinked from the last canyon they shared, or that share was revoked,
- * or the canyon was deleted. The OWNER keeps it — it survives as a standalone
+ * it was unlinked from the last place they shared, or that share was revoked,
+ * or the place was deleted. The OWNER keeps it — it survives as a standalone
  * waypoint — so only the losing users appear here.
  *
  * `userIds` must come from waypointVisibilityLoss (lib/waypointLink.ts), never
- * from "the sharees of the canyon we just left": the link is many-to-many, and
+ * from "the sharees of the place we just left": the link is many-to-many, and
  * a user still holding another shared path to the waypoint has lost nothing. */
 export function waypointRevokeTombstones(args: {
   waypointId: string;
@@ -269,7 +269,7 @@ export function waypointRevokeTombstones(args: {
 /** A DIRECT share revoked (DELETE /shares/...), or the entity it pointed at
  * hard-deleted: the named users lose sight of it, the owner keeps it. The
  * sibling of waypointRevokeTombstones/routeUnlinkTombstones for the sharing
- * path that does not run through a canyon.
+ * path that does not run through a place.
  *
  * Only waypoints and routes appear here because only they ride delta sync —
  * topo and GeoPDF jobs are fetched through their own list endpoints, so a
@@ -289,20 +289,20 @@ export function directShareRevokeTombstones(args: {
  * their account (and their whole tombstone log) is going away with them.
  *
  * Five counterpart groups, one per way another user could be holding a row:
- * canyon sharees (the canyon + its canyon-level media), friendship
- * counterparts (the edge), owners of canyons shared WITH the deleted user (the
- * CanyonShare row), DIRECT recipients of the deleted user's synced
- * waypoints/routes, and canyon sharees who could see a waypoint or route
- * through one of those shared canyons. The last two are the ones a cascade
+ * place sharees (the place + its place-level media), friendship
+ * counterparts (the edge), owners of places shared WITH the deleted user (the
+ * PlaceShare row), DIRECT recipients of the deleted user's synced
+ * waypoints/routes, and place sharees who could see a waypoint or route
+ * through one of those shared places. The last two are the ones a cascade
  * silently drops: the Share rows vanish with the user and the waypoint/route
  * rows are hard-deleted, but neither writes a tombstone, so without these the
  * recipient's mirror keeps the item forever. */
 export function accountDeleteTombstones(args: {
   userId: string;
-  /** Canyon-level media ids, keyed by canyon id. */
-  mediaIdsByCanyon: Map<string, string[]>;
-  canyonSharesOut: { canyonId: string; sharedWithId: string }[];
-  canyonSharesIn: { id: string; sharedById: string }[];
+  /** Place-level media ids, keyed by place id. */
+  mediaIdsByPlace: Map<string, string[]>;
+  placeSharesOut: { placeId: string; sharedWithId: string }[];
+  placeSharesIn: { id: string; sharedById: string }[];
   friendships: { id: string; requesterId: string; addresseeId: string }[];
   directSharesOut: {
     entityType: Extract<SyncEntityType, "waypoint" | "route">;
@@ -311,12 +311,12 @@ export function accountDeleteTombstones(args: {
   }[];
   /**
    * Waypoints/routes of this account that OTHER users could see through a
-   * canyon share, with the users who could see each. No visibility DIFF is
-   * needed here (unlike an unlink or a single-canyon delete): the account
+   * place share, with the users who could see each. No visibility DIFF is
+   * needed here (unlike an unlink or a single-place delete): the account
    * delete hard-deletes every one of these rows, so no surviving path can
    * exist and every current viewer loses the row.
    */
-  canyonInheritedOut: {
+  placeInheritedOut: {
     entityType: Extract<SyncEntityType, "waypoint" | "route">;
     entityId: string;
     userIds: string[];
@@ -324,17 +324,17 @@ export function accountDeleteTombstones(args: {
 }): TombstoneRow[] {
   const {
     userId,
-    mediaIdsByCanyon,
-    canyonSharesOut,
-    canyonSharesIn,
+    mediaIdsByPlace,
+    placeSharesOut,
+    placeSharesIn,
     friendships,
     directSharesOut,
-    canyonInheritedOut,
+    placeInheritedOut,
   } = args;
   return [
-    ...canyonSharesOut.flatMap((share): TombstoneRow[] => [
-      { userId: share.sharedWithId, entityType: "canyon", entityId: share.canyonId },
-      ...(mediaIdsByCanyon.get(share.canyonId) ?? []).map(
+    ...placeSharesOut.flatMap((share): TombstoneRow[] => [
+      { userId: share.sharedWithId, entityType: "place", entityId: share.placeId },
+      ...(mediaIdsByPlace.get(share.placeId) ?? []).map(
         (mediaId): TombstoneRow => ({
           userId: share.sharedWithId,
           entityType: "media",
@@ -349,10 +349,10 @@ export function accountDeleteTombstones(args: {
         entityId: f.id,
       }),
     ),
-    ...canyonSharesIn.map(
+    ...placeSharesIn.map(
       (share): TombstoneRow => ({
         userId: share.sharedById,
-        entityType: "canyonShare",
+        entityType: "placeShare",
         entityId: share.id,
       }),
     ),
@@ -363,7 +363,7 @@ export function accountDeleteTombstones(args: {
         entityId: share.entityId,
       }),
     ),
-    ...canyonInheritedOut.flatMap((entity): TombstoneRow[] =>
+    ...placeInheritedOut.flatMap((entity): TombstoneRow[] =>
       entity.entityType === "waypoint"
         ? waypointRevokeTombstones({
             waypointId: entity.entityId,

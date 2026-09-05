@@ -8,10 +8,10 @@
 // while text and date range live in a "find" row that stays collapsed until
 // asked for, so the resting screen is a logbook and not a search console.
 //
-// PRIVACY: rows carry canyon names, dates and user notes — data the mirror
+// PRIVACY: rows carry place names, dates and user notes — data the mirror
 // already holds on this device. None of it is logged, and the failure paths
 // here print our own copy rather than an error string that might embed a
-// canyon name.
+// place name.
 import { memo, useCallback, useMemo, useRef, useState } from "react";
 import {
   Alert,
@@ -38,7 +38,7 @@ import type { MirrorTrip } from "../sync/mirrorStore";
 import { deleteTripLocal } from "../sync/outbox";
 import { useConnectivity } from "../map/connectivity";
 import {
-  useMirrorCanyons,
+  useMirrorPlaces,
   useMirrorMediaCounts,
   useMirrorTrips,
   usePendingSyncCount,
@@ -67,7 +67,7 @@ import {
 } from "../ui";
 import {
   countTripsInLastMonths,
-  distinctCanyonCount,
+  distinctPlaceCount,
   formatDateKey,
   formatTripDate,
   groupTripsByYear,
@@ -83,7 +83,7 @@ export function LogsScreen({ onOpenTrip }: { onOpenTrip: (trip: MirrorTrip) => v
   const online = connectivity === "online";
   const pendingCount = usePendingSyncCount();
   const query = useMirrorTrips();
-  const canyonsQuery = useMirrorCanyons();
+  const placesQuery = useMirrorPlaces();
   const attachmentCounts = useMirrorMediaCounts("tripLog");
   const syncStatus = useSyncStatus();
   // Memoised so the many derived useMemos below don't recompute on every render.
@@ -247,7 +247,7 @@ export function LogsScreen({ onOpenTrip }: { onOpenTrip: (trip: MirrorTrip) => v
 
   const spark = useMemo(() => monthlyTripCounts(trips, new Date()), [trips]);
   const recentCount = useMemo(() => countTripsInLastMonths(trips, new Date()), [trips]);
-  const canyonCount = useMemo(() => distinctCanyonCount(trips), [trips]);
+  const placeCount = useMemo(() => distinctPlaceCount(trips), [trips]);
 
   const menuTrip = trips.find((trip) => trip.id === menuTripId) ?? null;
   const filtering = hasActiveTripFilter(criteria);
@@ -357,9 +357,9 @@ export function LogsScreen({ onOpenTrip }: { onOpenTrip: (trip: MirrorTrip) => v
                 style={styles.searchInput}
                 value={search}
                 onChangeText={setSearch}
-                placeholder="Canyon or trip name"
+                placeholder="Place or trip name"
                 placeholderTextColor={theme.textMuted}
-                accessibilityLabel="Search by canyon or trip name"
+                accessibilityLabel="Search by place or trip name"
                 autoCapitalize="none"
                 autoFocus
                 returnKeyType="search"
@@ -388,8 +388,8 @@ export function LogsScreen({ onOpenTrip }: { onOpenTrip: (trip: MirrorTrip) => v
         ) : (
           <ActivitySpark
             buckets={spark}
-            caption={`${recentCount} in the last 12 months · ${canyonCount} ${
-              canyonCount === 1 ? "canyon" : "canyons"
+            caption={`${recentCount} in the last 12 months · ${placeCount} ${
+              placeCount === 1 ? "place" : "places"
             }`}
           />
         )}
@@ -595,7 +595,7 @@ export function LogsScreen({ onOpenTrip }: { onOpenTrip: (trip: MirrorTrip) => v
         online={online}
         visible={editing !== null}
         trip={editing?.trip ?? null}
-        canyons={canyonsQuery.data ?? []}
+        places={placesQuery.data ?? []}
         existingTypes={distinctTypes}
         onClose={() => setEditing(null)}
         onSaved={info}
@@ -636,7 +636,7 @@ const TripRow = memo(function TripRow({
       titleNumberOfLines={2}
       subtitle={[
         formatTripDate(trip.date),
-        trip.canyons.length > 1 ? `${trip.canyons.length} canyons` : null,
+        trip.places.length > 1 ? `${trip.places.length} places` : null,
       ]
         .filter(Boolean)
         .join(" · ")}

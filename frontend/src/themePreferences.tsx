@@ -17,7 +17,7 @@ import {
   type ThemeTokens,
 } from "@logjam/shared";
 import { createThemeFromTokens } from "./theme";
-import { fetchCurrentUser, updateCurrentUserThemeScheme } from "./canyonUtils";
+import { fetchCurrentUser, updateCurrentUserThemeScheme } from "./placeUtils";
 import { messageFromError } from "./errors/messageFromError";
 
 function applyTokensToCss(tokens: ThemeTokens) {

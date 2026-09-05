@@ -11,7 +11,7 @@ export const PENDING_CONSENT_STORAGE_KEY = "logjam.pendingConsentVersion";
  * The single consent decision, used twice: to render ConsentGate INSTEAD of the
  * app, and to hold every `enabled=authenticated` data hook and boot effect
  * until consent is settled (FECO-005 — the gate blocked the UI but not the
- * app's own API traffic, so a stale-consent user's canyons, trips, friends and
+ * app's own API traffic, so a stale-consent user's places, trips, friends and
  * notifications were fetched before they agreed).
  *
  * Two callers, one derivation, on purpose: a gate that renders on a different

@@ -11,7 +11,7 @@ import {
   type TripLogCustomFieldDef,
   type TripLogCustomFieldType,
 } from "@logjam/shared";
-import { updateUserPreferences, type CustomFieldEntityKind } from "../../canyonUtils";
+import { updateUserPreferences, type CustomFieldEntityKind } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import AddCustomFieldForm from "./AddCustomFieldForm";
 
@@ -19,17 +19,17 @@ import AddCustomFieldForm from "./AddCustomFieldForm";
 // add-form uses ("This field will be created for all <noun>.").
 const ENTITY_META: Record<
   CustomFieldEntityKind,
-  { prefsKey: "tripLogCustomFields" | "canyonCustomFields"; noun: string }
+  { prefsKey: "tripLogCustomFields" | "placeCustomFields"; noun: string }
 > = {
   "trip-log": { prefsKey: "tripLogCustomFields", noun: "trip logs" },
-  canyon: { prefsKey: "canyonCustomFields", noun: "canyons" },
+  place: { prefsKey: "placeCustomFields", noun: "places" },
 };
 
 /**
  * MUI dialog that hosts the shared AddCustomFieldForm so a custom field can be
  * created from the Account panel (which, being a sidebar panel, can't render
  * MUI form controls itself). Owns the add-form draft state, runs the same
- * `buildCustomFieldDef` validation the CanyonDialog/TripLogDialog add-forms use,
+ * `buildCustomFieldDef` validation the PlaceDialog/TripLogDialog add-forms use,
  * persists the new def to User.uiPreferences, and reports the updated def list.
  */
 function AddCustomFieldDialog({

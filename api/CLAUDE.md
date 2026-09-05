@@ -3,7 +3,7 @@
 Express 5 + Prisma + TypeScript REST backend. Port 8080 dev.
 
 **Canonical examples:**
-- Route file w/ auth + AppError + Prisma: `routes/canyons.ts`.
+- Route file w/ auth + AppError + Prisma: `routes/places.ts`.
 - Route w/ AWS SDK (S3 presign + ECS task launch): `routes/topoJobs.ts`. Tasks launch via `lib/ecsRunTask.ts`, which inspects the RunTask response's `.failures[]` and force-fails the job if placement fails (no SQS in this architecture) — don't call `RunTaskCommand` directly in routes.
 - User resolution: `resolveUser(sub)` from `lib/resolveUser.ts` (see its docstring; GET /users/me is the deliberate exception). Ownership checks: filter by `ownerId` / verify via join — see `routes/topoJobs.ts`.
 
@@ -35,7 +35,7 @@ All env is zod-validated at boot by `lib/env.ts` — read values via `getEnv()`,
 
 ## Routes
 
-Register new routers in `src/index.ts`. Mount paths can overlap (e.g. `/canyons` + `/canyons/:canyonId/trips`); preserve order.
+Register new routers in `src/index.ts`. Mount paths can overlap (e.g. `/places` + `/places/:placeId/trips`); preserve order.
 
 ## Migrations
 
@@ -61,6 +61,6 @@ Integration tests in `__tests__/` run against live local API. `make dev` must ru
 
 - **Bulk collection endpoints must cap array length explicitly (both ends).** Any POST that does per-element work over a request array (import/delete) must reject empty AND oversized inputs: `length === 0` → `AppError(400)`, `length > LIMIT` → `AppError(413)`. Mirror the sibling limit in the file (`BULK_DELETE_LIMIT` / `BULK_IMPORT_LIMIT`). The 1 MB body cap + 300/min limiter are not a substitute. (SEC-001, 2026-06-22)
 - **Any new S3-writing pipeline must be added to the account-delete purge (`DELETE /users/me`, `routes/users.ts`).** Pre-fetch the owning rows, delete their S3 keys/prefix in the same S3-first `Promise.all` (S3 before the DB transaction so a failed delete leaves rows for retry), and add the matching `prisma.<model>.deleteMany({ where: { userId } })` to the explicit list even when a cascade covers the row — the cascade removes DB rows but never S3 objects. The GeoPDF pipeline re-opened this gap by post-dating the topo-job/export coverage. (ARCH-001, 2026-06-22)
-- **Never log a raw thrown error; scrub it with `safeErrorForLog` (`lib/logger.ts`).** Pino's `redact.paths` only censor structured keys — they cannot reach free text inside `err.message`/`err.stack`, and Prisma renders user-supplied canyon name/coords into validation-error messages. The global `errorHandler` logs `safeErrorForLog(err)`; any new direct `logger.*({ err })` site must do the same. (SEC-001 DoD, 2026-06-22)
-- **Any hard-delete of a synced entity must call `writeTombstones` (`lib/syncTombstones.ts`) in the same transaction, fanning out to every user whose visibility included the row.** Synced entities: canyon, tripLog, media, canyonShare, friendship, waypoint (`SYNC_ENTITY_TYPES` in shared/src/sync.ts). Use the pure per-site builders in that lib (unit-tested fan-out shapes) rather than inline row construction; tombstones carry ids only — never names/coords. This is the sync-era sibling of the ARCH-001 S3-purge rule: a delete without a tombstone orphans mobile mirrors forever. (Stage 8 PR-1, 2026-07-24)
+- **Never log a raw thrown error; scrub it with `safeErrorForLog` (`lib/logger.ts`).** Pino's `redact.paths` only censor structured keys — they cannot reach free text inside `err.message`/`err.stack`, and Prisma renders user-supplied place name/coords into validation-error messages. The global `errorHandler` logs `safeErrorForLog(err)`; any new direct `logger.*({ err })` site must do the same. (SEC-001 DoD, 2026-06-22)
+- **Any hard-delete of a synced entity must call `writeTombstones` (`lib/syncTombstones.ts`) in the same transaction, fanning out to every user whose visibility included the row.** Synced entities: place, tripLog, media, placeShare, friendship, waypoint (`SYNC_ENTITY_TYPES` in shared/src/sync.ts). Use the pure per-site builders in that lib (unit-tested fan-out shapes) rather than inline row construction; tombstones carry ids only — never names/coords. This is the sync-era sibling of the ARCH-001 S3-purge rule: a delete without a tombstone orphans mobile mirrors forever. (Stage 8 PR-1, 2026-07-24)
 - **Use the pino `logger` (`lib/logger.ts`), never `console.*`, with the `(obj, msg)` call shape.** `console.*` bypasses pino's redaction + transport (and `console.error(obj, msg)` logs `[object Object]`); pass structured fields as the first arg and a stable event string as the message: `logger.error({ jobId, reason }, "topo_runtask_failed")`. Only exceptions: `lib/env.ts` and `boot.ts`, which run before the logger exists. (CH-004, 2026-06-22)

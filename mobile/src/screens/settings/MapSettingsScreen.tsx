@@ -80,7 +80,7 @@ const LONG_PRESS_LABELS: Record<LongPressAction, string> = {
   navigate: "Navigate",
   route: "Draw route",
   measure: "Measure",
-  canyon: "Add canyon",
+  place: "Add place",
 };
 
 /**
@@ -402,7 +402,7 @@ export function MapSettingsScreen() {
             as a feature: it costs battery, it produces a file only a laptop
             can read, and nothing in the app gets better while it is on. It is
             here rather than behind a hidden gesture because the person who
-            needs it is the person carrying the phone into the canyon, and a
+            needs it is the person carrying the phone into the place, and a
             setting they cannot find is a trip's data lost. */}
         {sensorLoggingAvailable() && sensorCaps != null && (
           <PreferenceRow

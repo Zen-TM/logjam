@@ -32,21 +32,21 @@ import {
 // one friend (bob), and bob two (alice and carol), so bob is the only actor who
 // can exercise the recipient dimension of the cross product.
 
-async function createCanyon(sub: string, name: string): Promise<string> {
+async function createPlace(sub: string, name: string): Promise<string> {
   const res = await request(API_URL)
-    .post("/canyons")
+    .post("/places")
     .set(as(sub))
     .send({ name, latitude: -33.7, longitude: 150.3 });
   expect(res.status).toBe(201);
   return res.body.id as string;
 }
 
-async function deleteCanyon(sub: string, id: string): Promise<void> {
-  await request(API_URL).delete(`/canyons/${id}`).set(as(sub));
+async function deletePlace(sub: string, id: string): Promise<void> {
+  await request(API_URL).delete(`/places/${id}`).set(as(sub));
 }
 
-async function shareRecipientIds(sub: string, canyonId: string): Promise<string[]> {
-  const res = await request(API_URL).get(`/canyons/${canyonId}/shares`).set(as(sub));
+async function shareRecipientIds(sub: string, placeId: string): Promise<string[]> {
+  const res = await request(API_URL).get(`/places/${placeId}/shares`).set(as(sub));
   expect(res.status).toBe(200);
   return res.body.map((row: { sharedWith: { id: string } }) => row.sharedWith.id);
 }
@@ -72,16 +72,16 @@ beforeAll(async () => {
 
 describe("POST /bulk-share", () => {
   it("writes the whole cross product and reports it", async () => {
-    const first = await createCanyon(BOB_SUB, "Bulk share A");
-    const second = await createCanyon(BOB_SUB, "Bulk share B");
+    const first = await createPlace(BOB_SUB, "Bulk share A");
+    const second = await createPlace(BOB_SUB, "Bulk share B");
     try {
       const res = await request(API_URL)
         .post("/bulk-share")
         .set(as(BOB_SUB))
         .send({
           items: [
-            { entityType: "canyon", entityId: first },
-            { entityType: "canyon", entityId: second },
+            { entityType: "place", entityId: first },
+            { entityType: "place", entityId: second },
           ],
           recipientIds: [ALICE_ID, CAROL_ID],
           batchId: randomUUID(),
@@ -97,16 +97,16 @@ describe("POST /bulk-share", () => {
         [ALICE_ID, CAROL_ID].sort(),
       );
     } finally {
-      await deleteCanyon(BOB_SUB, first);
-      await deleteCanyon(BOB_SUB, second);
+      await deletePlace(BOB_SUB, first);
+      await deletePlace(BOB_SUB, second);
     }
   });
 
   it("re-sharing is a no-op, not a 409 — a bulk selection routinely overlaps", async () => {
-    const canyonId = await createCanyon(BOB_SUB, "Bulk share repeat");
+    const placeId = await createPlace(BOB_SUB, "Bulk share repeat");
     try {
       const body = {
-        items: [{ entityType: "canyon", entityId: canyonId }],
+        items: [{ entityType: "place", entityId: placeId }],
         recipientIds: [ALICE_ID, CAROL_ID],
       };
       const first = await request(API_URL)
@@ -123,27 +123,27 @@ describe("POST /bulk-share", () => {
       expect(again.status).toBe(200);
       expect(again.body).toEqual({ granted: 0, alreadyShared: 2, ineligible: 0 });
       // Still exactly two rows, not four.
-      expect(await shareRecipientIds(BOB_SUB, canyonId)).toHaveLength(2);
+      expect(await shareRecipientIds(BOB_SUB, placeId)).toHaveLength(2);
     } finally {
-      await deleteCanyon(BOB_SUB, canyonId);
+      await deletePlace(BOB_SUB, placeId);
     }
   });
 
   it("COUNTS an id that isn't the caller's, and never says which", async () => {
-    // Alice's canyon and an id that exists nowhere are indistinguishable in the
+    // Alice's place and an id that exists nowhere are indistinguishable in the
     // response — the aggregate form of the 404-not-403 rule (SEC-001). Naming
     // either one would confirm to bob that it exists.
-    const mine = await createCanyon(BOB_SUB, "Bulk share mine");
-    const hers = await createCanyon(ALICE_SUB, "Alice's own canyon");
+    const mine = await createPlace(BOB_SUB, "Bulk share mine");
+    const hers = await createPlace(ALICE_SUB, "Alice's own place");
     try {
       const res = await request(API_URL)
         .post("/bulk-share")
         .set(as(BOB_SUB))
         .send({
           items: [
-            { entityType: "canyon", entityId: mine },
-            { entityType: "canyon", entityId: hers },
-            { entityType: "canyon", entityId: NONEXISTENT_ID },
+            { entityType: "place", entityId: mine },
+            { entityType: "place", entityId: hers },
+            { entityType: "place", entityId: NONEXISTENT_ID },
           ],
           recipientIds: [CAROL_ID],
           batchId: randomUUID(),
@@ -159,37 +159,37 @@ describe("POST /bulk-share", () => {
       expect(JSON.stringify(res.body)).not.toContain(hers);
       expect(JSON.stringify(res.body)).not.toContain(NONEXISTENT_ID);
 
-      // And alice's canyon really was not shared.
+      // And alice's place really was not shared.
       expect(await shareRecipientIds(ALICE_SUB, hers)).toEqual([]);
     } finally {
-      await deleteCanyon(BOB_SUB, mine);
-      await deleteCanyon(ALICE_SUB, hers);
+      await deletePlace(BOB_SUB, mine);
+      await deletePlace(ALICE_SUB, hers);
     }
   });
 
   it("refuses the WHOLE request for a non-friend rather than partly sharing", async () => {
     // A partial fan-out the sender was never told about is worse than an error.
-    const canyonId = await createCanyon(BOB_SUB, "Bulk share stranger");
+    const placeId = await createPlace(BOB_SUB, "Bulk share stranger");
     try {
       const res = await request(API_URL)
         .post("/bulk-share")
         .set(as(BOB_SUB))
         .send({
-          items: [{ entityType: "canyon", entityId: canyonId }],
+          items: [{ entityType: "place", entityId: placeId }],
           recipientIds: [ALICE_ID, NONEXISTENT_ID],
           batchId: randomUUID(),
         });
       expect(res.status).toBe(403);
       // Alice, the legitimate half of the list, got nothing.
-      expect(await shareRecipientIds(BOB_SUB, canyonId)).toEqual([]);
+      expect(await shareRecipientIds(BOB_SUB, placeId)).toEqual([]);
     } finally {
-      await deleteCanyon(BOB_SUB, canyonId);
+      await deletePlace(BOB_SUB, placeId);
     }
   });
 
   it("stamps the batchId on the recipient's notifications, for the inbox to group on", async () => {
-    const first = await createCanyon(ALICE_SUB, "Bulk share notify A");
-    const second = await createCanyon(ALICE_SUB, "Bulk share notify B");
+    const first = await createPlace(ALICE_SUB, "Bulk share notify A");
+    const second = await createPlace(ALICE_SUB, "Bulk share notify B");
     const batchId = randomUUID();
     try {
       const res = await request(API_URL)
@@ -197,8 +197,8 @@ describe("POST /bulk-share", () => {
         .set(as(ALICE_SUB))
         .send({
           items: [
-            { entityType: "canyon", entityId: first },
-            { entityType: "canyon", entityId: second },
+            { entityType: "place", entityId: first },
+            { entityType: "place", entityId: second },
           ],
           recipientIds: [BOB_ID],
           batchId,
@@ -212,22 +212,22 @@ describe("POST /bulk-share", () => {
         (n: { payload: { batchId?: string } }) => n.payload.batchId === batchId,
       );
       expect(batched).toHaveLength(2);
-      // Ids only in the payload (PRIV-005) — the canyon NAME is resolved at
+      // Ids only in the payload (PRIV-005) — the place NAME is resolved at
       // read time, so it appears in the response but was never stored.
-      expect(batched[0].type).toBe("canyon_shared");
-      expect(batched[0].payload.canyonId).toBeTypeOf("string");
+      expect(batched[0].type).toBe("place_shared");
+      expect(batched[0].payload.placeId).toBeTypeOf("string");
     } finally {
-      // Deleting the canyons purges the shares and the notifications with them.
-      await deleteCanyon(ALICE_SUB, first);
-      await deleteCanyon(ALICE_SUB, second);
+      // Deleting the places purges the shares and the notifications with them.
+      await deletePlace(ALICE_SUB, first);
+      await deletePlace(ALICE_SUB, second);
     }
   });
 
   it("rejects a malformed request rather than doing part of it", async () => {
-    const canyonId = await createCanyon(ALICE_SUB, "Bulk share malformed");
+    const placeId = await createPlace(ALICE_SUB, "Bulk share malformed");
     try {
       const base = {
-        items: [{ entityType: "canyon", entityId: canyonId }],
+        items: [{ entityType: "place", entityId: placeId }],
         recipientIds: [BOB_ID],
         batchId: randomUUID(),
       };
@@ -248,7 +248,7 @@ describe("POST /bulk-share", () => {
       const badType = await request(API_URL)
         .post("/bulk-share")
         .set(as(ALICE_SUB))
-        .send({ ...base, items: [{ entityType: "tripLog", entityId: canyonId }] });
+        .send({ ...base, items: [{ entityType: "tripLog", entityId: placeId }] });
       expect(badType.status).toBe(400);
 
       // Nothing at all in the action.
@@ -258,16 +258,16 @@ describe("POST /bulk-share", () => {
         .send({ ...base, items: [], copyCount: 0 });
       expect(empty.status).toBe(400);
 
-      // Every rejection above left the canyon unshared.
-      expect(await shareRecipientIds(ALICE_SUB, canyonId)).toEqual([]);
+      // Every rejection above left the place unshared.
+      expect(await shareRecipientIds(ALICE_SUB, placeId)).toEqual([]);
     } finally {
-      await deleteCanyon(ALICE_SUB, canyonId);
+      await deletePlace(ALICE_SUB, placeId);
     }
   });
 
   it("caps the item list at 413 rather than doing unbounded per-element work", async () => {
     const items = Array.from({ length: 201 }, () => ({
-      entityType: "canyon",
+      entityType: "place",
       entityId: NONEXISTENT_ID,
     }));
     const res = await request(API_URL)
@@ -277,8 +277,8 @@ describe("POST /bulk-share", () => {
     expect(res.status).toBe(413);
   });
 
-  it("shares a WAYPOINT and a canyon from one mixed list — two tables, one call", async () => {
-    const canyonId = await createCanyon(ALICE_SUB, "Bulk share mixed");
+  it("shares a WAYPOINT and a place from one mixed list — two tables, one call", async () => {
+    const placeId = await createPlace(ALICE_SUB, "Bulk share mixed");
     const waypoint = await request(API_URL)
       .post("/waypoints")
       .set(as(ALICE_SUB))
@@ -291,7 +291,7 @@ describe("POST /bulk-share", () => {
         .set(as(ALICE_SUB))
         .send({
           items: [
-            { entityType: "canyon", entityId: canyonId },
+            { entityType: "place", entityId: placeId },
             { entityType: "waypoint", entityId: waypointId },
           ],
           recipientIds: [BOB_ID],
@@ -300,9 +300,9 @@ describe("POST /bulk-share", () => {
       expect(res.status).toBe(200);
       expect(res.body).toEqual({ granted: 2, alreadyShared: 0, ineligible: 0 });
 
-      // The canyon went to CanyonShare, the waypoint to Share — different
+      // The place went to PlaceShare, the waypoint to Share — different
       // tables, one request.
-      expect(await shareRecipientIds(ALICE_SUB, canyonId)).toEqual([BOB_ID]);
+      expect(await shareRecipientIds(ALICE_SUB, placeId)).toEqual([BOB_ID]);
       const shares = await request(API_URL)
         .get(`/shares/waypoint/${waypointId}`)
         .set(as(ALICE_SUB));
@@ -312,18 +312,18 @@ describe("POST /bulk-share", () => {
       ).toEqual([BOB_ID]);
     } finally {
       await request(API_URL).delete(`/waypoints/${waypointId}`).set(as(ALICE_SUB));
-      await deleteCanyon(ALICE_SUB, canyonId);
+      await deletePlace(ALICE_SUB, placeId);
     }
   });
 
   it("a sharee may not re-share what was shared with them", async () => {
-    const canyonId = await createCanyon(ALICE_SUB, "Bulk share resharer");
+    const placeId = await createPlace(ALICE_SUB, "Bulk share resharer");
     try {
       const grant = await request(API_URL)
         .post("/bulk-share")
         .set(as(ALICE_SUB))
         .send({
-          items: [{ entityType: "canyon", entityId: canyonId }],
+          items: [{ entityType: "place", entityId: placeId }],
           recipientIds: [BOB_ID],
           batchId: randomUUID(),
         });
@@ -336,15 +336,15 @@ describe("POST /bulk-share", () => {
         .post("/bulk-share")
         .set(as(BOB_SUB))
         .send({
-          items: [{ entityType: "canyon", entityId: canyonId }],
+          items: [{ entityType: "place", entityId: placeId }],
           recipientIds: [CAROL_ID],
           batchId: randomUUID(),
         });
       expect(reshare.status).toBe(200);
       expect(reshare.body).toEqual({ granted: 0, alreadyShared: 0, ineligible: 1 });
-      expect(await shareRecipientIds(ALICE_SUB, canyonId)).toEqual([BOB_ID]);
+      expect(await shareRecipientIds(ALICE_SUB, placeId)).toEqual([BOB_ID]);
     } finally {
-      await deleteCanyon(ALICE_SUB, canyonId);
+      await deletePlace(ALICE_SUB, placeId);
     }
   });
 });

@@ -18,14 +18,14 @@ export function SelectionBar({
   deleteIcon = "trash-2",
   deleteLabel = "Delete the selected items",
 }: {
-  /** The words between the close and the buttons — "3 canyons selected". */
+  /** The words between the close and the buttons — "3 places selected". */
   countLabel: string;
   /** Hidden once everything selectable is picked (nothing left to add). */
   showSelectAll: boolean;
   /**
    * One more group verb, sitting between select-all and delete — an
    * `IconButton`, sized like the two it stands among. Two exist: the inbox's
-   * read/unread toggle, and bulk share on Canyons and Saved. The bar stays a
+   * read/unread toggle, and bulk share on Places and Saved. The bar stays a
    * fixed set of slots rather than an arbitrary toolbar: DESIGN.md §7 admits
    * only verbs that are BETTER in bulk than one at a time, and a bar that grows
    * a row per screen is how that rule stops being checkable.
@@ -44,7 +44,7 @@ export function SelectionBar({
    * the word: the per-friend sharing screen puts "unshare these" and "remove my
    * access" here, which are destructive in the same way (irreversible from this
    * screen) and destructive of something else entirely (a grant, not a record).
-   * Naming it delete there would have promised to destroy the canyon.
+   * Naming it delete there would have promised to destroy the place.
    */
   onDelete: () => void;
   /** Glyph for that slot. Feather; `trash-2` unless the verb is not deletion. */

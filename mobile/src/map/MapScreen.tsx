@@ -1,5 +1,5 @@
 // Map core (Stage 2, online) — full-bleed map with raster + Protomaps vector
-// basemaps, canyon overlay (owned vs shared theming), raster + vector topo
+// basemaps, place overlay (owned vs shared theming), raster + vector topo
 // overlays (user vectorStyle), tap → detail, locate-me. Every tile source
 // flows through the resolver so Stage 4 offline downloads change data, not
 // this screen.
@@ -94,9 +94,9 @@ import { readSnapMode, writeSnapMode } from "./snapPreference";
 import { getVectorStyle, useApiQuery } from "../api/queries";
 import { useAccountState } from "../auth/AccountStateContext";
 import {
-  useMirrorCanyons,
+  useMirrorPlaces,
   useMirrorTrips,
-  useMirrorCanyonTracks,
+  useMirrorPlaceTracks,
   useMirrorWaypoints,
   useMirrorRoutes,
 } from "../sync/useSyncQueries";
@@ -113,11 +113,11 @@ import {
 } from "../theme";
 import { MapSearchBar, type SavedSearchItem } from "./MapSearchBar";
 import {
-  CanyonPinsLayer,
-  OWNED_CANYON_COLOR,
-  SHARED_CANYON_COLOR,
-  toCanyonFeatureCollection,
-} from "./CanyonPinsLayer";
+  PlacePinsLayer,
+  OWNED_PLACE_COLOR,
+  SHARED_PLACE_COLOR,
+  toPlaceFeatureCollection,
+} from "./PlacePinsLayer";
 import { SpeedElevationChip, READOUT_CHIP_HEIGHT } from "./SpeedElevationChip";
 import { sampleElevations } from "../offline/demLookup";
 import {
@@ -207,7 +207,7 @@ import { RouteDraftLayer } from "./RouteDraftLayer";
 import { RoutesLayer } from "./RoutesLayer";
 import { ROUTE_ARROW_SDF_URI } from "./routeArrowSdf";
 import { ROUTE_ARROW_IMAGE } from "./routeArrowStyle";
-import type { MirrorCanyon, MirrorRoute, MirrorWaypoint } from "../sync/mirrorStore";
+import type { MirrorPlace, MirrorRoute, MirrorWaypoint } from "../sync/mirrorStore";
 import { RouteOptionsSheet } from "../routes/RouteOptionsSheet";
 import { BottomSheet } from "../ui/BottomSheet";
 import { Button } from "../ui/Button";
@@ -216,23 +216,23 @@ import { IconButton } from "../ui/IconButton";
 import { Row } from "../ui/Row";
 import { Toast, type ToastMessage } from "../ui/Toast";
 import { BASEMAP_THUMB_CREDIT } from "./BasemapThumb";
-import { CanyonRoutesLayer, type CanyonRoutesStatus } from "./CanyonRoutesLayer";
+import { PlaceRoutesLayer, type PlaceRoutesStatus } from "./PlaceRoutesLayer";
 import { MapLayersSheet, type LayerToggleEntry } from "./MapLayersSheet";
 import { waypointSymbol } from "./waypointSymbol";
 import { WaypointSheet } from "./WaypointSheet";
 import type { WaypointFormDraft } from "../waypoints/waypointSheetBodies";
 import { takePickedPoint } from "./pickedPoint";
 import { MapPointSheet, type MapPoint } from "./MapPointSheet";
-import { CanyonEditSheet } from "../canyons/CanyonEditSheet";
-import { fillRouteSlot } from "../canyons/fillRouteSlot";
-import { routeSlotOccupant } from "../canyons/routeSlot";
-import { CanyonOptionsSheet } from "../canyons/CanyonOptionsSheet";
+import { PlaceEditSheet } from "../places/PlaceEditSheet";
+import { fillRouteSlot } from "../places/fillRouteSlot";
+import { routeSlotOccupant } from "../places/routeSlot";
+import { PlaceOptionsSheet } from "../places/PlaceOptionsSheet";
 import { TripEditSheet } from "../logs/TripEditSheet";
 import {
-  isWithholdingCanyons,
-  setCanyonMapFilterEnabled,
-  useCanyonMapFilter,
-} from "../canyons/canyonMapFilter";
+  isWithholdingPlaces,
+  setPlaceMapFilterEnabled,
+  usePlaceMapFilter,
+} from "../places/placeMapFilter";
 import { updateGeoPdfImport } from "../geopdf/geoPdfImportsDb";
 import { GEOPDF_ERRORS, importGeoPdfFile } from "../geopdf/importPipeline";
 import { runGeoPdfImport } from "../geopdf/importRunner";
@@ -318,7 +318,7 @@ import { TopoIconImages, TopoVectorOverlay } from "./TopoVectorOverlay";
 // Shell style (glyphs/sprite) lives in basemap/shellStyle.ts — bundled
 // file:// assets once installed (stage 4a §8.3), remote host as the
 // install-failure fallback. Fonts: the Noto Sans stacks the generated basemap
-// layers reference — canyon labels use the same stack so one glyph source
+// layers reference — place labels use the same stack so one glyph source
 // serves everything.
 //
 // Light flavor everywhere for now — matches the paper-topo look of the SIX
@@ -501,7 +501,7 @@ function overlayKind(ref: TopoOverlayRef): "contours" | "features" {
  * redraw at compass rate. Inside MapScreen's body a sample re-rendered the
  * whole map — see the note on `publishHeading`.
  *
- * Unpinned ⇒ renders above everything, like the canyon layers. No accuracy
+ * Unpinned ⇒ renders above everything, like the place layers. No accuracy
  * halo: it was a translucent disc the size of a suburb that told the user
  * nothing actionable and hid the map under itself. What the halo was reaching
  * for is answered by `quality` instead — a single colour change, drawn only
@@ -718,7 +718,7 @@ const LiveCompassStrip = memo(function LiveCompassStrip({
 });
 
 export function MapScreen({
-  onOpenCanyon,
+  onOpenPlace,
   onOpenSaved,
   onSaveMapsOffline,
   onPickPoint,
@@ -729,7 +729,7 @@ export function MapScreen({
   startRecording,
   navigateWaypoint,
 }: {
-  onOpenCanyon: (canyonId: string, name: string) => void;
+  onOpenPlace: (placeId: string, name: string) => void;
   /**
    * Opens the offline-download screen on the ground the user is looking at, so
    * framing an area starts from what they already framed by panning here.
@@ -771,11 +771,11 @@ export function MapScreen({
   // "Edit points" from the Saved tab: arm the draw tool on a saved route. An
   // id only — the geometry comes from the mirror.
   editRoute?: { routeId: string; nonce: number } | null;
-  // "Draw one on the map": arm the tool. From a canyon it carries that
-  // canyon's id and saves into its route slot; from the Saved tab's add sheet
-  // `canyonId` is null and the route belongs to nothing until the user links
+  // "Draw one on the map": arm the tool. From a place it carries that
+  // place's id and saves into its route slot; from the Saved tab's add sheet
+  // `placeId` is null and the route belongs to nothing until the user links
   // it.
-  drawRouteFor?: { canyonId: string | null; nonce: number } | null;
+  drawRouteFor?: { placeId: string | null; nonce: number } | null;
   // "Continue recording" from the Saved tab: pick a finished track back up. An
   // id only; the row comes from this screen's own list. It lands here rather
   // than being done on Saved because arming the recorder needs the location
@@ -820,13 +820,13 @@ export function MapScreen({
   }, []);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [attributionOpen, setAttributionOpen] = useState(false);
-  // Press-and-hold target, and the point handed to the canyon form once that
+  // Press-and-hold target, and the point handed to the place form once that
   // sheet has actually closed (never two sheets at once — DESIGN.md §6).
   const [longPressPoint, setLongPressPoint] = useState<MapPoint | null>(null);
   /** Where the user last tapped — the point panel's subject, and its dot. */
   const [tappedPoint, setTappedPoint] = useState<MapPoint | null>(null);
-  const [addCanyonAt, setAddCanyonAt] = useState<MapPoint | null>(null);
-  const pendingCanyonPoint = useRef<MapPoint | null>(null);
+  const [addPlaceAt, setAddPlaceAt] = useState<MapPoint | null>(null);
+  const pendingPlacePoint = useRef<MapPoint | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const toastNonce = useRef(0);
   // Both point tools run the SAME draft model — same anchors, same drag,
@@ -907,8 +907,8 @@ export function MapScreen({
   // the id rather than the row — the row comes from the mirror so it stays
   // current if a sync lands while a sheet is open.
   const [optionsRouteId, setOptionsRouteId] = useState<string | null>(null);
-  // Set when the draw was started from a canyon page; consumed by the save.
-  const [draftCanyonId, setDraftCanyonId] = useState<string | null>(null);
+  // Set when the draw was started from a place page; consumed by the save.
+  const [draftPlaceId, setDraftPlaceId] = useState<string | null>(null);
   /** The colour the draft will SAVE with, picked in the tool panel.
    *
    *  Null means "not chosen in this session", which is why the save writes the
@@ -917,13 +917,13 @@ export function MapScreen({
    *  quietly strip the colour off the route being edited. The palette can only
    *  set a colour, never clear one, so nothing is lost by the gate. */
   const [draftColor, setDraftColor] = useState<string | null>(null);
-  // "Canyon routes" layer (web parity), off by default: it is a lot of ink to
+  // "Place routes" layer (web parity), off by default: it is a lot of ink to
   // add to a map unasked, and the layers sheet is where it belongs.
-  const [showCanyonRoutes, setShowCanyonRoutes] = useState(false);
+  const [showPlaceRoutes, setShowPlaceRoutes] = useState(false);
   // The rest of the layer masters. Every kind drawn over the basemap now has
-  // one, INCLUDING the three that never had a switch at all (own canyons,
-  // shared canyons, waypoints) — a map you cannot take the pins off is a map
-  // that cannot be read at a canyon's entrance, where they all overlap.
+  // one, INCLUDING the three that never had a switch at all (own places,
+  // shared places, waypoints) — a map you cannot take the pins off is a map
+  // that cannot be read at a place's entrance, where they all overlap.
   //
   // Booleans in this screen's state, deliberately, and not derived from the
   // items' own `visible` columns: a master has to toggle with zero items behind
@@ -931,13 +931,13 @@ export function MapScreen({
   // and a switch whose value comes back from an async DB write lags the thumb.
   // The per-item columns still exist and are still ANDed in below — they are
   // written from Saved now rather than from the map.
-  const [showOwnedCanyons, setShowOwnedCanyons] = useState(true);
-  const [showSharedCanyons, setShowSharedCanyons] = useState(true);
+  const [showOwnedPlaces, setShowOwnedPlaces] = useState(true);
+  const [showSharedPlaces, setShowSharedPlaces] = useState(true);
   const [showWaypoints, setShowWaypoints] = useState(true);
   const [showGeoPdfs, setShowGeoPdfs] = useState(true);
   const [showVectorImports, setShowVectorImports] = useState(true);
   const [showOverlays, setShowOverlays] = useState(true);
-  const [routesStatus, setRoutesStatus] = useState<CanyonRoutesStatus | null>(null);
+  const [routesStatus, setRoutesStatus] = useState<PlaceRoutesStatus | null>(null);
   // Settled camera readout, used only to hand the offline-download screen the
   // ground the user is looking at. The scale bar does NOT read this: it follows
   // the camera continuously through its own ref (see scaleBarRef), because
@@ -1221,14 +1221,14 @@ export function MapScreen({
   // (MLIFE-007). Each effect now carries that guard itself, for its own
   // teardown — which is a blur or a background as well as an unmount.
 
-  // Canyon overlay reads the offline mirror (Stage 8): instant, and the map
+  // Place overlay reads the offline mirror (Stage 8): instant, and the map
   // keeps its pins in airplane mode.
-  const canyons = useMirrorCanyons();
-  // Every canyon route ATTACHMENT on the account. Read here rather than beside
+  const places = useMirrorPlaces();
+  // Every place route ATTACHMENT on the account. Read here rather than beside
   // its tally below, because the route tool's save consults it to see what it
   // would displace (routeSlot.ts) and that runs earlier in this component.
-  const { data: canyonTrackMedia } = useMirrorCanyonTracks(TRACK_MIME_TYPES);
-  // Only for the trip form a canyon pin can open — the type vocabulary is the
+  const { data: placeTrackMedia } = useMirrorPlaceTracks(TRACK_MIME_TYPES);
+  // Only for the trip form a place pin can open — the type vocabulary is the
   // user's own history, and a form that offered fewer types here than on the
   // Logs tab would be the same drift this sheet exists to remove.
   const trips = useMirrorTrips();
@@ -1403,58 +1403,58 @@ export function MapScreen({
     return { plans, nextIndex: next };
   }, [overlayRefs, overlayBaseIndex, vectorStyle]);
 
-  // "Show only these on the map" — the Canyons screen's filter, opt-in, handed
+  // "Show only these on the map" — the Places screen's filter, opt-in, handed
   // over as a set of ids (never a bbox; nothing persisted). Until that screen
-  // has published, or with the option off, every canyon draws.
+  // has published, or with the option off, every place draws.
   //
-  // NOT BUILT YET: the web also has a layer toggle that draws every canyon's
-  // ROUTE (`showCanyonTracks` + GET /canyons/tracks). There is no mobile
-  // equivalent — a route is drawn one at a time, transiently, from a canyon's
+  // NOT BUILT YET: the web also has a layer toggle that draws every place's
+  // ROUTE (`showPlaceTracks` + GET /places/tracks). There is no mobile
+  // equivalent — a route is drawn one at a time, transiently, from a place's
   // detail screen. It belongs in the map-page redesign, alongside the layer
   // sheet; the mirror already holds the files, so it can work offline.
-  const mapFilter = useCanyonMapFilter();
-  const allowedCanyonIds = useMemo(
+  const mapFilter = usePlaceMapFilter();
+  const allowedPlaceIds = useMemo(
     () =>
       mapFilter.enabled && mapFilter.visibleIds !== null
         ? new Set(mapFilter.visibleIds)
         : null,
     [mapFilter.enabled, mapFilter.visibleIds],
   );
-  const withholdingCanyons = isWithholdingCanyons(mapFilter);
+  const withholdingPlaces = isWithholdingPlaces(mapFilter);
 
-  const ownedCanyons = useMemo(
-    () => (canyons.data ?? []).filter((c) => c.syncRole === "owner"),
-    [canyons.data],
+  const ownedPlaces = useMemo(
+    () => (places.data ?? []).filter((c) => c.syncRole === "owner"),
+    [places.data],
   );
-  const sharedCanyons = useMemo(
-    () => (canyons.data ?? []).filter((c) => c.syncRole === "shared"),
-    [canyons.data],
+  const sharedPlaces = useMemo(
+    () => (places.data ?? []).filter((c) => c.syncRole === "shared"),
+    [places.data],
   );
-  // The layer master and the Canyons screen's filter are separate gates and
-  // stay separate: the filter is "these particular canyons", the switch is
-  // "canyons at all", and folding one into the other would have turning the
+  // The layer master and the Places screen's filter are separate gates and
+  // stay separate: the filter is "these particular places", the switch is
+  // "places at all", and folding one into the other would have turning the
   // pins back on silently discard a filter the user set on another screen.
   const ownedFc = useMemo(
     () =>
-      toCanyonFeatureCollection(
-        showOwnedCanyons
-          ? ownedCanyons.filter(
-              (c) => allowedCanyonIds === null || allowedCanyonIds.has(c.id),
+      toPlaceFeatureCollection(
+        showOwnedPlaces
+          ? ownedPlaces.filter(
+              (c) => allowedPlaceIds === null || allowedPlaceIds.has(c.id),
             )
           : [],
       ),
-    [allowedCanyonIds, ownedCanyons, showOwnedCanyons],
+    [allowedPlaceIds, ownedPlaces, showOwnedPlaces],
   );
   const sharedFc = useMemo(
     () =>
-      toCanyonFeatureCollection(
-        showSharedCanyons
-          ? sharedCanyons.filter(
-              (c) => allowedCanyonIds === null || allowedCanyonIds.has(c.id),
+      toPlaceFeatureCollection(
+        showSharedPlaces
+          ? sharedPlaces.filter(
+              (c) => allowedPlaceIds === null || allowedPlaceIds.has(c.id),
             )
           : [],
       ),
-    [allowedCanyonIds, sharedCanyons, showSharedCanyons],
+    [allowedPlaceIds, sharedPlaces, showSharedPlaces],
   );
 
   /** Follow a track between two anchors, if snapping is on and finds one.
@@ -1709,21 +1709,21 @@ export function MapScreen({
             anchors,
             ...(draftColor ? { color: draftColor } : {}),
           });
-        } else if (draftCanyonId) {
-          // Drawn INTO a canyon's route slot, which may have filled since the
-          // pen was armed (from another device, or from the canyon screen).
+        } else if (draftPlaceId) {
+          // Drawn INTO a place's route slot, which may have filled since the
+          // pen was armed (from another device, or from the place screen).
           // The confirm and the swap order are routeSlot.ts's, exactly as they
           // are for the four sources that write immediately — this one just
           // asks at the moment it finally writes.
           const filled = await fillRouteSlot({
-            canyonName:
-              canyons.data?.find((canyon) => canyon.id === draftCanyonId)?.name ??
-              "This canyon",
+            placeName:
+              places.data?.find((place) => place.id === draftPlaceId)?.name ??
+              "This place",
             source: "draw",
             occupant: routeSlotOccupant(
-              draftCanyonId,
+              draftPlaceId,
               routes.data ?? [],
-              canyonTrackMedia ?? [],
+              placeTrackMedia ?? [],
             ),
             write: () =>
               createRouteLocal({
@@ -1731,7 +1731,7 @@ export function MapScreen({
                 points,
                 anchors,
                 ...(draftColor ? { color: draftColor } : {}),
-                canyonId: draftCanyonId,
+                placeId: draftPlaceId,
               }),
           });
           // Cancelled the displacement confirm: the draft stays exactly as it
@@ -1748,7 +1748,7 @@ export function MapScreen({
         setNamingRoute(false);
         routeDraft.close();
         setEditingRouteId(null);
-        setDraftCanyonId(null);
+        setDraftPlaceId(null);
         setDraftColor(null);
       } catch (err) {
         console.error(err);
@@ -1758,9 +1758,9 @@ export function MapScreen({
       }
     },
     [
-      canyonTrackMedia,
-      canyons.data,
-      draftCanyonId,
+      placeTrackMedia,
+      places.data,
+      draftPlaceId,
       draftColor,
       editingRouteId,
       routeDraft,
@@ -1808,7 +1808,7 @@ export function MapScreen({
   );
 
   /** One entry point for both point-collecting tools, so every tap surface
-   *  (map, canyon pin, waypoint pin) only has to know "a tool wants this".
+   *  (map, place pin, waypoint pin) only has to know "a tool wants this".
    *
    *  Snapping happens here rather than in each tool, so both behave the same.
    *  It only ever ADDS points between the previous vertex and this one — the
@@ -1919,12 +1919,12 @@ export function MapScreen({
     [addToolPoint, anchorDeleteSideFor, collectingPoints, pressedAnchorIndex],
   );
 
-  const handleCanyonPress = useCallback(
+  const handlePlacePress = useCallback(
     (event: NativeSyntheticEvent<PressEventWithFeatures>) => {
       stopSourcePress(event);
       // The pin no longer swallows the press for us (MLRN 11 bubbles it), so
       // while a point-collecting tool is armed this has to place the point
-      // itself — otherwise tapping near a canyon does nothing and reads as
+      // itself — otherwise tapping near a place does nothing and reads as
       // broken.
       if (collectingPoints) {
         const [lon, lat] = event.nativeEvent.lngLat;
@@ -1933,22 +1933,22 @@ export function MapScreen({
       }
       const props = event.nativeEvent.features[0]?.properties;
       // The OPTIONS sheet, not the detail screen: the same six verbs the
-      // Canyons list offers, with "Open canyon" first because that is what this
+      // Places list offers, with "Open place" first because that is what this
       // tap used to do (DESIGN.md §7). Held as an id so an edit made from
       // inside the sheet re-renders it rather than showing a stale copy.
-      if (props && typeof props.id === "string") setOptionsCanyonId(props.id);
+      if (props && typeof props.id === "string") setOptionsPlaceId(props.id);
     },
     [addToolPoint, collectingPoints],
   );
 
-  /** One canyon's verbs, from its pin. */
-  const [optionsCanyonId, setOptionsCanyonId] = useState<string | null>(null);
-  const optionsCanyon =
-    (canyons.data ?? []).find((row) => row.id === optionsCanyonId) ?? null;
+  /** One place's verbs, from its pin. */
+  const [optionsPlaceId, setOptionsPlaceId] = useState<string | null>(null);
+  const optionsPlace =
+    (places.data ?? []).find((row) => row.id === optionsPlaceId) ?? null;
   /** The two verbs that need a FORM. Each is a sheet of its own, so the
    *  options sheet closes before one opens (DESIGN.md §6). */
-  const [editingCanyon, setEditingCanyon] = useState<MirrorCanyon | null>(null);
-  const [loggingCanyon, setLoggingCanyon] = useState<MirrorCanyon | null>(null);
+  const [editingPlace, setEditingPlace] = useState<MirrorPlace | null>(null);
+  const [loggingPlace, setLoggingPlace] = useState<MirrorPlace | null>(null);
 
   /** A recorded line's own verbs, from the map (DESIGN.md §7: the same object
    *  wherever it is listed) — what a TAP on the line opens, with the stats a
@@ -1958,7 +1958,7 @@ export function MapScreen({
   const [recordingSheetOpen, setRecordingSheetOpen] = useState(false);
   const handleTrackPress = useCallback(
     (track: Track, coordinates?: { latitude: number; longitude: number }) => {
-      // Same rule as a canyon pin: the line swallows the press before the map
+      // Same rule as a place pin: the line swallows the press before the map
       // sees it, so while a tool is collecting points it has to place the point
       // itself — otherwise tapping near a track does nothing and reads as
       // broken.
@@ -2162,28 +2162,28 @@ export function MapScreen({
     ) ?? null;
   /** Finished recordings — what the Tracks layer draws, and its tally. */
   const savedTracks = tracks.filter((track) => track.state === "done");
-  // How many canyons have a route file on this phone. Counted here rather than
+  // How many places have a route file on this phone. Counted here rather than
   // taken from `routesStatus`, which only exists while the layer is MOUNTED —
   // the row has to state its tally with the switch off, which is exactly when
   // someone is deciding whether to turn it on.
-  const canyonRouteCount = canyonTrackMedia?.length ?? 0;
+  const placeRouteCount = placeTrackMedia?.length ?? 0;
 
   /**
    * The two route toggles split by WHAT THE ROUTE BELONGS TO, not by how it
    * was made.
    *
-   * "Canyon routes" is every route attached to a canyon — the GPX and KML
-   * files counted above, and drawn routes carrying a `canyonId`. "My routes"
+   * "Place routes" is every route attached to a place — the GPX and KML
+   * files counted above, and drawn routes carrying a `placeId`. "My routes"
    * is what is attached to nothing. Splitting it the other way (drawn vs
-   * imported) put a canyon's own line under a switch labelled for loose
-   * routes, so turning canyon routes off still drew half of them.
+   * imported) put a place's own line under a switch labelled for loose
+   * routes, so turning place routes off still drew half of them.
    */
   const standaloneRoutes = useMemo(
-    () => (routes.data ?? []).filter((route) => route.canyonId == null),
+    () => (routes.data ?? []).filter((route) => route.placeId == null),
     [routes.data],
   );
-  const canyonLinkedRoutes = useMemo(
-    () => (routes.data ?? []).filter((route) => route.canyonId != null),
+  const placeLinkedRoutes = useMemo(
+    () => (routes.data ?? []).filter((route) => route.placeId != null),
     [routes.data],
   );
   // One list for one layer: RoutesLayer draws whatever it is handed, and which
@@ -2191,9 +2191,9 @@ export function MapScreen({
   const visibleRoutes = useMemo(
     () => [
       ...(showRoutes ? standaloneRoutes : []),
-      ...(showCanyonRoutes ? canyonLinkedRoutes : []),
+      ...(showPlaceRoutes ? placeLinkedRoutes : []),
     ],
-    [canyonLinkedRoutes, showCanyonRoutes, showRoutes, standaloneRoutes],
+    [placeLinkedRoutes, showPlaceRoutes, showRoutes, standaloneRoutes],
   );
 
   // Locking north-up straightens a map that is already turned. Without this the
@@ -2357,7 +2357,7 @@ export function MapScreen({
   }, []);
 
   // A press-and-hold is "something goes here". Two things can: a waypoint (a
-  // scratch mark) and a canyon (a real record). A sheet rather than an Alert now
+  // scratch mark) and a place (a real record). A sheet rather than an Alert now
   // that there is more than one — Android's Alert drops buttons past three, and
   // these entries carry glyphs and a subtitle (DESIGN.md §6).
   const notify = useCallback((text: string, tone: "info" | "error") => {
@@ -2580,13 +2580,13 @@ export function MapScreen({
     // Being asked to look at something else ENDS follow mode, exactly as a
     // place search does (handleSelectPlace). While following, the fix watcher
     // writes a camera stop per sample, so the fit below was overwritten within
-    // a frame: tapping "Show on map" — or a canyon's route attachment — did
+    // a frame: tapping "Show on map" — or a place's route attachment — did
     // nothing at all, silently, for as long as the dot was on.
     setFollowMode("off");
     fitCameraToBbox(focus.bbox);
     // …and say WHICH rectangle — but only for a saved REGION, the one asset
     // whose extent is a meaningful box. A pulsing rectangle around a pin, a
-    // line or a canyon point is noise (the asset itself is already the shape).
+    // line or a place point is noise (the asset itself is already the shape).
     // `basemapId` is the region signal: Saved only sets it on a downloaded
     // region (SavedItem.focusBasemapId).
     if (focus.basemapId) {
@@ -2633,7 +2633,7 @@ export function MapScreen({
     [fitCameraToBbox, handleCancelRouteDraw, measureDraft, routeDraft],
   );
 
-  /** "Draw one on the map" arriving from a canyon page. */
+  /** "Draw one on the map" arriving from a place page. */
   const drawRouteNonce = drawRouteFor?.nonce ?? null;
   const handledDrawNonce = useRef<number | null>(null);
   useEffect(() => {
@@ -2644,7 +2644,7 @@ export function MapScreen({
       measureDraft.close();
       routeDraft.open();
       setEditingRouteId(null);
-      setDraftCanyonId(drawRouteFor.canyonId);
+      setDraftPlaceId(drawRouteFor.placeId);
       setDraftColor(pickNextTrackColor(routes.data?.map((r) => r.color) ?? []));
     };
     if (routeDraft.active && routeDraft.points.length > 0) {
@@ -3647,7 +3647,7 @@ export function MapScreen({
       }
       // Third tap drops follow but KEEPS the dot and its watchers: "don't
       // chase me" is a different request from "stop showing me", and a
-      // canyoner who wants to look at the next drop still wants to see where
+      // placeer who wants to look at the next drop still wants to see where
       // they are. Stopping the watchers is what leaving the screen does.
       setFollowMode("off");
       // The ref too, and BEFORE recentre(): setCameraStop reads
@@ -3760,7 +3760,7 @@ export function MapScreen({
       // Only when it lands near the line; anywhere else follows the preference.
       if (insertAnchorNear(lon, lat)) return;
       // Drawing or measuring: every other long-press outcome (waypoint, navigate,
-      // start route/measure, add canyon, "This point" sheet) is a bug mid-draw —
+      // start route/measure, add place, "This point" sheet) is a bug mid-draw —
       // press-and-hold off the line does nothing while a tool is armed.
       if (collectingPoints) return;
       const point = { latitude: lat, longitude: lon };
@@ -3777,11 +3777,11 @@ export function MapScreen({
         case "measure":
           startMeasureAt(point);
           return;
-        case "canyon":
+        case "place":
           // Straight to the form: with no sheet open there is no Modal to
           // collide with, so this is the one branch that skips the park-and-
           // reopen dance the sheet needs (DESIGN.md §6).
-          setAddCanyonAt(point);
+          setAddPlaceAt(point);
           return;
         default:
           setLongPressPoint(point);
@@ -3921,7 +3921,7 @@ export function MapScreen({
       // map as well, so a handler that bails without this leaks the tap into
       // the map's own handler (map/sourcePress.ts).
       stopSourcePress(event);
-      // Same rule as a canyon pin and a track line: while a point-collecting
+      // Same rule as a place pin and a track line: while a point-collecting
       // tool is armed the feature under the thumb has to place the point
       // itself, or tapping near an import does nothing and reads as broken.
       if (collectingPoints) {
@@ -3936,7 +3936,7 @@ export function MapScreen({
 
   const handleWaypointPress = useCallback(
     (waypoint: Waypoint) => {
-      // Same reason as a canyon pin: while a tool is armed, a marker under the
+      // Same reason as a place pin: while a tool is armed, a marker under the
       // thumb places a point rather than opening its menu.
       if (collectingPoints) {
         void addToolPoint(waypoint.lon, waypoint.lat);
@@ -3965,7 +3965,7 @@ export function MapScreen({
    * What the search box can find on this phone.
    *
    * Composed from the same lists the layers above are counted from, in the
-   * order a tie is broken in (`localSearch.ts` keeps it): canyons, then
+   * order a tie is broken in (`localSearch.ts` keeps it): places, then
    * waypoints, then the recorded and drawn lines. Extents resolve lazily
    * through the SAME descriptors Saved uses (`assetActions.ts`) — one
    * definition of "where is this thing", not a second one for search.
@@ -3975,25 +3975,25 @@ export function MapScreen({
    */
   const savedSearchItems: SavedSearchItem[] = useMemo(
     () => [
-      ...ownedCanyons.map((canyon) => ({
-        key: `canyon:${canyon.id}`,
+      ...ownedPlaces.map((place) => ({
+        key: `place:${place.id}`,
         icon: "map-pin" as const,
-        hue: OWNED_CANYON_COLOR,
-        title: canyon.name,
-        kindLabel: "Canyon",
-        alternates: canyon.altNames,
+        hue: OWNED_PLACE_COLOR,
+        title: place.name,
+        kindLabel: "Place",
+        alternates: place.altNames,
         resolveBbox: async () =>
-          bboxOfPoints([{ lon: canyon.longitude, lat: canyon.latitude }]),
+          bboxOfPoints([{ lon: place.longitude, lat: place.latitude }]),
       })),
-      ...sharedCanyons.map((canyon) => ({
-        key: `canyon:${canyon.id}`,
+      ...sharedPlaces.map((place) => ({
+        key: `place:${place.id}`,
         icon: "share-2" as const,
-        hue: SHARED_CANYON_COLOR,
-        title: canyon.name,
-        kindLabel: "Shared canyon",
-        alternates: canyon.altNames,
+        hue: SHARED_PLACE_COLOR,
+        title: place.name,
+        kindLabel: "Shared place",
+        alternates: place.altNames,
         resolveBbox: async () =>
-          bboxOfPoints([{ lon: canyon.longitude, lat: canyon.latitude }]),
+          bboxOfPoints([{ lon: place.longitude, lat: place.latitude }]),
       })),
       ...(mirrorWaypoints.data ?? []).map((waypoint) => ({
         key: `waypoint:${waypoint.id}`,
@@ -4029,7 +4029,7 @@ export function MapScreen({
         resolveBbox: vectorImportActions(imported).resolveBbox,
       })),
     ],
-    [ownedCanyons, sharedCanyons, mirrorWaypoints.data, savedTracks, routes.data, imports],
+    [ownedPlaces, sharedPlaces, mirrorWaypoints.data, savedTracks, routes.data, imports],
   );
 
   /**
@@ -4043,22 +4043,22 @@ export function MapScreen({
    */
   const layerToggles: LayerToggleEntry[] = [
     {
-      key: "canyons",
+      key: "places",
       icon: "map-pin",
-      hue: OWNED_CANYON_COLOR,
-      title: "My canyons",
-      count: ownedCanyons.length,
-      value: showOwnedCanyons,
-      onChange: setShowOwnedCanyons,
+      hue: OWNED_PLACE_COLOR,
+      title: "My places",
+      count: ownedPlaces.length,
+      value: showOwnedPlaces,
+      onChange: setShowOwnedPlaces,
     },
     {
-      key: "shared-canyons",
+      key: "shared-places",
       icon: "share-2",
-      hue: SHARED_CANYON_COLOR,
-      title: "Shared canyons",
-      count: sharedCanyons.length,
-      value: showSharedCanyons,
-      onChange: setShowSharedCanyons,
+      hue: SHARED_PLACE_COLOR,
+      title: "Shared places",
+      count: sharedPlaces.length,
+      value: showSharedPlaces,
+      onChange: setShowSharedPlaces,
     },
     {
       key: "waypoints",
@@ -4079,21 +4079,21 @@ export function MapScreen({
       onChange: setShowRoutes,
     },
     {
-      key: "canyon-routes",
+      key: "place-routes",
       icon: "git-commit",
-      hue: OWNED_CANYON_COLOR,
-      title: "Canyon routes",
-      count: canyonRouteCount + canyonLinkedRoutes.length,
+      hue: OWNED_PLACE_COLOR,
+      title: "Place routes",
+      count: placeRouteCount + placeLinkedRoutes.length,
       // The layer's own report of what it could not draw. Present only while
       // it is on AND something is missing — a map drawing less than it says
       // has to say so (DESIGN.md §8), and the rest of the time there is
       // nothing to report.
       note:
-        showCanyonRoutes && routesStatus && routesStatus.unavailable > 0
+        showPlaceRoutes && routesStatus && routesStatus.unavailable > 0
           ? `${routesStatus.unavailable} not downloaded yet`
           : undefined,
-      value: showCanyonRoutes,
-      onChange: setShowCanyonRoutes,
+      value: showPlaceRoutes,
+      onChange: setShowPlaceRoutes,
     },
     {
       key: "vector-imports",
@@ -4187,7 +4187,7 @@ export function MapScreen({
     showTracks ? tracks.map((track) => track.id).join(",") : "",
     waypoints.length > 0,
     showRoutes,
-    showCanyonRoutes,
+    showPlaceRoutes,
     showWaypoints,
     drawingRoute,
     measuring,
@@ -4351,9 +4351,9 @@ export function MapScreen({
         <RouteArrowImage />
 
         {/* layerIndex pins z-order across remounts: a swapped basemap source
-            re-adds its layer at the TOP of the stack, burying the canyon
+            re-adds its layer at the TOP of the stack, burying the place
             layers — explicit indexes (background=0, basemap band from 1,
-            overlays above the band) keep the basemap underneath while canyon
+            overlays above the band) keep the basemap underneath while place
             layers stay on top. The Protomaps band is ~70 layers wide, so the
             overlay base index depends on the active basemap. */}
         {basemapResolved.map((resolved) =>
@@ -4379,7 +4379,7 @@ export function MapScreen({
         )}
 
         {/* The edge of what this phone actually holds. Above the basemap band
-            and below everything else, so canyon pins, tracks and imports stay
+            and below everything else, so place pins, tracks and imports stay
             visible over the blanked ground. */}
         {offlineMask ? (
           <GeoJSONSource id="offline-mask" data={offlineMask}>
@@ -4451,7 +4451,7 @@ export function MapScreen({
         )}
 
         {/* Vector imports (Stage 5): device-local GeoJSON from user files,
-            pinned above the overlay band, below the canyon layers. Each
+            pinned above the overlay band, below the place layers. Each
             import is one GeoJSONSource read straight off disk. */}
         {visibleImports.map((imported, importPosition) => {
           const base =
@@ -4506,17 +4506,17 @@ export function MapScreen({
           );
         })}
 
-        {/* Every canyon route at once (layers sheet → Layers → Canyon routes).
+        {/* Every place route at once (layers sheet → Layers → Place routes).
             Mirror-backed, so it draws with no signal for any file this phone
-            has fetched; mounted before the canyon pins so the pins stay on
+            has fetched; mounted before the place pins so the pins stay on
             top of their own lines. */}
-        {showCanyonRoutes ? <CanyonRoutesLayer onStatus={setRoutesStatus} /> : null}
+        {showPlaceRoutes ? <PlaceRoutesLayer onStatus={setRoutesStatus} /> : null}
 
         {/* Saved routes, below the point markers — a route is ink on the map and
-            a waypoint or canyon marker must stay above it (the draft layer below
+            a waypoint or place marker must stay above it (the draft layer below
             is exempt: while editing, the line you are working on is the thing
             that has to stay readable). Mounted before the tracks/waypoints and
-            canyon pins for exactly that reason. Always mounted (RoutesLayer
+            place pins for exactly that reason. Always mounted (RoutesLayer
             keeps an empty source rather than unmounting) so the 0↔1 route
             transition cannot re-add its layers to the top of the stack. */}
         <RoutesLayer
@@ -4529,7 +4529,7 @@ export function MapScreen({
         />
 
         {/* Recorded tracks + waypoints (Stage 7): unpinned, mounted before
-            the canyon sources so canyons draw on top. */}
+            the place sources so places draw on top. */}
         <TrackMapLayers
           tracks={tracks}
           waypoints={showWaypoints ? waypoints : EMPTY_WAYPOINTS}
@@ -4556,13 +4556,13 @@ export function MapScreen({
           </GeoJSONSource>
         ) : null}
 
-        {/* Canyon overlays: authed API GeoJSON — never baked into tiles
+        {/* Place overlays: authed API GeoJSON — never baked into tiles
             (privacy rule). Shared under owned; one definition, also drawn by
-            the canyon point-picker (CanyonPinsLayer). */}
-        <CanyonPinsLayer
+            the place point-picker (PlacePinsLayer). */}
+        <PlacePinsLayer
           ownedFc={ownedFc}
           sharedFc={sharedFc}
-          onPress={handleCanyonPress}
+          onPress={handlePlacePress}
         />
 
         {/* The route being drawn — solid. */}
@@ -4861,28 +4861,28 @@ export function MapScreen({
         ) : null}
 
         {/* Error surfaces: background failures, non-blocking. */}
-        {canyons.error ? (
+        {places.error ? (
           <View style={styles.notice}>
-            <Text style={styles.noticeText}>{canyons.error}</Text>
+            <Text style={styles.noticeText}>{places.error}</Text>
           </View>
         ) : null}
 
         {/* A map that quietly hides pins is a map you can't trust. Says how many
             are missing, and the dismiss IS the way out — clearing it turns the
-            Canyons screen's "show only these" option back off. */}
-        {withholdingCanyons ? (
+            Places screen's "show only these" option back off. */}
+        {withholdingPlaces ? (
           <View style={styles.filterBadge}>
             <Feather name="filter" size={14} color={theme.accent} />
             {/* Two lines: this sentence grows with the user's text size, and a
                 badge that says "Showing 5 of 2…" is a warning nobody can act on. */}
             <Text style={styles.filterBadgeText} numberOfLines={2}>
-              {`Showing ${mapFilter.visibleIds?.length ?? 0} of ${mapFilter.totalCount} canyons`}
+              {`Showing ${mapFilter.visibleIds?.length ?? 0} of ${mapFilter.totalCount} places`}
             </Text>
             <IconButton
               icon="x"
               size={16}
-              accessibilityLabel="Show all canyons again"
-              onPress={() => setCanyonMapFilterEnabled(false)}
+              accessibilityLabel="Show all places again"
+              onPress={() => setPlaceMapFilterEnabled(false)}
             />
           </View>
         ) : null}
@@ -5048,7 +5048,7 @@ export function MapScreen({
         <Text style={styles.attributionText}>{DEM_ATTRIBUTION}</Text>
       </BottomSheet>
 
-      {/* One waypoint's verbs, tags and canyon links. Looked up from the
+      {/* One waypoint's verbs, tags and place links. Looked up from the
           mirror by id rather than held as an object, so an edit made inside
           the sheet re-renders it instead of showing the stale copy the pin
           was tapped with. */}
@@ -5070,7 +5070,7 @@ export function MapScreen({
         draft={waypointDraft}
         picked={waypointPicked}
         onPickOnMap={openWaypointPicker}
-        onOpenCanyon={onOpenCanyon}
+        onOpenPlace={onOpenPlace}
         onClose={() => {
           setOpenWaypoint(null);
           setWaypointDraft(null);
@@ -5093,18 +5093,18 @@ export function MapScreen({
         onInfo={(text) => notify(text, "info")}
       />
 
-      {/* Press-and-hold: a waypoint is a scratch mark, a canyon is a record.
-          The canyon form can't open from here directly — a second Modal over the
+      {/* Press-and-hold: a waypoint is a scratch mark, a place is a record.
+          The place form can't open from here directly — a second Modal over the
           first doesn't hold focus — so the point is parked and picked up in
           `onClosed`. */}
       <BottomSheet
         visible={longPressPoint !== null}
         onClose={() => setLongPressPoint(null)}
         onClosed={() => {
-          const point = pendingCanyonPoint.current;
+          const point = pendingPlacePoint.current;
           if (!point) return;
-          pendingCanyonPoint.current = null;
-          setAddCanyonAt(point);
+          pendingPlacePoint.current = null;
+          setAddPlaceAt(point);
         }}
         title="What goes here?"
       >
@@ -5152,10 +5152,10 @@ export function MapScreen({
           />
           <Row
             icon="plus-circle"
-            title="Add a canyon"
+            title="Add a place"
             subtitle="With this position filled in"
             onPress={() => {
-              pendingCanyonPoint.current = longPressPoint;
+              pendingPlacePoint.current = longPressPoint;
               setLongPressPoint(null);
             }}
           />
@@ -5163,51 +5163,51 @@ export function MapScreen({
       </BottomSheet>
 
       {/* ONE form for both modes (DESIGN.md §7): a long-press drops a new
-          canyon here, and "Edit canyon" in the pin's options sheet reopens the
+          place here, and "Edit place" in the pin's options sheet reopens the
           same fields on an existing one. The two states are mutually exclusive
           — each entry point clears the other. */}
-      <CanyonEditSheet
-        visible={addCanyonAt !== null || editingCanyon !== null}
-        canyon={editingCanyon}
-        initialCoords={addCanyonAt}
+      <PlaceEditSheet
+        visible={addPlaceAt !== null || editingPlace !== null}
+        place={editingPlace}
+        initialCoords={addPlaceAt}
         onClose={() => {
-          setAddCanyonAt(null);
-          setEditingCanyon(null);
+          setAddPlaceAt(null);
+          setEditingPlace(null);
         }}
         onSaved={(text) => notify(text, "info")}
         onFailed={(text) => notify(text, "error")}
       />
 
-      {/* One canyon's verbs, from the pin the user tapped — the same sheet the
-          Canyons list opens, minus its "Show on map" row. */}
-      <CanyonOptionsSheet
-        canyon={optionsCanyon}
-        visible={optionsCanyon !== null}
-        onClose={() => setOptionsCanyonId(null)}
-        onOpenCanyon={(canyon) => onOpenCanyon(canyon.id, canyon.name)}
-        onLogTrip={(canyon) => {
-          setAddCanyonAt(null);
-          setLoggingCanyon(canyon);
+      {/* One place's verbs, from the pin the user tapped — the same sheet the
+          Places list opens, minus its "Show on map" row. */}
+      <PlaceOptionsSheet
+        place={optionsPlace}
+        visible={optionsPlace !== null}
+        onClose={() => setOptionsPlaceId(null)}
+        onOpenPlace={(place) => onOpenPlace(place.id, place.name)}
+        onLogTrip={(place) => {
+          setAddPlaceAt(null);
+          setLoggingPlace(place);
         }}
-        onEdit={(canyon) => {
-          setAddCanyonAt(null);
-          setEditingCanyon(canyon);
+        onEdit={(place) => {
+          setAddPlaceAt(null);
+          setEditingPlace(place);
         }}
         onInfo={(text) => notify(text, "info")}
         onError={(text) => notify(text, "error")}
       />
 
-      {/* Logging from a pin: the same trip form the Canyons list opens, with
-          this canyon already linked. */}
+      {/* Logging from a pin: the same trip form the Places list opens, with
+          this place already linked. */}
       <TripEditSheet
         online={connectivity === "online"}
-        visible={loggingCanyon !== null}
-        canyons={canyons.data ?? []}
-        initialCanyons={
-          loggingCanyon ? [{ id: loggingCanyon.id, name: loggingCanyon.name }] : undefined
+        visible={loggingPlace !== null}
+        places={places.data ?? []}
+        initialPlaces={
+          loggingPlace ? [{ id: loggingPlace.id, name: loggingPlace.name }] : undefined
         }
         existingTypes={tripTypes}
-        onClose={() => setLoggingCanyon(null)}
+        onClose={() => setLoggingPlace(null)}
         onSaved={(text) => notify(text, "info")}
         onFailed={(text) => notify(text, "error")}
       />
@@ -5225,7 +5225,7 @@ export function MapScreen({
           setOptionsRouteId(null);
           if (target) openRouteForEditing(target);
         }}
-        onOpenCanyon={onOpenCanyon}
+        onOpenPlace={onOpenPlace}
         onInfo={(text) => notify(text, "info")}
         onError={(text) => notify(text, "error")}
       />

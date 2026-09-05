@@ -12,18 +12,18 @@
 //   "You share with Bob"  — mine. Sharing it with someone ELSE is free, and
 //                           unsharing is recoverable (I can re-share it), so
 //                           both verbs are offered in bulk.
-//   "Bob shares with you" — Bob's. I can keep a COPY of a canyon (recoverable,
+//   "Bob shares with you" — Bob's. I can keep a COPY of a place (recoverable,
 //                           and the reason to do it before the other verb), and
 //                           I can drop my access — which only Bob can undo, so
 //                           it is the destructive slot and it confirms.
 //
 // WHAT THE LIST CANNOT SHOW, stated on the screen because it decides whether a
-// user believes the list: a shared canyon carries its canyon-level notes, its
-// canyon-level media and its linked route, and a waypoint linked to it inherits
+// user believes the list: a shared place carries its place-level notes, its
+// place-level media and its linked route, and a waypoint linked to it inherits
 // visibility with no share row of its own. Those are not rows here. Unsharing
-// the CANYON is what takes them back.
+// the PLACE is what takes them back.
 //
-// PRIVACY: row titles are user text and routinely name canyons. They reach the
+// PRIVACY: row titles are user text and routinely name places. They reach the
 // screen and the confirms — a user cannot act on "3 things" without knowing
 // which — and nothing here is logged.
 import {
@@ -41,11 +41,11 @@ export type FriendShareDirection = "theySee" | "youSee";
  * The glyph per kind. Feather names, spelled as literals rather than imported
  * from `@expo/vector-icons`, so this module stays free of the RN runtime — and
  * the same five glyphs the rest of the app already uses for these kinds
- * (`map-pin` a canyon, `flag` a waypoint, `edit-3` a route, `layers` a LiDAR
+ * (`map-pin` a place, `flag` a waypoint, `edit-3` a route, `layers` a LiDAR
  * topo, `file-text` a GeoPDF).
  */
 export const SHARE_KIND_ICON = {
-  canyon: "map-pin",
+  place: "map-pin",
   waypoint: "flag",
   route: "edit-3",
   topoJob: "layers",
@@ -65,17 +65,17 @@ export type FriendShareCard = {
   key: string;
   row: FriendShareRow;
   title: string;
-  /** "Canyon · shared 12 Aug" — kind first, because kind is what a mixed list needs. */
+  /** "Place · shared 12 Aug" — kind first, because kind is what a mixed list needs. */
   subtitle: string;
   icon: (typeof SHARE_KIND_ICON)[keyof typeof SHARE_KIND_ICON];
-  /** Copying it into my own account is possible (canyons only, today). */
+  /** Copying it into my own account is possible (places only, today). */
   copyable: boolean;
   /** Dropping my access would actually change what I can see. */
   removable: boolean;
   /**
    * Why Remove is withheld, in the words the sheet shows. Set only for a row
-   * that is ALSO visible through a canyon this friend shared: revoking its
-   * direct share leaves the canyon arm standing, so the row would vanish and
+   * that is ALSO visible through a place this friend shared: revoking its
+   * direct share leaves the place arm standing, so the row would vanish and
    * come straight back on the next pull.
    */
   blockedReason?: string;
@@ -84,7 +84,7 @@ export type FriendShareCard = {
 /**
  * The row's identity, and the ONE spelling of it — the screen also builds these
  * keys from mirror rows (to find which received rows also ride a shared
- * canyon), so a second format there would silently match nothing.
+ * place), so a second format there would silently match nothing.
  */
 export function shareCardKey(row: {
   entityType: FriendShareRow["entityType"];
@@ -112,8 +112,8 @@ function capitalise(word: string): string {
 /**
  * Build the cards for one direction.
  *
- * The "this also rides a shared canyon" answer comes from the ROW (the server
- * sets `alsoViaCanyon`), not from the local mirror. Deriving it here was right
+ * The "this also rides a shared place" answer comes from the ROW (the server
+ * sets `alsoViaPlace`), not from the local mirror. Deriving it here was right
  * only once the mirror had pulled the linked row — before that, the same
  * waypoint offered a Remove that the next delta pull would have undone.
  */
@@ -127,7 +127,7 @@ export function buildShareCards(
 ): FriendShareCard[] {
   return rows.map((row) => {
     const key = shareCardKey(row);
-    const viaCanyon = options.direction === "youSee" && row.alsoViaCanyon === true;
+    const viaPlace = options.direction === "youSee" && row.alsoViaPlace === true;
     return {
       key,
       row,
@@ -135,10 +135,10 @@ export function buildShareCards(
       subtitle: `${capitalise(SHARE_KIND_LABEL[row.entityType])} · shared ${formatShareDay(row.sharedAt)}`,
       icon: SHARE_KIND_ICON[row.entityType],
       copyable: options.direction === "youSee" && isCopyableSharedRow(row),
-      removable: options.direction === "youSee" && !viaCanyon,
-      ...(viaCanyon
+      removable: options.direction === "youSee" && !viaPlace,
+      ...(viaPlace
         ? {
-            blockedReason: `This came with a canyon ${options.friendName} shared with you. Remove that canyon to stop seeing it.`,
+            blockedReason: `This came with a place ${options.friendName} shared with you. Remove that place to stop seeing it.`,
           }
         : {}),
     };
@@ -179,16 +179,16 @@ export function shareSelectionCountLabel(
 export function unshareAllConfirm(args: {
   count: number;
   friendName: string;
-  /** Whether a canyon is in the selection — it carries more than itself. */
-  includesCanyon: boolean;
+  /** Whether a place is in the selection — it carries more than itself. */
+  includesPlace: boolean;
 }): { title: string; body: string } {
   const things = args.count === 1 ? "1 item" : `${args.count} items`;
   return {
     title: `Unshare ${things} from ${args.friendName}?`,
     body:
       `${args.friendName} loses access to ${things}` +
-      (args.includesCanyon
-        ? ", and a canyon takes its notes, its photos and its route with it. "
+      (args.includesPlace
+        ? ", and a place takes its notes, its photos and its route with it. "
         : ". ") +
       `You stay friends, and what ${args.friendName} shares with you is unaffected. ` +
       `There is no undo — you would have to share each one again. Unsharing won't remove copies ${args.friendName} has already made.`,
@@ -219,15 +219,15 @@ export function removeAllConfirm(args: {
       (args.copyableCount === 0
         ? ""
         : one
-          ? " It's a canyon you could save a copy of first."
-          : ` ${args.copyableCount === 1 ? "1 of them is a canyon you" : `${args.copyableCount} of them are canyons you`} could save a copy of first.`),
+          ? " It's a place you could save a copy of first."
+          : ` ${args.copyableCount === 1 ? "1 of them is a place you" : `${args.copyableCount} of them are places you`} could save a copy of first.`),
   };
 }
 
 /** What a bulk copy did, in one sentence. */
 /**
  * The line under Remove in a row's sheet. NOT `removeShareConfirm(...).title` —
- * that is a question ("Remove shared canyon?"), and a question reads as an
+ * that is a question ("Remove shared place?"), and a question reads as an
  * unanswered prompt when it sits under the verb that asks it. A subtitle states
  * the consequence; the confirm does the asking.
  */
@@ -258,10 +258,10 @@ export function copyConfirm(args: {
     title: one ? "Save a copy?" : `Save ${args.count} copies?`,
     body:
       (one && args.itemName
-        ? `“${args.itemName}” is copied into your own canyons, with its route. `
-        : `${args.count} canyons are copied into your own canyons, with their routes. `) +
+        ? `“${args.itemName}” is copied into your own places, with its route. `
+        : `${args.count} places are copied into your own places, with their routes. `) +
       `The ${one ? "copy is" : "copies are"} yours to edit, and ${one ? "stays" : "stay"} if ${args.friendName} stops sharing. ` +
-      `${args.friendName}'s ${one ? "canyon is" : "canyons are"} untouched.`,
+      `${args.friendName}'s ${one ? "place is" : "places are"} untouched.`,
   };
 }
 
@@ -272,7 +272,7 @@ export function copyOutcomeMessage(outcome: {
 }): { text: string; tone: "info" | "error" } {
   const { copied, failed } = outcome;
   const saved =
-    copied === 1 ? "Saved 1 copy to your canyons" : `Saved ${copied} copies to your canyons`;
+    copied === 1 ? "Saved 1 copy to your places" : `Saved ${copied} copies to your places`;
   if (failed.length === 0) {
     return { text: `${saved}.`, tone: "info" };
   }
@@ -281,7 +281,7 @@ export function copyOutcomeMessage(outcome: {
       text:
         failed.length === 1
           ? `Couldn't copy ${failed[0]}.`
-          : `Couldn't copy ${failed.length} canyons: ${failed.join(", ")}.`,
+          : `Couldn't copy ${failed.length} places: ${failed.join(", ")}.`,
       tone: "error",
     };
   }

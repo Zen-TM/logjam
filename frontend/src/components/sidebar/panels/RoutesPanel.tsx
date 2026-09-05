@@ -1,13 +1,13 @@
 // Routes: the drawing tool, the lines the user authored, and the track files
-// attached to their canyons.
+// attached to their places.
 //
 // Two kinds of line live here and they are NOT the same thing. A ROUTE is drawn
 // in this app and stored as geometry. A TRACK is a GPX/KML the user uploaded
-// against a canyon or trip — it belongs to that canyon, so its row opens the
-// canyon rather than pretending to be a route.
+// against a place or trip — it belongs to that place, so its row opens the
+// place rather than pretending to be a route.
 //
 // A third kind now lives here too: a STANDALONE FILE — an import or a track
-// Logjam GPS recorded — which belongs to no canyon at all, so this is the only
+// Logjam GPS recorded — which belongs to no place at all, so this is the only
 // surface it can appear on. Its checkbox IS its map visibility (there is no
 // Layers-panel toggle for a per-file list), which is the one deliberate
 // exception to the rule below.
@@ -21,7 +21,7 @@ import TrackIcon from "../../media/TrackIcon";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
 import { ErrorBanner } from "../../feedback/ErrorBanner";
 import type { PanelId } from "../panels";
-import type { TCanyon, TRoute, CanyonTrack } from "../../../canyonUtils";
+import type { TPlace, TRoute, PlaceTrack } from "../../../placeUtils";
 import {
   formatDistanceM,
   mediaDisplayName,
@@ -31,10 +31,10 @@ import {
 
 type RoutesPanelProps = {
   routes: TRoute[];
-  /** Owner vs sharee: a route reached through a canyon share is listed, but
-   * under the canyon it came with rather than as the user's own work. */
+  /** Owner vs sharee: a route reached through a place share is listed, but
+   * under the place it came with rather than as the user's own work. */
   currentUserId: string | null;
-  canyonTracks: CanyonTrack[];
+  placeTracks: PlaceTrack[];
   /** The user's own imports and Logjam GPS recordings (metadata only). */
   standaloneFiles: StandaloneFile[];
   standaloneFilesError: string | null;
@@ -45,18 +45,18 @@ type RoutesPanelProps = {
   onDeleteStandaloneFile: (file: StandaloneFile) => Promise<void>;
   /** Centre the map on a file's recorded extent. */
   onFlyToStandaloneFile: (file: StandaloneFile) => void;
-  /** Owned + shared, for naming a track's canyon. */
-  canyons: TCanyon[];
+  /** Owned + shared, for naming a track's place. */
+  places: TPlace[];
   onStartDrawingRoute: () => void;
   onSelectRoute: (id: string) => void;
-  setSelectedCanyonID: (id: string) => void;
+  setSelectedPlaceID: (id: string) => void;
   setActivePanel: (panel: PanelId) => void;
 };
 
 export default function RoutesPanel({
   routes,
   currentUserId,
-  canyonTracks,
+  placeTracks,
   standaloneFiles,
   standaloneFilesError,
   shownStandaloneIds,
@@ -64,18 +64,18 @@ export default function RoutesPanel({
   onRenameStandaloneFile,
   onDeleteStandaloneFile,
   onFlyToStandaloneFile,
-  canyons,
+  places,
   onStartDrawingRoute,
   onSelectRoute,
-  setSelectedCanyonID,
+  setSelectedPlaceID,
   setActivePanel,
 }: RoutesPanelProps): React.JSX.Element {
   const [pendingDelete, setPendingDelete] = useState<StandaloneFile | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const ownRoutes = routes.filter((route) => route.ownerId === currentUserId);
   const sharedRoutes = routes.filter((route) => route.ownerId !== currentUserId);
-  const canyonName = (id: string) =>
-    canyons.find((canyon) => canyon.id === id)?.name ?? "Unnamed canyon";
+  const placeName = (id: string) =>
+    places.find((place) => place.id === id)?.name ?? "Unnamed place";
 
   const routeRow = (route: TRoute) => (
     <button
@@ -121,23 +121,23 @@ export default function RoutesPanel({
       <div className={classes.divider} />
 
       <div className={classes.sectionLabel}>Tracks</div>
-      {canyonTracks.length === 0 ? (
+      {placeTracks.length === 0 ? (
         <span className={classes.caption}>
-          No track files. GPX and KML uploaded to a canyon appear here.
+          No track files. GPX and KML uploaded to a place appear here.
         </span>
       ) : (
-        canyonTracks.map((track) => (
+        placeTracks.map((track) => (
           <button
             key={track.mediaId}
             type="button"
             className={classes.row}
             onClick={() => {
-              setSelectedCanyonID(track.canyonId);
-              setActivePanel("canyon-detail");
+              setSelectedPlaceID(track.placeId);
+              setActivePanel("place-detail");
             }}
           >
             <TrackIcon color={track.color} size={16} />
-            <span className={classes.rowName}>{canyonName(track.canyonId)}</span>
+            <span className={classes.rowName}>{placeName(track.placeId)}</span>
           </button>
         ))
       )}
@@ -213,23 +213,23 @@ function StandaloneFileRow({
   };
   const distanceM = file.metadata.distanceM;
 
-  // A file linked to a canyon is that canyon's way, and the canyon-tracks layer
+  // A file linked to a place is that place's way, and the place-tracks layer
   // already draws it — so it gets no toggle of its own rather than a checkbox
   // that appears to do nothing. The disabled input keeps the row's columns
   // aligned with its neighbours.
-  const isCanyonWay = file.linkedCanyonId !== null;
+  const isPlaceWay = file.linkedPlaceId !== null;
 
   return (
     <div className={classes.fileRow}>
       <input
         type="checkbox"
-        checked={shown && !isCanyonWay}
+        checked={shown && !isPlaceWay}
         onChange={onToggle}
-        disabled={isCanyonWay}
-        title={isCanyonWay ? "Drawn as this canyon's route" : undefined}
+        disabled={isPlaceWay}
+        title={isPlaceWay ? "Drawn as this place's route" : undefined}
         aria-label={
-          isCanyonWay
-            ? `${current} is a canyon's route and is already on the map`
+          isPlaceWay
+            ? `${current} is a place's route and is already on the map`
             : `Show ${current} on the map`
         }
       />

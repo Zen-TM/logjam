@@ -4,7 +4,7 @@
 // (waypoint, route, LiDAR topo, GeoPDF). It is NOT the same promise as sending
 // a copy of a file, which cannot be taken back — see shared/src/sharing.ts.
 //
-// Online-only, like the canyon sharing calls in ./friends.ts and for the same
+// Online-only, like the place sharing calls in ./friends.ts and for the same
 // reason: the resulting rows and their tombstones reach the mirror on the next
 // pull, but granting access is not a field use case and must not be queued in
 // the outbox (the outbox carries entity mutations, not permission grants).
@@ -18,7 +18,7 @@ import type {
 
 import { apiFetch } from "./apiFetch";
 
-/** Same shape the canyon shares endpoint returns, deliberately. */
+/** Same shape the place shares endpoint returns, deliberately. */
 export type ShareRecipient = {
   id: string;
   sharedWith: { id: string; username: string };

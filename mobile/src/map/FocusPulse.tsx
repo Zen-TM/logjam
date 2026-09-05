@@ -54,7 +54,7 @@ export const FocusPulse = memo(function FocusPulse({
   }, [nonce]);
 
   const [west, south, east, north] = bbox;
-  // A WAYPOINT or a canyon is focused as a single point, and a zero-area
+  // A WAYPOINT or a place is focused as a single point, and a zero-area
   // polygon draws nothing at all — so that case gets a circle instead of being
   // skipped. It is the case that needs the pulse MOST: a rectangle at least has
   // corners to notice, a point has nothing.

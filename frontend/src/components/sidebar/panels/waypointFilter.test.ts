@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import { filterWaypoints, tagTallies } from "./waypointFilter";
-import type { TWaypoint } from "../../../canyonUtils";
+import type { TWaypoint } from "../../../placeUtils";
 
-// Synthetic coords only (committed-fixture rule): never a real canyon.
+// Synthetic coords only (committed-fixture rule): never a real place.
 function waypoint(overrides: Partial<TWaypoint> & { id: string }): TWaypoint {
   return {
     ownerId: "u1",
     syncRole: "owner",
-    canyonIds: [],
+    placeIds: [],
     name: "Point",
     latitude: -33.65,
     longitude: 150.25,

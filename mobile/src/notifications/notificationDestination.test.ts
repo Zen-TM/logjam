@@ -54,7 +54,7 @@ describe("notificationDestination", () => {
     ).toBeNull();
     expect(
       notificationDestination(
-        notification("item_shared", { entityType: "canyon", entityId: "c1" }),
+        notification("item_shared", { entityType: "place", entityId: "c1" }),
       ),
     ).toBeNull();
   });
@@ -117,9 +117,9 @@ describe("notificationDestination", () => {
     ).toMatchObject({ filter: "geoPdf" });
   });
 
-  it("leaves a canyon share to the sheet's own Open", () => {
+  it("leaves a place share to the sheet's own Open", () => {
     expect(
-      notificationDestination(notification("canyon_shared", { canyonId: "c1" })),
+      notificationDestination(notification("place_shared", { placeId: "c1" })),
     ).toBeNull();
   });
 });

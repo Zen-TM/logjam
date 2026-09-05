@@ -39,10 +39,10 @@ class TestBuildPushMessages(unittest.TestCase):
         self.assertEqual(message["title"], "Logjam notification")
 
     def test_rejects_non_whitelisted_keys(self):
-        with self.assertRaisesRegex(ValueError, "canyonName"):
-            build_push_messages(["t"], {"type": "canyon_shared", "canyonName": "Secret"})
+        with self.assertRaisesRegex(ValueError, "placeName"):
+            build_push_messages(["t"], {"type": "place_shared", "placeName": "Secret"})
         with self.assertRaisesRegex(ValueError, "latitude"):
-            build_push_messages(["t"], {"type": "canyon_shared", "latitude": -33.7})
+            build_push_messages(["t"], {"type": "place_shared", "latitude": -33.7})
 
     def test_whitelist_matches_node_side(self):
         # Keep in sync with api/src/services/push.ts ALLOWED_DATA_KEYS.
@@ -52,7 +52,7 @@ class TestBuildPushMessages(unittest.TestCase):
                 "type",
                 "notificationId",
                 "friendshipId",
-                "canyonId",
+                "placeId",
                 "jobId",
                 "exportId",
                 "geoPdfJobId",

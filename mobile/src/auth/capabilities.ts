@@ -2,7 +2,7 @@
 // guest-mode gating matrix.
 //
 // The app runs in one of two account states. A **guest** has no Logjam account:
-// canyons, trips, waypoints, tracks and photos live only in the on-device
+// places, trips, waypoints, tracks and photos live only in the on-device
 // SQLite stores, the sync engine is never started, and everything that needs a
 // server is visibly disabled. A **linked** install has a Cognito account and
 // behaves as the app always has.
@@ -31,12 +31,12 @@ export type AccountState = "guest" | "linked";
 
 /**
  * A server-backed feature that can be gated. Anything absent from this union
- * works for a guest — canyons, trip logs, waypoints, media capture, tracks,
+ * works for a guest — places, trip logs, waypoints, media capture, tracks,
  * local GeoPDF import, measure, compass, raster offline regions and the user's
  * own custom fields are all fully local and must never be routed through here.
  */
 export type Capability =
-  /** Sharing a canyon, waypoint, route, topo or GeoPDF with another user. */
+  /** Sharing a place, waypoint, route, topo or GeoPDF with another user. */
   | "sharing"
   /** Friend list, requests and search. */
   | "friends"
@@ -200,7 +200,7 @@ export function statusRowProps(
  * Sharing's own status, with the third axis: does the ACCOUNT hold this row
  * yet?
  *
- * A live share is a grant on a server row (`POST /shares`, `/canyons/:id/share`),
+ * A live share is a grant on a server row (`POST /shares`, `/places/:id/share`),
  * so a route drawn in the field whose `create` op is still in the outbox has
  * nothing to grant access to — the recipients lookup 404s and the grant would
  * too. Callers pass the fact in (`sync/outbox.ts` `pendingCreateIds`); this
@@ -236,7 +236,7 @@ export function shareCapabilityStatus(
  * that decision is written down.
  *
  * Definitions are rows in the local mirror, written through the outbox like a
- * canyon or a waypoint (`customFields/fieldDefsStore.ts`), so adding, renaming
+ * place or a waypoint (`customFields/fieldDefsStore.ts`), so adding, renaming
  * and deleting a field works with no account and with no signal. There is
  * therefore nothing left for this function to return, and it is kept only so
  * the decision has a place to be stated and a test to pin it.

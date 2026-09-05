@@ -36,14 +36,14 @@ export async function sendEmail(params: {
       html: params.html,
     });
     if (error) {
-      // error.name/message are API-level (no recipient/canyon detail).
+      // error.name/message are API-level (no recipient/place detail).
       logger.warn(
         { errName: error.name, errMessage: error.message },
         "email_send_rejected",
       );
     }
   } catch (err) {
-    // Never reference recipient/canyon detail in the log (CLAUDE.md privacy
+    // Never reference recipient/place detail in the log (CLAUDE.md privacy
     // rule); the send is best-effort and the notification row already exists.
     logger.warn(
       { errClass: err instanceof Error ? err.constructor.name : typeof err },

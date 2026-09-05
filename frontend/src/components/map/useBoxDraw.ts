@@ -1,5 +1,5 @@
 // Click-anchor-click box drawing on the main map, for every surface that wants
-// an area: the topo job's bbox, the canyon multi-select, and the Canyons
+// an area: the topo job's bbox, the place multi-select, and the Places
 // filter's area.
 //
 // ONE implementation. The first two shipped as two ~110-line copies that

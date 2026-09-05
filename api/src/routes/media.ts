@@ -20,8 +20,8 @@ import { deleteS3Keys, deleteS3KeysBestEffort } from "../lib/s3Cleanup";
 import { validateUploadSizes } from "../lib/mediaUploadValidation";
 import { toMediaItem } from "../lib/mediaPresign";
 import { exhaustedEgressOwnerIds } from "../lib/egressQuota";
-import { requireCanyonOwnerAccess } from "../lib/canyonAccess";
-import { canyonIdOfMedia } from "../lib/mediaLink";
+import { requirePlaceOwnerAccess } from "../lib/placeAccess";
+import { placeIdOfMedia } from "../lib/mediaLink";
 import {
   mediaDeleteTombstones,
   mediaUnlinkTombstones,
@@ -73,7 +73,7 @@ function parseLinkTarget(body: Record<string, unknown>): {
   origin: MediaOrigin | null;
 } {
   const { linkedType, linkedId, origin } = body;
-  if (linkedType !== "canyon" && linkedType !== "tripLog" && linkedType !== "none") {
+  if (linkedType !== "place" && linkedType !== "tripLog" && linkedType !== "none") {
     throw new AppError(400, "Invalid linkedType");
   }
   if (origin !== undefined && origin !== null && !isMediaOrigin(origin)) {
@@ -95,8 +95,8 @@ function parseLinkTarget(body: Record<string, unknown>): {
   return { linkedType, linkedId, origin: parsedOrigin };
 }
 
-// Only the owner of the target canyon (or the canyon owning the trip log) may
-// attach media — even on canyons shared with them. A standalone file's target
+// Only the owner of the target place (or the place owning the trip log) may
+// attach media — even on places shared with them. A standalone file's target
 // is the caller themselves, so there is nothing to check.
 async function assertOwnsTarget(
   userId: string,
@@ -105,17 +105,17 @@ async function assertOwnsTarget(
 ) {
   if (linkedType === "none") return;
   if (linkedId === null) throw new AppError(400, "linkedId is required");
-  if (linkedType === "canyon") {
-    const canyon = await prisma.canyon.findUnique({
+  if (linkedType === "place") {
+    const place = await prisma.place.findUnique({
       where: { id: linkedId },
       select: { id: true, ownerId: true },
     });
-    if (!canyon) throw new AppError(404, "Canyon not found");
-    // none → 404 (no existence oracle for canyons the caller can't see);
-    // sharee → 403 (legitimately sees the canyon, just can't attach media).
-    await requireCanyonOwnerAccess(
+    if (!place) throw new AppError(404, "Place not found");
+    // none → 404 (no existence oracle for places the caller can't see);
+    // sharee → 403 (legitimately sees the place, just can't attach media).
+    await requirePlaceOwnerAccess(
       userId,
-      canyon,
+      place,
       "Only the owner can attach media",
     );
   } else if (linkedType === "tripLog") {
@@ -132,26 +132,26 @@ async function assertOwnsTarget(
   }
 }
 
-// A canyon may have at most one track (GPX/KML). Trip logs are unconstrained.
+// A place may have at most one track (GPX/KML). Trip logs are unconstrained.
 // Checked in both presign (fail fast) and confirm (authoritative — the presign
 // check can race; the orphan sweeper reclaims a blob whose confirm is rejected).
-async function assertCanyonTrackSlotFree(
+async function assertPlaceTrackSlotFree(
   linkedType: string,
   linkedId: string | null,
   category: MediaCategory,
   /** The row being MOVED, on a re-link: it is otherwise its own incumbent. */
   ignoreMediaId?: string,
 ) {
-  if (linkedType !== "canyon" || linkedId === null || category !== "track") return;
+  if (linkedType !== "place" || linkedId === null || category !== "track") return;
   const existing = await prisma.media.count({
     where: {
-      linkedType: "canyon",
+      linkedType: "place",
       linkedId,
       mediaType: { in: TRACK_MIME_TYPES as unknown as string[] },
       ...(ignoreMediaId ? { id: { not: ignoreMediaId } } : {}),
     },
   });
-  if (existing > 0) throw new AppError(409, "This canyon already has a track");
+  if (existing > 0) throw new AppError(409, "This place already has a track");
 }
 
 /**
@@ -238,7 +238,7 @@ router.post(
     // Content-Length below, so S3 rejects uploads that exceed the declaration.
     const sizes = validateUploadSizes(category, sizeBytes, thumbnailSizeBytes);
     await assertOwnsTarget(user.id, linkedType, linkedId);
-    await assertCanyonTrackSlotFree(linkedType, linkedId, category);
+    await assertPlaceTrackSlotFree(linkedType, linkedId, category);
     // Headroom pre-check including the declared upload; the authoritative
     // quota charge still happens on confirm against the real S3 size.
     await assertHasStorageQuota(
@@ -329,7 +329,7 @@ router.post(
       return;
     }
 
-    await assertCanyonTrackSlotFree(linkedType, linkedId, category);
+    await assertPlaceTrackSlotFree(linkedType, linkedId, category);
 
     const { displayKey, thumbnailKey } = mediaKeys(user.id, mediaId, mediaType);
     const expectThumb = categoryHasThumbnail(category);
@@ -450,7 +450,7 @@ router.post(
 
 // POST /media/download-urls — batch presigned GET URLs for the mobile blob
 // cache (Stage 8 §7.3; delta media rows carry metadata only). Authorization
-// per id: owner, or sharee of the canyon a canyon-linked row is attached to.
+// per id: owner, or sharee of the place a place-linked row is attached to.
 // Rows the caller can't see are OMITTED, never erred — the response must not
 // confirm foreign ids (anti-oracle; deliberately supersedes the attach-403
 // pattern rather than copying it).
@@ -481,36 +481,36 @@ router.post(
     });
     // Visibility set derived from the caller's own shares — one query, no
     // per-id role lookups.
-    const candidateCanyonIds = Array.from(
+    const candidatePlaceIds = Array.from(
       new Set(
         rows
           .filter((m) => m.ownerId !== user.id)
-          .map(canyonIdOfMedia)
-          .filter((canyonId): canyonId is string => canyonId !== null),
+          .map(placeIdOfMedia)
+          .filter((placeId): placeId is string => placeId !== null),
       ),
     );
-    const sharedCanyonIds = new Set(
-      candidateCanyonIds.length > 0
+    const sharedPlaceIds = new Set(
+      candidatePlaceIds.length > 0
         ? (
-            await prisma.canyonShare.findMany({
+            await prisma.placeShare.findMany({
               where: {
                 sharedWithId: user.id,
-                canyonId: { in: candidateCanyonIds },
+                placeId: { in: candidatePlaceIds },
               },
-              select: { canyonId: true },
+              select: { placeId: true },
             })
-          ).map((s) => s.canyonId)
+          ).map((s) => s.placeId)
         : [],
     );
     const visible = rows.filter((m) => {
       if (m.ownerId === user.id) return true;
-      const canyonId = canyonIdOfMedia(m);
-      return canyonId !== null && sharedCanyonIds.has(canyonId);
+      const placeId = placeIdOfMedia(m);
+      return placeId !== null && sharedPlaceIds.has(placeId);
     });
 
     // Monthly egress cap. This is the bulk media pull (the mobile blob cache
     // asks for up to 100 blobs at a time), so it is where a download loop would
-    // actually live — the inline presigns on canyon/trip reads are small and
+    // actually live — the inline presigns on place/trip reads are small and
     // interactive and are deliberately left ungated.
     //
     // Charged to the media's OWNER, so rows belonging to an exhausted owner are
@@ -536,17 +536,17 @@ router.post(
 );
 
 // DELETE /media/:id — remove a single media item (owner only). Bulk/cascade
-// deletes on canyon/trip/account live in their respective routes.
+// deletes on place/trip/account live in their respective routes.
 // GET /media/standalone — the caller's own imports and recorded tracks.
 //
 // For the web app, which is not delta-synced and so has no other way to see a
-// file that hangs off no canyon. Metadata only: presigning every row would put
+// file that hangs off no place. Metadata only: presigning every row would put
 // the whole list through the egress meter on page load, whether or not anything
 // was opened. Content comes from POST /media/download-urls, which is gated.
 //
 // Owner-scoped by construction — a standalone file is visible to nobody else,
-// and one LINKED to a canyon is reported here for its owner only (a sharee
-// sees it as that canyon's way, through the canyon).
+// and one LINKED to a place is reported here for its owner only (a sharee
+// sees it as that place's way, through the place).
 router.get(
   "/standalone",
   requireAuth,
@@ -568,7 +568,7 @@ router.get(
           color: row.color,
           origin: row.origin,
           metadata: readMediaMetadata(row.origin, row.metadata),
-          linkedCanyonId: canyonIdOfMedia(row),
+          linkedPlaceId: placeIdOfMedia(row),
           createdAt: row.createdAt.toISOString(),
           updatedAt: row.updatedAt.toISOString(),
         },
@@ -612,9 +612,9 @@ router.patch(
   },
 );
 
-// PATCH /media/:id/link — move a standalone file between "nobody" and a canyon.
+// PATCH /media/:id/link — move a standalone file between "nobody" and a place.
 //
-// This is what makes a canyon's way a LINK rather than a copy. Attaching an
+// This is what makes a place's way a LINK rather than a copy. Attaching an
 // import used to upload a second copy of it, so the user held two files, only
 // one of which was in their Saved list, and replacing the way DELETED the copy.
 // Now the same row changes parent, and detaching leaves the file standing.
@@ -631,21 +631,21 @@ router.patch(
     const body = (req.body ?? {}) as Record<string, unknown>;
 
     const { linkedType, linkedId } = body;
-    if (linkedType !== "canyon" && linkedType !== "none") {
+    if (linkedType !== "place" && linkedType !== "none") {
       // Deliberately narrower than parseLinkTarget: a file is linked to a
-      // canyon or to nothing. Trip logs hold attachments, not ways.
-      throw new AppError(400, "linkedType must be \"canyon\" or \"none\"");
+      // place or to nothing. Trip logs hold attachments, not ways.
+      throw new AppError(400, "linkedType must be \"place\" or \"none\"");
     }
-    if (linkedType === "canyon" && (typeof linkedId !== "string" || !linkedId)) {
+    if (linkedType === "place" && (typeof linkedId !== "string" || !linkedId)) {
       throw new AppError(400, "linkedId is required");
     }
     if (linkedType === "none" && linkedId !== undefined && linkedId !== null) {
       throw new AppError(400, "Unlinking must not carry a linkedId");
     }
-    const nextLinkedId = linkedType === "canyon" ? (linkedId as string) : null;
+    const nextLinkedId = linkedType === "place" ? (linkedId as string) : null;
 
     // Owner-scoped lookup, and a foreign id gets the SAME 404 a missing one
-    // gets — a sharee sees canyon-level media ids in a shared canyon payload,
+    // gets — a sharee sees place-level media ids in a shared place payload,
     // so a 403 here would confirm which of them are real (the anti-oracle this
     // file's DELETE and presign already argue).
     const media = await prisma.media.findFirst({ where: { id, ownerId: user.id } });
@@ -657,16 +657,16 @@ router.patch(
     const category = mediaCategory(media.mediaType);
     if (!category) throw new AppError(400, "Unsupported media type");
     await assertOwnsTarget(user.id, linkedType, nextLinkedId);
-    await assertCanyonTrackSlotFree(linkedType, nextLinkedId, category, id);
+    await assertPlaceTrackSlotFree(linkedType, nextLinkedId, category, id);
 
-    // Whoever could see this file only through its OLD canyon must be told to
+    // Whoever could see this file only through its OLD place must be told to
     // forget it, in the same transaction as the move (the tombstone rule). A
-    // LINK needs no tombstone in the other direction: the new canyon's sharees
+    // LINK needs no tombstone in the other direction: the new place's sharees
     // simply gain the row on their next delta.
-    const previousCanyonId = canyonIdOfMedia(media);
-    const losingCanyonId =
-      previousCanyonId !== null && previousCanyonId !== nextLinkedId
-        ? previousCanyonId
+    const previousPlaceId = placeIdOfMedia(media);
+    const losingPlaceId =
+      previousPlaceId !== null && previousPlaceId !== nextLinkedId
+        ? previousPlaceId
         : null;
 
     const updated = await prisma.$transaction(async (tx) => {
@@ -674,9 +674,9 @@ router.patch(
         where: { id },
         data: { linkedType, linkedId: nextLinkedId },
       });
-      if (losingCanyonId !== null) {
-        const sharees = await tx.canyonShare.findMany({
-          where: { canyonId: losingCanyonId },
+      if (losingPlaceId !== null) {
+        const sharees = await tx.placeShare.findMany({
+          where: { placeId: losingPlaceId },
           select: { sharedWithId: true },
         });
         await writeTombstones(
@@ -701,7 +701,7 @@ router.delete(
     const user = await getUser(req.user!.sub);
     const id = getParam(req.params.id);
     // Owner-scoped: a foreign media id gets the SAME 404 a non-existent one
-    // gets. A sharee sees canyon-level media ids in a shared canyon payload,
+    // gets. A sharee sees place-level media ids in a shared place payload,
     // so a 403 here would confirm which of them are real (APIR-013/PRIV-106) —
     // the presign path in this same file already argues exactly that.
     const media = await prisma.media.findFirst({
@@ -720,14 +720,14 @@ router.delete(
       ),
     );
     await prisma.$transaction(async (tx) => {
-      // Canyon-level media is visible to the canyon's sharees (hybrid model),
+      // Place-level media is visible to the place's sharees (hybrid model),
       // so they must be told to forget it too. Trip media is owner-private —
       // no fan-out (sync tombstone rule, same transaction as the delete).
-      const deletedFromCanyonId = canyonIdOfMedia(media);
+      const deletedFromPlaceId = placeIdOfMedia(media);
       const sharees =
-        deletedFromCanyonId !== null
-          ? await tx.canyonShare.findMany({
-              where: { canyonId: deletedFromCanyonId },
+        deletedFromPlaceId !== null
+          ? await tx.placeShare.findMany({
+              where: { placeId: deletedFromPlaceId },
               select: { sharedWithId: true },
             })
           : [];

@@ -20,7 +20,7 @@ type DefRow = {
 
 let defRows: DefRow[] = [];
 let trips: { id: string; customFields: Record<string, unknown> }[] = [];
-let canyons: {
+let places: {
   id: string;
   syncRole: string;
   attributes: { sources?: [string, string][]; customFields?: Record<string, unknown> };
@@ -30,12 +30,12 @@ const created: { entity: string; def: TripLogCustomFieldDef }[] = [];
 const updated: { id: string; fields: Record<string, unknown> }[] = [];
 const deleted: string[] = [];
 const tripUpdates: { id: string; fields: Record<string, unknown> }[] = [];
-const canyonUpdates: { id: string; fields: Record<string, unknown> }[] = [];
+const placeUpdates: { id: string; fields: Record<string, unknown> }[] = [];
 
 vi.mock("../sync/mirrorStore", () => ({
   listMirrorCustomFieldDefs: () => Promise.resolve(defRows),
   listMirrorTrips: () => Promise.resolve(trips),
-  listMirrorCanyons: () => Promise.resolve(canyons),
+  listMirrorPlaces: () => Promise.resolve(places),
 }));
 vi.mock("../sync/outbox", () => ({
   createCustomFieldDefLocal: (draft: { entity: string; def: TripLogCustomFieldDef }) => {
@@ -54,8 +54,8 @@ vi.mock("../sync/outbox", () => ({
     tripUpdates.push({ id, fields });
     return Promise.resolve();
   },
-  updateCanyonLocal: (id: string, fields: Record<string, unknown>) => {
-    canyonUpdates.push({ id, fields });
+  updatePlaceLocal: (id: string, fields: Record<string, unknown>) => {
+    placeUpdates.push({ id, fields });
     return Promise.resolve();
   },
 }));
@@ -89,19 +89,19 @@ function row(def: TripLogCustomFieldDef, entity: string, position = 0): DefRow {
 beforeEach(() => {
   defRows = [];
   trips = [];
-  canyons = [];
+  places = [];
   created.length = 0;
   updated.length = 0;
   deleted.length = 0;
   tripUpdates.length = 0;
-  canyonUpdates.length = 0;
+  placeUpdates.length = 0;
 });
 
 describe("loadFieldDefs", () => {
   it("reads the mirror, scoped to one entity", async () => {
-    defRows = [row(water, "tripLog", 0), row(party, "canyon", 0)];
+    defRows = [row(water, "tripLog", 0), row(party, "place", 0)];
     expect(await loadFieldDefs("tripLog")).toEqual([water]);
-    expect(await loadFieldDefs("canyon")).toEqual([party]);
+    expect(await loadFieldDefs("place")).toEqual([party]);
   });
 
   it("orders by position, not by insertion", async () => {
@@ -159,7 +159,7 @@ describe("saveFieldDefs", () => {
   });
 
   it("leaves the other entity's definitions alone", async () => {
-    defRows = [row(water, "tripLog", 0), row(party, "canyon", 0)];
+    defRows = [row(water, "tripLog", 0), row(party, "place", 0)];
     await saveFieldDefs("tripLog", []);
     expect(deleted).toEqual(["row-water"]);
   });
@@ -176,12 +176,12 @@ describe("countFieldValues", () => {
 
   // A sharee cannot strip the owner's values, so they must not be counted as
   // rows this delete will clear either — the number and the effect must agree.
-  it("ignores canyons shared WITH this user", async () => {
-    canyons = [
+  it("ignores places shared WITH this user", async () => {
+    places = [
       { id: "c1", syncRole: "owner", attributes: { customFields: { party: 3 } } },
       { id: "c2", syncRole: "shared", attributes: { customFields: { party: 4 } } },
     ];
-    expect(await countFieldValues("canyon", "party")).toBe(1);
+    expect(await countFieldValues("place", "party")).toBe(1);
   });
 });
 
@@ -201,9 +201,9 @@ describe("removeFieldDef", () => {
 
   // `sources` is written only by the web, so a strip that rebuilt `attributes`
   // from the customFields alone would silently drop it.
-  it("preserves the rest of a canyon's attributes", async () => {
-    defRows = [row(party, "canyon", 0)];
-    canyons = [
+  it("preserves the rest of a place's attributes", async () => {
+    defRows = [row(party, "place", 0)];
+    places = [
       {
         id: "c1",
         syncRole: "owner",
@@ -213,8 +213,8 @@ describe("removeFieldDef", () => {
         },
       },
     ];
-    expect(await removeFieldDef("canyon", "party")).toBe(1);
-    expect(canyonUpdates).toEqual([
+    expect(await removeFieldDef("place", "party")).toBe(1);
+    expect(placeUpdates).toEqual([
       {
         id: "c1",
         fields: {

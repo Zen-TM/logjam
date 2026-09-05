@@ -22,11 +22,11 @@ import { AppError, errorHandler } from "./middleware/errorHandler";
 import { globalLimiter } from "./middleware/rateLimit";
 import { startTopoJobReaper } from "./lib/topoJobReaper";
 import usersRouter from "./routes/users";
-import canyonsRouter from "./routes/canyons";
+import placesRouter from "./routes/places";
 import tripLogsRouter from "./routes/tripLogs";
 import tripLogsGlobalRouter from "./routes/tripLogsGlobal";
 import tripLogsBulkRouter from "./routes/tripLogsBulk";
-import canyonsBulkRouter from "./routes/canyonsBulk";
+import placesBulkRouter from "./routes/placesBulk";
 import sharingRouter from "./routes/sharing";
 import sharesRouter from "./routes/shares";
 import bulkShareRouter from "./routes/bulkShare";
@@ -193,13 +193,13 @@ app.use(globalLimiter);
 
 app.use("/meta", metaRouter);
 app.use("/users", usersRouter);
-app.use("/canyons", canyonsRouter);
-app.use("/canyons/:canyonId/trips", tripLogsRouter);
+app.use("/places", placesRouter);
+app.use("/places/:placeId/trips", tripLogsRouter);
 app.use("/trips/bulk", tripLogsBulkRouter);
-app.use("/canyons/bulk", canyonsBulkRouter);
+app.use("/places/bulk", placesBulkRouter);
 app.use("/imports", importsRouter);
 app.use("/trips", tripLogsGlobalRouter);
-app.use("/canyons", sharingRouter);
+app.use("/places", sharingRouter);
 app.use("/shares", sharesRouter);
 // Its own path, NOT /shares/bulk: it also ends a bulk action made entirely of
 // file copies, which grant no Share row at all, and mounting it under the

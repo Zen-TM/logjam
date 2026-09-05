@@ -25,9 +25,9 @@ describe("AppError", () => {
 describe("errorHandler", () => {
   it("responds with the AppError status and message", () => {
     const { req, res, status, json } = mockReqRes();
-    errorHandler(new AppError(404, "Canyon not found"), req, res, vi.fn() as NextFunction);
+    errorHandler(new AppError(404, "Place not found"), req, res, vi.fn() as NextFunction);
     expect(status).toHaveBeenCalledWith(404);
-    expect(json).toHaveBeenCalledWith({ error: "Canyon not found", requestId: "req-1" });
+    expect(json).toHaveBeenCalledWith({ error: "Place not found", requestId: "req-1" });
   });
 
   it("echoes only whitelisted detail keys (used/quota/resetAt)", () => {
@@ -37,7 +37,7 @@ describe("errorHandler", () => {
       quota: 8,
       resetAt: "2026-06-07T00:00:00.000Z",
       // A future caller accidentally attaching sensitive data must NOT leak.
-      canyonName: "Secret Canyon",
+      placeName: "Secret Place",
       latitude: -33.5,
     } as unknown as AppError["details"];
     errorHandler(new AppError(507, "quota", details), req, res, vi.fn() as NextFunction);
@@ -49,7 +49,7 @@ describe("errorHandler", () => {
       quota: 8,
       resetAt: "2026-06-07T00:00:00.000Z",
     });
-    expect(body).not.toHaveProperty("canyonName");
+    expect(body).not.toHaveProperty("placeName");
     expect(body).not.toHaveProperty("latitude");
   });
 

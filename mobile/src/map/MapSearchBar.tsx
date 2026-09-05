@@ -11,13 +11,13 @@
 // Nominatim via `geocode`, tap a result to recentre.
 //
 // IT SEARCHES THE USER'S OWN THINGS FIRST, and those never touch the network.
-// A box that could find Katoomba but not the canyon you saved last week was
+// A box that could find Katoomba but not the place you saved last week was
 // answering the question nobody has standing in the bush; saved matches are
 // ranked on the device (`localSearch.ts`), appear from the second keystroke
 // with no debounce and no request, and are listed ABOVE the places with their
 // kind's glyph and hue so the two are never confused for each other.
 //
-// PRIVACY: only the typed string leaves the app (see src/geocode.ts). Canyon
+// PRIVACY: only the typed string leaves the app (see src/geocode.ts). Place
 // names and coordinates are never sent here — the saved matches are the reason
 // they do not have to be — and results are not persisted.
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -64,7 +64,7 @@ export type SavedSearchItem = {
   icon: React.ComponentProps<typeof Feather>["name"];
   hue: string;
   title: string;
-  /** What kind of thing it is — "Canyon", "Waypoint". The row's only subtitle. */
+  /** What kind of thing it is — "Place", "Waypoint". The row's only subtitle. */
   kindLabel: string;
   /** Matched but never displayed: alt names, tags. */
   alternates?: readonly string[];
@@ -94,7 +94,7 @@ export function MapSearchBar({
    * has to stay reachable while a recording runs.
    */
   reservedWidth?: number;
-  /** The user's own canyons, waypoints, tracks and route files. */
+  /** The user's own places, waypoints, tracks and route files. */
   savedItems: readonly SavedSearchItem[];
   onSelectPlace: (latitude: number, longitude: number) => void;
   onSelectSaved: (item: SavedSearchItem) => void;

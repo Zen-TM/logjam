@@ -1,7 +1,7 @@
 import type { PaperSize, Orientation, CoordMode } from "./geoPdfExtent.js";
 import { TOPO_LAYERS } from "./topoSettings.js";
 
-export interface CanyonMarker {
+export interface PlaceMarker {
   lat: number;
   lon: number;
   name: string;
@@ -23,7 +23,7 @@ export interface GeoPdfConfig {
     scaleBar: boolean;
     gridLines?: CoordMode;
   };
-  canyonMarkers?: CanyonMarker[];
+  placeMarkers?: PlaceMarker[];
 }
 
 // ── Allowlists ────────────────────────────────────────────────────────────────
@@ -118,11 +118,11 @@ function validateGeoPdfConfigCore(
     }
   }
 
-  if (config.canyonMarkers !== undefined) {
-    if (!Array.isArray(config.canyonMarkers)) {
-      return "Invalid canyonMarkers: must be an array";
+  if (config.placeMarkers !== undefined) {
+    if (!Array.isArray(config.placeMarkers)) {
+      return "Invalid placeMarkers: must be an array";
     }
-    for (const m of config.canyonMarkers) {
+    for (const m of config.placeMarkers) {
       if (
         !m ||
         typeof m.lat !== "number" ||
@@ -130,7 +130,7 @@ function validateGeoPdfConfigCore(
         typeof m.name !== "string" ||
         (m.color !== "owned" && m.color !== "shared")
       ) {
-        return "Invalid canyon marker entry";
+        return "Invalid place marker entry";
       }
     }
   }

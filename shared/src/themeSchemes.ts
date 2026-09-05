@@ -2,7 +2,7 @@ import {
   isTripLogCustomFieldDef,
   type TripLogCustomFieldDef,
 } from "./tripLogFields.js";
-import { MERGEABLE_FIELDS } from "./mergeCanyon.js";
+import { MERGEABLE_FIELDS } from "./mergePlace.js";
 
 export type ThemeSchemeId = "sandstone" | "basalt" | "scribblyGum" | "ironbark";
 
@@ -54,10 +54,10 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
 export type UserUiPreferences = {
   themeSchemeId: ThemeSchemeId;
   tripLogCustomFields?: import("./tripLogFields.js").TripLogCustomFieldDef[];
-  canyonCustomFields?: import("./tripLogFields.js").TripLogCustomFieldDef[];
+  placeCustomFields?: import("./tripLogFields.js").TripLogCustomFieldDef[];
   notifications: NotificationPreferences;
   autoDownloadGeoPdfs: boolean;
-  importMergePolicy?: import("./mergeCanyon.js").CanyonMergePolicy;
+  importMergePolicy?: import("./mergePlace.js").PlaceMergePolicy;
 };
 
 export function isNotificationPreferences(
@@ -214,7 +214,7 @@ const VALID_MERGE_VALUES = new Set(["keepExisting", "useIncoming"]);
  */
 export function normalizeImportMergePolicy(
   value: unknown,
-): import("./mergeCanyon.js").CanyonMergePolicy | undefined {
+): import("./mergePlace.js").PlaceMergePolicy | undefined {
   if (typeof value !== "object" || value === null) return undefined;
   const candidate = value as Record<string, unknown>;
   const result: Record<string, string> = {};
@@ -223,7 +223,7 @@ export function normalizeImportMergePolicy(
     if (typeof v !== "string" || !VALID_MERGE_VALUES.has(v)) return undefined;
     result[field] = v;
   }
-  return result as unknown as import("./mergeCanyon.js").CanyonMergePolicy;
+  return result as unknown as import("./mergePlace.js").PlaceMergePolicy;
 }
 
 export function normalizeUserUiPreferences(value: unknown): UserUiPreferences {
@@ -233,12 +233,12 @@ export function normalizeUserUiPreferences(value: unknown): UserUiPreferences {
       ? prefs.themeSchemeId
       : DEFAULT_THEME_SCHEME_ID;
     const tripLogCustomFields = normalizeCustomFieldDefs(prefs.tripLogCustomFields);
-    const canyonCustomFields = normalizeCustomFieldDefs(prefs.canyonCustomFields);
+    const placeCustomFields = normalizeCustomFieldDefs(prefs.placeCustomFields);
     const notifications = normalizeNotificationPreferences(prefs.notifications);
     const autoDownloadGeoPdfs =
       typeof prefs.autoDownloadGeoPdfs === "boolean" ? prefs.autoDownloadGeoPdfs : true;
     const importMergePolicy = normalizeImportMergePolicy(prefs.importMergePolicy);
-    const result: UserUiPreferences = { themeSchemeId, tripLogCustomFields, canyonCustomFields, notifications, autoDownloadGeoPdfs };
+    const result: UserUiPreferences = { themeSchemeId, tripLogCustomFields, placeCustomFields, notifications, autoDownloadGeoPdfs };
     if (importMergePolicy) result.importMergePolicy = importMergePolicy;
     return result;
   }
@@ -246,7 +246,7 @@ export function normalizeUserUiPreferences(value: unknown): UserUiPreferences {
   return {
     themeSchemeId: DEFAULT_THEME_SCHEME_ID,
     tripLogCustomFields: [],
-    canyonCustomFields: [],
+    placeCustomFields: [],
     notifications: { ...DEFAULT_NOTIFICATION_PREFERENCES },
     autoDownloadGeoPdfs: true,
   };

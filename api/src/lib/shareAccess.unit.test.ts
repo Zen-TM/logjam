@@ -3,8 +3,8 @@ import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
 vi.mock("../services/prisma", () => ({
   default: {
     share: { findUnique: vi.fn() },
-    canyonShare: { findFirst: vi.fn() },
-    canyonWaypoint: { findFirst: vi.fn() },
+    placeShare: { findFirst: vi.fn() },
+    placeWaypoint: { findFirst: vi.fn() },
     route: { findFirst: vi.fn() },
   },
 }));
@@ -17,7 +17,7 @@ import {
   getJobRole,
   getRouteRole,
   getWaypointRole,
-  hasCanyonInheritedAccess,
+  hasPlaceInheritedAccess,
   parseSharableEntityType,
   requireShareAccess,
   requireShareOwner,
@@ -26,8 +26,8 @@ import {
 
 const mocked = prisma as unknown as {
   share: { findUnique: Mock };
-  canyonShare: { findFirst: Mock };
-  canyonWaypoint: { findFirst: Mock };
+  placeShare: { findFirst: Mock };
+  placeWaypoint: { findFirst: Mock };
   route: { findFirst: Mock };
 };
 
@@ -36,13 +36,13 @@ const OTHER = "user-other";
 
 beforeEach(() => {
   mocked.share.findUnique.mockReset().mockResolvedValue(null);
-  mocked.canyonShare.findFirst.mockReset().mockResolvedValue(null);
-  mocked.canyonWaypoint.findFirst.mockReset().mockResolvedValue(null);
+  mocked.placeShare.findFirst.mockReset().mockResolvedValue(null);
+  mocked.placeWaypoint.findFirst.mockReset().mockResolvedValue(null);
   mocked.route.findFirst.mockReset().mockResolvedValue(null);
 });
 
 // The reason this file exists: after direct sharing there are TWO independent
-// reasons a waypoint or route can be visible (a Share row, or a shared canyon
+// reasons a waypoint or route can be visible (a Share row, or a shared place
 // it is linked to). Every test below pins one arm while the other is absent,
 // so a change that quietly drops an arm fails here rather than in the field.
 describe("getWaypointRole", () => {
@@ -51,16 +51,16 @@ describe("getWaypointRole", () => {
   it("calls the owner owner without touching either share table", async () => {
     expect(await getWaypointRole(OWNER, waypoint)).toBe("owner");
     expect(mocked.share.findUnique).not.toHaveBeenCalled();
-    expect(mocked.canyonWaypoint.findFirst).not.toHaveBeenCalled();
+    expect(mocked.placeWaypoint.findFirst).not.toHaveBeenCalled();
   });
 
-  it("grants 'shared' on a direct share with no canyon link at all", async () => {
+  it("grants 'shared' on a direct share with no place link at all", async () => {
     mocked.share.findUnique.mockResolvedValue({ id: "share-1" });
     expect(await getWaypointRole(OTHER, waypoint)).toBe("shared");
   });
 
-  it("grants 'shared' through a shared canyon with no direct share", async () => {
-    mocked.canyonWaypoint.findFirst.mockResolvedValue({ waypointId: "wp-1" });
+  it("grants 'shared' through a shared place with no direct share", async () => {
+    mocked.placeWaypoint.findFirst.mockResolvedValue({ waypointId: "wp-1" });
     expect(await getWaypointRole(OTHER, waypoint)).toBe("shared");
   });
 
@@ -75,55 +75,55 @@ describe("getRouteRole", () => {
     const role = await getRouteRole(OTHER, {
       id: "rt-1",
       ownerId: OWNER,
-      canyonId: null,
+      placeId: null,
     });
     expect(role).toBe("shared");
   });
 
-  it("grants 'shared' through the linked canyon's share", async () => {
+  it("grants 'shared' through the linked place's share", async () => {
     mocked.route.findFirst.mockResolvedValue({ id: "rt-1" });
     const role = await getRouteRole(OTHER, {
       id: "rt-1",
       ownerId: OWNER,
-      canyonId: "canyon-1",
+      placeId: "place-1",
     });
     expect(role).toBe("shared");
   });
 
-  it("is 'none' on a route whose canyon (if any) is not shared", async () => {
+  it("is 'none' on a route whose place (if any) is not shared", async () => {
     const role = await getRouteRole(OTHER, {
       id: "rt-1",
       ownerId: OWNER,
-      canyonId: null,
+      placeId: null,
     });
     expect(role).toBe("none");
   });
 });
 
 // The revoke path asks this directly: a direct revoke must not tombstone a
-// recipient who keeps the canyon arm (finding 2).
-describe("hasCanyonInheritedAccess", () => {
-  it("is true for a waypoint linked to a canyon shared with the user", async () => {
-    mocked.canyonWaypoint.findFirst.mockResolvedValue({ waypointId: "wp-1" });
-    expect(await hasCanyonInheritedAccess(OTHER, "waypoint", "wp-1")).toBe(true);
+// recipient who keeps the place arm (finding 2).
+describe("hasPlaceInheritedAccess", () => {
+  it("is true for a waypoint linked to a place shared with the user", async () => {
+    mocked.placeWaypoint.findFirst.mockResolvedValue({ waypointId: "wp-1" });
+    expect(await hasPlaceInheritedAccess(OTHER, "waypoint", "wp-1")).toBe(true);
   });
 
-  it("is false for a waypoint with no shared-canyon link", async () => {
-    expect(await hasCanyonInheritedAccess(OTHER, "waypoint", "wp-1")).toBe(false);
+  it("is false for a waypoint with no shared-place link", async () => {
+    expect(await hasPlaceInheritedAccess(OTHER, "waypoint", "wp-1")).toBe(false);
   });
 
-  it("is true for a route whose canyon is shared with the user", async () => {
+  it("is true for a route whose place is shared with the user", async () => {
     mocked.route.findFirst.mockResolvedValue({ id: "rt-1" });
-    expect(await hasCanyonInheritedAccess(OTHER, "route", "rt-1")).toBe(true);
+    expect(await hasPlaceInheritedAccess(OTHER, "route", "rt-1")).toBe(true);
   });
 
-  it("is false for a route with no shared-canyon link", async () => {
-    expect(await hasCanyonInheritedAccess(OTHER, "route", "rt-1")).toBe(false);
+  it("is false for a route with no shared-place link", async () => {
+    expect(await hasPlaceInheritedAccess(OTHER, "route", "rt-1")).toBe(false);
   });
 });
 
 describe("getJobRole", () => {
-  it("is owner-or-direct-share only: jobs have no canyon inheritance", async () => {
+  it("is owner-or-direct-share only: jobs have no place inheritance", async () => {
     const job = { id: "job-1", userId: OWNER };
     expect(await getJobRole(OWNER, "topoJob", job)).toBe("owner");
     expect(await getJobRole(OTHER, "topoJob", job)).toBe("none");
@@ -214,8 +214,8 @@ describe("parseSharableEntityType", () => {
     }
   });
 
-  it("rejects canyon — canyons share through CanyonShare, not here", () => {
-    expect(() => parseSharableEntityType("canyon")).toThrow(AppError);
+  it("rejects place — places share through PlaceShare, not here", () => {
+    expect(() => parseSharableEntityType("place")).toThrow(AppError);
   });
 
   it("rejects unknown and non-string input with 400", () => {
@@ -231,7 +231,7 @@ describe("parseSharableEntityType", () => {
 });
 
 // APIR-007 / decision D2: unfriending revokes EVERY share type, in both
-// directions — not just the canyon shares the unfriend handler already
+// directions — not just the place shares the unfriend handler already
 // deleted. The distinction that is easy to get wrong is FileSend: a pending
 // send is still live access, an accepted one is a copy the recipient holds.
 describe("revokeAllSharesBetween", () => {

@@ -16,7 +16,7 @@ import { Button, Row, SectionHeader, SegmentedControl, TextField, Toggle } from 
 /**
  * Manage the user's own custom field definitions — the mobile counterpart of the
  * web's account-level custom fields. One component for BOTH entities a field can
- * hang off (trip logs and canyons); they differ only in the nouns below and in
+ * hang off (trip logs and places); they differ only in the nouns below and in
  * the route the API layer picks.
  *
  * Rendered as MODES of a sheet, never as its own sheet — either the entity's
@@ -43,7 +43,7 @@ import { Button, Row, SectionHeader, SegmentedControl, TextField, Toggle } from 
 /** The only per-entity difference in this file: what to call the rows. */
 const ENTITY_NOUN: Record<CustomFieldEntity, { one: string; many: string; has: string; have: string }> = {
   tripLog: { one: "trip", many: "trips", has: "trip has", have: "trips have" },
-  canyon: { one: "canyon", many: "canyons", has: "canyon has", have: "canyons have" },
+  place: { one: "place", many: "places", has: "place has", have: "places have" },
 };
 
 export function CustomFieldList({

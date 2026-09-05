@@ -7,17 +7,17 @@ import { useCallback, useEffect, useState } from "react";
 import {
   hasMirrorSynced,
   countMediaByLinkedId,
-  countOutgoingSharesByCanyon,
-  incomingShareOwnerByCanyon,
-  listCanyonTrackMedia,
+  countOutgoingSharesByPlace,
+  incomingShareOwnerByPlace,
+  listPlaceTrackMedia,
   listMediaForLinked,
-  listMirrorCanyons,
+  listMirrorPlaces,
   listMirrorTrips,
   listMirrorWaypoints,
   listMirrorRoutes,
-  getMirrorCanyon,
+  getMirrorPlace,
   getMirrorTrip,
-  type MirrorCanyon,
+  type MirrorPlace,
   type MirrorMedia,
   type MirrorTrip,
   type MirrorWaypoint,
@@ -99,22 +99,22 @@ function useMirrorQuery<T>(read: () => Promise<T>): MirrorQueryState<T> {
   };
 }
 
-const readCanyons = () => listMirrorCanyons();
+const readPlaces = () => listMirrorPlaces();
 const readTrips = () => listMirrorTrips();
 const readWaypoints = () => listMirrorWaypoints();
-const readShareCounts = () => countOutgoingSharesByCanyon();
-const readIncomingShareOwners = () => incomingShareOwnerByCanyon();
+const readShareCounts = () => countOutgoingSharesByPlace();
+const readIncomingShareOwners = () => incomingShareOwnerByPlace();
 
-export function useMirrorCanyons(): MirrorQueryState<MirrorCanyon[]> {
-  return useMirrorQuery(readCanyons);
+export function useMirrorPlaces(): MirrorQueryState<MirrorPlace[]> {
+  return useMirrorQuery(readPlaces);
 }
 
 export function useMirrorTrips(): MirrorQueryState<MirrorTrip[]> {
   return useMirrorQuery(readTrips);
 }
 
-export function useMirrorCanyon(id: string): MirrorQueryState<MirrorCanyon | null> {
-  const read = useCallback(() => getMirrorCanyon(id), [id]);
+export function useMirrorPlace(id: string): MirrorQueryState<MirrorPlace | null> {
+  const read = useCallback(() => getMirrorPlace(id), [id]);
   return useMirrorQuery(read);
 }
 
@@ -127,20 +127,20 @@ export function useMirrorWaypoints(): MirrorQueryState<MirrorWaypoint[]> {
   return useMirrorQuery(readWaypoints);
 }
 
-/** Every route the account can see (own + through a canyon share). */
+/** Every route the account can see (own + through a place share). */
 export function useMirrorRoutes(): MirrorQueryState<MirrorRoute[]> {
   return useMirrorQuery(listMirrorRoutes);
 }
 
 /**
- * Every canyon route attachment on this account, for the map's "Canyon routes"
+ * Every place route attachment on this account, for the map's "Place routes"
  * layer. Mirror-backed, so it works with no signal.
  */
-export function useMirrorCanyonTracks(
+export function useMirrorPlaceTracks(
   trackMimeTypes: readonly string[],
 ): MirrorQueryState<MirrorMedia[]> {
   const read = useCallback(
-    () => listCanyonTrackMedia(trackMimeTypes),
+    () => listPlaceTrackMedia(trackMimeTypes),
     [trackMimeTypes],
   );
   return useMirrorQuery(read);
@@ -148,28 +148,28 @@ export function useMirrorCanyonTracks(
 
 /** Attachment counts keyed by linked row id — for list badges. */
 export function useMirrorMediaCounts(
-  linkedType: "canyon" | "tripLog",
+  linkedType: "place" | "tripLog",
 ): MirrorQueryState<Record<string, number>> {
   const read = useCallback(() => countMediaByLinkedId(linkedType), [linkedType]);
   return useMirrorQuery(read);
 }
 
-/** Share fan-out per owned canyon, for the "Shared with N" badge. */
+/** Share fan-out per owned place, for the "Shared with N" badge. */
 export function useMirrorShareCounts(): MirrorQueryState<Record<string, number>> {
   return useMirrorQuery(readShareCounts);
 }
 
 /**
- * Username of whoever shared each incoming canyon with the viewer, keyed by
- * canyon id — the "From <name>" mark on a shared route or waypoint in Saved.
+ * Username of whoever shared each incoming place with the viewer, keyed by
+ * place id — the "From <name>" mark on a shared route or waypoint in Saved.
  */
 export function useMirrorIncomingShareOwners(): MirrorQueryState<Record<string, string>> {
   return useMirrorQuery(readIncomingShareOwners);
 }
 
-/** Media attached to one canyon or trip, pendingUpload rows included. */
+/** Media attached to one place or trip, pendingUpload rows included. */
 export function useMirrorMedia(
-  linkedType: "canyon" | "tripLog",
+  linkedType: "place" | "tripLog",
   linkedId: string,
 ): MirrorQueryState<MirrorMedia[]> {
   const read = useCallback(

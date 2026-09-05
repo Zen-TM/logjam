@@ -1,7 +1,7 @@
 // Detail view for a route selected on the map. Opened programmatically from a
-// map click (never a NavRail item), mirroring CanyonDetailPanel.
+// map click (never a NavRail item), mirroring PlaceDetailPanel.
 //
-// A route reached through a canyon share is READ-ONLY here: the sharee can see
+// A route reached through a place share is READ-ONLY here: the sharee can see
 // it and export it, but edit/delete/link belong to the owner. The API enforces
 // this with a 403; the UI just doesn't offer the controls.
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -24,9 +24,9 @@ import {
   shareEntityWith,
   unshareEntityWith,
   type TRoute,
-  type TCanyon,
+  type TPlace,
   type TFriend,
-} from "../../../canyonUtils";
+} from "../../../placeUtils";
 import {
   sharedRowVisibility,
   densifyLine,
@@ -46,25 +46,25 @@ type RouteDetailPanelProps = {
   route: TRoute | null;
   /** Current user id, to decide owner vs sharee. */
   currentUserId: string | null;
-  /** Canyons the user owns, for the link picker. */
-  ownedCanyons: TCanyon[];
+  /** Places the user owns, for the link picker. */
+  ownedPlaces: TPlace[];
   /**
-   * Canyons shared WITH the user. Not for the picker (a sharee cannot link
+   * Places shared WITH the user. Not for the picker (a sharee cannot link
    * anything) — this is how a shared route tells whether it is here on a share
-   * row of its own or because its canyon came with it (shared/src/sharing.ts).
+   * row of its own or because its place came with it (shared/src/sharing.ts).
    */
-  sharedCanyons: TCanyon[];
+  sharedPlaces: TPlace[];
   /** Friends this route can be shared with. */
   friends: TFriend[];
-  /** Every route the caller can see, to detect an occupied canyon slot before
+  /** Every route the caller can see, to detect an occupied place slot before
    * linking (the displacement is non-destructive but must not be a surprise). */
   allRoutes: TRoute[];
   onEdit: (route: TRoute) => void;
   onChanged: () => void;
   onClose: () => void;
-  /** Open a canyon's detail panel — where a route that came WITH a shared
-   *  canyon is removed, since it has no share row of its own. */
-  onOpenCanyon: (canyonId: string) => void;
+  /** Open a place's detail panel — where a route that came WITH a shared
+   *  place is removed, since it has no share row of its own. */
+  onOpenPlace: (placeId: string) => void;
   /** Where along the route the elevation-profile cursor sits, so the map can
    * mark the same spot. Null when the cursor leaves the chart. */
   onHoverPosition: (position: [number, number] | null) => void;
@@ -84,23 +84,23 @@ function downloadText(filename: string, text: string, mimeType: string): void {
 export default function RouteDetailPanel({
   route,
   currentUserId,
-  ownedCanyons,
-  sharedCanyons,
+  ownedPlaces,
+  sharedPlaces,
   friends,
   allRoutes,
   onEdit,
   onChanged,
   onClose,
-  onOpenCanyon,
+  onOpenPlace,
   onHoverPosition,
 }: RouteDetailPanelProps): React.JSX.Element {
   const toast = useToast();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [showShare, setShowShare] = useState(false);
-  // Canyon the user picked that already holds a route — pending confirmation.
+  // Place the user picked that already holds a route — pending confirmation.
   const [pendingLink, setPendingLink] = useState<{
-    canyonId: string;
-    canyonName: string;
+    placeId: string;
+    placeName: string;
     incumbentName: string;
   } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -134,15 +134,15 @@ export default function RouteDetailPanel({
   }
 
   const isOwner = currentUserId !== null && route.ownerId === currentUserId;
-  const linkedCanyon = ownedCanyons.find((c) => c.id === route.canyonId) ?? null;
-  // The canyon a SHAREE reached this route through, if that is why they see it.
-  // A route linked to a canyon they cannot see is not an inherited one — the
-  // canyon simply isn't theirs to know about — so only a match here counts.
-  const viaCanyon =
-    sharedCanyons.find((canyon) => canyon.id === route.canyonId) ?? null;
+  const linkedPlace = ownedPlaces.find((c) => c.id === route.placeId) ?? null;
+  // The place a SHAREE reached this route through, if that is why they see it.
+  // A route linked to a place they cannot see is not an inherited one — the
+  // place simply isn't theirs to know about — so only a match here counts.
+  const viaPlace =
+    sharedPlaces.find((place) => place.id === route.placeId) ?? null;
   const visibility = sharedRowVisibility({
     syncRole: isOwner ? "owner" : "shared",
-    visibleLinkedCanyonIds: viaCanyon ? [viaCanyon.id] : [],
+    visibleLinkedPlaceIds: viaPlace ? [viaPlace.id] : [],
   });
 
   const run = async (action: () => Promise<unknown>, failure: string) => {
@@ -182,13 +182,13 @@ export default function RouteDetailPanel({
 
   const handleUnlink = () =>
     run(
-      () => updateRoute(route.id, { canyonId: null }),
+      () => updateRoute(route.id, { placeId: null }),
       "Couldn't unlink the route.",
     );
 
-  const linkNow = (canyonId: string) =>
+  const linkNow = (placeId: string) =>
     run(async () => {
-      const result = await updateRoute(route.id, { canyonId });
+      const result = await updateRoute(route.id, { placeId });
       // Confirm what moved even when the dialog already warned — the write is
       // what makes it true, and a sharee-visible route just changed hands.
       if (result.displacedRoute) {
@@ -198,20 +198,20 @@ export default function RouteDetailPanel({
       }
     }, "Couldn't link the route.");
 
-  // A canyon holds at most one route. Linking to an occupied one displaces the
+  // A place holds at most one route. Linking to an occupied one displaces the
   // incumbent — it survives standalone, so this is not destructive, but it
-  // still changes what a sharee of that canyon sees. Ask first.
-  const handleLinkSelected = (canyonId: string) => {
+  // still changes what a sharee of that place sees. Ask first.
+  const handleLinkSelected = (placeId: string) => {
     const incumbent = allRoutes.find(
-      (r) => r.canyonId === canyonId && r.id !== route.id,
+      (r) => r.placeId === placeId && r.id !== route.id,
     );
     if (!incumbent) {
-      void linkNow(canyonId);
+      void linkNow(placeId);
       return;
     }
     setPendingLink({
-      canyonId,
-      canyonName: ownedCanyons.find((c) => c.id === canyonId)?.name ?? "That canyon",
+      placeId,
+      placeName: ownedPlaces.find((c) => c.id === placeId)?.name ?? "That place",
       incumbentName: incumbent.name,
     });
   };
@@ -269,8 +269,8 @@ export default function RouteDetailPanel({
 
       {!isOwner && (
         <p className={classes.caption}>
-          {visibility === "via-canyon"
-            ? `Shared with you as part of ${viaCanyon?.name} — you can view and export this route, but not change it.`
+          {visibility === "via-place"
+            ? `Shared with you as part of ${viaPlace?.name} — you can view and export this route, but not change it.`
             : "Shared with you — you can view and export this route, but not change it."}
         </p>
       )}
@@ -302,17 +302,17 @@ export default function RouteDetailPanel({
 
       <div className={shared.divider} />
 
-      <div className={shared.sectionLabel}>Canyon</div>
-      {linkedCanyon ? (
+      <div className={shared.sectionLabel}>Place</div>
+      {linkedPlace ? (
         <div className={classes.linkRow}>
-          <span className={classes.linkName}>{linkedCanyon.name}</span>
+          <span className={classes.linkName}>{linkedPlace.name}</span>
           {isOwner && (
             <button
               type="button"
               className={`${shared.btn} ${shared.btnGhost} ${shared.btnXs}`}
               onClick={handleUnlink}
               disabled={busy}
-              title="Unlink from this canyon (the route is kept)"
+              title="Unlink from this place (the route is kept)"
             >
               <Link2Off size={14} /> Unlink
             </button>
@@ -325,30 +325,30 @@ export default function RouteDetailPanel({
           disabled={busy}
           onChange={(e) => e.target.value && handleLinkSelected(e.target.value)}
         >
-          <option value="">Link to a canyon…</option>
-          {ownedCanyons.map((canyon) => (
-            <option key={canyon.id} value={canyon.id}>
-              {canyon.name}
+          <option value="">Link to a place…</option>
+          {ownedPlaces.map((place) => (
+            <option key={place.id} value={place.id}>
+              {place.name}
             </option>
           ))}
         </select>
-      ) : viaCanyon ? (
-        // A sharee's canyon row. It is not decoration: this is the canyon whose
+      ) : viaPlace ? (
+        // A sharee's place row. It is not decoration: this is the place whose
         // share brought the route, and removing THAT is the only way to stop
         // seeing this (the route carries no share row of its own).
         <div className={classes.linkRow}>
-          <span className={classes.linkName}>{viaCanyon.name}</span>
+          <span className={classes.linkName}>{viaPlace.name}</span>
           <button
             type="button"
             className={`${shared.btn} ${shared.btnGhost} ${shared.btnXs}`}
-            onClick={() => onOpenCanyon(viaCanyon.id)}
-            title="Open the shared canyon this route came with"
+            onClick={() => onOpenPlace(viaPlace.id)}
+            title="Open the shared place this route came with"
           >
             Open
           </button>
         </div>
       ) : (
-        <span className={classes.caption}>Not linked to a canyon.</span>
+        <span className={classes.caption}>Not linked to a place.</span>
       )}
 
       <div className={shared.divider} />
@@ -419,8 +419,8 @@ export default function RouteDetailPanel({
           </>
         )}
 
-        {/* Only on a route shared DIRECTLY: one shared through a canyon has no
-            share row of its own, and the canyon row above is where that ends. */}
+        {/* Only on a route shared DIRECTLY: one shared through a place has no
+            share row of its own, and the place row above is where that ends. */}
         {visibility === "direct" && (
           <RemoveSharedButton
             kindLabel="route"
@@ -456,10 +456,10 @@ export default function RouteDetailPanel({
 
       <ConfirmDialog
         open={pendingLink !== null}
-        title="Replace this canyon's route?"
+        title="Replace this place's route?"
         message={
           pendingLink
-            ? `${pendingLink.canyonName} already has the route "${pendingLink.incumbentName}". It will be unlinked and kept as a standalone route — nothing is deleted.`
+            ? `${pendingLink.placeName} already has the route "${pendingLink.incumbentName}". It will be unlinked and kept as a standalone route — nothing is deleted.`
             : ""
         }
         confirmLabel="Replace"
@@ -468,7 +468,7 @@ export default function RouteDetailPanel({
         onConfirm={() => {
           const target = pendingLink;
           setPendingLink(null);
-          if (target) void linkNow(target.canyonId);
+          if (target) void linkNow(target.placeId);
         }}
         onClose={() => setPendingLink(null)}
       />

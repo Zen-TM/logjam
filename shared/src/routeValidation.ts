@@ -12,14 +12,14 @@
 // PRIVACY: like IMPORT_ERRORS in vectorImport.ts, every error string here is
 // STATIC — it must never echo a coordinate or a file's contents.
 
-import { haversineMeters } from "./canyonGeo.js";
+import { haversineMeters } from "./placeGeo.js";
 import { TRACK_COLORS } from "./media.js";
 import {
   isValidLatitude,
   isValidLongitude,
   LATITUDE_RANGE,
   LONGITUDE_RANGE,
-} from "./canyonValidation.js";
+} from "./placeValidation.js";
 import {
   IMPORT_ERRORS,
   type ImportedFeature,
@@ -167,8 +167,8 @@ export function parseRoutePoints(
  * - `requireCore: true` (create) demands name AND points.
  * - `requireCore: false` (patch) validates fields only when supplied.
  *
- * `canyonId` is NOT validated here — resolving it requires a DB lookup scoped
- * to the caller (see resolveCanyonAssociation in the API route).
+ * `placeId` is NOT validated here — resolving it requires a DB lookup scoped
+ * to the caller (see resolvePlaceAssociation in the API route).
  */
 export function validateRoutePayload(
   payload: RouteFieldPayload,

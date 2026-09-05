@@ -4,7 +4,7 @@
 //
 // THE BUG. `android/app/build.gradle` sets `buildTypes.release { debuggable
 // true }` so a release-shaped APK (embedded bundle, no Metro dependency in a
-// canyon) can still be read with `run-as`. But Android Gradle Plugin ties
+// place) can still be read with `run-as`. But Android Gradle Plugin ties
 // `BuildConfig.DEBUG` to the `debuggable` flag, not to the build-type NAME —
 // so a "release" build with `debuggable true` gets `BuildConfig.DEBUG = true`.
 // The app's `getUseDeveloperSupport()` returns `BuildConfig.DEBUG`, so

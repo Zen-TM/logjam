@@ -198,7 +198,7 @@
   gap: 0.4em;
 }
 
-.viaCanyonButton {
+.viaPlaceButton {
   composes: btn btnGhost btnXs from '@styles/shared.module.css';
 }
 
@@ -219,7 +219,7 @@
 /* Bounded so a big library doesn't push Delete off the bottom of the panel.
    The panel body owns the page scroll; this is a local list, which is the one
    place a nested scroller is the lesser evil. */
-.canyonList {
+.placeList {
   display: flex;
   flex-direction: column;
   gap: 0.15em;
@@ -227,7 +227,7 @@
   overflow-y: auto;
 }
 
-.canyonRow {
+.placeRow {
   display: flex;
   align-items: center;
   gap: 0.4em;
@@ -236,7 +236,7 @@
   cursor: pointer;
 }
 
-.canyonName {
+.placeName {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

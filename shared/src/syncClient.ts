@@ -110,7 +110,7 @@ export function planOutboxEnqueue(
     // `queued` is NOT proof the create never left the device: a network
     // failure after the request was sent, or a process kill mid-flight, both
     // return an op to `queued`. Cancelling the pair in that case discarded a
-    // delete for a row the server had actually committed — the canyon came
+    // delete for a row the server had actually committed — the place came
     // back on the next pull and the user's delete had silently done nothing.
     // `attempts === 0` is the real "never sent" test.
     const unsentCreate = sameRowQueued.find(
@@ -158,7 +158,7 @@ export function planOutboxEnqueue(
 // A batch is the next ≤ max queued ops, in seq order, skipping any op that
 // depends (pushOpDependencies) on an entity id owned by a parked op OR by an
 // op skipped earlier in this pass — the closure propagates so a media/trip
-// op never flies into a guaranteed 404 behind its parked canyon create.
+// op never flies into a guaranteed 404 behind its parked place create.
 
 export type BatchSelection = {
   ready: OutboxEntry[];

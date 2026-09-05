@@ -4,11 +4,11 @@ import {
   REVIEW_DIST_M,
   BBOX_DEG,
   haversineMeters,
-  matchCanyon,
+  matchPlace,
   withinBbox,
   type MatchCandidate,
 } from "@logjam/shared";
-import type { Canyon } from "@prisma/client";
+import type { Place } from "@prisma/client";
 import type { RopeWikiCanyon, RopeWikiOwnableField } from "./ropewiki";
 
 const TOP_CANDIDATES = 3;
@@ -16,7 +16,7 @@ const TOP_CANDIDATES = 3;
 export type DedupeTier = "autoLink" | "review" | "create";
 
 export type CandidateScore = {
-  canyonId: string;
+  placeId: string;
   distanceMeters: number;
   nameMatch: boolean;
   // Internal sort key (higher = better): name tier dominates, nearer wins
@@ -28,10 +28,10 @@ export type DedupeProposal = {
   ropeWikiId: number;
   tier: DedupeTier;
   candidates: CandidateScore[]; // empty for `create` tier
-  bestCanyonId: string | null; // populated when tier === "autoLink"
+  bestPlaceId: string | null; // populated when tier === "autoLink"
 };
 
-function toMatchCandidate(c: Canyon): MatchCandidate {
+function toMatchCandidate(c: Place): MatchCandidate {
   return {
     id: c.id,
     name: c.name,
@@ -41,14 +41,14 @@ function toMatchCandidate(c: Canyon): MatchCandidate {
   };
 }
 
-// Existing canyons within the spatial review radius of an incoming RopeWiki
+// Existing places within the spatial review radius of an incoming RopeWiki
 // row, regardless of name. This preserves the long-standing behaviour where a
-// canyon sitting on top of an incoming one is surfaced for human review even
+// place sitting on top of an incoming one is surfaced for human review even
 // when the names don't match at all — the shared name matcher deliberately
 // discards non-name candidates, so the spatial signal is recovered here.
 function spatialReviewCandidates(
   rw: RopeWikiCanyon,
-  existing: Canyon[],
+  existing: Place[],
 ): CandidateScore[] {
   const nearby: CandidateScore[] = [];
   for (const c of existing) {
@@ -58,7 +58,7 @@ function spatialReviewCandidates(
     const distanceMeters = haversineMeters(rw.latitude, rw.longitude, c.latitude, c.longitude);
     if (distanceMeters > REVIEW_DIST_M) continue;
     nearby.push({
-      canyonId: c.id,
+      placeId: c.id,
       distanceMeters,
       nameMatch: false,
       combinedScore: -distanceMeters, // nearer ranks higher; below any name match
@@ -67,24 +67,24 @@ function spatialReviewCandidates(
   return nearby.sort((a, b) => b.combinedScore - a.combinedScore).slice(0, TOP_CANDIDATES);
 }
 
-// Build dedupe proposals. Existing canyons that already have a ropeWikiId
+// Build dedupe proposals. Existing places that already have a ropeWikiId
 // must be filtered out by the caller before invoking. The matcher ensures
-// no existing canyon is auto-linked by more than one incoming RopeWiki row:
+// no existing place is auto-linked by more than one incoming RopeWiki row:
 // if two rows top-score the same target, the lower-scoring one is downgraded
 // to `review`.
 //
-// Name-tier classification (exact/typo) comes from the shared matchCanyon; this
+// Name-tier classification (exact/typo) comes from the shared matchPlace; this
 // module layers RopeWiki-specific spatial gating on top: far same-name twins
 // (outside NAME_MATCH_DIST_M) are dropped to `create`, and close-but-different
-// -name canyons are surfaced for `review` via spatialReviewCandidates.
+// -name places are surfaced for `review` via spatialReviewCandidates.
 export function buildProposals(
   incoming: RopeWikiCanyon[],
-  existing: Canyon[],
+  existing: Place[],
 ): DedupeProposal[] {
   const matchCandidates = existing.map(toMatchCandidate);
 
   const proposals: DedupeProposal[] = incoming.map((rw) => {
-    const result = matchCanyon(
+    const result = matchPlace(
       { name: rw.name, latitude: rw.latitude, longitude: rw.longitude },
       matchCandidates,
     );
@@ -99,7 +99,7 @@ export function buildProposals(
           s.distanceMeters <= NAME_MATCH_DIST_M,
       )
       .map((s) => ({
-        canyonId: s.candidate.id,
+        placeId: s.candidate.id,
         distanceMeters: s.distanceMeters as number,
         nameMatch: true,
         // exact ranks above typo; nearer wins within a tier.
@@ -135,30 +135,30 @@ export function buildProposals(
       ropeWikiId: rw.ropeWikiId,
       tier,
       candidates,
-      bestCanyonId: tier === "autoLink" ? candidates[0].canyonId : null,
+      bestPlaceId: tier === "autoLink" ? candidates[0].placeId : null,
     };
   });
 
   // Resolve auto-link collisions: if two proposals auto-link to the same
-  // existing canyon, the higher combined score wins; the loser is demoted
+  // existing place, the higher combined score wins; the loser is demoted
   // to review.
   const claimed = new Map<string, { ropeWikiId: number; score: number }>();
   for (const p of proposals) {
-    if (p.tier !== "autoLink" || !p.bestCanyonId) continue;
+    if (p.tier !== "autoLink" || !p.bestPlaceId) continue;
     const myScore = p.candidates[0]?.combinedScore ?? 0;
-    const current = claimed.get(p.bestCanyonId);
+    const current = claimed.get(p.bestPlaceId);
     if (!current || myScore > current.score) {
       if (current) {
         const loser = proposals.find((q) => q.ropeWikiId === current.ropeWikiId);
         if (loser) {
           loser.tier = "review";
-          loser.bestCanyonId = null;
+          loser.bestPlaceId = null;
         }
       }
-      claimed.set(p.bestCanyonId, { ropeWikiId: p.ropeWikiId, score: myScore });
+      claimed.set(p.bestPlaceId, { ropeWikiId: p.ropeWikiId, score: myScore });
     } else {
       p.tier = "review";
-      p.bestCanyonId = null;
+      p.bestPlaceId = null;
     }
   }
 
@@ -185,9 +185,9 @@ function mergeSources(
 // scalar fields. ropeWikiId and ropeWikiSnapshot are always set so subsequent
 // /refresh calls work. sources are always unioned (additive).
 // Returns the merged data AND the list of fields RopeWiki contributed
-// (i.e. fields that were null on the existing canyon).
+// (i.e. fields that were null on the existing place).
 export function mergeFillNulls(
-  existing: Canyon,
+  existing: Place,
   fresh: RopeWikiCanyon,
 ): {
   ropeWikiId: number;

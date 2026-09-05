@@ -123,7 +123,7 @@ export async function processGeoPdfJob(jobId: string): Promise<number> {
   } catch (err) {
     // Keep the raw exception (which may reference tile URLs / extents) out of
     // the user-facing/stored error message — log only the error class, never
-    // canyon coords/names (CLAUDE.md privacy rule).
+    // place coords/names (CLAUDE.md privacy rule).
     logger.error(
       { jobId, errClass: err instanceof Error ? err.constructor.name : typeof err },
       "geo_pdf_worker_render_failed",

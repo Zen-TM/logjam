@@ -17,7 +17,7 @@
 // and of what happens to be on screen.
 //
 // WHY NOT OVERPASS: real OSM would give true topology (shared node ids) rather
-// than geometry we have to re-stitch. But every query would ship a canyon-area
+// than geometry we have to re-stitch. But every query would ship a place-area
 // bounding box to a third-party server, which is exactly what this project's
 // privacy rules forbid. The archive is our own, and on web it is same-origin.
 //
@@ -61,7 +61,7 @@ export const SNAP_MAX_TILES = 25;
  * "Trails" INCLUDES ROADS, which reads oddly until you try to draw in a town:
  * `path` alone is the whole OSM footpath/track world and nothing else, so
  * snapping worked in the bush and silently did nothing the moment a route
- * crossed a fire trail's gate onto a road. The approach to a canyon is very
+ * crossed a fire trail's gate onto a road. The approach to a place is very
  * often a road walk, and the road is the correct line to follow there.
  *
  * Ordered coarse-last only for readability; the graph treats every way the

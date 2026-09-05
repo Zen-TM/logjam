@@ -19,7 +19,7 @@
 
     <p>
       Logjam is built as a <strong>private</strong> tool. Privacy is a design
-      constraint, not a feature, because exposing canyon locations causes real
+      constraint, not a feature, because exposing place locations causes real
       environmental harm and can compromise rescue and access agreements. This
       policy explains what we store, why, and what we deliberately do not do.
     </p>
@@ -35,16 +35,16 @@
     <ul>
       <li><strong>Account data:</strong> username, email, sign-in credentials
           (via AWS Cognito), theme and UI preferences, storage usage.</li>
-      <li><strong>Canyon data:</strong> name, coordinates, grades, notes,
+      <li><strong>Place data:</strong> name, coordinates, grades, notes,
           attributes, and any media you upload.</li>
       <li><strong>Trip logs:</strong> dates, notes, custom fields, and media
           attached to your own trips.</li>
-      <li><strong>Sharing:</strong> which of your friends each canyon is
+      <li><strong>Sharing:</strong> which of your friends each place is
           shared with.</li>
       <li><strong>Topo jobs:</strong> LiDAR inputs you upload and the rendered
           map tiles produced from them.</li>
       <li><strong>Operational logs:</strong> request error logs and worker
-          job state. These are scrubbed so canyon names and coordinates do not
+          job state. These are scrubbed so place names and coordinates do not
           appear in plain text.</li>
     </ul>
 
@@ -56,20 +56,20 @@
           for exactly what they receive.)</li>
       <li>No public or unauthenticated endpoints on user data — every API
           route requires authentication.</li>
-      <li>No default public sharing. Sharing is explicit, per-canyon, between
+      <li>No default public sharing. Sharing is explicit, per-place, between
           authenticated users you have a friendship with.</li>
       <li>No selling, renting, or monetising your data.</li>
     </ul>
 
     <h2>How sharing works</h2>
     <p>
-      When you share a canyon with another Logjam user, that user can see the
-      canyon record including its name, coordinates, canyon-level notes and
-      canyon-level media. Per-trip notes, per-trip media, and your trip-log
+      When you share a place with another Logjam user, that user can see the
+      place record including its name, coordinates, place-level notes and
+      place-level media. Per-trip notes, per-trip media, and your trip-log
       history remain private to you.
     </p>
     <p>
-      While a canyon is shared with someone, they can copy it into their own
+      While a place is shared with someone, they can copy it into their own
       account or export it to a file on their device. Revoking a share stops
       future access through Logjam, but it does not retract copies or exports
       the recipient has already made.
@@ -105,7 +105,7 @@
       </li>
     </ul>
     <p>
-      Neither kind of email contains canyon names or coordinates. Sending them
+      Neither kind of email contains place names or coordinates. Sending them
       is a cross-border disclosure of your email address, and — for account
       emails — of a short-lived authentication code. We take reasonable steps to
       ensure overseas recipients handle your information consistently with the
@@ -200,7 +200,7 @@
       <li><strong>Export &amp; access:</strong> the Account panel has a
           "Download my data" button that produces a complete machine-readable
           JSON copy of the personal information we hold about you &mdash;
-          canyons, trip logs, GeoPDF and topo templates, topo job records
+          places, trip logs, GeoPDF and topo templates, topo job records
           (including their map footprints), shares, notifications, and media
           metadata. No request to us is required; the export is generated on
           demand in the app. (Media file contents are not included in the
@@ -208,9 +208,9 @@
           included; the job records identify them.)</li>
       <li><strong>Delete:</strong> the Account panel has a "Delete account"
           button that permanently removes every record we hold for you,
-          including canyons, trip logs, media, friendships, shares, and
+          including places, trip logs, media, friendships, shares, and
           notifications.</li>
-      <li><strong>Correct:</strong> you can edit your username, email, canyon
+      <li><strong>Correct:</strong> you can edit your username, email, place
           records, and trip logs at any time, and can ask us to correct any
           other personal information that is inaccurate.</li>
     </ul>
@@ -237,7 +237,7 @@
       are retained in AWS CloudWatch after the originating record is removed:
       API request logs expire automatically within 7 days; rendering-worker
       job logs have a 90-day automatic expiry. All
-      operational logs are scrubbed so canyon names and coordinates do not
+      operational logs are scrubbed so place names and coordinates do not
       appear in plain text.
     </p>
 

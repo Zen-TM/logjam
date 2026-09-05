@@ -3,12 +3,12 @@ import { Typography } from "@mui/material";
 import type { TripLogCustomFieldDef } from "@logjam/shared";
 import ConfirmDialog from "./ConfirmDialog";
 import { ErrorBanner } from "../feedback/ErrorBanner";
-import { deleteCustomField, type CustomFieldEntityKind } from "../../canyonUtils";
+import { deleteCustomField, type CustomFieldEntityKind } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import { useCustomFieldImpact } from "./useCustomFieldImpact";
 
 // Entity-specific copy nouns. Both families store values keyed by the field's
-// `key`; only the surface wording differs (trip logs vs canyons).
+// `key`; only the surface wording differs (trip logs vs places).
 const ENTITY_COPY: Record<
   CustomFieldEntityKind,
   { removesFrom: string; singular: string; plural: string }
@@ -18,18 +18,18 @@ const ENTITY_COPY: Record<
     singular: "trip log",
     plural: "trip logs",
   },
-  canyon: {
-    removesFrom: "all your canyons",
-    singular: "canyon",
-    plural: "canyons",
+  place: {
+    removesFrom: "all your places",
+    singular: "place",
+    plural: "places",
   },
 };
 
 /**
  * Confirm-and-delete dialog for a custom field, shared across every surface that
- * deletes one: the Account panel's field managers (trip + canyon) and the
- * TripLogDialog/CanyonDialog per-field delete. Shows an impact warning ("N trip
- * logs / canyons carry a value…") fetched from the server before the user
+ * deletes one: the Account panel's field managers (trip + place) and the
+ * TripLogDialog/PlaceDialog per-field delete. Shows an impact warning ("N trip
+ * logs / places carry a value…") fetched from the server before the user
  * confirms. Deleting removes the field definition AND permanently strips its
  * stored values from those rows (one transaction, server-side).
  */
@@ -39,7 +39,7 @@ function DeleteCustomFieldDialog({
   onClose,
   onDeleted,
 }: {
-  // Which custom-field family this deletes (trip-log | canyon).
+  // Which custom-field family this deletes (trip-log | place).
   entity: CustomFieldEntityKind;
   // The field being deleted; null = closed.
   def: TripLogCustomFieldDef | null;

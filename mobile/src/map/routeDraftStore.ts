@@ -10,7 +10,7 @@
 // saved route already stores. One representation, not a second one to keep in
 // step.
 //
-// PRIVACY: these are coordinates through a canyon. They live in
+// PRIVACY: these are coordinates through a place. They live in
 // logjam-offline.db (app-private, backup-excluded) and are cleared by
 // wipeLocalData on any account transition. Nothing here logs.
 import type { RoutePoint } from "@logjam/shared";

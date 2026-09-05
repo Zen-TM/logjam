@@ -213,7 +213,7 @@ export function useAuth() {
         if (sub) {
           const previous = await readLocalIdentity().catch(() => null);
           if (previous && previous.sub !== sub) {
-            // Someone else's canyons, tracks, photos and downloaded regions
+            // Someone else's places, tracks, photos and downloaded regions
             // must not be visible to — or flushed under the token of — the
             // account now signing in. Everything goes before the new identity
             // lands. Note a GUEST reaches here with `previous === null` and is

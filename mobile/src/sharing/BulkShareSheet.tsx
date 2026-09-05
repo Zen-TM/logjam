@@ -1,7 +1,7 @@
 // The sheet the selection bar's share button opens, on every screen that has
 // one.
 //
-// It exists so Canyons and Saved cannot drift: both hand it the rows they have
+// It exists so Places and Saved cannot drift: both hand it the rows they have
 // selected, and everything else — the triage line, which verb each row gets,
 // both promise banners, the confirm, the upload queue's progress and the
 // sentence afterwards — is decided once, below the two screens rather than
@@ -79,7 +79,7 @@ export function BulkShareSheet<C extends BulkShareCandidate>({
   onDone: (report: { text: string; tone: "info" | "error" }) => void;
 }) {
   // Which of the picked rows the account does not hold yet. Read here rather
-  // than in each screen so Saved and Canyons cannot disagree about it: a row
+  // than in each screen so Saved and Places cannot disagree about it: a row
   // whose `create` op is still in the outbox has no server row to grant access
   // to, and the plan skips it with its own reason instead of sending it to an
   // endpoint that answers 404.

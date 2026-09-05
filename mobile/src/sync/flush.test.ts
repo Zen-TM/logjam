@@ -49,7 +49,7 @@ function mediaRow(seq: number, extra: Partial<Row> = {}): Row {
     op: "create",
     entity_id: `media-${seq}`,
     base_updated_at: null,
-    fields_json: JSON.stringify({ linkedType: "canyon", linkedId: `c-${seq}` }),
+    fields_json: JSON.stringify({ linkedType: "place", linkedId: `c-${seq}` }),
     base_fields_json: null,
     state: "queued",
     media_phase: null,
@@ -146,7 +146,7 @@ vi.mock("expo-file-system/legacy", () => ({
 }));
 vi.mock("expo-crypto", () => ({ randomUUID: () => "00000000-0000-4000-8000-000000000000" }));
 vi.mock("./mirrorStore", () => ({
-  upsertCanyon: () => Promise.resolve(),
+  upsertPlace: () => Promise.resolve(),
   upsertTrip: () => Promise.resolve(),
   upsertWaypoint: () => Promise.resolve(),
 }));
@@ -209,7 +209,7 @@ describe("who owns a rejection", () => {
 
   it("parks a refusal about the request itself", async () => {
     rows = [pushRow(1)];
-    rejections.set("op-1", { code: 409, message: "This canyon already has a track." });
+    rejections.set("op-1", { code: 409, message: "This place already has a track." });
 
     const summary = await flushOutbox();
 

@@ -2,11 +2,11 @@
 // revoking, and the door that closes when sharing is unavailable.
 //
 // Its only caller is `useSharePanel` (SharePanel.tsx), which is what every
-// surface renders — the canyon screen, Saved's item sheet, the route sheet and
+// surface renders — the place screen, Saved's item sheet, the route sheet and
 // the map's waypoint sheet. It exists for the reason assetActions.ts exists:
 // two surfaces offering the same verb is how the two copies of "what does
-// unsharing mean" drift apart (DESIGN.md §7). The API calls differ (canyons
-// keep /canyons/:id/share, every other kind uses /shares), so they arrive as
+// unsharing mean" drift apart (DESIGN.md §7). The API calls differ (places
+// keep /places/:id/share, every other kind uses /shares), so they arrive as
 // props; everything else — load, grant, revoke-with-confirm, busy state, the
 // offline gate, the error copy — lives here once.
 //
@@ -21,7 +21,7 @@
 //
 // PRIVACY: recipients and friends are username-only (server-enforced). Error
 // copy is OURS, never the server's message — interpolating a response into a
-// row is how a canyon name reaches a screenshot (DESIGN.md §11).
+// row is how a place name reaches a screenshot (DESIGN.md §11).
 import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Alert } from "react-native";
 
@@ -185,7 +185,7 @@ export function useSharing({
  * Current recipients, each revocable. Empty render when there are none.
  *
  * `recipients` overrides the hook's own list so the panel can pass the ones
- * matching its search box; the canyon screen's at-a-glance section passes
+ * matching its search box; the place screen's at-a-glance section passes
  * nothing and gets them all.
  */
 export function RecipientRows({

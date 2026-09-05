@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { ChevronLeft, ChevronRight, ArrowLeft, Info } from "lucide-react";
-import type { TAnalytics, TTripLog } from "../../../canyonUtils";
-import { tripTitle } from "../../../canyonUtils";
+import type { TAnalytics, TTripLog } from "../../../placeUtils";
+import { tripTitle } from "../../../placeUtils";
 import { type TripLogCustomFieldDef } from "@logjam/shared";
 import TripLogViewDialog from "../../dialogs/TripLogViewDialog";
 import classes from "./AnalyticsPanel.module.css";
@@ -82,16 +82,16 @@ function CompletionRing({ total, completed }: { total: number; completed: number
   return (
     <div className={classes.completionSection}>
       <span className={classes.sectionLabel}>
-        Canyon Completion
+        Place Completion
         <span
           className={classes.tooltipAnchor}
-          aria-label="Canyons in your library that have at least one logged trip of any type, out of your total canyons. Counts all trip types, so it can exceed Unique Canyons above (which is canyoning-only)."
+          aria-label="Places in your library that have at least one logged trip of any type, out of your total places. Counts all trip types, so it can exceed Unique Places above (which is canyoning-only)."
         >
           <Info size={11} />
           <span className={classes.tooltip}>
-            Canyons in your library that have at least one logged trip of any
-            type, out of your total canyons. Counts all trip types, so it can
-            exceed Unique Canyons above (which is canyoning-only).
+            Places in your library that have at least one logged trip of any
+            type, out of your total places. Counts all trip types, so it can
+            exceed Unique Places above (which is canyoning-only).
           </span>
         </span>
       </span>
@@ -377,7 +377,7 @@ function DrilldownHeatmap({
                 className={classes.tripCard}
                 onClick={() => setViewingTripLog(trip)}
               >
-                <span className={classes.tripCanyonName}>{tripTitle(trip)}</span>
+                <span className={classes.tripPlaceName}>{tripTitle(trip)}</span>
                 {trip.notes && (
                   <span className={classes.tripNotes}>
                     {trip.notes.length > 80 ? trip.notes.slice(0, 80) + "…" : trip.notes}
@@ -442,27 +442,27 @@ function AnalyticsPanel({
       {/* Hero stats */}
       <div className={classes.statGrid}>
         <StatTile
-          label="Canyon Trips"
+          label="Place Trips"
           value={formatNumber(heroStats.totalTrips)}
-          tooltip="Trips with a linked canyon, plus any trip tagged canyoning. Trips of other types aren't counted here."
+          tooltip="Trips with a linked place, plus any trip tagged canyoning. Trips of other types aren't counted here."
         />
         <StatTile
-          label="Unique Canyons"
-          value={formatNumber(heroStats.uniqueCanyons)}
-          tooltip="Distinct canyons you've logged a canyoning trip on. A named trip with no linked canyon counts once by its name."
+          label="Unique Places"
+          value={formatNumber(heroStats.uniquePlaces)}
+          tooltip="Distinct places you've logged a canyoning trip on. A named trip with no linked place counts once by its name."
         />
         <StatTile label="Days Canyoning" value={formatNumber(heroStats.daysCanyoning)} />
         <StatTile
           label="Total Abseils"
           value={formatNumber(heroStats.totalAbseils)}
-          tooltip="Estimated from canyon data. Excludes canyons with no abseil count recorded."
+          tooltip="Estimated from place data. Excludes places with no abseil count recorded."
         />
       </div>
 
       {/* Completion ring */}
       <CompletionRing
-        total={completion.totalCanyons}
-        completed={completion.canyonsWithTrips}
+        total={completion.totalPlaces}
+        completed={completion.placesWithTrips}
       />
 
       {/* Drill-down heatmap */}

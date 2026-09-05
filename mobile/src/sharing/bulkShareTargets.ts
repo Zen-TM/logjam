@@ -15,7 +15,7 @@
 // mobile's vitest cannot parse React Native's Flow sources, so the branching
 // and the copy are only testable away from the screen.
 //
-// PRIVACY: item titles are user text and routinely name canyons. They are not
+// PRIVACY: item titles are user text and routinely name places. They are not
 // used here at all — the sentence counts rows, it never lists them — and
 // nothing in this module is logged.
 import type { BulkShareItem, BulkShareItemType } from "@logjam/shared";

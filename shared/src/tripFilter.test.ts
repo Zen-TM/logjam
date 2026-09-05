@@ -14,7 +14,7 @@ function trip(overrides: Partial<FilterableTrip> = {}): FilterableTrip {
     date: "2026-03-15T00:00:00.000Z",
     displayName: null,
     types: ["canyoning"],
-    canyons: [{ name: "Claustral" }],
+    places: [{ name: "Claustral" }],
     ...overrides,
   };
 }
@@ -24,20 +24,20 @@ describe("tripMatchesFilter", () => {
     expect(tripMatchesFilter(trip(), {})).toBe(true);
   });
 
-  it("searches canyon names case-insensitively", () => {
+  it("searches place names case-insensitively", () => {
     expect(tripMatchesFilter(trip(), { search: "claus" })).toBe(true);
     expect(tripMatchesFilter(trip(), { search: "CLAUS" })).toBe(true);
     expect(tripMatchesFilter(trip(), { search: "ranon" })).toBe(false);
   });
 
   it("searches the trip's own display name", () => {
-    const named = trip({ displayName: "Birthday descent", canyons: [] });
+    const named = trip({ displayName: "Birthday descent", places: [] });
     expect(tripMatchesFilter(named, { search: "birthday" })).toBe(true);
     expect(tripMatchesFilter(named, { search: "claustral" })).toBe(false);
   });
 
   it("ignores a whitespace-only search", () => {
-    expect(tripMatchesFilter(trip({ canyons: [] }), { search: "   " })).toBe(true);
+    expect(tripMatchesFilter(trip({ places: [] }), { search: "   " })).toBe(true);
   });
 
   it("treats both date bounds as inclusive", () => {
@@ -74,9 +74,9 @@ describe("tripMatchesFilter", () => {
 describe("filterTrips", () => {
   it("keeps input order", () => {
     const trips = [
-      trip({ canyons: [{ name: "Ranon" }] }),
-      trip({ canyons: [{ name: "Claustral" }] }),
-      trip({ canyons: [{ name: "Ranon" }] }),
+      trip({ places: [{ name: "Ranon" }] }),
+      trip({ places: [{ name: "Claustral" }] }),
+      trip({ places: [{ name: "Ranon" }] }),
     ];
     expect(filterTrips(trips, { search: "ranon" })).toEqual([trips[0], trips[2]]);
   });

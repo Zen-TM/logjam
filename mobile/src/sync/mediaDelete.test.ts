@@ -59,8 +59,8 @@ const { deleteMediaLocal } = await import("./mediaUpload");
 
 const media = {
   id: "media-1",
-  linkedType: "canyon",
-  linkedId: "canyon-1",
+  linkedType: "place",
+  linkedId: "place-1",
   mediaType: "image/jpeg",
   filename: "a.jpg",
   color: null,

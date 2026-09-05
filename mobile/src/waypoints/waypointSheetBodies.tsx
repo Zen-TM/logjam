@@ -1,4 +1,4 @@
-// The waypoint sub-mode bodies — tags and canyon links — as sheet CONTENT with
+// The waypoint sub-mode bodies — tags and place links — as sheet CONTENT with
 // no sheet of their own.
 //
 // Two surfaces offer these verbs: the map's WaypointSheet and the Saved tab's
@@ -19,9 +19,9 @@ import {
 
 import { assetHue, fontSize, spacing, theme } from "../theme";
 import { Button, ChipPicker, ErrorBanner, Row, TextField, type ChipOption } from "../ui";
-import { useMirrorCanyons, useMirrorShareCounts } from "../sync/useSyncQueries";
+import { useMirrorPlaces, useMirrorShareCounts } from "../sync/useSyncQueries";
 import type { MirrorWaypoint } from "../sync/mirrorStore";
-import { linkableCanyons, truncationHint } from "./linkableCanyons";
+import { linkablePlaces, truncationHint } from "./linkablePlaces";
 
 /**
  * The pinned header for a sub-mode: its explainer and any filter field.
@@ -99,7 +99,7 @@ export function WaypointTagsBody({
   );
 }
 
-export function WaypointCanyonsBody({
+export function WaypointPlacesBody({
   waypoint,
   query,
   onWrite,
@@ -109,34 +109,34 @@ export function WaypointCanyonsBody({
   query: string;
   onWrite: (fields: Record<string, unknown>) => void;
 }) {
-  const canyons = useMirrorCanyons();
+  const places = useMirrorPlaces();
   const shareCounts = useMirrorShareCounts();
 
   const { visible: owned, hiddenCount } = useMemo(
-    () => linkableCanyons(canyons.data ?? [], query),
-    [canyons.data, query],
+    () => linkablePlaces(places.data ?? [], query),
+    [places.data, query],
   );
   const truncated = truncationHint(owned.length, hiddenCount);
 
-  const toggle = (canyonId: string, canyonName: string) => {
-    const linked = waypoint.canyonIds.includes(canyonId);
+  const toggle = (placeId: string, placeName: string) => {
+    const linked = waypoint.placeIds.includes(placeId);
     const next = linked
-      ? waypoint.canyonIds.filter((id) => id !== canyonId)
-      : [...waypoint.canyonIds, canyonId];
-    const recipients = shareCounts.data?.[canyonId] ?? 0;
+      ? waypoint.placeIds.filter((id) => id !== placeId)
+      : [...waypoint.placeIds, placeId];
+    const recipients = shareCounts.data?.[placeId] ?? 0;
     // Unlinking never needs a warning — it can only narrow visibility.
     if (linked || recipients === 0) {
-      onWrite({ canyonIds: next });
+      onWrite({ placeIds: next });
       return;
     }
     Alert.alert(
-      `${canyonName} is shared`,
-      `Linking puts this waypoint — including its position — in the canyon record ${
+      `${placeName} is shared`,
+      `Linking puts this waypoint — including its position — in the place record ${
         recipients === 1 ? "1 person" : `${recipients} people`
       } can already see.`,
       [
         { text: "Cancel", style: "cancel" },
-        { text: "Link anyway", onPress: () => onWrite({ canyonIds: next }) },
+        { text: "Link anyway", onPress: () => onWrite({ placeIds: next }) },
       ],
     );
   };
@@ -145,22 +145,22 @@ export function WaypointCanyonsBody({
     <View style={styles.body}>
       {owned.length === 0 ? (
         <Text style={styles.hint}>
-          {query ? "No canyon of yours matches that." : "You have no canyons yet."}
+          {query ? "No place of yours matches that." : "You have no places yet."}
         </Text>
       ) : (
         <>
-          {owned.map((canyon) => {
-            const linked = waypoint.canyonIds.includes(canyon.id);
+          {owned.map((place) => {
+            const linked = waypoint.placeIds.includes(place.id);
             return (
               <Row
-                key={canyon.id}
-                title={canyon.name}
+                key={place.id}
+                title={place.name}
                 subtitle={
-                  (shareCounts.data?.[canyon.id] ?? 0) > 0 ? "Shared" : undefined
+                  (shareCounts.data?.[place.id] ?? 0) > 0 ? "Shared" : undefined
                 }
                 icon={linked ? "check" : "map-pin"}
                 hue={linked ? theme.accent : assetHue.route}
-                onPress={() => toggle(canyon.id, canyon.name)}
+                onPress={() => toggle(place.id, place.name)}
               />
             );
           })}
@@ -231,7 +231,7 @@ function draftOf(waypoint: MirrorWaypoint | null): WaypointFormDraft {
  * Validated by `validateWaypointPayload` — the same predicate the API applies —
  * BEFORE anything is queued, so a bad number is a message here rather than a
  * dead push in the outbox whose reason the user never sees (the rule
- * CanyonEditSheet already follows).
+ * PlaceEditSheet already follows).
  */
 export function WaypointFormBody({
   waypoint = null,
@@ -380,15 +380,15 @@ export function WaypointFormBody({
   );
 }
 
-/** The pinned canyon filter field, for the host's header slot. */
-export function WaypointCanyonFilter({
+/** The pinned place filter field, for the host's header slot. */
+export function WaypointPlaceFilter({
   value,
   onChangeText,
 }: {
   value: string;
   onChangeText: (text: string) => void;
 }) {
-  return <TextField label="Find a canyon" value={value} onChangeText={onChangeText} />;
+  return <TextField label="Find a place" value={value} onChangeText={onChangeText} />;
 }
 
 const styles = StyleSheet.create({

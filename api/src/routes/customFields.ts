@@ -1,4 +1,4 @@
-// Custom field management (account-level), for BOTH trip-log and canyon fields.
+// Custom field management (account-level), for BOTH trip-log and place fields.
 //
 // Row-grain REST over `lib/customFieldDefs.ts`, which owns every write and the
 // value strip a delete carries. This router holds no storage knowledge — it
@@ -12,8 +12,8 @@
 //    browser tab has nothing to merge against.
 //
 // The impact/delete response key names (`tripLogCount`, `removedFromTripCount`
-// and their canyon equivalents) predate this rewrite and are kept verbatim —
-// `frontend/src/canyonUtils.ts` reads them by name.
+// and their place equivalents) predate this rewrite and are kept verbatim —
+// `frontend/src/placeUtils.ts` reads them by name.
 //
 // PRIVACY: labels are user-authored text. Nothing here logs one.
 import { Router, Response } from "express";
@@ -38,7 +38,7 @@ import {
 
 const router = Router();
 
-/** `:entity` is the URL segment ("trip-log" | "canyon"), not the union value. */
+/** `:entity` is the URL segment ("trip-log" | "place"), not the union value. */
 function parseEntity(req: AuthenticatedRequest): CustomFieldEntity {
   const entity = ENTITY_BY_SEGMENT[getParam(req.params.entity)];
   if (!entity) throw new AppError(404, "Unknown custom field entity");
@@ -172,7 +172,7 @@ router.delete(
     const config = entityConfig(entity);
     res.json({
       // Response key names are entity-specific and predate this router.
-      [entity === "tripLog" ? "tripLogCustomFields" : "canyonCustomFields"]:
+      [entity === "tripLog" ? "tripLogCustomFields" : "placeCustomFields"]:
         await loadDefs(user.id, entity),
       [config.removedResponseKey]: result.removed,
     });

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   countTripsInLastMonths,
-  distinctCanyonCount,
+  distinctPlaceCount,
   formatTripDate,
   groupTripsByYear,
   monthlyTripCounts,
@@ -44,20 +44,20 @@ describe("groupTripsByYear", () => {
   });
 });
 
-describe("distinctCanyonCount", () => {
-  it("counts a canyon done twice once", () => {
+describe("distinctPlaceCount", () => {
+  it("counts a place done twice once", () => {
     const trips = [
-      { date: "2026-01-01T00:00:00.000Z", canyons: [{ id: "x", name: "X" }] },
+      { date: "2026-01-01T00:00:00.000Z", places: [{ id: "x", name: "X" }] },
       {
         date: "2026-02-01T00:00:00.000Z",
-        canyons: [
+        places: [
           { id: "x", name: "X" },
           { id: "y", name: "Y" },
         ],
       },
-      { date: "2026-03-01T00:00:00.000Z", canyons: [] },
+      { date: "2026-03-01T00:00:00.000Z", places: [] },
     ];
-    expect(distinctCanyonCount(trips)).toBe(2);
+    expect(distinctPlaceCount(trips)).toBe(2);
   });
 });
 

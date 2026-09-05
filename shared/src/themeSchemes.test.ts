@@ -8,7 +8,7 @@ import {
   DEFAULT_NOTIFICATION_PREFERENCES,
   THEME_SCHEME_ORDER,
 } from "./themeSchemes.js";
-import { DEFAULT_CANYON_MERGE_POLICY } from "./mergeCanyon.js";
+import { DEFAULT_PLACE_MERGE_POLICY } from "./mergePlace.js";
 
 describe("isThemeSchemeId", () => {
   it("accepts every known scheme id", () => {
@@ -121,7 +121,7 @@ describe("normalizeUserUiPreferences", () => {
 
 describe("normalizeImportMergePolicy", () => {
   it("round-trips a complete policy, attributes included", () => {
-    const policy = { ...DEFAULT_CANYON_MERGE_POLICY, attributes: "useIncoming" as const };
+    const policy = { ...DEFAULT_PLACE_MERGE_POLICY, attributes: "useIncoming" as const };
     expect(normalizeImportMergePolicy(policy)).toEqual(policy);
   });
 
@@ -130,28 +130,28 @@ describe("normalizeImportMergePolicy", () => {
   // "Custom attributes: use file" choice would fail to persist.
   it("preserves the attributes entry rather than dropping it", () => {
     const result = normalizeImportMergePolicy({
-      ...DEFAULT_CANYON_MERGE_POLICY,
+      ...DEFAULT_PLACE_MERGE_POLICY,
       attributes: "useIncoming",
     });
     expect(result?.attributes).toBe("useIncoming");
   });
 
   it("rejects a policy missing the attributes entry", () => {
-    const { attributes: _omitted, ...incomplete } = DEFAULT_CANYON_MERGE_POLICY;
+    const { attributes: _omitted, ...incomplete } = DEFAULT_PLACE_MERGE_POLICY;
     expect(normalizeImportMergePolicy(incomplete)).toBeUndefined();
   });
 
   it("rejects an unknown value", () => {
     expect(
-      normalizeImportMergePolicy({ ...DEFAULT_CANYON_MERGE_POLICY, notes: "useFile" }),
+      normalizeImportMergePolicy({ ...DEFAULT_PLACE_MERGE_POLICY, notes: "useFile" }),
     ).toBeUndefined();
   });
 
   it("drops unknown keys", () => {
     const result = normalizeImportMergePolicy({
-      ...DEFAULT_CANYON_MERGE_POLICY,
+      ...DEFAULT_PLACE_MERGE_POLICY,
       somethingElse: "useIncoming",
     });
-    expect(result).toEqual(DEFAULT_CANYON_MERGE_POLICY);
+    expect(result).toEqual(DEFAULT_PLACE_MERGE_POLICY);
   });
 });

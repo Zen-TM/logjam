@@ -20,7 +20,7 @@
 // a deliberate follow-up, not a silent no-op. When it lands it goes in
 // saveExportFile alone and both callers get it at once.
 //
-// PRIVACY: the written file IS the line through a canyon, and for a recording
+// PRIVACY: the written file IS the line through a place, and for a recording
 // it is precise timestamped location history. It goes only to the folder the
 // user chose; nothing here logs the name, the path, or the geometry.
 import { Platform } from "react-native";

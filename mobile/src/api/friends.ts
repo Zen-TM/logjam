@@ -1,4 +1,4 @@
-// Friends + per-canyon sharing — typed ports of the authed API (api/src/routes/
+// Friends + per-place sharing — typed ports of the authed API (api/src/routes/
 // friends.ts, api/src/routes/sharing.ts). Online-only by design (Stage 8): the
 // mirror already syncs the RESULTING friendships/shares/tombstones offline, but
 // the management actions themselves are not field use cases, so they hit REST
@@ -21,8 +21,8 @@ export type FriendRequest = {
 
 export type UserSearchResult = { id: string; username: string };
 
-// GET /canyons/:id/shares returns CanyonShare rows with the recipient joined.
-export type CanyonShareRecipient = {
+// GET /places/:id/shares returns PlaceShare rows with the recipient joined.
+export type PlaceShareRecipient = {
   id: string;
   sharedWith: { id: string; username: string };
 };
@@ -56,19 +56,19 @@ export function removeFriend(friendshipId: string): Promise<void> {
   return apiFetch<void>(`/friends/${friendshipId}`, { method: "DELETE" });
 }
 
-export function getCanyonShares(canyonId: string): Promise<CanyonShareRecipient[]> {
-  return apiFetch<CanyonShareRecipient[]>(`/canyons/${canyonId}/shares`);
+export function getPlaceShares(placeId: string): Promise<PlaceShareRecipient[]> {
+  return apiFetch<PlaceShareRecipient[]>(`/places/${placeId}/shares`);
 }
 
-export function shareCanyon(canyonId: string, sharedWithUserId: string): Promise<unknown> {
-  return apiFetch(`/canyons/${canyonId}/share`, {
+export function sharePlace(placeId: string, sharedWithUserId: string): Promise<unknown> {
+  return apiFetch(`/places/${placeId}/share`, {
     method: "POST",
     body: { sharedWithUserId },
   });
 }
 
-export function unshareCanyon(canyonId: string, userId: string): Promise<void> {
-  return apiFetch<void>(`/canyons/${canyonId}/share/${userId}`, { method: "DELETE" });
+export function unsharePlace(placeId: string, userId: string): Promise<void> {
+  return apiFetch<void>(`/places/${placeId}/share/${userId}`, { method: "DELETE" });
 }
 
 // ── The per-friend sharing audit ─────────────────────────────
@@ -94,7 +94,7 @@ export function unshareWithFriend(
   items: BulkShareItem[],
 ): Promise<{
   revokedCount: number;
-  canyonsRevokedCount: number;
+  placesRevokedCount: number;
   itemsRevokedCount: number;
 }> {
   return apiFetch(`/friends/${friendshipId}/shares`, {
@@ -106,14 +106,14 @@ export function unshareWithFriend(
 }
 
 /**
- * Keep a canyon a friend shared: copies the record (and its linked route) into
+ * Keep a place a friend shared: copies the record (and its linked route) into
  * my own account, server-side. The copy is MINE — editable, and unaffected if
  * the friend later revokes the share.
  *
- * The new canyon reaches this device through the next delta pull, so callers
+ * The new place reaches this device through the next delta pull, so callers
  * `requestSync()` afterwards rather than inserting into the mirror themselves
  * (there is no local id to insert: the server mints it).
  */
-export function copySharedCanyon(canyonId: string): Promise<{ id: string }> {
-  return apiFetch<{ id: string }>(`/canyons/${canyonId}/copy`, { method: "POST" });
+export function copySharedPlace(placeId: string): Promise<{ id: string }> {
+  return apiFetch<{ id: string }>(`/places/${placeId}/copy`, { method: "POST" });
 }

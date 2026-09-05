@@ -2,7 +2,7 @@
 //
 // Hard preconditions honoured here:
 //  - scrubEvent/scrubBreadcrumb (pure, vitest-covered) wired as beforeSend /
-//    beforeBreadcrumb — no canyon coords/names/URLs leave the device.
+//    beforeBreadcrumb — no place coords/names/URLs leave the device.
 //  - sendDefaultPii: false.
 //  - No-op when EXPO_PUBLIC_SENTRY_DSN is unset (operator hasn't created the
 //    Sentry org yet — OPERATOR_SETUP.md B). The DSN is not a secret (it's a

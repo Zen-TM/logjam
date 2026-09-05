@@ -30,7 +30,7 @@ describe("partitionNavItems", () => {
 
   it("leaves four rail slots on mobile: three items plus More", () => {
     const { railItems, spacerAfterIndex } = partitionNavItems(true);
-    expect(ids(railItems)).toEqual(["layers", "canyons", "trip-logs"]);
+    expect(ids(railItems)).toEqual(["layers", "places", "trip-logs"]);
     expect(spacerAfterIndex).toBeNull();
   });
 
@@ -99,15 +99,15 @@ describe("isPanelInMore", () => {
   });
 
   it("does not select More for a rail panel", () => {
-    expect(isPanelInMore(moreItems, "canyons")).toBe(false);
+    expect(isPanelInMore(moreItems, "places")).toBe(false);
   });
 
   it("does not select More when no panel is open", () => {
     expect(isPanelInMore(moreItems, null)).toBe(false);
   });
 
-  it("does not select More for canyon-detail, which is not a nav item", () => {
-    expect(isPanelInMore(moreItems, "canyon-detail")).toBe(false);
+  it("does not select More for place-detail, which is not a nav item", () => {
+    expect(isPanelInMore(moreItems, "place-detail")).toBe(false);
   });
 
   it("never selects More on desktop, where the group is empty", () => {

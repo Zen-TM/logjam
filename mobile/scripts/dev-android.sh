@@ -12,7 +12,7 @@
 #   ./scripts/dev-android.sh --logs       # tail the app's logcat instead
 #
 # With a phone plugged in, prefer the phone: it is the only place GPS, real
-# cameras and the biometric prompt behave like they will in a canyon. --emulator
+# cameras and the biometric prompt behave like they will in a place. --emulator
 # is for when no phone is attached, or for checking a second screen size.
 #
 # What it does, and why each step exists:

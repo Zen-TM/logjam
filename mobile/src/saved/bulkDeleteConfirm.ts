@@ -3,7 +3,7 @@
 //
 // A bulk delete is two different deletes wearing one button: most saved assets
 // are files on this handset, but a route or a waypoint is a synced record whose
-// delete reaches the account and everyone its canyons are shared with
+// delete reaches the account and everyone its places are shared with
 // (assetActions.ts). One sentence covering a mixed selection is false for half
 // of it, so each kind gets its own clause — and a selection of only one kind
 // never mentions the other, rather than reading as a filled-in template.

@@ -3,7 +3,7 @@
 // from logjam-offline.db (map artifacts / imports / tracks — local-only by
 // design, never in the sync protocol).
 //
-// PRIVACY: mirror rows carry canyon names and coordinates. App-private
+// PRIVACY: mirror rows carry place names and coordinates. App-private
 // storage (expo-sqlite default dir, allowBackup=false), surfaced behind the
 // Stage 4 app lock; contents must never reach logs, telemetry, or crash
 // reports. Wiped on explicit sign-out (outbox included, after the "N
@@ -15,6 +15,7 @@ import {
   SYNC_TABLES,
   createSchemaSql,
 } from "./mirrorSchema";
+import { OUTBOX_ENTITIES } from "./outboxTables";
 
 /**
  * Bump whenever the mirror's shape changes. On a mismatch the mirror tables
@@ -22,7 +23,7 @@ import {
  * refetches everything from zero.
  *
  * This replaces an ALTER TABLE ladder that only ever ADDED columns, which is
- * how a tombstone cascade came to write `waypoints.canyon_id` — a column that
+ * how a tombstone cascade came to write `waypoints.place_id` — a column that
  * existed on upgraded installs and on no fresh one, so the delta transaction
  * rolled back forever and sync died silently on every new phone. The mirror is
  * a rebuildable cache of the server; recreating it is always available and
@@ -32,8 +33,12 @@ import {
  * — the outbox holds writes the server has never seen — so they survive the
  * reset untouched. A change to THEIR shape needs its own migration, and this
  * lever won't do it.
+ *
+ * 5: the places rework. `canyons` and `canyon_shares` become `places` and
+ * `place_shares`, so every mirror table holding them is dropped and refilled
+ * from a full delta pull.
  */
-export const MIRROR_SCHEMA_VERSION = 4;
+export const MIRROR_SCHEMA_VERSION = 5;
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
@@ -69,7 +74,7 @@ export async function getSyncDb(): Promise<SQLite.SQLiteDatabase> {
       // launch, for ever.
       await db.execAsync(`PRAGMA journal_mode = WAL;\n${createSchemaSql("local")}`);
       await ensureLocalColumns(db);
-      await dropStaleMirror(db);
+      if (await dropStaleMirror(db)) await purgeDeadVocabularyOps(db);
       await db.execAsync(createSchemaSql("mirror"));
       await stampMirrorSchemaVersion(db);
       return db;
@@ -115,12 +120,12 @@ async function ensureLocalColumns(db: SQLite.SQLiteDatabase): Promise<void> {
  * This only DESTROYS. Creating is the caller's next statement, and the two are
  * deliberately separate: see the ordering note in `getSyncDb`.
  */
-async function dropStaleMirror(db: SQLite.SQLiteDatabase): Promise<void> {
+async function dropStaleMirror(db: SQLite.SQLiteDatabase): Promise<boolean> {
   const row = await db.getFirstAsync<{ value: string }>(
     "SELECT value FROM sync_state WHERE key = ?",
     "schemaVersion",
   );
-  if (row?.value === String(MIRROR_SCHEMA_VERSION)) return;
+  if (row?.value === String(MIRROR_SCHEMA_VERSION)) return false;
 
   await db.withTransactionAsync(async () => {
     for (const table of MIRROR_TABLES) {
@@ -132,6 +137,33 @@ async function dropStaleMirror(db: SQLite.SQLiteDatabase): Promise<void> {
     await db.runAsync(
       "DELETE FROM sync_state WHERE key IN ('cursor', 'lastSyncAt')",
     );
+  });
+  return true;
+}
+
+/**
+ * Drop queued writes whose entity no longer exists in the protocol.
+ *
+ * The mirror reset above deliberately spares the `local` tables, so a bump that
+ * renames an ENTITY leaves the outbox holding ops the server will never accept
+ * again: `parsePushOp` answers `ops[i].entity is invalid`, the op parks in the
+ * conflict shelf, and the user has no way to clear it — a permanent sync-issues
+ * badge on a phone that did nothing wrong. This is not covered by "the author's
+ * Pixel gets wiped": that is a condition of the places rework, not a mechanism.
+ *
+ * Runs only on a version bump, and only for entities absent from
+ * OUTBOX_ENTITIES, so an op the current protocol still understands is never
+ * touched. Unsendable by construction, so nothing recoverable is lost.
+ */
+async function purgeDeadVocabularyOps(db: SQLite.SQLiteDatabase): Promise<void> {
+  const placeholders = OUTBOX_ENTITIES.map(() => "?").join(", ");
+  await db.withTransactionAsync(async () => {
+    for (const table of ["outbox", "conflict_shelf"]) {
+      await db.runAsync(
+        `DELETE FROM ${table} WHERE entity NOT IN (${placeholders})`,
+        ...OUTBOX_ENTITIES,
+      );
+    }
   });
 }
 
@@ -237,7 +269,7 @@ export async function clearSyncStateValue(key: string): Promise<void> {
  *    an empty list with no first-sync error state and a stale "last synced"
  *    claim. `applySchemaVersion` documents the same rule for the same event.
  *  - a locally-created row exists ONLY as its optimistic mirror row until its
- *    create op flushes, so wiping it made the user's unsynced canyons, trips
+ *    create op flushes, so wiping it made the user's unsynced places, trips
  *    and waypoints vanish from every screen — while "Changes still waiting to
  *    upload are kept" was the sentence they had just agreed to, and while the
  *    ops themselves did survive. Offline, nothing brings them back. Rows named
@@ -299,7 +331,7 @@ export async function countUnsyncedChanges(): Promise<number> {
 }
 
 export type LocalEntityCounts = {
-  canyons: number;
+  places: number;
   trips: number;
   media: number;
 };
@@ -308,19 +340,19 @@ export type LocalEntityCounts = {
  * What this device holds, by kind — for the guest→account link confirmation.
  *
  * Deliberately counts MIRROR rows rather than outbox ops: the user is being
- * asked about their canyons and photos, not about a queue depth, and after a
+ * asked about their places and photos, not about a queue depth, and after a
  * partial flush the two numbers diverge. Media is called out separately
  * because it is the part that takes hours, not seconds, to upload.
  */
 export async function countLocalEntities(): Promise<LocalEntityCounts> {
   const db = await getSyncDb();
-  const [canyons, trips, media] = await Promise.all([
-    db.getFirstAsync<{ n: number }>("SELECT COUNT(*) AS n FROM canyons"),
+  const [places, trips, media] = await Promise.all([
+    db.getFirstAsync<{ n: number }>("SELECT COUNT(*) AS n FROM places"),
     db.getFirstAsync<{ n: number }>("SELECT COUNT(*) AS n FROM trip_logs"),
     db.getFirstAsync<{ n: number }>("SELECT COUNT(*) AS n FROM media"),
   ]);
   return {
-    canyons: canyons?.n ?? 0,
+    places: places?.n ?? 0,
     trips: trips?.n ?? 0,
     media: media?.n ?? 0,
   };

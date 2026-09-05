@@ -4,7 +4,7 @@
 // API is one HTTPS POST.
 //
 // PRIVACY (hard rule, root CLAUDE.md + mobile plan Stage 3): push payloads
-// transit Apple/Google/Expo servers in plaintext. NEVER put canyon names,
+// transit Apple/Google/Expo servers in plaintext. NEVER put place names,
 // coordinates, usernames, or any free text in a push. The payload is a
 // generic per-type title, the notification type, and opaque IDs only — the
 // app fetches details over the authed API on tap. buildPushMessages is the
@@ -22,7 +22,7 @@ const EXPO_PUSH_BATCH_LIMIT = 100;
 const PUSH_TITLES: Record<string, string> = {
   friend_request: "New friend request",
   friend_request_accepted: "Friend request accepted",
-  canyon_shared: "A canyon was shared with you",
+  place_shared: "A place was shared with you",
   topo_complete: "Topo processing complete",
   topo_failed: "Topo processing failed",
   topo_export_complete: "Topo export finished",
@@ -48,7 +48,7 @@ export type PushData = {
   type: string;
   notificationId?: string;
   friendshipId?: string;
-  canyonId?: string;
+  placeId?: string;
   jobId?: string;
   exportId?: string;
   geoPdfJobId?: string;
@@ -63,7 +63,7 @@ const ALLOWED_DATA_KEYS = new Set([
   "type",
   "notificationId",
   "friendshipId",
-  "canyonId",
+  "placeId",
   "jobId",
   "exportId",
   "geoPdfJobId",

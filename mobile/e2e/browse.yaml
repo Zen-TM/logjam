@@ -1,18 +1,18 @@
 # Stage 1 browse flow — fake-auth local dev (EXPO_PUBLIC_AUTH_MODE=fake in
 # mobile/.env, local API running as seeded alice). Verifies the authed shell:
-# tabs render, canyon list loads from the API, detail opens, inbox + account
+# tabs render, place list loads from the API, detail opens, inbox + account
 # reachable. Run: maestro test e2e/browse.yaml (emulator + Metro running;
 # see e2e/README.md).
 appId: com.logjamnsw.mobile
 ---
 - openLink: "exp+logjam-mobile://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081"
 - extendedWaitUntil:
-    visible: "Canyons"
+    visible: "Places"
     timeout: 30000
-# The shell lands on the Map tab; the list lives on the Canyons tab. (The map
-# also labels canyons now, so assert/tap only after switching tabs.)
-- tapOn: "Canyons"
-# Canyon list loaded from the seeded API — alice owns Claustral Canyon.
+# The shell lands on the Map tab; the list lives on the Places tab. (The map
+# also labels places now, so assert/tap only after switching tabs.)
+- tapOn: "Places"
+# Place list loaded from the seeded API — alice owns Claustral Canyon.
 - extendedWaitUntil:
     visible: "Claustral Canyon"
     timeout: 15000

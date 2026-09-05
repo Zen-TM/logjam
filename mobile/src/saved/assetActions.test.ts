@@ -51,11 +51,11 @@ vi.mock("../offline/localStores", () => ({
 
 vi.mock("../sharing/removeShare", () => ({ removeSharedEntity: vi.fn() }));
 
-const route = (syncRole: "owner" | "shared", canyonId: string | null = null) =>
+const route = (syncRole: "owner" | "shared", placeId: string | null = null) =>
   ({
     id: "r1",
     name: "Creek",
-    canyonId,
+    placeId,
     points: [
       [150.1, -33.5],
       [150.2, -33.6],
@@ -63,14 +63,14 @@ const route = (syncRole: "owner" | "shared", canyonId: string | null = null) =>
     syncRole,
   }) as unknown as MirrorRoute;
 
-const waypoint = (syncRole: "owner" | "shared", canyonIds: string[] = []) =>
+const waypoint = (syncRole: "owner" | "shared", placeIds: string[] = []) =>
   ({
     id: "w1",
     name: "Carpark",
     latitude: -33.5,
     longitude: 150.1,
     tags: [],
-    canyonIds,
+    placeIds,
     syncRole,
   }) as unknown as MirrorWaypoint;
 
@@ -276,31 +276,31 @@ describe("the share / send-a-copy verb matrix", () => {
     expect(vectorImportActions(importRow({ sourcePath: null })).sendCopy).toBeUndefined();
   });
 
-  // A canyon's route slot takes TRACK media and nothing else, so this verb has
+  // A place's route slot takes TRACK media and nothing else, so this verb has
   // a narrower gate than Send a copy over the very same file — the row that can
   // only fail is absent, not offered (DESIGN.md §7).
-  it("gives EVERY import Attach to a canyon — attaching links the row", () => {
+  it("gives EVERY import Attach to a place — attaching links the row", () => {
     for (const sourcePath of [
       "/imports/i1-source.gpx",
       "/imports/i1-source.kml",
       // GeoJSON joined TRACK_MIME_TYPES when standalone imports became media —
-      // a canyon's way may be any format an import may be.
+      // a place's way may be any format an import may be.
       "/imports/i1-source.geojson",
       // No bytes on this phone at all: a file that synced from another device
       // and has not been downloaded here. Linking is a row change, so there is
       // nothing for it to need locally.
       null,
     ]) {
-      expect(vectorImportActions(importRow({ sourcePath })).attachToCanyon).toBeDefined();
+      expect(vectorImportActions(importRow({ sourcePath })).attachToPlace).toBeDefined();
     }
   });
 
-  it("never offers Attach to a canyon on the kinds that are not files", () => {
-    expect(routeActions(route("owner")).attachToCanyon).toBeUndefined();
-    expect(waypointActions(waypoint("owner")).attachToCanyon).toBeUndefined();
+  it("never offers Attach to a place on the kinds that are not files", () => {
+    expect(routeActions(route("owner")).attachToPlace).toBeUndefined();
+    expect(waypointActions(waypoint("owner")).attachToPlace).toBeUndefined();
     // A recording gets there through createRouteFrom instead: the track itself
     // is never linked, a route made from it is.
-    expect(trackActions(track(3)).attachToCanyon).toBeUndefined();
+    expect(trackActions(track(3)).attachToPlace).toBeUndefined();
     expect(trackActions(track(3)).createRouteFrom).toBeDefined();
   });
 
@@ -315,49 +315,49 @@ describe("the share / send-a-copy verb matrix", () => {
 
   // The recipient's own verb, and the one rule that decides whether it exists
   // at all: a share held DIRECTLY is theirs to hand back, one seen only because
-  // a canyon was shared with them is not — dropping the (nonexistent) share row
+  // a place was shared with them is not — dropping the (nonexistent) share row
   // would 404, and offering it would promise a removal the next pull undoes.
-  it("offers Remove on a route shared directly, with no canyon named", () => {
+  it("offers Remove on a route shared directly, with no place named", () => {
     const actions = routeActions(route("shared"), ["c1"]);
     expect(actions.removeShare).toBeDefined();
-    expect(actions.sharedViaCanyonIds).toBeUndefined();
+    expect(actions.sharedViaPlaceIds).toBeUndefined();
     expect(actions.removeShare?.confirmTitle).toBe("Remove shared route?");
     // Not a delete: the owner keeps theirs, so the copy must not threaten one.
     expect(actions.removeShare?.confirmBody).not.toMatch(/delete|permanent/i);
   });
 
-  it("points a canyon-inherited route at its canyon instead of offering Remove", () => {
+  it("points a place-inherited route at its place instead of offering Remove", () => {
     const actions = routeActions(route("shared", "c1"), ["c1"]);
     expect(actions.removeShare).toBeUndefined();
-    expect(actions.sharedViaCanyonIds).toEqual(["c1"]);
+    expect(actions.sharedViaPlaceIds).toEqual(["c1"]);
   });
 
-  it("treats a link to a canyon the user cannot see as no link at all", () => {
-    // The canyon exists for its owner; this user was given only the route.
+  it("treats a link to a place the user cannot see as no link at all", () => {
+    // The place exists for its owner; this user was given only the route.
     const actions = routeActions(route("shared", "c9"), ["c1"]);
     expect(actions.removeShare).toBeDefined();
-    expect(actions.sharedViaCanyonIds).toBeUndefined();
+    expect(actions.sharedViaPlaceIds).toBeUndefined();
   });
 
   it("offers neither on an owned route, whatever it is linked to", () => {
     const actions = routeActions(route("owner", "c1"), ["c1"]);
     expect(actions.removeShare).toBeUndefined();
-    expect(actions.sharedViaCanyonIds).toBeUndefined();
+    expect(actions.sharedViaPlaceIds).toBeUndefined();
   });
 
-  it("says nothing about shares when the caller passed no canyon list", () => {
+  it("says nothing about shares when the caller passed no place list", () => {
     // The surfaces that only want a bbox or an export get what they always got
     // — silence, rather than a Remove derived from a list they never sent.
     const actions = routeActions(route("shared"));
     expect(actions.removeShare).toBeUndefined();
-    expect(actions.sharedViaCanyonIds).toBeUndefined();
+    expect(actions.sharedViaPlaceIds).toBeUndefined();
   });
 
-  it("reads a shared waypoint's own scoped canyonIds, with no list to pass", () => {
+  it("reads a shared waypoint's own scoped placeIds, with no list to pass", () => {
     expect(waypointActions(waypoint("shared")).removeShare).toBeDefined();
     const inherited = waypointActions(waypoint("shared", ["c1"]));
     expect(inherited.removeShare).toBeUndefined();
-    expect(inherited.sharedViaCanyonIds).toEqual(["c1"]);
+    expect(inherited.sharedViaPlaceIds).toEqual(["c1"]);
   });
 
   it("never offers Remove on something the user owns", () => {

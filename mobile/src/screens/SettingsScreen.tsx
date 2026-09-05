@@ -23,7 +23,7 @@
 // because a count IS state, and Notifications keeps the reason slot free for
 // §10's "Needs an account".
 //
-// PRIVACY: nothing here reads canyon data.
+// PRIVACY: nothing here reads place data.
 import { useCallback, useState } from "react";
 import { StyleSheet, Text } from "react-native";
 import { Feather } from "@expo/vector-icons";
@@ -85,13 +85,13 @@ export function SettingsScreen({ onOpenPage }: { onOpenPage: (page: SettingsPage
   // whose whole content is the two rows above it.
   const [sheet, setSheet] = useState<SheetMode>({ kind: "closed" });
   const tripFields = useFieldDefs("tripLog");
-  const canyonFields = useFieldDefs("canyon");
+  const placeFields = useFieldDefs("place");
 
   const defsFor = (entity: CustomFieldEntity) =>
-    entity === "tripLog" ? tripFields.defs : canyonFields.defs;
+    entity === "tripLog" ? tripFields.defs : placeFields.defs;
   const setDefsFor = (entity: CustomFieldEntity, next: TripLogCustomFieldDef[]) => {
     if (entity === "tripLog") tripFields.setDefs(next);
-    else canyonFields.setDefs(next);
+    else placeFields.setDefs(next);
   };
 
   return (
@@ -126,9 +126,9 @@ export function SettingsScreen({ onOpenPage }: { onOpenPage: (page: SettingsPage
         />
         <Row
           icon="tag"
-          title="Canyon fields"
-          subtitle={fieldCountLabel(canyonFields.defs.length)}
-          onPress={() => setSheet({ kind: "fields", entity: "canyon" })}
+          title="Place fields"
+          subtitle={fieldCountLabel(placeFields.defs.length)}
+          onPress={() => setSheet({ kind: "fields", entity: "place" })}
           right={<Feather name="chevron-right" size={20} color={theme.textMuted} />}
         />
 
@@ -193,7 +193,7 @@ export function SettingsScreen({ onOpenPage }: { onOpenPage: (page: SettingsPage
 
 function sheetTitle(sheet: SheetMode): string {
   if (sheet.kind === "closed") return "";
-  const noun = sheet.entity === "tripLog" ? "Trip" : "Canyon";
+  const noun = sheet.entity === "tripLog" ? "Trip" : "Place";
   if (sheet.kind === "fields") return `${noun} fields`;
   return sheet.editing ? sheet.editing.label : `New ${noun.toLowerCase()} field`;
 }

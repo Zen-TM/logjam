@@ -9,7 +9,7 @@ import {
   isUuidV4,
   pickNextTrackColor,
   planOutboxEnqueue,
-  validateCanyonPayload,
+  validatePlacePayload,
   type CustomFieldEntity,
   type OutboxEntry,
   type TripLogCustomFieldDef,
@@ -17,14 +17,14 @@ import {
   type SyncPushOp,
 } from "@logjam/shared";
 
-import type { TripCanyonLink } from "./canyonLinks";
+import type { TripPlaceLink } from "./placeLinks";
 import { isOutboxEntity, outboxMirrorTable } from "./outboxTables";
-import { cascadeCanyonDelete } from "./mirrorStore";
+import { cascadePlaceDelete } from "./mirrorStore";
 import { getSyncDb, notifyMirrorChanged, withSyncTransaction } from "./syncDb";
 import { scheduleMutationSync } from "./mediaSyncBridge";
 
-/** A trip's canyon links, ordered — order drives the derived title. */
-export type { TripCanyonLink };
+/** A trip's place links, ordered — order drives the derived title. */
+export type { TripPlaceLink };
 
 export type OutboxRow = {
   seq: number;
@@ -85,7 +85,7 @@ export async function countPendingOps(): Promise<number> {
  * Drives the "backed up" mark on a Saved row, so the question it answers is
  * narrow and literal — is there a copy of this on the server? A pending UPDATE
  * does not belong here: the row IS in the account, just a revision behind, and
- * marking it unsaved would tell a user their canyon is at risk because they
+ * marking it unsaved would tell a user their place is at risk because they
  * renamed it on a train. A create is the only op whose absence means the thing
  * does not exist there at all.
  *
@@ -135,7 +135,7 @@ function mintUuid(): string {
 // ── waypoint mutation surface ────────────────────────────────────────────────
 //
 // Waypoints are the first offline-writable entity (Stage 7's map UI already
-// drops/deletes them). Canyon/trip edit forms reuse enqueueOp when they land.
+// drops/deletes them). Place/trip edit forms reuse enqueueOp when they land.
 
 export type WaypointDraft = {
   /** Client-minted id to reuse. Only the legacy-waypoint promotion passes it
@@ -148,7 +148,7 @@ export type WaypointDraft = {
   symbol?: string | null;
   notes?: string | null;
   tags?: string[];
-  canyonIds?: string[];
+  placeIds?: string[];
 };
 
 export async function createWaypointLocal(draft: WaypointDraft): Promise<string> {
@@ -162,7 +162,7 @@ export async function createWaypointLocal(draft: WaypointDraft): Promise<string>
     ...(draft.symbol != null && { symbol: draft.symbol }),
     ...(draft.notes != null && { notes: draft.notes }),
     ...(draft.tags?.length && { tags: draft.tags }),
-    ...(draft.canyonIds?.length && { canyonIds: draft.canyonIds }),
+    ...(draft.placeIds?.length && { placeIds: draft.placeIds }),
   };
 
   const db = await getSyncDb();
@@ -172,12 +172,12 @@ export async function createWaypointLocal(draft: WaypointDraft): Promise<string>
     // sync_role is 'owner' — you cannot create someone else's waypoint.
     await db.runAsync(
       `INSERT INTO waypoints
-         (id, canyon_ids_json, tags_json, sync_role, name, latitude, longitude,
+         (id, place_ids_json, tags_json, sync_role, name, latitude, longitude,
           elevation, symbol, notes, created_at, updated_at, extra_json,
           dirty_fields_json)
        VALUES (?, ?, ?, 'owner', ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)`,
       id,
-      JSON.stringify(draft.canyonIds ?? []),
+      JSON.stringify(draft.placeIds ?? []),
       JSON.stringify(draft.tags ?? []),
       draft.name,
       draft.latitude,
@@ -202,7 +202,7 @@ export async function createWaypointLocal(draft: WaypointDraft): Promise<string>
   return id;
 }
 
-// tags and canyonIds are lists: the mirror stores them as JSON text while the
+// tags and placeIds are lists: the mirror stores them as JSON text while the
 // OUTBOX carries the real array, exactly as route geometry does, so a §6
 // conflict compares arrays against the server's arrays rather than against our
 // JSON encoding.
@@ -228,7 +228,7 @@ const WAYPOINT_UPDATE_COLUMNS: Record<string, ColumnSpec> = {
   symbol: "symbol",
   notes: "notes",
   tags: stringListColumn("tags_json"),
-  canyonIds: stringListColumn("canyon_ids_json"),
+  placeIds: stringListColumn("place_ids_json"),
 };
 
 export async function updateWaypointLocal(
@@ -263,7 +263,7 @@ export type RouteDraft = {
   points: [number, number][];
   /** Indices into `points` the user placed; the rest is snapped filler. */
   anchors?: number[] | null;
-  canyonId?: string | null;
+  placeId?: string | null;
   /** From TRACK_COLORS. Omitted means "pick one for me". */
   color?: string;
 };
@@ -289,17 +289,17 @@ export async function createRouteLocal(draft: RouteDraft): Promise<string> {
     points: draft.points,
     color,
     ...(draft.anchors != null && { anchors: draft.anchors }),
-    ...(draft.canyonId != null && { canyonId: draft.canyonId }),
+    ...(draft.placeId != null && { placeId: draft.placeId }),
   };
 
   await withSyncTransaction(db, async () => {
     await db.runAsync(
       `INSERT INTO routes
-         (id, owner_id, canyon_id, name, color, points_json, anchors_json,
+         (id, owner_id, place_id, name, color, points_json, anchors_json,
           sync_role, created_at, updated_at, extra_json, dirty_fields_json)
        VALUES (?, NULL, ?, ?, ?, ?, ?, 'owner', ?, ?, NULL, ?)`,
       id,
-      draft.canyonId ?? null,
+      draft.placeId ?? null,
       draft.name,
       color,
       JSON.stringify(draft.points),
@@ -323,7 +323,7 @@ export async function createRouteLocal(draft: RouteDraft): Promise<string> {
 
 const ROUTE_UPDATE_COLUMNS: Record<string, ColumnSpec> = {
   name: "name",
-  canyonId: "canyon_id",
+  placeId: "place_id",
   color: "color",
   // The mirror stores geometry as JSON text, so the value is encoded into the
   // column while the OUTBOX carries the real array — and decode reads the base
@@ -382,7 +382,7 @@ export async function deleteRouteLocal(id: string): Promise<void> {
 // ── custom field definitions ─────────────────────────────────────────────────
 //
 // The whole reason definitions moved off the user record: they are now written
-// exactly like a canyon or a route — materialized into the mirror immediately,
+// exactly like a place or a route — materialized into the mirror immediately,
 // queued for the server, flushed whenever there is a connection. A guest's
 // writes are the same writes, simply never flushed (mobile/CLAUDE.md), so the
 // account-state branch that used to live in `fieldDefsStore` is gone.
@@ -477,7 +477,7 @@ export async function updateCustomFieldDefLocal(
  * Delete the definition locally and queue the server's half.
  *
  * Only the DEFINITION is removed here. Stripping the orphaned values off every
- * trip log and canyon is the server's job (`lib/customFieldDefs.ts`) because
+ * trip log and place is the server's job (`lib/customFieldDefs.ts`) because
  * this phone can only reach the rows in its own mirror — a value left on a row
  * the phone has not pulled would resurface under a later field with the same
  * slug. Callers that want the values gone from the LOCAL rows too (so the user
@@ -499,16 +499,16 @@ export async function deleteCustomFieldDefLocal(id: string): Promise<void> {
   scheduleMutationSync();
 }
 
-// ── canyon / trip update surface ─────────────────────────────────────────────
+// ── place / trip update surface ─────────────────────────────────────────────
 //
 // Field-scoped updates over the generic enqueueUpdate path (§8.2 coalescing,
 // §8.5 optimistic materialization). Only own rows are pushable: a shared
-// canyon's update would 404 server-side and park deadRemote, so callers gate
+// place's update would 404 server-side and park deadRemote, so callers gate
 // the edit UI on syncRole === "owner". These maps list ONLY scalar columns —
-// array/object fields (altNames, attributes, types, customFields, canyon
+// array/object fields (altNames, attributes, types, customFields, place
 // links) aren't materialized here because enqueueUpdate binds values raw.
 
-const CANYON_UPDATE_COLUMNS: Record<string, ColumnSpec> = {
+const PLACE_UPDATE_COLUMNS: Record<string, ColumnSpec> = {
   name: "name",
   notes: "notes",
   quality: "quality",
@@ -525,10 +525,10 @@ const CANYON_UPDATE_COLUMNS: Record<string, ColumnSpec> = {
     encode: (value) => JSON.stringify(value ?? []),
     decode: (raw) => JSON.parse((raw as string | null) ?? "[]"),
   },
-  // The canyon's free-form blob, which carries `customFields` (and `sources`,
+  // The place's free-form blob, which carries `customFields` (and `sources`,
   // which only the web writes). Callers pass the WHOLE object — the server
   // replaces it wholesale, so an edit that drops a key the web put there loses
-  // it. `CanyonEditSheet` spreads the canyon's existing attributes for that
+  // it. `PlaceEditSheet` spreads the place's existing attributes for that
   // reason.
   attributes: {
     column: "attributes_json",
@@ -537,16 +537,16 @@ const CANYON_UPDATE_COLUMNS: Record<string, ColumnSpec> = {
   },
 };
 
-export async function updateCanyonLocal(
+export async function updatePlaceLocal(
   id: string,
   fields: Record<string, unknown>,
 ): Promise<void> {
-  await enqueueUpdate("canyon", "canyons", id, fields, CANYON_UPDATE_COLUMNS);
+  await enqueueUpdate("place", "places", id, fields, PLACE_UPDATE_COLUMNS);
 }
 
-/** The fields a canyon can be created with offline. Coordinates are required:
- * a canyon without a position isn't a canyon, and the server rejects it. */
-export type CanyonDraftFields = {
+/** The fields a place can be created with offline. Coordinates are required:
+ * a place without a position isn't a place, and the server rejects it. */
+export type PlaceDraftFields = {
   name: string;
   latitude: number;
   longitude: number;
@@ -564,15 +564,15 @@ export type CanyonDraftFields = {
 };
 
 /**
- * Add a canyon offline: optimistic mirror row + a canyon.create op. Mirrors
+ * Add a place offline: optimistic mirror row + a place.create op. Mirrors
  * createTripLocal — every field is locally dirty until the create flushes, and
  * the server row replaces the provisional timestamps.
  *
- * Validated with the same predicate the API applies (`validateCanyonPayload`),
+ * Validated with the same predicate the API applies (`validatePlacePayload`),
  * so a bad value fails here with a message rather than parking a deadRemote op
  * on the next flush.
  */
-export async function createCanyonLocal(draft: CanyonDraftFields): Promise<string> {
+export async function createPlaceLocal(draft: PlaceDraftFields): Promise<string> {
   const id = mintUuid();
   const now = new Date().toISOString();
   const altNames = draft.altNames ?? [];
@@ -587,13 +587,13 @@ export async function createCanyonLocal(draft: CanyonDraftFields): Promise<strin
     ...(Object.keys(attributes).length > 0 && { attributes }),
   };
 
-  const invalid = validateCanyonPayload(fields, { requireCoords: true });
+  const invalid = validatePlacePayload(fields, { requireCoords: true });
   if (invalid) throw new Error(invalid);
 
   const db = await getSyncDb();
   await withSyncTransaction(db, async () => {
     await db.runAsync(
-      `INSERT INTO canyons
+      `INSERT INTO places
          (id, sync_role, name, latitude, longitude, alt_names_json, num_abseils,
           longest_abseil, v_grade, a_grade, commitment, quality, hours, notes,
           attributes_json, forked_from_id, created_at, updated_at, extra_json,
@@ -619,7 +619,7 @@ export async function createCanyonLocal(draft: CanyonDraftFields): Promise<strin
     );
     await appendOp(db, {
       opId: mintUuid(),
-      entity: "canyon",
+      entity: "place",
       op: "create",
       id,
       fields,
@@ -632,7 +632,7 @@ export async function createCanyonLocal(draft: CanyonDraftFields): Promise<strin
 
 /** Only the numeric fields the caller actually set — an omitted grade must stay
  * absent from the op rather than being pushed as an explicit null. */
-function optionalNumbers(draft: CanyonDraftFields): Record<string, number> {
+function optionalNumbers(draft: PlaceDraftFields): Record<string, number> {
   const keys = [
     "numAbseils",
     "longestAbseil",
@@ -651,23 +651,23 @@ function optionalNumbers(draft: CanyonDraftFields): Record<string, number> {
 }
 
 /**
- * Delete a canyon offline. Owner-only (the caller gates on syncRole): a
+ * Delete a place offline. Owner-only (the caller gates on syncRole): a
  * sharee's delete would 404 server-side and park deadRemote.
  *
- * The mirror-side cascade is `cascadeCanyonDelete` — the SAME function the
+ * The mirror-side cascade is `cascadePlaceDelete` — the SAME function the
  * server tombstone runs, so the two paths cannot diverge again. They did:
- * this path used to scrub links and shares only, leaving the canyon's media
- * rows, their cached blobs and `routes.canyon_id` behind until a later delta
+ * this path used to scrub links and shares only, leaving the place's media
+ * rows, their cached blobs and `routes.place_id` behind until a later delta
  * pull cleaned up — i.e. never, for a guest, whose device is never registered
  * for pulls at all.
  */
-export async function deleteCanyonLocal(id: string): Promise<void> {
+export async function deletePlaceLocal(id: string): Promise<void> {
   const db = await getSyncDb();
   const orphanedPaths = await withSyncTransaction(db, async () => {
-    const paths = await cascadeCanyonDelete(db, id);
+    const paths = await cascadePlaceDelete(db, id);
     await appendOp(db, {
       opId: mintUuid(),
-      entity: "canyon",
+      entity: "place",
       op: "delete",
       id,
     });
@@ -706,51 +706,51 @@ export type TripDraftFields = {
   /** Values for the user's own field definitions, keyed by field key. */
   customFields?: Record<string, unknown>;
   /** Ordered; the mirror needs the names, the push op sends ids only. */
-  canyons?: TripCanyonLink[];
+  places?: TripPlaceLink[];
 };
 
 /**
- * The canyon-links column spec. The push op carries ids (`canyonIds`, what the
+ * The place-links column spec. The push op carries ids (`placeIds`, what the
  * server resolves), but the mirror column stores `{id, name}` because the
  * derived trip title is built from names offline. So the caller has to supply
  * the names it already had on screen — there is no id→name lookup down here,
  * and a blank name would render a blank trip title.
  */
-function canyonLinksColumn(links: TripCanyonLink[]): ColumnSpec {
+function placeLinksColumn(links: TripPlaceLink[]): ColumnSpec {
   const nameById = new Map(links.map((link) => [link.id, link.name]));
   return {
-    column: "canyons_json",
+    column: "places_json",
     encode: (value) =>
       JSON.stringify(
-        ((value ?? []) as string[]).map((canyonId) => {
-          const name = nameById.get(canyonId);
+        ((value ?? []) as string[]).map((placeId) => {
+          const name = nameById.get(placeId);
           if (name == null) {
-            throw new Error("Trip canyon link is missing its name for the mirror row");
+            throw new Error("Trip place link is missing its name for the mirror row");
           }
-          return { id: canyonId, name };
+          return { id: placeId, name };
         }),
       ),
     decode: (raw) =>
-      (JSON.parse((raw as string | null) ?? "[]") as TripCanyonLink[]).map(
+      (JSON.parse((raw as string | null) ?? "[]") as TripPlaceLink[]).map(
         (link) => link.id,
       ),
   };
 }
 
 /**
- * Field-scoped trip update. `canyons` is translated into the `canyonIds` op
+ * Field-scoped trip update. `places` is translated into the `placeIds` op
  * field; every other key passes through as-is.
  */
 export async function updateTripLocal(
   id: string,
-  fields: Omit<Partial<TripDraftFields>, "canyons"> & { canyons?: TripCanyonLink[] },
+  fields: Omit<Partial<TripDraftFields>, "places"> & { places?: TripPlaceLink[] },
 ): Promise<void> {
-  const { canyons, ...scalar } = fields;
+  const { places, ...scalar } = fields;
   const columns: Record<string, ColumnSpec> = { ...TRIP_UPDATE_COLUMNS };
   const opFields: Record<string, unknown> = { ...scalar };
-  if (canyons !== undefined) {
-    columns.canyonIds = canyonLinksColumn(canyons);
-    opFields.canyonIds = canyons.map((link) => link.id);
+  if (places !== undefined) {
+    columns.placeIds = placeLinksColumn(places);
+    opFields.placeIds = places.map((link) => link.id);
   }
   await enqueueUpdate("tripLog", "trip_logs", id, opFields, columns);
 }
@@ -767,13 +767,13 @@ export async function updateTripLocal(
 export async function createTripLocal(draft: TripDraftFields): Promise<string> {
   const id = mintUuid();
   const now = new Date().toISOString();
-  const canyons = draft.canyons ?? [];
+  const places = draft.places ?? [];
   const types = draft.types ?? [];
   const customFields = draft.customFields ?? {};
   const fields: Record<string, unknown> = {
     date: draft.date,
     types,
-    canyonIds: canyons.map((link) => link.id),
+    placeIds: places.map((link) => link.id),
     ...(Object.keys(customFields).length > 0 && { customFields }),
     ...(draft.displayName != null && { displayName: draft.displayName }),
     ...(draft.notes != null && { notes: draft.notes }),
@@ -784,7 +784,7 @@ export async function createTripLocal(draft: TripDraftFields): Promise<string> {
     await db.runAsync(
       `INSERT INTO trip_logs
          (id, date, display_name, types_json, notes, custom_fields_json,
-          canyons_json, created_at, updated_at, extra_json, dirty_fields_json)
+          places_json, created_at, updated_at, extra_json, dirty_fields_json)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)`,
       id,
       draft.date,
@@ -792,7 +792,7 @@ export async function createTripLocal(draft: TripDraftFields): Promise<string> {
       JSON.stringify(types),
       draft.notes ?? null,
       JSON.stringify(customFields),
-      JSON.stringify(canyons),
+      JSON.stringify(places),
       now,
       now,
       JSON.stringify(Object.keys(fields)),
@@ -1096,7 +1096,7 @@ type UpdateTarget = { table: string; columns: Record<string, ColumnSpec> };
  * here; `notification` answers null because a markRead materializes nothing.
  */
 export const UPDATE_TARGETS: Record<SyncPushEntity, UpdateTarget | null> = {
-  canyon: { table: "canyons", columns: CANYON_UPDATE_COLUMNS },
+  place: { table: "places", columns: PLACE_UPDATE_COLUMNS },
   tripLog: { table: "trip_logs", columns: TRIP_UPDATE_COLUMNS },
   waypoint: { table: "waypoints", columns: WAYPOINT_UPDATE_COLUMNS },
   route: { table: "routes", columns: ROUTE_UPDATE_COLUMNS },
@@ -1112,7 +1112,7 @@ export const UPDATE_TARGETS: Record<SyncPushEntity, UpdateTarget | null> = {
  *
  * `enqueueUpdate` materializes an edit into the mirror columns immediately, so
  * discarding the op has to undo that write — otherwise the rejected value sits
- * on screen indefinitely (the canyon keeps the name the server refused), and
+ * on screen indefinitely (the place keeps the name the server refused), and
  * the field stays in `dirty_fields_json`, which then makes the NEXT edit skip
  * its base snapshot and shelve spurious conflicts. Only the create case used
  * to be cleaned up.
@@ -1142,8 +1142,8 @@ export async function revertDiscardedUpdate(
   for (const [field, value] of Object.entries(baseFields)) {
     if (remainingDirty.has(field)) continue;
     const spec =
-      field === "canyonIds" && entity === "tripLog"
-        ? await canyonLinksColumnFromMirror(db, value)
+      field === "placeIds" && entity === "tripLog"
+        ? await placeLinksColumnFromMirror(db, value)
         : target.columns[field];
     if (!spec) continue;
     assignments.push(`${typeof spec === "string" ? spec : spec.column} = ?`);
@@ -1163,24 +1163,24 @@ export async function revertDiscardedUpdate(
   );
 }
 
-/** `canyonLinksColumn` needs id→name, and a revert has only the ids the base
- * snapshot decoded to. The names are in the mirror's own canyons table. */
-async function canyonLinksColumnFromMirror(
+/** `placeLinksColumn` needs id→name, and a revert has only the ids the base
+ * snapshot decoded to. The names are in the mirror's own places table. */
+async function placeLinksColumnFromMirror(
   db: Awaited<ReturnType<typeof getSyncDb>>,
   baseValue: unknown,
 ): Promise<ColumnSpec> {
   const ids = Array.isArray(baseValue) ? (baseValue as string[]) : [];
-  const links: TripCanyonLink[] = [];
-  for (const canyonId of ids) {
-    const canyon = await db.getFirstAsync<{ name: string }>(
-      "SELECT name FROM canyons WHERE id = ?",
-      canyonId,
+  const links: TripPlaceLink[] = [];
+  for (const placeId of ids) {
+    const place = await db.getFirstAsync<{ name: string }>(
+      "SELECT name FROM places WHERE id = ?",
+      placeId,
     );
-    // A canyon the mirror no longer holds can't be named, so it can't be put
+    // A place the mirror no longer holds can't be named, so it can't be put
     // back — drop the link rather than write a blank trip title.
-    if (canyon) links.push({ id: canyonId, name: canyon.name });
+    if (place) links.push({ id: placeId, name: place.name });
   }
-  return canyonLinksColumn(links);
+  return placeLinksColumn(links);
 }
 
 // ── restoring one shelved field ─────────────────────────────────────────────
@@ -1192,7 +1192,7 @@ async function canyonLinksColumnFromMirror(
  * from inside a transaction, at the moment the user tapped Put this value back.
  *
  * `notification` has no updatable field (its ops are markRead/markUnread), and
- * a trip's `canyonIds` is deliberately absent — its column is built per call
+ * a trip's `placeIds` is deliberately absent — its column is built per call
  * from resolved link names (`updateTripLocal`), so it is not restorable from a
  * shelved value alone and `canRestoreField` says so rather than guessing.
  */
@@ -1200,7 +1200,7 @@ const UPDATE_COLUMNS_BY_ENTITY: Record<
   SyncPushEntity,
   Record<string, ColumnSpec> | null
 > = {
-  canyon: CANYON_UPDATE_COLUMNS,
+  place: PLACE_UPDATE_COLUMNS,
   tripLog: TRIP_UPDATE_COLUMNS,
   waypoint: WAYPOINT_UPDATE_COLUMNS,
   route: ROUTE_UPDATE_COLUMNS,
@@ -1221,8 +1221,8 @@ export function canRestoreField(entity: string, field: string): boolean {
  * Only `notes` qualifies, and that is a fact about the protocol rather than a
  * choice: joining two values with a blank line has to produce something the
  * field's own editor would have accepted, and every other conflictable field is
- * a name (a two-line canyon name is a broken canyon name), a number, or a blob.
- * Custom fields are not addressable here at all — a canyon's live inside
+ * a name (a two-line place name is a broken place name), a number, or a blob.
+ * Custom fields are not addressable here at all — a place's live inside
  * `attributes` and a trip's inside `customFields`, so a conflict on one is a
  * conflict on the WHOLE object and merging it is a key-by-key affair, not a
  * concatenation. That is the deferred case, not this one.

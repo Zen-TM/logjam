@@ -12,7 +12,7 @@
 // It reads TRUE north by default, like the map, the GPS and the navigate-to-
 // waypoint chip (heading.ts) — so in NSW it sits ~12.5° above what a baseplate
 // compass needle says, and that is the needle being magnetic, not this being
-// wrong. Which is precisely why `reference` exists: a canyoner transferring a
+// wrong. Which is precisely why `reference` exists: a placeer transferring a
 // bearing onto a paper topo and a plate compass wants the number the NEEDLE
 // will show, and doing that arithmetic in the head at the top of an abseil is
 // how people walk off on the wrong spur.

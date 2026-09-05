@@ -4,7 +4,7 @@ import { routeToGpx, routeToKml, exportFilename } from "./routeExport.js";
 import { parseVectorImport } from "./vectorImport.js";
 import type { RoutePoint } from "./routeValidation.js";
 
-// Synthetic coordinates — never a real canyon line in a committed test.
+// Synthetic coordinates — never a real place line in a committed test.
 const LINE: RoutePoint[] = [
   [150.4, -33.5],
   [150.41, -33.51],

@@ -58,12 +58,12 @@ const LAYER_DESCRIPTIONS: Partial<Record<string, string>> = {
 
 function LayersPanel({
   // Overlays
-  showOwnedCanyons,
-  setShowOwnedCanyons,
-  showSharedCanyons,
-  setShowSharedCanyons,
-  showCanyonTracks,
-  setShowCanyonTracks,
+  showOwnedPlaces,
+  setShowOwnedPlaces,
+  showSharedPlaces,
+  setShowSharedPlaces,
+  showPlaceTracks,
+  setShowPlaceTracks,
   showRoutes,
   setShowRoutes,
   showWaypoints,
@@ -81,12 +81,12 @@ function LayersPanel({
   onActiveLayerChange,
   mapView,
 }: {
-  showOwnedCanyons: boolean;
-  setShowOwnedCanyons: (v: boolean) => void;
-  showSharedCanyons: boolean;
-  setShowSharedCanyons: (v: boolean) => void;
-  showCanyonTracks: boolean;
-  setShowCanyonTracks: (v: boolean) => void;
+  showOwnedPlaces: boolean;
+  setShowOwnedPlaces: (v: boolean) => void;
+  showSharedPlaces: boolean;
+  setShowSharedPlaces: (v: boolean) => void;
+  showPlaceTracks: boolean;
+  setShowPlaceTracks: (v: boolean) => void;
   showRoutes: boolean;
   setShowRoutes: (v: boolean) => void;
   showWaypoints: boolean;
@@ -176,29 +176,29 @@ function LayersPanel({
       <div className={classes.sectionLabel}>Overlays</div>
 
       <div className={classes.toggleRow}>
-        <span>My Canyons</span>
+        <span>My Places</span>
         <Switch
           size="small"
-          checked={showOwnedCanyons}
-          onChange={(_, v) => setShowOwnedCanyons(v)}
-          sx={switchSx("var(--owned-canyon-color)")}
+          checked={showOwnedPlaces}
+          onChange={(_, v) => setShowOwnedPlaces(v)}
+          sx={switchSx("var(--owned-place-color)")}
         />
       </div>
       <div className={classes.toggleRow}>
-        <span>Shared Canyons</span>
+        <span>Shared Places</span>
         <Switch
           size="small"
-          checked={showSharedCanyons}
-          onChange={(_, v) => setShowSharedCanyons(v)}
-          sx={switchSx("var(--shared-canyon-color)")}
+          checked={showSharedPlaces}
+          onChange={(_, v) => setShowSharedPlaces(v)}
+          sx={switchSx("var(--shared-place-color)")}
         />
       </div>
       <div className={classes.toggleRow}>
-        <span>Canyon Tracks</span>
+        <span>Place Tracks</span>
         <Switch
           size="small"
-          checked={showCanyonTracks}
-          onChange={(_, v) => setShowCanyonTracks(v)}
+          checked={showPlaceTracks}
+          onChange={(_, v) => setShowPlaceTracks(v)}
           sx={switchSx("var(--theme-accent)")}
         />
       </div>

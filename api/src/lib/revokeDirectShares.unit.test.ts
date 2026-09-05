@@ -40,9 +40,9 @@ describe("revocationsNeedingTombstones", () => {
     ]);
   });
 
-  // The direct arm goes, the canyon arm stays: the recipient still sees it
-  // through a canyon its owner shared, so it must NOT be told to forget it.
-  it("skips a row the recipient still sees through a shared canyon", () => {
+  // The direct arm goes, the place arm stays: the recipient still sees it
+  // through a place its owner shared, so it must NOT be told to forget it.
+  it("skips a row the recipient still sees through a shared place", () => {
     expect(
       revocationsNeedingTombstones(
         [WAYPOINT, ROUTE],
