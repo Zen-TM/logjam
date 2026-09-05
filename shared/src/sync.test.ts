@@ -4,6 +4,7 @@ import {
   encodeSyncCursor,
   isUuidV4,
   parseSyncDeltaCanyonRow,
+  parseSyncDeltaTombstone,
   parseSyncDeltaTripRow,
   parseSyncDeltaWaypointRow,
   SYNC_ENTITY_TYPES,
@@ -96,7 +97,7 @@ describe("sync cursor codec", () => {
 });
 
 describe("SYNC_ENTITY_TYPES", () => {
-  it("covers the seven synced entities", () => {
+  it("covers the eight synced entities", () => {
     expect(SYNC_ENTITY_TYPES).toEqual([
       "canyon",
       "tripLog",
@@ -105,7 +106,36 @@ describe("SYNC_ENTITY_TYPES", () => {
       "friendship",
       "waypoint",
       "route",
+      "customFieldDef",
     ]);
+  });
+});
+
+// A tombstone naming an entity this build has never heard of is a NEWER
+// SERVER, not corruption. Validating `type` against SYNC_ENTITY_TYPES made
+// every addition to that list a breaking change for phones already in the
+// field: adding `customFieldDef` made a 0.1.0 build report "dropped 12
+// unreadable row(s) from a delta page" — a data-loss warning about rows it
+// correctly had nothing to do with. Caught on-device, not by this suite, which
+// is why the test exists now.
+describe("parseSyncDeltaTombstone", () => {
+  it("accepts every known entity type", () => {
+    for (const type of SYNC_ENTITY_TYPES) {
+      expect(parseSyncDeltaTombstone({ type, id: "x" })).toEqual({ type, id: "x" });
+    }
+  });
+
+  it("accepts an entity type this build does not know", () => {
+    expect(parseSyncDeltaTombstone({ type: "placeType", id: "x" })).toEqual({
+      type: "placeType",
+      id: "x",
+    });
+  });
+
+  it("still rejects a malformed SHAPE", () => {
+    expect(() => parseSyncDeltaTombstone({ type: "canyon" })).toThrow(SyncRowError);
+    expect(() => parseSyncDeltaTombstone({ type: 7, id: "x" })).toThrow(SyncRowError);
+    expect(() => parseSyncDeltaTombstone(null)).toThrow(SyncRowError);
   });
 });
 

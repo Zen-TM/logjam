@@ -232,20 +232,25 @@ export function shareCapabilityStatus(
 }
 
 /**
- * Custom fields are NOT a gated capability, and this is where that decision is
- * written down. A guest keeps their own definitions on the device
- * (`customFields/fieldDefsStore.ts`), so there is no account axis: they can add,
- * rename and delete a field in a canyon with no signal. Only the ACCOUNT list is
- * network-bound — it is shared with the web and every other device — so a linked
- * user still needs a connection to change it.
+ * Custom fields are NOT a gated capability on EITHER axis, and this is where
+ * that decision is written down.
+ *
+ * Definitions are rows in the local mirror, written through the outbox like a
+ * canyon or a waypoint (`customFields/fieldDefsStore.ts`), so adding, renaming
+ * and deleting a field works with no account and with no signal. There is
+ * therefore nothing left for this function to return, and it is kept only so
+ * the decision has a place to be stated and a test to pin it.
+ *
+ * It used to return "Needs a connection" for a linked user, because the
+ * definitions then lived on the user record and were shared with the web — a
+ * list two surfaces could edit at once, with no per-field grain to merge on.
+ * Moving them to rows is what removed that constraint.
  *
  * Undefined means "go ahead", to match `capabilityRowProps`' subtitle contract.
  */
 export function fieldDefsBlockedReason(
-  accountState: AccountState,
-  online: boolean,
+  _accountState: AccountState,
+  _online: boolean,
 ): string | undefined {
-  return accountState === "linked" && !online
-    ? unavailableReasonText("needs-connection")
-    : undefined;
+  return undefined;
 }

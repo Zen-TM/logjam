@@ -135,6 +135,43 @@ export const SYNC_TABLES: readonly TableSchema[] = [
     },
   },
   {
+    // Custom field DEFINITIONS. A mirror table like any other, which is the
+    // whole point of moving them off the user record: defining, renaming and
+    // deleting a field is now the same offline-capable write path as creating
+    // a canyon, for a guest and for a linked user alike.
+    //
+    // No owner_id / sync_role: definitions belong to one account and are never
+    // shared, so every row here is the user's own and always editable.
+    //
+    // PRIVACY: `label` is user-authored text about their canyoning. It is in
+    // the mirror, so it is inside the sign-out wipe derived from SYNC_TABLES —
+    // which is the reason a definition must never be stored anywhere else.
+    name: "custom_field_defs",
+    kind: "mirror",
+    columns: {
+      id: "TEXT PRIMARY KEY",
+      // "tripLog" | "canyon".
+      entity: "TEXT NOT NULL",
+      // The slug the stored values are keyed by. Stable across a rename.
+      key: "TEXT NOT NULL",
+      label: "TEXT NOT NULL",
+      type: "TEXT NOT NULL",
+      min: "REAL",
+      max: "REAL",
+      position: "INTEGER NOT NULL DEFAULT 0",
+      created_at: "TEXT",
+      updated_at: "TEXT",
+      extra_json: "TEXT",
+      dirty_fields_json: "TEXT",
+    },
+    indexes: [
+      {
+        name: "custom_field_defs_entity",
+        on: "custom_field_defs(entity, position)",
+      },
+    ],
+  },
+  {
     // owner_id + sync_role mirror the routes table: a waypoint linked to a
     // canyon shared with this user arrives here read-only. Canyon links are
     // many-to-many and live in canyon_ids_json — there is no canyon_id column.

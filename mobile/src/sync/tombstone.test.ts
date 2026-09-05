@@ -52,6 +52,30 @@ function sqlText(): string {
   return calls.map((call) => call.sql).join("\n");
 }
 
+// The other half of the tolerance the shared parser now allows: a type from a
+// newer server reaches here, and must touch NOTHING — not the mirror, and not
+// the outbox (the pending-op parking at the end of applyTombstone would
+// otherwise mark a local row deadRemote against an id it knows nothing about).
+describe("a tombstone type this build does not know", () => {
+  beforeEach(() => {
+    calls.length = 0;
+  });
+
+  it("issues no statement at all", async () => {
+    const orphaned = await applyTombstone(db as never, {
+      type: "placeType",
+      id: "from-a-newer-server",
+    });
+    expect(orphaned).toEqual([]);
+    expect(calls).toEqual([]);
+  });
+
+  it("still cascades a type it DOES know", async () => {
+    await applyTombstone(db as never, { type: "waypoint", id: "wp-1" });
+    expect(sqlText()).toMatch(/DELETE FROM waypoints/);
+  });
+});
+
 describe("canyon tombstone cascade", () => {
   beforeEach(() => {
     calls.length = 0;

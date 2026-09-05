@@ -10,7 +10,9 @@ import {
   pickNextTrackColor,
   planOutboxEnqueue,
   validateCanyonPayload,
+  type CustomFieldEntity,
   type OutboxEntry,
+  type TripLogCustomFieldDef,
   type SyncPushEntity,
   type SyncPushOp,
 } from "@logjam/shared";
@@ -369,6 +371,126 @@ export async function deleteRouteLocal(id: string): Promise<void> {
     await appendOp(db, {
       opId: mintUuid(),
       entity: "route",
+      op: "delete",
+      id,
+    });
+  });
+  notifyMirrorChanged();
+  scheduleMutationSync();
+}
+
+// ── custom field definitions ─────────────────────────────────────────────────
+//
+// The whole reason definitions moved off the user record: they are now written
+// exactly like a canyon or a route — materialized into the mirror immediately,
+// queued for the server, flushed whenever there is a connection. A guest's
+// writes are the same writes, simply never flushed (mobile/CLAUDE.md), so the
+// account-state branch that used to live in `fieldDefsStore` is gone.
+//
+// `key` and `entity` are create-only. Every stored value is keyed by `key`, so
+// changing it would orphan them all; `entity` decides which rows those values
+// live on. A rename moves `label` (see `renameCustomFieldLabel`), never `key`.
+
+const CUSTOM_FIELD_DEF_UPDATE_COLUMNS: Record<string, ColumnSpec> = {
+  label: "label",
+  type: "type",
+  min: "min",
+  max: "max",
+  position: "position",
+};
+
+export type CustomFieldDefDraft = {
+  entity: CustomFieldEntity;
+  def: TripLogCustomFieldDef;
+};
+
+export async function createCustomFieldDefLocal(
+  draft: CustomFieldDefDraft,
+): Promise<string> {
+  const id = mintUuid();
+  const now = new Date().toISOString();
+  const db = await getSyncDb();
+  const { entity, def } = draft;
+
+  // Append to the end of this entity's list, matching what the server's
+  // `nextPosition` would have chosen.
+  const last = await db.getFirstAsync<{ position: number }>(
+    "SELECT position FROM custom_field_defs WHERE entity = ? ORDER BY position DESC LIMIT 1",
+    entity,
+  );
+  const position = last ? last.position + 1 : 0;
+
+  const fields: Record<string, unknown> = {
+    entity,
+    key: def.key,
+    label: def.label,
+    type: def.type,
+    position,
+    ...(def.min != null && def.max != null && { min: def.min, max: def.max }),
+  };
+
+  await withSyncTransaction(db, async () => {
+    await db.runAsync(
+      `INSERT INTO custom_field_defs
+         (id, entity, key, label, type, min, max, position, created_at,
+          updated_at, extra_json, dirty_fields_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)`,
+      id,
+      entity,
+      def.key,
+      def.label,
+      def.type,
+      def.min ?? null,
+      def.max ?? null,
+      position,
+      now,
+      now,
+      JSON.stringify(Object.keys(fields)),
+    );
+    await appendOp(db, {
+      opId: mintUuid(),
+      entity: "customFieldDef",
+      op: "create",
+      id,
+      fields,
+    });
+  });
+  notifyMirrorChanged();
+  scheduleMutationSync();
+  return id;
+}
+
+export async function updateCustomFieldDefLocal(
+  id: string,
+  fields: Record<string, unknown>,
+): Promise<void> {
+  await enqueueUpdate(
+    "customFieldDef",
+    "custom_field_defs",
+    id,
+    fields,
+    CUSTOM_FIELD_DEF_UPDATE_COLUMNS,
+  );
+}
+
+/**
+ * Delete the definition locally and queue the server's half.
+ *
+ * Only the DEFINITION is removed here. Stripping the orphaned values off every
+ * trip log and canyon is the server's job (`lib/customFieldDefs.ts`) because
+ * this phone can only reach the rows in its own mirror — a value left on a row
+ * the phone has not pulled would resurface under a later field with the same
+ * slug. Callers that want the values gone from the LOCAL rows too (so the user
+ * sees the effect immediately) strip them through the normal update paths
+ * first; see `removeFieldDef`.
+ */
+export async function deleteCustomFieldDefLocal(id: string): Promise<void> {
+  const db = await getSyncDb();
+  await withSyncTransaction(db, async () => {
+    await db.runAsync("DELETE FROM custom_field_defs WHERE id = ?", id);
+    await appendOp(db, {
+      opId: mintUuid(),
+      entity: "customFieldDef",
       op: "delete",
       id,
     });
@@ -978,6 +1100,10 @@ export const UPDATE_TARGETS: Record<SyncPushEntity, UpdateTarget | null> = {
   tripLog: { table: "trip_logs", columns: TRIP_UPDATE_COLUMNS },
   waypoint: { table: "waypoints", columns: WAYPOINT_UPDATE_COLUMNS },
   route: { table: "routes", columns: ROUTE_UPDATE_COLUMNS },
+  customFieldDef: {
+    table: "custom_field_defs",
+    columns: CUSTOM_FIELD_DEF_UPDATE_COLUMNS,
+  },
   notification: null,
 };
 
@@ -1078,6 +1204,7 @@ const UPDATE_COLUMNS_BY_ENTITY: Record<
   tripLog: TRIP_UPDATE_COLUMNS,
   waypoint: WAYPOINT_UPDATE_COLUMNS,
   route: ROUTE_UPDATE_COLUMNS,
+  customFieldDef: CUSTOM_FIELD_DEF_UPDATE_COLUMNS,
   notification: null,
 };
 

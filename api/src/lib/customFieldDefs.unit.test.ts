@@ -1,17 +1,17 @@
 import { describe, it, expect, vi } from "vitest";
 
-// The route module imports the Prisma singleton at load; mock it so importing
-// the pure helper under test doesn't require a DB connection.
+// The store imports the Prisma singleton at load; mock it so importing the
+// pure helpers under test doesn't require a DB connection.
 vi.mock("../services/prisma", () => ({
   default: {
     tripLog: { findMany: vi.fn(), update: vi.fn() },
     canyon: { findMany: vi.fn(), update: vi.fn() },
-    user: { update: vi.fn() },
+    customFieldDef: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn() },
     $transaction: vi.fn(),
   },
 }));
 
-import { canyonCustomFieldsRecord } from "./customFields";
+import { canyonCustomFieldsRecord } from "./customFieldDefs";
 import { tripLogHasCustomFieldValue } from "@logjam/shared";
 
 describe("canyonCustomFieldsRecord", () => {

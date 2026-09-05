@@ -1,63 +1,41 @@
 // The definitions in force on this install, as a hook — the read half of
-// `fieldDefsStore`, wired to whichever source that file says applies.
+// `fieldDefsStore`.
 //
-// Both sources are watched, not polled once: a guest's list lives in the local
-// KV and is re-read on `onMirrorChanged` (which `writeLocalFieldDefs` fires), a
-// linked user's arrives with `/users/me` and is re-seeded whenever a refetch
-// moves it. Without either, adding a field in Settings left the trip form
-// showing the old list until the screen was remounted.
+// One source now, for both account states: the local mirror. It is watched
+// rather than read once, via `onMirrorChanged` — which both a local write
+// (`saveFieldDefs`) and a delta pull fire — so a field added in Settings, or
+// added in a browser and pulled in while the screen stayed mounted, shows up
+// in the trip form without a remount.
 //
-// `setDefs` exists so a form that has just saved can show the new list without
-// waiting for a round trip; the store is still the thing that persisted it.
+// This used to hold a second path for linked users that re-seeded from
+// `/users/me`, with the account list serialized into a dependency key to spot
+// changes. That is gone with the storage change: there is no account list to
+// diverge from any more, and no fetch to fail, which is why `error` is gone
+// too — reading definitions can no longer depend on the network.
 import { useEffect, useState } from "react";
-import type { TripLogCustomFieldDef } from "@logjam/shared";
+import type { CustomFieldEntity, TripLogCustomFieldDef } from "@logjam/shared";
 
-import {
-  customFieldDefsOf,
-  fetchCurrentUser,
-  useApiQuery,
-  type CustomFieldEntity,
-} from "../api/queries";
-import { useAccountState } from "../auth/AccountStateContext";
 import { onMirrorChanged } from "../sync/syncDb";
-import { readLocalFieldDefs } from "./fieldDefsStore";
+import { loadFieldDefs } from "./fieldDefsStore";
 
 export type FieldDefsState = {
   defs: TripLogCustomFieldDef[];
-  /** Optimistic local update after a save. Does not persist — the store does. */
+  /** Optimistic local update after a save, so a form that just saved can show
+   *  the new list without waiting for the mirror notification to land. The
+   *  store is still the thing that persisted it. */
   setDefs: (next: TripLogCustomFieldDef[]) => void;
-  /** Why the ACCOUNT list couldn't be read. Always null for a guest. */
-  error: string | null;
 };
 
 export function useFieldDefs(entity: CustomFieldEntity): FieldDefsState {
-  const { accountState } = useAccountState();
-  const guest = accountState === "guest";
   const [defs, setDefs] = useState<TripLogCustomFieldDef[]>([]);
-  // Disabled for a guest: they have no account to 401 against, and a guaranteed
-  // failure per screen open is a battery cost (mobile/CLAUDE.md).
-  const userQuery = useApiQuery(fetchCurrentUser, "Couldn't load your fields.", !guest);
 
   useEffect(() => {
-    if (!guest) return;
     const read = () => {
-      readLocalFieldDefs(entity).then(setDefs).catch(console.error);
+      loadFieldDefs(entity).then(setDefs).catch(console.error);
     };
     read();
     return onMirrorChanged(read);
-  }, [entity, guest]);
+  }, [entity]);
 
-  // Re-seed on the VALUE, not on `user.id` — which never changes for a signed-in
-  // user, so defs edited on another device and pulled in by a refetch while the
-  // screen stayed mounted were silently dropped. The serialized list is the key
-  // because a refetch mints a fresh object even when nothing moved.
-  const accountDefsKey = userQuery.data
-    ? JSON.stringify(customFieldDefsOf(userQuery.data, entity))
-    : null;
-  useEffect(() => {
-    if (accountDefsKey == null) return;
-    setDefs(JSON.parse(accountDefsKey) as TripLogCustomFieldDef[]);
-  }, [accountDefsKey]);
-
-  return { defs, setDefs, error: guest ? null : userQuery.error };
+  return { defs, setDefs };
 }

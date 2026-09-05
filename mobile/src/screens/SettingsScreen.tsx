@@ -7,9 +7,11 @@
 // Notifications live on the user record, so they need both, and every one of
 // those rows had to carry its own "Needs an account" subtitle to say so. Split
 // by page, each page is one backend and can state that once (see
-// `NotificationSettingsScreen`). Custom-field definitions sit in between: an
-// account's are on the user record, a guest's are on the device
-// (`customFields/fieldDefsStore.ts`), so those rows gate on connection alone.
+// `NotificationSettingsScreen`). Custom-field definitions are DEVICE-side too:
+// they are rows in the local mirror written through the outbox
+// (`customFields/fieldDefsStore.ts`), so those rows never gate on anything —
+// they used to gate on connection, back when an account's list lived on the
+// user record.
 //
 // LAYOUT: a plain list, so per DESIGN.md §2 it keeps `ScreenScroll` and the
 // native header rather than being given a hero. There is no headline metric
@@ -29,7 +31,7 @@ import { type TripLogCustomFieldDef } from "@logjam/shared";
 
 import { type CustomFieldEntity } from "../api/queries";
 import { useAccountState } from "../auth/AccountStateContext";
-import { capabilityRowProps, fieldDefsBlockedReason } from "../auth/capabilities";
+import { capabilityRowProps } from "../auth/capabilities";
 import { CLIENT_VERSION } from "../config";
 import { CustomFieldForm, CustomFieldList } from "../customFields/CustomFieldsEditor";
 import { useFieldDefs } from "../customFields/useFieldDefs";
@@ -92,14 +94,6 @@ export function SettingsScreen({ onOpenPage }: { onOpenPage: (page: SettingsPage
     else canyonFields.setDefs(next);
   };
 
-  // Why the field rows can't be touched right now — offline with an account is
-  // one reason, a failed account fetch another, and a dead row with no reason is
-  // the state this must never render in (§8). A guest is never blocked: their
-  // list is on this phone.
-  const fieldsBlocked: string | undefined =
-    fieldDefsBlockedReason(accountState, online) ??
-    (tripFields.error ? "Couldn't reach your account" : undefined);
-
   return (
     <>
       <ScreenScroll>
@@ -126,16 +120,14 @@ export function SettingsScreen({ onOpenPage }: { onOpenPage: (page: SettingsPage
         <Row
           icon="tag"
           title="Trip fields"
-          subtitle={fieldsBlocked ?? fieldCountLabel(tripFields.defs.length)}
-          disabled={fieldsBlocked !== undefined}
+          subtitle={fieldCountLabel(tripFields.defs.length)}
           onPress={() => setSheet({ kind: "fields", entity: "tripLog" })}
           right={<Feather name="chevron-right" size={20} color={theme.textMuted} />}
         />
         <Row
           icon="tag"
           title="Canyon fields"
-          subtitle={fieldsBlocked ?? fieldCountLabel(canyonFields.defs.length)}
-          disabled={fieldsBlocked !== undefined}
+          subtitle={fieldCountLabel(canyonFields.defs.length)}
           onPress={() => setSheet({ kind: "fields", entity: "canyon" })}
           right={<Feather name="chevron-right" size={20} color={theme.textMuted} />}
         />
@@ -173,7 +165,6 @@ export function SettingsScreen({ onOpenPage }: { onOpenPage: (page: SettingsPage
           <CustomFieldList
             entity={sheet.entity}
             defs={defsFor(sheet.entity)}
-            online={online}
             onAdd={() => setSheet({ kind: "fieldForm", entity: sheet.entity, editing: null })}
             onEdit={(def) =>
               setSheet({ kind: "fieldForm", entity: sheet.entity, editing: def })
@@ -184,7 +175,6 @@ export function SettingsScreen({ onOpenPage }: { onOpenPage: (page: SettingsPage
           <CustomFieldForm
             entity={sheet.entity}
             defs={defsFor(sheet.entity)}
-            online={online}
             editing={sheet.editing}
             onSaved={(next, message) => {
               setDefsFor(sheet.entity, next);
