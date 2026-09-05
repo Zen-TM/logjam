@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
-import { API_URL, as, BOB_SUB, CAROL_SUB } from "./_actors";
+import { API_URL, as, BOB_SUB, CAROL_SUB, CANYON_TYPE_ID} from "./_actors";
 
 const BOB = as(BOB_SUB);
 
@@ -57,7 +57,7 @@ describe("GET /analytics (fake auth = alice)", () => {
     const placeRes = await request(API_URL)
       .post("/places")
       .set(AUTH)
-      .send({ name: `${TAG}-delta`, latitude: -33.7, longitude: 150.3 });
+      .send({ placeTypeId: CANYON_TYPE_ID, name: `${TAG}-delta`, latitude: -33.7, longitude: 150.3 });
     expect(placeRes.status).toBe(201);
     const placeId = placeRes.body.id as string;
     const tripRes = await request(API_URL)
@@ -81,7 +81,7 @@ describe("GET /analytics (fake auth = alice)", () => {
     const placeRes = await request(API_URL)
       .post("/places")
       .set(AUTH)
-      .send({ name: `${TAG}-iso`, latitude: -33.7, longitude: 150.3 });
+      .send({ placeTypeId: CANYON_TYPE_ID, name: `${TAG}-iso`, latitude: -33.7, longitude: 150.3 });
     expect(placeRes.status).toBe(201);
     const placeId = placeRes.body.id as string;
     const tripRes = await request(API_URL)
@@ -111,14 +111,14 @@ describe("GET /analytics (fake auth = alice)", () => {
     const placeA = await request(API_URL)
       .post("/places")
       .set(BOB)
-      .send({ name: `${TAG}-type-A`, latitude: -33.7, longitude: 150.3, numAbseils: 3 });
+      .send({ placeTypeId: CANYON_TYPE_ID, name: `${TAG}-type-A`, latitude: -33.7, longitude: 150.3, fieldValues: { num_abseils: 3 } });
     expect(placeA.status).toBe(201);
     const placeAId = placeA.body.id as string;
 
     const placeB = await request(API_URL)
       .post("/places")
       .set(BOB)
-      .send({ name: `${TAG}-type-B`, latitude: -33.7, longitude: 150.3, numAbseils: 5 });
+      .send({ placeTypeId: CANYON_TYPE_ID, name: `${TAG}-type-B`, latitude: -33.7, longitude: 150.3, fieldValues: { num_abseils: 5 } });
     expect(placeB.status).toBe(201);
     const placeBId = placeB.body.id as string;
 

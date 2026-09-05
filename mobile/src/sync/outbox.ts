@@ -9,6 +9,8 @@ import {
   isUuidV4,
   pickNextTrackColor,
   planOutboxEnqueue,
+  setFieldValues,
+  SYSTEM_FIELD_DEFS,
   validatePlacePayload,
   type CustomFieldEntity,
   type OutboxEntry,
@@ -511,30 +513,38 @@ export async function deleteCustomFieldDefLocal(id: string): Promise<void> {
 const PLACE_UPDATE_COLUMNS: Record<string, ColumnSpec> = {
   name: "name",
   notes: "notes",
-  quality: "quality",
-  hours: "hours",
-  numAbseils: "num_abseils",
-  longestAbseil: "longest_abseil",
-  vGrade: "v_grade",
-  aGrade: "a_grade",
-  commitment: "commitment",
   latitude: "latitude",
   longitude: "longitude",
+  placeTypeId: "place_type_id",
   altNames: {
     column: "alt_names_json",
     encode: (value) => JSON.stringify(value ?? []),
     decode: (raw) => JSON.parse((raw as string | null) ?? "[]"),
   },
-  // The place's free-form blob, which carries `customFields` (and `sources`,
-  // which only the web writes). Callers pass the WHOLE object — the server
-  // replaces it wholesale, so an edit that drops a key the web put there loses
-  // it. `PlaceEditSheet` spreads the place's existing attributes for that
-  // reason.
-  attributes: {
-    column: "attributes_json",
+  // Every type-specific value, INCLUDING what used to be the seven grade
+  // columns. Callers pass the WHOLE object — the server replaces it wholesale,
+  // so an edit that drops a key another client put there loses it. Use
+  // `setFieldValues` over the place's existing values rather than building a
+  // fresh object, which also keeps the internal `_sources` / `_attributes`
+  // entries that live in here now.
+  //
+  // `foreignFields` is deliberately ABSENT and must stay absent: it is written
+  // only by copy and by a type change, never by a user edit, and it is not in
+  // the server's PLACE_FIELDS allowlist either — an op carrying it is a 400.
+  fieldValues: {
+    column: "field_values_json",
     encode: (value) => JSON.stringify(value ?? {}),
     decode: (raw) => JSON.parse((raw as string | null) ?? "{}"),
   },
+};
+
+/** A place type's editable columns. Name, icon, colour and order — everything
+ *  a user can change about a category they made. */
+const PLACE_TYPE_UPDATE_COLUMNS: Record<string, ColumnSpec> = {
+  name: "name",
+  iconKey: "icon_key",
+  color: "color",
+  position: "position",
 };
 
 export async function updatePlaceLocal(
@@ -550,17 +560,13 @@ export type PlaceDraftFields = {
   name: string;
   latitude: number;
   longitude: number;
+  /** Required: a place with no type has no form and no tab. */
+  placeTypeId: string;
   altNames?: string[];
-  numAbseils?: number | null;
-  longestAbseil?: number | null;
-  vGrade?: number | null;
-  aGrade?: number | null;
-  commitment?: number | null;
-  quality?: number | null;
-  hours?: number | null;
   notes?: string | null;
-  /** Free-form blob; `customFields` holds the user's own field values. */
-  attributes?: Record<string, unknown>;
+  /** Type-specific values, keyed by definition key — the seven grades
+   *  included. Nulls are dropped rather than stored. */
+  fieldValues?: Record<string, unknown>;
 };
 
 /**
@@ -576,43 +582,43 @@ export async function createPlaceLocal(draft: PlaceDraftFields): Promise<string>
   const id = mintUuid();
   const now = new Date().toISOString();
   const altNames = draft.altNames ?? [];
-  const attributes = draft.attributes ?? {};
+  const fieldValues = setFieldValues({}, draft.fieldValues ?? {});
   const fields: Record<string, unknown> = {
     name: draft.name,
     latitude: draft.latitude,
     longitude: draft.longitude,
+    placeTypeId: draft.placeTypeId,
     altNames,
-    ...optionalNumbers(draft),
     ...(draft.notes != null && { notes: draft.notes }),
-    ...(Object.keys(attributes).length > 0 && { attributes }),
+    ...(Object.keys(fieldValues).length > 0 && { fieldValues }),
   };
 
-  const invalid = validatePlacePayload(fields, { requireCoords: true });
+  // The system definitions are compiled in, so this bound check works with no
+  // signal — which is the point: it stops a rejected op reaching the outbox
+  // from a gorge. A value under a USER definition is checked server-side.
+  const invalid = validatePlacePayload(fields, {
+    requireCoords: true,
+    defs: SYSTEM_FIELD_DEFS,
+  });
   if (invalid) throw new Error(invalid);
 
   const db = await getSyncDb();
   await withSyncTransaction(db, async () => {
     await db.runAsync(
       `INSERT INTO places
-         (id, sync_role, name, latitude, longitude, alt_names_json, num_abseils,
-          longest_abseil, v_grade, a_grade, commitment, quality, hours, notes,
-          attributes_json, forked_from_id, created_at, updated_at, extra_json,
-          dirty_fields_json)
-       VALUES (?, 'owner', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, NULL, ?)`,
+         (id, sync_role, name, latitude, longitude, alt_names_json,
+          place_type_id, notes, field_values_json, field_defs_snapshot_json,
+          foreign_fields_json, forked_from_id, created_at, updated_at,
+          extra_json, dirty_fields_json)
+       VALUES (?, 'owner', ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?, NULL, ?)`,
       id,
       draft.name,
       draft.latitude,
       draft.longitude,
       JSON.stringify(altNames),
-      draft.numAbseils ?? null,
-      draft.longestAbseil ?? null,
-      draft.vGrade ?? null,
-      draft.aGrade ?? null,
-      draft.commitment ?? null,
-      draft.quality ?? null,
-      draft.hours ?? null,
+      draft.placeTypeId,
       draft.notes ?? null,
-      JSON.stringify(attributes),
+      JSON.stringify(fieldValues),
       now,
       now,
       JSON.stringify(Object.keys(fields)),
@@ -630,25 +636,6 @@ export async function createPlaceLocal(draft: PlaceDraftFields): Promise<string>
   return id;
 }
 
-/** Only the numeric fields the caller actually set — an omitted grade must stay
- * absent from the op rather than being pushed as an explicit null. */
-function optionalNumbers(draft: PlaceDraftFields): Record<string, number> {
-  const keys = [
-    "numAbseils",
-    "longestAbseil",
-    "vGrade",
-    "aGrade",
-    "commitment",
-    "quality",
-    "hours",
-  ] as const;
-  const out: Record<string, number> = {};
-  for (const key of keys) {
-    const value = draft[key];
-    if (value != null) out[key] = value;
-  }
-  return out;
-}
 
 /**
  * Delete a place offline. Owner-only (the caller gates on syncRole): a
@@ -1097,6 +1084,7 @@ type UpdateTarget = { table: string; columns: Record<string, ColumnSpec> };
  */
 export const UPDATE_TARGETS: Record<SyncPushEntity, UpdateTarget | null> = {
   place: { table: "places", columns: PLACE_UPDATE_COLUMNS },
+  placeType: { table: "place_types", columns: PLACE_TYPE_UPDATE_COLUMNS },
   tripLog: { table: "trip_logs", columns: TRIP_UPDATE_COLUMNS },
   waypoint: { table: "waypoints", columns: WAYPOINT_UPDATE_COLUMNS },
   route: { table: "routes", columns: ROUTE_UPDATE_COLUMNS },
@@ -1201,6 +1189,7 @@ const UPDATE_COLUMNS_BY_ENTITY: Record<
   Record<string, ColumnSpec> | null
 > = {
   place: PLACE_UPDATE_COLUMNS,
+  placeType: PLACE_TYPE_UPDATE_COLUMNS,
   tripLog: TRIP_UPDATE_COLUMNS,
   waypoint: WAYPOINT_UPDATE_COLUMNS,
   route: ROUTE_UPDATE_COLUMNS,

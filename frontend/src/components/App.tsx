@@ -1677,6 +1677,7 @@ function App() {
       <SelectedPlacesDialog
         open={selectedAreaPlaceIds.length > 0}
         selectedPlaces={selectedAreaPlaces}
+        placeCustomFieldDefs={placeCustomFieldDefs}
         availablePlaces={allPlaces}
         ownedPlaceIds={ownedPlaceIds}
         friends={friends}

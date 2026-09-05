@@ -33,6 +33,7 @@ model User {
   sharedBy                PlaceShare[]        @relation("sharedBy")
   sharedWith              PlaceShare[]        @relation("sharedWith")
   places                  Place[]
+  placeTypes              PlaceType[]
   receivedFriendships     Friendship[]        @relation("addressee")
   sentFriendships         Friendship[]        @relation("requester")
   media                   Media[]
@@ -65,63 +66,146 @@ model User {
 /// which a shared record carrying values keyed by these definitions needs.
 ///
 /// The VALUES still live on the owning rows, keyed by `key`:
-/// `TripLog.customFields` and `Place.attributes.customFields`.
+/// `TripLog.customFields` and `Place.fieldValues`. A place value sits at the
+/// TOP level of `fieldValues` — it was nested under `attributes.customFields`
+/// before the places rework, and the forward migration hoists it.
 model CustomFieldDef {
-  id       String @id @default(uuid())
-  ownerId  String @map("owner_id")
-  owner    User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  id                String  @id @default(uuid())
+  /// Null = a SYSTEM definition (the seeded canyon / campsite fields), visible
+  /// to every user and not deletable. Ids pinned in shared/src/placeTypes.ts.
+  ownerId           String? @map("owner_id")
+  owner             User?   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   /// Which surface this field belongs to: "tripLog" or "place".
-  entity   String
+  entity            String
   /// Stable slug the stored VALUES are keyed by. Derived from the label once,
   /// at creation, and deliberately never re-derived on rename — re-deriving
   /// would orphan every value already stored under the old key.
-  key      String
-  label    String
+  key               String
+  label             String
   /// One of TripLogCustomFieldType: string | integer | float | date | boolean.
-  type     String
-  /// Optional inclusive bounds, numeric field types only. Both or neither.
+  type              String
+  /// Optional inclusive bounds, numeric field types only. EITHER, NEITHER OR
+  /// BOTH — they used to be both-or-neither, which the system defs cannot
+  /// satisfy: `hours`, `num_abseils` and `longest_abseil` are min-only. The
+  /// filter UI renders a double-ended slider only when both are present and
+  /// falls back to op+value otherwise.
   /// Float for both integer and float fields; integer-ness is enforced by
   /// `isTripLogCustomFieldDef`, which every write path runs.
-  min      Float?
-  max      Float?
+  min               Float?
+  max               Float?
   /// Display order within (owner, entity). The uiPreferences array carried
   /// this implicitly by index; rows need it stated.
-  position Int    @default(0)
+  position          Int     @default(0)
+  /// Applies to EVERY place type, including types created after this def.
+  ///
+  /// A boolean rather than a join row per type that exists today: join rows
+  /// would silently fail to apply to tomorrow's types, which is exactly the
+  /// parallel-list drift the root CLAUDE.md rule targets. Guard:
+  /// `appliesToAllTypes` in customFieldScope.unit.test.ts.
+  appliesToAllTypes Boolean @default(false) @map("applies_to_all_types")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  placeTypes CustomFieldDefPlaceType[]
+
   /// One definition per key per surface — the uniqueness `buildCustomFieldDef`
   /// checked in application code, now enforced by the database.
+  /// Needs NULLS NOT DISTINCT (raw SQL in the migration) or the system rows,
+  /// which sit at ownerId = null, are not covered at all.
   @@unique([ownerId, entity, key])
   /// Delta sync pages by (updatedAt, id) within an owner.
   @@index([ownerId, updatedAt])
   @@map("custom_field_defs")
 }
 
+/// A category of place, with the custom field definitions scoped to it.
+///
+/// `ownerId = null` means a SYSTEM type — Canyon, Campsite, Marker — and those
+/// rows are GLOBAL, one row shared by every user rather than a per-user copy.
+/// That is what lets a shared place resolve for its recipient with no
+/// reconciliation at all: the sender's Canyon type IS the recipient's.
+/// Ids are pinned in `shared/src/placeTypes.ts`; see its header for why they
+/// must be real UUIDv4s.
+///
+/// System types are UNDELETABLE. RopeWiki import writes reserved field keys, so
+/// a deletable Canyon type would let import write values nothing can render.
+model PlaceType {
+  id        String   @id @default(uuid())
+  /// Null = a system type, shared by every user.
+  ownerId   String?  @map("owner_id")
+  name      String
+  /// Platform-neutral key from a curated grid; each client maps it to its own
+  /// icon set (mobile draws Feather, web draws lucide). Curated rather than
+  /// free text, or a key resolves on one platform and not the other.
+  iconKey   String   @map("icon_key")
+  /// From a curated palette, not a free hex picker: scripts/wcag-contrast.mjs
+  /// asserts every marker colour clears 3:1 against the map background under
+  /// every theme scheme (WCAG 1.4.11), and an arbitrary user hex would destroy
+  /// that guarantee rather than fail it.
+  color     String
+  position  Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  owner     User?                     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  places    Place[]
+  fieldDefs CustomFieldDefPlaceType[]
+
+  /// Copy reconciliation matches an incoming type by NAME (§2.6 rule 1), so
+  /// this has to hold. Postgres treats NULLs as distinct in a unique index and
+  /// Prisma emits a plain UNIQUE, which would let a re-run migration insert a
+  /// second global "Canyon"; the migration adds NULLS NOT DISTINCT by raw SQL.
+  @@unique([ownerId, name])
+  @@index([ownerId, updatedAt])
+  @@map("place_types")
+}
+
+/// Scoping of a field definition to the place types that carry it. Not a sync
+/// entity of its own — the `customFieldDef` push op carries `placeTypeIds`, so
+/// a def created offline and scoped to two types can express that on the wire.
+model CustomFieldDefPlaceType {
+  defId       String @map("def_id")
+  placeTypeId String @map("place_type_id")
+
+  def       CustomFieldDef @relation(fields: [defId], references: [id], onDelete: Cascade)
+  placeType PlaceType      @relation(fields: [placeTypeId], references: [id], onDelete: Cascade)
+
+  @@id([defId, placeTypeId])
+  @@index([placeTypeId])
+  @@map("custom_field_def_place_types")
+}
+
 model Place {
   id               String          @id @default(uuid())
   ownerId          String          @map("owner_id")
+  placeTypeId      String          @map("place_type_id")
   name             String
   altNames         String[]        @default([])
   latitude         Float
   longitude        Float
-  numAbseils       Int?            @map("num_abseils")
-  longestAbseil    Float?          @map("longest_abseil_m")
   notes            String?
-  attributes       Json            @default("{}")
+  /// Type-specific values, keyed by `CustomFieldDef.key`. Replaces the seven
+  /// grade columns AND the free-form `attributes` blob. Values that were nested
+  /// at `attributes.customFields[key]` are HOISTED to the top level here — see
+  /// the migration; a flat merge would have left them at
+  /// `field_values.customFields.<key>` where nothing reads.
+  /// Keys starting with `_` are internal (`_sources`, `_attributes`) and cannot
+  /// collide with a user key: `makeCustomFieldKey` never produces one.
+  fieldValues      Json            @default("{}") @map("field_values")
+  /// Values that arrived on a COPY keyed by defs this owner does not have, or
+  /// were stranded by a type change. Rendered read-only, per-item adoptable.
+  /// OWNER-PRIVATE: never emitted on a delta row with syncRole "shared", and
+  /// absent from the push allowlist — only copy and type-change write it.
+  foreignFields    Json?           @map("foreign_fields")
   createdAt        DateTime        @default(now()) @map("created_at")
   updatedAt        DateTime        @updatedAt @map("updated_at")
   forkedFromId     String?         @map("forked_from_id")
   ropeWikiId       Int?            @map("ropewiki_id")
   ropeWikiSnapshot Json?           @map("ropewiki_snapshot")
-  vGrade           Int?            @map("v_grade")
-  aGrade           Int?            @map("a_grade")
-  commitment       Int?
-  quality          Float?
-  hours            Float?
   importKey        String?         @map("import_key")
   importBatchId    String?         @map("import_batch_id")
+  placeType        PlaceType       @relation(fields: [placeTypeId], references: [id])
   shares           PlaceShare[]
   forkedFrom       Place?          @relation("PlaceForks", fields: [forkedFromId], references: [id], onDelete: SetNull)
   forks            Place[]         @relation("PlaceForks")
@@ -134,8 +218,14 @@ model Place {
   route            Route?
 
   @@unique([ownerId, ropeWikiId])
-  @@unique([ownerId, importKey])
+  /// TYPE-SCOPED, deliberately. `placeImportKey()` derives from name + rounded
+  /// coords with no type input (lib/importKeys.ts), so a type-blind constraint
+  /// would 409 a Marker CSV row that happens to share a name and position with
+  /// a canyon. Matching is scoped within a type everywhere else too; the two
+  /// rules have to agree.
+  @@unique([ownerId, placeTypeId, importKey])
   @@index([ownerId])
+  @@index([ownerId, placeTypeId])
   @@index([ownerId, importBatchId])
   @@map("places")
 }

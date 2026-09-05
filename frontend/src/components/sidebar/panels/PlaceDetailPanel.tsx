@@ -1,4 +1,9 @@
 import { useState, useEffect, useMemo, useRef } from "react";
+import {
+  fieldValue,
+  numericFieldValue,
+  SOURCES_FIELD_KEY,
+} from "@logjam/shared";
 import { Pencil, TriangleAlert, X, Trash2 } from "lucide-react";
 import classes from "./PlaceDetailPanel.module.css";
 import { useToast } from "../../feedback/ToastProvider";
@@ -53,6 +58,14 @@ function joinWithAnd(names: string[]): string {
   if (names.length === 1) return names[0];
   if (names.length === 2) return `${names[0]} and ${names[1]}`;
   return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
+}
+
+/** The place's source links, or none. Lived at `attributes.sources` before the
+ *  rework; it is a reserved `_`-prefixed key in `fieldValues` now, which no
+ *  user-authored key can collide with. */
+function placeSources(place: { fieldValues?: unknown }): [string, string][] {
+  const stored = fieldValue(place.fieldValues, SOURCES_FIELD_KEY);
+  return Array.isArray(stored) ? (stored as [string, string][]) : [];
 }
 
 function PlaceDetailPanel({
@@ -421,31 +434,38 @@ function PlaceDetailPanel({
             <p>
               <b>Location:</b> {place.latitude.toFixed(4)}, {place.longitude.toFixed(4)}
             </p>
-            {place.quality != null && (
+            {/* The four remaining canyon scalars, read from fieldValues under
+                their reserved keys. Still hardcoded rather than rendered from
+                the type's definitions — see the ponytail note in PlaceDialog:
+                the generic field form is phase 6, with the rest of the web UI.
+                A place of a type that has no grades simply renders none of
+                these, with no special case. */}
+            {numericFieldValue(place.fieldValues, "quality") != null && (
               <p>
-                <b>Quality:</b> {place.quality}/5
+                <b>Quality:</b> {numericFieldValue(place.fieldValues, "quality")}/5
               </p>
             )}
-            {place.numAbseils != null && (
+            {numericFieldValue(place.fieldValues, "num_abseils") != null && (
               <p>
-                <b>Pitches:</b> {place.numAbseils}
+                <b>Pitches:</b> {numericFieldValue(place.fieldValues, "num_abseils")}
               </p>
             )}
-            {place.longestAbseil != null && (
+            {numericFieldValue(place.fieldValues, "longest_abseil") != null && (
               <p>
-                <b>Longest Pitch:</b> {place.longestAbseil}m
+                <b>Longest Pitch:</b>{" "}
+                {numericFieldValue(place.fieldValues, "longest_abseil")}m
               </p>
             )}
-            {place.hours != null && (
+            {numericFieldValue(place.fieldValues, "hours") != null && (
               <p>
-                <b>Hours:</b> {place.hours}
+                <b>Hours:</b> {numericFieldValue(place.fieldValues, "hours")}
               </p>
             )}
-            {place.attributes.sources && place.attributes.sources.length > 0 && (
+            {placeSources(place).length > 0 && (
               <div>
                 <b>Sources:</b>
                 <ul className={classes.sourcesList}>
-                  {place.attributes.sources.map(([label, url], i) => (
+                  {placeSources(place).map(([label, url], i) => (
                     <li key={i}>
                       {/* FEUI-012: only render http(s) as a link — a non-http
                           scheme (e.g. from data saved before the save-time
@@ -464,7 +484,7 @@ function PlaceDetailPanel({
             )}
             {placeCustomFieldDefs.map((def) => {
               const display = formatCustomFieldValue(
-                place.attributes.customFields?.[def.key],
+                fieldValue(place.fieldValues, def.key),
                 def.type,
               );
               if (display == null) return null;

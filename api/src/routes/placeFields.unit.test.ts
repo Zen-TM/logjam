@@ -11,6 +11,7 @@ import {
   PLACE_NAME_MAX_LENGTH,
   PLACE_MAX_ALT_NAMES,
 } from "./places";
+import { PLACE_FIELDS } from "./sync";
 
 // APIR-010. `validatePlacePayload` (shared) covers coordinates + numerics
 // only, so a mistyped name/altNames/notes/attributes used to pass validation
@@ -67,5 +68,60 @@ describe("validatePlaceTextFields", () => {
     expect(validatePlaceTextFields({ notes: 5 })).toMatch(/notes must be a string/);
     expect(validatePlaceTextFields({ attributes: [1, 2] })).toMatch(/attributes must be an object/);
     expect(validatePlaceTextFields({ attributes: "x" })).toMatch(/attributes must be an object/);
+  });
+});
+
+// ── the push allowlist, and what must never be in it ────────────────────────
+//
+// Plan §7.13. `foreignFields` records what the SENDER's definitions said about
+// values this owner has no definition for. It is written ONLY by copy and by a
+// place-type change, and its absence from this allowlist is what enforces
+// that: an unknown key is a per-op 400, so a client cannot write it at all.
+//
+// Without this test that rule is a comment, which the root CLAUDE.md forbids.
+describe("PLACE_FIELDS (the push allowlist)", () => {
+  it("does not admit foreignFields", () => {
+    expect(
+      PLACE_FIELDS.has("foreignFields"),
+      "foreignFields is owner-provenance, not user input — a client that could " +
+        "write it could forge where a value came from, or resurrect values the " +
+        "owner discarded",
+    ).toBe(false);
+  });
+
+  it("does not admit fieldDefsSnapshot either", () => {
+    // Derived live from the OWNER's definitions on the way out. A client
+    // writing it would be asserting what someone else's schema says.
+    expect(PLACE_FIELDS.has("fieldDefsSnapshot")).toBe(false);
+  });
+
+  it("admits exactly the fields a user can edit", () => {
+    expect([...PLACE_FIELDS].sort()).toEqual([
+      "altNames",
+      "fieldValues",
+      "latitude",
+      "longitude",
+      "name",
+      "notes",
+      "placeTypeId",
+    ]);
+  });
+
+  // The seven grade columns are gone from the wire entirely — a client still
+  // sending `vGrade` gets a 400 rather than a silent drop, which is the
+  // protocol's stated behaviour for an unknown key (§10.4).
+  it("no longer admits the grade columns", () => {
+    for (const legacy of [
+      "vGrade",
+      "aGrade",
+      "commitment",
+      "quality",
+      "hours",
+      "numAbseils",
+      "longestAbseil",
+      "attributes",
+    ]) {
+      expect(PLACE_FIELDS.has(legacy), `${legacy} is still accepted`).toBe(false);
+    }
   });
 });

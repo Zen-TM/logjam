@@ -1,7 +1,11 @@
 import { Router, Response } from "express";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
-import { CANYONING_TRIP_TYPE } from "@logjam/shared";
+import {
+  CANYONING_TRIP_TYPE,
+  numericFieldValue,
+  SYSTEM_PLACE_TYPE_IDS,
+} from "@logjam/shared";
 import { resolveUser } from "../lib/resolveUser";
 
 const router = Router();
@@ -24,8 +28,26 @@ const router = Router();
 // with no backfill. The tag branch is NOT vestigial: it catches the place-less
 // canyoning trip — "I did a place that isn't in my library" — which has no link
 // to match on and is otherwise counted only by displayName below.
-function isCanyoningTrip(trip: { places: unknown[]; types: string[] }): boolean {
-  return trip.places.length > 0 || trip.types.includes(CANYONING_TRIP_TYPE);
+// Now that a place can be a campsite or a marker, "has a linked place" is no
+// longer the same question as "was this canyoning" — a walk to a campsite would
+// otherwise land in Days Canyoning. The link arm is scoped to places of the
+// system CANYON type; the tag arm is unchanged and still catches the place-less
+// canyoning trip.
+//
+// Analytics stays canyoning-scoped on purpose (plan §8): "Days Canyoning" and
+// "Total abseils" have no meaningful generic form, and inventing per-type
+// aggregates is product design rather than migration.
+// ponytail: no per-type analytics. Upgrade path is a type selector on this
+// endpoint, once there is a second type anyone actually keeps stats for.
+function isCanyoningTrip(trip: {
+  places: { place: { placeTypeId: string } | null }[];
+  types: string[];
+}): boolean {
+  return (
+    trip.places.some(
+      (link) => link.place?.placeTypeId === SYSTEM_PLACE_TYPE_IDS.canyon,
+    ) || trip.types.includes(CANYONING_TRIP_TYPE)
+  );
 }
 
 router.get(
@@ -47,7 +69,7 @@ router.get(
           places: {
             select: {
               placeId: true,
-              place: { select: { numAbseils: true } },
+              place: { select: { placeTypeId: true, fieldValues: true } },
             },
           },
         },
@@ -86,9 +108,14 @@ router.get(
         // toward uniquePlaces and contributes its own abseil count.
         for (const link of t.places) {
           distinctPlaces.add("id:" + link.placeId);
-          if (link.place?.numAbseils != null) {
-            totalAbseils = (totalAbseils ?? 0) + link.place.numAbseils;
-          }
+          // The pitch count is a JSON key now, not a column, so the sum moves
+          // from Prisma into JS — which it already was: the canyoning filter
+          // above has always run here rather than in the query.
+          const abseils = numericFieldValue(
+            link.place?.fieldValues,
+            "num_abseils",
+          );
+          if (abseils != null) totalAbseils = (totalAbseils ?? 0) + abseils;
         }
       } else if (t.displayName) {
         // Place-less trip with a label — counted by name for continuity with

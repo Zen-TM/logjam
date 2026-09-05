@@ -21,12 +21,16 @@ import {
   coerceFieldValue,
   mediaCategory,
   buildCustomFieldDef,
-  PLACE_NUMERIC_CONSTRAINTS,
+  fieldValue,
+  numericFieldValue,
+  setFieldValues as withFieldValues,
+  SOURCES_FIELD_KEY,
+  SYSTEM_FIELD_DEFS,
+  SYSTEM_PLACE_TYPE_IDS,
   LATITUDE_RANGE,
   LONGITUDE_RANGE,
   isValidLatitude,
   isValidLongitude,
-  type PlaceNumericFieldName,
 } from "@logjam/shared";
 import { numericFieldError, type NumericFieldConstraints } from "../../numberInput";
 import ValidatedNumberField from "./ValidatedNumberField";
@@ -72,12 +76,32 @@ const COMMITMENTS = [
 
 type Source = { label: string; url: string };
 
-// Adapt a shared place constraint (max: number | null) to the frontend field
-// shape (max?: number). Keeps the numeric ranges sourced from @logjam/shared.
-function fieldConstraints(name: PlaceNumericFieldName): NumericFieldConstraints {
-  const c = PLACE_NUMERIC_CONSTRAINTS[name];
-  return { integer: c.integer, min: c.min, max: c.max ?? undefined };
+// Adapt a system field definition's bounds to the frontend field shape. The
+// hardcoded PLACE_NUMERIC_CONSTRAINTS table this used to read is gone — the
+// bounds now live on the DEFINITIONS, which is the only place they are declared.
+/** A field value as the string an input wants, or "" when unset. */
+function stringFieldValueOf(place: TPlace, key: string): string {
+  const value = fieldValue(place.fieldValues, key);
+  return value != null ? String(value) : "";
 }
+
+function fieldConstraints(key: string): NumericFieldConstraints {
+  const def = SYSTEM_FIELD_DEFS.find((d) => d.key === key);
+  if (!def) throw new Error(`no system field definition keyed ${key}`);
+  return {
+    integer: def.type === "integer",
+    min: def.min ?? undefined,
+    max: def.max ?? undefined,
+  };
+}
+
+// ponytail: this dialog still writes CANYONS ONLY, and the seven grade inputs
+// below are still hardcoded rather than rendered from the chosen type's
+// definitions. The web UI is phase 6 of the places rework, where the type
+// picker and the generic field form land together with the type-management
+// screens they need to sit beside; doing half of it here would mean a picker
+// with nothing to pick. Until then the web creates canyons and the phone
+// creates anything — stated so the gap is a decision, not an oversight.
 
 const LAT_CONSTRAINTS: NumericFieldConstraints = {
   min: LATITUDE_RANGE.min,
@@ -195,23 +219,25 @@ function PlaceDialog({
       initialAltNames = place.altNames.join(", ");
       initialLatitude = String(place.latitude);
       initialLongitude = String(place.longitude);
-      initialNumAbseils = place.numAbseils != null ? String(place.numAbseils) : "";
-      initialLongestAbseil =
-        place.longestAbseil != null ? String(place.longestAbseil) : "";
       initialNotes = place.notes ?? "";
-      initialVGrade = place.vGrade ?? "";
-      initialAGrade = place.aGrade ?? "";
-      initialCommitment = place.commitment ?? "";
-      initialQuality = place.quality != null ? String(place.quality) : "";
-      initialHours = place.hours != null ? String(place.hours) : "";
-      initialSources = (place.attributes.sources ?? []).map(([label, url]) => ({
-        label,
-        url,
-      }));
-      // Populate existing custom field values as strings
+      initialNumAbseils = stringFieldValueOf(place, "num_abseils");
+      initialLongestAbseil = stringFieldValueOf(place, "longest_abseil");
+      initialVGrade = numericFieldValue(place.fieldValues, "v_grade") ?? "";
+      initialAGrade = numericFieldValue(place.fieldValues, "a_grade") ?? "";
+      initialCommitment = numericFieldValue(place.fieldValues, "commitment") ?? "";
+      initialQuality = stringFieldValueOf(place, "quality");
+      initialHours = stringFieldValueOf(place, "hours");
+      const storedSources = place.fieldValues?.[SOURCES_FIELD_KEY];
+      initialSources = (Array.isArray(storedSources)
+        ? (storedSources as [string, string][])
+        : []
+      ).map(([label, url]) => ({ label, url }));
+      // Existing field values as strings. Reads the TOP level of fieldValues —
+      // these used to be nested under `attributes.customFields`, and the
+      // forward migration hoisted them.
       const vals: Record<string, string> = {};
       for (const def of customFieldDefs) {
-        const raw = place.attributes.customFields?.[def.key];
+        const raw = fieldValue(place.fieldValues, def.key);
         vals[def.key] = raw != null ? String(raw) : "";
       }
       initialFieldValues = vals;
@@ -349,6 +375,10 @@ function PlaceDialog({
       name: name.trim(),
       latitude: parsedLat,
       longitude: parsedLng,
+      // A media draft is always a new place, so there is no existing type to
+      // carry over. See the ponytail note above: the web creates canyons until
+      // phase 6 gives it a type picker.
+      placeTypeId: SYSTEM_PLACE_TYPE_IDS.canyon,
     })
       .then((created) => {
         setDraftPlaceId(created.id);
@@ -479,6 +509,10 @@ function PlaceDialog({
         customFields[def.key] = coerceFieldValue(getFieldValue(def.key), def.type);
       }
 
+      // The seven grades are FIELD VALUES now, keyed by the system definitions.
+      // `setFieldValues` drops the empty ones rather than storing nulls: a
+      // stored null renders as a filled-in-but-blank field and satisfies a
+      // "has a value" filter.
       const data = {
         name: name.trim(),
         altNames: altNames
@@ -487,19 +521,19 @@ function PlaceDialog({
           .filter(Boolean),
         latitude: parsedLat,
         longitude: parsedLng,
-        numAbseils: numAbseils ? parseInt(numAbseils) : null,
-        longestAbseil: longestAbseil ? parseFloat(longestAbseil) : null,
-        vGrade: vGrade !== "" ? (vGrade as number) : null,
-        aGrade: aGrade !== "" ? (aGrade as number) : null,
-        commitment: commitment !== "" ? (commitment as number) : null,
-        quality: quality ? parseFloat(quality) : null,
-        hours: hours ? parseFloat(hours) : null,
+        placeTypeId: place?.placeTypeId ?? SYSTEM_PLACE_TYPE_IDS.canyon,
         notes: notes || null,
-        attributes: {
-          ...place?.attributes,
-          sources: cleanSources.length > 0 ? cleanSources : undefined,
-          customFields,
-        },
+        fieldValues: withFieldValues(place?.fieldValues ?? {}, {
+          ...customFields,
+          num_abseils: numAbseils ? parseInt(numAbseils) : null,
+          longest_abseil: longestAbseil ? parseFloat(longestAbseil) : null,
+          v_grade: vGrade !== "" ? (vGrade as number) : null,
+          a_grade: aGrade !== "" ? (aGrade as number) : null,
+          commitment: commitment !== "" ? (commitment as number) : null,
+          quality: quality ? parseFloat(quality) : null,
+          hours: hours ? parseFloat(hours) : null,
+          [SOURCES_FIELD_KEY]: cleanSources.length > 0 ? cleanSources : null,
+        }),
       };
 
       if (isEdit) {

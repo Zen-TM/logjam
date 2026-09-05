@@ -19,6 +19,20 @@ export const redactPaths = [
   'req.body.place.longitude',
   'req.body.place.name',
   'req.body.place.notes',
+  // FIELD VALUES. A user-authored field LABEL names the thing it describes
+  // ("Which slot for the Ranon exit") and its VALUE is whatever they typed, so
+  // both are as sensitive as `notes` — and no wildcard above reaches them: the
+  // `*.latitude` family matches coordinate KEYS by name, and a field value can
+  // be keyed anything at all. The whole object is censored rather than any key
+  // inside it, because the keys themselves are user-authored.
+  //
+  // `foreignFields` is the same data arriving from someone else's place, which
+  // makes it a second person's field labels in one user's log line.
+  'req.body.fieldValues',
+  'req.body.foreignFields',
+  'req.body.place.fieldValues',
+  'req.body.rows[*].data.fieldValues',
+  'req.body.places[*].fieldValues',
   // Generic wildcards for nested payloads
   '*.latitude',
   '*.longitude',

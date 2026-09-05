@@ -101,16 +101,40 @@ export const SYNC_TABLES: readonly TableSchema[] = [
       latitude: "REAL NOT NULL",
       longitude: "REAL NOT NULL",
       alt_names_json: "TEXT",
-      num_abseils: "INTEGER",
-      longest_abseil: "REAL",
-      v_grade: "INTEGER",
-      a_grade: "INTEGER",
-      commitment: "INTEGER",
-      quality: "REAL",
-      hours: "REAL",
+      place_type_id: "TEXT NOT NULL DEFAULT ''",
       notes: "TEXT",
-      attributes_json: "TEXT",
+      // The seven grade columns and `attributes_json` collapsed into ONE JSON
+      // column, keyed by definition key. That is the whole shape change of the
+      // rework on this side: a campsite and a canyon are the same row now, and
+      // the difference is which keys are in here.
+      field_values_json: "TEXT",
+      // The definitions that label the values above, for a place of a type the
+      // VIEWER does not own — a place shared with them. Absent otherwise,
+      // because they hold the definitions themselves.
+      field_defs_snapshot_json: "TEXT",
+      // OWNER-PRIVATE. Never arrives on a shared row (the server strips it), so
+      // a value here always belongs to this account.
+      foreign_fields_json: "TEXT",
       forked_from_id: "TEXT",
+      created_at: "TEXT",
+      updated_at: "TEXT",
+      extra_json: "TEXT",
+      dirty_fields_json: "TEXT",
+    },
+  },
+  {
+    // Place TYPES: the user's own plus the SYSTEM ones (owner_id null), which
+    // are global rows shared by every account. A client must not read a null
+    // owner as "mine" — it means "everyone's, and not editable".
+    name: "place_types",
+    kind: "mirror",
+    columns: {
+      id: "TEXT PRIMARY KEY",
+      owner_id: "TEXT",
+      name: "TEXT NOT NULL",
+      icon_key: "TEXT NOT NULL",
+      color: "TEXT NOT NULL",
+      position: "INTEGER NOT NULL DEFAULT 0",
       created_at: "TEXT",
       updated_at: "TEXT",
       extra_json: "TEXT",

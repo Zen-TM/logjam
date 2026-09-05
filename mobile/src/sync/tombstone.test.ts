@@ -62,8 +62,12 @@ describe("a tombstone type this build does not know", () => {
   });
 
   it("issues no statement at all", async () => {
+    // `placeType` used to stand in for "an entity a NEWER server knows and this
+    // build does not". It is a real entity now, so the stand-in has to be
+    // something genuinely unknown — which is the point of the test, not the
+    // particular word.
     const orphaned = await applyTombstone(db as never, {
-      type: "placeType",
+      type: "somethingFromTheFuture",
       id: "from-a-newer-server",
     });
     expect(orphaned).toEqual([]);

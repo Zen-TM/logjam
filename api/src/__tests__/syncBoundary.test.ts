@@ -8,6 +8,7 @@ import {
   BOB_ID,
   SHARED_PLACE_ID,
   as,
+  CANYON_TYPE_ID
 } from "./_actors";
 
 // Stage 8 §11 mandatory privacy-boundary suite for GET /sync/delta.
@@ -170,7 +171,7 @@ describe("sync delta — revocation signals", () => {
     const created = await request(API_URL)
       .post("/places")
       .set(as(ALICE_SUB))
-      .send({ name: "Tombstone place", latitude: -33.69, longitude: 150.29 });
+      .send({ placeTypeId: CANYON_TYPE_ID, name: "Tombstone place", latitude: -33.69, longitude: 150.29 });
     expect(created.status).toBe(201);
     const placeId = created.body.id as string;
     const share = await request(API_URL)

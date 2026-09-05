@@ -44,6 +44,27 @@ export function customFieldDefDeleteTombstones(args: {
   ];
 }
 
+/**
+ * DELETE /place-types/:id. Owner-private, so no fan-out: a type is never
+ * shared, and a place OF that type reaches a sharee carrying its type id
+ * without the sharee ever holding the type row itself.
+ *
+ * The definitions the delete cascades away carry their own tombstones — this
+ * one is only for the type row.
+ */
+export function placeTypeDeleteTombstones(args: {
+  ownerId: string;
+  placeTypeId: string;
+}): TombstoneRow[] {
+  return [
+    {
+      userId: args.ownerId,
+      entityType: "placeType",
+      entityId: args.placeTypeId,
+    },
+  ];
+}
+
 /** DELETE /trips/:id (and each row of the bulk cascade): owner forgets the
  * trip and its media. Trips are owner-private, so there is no fan-out. */
 export function tripDeleteTombstones(args: {

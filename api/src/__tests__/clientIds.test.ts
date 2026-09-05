@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
 import { randomUUID } from "crypto";
-import { API_URL, ALICE_SUB, BOB_SUB, as } from "./_actors";
+import { API_URL, ALICE_SUB, BOB_SUB, as, CANYON_TYPE_ID} from "./_actors";
 
 // Client-supplied create ids (Stage 8 §3.5 — outbox idempotency backbone).
 // Uniform rules under test: strict UUIDv4 or 400; own-id replay → 200 with the
@@ -21,7 +21,7 @@ describe("client-supplied ids — places", () => {
     const created = await request(API_URL)
       .post("/places")
       .set(as(ALICE_SUB))
-      .send({ id, name: "Client-id place", latitude: -33.61, longitude: 150.21 });
+      .send({ placeTypeId: CANYON_TYPE_ID, id, name: "Client-id place", latitude: -33.61, longitude: 150.21 });
     expect(created.status).toBe(201);
     expect(created.body.id).toBe(id);
 
@@ -29,7 +29,7 @@ describe("client-supplied ids — places", () => {
     const replay = await request(API_URL)
       .post("/places")
       .set(as(ALICE_SUB))
-      .send({ id, name: "Different name", latitude: -33.62, longitude: 150.22 });
+      .send({ placeTypeId: CANYON_TYPE_ID, id, name: "Different name", latitude: -33.62, longitude: 150.22 });
     expect(replay.status).toBe(200);
     expect(replay.body.id).toBe(id);
     expect(replay.body.name).toBe("Client-id place");
@@ -38,7 +38,7 @@ describe("client-supplied ids — places", () => {
     const foreign = await request(API_URL)
       .post("/places")
       .set(as(BOB_SUB))
-      .send({ id, name: "Hijack", latitude: -33.63, longitude: 150.23 });
+      .send({ placeTypeId: CANYON_TYPE_ID, id, name: "Hijack", latitude: -33.63, longitude: 150.23 });
     expect(foreign.status).toBe(404);
 
     await request(API_URL).delete(`/places/${id}`).set(as(ALICE_SUB));
@@ -48,7 +48,7 @@ describe("client-supplied ids — places", () => {
     const res = await request(API_URL)
       .post("/places")
       .set(as(ALICE_SUB))
-      .send({ id: "not-a-uuid", name: "x", latitude: -33.61, longitude: 150.21 });
+      .send({ placeTypeId: CANYON_TYPE_ID, id: "not-a-uuid", name: "x", latitude: -33.61, longitude: 150.21 });
     expect(res.status).toBe(400);
   });
 });
@@ -115,7 +115,7 @@ describe("client-supplied ids — media presign/confirm", () => {
     const place = await request(API_URL)
       .post("/places")
       .set(as(ALICE_SUB))
-      .send({ name: "Media-id place", latitude: -33.67, longitude: 150.27 });
+      .send({ placeTypeId: CANYON_TYPE_ID, name: "Media-id place", latitude: -33.67, longitude: 150.27 });
     expect(place.status).toBe(201);
     const placeId = place.body.id as string;
 
@@ -180,7 +180,7 @@ describe("client-supplied ids — media presign/confirm", () => {
     const bobPlace = await request(API_URL)
       .post("/places")
       .set(as(BOB_SUB))
-      .send({ name: "Bob target", latitude: -33.68, longitude: 150.28 });
+      .send({ placeTypeId: CANYON_TYPE_ID, name: "Bob target", latitude: -33.68, longitude: 150.28 });
     expect(bobPlace.status).toBe(201);
 
     const foreignPresign = await request(API_URL)

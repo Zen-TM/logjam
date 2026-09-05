@@ -9,6 +9,7 @@
 import {
   collectDirtyFields,
   parseSyncDeltaPlaceRow,
+  parseSyncDeltaPlaceTypeRow,
   parseSyncDeltaCustomFieldDefRow,
   parseSyncDeltaFriendshipRow,
   parseSyncDeltaMediaRow,
@@ -178,6 +179,12 @@ export async function runDeltaPull(currentUserId: string): Promise<DeltaPullResu
       customFieldDefs: parsedRows(
         raw.customFieldDefs ?? [],
         parseSyncDeltaCustomFieldDefRow,
+        skipped,
+      ),
+      // Types lead the order, ahead of the definitions that point at them.
+      placeTypes: parsedRows(
+        raw.placeTypes ?? [],
+        parseSyncDeltaPlaceTypeRow,
         skipped,
       ),
       places: parsedRows(raw.places ?? [], parseSyncDeltaPlaceRow, skipped),

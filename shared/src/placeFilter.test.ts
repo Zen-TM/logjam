@@ -15,6 +15,7 @@ import {
 } from "./placeFilter.js";
 import type { PlaceFilterFields, PlaceFilters as TFilters } from "./placeFilter.js";
 import type { TripLogCustomFieldDef } from "./tripLogFields.js";
+import { SYSTEM_PLACE_TYPE_IDS } from "./placeTypes.js";
 
 // Named TPlace here because these cases were written against the web place
 // type; the predicate only ever reads the structural subset.
@@ -31,20 +32,37 @@ function place(
     latitude: -33.5,
     longitude: 150.3,
     altNames: [],
-    vGrade: 3,
-    aGrade: 3,
-    commitment: 3,
-    quality: 3,
-    numAbseils: 8,
-    longestAbseil: 30,
-    hours: 4,
+    placeTypeId: SYSTEM_PLACE_TYPE_IDS.canyon,
+    // The seven graded axes are ordinary field VALUES now — the predicate
+    // reads them through the same path as a user's own field, which is the
+    // point of the collapse.
+    fieldValues: {
+      v_grade: 3,
+      a_grade: 3,
+      commitment: 3,
+      quality: 3,
+      num_abseils: 8,
+      longest_abseil: 30,
+      hours: 4,
+    },
     notes: null,
     ropeWikiId: null,
-    attributes: {},
     createdAt: "2026-01-15T00:00:00.000Z",
     updatedAt: "2026-06-01T00:00:00.000Z",
     ...overrides,
   } as unknown as TPlace;
+}
+
+/** A fixture place with some of its field values overridden. */
+function placeWith(
+  values: Record<string, unknown>,
+  overrides: Partial<{ [K in keyof TPlace]: TPlace[K] | null }> = {},
+): TPlace {
+  const base = place(overrides);
+  return {
+    ...base,
+    fieldValues: { ...(base.fieldValues as object), ...values },
+  } as TPlace;
 }
 
 function filters(overrides: Partial<TFilters> = {}): TFilters {
@@ -150,12 +168,33 @@ describe("passesFilters — completion", () => {
   });
 
   it("ANDs with other filters rather than replacing them", () => {
-    const f = filters({ completion: "not_done", v_grade: [1, 3] });
-    expect(passesFilters(place({ vGrade: 2, _count: { tripLogLinks: 0, shares: 0 } }), f, true)).toBe(true);
+    const f = filters({
+      completion: "not_done",
+      custom: { v_grade: { kind: "numberRange", range: [1, 3] } },
+    });
+    expect(
+      passesFilters(
+        placeWith({ v_grade: 2 }, { _count: { tripLogLinks: 0, shares: 0 } }),
+        f,
+        true,
+      ),
+    ).toBe(true);
     // right grade, but already done
-    expect(passesFilters(place({ vGrade: 2, _count: { tripLogLinks: 1, shares: 0 } }), f, true)).toBe(false);
+    expect(
+      passesFilters(
+        placeWith({ v_grade: 2 }, { _count: { tripLogLinks: 1, shares: 0 } }),
+        f,
+        true,
+      ),
+    ).toBe(false);
     // not done, but out of grade range
-    expect(passesFilters(place({ vGrade: 6, _count: { tripLogLinks: 0, shares: 0 } }), f, true)).toBe(false);
+    expect(
+      passesFilters(
+        placeWith({ v_grade: 6 }, { _count: { tripLogLinks: 0, shares: 0 } }),
+        f,
+        true,
+      ),
+    ).toBe(false);
   });
 });
 
@@ -309,19 +348,30 @@ describe("activeFilterCount", () => {
   });
 
   it("counts each active filter exactly once", () => {
+    // The graded axes count as CUSTOM entries now — they are custom fields.
     const f = filters({
-      v_grade: [2, 5],
       ownership: "owned",
       ropewiki: "linked",
       created_at: ["2026-01-01", null],
-      hours: ["More than", 3],
+      placeTypeId: SYSTEM_PLACE_TYPE_IDS.canyon,
+      custom: {
+        v_grade: { kind: "numberRange", range: [2, 5] },
+        hours: { kind: "number", op: "More than", value: 3 },
+      },
     });
-    expect(activeFilterCount(f)).toBe(5);
+    expect(activeFilterCount(f)).toBe(6);
   });
 
-  it("does not count a full-range slider or an 'Any' threshold", () => {
-    const f = filters({ v_grade: [1, 7], hours: ["Any", 0] });
-    expect(activeFilterCount(f)).toBe(0);
+  // An inactive custom filter is ABSENT from the map rather than present at its
+  // full span: a range set to the whole span is committed as a deletion by the
+  // UI, so "is it active" is `key in custom` and nothing has to know the span.
+  // That is what let the hardcoded bounds table go.
+  it("does not count a custom filter that was cleared", () => {
+    expect(activeFilterCount(filters({ custom: {} }))).toBe(0);
+  });
+
+  it("does not count an unset type filter", () => {
+    expect(activeFilterCount(filters({ placeTypeId: null }))).toBe(0);
   });
 
   it("does not count name or include_unknowns", () => {
@@ -351,7 +401,7 @@ describe("filter keys — counted and uncounted partition the type", () => {
 
 describe("passesFilters — custom fields", () => {
   function withCustom(customFields: Record<string, unknown>): TPlace {
-    return place({ attributes: { customFields } });
+    return placeWith(customFields);
   }
 
   it("text filter matches case-insensitive substring", () => {
@@ -411,7 +461,7 @@ describe("passesFilters — custom fields", () => {
 describe("activeFilterCount — custom fields", () => {
   it("counts each active custom filter once", () => {
     const f = filters({
-      v_grade: [2, 5],
+      ownership: "owned",
       custom: {
         water: { kind: "text", value: "high" },
         size: { kind: "number", op: "More than", value: 3 },
@@ -504,26 +554,26 @@ describe("comparePlaces", () => {
 
   it("sorts grade easiest first, V before A", () => {
     const rows = [
-      place({ name: "HardV", vGrade: 5, aGrade: 1 }),
-      place({ name: "EasyV", vGrade: 3, aGrade: 4 }),
-      place({ name: "SameVWetA", vGrade: 3, aGrade: 5 }),
+      placeWith({ v_grade: 5, a_grade: 1 }, { name: "HardV" }),
+      placeWith({ v_grade: 3, a_grade: 4 }, { name: "EasyV" }),
+      placeWith({ v_grade: 3, a_grade: 5 }, { name: "SameVWetA" }),
     ];
     expect(sorted(rows, "grade")).toEqual(["EasyV", "SameVWetA", "HardV"]);
   });
 
   it("sorts quality best first and puts an unrated place last, not first", () => {
     const rows = [
-      place({ name: "Unrated", quality: null }),
-      place({ name: "Good", quality: 4 }),
-      place({ name: "Best", quality: 5 }),
+      placeWith({ quality: null }, { name: "Unrated" }),
+      placeWith({ quality: 4 }, { name: "Good" }),
+      placeWith({ quality: 5 }, { name: "Best" }),
     ];
     expect(sorted(rows, "quality")).toEqual(["Best", "Good", "Unrated"]);
   });
 
   it("falls back to name so the order is total, not arbitrary", () => {
     const rows = [
-      place({ name: "Beta", vGrade: 3, aGrade: 3 }),
-      place({ name: "Alpha", vGrade: 3, aGrade: 3 }),
+      placeWith({ v_grade: 3, a_grade: 3 }, { name: "Beta" }),
+      placeWith({ v_grade: 3, a_grade: 3 }, { name: "Alpha" }),
     ];
     expect(sorted(rows, "grade")).toEqual(["Alpha", "Beta"]);
   });

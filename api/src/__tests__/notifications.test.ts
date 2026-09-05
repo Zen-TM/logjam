@@ -1,7 +1,7 @@
 import { describe, it, expect, afterAll } from "vitest";
 import request from "supertest";
 import prisma from "../services/prisma";
-import { ALICE_ID, BOB_ID, NONEXISTENT_ID } from "./_actors";
+import { ALICE_ID, BOB_ID, NONEXISTENT_ID, CANYON_TYPE_ID} from "./_actors";
 
 // Requires `make dev` running with AUTH_MODE=fake (requests = seeded alice).
 // Each test creates its own notification rows directly via Prisma (the API
@@ -60,6 +60,7 @@ describe("GET /notifications (fake auth = alice)", () => {
   it("resolves placeName and sharedByUsername for a live place_shared notification", async () => {
     const place = await prisma.place.create({
       data: {
+        placeTypeId: CANYON_TYPE_ID,
         ownerId: BOB_ID,
         name: "CH-002 notification place",
         latitude: -33.7,

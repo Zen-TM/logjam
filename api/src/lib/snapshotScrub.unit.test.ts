@@ -66,12 +66,21 @@ function textColumns(model: string): string[] {
     if (!field) continue;
     const [, name] = field;
     if (name === "id" || /Id$/.test(name)) continue;
-    columns.push(/@map\("([^"]+)"\)/.exec(line)?.[1] ?? snake(name));
+    columns.push(/@map\("([^"]+)"\)/.exec(line)?.[1] ?? columnName(name));
   }
   return columns;
 }
 
-const snake = (s: string) => s.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
+/**
+ * The DB column for a field with no `@map`.
+ *
+ * Prisma does NOT snake_case automatically — an unmapped `altNames` is a column
+ * literally called "altNames". This helper used to snake_case it, which made
+ * the guard agree with a scrub that named a column that does not exist: both
+ * sides shared one wrong assumption, so the test passed and the scrub would
+ * have aborted on the next snapshot. Verbatim is the rule.
+ */
+const columnName = (field: string) => field;
 
 /** (table, column) pairs the scrub assigns to. */
 function scrubbedColumns(): Set<string> {
@@ -81,7 +90,12 @@ function scrubbedColumns(): Set<string> {
     /^UPDATE\s+(\w+)\s*\n?\s*SET([\s\S]*?);$/gim,
   );
   for (const [, table, assignments] of statements) {
-    for (const [, column] of assignments.matchAll(/(?:^|,)\s*(\w+)\s*=/g)) {
+    // A column may be double-quoted, and one of them has to be: Prisma leaves
+    // an unmapped field name verbatim, so `altNames` is a camelCase identifier
+    // that Postgres folds to lowercase unless it is quoted.
+    for (const [, column] of assignments.matchAll(
+      /(?:^|,)\s*"?([A-Za-z_]\w*)"?\s*=/g,
+    )) {
       pairs.add(`${table}.${column}`);
     }
   }
@@ -152,7 +166,7 @@ function allColumns(model: string): string[] {
   for (const line of modelBody(model).split("\n")) {
     const field = /^\s{2}(\w+)\s+(\w+)(\[\])?(\?)?(?:\s|$)/.exec(line);
     if (!field) continue;
-    columns.push(/@map\("([^"]+)"\)/.exec(line)?.[1] ?? snake(field[1]));
+    columns.push(/@map\("([^"]+)"\)/.exec(line)?.[1] ?? columnName(field[1]));
   }
   return columns;
 }

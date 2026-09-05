@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
-import { API_URL, ALICE_SUB, BOB_SUB, CAROL_SUB, BOB_ID, as } from "./_actors";
+import { API_URL, ALICE_SUB, BOB_SUB, CAROL_SUB, BOB_ID, as, CANYON_TYPE_ID} from "./_actors";
 
 // Direct per-item sharing (Share model + /shares) from the RECIPIENT's side —
 // the perspective mocked-Prisma unit tests structurally cannot reach, and the
@@ -251,7 +251,7 @@ describe("revoke with a surviving place arm", () => {
     const res = await request(API_URL)
       .post("/places")
       .set(as(sub))
-      .send({ name, latitude: -33.7, longitude: 150.3 });
+      .send({ placeTypeId: CANYON_TYPE_ID, name, latitude: -33.7, longitude: 150.3 });
     expect(res.status).toBe(201);
     return res.body.id as string;
   }

@@ -9,6 +9,7 @@ import {
   CAROL_ID,
   NONEXISTENT_ID,
   as,
+  CANYON_TYPE_ID
 } from "./_actors";
 
 // Revocation, from the side that loses access. Three findings live here:
@@ -234,7 +235,7 @@ describe("revoked place share stops resolving the place name (APIR-012)", () => 
       .post("/places")
       .set(as(ALICE_SUB))
       .set(CLIENT)
-      .send({ name: "revoke-notification-probe", latitude: -33.4, longitude: 150.4 });
+      .send({ placeTypeId: CANYON_TYPE_ID, name: "revoke-notification-probe", latitude: -33.4, longitude: 150.4 });
     expect(place.status).toBe(201);
     const placeId = place.body.id as string;
 

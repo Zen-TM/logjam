@@ -10,11 +10,19 @@
 //    tombstone) — deliberately indistinguishable.
 // 4. Logging: counts and cursor timestamps only — never row contents.
 import { Router, Response, NextFunction } from "express";
-import { Prisma } from "@prisma/client";
+import { Prisma, type Place } from "@prisma/client";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import { readMediaMetadata } from "@logjam/shared";
 import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
+import {
+  assertValidPlaceType,
+  createPlaceType,
+  defsForPlaceType,
+  deletePlaceType,
+  requireOwnPlaceType,
+  resolvePlaceTypeId,
+} from "../lib/placeTypes";
 import { getEnv } from "../lib/env";
 import { logger } from "../lib/logger";
 import { resolveUser } from "../lib/resolveUser";
@@ -32,7 +40,9 @@ import {
   SYNC_PUSH_MAX_OPS,
   SYNC_PUSH_OPS_BY_ENTITY,
   pushOpDependencies,
+  asFieldValues,
   validatePlacePayload,
+  type TripLogCustomFieldDef,
   validateRoutePayload,
   normalizeWaypointPlaceIds,
   normalizeWaypointTags,
@@ -64,6 +74,7 @@ import {
   directShareRevokeTombstones,
   routeDeleteTombstones,
   waypointDeleteTombstones,
+  placeTypeDeleteTombstones,
   writeTombstones,
 } from "../lib/syncTombstones";
 import {
@@ -201,6 +212,7 @@ router.get(
         hasMore: false,
         resetRequired: true,
         changes: {
+          placeTypes: [],
           customFieldDefs: [],
           places: [],
           tripLogs: [],
@@ -291,23 +303,57 @@ router.get(
       return rows;
     }
 
-    // Definitions lead the budget order: a place's and a trip's stored values
-    // are keyed by them, so a client applying an early page has the labels
-    // before the rows that need them. Always the caller's own — definitions
-    // belong to one account and are never shared, so unlike a place there is
-    // no visibility set to intersect and no `syncRole` on the row.
-    const customFieldDefs = await fill(
-      "customFieldDefs",
+    // TYPES LEAD, ahead of the definitions, because a definition points at the
+    // types it is scoped to — a defs page applied first would carry scopings
+    // naming rows the mirror does not have yet. Same argument as defs before
+    // values, one level up.
+    //
+    // The caller's own types AND the SYSTEM ones (ownerId null): system types
+    // are global, one row shared by everyone, and a client that did not hold
+    // them could not render its own canyons. A client must not read a null
+    // owner as "mine" — see SyncDeltaPlaceTypeRow.
+    const placeTypes = await fill(
+      "placeTypes",
       (after, take) =>
-        prisma.customFieldDef.findMany({
+        prisma.placeType.findMany({
           where: {
-            AND: [{ ownerId: user.id }, keysetWhere("updatedAt", since, after)],
+            AND: [
+              { OR: [{ ownerId: user.id }, { ownerId: null }] },
+              keysetWhere("updatedAt", since, after),
+            ],
           },
           orderBy: [{ updatedAt: "asc" }, { id: "asc" }],
           take,
         }),
       (row) => row.updatedAt,
     );
+
+    // Definitions follow: a place's and a trip's stored values are keyed by
+    // them, so a client applying an early page has the labels before the rows
+    // that need them. The caller's own PLUS the system definitions, which
+    // label the built-in fields and belong to no account.
+    const customFieldDefs = await fill(
+      "customFieldDefs",
+      (after, take) =>
+        prisma.customFieldDef.findMany({
+          where: {
+            AND: [
+              { OR: [{ ownerId: user.id }, { ownerId: null }] },
+              keysetWhere("updatedAt", since, after),
+            ],
+          },
+          orderBy: [{ updatedAt: "asc" }, { id: "asc" }],
+          take,
+        }),
+      (row) => row.updatedAt,
+    );
+
+    // For a shared place of a USER type, the recipient owns none of the sender's
+    // definitions, so without this they would see bare keys where the values
+    // should be labelled. Derived LIVE from the OWNER's current definitions
+    // rather than persisted, so a renamed field renames on the sharee's screen
+    // too. System types need none: the recipient already holds the same rows.
+    const sharedDefsByType = new Map<string, TripLogCustomFieldDef[]>();
 
     const places = await fill(
       "places",
@@ -329,6 +375,20 @@ router.get(
         }),
       (row) => row.updatedAt,
     );
+
+    for (const place of places) {
+      if (place.ownerId === user.id) continue;
+      if (sharedDefsByType.has(place.placeTypeId)) continue;
+      const type = await prisma.placeType.findUnique({
+        where: { id: place.placeTypeId },
+        select: { ownerId: true },
+      });
+      if (!type || type.ownerId === null) continue; // system type: already held
+      sharedDefsByType.set(
+        place.placeTypeId,
+        await defsForPlaceType(type.ownerId, place.placeTypeId),
+      );
+    }
 
     const tripLogs = await fill(
       "tripLogs",
@@ -552,6 +612,7 @@ router.get(
         sinceTs: cursor.ts,
         hasMore,
         counts: {
+          placeTypes: placeTypes.length,
           customFieldDefs: customFieldDefs.length,
           places: places.length,
           tripLogs: tripLogs.length,
@@ -600,11 +661,9 @@ router.get(
       hasMore,
       resetRequired: false,
       changes: {
+        placeTypes,
         customFieldDefs,
-        places: places.map((place) => ({
-          syncRole: place.ownerId === user.id ? "owner" : "shared",
-          ...place,
-        })),
+        places: places.map((place) => serializePlace(place, user.id, sharedDefsByType)),
         tripLogs: tripLogs.map(serializeTrip),
         // syncRole tells the client whether this is its own waypoint or one
         // seen through a place share — a 'shared' waypoint is read-only there.
@@ -702,20 +761,20 @@ type PushOpResult = {
 // Per-entity field whitelists. An unknown key is a per-op 400 (`rejected`),
 // never silently dropped (§10.4) — the client parks the op visibly instead
 // of losing a field a newer app version wrote.
-const PLACE_FIELDS = new Set([
+// `foreignFields` is DELIBERATELY ABSENT and must stay absent. It is written
+// only by copy and by a place-type change — never by a user edit — because it
+// exists to record what the SENDER's definitions said, and a client that could
+// write it could forge that provenance or resurrect values the owner discarded.
+// An unknown key is a per-op 400, so its absence here is the enforcement, not a
+// convention. Guard: placeFields.unit.test.ts.
+export const PLACE_FIELDS = new Set([
   "name",
   "altNames",
   "latitude",
   "longitude",
-  "numAbseils",
-  "longestAbseil",
-  "vGrade",
-  "aGrade",
-  "commitment",
-  "quality",
-  "hours",
+  "placeTypeId",
   "notes",
-  "attributes",
+  "fieldValues",
 ]);
 const TRIP_FIELDS = new Set([
   "date",
@@ -901,9 +960,7 @@ async function applyPlaceOp(userId: string, op: PushOp): Promise<PushOpResult> {
   // divergence here is the SEC-001 failure mode, and a mistyped free-text field
   // that reaches Prisma throws a non-AppError, which the per-op catch re-throws
   // and 500s the WHOLE batch (a poison pill that never drains).
-  const validationError =
-    validatePlacePayload(fields, { requireCoords: op.op === "create" }) ??
-    validatePlaceTextFields(fields);
+  const validationError = validatePlaceTextFields(fields);
   if (validationError) throw new AppError(400, validationError);
 
   if (op.op === "create") {
@@ -919,23 +976,28 @@ async function applyPlaceOp(userId: string, op: PushOp): Promise<PushOpResult> {
     if (await createAlreadyTombstoned(userId, "place", op.id)) {
       return { opId: op.opId, status: "alreadyApplied" };
     }
+    const typeId = await resolvePlaceTypeId(userId, fields.placeTypeId);
+    // Same two validators the REST twin runs, in the same order — REST/sync
+    // divergence here is the SEC-001 failure mode. The field-value bounds come
+    // from the definitions in force for the type, so they can only be resolved
+    // once the type is.
+    const createError = validatePlacePayload(fields, {
+      requireCoords: true,
+      defs: await defsForPlaceType(userId, typeId),
+    });
+    if (createError) throw new AppError(400, createError);
+
     const place = await prisma.place.create({
       data: {
         id: op.id,
         ownerId: userId,
+        placeTypeId: typeId,
         name: fields.name as string,
         altNames: (fields.altNames as string[] | undefined) ?? [],
         latitude: fields.latitude as number,
         longitude: fields.longitude as number,
-        numAbseils: (fields.numAbseils as number | null | undefined) ?? null,
-        longestAbseil: (fields.longestAbseil as number | null | undefined) ?? null,
-        vGrade: (fields.vGrade as number | null | undefined) ?? null,
-        aGrade: (fields.aGrade as number | null | undefined) ?? null,
-        commitment: (fields.commitment as number | null | undefined) ?? null,
-        quality: (fields.quality as number | null | undefined) ?? null,
-        hours: (fields.hours as number | null | undefined) ?? null,
         notes: (fields.notes as string | null | undefined) ?? null,
-        attributes: (fields.attributes ?? {}) as Prisma.InputJsonValue,
+        fieldValues: asFieldValues(fields.fieldValues) as Prisma.InputJsonValue,
       },
     });
     return { opId: op.opId, status: "applied", row: place };
@@ -947,6 +1009,21 @@ async function applyPlaceOp(userId: string, op: PushOp): Promise<PushOpResult> {
   // deadRemote; delete-wins per §6).
   if (!place || place.ownerId !== userId)
     throw new AppError(404, "Place not found");
+
+  // A type change is a legal edit (miscategorising is inevitable, and
+  // delete-and-recreate would lose media, route, links and trips). Values the
+  // NEW type does not carry are not destroyed here — phase 4 moves them into
+  // foreignFields; until then they simply stay in fieldValues, which the
+  // "render any key that already has a value" rule keeps visible.
+  const typeId =
+    fields.placeTypeId !== undefined
+      ? await resolvePlaceTypeId(userId, fields.placeTypeId)
+      : place.placeTypeId;
+  const updateError = validatePlacePayload(fields, {
+    requireCoords: false,
+    defs: await defsForPlaceType(userId, typeId),
+  });
+  if (updateError) throw new AppError(400, updateError);
 
   const conflicts = conflictReceipts(
     op.baseUpdatedAt,
@@ -967,28 +1044,10 @@ async function applyPlaceOp(userId: string, op: PushOp): Promise<PushOpResult> {
       ...(fields.longitude !== undefined && {
         longitude: fields.longitude as number,
       }),
-      ...(fields.numAbseils !== undefined && {
-        numAbseils: fields.numAbseils as number | null,
-      }),
-      ...(fields.longestAbseil !== undefined && {
-        longestAbseil: fields.longestAbseil as number | null,
-      }),
-      ...(fields.vGrade !== undefined && {
-        vGrade: fields.vGrade as number | null,
-      }),
-      ...(fields.aGrade !== undefined && {
-        aGrade: fields.aGrade as number | null,
-      }),
-      ...(fields.commitment !== undefined && {
-        commitment: fields.commitment as number | null,
-      }),
-      ...(fields.quality !== undefined && {
-        quality: fields.quality as number | null,
-      }),
-      ...(fields.hours !== undefined && { hours: fields.hours as number | null }),
+      ...(fields.placeTypeId !== undefined && { placeTypeId: typeId }),
       ...(fields.notes !== undefined && { notes: fields.notes as string | null }),
-      ...(fields.attributes !== undefined && {
-        attributes: (fields.attributes ?? Prisma.JsonNull) as Prisma.InputJsonValue,
+      ...(fields.fieldValues !== undefined && {
+        fieldValues: asFieldValues(fields.fieldValues) as Prisma.InputJsonValue,
       }),
     },
   });
@@ -1462,6 +1521,11 @@ async function applyNotificationOp(
 // decides which table the values live in, and `key` is what every stored value
 // is keyed by — changing either orphans data rather than editing it. A rename
 // moves `label` only (renameCustomFieldLabel).
+//
+// `placeTypeIds` and `appliesToAllTypes` are on BOTH lists deliberately.
+// CustomFieldDefPlaceType is not a sync entity of its own, so without them a
+// definition created offline and scoped to two types could not express that
+// scoping on the wire — it would arrive unscoped and apply to nothing.
 const CUSTOM_FIELD_DEF_CREATE_FIELDS = new Set([
   "entity",
   "key",
@@ -1470,6 +1534,8 @@ const CUSTOM_FIELD_DEF_CREATE_FIELDS = new Set([
   "min",
   "max",
   "position",
+  "placeTypeIds",
+  "appliesToAllTypes",
 ]);
 const CUSTOM_FIELD_DEF_UPDATE_FIELDS = new Set([
   "label",
@@ -1477,7 +1543,146 @@ const CUSTOM_FIELD_DEF_UPDATE_FIELDS = new Set([
   "min",
   "max",
   "position",
+  "placeTypeIds",
+  "appliesToAllTypes",
 ]);
+
+/** A `placeTypeIds` field off the wire, or undefined when absent. Anything that
+ *  is not an array of strings is a 400 rather than a silent empty scoping — a
+ *  definition that applies to nothing is indistinguishable from one the user
+ *  never finished creating. */
+function parsePlaceTypeIds(value: unknown): string[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.some((id) => typeof id !== "string")) {
+    throw new AppError(400, "placeTypeIds must be an array of ids");
+  }
+  return value as string[];
+}
+
+/**
+ * A place on the wire.
+ *
+ * TWO THINGS THIS DECIDES, both privacy boundaries rather than formatting:
+ *
+ * `foreignFields` is OWNER-PRIVATE and is stripped from any row the caller does
+ * not own. It records what the SENDER's definitions said about values this
+ * owner has no definition for, so emitting it to a sharee reproduces exactly
+ * the propagation problem that got the "append it to the notes field" design
+ * rejected: B copies A's place, B shares it with C, and C reads A's field
+ * labels and values. Enforced HERE rather than by the client declining to
+ * render it — a client that looks away is not a boundary (the SEC-001 shape).
+ *
+ * `fieldDefsSnapshot` is what a sharee gets instead, and only for a place of a
+ * type they do not own: the labels and bounds for the keys on this row, derived
+ * live from the OWNER's current definitions. Without it a sharee sees bare keys.
+ */
+function serializePlace(
+  place: Place,
+  viewerId: string,
+  defsByType: Map<string, TripLogCustomFieldDef[]>,
+) {
+  const isOwner = place.ownerId === viewerId;
+  const { foreignFields, ...rest } = place;
+  if (isOwner) {
+    return { syncRole: "owner" as const, ...rest, foreignFields };
+  }
+  const snapshot = defsByType.get(place.placeTypeId);
+  return {
+    syncRole: "shared" as const,
+    ...rest,
+    ...(snapshot?.length ? { fieldDefsSnapshot: snapshot } : {}),
+  };
+}
+
+// A place type is created, renamed and deleted OFFLINE like every other
+// user-made row (§2.9), so it needs a push op — building type creation as an
+// online-only path would make it the one thing a user could not do in a gorge,
+// and would break guest installs entirely.
+const PLACE_TYPE_FIELDS = new Set(["name", "iconKey", "color", "position"]);
+
+async function applyPlaceTypeOp(
+  userId: string,
+  op: PushOp,
+): Promise<PushOpResult> {
+  if (op.op === "delete") {
+    const existing = await prisma.placeType.findFirst({
+      where: { id: op.id, ownerId: userId },
+      select: { id: true },
+    });
+    // Already gone is idempotent success — a delete's goal state is "not
+    // there" (§8.1), and the push path replays ops. A SYSTEM type also lands
+    // here (it has no owner), and answering alreadyApplied for one would be a
+    // lie the phone then acts on, so it is a rejection instead.
+    if (!existing) {
+      const system = await prisma.placeType.findFirst({
+        where: { id: op.id, ownerId: null },
+        select: { id: true },
+      });
+      if (system) {
+        throw new AppError(403, "Built-in place types cannot be deleted.");
+      }
+      return { opId: op.opId, status: "alreadyApplied" };
+    }
+    const result = await deletePlaceType(userId, op.id);
+    if (!result.ok) {
+      throw new AppError(
+        409,
+        `That type still has ${result.placeCount} place${result.placeCount === 1 ? "" : "s"} in it. Move them to another type first.`,
+      );
+    }
+    await writeTombstones(
+      prisma,
+      placeTypeDeleteTombstones({ ownerId: userId, placeTypeId: op.id }),
+    );
+    return { opId: op.opId, status: "applied" };
+  }
+
+  const fields = op.fields ?? {};
+
+  if (op.op === "create") {
+    assertKnownFields(fields, PLACE_TYPE_FIELDS);
+    const existing = await prisma.placeType.findUnique({ where: { id: op.id } });
+    if (existing) {
+      // Foreign id gets the same 404 a missing one would — no existence oracle.
+      if (existing.ownerId !== userId) {
+        throw new AppError(404, "Place type not found");
+      }
+      return { opId: op.opId, status: "alreadyApplied", row: existing };
+    }
+    if (await createAlreadyTombstoned(userId, "placeType", op.id)) {
+      return { opId: op.opId, status: "alreadyApplied" };
+    }
+    const row = await createPlaceType(userId, op.id, assertValidPlaceType(fields));
+    return { opId: op.opId, status: "applied", row };
+  }
+
+  assertKnownFields(fields, PLACE_TYPE_FIELDS);
+  const current = await requireOwnPlaceType(userId, op.id);
+  const conflicts = conflictReceipts(
+    op.baseUpdatedAt,
+    current.updatedAt,
+    fields,
+    current as unknown as Record<string, unknown>,
+  );
+  // Validate the RESULT, not the patch: a patch that only moves `color` still
+  // has to produce a type whose icon and colour are both in the curated lists.
+  const merged = assertValidPlaceType({
+    name: fields.name ?? current.name,
+    iconKey: fields.iconKey ?? current.iconKey,
+    color: fields.color ?? current.color,
+    position: fields.position ?? current.position,
+  });
+  const row = await prisma.placeType.update({
+    where: { id: op.id },
+    data: merged,
+  });
+  return {
+    opId: op.opId,
+    status: conflicts.length ? "appliedWithConflict" : "applied",
+    row,
+    ...(conflicts.length ? { conflicts } : {}),
+  };
+}
 
 async function applyCustomFieldDefOp(
   userId: string,
@@ -1535,6 +1740,12 @@ async function applyCustomFieldDefOp(
       ...(typeof fields.position === "number"
         ? { position: fields.position }
         : {}),
+      ...(parsePlaceTypeIds(fields.placeTypeIds) !== undefined
+        ? { placeTypeIds: parsePlaceTypeIds(fields.placeTypeIds) }
+        : {}),
+      ...(typeof fields.appliesToAllTypes === "boolean"
+        ? { appliesToAllTypes: fields.appliesToAllTypes }
+        : {}),
     });
     const row = await prisma.customFieldDef.findUnique({ where: { id: op.id } });
     return { opId: op.opId, status: "applied", row: row ?? undefined };
@@ -1560,6 +1771,12 @@ async function applyCustomFieldDefOp(
     ...(fields.max !== undefined ? { max: fields.max as number | null } : {}),
     ...(fields.position !== undefined
       ? { position: fields.position as number }
+      : {}),
+    ...(parsePlaceTypeIds(fields.placeTypeIds) !== undefined
+      ? { placeTypeIds: parsePlaceTypeIds(fields.placeTypeIds) }
+      : {}),
+    ...(fields.appliesToAllTypes !== undefined
+      ? { appliesToAllTypes: Boolean(fields.appliesToAllTypes) }
       : {}),
   });
 
@@ -1629,6 +1846,9 @@ router.post(
             break;
           case "customFieldDef":
             result = await applyCustomFieldDefOp(user.id, op);
+            break;
+          case "placeType":
+            result = await applyPlaceTypeOp(user.id, op);
             break;
         }
         results.push(result);

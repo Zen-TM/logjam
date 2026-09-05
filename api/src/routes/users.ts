@@ -6,13 +6,10 @@ import {
   isThemeSchemeId,
   normalizeUserUiPreferences,
   normalizeImportMergePolicy,
-  isTripLogCustomFieldDef,
   isNotificationPreferences,
-  type TripLogCustomFieldDef,
 } from "@logjam/shared";
 import {
   defsForUserResponse,
-  replaceFieldDefs,
 } from "../lib/customFieldDefs";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
@@ -299,16 +296,40 @@ router.patch(
   userPatchLimiter,
   async (req: AuthenticatedRequest, res: Response) => {
     const { sub } = req.user!;
-    const { username, themeSchemeId, tripLogCustomFields, placeCustomFields, notifications, autoDownloadGeoPdfs, importMergePolicy, consentVersion } = req.body as {
+    // `tripLogCustomFields` / `placeCustomFields` USED TO BE ACCEPTED HERE, as
+    // a whole list reconciled by `replaceFieldDefs`. Both are gone, and the
+    // deletion is deliberate rather than a tidy-up — the whole-list shape
+    // cannot express what a definition now is:
+    //
+    //  * It carried `{key,label,type,min,max}` and nothing else, so every save
+    //    from a dialog that round-tripped the list would have wiped
+    //    `placeTypeIds` and `appliesToAllTypes` on every definition — silently,
+    //    because the payload simply did not mention them.
+    //  * It matched `existing` scoped to `ownerId: userId`, so the SYSTEM
+    //    definitions (ownerId null) fell through to the create branch and the
+    //    user acquired a private duplicate of every built-in field, colliding
+    //    with the real one under the same key.
+    //
+    // Definitions have been rows since the custom_field_defs table landed; the
+    // row-grain endpoints in routes/customFields.ts and the sync push op are
+    // the write paths. A client sending the old key gets a 400 naming the
+    // replacement rather than a silent no-op.
+    const { username, themeSchemeId, notifications, autoDownloadGeoPdfs, importMergePolicy, consentVersion } = req.body as {
       username?: unknown;
       themeSchemeId?: unknown;
-      tripLogCustomFields?: unknown;
-      placeCustomFields?: unknown;
       notifications?: unknown;
       autoDownloadGeoPdfs?: unknown;
       importMergePolicy?: unknown;
       consentVersion?: unknown;
     };
+    for (const legacy of ["tripLogCustomFields", "placeCustomFields"] as const) {
+      if ((req.body as Record<string, unknown>)[legacy] !== undefined) {
+        throw new AppError(
+          400,
+          `${legacy} is no longer accepted here — use /custom-fields/:entity.`,
+        );
+      }
+    }
 
     const user = await resolveUser(sub);
 
@@ -343,30 +364,12 @@ router.patch(
 
     if (
       themeSchemeId !== undefined ||
-      tripLogCustomFields !== undefined ||
-      placeCustomFields !== undefined ||
       notifications !== undefined ||
       autoDownloadGeoPdfs !== undefined ||
       importMergePolicy !== undefined
     ) {
       if (themeSchemeId !== undefined && !isThemeSchemeId(themeSchemeId)) {
         throw new AppError(400, "Invalid themeSchemeId");
-      }
-      if (tripLogCustomFields !== undefined) {
-        if (
-          !Array.isArray(tripLogCustomFields) ||
-          !tripLogCustomFields.every(isTripLogCustomFieldDef)
-        ) {
-          throw new AppError(400, "Invalid tripLogCustomFields");
-        }
-      }
-      if (placeCustomFields !== undefined) {
-        if (
-          !Array.isArray(placeCustomFields) ||
-          !placeCustomFields.every(isTripLogCustomFieldDef)
-        ) {
-          throw new AppError(400, "Invalid placeCustomFields");
-        }
       }
       if (notifications !== undefined && !isNotificationPreferences(notifications)) {
         throw new AppError(400, "Invalid notifications");
@@ -379,28 +382,6 @@ router.patch(
         if (!normalized) {
           throw new AppError(400, "Invalid importMergePolicy");
         }
-      }
-
-      // Custom field definitions are NOT part of the preferences blob any more
-      // — they are rows. The two keys stay accepted here because that is how
-      // every dialog in the web app writes them (a whole list at a time), and
-      // `replaceFieldDefs` reconciles the list into row creates/updates/deletes,
-      // carrying the value strip a dropped field needs. They are deliberately
-      // absent from `updates.uiPreferences` below: a copy left in the blob
-      // would be a second source of the same list.
-      if (tripLogCustomFields !== undefined) {
-        await replaceFieldDefs(
-          user.id,
-          "tripLog",
-          tripLogCustomFields as TripLogCustomFieldDef[],
-        );
-      }
-      if (placeCustomFields !== undefined) {
-        await replaceFieldDefs(
-          user.id,
-          "place",
-          placeCustomFields as TripLogCustomFieldDef[],
-        );
       }
 
       const current = normalizeUserUiPreferences(user.uiPreferences);

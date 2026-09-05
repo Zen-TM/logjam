@@ -81,6 +81,41 @@ describe("logger redaction", () => {
     expect(row.notes).toBe("[redacted]");
   });
 
+  // PLACE FIELD VALUES. A user-authored field label names the thing it
+  // describes and its value is whatever they typed, so both are as sensitive as
+  // notes — and NO existing wildcard reaches them: the `*.latitude` family
+  // matches coordinate keys BY NAME, and a field value can be keyed anything.
+  // The whole object is censored because the keys are user-authored too.
+  it("censors place field values, whose keys the coordinate wildcards cannot match", () => {
+    const out = captureLog({
+      req: {
+        body: {
+          fieldValues: { rap_2_anchor: "tree on the true left", v_grade: 4 },
+          foreignFields: [
+            { key: "bolt_count", label: "Bolt count", type: "integer", value: 3 },
+          ],
+        },
+      },
+    });
+    const body = (out.req as { body: Record<string, unknown> }).body;
+    expect(body.fieldValues).toBe("[redacted]");
+    expect(body.foreignFields).toBe("[redacted]");
+  });
+
+  it("censors field values inside a bulk-import row", () => {
+    const out = captureLog({
+      req: {
+        body: {
+          rows: [
+            { data: { name: "Secret Place", fieldValues: { access_beta: "gate code 1234" } } },
+          ],
+        },
+      },
+    });
+    const row = ((out.req as { body: { rows: Array<{ data: Record<string, unknown> }> } }).body.rows)[0].data;
+    expect(row.fieldValues).toBe("[redacted]");
+  });
+
   it("censors array-shaped bulk trip names", () => {
     const out = captureLog({ req: { body: { trips: [{ name: "Secret trip", notes: "beta" }] } } });
     const trip = ((out.req as { body: { trips: Array<Record<string, unknown>> } }).body.trips)[0];

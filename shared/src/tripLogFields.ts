@@ -4,9 +4,12 @@
  * used to be spelled separately in `mobile/src/api/queries.ts` and in the
  * `entityConfigs` of `api/src/routes/customFields.ts`.
  *
- * The Place rework replaces `"place"` with a reference to a user-created
- * place type; until then these are the only two values `CustomFieldDef.entity`
- * may hold, and `isCustomFieldEntity` is the gate that says so.
+ * `"place"` stays ONE entity after the places rework rather than splitting per
+ * place type: scoping a definition to types is a separate axis, carried by
+ * `CustomFieldDefPlaceType` plus the `appliesToAllTypes` flag, precisely so a
+ * field key means the same thing wherever it appears in one owner's namespace.
+ * These remain the only two values `CustomFieldDef.entity` may hold, and
+ * `isCustomFieldEntity` is the gate that says so.
  */
 export const CUSTOM_FIELD_ENTITIES = ["tripLog", "place"] as const;
 
@@ -28,8 +31,10 @@ export type TripLogCustomFieldDef = {
   label: string;
   type: TripLogCustomFieldType;
   // Optional inclusive bounds, only meaningful (and only valid) for
-  // integer/float fields. Present together or not at all. When set, the
-  // place filter renders a double-ended range slider instead of op+value.
+  // integer/float fields. EITHER, NEITHER OR BOTH — min-only is how every
+  // "how many" field is bounded, because there is no honest ceiling for it.
+  // The place filter renders a double-ended range slider only when both are
+  // present, and falls back to op+value otherwise.
   min?: number;
   max?: number;
 };
@@ -59,9 +64,15 @@ export const VALID_CUSTOM_FIELD_TYPES = new Set<string>([
  * visible everywhere the field is shown, without polluting the stored label.
  */
 export function customFieldDisplayLabel(def: TripLogCustomFieldDef): string {
+  // One-sided bounds get shown too. This used to require BOTH, so a min-only
+  // field — which every "how many" field now is — displayed with no hint that
+  // it was bounded at all, and the user only found out when a write was
+  // refused.
   if (def.min != null && def.max != null) {
     return `${def.label} (${def.min}-${def.max})`;
   }
+  if (def.min != null) return `${def.label} (${def.min}+)`;
+  if (def.max != null) return `${def.label} (up to ${def.max})`;
   return def.label;
 }
 
@@ -249,12 +260,17 @@ export type CustomFieldDefRow = {
 export function customFieldDefFromRow(
   row: CustomFieldDefRow,
 ): TripLogCustomFieldDef | null {
-  const bounded = row.min != null && row.max != null;
+  // ONE-SIDED BOUNDS SURVIVE. This used to require both, so a min-only
+  // definition — which every "how many" field is, and which three of the system
+  // fields are — came back through this reader with no bound at all: the form
+  // stopped showing the range and the client-side check stopped refusing a
+  // negative, leaving the server as the only thing that still said no.
   const candidate = {
     key: row.key,
     label: row.label,
     type: row.type,
-    ...(bounded ? { min: row.min, max: row.max } : {}),
+    ...(row.min != null ? { min: row.min } : {}),
+    ...(row.max != null ? { max: row.max } : {}),
   };
   return isTripLogCustomFieldDef(candidate) ? candidate : null;
 }
@@ -288,19 +304,27 @@ export function isTripLogCustomFieldDef(v: unknown): v is TripLogCustomFieldDef 
   ) {
     return false;
   }
-  // Bounds are optional, but if either is present both must be valid finite
-  // numbers with min < max, only on numeric field types (integers when
-  // type === "integer"). Fail loud rather than silently dropping.
-  const hasMin = c.min !== undefined;
-  const hasMax = c.max !== undefined;
+  // Bounds are optional and ONE-SIDED IS LEGAL: min alone, max alone, or both.
+  //
+  // They used to be both-or-neither, which the system defs cannot satisfy —
+  // `hours`, `num_abseils` and `longest_abseil` are min-0-no-max, exactly as
+  // the numeric constraints on the old grade columns were. Requiring both would
+  // have meant inventing a ceiling for "how many pitches", which is a number
+  // nobody knows and every user would eventually hit.
+  //
+  // Whatever is present must be a finite number of the right kind, and when
+  // both are present min must be below max. Fail loud rather than silently
+  // dropping — a dropped bound is a field that quietly stops validating.
+  const hasMin = c.min !== undefined && c.min !== null;
+  const hasMax = c.max !== undefined && c.max !== null;
   if (hasMin || hasMax) {
     if (c.type !== "integer" && c.type !== "float") return false;
-    if (typeof c.min !== "number" || typeof c.max !== "number") return false;
-    if (!Number.isFinite(c.min) || !Number.isFinite(c.max)) return false;
-    if (c.min >= c.max) return false;
-    if (c.type === "integer" && (!Number.isInteger(c.min) || !Number.isInteger(c.max))) {
-      return false;
+    for (const bound of [hasMin ? c.min : undefined, hasMax ? c.max : undefined]) {
+      if (bound === undefined) continue;
+      if (typeof bound !== "number" || !Number.isFinite(bound)) return false;
+      if (c.type === "integer" && !Number.isInteger(bound)) return false;
     }
+    if (hasMin && hasMax && (c.min as number) >= (c.max as number)) return false;
   }
   return true;
 }

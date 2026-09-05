@@ -2,7 +2,7 @@ import { describe, it, expect, afterAll } from "vitest";
 import request from "supertest";
 import { randomUUID } from "node:crypto";
 import prisma from "../services/prisma";
-import { BOB_ID, NONEXISTENT_ID } from "./_actors";
+import { BOB_ID, NONEXISTENT_ID, CANYON_TYPE_ID} from "./_actors";
 
 // Requires `make dev` running with AUTH_MODE=fake (requests = seeded alice).
 // Tests that need a "foreign" place create one directly via Prisma owned by
@@ -15,7 +15,7 @@ async function createPlace(name: string): Promise<string> {
   const res = await request(API_URL)
     .post("/places")
     .set(AUTH)
-    .send({ name, latitude: -33.7, longitude: 150.3 });
+    .send({ placeTypeId: CANYON_TYPE_ID, name, latitude: -33.7, longitude: 150.3 });
   expect(res.status).toBe(201);
   return res.body.id as string;
 }
@@ -28,12 +28,12 @@ describe("POST /places/bulk — import contract (fake auth = alice)", () => {
       .post("/places/bulk")
       .set(AUTH)
       .send({
-        importBatchId: randomUUID(),
+        placeTypeId: CANYON_TYPE_ID, importBatchId: randomUUID(),
         rows: [
           { data: { name: goodName, latitude: -33.7, longitude: 150.3 }, resolution: { kind: "create" } },
           { data: { name: "", latitude: -33.7, longitude: 150.3 }, resolution: { kind: "create" } },
           { data: { name: `bad lat ${run}`, latitude: 999, longitude: 150.3 }, resolution: { kind: "create" } },
-          { data: { name: `bad grade ${run}`, latitude: -33.7, longitude: 150.3, vGrade: 99 }, resolution: { kind: "create" } },
+          { data: { name: `bad grade ${run}`, latitude: -33.7, longitude: 150.3, fieldValues: { v_grade: 99 } }, resolution: { kind: "create" } },
         ],
       });
     expect(res.status).toBe(200);
@@ -65,7 +65,7 @@ describe("POST /places/bulk — import contract (fake auth = alice)", () => {
     const res = await request(API_URL)
       .post("/places/bulk")
       .set(AUTH)
-      .send({ importBatchId: randomUUID(), rows: [dupRow, dupRow] });
+      .send({ placeTypeId: CANYON_TYPE_ID, importBatchId: randomUUID(), rows: [dupRow, dupRow] });
     expect(res.status).toBe(200);
     expect(res.body.created).toBe(1);
     expect(res.body.errors).toEqual([]);
@@ -80,7 +80,7 @@ describe("POST /places/bulk — import contract (fake auth = alice)", () => {
     const res = await request(API_URL)
       .post("/places/bulk")
       .set(AUTH)
-      .send({ importBatchId: randomUUID(), rows: [] });
+      .send({ placeTypeId: CANYON_TYPE_ID, importBatchId: randomUUID(), rows: [] });
     expect(res.status).toBe(400);
   });
 
@@ -91,7 +91,7 @@ describe("POST /places/bulk — import contract (fake auth = alice)", () => {
         .post("/places/bulk")
         .set(AUTH)
         .send({
-          importBatchId: randomUUID(),
+          placeTypeId: CANYON_TYPE_ID, importBatchId: randomUUID(),
           rows: [
             {
               data: { name: "ignored — name is immutable on merge", latitude: -33.8, longitude: 150.4, notes: "merged in" },
@@ -114,7 +114,7 @@ describe("POST /places/bulk — import contract (fake auth = alice)", () => {
       .post("/places/bulk")
       .set(AUTH)
       .send({
-        importBatchId: randomUUID(),
+        placeTypeId: CANYON_TYPE_ID, importBatchId: randomUUID(),
         rows: [
           {
             data: { name: `CH-002 bulk nonexistent ${Date.now()}`, latitude: -33.7, longitude: 150.3 },
@@ -136,6 +136,7 @@ describe("POST /places/bulk — import contract (fake auth = alice)", () => {
     // confirm to a non-owner that the place ID exists (existence oracle).
     const foreign = await prisma.place.create({
       data: {
+        placeTypeId: CANYON_TYPE_ID,
         ownerId: BOB_ID,
         name: `CH-002 bob's place ${Date.now()}`,
         latitude: -33.5,
@@ -147,7 +148,7 @@ describe("POST /places/bulk — import contract (fake auth = alice)", () => {
         .post("/places/bulk")
         .set(AUTH)
         .send({
-          importBatchId: randomUUID(),
+          placeTypeId: CANYON_TYPE_ID, importBatchId: randomUUID(),
           rows: [
             {
               data: { name: "CH-002 hijacked", latitude: -33.7, longitude: 150.3, notes: "hijack" },
@@ -183,7 +184,7 @@ describe("POST /places/bulk — import contract (fake auth = alice)", () => {
         .post("/places/bulk")
         .set(AUTH)
         .send({
-          importBatchId: randomUUID(),
+          placeTypeId: CANYON_TYPE_ID, importBatchId: randomUUID(),
           rows: [
             { data: { name: shared, latitude: -33.7, longitude: 150.3 }, resolution: { kind: "create" } },
             { data: { name: shared, latitude: -33.7, longitude: 150.3, notes: "merged" }, resolution: { kind: "merge", placeId: mergeTargetId } },
@@ -215,6 +216,7 @@ describe("POST /places/bulk/delete (fake auth = alice)", () => {
     const ownedId = await createPlace("CH-002 bulk delete owned");
     const foreign = await prisma.place.create({
       data: {
+        placeTypeId: CANYON_TYPE_ID,
         ownerId: BOB_ID,
         name: "CH-002 bulk delete foreign",
         latitude: -33.5,
@@ -242,6 +244,7 @@ describe("POST /places/bulk/delete (fake auth = alice)", () => {
   it("returns an empty deletedIds list when all ids are foreign-owned", async () => {
     const foreign = await prisma.place.create({
       data: {
+        placeTypeId: CANYON_TYPE_ID,
         ownerId: BOB_ID,
         name: "CH-002 bulk delete all-foreign",
         latitude: -33.5,

@@ -31,8 +31,11 @@ import {
   matchPlace,
   haversineMeters,
   defaultsToMergeOnImport,
-  DEFAULT_PLACE_MERGE_POLICY,
-  MERGEABLE_FIELDS,
+  defaultPlaceMergePolicy,
+  mergeableFieldsForDefs,
+  setFieldValues,
+  SYSTEM_PLACE_TYPE_IDS,
+  SOURCES_FIELD_KEY,
   type MatchCandidate,
   type PlaceMergePolicy,
   type MergeableField,
@@ -252,7 +255,7 @@ function buildPlaceInput(
   assignments: Record<string, PlaceFieldRole>,
 ): { input: BulkPlaceInput; warnings: string[] } {
   const input: BulkPlaceInput = { name: "", latitude: NaN, longitude: NaN };
-  const attrs: Record<string, unknown> = {};
+  const values: Record<string, unknown> = {};
   const warnings: string[] = [];
 
   for (const [header, role] of Object.entries(assignments)) {
@@ -284,63 +287,78 @@ function buildPlaceInput(
       case "notes":
         input.notes = value != null && value !== "" ? String(value) : null;
         break;
+      // The seven grade roles are FIELD VALUES now, under their reserved keys.
+      // Rounding stays per-role because the CSV cell is free text and an
+      // integer field must not take 2.5 — the definition's bounds catch it
+      // server-side, but a silently truncated import is a worse error message.
       case "numAbseils":
-        input.numAbseils = value != null && !isNaN(Number(value)) ? Math.round(Number(value)) : null;
+        values["num_abseils"] = value != null && !isNaN(Number(value)) ? Math.round(Number(value)) : null;
         break;
       case "longestAbseil":
-        input.longestAbseil = value != null && !isNaN(Number(value)) ? Number(value) : null;
+        values["longest_abseil"] = value != null && !isNaN(Number(value)) ? Number(value) : null;
         break;
       case "hours":
-        input.hours = value != null && !isNaN(Number(value)) ? Number(value) : null;
+        values["hours"] = value != null && !isNaN(Number(value)) ? Number(value) : null;
         break;
       case "vGrade":
-        input.vGrade = value != null && !isNaN(Number(value)) ? Math.round(Number(value)) : null;
+        values["v_grade"] = value != null && !isNaN(Number(value)) ? Math.round(Number(value)) : null;
         break;
       case "aGrade":
-        input.aGrade = value != null && !isNaN(Number(value)) ? Math.round(Number(value)) : null;
+        values["a_grade"] = value != null && !isNaN(Number(value)) ? Math.round(Number(value)) : null;
         break;
       case "commitment":
-        input.commitment = value != null && !isNaN(Number(value)) ? Math.round(Number(value)) : null;
+        values["commitment"] = value != null && !isNaN(Number(value)) ? Math.round(Number(value)) : null;
         break;
       case "quality":
-        input.quality = value != null && !isNaN(Number(value)) ? Number(value) : null;
+        values["quality"] = value != null && !isNaN(Number(value)) ? Number(value) : null;
         break;
       case "sources":
-        attrs["sources"] = Array.isArray(value) ? value : [];
+        values[SOURCES_FIELD_KEY] = Array.isArray(value) ? value : [];
         break;
       default:
-        // attr:* / new-attr — store as a custom attribute. An `attr:<key>`
-        // column carries its storage key in the role (the exporter's
-        // convention); a brand-new attribute has no key yet, so the CSV header
-        // is the key.
+        // attr:* / new-attr — an ordinary field value. An `attr:<key>` column
+        // carries its storage key in the role (the exporter's convention); a
+        // brand-new attribute has no key yet, so the CSV header is the key.
         if (typeof role === "string" && role.startsWith("attr:")) {
-          attrs[role.slice(5)] = value ?? null;
+          values[role.slice(5)] = value ?? null;
         } else if (role === "new-attr") {
-          attrs[header] = value ?? null;
+          values[header] = value ?? null;
         }
         break;
     }
   }
 
-  if (Object.keys(attrs).length > 0) input.attributes = attrs;
+  // Nulls are dropped rather than stored: a stored null renders as an empty
+  // field and satisfies a "has a value" filter.
+  const cleaned = setFieldValues({}, values);
+  if (Object.keys(cleaned).length > 0) input.fieldValues = cleaned;
   return { input, warnings };
 }
 
-// Switch labels for the merge-settings accordion. A total Record over
-// MergeableField, so a new policy entry in shared fails the build here rather
-// than shipping an unlabelled (or missing) switch. Order comes from the shared
-// MERGEABLE_FIELDS, not from this map's key order.
-const MERGEABLE_FIELD_LABELS: Record<MergeableField, string> = {
-  vGrade: "V grade",
-  aGrade: "A grade",
-  commitment: "Commitment",
-  quality: "Quality",
-  numAbseils: "Pitches",
-  longestAbseil: "Longest pitch",
-  hours: "Hours",
+// Switch labels for the merge-settings accordion.
+//
+// This USED TO BE a total Record over a fixed nine-entry MergeableField union,
+// which is what made it a build-time check. It cannot be one any more: the
+// mergeable fields are the KEYS of the definitions the target type carries, an
+// open set that differs per user. So the label for a field is the DEFINITION'S
+// OWN label — which is better than a hand-written one anyway, because it is
+// what the user called the field — and only the two structural entries need
+// spelling here.
+const STRUCTURAL_MERGE_LABELS: Record<string, string> = {
   notes: "Notes",
-  attributes: "Custom attributes",
+  _attributes: "Custom attributes",
 };
+
+function mergeFieldLabel(
+  field: MergeableField,
+  defs: TripLogCustomFieldDef[],
+): string {
+  return (
+    STRUCTURAL_MERGE_LABELS[field] ??
+    defs.find((def) => def.key === field)?.label ??
+    field
+  );
+}
 
 // ── Component ────────────────────────────────────────────────────────────────
 
@@ -419,7 +437,15 @@ function UnifiedImportDialog({
   });
 
   // Step 3 (confirm) state
-  const [mergePolicy, setMergePolicy] = useState<PlaceMergePolicy>(DEFAULT_PLACE_MERGE_POLICY);
+  // The fields a policy can govern depend on the definitions in force, so the
+  // default is built from them rather than being a constant.
+  const mergeableFields = useMemo(
+    () => mergeableFieldsForDefs(customFieldDefs),
+    [customFieldDefs],
+  );
+  const [mergePolicy, setMergePolicy] = useState<PlaceMergePolicy>(() =>
+    defaultPlaceMergePolicy(mergeableFieldsForDefs([])),
+  );
 
   // Map-pick bookkeeping: which surfaced trip name is awaiting a picked coord.
   const pickingRef = useRef(false);
@@ -474,7 +500,7 @@ function UnifiedImportDialog({
     // re-validation — which would silently drop every OTHER choice the user had
     // saved. Missing entry -> that field's default; stored entries still win.
     setMergePolicy({
-      ...DEFAULT_PLACE_MERGE_POLICY,
+      ...defaultPlaceMergePolicy(mergeableFields),
       ...(currentUser?.uiPreferences?.importMergePolicy ?? {}),
     });
   }, [open, currentUser]);
@@ -1000,7 +1026,18 @@ function UnifiedImportDialog({
       }
       return { data: row.input, resolution };
     });
-    return { importBatchId: batchId, rows, mergePolicy };
+    // ponytail: every imported row lands in the CANYON type. The plan gives
+    // CSV import a "pick the place type, then map columns" step, symmetric with
+    // creating a place — that lands in phase 6 with the rest of the web UI,
+    // because the column mapping is only meaningful against a type's field
+    // labels and there is no type picker to map against yet. Stated so the
+    // limitation is a decision rather than an omission.
+    return {
+      importBatchId: batchId,
+      placeTypeId: SYSTEM_PLACE_TYPE_IDS.canyon,
+      rows,
+      mergePolicy,
+    };
   }
 
   // Server per-row errors carry a `rowIndex` into the POST body (== index into
@@ -1107,6 +1144,7 @@ function UnifiedImportDialog({
         try {
           const result = await bulkPlaceImport({
             importBatchId: batchId,
+            placeTypeId: SYSTEM_PLACE_TYPE_IDS.canyon,
             rows: createRows.map((e) => ({
               data: {
                 name: e.form.name.trim(),
@@ -1671,7 +1709,7 @@ function UnifiedImportDialog({
                 file, and an empty cell in your file never clears what's already there. Names and coordinates
                 never change.
               </Typography>
-              {MERGEABLE_FIELDS.map((field) => (
+              {mergeableFields.map((field) => (
                 <FormControlLabel
                   key={field}
                   control={
@@ -1684,7 +1722,7 @@ function UnifiedImportDialog({
                   }
                   label={
                     <Typography variant="body2" sx={{ color: "var(--theme-text-primary)" }}>
-                      {MERGEABLE_FIELD_LABELS[field]}: {mergePolicy[field] === "useIncoming" ? "use file" : "keep existing"}
+                      {mergeFieldLabel(field, customFieldDefs)}: {mergePolicy[field] === "useIncoming" ? "use file" : "keep existing"}
                     </Typography>
                   }
                   sx={{ display: "flex" }}

@@ -2,7 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import {
-  PLACE_RANGE_BOUNDS,
+  numericFieldValue,
+  setFieldValues as withFieldValues,
+  SYSTEM_FIELD_DEFS,
+  SYSTEM_PLACE_TYPE_IDS,
+  userFieldValues,
   validatePlacePayload,
   type TripLogCustomFieldDef,
 } from "@logjam/shared";
@@ -135,18 +139,21 @@ export function PlaceEditSheet({
     // is trimmed, because a map press carries fifteen meaningless decimals.
     setLatitude(place ? numberText(place.latitude) : seedCoord(initialCoords?.latitude));
     setLongitude(place ? numberText(place.longitude) : seedCoord(initialCoords?.longitude));
-    setVGrade(numberText(place?.vGrade));
-    setAGrade(numberText(place?.aGrade));
-    setCommitment(numberText(place?.commitment));
-    setQuality(numberText(place?.quality));
-    setNumAbseils(numberText(place?.numAbseils));
-    setLongestAbseil(numberText(place?.longestAbseil));
-    setHours(numberText(place?.hours));
+    // The seven grades are FIELD VALUES now, read by their reserved keys.
+    setVGrade(numberText(numericFieldValue(place?.fieldValues, "v_grade")));
+    setAGrade(numberText(numericFieldValue(place?.fieldValues, "a_grade")));
+    setCommitment(numberText(numericFieldValue(place?.fieldValues, "commitment")));
+    setQuality(numberText(numericFieldValue(place?.fieldValues, "quality")));
+    setNumAbseils(numberText(numericFieldValue(place?.fieldValues, "num_abseils")));
+    setLongestAbseil(
+      numberText(numericFieldValue(place?.fieldValues, "longest_abseil")),
+    );
+    setHours(numberText(numericFieldValue(place?.fieldValues, "hours")));
     setNotes(place?.notes ?? "");
     setMode("form");
     setEditingField(null);
     setDateFieldKey(null);
-    setFieldValues(fieldValueStrings(place?.attributes?.customFields));
+    setFieldValues(fieldValueStrings(userFieldValues(place?.fieldValues)));
   }, [place, initialCoords, visible]);
 
   // A point back from the picker touches the two coordinate fields and nothing
@@ -205,11 +212,16 @@ export function PlaceEditSheet({
     // the user never sees.
     const problem = validatePlacePayload(
       {
-        ...definedNumbers(draft),
+        fieldValues: definedNumbers(draft),
         ...(draft.latitude != null && { latitude: draft.latitude }),
         ...(draft.longitude != null && { longitude: draft.longitude }),
       },
-      { requireCoords: !editing },
+      // The bounds come from the DEFINITIONS. The system ones are what this
+      // form's seven inputs are, and they are available offline because they
+      // are compiled in rather than fetched — which matters, because this
+      // check exists precisely so a rejected op never reaches the outbox in a
+      // gorge with no signal.
+      { requireCoords: !editing, defs: SYSTEM_FIELD_DEFS },
     );
     if (problem) {
       setInvalid(problem);
@@ -231,21 +243,20 @@ export function PlaceEditSheet({
         if (draft.longitude != null && draft.longitude !== place.longitude) {
           changes.longitude = draft.longitude;
         }
-        for (const key of NUMERIC_KEYS) {
-          if (draft[key] !== place[key]) changes[key] = draft[key];
-        }
         if (draft.notes !== place.notes) changes.notes = draft.notes;
-        // `attributes` is replaced wholesale by the server, so the place's
-        // existing blob is spread through — `sources`, which only the web
-        // writes, would otherwise be dropped by an edit made on the phone.
+        // `fieldValues` is replaced wholesale by the server, so the edit is
+        // built OVER the place's existing values — `_sources`, which only the
+        // web writes, and any key another client added would otherwise be
+        // dropped by an edit made on the phone.
+        const nextValues = withFieldValues(place.fieldValues, {
+          ...effectiveCustomFields,
+          ...definedGrades(draft),
+        });
         if (
-          JSON.stringify(effectiveCustomFields) !==
-          JSON.stringify(place.attributes?.customFields ?? {})
+          JSON.stringify(nextValues) !==
+          JSON.stringify(place.fieldValues ?? {})
         ) {
-          changes.attributes = {
-            ...place.attributes,
-            customFields: effectiveCustomFields,
-          };
+          changes.fieldValues = nextValues;
         }
         if (Object.keys(changes).length === 0) {
           onClose();
@@ -260,17 +271,15 @@ export function PlaceEditSheet({
           latitude: draft.latitude as number,
           longitude: draft.longitude as number,
           altNames: draft.altNames,
-          vGrade: draft.vGrade,
-          aGrade: draft.aGrade,
-          commitment: draft.commitment,
-          quality: draft.quality,
-          numAbseils: draft.numAbseils,
-          longestAbseil: draft.longestAbseil,
-          hours: draft.hours,
           notes: draft.notes,
-          ...(Object.keys(effectiveCustomFields).length > 0 && {
-            attributes: { customFields: effectiveCustomFields },
-          }),
+          // ponytail: the phone still creates CANYONS from this sheet. The
+          // "choose a type, then its form" flow is phase 5, where the Places
+          // screen grows its type tabs and there is somewhere to choose from.
+          placeTypeId: SYSTEM_PLACE_TYPE_IDS.canyon,
+          fieldValues: withFieldValues(
+            {},
+            { ...effectiveCustomFields, ...definedGrades(draft) },
+          ),
         });
         onSaved("Place added.");
       }
@@ -507,11 +516,15 @@ function GradePicker({
   onChange,
 }: {
   label: string;
-  axis: keyof typeof PLACE_RANGE_BOUNDS;
+  /** A reserved field key — the picker's stops come from that definition's
+   *  own bounds, which is the only place they are declared. */
+  axis: string;
   value: string;
   onChange: (next: string) => void;
 }) {
-  const [min, max] = PLACE_RANGE_BOUNDS[axis];
+  const def = SYSTEM_FIELD_DEFS.find((candidate) => candidate.key === axis);
+  const min = def?.min ?? 1;
+  const max = def?.max ?? 7;
   const options: SegmentOption<string>[] = [{ value: "", label: "—" }];
   for (let stop = min; stop <= max; stop += 1) {
     options.push({ value: String(stop), label: String(stop) });
@@ -524,23 +537,37 @@ function GradePicker({
   );
 }
 
-const NUMERIC_KEYS = [
-  "vGrade",
-  "aGrade",
-  "commitment",
-  "quality",
-  "numAbseils",
-  "longestAbseil",
-  "hours",
-] as const;
+// The form's seven numeric inputs, and the reserved key each one writes. The
+// draft still names them the way a canyon does; this is where that becomes a
+// field key.
+const GRADE_KEYS: Record<string, string> = {
+  vGrade: "v_grade",
+  aGrade: "a_grade",
+  commitment: "commitment",
+  quality: "quality",
+  numAbseils: "num_abseils",
+  longestAbseil: "longest_abseil",
+  hours: "hours",
+};
 
-/** Only the numeric fields the user actually filled in — the validator must not
- * be handed an explicit null for a field that simply isn't recorded. */
+/** Only the fields the user actually filled in — the validator must not be
+ *  handed an explicit null for a field that simply isn't recorded. */
 function definedNumbers(draft: Record<string, unknown>): Record<string, number> {
   const out: Record<string, number> = {};
-  for (const key of NUMERIC_KEYS) {
-    const value = draft[key];
-    if (typeof value === "number") out[key] = value;
+  for (const [draftKey, fieldKey] of Object.entries(GRADE_KEYS)) {
+    const value = draft[draftKey];
+    if (typeof value === "number") out[fieldKey] = value;
+  }
+  return out;
+}
+
+/** The same seven, but keeping the CLEARED ones as null so `setFieldValues`
+ *  removes them — clearing a grade has to be expressible, and an omitted key
+ *  would silently leave the old value in place. */
+function definedGrades(draft: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [draftKey, fieldKey] of Object.entries(GRADE_KEYS)) {
+    out[fieldKey] = draft[draftKey] ?? null;
   }
   return out;
 }

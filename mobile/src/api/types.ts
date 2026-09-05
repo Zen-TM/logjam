@@ -6,7 +6,6 @@
 // no call site had to move; add nothing to it but re-exports.
 export type {
   TPlace,
-  TPlaceAttributes,
   TNotification,
   TTripLog,
   TUser,

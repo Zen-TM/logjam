@@ -14,13 +14,7 @@ import {
   activeFilterCount,
   emptyFilters,
 } from "../../../placeUtils";
-// The graded axes' bounds double as the "inactive" value, so they come from
-// the same place the predicate reads them (shared/src/placeFilter.ts).
-import {
-  PLACE_RANGE_BOUNDS as SLIDER_RANGES,
-  regionEdgesKm,
-  type PlaceRangeKey,
-} from "@logjam/shared";
+import { numericFieldValue, regionEdgesKm } from "@logjam/shared";
 import type { RefreshResult } from "../../../placeUtils";
 import { useStoredState } from "../../../useStoredState";
 import type { PanelId } from "../panels";
@@ -31,8 +25,6 @@ import ConfirmDialog from "../../dialogs/ConfirmDialog";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
 
-type SliderKey = PlaceRangeKey;
-type ThresholdKey = "pitches" | "longest_pitch" | "hours";
 
 type SortKey = "name" | "recent" | "grade";
 
@@ -63,10 +55,15 @@ const COMPLETION_OPTIONS: { value: TFilters["completion"]; label: string }[] = [
   { value: "not_done", label: "Not done" },
 ];
 
+// The V/A summary on a row. Reads the reserved canyon keys out of fieldValues;
+// a place of a type that carries no grades summarises to "", which is what an
+// ungraded canyon always did.
 function gradeSummary(c: TPlace): string {
   const parts: string[] = [];
-  if (c.vGrade != null) parts.push(`V${c.vGrade}`);
-  if (c.aGrade != null) parts.push(`A${c.aGrade}`);
+  const v = numericFieldValue(c.fieldValues, "v_grade");
+  const a = numericFieldValue(c.fieldValues, "a_grade");
+  if (v != null) parts.push(`V${v}`);
+  if (a != null) parts.push(`A${a}`);
   return parts.join(" ");
 }
 
@@ -173,11 +170,11 @@ function PlacesPanel({
         case "recent":
           return b.createdAt.localeCompare(a.createdAt);
         case "grade": {
-          const av = a.vGrade ?? Infinity;
-          const bv = b.vGrade ?? Infinity;
+          const av = numericFieldValue(a.fieldValues, "v_grade") ?? Infinity;
+          const bv = numericFieldValue(b.fieldValues, "v_grade") ?? Infinity;
           if (av !== bv) return av - bv;
-          const aa = a.aGrade ?? Infinity;
-          const ba = b.aGrade ?? Infinity;
+          const aa = numericFieldValue(a.fieldValues, "a_grade") ?? Infinity;
+          const ba = numericFieldValue(b.fieldValues, "a_grade") ?? Infinity;
           if (aa !== ba) return aa - ba;
           return a.name.localeCompare(b.name);
         }
@@ -193,20 +190,6 @@ function PlacesPanel({
   // Sliders keep a local draft so the thumb tracks the drag smoothly; the
   // global filter only commits on release (onChangeCommitted). Full range
   // commits as null — the canonical "inactive" value (see placeUtils).
-  const draftFromFilters = useCallback(
-    (f: TFilters): Record<SliderKey, number[]> => ({
-      v_grade: f.v_grade ?? [...SLIDER_RANGES.v_grade],
-      a_grade: f.a_grade ?? [...SLIDER_RANGES.a_grade],
-      commitment: f.commitment ?? [...SLIDER_RANGES.commitment],
-      quality: f.quality ?? [...SLIDER_RANGES.quality],
-    }),
-    [],
-  );
-  const [sliderDraft, setSliderDraft] = useState(() => draftFromFilters(filters));
-  useEffect(() => {
-    setSliderDraft(draftFromFilters(filters));
-  }, [filters, draftFromFilters]);
-
   // Bounded custom-field range sliders keep their own draft map, keyed by field
   // key, synced from the committed filter (defaulting to the field's full span).
   const customDraftFromFilters = useCallback(
@@ -229,12 +212,6 @@ function PlacesPanel({
     setCustomSliderDraft(customDraftFromFilters(filters));
   }, [filters, customDraftFromFilters]);
 
-  function commitSlider(key: SliderKey, v: number[]) {
-    const [min, max] = SLIDER_RANGES[key];
-    const value = v[0] === min && v[1] === max ? null : v;
-    onChangeFilters({ ...filters, [key]: value });
-  }
-
   function clearFilter(key: keyof TFilters, emptyValue: TFilters[keyof TFilters]) {
     onChangeFilters({ ...filters, [key]: emptyValue });
   }
@@ -249,110 +226,6 @@ function PlacesPanel({
       >
         <X size={12} />
       </button>
-    );
-  }
-
-  function sliderCell(
-    key: SliderKey,
-    displayName: string,
-    tooltip?: string,
-  ) {
-    const range = SLIDER_RANGES[key];
-    const value = sliderDraft[key];
-    const isFull = value[0] === range[0] && value[1] === range[1];
-    const isActive = filters[key] != null;
-    return (
-      <div
-        className={`${classes.sliderCell} ${isFull ? classes.sliderInactive : ""}`}
-        key={key}
-        title={tooltip}
-      >
-        <div className={classes.sliderLabel}>
-          <span className={classes.sliderLabelText}>{displayName}</span>
-          <span className={classes.sliderValueGroup}>
-            <span className={classes.sliderValue}>
-              {isFull ? "Any" : `${value[0]}–${value[1]}`}
-            </span>
-            {isActive && clearButton(() => clearFilter(key, null))}
-          </span>
-        </div>
-        <Slider
-          id={key}
-          color="secondary"
-          marks
-          step={1}
-          min={range[0]}
-          max={range[1]}
-          value={value}
-          valueLabelDisplay="auto"
-          onChange={(_e, v) => {
-            if (Array.isArray(v) && v.length === 2) {
-              setSliderDraft((d) => ({ ...d, [key]: v }));
-            }
-          }}
-          onChangeCommitted={(_e, v) => {
-            if (Array.isArray(v) && v.length === 2) commitSlider(key, v);
-          }}
-        />
-      </div>
-    );
-  }
-
-  function thresholdCell(key: ThresholdKey, displayName: string) {
-    const current = filters[key];
-    const op = current?.[0] ?? "Any";
-    const num = current?.[1] ?? 0;
-    const isActive = current != null && op !== "Any";
-    return (
-      <div className={classes.selectCell} key={key}>
-        <div className={classes.selectLabel}>
-          <span>{displayName}</span>
-          {isActive && clearButton(() => clearFilter(key, null))}
-        </div>
-        <div className={classes.selectContainer}>
-          <select
-            id={`${key}Operator`}
-            className={classes.select}
-            value={op}
-            onChange={(e) => {
-              const nextOp = e.target.value as
-                | "Any"
-                | "Less than"
-                | "More than"
-                | "Exactly";
-              onChangeFilters({
-                ...filters,
-                [key]: nextOp === "Any" ? null : [nextOp, num],
-              });
-            }}
-          >
-            <option value="Any">Any</option>
-            <option value="Less than">&lt;</option>
-            <option value="More than">&gt;</option>
-            <option value="Exactly">=</option>
-          </select>
-          {op !== "Any" && (
-            // FEUI-005: uncontrolled (defaultValue, not value) so backspacing
-            // to empty doesn't get snapped back to the last committed number
-            // on every keystroke — React only re-applies `value` bindings,
-            // never `defaultValue`, after mount. A commit still fires live on
-            // every valid parse; an empty/invalid intermediate state is left
-            // alone rather than reverted or force-committed.
-            <input
-              type="number"
-              aria-label={`${displayName} value`}
-              className={classes.numberInput}
-              defaultValue={num}
-              onChange={(e) => {
-                const v = parseInt(e.target.value, 10);
-                if (!isNaN(v)) {
-                  onChangeFilters({ ...filters, [key]: [op, v] });
-                }
-              }}
-            />
-          )}
-        </div>
-      </div>
     );
   }
 
@@ -795,23 +668,16 @@ function PlacesPanel({
                   )}
                 </div>
               </div>
-              <div className={classes.section}>
-                <div className={classes.sectionHeader}>Grades</div>
-                <div className={classes.sliderGrid}>
-                  {sliderCell("v_grade", "Vertical")}
-                  {sliderCell("a_grade", "Aquatic")}
-                  {sliderCell("commitment", "Commitment")}
-                  {sliderCell("quality", "Quality")}
-                </div>
-              </div>
-              <div className={classes.section}>
-                <div className={classes.sectionHeader}>Logistics</div>
-                <div className={classes.selectGrid}>
-                  {thresholdCell("pitches", "Pitches")}
-                  {thresholdCell("longest_pitch", "Longest pitch (m)")}
-                  {thresholdCell("hours", "Hours (h)")}
-                </div>
-              </div>
+              {/* The Grades and Logistics sections are GONE, and nothing was
+                  lost with them. Those seven axes are ordinary field
+                  definitions now, so they render through the same
+                  `customFieldCell` as every other field, below — a bounded one
+                  still gets its double-ended slider and a min-only one still
+                  gets op+value, because `customFilterKind` decides that from
+                  the definition's bounds rather than from a hardcoded list.
+                  The user's OWN bounded field gets the slider too now, which it
+                  never did. Grouping them back under their own headings is
+                  phase 6's job, along with the rest of the web UI. */}
               {/* Location. Two ways in, because they answer different
                   questions: most of the time the user has already panned to the
                   country they mean, and "This view" is that with no gesture at
@@ -1028,7 +894,7 @@ function PlacesPanel({
         open={confirmRefreshOpen}
         title="Import from RopeWiki?"
         message={
-          "This fetches the public NSW place list from ropewiki.com and adds any places you don't already have, updating RopeWiki-sourced ones you haven't edited. Places that look like ones you already have are set aside for you to review before they're imported. Nothing you've edited is overwritten."
+          "This fetches the public NSW canyon list from ropewiki.com and adds any canyons you don't already have, updating RopeWiki-sourced ones you haven't edited. Canyons that look like ones you already have are set aside for you to review before they're imported. Nothing you've edited is overwritten."
         }
         confirmLabel="Fetch from RopeWiki"
         confirmColor="secondary"

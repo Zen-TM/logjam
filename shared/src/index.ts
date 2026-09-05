@@ -10,6 +10,8 @@ export * from "./elvisZip.js";
 export * from "./placeNameMatch.js";
 export * from "./placeGeo.js";
 export * from "./geocode.js";
+export * from "./placeTypes.js";
+export * from "./fieldValues.js";
 export * from "./placeValidation.js";
 export * from "./placeMatch.js";
 export * from "./mergePlace.js";

@@ -7,6 +7,7 @@ import {
   CAROL_SUB,
   SHARED_PLACE_ID,
   as,
+  CANYON_TYPE_ID
 } from "./_actors";
 
 // The delta endpoint requires the client-version header (the forced-upgrade
@@ -199,7 +200,7 @@ describe("waypoints share boundary", () => {
     const privatePlace = await request(API_URL)
       .post("/places")
       .set(as(ALICE_SUB))
-      .send({ name: "Unshared place", latitude: -33.68, longitude: 150.28 });
+      .send({ placeTypeId: CANYON_TYPE_ID, name: "Unshared place", latitude: -33.68, longitude: 150.28 });
     expect(privatePlace.status).toBe(201);
 
     const created = await request(API_URL)
@@ -295,7 +296,7 @@ describe("trip updatedAt watermark (stage8 §3.1 trap)", () => {
     const place = await request(API_URL)
       .post("/places")
       .set(as(ALICE_SUB))
-      .send({ name: "Watermark place", latitude: -33.66, longitude: 150.26 });
+      .send({ placeTypeId: CANYON_TYPE_ID, name: "Watermark place", latitude: -33.66, longitude: 150.26 });
     expect(place.status).toBe(201);
 
     const trip = await request(API_URL)

@@ -10,7 +10,9 @@ import {
   snapshotsEqual,
   isRopeWikiOwned,
   attributesSourcesEqual,
+  ROPE_WIKI_FIELD_KEYS,
   ROPE_WIKI_OWNABLE_FIELDS,
+  ropeWikiFieldValues,
   type RopeWikiCanyon,
   type RopeWikiSnapshot,
   type RopeWikiOwnableField,
@@ -21,7 +23,14 @@ import {
   mergeFillNulls,
   type DedupeProposal,
 } from "../services/ropewikiDedupe";
-import { matchOzUltimateUrl } from "@logjam/shared";
+import {
+  asFieldValues,
+  fieldValue,
+  matchOzUltimateUrl,
+  SOURCES_FIELD_KEY,
+  SYSTEM_PLACE_TYPE_IDS,
+} from "@logjam/shared";
+import { Prisma } from "@prisma/client";
 
 const router = Router();
 
@@ -77,17 +86,14 @@ async function applyAutoLinkAndCreate(
         const c = withOzUltimate(parsedByRwId.get(p.ropeWikiId)!);
         return {
           ownerId,
+          // RopeWiki is a CANYON source, hardwired to the system Canyon type.
+          // It stays canyon-specific through the places rework (plan §5.2) —
+          // there is no generic form of a V grade.
+          placeTypeId: SYSTEM_PLACE_TYPE_IDS.canyon,
           name: c.name,
           latitude: c.latitude,
           longitude: c.longitude,
-          numAbseils: c.numAbseils,
-          longestAbseil: c.longestAbseil,
-          vGrade: c.vGrade,
-          aGrade: c.aGrade,
-          commitment: c.commitment,
-          quality: c.quality,
-          hours: c.hours,
-          attributes: c.attributes,
+          fieldValues: ropeWikiFieldValues(c) as Prisma.InputJsonValue,
           ropeWikiId: c.ropeWikiId,
           ropeWikiSnapshot: snapshotFromCreate(c),
         };
@@ -108,11 +114,12 @@ async function applyAutoLinkAndCreate(
         throw new AppError(500, `Missing existing place for id ${p.bestPlaceId}`);
       const fresh = withOzUltimate(rawFresh, existing.altNames);
       const merged = mergeFillNulls(existing, fresh);
-      const { ropeWikiOwnedFields, ...mergedFields } = merged;
+      const { ropeWikiOwnedFields, fieldValues, ropeWikiId } = merged;
       return prisma.place.update({
         where: { id: existing.id },
         data: {
-          ...mergedFields,
+          ropeWikiId,
+          fieldValues: fieldValues as Prisma.InputJsonValue,
           ropeWikiSnapshot: snapshotFromLink(fresh, ropeWikiOwnedFields),
         },
       });
@@ -310,12 +317,13 @@ router.post(
       }
       const freshWithOz = withOzUltimate(fresh, target.altNames);
       const merged = mergeFillNulls(target, freshWithOz);
-      const { ropeWikiOwnedFields, ...mergedFields } = merged;
+      const { ropeWikiOwnedFields, fieldValues, ropeWikiId } = merged;
       updates.push(
         prisma.place.update({
           where: { id: target.id },
           data: {
-            ...mergedFields,
+            ropeWikiId,
+            fieldValues: fieldValues as Prisma.InputJsonValue,
             ropeWikiSnapshot: snapshotFromLink(freshWithOz, ropeWikiOwnedFields),
           },
         }),
@@ -329,17 +337,14 @@ router.post(
           const c = withOzUltimate(rawC);
           return {
             ownerId: user.id,
+            // RopeWiki is a CANYON source, hardwired to the system Canyon type.
+            // It stays canyon-specific through the places rework (plan §5.2) —
+            // there is no generic form of a V grade.
+            placeTypeId: SYSTEM_PLACE_TYPE_IDS.canyon,
             name: c.name,
             latitude: c.latitude,
             longitude: c.longitude,
-            numAbseils: c.numAbseils,
-            longestAbseil: c.longestAbseil,
-            vGrade: c.vGrade,
-            aGrade: c.aGrade,
-            commitment: c.commitment,
-            quality: c.quality,
-            hours: c.hours,
-            attributes: c.attributes,
+            fieldValues: ropeWikiFieldValues(c) as Prisma.InputJsonValue,
             ropeWikiId: c.ropeWikiId,
             ropeWikiSnapshot: snapshotFromCreate(c),
           };
@@ -458,8 +463,18 @@ router.post(
       const newOwnedFields: RopeWikiOwnableField[] =
         effectiveOwnership === "*" ? [...ROPE_WIKI_OWNABLE_FIELDS] : [...effectiveOwnership];
 
+      // The snapshot keeps RopeWiki's own camelCase names — it is persisted and
+      // compared field by field on every refresh, so renaming its keys would
+      // make every existing snapshot look like a user edit and freeze RopeWiki
+      // out of every field it owns. The place side speaks field KEYS, so the
+      // comparison translates one to the other rather than moving either.
+      const existingValues = asFieldValues(existing.fieldValues);
+      const nextValues: Record<string, unknown> = { ...existingValues };
+      let valuesChanged = false;
+
       for (const field of ROPE_WIKI_OWNABLE_FIELDS) {
-        const existingVal = existing[field];
+        const key = ROPE_WIKI_FIELD_KEYS[field];
+        const existingVal = fieldValue(existingValues, key) ?? null;
         const snapshotVal = effectiveSnapshot[field];
         const freshVal = freshWithOz[field];
 
@@ -470,27 +485,33 @@ router.post(
             if (idx !== -1) newOwnedFields.splice(idx, 1);
           } else if (freshVal !== snapshotVal) {
             // RopeWiki changed this field and user hasn't touched it — update.
-            placeData[field] = freshVal;
+            if (freshVal === null || freshVal === undefined) delete nextValues[key];
+            else nextValues[key] = freshVal;
+            valuesChanged = true;
           }
         }
         // user-owned fields: never overwrite.
       }
 
       // Sources: always union (no ownership semantics).
-      const existingAttrs = existing.attributes as { sources?: [string, string][] } | null;
-      const existingSources = existingAttrs?.sources ?? [];
+      const existingSources =
+        (existingValues[SOURCES_FIELD_KEY] as [string, string][] | undefined) ?? [];
       const freshSources = freshWithOz.attributes?.sources ?? [];
       const mergedSources = [...existingSources];
       for (const [label, url] of freshSources) {
         if (!mergedSources.some(([, u]) => u === url)) mergedSources.push([label, url]);
       }
-      const sourcesChanged = !attributesSourcesEqual(existingAttrs, { sources: mergedSources.length ? mergedSources : undefined });
+      const sourcesChanged = !attributesSourcesEqual(
+        { sources: existingSources.length ? existingSources : undefined },
+        { sources: mergedSources.length ? mergedSources : undefined },
+      );
       if (sourcesChanged) {
-        placeData["attributes"] = {
-          ...(existing.attributes as object ?? {}),
-          sources: mergedSources.length ? mergedSources : undefined,
-        };
+        if (mergedSources.length) nextValues[SOURCES_FIELD_KEY] = mergedSources;
+        else delete nextValues[SOURCES_FIELD_KEY];
+        valuesChanged = true;
       }
+
+      if (valuesChanged) placeData["fieldValues"] = nextValues;
 
       const newSnapshot: RopeWikiSnapshot = {
         ...freshSnapshot,

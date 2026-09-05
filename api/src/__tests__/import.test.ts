@@ -2,7 +2,7 @@ import { describe, it, expect, afterAll } from "vitest";
 import request from "supertest";
 import { randomUUID } from "node:crypto";
 import prisma from "../services/prisma";
-import { ALICE_ID } from "./_actors";
+import { ALICE_ID, CANYON_TYPE_ID} from "./_actors";
 
 // Idempotent file-import endpoints (see plan §6b/§6c, §8).
 // Requires `make dev` running with AUTH_MODE=fake (requests = seeded alice).
@@ -38,6 +38,7 @@ describe("POST /places/bulk — idempotent import (fake auth = alice)", () => {
     const name = `IMP place idempotent ${run}`;
     const batchId = newBatch();
     const body = {
+      placeTypeId: CANYON_TYPE_ID,
       importBatchId: batchId,
       rows: [placeRow(name, -33.71, 150.31)],
     };
@@ -51,7 +52,7 @@ describe("POST /places/bulk — idempotent import (fake auth = alice)", () => {
     const second = await request(API_URL)
       .post("/places/bulk")
       .set(AUTH)
-      .send({ ...body, importBatchId: newBatch() });
+      .send({ placeTypeId: CANYON_TYPE_ID, ...body, importBatchId: newBatch() });
     expect(second.status).toBe(200);
     expect(second.body.created).toBe(0);
 
@@ -67,7 +68,7 @@ describe("POST /places/bulk — idempotent import (fake auth = alice)", () => {
     const created = await request(API_URL)
       .post("/places")
       .set(AUTH)
-      .send({ name: `IMP merge target ${run}`, latitude: -33.72, longitude: 150.32, vGrade: 2 });
+      .send({ placeTypeId: CANYON_TYPE_ID, name: `IMP merge target ${run}`, latitude: -33.72, longitude: 150.32, fieldValues: { v_grade: 2 } });
     expect(created.status).toBe(201);
     const placeId = created.body.id as string;
 
@@ -76,7 +77,7 @@ describe("POST /places/bulk — idempotent import (fake auth = alice)", () => {
       .post("/places/bulk")
       .set(AUTH)
       .send({
-        importBatchId: batchId,
+        placeTypeId: CANYON_TYPE_ID, importBatchId: batchId,
         // keepExisting on vGrade (conflict → keep 2); notes is null on the
         // existing row so the incoming value fills it regardless of policy.
         mergePolicy: undefined,
@@ -86,7 +87,7 @@ describe("POST /places/bulk — idempotent import (fake auth = alice)", () => {
               name: `IMP merge target ${run}`,
               latitude: -33.72,
               longitude: 150.32,
-              vGrade: 5,
+              fieldValues: { v_grade: 5 },
               notes: "from import",
             },
             resolution: { kind: "merge", placeId },
@@ -97,7 +98,9 @@ describe("POST /places/bulk — idempotent import (fake auth = alice)", () => {
     expect(res.body.merged).toBe(1);
 
     const after = await prisma.place.findUnique({ where: { id: placeId } });
-    expect(after?.vGrade).toBe(2); // default policy keeps existing
+    // Default policy keeps the existing value. It lives in `fieldValues`
+    // now rather than a column, which is the only thing that changed here.
+    expect((after?.fieldValues as Record<string, unknown>).v_grade).toBe(2);
     expect(after?.notes).toBe("from import"); // null filled, no data lost
     // Merged-into pre-existing row must NOT be batch-stamped (so undo spares it).
     expect(after?.importBatchId).toBeNull();
@@ -165,7 +168,7 @@ describe("POST /trips/bulk — idempotent import (fake auth = alice)", () => {
     const place = await request(API_URL)
       .post("/places")
       .set(AUTH)
-      .send({ name: sourcePlaceName, latitude: -33.6, longitude: 150.2 });
+      .send({ placeTypeId: CANYON_TYPE_ID, name: sourcePlaceName, latitude: -33.6, longitude: 150.2 });
     const placeId = place.body.id as string;
 
     // 3) Re-import the SAME file, now resolved to the place. importKey is keyed
@@ -204,7 +207,7 @@ describe("DELETE /imports/:batchId — undo (fake auth = alice)", () => {
     const preexisting = await request(API_URL)
       .post("/places")
       .set(AUTH)
-      .send({ name: `IMP undo preexisting ${run}`, latitude: -33.5, longitude: 150.1 });
+      .send({ placeTypeId: CANYON_TYPE_ID, name: `IMP undo preexisting ${run}`, latitude: -33.5, longitude: 150.1 });
     const preexistingId = preexisting.body.id as string;
 
     const batchId = newBatch();
@@ -214,7 +217,7 @@ describe("DELETE /imports/:batchId — undo (fake auth = alice)", () => {
       .post("/places/bulk")
       .set(AUTH)
       .send({
-        importBatchId: batchId,
+        placeTypeId: CANYON_TYPE_ID, importBatchId: batchId,
         rows: [
           placeRow(`IMP undo created ${run}`, -33.8, 150.4),
           {

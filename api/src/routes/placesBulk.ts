@@ -4,19 +4,20 @@ import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
 import { Prisma } from "@prisma/client";
 import {
-  mergePlace,
-  DEFAULT_PLACE_MERGE_POLICY,
-  MERGEABLE_FIELDS,
+  asFieldValues,
+  defaultPlaceMergePolicy,
   isValidLatitude,
   isValidLongitude,
   LATITUDE_RANGE,
   LONGITUDE_RANGE,
-  PLACE_NUMERIC_CONSTRAINTS,
-  numericConstraintError,
+  mergeableFieldsForDefs,
+  mergePlace,
+  validateFieldValues,
   type PlaceMergePolicy,
-  type PlaceNumericFieldName,
+  type TripLogCustomFieldDef,
 } from "@logjam/shared";
 import { resolveUser } from "../lib/resolveUser";
+import { defsForPlaceType, resolvePlaceTypeId } from "../lib/placeTypes";
 import { placeImportKey } from "../lib/importKeys";
 import { deletePlacesCascade } from "../lib/bulkDelete";
 
@@ -36,14 +37,10 @@ type BulkPlaceInput = {
   longitude: number;
   altNames?: string[];
   notes?: string | null;
-  vGrade?: number | null;
-  aGrade?: number | null;
-  commitment?: number | null;
-  quality?: number | null;
-  numAbseils?: number | null;
-  longestAbseil?: number | null;
-  hours?: number | null;
-  attributes?: Record<string, unknown>;
+  /** Type-specific values, keyed by definition key. The seven grade columns
+   *  used to be named members here; they are ordinary keys now, which is what
+   *  lets a CSV of campsites import through the same endpoint. */
+  fieldValues?: Record<string, unknown>;
 };
 
 type BulkError = { rowIndex: number; message: string };
@@ -52,6 +49,7 @@ function validateInput(
   input: BulkPlaceInput,
   rowIndex: number,
   errors: BulkError[],
+  defs: TripLogCustomFieldDef[],
 ): boolean {
   // Messages carry no "Row N:" prefix: `rowIndex` is returned alongside so the
   // caller can label the error with the ORIGINAL CSV line (the request-body index
@@ -75,52 +73,43 @@ function validateInput(
     });
     return false;
   }
-  // Numeric fields (grades, quality, pitches, longest pitch, hours) derive their
-  // range + integer rule from the shared PLACE_NUMERIC_CONSTRAINTS so this
-  // import path can never drift from POST/PATCH /places. Previously this block
-  // re-implemented the grade/quality ranges inline and omitted
-  // numAbseils/longestAbseil/hours entirely, letting negatives through here.
-  const numericFields: PlaceNumericFieldName[] = [
-    "vGrade",
-    "aGrade",
-    "commitment",
-    "quality",
-    "numAbseils",
-    "longestAbseil",
-    "hours",
-  ];
-  for (const field of numericFields) {
-    const value = input[field];
-    if (value == null) continue;
-    const constraint = PLACE_NUMERIC_CONSTRAINTS[field];
-    if (typeof value !== "number") {
-      errors.push({ rowIndex, message: `${constraint.label} must be a number` });
-      return false;
-    }
-    const message = numericConstraintError(value, constraint);
-    if (message) {
-      errors.push({ rowIndex, message });
-      return false;
-    }
+  // Field values are validated against the DEFINITIONS in force for the target
+  // type, which is the same check POST/PATCH /places runs — so this import path
+  // cannot drift from them. It used to re-implement the grade ranges inline and
+  // omit pitches/longest/hours entirely, letting negatives through here.
+  const message = validateFieldValues(asFieldValues(input.fieldValues), defs);
+  if (message) {
+    errors.push({ rowIndex, message });
+    return false;
   }
   return true;
 }
 
-// Re-validate the client-supplied policy against the shared MERGEABLE_FIELDS —
-// the same list mergePlace enforces and the frontend renders switches for. This
-// used to redeclare the field names, so adding a policy entry in shared left the
-// server silently rejecting it as an unknown key.
-function validateMergePolicy(policy: unknown): PlaceMergePolicy | null {
-  if (typeof policy !== "object" || policy === null) return null;
-  const candidate = policy as Record<string, unknown>;
-  for (const field of MERGEABLE_FIELDS) {
-    const value = candidate[field];
-    if (value !== "keepExisting" && value !== "useIncoming") return null;
+// Re-validate the client-supplied policy against the fields this TYPE actually
+// has — the same list mergePlace enforces and the frontend renders switches
+// for. It used to redeclare the field names, so adding a policy entry in shared
+// left the server silently rejecting it as an unknown key; now the list is
+// derived from the type's definitions, so it cannot be redeclared at all.
+//
+// A field the policy omits is keepExisting (mergePolicyFor), so a partial
+// policy is accepted rather than rejected: rejecting it would revert every
+// merge choice the user made the moment they added or deleted a field.
+function validateMergePolicy(
+  policy: unknown,
+  defs: TripLogCustomFieldDef[],
+): PlaceMergePolicy | null {
+  if (typeof policy !== "object" || policy === null || Array.isArray(policy)) {
+    return null;
   }
-  // Drop unknown keys — reconstruct from known fields only.
+  const candidate = policy as Record<string, unknown>;
   const result = {} as PlaceMergePolicy;
-  for (const field of MERGEABLE_FIELDS) {
-    result[field] = candidate[field] as "keepExisting" | "useIncoming";
+  for (const field of mergeableFieldsForDefs(defs)) {
+    const value = candidate[field];
+    if (value === undefined) continue;
+    // A malformed VALUE is still a rejection: garbage must not reach the merge
+    // dressed as a decision.
+    if (value !== "keepExisting" && value !== "useIncoming") return null;
+    result[field] = value;
   }
   return result;
 }
@@ -132,6 +121,7 @@ type ImportRow = {
 
 type ImportRequest = {
   importBatchId: string;
+  placeTypeId?: unknown;
   rows: ImportRow[];
   mergePolicy?: unknown;
 };
@@ -155,9 +145,17 @@ router.post(
       throw new AppError(413, `Cannot import more than ${BULK_IMPORT_LIMIT} places at once`);
     }
 
+    // Import gains a TYPE: every row of one CSV lands in one type, chosen by
+    // the user before column mapping. That is symmetric with creating a place,
+    // and it is what makes the column mapping meaningful — the type's field
+    // labels are what the columns map ONTO.
+    const placeTypeId = await resolvePlaceTypeId(user.id, body.placeTypeId);
+    const defs = await defsForPlaceType(user.id, placeTypeId);
+
+    const defaultPolicy = defaultPlaceMergePolicy(mergeableFieldsForDefs(defs));
     const policy: PlaceMergePolicy = body.mergePolicy
-      ? (validateMergePolicy(body.mergePolicy) ?? DEFAULT_PLACE_MERGE_POLICY)
-      : DEFAULT_PLACE_MERGE_POLICY;
+      ? (validateMergePolicy(body.mergePolicy, defs) ?? defaultPolicy)
+      : defaultPolicy;
 
     // ---- Phase 1: Validate ALL rows before ANY write ----
     const errors: BulkError[] = [];
@@ -184,7 +182,7 @@ router.post(
         errors.push({ rowIndex: i, message: "resolution.placeId is required for merge" });
         continue;
       }
-      if (!validateInput(row.data, i, errors)) continue;
+      if (!validateInput(row.data, i, errors, defs)) continue;
 
       const importKey = placeImportKey(row.data.name, row.data.latitude, row.data.longitude);
       validRows.push({ rowIndex: i, data: row.data, importKey, resolution: row.resolution });
@@ -202,11 +200,9 @@ router.post(
       ? await prisma.place.findMany({
           where: { id: { in: mergeTargetIds }, ownerId: user.id },
           select: {
-            id: true, ownerId: true, importKey: true,
+            id: true, ownerId: true, importKey: true, placeTypeId: true,
             name: true, latitude: true, longitude: true, altNames: true,
-            vGrade: true, aGrade: true, commitment: true, quality: true,
-            numAbseils: true, longestAbseil: true, hours: true, notes: true,
-            attributes: true,
+            notes: true, fieldValues: true,
           },
         })
       : [];
@@ -235,11 +231,9 @@ router.post(
       const existing = await prisma.place.findMany({
         where: { ownerId: user.id, importKey: { in: allImportKeys } },
         select: {
-          id: true, ownerId: true, importKey: true,
+          id: true, ownerId: true, importKey: true, placeTypeId: true,
           name: true, latitude: true, longitude: true, altNames: true,
-          vGrade: true, aGrade: true, commitment: true, quality: true,
-          numAbseils: true, longestAbseil: true, hours: true, notes: true,
-          attributes: true,
+          notes: true, fieldValues: true,
         },
       });
       for (const row of existing) {
@@ -302,25 +296,14 @@ router.post(
       if (existingPlace) {
         // Merge into existing — do NOT create, do NOT touch its importBatchId.
         // Cast attributes from Prisma JsonValue to Record<string, unknown> for mergePlace.
-        const mergedResult = mergePlace(
-          { ...existingPlace, attributes: existingPlace.attributes as Record<string, unknown> | null },
-          data,
-          policy,
-        );
+        const mergedResult = mergePlace(existingPlace, data, policy);
         merges.push({
           kind: "merge",
           placeId: existingPlace.id,
           mergedData: {
             altNames: mergedResult.altNames,
-            vGrade: mergedResult.vGrade ?? null,
-            aGrade: mergedResult.aGrade ?? null,
-            commitment: mergedResult.commitment ?? null,
-            quality: mergedResult.quality ?? null,
-            numAbseils: mergedResult.numAbseils ?? null,
-            longestAbseil: mergedResult.longestAbseil ?? null,
-            hours: mergedResult.hours ?? null,
             notes: mergedResult.notes ?? null,
-            attributes: mergedResult.attributes as Prisma.InputJsonValue,
+            fieldValues: mergedResult.fieldValues as Prisma.InputJsonValue,
           },
           setImportKey: null, // Already has an importKey.
           sourceName: data.name,
@@ -333,11 +316,7 @@ router.post(
         // Merge into a specific pre-existing place.
         const targetId = (resolution as { kind: "merge"; placeId: string }).placeId;
         const target = mergeTargetById.get(targetId)!;
-        const mergedResult = mergePlace(
-          { ...target, attributes: target.attributes as Record<string, unknown> | null },
-          data,
-          policy,
-        );
+        const mergedResult = mergePlace(target, data, policy);
         // Set importKey if currently null (so future re-imports are idempotent)
         // — but only if no create row and no earlier merge in this request
         // already claims it, otherwise the write races to the same
@@ -358,15 +337,8 @@ router.post(
           placeId: targetId,
           mergedData: {
             altNames: mergedResult.altNames,
-            vGrade: mergedResult.vGrade ?? null,
-            aGrade: mergedResult.aGrade ?? null,
-            commitment: mergedResult.commitment ?? null,
-            quality: mergedResult.quality ?? null,
-            numAbseils: mergedResult.numAbseils ?? null,
-            longestAbseil: mergedResult.longestAbseil ?? null,
-            hours: mergedResult.hours ?? null,
             notes: mergedResult.notes ?? null,
-            attributes: mergedResult.attributes as Prisma.InputJsonValue,
+            fieldValues: mergedResult.fieldValues as Prisma.InputJsonValue,
           },
           setImportKey,
           sourceName: data.name,
@@ -384,29 +356,15 @@ router.post(
               latitude: priorOp.data.latitude,
               longitude: priorOp.data.longitude,
               altNames: priorOp.data.altNames as string[] | undefined,
-              attributes: priorOp.data.attributes as unknown as Record<string, unknown> | null,
-              vGrade: priorOp.data.vGrade,
-              aGrade: priorOp.data.aGrade,
-              commitment: priorOp.data.commitment,
-              quality: priorOp.data.quality,
-              numAbseils: priorOp.data.numAbseils,
-              longestAbseil: priorOp.data.longestAbseil,
-              hours: priorOp.data.hours,
               notes: priorOp.data.notes,
+              fieldValues: priorOp.data.fieldValues,
             },
             data,
             policy,
           );
           priorOp.data.altNames = folded.altNames;
-          priorOp.data.vGrade = (folded.vGrade ?? null) as number | null;
-          priorOp.data.aGrade = (folded.aGrade ?? null) as number | null;
-          priorOp.data.commitment = (folded.commitment ?? null) as number | null;
-          priorOp.data.quality = (folded.quality ?? null) as number | null;
-          priorOp.data.numAbseils = (folded.numAbseils ?? null) as number | null;
-          priorOp.data.longestAbseil = (folded.longestAbseil ?? null) as number | null;
-          priorOp.data.hours = (folded.hours ?? null) as number | null;
           priorOp.data.notes = (folded.notes ?? null) as string | null;
-          priorOp.data.attributes = folded.attributes as Prisma.InputJsonValue;
+          priorOp.data.fieldValues = folded.fieldValues as Prisma.InputJsonValue;
           continue; // duplicate folded — not a separate create
         }
 
@@ -415,19 +373,13 @@ router.post(
           kind: "create",
           data: {
             ownerId: user.id,
+            placeTypeId,
             name: data.name.trim(),
             altNames: data.altNames ?? [],
             latitude: data.latitude,
             longitude: data.longitude,
             notes: data.notes ?? null,
-            vGrade: data.vGrade ?? null,
-            aGrade: data.aGrade ?? null,
-            commitment: data.commitment ?? null,
-            quality: data.quality ?? null,
-            numAbseils: data.numAbseils ?? null,
-            longestAbseil: data.longestAbseil ?? null,
-            hours: data.hours ?? null,
-            attributes: (data.attributes ?? {}) as Prisma.InputJsonValue,
+            fieldValues: asFieldValues(data.fieldValues) as Prisma.InputJsonValue,
             importKey,
             importBatchId: body.importBatchId,
           },

@@ -34,11 +34,15 @@ import { OUTBOX_ENTITIES } from "./outboxTables";
  * reset untouched. A change to THEIR shape needs its own migration, and this
  * lever won't do it.
  *
- * 5: the places rework. `canyons` and `canyon_shares` become `places` and
- * `place_shares`, so every mirror table holding them is dropped and refilled
- * from a full delta pull.
+ * 5: the places rework, phase 1a. `canyons` and `canyon_shares` become
+ * `places` and `place_shares`, so every mirror table holding them is dropped
+ * and refilled from a full delta pull.
+ *
+ * 6: phase 1b. `places` loses its seven grade columns and its attributes blob
+ * to one `field_values_json`, gains a `place_type_id`, and `place_types`
+ * arrives as a table of its own.
  */
-export const MIRROR_SCHEMA_VERSION = 5;
+export const MIRROR_SCHEMA_VERSION = 6;
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 

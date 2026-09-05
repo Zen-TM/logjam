@@ -12,6 +12,7 @@ import {
   BOB_SHARED_WAYPOINT_ID,
   NONEXISTENT_ID,
   as,
+  CANYON_TYPE_ID
 } from "./_actors";
 
 // Sharing-audit surface (fix 24): GET/DELETE /friends/:id/shares.
@@ -211,7 +212,7 @@ describe("GET /friends/:id/shares — the audit surface", () => {
     const place = await request(API_URL)
       .post("/places")
       .set(as(BOB_SUB))
-      .send({ name: "friend-shares-inherit", latitude: -33.57, longitude: 150.39 });
+      .send({ placeTypeId: CANYON_TYPE_ID, name: "friend-shares-inherit", latitude: -33.57, longitude: 150.39 });
     expect(place.status).toBe(201);
     const placeId = place.body.id as string;
     await request(API_URL)

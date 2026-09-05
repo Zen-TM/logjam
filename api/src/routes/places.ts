@@ -2,6 +2,7 @@ import { Router, Response } from "express";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
+import { defsForPlaceType, resolvePlaceTypeId } from "../lib/placeTypes";
 import { Prisma } from "@prisma/client";
 import { getParam } from "../lib/getParam";
 import { getEnv } from "../lib/env";
@@ -20,7 +21,11 @@ import {
   assertClientIdReplayable,
   parseClientSuppliedId,
 } from "../lib/clientSuppliedId";
-import { TRACK_MIME_TYPES, validatePlacePayload } from "@logjam/shared";
+import {
+  asFieldValues,
+  TRACK_MIME_TYPES,
+  validatePlacePayload,
+} from "@logjam/shared";
 import { serializeTrip, tripPlacesInclude } from "./tripLogsGlobal";
 
 const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
@@ -223,27 +228,28 @@ router.post(
       altNames,
       latitude,
       longitude,
-      numAbseils,
-      longestAbseil,
-      vGrade,
-      aGrade,
-      commitment,
-      quality,
-      hours,
-
+      placeTypeId,
       notes,
-      attributes,
+      fieldValues,
     } = req.body;
 
     if (!name || latitude === undefined || longitude === undefined) {
       throw new AppError(400, "name, latitude, and longitude are required");
     }
 
-    // Validate coordinate + numeric-field ranges (PLACE-1/PLACE-2). Same
-    // ranges as the CSV bulk-import path, sourced from @logjam/shared.
+    // A place must have a type. Defaulting silently to Canyon would put a
+    // campsite the client forgot to type into the canyon tab, where the user
+    // would not think to look for it.
+    const typeId = await resolvePlaceTypeId(user.id, placeTypeId);
+
+    // Validate coordinates and the type's field values (PLACE-1/PLACE-2). The
+    // bounds come from the DEFINITIONS in force for this type, so a user's own
+    // bounded field is enforced exactly as a grade always was.
     const validationError =
-      validatePlacePayload(req.body, { requireCoords: true }) ??
-      validatePlaceTextFields(req.body);
+      validatePlacePayload(req.body, {
+        requireCoords: true,
+        defs: await defsForPlaceType(user.id, typeId),
+      }) ?? validatePlaceTextFields(req.body);
     if (validationError) throw new AppError(400, validationError);
 
     // Optional client-minted id (Stage 8 §3.5): own-id replay → 200 with the
@@ -266,20 +272,13 @@ router.post(
         data: {
           ...(clientId && { id: clientId }),
           ownerId: user.id,
+          placeTypeId: typeId,
           name,
           altNames: altNames ?? [],
           latitude,
           longitude,
-          numAbseils,
-          longestAbseil,
-          vGrade,
-          aGrade,
-          commitment,
-          quality,
-          hours,
-
           notes,
-          attributes: attributes ?? {},
+          fieldValues: asFieldValues(fieldValues) as Prisma.InputJsonValue,
         },
       });
     } catch (err) {
@@ -332,15 +331,13 @@ router.post(
         altNames: place.altNames,
         latitude: place.latitude,
         longitude: place.longitude,
-        numAbseils: place.numAbseils,
-        longestAbseil: place.longestAbseil,
-        vGrade: place.vGrade,
-        aGrade: place.aGrade,
-        commitment: place.commitment,
-        quality: place.quality,
-        hours: place.hours,
+        // The sender's type carries straight over. A system type resolves
+        // globally (one row for every user), which is what makes a copy of a
+        // canyon need no reconciliation at all. Reconciling a copy of a USER
+        // type, and the foreignFields it strands, is phase 4.
+        placeTypeId: place.placeTypeId,
         notes: place.notes,
-        attributes: place.attributes ?? Prisma.JsonNull,
+        fieldValues: (place.fieldValues ?? {}) as Prisma.InputJsonValue,
         ropeWikiId: null,
         ropeWikiSnapshot: Prisma.JsonNull,
         forkedFromId: placeId,
@@ -465,28 +462,15 @@ router.patch(
       "Only the owner can edit a place",
     );
 
-    const {
-      name,
-      altNames,
-      latitude,
-      longitude,
-      numAbseils,
-      longestAbseil,
-      vGrade,
-      aGrade,
-      commitment,
-      quality,
-      hours,
+    const { name, altNames, latitude, longitude, notes, fieldValues } = req.body;
 
-      notes,
-      attributes,
-    } = req.body;
-
-    // Validate any supplied coordinate/numeric field (PLACE-1/PLACE-2).
+    // Validate any supplied coordinate or field value (PLACE-1/PLACE-2).
     // requireCoords:false — PATCH may omit fields; only validate what's present.
     const validationError =
-      validatePlacePayload(req.body, { requireCoords: false }) ??
-      validatePlaceTextFields(req.body);
+      validatePlacePayload(req.body, {
+        requireCoords: false,
+        defs: await defsForPlaceType(user.id, place.placeTypeId),
+      }) ?? validatePlaceTextFields(req.body);
     if (validationError) throw new AppError(400, validationError);
 
     const updated = await prisma.place.update({
@@ -496,16 +480,9 @@ router.patch(
         ...(altNames !== undefined && { altNames }),
         ...(latitude !== undefined && { latitude }),
         ...(longitude !== undefined && { longitude }),
-        ...(numAbseils !== undefined && { numAbseils }),
-        ...(longestAbseil !== undefined && { longestAbseil }),
-        ...(vGrade !== undefined && { vGrade }),
-        ...(aGrade !== undefined && { aGrade }),
-        ...(commitment !== undefined && { commitment }),
-        ...(quality !== undefined && { quality }),
-        ...(hours !== undefined && { hours }),
         ...(notes !== undefined && { notes }),
-        ...(attributes !== undefined && {
-          attributes: attributes ?? Prisma.JsonNull,
+        ...(fieldValues !== undefined && {
+          fieldValues: asFieldValues(fieldValues) as Prisma.InputJsonValue,
         }),
       },
     });

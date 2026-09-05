@@ -20,7 +20,12 @@
 import { Prisma } from "@prisma/client";
 import {
   customFieldDefsFromRows,
+  isReservedFieldKey,
   isTripLogCustomFieldDef,
+  makeCustomFieldKey,
+  reservedFieldKeyError,
+  setFieldValues,
+  userFieldValues,
   type CustomFieldEntity,
   type TripLogCustomFieldDef,
 } from "@logjam/shared";
@@ -54,16 +59,19 @@ function isJsonObject(
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-// Extract the customFields record from a place's attributes blob, or null when
-// the place has no custom-field values at all. Exported for unit testing.
+// The user-visible field values of a place, or null when it has none.
+//
+// Values used to be NESTED, at `attributes.customFields[key]`, and are now at
+// the TOP level of `fieldValues` — the forward migration hoists them. The
+// internal `_`-prefixed entries (`_sources`, `_attributes`) are excluded here
+// because they are not fields: a delete would otherwise offer to strip the
+// source list off every place. Exported for unit testing.
 export function placeCustomFieldsRecord(
-  attributes: Prisma.JsonValue | null,
+  fieldValues: Prisma.JsonValue | null,
 ): Record<string, unknown> | null {
-  if (!isJsonObject(attributes)) return null;
-  const customFields = attributes.customFields;
-  return isJsonObject(customFields)
-    ? (customFields as Record<string, unknown>)
-    : null;
+  if (!isJsonObject(fieldValues)) return null;
+  const values = userFieldValues(fieldValues);
+  return Object.keys(values).length > 0 ? values : null;
 }
 
 // ── where the values live ────────────────────────────────────────────────────
@@ -137,27 +145,21 @@ const placeEntity: EntityConfig = {
   pendingStrips: async (userId, key) => {
     const rows = await prisma.place.findMany({
       where: { ownerId: userId },
-      select: { id: true, attributes: true },
+      select: { id: true, fieldValues: true },
     });
     return rows
-      .filter((row) => hasValue(placeCustomFieldsRecord(row.attributes), key))
+      .filter((row) => hasValue(placeCustomFieldsRecord(row.fieldValues), key))
       .map((row): StripThunk => {
-        // Preserve every other attribute (notably `sources`) — only the one
-        // customFields entry is removed.
-        const attributes = isJsonObject(row.attributes) ? row.attributes : {};
-        const nextFields = {
-          ...(placeCustomFieldsRecord(row.attributes) ?? {}),
-        };
-        delete nextFields[key];
+        // Removes ONE key. The internal `_sources` / `_attributes` entries ride
+        // in the same object and must survive — before the hoist they were
+        // siblings of the customFields sub-object and survived structurally;
+        // now they are siblings of the values themselves, so `setFieldValues`
+        // has to be the thing that keeps them.
+        const next = setFieldValues(row.fieldValues, { [key]: null });
         return (tx) =>
           tx.place.update({
             where: { id: row.id },
-            data: {
-              attributes: {
-                ...attributes,
-                customFields: nextFields,
-              } as unknown as Prisma.InputJsonValue,
-            },
+            data: { fieldValues: next as Prisma.InputJsonValue },
           });
       });
   },
@@ -187,8 +189,15 @@ export const ENTITY_BY_SEGMENT: Record<string, CustomFieldEntity> = {
 /** Every definition this user owns, both entities, ordered for display. */
 export function loadDefRows(userId: string): Promise<CustomFieldDefRecord[]> {
   return prisma.customFieldDef.findMany({
-    where: { ownerId: userId },
+    // The user's own PLUS the SYSTEM definitions (ownerId null), which label
+    // the built-in fields and belong to no account. Omitting them left every
+    // value RopeWiki import writes — and every grade a canyon has ever had —
+    // rendering as a bare key with no label and no bounds, because the one
+    // list the clients read did not contain the definitions that describe them.
+    where: { OR: [{ ownerId: userId }, { ownerId: null }] },
     select: DEF_SELECT,
+    // `customFieldDefsFromRows` re-sorts by (position, key) for display, so
+    // this ordering is only for callers that read the rows directly.
     orderBy: [{ position: "asc" }, { key: "asc" }],
   });
 }
@@ -283,12 +292,40 @@ export function assertValidDef(
   return def;
 }
 
+/**
+ * Refuse a key that a system definition already owns.
+ *
+ * A user field labelled "V grade" on their own Campsite type slugs to
+ * `v_grade` — the key RopeWiki import writes into Canyon. Two writers, one key,
+ * in one owner's namespace: the import would overwrite their value, or their
+ * value would render under the built-in field's label and bounds.
+ *
+ * Only for USER definitions. The system rows legitimately hold these keys, and
+ * the seed and the migration create them directly.
+ *
+ * The list is derived from the seeded definitions (`RESERVED_FIELD_KEYS`), not
+ * restated here — see the note on that constant.
+ */
+function assertKeyNotReserved(key: string, label: string): void {
+  if (isReservedFieldKey(key)) {
+    throw new AppError(409, reservedFieldKeyError(key, label));
+  }
+}
+
 export type CreateDefInput = {
   /** Client-minted UUIDv4 when the definition came from an offline device, so
    *  a replayed push is idempotent. Server-minted otherwise. */
   id?: string;
   def: TripLogCustomFieldDef;
   position?: number;
+  /** Place types this definition applies to. Carried for BOTH entities: a trip
+   *  log field is scoped by the types of the places the trip links, so a trip
+   *  field is scoped to types exactly as a place field is (plan §2.7). */
+  placeTypeIds?: string[];
+  /** Applies to every place type, including ones created later. A flag rather
+   *  than join rows for the types that exist today, which would silently fail
+   *  to apply to tomorrow's. */
+  appliesToAllTypes?: boolean;
 };
 
 /**
@@ -302,6 +339,8 @@ export async function createFieldDef(
   input: CreateDefInput,
 ): Promise<TripLogCustomFieldDef> {
   const { def } = input;
+  assertKeyNotReserved(def.key, def.label);
+  const placeTypeIds = await ownedPlaceTypeIds(userId, input.placeTypeIds);
   try {
     await prisma.customFieldDef.create({
       data: {
@@ -314,6 +353,14 @@ export async function createFieldDef(
         min: def.min ?? null,
         max: def.max ?? null,
         position: input.position ?? (await nextPosition(userId, entity)),
+        appliesToAllTypes: input.appliesToAllTypes ?? false,
+        ...(placeTypeIds.length
+          ? {
+              placeTypes: {
+                create: placeTypeIds.map((placeTypeId) => ({ placeTypeId })),
+              },
+            }
+          : {}),
       },
     });
   } catch (e) {
@@ -336,7 +383,15 @@ export async function createFieldDef(
 export async function updateFieldDef(
   userId: string,
   id: string,
-  patch: { label?: string; type?: string; min?: number | null; max?: number | null; position?: number },
+  patch: {
+    label?: string;
+    type?: string;
+    min?: number | null;
+    max?: number | null;
+    position?: number;
+    placeTypeIds?: string[];
+    appliesToAllTypes?: boolean;
+  },
 ): Promise<void> {
   const existing = await prisma.customFieldDef.findFirst({
     where: { id, ownerId: userId },
@@ -364,16 +419,67 @@ export async function updateFieldDef(
       : {}),
   });
 
-  await prisma.customFieldDef.update({
-    where: { id },
-    data: {
-      label: merged.label,
-      type: merged.type,
-      min: merged.min,
-      max: merged.max,
-      ...(patch.position !== undefined ? { position: patch.position } : {}),
-    },
+  // A RENAME cannot take a reserved label either. The key never moves on a
+  // rename (every stored value is keyed by it), so this is not a data
+  // collision — it is two fields displaying the same name, one of them the
+  // built-in, which is worse than useless on a form.
+  if (patch.label !== undefined) {
+    assertKeyNotReserved(makeCustomFieldKey(merged.label), merged.label);
+  }
+
+  const placeTypeIds =
+    patch.placeTypeIds === undefined
+      ? undefined
+      : await ownedPlaceTypeIds(userId, patch.placeTypeIds);
+
+  await prisma.$transaction(async (tx) => {
+    await tx.customFieldDef.update({
+      where: { id },
+      data: {
+        label: merged.label,
+        type: merged.type,
+        min: merged.min,
+        max: merged.max,
+        ...(patch.position !== undefined ? { position: patch.position } : {}),
+        ...(patch.appliesToAllTypes !== undefined
+          ? { appliesToAllTypes: patch.appliesToAllTypes }
+          : {}),
+      },
+    });
+    // Scoping is REPLACED rather than merged: the client sends the set it
+    // wants, and a diff would make "remove the last type" unexpressible.
+    if (placeTypeIds !== undefined) {
+      await tx.customFieldDefPlaceType.deleteMany({ where: { defId: id } });
+      if (placeTypeIds.length) {
+        await tx.customFieldDefPlaceType.createMany({
+          data: placeTypeIds.map((placeTypeId) => ({ defId: id, placeTypeId })),
+        });
+      }
+    }
   });
+}
+
+/**
+ * Narrow a requested scoping to types this user may actually scope to: their
+ * own, plus the global system types. Silently dropping a foreign id rather than
+ * erroring is deliberate — the ids arrive from an offline client whose mirror
+ * may name a type that has since been deleted, and parking that op in the sync
+ * shelf would cost the user a field over a stale reference. An id that survives
+ * is one they can see.
+ */
+async function ownedPlaceTypeIds(
+  userId: string,
+  requested: string[] | undefined,
+): Promise<string[]> {
+  if (!requested?.length) return [];
+  const rows = await prisma.placeType.findMany({
+    where: {
+      id: { in: requested },
+      OR: [{ ownerId: userId }, { ownerId: null }],
+    },
+    select: { id: true },
+  });
+  return rows.map((row) => row.id);
 }
 
 export type DeleteResult = {
@@ -436,58 +542,3 @@ export async function deleteFieldDefByKey(
 }
 
 // ── whole-list write (the web's shape) ───────────────────────────────────────
-
-/**
- * Reconcile the whole list for one entity: create what is new, update what
- * moved, delete (with the value strip) what the caller dropped.
- *
- * This exists because the web edits definitions as a list — `PATCH /users/me`
- * with `{ placeCustomFields: [...] }` is what every dialog in the frontend
- * sends, and rewriting all of them to row-grain REST buys nothing while a
- * single browser tab is the only writer. Mobile does NOT use this path: it
- * pushes per-row ops through the sync engine, where the row grain is what
- * makes two devices' concurrent edits merge instead of clobber.
- *
- * Rows are matched by `key`, which is stable across a rename, so a relabelled
- * field updates in place and keeps its values.
- */
-export async function replaceFieldDefs(
-  userId: string,
-  entity: CustomFieldEntity,
-  defs: TripLogCustomFieldDef[],
-): Promise<void> {
-  const existing = await prisma.customFieldDef.findMany({
-    where: { ownerId: userId, entity },
-    select: DEF_SELECT,
-  });
-  const byKey = new Map(existing.map((row) => [row.key, row]));
-  const incomingKeys = new Set(defs.map((def) => def.key));
-
-  // Deletes first, and one at a time: each carries its own value strip, and
-  // that strip rewrites rows the later creates never touch.
-  for (const row of existing) {
-    if (!incomingKeys.has(row.key)) await deleteFieldDef(userId, row.id);
-  }
-
-  for (const [position, def] of defs.entries()) {
-    const row = byKey.get(def.key);
-    if (!row) {
-      await createFieldDef(userId, entity, { def, position });
-      continue;
-    }
-    const unchanged =
-      row.label === def.label &&
-      row.type === def.type &&
-      row.min === (def.min ?? null) &&
-      row.max === (def.max ?? null) &&
-      row.position === position;
-    if (unchanged) continue;
-    await updateFieldDef(userId, row.id, {
-      label: def.label,
-      type: def.type,
-      min: def.min ?? null,
-      max: def.max ?? null,
-      position,
-    });
-  }
-}

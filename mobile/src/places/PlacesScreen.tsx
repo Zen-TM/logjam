@@ -16,6 +16,7 @@
 // PRIVACY: rows carry names, grades, tallies — never coordinates or any derived
 // location detail (DESIGN.md §11). Nothing here is logged, and the failure paths
 // print our own copy rather than an error string that might embed a place name.
+import { numericFieldValue } from "@logjam/shared";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
@@ -729,7 +730,7 @@ const PlaceRow = memo(function PlaceRow({
   onToggle: () => void;
 }) {
   const meta = PLACE_STATUS_META[status];
-  const quality = qualityLabel(place.quality);
+  const quality = qualityLabel(numericFieldValue(place.fieldValues, "quality"));
   return (
     <Row
       icon={meta.icon}

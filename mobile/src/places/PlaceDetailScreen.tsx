@@ -25,6 +25,9 @@ import {
 import { Feather } from "@expo/vector-icons";
 import {
   customFieldDisplayLabel,
+  numericFieldValue,
+  userFieldValues,
+  type TripLogCustomFieldDef,
   distinctTripTypes,
   formatCanyonGrade,
   formatDistanceM,
@@ -191,27 +194,46 @@ export function PlaceDetailScreen({
     (item) => mediaCategory(item.mediaType) === "track",
   ).length;
 
-  const storedFields = place.attributes?.customFields ?? {};
+  // The user-visible values, internal `_`-prefixed entries excluded. The
+  // definitions that label them are the viewer's own — or, for a place shared
+  // from a type they do not own, the snapshot the delta row carried, without
+  // which they would see bare keys.
+  const storedFields = userFieldValues(place.fieldValues);
+  const labellingDefs = [...fieldDefs, ...(place.fieldDefsSnapshot ?? [])];
   const customFields = [
-    ...fieldDefs
+    ...labellingDefs
       .filter((def) => storedFields[def.key] !== undefined)
-      .map((def) => [customFieldDisplayLabel(def), storedFields[def.key]] as const),
+      .map(
+        (def) =>
+          [
+            customFieldDisplayLabel(def as TripLogCustomFieldDef),
+            storedFields[def.key],
+          ] as const,
+      ),
     ...Object.entries(storedFields)
-      .filter(([key]) => !fieldDefs.some((def) => def.key === key))
+      .filter(([key]) => !labellingDefs.some((def) => def.key === key))
       .map(([key, value]) => [humanizeFieldKey(key), value] as const),
   ];
 
   // Grade is in the hero pill row, a few pixels above — no need to state it
   // twice in a row.
+  //
+  // These four are the canyon scalars, read from fieldValues by their reserved
+  // keys. A place of a type that carries none of them simply gets no stats, and
+  // its own fields show in the list above instead — no special case for either.
   const stats: Stat[] = [];
-  if (place.quality != null) stats.push({ label: "Rating", value: `${place.quality}/5` });
-  if (place.numAbseils != null) {
-    stats.push({ label: "Abseils", value: String(place.numAbseils) });
+  const quality = numericFieldValue(place.fieldValues, "quality");
+  const numAbseils = numericFieldValue(place.fieldValues, "num_abseils");
+  const longestAbseil = numericFieldValue(place.fieldValues, "longest_abseil");
+  const hours = numericFieldValue(place.fieldValues, "hours");
+  if (quality != null) stats.push({ label: "Rating", value: `${quality}/5` });
+  if (numAbseils != null) {
+    stats.push({ label: "Abseils", value: String(numAbseils) });
   }
-  if (place.longestAbseil != null) {
-    stats.push({ label: "Longest drop", value: `${place.longestAbseil} m` });
+  if (longestAbseil != null) {
+    stats.push({ label: "Longest drop", value: `${longestAbseil} m` });
   }
-  if (place.hours != null) stats.push({ label: "Hours", value: String(place.hours) });
+  if (hours != null) stats.push({ label: "Hours", value: String(hours) });
   const position = `${place.latitude.toFixed(5)}, ${place.longitude.toFixed(5)}`;
   const copyPosition = () => {
     // RN core Clipboard: deprecated upstream but still shipped, and it needs no

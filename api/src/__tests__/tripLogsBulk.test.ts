@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
-import { API_URL, as, CAROL_SUB, NONEXISTENT_ID } from "./_actors";
+import { API_URL, as, CAROL_SUB, NONEXISTENT_ID, CANYON_TYPE_ID} from "./_actors";
 
 // Integration coverage for POST /trips/bulk (routes/tripLogsBulk.ts), previously
 // untested (CH-003, 2026-06-22). Focus: the SEC-001 row-cap guards (empty 400 /
@@ -89,7 +89,7 @@ describe("POST /trips/bulk (import, fake auth = alice)", () => {
     const carolPlace = await request(API_URL)
       .post("/places")
       .set(as(CAROL_SUB))
-      .send({ name: `${TAG}-carol`, latitude: -33.7, longitude: 150.3 });
+      .send({ placeTypeId: CANYON_TYPE_ID, name: `${TAG}-carol`, latitude: -33.7, longitude: 150.3 });
     expect(carolPlace.status).toBe(201);
     const carolPlaceId = carolPlace.body.id as string;
     const name = `${TAG}-foreign`;
@@ -181,7 +181,7 @@ describe("POST /trips/bulk (import, fake auth = alice)", () => {
     const placeRes = await request(API_URL)
       .post("/places")
       .set(AUTH)
-      .send({ name: placeName, latitude: -33.7, longitude: 150.3 });
+      .send({ placeTypeId: CANYON_TYPE_ID, name: placeName, latitude: -33.7, longitude: 150.3 });
     expect(placeRes.status).toBe(201);
     const placeId = placeRes.body.id as string;
     const name = `${TAG}-linked-trip`;
@@ -216,7 +216,7 @@ describe("POST /trips/bulk (import, fake auth = alice)", () => {
     const placeRes = await request(API_URL)
       .post("/places")
       .set(AUTH)
-      .send({ name: placeName, latitude: -33.71, longitude: 150.31 });
+      .send({ placeTypeId: CANYON_TYPE_ID, name: placeName, latitude: -33.71, longitude: 150.31 });
     expect(placeRes.status).toBe(201);
     const placeId = placeRes.body.id as string;
     const name = `${TAG}-tag-trip`;

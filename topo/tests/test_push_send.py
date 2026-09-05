@@ -44,20 +44,19 @@ class TestBuildPushMessages(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "latitude"):
             build_push_messages(["t"], {"type": "place_shared", "latitude": -33.7})
 
-    def test_whitelist_matches_node_side(self):
-        # Keep in sync with api/src/services/push.ts ALLOWED_DATA_KEYS.
-        self.assertEqual(
-            ALLOWED_DATA_KEYS,
-            {
-                "type",
-                "notificationId",
-                "friendshipId",
-                "placeId",
-                "jobId",
-                "exportId",
-                "geoPdfJobId",
-            },
-        )
+    # The "matches the node side" assertion USED TO LIVE HERE, against a
+    # hardcoded copy of the TS set. That is the failure mode it was written to
+    # catch, one level up: it stayed green for four keys of real drift, because
+    # the thing it compared against was a third copy that nobody updated either.
+    # It now reads api/src/services/push.ts directly — see
+    # tests/test_push_constants_sync.py. What is left here is the local
+    # property: the allowlist admits ids and refuses anything else.
+    def test_whitelist_admits_only_opaque_ids(self):
+        for key in ALLOWED_DATA_KEYS:
+            self.assertTrue(
+                key == "type" or key.endswith("Id") or key.endswith("Type"),
+                f"{key!r} is not an opaque id — push payloads carry no free text",
+            )
 
 
 class TestTokensToPrune(unittest.TestCase):

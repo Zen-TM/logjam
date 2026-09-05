@@ -38,6 +38,37 @@ import {
 
 const router = Router();
 
+/**
+ * The type-scoping half of a definition write.
+ *
+ * `appliesToAllTypes` is a FLAG rather than "every type id we know about",
+ * which is the whole reason it exists: a list of today's types silently fails
+ * to apply to a type created tomorrow, and the user who ticked "All" would
+ * never find out. A definition sent with the flag needs no ids at all.
+ */
+function parseScoping(body: {
+  placeTypeIds?: unknown;
+  appliesToAllTypes?: unknown;
+}): { placeTypeIds?: string[]; appliesToAllTypes?: boolean } {
+  const out: { placeTypeIds?: string[]; appliesToAllTypes?: boolean } = {};
+  if (body.placeTypeIds !== undefined) {
+    if (
+      !Array.isArray(body.placeTypeIds) ||
+      body.placeTypeIds.some((id) => typeof id !== "string")
+    ) {
+      throw new AppError(400, "placeTypeIds must be an array of ids");
+    }
+    out.placeTypeIds = body.placeTypeIds as string[];
+  }
+  if (body.appliesToAllTypes !== undefined) {
+    if (typeof body.appliesToAllTypes !== "boolean") {
+      throw new AppError(400, "appliesToAllTypes must be a boolean");
+    }
+    out.appliesToAllTypes = body.appliesToAllTypes;
+  }
+  return out;
+}
+
 /** `:entity` is the URL segment ("trip-log" | "place"), not the union value. */
 function parseEntity(req: AuthenticatedRequest): CustomFieldEntity {
   const entity = ENTITY_BY_SEGMENT[getParam(req.params.entity)];
@@ -64,8 +95,18 @@ router.post(
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await resolveUser(req.user!.sub);
     const entity = parseEntity(req);
-    const def = assertValidDef((req.body as { field?: unknown })?.field);
-    res.status(201).json({ field: await createFieldDef(user.id, entity, { def }) });
+    const body = req.body as {
+      field?: unknown;
+      placeTypeIds?: unknown;
+      appliesToAllTypes?: unknown;
+    };
+    const def = assertValidDef(body?.field);
+    res.status(201).json({
+      field: await createFieldDef(user.id, entity, {
+        def,
+        ...parseScoping(body),
+      }),
+    });
   },
 );
 
@@ -86,6 +127,8 @@ router.patch(
     if (!id) throw new AppError(404, "Custom field not found");
 
     const body = req.body as {
+      placeTypeIds?: unknown;
+      appliesToAllTypes?: unknown;
       label?: unknown;
       type?: unknown;
       min?: unknown;
@@ -118,6 +161,7 @@ router.patch(
       ...(body.position !== undefined
         ? { position: body.position as number }
         : {}),
+      ...parseScoping(body),
     });
 
     res.json({ fields: await loadDefs(user.id, entity) });

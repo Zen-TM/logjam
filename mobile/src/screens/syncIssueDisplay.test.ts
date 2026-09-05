@@ -196,14 +196,17 @@ describe("opAdvice", () => {
 
 describe("rejectedFields / salvageableFields", () => {
   const badGrade = parked({
-    fields: { notes: "rebolted", vGrade: 9 },
+    fields: { notes: "rebolted", fieldValues: { v_grade: 9 } },
     error: { code: 400, message: "V grade must be between 1 and 7" },
   });
 
   it("splits a rejected edit into what the server refused and what it didn't", () => {
     // One bad number used to take a paragraph of notes down with it: the API
     // validates the whole payload, so the whole op parks.
-    expect(rejectedFields(badGrade)).toEqual(["vGrade"]);
+    // The whole `fieldValues` blob is ONE dirty field on the wire, so that is
+    // the granularity a "send the rest" offer can work at — the client cannot
+    // resend half a JSON column.
+    expect(rejectedFields(badGrade)).toEqual(["fieldValues"]);
     expect(salvageableFields(badGrade)).toEqual(["notes"]);
   });
 
@@ -211,7 +214,7 @@ describe("rejectedFields / salvageableFields", () => {
     // A transient failure is the engine's problem, and re-sending a SUBSET of
     // it would silently drop fields over a dropped connection.
     const transient = parked({
-      fields: { notes: "x", vGrade: 9 },
+      fields: { notes: "x", fieldValues: { v_grade: 9 } },
       error: { code: 503, message: "upstream" },
     });
     expect(rejectedFields(transient)).toEqual([]);
@@ -221,10 +224,10 @@ describe("rejectedFields / salvageableFields", () => {
   it("offers nothing when every dirty field was refused", () => {
     // Nothing to salvage — the sheet falls back to Discard, which is honest.
     const allBad = parked({
-      fields: { vGrade: 9 },
+      fields: { fieldValues: { v_grade: 9 } },
       error: { code: 400, message: "V grade must be between 1 and 7" },
     });
-    expect(rejectedFields(allBad)).toEqual(["vGrade"]);
+    expect(rejectedFields(allBad)).toEqual(["fieldValues"]);
     expect(salvageableFields(allBad)).toEqual([]);
   });
 
@@ -289,10 +292,12 @@ describe("opChanges", () => {
     // can point at the field without reading the server's English.
     const changes = opChanges(
       parked({
-        fields: { notes: "rebolted", vGrade: 9 },
+        fields: { notes: "rebolted", fieldValues: { v_grade: 9 } },
         error: { code: 400, message: "V grade must be between 1 and 7" },
       }),
     );
+    // `fieldValues` is one field on the wire but is expanded into a line per
+    // value, so the reader still sees WHICH value the complaint is about.
     expect(changes.map((change) => [change.label, change.rejected])).toEqual([
       ["Notes", false],
       ["Water grade", true],
@@ -400,7 +405,7 @@ describe("shelf copy", () => {
     expect(shelfTitle(shelved())).toBe("Your notes for “Claustral” were overwritten");
     // Agreement follows the FIELD, and got this wrong on a shipped row: "your
     // water grade WERE overwritten".
-    expect(shelfTitle(shelved({ field: "vGrade" }))).toBe(
+    expect(shelfTitle(shelved({ field: "v_grade" }))).toBe(
       "Your water grade for “Claustral” was overwritten",
     );
     // The name is captured when the value is shelved, so it survives the row
@@ -414,13 +419,13 @@ describe("shelf copy", () => {
     // The rule is "a plural label ends in s, a singular one doesn't", which is
     // true of the whole map today and is what `isPluralLabel` reads. A future
     // label that breaks it (a "status") fails here rather than on a phone.
-    const plural = ["notes", "altNames", "tags", "placeIds", "attributes",
-      "customFields"];
+    const plural = ["notes", "altNames", "tags", "placeIds", "customFields",
+      "fieldValues"];
     // `types` is in here on purpose: the FIELD is plural and its LABEL — "trip
     // type" — is not, and the label is what the sentence has to agree with.
-    const singular = ["name", "types", "vGrade", "aGrade", "commitment", "quality",
-      "hours", "date", "displayName", "elevation", "symbol", "color", "numAbseils",
-      "longestAbseil"];
+    const singular = ["name", "types", "v_grade", "a_grade", "commitment",
+      "quality", "hours", "date", "displayName", "elevation", "symbol", "color",
+      "num_abseils", "longest_abseil"];
     for (const field of plural) {
       expect(shelfTitle(shelved({ field })), field).toContain(" were ");
     }

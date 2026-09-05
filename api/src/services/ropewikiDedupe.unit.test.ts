@@ -10,16 +10,16 @@ function place(overrides: Partial<Place> = {}): Place {
     altNames: [],
     latitude: -33.5,
     longitude: 150.3,
-    numAbseils: null,
-    longestAbseil: null,
-    vGrade: null,
-    aGrade: null,
-    commitment: null,
-    quality: null,
-    hours: null,
-    attributes: null,
+    fieldValues: {},
     ...overrides,
   } as unknown as Place;
+}
+
+/** A place carrying the given field values. The seven scalars are keys now, so
+ *  "is it null" became "is the key absent" — the same question, because no
+ *  write path stores a null. */
+function placeWith(values: Record<string, unknown>): Place {
+  return place({ fieldValues: values } as Partial<Place>);
 }
 
 function rwCanyon(overrides: Partial<RopeWikiCanyon> = {}): RopeWikiCanyon {
@@ -87,17 +87,25 @@ describe("buildProposals", () => {
 });
 
 describe("mergeFillNulls", () => {
-  it("fills only null scalar fields and preserves existing user data", () => {
-    const existing = place({ vGrade: 2, numAbseils: null, hours: null });
+  it("fills only empty fields and preserves existing user data", () => {
+    const existing = placeWith({ v_grade: 2 });
     const merged = mergeFillNulls(existing, rwCanyon());
-    expect(merged.vGrade).toBe(2); // user value preserved
-    expect(merged.numAbseils).toBe(5); // null filled from RopeWiki
-    expect(merged.hours).toBe(6);
+    expect(merged.fieldValues.v_grade).toBe(2); // user value preserved
+    expect(merged.fieldValues.num_abseils).toBe(5); // filled from RopeWiki
+    expect(merged.fieldValues.hours).toBe(6);
     expect(merged.ropeWikiId).toBe(100);
   });
 
+  // The RopeWiki DTO and its stored snapshot keep camelCase names; the place
+  // side speaks reserved field keys. This asserts the translation happens.
+  it("writes RopeWiki's values under the reserved field keys", () => {
+    const merged = mergeFillNulls(place(), rwCanyon());
+    expect(Object.keys(merged.fieldValues).sort()).toContain("num_abseils");
+    expect(merged.fieldValues).not.toHaveProperty("numAbseils");
+  });
+
   it("reports exactly the fields RopeWiki contributed", () => {
-    const existing = place({ vGrade: 2, quality: 5 }); // these two are non-null
+    const existing = placeWith({ v_grade: 2, quality: 5 });
     const merged = mergeFillNulls(existing, rwCanyon());
     expect(merged.ropeWikiOwnedFields).not.toContain("vGrade");
     expect(merged.ropeWikiOwnedFields).not.toContain("quality");
@@ -106,18 +114,18 @@ describe("mergeFillNulls", () => {
   });
 
   it("unions sources by URL, preserving existing entries", () => {
-    const existing = place({ attributes: { sources: [["OzUltimate", "http://oz/1"]] } });
+    const existing = placeWith({ _sources: [["OzUltimate", "http://oz/1"]] });
     const merged = mergeFillNulls(existing, rwCanyon());
-    const sources = (merged.attributes as { sources: [string, string][] }).sources;
+    const sources = merged.fieldValues._sources as [string, string][];
     const urls = sources.map(([, u]) => u);
     expect(urls).toContain("http://oz/1");
     expect(urls).toContain("http://rw/100");
   });
 
   it("does not duplicate a source already present by URL", () => {
-    const existing = place({ attributes: { sources: [["RopeWiki", "http://rw/100"]] } });
+    const existing = placeWith({ _sources: [["RopeWiki", "http://rw/100"]] });
     const merged = mergeFillNulls(existing, rwCanyon());
-    const sources = (merged.attributes as { sources: [string, string][] }).sources;
+    const sources = merged.fieldValues._sources as [string, string][];
     expect(sources.filter(([, u]) => u === "http://rw/100")).toHaveLength(1);
   });
 });

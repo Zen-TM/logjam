@@ -11,6 +11,7 @@ import {
   CAROL_ID,
   NONEXISTENT_ID,
   as,
+  CANYON_TYPE_ID
 } from "./_actors";
 
 // POST /bulk-share — "share these things with these friends", in one request.
@@ -36,7 +37,7 @@ async function createPlace(sub: string, name: string): Promise<string> {
   const res = await request(API_URL)
     .post("/places")
     .set(as(sub))
-    .send({ name, latitude: -33.7, longitude: 150.3 });
+    .send({ placeTypeId: CANYON_TYPE_ID, name, latitude: -33.7, longitude: 150.3 });
   expect(res.status).toBe(201);
   return res.body.id as string;
 }

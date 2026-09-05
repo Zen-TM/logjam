@@ -16,6 +16,18 @@ import { dirname, join } from "node:path";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const schemesPath = join(here, "..", "shared", "src", "themeSchemes.ts");
+const placeTypesPath = join(here, "..", "shared", "src", "placeTypes.ts");
+
+// Parsed out of the TypeScript source rather than imported: this script runs on
+// bare node with no build step, exactly as the scheme parsing below does.
+function parsePaletteColors() {
+  const src = readFileSync(placeTypesPath, "utf8");
+  const block = /export const PLACE_TYPE_COLORS = \[([\s\S]*?)\] as const;/.exec(src);
+  if (!block) throw new Error("PLACE_TYPE_COLORS not found in placeTypes.ts");
+  const colors = [...block[1].matchAll(/"(#[0-9A-Fa-f]{6})"/g)].map((m) => m[1]);
+  if (colors.length === 0) throw new Error("PLACE_TYPE_COLORS parsed empty");
+  return colors;
+}
 
 // ─── WCAG relative luminance + contrast ratio ───────────────────────────────
 // https://www.w3.org/WAI/WCAG21/Understanding/contrast-minimum.html
@@ -71,6 +83,9 @@ function parseSchemes(src) {
 }
 
 // Hardcoded markers (live in index.css / Map.tsx, not the schemes file).
+// Read from the shared declaration rather than restated: these two ARE palette
+// entries, and a copy here would be the list that drifts.
+const PLACE_TYPE_COLORS = parsePaletteColors();
 const OWNED_MARKER = "#F97316";
 const SHARED_MARKER = "#629BF8";
 
@@ -96,6 +111,16 @@ function pairsFor(t) {
     // map markers (non-text UI, 1.4.11)
     { name: "owned-place marker on primary (UI)", fg: OWNED_MARKER, bg: t.primary, min: 3 },
     { name: "shared-place marker on primary (UI)", fg: SHARED_MARKER, bg: t.primary, min: 3 },
+    // A PLACE TYPE'S COLOUR IS A MARKER COLOUR, so every entry of the curated
+    // palette has to clear the same bar under every scheme. This is why the
+    // palette is curated at all: a free hex picker would not fail this check,
+    // it would delete it — there would be nothing fixed left to assert.
+    ...PLACE_TYPE_COLORS.map((color) => ({
+      name: `place-type palette ${color} on primary (UI)`,
+      fg: color,
+      bg: t.primary,
+      min: 3,
+    })),
   ];
 }
 

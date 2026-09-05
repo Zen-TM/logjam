@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
 import { randomUUID } from "crypto";
-import { API_URL, ALICE_SUB, BOB_SUB, BOB_ID, as } from "./_actors";
+import { API_URL, ALICE_SUB, BOB_SUB, BOB_ID, as, CANYON_TYPE_ID} from "./_actors";
 
 // POST /sync/push contract (Stage 8 §8): FIFO order, per-op transactions,
 // per-op statuses, dependencyFailed propagation, conflict receipts, and the
@@ -58,7 +58,12 @@ describe("sync push — FIFO batch lifecycle", () => {
         entity: "place",
         op: "create",
         id: placeId,
-        fields: { name: "Push place", latitude: -33.61, longitude: 150.21 },
+        fields: {
+          placeTypeId: CANYON_TYPE_ID,
+          name: "Push place",
+          latitude: -33.61,
+          longitude: 150.21,
+        },
       },
       {
         opId: "op-trip",
@@ -130,7 +135,12 @@ describe("sync push — FIFO batch lifecycle", () => {
         op: "create",
         id: badPlaceId,
         // latitude out of range → rejected 400
-        fields: { name: "Bad", latitude: 95, longitude: 150.2 },
+        fields: {
+          placeTypeId: CANYON_TYPE_ID,
+          name: "Bad",
+          latitude: 95,
+          longitude: 150.2,
+        },
       },
       {
         opId: "dependent-trip",
@@ -144,6 +154,8 @@ describe("sync push — FIFO batch lifecycle", () => {
         entity: "waypoint",
         op: "create",
         id: goodWaypointId,
+        // NOT a place — no placeTypeId. A waypoint is still its own entity
+        // until phase 1c folds it in, and WAYPOINT_FIELDS would reject the key.
         fields: { name: "Fine", latitude: -33.63, longitude: 150.23 },
       },
     ]);
@@ -186,7 +198,12 @@ describe("sync push — conflicts (§6)", () => {
         entity: "place",
         op: "create",
         id: placeId,
-        fields: { name: "Conflict place", latitude: -33.64, longitude: 150.24 },
+        fields: {
+          placeTypeId: CANYON_TYPE_ID,
+          name: "Conflict place",
+          latitude: -33.64,
+          longitude: 150.24,
+        },
       },
     ]);
 
@@ -206,21 +223,25 @@ describe("sync push — conflicts (§6)", () => {
         op: "update",
         id: placeId,
         baseUpdatedAt: staleBase,
-        fields: { notes: "phone edit", quality: 4 },
+        fields: { notes: "phone edit", fieldValues: { quality: 4 } },
       },
     ]);
     const result = res.body.results[0];
     expect(result.status).toBe("appliedWithConflict");
     // Last flush wins…
     expect(result.row.notes).toBe("phone edit");
-    expect(result.row.quality).toBe(4);
+    expect(result.row.fieldValues.quality).toBe(4);
     // …and receipts shelve every replaced value while the base was stale.
-    // The server over-reports by contract (no per-field history): quality's
-    // receipt carries the pre-write null, which the CLIENT drops as a
-    // self-conflict because it matches its own base value.
+    // The server over-reports by contract (no per-field history).
+    //
+    // The receipt names `fieldValues`, not `quality`: the whole blob is ONE
+    // dirty field on the wire, so that is the granularity a conflict can be
+    // reported and shelved at — the client cannot resend half a JSON column.
+    // The shelved value is the pre-write object, which the CLIENT drops as a
+    // self-conflict when it matches its own base.
     expect(result.conflicts).toEqual([
       { field: "notes", serverValue: "web edit" },
-      { field: "quality", serverValue: null },
+      { field: "fieldValues", serverValue: {} },
     ]);
 
     // Same edit with a fresh base → plain applied, no receipts.
@@ -265,7 +286,12 @@ describe("sync push — ownership boundary", () => {
         entity: "place",
         op: "create",
         id: placeId,
-        fields: { name: "Alice push", latitude: -33.66, longitude: 150.26 },
+        fields: {
+          placeTypeId: CANYON_TYPE_ID,
+          name: "Alice push",
+          latitude: -33.66,
+          longitude: 150.26,
+        },
       },
     ]);
 
@@ -287,7 +313,12 @@ describe("sync push — ownership boundary", () => {
         entity: "place",
         op: "create",
         id: placeId,
-        fields: { name: "Bob claim", latitude: -33.67, longitude: 150.27 },
+        fields: {
+          placeTypeId: CANYON_TYPE_ID,
+          name: "Bob claim",
+          latitude: -33.67,
+          longitude: 150.27,
+        },
       },
     ]);
     expect(bobCreate.body.results[0].status).toBe("rejected");

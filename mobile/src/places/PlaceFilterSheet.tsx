@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import {
-  PLACE_RANGE_BOUNDS,
+  SYSTEM_FIELD_DEFS,
   regionEdgesKm,
   type PlaceFilters,
   type PlaceSortKey,
@@ -74,14 +74,64 @@ const ROPEWIKI: { value: PlaceFilters["ropewiki"]; label: string }[] = [
 ];
 
 /** Presets are the shortcut, not the ceiling — "Custom" reaches everything else. */
+// The seven graded axes live in `filters.custom` now, keyed by their reserved
+// FIELD keys — they are ordinary custom-field filters, and two of them changed
+// name on the way (`pitches` -> `num_abseils`, `longest_pitch` ->
+// `longest_abseil`). These four helpers are the whole adaptation: the pills and
+// threshold rows below are unchanged, they just read and write one level in.
+//
+// ponytail: this sheet still shows exactly the seven canyon axes and no other
+// field. Rendering a filter row per definition of the selected type is phase 5,
+// with the type tabs that decide which definitions are in force.
+function rangeOf(filters: PlaceFilters, key: string): NumberRange | null {
+  const filter = filters.custom?.[key];
+  return filter?.kind === "numberRange" ? (filter.range as NumberRange) : null;
+}
+
+function patchRange(key: string, next: NumberRange | null) {
+  return (filters: PlaceFilters): Partial<PlaceFilters> => {
+    const custom = { ...(filters.custom ?? {}) };
+    // An inactive filter is ABSENT rather than present at its full span, which
+    // is what lets "is it active" be `key in custom` with nothing needing to
+    // know the span.
+    if (next == null) delete custom[key];
+    else custom[key] = { kind: "numberRange", range: next };
+    return { custom };
+  };
+}
+
+function thresholdOf(
+  filters: PlaceFilters,
+  key: string,
+): PlaceThresholdFilter | null {
+  const filter = filters.custom?.[key];
+  return filter?.kind === "number" ? [filter.op, filter.value] : null;
+}
+
+function patchThreshold(key: string, next: PlaceThresholdFilter | null) {
+  return (filters: PlaceFilters): Partial<PlaceFilters> => {
+    const custom = { ...(filters.custom ?? {}) };
+    if (next == null || next[0] === "Any") delete custom[key];
+    else custom[key] = { kind: "number", op: next[0], value: next[1] };
+    return { custom };
+  };
+}
+
+/** A system definition's bounds, for the pill row. They are declared on the
+ *  definition and nowhere else. */
+function boundsOf(key: string): [number, number] {
+  const def = SYSTEM_FIELD_DEFS.find((candidate) => candidate.key === key);
+  return [def?.min ?? 1, def?.max ?? 7];
+}
+
 const THRESHOLDS: {
-  key: "pitches" | "longest_pitch" | "hours";
+  key: string;
   label: string;
   unit: string;
   presets: PlaceThresholdFilter[];
 }[] = [
   {
-    key: "pitches",
+    key: "num_abseils",
     label: "Abseils",
     unit: "",
     presets: [
@@ -91,7 +141,7 @@ const THRESHOLDS: {
     ],
   },
   {
-    key: "longest_pitch",
+    key: "longest_abseil",
     label: "Longest abseil",
     unit: "m",
     presets: [
@@ -257,28 +307,28 @@ export function PlaceFilterSheet({
         <RangePills
           label="Vertical"
           prefix="V"
-          bounds={PLACE_RANGE_BOUNDS.v_grade}
-          value={filters.v_grade as NumberRange | null}
-          onChange={(next) => patch({ v_grade: next })}
+          bounds={boundsOf("v_grade")}
+          value={rangeOf(filters, "v_grade")}
+          onChange={(next) => patch(patchRange("v_grade", next)(filters))}
         />
         <RangePills
           label="Aquatic"
           prefix="A"
-          bounds={PLACE_RANGE_BOUNDS.a_grade}
-          value={filters.a_grade as NumberRange | null}
-          onChange={(next) => patch({ a_grade: next })}
+          bounds={boundsOf("a_grade")}
+          value={rangeOf(filters, "a_grade")}
+          onChange={(next) => patch(patchRange("a_grade", next)(filters))}
         />
         <RangePills
           label="Commitment"
-          bounds={PLACE_RANGE_BOUNDS.commitment}
-          value={filters.commitment as NumberRange | null}
-          onChange={(next) => patch({ commitment: next })}
+          bounds={boundsOf("commitment")}
+          value={rangeOf(filters, "commitment")}
+          onChange={(next) => patch(patchRange("commitment", next)(filters))}
         />
         <RangePills
           label="Quality"
-          bounds={PLACE_RANGE_BOUNDS.quality}
-          value={filters.quality as NumberRange | null}
-          onChange={(next) => patch({ quality: next })}
+          bounds={boundsOf("quality")}
+          value={rangeOf(filters, "quality")}
+          onChange={(next) => patch(patchRange("quality", next)(filters))}
         />
 
         <SectionHeader label="Logistics" />
@@ -288,8 +338,8 @@ export function PlaceFilterSheet({
             label={spec.label}
             unit={spec.unit}
             presets={spec.presets}
-            value={filters[spec.key]}
-            onChange={(next) => patch({ [spec.key]: next })}
+            value={thresholdOf(filters, spec.key)}
+            onChange={(next) => patch(patchThreshold(spec.key, next)(filters))}
           />
         ))}
 

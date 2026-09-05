@@ -12,18 +12,11 @@ import { messageFromError } from "./errors/messageFromError";
 // by a comment. Every existing `from "./placeUtils"` import still resolves.
 export type {
   TPlace,
-  TPlaceAttributes,
   TNotification,
   TTripLog,
   TUser,
 } from "@logjam/shared";
-import type {
-  TPlace,
-  TPlaceAttributes,
-  TNotification,
-  TTripLog,
-  TUser,
-} from "@logjam/shared";
+import type { TPlace, TNotification, TTripLog, TUser } from "@logjam/shared";
 
 // A trip's title: an explicit displayName always wins; otherwise it's the
 // joined names of its linked places; otherwise a generic fallback. Every
@@ -235,6 +228,11 @@ export type RopeWikiCandidatePayload = {
     name: string;
     latitude: number;
     longitude: number;
+    // RopeWiki's OWN shape, which keeps its camelCase names: it is foreign
+    // data and its snapshot is persisted on the row and compared field by
+    // field on refresh, so renaming these keys would make every stored
+    // snapshot look like a user edit. The API translates them to reserved
+    // field keys at the boundary where a value reaches a place.
     numAbseils: number | null;
     longestAbseil: number | null;
     vGrade: number | null;
@@ -242,7 +240,7 @@ export type RopeWikiCandidatePayload = {
     commitment: number | null;
     quality: number | null;
     hours: number | null;
-    attributes: TPlaceAttributes;
+    sources?: [string, string][];
   };
   candidates: {
     placeId: string;
@@ -313,15 +311,13 @@ export type CreatePlaceData = {
   altNames?: string[];
   latitude: number;
   longitude: number;
-  numAbseils?: number | null;
-  longestAbseil?: number | null;
-  vGrade?: number | null;
-  aGrade?: number | null;
-  commitment?: number | null;
-  quality?: number | null;
-  hours?: number | null;
+  /** Required by the API — a place with no type would have no form to fill in
+   *  and no tab to appear under. */
+  placeTypeId: string;
   notes?: string | null;
-  attributes?: TPlaceAttributes;
+  /** Type-specific values, keyed by definition key. Replaces the seven grade
+   *  members this type used to carry. */
+  fieldValues?: Record<string, unknown>;
 };
 
 export function createPlace(data: CreatePlaceData): Promise<TPlace> {
@@ -893,14 +889,7 @@ export type BulkPlaceInput = {
   longitude: number;
   altNames?: string[];
   notes?: string | null;
-  vGrade?: number | null;
-  aGrade?: number | null;
-  commitment?: number | null;
-  quality?: number | null;
-  numAbseils?: number | null;
-  longestAbseil?: number | null;
-  hours?: number | null;
-  attributes?: Record<string, unknown>;
+  fieldValues?: Record<string, unknown>;
 };
 
 // One place row to import. The client decides per row whether the data should
@@ -912,6 +901,9 @@ export type BulkPlaceRow = {
 
 export type BulkPlaceRequest = {
   importBatchId: string;
+  /** Every row of one import lands in ONE type, chosen before column mapping —
+   *  the type's field labels are what the columns map onto. */
+  placeTypeId: string;
   rows: BulkPlaceRow[];
   mergePolicy?: PlaceMergePolicy;
 };
@@ -1533,7 +1525,6 @@ export {
   customFilterKind,
   reconcileCustomFilters,
   EMPTY_PLACE_FILTERS as emptyFilters,
-  PLACE_RANGE_BOUNDS,
 } from "@logjam/shared";
 export type {
   PlaceFilters as TFilters,

@@ -24,20 +24,10 @@ export function isValidLongitude(value: unknown): value is number {
   );
 }
 
-/** Numeric-field names on a place that carry a validated range. */
-export type PlaceNumericFieldName =
-  | "vGrade"
-  | "aGrade"
-  | "commitment"
-  | "quality"
-  | "numAbseils"
-  | "longestAbseil"
-  | "hours";
-
 export type NumericConstraint = {
-  /** Inclusive lower bound. */
-  min: number;
-  /** Inclusive upper bound, or null for no upper bound. */
+  /** Inclusive lower bound, or null for none. */
+  min: number | null;
+  /** Inclusive upper bound, or null for none. */
   max: number | null;
   /** When true, the value must be a whole number. */
   integer: boolean;
@@ -45,21 +35,33 @@ export type NumericConstraint = {
   label: string;
 };
 
-// Grades/quality/commitment carry known scales.
-// numAbseils/longestAbseil/hours have no natural upper bound — only reject
-// negatives (a count/length/duration can't be below zero).
-export const PLACE_NUMERIC_CONSTRAINTS: Record<
-  PlaceNumericFieldName,
-  NumericConstraint
-> = {
-  vGrade: { min: 1, max: 7, integer: true, label: "V grade" },
-  aGrade: { min: 1, max: 7, integer: true, label: "A grade" },
-  commitment: { min: 1, max: 6, integer: true, label: "Commitment" },
-  quality: { min: 1, max: 5, integer: false, label: "Quality" },
-  numAbseils: { min: 0, max: null, integer: true, label: "Pitches" },
-  longestAbseil: { min: 0, max: null, integer: false, label: "Longest pitch" },
-  hours: { min: 0, max: null, integer: false, label: "Hours" },
-};
+/**
+ * A field definition's bounds, as a constraint — or null when it has none.
+ *
+ * This REPLACES the hardcoded PLACE_NUMERIC_CONSTRAINTS table. The seven grade
+ * columns became field values, and their bounds became the `min`/`max` of the
+ * system definitions that describe them, so a second table restating those
+ * numbers would be two lists that must agree with no test to say when they
+ * stop agreeing. The bounds are now enforced from exactly where they are
+ * declared, for user fields and system fields alike, which is also what makes a
+ * user-defined bounded field validate at all — it never did before.
+ */
+export function constraintFromDef(def: {
+  label: string;
+  type: string;
+  min?: number | null;
+  max?: number | null;
+}): NumericConstraint | null {
+  if (def.type !== "integer" && def.type !== "float") return null;
+  const min = def.min ?? null;
+  const max = def.max ?? null;
+  if (min === null && max === null) {
+    // Still constrained: an integer field rejects 2.5 whether or not it is
+    // bounded. Only an unbounded FLOAT has nothing left to check.
+    if (def.type !== "integer") return null;
+  }
+  return { min, max, integer: def.type === "integer", label: def.label };
+}
 
 /**
  * Validate a single numeric value against a constraint. Returns a user-facing
@@ -74,28 +76,76 @@ export function numericConstraintError(
   if (integer && !Number.isInteger(value)) {
     return `${label} must be a whole number`;
   }
-  if (value < min) {
+  if (min !== null && value < min) {
     if (min === 0) return `${label} cannot be negative`;
-    return max == null
+    return max === null
       ? `${label} must be at least ${min}`
       : `${label} must be between ${min} and ${max}`;
   }
-  if (max != null && value > max) {
-    return `${label} must be between ${min} and ${max}`;
+  if (max !== null && value > max) {
+    return min === null
+      ? `${label} must be at most ${max}`
+      : `${label} must be between ${min} and ${max}`;
   }
   return null;
+}
+
+/**
+ * Validate a place's `fieldValues` against the definitions in force for its
+ * type. Returns the first user-facing error, or null.
+ *
+ * Values whose key has no definition are LEFT ALONE, not rejected: a def can be
+ * deleted or rescoped while values are already stored, and the trip-log union
+ * rule (§2.7) keeps showing a value whose def no longer applies rather than
+ * destroying it. Rejecting here would make that impossible to save.
+ */
+export function validateFieldValues(
+  values: Record<string, unknown>,
+  defs: { key: string; label: string; type: string; min?: number | null; max?: number | null }[],
+): string | null {
+  const byKey = new Map(defs.map((def) => [def.key, def]));
+  for (const [key, value] of Object.entries(values)) {
+    if (value === null || value === undefined) continue;
+    const def = byKey.get(key);
+    if (!def) continue;
+    if (def.type === "integer" || def.type === "float") {
+      if (typeof value !== "number") return `${def.label} must be a number`;
+      const constraint = constraintFromDef(def);
+      const error = constraint && numericConstraintError(value, constraint);
+      if (error) return error;
+    } else if (def.type === "boolean") {
+      if (typeof value !== "boolean") return `${def.label} must be true or false`;
+    } else if (typeof value !== "string") {
+      return `${def.label} must be text`;
+    }
+  }
+  return null;
+}
+
+/** The KEYS whose value is out of range — the per-field answer
+ *  `validateFieldValues` deliberately does not give (it stops at the first
+ *  error, because an API rejection is one message). See invalidPlaceFields. */
+export function invalidFieldValueKeys(
+  values: Record<string, unknown>,
+  defs: { key: string; label: string; type: string; min?: number | null; max?: number | null }[],
+): string[] {
+  const byKey = new Map(defs.map((def) => [def.key, def]));
+  const invalid: string[] = [];
+  for (const [key, value] of Object.entries(values)) {
+    if (value === null || value === undefined) continue;
+    const def = byKey.get(key);
+    if (!def) continue;
+    if (validateFieldValues({ [key]: value }, [def])) invalid.push(key);
+  }
+  return invalid;
 }
 
 export type PlaceFieldPayload = {
   latitude?: unknown;
   longitude?: unknown;
-  vGrade?: unknown;
-  aGrade?: unknown;
-  commitment?: unknown;
-  quality?: unknown;
-  numAbseils?: unknown;
-  longestAbseil?: unknown;
-  hours?: unknown;
+  /** Type-specific values. Validated against the type's DEFINITIONS, which the
+   *  caller supplies — this module has no way to load them. */
+  fieldValues?: unknown;
 };
 
 /**
@@ -105,11 +155,18 @@ export type PlaceFieldPayload = {
  * - `requireCoords: true` (create) demands latitude AND longitude be present
  *   and in range.
  * - `requireCoords: false` (patch) validates coordinates only when supplied.
- * Numeric fields are validated whenever present and non-null.
+ *
+ * `fieldValues` is validated only when `opts.defs` is given. The definitions
+ * cannot be reached from here — they are rows — so a caller that has them
+ * passes them, and a caller that does not gets coordinate validation alone
+ * rather than a silent pass on values it never checked.
  */
 export function validatePlacePayload(
   payload: PlaceFieldPayload,
-  opts: { requireCoords: boolean },
+  opts: {
+    requireCoords: boolean;
+    defs?: { key: string; label: string; type: string; min?: number | null; max?: number | null }[];
+  },
 ): string | null {
   const { latitude, longitude } = payload;
 
@@ -124,14 +181,18 @@ export function validatePlacePayload(
     }
   }
 
-  for (const field of Object.keys(
-    PLACE_NUMERIC_CONSTRAINTS,
-  ) as PlaceNumericFieldName[]) {
-    const value = payload[field];
-    if (value === undefined || value === null) continue;
-    const constraint = PLACE_NUMERIC_CONSTRAINTS[field];
-    if (typeof value !== "number") return `${constraint.label} must be a number`;
-    const error = numericConstraintError(value, constraint);
+  if (opts.defs && payload.fieldValues !== undefined) {
+    if (
+      payload.fieldValues === null ||
+      typeof payload.fieldValues !== "object" ||
+      Array.isArray(payload.fieldValues)
+    ) {
+      return "Field values must be an object";
+    }
+    const error = validateFieldValues(
+      payload.fieldValues as Record<string, unknown>,
+      opts.defs,
+    );
     if (error) return error;
   }
 
@@ -153,22 +214,22 @@ export function validatePlacePayload(
  * (an unknown field, a server-side rule) yields an empty list, which callers
  * must read as "can't tell", not as "everything is fine".
  */
-export function invalidPlaceFields(fields: Record<string, unknown>): string[] {
+export function invalidPlaceFields(
+  fields: Record<string, unknown>,
+  defs: { key: string; label: string; type: string; min?: number | null; max?: number | null }[] = [],
+): string[] {
   const invalid: string[] = [];
   if ("latitude" in fields && !isValidLatitude(fields.latitude)) invalid.push("latitude");
   if ("longitude" in fields && !isValidLongitude(fields.longitude)) {
     invalid.push("longitude");
   }
-  for (const field of Object.keys(PLACE_NUMERIC_CONSTRAINTS) as PlaceNumericFieldName[]) {
-    if (!(field in fields)) continue;
-    const value = fields[field];
-    if (value === undefined || value === null) continue;
-    if (typeof value !== "number") {
-      invalid.push(field);
-      continue;
-    }
-    if (numericConstraintError(value, PLACE_NUMERIC_CONSTRAINTS[field])) {
-      invalid.push(field);
+  // An out-of-range VALUE names `fieldValues`, not the key inside it: the whole
+  // blob is one dirty field on the wire, so that is the granularity the client
+  // can act on when it decides which parked fields to resend.
+  const values = fields.fieldValues;
+  if (values != null && typeof values === "object" && !Array.isArray(values)) {
+    if (invalidFieldValueKeys(values as Record<string, unknown>, defs).length > 0) {
+      invalid.push("fieldValues");
     }
   }
   return invalid;

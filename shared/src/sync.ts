@@ -10,6 +10,7 @@
  */
 export const SYNC_ENTITY_TYPES = [
   "place",
+  "placeType",
   "tripLog",
   "media",
   "placeShare",
@@ -53,8 +54,14 @@ export const SYNC_OVERLAP_MS = 60_000;
  * (§4.4). Order matters only for client convenience — places before the
  * trips that embed their names, and custom field definitions before both,
  * since a place's and a trip's stored values are keyed by them and a screen
- * that applies a page mid-pull would otherwise have values it cannot label. */
+ * that applies a page mid-pull would otherwise have values it cannot label.
+ *
+ * TYPES COME FIRST, ahead of the definitions, because a definition points at
+ * the types it is scoped to: a defs page applied before its types would carry
+ * scopings naming rows the mirror does not have yet. Same argument as defs
+ * before values, one level up. */
 export const DELTA_ENTITY_ORDER = [
+  "placeTypes",
   "customFieldDefs",
   "places",
   "tripLogs",
@@ -88,6 +95,13 @@ export const SYNC_DELTA_ROUTE_LIMIT = 50;
  * dedups them (see planOutboxEnqueue). */
 export const SYNC_PUSH_OPS_BY_ENTITY = {
   place: ["create", "update", "delete"],
+  // A place TYPE. Created, renamed and deleted OFFLINE like every other
+  // user-made row — deliberately not an online-only path, and that applies to
+  // guest installs too. A delete CASCADES SERVER-SIDE (the definitions scoped
+  // only to it go with it), for the same reason a customFieldDef delete does:
+  // a phone can only reach the rows in its own mirror, so anything stripped
+  // client-side would resurface the moment a later type slugged to the same id.
+  placeType: ["create", "update", "delete"],
   tripLog: ["create", "update", "delete"],
   waypoint: ["create", "update", "delete"],
   route: ["create", "update", "delete"],
@@ -169,6 +183,8 @@ export function pushOpDependencies(op: SyncPushOp): string[] {
 // clients must tolerate unknown extra keys (preserved via extra_json in the
 // mobile mirror, never round-tripped).
 
+import type { ForeignFieldValue } from "./fieldValues.js";
+
 export type SyncUserRef = { id: string; username: string };
 
 export type SyncDeltaPlaceRow = {
@@ -180,17 +196,44 @@ export type SyncDeltaPlaceRow = {
   altNames: string[];
   latitude: number;
   longitude: number;
-  numAbseils: number | null;
-  longestAbseil: number | null;
-  vGrade: number | null;
-  aGrade: number | null;
-  commitment: number | null;
-  quality: number | null;
-  hours: number | null;
+  placeTypeId: string;
   notes: string | null;
-  attributes: Record<string, unknown>;
+  /** Type-specific values, keyed by CustomFieldDef.key. Replaces the seven
+   *  grade columns and the free-form `attributes` blob. */
+  fieldValues: Record<string, unknown>;
+  /**
+   * The definitions that label this row's values, for a place whose type the
+   * CALLER does not own — a place of the sender's own type, shared with them.
+   * Without it a sharee sees bare keys.
+   *
+   * Derived LIVE from the owner's current definitions, and present only when
+   * syncRole is "shared". `foreignFields` is the same shape persisted at copy
+   * time, which is why this is not a third field mechanism.
+   */
+  fieldDefsSnapshot?: { key: string; label: string; type: string; min?: number | null; max?: number | null }[];
+  /**
+   * OWNER-PRIVATE — present only when syncRole is "owner". The server strips
+   * it from every shared row, because it records what the SENDER's definitions
+   * said and re-emitting it down a share chain is the propagation problem that
+   * got the "append it to notes" design rejected.
+   */
+  foreignFields?: ForeignFieldValue[] | null;
   ropeWikiId: number | null;
   forkedFromId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SyncDeltaPlaceTypeRow = {
+  id: string;
+  /** Null for a SYSTEM type — one global row shared by every user, which is
+   *  what makes a shared place of a system type resolve with no
+   *  reconciliation. A client must not treat null as "mine". */
+  ownerId: string | null;
+  name: string;
+  iconKey: string;
+  color: string;
+  position: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -429,17 +472,28 @@ const PLACE_ROW_SPEC: Record<string, FieldCheck> = {
   altNames: arrayOf(isString),
   latitude: isNumber,
   longitude: isNumber,
-  numAbseils: nullable(isNumber),
-  longestAbseil: nullable(isNumber),
-  vGrade: nullable(isNumber),
-  aGrade: nullable(isNumber),
-  commitment: nullable(isNumber),
-  quality: nullable(isNumber),
-  hours: nullable(isNumber),
+  placeTypeId: isString,
   notes: nullable(isString),
-  attributes: isPlainObject,
+  fieldValues: isPlainObject,
   ropeWikiId: nullable(isNumber),
   forkedFromId: nullable(isString),
+  createdAt: isString,
+  updatedAt: isString,
+  // fieldDefsSnapshot and foreignFields are deliberately UNCHECKED here and
+  // therefore optional: one is present only on a shared row of a type the
+  // caller does not own, the other only on an owned row. Requiring either
+  // would reject the rows that legitimately lack it, and a row that fails
+  // validation takes its whole delta page with it.
+};
+
+const PLACE_TYPE_ROW_SPEC: Record<string, FieldCheck> = {
+  id: isString,
+  // NULL for a SYSTEM type — global, owned by no one. Not an error.
+  ownerId: nullable(isString),
+  name: isString,
+  iconKey: isString,
+  color: isString,
+  position: isNumber,
   createdAt: isString,
   updatedAt: isString,
 };
@@ -569,6 +623,10 @@ function parseRow<Row>(
 
 export function parseSyncDeltaPlaceRow(value: unknown): SyncDeltaPlaceRow {
   return parseRow<SyncDeltaPlaceRow>("place", value, PLACE_ROW_SPEC);
+}
+
+export function parseSyncDeltaPlaceTypeRow(value: unknown): SyncDeltaPlaceTypeRow {
+  return parseRow<SyncDeltaPlaceTypeRow>("placeType", value, PLACE_TYPE_ROW_SPEC);
 }
 
 export function parseSyncDeltaTripRow(value: unknown): SyncDeltaTripRow {

@@ -2,7 +2,6 @@ import {
   isTripLogCustomFieldDef,
   type TripLogCustomFieldDef,
 } from "./tripLogFields.js";
-import { MERGEABLE_FIELDS } from "./mergePlace.js";
 
 export type ThemeSchemeId = "sandstone" | "basalt" | "scribblyGum" | "ironbark";
 
@@ -207,21 +206,31 @@ function normalizeCustomFieldDefs(value: unknown): TripLogCustomFieldDef[] {
 const VALID_MERGE_VALUES = new Set(["keepExisting", "useIncoming"]);
 
 /**
- * Validate and normalize an importMergePolicy value. Returns the policy if
- * valid (all known fields present with valid values, unknown keys dropped),
- * or undefined if absent/invalid — in which case the caller should omit the
- * field entirely (the default policy is applied at import time).
+ * Validate and normalize an importMergePolicy value. Returns the entries that
+ * are well-formed, or undefined when the value is absent or not an object.
+ *
+ * PARTIAL IS NOW VALID, and that is a behaviour change with a reason. The
+ * policy used to be a fixed seven-entry union of grade columns, so "all known
+ * fields present" was a meaningful check. Its keys are field KEYS now — an
+ * open set that differs per user and per place type — so demanding every one
+ * of them would reject a perfectly good policy the moment the user added a
+ * field, or deleted one, silently reverting all of their merge choices to the
+ * default. A missing entry already means `keepExisting` (`mergePolicyFor` in
+ * mergePlace.ts), which is the safe direction.
+ *
+ * Malformed ENTRIES are still dropped rather than tolerated, so a garbage
+ * value cannot reach the merge as if it were a decision.
  */
 export function normalizeImportMergePolicy(
   value: unknown,
 ): import("./mergePlace.js").PlaceMergePolicy | undefined {
-  if (typeof value !== "object" || value === null) return undefined;
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return undefined;
+  }
   const candidate = value as Record<string, unknown>;
   const result: Record<string, string> = {};
-  for (const field of MERGEABLE_FIELDS) {
-    const v = candidate[field];
-    if (typeof v !== "string" || !VALID_MERGE_VALUES.has(v)) return undefined;
-    result[field] = v;
+  for (const [field, v] of Object.entries(candidate)) {
+    if (typeof v === "string" && VALID_MERGE_VALUES.has(v)) result[field] = v;
   }
   return result as unknown as import("./mergePlace.js").PlaceMergePolicy;
 }

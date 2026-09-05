@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
-import { API_URL, as, ALICE_SUB, BOB_SUB, CAROL_SUB, SHARED_PLACE_ID } from "./_actors";
+import { API_URL, as, ALICE_SUB, BOB_SUB, CAROL_SUB, SHARED_PLACE_ID, CANYON_TYPE_ID} from "./_actors";
 
 // Requires `make dev` (Postgres + MiniStack + API on :8080, AUTH_MODE=fake).
 // Covers the track-specific media behaviour: colour assignment, the place
@@ -46,7 +46,7 @@ async function createPlace(headers: Record<string, string>) {
   const res = await request(API_URL)
     .post("/places")
     .set(headers)
-    .send({ name: "Track Test Place", latitude: -33.7, longitude: 150.3 });
+    .send({ placeTypeId: CANYON_TYPE_ID, name: "Track Test Place", latitude: -33.7, longitude: 150.3 });
   expect(res.status).toBe(201);
   return res.body.id as string;
 }

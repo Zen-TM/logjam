@@ -1,11 +1,13 @@
 import { parse } from "csv-parse/sync";
+import { SOURCES_FIELD_KEY } from "@logjam/shared";
+
 import { AppError } from "../middleware/errorHandler";
 
 // notes is a Logjam user-only field — never sourced from RopeWiki.
 
 const ROPEWIKI_CSV_URL =
   "https://ropewiki.com/index.php?title=Special:Ask" +
-  "&x=-5B-5BCategory%3APlaces-5D-5D-20-5B-5BLocated-20in-20region" +
+  "&x=-5B-5BCategory%3ACanyons-5D-5D-20-5B-5BLocated-20in-20region" +
   ".Located-20in-20regions%3A%3AX-7C-7CNew-20South-20Wales-5D-5D" +
   "%2F-3FHas-20pageid%3DPAGEID%2F-3FHas-20name%3DLocation%2F-3FHas-20" +
   "coordinates%3DCoords%2F-3FLocated-20in-20region%3DRegion%2F-3FHas-20user" +
@@ -54,6 +56,48 @@ export const ROPE_WIKI_OWNABLE_FIELDS: RopeWikiOwnableField[] = [
   "quality",
   "hours",
 ];
+
+/**
+ * RopeWiki's field name -> the reserved `fieldValues` key it writes.
+ *
+ * The DTO and the stored `ropeWikiSnapshot` keep their camelCase names on
+ * purpose: the snapshot is PERSISTED on the row and compared field-by-field on
+ * every refresh, so renaming its keys would make every existing snapshot look
+ * like a user edit and freeze RopeWiki out of every field it owns. The
+ * translation happens here, at the boundary where a value is written to a
+ * place.
+ *
+ * Guard: ropewiki.unit.test.ts asserts every value is a RESERVED key, so a
+ * typo cannot invent a field nobody can render.
+ */
+export const ROPE_WIKI_FIELD_KEYS: Record<RopeWikiOwnableField, string> = {
+  numAbseils: "num_abseils",
+  longestAbseil: "longest_abseil",
+  vGrade: "v_grade",
+  aGrade: "a_grade",
+  commitment: "commitment",
+  quality: "quality",
+  hours: "hours",
+};
+
+/**
+ * A RopeWiki canyon as `fieldValues`. Nulls are omitted rather than stored:
+ * a stored null renders as an empty field and satisfies a "has a value"
+ * filter, where an absent key correctly reads as "not recorded".
+ */
+export function ropeWikiFieldValues(c: RopeWikiCanyon): Record<string, unknown> {
+  const values: Record<string, unknown> = {};
+  for (const field of ROPE_WIKI_OWNABLE_FIELDS) {
+    const value = c[field];
+    if (value !== null && value !== undefined) {
+      values[ROPE_WIKI_FIELD_KEYS[field]] = value;
+    }
+  }
+  if (c.attributes?.sources?.length) {
+    values[SOURCES_FIELD_KEY] = c.attributes.sources;
+  }
+  return values;
+}
 
 // Snapshot stored alongside the place to detect user edits on refresh.
 // Values are always the RopeWiki upstream values at last sync time.

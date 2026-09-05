@@ -1,3 +1,4 @@
+import type { TripLogCustomFieldDef } from "@logjam/shared";
 import { useState, useRef, useEffect } from "react";
 import { useIsMobile } from "../../useIsMobile";
 import {
@@ -28,6 +29,7 @@ import classes from "./SelectedPlacesDialog.module.css";
 function SelectedPlacesDialog({
   open,
   selectedPlaces,
+  placeCustomFieldDefs,
   availablePlaces,
   ownedPlaceIds,
   friends,
@@ -39,6 +41,9 @@ function SelectedPlacesDialog({
 }: {
   open: boolean;
   selectedPlaces: TPlace[];
+  /** Labels the field values in the human-readable GPX/KML descriptions. The
+   *  machine-readable forms key by `key` so they round-trip through import. */
+  placeCustomFieldDefs: TripLogCustomFieldDef[];
   availablePlaces: TPlace[];
   ownedPlaceIds: Set<string>;
   friends: TFriend[];
@@ -111,7 +116,7 @@ function SelectedPlacesDialog({
   }
 
   function handleExport() {
-    const { blob, filename } = buildPlaceExport(selectedPlaces, exportFormat);
+    const { blob, filename } = buildPlaceExport(selectedPlaces, exportFormat, placeCustomFieldDefs);
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;

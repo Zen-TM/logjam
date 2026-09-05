@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
+import type { CustomFieldDefRow } from "./tripLogFields.js";
 import {
+  customFieldDefFromRow,
   makeCustomFieldKey,
   coerceFieldValue,
   coerceFieldValueStrict,
@@ -279,5 +281,48 @@ describe("renameCustomFieldLabel", () => {
   it("is a no-op when the label is unchanged", () => {
     const result = renameCustomFieldLabel(defs, "rope", "Rope Length");
     expect(result).toEqual({ defs });
+  });
+});
+
+// One-sided bounds, end to end through the row reader. Three of the system
+// definitions are min-only (`hours`, `num_abseils`, `longest_abseil`) — there
+// is no honest ceiling for "how many pitches" — and the both-or-neither rule
+// this replaces dropped their bound silently on the way out of the database.
+describe("customFieldDefFromRow with one-sided bounds", () => {
+  const row = (over: Partial<CustomFieldDefRow>): CustomFieldDefRow => ({
+    entity: "place",
+    key: "num_abseils",
+    label: "Pitches",
+    type: "integer",
+    min: null,
+    max: null,
+    position: 0,
+    ...over,
+  });
+
+  it("keeps a min with no max", () => {
+    expect(customFieldDefFromRow(row({ min: 0 }))).toEqual({
+      key: "num_abseils",
+      label: "Pitches",
+      type: "integer",
+      min: 0,
+    });
+  });
+
+  it("keeps a max with no min", () => {
+    expect(customFieldDefFromRow(row({ max: 10 }))).toMatchObject({ max: 10 });
+  });
+
+  it("keeps both when both are set", () => {
+    expect(customFieldDefFromRow(row({ min: 1, max: 7 }))).toMatchObject({
+      min: 1,
+      max: 7,
+    });
+  });
+
+  it("carries no bounds when neither is set", () => {
+    const def = customFieldDefFromRow(row({}));
+    expect(def).not.toHaveProperty("min");
+    expect(def).not.toHaveProperty("max");
   });
 });

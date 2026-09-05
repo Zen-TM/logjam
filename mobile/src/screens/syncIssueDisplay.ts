@@ -7,7 +7,11 @@
 // The screen's job is to answer five questions per row, in order: which of my
 // things, what was I trying to do, why did it fail, can I fix it, and what
 // happens if I ignore it. Everything below exists to answer one of them.
-import { invalidPlaceFields, isTransientSyncError } from "@logjam/shared";
+import {
+  invalidPlaceFields,
+  isTransientSyncError,
+  SYSTEM_FIELD_DEFS,
+} from "@logjam/shared";
 
 import type { ParkedOp, ShelfEntry } from "../sync/syncIssues";
 import { relativeTime } from "./syncHealth";
@@ -40,14 +44,15 @@ const FIELD_LABEL: Record<string, string> = {
   name: "name",
   altNames: "other names",
   notes: "notes",
-  numAbseils: "abseil count",
-  longestAbseil: "longest abseil",
-  vGrade: "water grade",
-  aGrade: "difficulty grade",
+  // Keyed by FIELD KEY now, because the seven grades are field values rather
+  // than columns — same words, one level in.
+  num_abseils: "abseil count",
+  longest_abseil: "longest abseil",
+  v_grade: "water grade",
+  a_grade: "difficulty grade",
   commitment: "commitment grade",
   quality: "star rating",
   hours: "trip time",
-  attributes: "details",
   date: "date",
   displayName: "title",
   types: "trip type",
@@ -207,7 +212,12 @@ export function canRecreate(op: ParkedOp): boolean {
 export function rejectedFields(op: ParkedOp): string[] {
   if (op.state !== "blocked" || op.entity !== "place" || !op.fields) return [];
   if (op.error && isTransientSyncError(op.error.code)) return [];
-  return invalidPlaceFields(op.fields);
+  // The SYSTEM definitions only. A value under a user definition can be out of
+  // range too, but its bounds live server-side — and answering "can't tell"
+  // there is the honest outcome: this function's empty result already means
+  // exactly that, and the caller offers nothing rather than re-sending an edit
+  // that would park again.
+  return invalidPlaceFields(op.fields, SYSTEM_FIELD_DEFS);
 }
 
 /**
@@ -254,6 +264,25 @@ export function opChanges(op: ParkedOp): OpChange[] {
     // typed; a coordinate renders as "(hidden)" and says nothing either.
     if (field === "id" || field.endsWith("Id") || field.endsWith("Ids")) continue;
     if (UNRENDERABLE_FIELDS.has(field)) continue;
+    // `fieldValues` is ONE field on the wire but several things to a reader, so
+    // it is expanded into a line per value. They share the blob's rejected
+    // state, because that is the truth: the server refused the whole column and
+    // "send the rest" cannot resend half of it — but the reader still gets to
+    // see WHICH value the complaint is about, which is the whole point of
+    // marking a line at all.
+    if (field === "fieldValues" && value && typeof value === "object") {
+      for (const [key, inner] of Object.entries(value as Record<string, unknown>)) {
+        // Internal `_`-prefixed entries are not something the user typed.
+        if (key.startsWith("_")) continue;
+        const innerLabel = fieldLabel(key);
+        changes.push({
+          label: innerLabel.charAt(0).toUpperCase() + innerLabel.slice(1),
+          value: fieldValueText(key, inner),
+          rejected: rejected.has("fieldValues"),
+        });
+      }
+      continue;
+    }
     const label = fieldLabel(field);
     changes.push({
       // Sentence case, because this is a line of its own rather than a phrase

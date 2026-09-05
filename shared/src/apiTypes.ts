@@ -16,12 +16,8 @@ import type {
   NotificationPreferences,
   ThemeSchemeId,
 } from "./themeSchemes.js";
+import type { ForeignFieldValue } from "./fieldValues.js";
 import type { TripLogCustomFieldDef } from "./tripLogFields.js";
-
-export type TPlaceAttributes = {
-  sources?: [string, string][];
-  customFields?: Record<string, unknown>;
-};
 
 export type TPlace = {
   id: string;
@@ -30,15 +26,15 @@ export type TPlace = {
   altNames: string[];
   latitude: number;
   longitude: number;
-  numAbseils: number | null;
-  longestAbseil: number | null;
-  vGrade: number | null;
-  aGrade: number | null;
-  commitment: number | null;
-  quality: number | null;
-  hours: number | null;
+  placeTypeId: string;
   notes: string | null;
-  attributes: TPlaceAttributes;
+  /** Type-specific values, keyed by CustomFieldDef.key. Replaces the seven
+   *  grade columns and the free-form `attributes` blob; internal `_`-prefixed
+   *  keys (`_sources`, `_attributes`) are not user fields. */
+  fieldValues: Record<string, unknown>;
+  /** Values that came in on a copy keyed by definitions this owner does not
+   *  have. OWNER-PRIVATE — never present on a place shared WITH the viewer. */
+  foreignFields?: ForeignFieldValue[] | null;
   ropeWikiId: number | null;
   createdAt: string;
   updatedAt: string;

@@ -35,6 +35,12 @@ PUSH_TITLES = {
 }
 GENERIC_TITLE = "Logjam notification"
 
+# MUST match ALLOWED_DATA_KEYS in api/src/services/push.ts exactly. The API
+# builds the payload and either sender may deliver it, and build_push_messages
+# RAISES on a key that is not here — so a key the API adds and this list lacks
+# is a send that throws, for an edit in a file this module never imports.
+# Guard: tests/test_push_constants_sync.py, which found these four missing.
+# Every key is an opaque id; that is the whole rule (no free text, ever).
 ALLOWED_DATA_KEYS = {
     "type",
     "notificationId",
@@ -43,6 +49,10 @@ ALLOWED_DATA_KEYS = {
     "jobId",
     "exportId",
     "geoPdfJobId",
+    "entityType",
+    "entityId",
+    "fileSendId",
+    "batchId",
 }
 
 

@@ -103,7 +103,12 @@ describe("custom-fields route (fake auth)", () => {
       .set(AUTH);
     expect(removed.status).toBe(200);
     expect(removed.body.removedFromPlaceCount).toBe(0);
-    expect(await defsFromUser("placeCustomFields")).toEqual([]);
+    // NOT `toEqual([])`: the list carries the SYSTEM definitions too, which
+    // label the built-in fields and belong to no account. What has to be gone
+    // is this user's own row.
+    expect(
+      (await defsFromUser("placeCustomFields")).map((def) => def.key),
+    ).not.toContain("permit_no");
   });
 
   it("rejects a definition that is not valid", async () => {
@@ -124,30 +129,27 @@ describe("custom-fields route (fake auth)", () => {
     expect(res.status).toBe(400);
   });
 
-  // The web writes whole lists through PATCH /users/me; the reconcile behind it
-  // must land as rows and come back through the projection unchanged.
-  it("round-trips a whole-list write from the web's shape", async () => {
-    const fields = [
-      { key: "access", label: "Access", type: "string" },
-      { key: "party", label: "Party size", type: "integer", min: 1, max: 12 },
-    ];
-    const patched = await request(API_URL)
-      .patch("/users/me")
-      .set(AUTH)
-      .send({ placeCustomFields: fields });
-    expect(patched.status).toBe(200);
-    expect(patched.body.uiPreferences.placeCustomFields).toEqual(fields);
-    expect(await defsFromUser("placeCustomFields")).toEqual(fields);
-
-    // Dropping one from the list deletes its row (and would strip its values).
-    const trimmed = await request(API_URL)
-      .patch("/users/me")
-      .set(AUTH)
-      .send({ placeCustomFields: [fields[0]] });
-    expect(trimmed.status).toBe(200);
-    expect(await defsFromUser("placeCustomFields")).toEqual([fields[0]]);
-
-    await request(API_URL).patch("/users/me").set(AUTH).send({ placeCustomFields: [] });
-    expect(await defsFromUser("placeCustomFields")).toEqual([]);
+  // THE WHOLE-LIST WRITE PATH IS GONE, and its removal is the assertion now.
+  //
+  // `PATCH /users/me { placeCustomFields: [...] }` reconciled a whole list of
+  // `{key,label,type,min,max}`. That shape cannot express what a definition is
+  // any more: it carries no `placeTypeIds` and no `appliesToAllTypes`, so every
+  // save from a dialog that round-tripped the list would have wiped the scoping
+  // off every definition — silently, because the payload simply did not mention
+  // it. And it matched `existing` scoped to the caller, so the SYSTEM
+  // definitions fell through to the create branch and the user acquired a
+  // private duplicate of every built-in field, colliding under the same key.
+  //
+  // A client still sending it gets a 400 naming the replacement rather than a
+  // silent no-op, which is the difference between a migration and a trap.
+  it("refuses the legacy whole-list write and says what to use instead", async () => {
+    for (const key of ["placeCustomFields", "tripLogCustomFields"]) {
+      const res = await request(API_URL)
+        .patch("/users/me")
+        .set(AUTH)
+        .send({ [key]: [{ key: "access", label: "Access", type: "string" }] });
+      expect(res.status, key).toBe(400);
+      expect(res.body.error).toContain("/custom-fields/");
+    }
   });
 });

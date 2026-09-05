@@ -5,8 +5,10 @@ import {
   invalidPlaceFields,
   numericConstraintError,
   validatePlacePayload,
-  PLACE_NUMERIC_CONSTRAINTS,
+  constraintFromDef,
+  validateFieldValues,
 } from "./placeValidation.js";
+import { SYSTEM_FIELD_DEFS } from "./placeTypes.js";
 
 describe("isValidLatitude", () => {
   it("accepts in-range values incl. bounds", () => {
@@ -40,42 +42,86 @@ describe("isValidLongitude", () => {
   });
 });
 
+// The bounds under test are the SYSTEM DEFINITIONS' own, so this suite fails
+// if a system field's bounds ever change — which is the point. The hardcoded
+// PLACE_NUMERIC_CONSTRAINTS table these cases used to read is gone; there is
+// one declaration now (shared/src/placeTypes.ts) and this reads it.
+const defOf = (key: string) => {
+  const def = SYSTEM_FIELD_DEFS.find((d) => d.key === key);
+  if (!def) throw new Error(`no system def keyed ${key}`);
+  return def;
+};
+const CONSTRAINT = {
+  quality: constraintFromDef(defOf("quality"))!,
+  numAbseils: constraintFromDef(defOf("num_abseils"))!,
+  vGrade: constraintFromDef(defOf("v_grade"))!,
+  hours: constraintFromDef(defOf("hours"))!,
+};
+
+describe("constraintFromDef", () => {
+  it("carries a one-sided bound rather than inventing a ceiling", () => {
+    expect(CONSTRAINT.numAbseils).toEqual({
+      min: 0,
+      max: null,
+      integer: true,
+      label: "Pitches",
+    });
+  });
+
+  it("keeps the integer rule for an unbounded integer field", () => {
+    expect(constraintFromDef({ label: "Count", type: "integer" })).toEqual({
+      min: null,
+      max: null,
+      integer: true,
+      label: "Count",
+    });
+  });
+
+  it("has nothing to enforce for an unbounded float", () => {
+    expect(constraintFromDef({ label: "Depth", type: "float" })).toBeNull();
+  });
+
+  it("has nothing to enforce for a non-numeric field", () => {
+    expect(constraintFromDef({ label: "Notes", type: "string" })).toBeNull();
+  });
+});
+
 describe("numericConstraintError", () => {
   it("passes valid values", () => {
     expect(
-      numericConstraintError(3, PLACE_NUMERIC_CONSTRAINTS.quality),
+      numericConstraintError(3, CONSTRAINT.quality),
     ).toBeNull();
     expect(
-      numericConstraintError(0, PLACE_NUMERIC_CONSTRAINTS.numAbseils),
+      numericConstraintError(0, CONSTRAINT.numAbseils),
     ).toBeNull();
     expect(
-      numericConstraintError(4, PLACE_NUMERIC_CONSTRAINTS.vGrade),
+      numericConstraintError(4, CONSTRAINT.vGrade),
     ).toBeNull();
   });
   it("rejects negatives on count/length/duration fields (PLACE-2)", () => {
     expect(
-      numericConstraintError(-3, PLACE_NUMERIC_CONSTRAINTS.numAbseils),
+      numericConstraintError(-3, CONSTRAINT.numAbseils),
     ).toBe("Pitches cannot be negative");
     expect(
-      numericConstraintError(-1, PLACE_NUMERIC_CONSTRAINTS.hours),
+      numericConstraintError(-1, CONSTRAINT.hours),
     ).toBe("Hours cannot be negative");
   });
   it("rejects non-integers on integer fields", () => {
     expect(
-      numericConstraintError(2.5, PLACE_NUMERIC_CONSTRAINTS.numAbseils),
+      numericConstraintError(2.5, CONSTRAINT.numAbseils),
     ).toBe("Pitches must be a whole number");
   });
   it("enforces the quality scale (1-5)", () => {
     expect(
-      numericConstraintError(0.5, PLACE_NUMERIC_CONSTRAINTS.quality),
+      numericConstraintError(0.5, CONSTRAINT.quality),
     ).toBe("Quality must be between 1 and 5");
     expect(
-      numericConstraintError(6, PLACE_NUMERIC_CONSTRAINTS.quality),
+      numericConstraintError(6, CONSTRAINT.quality),
     ).toBe("Quality must be between 1 and 5");
   });
   it("rejects NaN", () => {
     expect(
-      numericConstraintError(NaN, PLACE_NUMERIC_CONSTRAINTS.hours),
+      numericConstraintError(NaN, CONSTRAINT.hours),
     ).toBe("Hours must be a number");
   });
 });
@@ -84,8 +130,12 @@ describe("validatePlacePayload", () => {
   it("accepts a valid create payload", () => {
     expect(
       validatePlacePayload(
-        { latitude: -33.71, longitude: 150.3, numAbseils: 4, quality: 3 },
-        { requireCoords: true },
+        {
+          latitude: -33.71,
+          longitude: 150.3,
+          fieldValues: { num_abseils: 4, quality: 3 },
+        },
+        { requireCoords: true, defs: SYSTEM_FIELD_DEFS },
       ),
     ).toBeNull();
   });
@@ -107,12 +157,18 @@ describe("validatePlacePayload", () => {
   });
   it("requires coordinates on create when absent", () => {
     expect(
-      validatePlacePayload({ numAbseils: 3 }, { requireCoords: true }),
+      validatePlacePayload(
+        { fieldValues: { num_abseils: 3 } },
+        { requireCoords: true, defs: SYSTEM_FIELD_DEFS },
+      ),
     ).toBe("Latitude must be a number between -90 and 90");
   });
   it("skips absent coordinates on patch", () => {
     expect(
-      validatePlacePayload({ numAbseils: 3 }, { requireCoords: false }),
+      validatePlacePayload(
+        { fieldValues: { num_abseils: 3 } },
+        { requireCoords: false, defs: SYSTEM_FIELD_DEFS },
+      ),
     ).toBeNull();
   });
   it("still validates a supplied coordinate on patch", () => {
@@ -123,24 +179,28 @@ describe("validatePlacePayload", () => {
   it("rejects a negative numeric field (PLACE-2)", () => {
     expect(
       validatePlacePayload(
-        { latitude: -33, longitude: 150, numAbseils: -3 },
-        { requireCoords: true },
+        { latitude: -33, longitude: 150, fieldValues: { num_abseils: -3 } },
+        { requireCoords: true, defs: SYSTEM_FIELD_DEFS },
       ),
     ).toBe("Pitches cannot be negative");
   });
   it("ignores null numeric fields (unset)", () => {
     expect(
       validatePlacePayload(
-        { latitude: -33, longitude: 150, numAbseils: null, quality: null },
-        { requireCoords: true },
+        {
+          latitude: -33,
+          longitude: 150,
+          fieldValues: { num_abseils: null, quality: null },
+        },
+        { requireCoords: true, defs: SYSTEM_FIELD_DEFS },
       ),
     ).toBeNull();
   });
   it("rejects a non-number numeric field", () => {
     expect(
       validatePlacePayload(
-        { latitude: -33, longitude: 150, quality: "abc" },
-        { requireCoords: true },
+        { latitude: -33, longitude: 150, fieldValues: { quality: "abc" } },
+        { requireCoords: true, defs: SYSTEM_FIELD_DEFS },
       ),
     ).toBe("Quality must be a number");
   });
@@ -151,34 +211,83 @@ describe("invalidPlaceFields", () => {
     // validatePlacePayload answers with ONE sentence because an API rejection
     // is one message. The client needs the names: a parked op carries several
     // dirty fields and usually only one is the problem.
-    expect(invalidPlaceFields({ vGrade: 9, quality: 3, hours: -1 })).toEqual([
-      "vGrade",
-      "hours",
-    ]);
+    // The whole blob is ONE dirty field on the wire, so `fieldValues` is the
+    // granularity the client can act on — it cannot resend half a JSON column.
+    expect(
+      invalidPlaceFields(
+        { fieldValues: { v_grade: 9, quality: 3, hours: -1 } },
+        SYSTEM_FIELD_DEFS,
+      ),
+    ).toEqual(["fieldValues"]);
   });
 
   it("passes a payload the API would accept", () => {
     expect(
-      invalidPlaceFields({ notes: "rebolted", vGrade: 4, longestAbseil: 32 }),
+      invalidPlaceFields(
+        { notes: "rebolted", fieldValues: { v_grade: 4, longest_abseil: 32 } },
+        SYSTEM_FIELD_DEFS,
+      ),
     ).toEqual([]);
   });
 
   it("says nothing about fields it has no constraint for", () => {
     // An empty list means "can't tell", never "everything is fine" — a
     // rejection for an unknown field or a server-side rule looks like this.
-    expect(invalidPlaceFields({ notes: "x", name: "y" })).toEqual([]);
+    expect(invalidPlaceFields({ notes: "x", name: "y" }, SYSTEM_FIELD_DEFS)).toEqual(
+      [],
+    );
   });
 
   it("catches a coordinate, which is the one a create op carries", () => {
-    expect(invalidPlaceFields({ latitude: 91, longitude: 150 })).toEqual(["latitude"]);
+    expect(
+      invalidPlaceFields({ latitude: 91, longitude: 150 }, SYSTEM_FIELD_DEFS),
+    ).toEqual(["latitude"]);
   });
 
   it("treats a non-number in a numeric field as invalid", () => {
-    expect(invalidPlaceFields({ hours: "six" })).toEqual(["hours"]);
+    expect(
+      invalidPlaceFields({ fieldValues: { hours: "six" } }, SYSTEM_FIELD_DEFS),
+    ).toEqual(["fieldValues"]);
   });
 
   it("ignores an explicit null, which clears the field rather than setting it", () => {
-    expect(invalidPlaceFields({ vGrade: null })).toEqual([]);
+    expect(
+      invalidPlaceFields({ fieldValues: { v_grade: null } }, SYSTEM_FIELD_DEFS),
+    ).toEqual([]);
   });
 });
 
+
+describe("validateFieldValues", () => {
+  it("enforces a definition's bounds", () => {
+    expect(
+      validateFieldValues({ v_grade: 9 }, SYSTEM_FIELD_DEFS),
+    ).toBe("V grade must be between 1 and 7");
+  });
+
+  it("enforces a one-sided bound without inventing the other end", () => {
+    expect(validateFieldValues({ num_abseils: -1 }, SYSTEM_FIELD_DEFS)).toBe(
+      "Pitches cannot be negative",
+    );
+    expect(validateFieldValues({ num_abseils: 900 }, SYSTEM_FIELD_DEFS)).toBeNull();
+  });
+
+  it("type-checks non-numeric fields too", () => {
+    expect(validateFieldValues({ is_cave: "yes" }, SYSTEM_FIELD_DEFS)).toBe(
+      "Is a cave? must be true or false",
+    );
+  });
+
+  // A def can be deleted or rescoped while values are already stored, and the
+  // trip-log union rule keeps showing a value whose def no longer applies
+  // rather than destroying it. Rejecting here would make that unsaveable.
+  it("leaves a value with no definition alone rather than rejecting it", () => {
+    expect(
+      validateFieldValues({ some_deleted_field: "kept" }, SYSTEM_FIELD_DEFS),
+    ).toBeNull();
+  });
+
+  it("ignores nulls, which mean 'unset' rather than a value", () => {
+    expect(validateFieldValues({ v_grade: null }, SYSTEM_FIELD_DEFS)).toBeNull();
+  });
+});

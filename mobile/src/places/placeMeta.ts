@@ -10,7 +10,7 @@
 // touches latitude/longitude — a place's position never reaches a list row
 // (DESIGN.md §11).
 import type { Feather } from "@expo/vector-icons";
-import { formatCanyonGrade } from "@logjam/shared";
+import { formatCanyonGrade, numericFieldValue } from "@logjam/shared";
 
 import { placeHue } from "../theme";
 
@@ -43,13 +43,10 @@ export function placeStatus(
   return tripCount > 0 ? "done" : "todo";
 }
 
+/** Structural, so both a mirror row and an API place satisfy it. Everything
+ *  the summary needs is in `fieldValues` now, under the reserved keys. */
 export type PlaceSummaryFields = {
-  vGrade: number | null;
-  aGrade: number | null;
-  commitment: number | null;
-  numAbseils: number | null;
-  longestAbseil: number | null;
-  hours: number | null;
+  fieldValues?: unknown;
 };
 
 /**
@@ -68,11 +65,17 @@ export type PlaceSummaryFields = {
 const SUMMARY_FACTS = 3;
 
 export function placeSummary(place: PlaceSummaryFields): string {
+  // A place of a type that carries none of these summarises to "", and the row
+  // shows its name alone — the same thing an ungraded canyon has always done,
+  // now with no special case for the type that has no grades at all.
+  const hours = numericFieldValue(place.fieldValues, "hours");
+  const longest = numericFieldValue(place.fieldValues, "longest_abseil");
+  const abseils = numericFieldValue(place.fieldValues, "num_abseils");
   return [
-    formatCanyonGrade(place),
-    place.hours != null ? `${trimNumber(place.hours)} h` : null,
-    place.longestAbseil != null ? `${trimNumber(place.longestAbseil)} m max` : null,
-    place.numAbseils != null ? `${place.numAbseils} abseils` : null,
+    formatCanyonGrade(place.fieldValues),
+    hours != null ? `${trimNumber(hours)} h` : null,
+    longest != null ? `${trimNumber(longest)} m max` : null,
+    abseils != null ? `${abseils} abseils` : null,
   ]
     .filter((part): part is string => Boolean(part))
     .slice(0, SUMMARY_FACTS)

@@ -97,9 +97,14 @@ describe("sync cursor codec", () => {
 });
 
 describe("SYNC_ENTITY_TYPES", () => {
-  it("covers the eight synced entities", () => {
+  it("covers the nine synced entities", () => {
     expect(SYNC_ENTITY_TYPES).toEqual([
       "place",
+      // A place TYPE is a synced entity of its own: it is created, renamed and
+      // deleted OFFLINE like every other user-made row (§2.9), which an
+      // online-only path could not do — and would break guest installs, which
+      // never reach the server at all until they link.
+      "placeType",
       "tripLog",
       "media",
       "placeShare",
@@ -148,15 +153,9 @@ describe("delta row parsers", () => {
     altNames: [],
     latitude: -33.5,
     longitude: 150.4,
-    numAbseils: 6,
-    longestAbseil: null,
-    vGrade: 4,
-    aGrade: 3,
-    commitment: 3,
-    quality: null,
-    hours: 7,
+    placeTypeId: "b0000000-0000-4000-8000-000000000001",
     notes: null,
-    attributes: {},
+    fieldValues: { v_grade: 4, a_grade: 3, commitment: 3, num_abseils: 6, hours: 7 },
     ropeWikiId: null,
     forkedFromId: null,
     createdAt: "2026-01-01T00:00:00.000Z",

@@ -8,7 +8,6 @@ import {
   DEFAULT_NOTIFICATION_PREFERENCES,
   THEME_SCHEME_ORDER,
 } from "./themeSchemes.js";
-import { DEFAULT_PLACE_MERGE_POLICY } from "./mergePlace.js";
 
 describe("isThemeSchemeId", () => {
   it("accepts every known scheme id", () => {
@@ -120,38 +119,55 @@ describe("normalizeUserUiPreferences", () => {
 });
 
 describe("normalizeImportMergePolicy", () => {
-  it("round-trips a complete policy, attributes included", () => {
-    const policy = { ...DEFAULT_PLACE_MERGE_POLICY, attributes: "useIncoming" as const };
-    expect(normalizeImportMergePolicy(policy)).toEqual(policy);
+  const POLICY = {
+    notes: "keepExisting" as const,
+    _attributes: "useIncoming" as const,
+    v_grade: "keepExisting" as const,
+    water_temp: "useIncoming" as const,
+  };
+
+  it("round-trips a policy keyed by field keys", () => {
+    expect(normalizeImportMergePolicy(POLICY)).toEqual(POLICY);
   });
 
-  // The normalizer rebuilds the policy from the shared field list, so a field
-  // missing from that list is silently dropped on save — which is how the user's
-  // "Custom attributes: use file" choice would fail to persist.
-  it("preserves the attributes entry rather than dropping it", () => {
-    const result = normalizeImportMergePolicy({
-      ...DEFAULT_PLACE_MERGE_POLICY,
-      attributes: "useIncoming",
+  // The legacy attributes bag is one policy entry, and it has to survive the
+  // round trip: this is the user's "Custom attributes: use file" choice, which
+  // an earlier normalizer silently dropped because it rebuilt the policy from a
+  // field list that did not contain it.
+  it("preserves the legacy attributes entry rather than dropping it", () => {
+    expect(normalizeImportMergePolicy(POLICY)?._attributes).toBe("useIncoming");
+  });
+
+  // BEHAVIOUR CHANGE, deliberate. The policy used to be a fixed seven-entry
+  // union of grade columns, so demanding every entry was meaningful. Its keys
+  // are field KEYS now — an open set that differs per user and per place type —
+  // and rejecting a partial policy would silently revert every merge choice the
+  // user had made the moment they added or deleted a field. A missing entry
+  // already means keepExisting, which is the safe direction.
+  it("accepts a partial policy instead of rejecting it", () => {
+    expect(normalizeImportMergePolicy({ notes: "useIncoming" })).toEqual({
+      notes: "useIncoming",
     });
-    expect(result?.attributes).toBe("useIncoming");
   });
 
-  it("rejects a policy missing the attributes entry", () => {
-    const { attributes: _omitted, ...incomplete } = DEFAULT_PLACE_MERGE_POLICY;
-    expect(normalizeImportMergePolicy(incomplete)).toBeUndefined();
-  });
-
-  it("rejects an unknown value", () => {
+  it("drops a malformed entry rather than the whole policy", () => {
     expect(
-      normalizeImportMergePolicy({ ...DEFAULT_PLACE_MERGE_POLICY, notes: "useFile" }),
-    ).toBeUndefined();
+      normalizeImportMergePolicy({ notes: "useFile", v_grade: "useIncoming" }),
+    ).toEqual({ v_grade: "useIncoming" });
   });
 
-  it("drops unknown keys", () => {
-    const result = normalizeImportMergePolicy({
-      ...DEFAULT_PLACE_MERGE_POLICY,
+  // Unknown keys are KEPT, because with an open key set there is no way to tell
+  // an unknown key from a field this reader has not been told about. An entry
+  // for a field that does not exist is inert — nothing merges it.
+  it("keeps an entry whose field it cannot verify", () => {
+    expect(normalizeImportMergePolicy({ somethingElse: "useIncoming" })).toEqual({
       somethingElse: "useIncoming",
     });
-    expect(result).toEqual(DEFAULT_PLACE_MERGE_POLICY);
+  });
+
+  it("rejects a non-object", () => {
+    expect(normalizeImportMergePolicy("nope")).toBeUndefined();
+    expect(normalizeImportMergePolicy(null)).toBeUndefined();
+    expect(normalizeImportMergePolicy(["a"])).toBeUndefined();
   });
 });

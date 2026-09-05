@@ -9,6 +9,7 @@ import {
   CAROL_ID,
   SHARED_PLACE_ID,
   as,
+  CANYON_TYPE_ID
 } from "./_actors";
 
 // Multi-user / share-boundary coverage (gap 1, SEC-001 regression).
@@ -41,7 +42,7 @@ async function createPlace(sub: string, name: string): Promise<string> {
   const res = await request(API_URL)
     .post("/places")
     .set(as(sub))
-    .send({ name, latitude: -33.7, longitude: 150.3 });
+    .send({ placeTypeId: CANYON_TYPE_ID, name, latitude: -33.7, longitude: 150.3 });
   expect(res.status).toBe(201);
   return res.body.id as string;
 }

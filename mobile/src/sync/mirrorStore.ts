@@ -6,6 +6,7 @@
 import type { SQLiteDatabase } from "expo-sqlite";
 import type {
   SyncDeltaPlaceRow,
+  SyncDeltaPlaceTypeRow,
   SyncDeltaCustomFieldDefRow,
   SyncDeltaFriendshipRow,
   SyncDeltaMediaRow,
@@ -42,8 +43,12 @@ function splitExtras<Row extends Record<string, unknown>>(
 
 const PLACE_KNOWN = [
   "id", "syncRole", "name", "altNames", "latitude", "longitude",
-  "numAbseils", "longestAbseil", "vGrade", "aGrade", "commitment",
-  "quality", "hours", "notes", "attributes", "forkedFromId",
+  "placeTypeId", "notes", "fieldValues", "fieldDefsSnapshot",
+  "foreignFields", "forkedFromId", "createdAt", "updatedAt",
+] as const;
+
+const PLACE_TYPE_KNOWN = [
+  "id", "ownerId", "name", "iconKey", "color", "position",
   "createdAt", "updatedAt",
 ] as const;
 
@@ -91,29 +96,56 @@ export async function upsertPlace(
   await db.runAsync(
     `INSERT OR REPLACE INTO places
        (id, sync_role, name, latitude, longitude, alt_names_json,
-        num_abseils, longest_abseil, v_grade, a_grade, commitment, quality,
-        hours, notes, attributes_json, forked_from_id, created_at, updated_at,
+        place_type_id, notes, field_values_json, field_defs_snapshot_json,
+        foreign_fields_json, forked_from_id, created_at, updated_at,
         extra_json, dirty_fields_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     row.id,
     row.syncRole,
     row.name,
     row.latitude,
     row.longitude,
     JSON.stringify(row.altNames ?? []),
-    row.numAbseils,
-    row.longestAbseil,
-    row.vGrade,
-    row.aGrade,
-    row.commitment,
-    row.quality,
-    row.hours,
+    row.placeTypeId,
     row.notes,
-    JSON.stringify(row.attributes ?? {}),
+    JSON.stringify(row.fieldValues ?? {}),
+    // Present only on a place of a type this account does not own — a shared
+    // place of the sender's own type. Otherwise the viewer holds the
+    // definitions themselves and needs no snapshot.
+    row.fieldDefsSnapshot ? JSON.stringify(row.fieldDefsSnapshot) : null,
+    // OWNER-PRIVATE: the server never emits it on a shared row, so anything
+    // stored here belongs to this account.
+    row.foreignFields ? JSON.stringify(row.foreignFields) : null,
     row.forkedFromId,
     row.createdAt,
     row.updatedAt,
     splitExtras(row, PLACE_KNOWN),
+    dirtyFieldNames.length ? JSON.stringify(dirtyFieldNames) : null,
+  );
+}
+
+export async function upsertPlaceType(
+  db: SQLiteDatabase,
+  row: SyncDeltaPlaceTypeRow,
+  dirtyFieldNames: string[],
+): Promise<void> {
+  await db.runAsync(
+    `INSERT OR REPLACE INTO place_types
+       (id, owner_id, name, icon_key, color, position, created_at, updated_at,
+        extra_json, dirty_fields_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    row.id,
+    // NULL means a SYSTEM type — global, shared by every account, not this
+    // user's. Storing it verbatim rather than coercing to "" keeps that
+    // distinction readable at every call site.
+    row.ownerId,
+    row.name,
+    row.iconKey,
+    row.color,
+    row.position,
+    row.createdAt,
+    row.updatedAt,
+    splitExtras(row, PLACE_TYPE_KNOWN),
     dirtyFieldNames.length ? JSON.stringify(dirtyFieldNames) : null,
   );
 }
@@ -543,6 +575,13 @@ export async function applyTombstone(
       // still exists for its owner, but this user must forget it.
       await db.runAsync("DELETE FROM routes WHERE id = ?", tombstone.id);
       break;
+    case "placeType":
+      // Only the type row. The definitions scoped ONLY to it were deleted
+      // server-side in the same transaction and arrive as their own tombstones;
+      // the places that used it cannot exist, because a type holding places
+      // refuses to be deleted at all.
+      await db.runAsync("DELETE FROM place_types WHERE id = ?", tombstone.id);
+      break;
     case "customFieldDef":
       // Only the definition. The VALUES it described were stripped server-side
       // in the same transaction as the delete, and reach this device as
@@ -599,21 +638,41 @@ type PlaceRow = {
   latitude: number;
   longitude: number;
   alt_names_json: string | null;
-  num_abseils: number | null;
-  longest_abseil: number | null;
-  v_grade: number | null;
-  a_grade: number | null;
-  commitment: number | null;
-  quality: number | null;
-  hours: number | null;
+  place_type_id: string;
   notes: string | null;
-  attributes_json: string | null;
+  field_values_json: string | null;
+  field_defs_snapshot_json: string | null;
+  foreign_fields_json: string | null;
   created_at: string | null;
   updated_at: string | null;
   extra_json: string | null;
 };
 
-export type MirrorPlace = TPlace & { syncRole: "owner" | "shared" };
+export type MirrorPlace = TPlace & {
+  syncRole: "owner" | "shared";
+  /** Definitions for a shared place of a type this account does not own, so
+   *  its values render with labels rather than bare keys. Absent otherwise. */
+  fieldDefsSnapshot?: {
+    key: string;
+    label: string;
+    type: string;
+    min?: number | null;
+    max?: number | null;
+  }[];
+};
+
+/** A place type as mirrored. `ownerId: null` means a SYSTEM type — global and
+ *  not editable — which a client must not read as "mine". */
+export type MirrorPlaceType = {
+  id: string;
+  ownerId: string | null;
+  name: string;
+  iconKey: string;
+  color: string;
+  position: number;
+  createdAt: string;
+  updatedAt: string;
+};
 
 function parseJson<T>(value: string | null, fallback: T): T {
   if (value == null) return fallback;
@@ -636,15 +695,15 @@ function rowToPlace(row: PlaceRow): MirrorPlace {
     altNames: parseJson<string[]>(row.alt_names_json, []),
     latitude: row.latitude,
     longitude: row.longitude,
-    numAbseils: row.num_abseils,
-    longestAbseil: row.longest_abseil,
-    vGrade: row.v_grade,
-    aGrade: row.a_grade,
-    commitment: row.commitment,
-    quality: row.quality,
-    hours: row.hours,
+    placeTypeId: row.place_type_id,
     notes: row.notes,
-    attributes: parseJson(row.attributes_json, {}),
+    fieldValues: parseJson(row.field_values_json, {}),
+    fieldDefsSnapshot: row.field_defs_snapshot_json
+      ? parseJson(row.field_defs_snapshot_json, [])
+      : undefined,
+    foreignFields: row.foreign_fields_json
+      ? parseJson(row.foreign_fields_json, [])
+      : null,
     ropeWikiId: (extras.ropeWikiId as number | null) ?? null,
     createdAt: row.created_at ?? "",
     updatedAt: row.updated_at ?? "",

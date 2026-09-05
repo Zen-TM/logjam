@@ -40,6 +40,8 @@ export function outboxMirrorTable(entity: OutboxEntity): string | null {
   switch (entity) {
     case "place":
       return "places";
+    case "placeType":
+      return "place_types";
     case "tripLog":
       return "trip_logs";
     case "waypoint":

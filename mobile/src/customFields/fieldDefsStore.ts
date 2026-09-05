@@ -23,9 +23,11 @@ import {
   customFieldDefsFromRows,
   type CustomFieldEntity,
   type TripLogCustomFieldDef,
+  asFieldValues,
+  fieldValue,
+  setFieldValues,
 } from "@logjam/shared";
 
-import type { TPlaceAttributes } from "../api/types";
 import { listMirrorPlaces, listMirrorCustomFieldDefs, listMirrorTrips } from "../sync/mirrorStore";
 import {
   createCustomFieldDefLocal,
@@ -132,13 +134,17 @@ async function removeFieldDefById(
 ): Promise<number> {
   const rows = await rowsWithFieldValue(entity, key);
   for (const row of rows) {
-    const remaining = { ...row.values };
-    delete remaining[key];
     if (entity === "tripLog") {
+      const remaining = { ...row.values };
+      delete remaining[key];
       await updateTripLocal(row.id, { customFields: remaining });
     } else {
+      // `setFieldValues` removes the key and leaves everything else — including
+      // the internal `_sources` / `_attributes` entries, which live in the same
+      // object now rather than beside it. Rebuilding the object by hand here
+      // would drop them.
       await updatePlaceLocal(row.id, {
-        attributes: { ...row.attributes, customFields: remaining },
+        fieldValues: setFieldValues(row.values, { [key]: null }),
       });
     }
   }
@@ -154,14 +160,12 @@ async function removeFieldDefById(
 async function rowsWithFieldValue(
   entity: CustomFieldEntity,
   key: string,
-): Promise<
-  { id: string; values: Record<string, unknown>; attributes: TPlaceAttributes }[]
-> {
+): Promise<{ id: string; values: Record<string, unknown> }[]> {
   if (entity === "tripLog") {
     const trips = await listMirrorTrips();
     return trips
       .filter((trip) => trip.customFields?.[key] !== undefined)
-      .map((trip) => ({ id: trip.id, values: trip.customFields ?? {}, attributes: {} }));
+      .map((trip) => ({ id: trip.id, values: trip.customFields ?? {} }));
   }
   const places = await listMirrorPlaces();
   return places
@@ -170,11 +174,10 @@ async function rowsWithFieldValue(
     .filter(
       (place) =>
         place.syncRole === "owner" &&
-        place.attributes?.customFields?.[key] !== undefined,
+        fieldValue(place.fieldValues, key) !== undefined,
     )
     .map((place) => ({
       id: place.id,
-      values: place.attributes?.customFields ?? {},
-      attributes: place.attributes ?? {},
+      values: asFieldValues(place.fieldValues),
     }));
 }

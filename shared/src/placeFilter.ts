@@ -12,6 +12,7 @@
 // it is a box the user drew on their own map, compared against place
 // positions the caller already has in memory. It is never logged and never
 // sent anywhere; the clients decide what they persist (see the `area` field).
+import { fieldValue, numericFieldValue } from "./fieldValues.js";
 import type { RegionBbox } from "./mapRegionEstimate.js";
 import type { TripLogCustomFieldDef } from "./tripLogFields.js";
 
@@ -40,13 +41,22 @@ export type PlaceThresholdFilter = [
 
 export type PlaceFilters = {
   name: string | null;
-  v_grade: number[] | null;
-  a_grade: number[] | null;
-  commitment: number[] | null;
-  quality: number[] | null;
-  pitches: PlaceThresholdFilter | null;
-  longest_pitch: PlaceThresholdFilter | null;
-  hours: PlaceThresholdFilter | null;
+  /**
+   * The seven graded axes USED TO LIVE HERE as named fields (`v_grade`,
+   * `pitches`, ...). They are ordinary custom-field filters now, in `custom`,
+   * because the columns they read became field values and a place of a
+   * user-made type has no grades at all. Two of them changed key on the way:
+   * `pitches` -> `num_abseils` and `longest_pitch` -> `longest_abseil`, which
+   * are the reserved keys the values are actually stored under.
+   *
+   * Nothing is lost: a bounded def still renders as a double-ended slider
+   * (`numberRange`) and a min-only one as op+value (`number`) — the same two
+   * shapes the named fields had, now chosen from the definition instead of
+   * hardcoded. And a user's own bounded field gets the slider too, which it
+   * never did before.
+   */
+  /** Keep only places of this type; null = every type. */
+  placeTypeId: string | null;
   ownership: "all" | "owned" | "shared";
   /** When true, keep only places the user has shared with at least one friend. */
   shared_by_me: boolean;
@@ -97,29 +107,22 @@ export type PlaceFilterFields = {
    */
   latitude: number;
   longitude: number;
-  numAbseils?: number | null;
-  longestAbseil?: number | null;
-  vGrade?: number | null;
-  aGrade?: number | null;
-  commitment?: number | null;
-  quality?: number | null;
-  hours?: number | null;
+  /** The type this place belongs to, for the per-type tab/layer filter. */
+  placeTypeId?: string;
+  /** Type-specific values, keyed by definition key. Replaces the seven grade
+   *  scalars AND the `attributes.customFields` sub-object they sat beside —
+   *  which is the whole point: a value keyed `v_grade` and a user's own value
+   *  are now read the same way, through the same predicate. */
+  fieldValues?: unknown;
   ropeWikiId?: number | null;
   createdAt?: string;
   updatedAt?: string;
-  attributes?: { customFields?: Record<string, unknown> };
   _count?: { tripLogLinks: number; shares: number };
 };
 
 export const EMPTY_PLACE_FILTERS: PlaceFilters = {
   name: null,
-  v_grade: null,
-  a_grade: null,
-  commitment: null,
-  quality: null,
-  pitches: null,
-  longest_pitch: null,
-  hours: null,
+  placeTypeId: null,
   ownership: "all",
   shared_by_me: false,
   completion: "any",
@@ -131,24 +134,14 @@ export const EMPTY_PLACE_FILTERS: PlaceFilters = {
   include_unknowns: false,
 };
 
-/**
- * The [min, max] span of each graded axis. One definition: it is simultaneously
- * the slider/pill bounds a UI renders, and the value that means "inactive"
- * (a filter set to its full span filters nothing).
- */
-export const PLACE_RANGE_BOUNDS = {
-  v_grade: [1, 7],
-  a_grade: [1, 7],
-  commitment: [1, 6],
-  quality: [1, 5],
-} as const satisfies Record<string, readonly [number, number]>;
-
-export type PlaceRangeKey = keyof typeof PLACE_RANGE_BOUNDS;
-
-export const PLACE_THRESHOLD_KEYS = ["pitches", "longest_pitch", "hours"] as const;
+// PLACE_RANGE_BOUNDS and PLACE_THRESHOLD_KEYS are GONE. They restated the
+// bounds of the seven grade columns, which are now the `min`/`max` of the
+// system field definitions — so keeping them would have been two lists that
+// must agree, with the UI silently offering a slider over the wrong span when
+// they stopped. A range filter's bounds come from the definition now
+// (`customFilterKind`), which is also why a user's own bounded field finally
+// gets the same slider.
 const DATE_FILTER_KEYS = ["created_at", "updated_at"] as const;
-
-const RANGE_KEYS = Object.keys(PLACE_RANGE_BOUNDS) as PlaceRangeKey[];
 
 /**
  * True when a single filter field is set to anything other than its inactive
@@ -161,16 +154,8 @@ function isFilterActive(filters: PlaceFilters, key: keyof PlaceFilters): boolean
   if (key === "completion") return filters.completion !== "any";
   if (key === "ropewiki") return filters.ropewiki !== "any";
   if (key === "area") return filters.area != null;
+  if (key === "placeTypeId") return filters.placeTypeId != null;
   if (key === "include_unknowns") return false; // a modifier, not a filter
-  if ((RANGE_KEYS as string[]).includes(key)) {
-    const [min, max] = PLACE_RANGE_BOUNDS[key as PlaceRangeKey];
-    const value = filters[key] as number[] | null;
-    return !!value && (value[0] !== min || value[1] !== max);
-  }
-  if ((PLACE_THRESHOLD_KEYS as readonly string[]).includes(key)) {
-    const value = filters[key] as PlaceThresholdFilter | null;
-    return !!value && value[0] !== "Any";
-  }
   if ((DATE_FILTER_KEYS as readonly string[]).includes(key)) {
     const value = filters[key] as PlaceDateRange | null;
     return !!value && (value[0] != null || value[1] != null);
@@ -188,9 +173,8 @@ function isFilterActive(filters: PlaceFilters, key: keyof PlaceFilters): boolean
 // `UNCOUNTED_FILTER_KEYS` is the other half of that pair — every field is in
 // exactly one of the two, and `placeFilter.test.ts` fails when one isn't.
 export const COUNTED_FILTER_KEYS: (keyof PlaceFilters)[] = [
-  ...RANGE_KEYS,
-  ...PLACE_THRESHOLD_KEYS,
   ...DATE_FILTER_KEYS,
+  "placeTypeId",
   "ownership",
   "shared_by_me",
   "completion",
@@ -295,31 +279,6 @@ export function passesPlaceFilters(
 ): boolean {
   const includeUnknowns = filters.include_unknowns;
 
-  function passesRangeFilter(
-    value: number | null | undefined,
-    filter: number[] | null,
-    bounds: readonly [number, number],
-  ): boolean {
-    if (filter && (filter[0] !== bounds[0] || filter[1] !== bounds[1])) {
-      if (value == null) return includeUnknowns;
-      if (value < filter[0] || value > filter[1]) return false;
-    }
-    return true;
-  }
-
-  function passesThresholdFilter(
-    value: number | null | undefined,
-    filter: PlaceThresholdFilter | null,
-  ): boolean {
-    if (filter && filter[0] !== "Any") {
-      if (value == null) return includeUnknowns;
-      if (filter[0] === "Less than" && value >= filter[1]) return false;
-      if (filter[0] === "More than" && value <= filter[1]) return false;
-      if (filter[0] === "Exactly" && value !== filter[1]) return false;
-    }
-    return true;
-  }
-
   function passesDateRangeFilter(
     value: string | null | undefined,
     filter: PlaceDateRange | null,
@@ -373,24 +332,15 @@ export function passesPlaceFilters(
     if (!placeMatchesSearch(place, filters.name)) return false;
   }
 
-  if (!passesRangeFilter(place.vGrade, filters.v_grade, PLACE_RANGE_BOUNDS.v_grade))
+  if (filters.placeTypeId != null && place.placeTypeId !== filters.placeTypeId) {
     return false;
-  if (!passesRangeFilter(place.aGrade, filters.a_grade, PLACE_RANGE_BOUNDS.a_grade))
-    return false;
-  if (
-    !passesRangeFilter(place.commitment, filters.commitment, PLACE_RANGE_BOUNDS.commitment)
-  )
-    return false;
-  if (!passesRangeFilter(place.quality, filters.quality, PLACE_RANGE_BOUNDS.quality))
-    return false;
-  if (!passesThresholdFilter(place.numAbseils, filters.pitches)) return false;
-  if (!passesThresholdFilter(place.longestAbseil, filters.longest_pitch)) return false;
-  if (!passesThresholdFilter(place.hours, filters.hours)) return false;
+  }
+
   if (!passesDateRangeFilter(place.createdAt, filters.created_at)) return false;
   if (!passesDateRangeFilter(place.updatedAt, filters.updated_at)) return false;
 
   for (const [key, filter] of Object.entries(filters.custom ?? {})) {
-    const value = place.attributes?.customFields?.[key];
+    const value = fieldValue(place.fieldValues, key);
     if (value == null) {
       if (!includeUnknowns) return false;
       continue;
@@ -489,18 +439,21 @@ export function comparePlaces(
     case "recent":
       return (b.createdAt ?? "").localeCompare(a.createdAt ?? "");
     case "grade": {
-      const av = a.vGrade ?? Infinity;
-      const bv = b.vGrade ?? Infinity;
+      // Reads the reserved canyon keys out of `fieldValues`. A place of a type
+      // that has no grades sorts to the bottom, exactly as an ungraded canyon
+      // always did — same rule, one fewer special case.
+      const av = numericFieldValue(a.fieldValues, "v_grade") ?? Infinity;
+      const bv = numericFieldValue(b.fieldValues, "v_grade") ?? Infinity;
       if (av !== bv) return av - bv;
-      const aa = a.aGrade ?? Infinity;
-      const ba = b.aGrade ?? Infinity;
+      const aa = numericFieldValue(a.fieldValues, "a_grade") ?? Infinity;
+      const ba = numericFieldValue(b.fieldValues, "a_grade") ?? Infinity;
       if (aa !== ba) return aa - ba;
       return a.name.localeCompare(b.name);
     }
     case "quality": {
       // Best first, so a missing rating sorts to the bottom rather than the top.
-      const aq = a.quality ?? -Infinity;
-      const bq = b.quality ?? -Infinity;
+      const aq = numericFieldValue(a.fieldValues, "quality") ?? -Infinity;
+      const bq = numericFieldValue(b.fieldValues, "quality") ?? -Infinity;
       if (aq !== bq) return bq - aq;
       return a.name.localeCompare(b.name);
     }

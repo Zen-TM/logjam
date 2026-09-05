@@ -1,5 +1,8 @@
 import {
+  asFieldValues,
   AUTO_LINK_DIST_M,
+  fieldValue,
+  SOURCES_FIELD_KEY,
   NAME_MATCH_DIST_M,
   REVIEW_DIST_M,
   BBOX_DEG,
@@ -9,7 +12,13 @@ import {
   type MatchCandidate,
 } from "@logjam/shared";
 import type { Place } from "@prisma/client";
-import type { RopeWikiCanyon, RopeWikiOwnableField } from "./ropewiki";
+import {
+  ROPE_WIKI_FIELD_KEYS,
+  ROPE_WIKI_OWNABLE_FIELDS,
+  ropeWikiFieldValues,
+  type RopeWikiCanyon,
+  type RopeWikiOwnableField,
+} from "./ropewiki";
 
 const TOP_CANDIDATES = 3;
 
@@ -181,58 +190,47 @@ function mergeSources(
   return merged.length ? merged : undefined;
 }
 
-// Merge policy: existing user data wins. RopeWiki values only fill nulls on
-// scalar fields. ropeWikiId and ropeWikiSnapshot are always set so subsequent
-// /refresh calls work. sources are always unioned (additive).
-// Returns the merged data AND the list of fields RopeWiki contributed
-// (i.e. fields that were null on the existing place).
+// Merge policy: existing user data wins. RopeWiki values only fill fields the
+// place has no value for. ropeWikiId and ropeWikiSnapshot are always set so
+// subsequent /refresh calls work. sources are always unioned (additive).
+// Returns the merged FIELD VALUES and the list of fields RopeWiki contributed
+// (i.e. fields that were empty on the existing place).
+//
+// The seven scalars are `fieldValues` keys now rather than columns, so "is it
+// null" became "is the key absent" — and those are the same question, because
+// setFieldValues stores no nulls (a stored null would render as an empty field
+// and count as a value here, letting RopeWiki think a field was user-owned when
+// the user had never touched it).
 export function mergeFillNulls(
   existing: Place,
   fresh: RopeWikiCanyon,
 ): {
   ropeWikiId: number;
-  numAbseils: number | null;
-  longestAbseil: number | null;
-  vGrade: number | null;
-  aGrade: number | null;
-  commitment: number | null;
-  quality: number | null;
-  hours: number | null;
-  attributes: object;
+  fieldValues: Record<string, unknown>;
   ropeWikiOwnedFields: RopeWikiOwnableField[];
 } {
-  const fill = <T>(current: T | null, incoming: T | null): T | null =>
-    current === null || current === undefined ? incoming : current;
-  const mergedAttrs: { sources?: [string, string][] } & object = {
-    ...(fresh.attributes ?? {}),
-    ...((existing.attributes as object) ?? {}),
-  };
-  const sources = mergeSources(
-    (existing.attributes as { sources?: [string, string][] } | null)?.sources,
-    fresh.attributes?.sources,
-  );
-  if (sources) mergedAttrs.sources = sources;
-  else delete (mergedAttrs as { sources?: unknown }).sources;
+  const existingValues = asFieldValues(existing.fieldValues);
+  const freshValues = ropeWikiFieldValues(fresh);
 
   const ropeWikiOwnedFields: RopeWikiOwnableField[] = [];
-  if (existing.numAbseils === null || existing.numAbseils === undefined) ropeWikiOwnedFields.push("numAbseils");
-  if (existing.longestAbseil === null || existing.longestAbseil === undefined) ropeWikiOwnedFields.push("longestAbseil");
-  if (existing.vGrade === null || existing.vGrade === undefined) ropeWikiOwnedFields.push("vGrade");
-  if (existing.aGrade === null || existing.aGrade === undefined) ropeWikiOwnedFields.push("aGrade");
-  if (existing.commitment === null || existing.commitment === undefined) ropeWikiOwnedFields.push("commitment");
-  if (existing.quality === null || existing.quality === undefined) ropeWikiOwnedFields.push("quality");
-  if (existing.hours === null || existing.hours === undefined) ropeWikiOwnedFields.push("hours");
+  const merged: Record<string, unknown> = { ...existingValues };
+  for (const field of ROPE_WIKI_OWNABLE_FIELDS) {
+    const key = ROPE_WIKI_FIELD_KEYS[field];
+    if (fieldValue(existingValues, key) !== undefined) continue;
+    ropeWikiOwnedFields.push(field);
+    if (freshValues[key] !== undefined) merged[key] = freshValues[key];
+  }
+
+  const sources = mergeSources(
+    existingValues[SOURCES_FIELD_KEY] as [string, string][] | undefined,
+    freshValues[SOURCES_FIELD_KEY] as [string, string][] | undefined,
+  );
+  if (sources) merged[SOURCES_FIELD_KEY] = sources;
+  else delete merged[SOURCES_FIELD_KEY];
 
   return {
     ropeWikiId: fresh.ropeWikiId,
-    numAbseils: fill(existing.numAbseils, fresh.numAbseils),
-    longestAbseil: fill(existing.longestAbseil, fresh.longestAbseil),
-    vGrade: fill(existing.vGrade, fresh.vGrade),
-    aGrade: fill(existing.aGrade, fresh.aGrade),
-    commitment: fill(existing.commitment, fresh.commitment),
-    quality: fill(existing.quality, fresh.quality),
-    hours: fill(existing.hours, fresh.hours),
-    attributes: mergedAttrs,
+    fieldValues: merged,
     ropeWikiOwnedFields,
   };
 }

@@ -23,7 +23,7 @@ let trips: { id: string; customFields: Record<string, unknown> }[] = [];
 let places: {
   id: string;
   syncRole: string;
-  attributes: { sources?: [string, string][]; customFields?: Record<string, unknown> };
+  fieldValues: Record<string, unknown>;
 }[] = [];
 
 const created: { entity: string; def: TripLogCustomFieldDef }[] = [];
@@ -178,8 +178,8 @@ describe("countFieldValues", () => {
   // rows this delete will clear either — the number and the effect must agree.
   it("ignores places shared WITH this user", async () => {
     places = [
-      { id: "c1", syncRole: "owner", attributes: { customFields: { party: 3 } } },
-      { id: "c2", syncRole: "shared", attributes: { customFields: { party: 4 } } },
+      { id: "c1", syncRole: "owner", fieldValues: { party: 3 } },
+      { id: "c2", syncRole: "shared", fieldValues: { party: 4 } },
     ];
     expect(await countFieldValues("place", "party")).toBe(1);
   });
@@ -199,17 +199,20 @@ describe("removeFieldDef", () => {
     expect(deleted).toEqual(["row-water"]);
   });
 
-  // `sources` is written only by the web, so a strip that rebuilt `attributes`
-  // from the customFields alone would silently drop it.
-  it("preserves the rest of a place's attributes", async () => {
+  // `_sources` is written only by the web, and it lives in the SAME object as
+  // the field values now rather than beside them — so a strip that rebuilt
+  // fieldValues from the user keys alone would silently drop it. That is a
+  // sharper trap than before the rework, not a milder one.
+  it("preserves the rest of a place's field values", async () => {
     defRows = [row(party, "place", 0)];
     places = [
       {
         id: "c1",
         syncRole: "owner",
-        attributes: {
-          sources: [["Wiki", "http://x"]],
-          customFields: { party: 3, permit: "yes" },
+        fieldValues: {
+          _sources: [["Wiki", "http://x"]],
+          party: 3,
+          permit: "yes",
         },
       },
     ];
@@ -218,9 +221,9 @@ describe("removeFieldDef", () => {
       {
         id: "c1",
         fields: {
-          attributes: {
-            sources: [["Wiki", "http://x"]],
-            customFields: { permit: "yes" },
+          fieldValues: {
+            _sources: [["Wiki", "http://x"]],
+            permit: "yes",
           },
         },
       },

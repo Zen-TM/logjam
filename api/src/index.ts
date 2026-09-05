@@ -23,6 +23,7 @@ import { globalLimiter } from "./middleware/rateLimit";
 import { startTopoJobReaper } from "./lib/topoJobReaper";
 import usersRouter from "./routes/users";
 import placesRouter from "./routes/places";
+import placeTypesRouter from "./routes/placeTypes";
 import tripLogsRouter from "./routes/tripLogs";
 import tripLogsGlobalRouter from "./routes/tripLogsGlobal";
 import tripLogsBulkRouter from "./routes/tripLogsBulk";
@@ -193,6 +194,7 @@ app.use(globalLimiter);
 
 app.use("/meta", metaRouter);
 app.use("/users", usersRouter);
+app.use("/place-types", placeTypesRouter);
 app.use("/places", placesRouter);
 app.use("/places/:placeId/trips", tripLogsRouter);
 app.use("/trips/bulk", tripLogsBulkRouter);

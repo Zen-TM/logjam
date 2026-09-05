@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useIsMobile } from "../../useIsMobile";
+import { SYSTEM_PLACE_TYPE_IDS } from "@logjam/shared";
 import {
   Dialog,
   DialogTitle,
@@ -563,6 +564,9 @@ function TripLogDialog({
       name: creating.name.trim(),
       latitude: lat,
       longitude: lng,
+      // Creating a place inline from a trip log: the Canyon type, like every
+      // other web create path until phase 6 adds a type picker.
+      placeTypeId: SYSTEM_PLACE_TYPE_IDS.canyon,
     });
     onPlaceCreated?.();
     return [...selectedPlaceIds, c.id];

@@ -15,26 +15,49 @@ import { placeCustomFieldsRecord } from "./customFieldDefs";
 import { tripLogHasCustomFieldValue } from "@logjam/shared";
 
 describe("placeCustomFieldsRecord", () => {
-  it("extracts the nested customFields object", () => {
-    expect(
-      placeCustomFieldsRecord({ customFields: { water_level: "high" } }),
-    ).toEqual({ water_level: "high" });
+  // Values are at the TOP LEVEL of fieldValues now. They used to be nested
+  // under `attributes.customFields`, and the forward migration hoists them —
+  // reading the old shape here would find nothing on a migrated row, silently,
+  // which is precisely the failure the hoist exists to prevent.
+  it("reads the values at the top level", () => {
+    expect(placeCustomFieldsRecord({ water_level: "high" })).toEqual({
+      water_level: "high",
+    });
   });
 
-  it("returns null when attributes is not an object", () => {
+  it("returns null when fieldValues is not an object", () => {
     expect(placeCustomFieldsRecord(null)).toBeNull();
     expect(placeCustomFieldsRecord("nope")).toBeNull();
     expect(placeCustomFieldsRecord(42)).toBeNull();
     expect(placeCustomFieldsRecord([1, 2])).toBeNull();
   });
 
-  it("returns null when there are no custom fields (sources-only attributes)", () => {
-    expect(placeCustomFieldsRecord({ sources: [["Wiki", "http://x"]] })).toBeNull();
+  it("returns null when there are no user fields", () => {
+    expect(placeCustomFieldsRecord({})).toBeNull();
   });
 
-  it("returns null when customFields is present but not an object", () => {
-    expect(placeCustomFieldsRecord({ customFields: "bad" })).toBeNull();
-    expect(placeCustomFieldsRecord({ customFields: null })).toBeNull();
+  // The internal `_`-prefixed entries are not fields, and a delete must not
+  // offer to strip the source list off every place the user owns.
+  it("ignores the internal `_` namespace", () => {
+    expect(
+      placeCustomFieldsRecord({ _sources: [["Wiki", "http://x"]] }),
+    ).toBeNull();
+    expect(
+      placeCustomFieldsRecord({ _attributes: { rockType: "sandstone" } }),
+    ).toBeNull();
+    expect(
+      placeCustomFieldsRecord({ _sources: [], water_level: "high" }),
+    ).toEqual({ water_level: "high" });
+  });
+
+  // The nested shape is what a PRE-migration row looks like. If one ever
+  // reaches this reader, `customFields` is just another key — it must not be
+  // unwrapped, or a half-migrated database would report values under a field
+  // literally named "customFields".
+  it("does not unwrap a legacy nested blob", () => {
+    expect(
+      placeCustomFieldsRecord({ customFields: { water_level: "high" } }),
+    ).toEqual({ customFields: { water_level: "high" } });
   });
 });
 
@@ -42,22 +65,22 @@ describe("placeCustomFieldsRecord", () => {
 // value-presence check (same semantics as trip logs: present, non-null,
 // non-empty-string counts).
 describe("place impact predicate", () => {
-  function placeHasValue(attributes: unknown, key: string): boolean {
-    const fields = placeCustomFieldsRecord(attributes as never);
+  function placeHasValue(fieldValues: unknown, key: string): boolean {
+    const fields = placeCustomFieldsRecord(fieldValues as never);
     return fields ? tripLogHasCustomFieldValue(fields, key) : false;
   }
 
   it("counts a meaningful value", () => {
-    expect(placeHasValue({ customFields: { rope_m: 30 } }, "rope_m")).toBe(true);
-    expect(placeHasValue({ customFields: { flag: false } }, "flag")).toBe(true);
-    expect(placeHasValue({ customFields: { n: 0 } }, "n")).toBe(true);
+    expect(placeHasValue({ rope_m: 30 }, "rope_m")).toBe(true);
+    expect(placeHasValue({ flag: false }, "flag")).toBe(true);
+    expect(placeHasValue({ n: 0 }, "n")).toBe(true);
   });
 
   it("ignores absent / null / empty-string values", () => {
-    expect(placeHasValue({ customFields: { rope_m: "" } }, "rope_m")).toBe(false);
-    expect(placeHasValue({ customFields: { rope_m: null } }, "rope_m")).toBe(false);
-    expect(placeHasValue({ customFields: {} }, "rope_m")).toBe(false);
-    expect(placeHasValue({ sources: [] }, "rope_m")).toBe(false);
+    expect(placeHasValue({ rope_m: "" }, "rope_m")).toBe(false);
+    expect(placeHasValue({ rope_m: null }, "rope_m")).toBe(false);
+    expect(placeHasValue({}, "rope_m")).toBe(false);
+    expect(placeHasValue({ _sources: [] }, "rope_m")).toBe(false);
     expect(placeHasValue(null, "rope_m")).toBe(false);
   });
 });

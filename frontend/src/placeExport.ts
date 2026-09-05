@@ -1,4 +1,10 @@
 import Papa from "papaparse";
+import {
+  SOURCES_FIELD_KEY,
+  userFieldValues,
+  type TripLogCustomFieldDef,
+} from "@logjam/shared";
+
 import type { TPlace } from "./placeUtils";
 
 export type TExportFormat = "gpx" | "kml" | "geojson" | "csv";
@@ -10,30 +16,27 @@ export type TExportFormat = "gpx" | "kml" | "geojson" | "csv";
 // parties. These are exactly the columns of the CSV import template, so a GeoJSON
 // or CSV export round-trips back through import. `name`, `latitude`, `longitude`
 // are handled separately (name is the feature title; coords are the geometry).
-const EXPORT_PROPERTY_KEYS = [
-  "altNames",
-  "vGrade",
-  "aGrade",
-  "commitment",
-  "quality",
-  "numAbseils",
-  "longestAbseil",
-  "hours",
-  "notes",
-] as const;
+const EXPORT_PROPERTY_KEYS = ["altNames", "notes"] as const;
 
-// User-authored extension data lives under place.attributes. Unlike the
-// internal identifiers the whitelist excludes, `sources` (user-authored
-// reference labels + URLs) and `customFields` (per-place custom-attribute
-// values) ARE meant to round-trip — they are exactly what the CSV importer's
-// `sources` role and `attr:<key>` roles re-ingest. Accessed through these two
-// helpers so the null-guard lives in one place.
+// The seven grade keys used to be listed above. They are FIELD VALUES now and
+// leave through `placeFieldValues` with every other field the place's type
+// carries — which is also what lets a campsite export its own fields instead of
+// seven canyon columns full of nulls.
+//
+// `foreignFields` is DELIBERATELY NOT EXPORTED, and this is the one place to
+// say why: it holds another user's field labels and values, carried in on a
+// copy. Exporting it would put a third party's authored text into a file this
+// user hands to a fourth. Same handling `ropeWikiSnapshot` already gets.
 function placeSources(c: TPlace): [string, string][] {
-  return c.attributes?.sources ?? [];
+  const sources = (c.fieldValues ?? {})[SOURCES_FIELD_KEY];
+  return Array.isArray(sources) ? (sources as [string, string][]) : [];
 }
 
-function placeCustomFields(c: TPlace): Record<string, unknown> {
-  return c.attributes?.customFields ?? {};
+// Every value the user can see on the place, WITHOUT the internal `_`-prefixed
+// entries (`_sources` leaves separately in its self-describing form,
+// `_attributes` is a migration bucket and not a field anyone authored).
+function placeFieldValues(c: TPlace): Record<string, unknown> {
+  return userFieldValues(c.fieldValues);
 }
 
 // Build the whitelisted property object for a GeoJSON feature. Explicit
@@ -44,19 +47,14 @@ function exportProperties(c: TPlace): Record<string, unknown> {
   return {
     name: c.name,
     altNames: c.altNames,
-    vGrade: c.vGrade,
-    aGrade: c.aGrade,
-    commitment: c.commitment,
-    quality: c.quality,
-    numAbseils: c.numAbseils,
-    longestAbseil: c.longestAbseil,
-    hours: c.hours,
     notes: c.notes,
     // Self-describing {label, url} objects (friendlier to third parties than
     // the internal positional [label, url] tuples).
     sources: placeSources(c).map(([label, url]) => ({ label, url })),
-    // Raw key→value record of the place's custom-attribute values.
-    customFields: placeCustomFields(c),
+    // Every field the place's type carries, keyed by definition key. Still one
+    // explicit assignment rather than a spread of the record: a future column
+    // on TPlace cannot start leaking through here.
+    fields: placeFieldValues(c),
   };
 }
 
@@ -79,16 +77,24 @@ function escapeCdata(s: string): string {
   return s.replace(/\]\]>/g, "]]]]><![CDATA[>");
 }
 
-function descriptionText(c: TPlace): string {
+/** A field's user-facing label, or its key when no definition describes it —
+ *  which is the honest fallback for a value stored under a definition that has
+ *  since been deleted, or one that arrived on a copy. */
+function fieldLabel(key: string, defs: TripLogCustomFieldDef[]): string {
+  return defs.find((def) => def.key === key)?.label ?? key;
+}
+
+function descriptionText(c: TPlace, defs: TripLogCustomFieldDef[]): string {
   const parts: string[] = [];
   if (c.altNames.length > 0) parts.push(`Also known as: ${c.altNames.join(", ")}`);
-  if (c.vGrade != null) parts.push(`V-grade: ${c.vGrade}`);
-  if (c.aGrade != null) parts.push(`A-grade: ${c.aGrade}`);
-  if (c.commitment != null) parts.push(`Commitment: ${c.commitment}`);
-  if (c.numAbseils != null) parts.push(`Abseils: ${c.numAbseils}`);
-  if (c.longestAbseil != null) parts.push(`Longest abseil: ${c.longestAbseil}m`);
-  if (c.hours != null) parts.push(`Duration: ${c.hours}h`);
-  if (c.quality != null) parts.push(`Quality: ${c.quality}`);
+  // Whatever the place's type carries, in the order the values are stored. The
+  // labels a UI would show live on the definitions, which this module does not
+  // have; the KEY is what a third-party reader gets, which is the same thing
+  // the GeoJSON/CSV forms give them.
+  for (const [key, value] of Object.entries(placeFieldValues(c))) {
+    if (value === null || value === undefined || value === "") continue;
+    parts.push(`${fieldLabel(key, defs)}: ${String(value)}`);
+  }
   if (c.notes) parts.push(`Notes: ${c.notes}`);
   const sources = placeSources(c);
   if (sources.length > 0) {
@@ -119,10 +125,10 @@ function buildFilename(places: TPlace[], ext: string): string {
   return `logjam-places-${dateStamp()}.${ext}`;
 }
 
-function placesToGpx(places: TPlace[]): Blob {
+function placesToGpx(places: TPlace[], defs: TripLogCustomFieldDef[]): Blob {
   const wpts = places
     .map((c) => {
-      const desc = descriptionText(c);
+      const desc = descriptionText(c, defs);
       return [
         `  <wpt lat="${c.latitude}" lon="${c.longitude}">`,
         `    <name>${escapeXml(c.name)}</name>`,
@@ -145,10 +151,10 @@ function placesToGpx(places: TPlace[]): Blob {
   return new Blob([xml], { type: "application/gpx+xml" });
 }
 
-function placesToKml(places: TPlace[]): Blob {
+function placesToKml(places: TPlace[], defs: TripLogCustomFieldDef[]): Blob {
   const placemarks = places
     .map((c) => {
-      const desc = descriptionText(c);
+      const desc = descriptionText(c, defs);
       return [
         `  <Placemark>`,
         `    <name>${escapeXml(c.name)}</name>`,
@@ -257,25 +263,29 @@ function csvCell(c: TPlace, column: (typeof CSV_COLUMNS)[number]): string {
   }
 }
 
-// Every custom-field key present across the exported set, sorted for a stable
-// column order. Each becomes an `attr:<key>` column the CSV importer auto-maps
-// straight back to the matching custom-field role (see detectPlaceColumns).
-function collectCustomFieldKeys(places: TPlace[]): string[] {
+// Every FIELD key present across the exported set, sorted for a stable column
+// order. Each becomes an `attr:<key>` column the CSV importer auto-maps
+// straight back to the matching field role (see detectPlaceColumns).
+//
+// The seven grade keys arrive through here now rather than as fixed columns,
+// which is what makes an export of campsites carry `capacity` and no grades,
+// and an export of canyons carry the grades and no `capacity`.
+function collectFieldKeys(places: TPlace[]): string[] {
   const keys = new Set<string>();
   for (const c of places) {
-    for (const key of Object.keys(placeCustomFields(c))) keys.add(key);
+    for (const key of Object.keys(placeFieldValues(c))) keys.add(key);
   }
   return [...keys].sort();
 }
 
 function placesToCsv(places: TPlace[]): Blob {
-  const attrKeys = collectCustomFieldKeys(places);
+  const attrKeys = collectFieldKeys(places);
   const attrColumns = attrKeys.map((key) => `attr:${key}`);
   const fields = [...CSV_COLUMNS, ...attrColumns];
   // Papa.unparse handles CSV escaping (quotes, commas, newlines in notes) — the
   // symmetric counterpart to parseCsv's Papa.parse on import.
   const rows = places.map((c) => {
-    const customFields = placeCustomFields(c);
+    const fieldValues = placeFieldValues(c);
     const row: Record<string, string> = {};
     for (const column of CSV_COLUMNS) {
       const cell = csvCell(c, column);
@@ -286,7 +296,7 @@ function placesToCsv(places: TPlace[]): Blob {
       // (custom-field values re-ingest as strings via the `attr:<key>` role).
       // Custom-field values are free-form user text — formula-injection guard
       // applies here too (FECO-010).
-      const value = customFields[key];
+      const value = fieldValues[key];
       row[`attr:${key}`] = value == null ? "" : neutralizeFormula(String(value));
     }
     return row;
@@ -295,15 +305,24 @@ function placesToCsv(places: TPlace[]): Blob {
   return new Blob([csv], { type: "text/csv" });
 }
 
+/**
+ * `defs` label the field values in the human-readable GPX/KML descriptions.
+ * They are optional because the machine-readable forms do not need them — CSV
+ * and GeoJSON key by `key` so the file round-trips back through import, and a
+ * label is not stable enough to key on (a rename would break the round trip).
+ * Absent, a description falls back to the key, which is what a value whose
+ * definition has been deleted gets anyway.
+ */
 export function buildPlaceExport(
   places: TPlace[],
   format: TExportFormat,
+  defs: TripLogCustomFieldDef[] = [],
 ): { blob: Blob; filename: string } {
   switch (format) {
     case "gpx":
-      return { blob: placesToGpx(places), filename: buildFilename(places, "gpx") };
+      return { blob: placesToGpx(places, defs), filename: buildFilename(places, "gpx") };
     case "kml":
-      return { blob: placesToKml(places), filename: buildFilename(places, "kml") };
+      return { blob: placesToKml(places, defs), filename: buildFilename(places, "kml") };
     case "geojson":
       return { blob: placesToGeoJson(places), filename: buildFilename(places, "geojson") };
     case "csv":

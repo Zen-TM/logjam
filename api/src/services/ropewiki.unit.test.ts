@@ -1,6 +1,11 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { isReservedFieldKey } from "@logjam/shared";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   fetchAndParseRopeWiki,
+  ROPE_WIKI_FIELD_KEYS,
+  ROPE_WIKI_OWNABLE_FIELDS,
   snapshotFromCreate,
   snapshotFromLink,
   isRopeWikiOwned,
@@ -236,5 +241,59 @@ describe("attributesSourcesEqual", () => {
     expect(attributesSourcesEqual({ sources: [["A", "u"]] }, { sources: [["A", "u"]] })).toBe(true);
     expect(attributesSourcesEqual(null, { sources: [] })).toBe(true);
     expect(attributesSourcesEqual({ sources: [["A", "u"]] }, { sources: [["A", "v"]] })).toBe(false);
+  });
+});
+
+// ── the query URL, and the field keys it writes ─────────────────────────────
+//
+// Added after the places rework rewrote `Category%3ACanyons` to
+// `Category%3APlaces` inside this URL. It is percent-encoded, so no
+// word-boundary protection could see it, and NOTHING would have reported the
+// damage: RopeWiki answers a query for a category that does not exist with an
+// empty CSV and HTTP 200. The import would have succeeded, imported nothing,
+// and looked exactly like the Cloudflare block coming back (root CLAUDE.md).
+describe("the RopeWiki query URL", () => {
+  const source = readFileSync(
+    join(import.meta.dirname, "ropewiki.ts"),
+    "utf8",
+  );
+
+  it("still asks for the Canyons category", () => {
+    expect(
+      source,
+      "the RopeWiki query must name the Canyons category — a wrong category " +
+        "returns an empty CSV with HTTP 200, so the import silently imports nothing",
+    ).toContain("Category%3ACanyons");
+  });
+
+  it("still asks for New South Wales", () => {
+    expect(source).toContain("New-20South-20Wales");
+  });
+
+  it("still asks for CSV", () => {
+    expect(source).toContain("format=csv");
+  });
+});
+
+describe("ROPE_WIKI_FIELD_KEYS", () => {
+  // RopeWiki writes into `fieldValues` under these keys. Every one has to be a
+  // key a system definition actually declares, or import writes a value that no
+  // form renders and no filter finds — the exact failure the reserved-key rule
+  // exists to prevent, arriving from the one writer that is not a user.
+  it("maps every ownable field to a reserved key", () => {
+    for (const field of ROPE_WIKI_OWNABLE_FIELDS) {
+      const key = ROPE_WIKI_FIELD_KEYS[field];
+      expect(key, `${field} has no field key`).toBeTruthy();
+      expect(
+        isReservedFieldKey(key),
+        `${field} maps to "${key}", which no system definition declares`,
+      ).toBe(true);
+    }
+  });
+
+  it("covers every ownable field", () => {
+    expect(Object.keys(ROPE_WIKI_FIELD_KEYS).sort()).toEqual(
+      [...ROPE_WIKI_OWNABLE_FIELDS].sort(),
+    );
   });
 });

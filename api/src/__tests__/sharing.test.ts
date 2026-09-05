@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
-import { BOB_ID, CAROL_ID, NONEXISTENT_ID } from "./_actors";
+import { BOB_ID, CAROL_ID, NONEXISTENT_ID, CANYON_TYPE_ID} from "./_actors";
 
 // Requires `make dev` running with AUTH_MODE=fake (requests = seeded alice).
 // alice <-> bob are friends in the seed, so alice may share with bob.
@@ -14,7 +14,7 @@ async function createPlace(name: string): Promise<string> {
   const res = await request(API_URL)
     .post("/places")
     .set(AUTH)
-    .send({ name, latitude: -33.7, longitude: 150.3 });
+    .send({ placeTypeId: CANYON_TYPE_ID, name, latitude: -33.7, longitude: 150.3 });
   expect(res.status).toBe(201);
   return res.body.id as string;
 }

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
-import { API_URL, as, BOB_SUB, CAROL_SUB } from "./_actors";
+import { API_URL, as, BOB_SUB, CAROL_SUB, CANYON_TYPE_ID} from "./_actors";
 
 const CAROL = as(CAROL_SUB);
 
@@ -23,7 +23,7 @@ async function createPlace(name: string, auth = AUTH): Promise<string> {
   const res = await request(API_URL)
     .post("/places")
     .set(auth)
-    .send({ name, latitude: -33.7, longitude: 150.3 });
+    .send({ placeTypeId: CANYON_TYPE_ID, name, latitude: -33.7, longitude: 150.3 });
   expect(res.status).toBe(201);
   return res.body.id as string;
 }

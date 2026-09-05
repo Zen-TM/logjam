@@ -8,6 +8,8 @@
 import * as FileSystem from "expo-file-system/legacy";
 
 import {
+  asFieldValues,
+  SYSTEM_PLACE_TYPE_IDS,
   collectDirtyFields,
   type SyncPushEntity,
   type SyncPushOp,
@@ -564,18 +566,17 @@ export async function recreateFromDeadRemote(seq: number): Promise<string | null
         altNames: Array.isArray(merged.altNames)
           ? merged.altNames.filter((alt): alt is string => typeof alt === "string")
           : [],
-        numAbseils: pick<number>("numAbseils"),
-        longestAbseil: pick<number>("longestAbseil"),
-        vGrade: pick<number>("vGrade"),
-        aGrade: pick<number>("aGrade"),
-        commitment: pick<number>("commitment"),
-        quality: pick<number>("quality"),
-        hours: pick<number>("hours"),
         notes: pick<string>("notes"),
-        attributes:
-          merged.attributes && typeof merged.attributes === "object"
-            ? (merged.attributes as Record<string, unknown>)
-            : {},
+        // The recovered copy keeps the type it had. Falling back to Canyon
+        // would file a recovered campsite under canyons — a recovery that
+        // quietly changes what the thing IS is worse than one that fails.
+        placeTypeId:
+          typeof merged.placeTypeId === "string" && merged.placeTypeId
+            ? merged.placeTypeId
+            : SYSTEM_PLACE_TYPE_IDS.canyon,
+        // Every field value in one go, including what used to be the seven
+        // grade columns.
+        fieldValues: asFieldValues(merged.fieldValues),
       });
       await dropOp(seq);
       return newId;

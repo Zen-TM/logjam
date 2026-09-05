@@ -8,6 +8,8 @@
 // api/src/middleware/auth.ts) so a single test process can act as any seeded
 // user per request. Spread `as(SUB)` onto a supertest `.set(...)`.
 
+import { SYSTEM_PLACE_TYPE_IDS } from "@logjam/shared";
+
 export const API_URL = process.env.API_URL ?? "http://localhost:8080";
 
 // Cognito subs of the seeded fake users (api/prisma/seed.ts).
@@ -35,6 +37,17 @@ export const SHARED_PLACE_ID = "10000000-0000-4000-8000-000000000001";
 // instead of against `[]`, so the next seed change fails loudly here.
 export const BOB_SHARED_PLACE_ID = "20000000-0000-4000-8000-000000000002";
 export const BOB_SHARED_WAYPOINT_ID = "60000000-0000-4000-8000-000000000005";
+
+// The system Canyon type. Every fixture that creates a place names a type,
+// because the API refuses one without — deliberately: a silent default would
+// file a campsite under canyons, where the user would never look for it, and
+// the request would look like it had worked.
+//
+// Re-exported from the shared declaration rather than restated as a literal,
+// so a change to the pinned id cannot leave the suite creating places of a
+// type that does not exist.
+export { SYSTEM_PLACE_TYPE_IDS } from "@logjam/shared";
+export const CANYON_TYPE_ID = SYSTEM_PLACE_TYPE_IDS.canyon;
 
 // Well-formed UUIDv4 that no seeded row uses — the "unknown id" probe, so a
 // 404 assertion is testing not-found and not id-format rejection.

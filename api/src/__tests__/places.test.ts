@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
-import { BOB_ID, NONEXISTENT_ID } from "./_actors";
+import { BOB_ID, NONEXISTENT_ID, CANYON_TYPE_ID} from "./_actors";
 
 // Requires `make dev` to be running (Postgres + MiniStack + API on :8080) with
 // AUTH_MODE=fake (every request authenticates as the seeded alice user).
@@ -14,7 +14,7 @@ async function createPlace(name: string): Promise<string> {
   const res = await request(API_URL)
     .post("/places")
     .set(AUTH)
-    .send({ name, latitude: -33.7, longitude: 150.3 });
+    .send({ placeTypeId: CANYON_TYPE_ID, name, latitude: -33.7, longitude: 150.3 });
   expect(res.status).toBe(201);
   return res.body.id as string;
 }
@@ -32,7 +32,7 @@ describe("places routes (fake auth = alice)", () => {
     const res = await request(API_URL)
       .post("/places")
       .set(AUTH)
-      .send({ name: "No coords" });
+      .send({ placeTypeId: CANYON_TYPE_ID, name: "No coords" });
     expect(res.status).toBe(400);
   });
 
@@ -189,7 +189,7 @@ describe("POST /places — free-text field validation", () => {
       const res = await request(API_URL)
         .post("/places")
         .set(AUTH_LOCAL)
-        .send({ latitude: -33.7, longitude: 150.3, ...fields });
+        .send({ placeTypeId: CANYON_TYPE_ID, latitude: -33.7, longitude: 150.3, ...fields });
       expect(res.status).toBe(400);
     }
   });

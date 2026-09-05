@@ -12,23 +12,34 @@
 \set ON_ERROR_STOP on
 
 -- Identity: real emails and Cognito ids become safe locals.
+--
+-- The username uses the WHOLE id, not its first 8 characters. The short form
+-- collided on the dev seed, whose ids share a `00000000` prefix by design, and
+-- `users.username` is UNIQUE — so the scrub aborted on its first statement and
+-- (before ON_ERROR_STOP) everything after it silently did not run. Two random
+-- prod uuids can collide on 8 hex characters too; this removes the class.
 UPDATE users
 SET
   email      = 'user-' || id || '@local',
   cognito_id = 'sanitized-' || id,
-  username   = 'user-' || substring(id::text, 1, 8);
+  username   = 'user-' || id;
 
 -- Everything a user typed. A place NAME is as sensitive as its notes under the
 -- NPWS guidance in CLAUDE.md — "Claustral" and "the one below the third
 -- waterfall" are the same disclosure — and so are the free-text tags and the
--- attributes blob (sources, rock type, custom-field values). `tags`, `field_values`
--- and `foreign_fields` join `places` in later phases; the coverage test above
--- fails until they are added here too.
+-- field values. `field_values` holds what the user typed into every field they
+-- defined, AND their source links and the legacy attributes bag; `foreign_fields`
+-- holds the same thing copied from someone else, labels included. Both are as
+-- sensitive as notes and neither is optional to scrub.
+--
+-- `tags` joins `places` in phase 1c and the coverage test fails until it is
+-- added here too — which is how these two arrived.
 UPDATE places
 SET name = 'place-' || substring(id::text, 1, 8),
-    alt_names = '{}',
+    "altNames" = '{}',
     notes = NULL,
-    attributes = '{}';
+    field_values = '{}',
+    foreign_fields = NULL;
 
 UPDATE waypoints
 SET name = 'waypoint-' || substring(id::text, 1, 8),

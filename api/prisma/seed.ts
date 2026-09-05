@@ -2,7 +2,15 @@ import { PrismaClient, Prisma } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { databaseUrlFromEnv } from "../src/lib/databaseUrl";
 import { CURRENT_CONSENT_VERSION } from "../src/constants/consent";
-import { enforceCanyoningTag, TRACK_COLORS } from "@logjam/shared";
+import {
+  enforceCanyoningTag,
+  setFieldValues,
+  SOURCES_FIELD_KEY,
+  SYSTEM_FIELD_DEFS,
+  SYSTEM_PLACE_TYPE_IDS,
+  SYSTEM_PLACE_TYPES,
+  TRACK_COLORS,
+} from "@logjam/shared";
 import { seedId, cid } from "./seedIds";
 
 const adapter = new PrismaPg({ connectionString: databaseUrlFromEnv() });
@@ -92,12 +100,46 @@ const ALICE_TRIP_FIELD_DEFS = [
   { key: "wetsuit", label: "Wetsuit", type: "boolean" },
 ];
 
+// A place type ALICE made herself, so copy reconciliation (§2.6) is
+// exercisable in dev: bob receiving a copy of one of these has to match it by
+// NAME against his own types, and there is no way to try that without a user
+// type existing.
+const ALICE_TYPE_ID = seedId("9", 1);
+
+// Place-scoped definitions alice owns. `access_beta` is scoped to her own type;
+// `permit_no` is `appliesToAllTypes`, which is the flag a new type inherits for
+// free — the case join rows cannot express.
+//
+// NONE of these may use a reserved key: `assertKeyNotReserved` refuses them on
+// the API path, and the seed writing one directly would create the exact
+// two-writers-one-key state the reservation exists to prevent.
+const ALICE_PLACE_FIELD_DEFS = [
+  {
+    id: seedId("5", 10),
+    key: "access_beta",
+    label: "Access beta",
+    type: "string",
+    placeTypeIds: [ALICE_TYPE_ID],
+    appliesToAllTypes: false,
+  },
+  {
+    id: seedId("5", 11),
+    key: "permit_no",
+    label: "Permit number",
+    type: "string",
+    placeTypeIds: [] as string[],
+    appliesToAllTypes: true,
+  },
+];
+
 type SeedPlace = {
   id: string;
   ownerId: string;
   name: string;
   latitude: number;
   longitude: number;
+  /** Defaults to the system Canyon type. */
+  placeTypeId?: string;
   numAbseils?: number;
   longestAbseil?: number;
   vGrade?: number;
@@ -107,67 +149,92 @@ type SeedPlace = {
   hours?: number;
   notes?: string;
   altNames?: string[];
-  attributes?: Prisma.InputJsonValue;
+  /** Extra field values beyond the grades — user-defined fields, sources. */
+  fieldValues?: Record<string, unknown>;
   ropeWikiId?: number;
   ropeWikiSnapshot?: Prisma.InputJsonValue;
   forkedFromId?: string;
 };
 
-const sandstone = (wetsuit?: number, sources?: [string, string][]): Prisma.InputJsonValue => ({
-  rockType: "Sandstone",
-  ...(wetsuit != null ? { wetsuit } : {}),
-  ...(sources ? { sources } : {}),
+// `sandstone()` IS GONE. It wrote `rockType` and `wetsuit` into the attributes
+// blob — two keys the owner added early, decided were too niche, and has asked
+// to have dropped. They were never declared in TPlaceAttributes either, so the
+// seed was the only thing that made them look like part of the model. Anyone
+// who wants them adds them back as ordinary custom fields, which is what they
+// always should have been.
+//
+// What replaces it is `sources()`: the one non-customFields key that survives,
+// under the reserved `_sources` key.
+const sources = (...entries: [string, string][]): Record<string, unknown> => ({
+  [SOURCES_FIELD_KEY]: entries,
 });
 
 const ALICE_PLACES: SeedPlace[] = [
   // --- anchors (ids referenced by tests) ---
-  { id: PLACE_IDS[0], ownerId: ALICE_ID, name: "Grand Canyon", latitude: -33.6563, longitude: 150.3179, numAbseils: 1, longestAbseil: 20, vGrade: 2, aGrade: 2, commitment: 3, quality: 3.4, hours: 3, attributes: sandstone(3) },
-  { id: PLACE_IDS[1], ownerId: ALICE_ID, name: "Claustral Canyon", latitude: -33.5603, longitude: 150.4033, numAbseils: 6, longestAbseil: 15, vGrade: 3, aGrade: 3, commitment: 3, quality: 4.9, hours: 9, attributes: sandstone(5) },
-  { id: PLACE_IDS[2], ownerId: ALICE_ID, name: "Empress Falls", latitude: -33.72, longitude: 150.3625, numAbseils: 1, longestAbseil: 28, vGrade: 3, aGrade: 2, commitment: 2, quality: 3, hours: 2.5, altNames: ["Valley-of-the-Waters"], attributes: sandstone(4) },
-  { id: PLACE_IDS[3], ownerId: ALICE_ID, name: "Hidden Slot", latitude: -33.701, longitude: 150.302, quality: 3, notes: "Fabricated test place — not a real location.", attributes: sandstone() },
-  { id: PLACE_IDS[4], ownerId: ALICE_ID, name: "Deep Pass", latitude: -33.3396, longitude: 150.3076, numAbseils: 0, vGrade: 1, aGrade: 2, quality: 2, hours: 3, attributes: sandstone(1) },
+  { id: PLACE_IDS[0], ownerId: ALICE_ID, name: "Grand Canyon", latitude: -33.6563, longitude: 150.3179, numAbseils: 1, longestAbseil: 20, vGrade: 2, aGrade: 2, commitment: 3, quality: 3.4, hours: 3, fieldValues: {} },
+  { id: PLACE_IDS[1], ownerId: ALICE_ID, name: "Claustral Canyon", latitude: -33.5603, longitude: 150.4033, numAbseils: 6, longestAbseil: 15, vGrade: 3, aGrade: 3, commitment: 3, quality: 4.9, hours: 9, fieldValues: {} },
+  { id: PLACE_IDS[2], ownerId: ALICE_ID, name: "Empress Falls", latitude: -33.72, longitude: 150.3625, numAbseils: 1, longestAbseil: 28, vGrade: 3, aGrade: 2, commitment: 2, quality: 3, hours: 2.5, altNames: ["Valley-of-the-Waters"], fieldValues: {} },
+  { id: PLACE_IDS[3], ownerId: ALICE_ID, name: "Hidden Slot", latitude: -33.701, longitude: 150.302, quality: 3, notes: "Fabricated test place — not a real location.", fieldValues: {} },
+  { id: PLACE_IDS[4], ownerId: ALICE_ID, name: "Deep Pass", latitude: -33.3396, longitude: 150.3076, numAbseils: 0, vGrade: 1, aGrade: 2, quality: 2, hours: 3, fieldValues: {} },
 
   // --- more published classics ---
-  { id: cid(6), ownerId: ALICE_ID, name: "Butterbox Canyon", latitude: -33.6304, longitude: 150.397, numAbseils: 11, longestAbseil: 20, vGrade: 4, aGrade: 2, commitment: 4, quality: 3.9, hours: 6.5, altNames: ["Mt Hay"], attributes: sandstone(5, [["OzUltimate", "https://ozultimate.com/canyoning/track_notes/mt_hay.htm"]]) },
-  { id: cid(7), ownerId: ALICE_ID, name: "Hole-in-the-Wall", latitude: -33.3754, longitude: 150.3292, numAbseils: 5, longestAbseil: 15, vGrade: 2, aGrade: 2, commitment: 3, quality: 4.4, hours: 7, attributes: { rockType: "Limestone", wetsuit: 5 } },
-  { id: cid(8), ownerId: ALICE_ID, name: "Fortress Canyon", latitude: -33.6445, longitude: 150.3593, numAbseils: 2, longestAbseil: 6, vGrade: 2, aGrade: 2, quality: 2.5, hours: 6, attributes: sandstone() },
-  { id: cid(9), ownerId: ALICE_ID, name: "Whungee Wheengee", latitude: -33.4757, longitude: 150.3742, numAbseils: 7, longestAbseil: 15, vGrade: 2, aGrade: 2, quality: 4, altNames: ["The Green Room"], attributes: sandstone(5) },
+  { id: cid(6), ownerId: ALICE_ID, name: "Butterbox Canyon", latitude: -33.6304, longitude: 150.397, numAbseils: 11, longestAbseil: 20, vGrade: 4, aGrade: 2, commitment: 4, quality: 3.9, hours: 6.5, altNames: ["Mt Hay"], fieldValues: sources(["OzUltimate", "https://ozultimate.com/canyoning/track_notes/mt_hay.htm"]) },
+  { id: cid(7), ownerId: ALICE_ID, name: "Hole-in-the-Wall", latitude: -33.3754, longitude: 150.3292, numAbseils: 5, longestAbseil: 15, vGrade: 2, aGrade: 2, commitment: 3, quality: 4.4, hours: 7, fieldValues: {} },
+  { id: cid(8), ownerId: ALICE_ID, name: "Fortress Canyon", latitude: -33.6445, longitude: 150.3593, numAbseils: 2, longestAbseil: 6, vGrade: 2, aGrade: 2, quality: 2.5, hours: 6, fieldValues: {} },
+  { id: cid(9), ownerId: ALICE_ID, name: "Whungee Wheengee", latitude: -33.4757, longitude: 150.3742, numAbseils: 7, longestAbseil: 15, vGrade: 2, aGrade: 2, quality: 4, altNames: ["The Green Room"], fieldValues: {} },
   { id: cid(10), ownerId: ALICE_ID, name: "Dione Dell", latitude: -34.0027, longitude: 150.0909, numAbseils: 6, longestAbseil: 25, vGrade: 3, aGrade: 2, commitment: 2, quality: 2.2, hours: 6, altNames: ["Upper Christys Creek"] },
-  { id: cid(11), ownerId: ALICE_ID, name: "Tiger Snake Canyon", latitude: -33.2214, longitude: 150.2527, numAbseils: 5, longestAbseil: 25, vGrade: 2, aGrade: 1, commitment: 2, quality: 3.8, hours: 7, altNames: ["Bottleneck"], attributes: sandstone(2) },
-  { id: cid(12), ownerId: ALICE_ID, name: "Rocky Creek Canyon", latitude: -33.2878, longitude: 150.2932, numAbseils: 0, vGrade: 1, aGrade: 2, commitment: 2, quality: 4.2, hours: 4.5, attributes: sandstone(5) },
-  { id: cid(13), ownerId: ALICE_ID, name: "Twister Canyon", latitude: -33.2876, longitude: 150.2864, numAbseils: 0, vGrade: 2, aGrade: 2, commitment: 2, quality: 3.4, hours: 2, altNames: ["Sheep Dip"], attributes: sandstone(5) },
+  { id: cid(11), ownerId: ALICE_ID, name: "Tiger Snake Canyon", latitude: -33.2214, longitude: 150.2527, numAbseils: 5, longestAbseil: 25, vGrade: 2, aGrade: 1, commitment: 2, quality: 3.8, hours: 7, altNames: ["Bottleneck"], fieldValues: {} },
+  { id: cid(12), ownerId: ALICE_ID, name: "Rocky Creek Canyon", latitude: -33.2878, longitude: 150.2932, numAbseils: 0, vGrade: 1, aGrade: 2, commitment: 2, quality: 4.2, hours: 4.5, fieldValues: {} },
+  { id: cid(13), ownerId: ALICE_ID, name: "Twister Canyon", latitude: -33.2876, longitude: 150.2864, numAbseils: 0, vGrade: 2, aGrade: 2, commitment: 2, quality: 3.4, hours: 2, altNames: ["Sheep Dip"], fieldValues: {} },
   // null grades edge case (quality only)
-  { id: cid(14), ownerId: ALICE_ID, name: "Wollangambe One", latitude: -33.4888, longitude: 150.3587, numAbseils: 0, quality: 2.5, hours: 7, attributes: sandstone(5) },
-  { id: cid(15), ownerId: ALICE_ID, name: "Bell Creek Canyon", latitude: -33.4999, longitude: 150.3371, vGrade: 1, aGrade: 1, commitment: 4, quality: 4.5, hours: 9, attributes: sandstone(5) },
-  { id: cid(16), ownerId: ALICE_ID, name: "Arethusa Canyon", latitude: -33.6589, longitude: 150.3467, numAbseils: 6, longestAbseil: 30, vGrade: 4, aGrade: 4, commitment: 3, quality: 4, hours: 9, attributes: sandstone() },
-  { id: cid(17), ownerId: ALICE_ID, name: "Starlight Canyon", latitude: -33.1516, longitude: 150.2844, numAbseils: 3, longestAbseil: 25, vGrade: 2, aGrade: 1, quality: 4.5, hours: 9, altNames: ["Newnes", "Wallaby Tunnel"], attributes: sandstone(1) },
-  { id: cid(18), ownerId: ALICE_ID, name: "Kanangra Main", latitude: -33.9809, longitude: 150.0991, numAbseils: 17, longestAbseil: 58, vGrade: 4, aGrade: 3, commitment: 5, quality: 4.6, hours: 12, altNames: ["Kanangra Falls"], attributes: { rockType: "Quartzite", wetsuit: 5 } },
+  { id: cid(14), ownerId: ALICE_ID, name: "Wollangambe One", latitude: -33.4888, longitude: 150.3587, numAbseils: 0, quality: 2.5, hours: 7, fieldValues: {} },
+  { id: cid(15), ownerId: ALICE_ID, name: "Bell Creek Canyon", latitude: -33.4999, longitude: 150.3371, vGrade: 1, aGrade: 1, commitment: 4, quality: 4.5, hours: 9, fieldValues: {} },
+  { id: cid(16), ownerId: ALICE_ID, name: "Arethusa Canyon", latitude: -33.6589, longitude: 150.3467, numAbseils: 6, longestAbseil: 30, vGrade: 4, aGrade: 4, commitment: 3, quality: 4, hours: 9, fieldValues: {} },
+  { id: cid(17), ownerId: ALICE_ID, name: "Starlight Canyon", latitude: -33.1516, longitude: 150.2844, numAbseils: 3, longestAbseil: 25, vGrade: 2, aGrade: 1, quality: 4.5, hours: 9, altNames: ["Newnes", "Wallaby Tunnel"], fieldValues: {} },
+  { id: cid(18), ownerId: ALICE_ID, name: "Kanangra Main", latitude: -33.9809, longitude: 150.0991, numAbseils: 17, longestAbseil: 58, vGrade: 4, aGrade: 3, commitment: 5, quality: 4.6, hours: 12, altNames: ["Kanangra Falls"], fieldValues: {} },
   // ropewiki snapshot edge cases
-  { id: cid(19), ownerId: ALICE_ID, name: "Yileen Canyon", latitude: -33.5666, longitude: 150.3295, numAbseils: 6, longestAbseil: 50, vGrade: 4, aGrade: 2, commitment: 2, quality: 3, hours: 3.5, ropeWikiId: 90019, ropeWikiSnapshot: { name: "Yileen", region: "Wollemi", quality: 3, rating: "4C2 IV", rappels: 6, longestRappelFt: 164, fetchedAt: "2025-11-02T00:00:00.000Z" }, attributes: { rockType: "Schist", wetsuit: 4, sources: [["RopeWiki", "https://ropewiki.com/Yileen"]] } },
-  { id: cid(20), ownerId: ALICE_ID, name: "Serendipity Canyon", latitude: -33.4947, longitude: 150.3812, numAbseils: 6, longestAbseil: 20, vGrade: 2, aGrade: 2, commitment: 3, quality: 3.4, hours: 4, altNames: ["Why Don't We Do It In The Road"], ropeWikiId: 90020, ropeWikiSnapshot: { name: "Serendipity", region: "Blue Mountains", quality: 3, rating: "3C2", rappels: 6, fetchedAt: "2025-11-02T00:00:00.000Z" }, attributes: sandstone(undefined, [["RopeWiki", "https://ropewiki.com/Serendipity"]]) },
+  { id: cid(19), ownerId: ALICE_ID, name: "Yileen Canyon", latitude: -33.5666, longitude: 150.3295, numAbseils: 6, longestAbseil: 50, vGrade: 4, aGrade: 2, commitment: 2, quality: 3, hours: 3.5, ropeWikiId: 90019, ropeWikiSnapshot: { name: "Yileen", region: "Wollemi", quality: 3, rating: "4C2 IV", rappels: 6, longestRappelFt: 164, fetchedAt: "2025-11-02T00:00:00.000Z" }, fieldValues: sources(["RopeWiki", "https://ropewiki.com/Yileen"]) },
+  { id: cid(20), ownerId: ALICE_ID, name: "Serendipity Canyon", latitude: -33.4947, longitude: 150.3812, numAbseils: 6, longestAbseil: 20, vGrade: 2, aGrade: 2, commitment: 3, quality: 3.4, hours: 4, altNames: ["Why Don't We Do It In The Road"], ropeWikiId: 90020, ropeWikiSnapshot: { name: "Serendipity", region: "Blue Mountains", quality: 3, rating: "3C2", rappels: 6, fetchedAt: "2025-11-02T00:00:00.000Z" }, fieldValues: sources(["RopeWiki", "https://ropewiki.com/Serendipity"]) },
   // all-null grades + quality
-  { id: cid(21), ownerId: ALICE_ID, name: "Devils Pinch", latitude: -33.1606, longitude: 150.2754, numAbseils: 6, longestAbseil: 30, quality: 4.5, hours: 9, attributes: sandstone(4) },
-  { id: cid(22), ownerId: ALICE_ID, name: "Du Faur Creek", latitude: -33.5153, longitude: 150.3343, numAbseils: 0, vGrade: 1, aGrade: 2, commitment: 3, quality: 3.5, hours: 10, altNames: ["Clatterteeth"], attributes: sandstone() },
-  { id: cid(23), ownerId: ALICE_ID, name: "Heart Attack Canyon", latitude: -33.2383, longitude: 150.3029, numAbseils: 6, longestAbseil: 37, vGrade: 4, aGrade: 1, commitment: 4, quality: 4, hours: 10, attributes: sandstone(3) },
-  { id: cid(24), ownerId: ALICE_ID, name: "Jugglers Canyon", latitude: -33.6592, longitude: 150.3294, numAbseils: 8, longestAbseil: 20, vGrade: 3, aGrade: 1, commitment: 2, quality: 2.3, hours: 4, altNames: ["Pilcher"], attributes: sandstone() },
-  { id: cid(25), ownerId: ALICE_ID, name: "Sarcophagus Canyon", latitude: -33.5693, longitude: 150.3235, numAbseils: 7, longestAbseil: 25, vGrade: 3, aGrade: 1, quality: 2.8, hours: 8, ropeWikiId: 90025, ropeWikiSnapshot: { name: "Sarcophagus", region: "Blue Mountains", quality: 2.8, rating: "3C1", rappels: 7, fetchedAt: "2025-11-02T00:00:00.000Z" }, attributes: sandstone() },
-  { id: cid(26), ownerId: ALICE_ID, name: "Bowens Creek North (Lower)", latitude: -33.5215, longitude: 150.3932, numAbseils: 3, longestAbseil: 12, vGrade: 2, aGrade: 2, commitment: 3, quality: 3.4, hours: 6, altNames: ["Gobsmacker"], attributes: sandstone(5) },
-  { id: cid(27), ownerId: ALICE_ID, name: "Crayfish Creek", latitude: -33.5976, longitude: 150.3037, numAbseils: 0, vGrade: 1, aGrade: 2, quality: 1.5, hours: 7, attributes: sandstone() },
+  { id: cid(21), ownerId: ALICE_ID, name: "Devils Pinch", latitude: -33.1606, longitude: 150.2754, numAbseils: 6, longestAbseil: 30, quality: 4.5, hours: 9, fieldValues: {} },
+  { id: cid(22), ownerId: ALICE_ID, name: "Du Faur Creek", latitude: -33.5153, longitude: 150.3343, numAbseils: 0, vGrade: 1, aGrade: 2, commitment: 3, quality: 3.5, hours: 10, altNames: ["Clatterteeth"], fieldValues: {} },
+  { id: cid(23), ownerId: ALICE_ID, name: "Heart Attack Canyon", latitude: -33.2383, longitude: 150.3029, numAbseils: 6, longestAbseil: 37, vGrade: 4, aGrade: 1, commitment: 4, quality: 4, hours: 10, fieldValues: {} },
+  { id: cid(24), ownerId: ALICE_ID, name: "Jugglers Canyon", latitude: -33.6592, longitude: 150.3294, numAbseils: 8, longestAbseil: 20, vGrade: 3, aGrade: 1, commitment: 2, quality: 2.3, hours: 4, altNames: ["Pilcher"], fieldValues: {} },
+  { id: cid(25), ownerId: ALICE_ID, name: "Sarcophagus Canyon", latitude: -33.5693, longitude: 150.3235, numAbseils: 7, longestAbseil: 25, vGrade: 3, aGrade: 1, quality: 2.8, hours: 8, ropeWikiId: 90025, ropeWikiSnapshot: { name: "Sarcophagus", region: "Blue Mountains", quality: 2.8, rating: "3C1", rappels: 7, fetchedAt: "2025-11-02T00:00:00.000Z" }, fieldValues: {} },
+  { id: cid(26), ownerId: ALICE_ID, name: "Bowens Creek North (Lower)", latitude: -33.5215, longitude: 150.3932, numAbseils: 3, longestAbseil: 12, vGrade: 2, aGrade: 2, commitment: 3, quality: 3.4, hours: 6, altNames: ["Gobsmacker"], fieldValues: {} },
+  { id: cid(27), ownerId: ALICE_ID, name: "Crayfish Creek", latitude: -33.5976, longitude: 150.3037, numAbseils: 0, vGrade: 1, aGrade: 2, quality: 1.5, hours: 7, fieldValues: {} },
   // second fabricated place
-  { id: cid(28), ownerId: ALICE_ID, name: "Test Gorge", latitude: -33.55, longitude: 150.28, numAbseils: 2, longestAbseil: 10, quality: 2, notes: "Fabricated place for local development.", attributes: sandstone() },
+  { id: cid(28), ownerId: ALICE_ID, name: "Test Gorge", latitude: -33.55, longitude: 150.28, numAbseils: 2, longestAbseil: 10, quality: 2, notes: "Fabricated place for local development.", fieldValues: {} },
+
+  // ── the field machinery, made visible in dev ─────────────────────────────
+  //
+  // Before the places rework NO seeded place carried a custom-field value, so
+  // the shape every prod canyon may hold was invisible here and the migration's
+  // hoist had to be proved against a hand-built fixture instead of dev data.
+  // These three make each case reachable by opening the app:
+  //
+  //  * a canyon carrying a user-defined value on the system type
+  //    (`permit_no`, which is appliesToAllTypes — the flag a new type inherits)
+  //  * a place of a USER type carrying a value scoped to that type, which is
+  //    what a copy has to reconcile (§2.6)
+  //  * a place of a SYSTEM type that is not Canyon, so the Places screen has
+  //    more than one populated tab and the zero-places hide rule is observable
+  { id: cid(29), ownerId: ALICE_ID, name: "Rocky Creek Canyon", latitude: -33.4487, longitude: 150.3311, numAbseils: 4, longestAbseil: 18, vGrade: 3, aGrade: 2, commitment: 3, quality: 3.2, hours: 5, fieldValues: { permit_no: "NPWS-2026-114" } },
+  { id: cid(30), ownerId: ALICE_ID, name: "Wollangambe Crater", latitude: -33.4602, longitude: 150.2588, placeTypeId: ALICE_TYPE_ID, quality: 4, fieldValues: { access_beta: "Park at the locked gate, walk the fire trail 20 min." } },
+  { id: cid(31), ownerId: ALICE_ID, name: "Newnes camp", latitude: -33.2074, longitude: 150.2247, placeTypeId: SYSTEM_PLACE_TYPE_IDS.campsite, quality: 4, fieldValues: { capacity: 12, is_cave: false } },
 ];
 
 // bob owns a fork of alice's shared Grand Canyon + two of his own.
 const BOB_PLACES: SeedPlace[] = [
-  { id: seedId("2", 1), ownerId: BOB_ID, name: "Grand Canyon (copy)", latitude: -33.6563, longitude: 150.3179, numAbseils: 1, longestAbseil: 20, vGrade: 2, aGrade: 2, commitment: 3, quality: 3.4, hours: 3, forkedFromId: PLACE_IDS[0], attributes: sandstone(3) },
-  { id: seedId("2", 2), ownerId: BOB_ID, name: "Coin Slot", latitude: -33.1224, longitude: 150.3297, numAbseils: 5, longestAbseil: 35, vGrade: 3, aGrade: 1, commitment: 4, quality: 4, hours: 3.5, attributes: sandstone(2) },
-  { id: seedId("2", 3), ownerId: BOB_ID, name: "Galah Canyon", latitude: -33.2514, longitude: 150.3037, numAbseils: 8, longestAbseil: 30, quality: 4, hours: 10, attributes: sandstone(4) },
+  { id: seedId("2", 1), ownerId: BOB_ID, name: "Grand Canyon (copy)", latitude: -33.6563, longitude: 150.3179, numAbseils: 1, longestAbseil: 20, vGrade: 2, aGrade: 2, commitment: 3, quality: 3.4, hours: 3, forkedFromId: PLACE_IDS[0], fieldValues: {} },
+  { id: seedId("2", 2), ownerId: BOB_ID, name: "Coin Slot", latitude: -33.1224, longitude: 150.3297, numAbseils: 5, longestAbseil: 35, vGrade: 3, aGrade: 1, commitment: 4, quality: 4, hours: 3.5, fieldValues: {} },
+  { id: seedId("2", 3), ownerId: BOB_ID, name: "Galah Canyon", latitude: -33.2514, longitude: 150.3037, numAbseils: 8, longestAbseil: 30, quality: 4, hours: 10, fieldValues: {} },
 ];
 
 // carol owns her own places (and is shared nothing of alice's — the stranger).
 const CAROL_PLACES: SeedPlace[] = [
-  { id: seedId("3", 1), ownerId: CAROL_ID, name: "Pipeline Canyon", latitude: -33.1658, longitude: 150.2634, numAbseils: 10, longestAbseil: 25, quality: 4, hours: 7, attributes: sandstone(4) },
-  { id: seedId("3", 2), ownerId: CAROL_ID, name: "Surefire Canyon", latitude: -33.2286, longitude: 150.2926, numAbseils: 5, longestAbseil: 15, quality: 4.5, hours: 12, attributes: sandstone(4) },
+  { id: seedId("3", 1), ownerId: CAROL_ID, name: "Pipeline Canyon", latitude: -33.1658, longitude: 150.2634, numAbseils: 10, longestAbseil: 25, quality: 4, hours: 7, fieldValues: {} },
+  { id: seedId("3", 2), ownerId: CAROL_ID, name: "Surefire Canyon", latitude: -33.2286, longitude: 150.2926, numAbseils: 5, longestAbseil: 15, quality: 4.5, hours: 12, fieldValues: {} },
 ];
 
 const ALL_PLACES = [...ALICE_PLACES, ...BOB_PLACES, ...CAROL_PLACES];
@@ -298,7 +365,9 @@ async function main() {
     prisma.waypoint.deleteMany(),
     prisma.route.deleteMany(),
     prisma.place.deleteMany(),
+    prisma.customFieldDefPlaceType.deleteMany(),
     prisma.customFieldDef.deleteMany(),
+    prisma.placeType.deleteMany(),
     prisma.notification.deleteMany(),
     prisma.topoJob.deleteMany(),
     prisma.geoPdfTemplate.deleteMany(),
@@ -322,6 +391,58 @@ async function main() {
     ],
   });
 
+  // ── system place types and their definitions ─────────────────────────────
+  //
+  // The WIPE above removes these, so the seed has to put them back — and it
+  // must put back exactly what the forward migration creates, ids included,
+  // or a dev database and a migrated one disagree about what the Canyon type
+  // IS. Both read the same declaration in shared/src/placeTypes.ts; nothing
+  // here is a literal.
+  await prisma.placeType.createMany({
+    data: SYSTEM_PLACE_TYPES.map((type) => ({
+      id: type.id,
+      ownerId: null,
+      name: type.name,
+      iconKey: type.iconKey,
+      color: type.color,
+      position: type.position,
+    })),
+  });
+  await prisma.customFieldDef.createMany({
+    data: SYSTEM_FIELD_DEFS.map((def, position) => ({
+      id: def.id,
+      ownerId: null,
+      entity: "place",
+      key: def.key,
+      label: def.label,
+      type: def.type,
+      min: def.min,
+      max: def.max,
+      position,
+    })),
+  });
+  await prisma.customFieldDefPlaceType.createMany({
+    data: SYSTEM_FIELD_DEFS.flatMap((def) =>
+      def.placeTypes.map((key) => ({
+        defId: def.id,
+        placeTypeId: SYSTEM_PLACE_TYPE_IDS[key],
+      })),
+    ),
+  });
+
+  // A type alice made herself, so a copy of one of her places has a USER type
+  // to reconcile rather than a system one that resolves for free.
+  await prisma.placeType.create({
+    data: {
+      id: ALICE_TYPE_ID,
+      ownerId: ALICE_ID,
+      name: "Swimming hole",
+      iconKey: "droplet",
+      color: "#06B6D4",
+      position: 0,
+    },
+  });
+
   await prisma.customFieldDef.createMany({
     data: ALICE_TRIP_FIELD_DEFS.map((def, position) => ({
       id: seedId("5", position + 1),
@@ -331,6 +452,34 @@ async function main() {
       position,
     })),
   });
+
+  // Place-scoped definitions alice owns, plus their scoping rows. This is what
+  // makes the field machinery VISIBLE in dev: before the places rework the seed
+  // had no place-scoped definitions and no place carried a custom-field value
+  // at all, so the nested `attributes.customFields` shape that every prod
+  // canyon may hold was invisible here — which is why the migration's hoist had
+  // to be proved against a hand-built fixture rather than against dev data.
+  for (const [position, def] of ALICE_PLACE_FIELD_DEFS.entries()) {
+    await prisma.customFieldDef.create({
+      data: {
+        id: def.id,
+        ownerId: ALICE_ID,
+        entity: "place",
+        key: def.key,
+        label: def.label,
+        type: def.type,
+        position,
+        appliesToAllTypes: def.appliesToAllTypes,
+        ...(def.placeTypeIds.length
+          ? {
+              placeTypes: {
+                create: def.placeTypeIds.map((placeTypeId) => ({ placeTypeId })),
+              },
+            }
+          : {}),
+      },
+    });
+  }
 
   // Friendships: alice<->bob accepted (invariant), carol->alice pending
   // (invariant), bob<->carol accepted (extra graph; does NOT make carol alice's
@@ -459,7 +608,7 @@ async function main() {
   // path untested by the integration suite.
   await prisma.media.createMany({
     data: [
-      { id: seedId("4", 1), ownerId: ALICE_ID, linkedType: "place", linkedId: PLACE_IDS[0], s3KeyDisplay: "media/seed/grand-1.jpg", s3KeyThumbnail: "media/seed/grand-1-thumb.jpg", mediaType: "image/jpeg", filename: "grand-place.jpg", fileSizeBytes: BigInt(2_048_000) },
+      { id: seedId("4", 1), ownerId: ALICE_ID, linkedType: "place", linkedId: PLACE_IDS[0], s3KeyDisplay: "media/seed/grand-1.jpg", s3KeyThumbnail: "media/seed/grand-1-thumb.jpg", mediaType: "image/jpeg", filename: "grand-canyon.jpg", fileSizeBytes: BigInt(2_048_000) },
       { id: seedId("4", 2), ownerId: ALICE_ID, linkedType: "place", linkedId: PLACE_IDS[1], s3KeyDisplay: "media/seed/claustral.gpx", mediaType: "application/gpx+xml", filename: "claustral-track.gpx", fileSizeBytes: BigInt(48_000), color: TRACK_COLORS[0], origin: "import", metadata: { bbox: [150.32, -33.42, 150.38, -33.36], featureCount: 1, positionCount: 812 } },
       { id: seedId("4", 3), ownerId: ALICE_ID, linkedType: "none", linkedId: null, s3KeyDisplay: "media/seed/du-faur.kml", mediaType: "application/vnd.google-earth.kml+xml", filename: "du-faur-approach.kml", displayName: "Du Faur approach", fileSizeBytes: BigInt(21_000), color: TRACK_COLORS[1], origin: "import", metadata: { bbox: [150.29, -33.45, 150.34, -33.41], featureCount: 3, positionCount: 240 } },
       { id: seedId("4", 4), ownerId: ALICE_ID, linkedType: "none", linkedId: null, s3KeyDisplay: "media/seed/recording-2026-08-02.gpx", mediaType: "application/gpx+xml", filename: "Wollangambe, 2 Aug.gpx", displayName: "Wollangambe, 2 Aug", fileSizeBytes: BigInt(184_000), color: TRACK_COLORS[2], origin: "track", metadata: { bbox: [150.25, -33.52, 150.31, -33.47], distanceM: 7420, durationMs: 19_800_000, elevationGainM: 265, elevationLossM: 310, pointCount: 6_140, startedAt: "2026-08-02T22:05:00.000Z", endedAt: "2026-08-03T03:35:00.000Z" } },
@@ -487,25 +636,38 @@ async function main() {
   );
 }
 
+/**
+ * The seven grades are FIELD VALUES now, keyed by the system definitions.
+ *
+ * The fixture keeps naming them `vGrade` etc. because that is what a canyon
+ * has; this is the one place the translation happens, and `setFieldValues`
+ * drops the ones that are absent rather than storing nulls — a stored null
+ * renders as an empty field and satisfies a "has a value" filter.
+ */
 function placeCreate(c: SeedPlace): Prisma.PlaceCreateInput {
+  const fieldValues = setFieldValues(c.fieldValues ?? {}, {
+    v_grade: c.vGrade ?? null,
+    a_grade: c.aGrade ?? null,
+    commitment: c.commitment ?? null,
+    quality: c.quality ?? null,
+    hours: c.hours ?? null,
+    num_abseils: c.numAbseils ?? null,
+    longest_abseil: c.longestAbseil ?? null,
+  });
   return {
     id: c.id,
     name: c.name,
     latitude: c.latitude,
     longitude: c.longitude,
-    numAbseils: c.numAbseils ?? null,
-    longestAbseil: c.longestAbseil ?? null,
-    vGrade: c.vGrade ?? null,
-    aGrade: c.aGrade ?? null,
-    commitment: c.commitment ?? null,
-    quality: c.quality ?? null,
-    hours: c.hours ?? null,
     notes: c.notes ?? null,
     altNames: c.altNames ?? [],
-    attributes: c.attributes ?? {},
+    fieldValues: fieldValues as Prisma.InputJsonValue,
     ropeWikiId: c.ropeWikiId ?? null,
     ropeWikiSnapshot: c.ropeWikiSnapshot ?? Prisma.JsonNull,
     owner: { connect: { id: c.ownerId } },
+    placeType: {
+      connect: { id: c.placeTypeId ?? SYSTEM_PLACE_TYPE_IDS.canyon },
+    },
     ...(c.forkedFromId ? { forkedFrom: { connect: { id: c.forkedFromId } } } : {}),
   };
 }
