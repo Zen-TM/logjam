@@ -195,6 +195,7 @@ import {
   type MarkerColorId,
   type NorthReference,
 } from "./mapPreferences";
+import { FIX_MOVE_MIN_M, fixQuality, type FixLiveness, type FixQuality } from "./gpsSignal";
 import { readBasemapPreference, setBasemapPreference } from "./basemapPreference";
 import { MOBILE_BASEMAPS } from "./basemapMeta";
 import { readMutedTopoAreas, writeMutedTopoAreas } from "./topoAreaMuting";
@@ -431,6 +432,38 @@ const COMPASS_PROBE_WINDOW_MS = 2000;
 const COMPASS_PROBE_INTERVAL_MS = 120_000;
 const COMPASS_PROBE_URGENT_MS = 6_000;
 
+/**
+ * How often the location arrow re-asks whether its fix is still current.
+ *
+ * Coarse on purpose, like the readout chip's ticker: it only has to land a
+ * `FIX_STALE_MS` cliff promptly, and it re-renders nothing on a tick that
+ * changes no answer.
+ */
+const GPS_QUALITY_TICK_MS = 2000;
+
+/**
+ * How long the arrow has to stay grey before the map says so out loud.
+ *
+ * The colour is instant; the SENTENCE waits, because the first fix of a session
+ * is the OS's cached one and it is routinely a couple of minutes old — the
+ * watcher replaces it within seconds, and a map that announced a lost signal on
+ * every cold open would be crying wolf about the one state it most needs to be
+ * believed about. Fifteen seconds is long enough to cover that handover and
+ * short enough that someone who has actually walked under rock hears about it
+ * while it still matters.
+ */
+const GPS_TOAST_DELAY_MS = 15_000;
+
+/**
+ * The floor between two "no GPS" toasts.
+ *
+ * The colour is the permanent signal; the sentence exists because grey means
+ * nothing to someone seeing it for the first time. Under a flapping canopy the
+ * verdict can cross back and forth all afternoon, and a toast per crossing is
+ * how a user learns to ignore the one that matters.
+ */
+const GPS_TOAST_MIN_GAP_MS = 300_000;
+
 /** Tag for this screen's wake lock, so releasing it can't release anyone else's. */
 const KEEP_AWAKE_TAG = "logjam-map";
 
@@ -470,15 +503,25 @@ function overlayKind(ref: TopoOverlayRef): "contours" | "features" {
  *
  * Unpinned ⇒ renders above everything, like the canyon layers. No accuracy
  * halo: it was a translucent disc the size of a suburb that told the user
- * nothing actionable and hid the map under itself.
+ * nothing actionable and hid the map under itself. What the halo was reaching
+ * for is answered by `quality` instead — a single colour change, drawn only
+ * when the position has actually stopped being worth trusting.
  */
 const UserLocationMarker = memo(function UserLocationMarker({
   coord,
   markerColorId,
+  quality,
   lockUpright,
 }: {
   coord: [number, number];
   markerColorId: MarkerColorId;
+  /**
+   * How much the position under the arrow is worth (`gpsSignal.ts`). Anything
+   * but "live" draws the grey arrow: the marker is the one thing on this map a
+   * person acts on directly, and it used to look identical whether the fix
+   * behind it was three seconds or three hours old.
+   */
+  quality: FixQuality;
   /**
    * Course-up: draw the arrow straight up the SCREEN instead of at its bearing
    * on the map.
@@ -499,9 +542,9 @@ const UserLocationMarker = memo(function UserLocationMarker({
   // GeoJSONSource plus two symbol layers to MLRN on every render. Same split as
   // LiveCompassStrip below, for the same reason.
   return lockUpright ? (
-    <UprightUserMarker coord={coord} markerColorId={markerColorId} />
+    <UprightUserMarker coord={coord} markerColorId={markerColorId} quality={quality} />
   ) : (
-    <BearingUserMarker coord={coord} markerColorId={markerColorId} />
+    <BearingUserMarker coord={coord} markerColorId={markerColorId} quality={quality} />
   );
 });
 
@@ -514,11 +557,16 @@ const BearingUserMarker = memo(function BearingUserMarker(props: UserMarkerProps
   return <UserMarkerLayers {...props} heading={useLiveHeading()} upright={false} />;
 });
 
-type UserMarkerProps = { coord: [number, number]; markerColorId: MarkerColorId };
+type UserMarkerProps = {
+  coord: [number, number];
+  markerColorId: MarkerColorId;
+  quality: FixQuality;
+};
 
 function UserMarkerLayers({
   coord,
   markerColorId,
+  quality,
   heading,
   upright,
 }: UserMarkerProps & { heading: number | null; upright: boolean }) {
@@ -549,7 +597,11 @@ function UserMarkerLayers({
           // One baked PNG per colour (USER_MARKER_IMAGES) rather than a
           // single SDF sprite recoloured via iconColor — see that constant
           // for why.
-          iconImage: `user-arrow-${markerColorId}`,
+          // GREY WHEN THE FIX IS NOT WORTH ITS COLOUR. The arrow still points
+          // where the compass says (that sensor is fine, and needs no sky) —
+          // only the claim about WHERE it is standing is withdrawn.
+          iconImage:
+            quality === "live" ? `user-arrow-${markerColorId}` : "user-arrow-stale",
           iconSize: 0.42,
           iconRotate: heading ?? 0,
           iconRotationAlignment: rotationAlignment,
@@ -587,13 +639,21 @@ function UserMarkerLayers({
  * forgotten one: a colour missing its `user-arrow-<id>` entry fails
  * typecheck rather than falling back to nothing at runtime.
  */
-const USER_MARKER_IMAGES: Record<`user-arrow-${MarkerColorId}`, { source: number }> = {
+const USER_MARKER_IMAGES: Record<
+  `user-arrow-${MarkerColorId}` | "user-arrow-stale",
+  { source: number }
+> = {
   "user-arrow-blue": { source: require("../../assets/user-arrow-blue.png") },
   "user-arrow-amber": { source: require("../../assets/user-arrow-amber.png") },
   "user-arrow-red": { source: require("../../assets/user-arrow-red.png") },
   "user-arrow-green": { source: require("../../assets/user-arrow-green.png") },
   "user-arrow-violet": { source: require("../../assets/user-arrow-violet.png") },
   "user-arrow-white": { source: require("../../assets/user-arrow-white.png") },
+  /** Not a colour choice — the state the arrow falls back to when the fix
+   *  behind it goes stale or coarse. Same artwork as the others (white halo
+   *  included), fill desaturated to #8A8F94, so nothing but the hue changes and
+   *  the user is not asked to notice a shape. */
+  "user-arrow-stale": { source: require("../../assets/user-arrow-stale.png") },
 };
 
 const UserMarkerImages = memo(function UserMarkerImages() {
@@ -3078,6 +3138,86 @@ export function MapScreen({
   dotWantedRef.current = dotWanted;
 
   /**
+   * Whether the arrow is still telling the truth (`gpsSignal.ts` owns the rule).
+   *
+   * The last fix's age and accuracy live in a REF and the verdict in state: the
+   * inputs change on every delivery and the verdict changes twice a trip, so
+   * the map re-renders on the transition and on nothing else.
+   *
+   * The ticker is not decoration — losing a signal is the ABSENCE of a
+   * callback, so only a clock can notice it. Same shape and the same reason as
+   * `SpeedElevationChip`'s, and gated on `sensorsActive` for the same reason
+   * everything here is: a timer behind a dark screen is a wakeup nobody sees.
+   */
+  const lastFix = useRef<FixLiveness | null>(null);
+  const [gpsQuality, setGpsQuality] = useState<FixQuality>("stale");
+  /**
+   * The verdict, mirrored, so the common case costs no render at all.
+   *
+   * This runs on every delivery — a dozen times a minute — and re-rendering
+   * MapScreen re-commits props per layer per MLRN layer (the Protomaps band
+   * alone is ~71). React's own same-value bail-out may still render the
+   * component once before it takes effect, and this is not the screen to
+   * spend that on: the comparison happens here, and `setGpsQuality` is only
+   * ever called on an actual transition.
+   */
+  const gpsQualityRef = useRef<FixQuality>(gpsQuality);
+  const noteGpsQuality = useCallback(() => {
+    const next = fixQuality(lastFix.current, Date.now());
+    if (next === gpsQualityRef.current) return;
+    gpsQualityRef.current = next;
+    setGpsQuality(next);
+  }, []);
+  useEffect(() => {
+    if (!sensorsActive || !dotWanted) return;
+    noteGpsQuality();
+    const timer = setInterval(noteGpsQuality, GPS_QUALITY_TICK_MS);
+    return () => clearInterval(timer);
+  }, [sensorsActive, dotWanted, noteGpsQuality]);
+
+  /**
+   * Say it in words the first time, then let the colour carry it.
+   *
+   * A grey arrow is only self-explanatory to someone who has seen it before,
+   * and this is the one state on the map where saying nothing is what the bug
+   * was. Two limiters, for two different noises: the timer below swallows a
+   * loss that resolves itself (the cold-open handover, a moment under an
+   * overhang), and `GPS_TOAST_MIN_GAP_MS` swallows the rest of an afternoon
+   * under a flapping canopy — a toast per crossing is how a user learns to
+   * dismiss the one that matters.
+   */
+  const lastGpsToastAt = useRef(0);
+  // WHETHER there is a marker, never WHERE it is. The position itself would put
+  // this effect's timer back to zero on every fix it accepted, so a walker on
+  // coarse tower fixes — the case the "weak signal" wording exists for — would
+  // never once reach the delay.
+  const markerDrawn = userCoord != null;
+  useEffect(() => {
+    // `markerDrawn`, because this sentence explains a MARKER. Before the first
+    // fix there is nothing drawn and nothing to disown — and the quality starts
+    // out "stale" precisely because nothing has arrived yet.
+    // `sensorsActive`, because a message about a map nobody is looking at would
+    // be read on the way back in, about a signal from before.
+    if (!sensorsActive || !dotWanted || !markerDrawn || gpsQuality === "live") {
+      return;
+    }
+    // Cleared by this effect's own teardown the moment the signal comes back,
+    // which is what makes "it went and stayed gone" the thing being reported.
+    const timer = setTimeout(() => {
+      const now = Date.now();
+      if (now - lastGpsToastAt.current < GPS_TOAST_MIN_GAP_MS) return;
+      lastGpsToastAt.current = now;
+      notify(
+        gpsQuality === "coarse"
+          ? "Weak GPS signal — your position could be out by hundreds of metres."
+          : "No GPS signal — the grey arrow is where you last had one.",
+        "info",
+      );
+    }, GPS_TOAST_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [gpsQuality, sensorsActive, dotWanted, markerDrawn, notify]);
+
+  /**
    * Why a position watcher is running at all.
    *
    * TWO reasons now, not one: the location dot, and the speed + elevation chip
@@ -3172,6 +3312,29 @@ export function MapScreen({
     if (!sensorsActive || !fixWanted) return;
     let subscription: Location.LocationSubscription | null = null;
     let cancelled = false;
+    // Every delivery, applied or not, is what says the sky is still there.
+    const noteFixArrived = (position: Location.LocationObject) => {
+      lastFix.current = {
+        atMs: position.timestamp,
+        accuracyM: position.coords.accuracy,
+      };
+      noteGpsQuality();
+    };
+    // The displacement filter that used to be the OS's `distanceInterval`,
+    // measured from the last fix we ACTED on — same 5 m, same semantics, so the
+    // dot, the camera and the readout behave exactly as they did.
+    const movedFarEnough = (position: Location.LocationObject) => {
+      const previous = latestFix.current;
+      if (!previous) return true;
+      return (
+        haversineMeters(
+          previous[1],
+          previous[0],
+          position.coords.latitude,
+          position.coords.longitude,
+        ) >= FIX_MOVE_MIN_M
+      );
+    };
     void (async () => {
       // Instant feedback from the OS's cached fix (the fused provider keeps a
       // recent network/wifi position even indoors) — the watcher then refines.
@@ -3180,6 +3343,12 @@ export function MapScreen({
       );
       if (cancelled) return;
       if (lastKnown) {
+        // Cached MEANS old, and how old is the whole question the arrow's
+        // colour answers: this fix can be last week's drive to the trailhead,
+        // and drawing it in the user's colour is the exact failure this batch
+        // exists to fix. It goes through the same rule as a live one, so an
+        // hours-old one arrives already grey.
+        noteFixArrived(lastKnown);
         // The readout gets it too, and for the same reason the dot does: a
         // chip showing two dashes until the first watch callback lands reads
         // as broken, and indoors that callback can be minutes away. A cached
@@ -3194,9 +3363,21 @@ export function MapScreen({
         {
           accuracy: Location.Accuracy.Balanced,
           timeInterval: 3000,
-          distanceInterval: 5,
+          // NO `distanceInterval`, since 2026-09-05 — the same conclusion the
+          // RECORDER's presets reached (recordingPreferences.ts). Android ANDs
+          // it with the interval, so it never saved a wakeup: it only discarded
+          // fixes the GNSS engine had already been woken to produce. Here it
+          // discarded the one thing the arrow's colour depends on. A standing
+          // phone crosses no 5 m threshold, so it received NOTHING, and "no
+          // deliveries" is exactly what losing the sky looks like — with the
+          // filter in the OS the two were the same observation and neither
+          // could be reported. The filter still runs, in `movedFarEnough`
+          // above, so nothing downstream sees a change.
+          distanceInterval: 0,
         },
         (position) => {
+          noteFixArrived(position);
+          if (!movedFarEnough(position)) return;
           noteReadoutFix(position);
           applyFix([position.coords.longitude, position.coords.latitude]);
         },
@@ -3218,8 +3399,14 @@ export function MapScreen({
       // chip reporting the speed it saw on the way out.
       publishLiveReadout(null);
       previousReadoutFix.current = null;
+      // `lastFix` is deliberately NOT cleared. It is a timestamp, and it keeps
+      // ageing correctly with nobody watching: a user who steps to another tab
+      // and back inside a few seconds returns to the arrow they left, while one
+      // who comes back an hour later finds it grey — which is true. Clearing it
+      // would turn "old" into "unknown", which renders the same but announces a
+      // lost signal on every visit to the tab.
     };
-  }, [sensorsActive, fixWanted, applyFix, noteReadoutFix]);
+  }, [sensorsActive, fixWanted, applyFix, noteReadoutFix, noteGpsQuality]);
 
   // The compass. Wanted by the tape (which runs with no fix at all) and by the
   // location arrow.
@@ -4418,6 +4605,7 @@ export function MapScreen({
             <UserLocationMarker
               coord={userCoord}
               markerColorId={markerColorId}
+              quality={gpsQuality}
               lockUpright={followMode === "course-up"}
             />
           ) : null}

@@ -1129,7 +1129,21 @@ EAS-managed (`appVersionSource: "remote"` + `autoIncrement`) — don't hand-set 
   Metro could not bundle at all (an unhoisted `babel-preset-expo` after the SDK
   54 bump — the app died at the dev launcher). A resolution or plugin break only
   shows up in a real bundle: `npx expo export --platform android`, or install the
-  APK.
+  APK. `expo export` is the cheap half of that — no device, no Gradle, seconds —
+  and it is the gate to run before a 25-minute build, not after it.
+  - **A `git worktree` starts with NO installed trees, and symlinking them from
+    the main checkout satisfies everything EXCEPT Metro.** `git worktree add`
+    carries source only, so `node_modules` and `shared/dist` are both absent;
+    symlinks make `tsc --noEmit`, `npm run typecheck` and the whole vitest suite
+    pass, and then Metro — which resolves realpaths and refuses a package
+    outside the project root — dies with `Unable to resolve module proj4 from
+    shared/dist/geoPdfExtent.js`. A per-entry symlink FARM fails the same way; a
+    real `npm ci` (or a real copy) in the worktree's `shared` and `mobile` is
+    what fixes it, plus `cd shared && npm run build`. Two sessions paid for this
+    on the same afternoon, one of them with a 10-minute Gradle build to surface
+    what `expo export` reports in seconds. Note `npm run typecheck` proves
+    nothing here: it resolves through tsconfig paths, where Metro goes through
+    `node_modules`.
 - Runtime verify: `npm run dev:android` (add `--emulator` for the AVD), then the
   screenshot loop via `adb exec-out screencap -p`; mock GPS via `adb emu geo fix`;
   Maestro flows in `e2e/`. iOS = EAS build + real device (no local iOS on the

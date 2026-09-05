@@ -786,10 +786,11 @@ nothing downstream, so the pointer silently stops working once the user has
 touched the filter themselves — the same failure the map's "show on map" nonce
 exists to prevent, one screen over.
 
-**A follow mode recentres on entry, not on the next sensor reading.** Position
-fixes arrive every few seconds and only after several metres of movement, so a
-"follow me" button that waits for one does nothing at all for a stationary user
-who has panned away. Tapping it moves the camera immediately from the last known
+**A follow mode recentres on entry, not on the next sensor reading.** The dot
+only MOVES after several metres of travel (fixes arrive every few seconds, but
+one inside the last one's 5 m is GPS wander, not walking), so a "follow me"
+button that waits for one does nothing at all for a stationary user who has
+panned away. Tapping it moves the camera immediately from the last known
 fix; the watcher only keeps it there. And a camera write that repeats at sensor
 rate (the POV heading) must carry the position too, or it cancels every recentre
 the location watcher asks for.
@@ -797,6 +798,23 @@ the location watcher asks for.
 **Draw what the user can act on.** The location marker is an arrow (position and
 facing in one glyph) with no accuracy halo: the halo was a translucent disc the
 size of a suburb that changed no decision and hid the map under itself.
+
+**A marker that has stopped knowing where it is SAYS SO, and it says it by
+going grey.** The arrow is the one thing on this map a person acts on directly,
+and until 2026-09-05 it looked identical whether the fix behind it was three
+seconds or three hours old — a slot canyon takes the sky away, the watcher
+simply stops being called, and the last position stays drawn in the user's own
+colour. It now falls back to a grey arrow (same artwork, desaturated fill)
+whenever nothing has arrived for `FIX_STALE_MS` or the fix is wider than
+`FIX_COARSE_M` — the tower-shaped fix a phone gets with the sky blocked and a
+bar of signal, which arrives on time and is a claim about a suburb. Two things
+this deliberately is NOT. It is not a second state to learn: the arrow keeps
+pointing where the compass says, because that sensor is fine and needs no sky,
+and only the claim about WHERE is withdrawn. And it is not silent — a colour
+means nothing the first time you see it, so a toast says it in words, rate-
+limited (`GPS_TOAST_MIN_GAP_MS`) because a flapping canopy would otherwise
+teach the user to dismiss the message that matters. Rule and thresholds:
+`src/map/gpsSignal.ts`, tested.
 
 **A choice that leads to a form parks the target and opens it from
 `onClosed`.** The map's press-and-hold sheet ("waypoint or canyon?") can't mount
