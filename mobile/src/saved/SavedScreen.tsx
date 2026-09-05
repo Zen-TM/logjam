@@ -138,7 +138,6 @@ import { RegionDownloadRow } from "../offline/RegionDownloadRow";
 import { TrackOptionsSheet } from "../tracks/TrackOptionsSheet";
 import { ImportOptionsSheet } from "../imports/ImportOptionsSheet";
 import {
-  SHARED_READ_ONLY_HINT,
   geoPdfActions,
   remoteTrackActions,
   trackActions,
@@ -2411,14 +2410,6 @@ export function SavedScreen({
             sharePanel.body
           ) : (
             <>
-              {/* Says why the write verbs below are missing, in the same words
-                  every other surface uses. Keyed on OWNERSHIP, not on the
-                  delete verb being absent: a LiDAR topo shared with you is
-                  still a file on this handset, so it keeps its delete and used
-                  to lose its Share verb with nothing explaining it. */}
-              {menuItem.sharedWithYou ? (
-                <Text style={styles.sharedHint}>{SHARED_READ_ONLY_HINT}</Text>
-              ) : null}
               {menuItem.locatable ? (
                 <Row
                   title="Show on map"
@@ -2810,7 +2801,6 @@ const styles = StyleSheet.create({
   sheetBody: { gap: spacing(1) },
   // Same treatment as the map's waypoint sheet hint: a footnote above the
   // verbs, not a warning.
-  sharedHint: { color: theme.textMuted, fontSize: fontSize.xs },
   // Small and honest: the constraint is real, but it is a footnote to the
   // cards above it, not a warning banner.
   downloadNote: {

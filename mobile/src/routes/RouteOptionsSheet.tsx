@@ -21,14 +21,14 @@
 // this route, and reverse and colour are controls in the tool's own panel,
 // acting on the draft (DraftToolPanel.tsx).
 import { useEffect, useState } from "react";
-import { Alert, StyleSheet, Text, View } from "react-native";
+import { Alert, StyleSheet, View } from "react-native";
 import { messageFromError } from "@logjam/shared";
 
-import { assetHue, canyonHue, fontSize, theme } from "../theme";
+import { assetHue, canyonHue, theme } from "../theme";
 import { BottomSheet, RenameForm, Row } from "../ui";
 import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
 import { useConnectivity } from "../map/connectivity";
-import { SHARED_READ_ONLY_HINT, routeActions } from "../saved/assetActions";
+import { routeActions } from "../saved/assetActions";
 import { useCanyonPicker } from "../canyons/useCanyonPicker";
 import { useMirrorCanyons } from "../sync/useSyncQueries";
 import { updateRouteLocal } from "../sync/outbox";
@@ -371,10 +371,6 @@ export function RouteOptionsSheet({
             disabled={busy}
             onPress={confirmDelete}
           />
-        ) : actions.sharedWithYou ? (
-          // Keyed on ownership rather than on the delete verb's absence — the
-          // two only coincide for kinds whose delete is the owner's.
-          <Text style={styles.sharedHint}>{SHARED_READ_ONLY_HINT}</Text>
         ) : null}
         {/* The recipient's own verb. Present only on a DIRECT share; it needs a
             connection for the same reason granting one does, so it is dimmed
@@ -415,5 +411,4 @@ export function RouteOptionsSheet({
 
 const styles = StyleSheet.create({
   body: { gap: 8 },
-  sharedHint: { color: theme.textMuted, fontSize: fontSize.xs },
 });

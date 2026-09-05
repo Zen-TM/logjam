@@ -76,21 +76,13 @@ import { bboxOfPoints, type Bbox } from "./bboxOfPoints";
 import { deleteAsync, writeAsStringAsync } from "expo-file-system/legacy";
 import { scratchFileUri } from "../offline/localStores";
 
-/**
- * Why a shared asset's write verbs are missing, in one sentence — five
- * surfaces say it, and the ownership rule is not something any two of them
- * should word differently (DESIGN.md §7).
- *
- * It does NOT name a canyon any more. It used to read "shared with you through
- * a canyon", which was true while a canyon share was the only way someone
- * else's row could reach this phone; direct `/shares` means a route, waypoint
- * or LiDAR topo now arrives with no canyon involved at all, and the sentence
- * was stating a false reason on the two surfaces that showed it most. Export
- * is named because a sharee genuinely can, and the copy that said only "view"
- * undersold what they were given.
- */
-export const SHARED_READ_ONLY_HINT =
-  "Shared with you — view and export, but not edit.";
+// There was a SHARED_READ_ONLY_HINT here — one sentence, rendered on five
+// surfaces, explaining why a shared asset had no write verbs. It is gone
+// (2026-09-05): the row already says "shared with you" in its subtitle and
+// wears a Shared pill, and the sheet now offers "Remove from my account", so a
+// line stating what is absent was the third telling. `sharedWithYou` stays as
+// the descriptor's own statement of ownership — the surfaces read it, they just
+// no longer print a sentence about it.
 
 /**
  * The one wording for "remove this shared thing", in the field names this
@@ -111,8 +103,7 @@ function removeConfirmFields(
 
 export type AssetActions = {
   /**
-   * Someone else owns this — the reason every write verb below is absent, and
-   * the flag the surfaces render `SHARED_READ_ONLY_HINT` on.
+   * Someone else owns this — the reason every write verb below is absent.
    *
    * An EXPLICIT statement rather than the proxy the screens used to read (`no
    * delete descriptor` = shared). The proxy only held for kinds whose delete

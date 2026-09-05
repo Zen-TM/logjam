@@ -110,13 +110,13 @@ describe("assetActions ownership", () => {
     expect(actions.locatable).toBe(true);
   });
 
-  // `sharedWithYou` is what every surface renders SHARED_READ_ONLY_HINT on,
-  // and the hint's whole job is to explain the missing verbs — so a descriptor
-  // that sets the flag while still offering a write verb puts a sentence on
-  // screen that the buttons beside it contradict, and one that withholds the
-  // verbs without the flag leaves them missing with nothing said. That second
-  // case is not hypothetical: it is exactly what a shared LiDAR topo did,
-  // because the screens read "no delete descriptor" as the proxy for shared.
+  // `sharedWithYou` is the descriptor's own statement that someone else owns
+  // this, and it must agree with the verbs beside it: a row that claims to be
+  // shared while offering a write verb is one the API will refuse, and one that
+  // withholds the write verbs without the flag is a row the surfaces cannot
+  // tell from an owned one. The second case is not hypothetical — a shared
+  // LiDAR topo did exactly that, because the screens read "no delete
+  // descriptor" as the proxy for shared, and a topo's delete is device-local.
   it.each([
     ["route", routeActions(route("shared"))],
     ["waypoint", waypointActions(waypoint("shared"))],

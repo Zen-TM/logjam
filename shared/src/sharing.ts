@@ -230,7 +230,7 @@ export function removeShareConfirm(args: {
   return {
     title: `Remove shared ${args.kindLabel}?`,
     body:
-      `“${args.itemName}” goes from your account, on every device. ` +
+      `“${args.itemName}” is removed from your account, on every device. ` +
       `${owner} keeps the original — ask them to share it again if you want it back.`,
   };
 }

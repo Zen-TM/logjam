@@ -21,11 +21,13 @@
 // and no Edit, Share or Delete, on BOTH surfaces, because the gate lives in
 // this component rather than in its callers.
 import { useEffect, useMemo, useState } from "react";
-import { Alert, StyleSheet, Text, View } from "react-native";
+import { Alert, StyleSheet, View } from "react-native";
 
-import { fontSize, spacing, theme } from "../theme";
+import { removeShareConfirm } from "@logjam/shared";
+
+import { spacing, theme } from "../theme";
 import { BottomSheet, Row } from "../ui";
-import { SHARED_READ_ONLY_HINT } from "../saved/assetActions";
+import { removeSharedCanyon } from "../sharing/removeShare";
 import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
 import { useConnectivity } from "../map/connectivity";
 import { useMirrorTrips } from "../sync/useSyncQueries";
@@ -103,6 +105,30 @@ export function CanyonOptionsSheet({
     onClose();
   };
 
+  const confirmRemoveShare = () => {
+    const confirm = removeShareConfirm({
+      kindLabel: "canyon",
+      itemName: canyon.name,
+    });
+    close();
+    Alert.alert(confirm.title, confirm.body, [
+      { text: "Cancel", style: "cancel" },
+      {
+        // Not `destructive`: alice keeps her canyon, its notes and its photos.
+        text: "Remove",
+        onPress: () => {
+          removeSharedCanyon(canyon.id)
+            .then(() => onInfo("Removed."))
+            .catch((err: unknown) => {
+              // Our own copy, never the error's: it may carry the name.
+              console.error(err);
+              onError("Couldn't remove this shared canyon.");
+            });
+        },
+      },
+    ]);
+  };
+
   const confirmDelete = () => {
     // The sentence is per-instance — it counts the trips that lose their link —
     // and it is written once, in canyonDeleteConfirm (DESIGN.md §7). The count
@@ -143,10 +169,6 @@ export function CanyonOptionsSheet({
         share.body
       ) : (
         <View style={styles.body}>
-          {/* Edit, Share and Delete are all absent below on someone else's
-              canyon, and three verbs vanishing with nothing said reads as a
-              broken sheet. Same sentence as every other kind. */}
-          {isOwner ? null : <Text style={styles.hint}>{SHARED_READ_ONLY_HINT}</Text>}
           <Row
             icon="book-open"
             title="Open canyon"
@@ -197,7 +219,20 @@ export function CanyonOptionsSheet({
                 onPress={confirmDelete}
               />
             </>
-          ) : null}
+          ) : (
+            // The recipient's own verb, in the same slot the owner's Delete
+            // takes. This sheet IS the canyon's options button, so a shared
+            // canyon has to be removable from here and not only from its detail
+            // screen — the sheet used to explain the missing owner verbs with a
+            // sentence instead of offering the one verb that is the sharee's.
+            <Row
+              icon="x-circle"
+              hue={theme.warning}
+              title="Remove from my account"
+              {...shareRowProps}
+              onPress={confirmRemoveShare}
+            />
+          )}
         </View>
       )}
     </BottomSheet>
@@ -206,5 +241,4 @@ export function CanyonOptionsSheet({
 
 const styles = StyleSheet.create({
   body: { gap: spacing(1) },
-  hint: { color: theme.textMuted, fontSize: fontSize.xs },
 });

@@ -38,7 +38,7 @@ import {
 import { assetHue, canyonHue, fontSize, spacing, theme } from "../theme";
 import { BottomSheet, Row, StatGrid, type Stat } from "../ui";
 import { deleteWaypointLocal, updateWaypointLocal } from "../sync/outbox";
-import { SHARED_READ_ONLY_HINT, waypointActions } from "../saved/assetActions";
+import { waypointActions } from "../saved/assetActions";
 import type { Bbox } from "../saved/bboxOfPoints";
 import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
 import { useConnectivity } from "./connectivity";
@@ -325,9 +325,6 @@ export function WaypointSheet({
       {mode === "actions" ? (
         <View style={styles.body}>
           <StatGrid stats={stats} />
-          {actions?.sharedWithYou ? (
-            <Text style={styles.hint}>{SHARED_READ_ONLY_HINT}</Text>
-          ) : null}
           {/* Why it is here, when it is here because of a canyon. The linked-
               canyons row above is owner-only, so without this a sharee had no
               way to find out which canyon brought the point. */}

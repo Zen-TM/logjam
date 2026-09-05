@@ -20,7 +20,6 @@ import { formatDistanceM, routeLengthM } from "@logjam/shared";
 import { fontSize, fontWeight, spacing, theme } from "../theme";
 import { ProfileChart, elevationSeries } from "../ui";
 import { useElevationProfile } from "../map/useElevationProfile";
-import { SHARED_READ_ONLY_HINT } from "../saved/assetActions";
 import type { MirrorRoute } from "../sync/mirrorStore";
 
 export function RouteStatsBody({
@@ -74,10 +73,6 @@ export function RouteStatsBody({
             : "Elevation needs a connection; distance always shows."}
         </Text>
       )}
-
-      {route.syncRole === "shared" ? (
-        <Text style={styles.note}>{SHARED_READ_ONLY_HINT}</Text>
-      ) : null}
     </View>
   );
 }
@@ -120,5 +115,4 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
   },
   pending: { color: theme.textMuted, fontSize: fontSize.sm },
-  note: { color: theme.textMuted, fontSize: fontSize.xs },
 });
