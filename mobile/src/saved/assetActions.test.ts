@@ -49,10 +49,13 @@ vi.mock("../offline/localStores", () => ({
   scratchFileUri: vi.fn(async (name: string) => `file:///scratch/${name}`),
 }));
 
-const route = (syncRole: "owner" | "shared") =>
+vi.mock("../sharing/removeShare", () => ({ removeSharedEntity: vi.fn() }));
+
+const route = (syncRole: "owner" | "shared", canyonId: string | null = null) =>
   ({
     id: "r1",
     name: "Creek",
+    canyonId,
     points: [
       [150.1, -33.5],
       [150.2, -33.6],
@@ -60,14 +63,14 @@ const route = (syncRole: "owner" | "shared") =>
     syncRole,
   }) as unknown as MirrorRoute;
 
-const waypoint = (syncRole: "owner" | "shared") =>
+const waypoint = (syncRole: "owner" | "shared", canyonIds: string[] = []) =>
   ({
     id: "w1",
     name: "Carpark",
     latitude: -33.5,
     longitude: 150.1,
     tags: [],
-    canyonIds: [],
+    canyonIds,
     syncRole,
   }) as unknown as MirrorWaypoint;
 
@@ -107,13 +110,13 @@ describe("assetActions ownership", () => {
     expect(actions.locatable).toBe(true);
   });
 
-  // `sharedWithYou` is what every surface renders SHARED_READ_ONLY_HINT on,
-  // and the hint's whole job is to explain the missing verbs — so a descriptor
-  // that sets the flag while still offering a write verb puts a sentence on
-  // screen that the buttons beside it contradict, and one that withholds the
-  // verbs without the flag leaves them missing with nothing said. That second
-  // case is not hypothetical: it is exactly what a shared LiDAR topo did,
-  // because the screens read "no delete descriptor" as the proxy for shared.
+  // `sharedWithYou` is the descriptor's own statement that someone else owns
+  // this, and it must agree with the verbs beside it: a row that claims to be
+  // shared while offering a write verb is one the API will refuse, and one that
+  // withholds the write verbs without the flag is a row the surfaces cannot
+  // tell from an owned one. The second case is not hypothetical — a shared
+  // LiDAR topo did exactly that, because the screens read "no delete
+  // descriptor" as the proxy for shared, and a topo's delete is device-local.
   it.each([
     ["route", routeActions(route("shared"))],
     ["waypoint", waypointActions(waypoint("shared"))],
@@ -288,6 +291,65 @@ describe("the share / send-a-copy verb matrix", () => {
     expect(actions.setColor).toBeDefined();
     await actions.setColor?.("#3cb44b");
     expect(updateTrack).toHaveBeenCalledWith("track-123", { color: "#3cb44b" });
+  });
+
+  // The recipient's own verb, and the one rule that decides whether it exists
+  // at all: a share held DIRECTLY is theirs to hand back, one seen only because
+  // a canyon was shared with them is not — dropping the (nonexistent) share row
+  // would 404, and offering it would promise a removal the next pull undoes.
+  it("offers Remove on a route shared directly, with no canyon named", () => {
+    const actions = routeActions(route("shared"), ["c1"]);
+    expect(actions.removeShare).toBeDefined();
+    expect(actions.sharedViaCanyonIds).toBeUndefined();
+    expect(actions.removeShare?.confirmTitle).toBe("Remove shared route?");
+    // Not a delete: the owner keeps theirs, so the copy must not threaten one.
+    expect(actions.removeShare?.confirmBody).not.toMatch(/delete|permanent/i);
+  });
+
+  it("points a canyon-inherited route at its canyon instead of offering Remove", () => {
+    const actions = routeActions(route("shared", "c1"), ["c1"]);
+    expect(actions.removeShare).toBeUndefined();
+    expect(actions.sharedViaCanyonIds).toEqual(["c1"]);
+  });
+
+  it("treats a link to a canyon the user cannot see as no link at all", () => {
+    // The canyon exists for its owner; this user was given only the route.
+    const actions = routeActions(route("shared", "c9"), ["c1"]);
+    expect(actions.removeShare).toBeDefined();
+    expect(actions.sharedViaCanyonIds).toBeUndefined();
+  });
+
+  it("offers neither on an owned route, whatever it is linked to", () => {
+    const actions = routeActions(route("owner", "c1"), ["c1"]);
+    expect(actions.removeShare).toBeUndefined();
+    expect(actions.sharedViaCanyonIds).toBeUndefined();
+  });
+
+  it("says nothing about shares when the caller passed no canyon list", () => {
+    // The surfaces that only want a bbox or an export get what they always got
+    // — silence, rather than a Remove derived from a list they never sent.
+    const actions = routeActions(route("shared"));
+    expect(actions.removeShare).toBeUndefined();
+    expect(actions.sharedViaCanyonIds).toBeUndefined();
+  });
+
+  it("reads a shared waypoint's own scoped canyonIds, with no list to pass", () => {
+    expect(waypointActions(waypoint("shared")).removeShare).toBeDefined();
+    const inherited = waypointActions(waypoint("shared", ["c1"]));
+    expect(inherited.removeShare).toBeUndefined();
+    expect(inherited.sharedViaCanyonIds).toEqual(["c1"]);
+  });
+
+  it("never offers Remove on something the user owns", () => {
+    expect(waypointActions(waypoint("owner", ["c1"])).removeShare).toBeUndefined();
+  });
+
+  it("revokes through the one online path, not through the outbox", async () => {
+    const { removeSharedEntity } = await import("../sharing/removeShare");
+    await routeActions(route("shared"), []).removeShare?.run();
+    expect(removeSharedEntity).toHaveBeenCalledWith("route", "r1");
+    await waypointActions(waypoint("shared")).removeShare?.run();
+    expect(removeSharedEntity).toHaveBeenCalledWith("waypoint", "w1");
   });
 
   it("passes track.color to createRouteLocal in createRouteFrom", async () => {

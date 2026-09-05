@@ -1374,6 +1374,21 @@ export function unshareEntityWith(
   });
 }
 
+/**
+ * Who owns a row shared with you, for the confirms that name them.
+ *
+ * The friends list is the only place the web holds a username for an id: rows
+ * shared with you carry `ownerId` and nothing else, and a share can only exist
+ * between friends — so a miss here means the friendship has just gone, and the
+ * copy falls back to "The owner" rather than inventing a name.
+ */
+export function ownerUsername(
+  friends: TFriend[],
+  ownerId: string,
+): string | null {
+  return friends.find((friend) => friend.id === ownerId)?.username ?? null;
+}
+
 // ── Sent copies (FileSend), recipient side ────────────────────
 // A file a friend handed over. Accepting downloads it and it is then THEIRS —
 // there is no revoking a copy, so nothing here may be worded as if there were.

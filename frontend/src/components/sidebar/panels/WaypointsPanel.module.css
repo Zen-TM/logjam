@@ -189,6 +189,19 @@
   flex-shrink: 0;
 }
 
+/* The read-only footer on a waypoint someone else owns: why it is here, and
+   the one thing the viewer can do about it. */
+.sharedFooter {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4em;
+}
+
+.viaCanyonButton {
+  composes: btn btnGhost btnXs from '@styles/shared.module.css';
+}
+
 .fieldLabel {
   display: flex;
   flex-direction: column;

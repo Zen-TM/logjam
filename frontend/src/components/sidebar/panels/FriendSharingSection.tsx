@@ -6,6 +6,7 @@ import ConfirmDialog from "../../dialogs/ConfirmDialog";
 import { ErrorBanner } from "../../feedback/ErrorBanner";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
+import { removeShareConfirm } from "@logjam/shared";
 import type { TFriend, TFriendShares, TFriendShareRow } from "../../../canyonUtils";
 import {
   getFriendShares,
@@ -193,8 +194,9 @@ function FriendSharingSection({
                     className={classes.unshareButton}
                     disabled={busy}
                     onClick={() => setPending({ kind: "remove-mine", row })}
+                    title="Remove this shared canyon"
                   >
-                    Remove my access
+                    Remove
                   </button>
                 </div>
               ))}
@@ -235,19 +237,34 @@ function FriendSharingSection({
         onClose={() => setPending(null)}
       />
 
+      {/* The SAME question the canyon panel, the waypoint list, the route
+          panel and both phone sheets ask, from the one source that words it
+          (removeShareConfirm) — this surface used to phrase it its own way. */}
       <ConfirmDialog
         open={pending?.kind === "remove-mine"}
-        title="Remove your access?"
+        title={
+          pending?.kind === "remove-mine"
+            ? removeShareConfirm({
+                kindLabel: "canyon",
+                itemName: pending.row.name,
+                ownerName: friend.username,
+              }).title
+            : ""
+        }
         message={
           pending?.kind === "remove-mine" ? (
             <Typography component="span" variant="body2" sx={{ display: "block" }}>
-              You&rsquo;ll no longer see <b>{pending.row.name}</b>. It stays in{" "}
-              {friend.username}&rsquo;s library — only {friend.username} can share
-              it with you again, so you can&rsquo;t undo this yourself.
+              {
+                removeShareConfirm({
+                  kindLabel: "canyon",
+                  itemName: pending.row.name,
+                  ownerName: friend.username,
+                }).body
+              }
             </Typography>
           ) : null
         }
-        confirmLabel="Remove my access"
+        confirmLabel="Remove"
         busy={busy}
         onConfirm={() =>
           pending?.kind === "remove-mine" && handleRemoveMyAccess(pending.row)

@@ -35,10 +35,10 @@ import {
   messageFromError,
 } from "@logjam/shared";
 
-import { assetHue, fontSize, spacing, theme } from "../theme";
+import { assetHue, canyonHue, fontSize, spacing, theme } from "../theme";
 import { BottomSheet, Row, StatGrid, type Stat } from "../ui";
 import { deleteWaypointLocal, updateWaypointLocal } from "../sync/outbox";
-import { SHARED_READ_ONLY_HINT, waypointActions } from "../saved/assetActions";
+import { waypointActions } from "../saved/assetActions";
 import type { Bbox } from "../saved/bboxOfPoints";
 import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
 import { useConnectivity } from "./connectivity";
@@ -64,6 +64,7 @@ export function WaypointSheet({
   picked = null,
   onPickOnMap,
   onShowOnMap,
+  onOpenCanyon,
   onClose,
   onNavigate,
   onInfo,
@@ -99,6 +100,12 @@ export function WaypointSheet({
    * (DESIGN.md §7: "Show on map" is the one row the two surfaces differ by).
    */
   onShowOnMap?: (bbox: Bbox) => void;
+  /**
+   * Open the canyon a SHARED waypoint came with. A waypoint linked to someone
+   * else's shared canyon has no share row of its own to drop, so the canyon is
+   * where getting rid of it happens (saved/assetActions.ts).
+   */
+  onOpenCanyon?: (canyonId: string, name: string) => void;
   onClose: () => void;
   /**
    * Start navigating to it. Present on BOTH surfaces: the map owns the bearing
@@ -178,6 +185,10 @@ export function WaypointSheet({
   const linkedNames = (canyons.data ?? [])
     .filter((canyon) => waypoint.canyonIds.includes(canyon.id))
     .map((canyon) => canyon.name);
+  // The shared canyons this waypoint arrived WITH, if that is why it is here.
+  const viaCanyons = (canyons.data ?? []).filter((canyon) =>
+    (actions?.sharedViaCanyonIds ?? []).includes(canyon.id),
+  );
 
   const position = `${waypoint.latitude.toFixed(5)}, ${waypoint.longitude.toFixed(5)}`;
   const copyPosition = () => {
@@ -188,6 +199,31 @@ export function WaypointSheet({
     // rebuild is happening anyway.
     Clipboard.setString(position);
     onInfo("Coordinates copied.");
+  };
+
+  // The recipient's own verb, and the only one a shared waypoint gets. Not
+  // styled destructive: the owner keeps theirs.
+  const confirmRemoveShare = () => {
+    const removal = actions?.removeShare;
+    if (!removal) return;
+    Alert.alert(removal.confirmTitle, removal.confirmBody, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        onPress: () => {
+          removal
+            .run()
+            .then(() => {
+              onInfo("Removed.");
+              close();
+            })
+            .catch((err: unknown) => {
+              console.error(err);
+              onError(messageFromError(err, "Couldn't remove that waypoint."));
+            });
+        },
+      },
+    ]);
   };
 
   const confirmDelete = () => {
@@ -289,8 +325,13 @@ export function WaypointSheet({
       {mode === "actions" ? (
         <View style={styles.body}>
           <StatGrid stats={stats} />
-          {actions?.sharedWithYou ? (
-            <Text style={styles.hint}>{SHARED_READ_ONLY_HINT}</Text>
+          {/* Why it is here, when it is here because of a canyon. The linked-
+              canyons row above is owner-only, so without this a sharee had no
+              way to find out which canyon brought the point. */}
+          {viaCanyons.length > 0 ? (
+            <Text style={styles.hint}>
+              {`Came with ${viaCanyons.map((canyon) => canyon.name).join(", ")}.`}
+            </Text>
           ) : null}
           {waypoint.notes ? <Text style={styles.notes}>{waypoint.notes}</Text> : null}
           {/* The one row the two surfaces differ by, and it leads the list. */}
@@ -319,6 +360,36 @@ export function WaypointSheet({
               close();
             }}
           />
+          {/* A shared waypoint's ONE verb, and where it isn't one: a direct
+              share is the recipient's to drop, an inherited one ends at its
+              canyon. Both live outside the `readOnly` block below, which is
+              where every OWNER verb lives. */}
+          {actions?.removeShare ? (
+            <Row
+              icon="x-circle"
+              title="Remove from my account"
+              hue={theme.warning}
+              {...shareRowProps}
+              disabled={busy || shareRowProps.disabled}
+              onPress={confirmRemoveShare}
+            />
+          ) : null}
+          {onOpenCanyon
+            ? viaCanyons.map((canyon) => (
+                <Row
+                  key={canyon.id}
+                  icon="map-pin"
+                  title={`Open ${canyon.name}`}
+                  subtitle="Remove that shared canyon to stop seeing this."
+                  hue={canyonHue.shared}
+                  disabled={busy}
+                  onPress={() => {
+                    close();
+                    onOpenCanyon(canyon.id, canyon.name);
+                  }}
+                />
+              ))
+            : null}
           {readOnly ? null : (
             <>
               <Row

@@ -4882,6 +4882,7 @@ export function MapScreen({
         draft={waypointDraft}
         picked={waypointPicked}
         onPickOnMap={openWaypointPicker}
+        onOpenCanyon={onOpenCanyon}
         onClose={() => {
           setOpenWaypoint(null);
           setWaypointDraft(null);
@@ -5036,6 +5037,7 @@ export function MapScreen({
           setOptionsRouteId(null);
           if (target) openRouteForEditing(target);
         }}
+        onOpenCanyon={onOpenCanyon}
         onInfo={(text) => notify(text, "info")}
         onError={(text) => notify(text, "error")}
       />

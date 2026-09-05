@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import type { ReactNode } from "react";
-import { ChevronDown, Download, Share2, Trash2 } from "lucide-react";
+import { ChevronDown, Download, Share2, Trash2, X } from "lucide-react";
 import classes from "./GeoPdfsPanel.module.css";
 import {
   apiFetch,
@@ -16,6 +16,7 @@ import { useToast } from "../../feedback/ToastProvider";
 import { JobRibbonStack, JobRibbon, minutesEta } from "../../feedback/JobRibbon";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
 import ShareDialog from "../../dialogs/ShareDialog";
+import RemoveSharedButton from "../../common/RemoveSharedButton";
 import type { GeoPdfTemplate } from "../../dialogs/GeoPdfDialog";
 
 /** Descriptor for the shared confirm dialog — one delete kind at a time. */
@@ -373,6 +374,21 @@ function GeoPdfsPanel({
                         <Trash2 size={14} />
                       </button>
                     </>
+                  )}
+                  {/* The recipient's half of that pair. A GeoPDF has no canyon
+                      to inherit visibility from, so a row that is not yours is
+                      always yours to remove. */}
+                  {job.syncRole !== "owner" && (
+                    <RemoveSharedButton
+                      kindLabel="GeoPDF"
+                      itemName={job.title ?? `GeoPDF · ${dateStr}`}
+                      className={classes.iconDownloadButton}
+                      title="Remove this shared GeoPDF"
+                      remove={() => unshareEntityWith("geoPdfJob", job.id, "me")}
+                      onRemoved={refetchJobs}
+                    >
+                      <X size={14} />
+                    </RemoveSharedButton>
                   )}
                 </div>
               );

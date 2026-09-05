@@ -18,14 +18,20 @@
 // list follows (mobile/DESIGN.md §11).
 import { useMemo, useState } from "react";
 import { ChevronDown, Copy, MapPin, Plus, Share2, Trash2 } from "lucide-react";
-import { WAYPOINT_TAG_SUGGESTIONS, waypointColor } from "@logjam/shared";
+import {
+  WAYPOINT_TAG_SUGGESTIONS,
+  sharedRowVisibility,
+  waypointColor,
+} from "@logjam/shared";
 
 import classes from "./WaypointsPanel.module.css";
 import { ErrorBanner } from "../../feedback/ErrorBanner";
 import { filterWaypoints, tagTallies } from "./waypointFilter";
 import ShareDialog from "../../dialogs/ShareDialog";
+import RemoveSharedButton from "../../common/RemoveSharedButton";
 import {
   getEntityShares,
+  ownerUsername,
   shareEntityWith,
   unshareEntityWith,
   type TCanyon,
@@ -61,6 +67,13 @@ type WaypointsPanelProps = {
   /** Opens the add dialog — creation is an authoring step, so it owns a
    *  dialog rather than a form wedged into this browsing surface. */
   onAdd: () => void;
+  /**
+   * Open a canyon's detail panel. Only used by a waypoint that is here because
+   * it is LINKED to a shared canyon: it has no share row of its own to drop, so
+   * the row points at the canyon that brought it instead of offering a Remove
+   * that would do nothing (shared/src/sharing.ts).
+   */
+  onOpenCanyon: (canyonId: string) => void;
 };
 
 export default function WaypointsPanel({
@@ -77,6 +90,7 @@ export default function WaypointsPanel({
   onUpdate,
   onDelete,
   onAdd,
+  onOpenCanyon,
 }: WaypointsPanelProps): React.JSX.Element {
   const [query, setQuery] = useState("");
   const [tag, setTag] = useState<string | null>(null);
@@ -108,6 +122,8 @@ export default function WaypointsPanel({
       onFlyTo={() => onFlyTo(waypoint)}
       onUpdate={(data) => onUpdate(waypoint.id, data)}
       onDelete={() => onDelete(waypoint)}
+      onRemovedShare={onRetry}
+      onOpenCanyon={onOpenCanyon}
       allWaypoints={waypoints}
     />
   );
@@ -198,6 +214,8 @@ function WaypointRow({
   onFlyTo,
   onUpdate,
   onDelete,
+  onRemovedShare,
+  onOpenCanyon,
 }: {
   waypoint: TWaypoint;
   canyons: TCanyon[];
@@ -215,8 +233,20 @@ function WaypointRow({
     }>,
   ) => Promise<void>;
   onDelete: () => Promise<void>;
+  /** Re-pull the list — the removed row is not the caller's to see any more. */
+  onRemovedShare: () => void;
+  onOpenCanyon: (canyonId: string) => void;
 }): React.JSX.Element {
   const readOnly = waypoint.syncRole === "shared";
+  // `canyonIds` is server-scoped to canyons this user can see, so a non-empty
+  // list on a shared row means it is here BECAUSE of one of them.
+  const visibility = sharedRowVisibility({
+    syncRole: waypoint.syncRole,
+    visibleLinkedCanyonIds: waypoint.canyonIds,
+  });
+  const viaCanyons = canyons.filter((canyon) =>
+    waypoint.canyonIds.includes(canyon.id),
+  );
   const color = waypointColor(waypoint);
   const position = `${waypoint.latitude.toFixed(5)}, ${waypoint.longitude.toFixed(5)}`;
   const [copied, setCopied] = useState(false);
@@ -263,9 +293,36 @@ function WaypointRow({
           </div>
 
           {readOnly ? (
-            <span className={classes.caption}>
-              Shared with you through a canyon — only its owner can change it.
-            </span>
+            <div className={classes.sharedFooter}>
+              <span className={classes.caption}>
+                {visibility === "via-canyon"
+                  ? // Naming the canyon is the whole point: it is the thing the
+                    // user has to act on, since this row carries no share of
+                    // its own to drop.
+                    `Shared with you as part of ${viaCanyons.map((canyon) => canyon.name).join(", ")} — only its owner can change it.`
+                  : "Shared with you — only its owner can change it."}
+              </span>
+              {visibility === "direct" ? (
+                <RemoveSharedButton
+                  kindLabel="waypoint"
+                  itemName={waypoint.name}
+                  ownerName={ownerUsername(friends, waypoint.ownerId)}
+                  remove={() => unshareEntityWith("waypoint", waypoint.id, "me")}
+                  onRemoved={onRemovedShare}
+                />
+              ) : (
+                viaCanyons.map((canyon) => (
+                  <button
+                    key={canyon.id}
+                    type="button"
+                    className={classes.viaCanyonButton}
+                    onClick={() => onOpenCanyon(canyon.id)}
+                  >
+                    Open {canyon.name}
+                  </button>
+                ))
+              )}
+            </div>
           ) : (
             <EditableDetail
               waypoint={waypoint}

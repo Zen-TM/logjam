@@ -62,10 +62,13 @@ import {
   MIN_ROUTE_POINTS,
   ROUTE_NAME_MAX_LENGTH,
   exportFilename,
+  removeShareConfirm,
+  sharedRowVisibility,
   trackPointsToGpx,
   simplifyToFit,
   type RoutePoint,
 } from "@logjam/shared";
+import { removeSharedEntity } from "../sharing/removeShare";
 import { exportStoredFile, exportTrack } from "../fileExport";
 import { bboxOfPoints, type Bbox } from "./bboxOfPoints";
 // Narrow imports rather than the namespace: this module is pure descriptors
@@ -73,26 +76,34 @@ import { bboxOfPoints, type Bbox } from "./bboxOfPoints";
 import { deleteAsync, writeAsStringAsync } from "expo-file-system/legacy";
 import { scratchFileUri } from "../offline/localStores";
 
+// There was a SHARED_READ_ONLY_HINT here — one sentence, rendered on five
+// surfaces, explaining why a shared asset had no write verbs. It is gone
+// (2026-09-05): the row already says "shared with you" in its subtitle and
+// wears a Shared pill, and the sheet now offers "Remove from my account", so a
+// line stating what is absent was the third telling. `sharedWithYou` stays as
+// the descriptor's own statement of ownership — the surfaces read it, they just
+// no longer print a sentence about it.
+
 /**
- * Why a shared asset's write verbs are missing, in one sentence — five
- * surfaces say it, and the ownership rule is not something any two of them
- * should word differently (DESIGN.md §7).
+ * The one wording for "remove this shared thing", in the field names this
+ * file's confirms already use. The words themselves live in
+ * `removeShareConfirm` (shared/src/sharing.ts), with the web.
  *
- * It does NOT name a canyon any more. It used to read "shared with you through
- * a canyon", which was true while a canyon share was the only way someone
- * else's row could reach this phone; direct `/shares` means a route, waypoint
- * or LiDAR topo now arrives with no canyon involved at all, and the sentence
- * was stating a false reason on the two surfaces that showed it most. Export
- * is named because a sharee genuinely can, and the copy that said only "view"
- * undersold what they were given.
+ * No owner name: a mirrored waypoint or route carries an `ownerId` and no
+ * username, and the copy falls back to "The owner" rather than this file
+ * inventing a lookup for one line.
  */
-export const SHARED_READ_ONLY_HINT =
-  "Shared with you — view and export, but not edit.";
+function removeConfirmFields(
+  kindLabel: string,
+  itemName: string,
+): { confirmTitle: string; confirmBody: string } {
+  const { title, body } = removeShareConfirm({ kindLabel, itemName });
+  return { confirmTitle: title, confirmBody: body };
+}
 
 export type AssetActions = {
   /**
-   * Someone else owns this — the reason every write verb below is absent, and
-   * the flag the surfaces render `SHARED_READ_ONLY_HINT` on.
+   * Someone else owns this — the reason every write verb below is absent.
    *
    * An EXPLICIT statement rather than the proxy the screens used to read (`no
    * delete descriptor` = shared). The proxy only held for kinds whose delete
@@ -101,6 +112,33 @@ export type AssetActions = {
    * nothing on screen saying why.
    */
   sharedWithYou?: true;
+  /**
+   * Stop seeing something shared WITH you — the recipient's own revoke, and the
+   * one verb a shared row does get.
+   *
+   * Present only where the share is DIRECT. A waypoint or route that is on this
+   * phone because it is linked to a shared CANYON has no share row of its own,
+   * so the server would answer 404 and, worse, a Remove that appeared to work
+   * would bring the row back on the next pull — those carry
+   * `sharedViaCanyonIds` instead, and the sheets point at the canyon.
+   * `sharedRowVisibility` (shared/src/sharing.ts) is the one place that decides
+   * which of the two it is.
+   *
+   * NOT a `delete`: nothing is destroyed, the owner keeps their row, and the
+   * confirm below comes from `removeShareConfirm` so no surface can word that
+   * promise its own way.
+   */
+  removeShare?: {
+    confirmTitle: string;
+    confirmBody: string;
+    run: () => Promise<unknown>;
+  };
+  /**
+   * The shared canyons this row arrived WITH, when that is why it is here.
+   * Non-empty means there is nothing to remove on this row — the surfaces name
+   * the canyon and offer to open it, which is where its share ends.
+   */
+  sharedViaCanyonIds?: string[];
   /** False when the asset has no geographic extent to fly to. */
   locatable: boolean;
   /** Resolved on tap — a track's extent needs its points read back. */
@@ -365,10 +403,41 @@ export function remoteTrackActions(file: MirrorMedia): AssetActions {
  * A route arriving through a canyon share is read-only: the API refuses the
  * write, so the UI must not offer it.
  */
-export function routeActions(route: MirrorRoute): AssetActions {
+export function routeActions(
+  route: MirrorRoute,
+  /**
+   * Ids of the canyons this phone can actually see. A route carries its
+   * `canyonId` raw, so this is what separates "linked to a canyon shared with
+   * me" (removed at the canyon) from "linked to a canyon I cannot see, and here
+   * on a share of its own" (removable). Omitted — by the surfaces that only
+   * need a bbox or an export — means neither Remove nor the canyon hint is
+   * offered, which is what every caller got before this existed.
+   */
+  visibleCanyonIds?: readonly string[],
+): AssetActions {
   const readOnly = route.syncRole === "shared";
+  const viaCanyonIds =
+    route.canyonId && visibleCanyonIds?.includes(route.canyonId)
+      ? [route.canyonId]
+      : [];
+  const shareVisibility =
+    visibleCanyonIds === undefined
+      ? "owned"
+      : sharedRowVisibility({
+          syncRole: route.syncRole,
+          visibleLinkedCanyonIds: viaCanyonIds,
+        });
   return {
     ...(readOnly ? { sharedWithYou: true as const } : {}),
+    ...(shareVisibility === "via-canyon" ? { sharedViaCanyonIds: viaCanyonIds } : {}),
+    ...(shareVisibility === "direct"
+      ? {
+          removeShare: {
+            ...removeConfirmFields("route", route.name),
+            run: () => removeSharedEntity("route", route.id),
+          },
+        }
+      : {}),
     locatable: route.points.length > 0,
     resolveBbox: async () =>
       bboxOfPoints(route.points.map(([lon, lat]) => ({ lon, lat }))),
@@ -396,8 +465,26 @@ export function routeActions(route: MirrorRoute): AssetActions {
 
 export function waypointActions(waypoint: MirrorWaypoint): AssetActions {
   const readOnly = waypoint.syncRole === "shared";
+  // No canyon list needed, unlike a route's: `canyonIds` is already SCOPED by
+  // the server to canyons this user can see, so a non-empty one on a shared
+  // waypoint means it is here because of them.
+  const shareVisibility = sharedRowVisibility({
+    syncRole: waypoint.syncRole,
+    visibleLinkedCanyonIds: waypoint.canyonIds,
+  });
   return {
     ...(readOnly ? { sharedWithYou: true as const } : {}),
+    ...(shareVisibility === "via-canyon"
+      ? { sharedViaCanyonIds: waypoint.canyonIds }
+      : {}),
+    ...(shareVisibility === "direct"
+      ? {
+          removeShare: {
+            ...removeConfirmFields("waypoint", waypoint.name),
+            run: () => removeSharedEntity("waypoint", waypoint.id),
+          },
+        }
+      : {}),
     locatable: true,
     // A point has no extent; the caller's camera treats a degenerate bbox as
     // "centre here", which is exactly what showing a waypoint means.

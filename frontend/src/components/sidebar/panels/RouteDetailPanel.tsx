@@ -10,6 +10,7 @@ import classes from "./RouteDetailPanel.module.css";
 import shared from "../../../styles/shared.module.css";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
 import ShareDialog from "../../dialogs/ShareDialog";
+import RemoveSharedButton from "../../common/RemoveSharedButton";
 import TrackIcon from "../../media/TrackIcon";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
@@ -19,6 +20,7 @@ import {
   updateRoute,
   useElevationProfile,
   getEntityShares,
+  ownerUsername,
   shareEntityWith,
   unshareEntityWith,
   type TRoute,
@@ -26,6 +28,7 @@ import {
   type TFriend,
 } from "../../../canyonUtils";
 import {
+  sharedRowVisibility,
   densifyLine,
   formatDistanceM,
   routeLengthM,
@@ -45,6 +48,12 @@ type RouteDetailPanelProps = {
   currentUserId: string | null;
   /** Canyons the user owns, for the link picker. */
   ownedCanyons: TCanyon[];
+  /**
+   * Canyons shared WITH the user. Not for the picker (a sharee cannot link
+   * anything) — this is how a shared route tells whether it is here on a share
+   * row of its own or because its canyon came with it (shared/src/sharing.ts).
+   */
+  sharedCanyons: TCanyon[];
   /** Friends this route can be shared with. */
   friends: TFriend[];
   /** Every route the caller can see, to detect an occupied canyon slot before
@@ -53,6 +62,9 @@ type RouteDetailPanelProps = {
   onEdit: (route: TRoute) => void;
   onChanged: () => void;
   onClose: () => void;
+  /** Open a canyon's detail panel — where a route that came WITH a shared
+   *  canyon is removed, since it has no share row of its own. */
+  onOpenCanyon: (canyonId: string) => void;
   /** Where along the route the elevation-profile cursor sits, so the map can
    * mark the same spot. Null when the cursor leaves the chart. */
   onHoverPosition: (position: [number, number] | null) => void;
@@ -73,11 +85,13 @@ export default function RouteDetailPanel({
   route,
   currentUserId,
   ownedCanyons,
+  sharedCanyons,
   friends,
   allRoutes,
   onEdit,
   onChanged,
   onClose,
+  onOpenCanyon,
   onHoverPosition,
 }: RouteDetailPanelProps): React.JSX.Element {
   const toast = useToast();
@@ -121,6 +135,15 @@ export default function RouteDetailPanel({
 
   const isOwner = currentUserId !== null && route.ownerId === currentUserId;
   const linkedCanyon = ownedCanyons.find((c) => c.id === route.canyonId) ?? null;
+  // The canyon a SHAREE reached this route through, if that is why they see it.
+  // A route linked to a canyon they cannot see is not an inherited one — the
+  // canyon simply isn't theirs to know about — so only a match here counts.
+  const viaCanyon =
+    sharedCanyons.find((canyon) => canyon.id === route.canyonId) ?? null;
+  const visibility = sharedRowVisibility({
+    syncRole: isOwner ? "owner" : "shared",
+    visibleLinkedCanyonIds: viaCanyon ? [viaCanyon.id] : [],
+  });
 
   const run = async (action: () => Promise<unknown>, failure: string) => {
     setBusy(true);
@@ -246,7 +269,9 @@ export default function RouteDetailPanel({
 
       {!isOwner && (
         <p className={classes.caption}>
-          Shared with you — you can view and export this route, but not change it.
+          {visibility === "via-canyon"
+            ? `Shared with you as part of ${viaCanyon?.name} — you can view and export this route, but not change it.`
+            : "Shared with you — you can view and export this route, but not change it."}
         </p>
       )}
 
@@ -307,6 +332,21 @@ export default function RouteDetailPanel({
             </option>
           ))}
         </select>
+      ) : viaCanyon ? (
+        // A sharee's canyon row. It is not decoration: this is the canyon whose
+        // share brought the route, and removing THAT is the only way to stop
+        // seeing this (the route carries no share row of its own).
+        <div className={classes.linkRow}>
+          <span className={classes.linkName}>{viaCanyon.name}</span>
+          <button
+            type="button"
+            className={`${shared.btn} ${shared.btnGhost} ${shared.btnXs}`}
+            onClick={() => onOpenCanyon(viaCanyon.id)}
+            title="Open the shared canyon this route came with"
+          >
+            Open
+          </button>
+        </div>
       ) : (
         <span className={classes.caption}>Not linked to a canyon.</span>
       )}
@@ -377,6 +417,22 @@ export default function RouteDetailPanel({
               <Trash2 size={14} /> Delete
             </button>
           </>
+        )}
+
+        {/* Only on a route shared DIRECTLY: one shared through a canyon has no
+            share row of its own, and the canyon row above is where that ends. */}
+        {visibility === "direct" && (
+          <RemoveSharedButton
+            kindLabel="route"
+            itemName={route.name}
+            ownerName={ownerUsername(friends, route.ownerId)}
+            disabled={busy}
+            remove={() => unshareEntityWith("route", route.id, "me")}
+            onRemoved={() => {
+              onChanged();
+              onClose();
+            }}
+          />
         )}
       </div>
 
