@@ -852,6 +852,16 @@ which subsystem is talking.
   a `Row` with its category glyph/hue and a verb title.
 - **Per-item actions live in an overflow sheet**, titled with the item's name.
   Rows stay clean and a mis-tap can't destroy anything.
+  - **The body OPENS, the `⋯` ACTS — on every list row, people included.** A row
+    whose tap opened its own action sheet was a second grammar for the same card:
+    a canyon, a track and a saved region all navigate on a tap, so a friend that
+    answered with a menu instead made the Friends tab read as a different app.
+    A friend's row now opens their sharing screen (`FriendsScreen` → `FriendShares`,
+    read-only, so the tap is never a destructive near-miss) and the `⋯` keeps
+    Shared items + Remove friend. The exception proves the rule rather than
+    breaking it: a pending REQUEST has no screen to open, so its body falls back
+    to the same accept/decline sheet its `⋯` opens — and it carries no inline
+    Accept, because one trailing control is what makes it the same card.
 - **The three verbs follow the asset wherever it is listed.** A GeoPDF or a track
   you can see on the map gets the same `⋯` in the map's layer sheet that it has in
   Saved — same actions, same copy, from one definition (`saved/assetActions.ts`).

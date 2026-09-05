@@ -54,6 +54,7 @@ import {
   ErrorBanner,
   ErrorState,
   HeroHeader,
+  IconButton,
   LoadingState,
   Row,
   SegmentedControl,
@@ -84,10 +85,9 @@ export function FriendsScreen({
   onBack: () => void;
   /**
    * Open the per-friend sharing audit — "what does this person see?". Pushed by
-   * the caller so Back returns to this list. It is reached from the friend's
-   * overflow sheet rather than from the row: this screen's per-row actions live
-   * behind that sheet on purpose (§7), and a row that navigated would put a
-   * revoke one mis-tap from the tap that opens it.
+   * the caller so Back returns to this list. Reached by tapping the friend's row
+   * body, and also from the row's overflow sheet: the body OPENS and the ⋯ ACTS
+   * (§7), so a mis-tap lands on a read-only screen rather than near a revoke.
    */
   onOpenShares: (friend: { friendshipId: string; username: string }) => void;
 }) {
@@ -183,17 +183,12 @@ export function FriendsScreen({
 
   // Stable identities so the memoised rows only re-render for a change that is
   // actually theirs (DESIGN.md §9).
-  const acceptRequest = useCallback(
+  const openFriend = useCallback(
     (item: FriendItem) => {
-      if (item.kind !== "request") return;
-      void runAction(
-        item.requestId,
-        () => acceptFriendRequest(item.requestId),
-        "Couldn't accept that request.",
-        `${item.username} is now a friend.`,
-      );
+      if (item.kind !== "friend") return;
+      onOpenShares({ friendshipId: item.friendshipId, username: item.username });
     },
-    [runAction],
+    [onOpenShares],
   );
   const openMenu = useCallback((item: FriendItem) => setMenuItem(item), []);
   const keyExtractor = useCallback((item: FriendItem) => item.key, []);
@@ -202,11 +197,11 @@ export function FriendsScreen({
       <FriendRow
         item={item}
         busy={busyId === (item.kind === "friend" ? item.friendshipId : item.requestId)}
-        onAccept={acceptRequest}
+        onOpen={openFriend}
         onMenu={openMenu}
       />
     ),
-    [acceptRequest, busyId, openMenu],
+    [busyId, openFriend, openMenu],
   );
 
   const items = useMemo<FriendItem[]>(() => {
@@ -383,21 +378,24 @@ export function FriendsScreen({
 }
 
 /**
- * One tap accepts, because that is the answer nearly every request gets; the
- * overflow carries the same accept plus decline, so "no" is never a mis-tap
- * away from "yes".
+ * The card every list in this app uses (§7): the row's body opens the thing, the
+ * ⋯ opens its actions. A friend opens to their sharing screen — read-only, so
+ * the tap costs nothing, while the verbs that revoke stay behind the sheet. A
+ * request has nowhere to open to, so both its body and its ⋯ reach the same
+ * accept/decline sheet; it carries no inline Accept, because one trailing
+ * control is what makes this the same card as a canyon's.
  *
  * Memoised, with callbacks that take the item rather than closing over it — §9.
  */
 const FriendRow = memo(function FriendRow({
   item,
   busy,
-  onAccept,
+  onOpen,
   onMenu,
 }: {
   item: FriendItem;
   busy: boolean;
-  onAccept: (item: FriendItem) => void;
+  onOpen: (item: FriendItem) => void;
   onMenu: (item: FriendItem) => void;
 }) {
   const request = item.kind === "request";
@@ -407,19 +405,16 @@ const FriendRow = memo(function FriendRow({
       hue={request ? canyonHue.shared : undefined}
       title={item.username}
       subtitle={request ? "Wants to be friends" : undefined}
-      onPress={() => onMenu(item)}
+      onPress={() => (request ? onMenu(item) : onOpen(item))}
       right={
         busy ? (
           <ActivityIndicator color={theme.accent} />
-        ) : request ? (
-          <Button
-            label="Accept"
-            variant="outlineAccent"
-            compact
-            onPress={() => onAccept(item)}
-          />
         ) : (
-          <StatusPill label="Friend" tone="muted" />
+          <IconButton
+            icon="more-vertical"
+            accessibilityLabel={`Actions for ${item.username}`}
+            onPress={() => onMenu(item)}
+          />
         )
       }
     />
