@@ -49,6 +49,43 @@ const CANYON_IDS = [
 // path validates op ids with isUuidV4 and rejects the whole request on a
 // mismatch, so a hand-written id here would make alice's definitions
 // permanently unsyncable from the phone.
+/** Waypoint and route ids — prefixes "6" and "7" (prisma/seedIds.ts). */
+const wpid = (n: number) => seedId("6", n);
+const rtid = (n: number) => seedId("7", n);
+
+/**
+ * The one canyon BOB shares WITH ALICE. Alice is the fake-auth dev user, so
+ * without an incoming share every sharee-perspective surface in the phone app
+ * is unreachable in dev — a read-only row, a "From bob" mark, a refused edit.
+ * Bob's "Coin Slot" (seedId("2", 2)); see the share block in main().
+ */
+const BOB_SHARED_CANYON_ID = seedId("2", 2);
+
+// Route geometries, [lon, lat]. Short and plausible rather than traced: a
+// route's own validation caps length, and dev only needs a line that draws.
+// These sit on the canyons they are linked to, so "Show on map" lands on them.
+const CLAUSTRAL_LINE: [number, number][] = [
+  [150.4033, -33.5603],
+  [150.4041, -33.5611],
+  [150.4058, -33.5624],
+  [150.4072, -33.5638],
+  [150.4089, -33.5647],
+];
+
+const DU_FAUR_LINE: [number, number][] = [
+  [150.3102, -33.4498],
+  [150.3121, -33.4487],
+  [150.3144, -33.4471],
+  [150.3168, -33.4459],
+];
+
+const COIN_SLOT_LINE: [number, number][] = [
+  [150.3297, -33.1224],
+  [150.3288, -33.1231],
+  [150.3271, -33.1244],
+  [150.3259, -33.1258],
+];
+
 const ALICE_TRIP_FIELD_DEFS = [
   { key: "water_level", label: "Water Level", type: "string" },
   { key: "rope_length_m", label: "Rope Length (m)", type: "integer" },
@@ -245,13 +282,23 @@ function buildTrips(): SeedTrip[] {
 }
 
 async function main() {
-  // Delete in reverse FK dependency order (Postgres enforces constraints per statement)
+  // Delete in reverse FK dependency order (Postgres enforces constraints per
+  // statement). Every seeded table is NAMED here even where `user.deleteMany()`
+  // would cascade it: this is a hand-kept list that must agree with what the
+  // seed writes, and relying on cascade order means a future table with no user
+  // FK survives the wipe silently — the ARCH-001 shape in the root CLAUDE.md.
+  // Guarded by src/lib/seedWipe.unit.test.ts.
   await prisma.$transaction([
+    prisma.share.deleteMany(),
     prisma.canyonShare.deleteMany(),
     prisma.friendship.deleteMany(),
     prisma.media.deleteMany(),
     prisma.tripLog.deleteMany(),
+    prisma.canyonWaypoint.deleteMany(),
+    prisma.waypoint.deleteMany(),
+    prisma.route.deleteMany(),
     prisma.canyon.deleteMany(),
+    prisma.customFieldDef.deleteMany(),
     prisma.notification.deleteMany(),
     prisma.topoJob.deleteMany(),
     prisma.geoPdfTemplate.deleteMany(),
@@ -309,6 +356,76 @@ async function main() {
     })),
   });
 
+  // ONE bob->alice canyon share, so the dev user has an INCOMING share and not
+  // only outgoing ones. Without it alice can never see a row she does not own,
+  // and every sharee-perspective surface in the phone app — a read-only
+  // waypoint, a "From bob" mark, a refused delete — is unreachable in dev.
+  // Deliberately bob's "Coin Slot" and not his FORK of Grand Canyon, which
+  // would sit next to alice's own copy of the same canyon and read as a bug.
+  await prisma.canyonShare.create({
+    data: {
+      canyonId: BOB_SHARED_CANYON_ID,
+      sharedById: BOB_ID,
+      sharedWithId: ALICE_ID,
+    },
+  });
+
+  // Waypoints and routes. The seed had NONE of either, which left two whole
+  // Saved categories empty in dev and made both of that screen's share marks
+  // unverifiable without hand-creating data as two different users.
+  //
+  // The set covers every combination the row builders branch on:
+  //   owned, unshared            → no mark
+  //   owned + a DIRECT share     → the fan-out glyph. sharedCount comes from
+  //                                `shares`, never from the canyon share, so a
+  //                                waypoint on a shared canyon has no count.
+  //   received via canyon share  → "From bob": the owner resolves through the
+  //                                mirrored canyon_shares row.
+  //   received via direct share  → "Shared with you". Direct shares are not a
+  //                                delta entity, so no owner name reaches the
+  //                                phone — this is the fallback, exercised.
+  await prisma.waypoint.createMany({
+    data: [
+      { id: wpid(1), ownerId: ALICE_ID, name: "Grand Canyon carpark", latitude: -33.6501, longitude: 150.3122, elevation: 1010, symbol: "parking", tags: ["carpark", "access"] },
+      { id: wpid(2), ownerId: ALICE_ID, name: "Claustral first abseil", latitude: -33.5611, longitude: 150.4041, elevation: 880, symbol: "anchor", notes: "Tree anchor on the true left.", tags: ["abseil"] },
+      { id: wpid(3), ownerId: ALICE_ID, name: "Ranger station", latitude: -33.7188, longitude: 150.3099, symbol: "flag" },
+      { id: wpid(4), ownerId: BOB_ID, name: "Coin Slot pothole", latitude: -33.1231, longitude: 150.3288, elevation: 720, symbol: "hazard", notes: "Bob's note — a sharee must not be able to edit this.", tags: ["hazard"] },
+      { id: wpid(5), ownerId: BOB_ID, name: "Galah exit gully", latitude: -33.2521, longitude: 150.3044, symbol: "flag", tags: ["exit"] },
+    ],
+  });
+
+  // Links are what make a waypoint part of a canyon record — and for wpid(4)
+  // they are what carries it to alice through bob's canyon share.
+  await prisma.canyonWaypoint.createMany({
+    data: [
+      { canyonId: CANYON_IDS[0], waypointId: wpid(1) },
+      { canyonId: CANYON_IDS[1], waypointId: wpid(2) },
+      { canyonId: BOB_SHARED_CANYON_ID, waypointId: wpid(4) },
+    ],
+  });
+
+  await prisma.route.createMany({
+    data: [
+      { id: rtid(1), ownerId: ALICE_ID, canyonId: CANYON_IDS[1], name: "Claustral through-trip", color: TRACK_COLORS[3], points: CLAUSTRAL_LINE, anchors: [0, CLAUSTRAL_LINE.length - 1] },
+      { id: rtid(2), ownerId: ALICE_ID, canyonId: null, name: "Du Faur Head approach", color: TRACK_COLORS[4], points: DU_FAUR_LINE, anchors: Prisma.DbNull },
+      { id: rtid(3), ownerId: BOB_ID, canyonId: BOB_SHARED_CANYON_ID, name: "Coin Slot approach", color: TRACK_COLORS[5], points: COIN_SLOT_LINE, anchors: [0, COIN_SLOT_LINE.length - 1] },
+    ],
+  });
+
+  // Direct per-item shares — the second, independent visibility source
+  // (lib/shareAccess.ts), and the only thing that puts a number in a row's
+  // sharedCount. alice's fan-out is 1 because bob is her only friend: carol is
+  // shared nothing and is not her friend, and sharing.test.ts asserts a 403 on
+  // share->carol. The mark is a glyph rather than a count, so one recipient
+  // renders it exactly as ten would.
+  await prisma.share.createMany({
+    data: [
+      { id: seedId("8", 1), entityType: "waypoint", entityId: wpid(1), sharedById: ALICE_ID, sharedWithId: BOB_ID },
+      { id: seedId("8", 2), entityType: "route", entityId: rtid(1), sharedById: ALICE_ID, sharedWithId: BOB_ID },
+      { id: seedId("8", 3), entityType: "waypoint", entityId: wpid(5), sharedById: BOB_ID, sharedWithId: ALICE_ID },
+    ],
+  });
+
   // Trip logs. `types` goes through enforceCanyoningTag, the same derivation
   // POST /trips applies — the seed writes via Prisma directly and so bypasses
   // the route's enforcement, which would otherwise leave every seeded trip
@@ -364,7 +481,9 @@ async function main() {
 
   const canyonCount = ALL_CANYONS.length;
   console.log(
-    `Seed complete: 3 users, ${canyonCount} canyons (1 fork), 4 shares, ${trips.length} trip logs, 4 media, 3 notifications, 0 topo jobs`,
+    `Seed complete: 3 users, ${canyonCount} canyons (1 fork), 5 canyon shares ` +
+      `(1 incoming to alice), 3 direct shares, ${trips.length} trip logs, ` +
+      `5 waypoints, 3 routes, 4 media, 3 notifications, 0 topo jobs`,
   );
 }
 

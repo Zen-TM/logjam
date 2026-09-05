@@ -63,10 +63,12 @@ import {
   savedRegionKey,
   type SavedCategory,
 } from "./savedKeys";
+import { shareMark, sharedWithLabel } from "./shareMark";
 import { formatBytes, formatMinutes } from "../format";
 import { getGeoPdfJob, listGeoPdfJobs, type GeoPdfJobView } from "../api/geoPdfJobs";
 import { useApiQuery } from "../api/queries";
 import {
+  useMirrorIncomingShareOwners,
   useMirrorRoutes,
   useMirrorWaypoints,
   usePendingCreateIds,
@@ -281,6 +283,12 @@ type SavedItem = {
   subtitle?: string;
   sizeBytes: number;
   pill?: { label: string; tone: "accent" | "outline" | "warning" | "muted" };
+  /**
+   * People this OWNED row is shared with — rendered as a glyph beside the
+   * backed-up cloud, never as a pill. See `shareMark.ts` for why the two share
+   * facts are marked in two different registers.
+   */
+  sharedWithCount?: number;
   /**
    * This row has a copy in the user's account. Set centrally, never by a
    * builder — see the note where it is applied.
@@ -834,6 +842,9 @@ export function SavedScreen({
   // --- Drawn routes (synced records, not device files) ---
   const routes = useMirrorRoutes();
   const waypoints = useMirrorWaypoints();
+  // Who shared each incoming canyon with this user — the name on a received
+  // row's pill. Mirror-backed, so it reads the same with no signal.
+  const shareOwners = useMirrorIncomingShareOwners();
   // One field for every tab (item 8) — the waypoint TAG rail stays a
   // waypoint-only narrowing control (DESIGN.md §3), but the name search
   // beside it is now general.
@@ -1113,41 +1124,29 @@ export function SavedScreen({
     }
 
     for (const route of routes.data ?? []) {
-      const shared = route.syncRole === "shared";
       rows.push({
         key: route.id,
         category: "route",
         title: route.name,
         // Length is DERIVED, never stored — a saved length goes stale the
-        // moment a vertex moves.
-        subtitle: `${formatDistanceM(routeLengthM(route.points))} · ${
-          shared ? "shared with you" : `drawn ${formatDay(route.createdAt)}`
-        }`,
+        // moment a vertex moves. Nothing about sharing here: the mark says it,
+        // and a subtitle that repeats a pill costs the title its width.
+        subtitle: `${formatDistanceM(routeLengthM(route.points))} · drawn ${formatDay(route.createdAt)}`,
         // Routes live in the sync mirror as a row of coordinates, not as a file
         // on this device, so they take no meaningful storage. Same deliberate
         // treatment as recorded tracks.
         sizeBytes: 0,
-        // Two DIFFERENT pills, and the words are not interchangeable.
-        // "Shared" on a received row means someone else's, read-only. The
-        // owner's badge is a COUNT of who they gave it to — a fact about
-        // their own sharing, which is why the server only sends the count on
-        // owned rows.
-        ...(shared
-          ? { pill: { label: "Shared", tone: "muted" as const } }
-          : route.sharedCount
-            ? {
-                pill: {
-                  label: `Shared with ${route.sharedCount}`,
-                  tone: "muted" as const,
-                },
-              }
-            : {}),
+        ...shareMark({
+          syncRole: route.syncRole,
+          sharedCount: route.sharedCount,
+          canyonIds: [route.canyonId],
+          ownersByCanyon: shareOwners.data ?? {},
+        }),
         ...routeActions(route),
       });
     }
 
     for (const waypoint of waypoints.data ?? []) {
-      const shared = waypoint.syncRole === "shared";
       rows.push({
         key: waypoint.id,
         category: "waypoint",
@@ -1157,22 +1156,16 @@ export function SavedScreen({
         // (DESIGN.md 11).
         subtitle: waypoint.tags.length
           ? waypoint.tags.join(" · ")
-          : shared
-            ? "shared with you"
-            : `marked ${formatDay(waypoint.createdAt)}`,
+          : `marked ${formatDay(waypoint.createdAt)}`,
         // A synced row, not a file on this device — same treatment as routes
         // and recordings, so it stays out of the capacity meter.
         sizeBytes: 0,
-        ...(shared
-          ? { pill: { label: "Shared", tone: "muted" as const } }
-          : waypoint.sharedCount
-            ? {
-                pill: {
-                  label: `Shared with ${waypoint.sharedCount}`,
-                  tone: "muted" as const,
-                },
-              }
-            : {}),
+        ...shareMark({
+          syncRole: waypoint.syncRole,
+          sharedCount: waypoint.sharedCount,
+          canyonIds: waypoint.canyonIds,
+          ownersByCanyon: shareOwners.data ?? {},
+        }),
         // Notes are searchable but never rendered in the row — a note can hold
         // anything, and this is a list surface.
         search: {
@@ -1282,6 +1275,7 @@ export function SavedScreen({
     importRun?.importId,
     routes.data,
     waypoints.data,
+    shareOwners.data,
     geoPdfImports,
     handleResumeGeoPdf,
     imports,
@@ -2085,6 +2079,20 @@ export function SavedScreen({
                     size={15}
                     color={theme.success}
                     accessibilityLabel="Backed up to your account"
+                  />
+                ) : null}
+                {/* Shared out, by the same argument as the cloud: the row's
+                    own fan-out is a fact the user is not asking about while
+                    scanning, and "Shared with 3" spelled out down a list eats
+                    the title's width to say it. The count survives in the
+                    screen-reader label and on the sharing sheet behind ⋯.
+                    Muted, not accent: this is information, not a state to fix. */}
+                {item.sharedWithCount ? (
+                  <Feather
+                    name="users"
+                    size={15}
+                    color={theme.textMuted}
+                    accessibilityLabel={sharedWithLabel(item.sharedWithCount)}
                   />
                 ) : null}
                 {item.inlineAction ? (

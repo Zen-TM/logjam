@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { UUID_V4_REGEX } from "@logjam/shared";
-import { seedId, cid } from "../../prisma/seedIds";
+import { seedId, cid, SEED_ID_PREFIXES } from "../../prisma/seedIds";
 
 // The dev seed used to hand-mint version-nibble-0 ids
 // ("10000000-0000-0000-0000-000000000001"), which mobile's sync push rejects
@@ -12,7 +12,7 @@ import { seedId, cid } from "../../prisma/seedIds";
 // right. The rule was a comment until this test.
 describe("hand-minted seed ids", () => {
   it("seedId mints real UUIDv4s across every prefix and index", () => {
-    for (const prefix of ["0", "1", "2", "3", "4", "5"]) {
+    for (const prefix of SEED_ID_PREFIXES) {
       for (const n of [1, 5, 28, 999, 999999999999]) {
         expect(seedId(prefix, n)).toMatch(UUID_V4_REGEX);
       }
@@ -38,5 +38,21 @@ describe("hand-minted seed ids", () => {
     const literals =
       source.match(/"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}"/gi) ?? [];
     expect(literals).toEqual([]);
+  });
+
+  // Two lists that must agree (root CLAUDE.md): the prefixes seed.ts actually
+  // mints under, and the SEED_ID_PREFIXES the test above iterates. A new
+  // prefix used in the seed but never added to the declaration would go
+  // unchecked for UUIDv4 shape — which is the whole failure this file exists
+  // to prevent.
+  it("every prefix seed.ts mints under is declared", () => {
+    const source = readFileSync(join(__dirname, "../../prisma/seed.ts"), "utf8");
+    const used = new Set(
+      [...source.matchAll(/\bseedId\("([0-9a-f])"/gi)].map((m) => m[1]),
+    );
+    expect(used.size).toBeGreaterThan(0);
+    for (const prefix of used) {
+      expect(SEED_ID_PREFIXES).toContain(prefix);
+    }
   });
 });

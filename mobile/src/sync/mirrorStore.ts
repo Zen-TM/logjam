@@ -791,6 +791,27 @@ export async function countOutgoingSharesByCanyon(): Promise<Record<string, numb
   return Object.fromEntries(rows.map((row) => [row.canyon_id, row.n]));
 }
 
+/**
+ * Who shared each INCOMING canyon with the viewer, keyed by canyon id. The
+ * counterpart on a `direction = 'in'` row is the owner, and a canyon has one
+ * owner, so there is at most one row per canyon here.
+ *
+ * The mirror side of the "From <name>" mark a shared route or waypoint wears in
+ * Saved: the sync delta never carries an owner username on the asset rows
+ * themselves, but it does carry it on the share row that made them visible.
+ */
+export async function incomingShareOwnerByCanyon(): Promise<Record<string, string>> {
+  const db = await getSyncDb();
+  const rows = await db.getAllAsync<{ canyon_id: string; counterpart_username: string | null }>(
+    `SELECT canyon_id, counterpart_username FROM canyon_shares WHERE direction = 'in'`,
+  );
+  return Object.fromEntries(
+    rows.flatMap((row) =>
+      row.counterpart_username ? [[row.canyon_id, row.counterpart_username]] : [],
+    ),
+  );
+}
+
 // ── media rows ──────────────────────────────────────────────────────────────
 //
 // One column list and one mapper for every media read. Three call sites spelled
