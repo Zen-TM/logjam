@@ -6,9 +6,14 @@
 // row parks blocked with a 400 nothing in the app surfaces.
 //
 // `prefix` is one hex digit naming the owner/space: "0" users, "1" alice's
-// canyons, "2" bob's, "3" carol's, "4" media, "5" custom field definitions.
-// Guarded by src/lib/seedIds.unit.test.ts.
+// canyons, "2" bob's, "3" carol's, "4" media, "5" custom field definitions,
+// "6" waypoints, "7" routes, "8" direct (per-item) shares.
+// SEED_ID_PREFIXES below is the declaration; src/lib/seedIds.unit.test.ts
+// iterates it, so a prefix used here without joining the list fails the guard.
 export const seedId = (prefix: string, n: number) =>
   `${prefix}0000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 
 export const cid = (n: number) => seedId("1", n);
+
+/** Every prefix the seed mints under — the list the guard test iterates. */
+export const SEED_ID_PREFIXES = ["0", "1", "2", "3", "4", "5", "6", "7", "8"] as const;

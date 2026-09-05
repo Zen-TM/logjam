@@ -26,6 +26,13 @@ export type ShareMark = {
 };
 
 /**
+ * A row can arrive shared TWO ways (api/src/routes/sync.ts): through a canyon
+ * share, or through a direct per-item share. Only the first carries an owner
+ * identity to the phone — direct `shares` are not a delta entity, so there is
+ * no username in the mirror for them and they land on the "Shared with you"
+ * fallback. That is the honest answer rather than a gap: naming the owner would
+ * take a new delta entity, not a change here.
+ *
  * `canyonIds` is every canyon the row hangs off (a route has at most one, a
  * waypoint can have several). The first that resolves to an incoming share
  * names the owner — a row visible through two shares is still one person's, and
