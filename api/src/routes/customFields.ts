@@ -1,232 +1,182 @@
+// Custom field management (account-level), for BOTH trip-log and canyon fields.
+//
+// Row-grain REST over `lib/customFieldDefs.ts`, which owns every write and the
+// value strip a delete carries. This router holds no storage knowledge — it
+// parses, authorizes and shapes responses.
+//
+// Two write surfaces exist deliberately, and this is the row-grain one:
+//  - here, and the sync push handler, address ONE definition at a time. That is
+//    the grain that lets a phone edit offline and merge rather than clobber.
+//  - `PATCH /users/me` still accepts a whole list (`replaceFieldDefs`) because
+//    that is how every dialog in the web app already writes, and a single
+//    browser tab has nothing to merge against.
+//
+// The impact/delete response key names (`tripLogCount`, `removedFromTripCount`
+// and their canyon equivalents) predate this rewrite and are kept verbatim —
+// `frontend/src/canyonUtils.ts` reads them by name.
+//
+// PRIVACY: labels are user-authored text. Nothing here logs one.
 import { Router, Response } from "express";
-import { Prisma } from "@prisma/client";
-import {
-  normalizeUserUiPreferences,
-  tripLogHasCustomFieldValue,
-  type TripLogCustomFieldDef,
-} from "@logjam/shared";
+import { type CustomFieldEntity } from "@logjam/shared";
+
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import { userPatchLimiter } from "../middleware/rateLimit";
-import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
 import { resolveUser } from "../lib/resolveUser";
 import { getParam } from "../lib/getParam";
+import {
+  assertValidDef,
+  countRowsWithValue,
+  createFieldDef,
+  deleteFieldDefByKey,
+  entityConfig,
+  findDefIdByKey,
+  loadDefs,
+  updateFieldDef,
+  ENTITY_BY_SEGMENT,
+} from "../lib/customFieldDefs";
 
 const router = Router();
 
-// Custom field management (account-level), for BOTH trip-log and canyon fields.
-// Field DEFINITIONS live in User.uiPreferences (tripLogCustomFields /
-// canyonCustomFields); the VALUES live keyed by the field's `key` on the owning
-// rows — TripLog.customFields (top-level JSON object) and, for canyons, nested
-// under Canyon.attributes.customFields.
-//
-// - Rename keeps the `key` stable (done via PATCH /users/me), so stored values
-//   stay linked — no endpoint needed here.
-// - Delete must both drop the definition AND strip the now-orphaned values from
-//   every row that carried one, transactionally. Preserving the values would
-//   leave them to silently resurface if a later field slugged to the same key
-//   (and, for canyons, would leak the orphaned values into exports), so we
-//   remove them and report the count.
-//
-// The two entities differ only in where the values live and how a stripped row
-// is rebuilt; that difference is isolated in the `entityConfigs` below so the
-// impact/delete handlers stay single-sourced.
-
-function isJsonObject(
-  value: Prisma.JsonValue | null | undefined,
-): value is Prisma.JsonObject {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+/** `:entity` is the URL segment ("trip-log" | "canyon"), not the union value. */
+function parseEntity(req: AuthenticatedRequest): CustomFieldEntity {
+  const entity = ENTITY_BY_SEGMENT[getParam(req.params.entity)];
+  if (!entity) throw new AppError(404, "Unknown custom field entity");
+  return entity;
 }
 
-// Extract the customFields record from a canyon's attributes blob, or null when
-// the canyon has no custom-field values at all. Exported for unit testing.
-export function canyonCustomFieldsRecord(
-  attributes: Prisma.JsonValue | null,
-): Record<string, unknown> | null {
-  if (!isJsonObject(attributes)) return null;
-  const customFields = attributes.customFields;
-  return isJsonObject(customFields)
-    ? (customFields as Record<string, unknown>)
-    : null;
-}
-
-// Per-entity config isolating the storage-shape differences. `Row` is the
-// narrow row loaded for counting/stripping; `extractFields` pulls the value
-// record out of it, and `stripUpdate` builds the Prisma update that removes the
-// key while preserving everything else (e.g. a canyon's `sources`).
-type EntityConfig<Row> = {
-  segment: "trip-log" | "canyon";
-  defsKey: "tripLogCustomFields" | "canyonCustomFields";
-  // Response field names, kept entity-specific to match the existing trip-log
-  // contract (tripLogCount / removedFromTripCount).
-  countResponseKey: string;
-  removedResponseKey: string;
-  loadRows: (userId: string) => Promise<Row[]>;
-  extractFields: (row: Row) => Record<string, unknown> | null;
-  stripUpdate: (row: Row, key: string) => Prisma.PrismaPromise<unknown>;
-};
-
-type TripLogRow = { id: string; customFields: Prisma.JsonValue };
-type CanyonRow = { id: string; attributes: Prisma.JsonValue };
-
-const tripLogEntity: EntityConfig<TripLogRow> = {
-  segment: "trip-log",
-  defsKey: "tripLogCustomFields",
-  countResponseKey: "tripLogCount",
-  removedResponseKey: "removedFromTripCount",
-  loadRows: (userId) =>
-    prisma.tripLog.findMany({
-      where: { userId },
-      select: { id: true, customFields: true },
-    }),
-  extractFields: (row) =>
-    isJsonObject(row.customFields)
-      ? (row.customFields as Record<string, unknown>)
-      : null,
-  stripUpdate: (row, key) => {
-    const next = { ...(row.customFields as Prisma.JsonObject) };
-    delete next[key];
-    return prisma.tripLog.update({
-      where: { id: row.id },
-      data: { customFields: next },
-    });
+// GET /custom-fields/:entity — the definitions in force for this user.
+router.get(
+  "/:entity",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const user = await resolveUser(req.user!.sub);
+    const entity = parseEntity(req);
+    res.json({ fields: await loadDefs(user.id, entity) });
   },
-};
+);
 
-const canyonEntity: EntityConfig<CanyonRow> = {
-  segment: "canyon",
-  defsKey: "canyonCustomFields",
-  countResponseKey: "canyonCount",
-  removedResponseKey: "removedFromCanyonCount",
-  loadRows: (userId) =>
-    prisma.canyon.findMany({
-      where: { ownerId: userId },
-      select: { id: true, attributes: true },
-    }),
-  extractFields: (row) => canyonCustomFieldsRecord(row.attributes),
-  stripUpdate: (row, key) => {
-    // Preserve every other attribute (notably `sources`) — only the one
-    // customFields entry is removed.
-    const attributes = isJsonObject(row.attributes) ? row.attributes : {};
-    const nextFields = { ...(canyonCustomFieldsRecord(row.attributes) ?? {}) };
-    delete nextFields[key];
-    return prisma.canyon.update({
-      where: { id: row.id },
-      data: {
-        attributes: {
-          ...attributes,
-          customFields: nextFields,
-        } as unknown as Prisma.InputJsonValue,
-      },
-    });
+// POST /custom-fields/:entity — add one definition.
+router.post(
+  "/:entity",
+  requireAuth,
+  userPatchLimiter,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const user = await resolveUser(req.user!.sub);
+    const entity = parseEntity(req);
+    const def = assertValidDef((req.body as { field?: unknown })?.field);
+    res.status(201).json({ field: await createFieldDef(user.id, entity, { def }) });
   },
-};
+);
 
-// Rows that actually carry a meaningful value for `key` — the only rows a
-// delete needs to rewrite, and the population an impact count reports.
-function rowsWithValue<Row>(
-  entity: EntityConfig<Row>,
-  rows: Row[],
-  key: string,
-): Row[] {
-  return rows.filter((row) => {
-    const fields = entity.extractFields(row);
-    return fields ? tripLogHasCustomFieldValue(fields, key) : false;
-  });
-}
+// PATCH /custom-fields/:entity/:key — relabel, retype or re-bound one field.
+//
+// Addressed by `key`, never by label, and `key` itself is not writable: every
+// stored value is keyed by it (see `renameCustomFieldLabel`).
+router.patch(
+  "/:entity/:key",
+  requireAuth,
+  userPatchLimiter,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const user = await resolveUser(req.user!.sub);
+    const entity = parseEntity(req);
+    const key = getParam(req.params.key);
 
-function requireFieldExists(
-  defs: TripLogCustomFieldDef[],
-  key: string,
-): void {
-  if (!defs.some((d) => d.key === key)) {
-    throw new AppError(404, "Custom field not found");
-  }
-}
+    const id = await findDefIdByKey(user.id, entity, key);
+    if (!id) throw new AppError(404, "Custom field not found");
+
+    const body = req.body as {
+      label?: unknown;
+      type?: unknown;
+      min?: unknown;
+      max?: unknown;
+      position?: unknown;
+    };
+    for (const [field, value] of [
+      ["label", body.label],
+      ["type", body.type],
+    ] as const) {
+      if (value !== undefined && typeof value !== "string") {
+        throw new AppError(400, `Invalid ${field}`);
+      }
+    }
+    for (const [field, value] of [
+      ["min", body.min],
+      ["max", body.max],
+      ["position", body.position],
+    ] as const) {
+      if (value !== undefined && value !== null && typeof value !== "number") {
+        throw new AppError(400, `Invalid ${field}`);
+      }
+    }
+
+    await updateFieldDef(user.id, id, {
+      ...(body.label !== undefined ? { label: body.label as string } : {}),
+      ...(body.type !== undefined ? { type: body.type as string } : {}),
+      ...(body.min !== undefined ? { min: body.min as number | null } : {}),
+      ...(body.max !== undefined ? { max: body.max as number | null } : {}),
+      ...(body.position !== undefined
+        ? { position: body.position as number }
+        : {}),
+    });
+
+    res.json({ fields: await loadDefs(user.id, entity) });
+  },
+);
 
 // GET /custom-fields/:entity/:key/impact — how many of the user's rows carry a
 // value for this field. Shown before a rename/delete is confirmed.
-async function handleImpact<Row>(
-  entity: EntityConfig<Row>,
-  req: AuthenticatedRequest,
-  res: Response,
-): Promise<void> {
-  const user = await resolveUser(req.user!.sub);
-  const key = getParam(req.params.key);
-
-  const prefs = normalizeUserUiPreferences(user.uiPreferences);
-  requireFieldExists(prefs[entity.defsKey] ?? [], key);
-
-  const rows = await entity.loadRows(user.id);
-  const count = rowsWithValue(entity, rows, key).length;
-
-  res.json({ [entity.countResponseKey]: count });
-}
-
-// DELETE /custom-fields/:entity/:key — remove the field definition and strip its
-// value from every row that carried one. Returns the surviving field
-// definitions and the number of rows whose value was removed.
-async function handleDelete<Row>(
-  entity: EntityConfig<Row>,
-  req: AuthenticatedRequest,
-  res: Response,
-): Promise<void> {
-  const user = await resolveUser(req.user!.sub);
-  const key = getParam(req.params.key);
-
-  const prefs = normalizeUserUiPreferences(user.uiPreferences);
-  const currentDefs = prefs[entity.defsKey] ?? [];
-  requireFieldExists(currentDefs, key);
-  const remainingDefs = currentDefs.filter((d) => d.key !== key);
-
-  const rows = await entity.loadRows(user.id);
-  const affected = rowsWithValue(entity, rows, key);
-
-  await prisma.$transaction([
-    ...affected.map((row) => entity.stripUpdate(row, key)),
-    prisma.user.update({
-      where: { id: user.id },
-      data: {
-        uiPreferences: {
-          ...prefs,
-          [entity.defsKey]: remainingDefs,
-        } as unknown as Prisma.InputJsonValue,
-      },
-    }),
-  ]);
-
-  res.json({
-    [entity.defsKey]: remainingDefs,
-    [entity.removedResponseKey]: affected.length,
-  });
-}
-
 router.get(
-  "/trip-log/:key/impact",
+  "/:entity/:key/impact",
   requireAuth,
-  (req: AuthenticatedRequest, res: Response) => handleImpact(tripLogEntity, req, res),
+  async (req: AuthenticatedRequest, res: Response) => {
+    const user = await resolveUser(req.user!.sub);
+    const entity = parseEntity(req);
+    const key = getParam(req.params.key);
+
+    const defs = await loadDefs(user.id, entity);
+    if (!defs.some((def) => def.key === key)) {
+      throw new AppError(404, "Custom field not found");
+    }
+
+    res.json({
+      [entityConfig(entity).countResponseKey]: await countRowsWithValue(
+        user.id,
+        entity,
+        key,
+      ),
+    });
+  },
 );
 
+// DELETE /custom-fields/:entity/:key — remove the definition and strip its
+// value from every row that carried one. Returns the surviving definitions and
+// the number of rows whose value was removed.
 router.delete(
-  "/trip-log/:key",
+  "/:entity/:key",
   requireAuth,
-  // Same budget as PATCH /users/me — this mutates the same preference blob
-  // (plus entity rows), and the rename path already goes through that limiter.
+  // Same budget as PATCH /users/me — this mutates the same definitions (plus
+  // entity rows), and the whole-list path already goes through that limiter.
   userPatchLimiter,
-  (req: AuthenticatedRequest, res: Response) => handleDelete(tripLogEntity, req, res),
-);
+  async (req: AuthenticatedRequest, res: Response) => {
+    const user = await resolveUser(req.user!.sub);
+    const entity = parseEntity(req);
+    const key = getParam(req.params.key);
 
-router.get(
-  "/canyon/:key/impact",
-  requireAuth,
-  (req: AuthenticatedRequest, res: Response) => handleImpact(canyonEntity, req, res),
-);
+    const result = await deleteFieldDefByKey(user.id, entity, key);
+    // A user-driven delete of a field that is not there is a 404. (The sync
+    // push path calls the store directly, where the same miss is idempotent —
+    // a replayed op must not fail.)
+    if (!result) throw new AppError(404, "Custom field not found");
 
-router.delete(
-  "/canyon/:key",
-  requireAuth,
-  userPatchLimiter,
-  (req: AuthenticatedRequest, res: Response) => handleDelete(canyonEntity, req, res),
+    const config = entityConfig(entity);
+    res.json({
+      // Response key names are entity-specific and predate this router.
+      [entity === "tripLog" ? "tripLogCustomFields" : "canyonCustomFields"]:
+        await loadDefs(user.id, entity),
+      [config.removedResponseKey]: result.removed,
+    });
+  },
 );
 
 export default router;

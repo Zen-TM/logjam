@@ -43,8 +43,12 @@ const CANYON_IDS = [
   cid(5),
 ];
 
-// Custom-field definitions live on the user's uiPreferences; trip customFields
-// JSON is keyed by these `key`s.
+// Custom-field definitions are ROWS in `custom_field_defs` (they used to live
+// on the user's uiPreferences); trip customFields JSON is keyed by these
+// `key`s. Ids come from seedId like every other seeded row — the sync push
+// path validates op ids with isUuidV4 and rejects the whole request on a
+// mismatch, so a hand-written id here would make alice's definitions
+// permanently unsyncable from the phone.
 const ALICE_TRIP_FIELD_DEFS = [
   { key: "water_level", label: "Water Level", type: "string" },
   { key: "rope_length_m", label: "Rope Length (m)", type: "integer" },
@@ -264,14 +268,21 @@ async function main() {
         email: "alice@local",
         consentedAt,
         consentVersion: CURRENT_CONSENT_VERSION,
-        uiPreferences: {
-          tripLogCustomFields: ALICE_TRIP_FIELD_DEFS,
-          autoDownloadGeoPdfs: false,
-        },
+        uiPreferences: { autoDownloadGeoPdfs: false },
       },
       { id: BOB_ID, cognitoId: BOB_COGNITO_ID, username: "bob", email: "bob@local", consentedAt, consentVersion: CURRENT_CONSENT_VERSION },
       { id: CAROL_ID, cognitoId: CAROL_COGNITO_ID, username: "carol", email: "carol@local", consentedAt, consentVersion: CURRENT_CONSENT_VERSION },
     ],
+  });
+
+  await prisma.customFieldDef.createMany({
+    data: ALICE_TRIP_FIELD_DEFS.map((def, position) => ({
+      id: seedId("5", position + 1),
+      ownerId: ALICE_ID,
+      entity: "tripLog",
+      ...def,
+      position,
+    })),
   });
 
   // Friendships: alice<->bob accepted (invariant), carol->alice pending

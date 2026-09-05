@@ -8,7 +8,12 @@ import {
   normalizeImportMergePolicy,
   isTripLogCustomFieldDef,
   isNotificationPreferences,
+  type TripLogCustomFieldDef,
 } from "@logjam/shared";
+import {
+  defsForUserResponse,
+  replaceFieldDefs,
+} from "../lib/customFieldDefs";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
 import { canyonIdOfMedia } from "../lib/mediaLink";
@@ -141,8 +146,18 @@ const usernameSchema = z
 
 const router = Router();
 
-function serializeUserForResponse(
+// `uiPreferences.tripLogCustomFields` / `.canyonCustomFields` are a PROJECTION,
+// not storage: the definitions live in `custom_field_defs` and are read back
+// onto the response under the two key names the web and mobile already consume
+// (`customFieldDefsOf`, `App.tsx`). Keeping the response shape meant not
+// rewriting every custom-field dialog in the frontend for a change that is
+// entirely about where the rows live.
+//
+// This also keeps the APP 12 data export complete — it serializes the user
+// through here, so a user's field definitions leave with the rest of their data.
+async function serializeUserForResponse(
   user: {
+    id: string;
     storageUsedBytes: bigint;
     storageQuotaBytes: bigint;
     uiPreferences: Prisma.JsonValue;
@@ -152,7 +167,10 @@ function serializeUserForResponse(
     ...user,
     storageUsedBytes: Number(user.storageUsedBytes),
     storageQuotaBytes: Number(user.storageQuotaBytes),
-    uiPreferences: normalizeUserUiPreferences(user.uiPreferences),
+    uiPreferences: {
+      ...normalizeUserUiPreferences(user.uiPreferences),
+      ...(await defsForUserResponse(user.id)),
+    },
   };
 }
 
@@ -174,7 +192,7 @@ async function serializeUserWithUsage(
     getEgressUsage(user.id),
   ]);
   return {
-    ...serializeUserForResponse(user),
+    ...(await serializeUserForResponse(user)),
     monthlyComputeCredits: credits.quota,
     monthlyComputeUsage: credits.used,
     monthlyComputeResetAt: credits.resetAt,
@@ -363,12 +381,36 @@ router.patch(
         }
       }
 
+      // Custom field definitions are NOT part of the preferences blob any more
+      // — they are rows. The two keys stay accepted here because that is how
+      // every dialog in the web app writes them (a whole list at a time), and
+      // `replaceFieldDefs` reconciles the list into row creates/updates/deletes,
+      // carrying the value strip a dropped field needs. They are deliberately
+      // absent from `updates.uiPreferences` below: a copy left in the blob
+      // would be a second source of the same list.
+      if (tripLogCustomFields !== undefined) {
+        await replaceFieldDefs(
+          user.id,
+          "tripLog",
+          tripLogCustomFields as TripLogCustomFieldDef[],
+        );
+      }
+      if (canyonCustomFields !== undefined) {
+        await replaceFieldDefs(
+          user.id,
+          "canyon",
+          canyonCustomFields as TripLogCustomFieldDef[],
+        );
+      }
+
       const current = normalizeUserUiPreferences(user.uiPreferences);
       updates.uiPreferences = {
         ...current,
+        // The projection this object was built from carries the two custom
+        // field keys; drop them so they are never written back to storage.
+        tripLogCustomFields: undefined,
+        canyonCustomFields: undefined,
         ...(themeSchemeId !== undefined ? { themeSchemeId } : {}),
-        ...(tripLogCustomFields !== undefined ? { tripLogCustomFields } : {}),
-        ...(canyonCustomFields !== undefined ? { canyonCustomFields } : {}),
         ...(notifications !== undefined
           ? { notifications: { ...current.notifications, ...(notifications as Record<string, boolean>) } }
           : {}),
@@ -452,7 +494,7 @@ router.get(
       exportedAt: new Date().toISOString(),
       // v2: adds topoJobs, topoExportJobs, topoTemplates, notifications.
       schemaVersion: 2,
-      user: serializeUserForResponse(user),
+      user: await serializeUserForResponse(user),
       canyons,
       tripLogs,
       geoPdfTemplates,
@@ -747,6 +789,11 @@ router.delete(
       // Routes store their geometry on the row, so like waypoints there is no
       // S3 leg here — that is the point of the design (ARCH-001).
       prisma.route.deleteMany({ where: { ownerId: user.id } }),
+      // Custom field definitions: user-authored labels, no S3 leg, and never
+      // shared — so no tombstone fan-out either, the only viewer is the
+      // account being deleted. Explicit per the ARCH-001 convention even
+      // though the FK cascade covers the rows.
+      prisma.customFieldDef.deleteMany({ where: { ownerId: user.id } }),
       prisma.user.delete({ where: { id: user.id } }),
     ]);
 
