@@ -22,6 +22,7 @@ import {
   decodeSyncCursor,
   encodeSyncCursor,
   enforceCanyoningTag,
+  isCustomFieldEntity,
   isUuidV4,
   SYNC_DELTA_DEFAULT_LIMIT,
   SYNC_DELTA_MAX_LIMIT,
@@ -52,6 +53,12 @@ import {
   tripCanyonsInclude,
 } from "./tripLogsGlobal";
 import { validateCanyonTextFields } from "./canyons";
+import {
+  assertValidDef,
+  createFieldDef,
+  deleteFieldDef,
+  updateFieldDef,
+} from "../lib/customFieldDefs";
 import { deleteCanyonsCascade, deleteTripsCascade } from "../lib/bulkDelete";
 import {
   directShareRevokeTombstones,
@@ -194,6 +201,7 @@ router.get(
         hasMore: false,
         resetRequired: true,
         changes: {
+          customFieldDefs: [],
           canyons: [],
           tripLogs: [],
           waypoints: [],
@@ -282,6 +290,24 @@ router.get(
       remaining -= rows.length;
       return rows;
     }
+
+    // Definitions lead the budget order: a canyon's and a trip's stored values
+    // are keyed by them, so a client applying an early page has the labels
+    // before the rows that need them. Always the caller's own — definitions
+    // belong to one account and are never shared, so unlike a canyon there is
+    // no visibility set to intersect and no `syncRole` on the row.
+    const customFieldDefs = await fill(
+      "customFieldDefs",
+      (after, take) =>
+        prisma.customFieldDef.findMany({
+          where: {
+            AND: [{ ownerId: user.id }, keysetWhere("updatedAt", since, after)],
+          },
+          orderBy: [{ updatedAt: "asc" }, { id: "asc" }],
+          take,
+        }),
+      (row) => row.updatedAt,
+    );
 
     const canyons = await fill(
       "canyons",
@@ -526,6 +552,7 @@ router.get(
         sinceTs: cursor.ts,
         hasMore,
         counts: {
+          customFieldDefs: customFieldDefs.length,
           canyons: canyons.length,
           tripLogs: tripLogs.length,
           waypoints: waypoints.length,
@@ -573,6 +600,7 @@ router.get(
       hasMore,
       resetRequired: false,
       changes: {
+        customFieldDefs,
         canyons: canyons.map((canyon) => ({
           syncRole: canyon.ownerId === user.id ? "owner" : "shared",
           ...canyon,
@@ -1430,6 +1458,120 @@ async function applyNotificationOp(
   return { opId: op.opId, status: count === 1 ? "applied" : "alreadyApplied" };
 }
 
+// `entity` and `key` are absent from the UPDATE surface on purpose: `entity`
+// decides which table the values live in, and `key` is what every stored value
+// is keyed by — changing either orphans data rather than editing it. A rename
+// moves `label` only (renameCustomFieldLabel).
+const CUSTOM_FIELD_DEF_CREATE_FIELDS = new Set([
+  "entity",
+  "key",
+  "label",
+  "type",
+  "min",
+  "max",
+  "position",
+]);
+const CUSTOM_FIELD_DEF_UPDATE_FIELDS = new Set([
+  "label",
+  "type",
+  "min",
+  "max",
+  "position",
+]);
+
+async function applyCustomFieldDefOp(
+  userId: string,
+  op: PushOp,
+): Promise<PushOpResult> {
+  if (op.op === "delete") {
+    // Strips the orphaned values off every trip log / canyon that carried one
+    // and writes the tombstone, in one transaction (lib/customFieldDefs.ts).
+    // A definition already gone is idempotent success — a delete's goal state
+    // is "not there" (§8.1).
+    const result = await deleteFieldDef(userId, op.id);
+    return {
+      opId: op.opId,
+      status: result ? "applied" : "alreadyApplied",
+    };
+  }
+
+  const fields = op.fields ?? {};
+
+  if (op.op === "create") {
+    assertKnownFields(fields, CUSTOM_FIELD_DEF_CREATE_FIELDS);
+    const existing = await prisma.customFieldDef.findUnique({
+      where: { id: op.id },
+    });
+    if (existing) {
+      // Foreign id gets the same 404 a missing one would — no existence oracle.
+      if (existing.ownerId !== userId) {
+        throw new AppError(404, "Custom field not found");
+      }
+      return { opId: op.opId, status: "alreadyApplied", row: existing };
+    }
+    if (await createAlreadyTombstoned(userId, "customFieldDef", op.id)) {
+      return { opId: op.opId, status: "alreadyApplied" };
+    }
+    if (!isCustomFieldEntity(fields.entity)) {
+      throw new AppError(400, "Invalid entity");
+    }
+    const def = assertValidDef({
+      key: fields.key,
+      label: fields.label,
+      type: fields.type,
+      ...(typeof fields.min === "number" && typeof fields.max === "number"
+        ? { min: fields.min, max: fields.max }
+        : {}),
+    });
+    // A key this owner already uses for this entity is a 409, which the push
+    // loop turns into a `rejected` op the user sees. Deliberately NOT folded
+    // into alreadyApplied: the server row has a different id, so silently
+    // accepting would leave the phone mirroring a duplicate definition under
+    // its own id forever. Two devices that both invented "Water level" offline
+    // is a real collision and the user is the one who can resolve it.
+    await createFieldDef(userId, fields.entity, {
+      id: op.id,
+      def,
+      ...(typeof fields.position === "number"
+        ? { position: fields.position }
+        : {}),
+    });
+    const row = await prisma.customFieldDef.findUnique({ where: { id: op.id } });
+    return { opId: op.opId, status: "applied", row: row ?? undefined };
+  }
+
+  assertKnownFields(fields, CUSTOM_FIELD_DEF_UPDATE_FIELDS);
+  const current = await prisma.customFieldDef.findFirst({
+    where: { id: op.id, ownerId: userId },
+  });
+  if (!current) throw new AppError(404, "Custom field not found");
+
+  const conflicts = conflictReceipts(
+    op.baseUpdatedAt,
+    current.updatedAt,
+    fields,
+    current as unknown as Record<string, unknown>,
+  );
+
+  await updateFieldDef(userId, op.id, {
+    ...(fields.label !== undefined ? { label: fields.label as string } : {}),
+    ...(fields.type !== undefined ? { type: fields.type as string } : {}),
+    ...(fields.min !== undefined ? { min: fields.min as number | null } : {}),
+    ...(fields.max !== undefined ? { max: fields.max as number | null } : {}),
+    ...(fields.position !== undefined
+      ? { position: fields.position as number }
+      : {}),
+  });
+
+  const row = await prisma.customFieldDef.findUnique({ where: { id: op.id } });
+  return {
+    opId: op.opId,
+    status: conflicts.length ? "appliedWithConflict" : "applied",
+    row: row ?? undefined,
+    ...(conflicts.length ? { conflicts } : {}),
+  };
+}
+
 router.post(
   "/push",
   requireAuth,
@@ -1484,6 +1626,9 @@ router.post(
             break;
           case "notification":
             result = await applyNotificationOp(user.id, op);
+            break;
+          case "customFieldDef":
+            result = await applyCustomFieldDefOp(user.id, op);
             break;
         }
         results.push(result);

@@ -1,14 +1,24 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { TripLogCustomFieldDef } from "@logjam/shared";
 
-// A guest's definitions have no account behind them, so every one of these
-// paths has to work with the API layer untouched — the assertions below check
-// that as much as they check the storage.
+// Definitions are rows in the local mirror now, written through the outbox.
+// These tests hold the two properties that change bought: every path works with
+// the API layer untouched (so it works for a guest, and offline), and the WRITES
+// are per-row rather than a whole list (so two devices merge instead of one
+// erasing the other).
 
-const kv = new Map<string, string>();
-const patched: { entity: string; defs: TripLogCustomFieldDef[] }[] = [];
-const tripUpdates: { id: string; fields: Record<string, unknown> }[] = [];
-const canyonUpdates: { id: string; fields: Record<string, unknown> }[] = [];
+type DefRow = {
+  id: string;
+  entity: string;
+  key: string;
+  label: string;
+  type: string;
+  min: number | null;
+  max: number | null;
+  position: number;
+};
+
+let defRows: DefRow[] = [];
 let trips: { id: string; customFields: Record<string, unknown> }[] = [];
 let canyons: {
   id: string;
@@ -16,19 +26,30 @@ let canyons: {
   attributes: { sources?: [string, string][]; customFields?: Record<string, unknown> };
 }[] = [];
 
-vi.mock("../sync/syncDb", () => ({
-  getSyncStateValue: (key: string) => Promise.resolve(kv.get(key) ?? null),
-  setSyncStateValue: (key: string, value: string) => {
-    kv.set(key, value);
-    return Promise.resolve();
-  },
-  notifyMirrorChanged: () => {},
-}));
+const created: { entity: string; def: TripLogCustomFieldDef }[] = [];
+const updated: { id: string; fields: Record<string, unknown> }[] = [];
+const deleted: string[] = [];
+const tripUpdates: { id: string; fields: Record<string, unknown> }[] = [];
+const canyonUpdates: { id: string; fields: Record<string, unknown> }[] = [];
+
 vi.mock("../sync/mirrorStore", () => ({
+  listMirrorCustomFieldDefs: () => Promise.resolve(defRows),
   listMirrorTrips: () => Promise.resolve(trips),
   listMirrorCanyons: () => Promise.resolve(canyons),
 }));
 vi.mock("../sync/outbox", () => ({
+  createCustomFieldDefLocal: (draft: { entity: string; def: TripLogCustomFieldDef }) => {
+    created.push(draft);
+    return Promise.resolve("new-id");
+  },
+  updateCustomFieldDefLocal: (id: string, fields: Record<string, unknown>) => {
+    updated.push({ id, fields });
+    return Promise.resolve();
+  },
+  deleteCustomFieldDefLocal: (id: string) => {
+    deleted.push(id);
+    return Promise.resolve();
+  },
   updateTripLocal: (id: string, fields: Record<string, unknown>) => {
     tripUpdates.push({ id, fields });
     return Promise.resolve();
@@ -38,161 +59,176 @@ vi.mock("../sync/outbox", () => ({
     return Promise.resolve();
   },
 }));
+
+// The API layer is mocked to THROW. Nothing in this file may reach it — that is
+// the assertion the whole suite rests on, and a rejection is louder than a spy.
 vi.mock("../api/queries", () => ({
-  customFieldDefsOf: (user: { uiPreferences?: Record<string, unknown> }, entity: string) =>
-    user?.uiPreferences?.[
-      entity === "tripLog" ? "tripLogCustomFields" : "canyonCustomFields"
-    ] ?? [],
-  fetchCurrentUser: () => Promise.reject(new Error("no account in this test")),
-  updateCustomFieldDefs: (entity: string, defs: TripLogCustomFieldDef[]) => {
-    patched.push({ entity, defs });
-    return Promise.resolve({});
-  },
-  deleteCustomFieldDef: () => Promise.reject(new Error("account path not exercised")),
-  getCustomFieldImpact: () => Promise.reject(new Error("account path not exercised")),
+  fetchCurrentUser: () => Promise.reject(new Error("definitions must not fetch")),
+  updateCustomFieldDefs: () => Promise.reject(new Error("definitions must not PATCH")),
 }));
 
-const {
-  adoptLocalFieldDefs,
-  countFieldValues,
-  mergeFieldDefs,
-  parseFieldDefs,
-  readLocalFieldDefs,
-  removeFieldDef,
-  saveFieldDefs,
-} = await import("./fieldDefsStore");
+const { countFieldValues, loadFieldDefs, removeFieldDef, saveFieldDefs } =
+  await import("./fieldDefsStore");
 
 const water: TripLogCustomFieldDef = { key: "water", label: "Water level", type: "string" };
 const party: TripLogCustomFieldDef = { key: "party", label: "Party size", type: "integer" };
 
+function row(def: TripLogCustomFieldDef, entity: string, position = 0): DefRow {
+  return {
+    id: `row-${def.key}`,
+    entity,
+    key: def.key,
+    label: def.label,
+    type: def.type,
+    min: def.min ?? null,
+    max: def.max ?? null,
+    position,
+  };
+}
+
 beforeEach(() => {
-  kv.clear();
-  patched.length = 0;
-  tripUpdates.length = 0;
-  canyonUpdates.length = 0;
+  defRows = [];
   trips = [];
   canyons = [];
+  created.length = 0;
+  updated.length = 0;
+  deleted.length = 0;
+  tripUpdates.length = 0;
+  canyonUpdates.length = 0;
 });
 
-describe("parseFieldDefs", () => {
-  it("reads nothing as no fields", () => {
-    expect(parseFieldDefs(null)).toEqual([]);
-    expect(parseFieldDefs("")).toEqual([]);
+describe("loadFieldDefs", () => {
+  it("reads the mirror, scoped to one entity", async () => {
+    defRows = [row(water, "tripLog", 0), row(party, "canyon", 0)];
+    expect(await loadFieldDefs("tripLog")).toEqual([water]);
+    expect(await loadFieldDefs("canyon")).toEqual([party]);
   });
 
-  it("round-trips a stored list", () => {
-    expect(parseFieldDefs(JSON.stringify([water, party]))).toEqual([water, party]);
-  });
-
-  // Falling back to [] would render as "you never made any fields", which the
-  // user cannot tell apart from data loss — and the next save would write that
-  // empty list back over the real one.
-  it("throws on a corrupt list rather than reporting none", () => {
-    expect(() => parseFieldDefs("{")).toThrow();
-    expect(() => parseFieldDefs('[{"key":"x"}]')).toThrow(/Corrupt/);
-    expect(() => parseFieldDefs('{"key":"x"}')).toThrow(/Corrupt/);
-  });
-});
-
-describe("a guest's definitions", () => {
-  it("save to the device, with no request", async () => {
-    await saveFieldDefs("tripLog", "guest", [water]);
-    expect(patched).toEqual([]);
-    expect(await readLocalFieldDefs("tripLog")).toEqual([water]);
-  });
-
-  it("keep the two entities apart", async () => {
-    await saveFieldDefs("tripLog", "guest", [water]);
-    await saveFieldDefs("canyon", "guest", [party]);
-    expect(await readLocalFieldDefs("tripLog")).toEqual([water]);
-    expect(await readLocalFieldDefs("canyon")).toEqual([party]);
-  });
-});
-
-describe("deleting a guest's field", () => {
-  it("counts and strips the trips that carry a value", async () => {
-    trips = [
-      { id: "t1", customFields: { water: "high", party: 4 } },
-      { id: "t2", customFields: { party: 2 } },
-      { id: "t3", customFields: { water: "low" } },
-    ];
-    await saveFieldDefs("tripLog", "guest", [water, party]);
-
-    expect(await countFieldValues("tripLog", "guest", "water")).toBe(2);
-    const cleared = await removeFieldDef("tripLog", "guest", "water", [water, party]);
-
-    expect(cleared).toBe(2);
-    // Through the outbox, so the clearing reaches the server if they ever link.
-    expect(tripUpdates).toEqual([
-      { id: "t1", fields: { customFields: { party: 4 } } },
-      { id: "t3", fields: { customFields: {} } },
+  it("orders by position, not by insertion", async () => {
+    defRows = [row(party, "tripLog", 1), row(water, "tripLog", 0)];
+    expect((await loadFieldDefs("tripLog")).map((def) => def.key)).toEqual([
+      "water",
+      "party",
     ]);
-    expect(await readLocalFieldDefs("tripLog")).toEqual([party]);
   });
 
-  it("keeps the rest of a canyon's attributes when it strips one value", async () => {
+  it("drops a row that does not describe a usable field", async () => {
+    defRows = [row(water, "tripLog"), { ...row(party, "tripLog", 1), type: "nonsense" }];
+    expect(await loadFieldDefs("tripLog")).toEqual([water]);
+  });
+});
+
+describe("saveFieldDefs", () => {
+  it("adds a new field as a create, touching nothing else", async () => {
+    defRows = [row(water, "tripLog", 0)];
+    await saveFieldDefs("tripLog", [water, party]);
+    expect(created).toEqual([{ entity: "tripLog", def: party }]);
+    expect(updated).toEqual([]);
+    expect(deleted).toEqual([]);
+  });
+
+  // The point of the row grain: a relabel writes ONE field of ONE row, so a
+  // definition another device added between reads is not in the payload at all
+  // and cannot be erased by this write.
+  it("relabels in place, sending only the changed field", async () => {
+    defRows = [row(water, "tripLog", 0)];
+    await saveFieldDefs("tripLog", [{ ...water, label: "Flow" }]);
+    expect(updated).toEqual([{ id: "row-water", fields: { label: "Flow" } }]);
+    expect(created).toEqual([]);
+  });
+
+  it("writes nothing at all when the list is unchanged", async () => {
+    defRows = [row(water, "tripLog", 0), row(party, "tripLog", 1)];
+    await saveFieldDefs("tripLog", [water, party]);
+    expect([...created, ...updated, ...deleted]).toEqual([]);
+  });
+
+  it("reorders by writing position", async () => {
+    defRows = [row(water, "tripLog", 0), row(party, "tripLog", 1)];
+    await saveFieldDefs("tripLog", [party, water]);
+    expect(updated).toEqual([
+      { id: "row-party", fields: { position: 0 } },
+      { id: "row-water", fields: { position: 1 } },
+    ]);
+  });
+
+  it("deletes a field the caller dropped", async () => {
+    defRows = [row(water, "tripLog", 0), row(party, "tripLog", 1)];
+    await saveFieldDefs("tripLog", [water]);
+    expect(deleted).toEqual(["row-party"]);
+  });
+
+  it("leaves the other entity's definitions alone", async () => {
+    defRows = [row(water, "tripLog", 0), row(party, "canyon", 0)];
+    await saveFieldDefs("tripLog", []);
+    expect(deleted).toEqual(["row-water"]);
+  });
+});
+
+describe("countFieldValues", () => {
+  it("counts trips carrying a value", async () => {
+    trips = [
+      { id: "t1", customFields: { water: "high" } },
+      { id: "t2", customFields: {} },
+    ];
+    expect(await countFieldValues("tripLog", "water")).toBe(1);
+  });
+
+  // A sharee cannot strip the owner's values, so they must not be counted as
+  // rows this delete will clear either — the number and the effect must agree.
+  it("ignores canyons shared WITH this user", async () => {
+    canyons = [
+      { id: "c1", syncRole: "owner", attributes: { customFields: { party: 3 } } },
+      { id: "c2", syncRole: "shared", attributes: { customFields: { party: 4 } } },
+    ];
+    expect(await countFieldValues("canyon", "party")).toBe(1);
+  });
+});
+
+describe("removeFieldDef", () => {
+  it("strips the value from every local trip, then deletes the definition", async () => {
+    defRows = [row(water, "tripLog", 0)];
+    trips = [
+      { id: "t1", customFields: { water: "high", other: 1 } },
+      { id: "t2", customFields: { other: 2 } },
+    ];
+    expect(await removeFieldDef("tripLog", "water")).toBe(1);
+    expect(tripUpdates).toEqual([
+      { id: "t1", fields: { customFields: { other: 1 } } },
+    ]);
+    expect(deleted).toEqual(["row-water"]);
+  });
+
+  // `sources` is written only by the web, so a strip that rebuilt `attributes`
+  // from the customFields alone would silently drop it.
+  it("preserves the rest of a canyon's attributes", async () => {
+    defRows = [row(party, "canyon", 0)];
     canyons = [
       {
         id: "c1",
         syncRole: "owner",
-        attributes: { sources: [["Wiki", "https://example.test"]], customFields: { permit: "yes" } },
+        attributes: {
+          sources: [["Wiki", "http://x"]],
+          customFields: { party: 3, permit: "yes" },
+        },
       },
-      // A canyon shared WITH this user is not theirs to edit.
-      { id: "c2", syncRole: "shared", attributes: { customFields: { permit: "no" } } },
     ];
-    const permit: TripLogCustomFieldDef = { key: "permit", label: "Permit", type: "boolean" };
-    await saveFieldDefs("canyon", "guest", [permit]);
-
-    expect(await countFieldValues("canyon", "guest", "permit")).toBe(1);
-    expect(await removeFieldDef("canyon", "guest", "permit", [permit])).toBe(1);
+    expect(await removeFieldDef("canyon", "party")).toBe(1);
     expect(canyonUpdates).toEqual([
       {
         id: "c1",
         fields: {
           attributes: {
-            sources: [["Wiki", "https://example.test"]],
-            customFields: {},
+            sources: [["Wiki", "http://x"]],
+            customFields: { permit: "yes" },
           },
         },
       },
     ]);
   });
-});
 
-describe("mergeFieldDefs", () => {
-  // The account may already have values behind its keys on the web, and a phone
-  // that has never seen them cannot be the authority on their label or type.
-  it("lets the account win a key collision and appends the rest", () => {
-    const renamed: TripLogCustomFieldDef = { key: "water", label: "Flow", type: "string" };
-    expect(mergeFieldDefs([renamed], [water, party])).toEqual([renamed, party]);
-  });
-});
-
-describe("adoptLocalFieldDefs", () => {
-  it("pushes the phone's fields to the account and clears the local copy", async () => {
-    await saveFieldDefs("tripLog", "guest", [water]);
-    await adoptLocalFieldDefs({
-      uiPreferences: { tripLogCustomFields: [party] },
-    } as never);
-
-    expect(patched).toEqual([{ entity: "tripLog", defs: [party, water] }]);
-    expect(await readLocalFieldDefs("tripLog")).toEqual([]);
-  });
-
-  it("does nothing for an install that never made a field", async () => {
-    await adoptLocalFieldDefs({ uiPreferences: {} } as never);
-    expect(patched).toEqual([]);
-  });
-
-  // A link made in a tunnel must retry, not silently drop the list.
-  it("keeps the local copy when the PATCH fails", async () => {
-    await saveFieldDefs("canyon", "guest", [party]);
-    const queries = await import("../api/queries");
-    vi.spyOn(queries, "updateCustomFieldDefs").mockRejectedValueOnce(
-      new Error("offline"),
-    );
-
-    await expect(adoptLocalFieldDefs({ uiPreferences: {} } as never)).rejects.toThrow();
-    expect(await readLocalFieldDefs("canyon")).toEqual([party]);
+  it("is a no-op on a definition that is already gone", async () => {
+    expect(await removeFieldDef("tripLog", "water")).toBe(0);
+    expect(deleted).toEqual([]);
   });
 });

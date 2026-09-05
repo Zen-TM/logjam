@@ -10,8 +10,6 @@ import {
 import { fontSize, spacing, theme } from "../theme";
 import type { MirrorCanyon } from "../sync/mirrorStore";
 import { createCanyonLocal, updateCanyonLocal } from "../sync/outbox";
-import { useAccountState } from "../auth/AccountStateContext";
-import { fieldDefsBlockedReason } from "../auth/capabilities";
 import { CustomFieldForm, CustomFieldList } from "../customFields/CustomFieldsEditor";
 import {
   coerceCustomFields,
@@ -19,7 +17,6 @@ import {
   fieldValueStrings,
 } from "../customFields/CustomFieldValues";
 import { useFieldDefs } from "../customFields/useFieldDefs";
-import { useConnectivity } from "../map/connectivity";
 import {
   BottomSheet,
   Button,
@@ -113,15 +110,12 @@ export function CanyonEditSheet({
   const [invalid, setInvalid] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [mode, setMode] = useState<Mode>("form");
-  const { accountState } = useAccountState();
-  const online = useConnectivity() === "online";
   const { defs: customFieldDefs, setDefs: setCustomFieldDefs } = useFieldDefs("canyon");
   // Values are strings while editing and coerced on save, like every other
   // custom-field form.
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   const [dateFieldKey, setDateFieldKey] = useState<string | null>(null);
   const [editingField, setEditingField] = useState<TripLogCustomFieldDef | null>(null);
-  const fieldsBlocked = fieldDefsBlockedReason(accountState, online);
 
   // Read through a ref so it is NOT a dependency: `resuming` and `visible` flip
   // in the same commit, and listing it would re-run the seed the moment the
@@ -341,7 +335,6 @@ export function CanyonEditSheet({
       {mode === "fields" ? (
         <CustomFieldList
           entity="canyon"
-          online={online}
           defs={customFieldDefs}
           onAdd={() => {
             setEditingField(null);
@@ -357,7 +350,6 @@ export function CanyonEditSheet({
       {mode === "fieldForm" ? (
         <CustomFieldForm
           entity="canyon"
-          online={online}
           defs={customFieldDefs}
           editing={editingField}
           onSaved={(next, message) => {
@@ -484,19 +476,16 @@ export function CanyonEditSheet({
             setMode("date");
           }}
         />
-        {/* A guest's definitions are on this phone, so this door is open with no
-            account and no signal. An account's list is shared with the web,
-            which is the only case that needs a connection. */}
+        {/* Definitions are local rows written through the outbox, so this door
+            is open with no account and no signal, for everyone. */}
         <Row
           icon="sliders"
           title="Your canyon fields"
           subtitle={
-            fieldsBlocked ??
-            (customFieldDefs.length === 0
+            customFieldDefs.length === 0
               ? "Add your own — permits, access notes, anything."
-              : `${customFieldDefs.length} field${customFieldDefs.length === 1 ? "" : "s"}`)
+              : `${customFieldDefs.length} field${customFieldDefs.length === 1 ? "" : "s"}`
           }
-          disabled={fieldsBlocked !== undefined}
           right={<Feather name="chevron-right" size={20} color={theme.textMuted} />}
           onPress={() => setMode("fields")}
         />

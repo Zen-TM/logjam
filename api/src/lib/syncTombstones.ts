@@ -30,6 +30,20 @@ export async function writeTombstones(
   await tx.syncTombstone.createMany({ data: rows });
 }
 
+/** Deleting a custom field DEFINITION. Definitions are never shared — they
+ * belong to one account — so the fan-out is the owner alone. The values the
+ * definition described are stripped from the owner's trip logs / canyons in
+ * the same transaction, and those rows' own `updatedAt` bumps carry the strip
+ * to other devices; this tombstone is only about the definition row. */
+export function customFieldDefDeleteTombstones(args: {
+  ownerId: string;
+  defId: string;
+}): TombstoneRow[] {
+  return [
+    { userId: args.ownerId, entityType: "customFieldDef", entityId: args.defId },
+  ];
+}
+
 /** DELETE /trips/:id (and each row of the bulk cascade): owner forgets the
  * trip and its media. Trips are owner-private, so there is no fan-out. */
 export function tripDeleteTombstones(args: {

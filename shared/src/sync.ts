@@ -16,6 +16,7 @@ export const SYNC_ENTITY_TYPES = [
   "friendship",
   "waypoint",
   "route",
+  "customFieldDef",
 ] as const;
 
 export type SyncEntityType = (typeof SYNC_ENTITY_TYPES)[number];
@@ -50,8 +51,11 @@ export const SYNC_OVERLAP_MS = 60_000;
 
 /** The `changes` keys of a delta response, in the fixed budget-fill order
  * (§4.4). Order matters only for client convenience — canyons before the
- * trips that embed their names. */
+ * trips that embed their names, and custom field definitions before both,
+ * since a canyon's and a trip's stored values are keyed by them and a screen
+ * that applies a page mid-pull would otherwise have values it cannot label. */
 export const DELTA_ENTITY_ORDER = [
+  "customFieldDefs",
   "canyons",
   "tripLogs",
   "waypoints",
@@ -88,6 +92,13 @@ export const SYNC_PUSH_OPS_BY_ENTITY = {
   waypoint: ["create", "update", "delete"],
   route: ["create", "update", "delete"],
   notification: ["markRead", "markUnread", "delete"],
+  // A custom field DEFINITION. `delete` is not a plain row delete: the server
+  // also strips the now-orphaned values off every trip log or canyon that
+  // carried one, in the same transaction (lib/customFieldDefs.ts). That has to
+  // stay server-side — a phone can only reach the rows in its own mirror, and
+  // a value left behind on a row the phone has not pulled would resurface the
+  // moment a later field slugged to the same key.
+  customFieldDef: ["create", "update", "delete"],
 } as const;
 
 export type SyncPushEntity = keyof typeof SYNC_PUSH_OPS_BY_ENTITY;
@@ -307,7 +318,46 @@ export type SyncDeltaFriendshipRow = {
   direction: "sent" | "received";
 };
 
-export type SyncDeltaTombstone = { type: SyncEntityType; id: string };
+/**
+ * A custom field DEFINITION. Always the caller's own — definitions are not
+ * shared, so unlike a canyon or a route this row carries no `syncRole`.
+ *
+ * `min`/`max` are present together or both null; the type-specific rules
+ * (numeric fields only, min < max, whole numbers on an integer field) are
+ * `isTripLogCustomFieldDef`'s and are re-checked before the row is stored.
+ */
+export type SyncDeltaCustomFieldDefRow = {
+  id: string;
+  ownerId: string;
+  entity: string;
+  key: string;
+  label: string;
+  type: string;
+  min: number | null;
+  max: number | null;
+  position: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/**
+ * A tombstone names a row to forget.
+ *
+ * `type` is deliberately NOT narrowed to `SyncEntityType`: a server newer than
+ * this client can name an entity the client has never heard of, and that is an
+ * ordinary additive protocol change (§10.3), not corruption. Callers narrow
+ * with `isKnownSyncEntityType` and ignore the rest — see `applyTombstone`.
+ */
+export type SyncDeltaTombstone = {
+  type: SyncEntityType | (string & {});
+  id: string;
+};
+
+export function isKnownSyncEntityType(
+  value: string,
+): value is SyncEntityType {
+  return (SYNC_ENTITY_TYPES as readonly string[]).includes(value);
+}
 
 export type SyncDeltaResponse = {
   protocol: number;
@@ -317,6 +367,7 @@ export type SyncDeltaResponse = {
   hasMore: boolean;
   resetRequired: boolean;
   changes: {
+    customFieldDefs: SyncDeltaCustomFieldDefRow[];
     canyons: SyncDeltaCanyonRow[];
     tripLogs: SyncDeltaTripRow[];
     waypoints: SyncDeltaWaypointRow[];
@@ -475,6 +526,20 @@ const SHARE_ROW_SPEC: Record<string, FieldCheck> = {
   sharedWith: isUserRef,
 };
 
+const CUSTOM_FIELD_DEF_ROW_SPEC: Record<string, FieldCheck> = {
+  id: isString,
+  ownerId: isString,
+  entity: isString,
+  key: isString,
+  label: isString,
+  type: isString,
+  min: nullable(isNumber),
+  max: nullable(isNumber),
+  position: isNumber,
+  createdAt: isString,
+  updatedAt: isString,
+};
+
 const FRIENDSHIP_ROW_SPEC: Record<string, FieldCheck> = {
   id: isString,
   status: isString,
@@ -526,6 +591,22 @@ export function parseSyncDeltaShareRow(value: unknown): SyncDeltaShareRow {
   return parseRow<SyncDeltaShareRow>("canyonShare", value, SHARE_ROW_SPEC);
 }
 
+/**
+ * Shape check only — `entity` and `type` are validated against their allowed
+ * values by `isTripLogCustomFieldDef` at the point the row becomes a
+ * definition, so an unknown field type from a NEWER server reaches the mirror
+ * intact (protocol §10.3 is additive) instead of failing the whole page.
+ */
+export function parseSyncDeltaCustomFieldDefRow(
+  value: unknown,
+): SyncDeltaCustomFieldDefRow {
+  return parseRow<SyncDeltaCustomFieldDefRow>(
+    "customFieldDef",
+    value,
+    CUSTOM_FIELD_DEF_ROW_SPEC,
+  );
+}
+
 export function parseSyncDeltaFriendshipRow(
   value: unknown,
 ): SyncDeltaFriendshipRow {
@@ -539,10 +620,21 @@ export function parseSyncDeltaFriendshipRow(
 /**
  * A tombstone names a row to delete, so a malformed one is as dangerous as a
  * malformed row — `type` decides WHICH table the delete cascades through.
+ *
+ * SHAPE is checked here; the VOCABULARY is not. `type` used to be validated
+ * against `SYNC_ENTITY_TYPES`, which made every addition to that list a
+ * breaking change for clients already in the field: the server emitted a
+ * tombstone for a new entity, the parser called it invalid, and the phone told
+ * its user it had "dropped N unreadable rows from a delta page" — a data-loss
+ * warning for a row it correctly had nothing to do with. Adding
+ * `customFieldDef` produced exactly that on a 0.1.0 build.
+ *
+ * An unknown type is a NEWER SERVER, not corruption. It is parsed, and
+ * `applyTombstone` ignores it (there is no local table it could name).
  */
 export function parseSyncDeltaTombstone(value: unknown): SyncDeltaTombstone {
   return parseRow<SyncDeltaTombstone>("tombstone", value, {
-    type: (v) => SYNC_ENTITY_TYPES.includes(v as SyncEntityType),
+    type: isString,
     id: isString,
   });
 }

@@ -51,8 +51,52 @@ model User {
   directSharesReceived Share[]             @relation("directSharedWith")
   fileSends            FileSend[]
   fileSendsReceived    FileSendRecipient[]
+  customFieldDefs      CustomFieldDef[]
 
   @@map("users")
+}
+
+/// User-defined custom field DEFINITIONS, for both trip logs and canyons.
+///
+/// Previously an array inside `User.uiPreferences`. Promoted to rows so that
+/// (a) a definition can be created, renamed and deleted offline through the
+/// sync engine like any other entity, and (b) a definition is addressable —
+/// a JSON blob on the user row can never be read by anyone but its owner,
+/// which a shared record carrying values keyed by these definitions needs.
+///
+/// The VALUES still live on the owning rows, keyed by `key`:
+/// `TripLog.customFields` and `Canyon.attributes.customFields`.
+model CustomFieldDef {
+  id      String @id @default(uuid())
+  ownerId String @map("owner_id")
+  owner   User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  /// Which surface this field belongs to: "tripLog" or "canyon".
+  entity  String
+  /// Stable slug the stored VALUES are keyed by. Derived from the label once,
+  /// at creation, and deliberately never re-derived on rename — re-deriving
+  /// would orphan every value already stored under the old key.
+  key     String
+  label   String
+  /// One of TripLogCustomFieldType: string | integer | float | date | boolean.
+  type    String
+  /// Optional inclusive bounds, numeric field types only. Both or neither.
+  /// Float for both integer and float fields; integer-ness is enforced by
+  /// `isTripLogCustomFieldDef`, which every write path runs.
+  min     Float?
+  max     Float?
+  /// Display order within (owner, entity). The uiPreferences array carried
+  /// this implicitly by index; rows need it stated.
+  position Int @default(0)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  /// One definition per key per surface — the uniqueness `buildCustomFieldDef`
+  /// checked in application code, now enforced by the database.
+  @@unique([ownerId, entity, key])
+  /// Delta sync pages by (updatedAt, id) within an owner.
+  @@index([ownerId, updatedAt])
+  @@map("custom_field_defs")
 }
 
 model Canyon {

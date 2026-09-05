@@ -6,16 +6,18 @@
 import type { SQLiteDatabase } from "expo-sqlite";
 import type {
   SyncDeltaCanyonRow,
+  SyncDeltaCustomFieldDefRow,
   SyncDeltaFriendshipRow,
   SyncDeltaMediaRow,
   SyncDeltaShareRow,
   SyncDeltaTombstone,
+  SyncEntityType,
   SyncDeltaTripRow,
   SyncDeltaWaypointRow,
   SyncDeltaRouteRow,
   MediaMetadata,
 } from "@logjam/shared";
-import { readMediaMetadata } from "@logjam/shared";
+import { isKnownSyncEntityType, readMediaMetadata } from "@logjam/shared";
 
 import type { TCanyon, TTripLog } from "../api/types";
 import { withoutCanyonId, withoutCanyonLink } from "./canyonLinks";
@@ -59,6 +61,14 @@ const WAYPOINT_KNOWN = [
 const ROUTE_KNOWN = [
   "id", "ownerId", "canyonId", "name", "color", "points", "syncRole",
   "sharedCount", "createdAt", "updatedAt",
+] as const;
+
+// `ownerId` is a known key that gets no column: every definition the server
+// sends is the caller's own (they are never shared), so storing it would be a
+// constant. It is listed here so it does not fall into extra_json.
+const CUSTOM_FIELD_DEF_KNOWN = [
+  "id", "ownerId", "entity", "key", "label", "type", "min", "max",
+  "position", "createdAt", "updatedAt",
 ] as const;
 
 const MEDIA_KNOWN = [
@@ -247,6 +257,31 @@ export async function upsertRoute(
     row.createdAt,
     row.updatedAt,
     splitExtras(row, ROUTE_KNOWN),
+    dirtyFieldNames.length ? JSON.stringify(dirtyFieldNames) : null,
+  );
+}
+
+export async function upsertCustomFieldDef(
+  db: SQLiteDatabase,
+  row: SyncDeltaCustomFieldDefRow,
+  dirtyFieldNames: string[],
+): Promise<void> {
+  await db.runAsync(
+    `INSERT OR REPLACE INTO custom_field_defs
+       (id, entity, key, label, type, min, max, position, created_at,
+        updated_at, extra_json, dirty_fields_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    row.id,
+    row.entity,
+    row.key,
+    row.label,
+    row.type,
+    row.min,
+    row.max,
+    row.position,
+    row.createdAt,
+    row.updatedAt,
+    splitExtras(row, CUSTOM_FIELD_DEF_KNOWN),
     dirtyFieldNames.length ? JSON.stringify(dirtyFieldNames) : null,
   );
 }
@@ -460,7 +495,16 @@ export async function applyTombstone(
 ): Promise<string[]> {
   const orphanedPaths: string[] = [];
 
-  switch (tombstone.type) {
+  // A type this build has never heard of belongs to a NEWER SERVER, and there
+  // is by definition no local table it could name — so forget it quietly and
+  // let the cursor advance. Returning early (rather than falling through to the
+  // switch) is also what keeps the `never` check below meaningful: the switch
+  // now sees only entities this build knows, so a ninth one added HERE still
+  // fails to compile until it is handled.
+  if (!isKnownSyncEntityType(tombstone.type)) return orphanedPaths;
+  const type: SyncEntityType = tombstone.type;
+
+  switch (type) {
     case "canyon": {
       orphanedPaths.push(...(await cascadeCanyonDelete(db, tombstone.id)));
       break;
@@ -499,12 +543,23 @@ export async function applyTombstone(
       // still exists for its owner, but this user must forget it.
       await db.runAsync("DELETE FROM routes WHERE id = ?", tombstone.id);
       break;
+    case "customFieldDef":
+      // Only the definition. The VALUES it described were stripped server-side
+      // in the same transaction as the delete, and reach this device as
+      // ordinary updates to the trip_logs / canyons rows that carried them —
+      // so cascading a value strip here would be a second, racing writer of
+      // rows the delta already owns.
+      await db.runAsync(
+        "DELETE FROM custom_field_defs WHERE id = ?",
+        tombstone.id,
+      );
+      break;
     default: {
-      // `parseSyncDeltaTombstone` validates `type` against SYNC_ENTITY_TYPES,
-      // so an eighth entity would sail through the boundary check, match no
-      // case here, delete nothing, and still advance the cursor — the copy
-      // would sit in the mirror forever. The compiler answers instead.
-      const unhandled: never = tombstone.type;
+      // An entity this build KNOWS but does not handle here would match no
+      // case, delete nothing, and still advance the cursor — the copy would sit
+      // in the mirror forever. The compiler answers instead. (A type this build
+      // does not know returned above; that one is not a bug.)
+      const unhandled: never = type;
       // Loud, but not a rollback: throwing here would abort the whole delta
       // page and freeze the cursor forever — the exact failure this mirror's
       // drop-and-rebuild lever exists to avoid. The compile error above is
@@ -594,6 +649,31 @@ function rowToCanyon(row: CanyonRow): MirrorCanyon {
     createdAt: row.created_at ?? "",
     updatedAt: row.updated_at ?? "",
   };
+}
+
+/** A definition row as stored. `customFieldDefsFromRows` turns these into the
+ *  `TripLogCustomFieldDef`s the UI works in. */
+export type MirrorCustomFieldDef = {
+  id: string;
+  entity: string;
+  key: string;
+  label: string;
+  type: string;
+  min: number | null;
+  max: number | null;
+  position: number;
+};
+
+/** Every definition on this device, both entities. The ORDER BY matches the
+ *  server's so a locally-created row sits where the pull will put it. */
+export async function listMirrorCustomFieldDefs(): Promise<
+  MirrorCustomFieldDef[]
+> {
+  const db = await getSyncDb();
+  return db.getAllAsync<MirrorCustomFieldDef>(
+    `SELECT id, entity, key, label, type, min, max, position
+       FROM custom_field_defs ORDER BY position ASC, key ASC`,
+  );
 }
 
 export async function listMirrorCanyons(): Promise<MirrorCanyon[]> {

@@ -176,16 +176,17 @@ describe("capabilityRowProps", () => {
   });
 });
 
-// Custom fields are deliberately NOT in the union above: a guest keeps their
-// own definitions on the device, so there is no account axis to gate on.
+// Custom fields are deliberately NOT in the union above, on EITHER axis:
+// definitions are rows in the local mirror written through the outbox, so
+// nothing about them needs an account or a connection. This test is what stops
+// a gate quietly coming back — it used to block a linked user offline, when an
+// account's list lived on the user record and was shared with the web.
 describe("fieldDefsBlockedReason", () => {
-  it("never blocks a guest, online or off", () => {
-    expect(fieldDefsBlockedReason("guest", true)).toBeUndefined();
-    expect(fieldDefsBlockedReason("guest", false)).toBeUndefined();
-  });
-
-  it("blocks a linked user offline, because that list is shared with the web", () => {
-    expect(fieldDefsBlockedReason("linked", false)).toBe("Needs a connection");
-    expect(fieldDefsBlockedReason("linked", true)).toBeUndefined();
+  it("never blocks anyone, in any combination", () => {
+    for (const accountState of ["guest", "linked"] as const) {
+      for (const online of [true, false]) {
+        expect(fieldDefsBlockedReason(accountState, online)).toBeUndefined();
+      }
+    }
   });
 });

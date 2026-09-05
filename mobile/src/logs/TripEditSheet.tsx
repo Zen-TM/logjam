@@ -29,8 +29,6 @@ import {
   todayDateKey,
   type ChipOption,
 } from "../ui";
-import { useAccountState } from "../auth/AccountStateContext";
-import { fieldDefsBlockedReason } from "../auth/capabilities";
 import { CustomFieldForm, CustomFieldList } from "../customFields/CustomFieldsEditor";
 import {
   coerceCustomFields,
@@ -99,7 +97,6 @@ export function TripEditSheet({
   online: boolean;
 }) {
   const editing = trip != null;
-  const { accountState } = useAccountState();
   const [mode, setMode] = useState<Mode>("form");
   const [dateKey, setDateKey] = useState(todayDateKey);
   const [selected, setSelected] = useState<TripCanyonLink[]>([]);
@@ -344,7 +341,6 @@ export function TripEditSheet({
       {mode === "fields" ? (
         <CustomFieldList
           entity="tripLog"
-          online={online}
           defs={customFieldDefs}
           onAdd={() => {
             setEditingField(null);
@@ -360,7 +356,6 @@ export function TripEditSheet({
       {mode === "fieldForm" ? (
         <CustomFieldForm
           entity="tripLog"
-          online={online}
           defs={customFieldDefs}
           editing={editingField}
           onSaved={(next, message) => {
@@ -448,19 +443,16 @@ export function TripEditSheet({
             }}
           />
 
-          {/* A guest's definitions are on this phone, so this door is open with
-              no account and no signal. An account's list is shared with the web,
-              which is the only case that needs a connection. */}
+          {/* Definitions are local rows written through the outbox, so this
+              door is open with no account and no signal, for everyone. */}
           <Row
             icon="sliders"
             title="Your trip fields"
             subtitle={
-              fieldDefsBlockedReason(accountState, online) ??
-              (customFieldDefs.length === 0
+              customFieldDefs.length === 0
                 ? "Add your own — water level, party size, anything"
-                : `${customFieldDefs.length} field${customFieldDefs.length === 1 ? "" : "s"}`)
+                : `${customFieldDefs.length} field${customFieldDefs.length === 1 ? "" : "s"}`
             }
-            disabled={fieldDefsBlockedReason(accountState, online) !== undefined}
             right={<Feather name="chevron-right" size={20} color={theme.textMuted} />}
             onPress={() => setMode("fields")}
           />

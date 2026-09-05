@@ -1,3 +1,21 @@
+/**
+ * The two surfaces a custom field can belong to. One declaration for the API's
+ * table column, the sync protocol, the mobile store and the web dialogs — it
+ * used to be spelled separately in `mobile/src/api/queries.ts` and in the
+ * `entityConfigs` of `api/src/routes/customFields.ts`.
+ *
+ * The Place rework replaces `"canyon"` with a reference to a user-created
+ * place type; until then these are the only two values `CustomFieldDef.entity`
+ * may hold, and `isCustomFieldEntity` is the gate that says so.
+ */
+export const CUSTOM_FIELD_ENTITIES = ["tripLog", "canyon"] as const;
+
+export type CustomFieldEntity = (typeof CUSTOM_FIELD_ENTITIES)[number];
+
+export function isCustomFieldEntity(value: unknown): value is CustomFieldEntity {
+  return CUSTOM_FIELD_ENTITIES.includes(value as CustomFieldEntity);
+}
+
 export type TripLogCustomFieldType =
   | "string"
   | "integer"
@@ -200,6 +218,62 @@ export function buildCustomFieldDef(
   return {
     def: { key, label, type: draft.type, ...(bounds ?? {}) },
   };
+}
+
+/**
+ * The persisted shape of a definition — a `custom_field_defs` row on the
+ * server, a `custom_field_defs` mirror row on the phone. Structural rather
+ * than imported from `sync.ts` so this module stays free of protocol types;
+ * both sides satisfy it.
+ */
+export type CustomFieldDefRow = {
+  entity: string;
+  key: string;
+  label: string;
+  type: string;
+  min: number | null;
+  max: number | null;
+  position: number;
+};
+
+/**
+ * Row → the definition the UI works in, or null when the row does not describe
+ * a usable field. Dropping rather than throwing matches what
+ * `normalizeCustomFieldDefs` has always done with a malformed def: it was
+ * unusable and invisible either way, and one bad row must not take out the
+ * whole list.
+ *
+ * Bounds only survive together — a half-bounded numeric row would fail the
+ * guard, so it is normalized to unbounded rather than dropped entirely.
+ */
+export function customFieldDefFromRow(
+  row: CustomFieldDefRow,
+): TripLogCustomFieldDef | null {
+  const bounded = row.min != null && row.max != null;
+  const candidate = {
+    key: row.key,
+    label: row.label,
+    type: row.type,
+    ...(bounded ? { min: row.min, max: row.max } : {}),
+  };
+  return isTripLogCustomFieldDef(candidate) ? candidate : null;
+}
+
+/**
+ * The rows for one entity, in the order the user arranged them, as definitions.
+ * `position` is the order; `key` breaks a tie so two rows that raced to the
+ * same position still render in a stable order rather than swapping between
+ * reads.
+ */
+export function customFieldDefsFromRows(
+  rows: CustomFieldDefRow[],
+  entity: CustomFieldEntity,
+): TripLogCustomFieldDef[] {
+  return rows
+    .filter((row) => row.entity === entity)
+    .sort((a, b) => a.position - b.position || a.key.localeCompare(b.key))
+    .map(customFieldDefFromRow)
+    .filter((def): def is TripLogCustomFieldDef => def !== null);
 }
 
 export function isTripLogCustomFieldDef(v: unknown): v is TripLogCustomFieldDef {
