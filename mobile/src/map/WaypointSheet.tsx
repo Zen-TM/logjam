@@ -144,8 +144,10 @@ export function WaypointSheet({
   // One descriptor for every verb on this sheet, same source as Saved
   // (saved/assetActions.ts). `share` and `delete` are both absent on a
   // waypoint seen through someone else's canyon.
-  const shareRowProps = useShareRowProps(online);
   const actions = waypoint ? waypointActions(waypoint) : null;
+  // A waypoint dropped on the trail reaches the server only when the outbox
+  // flushes; until then the live-share verb dims and says so.
+  const shareRowProps = useShareRowProps(online, actions?.share?.entityId);
   // THE sharing panel, identical to the one Saved, the route sheet and the
   // canyon screen render — the hook is called unconditionally (a closed sheet
   // passes a null target and issues no request).

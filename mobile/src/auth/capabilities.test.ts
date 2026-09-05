@@ -5,6 +5,8 @@ import {
   capabilityScreenBlock,
   capabilityStatus,
   fieldDefsBlockedReason,
+  shareCapabilityStatus,
+  statusRowProps,
   unavailableReasonText,
   type Capability,
 } from "./capabilities";
@@ -74,6 +76,66 @@ describe("unavailableReasonText", () => {
   it("uses the canonical strings", () => {
     expect(unavailableReasonText("needs-account")).toBe("Needs an account");
     expect(unavailableReasonText("needs-connection")).toBe("Needs a connection");
+    expect(unavailableReasonText("needs-upload")).toBe("Needs to sync first");
+  });
+});
+
+// The third axis, and the reason a Share verb on a route drawn in the field is
+// dimmed rather than left live: there is no server row to grant access to until
+// the outbox flushes, so the lookup and the grant both 404.
+describe("shareCapabilityStatus", () => {
+  it("is available for a linked user, online, once the row is on the server", () => {
+    expect(shareCapabilityStatus("linked", true, true)).toEqual({
+      status: "available",
+    });
+  });
+
+  it("blocks a row the account does not hold yet", () => {
+    expect(shareCapabilityStatus("linked", true, false)).toEqual({
+      status: "unavailable",
+      reason: "needs-upload",
+    });
+  });
+
+  // PRECEDENCE, both halves of it. An offline user is told to find signal, not
+  // to wait for a queue that is itself waiting on that signal — one outage, one
+  // explanation, and the only one with a next step. A guest is told neither:
+  // they have no account for anything to sync TO.
+  it("reports needs-connection over needs-upload for an offline linked user", () => {
+    expect(shareCapabilityStatus("linked", false, false)).toEqual({
+      status: "unavailable",
+      reason: "needs-connection",
+    });
+  });
+
+  it("reports needs-account over both for a guest, however unsynced", () => {
+    expect(shareCapabilityStatus("guest", true, false)).toEqual({
+      status: "unavailable",
+      reason: "needs-account",
+    });
+    expect(shareCapabilityStatus("guest", false, false)).toEqual({
+      status: "unavailable",
+      reason: "needs-account",
+    });
+  });
+
+  // A guest's whole library is unsynced by definition, so an "on the server"
+  // answer of true from a caller that did not look must not make sharing
+  // available to them.
+  it("still blocks a guest whose caller claims the row is on the server", () => {
+    expect(shareCapabilityStatus("guest", true, true)).toEqual({
+      status: "unavailable",
+      reason: "needs-account",
+    });
+  });
+});
+
+describe("statusRowProps", () => {
+  it("words every reason the same way capabilityRowProps does", () => {
+    expect(statusRowProps({ status: "available" })).toEqual({ disabled: false });
+    expect(
+      statusRowProps(shareCapabilityStatus("linked", true, false)),
+    ).toEqual({ disabled: true, subtitle: "Needs to sync first" });
   });
 });
 

@@ -81,7 +81,9 @@ export function CanyonOptionsSheet({
   }, [visible]);
 
   const isOwner = canyon?.syncRole === "owner";
-  const shareRowProps = useShareRowProps(online);
+  // The canyon's own id: one added in the field is not on the server until the
+  // outbox flushes, and the live-share verb dims with the reason until it is.
+  const shareRowProps = useShareRowProps(online, canyon?.id);
   // THE sharing panel, the same one the canyon's detail screen renders — and
   // withheld on a canyon shared WITH this user, because re-sharing is the
   // owner's to do and the API refuses it. Memoised on the id: an object literal

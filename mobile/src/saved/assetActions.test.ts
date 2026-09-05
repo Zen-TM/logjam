@@ -216,6 +216,26 @@ const importRow = (overrides: Partial<VectorImport> = {}) =>
 // so: `share` is a live, revocable view of a server-backed row; `sendCopy`
 // hands over a file for good.
 describe("the share / send-a-copy verb matrix", () => {
+  // Load-bearing for the share row's "Needs to sync first" gate, and not
+  // obviously so. SavedScreen builds ONE props object from
+  // `useShareRowProps(online, share?.entityId)` and spreads it onto both the
+  // Share row and the Send-a-copy row. That is only safe while no descriptor
+  // offers both: a kind that did would have its working copy verb dimmed by
+  // its own unsynced share id, and a copy needs no server row at all.
+  //
+  // A comment in SavedScreen says this; a comment is not a check.
+  it("never gives one kind BOTH verbs", () => {
+    const descriptors = [
+      routeActions(route("owner")),
+      waypointActions(waypoint("owner")),
+      vectorImportActions(importRow()),
+      trackActions(track(2)),
+    ];
+    for (const descriptor of descriptors) {
+      expect(descriptor.share != null && descriptor.sendCopy != null).toBe(false);
+    }
+  });
+
   it("gives an owned route and waypoint Share, and never sendCopy", () => {
     for (const actions of [routeActions(route("owner")), waypointActions(waypoint("owner"))]) {
       expect(actions.share).toBeDefined();

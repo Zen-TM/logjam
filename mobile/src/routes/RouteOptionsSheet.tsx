@@ -97,7 +97,6 @@ export function RouteOptionsSheet({
   }, [visible]);
   const online = useConnectivity() === "online";
 
-  const shareRowProps = useShareRowProps(online);
   // The canyons this phone can see, so a shared route can tell a share of its
   // own from one it inherited (assetActions.routeActions says why).
   const canyons = useMirrorCanyons();
@@ -106,6 +105,11 @@ export function RouteOptionsSheet({
   const viaCanyons = (canyons.data ?? []).filter((canyon) =>
     (actions?.sharedViaCanyonIds ?? []).includes(canyon.id),
   );
+  // Declared AFTER `actions`, which it now reads: the route's own id. A route
+  // drawn in the field is not on the server until the outbox flushes, and the
+  // verb dims with the reason rather than firing a grant at a row that isn't
+  // there.
+  const shareRowProps = useShareRowProps(online, actions?.share?.entityId);
   // THE sharing panel — the same one Saved, the waypoint sheet and the canyon
   // screen render. Called unconditionally; a closed sheet passes a null target
   // and issues no request.

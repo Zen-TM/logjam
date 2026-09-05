@@ -1751,7 +1751,12 @@ export function SavedScreen({
   });
 
   // Both verb rows below carry this: offline they dim and say why.
-  const shareRowProps = useShareRowProps(online);
+  //
+  // The id is the LIVE share's server row, and only the Share row can have one
+  // — no kind carries both verbs (a GeoPDF or an import can only be copied, a
+  // LiDAR topo can only be shared), so the same props spread onto the Send a
+  // copy row below never gate it on an upload it does not need.
+  const shareRowProps = useShareRowProps(online, menuItem?.share?.entityId);
 
   // The selection, as the bulk panel's triage takes it. A Saved selection is
   // the one that genuinely MIXES: on the All tab it can hold a waypoint (a
