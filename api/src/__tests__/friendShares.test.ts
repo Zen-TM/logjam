@@ -8,6 +8,8 @@ import {
   ALICE_ID,
   BOB_ID,
   SHARED_PLACE_ID,
+  BOB_SHARED_PLACE_ID,
+  BOB_SHARED_WAYPOINT_ID,
   NONEXISTENT_ID,
   as,
 } from "./_actors";
@@ -21,8 +23,14 @@ import {
 //
 // Requires `make dev` (Postgres + MiniStack + API on :8080) with AUTH_MODE=fake.
 // Seed baseline: alice owns 4 places shared with bob (incl. SHARED_PLACE_ID);
-// alice<->bob is an accepted friendship; carol->alice is PENDING and carol is
-// shared nothing.
+// bob shares two rows back with alice (BOB_SHARED_PLACE_ID and
+// BOB_SHARED_WAYPOINT_ID); alice<->bob is an accepted friendship; carol->alice
+// is PENDING and carol is shared nothing.
+//
+// The incoming pair is named in `_actors.ts` rather than assumed absent. Three
+// tests here asserted alice's received list was `[]`, which was true only while
+// the seed had no incoming shares at all — and this suite is NOT in CI, so the
+// seed change that added them landed green and broke it silently.
 //
 // The bulk-revoke test destroys the seeded alice->bob shares, and
 // SHARED_PLACE_ID-is-shared-with-bob is an invariant the rest of the suite
@@ -107,12 +115,19 @@ describe("GET /friends/:id/shares — the audit surface", () => {
     }
   });
 
-  it("reports the reverse direction as empty — bob shares nothing with alice", async () => {
+  // The reverse direction is exactly what the seed says bob shares with alice,
+  // and nothing else. Asserted as an exact SET rather than a `toContain`: this
+  // test's job is to prove the two directions do not bleed into each other, and
+  // a containment check would still pass if alice's own outgoing rows leaked in.
+  it("reports the reverse direction as bob's incoming shares, and only those", async () => {
     const res = await request(API_URL)
       .get(`/friends/${aliceBobFriendshipId}/shares`)
       .set(as(ALICE_SUB));
     expect(res.status).toBe(200);
-    expect((res.body as SharesBody).sharedWithYou).toEqual([]);
+    const received = (res.body as SharesBody).sharedWithYou;
+    expect(received.map((row) => row.entityId).sort()).toEqual(
+      [BOB_SHARED_PLACE_ID, BOB_SHARED_WAYPOINT_ID].sort(),
+    );
   });
 
   // The mirror: the same friendship read from bob's side must invert, and must
@@ -124,8 +139,11 @@ describe("GET /friends/:id/shares — the audit surface", () => {
       .set(as(BOB_SUB));
     expect(res.status).toBe(200);
     const body = res.body as SharesBody;
-    // Bob owns none of these, so his forward list is empty...
-    expect(body.sharedWithThem).toEqual([]);
+    // Bob's forward list is what HE owns and shares — the same two rows alice
+    // saw as incoming, now read from the other end of the same friendship.
+    expect(body.sharedWithThem.map((row) => row.entityId).sort()).toEqual(
+      [BOB_SHARED_PLACE_ID, BOB_SHARED_WAYPOINT_ID].sort(),
+    );
     // ...and alice's places appear in his received list.
     expect(placeIdsIn(body.sharedWithYou)).toContain(SHARED_PLACE_ID);
   });
@@ -161,8 +179,11 @@ describe("GET /friends/:id/shares — the audit surface", () => {
     expect(
       (theirs.body as SharesBody).sharedWithYou.map((r) => r.entityId),
     ).toContain(routeId);
-    // Bob owns none of it, so his forward list stays empty.
-    expect((theirs.body as SharesBody).sharedWithThem).toEqual([]);
+    // Alice's route is not bob's to share on, so it never joins HIS forward
+    // list — which holds only what the seed says bob owns and shares.
+    expect(
+      (theirs.body as SharesBody).sharedWithThem.map((r) => r.entityId).sort(),
+    ).toEqual([BOB_SHARED_PLACE_ID, BOB_SHARED_WAYPOINT_ID].sort());
   });
 
   // The ownership arm: the list is derived from who OWNS the row, not from the

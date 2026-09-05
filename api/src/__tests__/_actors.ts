@@ -25,6 +25,17 @@ export const CAROL_ID = "00000000-0000-4000-8000-000000000003";
 // carol is shared nothing (the stranger).
 export const SHARED_PLACE_ID = "10000000-0000-4000-8000-000000000001";
 
+// What bob shares WITH alice — bob's "Coin Slot" place and one waypoint. Named
+// here rather than assumed absent: the seed grew an incoming share for alice
+// (so the phone's sharee-perspective surfaces are reachable in dev) and three
+// tests in friendShares.test.ts were asserting her received list was EMPTY.
+// They passed for as long as the seed had no incoming shares, and the header
+// comment stating that baseline was the only thing linking the two — which is
+// how a seed change broke a suite that is not in CI. Assert against these
+// instead of against `[]`, so the next seed change fails loudly here.
+export const BOB_SHARED_PLACE_ID = "20000000-0000-4000-8000-000000000002";
+export const BOB_SHARED_WAYPOINT_ID = "60000000-0000-4000-8000-000000000005";
+
 // Well-formed UUIDv4 that no seeded row uses — the "unknown id" probe, so a
 // 404 assertion is testing not-found and not id-format rejection.
 export const NONEXISTENT_ID = "99999999-9999-4999-8999-999999999999";
