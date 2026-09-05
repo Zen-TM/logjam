@@ -407,7 +407,7 @@ async function main() {
   await prisma.route.createMany({
     data: [
       { id: rtid(1), ownerId: ALICE_ID, canyonId: CANYON_IDS[1], name: "Claustral through-trip", color: TRACK_COLORS[3], points: CLAUSTRAL_LINE, anchors: [0, CLAUSTRAL_LINE.length - 1] },
-      { id: rtid(2), ownerId: ALICE_ID, canyonId: null, name: "Du Faur Head approach", color: TRACK_COLORS[4], points: DU_FAUR_LINE, anchors: null },
+      { id: rtid(2), ownerId: ALICE_ID, canyonId: null, name: "Du Faur Head approach", color: TRACK_COLORS[4], points: DU_FAUR_LINE, anchors: Prisma.DbNull },
       { id: rtid(3), ownerId: BOB_ID, canyonId: BOB_SHARED_CANYON_ID, name: "Coin Slot approach", color: TRACK_COLORS[5], points: COIN_SLOT_LINE, anchors: [0, COIN_SLOT_LINE.length - 1] },
     ],
   });
