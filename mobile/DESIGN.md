@@ -960,6 +960,18 @@ which subsystem is talking.
   already said the cause and the rail already said which kind, so the pills went
   and the title got the width. A pill earns its place by saying something no
   other part of the row says.
+- **Two facts about the same row get two REGISTERS, not two similar words.**
+  Saved marked a received asset `Shared` and an owned one `Shared with 3` — one
+  word apart, same `muted` tone, same slot, opposite meanings: one says *you
+  may not edit this and someone else can take it away*, the other says *here is
+  a count you control*. They now differ in kind. The permission fact keeps the
+  pill and names the person (`From bob`, `outline`), because who can revoke it
+  is the part worth knowing. The fan-out becomes a `users` glyph beside the
+  backed-up cloud, by the cloud's own argument — a word repeated down a list
+  stops being read and eats the title's width to say something nobody is
+  scanning for; the count survives in the glyph's `accessibilityLabel` and on
+  the sharing sheet. The branch is `saved/shareMark.ts` (RN-free) with
+  `shareMark.test.ts` pinning both marks and that no row wears both.
 - **A selection is a STATE of the row, not a label on it.** The basemap list used
   to hang a "Showing" pill off the active row; it now lights the whole card (accent
   border, accent tint, a filled check). One row looking different is read before any

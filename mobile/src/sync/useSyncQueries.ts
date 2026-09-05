@@ -8,6 +8,7 @@ import {
   hasMirrorSynced,
   countMediaByLinkedId,
   countOutgoingSharesByCanyon,
+  incomingShareOwnerByCanyon,
   listCanyonTrackMedia,
   listMediaForLinked,
   listMirrorCanyons,
@@ -102,6 +103,7 @@ const readCanyons = () => listMirrorCanyons();
 const readTrips = () => listMirrorTrips();
 const readWaypoints = () => listMirrorWaypoints();
 const readShareCounts = () => countOutgoingSharesByCanyon();
+const readIncomingShareOwners = () => incomingShareOwnerByCanyon();
 
 export function useMirrorCanyons(): MirrorQueryState<MirrorCanyon[]> {
   return useMirrorQuery(readCanyons);
@@ -155,6 +157,14 @@ export function useMirrorMediaCounts(
 /** Share fan-out per owned canyon, for the "Shared with N" badge. */
 export function useMirrorShareCounts(): MirrorQueryState<Record<string, number>> {
   return useMirrorQuery(readShareCounts);
+}
+
+/**
+ * Username of whoever shared each incoming canyon with the viewer, keyed by
+ * canyon id — the "From <name>" mark on a shared route or waypoint in Saved.
+ */
+export function useMirrorIncomingShareOwners(): MirrorQueryState<Record<string, string>> {
+  return useMirrorQuery(readIncomingShareOwners);
 }
 
 /** Media attached to one canyon or trip, pendingUpload rows included. */
