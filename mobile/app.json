@@ -92,6 +92,13 @@
           }
         }
       ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#DEB188"
+        }
+      ],
       "expo-secure-store",
       "@sentry/react-native",
       "expo-sqlite",
