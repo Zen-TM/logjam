@@ -11,12 +11,13 @@ import type {
   SyncDeltaMediaRow,
   SyncDeltaShareRow,
   SyncDeltaTombstone,
+  SyncEntityType,
   SyncDeltaTripRow,
   SyncDeltaWaypointRow,
   SyncDeltaRouteRow,
   MediaMetadata,
 } from "@logjam/shared";
-import { readMediaMetadata } from "@logjam/shared";
+import { isKnownSyncEntityType, readMediaMetadata } from "@logjam/shared";
 
 import type { TCanyon, TTripLog } from "../api/types";
 import { withoutCanyonId, withoutCanyonLink } from "./canyonLinks";
@@ -494,7 +495,16 @@ export async function applyTombstone(
 ): Promise<string[]> {
   const orphanedPaths: string[] = [];
 
-  switch (tombstone.type) {
+  // A type this build has never heard of belongs to a NEWER SERVER, and there
+  // is by definition no local table it could name — so forget it quietly and
+  // let the cursor advance. Returning early (rather than falling through to the
+  // switch) is also what keeps the `never` check below meaningful: the switch
+  // now sees only entities this build knows, so a ninth one added HERE still
+  // fails to compile until it is handled.
+  if (!isKnownSyncEntityType(tombstone.type)) return orphanedPaths;
+  const type: SyncEntityType = tombstone.type;
+
+  switch (type) {
     case "canyon": {
       orphanedPaths.push(...(await cascadeCanyonDelete(db, tombstone.id)));
       break;
@@ -545,11 +555,11 @@ export async function applyTombstone(
       );
       break;
     default: {
-      // `parseSyncDeltaTombstone` validates `type` against SYNC_ENTITY_TYPES,
-      // so an eighth entity would sail through the boundary check, match no
-      // case here, delete nothing, and still advance the cursor — the copy
-      // would sit in the mirror forever. The compiler answers instead.
-      const unhandled: never = tombstone.type;
+      // An entity this build KNOWS but does not handle here would match no
+      // case, delete nothing, and still advance the cursor — the copy would sit
+      // in the mirror forever. The compiler answers instead. (A type this build
+      // does not know returned above; that one is not a bug.)
+      const unhandled: never = type;
       // Loud, but not a rollback: throwing here would abort the whole delta
       // page and freeze the cursor forever — the exact failure this mirror's
       // drop-and-rebuild lever exists to avoid. The compile error above is

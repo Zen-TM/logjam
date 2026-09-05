@@ -153,12 +153,34 @@ describe("a malformed delta row", () => {
     expect(stateWrites.applyFailedAt).toBeTruthy();
   });
 
-  it("drops a malformed tombstone rather than cascading an unknown type", async () => {
+  // An unknown entity type is a NEWER SERVER, not a malformed row: it reaches
+  // the applier, which ignores it (see mirrorStore's own tombstone test — the
+  // applier is mocked here). Treating it as corruption instead is what made a
+  // 0.1.0 build warn "dropped 12 unreadable row(s)" the moment the server
+  // learned an eighth entity, so this asserts NO issue is recorded.
+  it("passes an unknown tombstone type through without calling it corrupt", async () => {
     pages = [
       page({
         tombstones: [
           { type: "canyon", id: "gone" },
-          { type: "not-a-table", id: "hostile" },
+          { type: "placeType", id: "from-a-newer-server" },
+        ],
+      }),
+    ];
+
+    await runDeltaPull("user-1");
+
+    expect(applied.tombstones).toEqual(["gone", "from-a-newer-server"]);
+    expect(stateWrites.applyFailedAt).toBeFalsy();
+  });
+
+  it("still drops a tombstone whose SHAPE is malformed", async () => {
+    pages = [
+      page({
+        tombstones: [
+          { type: "canyon", id: "gone" },
+          { type: "canyon" },
+          { type: 7, id: "hostile" },
         ],
       }),
     ];

@@ -50,17 +50,28 @@ ALTER TABLE "custom_field_defs"
 
 -- ── Backfill ────────────────────────────────────────────────────────────────
 --
--- Mirrors `normalizeCustomFieldDefs` (shared/src/themeSchemes.ts) exactly, so
--- a user's definitions survive the move unchanged:
+-- Mirrors `normalizeCustomFieldDefs` (shared/src/themeSchemes.ts) on the two
+-- rules that decide whether a definition survives, so nothing a user can
+-- currently see is lost:
 --   * legacy `type: "text"` is repaired to "string" (repairLegacyFieldType);
 --   * anything still failing `isTripLogCustomFieldDef` is DROPPED rather than
 --     aborting the migration — the app has been dropping those on every read
 --     for as long as the guard has existed, so they are already invisible and
 --     unusable. Failing loudly here would block the deploy on data no user can
 --     see.
+-- Verified against the real function over a fixture carrying every malformed
+-- shape (missing label, empty key, unknown type, half-bounds, min >= max,
+-- fractional bounds on an integer, bounds on a string, a non-object element):
+-- both keep exactly the same definitions.
+--
 -- Array index becomes `position`, so the order the user arranged is preserved.
--- A duplicate key within one array (never constrained before) keeps the FIRST
--- occurrence, which is the one the app's own find-by-key already resolved to.
+--
+-- ONE deliberate divergence: the array permitted two definitions with the same
+-- key and the guard passed both through; the table's unique index does not, so
+-- the FIRST occurrence wins. That is the one the app's own find-by-key already
+-- resolved to, and both shared a single storage slot in the values (they are
+-- keyed by `key`), so only the loser's label and type go — no user-entered
+-- value is affected.
 
 WITH candidate AS (
     SELECT

@@ -340,7 +340,24 @@ export type SyncDeltaCustomFieldDefRow = {
   updatedAt: string;
 };
 
-export type SyncDeltaTombstone = { type: SyncEntityType; id: string };
+/**
+ * A tombstone names a row to forget.
+ *
+ * `type` is deliberately NOT narrowed to `SyncEntityType`: a server newer than
+ * this client can name an entity the client has never heard of, and that is an
+ * ordinary additive protocol change (§10.3), not corruption. Callers narrow
+ * with `isKnownSyncEntityType` and ignore the rest — see `applyTombstone`.
+ */
+export type SyncDeltaTombstone = {
+  type: SyncEntityType | (string & {});
+  id: string;
+};
+
+export function isKnownSyncEntityType(
+  value: string,
+): value is SyncEntityType {
+  return (SYNC_ENTITY_TYPES as readonly string[]).includes(value);
+}
 
 export type SyncDeltaResponse = {
   protocol: number;
@@ -603,10 +620,21 @@ export function parseSyncDeltaFriendshipRow(
 /**
  * A tombstone names a row to delete, so a malformed one is as dangerous as a
  * malformed row — `type` decides WHICH table the delete cascades through.
+ *
+ * SHAPE is checked here; the VOCABULARY is not. `type` used to be validated
+ * against `SYNC_ENTITY_TYPES`, which made every addition to that list a
+ * breaking change for clients already in the field: the server emitted a
+ * tombstone for a new entity, the parser called it invalid, and the phone told
+ * its user it had "dropped N unreadable rows from a delta page" — a data-loss
+ * warning for a row it correctly had nothing to do with. Adding
+ * `customFieldDef` produced exactly that on a 0.1.0 build.
+ *
+ * An unknown type is a NEWER SERVER, not corruption. It is parsed, and
+ * `applyTombstone` ignores it (there is no local table it could name).
  */
 export function parseSyncDeltaTombstone(value: unknown): SyncDeltaTombstone {
   return parseRow<SyncDeltaTombstone>("tombstone", value, {
-    type: (v) => SYNC_ENTITY_TYPES.includes(v as SyncEntityType),
+    type: isString,
     id: isString,
   });
 }
