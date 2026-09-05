@@ -6,6 +6,7 @@
 import type { SQLiteDatabase } from "expo-sqlite";
 import type {
   SyncDeltaCanyonRow,
+  SyncDeltaCustomFieldDefRow,
   SyncDeltaFriendshipRow,
   SyncDeltaMediaRow,
   SyncDeltaShareRow,
@@ -59,6 +60,14 @@ const WAYPOINT_KNOWN = [
 const ROUTE_KNOWN = [
   "id", "ownerId", "canyonId", "name", "color", "points", "syncRole",
   "sharedCount", "createdAt", "updatedAt",
+] as const;
+
+// `ownerId` is a known key that gets no column: every definition the server
+// sends is the caller's own (they are never shared), so storing it would be a
+// constant. It is listed here so it does not fall into extra_json.
+const CUSTOM_FIELD_DEF_KNOWN = [
+  "id", "ownerId", "entity", "key", "label", "type", "min", "max",
+  "position", "createdAt", "updatedAt",
 ] as const;
 
 const MEDIA_KNOWN = [
@@ -247,6 +256,31 @@ export async function upsertRoute(
     row.createdAt,
     row.updatedAt,
     splitExtras(row, ROUTE_KNOWN),
+    dirtyFieldNames.length ? JSON.stringify(dirtyFieldNames) : null,
+  );
+}
+
+export async function upsertCustomFieldDef(
+  db: SQLiteDatabase,
+  row: SyncDeltaCustomFieldDefRow,
+  dirtyFieldNames: string[],
+): Promise<void> {
+  await db.runAsync(
+    `INSERT OR REPLACE INTO custom_field_defs
+       (id, entity, key, label, type, min, max, position, created_at,
+        updated_at, extra_json, dirty_fields_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    row.id,
+    row.entity,
+    row.key,
+    row.label,
+    row.type,
+    row.min,
+    row.max,
+    row.position,
+    row.createdAt,
+    row.updatedAt,
+    splitExtras(row, CUSTOM_FIELD_DEF_KNOWN),
     dirtyFieldNames.length ? JSON.stringify(dirtyFieldNames) : null,
   );
 }
@@ -499,6 +533,17 @@ export async function applyTombstone(
       // still exists for its owner, but this user must forget it.
       await db.runAsync("DELETE FROM routes WHERE id = ?", tombstone.id);
       break;
+    case "customFieldDef":
+      // Only the definition. The VALUES it described were stripped server-side
+      // in the same transaction as the delete, and reach this device as
+      // ordinary updates to the trip_logs / canyons rows that carried them —
+      // so cascading a value strip here would be a second, racing writer of
+      // rows the delta already owns.
+      await db.runAsync(
+        "DELETE FROM custom_field_defs WHERE id = ?",
+        tombstone.id,
+      );
+      break;
     default: {
       // `parseSyncDeltaTombstone` validates `type` against SYNC_ENTITY_TYPES,
       // so an eighth entity would sail through the boundary check, match no
@@ -594,6 +639,31 @@ function rowToCanyon(row: CanyonRow): MirrorCanyon {
     createdAt: row.created_at ?? "",
     updatedAt: row.updated_at ?? "",
   };
+}
+
+/** A definition row as stored. `customFieldDefsFromRows` turns these into the
+ *  `TripLogCustomFieldDef`s the UI works in. */
+export type MirrorCustomFieldDef = {
+  id: string;
+  entity: string;
+  key: string;
+  label: string;
+  type: string;
+  min: number | null;
+  max: number | null;
+  position: number;
+};
+
+/** Every definition on this device, both entities. The ORDER BY matches the
+ *  server's so a locally-created row sits where the pull will put it. */
+export async function listMirrorCustomFieldDefs(): Promise<
+  MirrorCustomFieldDef[]
+> {
+  const db = await getSyncDb();
+  return db.getAllAsync<MirrorCustomFieldDef>(
+    `SELECT id, entity, key, label, type, min, max, position
+       FROM custom_field_defs ORDER BY position ASC, key ASC`,
+  );
 }
 
 export async function listMirrorCanyons(): Promise<MirrorCanyon[]> {

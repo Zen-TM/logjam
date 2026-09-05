@@ -219,14 +219,27 @@ regenerate only together with an extract/schema refresh.
     delta pull is `INSERT OR REPLACE`, so linking into an account that already
     has data merges rather than replaces. **Never add a guest-specific write
     path** — that equivalence is the whole feature.
-  - **Custom fields are the one guest-mode exception to that equivalence.**
-    Definitions are a USER PREFERENCE, not an entity, so there is no outbox op
-    to accumulate — a guest's list lives in `sync_state` (`customFields/
-    fieldDefsStore.ts`), and `adoptLocalFieldDefs` carries it up to the account
-    on link, before the outbox pushes the trips that reference its keys.
-    `sync_state` rather than `prefsDb` because `wipeAllLocalData` spares
-    `prefsDb`, and field labels are the user's words about their canyoning, not
-    a statement about the handset. Values were always local for both.
+  - **Custom fields used to be the one exception to that equivalence. They are
+    not any more, and nothing else may become one.** Definitions were a USER
+    PREFERENCE (`User.uiPreferences`), so there was no outbox op to accumulate:
+    a guest's list lived in `sync_state` and `adoptLocalFieldDefs` carried it up
+    on link. They are now rows — `custom_field_defs`, a `customFieldDef` push
+    entity — so defining, renaming and deleting a field is the ordinary write
+    path, unflushed for a guest, and both the second store and the adoption step
+    are deleted. `customFields/fieldDefsStore.ts` no longer branches on account
+    state at all; `useFieldDefs` reads the mirror and nothing else.
+    - **A definition delete is TWO things and only one of them is local.** The
+      phone removes the definition and strips the value off the rows in its own
+      mirror; the SERVER strips the value off every row the user owns, in the
+      delete op's transaction (`api/src/lib/customFieldDefs.ts`). The phone
+      cannot do the second — a row it has not pulled would keep a value that
+      resurfaces under a later field with the same slug.
+    - **A key collision on link is a REJECTED op, not a silent merge.** Two
+      devices (or a phone and the web) that each invent "Water level" offline
+      collide on `(owner, entity, key)`; the push answers 409 and the op parks
+      as a sync issue the user resolves. `adoptLocalFieldDefs`' old
+      account-wins merge is gone with it — accepting silently would leave the
+      phone mirroring a duplicate definition under its own id forever.
   - **`auth/capabilities.ts` is the single source of what is gated**, and the
     only place "Needs an account" / "Needs a connection" are spelled. Screens
     read `accountState` from `auth/AccountStateContext`, never from the

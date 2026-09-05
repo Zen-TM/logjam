@@ -25,7 +25,6 @@ import { isThemeSchemeId, needsReconsent } from "@logjam/shared";
 import { fetchCurrentUser, getUnreadNotificationCount, useApiQuery } from "./api/queries";
 import { AccountStateProvider } from "./auth/AccountStateContext";
 import type { AccountState } from "./auth/capabilities";
-import { adoptLocalFieldDefs } from "./customFields/fieldDefsStore";
 import { getCachedUnreadCount } from "./sync/notificationsCache";
 import { onMirrorChanged } from "./sync/syncDb";
 import { registerSyncTriggers } from "./sync/syncEngine";
@@ -756,18 +755,6 @@ export function AppShell({
     if (isGuest) return;
     return registerTopoAutoDownload();
   }, [isGuest]);
-
-  // Carry a guest's own custom-field definitions up to the account they just
-  // linked. They are a user preference, not a synced entity, so the outbox
-  // cannot do it — and without this the trips it is about to push would arrive
-  // carrying values under keys nothing on the account can name. One-shot: the
-  // local copy is cleared once the PATCH lands, so this is a no-op on every
-  // launch after the first (and retries if the link happened with no signal).
-  useEffect(() => {
-    const user = userQuery.data;
-    if (isGuest || !user) return;
-    adoptLocalFieldDefs(user).catch((err: unknown) => console.error(err));
-  }, [isGuest, userQuery.data]);
 
   // Mirror the account's theme choice onto this device, so a scheme picked in the
   // browser (or on another phone) is what this app opens in next launch. The

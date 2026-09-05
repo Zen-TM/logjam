@@ -9,6 +9,7 @@
 import {
   collectDirtyFields,
   parseSyncDeltaCanyonRow,
+  parseSyncDeltaCustomFieldDefRow,
   parseSyncDeltaFriendshipRow,
   parseSyncDeltaMediaRow,
   parseSyncDeltaRouteRow,
@@ -32,6 +33,7 @@ import {
   applyTombstone,
   notifyMirrorChanged,
   upsertCanyon,
+  upsertCustomFieldDef,
   upsertFriendship,
   upsertMedia,
   upsertShare,
@@ -173,6 +175,11 @@ export async function runDeltaPull(currentUserId: string): Promise<DeltaPullResu
     const skipped: string[] = [];
     const raw = response.changes as unknown as Record<string, unknown[]>;
     const changes = {
+      customFieldDefs: parsedRows(
+        raw.customFieldDefs ?? [],
+        parseSyncDeltaCustomFieldDefRow,
+        skipped,
+      ),
       canyons: parsedRows(raw.canyons ?? [], parseSyncDeltaCanyonRow, skipped),
       tripLogs: parsedRows(raw.tripLogs ?? [], parseSyncDeltaTripRow, skipped),
       waypoints: parsedRows(
@@ -215,6 +222,13 @@ export async function runDeltaPull(currentUserId: string): Promise<DeltaPullResu
     );
     const db = await getSyncDb();
     await applyPage(db, async () => {
+      // Definitions first, matching the server's budget order: the canyon and
+      // trip rows below carry values keyed by them, so a page never leaves a
+      // value on screen with no label to render it under.
+      for (const row of changes.customFieldDefs) {
+        const { effective, dirtyNames } = rebase(row, "customFieldDef", outbox);
+        await upsertCustomFieldDef(db, effective, dirtyNames);
+      }
       for (const row of changes.canyons) {
         const { effective, dirtyNames } = rebase(row, "canyon", outbox);
         await upsertCanyon(db, effective, dirtyNames);
@@ -246,6 +260,7 @@ export async function runDeltaPull(currentUserId: string): Promise<DeltaPullResu
       }
 
       changedRows +=
+        changes.customFieldDefs.length +
         changes.canyons.length +
         changes.tripLogs.length +
         changes.waypoints.length +

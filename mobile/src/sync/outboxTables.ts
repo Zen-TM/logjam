@@ -46,6 +46,8 @@ export function outboxMirrorTable(entity: OutboxEntity): string | null {
       return "waypoints";
     case "route":
       return "routes";
+    case "customFieldDef":
+      return "custom_field_defs";
     case "media":
       return "media";
     case "notification":

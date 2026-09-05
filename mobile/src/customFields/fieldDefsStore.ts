@@ -1,152 +1,135 @@
-// Where this install keeps its custom-field DEFINITIONS — and the only place
-// that knows the answer depends on whether there is an account.
+// Where this install keeps its custom-field DEFINITIONS — which is now the
+// same answer for everyone: the local mirror (`custom_field_defs` in
+// `logjam.db`), written through the outbox like every other thing the user
+// makes.
 //
-// A LINKED install keeps them on the user record (`uiPreferences`), shared with
-// the web and every other device, which is why editing them stays online-only:
-// an offline queue would need merge rules for a list the user could be
-// reordering in a browser at the same time.
+// This file used to branch on account state. A LINKED install kept its
+// definitions on the user record (`uiPreferences`), which made editing them
+// online-only — a JSON array on the user row has no id, no updatedAt and no
+// tombstone, so an offline queue would have had nothing to merge with. A GUEST
+// kept a second, private list in `sync_state`, and `adoptLocalFieldDefs` had to
+// carry it up on link. Definitions are rows now, so both halves are gone:
+// defining, renaming and deleting a field works with no signal for anyone, and
+// a guest's definitions reach their new account the same way their canyons do
+// — the outbox flushes.
 //
-// A GUEST has no user record. Their definitions live in `sync_state` — the
-// local key/value table in `logjam.db` — so defining, renaming and deleting a
-// field works with no signal at all, exactly like every other thing a guest
-// does. The VALUES were always local for both.
+// The VALUES were always local for both, and still are.
 //
-// `sync_state` rather than `prefsDb`, deliberately: `prefsDb` is the one store
-// `wipeAllLocalData` spares, because it holds statements about the HANDSET
-// (theme, app lock) that must survive the phone changing hands. A field label
-// is the user's own words about their canyoning, so it belongs on the side of
-// that boundary that gets erased — and `wipeAllSyncData` derives its DELETEs
-// from `SYNC_TABLES`, so `sync_state` is already in the wipe.
-//
-// Definitions are not a synced ENTITY — there is no outbox op for a user
-// preference — so this is the one part of guest mode that is not simply "the
-// same write path, unflushed" (mobile/CLAUDE.md). `adoptLocalFieldDefs` closes
-// that gap on link: the definitions go up to the account, or the trips the
-// outbox is about to push would arrive carrying values under keys nothing on
-// the account can name.
-//
-// PRIVACY: field labels are user-authored ("water level", "car shuttle"), and a
-// guest's exist only here. Nothing in this file logs one.
-import { isTripLogCustomFieldDef, type TripLogCustomFieldDef } from "@logjam/shared";
-
+// PRIVACY: field labels are user-authored ("water level", "car shuttle"). They
+// live in the mirror, which means they are inside the sign-out wipe derived
+// from SYNC_TABLES — the privacy boundary between two users of one phone. That
+// is precisely why they must not be kept anywhere else. Nothing here logs one.
 import {
-  customFieldDefsOf,
-  deleteCustomFieldDef,
-  fetchCurrentUser,
-  getCustomFieldImpact,
-  updateCustomFieldDefs,
+  customFieldDefsFromRows,
   type CustomFieldEntity,
-} from "../api/queries";
-import type { TCanyonAttributes, TUser } from "../api/types";
-import type { AccountState } from "../auth/capabilities";
-import { listMirrorCanyons, listMirrorTrips } from "../sync/mirrorStore";
-import { updateCanyonLocal, updateTripLocal } from "../sync/outbox";
+  type TripLogCustomFieldDef,
+} from "@logjam/shared";
+
+import type { TCanyonAttributes } from "../api/types";
+import { listMirrorCanyons, listMirrorCustomFieldDefs, listMirrorTrips } from "../sync/mirrorStore";
 import {
-  getSyncStateValue,
-  notifyMirrorChanged,
-  setSyncStateValue,
-} from "../sync/syncDb";
+  createCustomFieldDefLocal,
+  deleteCustomFieldDefLocal,
+  updateCanyonLocal,
+  updateCustomFieldDefLocal,
+  updateTripLocal,
+} from "../sync/outbox";
 
-/** `sync_state` keys. Distinct from the account's `uiPreferences` names on
- *  purpose — these hold a DIFFERENT list, belonging to no account. */
-const LOCAL_DEFS_KEY: Record<CustomFieldEntity, string> = {
-  tripLog: "localTripLogCustomFields",
-  canyon: "localCanyonCustomFields",
-};
-
-/** Derived, not repeated: `Record<CustomFieldEntity, …>` above already forces
- * an entry per entity, so a third custom-field entity joins this list by
- * existing. Hand-keeping it meant `adoptLocalFieldDefs` and `removeFieldDef`
- * would silently skip a forgotten entity — a guest's definitions for it would
- * never reach the account on link. */
-export const CUSTOM_FIELD_ENTITIES = Object.keys(
-  LOCAL_DEFS_KEY,
-) as readonly CustomFieldEntity[];
-
-/**
- * Stored JSON → definitions. Throws on anything that isn't a list of valid
- * definitions rather than falling back to `[]`: an empty list reads as "you
- * never made any fields", and a user whose values silently lose their labels
- * would have no way to tell that from data loss.
- */
-export function parseFieldDefs(raw: string | null): TripLogCustomFieldDef[] {
-  if (raw == null || raw === "") return [];
-  const parsed: unknown = JSON.parse(raw);
-  if (!Array.isArray(parsed) || !parsed.every(isTripLogCustomFieldDef)) {
-    throw new Error("Corrupt local custom field definitions");
-  }
-  return parsed;
-}
-
-/** This device's own definitions. Empty for an install that never made any. */
-export async function readLocalFieldDefs(
-  entity: CustomFieldEntity,
-): Promise<TripLogCustomFieldDef[]> {
-  return parseFieldDefs(await getSyncStateValue(LOCAL_DEFS_KEY[entity]));
-}
-
-/** Replace this device's definitions. Notifies so open screens re-read. */
-export async function writeLocalFieldDefs(
-  entity: CustomFieldEntity,
-  defs: TripLogCustomFieldDef[],
-): Promise<void> {
-  await setSyncStateValue(LOCAL_DEFS_KEY[entity], JSON.stringify(defs));
-  notifyMirrorChanged();
-}
-
-// ── the account-state-aware surface every screen calls ───────────────────────
-
-/** The definitions in force for this install. */
+/** The definitions in force for this install, for one entity. */
 export async function loadFieldDefs(
   entity: CustomFieldEntity,
-  accountState: AccountState,
 ): Promise<TripLogCustomFieldDef[]> {
-  return accountState === "guest"
-    ? readLocalFieldDefs(entity)
-    : customFieldDefsOf(await fetchCurrentUser(), entity);
-}
-
-/** Add, rename or retype: both paths take the WHOLE list, not a delta. */
-export async function saveFieldDefs(
-  entity: CustomFieldEntity,
-  accountState: AccountState,
-  defs: TripLogCustomFieldDef[],
-): Promise<void> {
-  if (accountState === "guest") {
-    await writeLocalFieldDefs(entity, defs);
-    return;
-  }
-  await updateCustomFieldDefs(entity, defs);
-}
-
-/** How many rows carry a value for this field — the number the delete
- *  confirmation quotes before the user commits. */
-export async function countFieldValues(
-  entity: CustomFieldEntity,
-  accountState: AccountState,
-  key: string,
-): Promise<number> {
-  return accountState === "guest"
-    ? (await rowsWithFieldValue(entity, key)).length
-    : getCustomFieldImpact(entity, key);
+  return customFieldDefsFromRows(await listMirrorCustomFieldDefs(), entity);
 }
 
 /**
- * Delete a definition AND strip the orphaned values off every row that carried
- * one, resolving with how many rows lost a value.
+ * Reconcile the whole list for one entity against what is stored: add what is
+ * new, update what changed, delete what the caller dropped.
  *
- * A guest's strip goes through the normal outbox update paths, so the same
- * clearing reaches the server if they ever link — a value cleared on the phone
- * must not come back the moment the trips are pushed.
+ * The editor hands over a whole list because that is what it edits, but the
+ * WRITES underneath are per-row — which is the point of the move. Two devices
+ * that each add a field now both keep it, where a whole-list PATCH would have
+ * let the later one erase the earlier.
+ *
+ * Rows are matched by `key`, which is stable across a rename, so relabelling a
+ * field updates it in place and its stored values stay attached.
+ */
+export async function saveFieldDefs(
+  entity: CustomFieldEntity,
+  defs: TripLogCustomFieldDef[],
+): Promise<void> {
+  const rows = (await listMirrorCustomFieldDefs()).filter(
+    (row) => row.entity === entity,
+  );
+  const byKey = new Map(rows.map((row) => [row.key, row]));
+  const incomingKeys = new Set(defs.map((def) => def.key));
+
+  for (const row of rows) {
+    if (!incomingKeys.has(row.key)) await removeFieldDefById(row.id, entity, row.key);
+  }
+
+  for (const [position, def] of defs.entries()) {
+    const row = byKey.get(def.key);
+    if (!row) {
+      await createCustomFieldDefLocal({ entity, def });
+      continue;
+    }
+    const patch: Record<string, unknown> = {};
+    if (row.label !== def.label) patch.label = def.label;
+    if (row.type !== def.type) patch.type = def.type;
+    if (row.min !== (def.min ?? null)) patch.min = def.min ?? null;
+    if (row.max !== (def.max ?? null)) patch.max = def.max ?? null;
+    if (row.position !== position) patch.position = position;
+    if (Object.keys(patch).length > 0) {
+      await updateCustomFieldDefLocal(row.id, patch);
+    }
+  }
+}
+
+/**
+ * How many rows carry a value for this field — the number the delete
+ * confirmation quotes before the user commits.
+ *
+ * Counted from the local mirror, which is complete for the rows this user owns
+ * (the delta pull is unbounded, not a window). It can still be BEHIND: a trip
+ * logged in the browser since the last pull is not counted. That is a stale
+ * number rather than a wrong one, and it is the honest one to show — the
+ * alternative is withholding the count from an offline user entirely.
+ */
+export async function countFieldValues(
+  entity: CustomFieldEntity,
+  key: string,
+): Promise<number> {
+  return (await rowsWithFieldValue(entity, key)).length;
+}
+
+/**
+ * Delete a definition AND strip the orphaned values off every local row that
+ * carried one, resolving with how many rows lost a value.
+ *
+ * The local strip goes through the normal outbox update paths so the clearing
+ * reaches the server too — but the SERVER also runs its own strip when the
+ * delete op lands (`api/src/lib/customFieldDefs.ts`), because this phone can
+ * only reach rows in its own mirror. A row the phone has not pulled would
+ * otherwise keep its value and resurface it under a later field with the same
+ * slug. The two strips agree, and the server's is the complete one.
  */
 export async function removeFieldDef(
   entity: CustomFieldEntity,
-  accountState: AccountState,
   key: string,
-  defs: TripLogCustomFieldDef[],
 ): Promise<number> {
-  if (accountState !== "guest") return deleteCustomFieldDef(entity, key);
+  const row = (await listMirrorCustomFieldDefs()).find(
+    (candidate) => candidate.entity === entity && candidate.key === key,
+  );
+  if (!row) return 0;
+  return removeFieldDefById(row.id, entity, key);
+}
 
+async function removeFieldDefById(
+  id: string,
+  entity: CustomFieldEntity,
+  key: string,
+): Promise<number> {
   const rows = await rowsWithFieldValue(entity, key);
   for (const row of rows) {
     const remaining = { ...row.values };
@@ -159,10 +142,7 @@ export async function removeFieldDef(
       });
     }
   }
-  await writeLocalFieldDefs(
-    entity,
-    defs.filter((def) => def.key !== key),
-  );
+  await deleteCustomFieldDefLocal(id);
   return rows.length;
 }
 
@@ -186,8 +166,7 @@ async function rowsWithFieldValue(
   const canyons = await listMirrorCanyons();
   return canyons
     // A canyon shared WITH this user is read-only, and its owner's fields are
-    // not this user's to strip. A guest has no shares, but this function is the
-    // shape both account states will use if the account path ever moves local.
+    // not this user's to strip.
     .filter(
       (canyon) =>
         canyon.syncRole === "owner" &&
@@ -198,37 +177,4 @@ async function rowsWithFieldValue(
       values: canyon.attributes?.customFields ?? {},
       attributes: canyon.attributes ?? {},
     }));
-}
-
-// ── linking an account ───────────────────────────────────────────────────────
-
-/**
- * One-shot on link: carry this phone's definitions up to the account, then drop
- * the local copy so there is only ever one list in force.
- *
- * The account's own definitions WIN on a key collision — they may already have
- * values behind them on the web, and a phone that has never seen them cannot
- * be the authority on their label or type. Local-only keys are appended.
- *
- * Nothing is cleared until the PATCH lands, so a link made in a tunnel simply
- * tries again the next time the app has the user record and a connection.
- */
-export async function adoptLocalFieldDefs(user: TUser): Promise<void> {
-  for (const entity of CUSTOM_FIELD_ENTITIES) {
-    const local = await readLocalFieldDefs(entity);
-    if (local.length === 0) continue;
-    const account = customFieldDefsOf(user, entity);
-    const merged = mergeFieldDefs(account, local);
-    if (merged.length > account.length) await updateCustomFieldDefs(entity, merged);
-    await writeLocalFieldDefs(entity, []);
-  }
-}
-
-/** Account list first, then whatever keys only the phone had. */
-export function mergeFieldDefs(
-  account: TripLogCustomFieldDef[],
-  local: TripLogCustomFieldDef[],
-): TripLogCustomFieldDef[] {
-  const taken = new Set(account.map((def) => def.key));
-  return [...account, ...local.filter((def) => !taken.has(def.key))];
 }
