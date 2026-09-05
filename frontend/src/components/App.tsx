@@ -188,6 +188,13 @@ function App() {
 
   // Area selection mode
   const [selectingArea, setSelectingArea] = useState(false);
+  /**
+   * The Canyons filter's "area on map" mode. Separate state from
+   * `selectingArea` above even though the gesture is identical: that one ends
+   * in a bulk-actions dialog and this one in a filter, and one flag would send
+   * the box to whichever the user was not in.
+   */
+  const [selectingFilterArea, setSelectingFilterArea] = useState(false);
   const [selectedAreaCanyonIds, setSelectedAreaCanyonIds] = useState<string[]>(
     [],
   );
@@ -417,6 +424,23 @@ function App() {
   const cancelAreaSelection = useCallback(() => {
     setSelectingArea(false);
     setSelectedAreaCanyonIds([]);
+  }, []);
+
+  /**
+   * The map's visible bounds, kept in a ref rather than in state: "Filter to
+   * the current view" reads them once, when the button is pressed, and putting
+   * them in state would re-render the app on every pan for a value nothing
+   * renders.
+   */
+  const mapBoundsRef = useRef<TBbox | null>(null);
+
+  const startFilterAreaSelection = useCallback(() => {
+    setActivePanel(null);
+    setSelectingFilterArea(true);
+  }, []);
+
+  const cancelFilterAreaSelection = useCallback(() => {
+    setSelectingFilterArea(false);
   }, []);
 
   // Reflect the active panel in the document title (WCAG 2.4.2 Page Titled).
@@ -1150,11 +1174,16 @@ function App() {
     return <ConsentGate onAccepted={applyCurrentUser} onSignOut={auth.signOut} />;
   }
 
-  const dimUI = pickingCoords || selectingArea || selectingGeoPdfExtent;
+  const dimUI =
+    pickingCoords || selectingArea || selectingFilterArea || selectingGeoPdfExtent;
   // Mobile: any map-selection flow needs the bottom sheet out of the way so the
   // map is tappable. Collapses the sheet to peek; restored when the flow ends.
   const mapInteractionActive =
-    pickingCoords || selectingArea || selectingGeoPdfExtent || selectingTopoBbox;
+    pickingCoords ||
+    selectingArea ||
+    selectingFilterArea ||
+    selectingGeoPdfExtent ||
+    selectingTopoBbox;
 
   return (
     <div className={classes.app}>
@@ -1301,6 +1330,11 @@ function App() {
           onRefetch={refetch}
           filters={filters}
           onChangeFilters={setFilters}
+          onDrawFilterArea={startFilterAreaSelection}
+          onFilterToMapView={() => {
+            const bounds = mapBoundsRef.current;
+            if (bounds) setFilters({ ...filters, area: bounds });
+          }}
           filtersAccordionSignal={filtersAccordionSignal}
           onFlyToCanyon={(lat, lng) => setFlyToCanyon({ lat, lng })}
           onOpenGeoPdf={() => {
@@ -1420,6 +1454,18 @@ function App() {
         onCancelPickCoords={cancelPickingCoords}
         selectingArea={selectingArea}
         onAreaSelected={handleAreaSelected}
+        selectingFilterArea={selectingFilterArea}
+        onFilterAreaSelected={(bbox) => {
+          setSelectingFilterArea(false);
+          setFilters({ ...filters, area: bbox });
+          // Straight back to where the button was, with the filters open — the
+          // panel was closed to uncover the map, not dismissed.
+          setActivePanel("canyons");
+          setFiltersAccordionSignal((n) => n + 1);
+        }}
+        onMapBoundsChange={(bounds) => {
+          mapBoundsRef.current = bounds;
+        }}
         selectingBbox={selectingTopoBbox}
         onBboxSelected={(bbox) => {
           setPendingTopoBbox(bbox);
@@ -1506,6 +1552,18 @@ function App() {
         onSave={(name, color) => void saveDrawnRoute(name, color)}
         onClose={() => setNamingRoute(false)}
       />
+
+      {selectingFilterArea && (
+        <div className={classes.selectAllButtons}>
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={cancelFilterAreaSelection}
+          >
+            Cancel
+          </Button>
+        </div>
+      )}
 
       {selectingArea && (
         <div className={classes.selectAllButtons}>

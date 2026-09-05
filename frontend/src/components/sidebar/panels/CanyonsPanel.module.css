@@ -457,3 +457,15 @@
   cursor: default;
 }
 
+
+/* The two ways into the area filter, side by side. They are alternatives, not a
+   primary and a secondary, so neither gets more room than the other. */
+.areaButtons {
+  display: flex;
+  gap: 6px;
+}
+
+.areaButtons > * {
+  flex: 1;
+  min-width: 0;
+}

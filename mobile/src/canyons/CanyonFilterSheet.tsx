@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import {
   CANYON_RANGE_BOUNDS,
+  regionEdgesKm,
   type CanyonFilters,
   type CanyonSortKey,
   type CanyonThresholdFilter,
@@ -38,9 +39,14 @@ import { formatDateKey } from "../logs/logbook";
  *   field type; on a phone that is a screenful of inputs for a rarely-used axis.
  *   Values still show on canyon detail.
  *
- * PRIVACY: filter state is local to the screen. The "show only these on the map"
- * option passes canyon IDS to the map through an in-memory store — never a bbox,
- * never anything persisted (see canyonMapFilter.ts).
+ * PRIVACY: filter state is local to the screen and dies with it. The "show only
+ * these on the map" option passes canyon IDS to the map through an in-memory
+ * store — never a bbox (see canyonMapFilter.ts, whose store carries no region of
+ * interest and derives none). The `area` filter is the one coordinate here: a
+ * box the user drew on their own map, held in this screen's state, never
+ * persisted and never sent. It is summarised by its SIZE and never by its
+ * position — the picker is where you see where it is, on a map, deliberately
+ * rather than as a coordinate anyone could read over a shoulder.
  */
 type Mode =
   | { kind: "main" }
@@ -124,6 +130,7 @@ export function CanyonFilterSheet({
   sort,
   onChangeSort,
   onReset,
+  onPickArea,
   activeCount,
   showFilteredOnMap,
   onChangeShowFilteredOnMap,
@@ -137,6 +144,12 @@ export function CanyonFilterSheet({
   sort: CanyonSortKey;
   onChangeSort: (next: CanyonSortKey) => void;
   onReset: () => void;
+  /**
+   * Open the area picker. A separate SCREEN, so the sheet has to close and
+   * re-open around it — a `BottomSheet` is an RN `Modal` in its own window, and
+   * a map drawn behind it would be invisible. The screen owns that dance.
+   */
+  onPickArea: () => void;
   activeCount: number;
   showFilteredOnMap: boolean;
   onChangeShowFilteredOnMap: (next: boolean) => void;
@@ -279,6 +292,13 @@ export function CanyonFilterSheet({
             onChange={(next) => patch({ [spec.key]: next })}
           />
         ))}
+
+        <SectionHeader label="Location" />
+        <AreaFilter
+          area={filters.area}
+          onPick={onPickArea}
+          onClear={() => patch({ area: null })}
+        />
 
         <SectionHeader label="Source" />
         <View style={styles.chipRow}>
@@ -479,6 +499,49 @@ function formatThreshold(filter: CanyonThresholdFilter, unit: string): string {
 
 /** A date range as two tappable bounds — the same two-level shape the Logs
  * screen uses, so the picker is never more than one step away. */
+/**
+ * The framed area, shown the way the other filters show themselves — except
+ * that its value is a place, and a place is not something to print.
+ *
+ * The chip carries the box's SIZE, not its position: "18 x 11 km" says which of
+ * two saved areas this is about as well as a coordinate pair would, without
+ * putting a canyon's location in text on a screen. Where it actually is, is
+ * answered by tapping the chip — the picker opens on the box, over the map.
+ */
+function AreaFilter({
+  area,
+  onPick,
+  onClear,
+}: {
+  area: CanyonFilters["area"];
+  onPick: () => void;
+  onClear: () => void;
+}) {
+  const size = area ? regionEdgesKm(area) : null;
+  return (
+    <View style={styles.block}>
+      <View style={styles.blockHeader}>
+        <Text style={styles.blockLabel}>Area</Text>
+        <Text style={[styles.blockValue, area != null && styles.blockValueActive]}>
+          {area ? "Set" : "Anywhere"}
+        </Text>
+      </View>
+      <View style={styles.chipRow}>
+        <Chip
+          label={
+            size
+              ? `${Math.round(size[0])} x ${Math.round(size[1])} km`
+              : "Choose on map"
+          }
+          active={area != null}
+          onPress={onPick}
+        />
+        {area ? <Chip label="Clear" onPress={onClear} /> : null}
+      </View>
+    </View>
+  );
+}
+
 function DateRangeFilter({
   label,
   value,

@@ -8,6 +8,8 @@ import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-csp-worker?url";
 // "on is not defined" errors and breaking GeoJSON source processing.
 setWorkerUrl(maplibreWorkerUrl);
 import { Protocol } from "pmtiles";
+import type { RegionBbox } from "@logjam/shared";
+import { useBoxDraw } from "./useBoxDraw";
 import { layers as protomapsLayers, namedFlavor } from "@protomaps/basemaps";
 import {
   draftAnchorIndices,
@@ -269,12 +271,13 @@ function protomapsLayerIds(map: maplibregl.Map): string[] {
     .filter((id) => id.startsWith(PROTOMAPS_LAYER_PREFIX));
 }
 
-export type TBbox = {
-  west: number;
-  south: number;
-  east: number;
-  north: number;
-};
+/**
+ * A lat/lng box. An ALIAS of the shared `RegionBbox`, not a second declaration:
+ * the same four numbers are the offline-region plan's input, the topo job's
+ * extent and the canyon filter's area, and three structurally-identical types
+ * meant three places to fix the day one of them grew a fifth field.
+ */
+export type TBbox = RegionBbox;
 
 // ── Vector style helpers ──────────────────────────────────────────────────
 // Colour + width math lives in @logjam/shared so the live overlay and the
@@ -529,6 +532,8 @@ function Map({
   onAreaSelected,
   selectingBbox,
   onBboxSelected,
+  selectingFilterArea,
+  onFilterAreaSelected,
   topoLayers,
   vectorStyle,
   activeLayerId,
@@ -539,6 +544,7 @@ function Map({
   geoPdfInitialScale,
   onGeoPdfExtentConfirmed,
   onGeoPdfExtentCancelled,
+  onMapBoundsChange,
   onMapViewChange,
   initialView,
   topoFlyTarget,
@@ -608,6 +614,9 @@ function Map({
   onAreaSelected: (ids: string[]) => void;
   selectingBbox?: boolean;
   onBboxSelected?: (bbox: TBbox) => void;
+  /** The Canyons filter's "area on map" mode — the third box-draw on this map. */
+  selectingFilterArea?: boolean;
+  onFilterAreaSelected?: (bbox: TBbox) => void;
   topoLayers?: {
     id: string;
     pmtilesUrl: string;
@@ -623,6 +632,14 @@ function Map({
   geoPdfInitialScale?: number;
   onGeoPdfExtentConfirmed?: (extent: TBbox, scale: number) => void;
   onGeoPdfExtentCancelled?: () => void;
+  /**
+   * The visible bounds, on load and after every pan/zoom. Separate from
+   * `onMapViewChange` because its consumer keeps the answer in a ref: "filter
+   * to the current view" needs the bounds only at the moment the button is
+   * pressed, and routing them through state would re-render the app on every
+   * frame of a pan for a value nothing renders.
+   */
+  onMapBoundsChange?: (bounds: TBbox) => void;
   onMapViewChange?: (view: {
     lat: number;
     lng: number;
@@ -652,6 +669,12 @@ function Map({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
+  /**
+   * The map, once it is safe to attach handlers to — null before load, so the
+   * box-draw hook can key its effect on the map itself rather than on a
+   * separate `mapLoaded` flag every call site would have to remember to pass.
+   */
+  const drawableMap = mapLoaded ? mapRef.current : null;
   const [is3D, setIs3D] = useState(false);
   const toast = useToast();
   // Touch/stylus input (coarse pointer) vs mouse — drives "Tap" vs "Click"
@@ -681,8 +704,21 @@ function Map({
   const pickModeRef = useRef(false);
   useEffect(() => {
     pickModeRef.current =
-      pickingCoords || selectingArea || (selectingGeoPdfExtent ?? false);
-  }, [pickingCoords, selectingArea, selectingGeoPdfExtent]);
+      pickingCoords ||
+      selectingArea ||
+      (selectingFilterArea ?? false) ||
+      // The topo bbox draw belongs here too and was missing: without it, the
+      // click that anchors a corner over a canyon marker also opened that
+      // canyon's panel behind the box being drawn.
+      (selectingBbox ?? false) ||
+      (selectingGeoPdfExtent ?? false);
+  }, [
+    pickingCoords,
+    selectingArea,
+    selectingFilterArea,
+    selectingBbox,
+    selectingGeoPdfExtent,
+  ]);
 
   // Route draw/edit mode, read by the once-on-load layer handlers.
   const drawingRouteRef = useRef(false);
@@ -766,6 +802,10 @@ function Map({
       });
   });
 
+  const onMapBoundsChangeRef = useRef(onMapBoundsChange);
+  useEffect(() => {
+    onMapBoundsChangeRef.current = onMapBoundsChange;
+  }, [onMapBoundsChange]);
   const onMapViewChangeRef = useRef(onMapViewChange);
   useEffect(() => {
     onMapViewChangeRef.current = onMapViewChange;
@@ -1367,6 +1407,17 @@ function Map({
         bearing: map.getBearing(),
         pitch: map.getPitch(),
       });
+      // `getBounds` returns the axis-aligned box around the view, so a rotated
+      // or pitched map reports MORE ground than is on screen. "Filter to the
+      // current view" is a coarse convenience, and reporting slightly more than
+      // is visible errs towards keeping canyons rather than hiding them.
+      const bounds = map.getBounds();
+      onMapBoundsChangeRef.current?.({
+        west: bounds.getWest(),
+        south: bounds.getSouth(),
+        east: bounds.getEast(),
+        north: bounds.getNorth(),
+      });
     };
 
     fireViewChange(); // report initial centre immediately on load
@@ -1574,134 +1625,47 @@ function Map({
     }
   }, [pickingCoords, mapLoaded]);
 
-  // Area selection mode
+  // Area selection: the same drawn box as the topo picker and the filter, ending
+  // in the canyons it covers rather than in the box itself.
   const onAreaSelectedRef = useRef(onAreaSelected);
   useEffect(() => {
     onAreaSelectedRef.current = onAreaSelected;
   }, [onAreaSelected]);
 
-  useEffect(() => {
-    if (!mapLoaded || !mapRef.current) return;
-    const map = mapRef.current;
-    const container = map.getCanvasContainer();
+  const handleAreaBox = useCallback(
+    (bbox: RegionBbox) => {
+      const map = mapRef.current;
+      if (!map) return;
+      // Back to pixels for the feature query: `queryRenderedFeatures` works in
+      // screen space, and the corners project back exactly because they came
+      // from this same map moments ago.
+      const northWest = map.project([bbox.west, bbox.north]);
+      const southEast = map.project([bbox.east, bbox.south]);
+      const pixels: [maplibregl.PointLike, maplibregl.PointLike] = [
+        [Math.min(northWest.x, southEast.x), Math.min(northWest.y, southEast.y)],
+        [Math.max(northWest.x, southEast.x), Math.max(northWest.y, southEast.y)],
+      ];
+      const features = map.queryRenderedFeatures(pixels, {
+        layers: ["canyon-circles", "shared-canyon-circles"],
+      });
+      const ids = [
+        ...new Set(
+          features.map((f) => f.properties?.id as string).filter(Boolean),
+        ),
+      ];
+      onAreaSelectedRef.current(ids);
+    },
+    [],
+  );
 
-    if (!selectingArea) {
-      map.getCanvas().style.cursor = "";
-      return;
-    }
-
-    map.getCanvas().style.cursor = "crosshair";
-
-    // Click-anchor-click flow (mirrors topo bbox selection): first click anchors
-    // one corner, second click closes the box on the diagonally opposite corner.
-    // First corner stored as geographic coords so the overlay tracks map pans/zooms.
-    let startLngLat: { lng: number; lat: number } | null = null;
-    let box: HTMLDivElement | null = null;
-
-    function updateOverlay(cursorX: number, cursorY: number) {
-      if (!startLngLat || !box) return;
-      const rect = container.getBoundingClientRect();
-      const startPx = map.project([startLngLat.lng, startLngLat.lat]);
-      const p1x = startPx.x + rect.left;
-      const p1y = startPx.y + rect.top;
-      const minX = Math.min(p1x, cursorX);
-      const minY = Math.min(p1y, cursorY);
-      const maxX = Math.max(p1x, cursorX);
-      const maxY = Math.max(p1y, cursorY);
-      box.style.left = minX - rect.left + "px";
-      box.style.top = minY - rect.top + "px";
-      box.style.width = maxX - minX + "px";
-      box.style.height = maxY - minY + "px";
-    }
-
-    // Kept in closure so map 'move' can call it without a cursor event.
-    let lastCursorX = 0;
-    let lastCursorY = 0;
-
-    function onMouseMove(e: MouseEvent) {
-      lastCursorX = e.clientX;
-      lastCursorY = e.clientY;
-      updateOverlay(e.clientX, e.clientY);
-    }
-
-    function onMapMove() {
-      updateOverlay(lastCursorX, lastCursorY);
-    }
-
-    function cancelSelection() {
-      if (box) {
-        box.remove();
-        box = null;
-      }
-      startLngLat = null;
-      document.removeEventListener("mousemove", onMouseMove);
-      map.off("move", onMapMove);
-    }
-
-    function onClick(e: MouseEvent) {
-      const rect = container.getBoundingClientRect();
-      if (!startLngLat) {
-        // First click — anchor first corner.
-        const lngLat = map.unproject([e.clientX - rect.left, e.clientY - rect.top]);
-        startLngLat = { lng: lngLat.lng, lat: lngLat.lat };
-        lastCursorX = e.clientX;
-        lastCursorY = e.clientY;
-
-        box = document.createElement("div");
-        box.style.position = "absolute";
-        box.style.border = "2px dashed var(--theme-accent)";
-        box.style.backgroundColor =
-          "color-mix(in srgb, var(--theme-accent) 20%, transparent)";
-        box.style.pointerEvents = "none";
-        box.style.zIndex = "10";
-        container.appendChild(box);
-
-        document.addEventListener("mousemove", onMouseMove);
-        map.on("move", onMapMove);
-      } else {
-        // Second click — finalize, query canyons inside the pixel bbox.
-        const startPx = map.project([startLngLat.lng, startLngLat.lat]);
-        const endPx: [number, number] = [
-          e.clientX - rect.left,
-          e.clientY - rect.top,
-        ];
-
-        const bbox: [maplibregl.PointLike, maplibregl.PointLike] = [
-          [Math.min(startPx.x, endPx[0]), Math.min(startPx.y, endPx[1])],
-          [Math.max(startPx.x, endPx[0]), Math.max(startPx.y, endPx[1])],
-        ];
-
-        const features = map.queryRenderedFeatures(bbox, {
-          layers: ["canyon-circles", "shared-canyon-circles"],
-        });
-
-        const ids = [
-          ...new Set(
-            features.map((f) => f.properties?.id as string).filter(Boolean),
-          ),
-        ];
-
-        cancelSelection();
-        onAreaSelectedRef.current(ids);
-      }
-    }
-
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") cancelSelection();
-    }
-
-    container.addEventListener("click", onClick);
-    document.addEventListener("keydown", onKeyDown);
-
-    return () => {
-      container.removeEventListener("click", onClick);
-      document.removeEventListener("keydown", onKeyDown);
-      document.removeEventListener("mousemove", onMouseMove);
-      map.off("move", onMapMove);
-      if (box) box.remove();
-      map.getCanvas().style.cursor = "";
-    };
-  }, [selectingArea, mapLoaded]);
+  // TODO: this and the filter's area box are two rubber bands on one map, and a
+  // user who draws one expecting the other gets the wrong outcome. The plan is
+  // to fold bulk actions into a selection mode over the FILTERED list (draw a
+  // box -> filter -> select all -> share/export/delete), which subsumes this
+  // mode entirely; `SelectedCanyonsDialog` already takes ids and has add/remove
+  // props, so it is an entry-point rewiring rather than a rewrite. Deferred to
+  // the web UI rework rather than done alongside the filter.
+  useBoxDraw({ map: drawableMap, enabled: selectingArea, onBox: handleAreaBox });
 
   // Toggle canyon layer visibility
   useEffect(() => {
@@ -2177,121 +2141,39 @@ function Map({
     });
   }, [activeLayerId, mapLoaded]);
 
-  // Topo bbox selection mode (rubber-band draw → returns lat/lng bbox)
+  // Topo bbox selection mode (rubber-band draw -> returns a lat/lng bbox)
   const onBboxSelectedRef = useRef(onBboxSelected);
   useEffect(() => {
     onBboxSelectedRef.current = onBboxSelected;
   }, [onBboxSelected]);
 
+
+  const handleTopoBox = useCallback((bbox: RegionBbox) => {
+    onBboxSelectedRef.current?.(bbox);
+  }, []);
+
+  useBoxDraw({
+    map: drawableMap,
+    enabled: selectingBbox ?? false,
+    onBox: handleTopoBox,
+  });
+
+  // The Canyons filter's area. Same gesture, same helper; it differs from the
+  // topo picker only in who receives the box.
+  const onFilterAreaSelectedRef = useRef(onFilterAreaSelected);
   useEffect(() => {
-    if (!mapLoaded || !mapRef.current) return;
-    const map = mapRef.current;
-    const container = map.getCanvasContainer();
+    onFilterAreaSelectedRef.current = onFilterAreaSelected;
+  }, [onFilterAreaSelected]);
 
-    if (!selectingBbox) {
-      map.getCanvas().style.cursor = "";
-      return;
-    }
+  const handleFilterAreaBox = useCallback((bbox: RegionBbox) => {
+    onFilterAreaSelectedRef.current?.(bbox);
+  }, []);
 
-    map.getCanvas().style.cursor = "crosshair";
-
-    // First corner stored as geographic coords so the overlay tracks map pans/zooms.
-    let startLngLat: { lng: number; lat: number } | null = null;
-    let box: HTMLDivElement | null = null;
-
-    function updateOverlay(cursorX: number, cursorY: number) {
-      if (!startLngLat || !box) return;
-      const rect = container.getBoundingClientRect();
-      const startPx = map.project([startLngLat.lng, startLngLat.lat]);
-      const p1x = startPx.x + rect.left;
-      const p1y = startPx.y + rect.top;
-      const minX = Math.min(p1x, cursorX);
-      const minY = Math.min(p1y, cursorY);
-      const maxX = Math.max(p1x, cursorX);
-      const maxY = Math.max(p1y, cursorY);
-      box.style.left = minX - rect.left + "px";
-      box.style.top = minY - rect.top + "px";
-      box.style.width = maxX - minX + "px";
-      box.style.height = maxY - minY + "px";
-    }
-
-    // Kept in closure so map 'move' can call it without a cursor event.
-    let lastCursorX = 0;
-    let lastCursorY = 0;
-
-    function onMouseMove(e: MouseEvent) {
-      lastCursorX = e.clientX;
-      lastCursorY = e.clientY;
-      updateOverlay(e.clientX, e.clientY);
-    }
-
-    function onMapMove() {
-      updateOverlay(lastCursorX, lastCursorY);
-    }
-
-    function cancelSelection() {
-      if (box) {
-        box.remove();
-        box = null;
-      }
-      startLngLat = null;
-      document.removeEventListener("mousemove", onMouseMove);
-      map.off("move", onMapMove);
-    }
-
-    function onClick(e: MouseEvent) {
-      if (!startLngLat) {
-        // First click — anchor first corner.
-        const rect = container.getBoundingClientRect();
-        const lngLat = map.unproject([e.clientX - rect.left, e.clientY - rect.top]);
-        startLngLat = { lng: lngLat.lng, lat: lngLat.lat };
-        lastCursorX = e.clientX;
-        lastCursorY = e.clientY;
-
-        box = document.createElement("div");
-        box.style.position = "absolute";
-        box.style.border = "2px dashed var(--theme-accent)";
-        box.style.backgroundColor =
-          "color-mix(in srgb, var(--theme-accent) 20%, transparent)";
-        box.style.pointerEvents = "none";
-        box.style.zIndex = "10";
-        container.appendChild(box);
-
-        document.addEventListener("mousemove", onMouseMove);
-        map.on("move", onMapMove);
-      } else {
-        // Second click — finalize bbox.
-        const rect = container.getBoundingClientRect();
-        const p1 = startLngLat;
-        const p2 = map.unproject([e.clientX - rect.left, e.clientY - rect.top]);
-
-        cancelSelection();
-
-        onBboxSelectedRef.current?.({
-          west: Math.min(p1.lng, p2.lng),
-          south: Math.min(p1.lat, p2.lat),
-          east: Math.max(p1.lng, p2.lng),
-          north: Math.max(p1.lat, p2.lat),
-        });
-      }
-    }
-
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") cancelSelection();
-    }
-
-    container.addEventListener("click", onClick);
-    document.addEventListener("keydown", onKeyDown);
-
-    return () => {
-      container.removeEventListener("click", onClick);
-      document.removeEventListener("keydown", onKeyDown);
-      document.removeEventListener("mousemove", onMouseMove);
-      map.off("move", onMapMove);
-      if (box) box.remove();
-      map.getCanvas().style.cursor = "";
-    };
-  }, [selectingBbox, mapLoaded]);
+  useBoxDraw({
+    map: drawableMap,
+    enabled: selectingFilterArea ?? false,
+    onBox: handleFilterAreaBox,
+  });
 
   // Lazily register point-feature icons. MapLibre fires `styleimagemissing`
   // when a symbol layer references an icon-image that isn't loaded yet; we load

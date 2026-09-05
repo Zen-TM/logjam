@@ -38,6 +38,7 @@ import {
   passesCanyonFilters,
   type CanyonFilters,
   type CanyonSortKey,
+  type RegionBbox,
 } from "@logjam/shared";
 
 import { useAccountState } from "../auth/AccountStateContext";
@@ -72,6 +73,7 @@ import { deleteCanyonLocal } from "../sync/outbox";
 import { TripEditSheet } from "../logs/TripEditSheet";
 import { CanyonEditSheet } from "./CanyonEditSheet";
 import { takePickedPoint } from "../map/pickedPoint";
+import { setAreaPickerStart, takePickedArea } from "../map/pickedArea";
 import { CanyonOptionsSheet } from "./CanyonOptionsSheet";
 import { BulkShareButton, BulkShareSheet } from "../sharing/BulkShareSheet";
 import { CanyonFilterSheet, sortLabel } from "./CanyonFilterSheet";
@@ -91,6 +93,7 @@ export function CanyonsScreen({
   onOpenCanyon,
   onShowOnMap,
   onPickPoint,
+  onPickArea,
 }: {
   onOpenCanyon: (canyon: MirrorCanyon) => void;
   /** Focuses the map on one canyon (a tight bbox around its point). */
@@ -101,6 +104,12 @@ export function CanyonsScreen({
    * which this screen collects when it regains focus.
    */
   onPickPoint: (from: { latitude: number; longitude: number } | null) => void;
+  /**
+   * Open the full-screen area picker. Where it opens and what it answers both
+   * travel in memory through `pickedArea.ts` rather than through navigation
+   * params — a drawn region of canyons does not go into navigation state.
+   */
+  onPickArea: () => void;
 }) {
   const connectivity = useConnectivity();
   const online = connectivity === "online";
@@ -168,6 +177,24 @@ export function CanyonsScreen({
     [editing, onPickPoint],
   );
 
+  /**
+   * The filter sheet's own round trip to the map, and a separate flag from the
+   * edit form's: the two return to different places (a sheet vs a form inside
+   * one), and sharing a flag would reopen whichever the user was NOT in.
+   */
+  const awayAtAreaPicker = useRef(false);
+  const openAreaPicker = useCallback(
+    (from: RegionBbox | null) => {
+      // Same reason the edit sheet has to go: a BottomSheet is a Modal in its
+      // own window, so the map would draw behind it and be invisible.
+      awayAtAreaPicker.current = true;
+      setAreaPickerStart(from);
+      setSheet(null);
+      onPickArea();
+    },
+    [onPickArea],
+  );
+
   const [loggingFor, setLoggingFor] = useState<MirrorCanyon | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const toastNonce = useRef(0);
@@ -188,6 +215,18 @@ export function CanyonsScreen({
   // typed over, and a CANCELLED pick still restores the form — they went to
   // look at a map, not to abandon what they had written.
   const onFocus = useCallback(() => {
+    if (awayAtAreaPicker.current) {
+      awayAtAreaPicker.current = false;
+      const area = takePickedArea();
+      // Functional update on purpose: reading `filters` here would put it in
+      // this callback's deps, and `useFocusEffect` re-runs whenever the
+      // callback's identity changes — every filter tap would replay the whole
+      // arrival. A cancelled pick keeps the area that was already set; the user
+      // went to look at the map, not to clear the filter.
+      if (area) setFilters((current) => ({ ...current, area }));
+      setSheet("filters");
+      return;
+    }
     if (awayAtPicker.current) {
       awayAtPicker.current = false;
       const point = takePickedPoint();
@@ -619,6 +658,7 @@ export function CanyonsScreen({
         sort={sort}
         onChangeSort={setSort}
         onReset={resetFilters}
+        onPickArea={() => openAreaPicker(filters.area)}
         activeCount={filterCount}
         showFilteredOnMap={mapFilter.enabled}
         onChangeShowFilteredOnMap={setCanyonMapFilterEnabled}
