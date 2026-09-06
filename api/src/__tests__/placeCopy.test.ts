@@ -206,6 +206,13 @@ describe("foreignFields is owner-private (§2.6)", () => {
     );
     expect(row!.syncRole).toBe("shared");
     expect(row!.foreignFields).toBeUndefined();
+    // The denylist is one list for every sharee-facing surface, so the OTHER
+    // owner-private columns go with it: `importKey` and `importBatchId` are the
+    // owner's filing (how and when they bulk-loaded), not part of the record.
+    expect(row!.importKey).toBeUndefined();
+    expect(row!.importBatchId).toBeUndefined();
+    expect(listed!.importBatchId).toBeUndefined();
+    expect(detail.body.importKey).toBeUndefined();
   });
 
   it("cannot be written by a client, on either path", async () => {

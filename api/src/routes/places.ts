@@ -9,6 +9,7 @@ import {
   resolveLinkedPlaceIds,
 } from "../lib/placeLinks";
 import { reconcileCopiedPlace, resolveCopyPlaceType } from "../lib/placeCopy";
+import { serializeSharedPlace } from "../lib/placeVisibility";
 import { Prisma } from "@prisma/client";
 import { getParam } from "../lib/getParam";
 import { getEnv } from "../lib/env";
@@ -129,30 +130,6 @@ export function placeListInclude(
 ): Prisma.PlaceInclude | undefined {
   if (scope === "shared") return undefined;
   return { _count: { select: { tripLogLinks: true, shares: true } } };
-}
-
-/**
- * A place as its RECIPIENT may see it: everything the record carries, minus
- * `foreignFields`.
- *
- * OWNER-PRIVATE, and the rule is §2.6's, not a nicety. `foreignFields` records
- * what the SENDER's definitions said about values this owner has no definition
- * for; re-emitting it down a share chain is the propagation objection that got
- * the "append it to notes" design rejected — B copies A's place, B shares it
- * with C, and C reads A's field labels and values. What a sharee gets instead
- * is `fieldDefsSnapshot`, derived LIVE from the owner's current definitions on
- * the delta path (routes/sync.ts).
- *
- * Stripped HERE rather than by a `select`, because a select is a list that has
- * to be kept in step with the schema and this only has to name the one field
- * that must never leave. A new column is visible to a sharee by default, which
- * is the right default for a record they are entitled to see.
- */
-export function serializeSharedPlace<T extends { foreignFields?: unknown }>(
-  place: T,
-): Omit<T, "foreignFields"> {
-  const { foreignFields: _stripped, ...rest } = place;
-  return rest;
 }
 
 async function fetchPlaces(

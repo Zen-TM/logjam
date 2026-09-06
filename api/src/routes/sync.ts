@@ -62,6 +62,7 @@ import {
 } from "./tripLogsGlobal";
 import { normalizePlaceTagsOrThrow, validatePlaceTextFields } from "./places";
 import { strandValuesOnTypeChange } from "../lib/placeCopy";
+import { serializeSharedPlace } from "../lib/placeVisibility";
 import {
   assertValidDef,
   createFieldDef,
@@ -1492,15 +1493,19 @@ function serializePlace(
   viewerId: string,
   defsByType: Map<string, TripLogCustomFieldDef[]>,
 ) {
-  const isOwner = place.ownerId === viewerId;
-  const { foreignFields, ...rest } = place;
-  if (isOwner) {
-    return { syncRole: "owner" as const, ...rest, foreignFields };
+  if (place.ownerId === viewerId) {
+    return { syncRole: "owner" as const, ...place };
   }
+  // One denylist for every sharee-facing surface (lib/placeVisibility.ts), so
+  // the delta and the REST responses cannot disagree about what is
+  // owner-private — and so a column added to `Place` reaches a sharee only
+  // after someone classifies it. This used to strip `foreignFields` by name,
+  // which meant `importKey` and `importBatchId` — the owner's filing, not the
+  // record — rode along.
   const snapshot = defsByType.get(place.placeTypeId);
   return {
     syncRole: "shared" as const,
-    ...rest,
+    ...serializeSharedPlace(place as unknown as Record<string, unknown>),
     ...(snapshot?.length ? { fieldDefsSnapshot: snapshot } : {}),
   };
 }
