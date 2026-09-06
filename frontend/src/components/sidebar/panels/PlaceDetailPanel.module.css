@@ -335,3 +335,44 @@
 /* No mobile overrides needed: the base rules above (min-height:100% root,
  * max-height attributes box, flex-grow trip-log region + scrolling panel body)
  * already flow correctly in the bottom sheet at any snap point. */
+
+/* Values carried in on a copy, or stranded by a type change (§2.6). Their own
+   block, visually quieter than the place's own fields: they are not part of
+   this type's record until the user says so. */
+.foreignFields {
+  margin: 0.6em 0 0.2em;
+  padding: 0.4em 0.6em;
+  border-left: 2px solid var(--theme-bonus-2);
+  background: var(--theme-bonus-2);
+  border-radius: 4px;
+}
+
+.foreignFieldRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4em;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-top: 0.3em;
+}
+
+.foreignFieldActions {
+  display: flex;
+  gap: 0.6em;
+}
+
+/* A verb rendered inline in prose — the sidebar's convention is a text button
+   rather than a control, so it reads as part of the sentence it sits in. */
+.linkButton {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--theme-accent);
+  cursor: pointer;
+}
+
+.linkButton:disabled {
+  color: var(--theme-text-muted);
+  cursor: default;
+}

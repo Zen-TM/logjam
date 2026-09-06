@@ -187,6 +187,12 @@ export const SYNC_TABLES: readonly TableSchema[] = [
       min: "REAL",
       max: "REAL",
       position: "INTEGER NOT NULL DEFAULT 0",
+      // WHERE the definition appears. Without these two the phone holds every
+      // definition and cannot tell which form any of them belongs on — it
+      // would put a canyon's grades on a campsite. `appliesToAllTypes` is a
+      // flag rather than a row per type so a type created tomorrow inherits it.
+      applies_to_all_types: "INTEGER NOT NULL DEFAULT 0",
+      place_type_ids_json: "TEXT",
       created_at: "TEXT",
       updated_at: "TEXT",
       extra_json: "TEXT",

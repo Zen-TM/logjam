@@ -15,10 +15,10 @@ import {
   emptyFilters,
 } from "../../../placeUtils";
 import { numericFieldValue, regionEdgesKm } from "@logjam/shared";
-import type { RefreshResult } from "../../../placeUtils";
+import type { RefreshResult, TPlaceType } from "../../../placeUtils";
 import { useStoredState } from "../../../useStoredState";
 import type { PanelId } from "../panels";
-import type { TripLogCustomFieldDef } from "@logjam/shared";
+import type { TripLogCustomFieldDef, ScopedCustomFieldDef } from "@logjam/shared";
 import { customFieldDisplayLabel } from "@logjam/shared";
 import RopeWikiReviewDialog from "../../dialogs/RopeWikiReviewDialog";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
@@ -87,6 +87,7 @@ function PlacesPanel({
   setSelectedPlaceID,
   setActivePanel,
   placeCustomFieldDefs,
+  placeTypes,
   onExpandSheet,
 }: {
   places: TPlace[];
@@ -111,7 +112,11 @@ function PlacesPanel({
   onFlyToPlace: (lat: number, lng: number) => void;
   setSelectedPlaceID: (id: string | null) => void;
   setActivePanel: (panel: PanelId | null) => void;
-  placeCustomFieldDefs: TripLogCustomFieldDef[];
+  placeCustomFieldDefs: ScopedCustomFieldDef[];
+  /** For the tab strip. Every type the user has, including empty ones — the
+   *  strip hides those itself, and hiding them here would make the count of
+   *  what exists unavailable to it. */
+  placeTypes: TPlaceType[];
   // Mobile: request the bottom sheet expand to its full snap. No-op on desktop
   // (SidebarPanel guards on isMobile). Used when opening the filters accordion,
   // which needs the full sheet height to be usable (its scroll region collapses
@@ -597,6 +602,28 @@ function PlacesPanel({
     }
   }, [onRefetch, toast]);
 
+  /**
+   * "All" plus every type that HAS places. A tab per empty type would be a tab
+   * onto an empty screen; the create dialog still offers every type, which is
+   * what stops this hiding a type you could never then use.
+   */
+  const typeTabs = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const place of places) {
+      counts.set(place.placeTypeId, (counts.get(place.placeTypeId) ?? 0) + 1);
+    }
+    return [
+      { id: null as string | null, name: "All", count: places.length },
+      ...placeTypes
+        .filter((type) => (counts.get(type.id) ?? 0) > 0)
+        .map((type) => ({
+          id: type.id as string | null,
+          name: type.name,
+          count: counts.get(type.id) ?? 0,
+        })),
+    ];
+  }, [places, placeTypes]);
+
   return (
     <div className={classes.root}>
       {/* Primary actions */}
@@ -611,6 +638,33 @@ function PlacesPanel({
           {selectingArea ? "Cancel Selection" : "Select Places"}
         </button>
       </div>
+
+      {/* TYPE TABS. The one filter that gets a permanent control rather than a
+          row in the accordion: a type is what a place IS, and the list reads as
+          a different list per type. A type with no places is hidden — it would
+          be a tab onto an empty screen — but "All" is always first, so a user
+          with places of one type sees no tabs at all rather than a single tab
+          that does nothing. */}
+      {typeTabs.length > 1 && (
+        <div className={classes.typeTabs}>
+          {typeTabs.map((tab) => (
+            <button
+              key={tab.id ?? "all"}
+              className={
+                (filters.placeTypeId ?? null) === tab.id
+                  ? classes.typeTabActive
+                  : classes.typeTab
+              }
+              onClick={() =>
+                onChangeFilters({ ...filters, placeTypeId: tab.id })
+              }
+            >
+              {tab.name}
+              {tab.count != null ? ` ${tab.count}` : ""}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Search — filters the cards below (by name or alternative names) */}
       <div className={classes.searchWrapper}>

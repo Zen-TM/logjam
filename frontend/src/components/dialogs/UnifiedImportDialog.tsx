@@ -33,6 +33,7 @@ import {
   defaultsToMergeOnImport,
   defaultPlaceMergePolicy,
   mergeableFieldsForDefs,
+  defsForType,
   setFieldValues,
   SYSTEM_PLACE_TYPE_IDS,
   SOURCES_FIELD_KEY,
@@ -41,18 +42,20 @@ import {
   type MergeableField,
   type TripLogCustomFieldDef,
   type TripLogCustomFieldType,
+  type ScopedCustomFieldDef,
 } from "@logjam/shared";
 import {
   CUSTOM_FIELD_TYPES,
   makeCustomFieldKey,
   coerceFieldValueStrict,
 } from "@logjam/shared";
-import type { TPlace, TUser, BulkPlaceInput, PlaceMergePair } from "../../placeUtils";
+import type { TPlace, TUser, BulkPlaceInput, PlaceMergePair, TPlaceType } from "../../placeUtils";
 import {
   apiFetch,
   bulkPlaceImport,
   bulkCreateTripLogs,
   undoImport,
+  createCustomField,
   updateUserPreferences,
 } from "../../placeUtils";
 import { parseCsv } from "../../csvImport/parseCsv";
@@ -60,10 +63,14 @@ import { detectFileKind, type FileKind } from "../../csvImport/detectFileKind";
 import {
   detectPlaceColumns,
   ROLE_LABELS,
-  ALL_ASSIGNABLE_ROLES,
+  assignableRolesForType,
   GRADE_RANGES,
   type PlaceFieldRole,
 } from "../../csvImport/placeColumns";
+import {
+  placeImportTemplateCsv,
+  placeImportTemplateFilename,
+} from "../../csvImport/placeTemplate";
 import { detectColumns, type ColumnRole } from "../../csvImport/detectColumns";
 import {
   detectDateFormat,
@@ -369,6 +376,8 @@ function UnifiedImportDialog({
   places,
   customFieldDefs,
   onCustomFieldDefsChange,
+  placeCustomFieldDefs,
+  placeTypes,
   currentUser,
   onRefetchPlaces,
   onRefetchTripLogs,
@@ -382,8 +391,12 @@ function UnifiedImportDialog({
   // dropping the user into an empty app.
   onBack?: () => void;
   places: TPlace[];
-  customFieldDefs: TripLogCustomFieldDef[];
-  onCustomFieldDefsChange: (defs: TripLogCustomFieldDef[]) => void;
+  customFieldDefs: ScopedCustomFieldDef[];
+  onCustomFieldDefsChange: (defs: ScopedCustomFieldDef[]) => void;
+  /** PLACE definitions, scoped — the column map is built from the chosen
+   *  type's own fields. */
+  placeCustomFieldDefs: ScopedCustomFieldDef[];
+  placeTypes: TPlaceType[];
   currentUser: TUser | null;
   onRefetchPlaces: () => void;
   onRefetchTripLogs: () => void;
@@ -405,6 +418,40 @@ function UnifiedImportDialog({
   const [placeFile, setPlaceFile] = useState<LoadedFile | null>(null);
   const [tripFile, setTripFile] = useState<LoadedFile | null>(null);
   const [placeAssignments, setPlaceAssignments] = useState<Record<string, PlaceFieldRole>>({});
+  // THE TYPE EVERY IMPORTED PLACE LANDS IN, chosen before the columns are
+  // mapped — the mapping is only meaningful against a type's fields, and a
+  // campsite list mapped onto canyon grades produces seven columns of nulls.
+  // Defaults to Canyon, which is what most imports are here.
+  const [importPlaceTypeId, setImportPlaceTypeId] = useState<string>(
+    SYSTEM_PLACE_TYPE_IDS.canyon,
+  );
+  /** The PLACE definitions in force for the chosen type — what the columns map
+   *  onto. `defsForType` is the shared rule, so a header matches the same field
+   *  here as it would in the place form. */
+  const placeDefsForImportType = useMemo(
+    () => defsForType(placeCustomFieldDefs, importPlaceTypeId),
+    [placeCustomFieldDefs, importPlaceTypeId],
+  );
+  // Changing the type re-detects the columns, because the mapping is against
+  // THAT type's fields — leaving the old assignments would keep a canyon's
+  // grade columns selected on a campsite import, where they cannot be saved.
+  useEffect(() => {
+    if (!placeFile) return;
+    setPlaceAssignments(
+      detectPlaceColumns(placeFile.headers, defsForType(placeCustomFieldDefs, importPlaceTypeId)),
+    );
+    // placeFile is re-parsed on load, which sets assignments itself.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [importPlaceTypeId]);
+
+  const placeRoleOptions = useMemo(
+    () =>
+      assignableRolesForType(
+        importPlaceTypeId === SYSTEM_PLACE_TYPE_IDS.canyon,
+        placeDefsForImportType,
+      ),
+    [importPlaceTypeId, placeDefsForImportType],
+  );
   const [tripAssignments, setTripAssignments] = useState<Record<string, ColumnRole>>({});
   const [tripNewCfForms, setTripNewCfForms] = useState<Record<string, { label: string; type: TripLogCustomFieldType }>>({});
   const [dateFormat, setDateFormat] = useState<DateFormat>("DD/MM/YYYY");
@@ -439,9 +486,15 @@ function UnifiedImportDialog({
   // Step 3 (confirm) state
   // The fields a policy can govern depend on the definitions in force, so the
   // default is built from them rather than being a constant.
+  // The merge policy governs PLACE fields — what happens to a value when an
+  // imported row folds into an existing place — so it is built from the
+  // definitions of the type being imported into, not from the trip-log ones.
+  // Reading `customFieldDefs` here listed a trip's fields against a place
+  // merge, and a policy keyed by a field the place cannot hold is a switch
+  // that does nothing.
   const mergeableFields = useMemo(
-    () => mergeableFieldsForDefs(customFieldDefs),
-    [customFieldDefs],
+    () => mergeableFieldsForDefs(placeDefsForImportType),
+    [placeDefsForImportType],
   );
   const [mergePolicy, setMergePolicy] = useState<PlaceMergePolicy>(() =>
     defaultPlaceMergePolicy(mergeableFieldsForDefs([])),
@@ -508,6 +561,25 @@ function UnifiedImportDialog({
   const noPlacesYet = places.length === 0;
 
   // ── File loading ────────────────────────────────────────────────────────────
+
+  const importTypeName =
+    placeTypes.find((type) => type.id === importPlaceTypeId)?.name ?? "Place";
+
+  /** The template for the chosen type, built and handed over in the browser —
+   *  there is no server round trip because the definitions are already here. */
+  function downloadPlaceTemplate() {
+    const csv = placeImportTemplateCsv(
+      importTypeName,
+      importPlaceTypeId,
+      placeDefsForImportType,
+    );
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = placeImportTemplateFilename(importTypeName);
+    link.click();
+    URL.revokeObjectURL(url);
+  }
 
   function handleDragOver(e: React.DragEvent<HTMLDivElement>) {
     e.preventDefault();
@@ -597,7 +669,7 @@ function UnifiedImportDialog({
 
     if (kind === "place") {
       setPlaceFile(loaded);
-      setPlaceAssignments(detectPlaceColumns(parsed.headers));
+      setPlaceAssignments(detectPlaceColumns(parsed.headers, placeDefsForImportType));
     } else {
       setTripFile(loaded);
       const detected = detectColumns(parsed.headers, customFieldDefs);
@@ -621,7 +693,7 @@ function UnifiedImportDialog({
     const moved: LoadedFile = { ...loaded, kind: newKind };
     if (newKind === "place") {
       setPlaceFile(moved);
-      setPlaceAssignments(detectPlaceColumns(moved.headers));
+      setPlaceAssignments(detectPlaceColumns(moved.headers, placeDefsForImportType));
     } else if (newKind === "triplog") {
       setTripFile(moved);
       const detected = detectColumns(moved.headers, customFieldDefs);
@@ -1026,15 +1098,9 @@ function UnifiedImportDialog({
       }
       return { data: row.input, resolution };
     });
-    // ponytail: every imported row lands in the CANYON type. The plan gives
-    // CSV import a "pick the place type, then map columns" step, symmetric with
-    // creating a place — that lands in phase 6 with the rest of the web UI,
-    // because the column mapping is only meaningful against a type's field
-    // labels and there is no type picker to map against yet. Stated so the
-    // limitation is a decision rather than an omission.
     return {
       importBatchId: batchId,
-      placeTypeId: SYSTEM_PLACE_TYPE_IDS.canyon,
+      placeTypeId: importPlaceTypeId,
       rows,
       mergePolicy,
     };
@@ -1126,8 +1192,15 @@ function UnifiedImportDialog({
         }
       }
       if (newFieldDefs.length > 0) {
-        const merged = [...customFieldDefs, ...newFieldDefs];
-        await updateUserPreferences({ tripLogCustomFields: merged });
+        // One create per definition — the whole-list PATCH is gone, and per-row
+        // writes are also what lets a failure on the third field leave the
+        // first two standing. The last response is the surviving list.
+        let merged = customFieldDefs;
+        for (const def of newFieldDefs) {
+          merged = await createCustomField("trip-log", def, {
+            appliesToAllTypes: true,
+          });
+        }
         onCustomFieldDefsChange(merged);
       }
 
@@ -1144,7 +1217,7 @@ function UnifiedImportDialog({
         try {
           const result = await bulkPlaceImport({
             importBatchId: batchId,
-            placeTypeId: SYSTEM_PLACE_TYPE_IDS.canyon,
+            placeTypeId: importPlaceTypeId,
             rows: createRows.map((e) => ({
               data: {
                 name: e.form.name.trim(),
@@ -1391,8 +1464,20 @@ function UnifiedImportDialog({
           A place list needs a name, latitude and longitude (grades and notes are
           optional). A logbook needs a place name and a date (notes optional).
           Need a starting point?{" "}
-          <a href="/templates/canyon-import-template.csv" download style={{ color: "var(--theme-accent)" }}>
-            Place template
+          {/* GENERATED from the chosen type's own definitions, not a static
+              file: a static template promises what a place has, and that
+              promise stopped being true the moment a place could be a
+              campsite. The logbook one below stays a file — a trip's columns
+              do not depend on a place type. */}
+          <a
+            href="#"
+            onClick={(e) => {
+              e.preventDefault();
+              downloadPlaceTemplate();
+            }}
+            style={{ color: "var(--theme-accent)" }}
+          >
+            {importTypeName} template
           </a>{" "}
           ·{" "}
           <a href="/templates/logbook-import-template.csv" download style={{ color: "var(--theme-accent)" }}>
@@ -1403,6 +1488,24 @@ function UnifiedImportDialog({
         {placeFile && (
           <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
             {renderFileChip(placeFile, "place")}
+            {/* TYPE FIRST, then the columns — the mapping below is built from
+                this type's fields, so choosing it afterwards would re-map
+                everything the user had just set. */}
+            <SectionLabel text="Place type" />
+            <FormControl size="small" sx={{ minWidth: 200 }}>
+              <Select
+                value={importPlaceTypeId}
+                onChange={(e) => setImportPlaceTypeId(e.target.value)}
+                sx={selectSx}
+                MenuProps={menuPaperProps}
+              >
+                {placeTypes.map((type) => (
+                  <MenuItem key={type.id} value={type.id}>
+                    {type.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
             <SectionLabel text="Place columns" />
             {renderColumnMapHeader()}
             {placeFile.headers.map((header) => {
@@ -1428,8 +1531,15 @@ function UnifiedImportDialog({
                       {isCustomAttr && (
                         <MenuItem value={role}>Custom field: {role.slice(5)}</MenuItem>
                       )}
-                      {ALL_ASSIGNABLE_ROLES.map((r) => (
-                        <MenuItem key={r} value={r}>{ROLE_LABELS[r] ?? r}</MenuItem>
+                      {placeRoleOptions.map((r) => (
+                        <MenuItem key={r} value={r}>
+                          {ROLE_LABELS[r] ??
+                            (r.startsWith("attr:")
+                              ? (placeDefsForImportType.find(
+                                  (d) => `attr:${d.key}` === r,
+                                )?.label ?? r.slice(5))
+                              : r)}
+                        </MenuItem>
                       ))}
                     </Select>
                   </FormControl>
@@ -1722,7 +1832,7 @@ function UnifiedImportDialog({
                   }
                   label={
                     <Typography variant="body2" sx={{ color: "var(--theme-text-primary)" }}>
-                      {mergeFieldLabel(field, customFieldDefs)}: {mergePolicy[field] === "useIncoming" ? "use file" : "keep existing"}
+                      {mergeFieldLabel(field, placeDefsForImportType)}: {mergePolicy[field] === "useIncoming" ? "use file" : "keep existing"}
                     </Typography>
                   }
                   sx={{ display: "flex" }}

@@ -1,5 +1,15 @@
-import { describe, it, expect, afterAll } from "vitest";
+import { describe, it, expect, afterAll, vi } from "vitest";
 import request from "supertest";
+
+import { throttleWrites } from "./_rateLimitGate";
+
+// A write in here may have to wait out `userPatchLimiter`'s 60-second window
+// (see `throttleWrites`): the budget is per user and the file that ran before
+// this one may have spent it. That wait is legitimate, and it does not fit the
+// suite's 15s default — so this FILE gets a longer one rather than the whole
+// suite, where it would mask a genuine hang.
+vi.setConfig({ testTimeout: 90_000 });
+
 import { SYSTEM_PLACE_TYPE_IDS } from "@logjam/shared";
 
 import { API_URL, ALICE_SUB, BOB_SUB, BOB_ID, ALICE_ID, as, CANYON_TYPE_ID } from "./_actors";
@@ -35,20 +45,36 @@ const createdFields: { sub: string; key: string }[] = [];
 // `userPatchLimiter` (30/60s), which `_rateLimitGate` knows nothing about. Read
 // the budget off the response and sleep to the window reset rather than letting
 // a 429 present as an assertion failure about copies.
-async function afterWrite(res: { headers: Record<string, string> }) {
-  const remaining = Number(res.headers["ratelimit-remaining"] ?? "99");
-  const reset = Number(res.headers["ratelimit-reset"] ?? "60");
-  if (remaining <= 3) {
-    await new Promise((resolve) => setTimeout(resolve, (reset + 1) * 1000));
-  }
+/**
+ * Post-write throttle: read the tighter `userPatchLimiter` budget (30/60s on
+ * the write routes) off the response and sleep to the window reset when it
+ * runs low. `_rateLimitGate` cannot do this — it probes a READ route, so it
+ * sees the global limiter and nothing about this one.
+ */
+async function afterWrite(res: { status: number; headers: Record<string, string> }) {
+  await throttleWrites(res);
+}
+
+/**
+ * The same, for a write that must SUCCEED: if the budget was already spent by
+ * the file that ran before this one, the first attempt is a 429 and the retry
+ * lands after the window resets. Without it a 429 arrives as an assertion
+ * failure about place types, in whichever file happens to run second.
+ */
+async function write<T extends { status: number; headers: Record<string, string> }>(
+  send: () => Promise<T>,
+): Promise<T> {
+  const first = await send();
+  return (await throttleWrites(first)) ? await send() : first;
 }
 
 async function makeType(sub: string, name: string): Promise<string> {
-  const res = await request(API_URL)
-    .post("/place-types")
-    .set(as(sub))
-    .send({ name, iconKey: "triangle", color: "#22C55E" });
-  await afterWrite(res);
+  const res = await write(() =>
+    request(API_URL)
+      .post("/place-types")
+      .set(as(sub))
+      .send({ name, iconKey: "triangle", color: "#22C55E" }),
+  );
   expect(res.status, JSON.stringify(res.body)).toBe(201);
   createdTypes.push({ sub, id: res.body.id as string });
   return res.body.id as string;
@@ -59,11 +85,9 @@ async function makeField(
   field: { key: string; label: string; type: string; min?: number; max?: number },
   placeTypeIds: string[],
 ): Promise<void> {
-  const res = await request(API_URL)
-    .post("/custom-fields/place")
-    .set(as(sub))
-    .send({ field, placeTypeIds });
-  await afterWrite(res);
+  const res = await write(() =>
+    request(API_URL).post("/custom-fields/place").set(as(sub)).send({ field, placeTypeIds }),
+  );
   expect(res.status, JSON.stringify(res.body)).toBe(201);
   createdFields.push({ sub, key: field.key });
 }
@@ -72,19 +96,21 @@ async function makePlace(
   sub: string,
   body: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
-  const res = await request(API_URL).post("/places").set(as(sub)).send(body);
-  await afterWrite(res);
+  const res = await write(() =>
+    request(API_URL).post("/places").set(as(sub)).send(body),
+  );
   expect(res.status, JSON.stringify(res.body)).toBe(201);
   createdPlaces.push({ sub, id: res.body.id as string });
   return res.body as Record<string, unknown>;
 }
 
 async function shareWith(sub: string, placeId: string, userId: string) {
-  const res = await request(API_URL)
-    .post(`/places/${placeId}/share`)
-    .set(as(sub))
-    .send({ sharedWithUserId: userId });
-  await afterWrite(res);
+  const res = await write(() =>
+    request(API_URL)
+      .post(`/places/${placeId}/share`)
+      .set(as(sub))
+      .send({ sharedWithUserId: userId }),
+  );
   expect(res.status, JSON.stringify(res.body)).toBe(201);
 }
 

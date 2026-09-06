@@ -36,6 +36,7 @@ function AddCustomFieldForm({
   adding,
   error,
   bounds,
+  scope,
 }: {
   entityNoun: string;
   label: string;
@@ -53,6 +54,21 @@ function AddCustomFieldForm({
     onMinChange: (value: string) => void;
     max: string;
     onMaxChange: (value: string) => void;
+  };
+  /**
+   * WHERE the field appears. Omitted where the answer is not the user's to
+   * make (a field added from a place's own form belongs to that place's type).
+   *
+   * "All types" is a FLAG, not every box ticked: a field scoped by ticking
+   * each type that exists today would silently fail to apply to one created
+   * tomorrow, and the user who meant "all" would never find out.
+   */
+  scope?: {
+    types: { id: string; name: string }[];
+    selectedTypeIds: string[];
+    onSelectedTypeIdsChange: (ids: string[]) => void;
+    appliesToAllTypes: boolean;
+    onAppliesToAllTypesChange: (value: boolean) => void;
   };
 }) {
   const isNumeric = type === "integer" || type === "float";
@@ -83,6 +99,50 @@ function AddCustomFieldForm({
       <Typography variant="caption" sx={{ color: "var(--theme-text-muted)", fontStyle: "italic" }}>
         This field will be created for all {entityNoun}.
       </Typography>
+      {scope ? (
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
+          <Typography
+            variant="caption"
+            sx={{ color: "var(--theme-text-muted)" }}
+          >
+            Where it appears
+          </Typography>
+          <FormControlLabel
+            control={
+              <Checkbox
+                size="small"
+                checked={scope.appliesToAllTypes}
+                onChange={(e) => scope.onAppliesToAllTypesChange(e.target.checked)}
+                sx={{ color: "var(--theme-text-muted)" }}
+              />
+            }
+            label="All types, including ones I add later"
+            slotProps={{ typography: { fontSize: "0.875rem" } }}
+          />
+          {!scope.appliesToAllTypes &&
+            scope.types.map((type) => (
+              <FormControlLabel
+                key={type.id}
+                control={
+                  <Checkbox
+                    size="small"
+                    checked={scope.selectedTypeIds.includes(type.id)}
+                    onChange={(e) =>
+                      scope.onSelectedTypeIdsChange(
+                        e.target.checked
+                          ? [...scope.selectedTypeIds, type.id]
+                          : scope.selectedTypeIds.filter((id) => id !== type.id),
+                      )
+                    }
+                    sx={{ color: "var(--theme-text-muted)" }}
+                  />
+                }
+                label={type.name}
+                slotProps={{ typography: { fontSize: "0.875rem" } }}
+              />
+            ))}
+        </Box>
+      ) : null}
       <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
         <TextField
           label="Field Label"

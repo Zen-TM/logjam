@@ -377,6 +377,10 @@ const CUSTOM_FIELD_DEF_UPDATE_COLUMNS: Record<string, ColumnSpec> = {
 export type CustomFieldDefDraft = {
   entity: CustomFieldEntity;
   def: TripLogCustomFieldDef;
+  /** WHERE it appears. A definition created with neither appears on no form —
+   *  which is visible and fixable, unlike one that appears on every form. */
+  placeTypeIds?: string[];
+  appliesToAllTypes?: boolean;
 };
 
 export async function createCustomFieldDefLocal(
@@ -401,15 +405,27 @@ export async function createCustomFieldDefLocal(
     label: def.label,
     type: def.type,
     position,
-    ...(def.min != null && def.max != null && { min: def.min, max: def.max }),
+    // EACH BOUND INDEPENDENTLY. Requiring both dropped every one-sided bound —
+    // which is what every "how many" field has, because there is no honest
+    // ceiling for one — and the field reached the server unbounded. Same bug
+    // `customFieldDefFromRow` had on the read side (fixed in 1b).
+    ...(def.min != null && { min: def.min }),
+    ...(def.max != null && { max: def.max }),
+    // The scoping travels WITH the create: `CustomFieldDefPlaceType` is not a
+    // sync entity of its own, so a def created offline and scoped to two types
+    // could not express that scoping any other way — it would arrive unscoped
+    // and apply nowhere.
+    ...(draft.placeTypeIds?.length ? { placeTypeIds: draft.placeTypeIds } : {}),
+    ...(draft.appliesToAllTypes ? { appliesToAllTypes: true } : {}),
   };
 
   await withSyncTransaction(db, async () => {
     await db.runAsync(
       `INSERT INTO custom_field_defs
-         (id, entity, key, label, type, min, max, position, created_at,
+         (id, entity, key, label, type, min, max, position,
+          applies_to_all_types, place_type_ids_json, created_at,
           updated_at, extra_json, dirty_fields_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)`,
       id,
       entity,
       def.key,
@@ -418,6 +434,8 @@ export async function createCustomFieldDefLocal(
       def.min ?? null,
       def.max ?? null,
       position,
+      draft.appliesToAllTypes ? 1 : 0,
+      JSON.stringify(draft.placeTypeIds ?? []),
       now,
       now,
       JSON.stringify(Object.keys(fields)),

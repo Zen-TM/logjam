@@ -21,7 +21,7 @@ import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import { ErrorBanner } from "../feedback/ErrorBanner";
 import { useToast } from "../feedback/ToastProvider";
 import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
-import type { TripLogCustomFieldDef, TripLogCustomFieldType, MediaItem } from "@logjam/shared";
+import type { TripLogCustomFieldDef, TripLogCustomFieldType, MediaItem, ScopedCustomFieldDef } from "@logjam/shared";
 import {
   coerceFieldValue,
   buildCustomFieldDef,
@@ -41,7 +41,7 @@ import {
   deleteTripLog,
   getTripLog,
   createPlace,
-  updateUserPreferences,
+  createCustomField,
 } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import {
@@ -175,8 +175,8 @@ function TripLogDialog({
   // trip's own places. Defaults to none.
   defaultPlaceId?: string | null;
   tripLog?: TTripLog;
-  customFieldDefs: TripLogCustomFieldDef[];
-  onCustomFieldDefsChange: (defs: TripLogCustomFieldDef[]) => void;
+  customFieldDefs: ScopedCustomFieldDef[];
+  onCustomFieldDefsChange: (defs: ScopedCustomFieldDef[]) => void;
   // Raw (non-deduped) trip.types values flattened from whichever trip list the
   // caller has on hand — unioned with TRIP_TYPE_SUGGESTIONS for the types
   // field's autocomplete options.
@@ -748,8 +748,17 @@ function TripLogDialog({
     setAddingField(true);
     setAddFieldError(null);
     try {
-      const updatedDefs = [...customFieldDefs, result.def];
-      await updateUserPreferences({ tripLogCustomFields: updatedDefs });
+      // ROW-GRAIN, not a whole-list PATCH: definitions are rows, and the list
+      // write would have wiped the scoping off every one of them. The server
+      // returns the surviving list, so this uses the server's answer rather
+      // than a locally-appended guess.
+      //
+      // `appliesToAllTypes` because a TRIP field is scoped by the types of the
+      // places the trip links (plan §2.7) — a trip with no places would
+      // otherwise get a field that appears nowhere.
+      const updatedDefs = await createCustomField("trip-log", result.def, {
+        appliesToAllTypes: true,
+      });
       onCustomFieldDefsChange(updatedDefs);
       setShowAddField(false);
       setNewFieldLabel("");

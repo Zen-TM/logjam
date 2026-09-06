@@ -32,6 +32,7 @@ import {
   entityConfig,
   findDefIdByKey,
   loadDefs,
+  loadScopedDefs,
   updateFieldDef,
   ENTITY_BY_SEGMENT,
 } from "../lib/customFieldDefs";
@@ -77,13 +78,18 @@ function parseEntity(req: AuthenticatedRequest): CustomFieldEntity {
 }
 
 // GET /custom-fields/:entity — the definitions in force for this user.
+//
+// WITH their scoping (`placeTypeIds`, `appliesToAllTypes`), because a client
+// that holds every definition and cannot tell which type each belongs to has to
+// render them all — a campsite form with seven canyon grades on it. The extra
+// two keys are additive: a caller that only wants the shape ignores them.
 router.get(
   "/:entity",
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await resolveUser(req.user!.sub);
     const entity = parseEntity(req);
-    res.json({ fields: await loadDefs(user.id, entity) });
+    res.json({ fields: await loadScopedDefs(user.id, entity) });
   },
 );
 
@@ -164,7 +170,7 @@ router.patch(
       ...parseScoping(body),
     });
 
-    res.json({ fields: await loadDefs(user.id, entity) });
+    res.json({ fields: await loadScopedDefs(user.id, entity) });
   },
 );
 
@@ -217,7 +223,7 @@ router.delete(
     res.json({
       // Response key names are entity-specific and predate this router.
       [entity === "tripLog" ? "tripLogCustomFields" : "placeCustomFields"]:
-        await loadDefs(user.id, entity),
+        await loadScopedDefs(user.id, entity),
       [config.removedResponseKey]: result.removed,
     });
   },

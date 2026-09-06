@@ -3,7 +3,10 @@ import { detectPlaceColumns } from "./placeColumns";
 
 describe("detectPlaceColumns", () => {
   it("maps every header of the app's own place import template 1:1 (IMPORT-4)", () => {
-    // Must match frontend/public/templates/canyon-import-template.csv exactly.
+    // The CANYON template's headers, which `placeImportTemplateCsv` now
+    // generates from the Canyon type's own definitions (its own test asserts
+    // the round trip). Kept here as the export/import round-trip case: an
+    // export written with these headers must re-import 1:1.
     const templateHeaders = [
       "name",
       "latitude",

@@ -57,7 +57,17 @@ describe("custom-fields route (fake auth)", () => {
       "rope_length_m",
       "wetsuit",
     ]);
-    expect(await defsFromUser("tripLogCustomFields")).toEqual(listed.body.fields);
+    // The /users/me projection is the PLAIN shape — key/label/type/bounds —
+    // while the row-grain list carries the scoping beside it. Same
+    // definitions, two reads, and the projection is what the legacy readers
+    // still consume; comparing them field-for-field would assert that a
+    // scoping key can never be added to one of them.
+    const projected = await defsFromUser("tripLogCustomFields");
+    expect(projected).toEqual(
+      (listed.body.fields as Record<string, unknown>[]).map(
+        ({ placeTypeIds: _s, appliesToAllTypes: _a, ...plain }) => plain,
+      ),
+    );
   });
 
   it("creates, relabels and deletes one definition, addressed by key", async () => {
@@ -85,11 +95,17 @@ describe("custom-fields route (fake auth)", () => {
       .set(AUTH)
       .send({ label: "Permit number" });
     expect(renamed.status).toBe(200);
-    expect(renamed.body.fields).toContainEqual({
-      key: "permit_no",
-      label: "Permit number",
-      type: "string",
-    });
+    expect(renamed.body.fields).toContainEqual(
+      expect.objectContaining({
+        key: "permit_no",
+        label: "Permit number",
+        type: "string",
+        // Created with no scoping, so it applies to no type — visible and
+        // fixable, unlike a definition that appears on every form.
+        placeTypeIds: [],
+        appliesToAllTypes: false,
+      }),
+    );
 
     // The rename is visible through the projection too — one source, two reads.
     expect(await defsFromUser("placeCustomFields")).toContainEqual({
@@ -151,5 +167,61 @@ describe("custom-fields route (fake auth)", () => {
       expect(res.status, key).toBe(400);
       expect(res.body.error).toContain("/custom-fields/");
     }
+  });
+
+  // WHERE a definition appears has to reach the clients, or they hold every
+  // definition and cannot tell which form any of them belongs on — a campsite
+  // rendering seven canyon grades. `CustomFieldDefPlaceType` is not a sync
+  // entity of its own, so the scoping rides ON the definition: flattened onto
+  // the REST list, and onto the delta row.
+  it("carries each definition's scoping on the REST list", async () => {
+    const type = await request(API_URL)
+      .post("/place-types")
+      .set(AUTH)
+      .send({ name: `Scoped ${Date.now()}`, iconKey: "map-pin", color: "#22C55E" });
+    expect(type.status, JSON.stringify(type.body)).toBe(201);
+    const typeId = type.body.id as string;
+    const key = `scoped_${Date.now()}`.slice(0, 20);
+
+    const created = await request(API_URL)
+      .post("/custom-fields/place")
+      .set(AUTH)
+      .send({
+        field: { key, label: "Scoped field", type: "string" },
+        placeTypeIds: [typeId],
+      });
+    expect(created.status, JSON.stringify(created.body)).toBe(201);
+
+    const list = await request(API_URL).get("/custom-fields/place").set(AUTH);
+    const def = (list.body.fields as Record<string, unknown>[]).find(
+      (f) => f.key === key,
+    );
+    expect(def, "the definition should be listed").toBeTruthy();
+    expect(def!.placeTypeIds).toEqual([typeId]);
+    expect(def!.appliesToAllTypes).toBe(false);
+
+    // A SYSTEM definition is scoped too — the seven grades belong to Canyon,
+    // and a client that thought they applied to everything would put a V grade
+    // on a campsite.
+    const vGrade = (list.body.fields as Record<string, unknown>[]).find(
+      (f) => f.key === "v_grade",
+    );
+    expect(vGrade, "the system definitions are in this list").toBeTruthy();
+    expect(Array.isArray(vGrade!.placeTypeIds)).toBe(true);
+
+    const delta = await request(API_URL)
+      .get("/sync/delta")
+      .set({ ...AUTH, "x-logjam-client": "mobile/0.1.0-test" })
+      .query({ limit: 500 });
+    expect(delta.status).toBe(200);
+    const row = (delta.body.changes.customFieldDefs as Record<string, unknown>[]).find(
+      (f) => f.key === key,
+    );
+    expect(row, "the delta should carry the definition").toBeTruthy();
+    expect(row!.placeTypeIds).toEqual([typeId]);
+    expect(row!.appliesToAllTypes).toBe(false);
+
+    await request(API_URL).delete(`/custom-fields/place/${key}`).set(AUTH);
+    await request(API_URL).delete(`/place-types/${typeId}`).set(AUTH);
   });
 });

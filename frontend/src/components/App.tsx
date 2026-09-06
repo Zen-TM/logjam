@@ -19,8 +19,8 @@ import OnboardingChoiceDialog from "./dialogs/OnboardingChoiceDialog";
 import SelectedPlacesDialog from "./dialogs/SelectedPlacesDialog";
 import classes from "./App.module.css";
 import type { TBbox } from "./map/Map";
-import type { TFilters, TPlace, GeoPdfJobView } from "../placeUtils";
-import type { StandaloneFile } from "@logjam/shared";
+import type { TFilters, TPlace, TPlaceType, GeoPdfJobView } from "../placeUtils";
+import type { ScopedCustomFieldDef, StandaloneFile } from "@logjam/shared";
 import type { PanelId } from "./sidebar/panels";
 import { TOPO_LAYERS } from "../topoLayerTypes";
 import type { CompletedTopoJob, CompletedOverlaysResponse } from "../topoLayerTypes";
@@ -45,6 +45,8 @@ import {
   useTopoExports,
   useGeoPdfJobs,
   fetchCurrentUser,
+  getCustomFields,
+  getPlaceTypes,
   recordConsent,
   passesFilters,
   hasActiveFilters,
@@ -62,7 +64,6 @@ import {
   needsReconsent,
 } from "../consent";
 import ConsentGate from "./ConsentGate";
-import type { TripLogCustomFieldDef } from "@logjam/shared";
 import { RouteDrawPanel } from "./routes/RouteDrawPanel";
 import RouteNameDialog from "./dialogs/RouteNameDialog";
 import ConfirmDialog from "./dialogs/ConfirmDialog";
@@ -107,8 +108,12 @@ function App() {
   );
   // Declared here (not with the other field-def state below) because the filters
   // memo needs it to prune custom filters whose definition no longer exists.
+  // SCOPED: each definition carries the place types it appears on, because a
+  // form built without that renders a canyon's grades on a campsite. Read from
+  // the row-grain endpoint rather than the /users/me projection, which is the
+  // plain shape kept for legacy readers.
   const [placeCustomFieldDefs, setPlaceCustomFieldDefs] = useState<
-    TripLogCustomFieldDef[]
+    ScopedCustomFieldDef[]
   >([]);
   // Backfill defaults for any filter keys missing from older persisted state, so
   // new fields (ownership, ropewiki, date ranges, custom) never read as undefined,
@@ -586,9 +591,17 @@ function App() {
     saveError: vectorStyleSaveError,
   } = useLiveVectorStyle(loadsUserData);
 
+  // Trip-log definitions, read from the same row-grain endpoint as the place
+  // ones. A trip field carries scoping too (§2.7 scopes a trip's fields by the
+  // types of the places it links), and reading both the same way means one
+  // shape reaches every dialog instead of two.
   const [customFieldDefs, setCustomFieldDefs] = useState<
-    TripLogCustomFieldDef[]
+    ScopedCustomFieldDef[]
   >([]);
+  // The types a place can be filed under. ALL of them, including empty ones:
+  // the tab bar and the layers list hide a type with no places, but the create
+  // dialog must offer every one or a user could never make their first canyon.
+  const [placeTypes, setPlaceTypes] = useState<TPlaceType[]>([]);
 
   // Refresh analytics whenever the analytics panel opens
   useEffect(() => {
@@ -609,10 +622,15 @@ function App() {
     // Best-effort: hydration prefetch for the map/sidebar; UI degrades
     // gracefully (panels show their own empty/error states) if this fails.
     hydrateFromUser().catch(console.error);
+    // The place definitions come from the row-grain endpoint because only it
+    // carries the scoping. Best-effort: a failure leaves the forms with the
+    // built-in fields alone, and the panels show their own error states.
+    getCustomFields("place").then(setPlaceCustomFieldDefs).catch(console.error);
+    getCustomFields("trip-log").then(setCustomFieldDefs).catch(console.error);
+    getPlaceTypes().then(setPlaceTypes).catch(console.error);
     fetchCurrentUser()
       .then((user) => {
-        setCustomFieldDefs(user.uiPreferences?.tripLogCustomFields ?? []);
-        setPlaceCustomFieldDefs(user.uiPreferences?.placeCustomFields ?? []);
+
         // Record the consent given on the sign-up form. Only a pending value
         // matching the current version is recordable (the server 400s any
         // other), and only while the user's stored version is actually stale —
@@ -1315,6 +1333,8 @@ function App() {
           onCustomFieldDefsChange={setCustomFieldDefs}
           placeCustomFieldDefs={placeCustomFieldDefs}
           onPlaceCustomFieldDefsChange={setPlaceCustomFieldDefs}
+          placeTypes={placeTypes}
+          onPlaceTypesChange={setPlaceTypes}
           analytics={analytics}
           analyticsLoading={analyticsLoading}
           vectorStyle={vectorStyle}
@@ -1549,6 +1569,8 @@ function App() {
         places={places}
         customFieldDefs={customFieldDefs}
         onCustomFieldDefsChange={setCustomFieldDefs}
+        placeCustomFieldDefs={placeCustomFieldDefs}
+        placeTypes={placeTypes}
         currentUser={currentUser}
         onRefetchPlaces={refetch}
         onRefetchTripLogs={refetchTripLogs}
@@ -1566,6 +1588,7 @@ function App() {
         onCancelPickCoords={cancelPickingCoords}
         customFieldDefs={placeCustomFieldDefs}
         onCustomFieldDefsChange={setPlaceCustomFieldDefs}
+        placeTypes={placeTypes}
       />
 
       <SelectedPlacesDialog

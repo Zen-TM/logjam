@@ -14,11 +14,20 @@ import TripLogDialog from "../../dialogs/TripLogDialog";
 import TripLogViewDialog from "../../dialogs/TripLogViewDialog";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
 import RemoveSharedButton from "../../common/RemoveSharedButton";
-import type { TPlace, TFriend, TTripLog, TPlaceShare } from "../../../placeUtils";
-import { mediaCategory, type TripLogCustomFieldDef, type MediaItem } from "@logjam/shared";
+import type { TPlace, TFriend, TTripLog, TPlaceShare, TPlaceType } from "../../../placeUtils";
+import {
+  asForeignFields,
+  defsForType,
+  mediaCategory,
+  type ScopedCustomFieldDef,
+  type TripLogCustomFieldDef,
+  type MediaItem,
+} from "@logjam/shared";
 import {
   formatCanyonGrade,
   deletePlace,
+  getCustomFields,
+  resolveForeignField,
   deleteMedia,
   copyPlace,
   sharePlaceWith,
@@ -80,6 +89,7 @@ function PlaceDetailPanel({
   pickingCoords,
   onCancelPickCoords,
   customFieldDefs,
+  placeTypes,
   onCustomFieldDefsChange,
   placeCustomFieldDefs,
   onPlaceCustomFieldDefsChange,
@@ -97,10 +107,12 @@ function PlaceDetailPanel({
   onPickCoords: (onPicked: (lat: number, lng: number) => void) => void;
   pickingCoords: boolean;
   onCancelPickCoords: () => void;
-  customFieldDefs: TripLogCustomFieldDef[];
-  onCustomFieldDefsChange: (defs: TripLogCustomFieldDef[]) => void;
-  placeCustomFieldDefs: TripLogCustomFieldDef[];
-  onPlaceCustomFieldDefsChange: (defs: TripLogCustomFieldDef[]) => void;
+  customFieldDefs: ScopedCustomFieldDef[];
+  /** Passed straight to the edit dialog's type picker. */
+  placeTypes: TPlaceType[];
+  onCustomFieldDefsChange: (defs: ScopedCustomFieldDef[]) => void;
+  placeCustomFieldDefs: ScopedCustomFieldDef[];
+  onPlaceCustomFieldDefsChange: (defs: ScopedCustomFieldDef[]) => void;
   onQuotaChanged: () => void;
   // Retrigger the global Trip Logs list/search after a trip is created or
   // deleted here — the place-scoped refetch below only updates this panel.
@@ -130,6 +142,56 @@ function PlaceDetailPanel({
 
   const [copying, setCopying] = useState(false);
   const [placeShares, setPlaceShares] = useState<TPlaceShare[]>([]);
+  /** Which parked field is being acted on — the buttons disable together, so
+   *  two taps cannot race one row into two states. */
+  const [foreignFieldBusy, setForeignFieldBusy] = useState<string | null>(null);
+
+  // The other end of every link touching this place. The list arrives on the
+  // OWNED place rows (`linkedPlaceIds`, owner-private), so the names come from
+  // the places already loaded rather than another fetch.
+  const linkedPlaces = useMemo(() => {
+    const ids = new Set(place?.linkedPlaceIds ?? []);
+    return places
+      .filter((row) => ids.has(row.id))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [place?.linkedPlaceIds, places]);
+
+  const foreignFields = useMemo(
+    () => asForeignFields(place?.foreignFields),
+    [place?.foreignFields],
+  );
+  const placeTypeName =
+    placeTypes.find((type) => type.id === place?.placeTypeId)?.name ?? "this type";
+
+  /**
+   * Adopt / discard / append one parked value.
+   *
+   * ONLINE-ONLY, like sharing: `foreignFields` is not client-writable by
+   * design (it is absent from the push allowlist), so there is no offline
+   * queue for this and the failure is reported rather than swallowed.
+   */
+  async function runForeignFieldAction(
+    key: string,
+    action: "adopt" | "discard" | "notes",
+  ) {
+    if (!place) return;
+    setForeignFieldBusy(key);
+    try {
+      await resolveForeignField(place.id, key, action);
+      // Adopting creates a definition, so the field list has to move with it —
+      // otherwise the value lands in a field the form does not yet know about
+      // and reads as having vanished.
+      if (action === "adopt") {
+        onPlaceCustomFieldDefsChange(await getCustomFields("place"));
+      }
+      onRefetch();
+    } catch (err) {
+      console.error(err);
+      toast.error(messageFromError(err, "Couldn't update that field."));
+    } finally {
+      setForeignFieldBusy(null);
+    }
+  }
 
   // Type suggestions for the trip dialog, flattened from this place's own
   // trips (the only trip list this panel loads).
@@ -482,7 +544,12 @@ function PlaceDetailPanel({
                 </ul>
               </div>
             )}
-            {placeCustomFieldDefs.map((def) => {
+            {/* The fields THIS place's type carries. Filtered by type rather
+                than listing every definition the user has: a campsite showing
+                seven empty canyon grades is the bug the scoping exists to
+                prevent, and a value with no definition still renders below,
+                under Fields from elsewhere. */}
+            {defsForType(placeCustomFieldDefs, place.placeTypeId).map((def) => {
               const display = formatCustomFieldValue(
                 fieldValue(place.fieldValues, def.key),
                 def.type,
@@ -498,6 +565,76 @@ function PlaceDetailPanel({
               <div className={classes.notesBlock}>
                 <b>Notes:</b>
                 <p className={classes.notesText}>{place.notes}</p>
+              </div>
+            )}
+
+            {/* LINKED PLACES — navigational only. A link grants no visibility
+                (§2.5), so this is the owner's own filing and a recipient is
+                sent no links at all; the list is simply absent for them. */}
+            {isOwnedPlace && linkedPlaces.length > 0 && (
+              <div>
+                <b>Linked places:</b>
+                <ul className={classes.sourcesList}>
+                  {linkedPlaces.map((linked) => (
+                    <li key={linked.id}>
+                      <button
+                        className={classes.linkButton}
+                        onClick={() => setSelectedPlaceID(linked.id)}
+                      >
+                        {linked.name}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* FIELDS FROM ELSEWHERE (§2.6). Values that arrived on a copy of
+                someone else's place, or were stranded when this place's type
+                changed, described by the definitions that DID cover them.
+                Read-only, in their own section, in no form and on no other
+                place: the schema decision is the user's to make, per item,
+                with the value in front of them.
+
+                Owner-only, and structurally so — the server never sends
+                `foreignFields` on a row a sharee can reach. */}
+            {isOwnedPlace && foreignFields.length > 0 && (
+              <div className={classes.foreignFields}>
+                <b>Fields from elsewhere:</b>
+                {foreignFields.map((item) => (
+                  <div key={item.key} className={classes.foreignFieldRow}>
+                    <span>
+                      <b>{item.label}:</b>{" "}
+                      {formatCustomFieldValue(
+                        item.value,
+                        item.type as TripLogCustomFieldDef["type"],
+                      ) ?? String(item.value)}
+                    </span>
+                    <span className={classes.foreignFieldActions}>
+                      <button
+                        className={classes.linkButton}
+                        disabled={foreignFieldBusy !== null}
+                        onClick={() => runForeignFieldAction(item.key, "adopt")}
+                      >
+                        Add to {placeTypeName}
+                      </button>
+                      <button
+                        className={classes.linkButton}
+                        disabled={foreignFieldBusy !== null}
+                        onClick={() => runForeignFieldAction(item.key, "notes")}
+                      >
+                        Append to notes
+                      </button>
+                      <button
+                        className={classes.linkButton}
+                        disabled={foreignFieldBusy !== null}
+                        onClick={() => runForeignFieldAction(item.key, "discard")}
+                      >
+                        Discard
+                      </button>
+                    </span>
+                  </div>
+                ))}
               </div>
             )}
           </div>
@@ -628,6 +765,7 @@ function PlaceDetailPanel({
         onCancelPickCoords={onCancelPickCoords}
         customFieldDefs={placeCustomFieldDefs}
         onCustomFieldDefsChange={onPlaceCustomFieldDefsChange}
+        placeTypes={placeTypes}
         onMediaChanged={reloadPlaceMedia}
       />
 

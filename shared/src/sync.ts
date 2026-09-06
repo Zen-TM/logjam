@@ -381,6 +381,12 @@ export type SyncDeltaCustomFieldDefRow = {
   min: number | null;
   max: number | null;
   position: number;
+  /** WHERE the definition appears. Without these two a client holds every
+   *  definition and cannot tell which form any of them belongs on — it would
+   *  render a canyon's grades on a campsite. `CustomFieldDefPlaceType` is not a
+   *  sync entity of its own, so the join rides here, flattened. */
+  placeTypeIds: string[];
+  appliesToAllTypes: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -588,6 +594,11 @@ const CUSTOM_FIELD_DEF_ROW_SPEC: Record<string, FieldCheck> = {
   min: nullable(isNumber),
   max: nullable(isNumber),
   position: isNumber,
+  // Deliberately UNCHECKED, and therefore optional: a row from a server that
+  // predates the scoping fields is still a definition, and rejecting it would
+  // take its whole delta page down (§10.3 is additive). A client reads them
+  // with a default of "no types, not all", which renders the definition on no
+  // form rather than on every one — the safe direction.
   createdAt: isString,
   updatedAt: isString,
 };

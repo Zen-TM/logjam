@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Typography } from "@mui/material";
-import type { TripLogCustomFieldDef } from "@logjam/shared";
+import type { ScopedCustomFieldDef, TripLogCustomFieldDef } from "@logjam/shared";
 import ConfirmDialog from "./ConfirmDialog";
 import { ErrorBanner } from "../feedback/ErrorBanner";
 import { deleteCustomField, type CustomFieldEntityKind } from "../../placeUtils";
@@ -45,7 +45,7 @@ function DeleteCustomFieldDialog({
   def: TripLogCustomFieldDef | null;
   onClose: () => void;
   // Fired with the surviving definitions after a successful delete.
-  onDeleted: (remainingDefs: TripLogCustomFieldDef[]) => void;
+  onDeleted: (remainingDefs: ScopedCustomFieldDef[]) => void;
 }) {
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);

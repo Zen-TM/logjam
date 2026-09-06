@@ -287,16 +287,42 @@ describe("renaming a standalone file", () => {
 });
 
 describe("the delta pull carries standalone files", () => {
+  /**
+   * Drain the delta the way a client does — one page after another until
+   * `hasMore` is false — and hand back the last cursor with the rows.
+   *
+   * A single unpaged request is not the same thing: the budget is spent in the
+   * fixed entity order (§4.4), so media lands on page two the moment the
+   * account holds enough places, links and trips to fill page one. Asserting
+   * against ONE page passed only while the seed happened to be small, and it
+   * failed the day the seed grew — which is a fact about the fixture, not about
+   * the endpoint.
+   */
+  async function drainMedia(sub: string): Promise<{
+    media: Record<string, unknown>[];
+    cursor: string;
+  }> {
+    const media: Record<string, unknown>[] = [];
+    let cursor: string | undefined;
+    for (;;) {
+      const page = await request(API_URL)
+        .get("/sync/delta")
+        .query(cursor ? { cursor } : {})
+        .set(as(sub))
+        .set(CLIENT);
+      expect(page.status).toBe(200);
+      media.push(...(page.body.changes.media as Record<string, unknown>[]));
+      cursor = page.body.cursor as string;
+      if (!page.body.hasMore) return { media, cursor };
+    }
+  }
+
   it("delivers the owner's own, and re-delivers one whose parent moved", async () => {
     const placeId = SHARED_PLACE_ID;
     const mediaId = await createStandaloneImport(ALICE_SUB);
     try {
-      const first = await request(API_URL)
-        .get("/sync/delta")
-        .set(as(ALICE_SUB))
-        .set(CLIENT);
-      expect(first.status).toBe(200);
-      const row = first.body.changes.media.find((m: { id: string }) => m.id === mediaId);
+      const first = await drainMedia(ALICE_SUB);
+      const row = first.media.find((m) => m.id === mediaId) as Record<string, unknown>;
       expect(row).toBeDefined();
       expect(row.linkedType).toBe("none");
       expect(row.linkedId).toBeNull();
@@ -306,7 +332,7 @@ describe("the delta pull carries standalone files", () => {
       // A cursor from AFTER the upload, then a link: the row must come back.
       // It would not on a createdAt keyset, which is what this column change
       // was for — the other device would show a stale parent forever.
-      const cursor = first.body.cursor;
+      const cursor = first.cursor;
       await request(API_URL)
         .patch(`/media/${mediaId}/link`)
         .set(as(ALICE_SUB))

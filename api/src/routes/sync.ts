@@ -321,7 +321,7 @@ router.get(
     // them, so a client applying an early page has the labels before the rows
     // that need them. The caller's own PLUS the system definitions, which
     // label the built-in fields and belong to no account.
-    const customFieldDefs = await fill(
+    const customFieldDefRows = await fill(
       "customFieldDefs",
       (after, take) =>
         prisma.customFieldDef.findMany({
@@ -333,9 +333,18 @@ router.get(
           },
           orderBy: [{ updatedAt: "asc" }, { id: "asc" }],
           take,
+          // The SCOPING rides with the definition. `CustomFieldDefPlaceType` is
+          // not a sync entity of its own, so without this join a client holds
+          // every definition and cannot tell which form any of them belongs on
+          // — it would render a canyon's grades on a campsite.
+          include: { placeTypes: { select: { placeTypeId: true } } },
         }),
       (row) => row.updatedAt,
     );
+    const customFieldDefs = customFieldDefRows.map(({ placeTypes, ...def }) => ({
+      ...def,
+      placeTypeIds: placeTypes.map((link) => link.placeTypeId),
+    }));
 
     // For a shared place of a USER type, the recipient owns none of the sender's
     // definitions, so without this they would see bare keys where the values

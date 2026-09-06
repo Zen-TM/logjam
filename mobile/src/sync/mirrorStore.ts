@@ -72,7 +72,7 @@ const ROUTE_KNOWN = [
 // constant. It is listed here so it does not fall into extra_json.
 const CUSTOM_FIELD_DEF_KNOWN = [
   "id", "ownerId", "entity", "key", "label", "type", "min", "max",
-  "position", "createdAt", "updatedAt",
+  "position", "placeTypeIds", "appliesToAllTypes", "createdAt", "updatedAt",
 ] as const;
 
 const MEDIA_KNOWN = [
@@ -282,9 +282,10 @@ export async function upsertCustomFieldDef(
 ): Promise<void> {
   await db.runAsync(
     `INSERT OR REPLACE INTO custom_field_defs
-       (id, entity, key, label, type, min, max, position, created_at,
+       (id, entity, key, label, type, min, max, position,
+        applies_to_all_types, place_type_ids_json, created_at,
         updated_at, extra_json, dirty_fields_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     row.id,
     row.entity,
     row.key,
@@ -293,6 +294,11 @@ export async function upsertCustomFieldDef(
     row.min,
     row.max,
     row.position,
+    // A server that predates the scoping fields sends neither. Defaulting to
+    // "no types, not all" renders the definition on NO form rather than on
+    // every one — the safe direction for a client that cannot tell.
+    row.appliesToAllTypes ? 1 : 0,
+    JSON.stringify(row.placeTypeIds ?? []),
     row.createdAt,
     row.updatedAt,
     splitExtras(row, CUSTOM_FIELD_DEF_KNOWN),
@@ -718,6 +724,18 @@ export type MirrorCustomFieldDef = {
   min: number | null;
   max: number | null;
   position: number;
+  /** WHERE it appears. Read as a parsed list rather than the stored JSON so no
+   *  caller has to know the column is text. */
+  placeTypeIds: string[];
+  appliesToAllTypes: boolean;
+};
+
+type CustomFieldDefRow = Omit<
+  MirrorCustomFieldDef,
+  "placeTypeIds" | "appliesToAllTypes"
+> & {
+  place_type_ids_json: string | null;
+  applies_to_all_types: number | null;
 };
 
 /** Every definition on this device, both entities. The ORDER BY matches the
@@ -726,10 +744,16 @@ export async function listMirrorCustomFieldDefs(): Promise<
   MirrorCustomFieldDef[]
 > {
   const db = await getSyncDb();
-  return db.getAllAsync<MirrorCustomFieldDef>(
-    `SELECT id, entity, key, label, type, min, max, position
+  const rows = await db.getAllAsync<CustomFieldDefRow>(
+    `SELECT id, entity, key, label, type, min, max, position,
+            applies_to_all_types, place_type_ids_json
        FROM custom_field_defs ORDER BY position ASC, key ASC`,
   );
+  return rows.map(({ place_type_ids_json, applies_to_all_types, ...def }) => ({
+    ...def,
+    placeTypeIds: parseStringList(place_type_ids_json),
+    appliesToAllTypes: applies_to_all_types === 1,
+  }));
 }
 
 export async function listMirrorPlaces(): Promise<MirrorPlace[]> {

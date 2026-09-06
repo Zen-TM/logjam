@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { fetchAuthSession } from "aws-amplify/auth";
-import type { StandaloneFile, ThemeSchemeId, TripLogCustomFieldDef, NotificationPreferences, MediaItem, MediaLinkedType, PlaceMergePolicy, ElevationProfile, SharableEntityType, FileSendStatus, FileSendSourceKind } from "@logjam/shared";
+import type { ScopedCustomFieldDef, StandaloneFile, ThemeSchemeId, TripLogCustomFieldDef, NotificationPreferences, MediaItem, MediaLinkedType, PlaceMergePolicy, ElevationProfile, SharableEntityType, FileSendStatus, FileSendSourceKind } from "@logjam/shared";
 import { formatTripPlaceNames } from "@logjam/shared";
 import type { BulkShareItem, FriendShareRow, FriendShares } from "@logjam/shared";
 import { ApiError } from "./errors/ApiError";
@@ -671,8 +671,9 @@ export function updateCurrentUserThemeScheme(
 export function updateUserPreferences(
   prefs: Partial<{
     themeSchemeId: ThemeSchemeId;
-    tripLogCustomFields: TripLogCustomFieldDef[];
-    placeCustomFields: TripLogCustomFieldDef[];
+    // NOTE: no `tripLogCustomFields` / `placeCustomFields` here. Definitions
+    // are rows, written through the row-grain calls below; sending them here
+    // is a 400 naming the replacement rather than a silent no-op.
     notifications: Partial<NotificationPreferences>;
     autoDownloadGeoPdfs: boolean;
     importMergePolicy: PlaceMergePolicy;
@@ -692,6 +693,155 @@ export function updateNotificationPreferences(
 // the definitions live under (trip-log → tripLogCustomFields, place →
 // placeCustomFields).
 export type CustomFieldEntityKind = "trip-log" | "place";
+
+// ── place types ─────────────────────────────────────────────────────────────
+//
+// A type is a CATEGORY of place, carrying its icon and colour and owning the
+// field definitions scoped to it. Three are SYSTEM types (`ownerId: null`) —
+// global rows every account shares, which is what lets a shared or copied place
+// of a system type resolve for its recipient with no reconciliation at all.
+// They cannot be renamed or deleted; the API answers 404 rather than 403 for
+// either, the same way every id-addressed surface does.
+
+export type TPlaceType = {
+  id: string;
+  ownerId: string | null;
+  name: string;
+  iconKey: string;
+  color: string;
+  position: number;
+  isSystem: boolean;
+  /** The caller's own places of this type. Two rules read it: a type with
+   *  none is hidden from the tab bar and the layer list (but ALWAYS offered
+   *  when creating a place, or a user could never make their first canyon),
+   *  and a type with places in it cannot be deleted. */
+  placeCount: number;
+};
+
+export function getPlaceTypes(): Promise<TPlaceType[]> {
+  return apiFetch<{ types: TPlaceType[] }>("/place-types").then((r) => r.types);
+}
+
+export function createPlaceType(body: {
+  name: string;
+  iconKey: string;
+  color: string;
+}): Promise<TPlaceType> {
+  return apiFetch<TPlaceType>("/place-types", { method: "POST", body });
+}
+
+export function updatePlaceType(
+  id: string,
+  body: Partial<{ name: string; iconKey: string; color: string; position: number }>,
+): Promise<TPlaceType> {
+  return apiFetch<TPlaceType>(`/place-types/${id}`, { method: "PATCH", body });
+}
+
+/** Deletes an EMPTY type. A type holding places is refused — deleting a
+ *  category must never delete what is in it — and the caller offers a reassign
+ *  instead. Returns how many definitions scoped only to it went with it. */
+export function deletePlaceType(id: string): Promise<{ removedFieldCount: number }> {
+  return apiFetch<{ removedFieldCount: number }>(`/place-types/${id}`, {
+    method: "DELETE",
+  });
+}
+
+/** Move every place of one type to another, so an unwanted type can then be
+ *  deleted without taking its places with it. */
+export function reassignPlaceType(
+  id: string,
+  toPlaceTypeId: string,
+): Promise<{ movedCount: number }> {
+  return apiFetch<{ movedCount: number }>(`/place-types/${id}/reassign`, {
+    method: "POST",
+    body: { toPlaceTypeId },
+  });
+}
+
+/**
+ * Adopt, discard or append one value the place is holding for a field this
+ * owner has no definition for (§2.6).
+ *
+ * ONE endpoint for the three because they share every precondition and differ
+ * only in what they do at the end. Returns the updated place, so a caller can
+ * render the result without a refetch — though adopting also creates a
+ * definition, and the caller has to reload those.
+ */
+export function resolveForeignField(
+  placeId: string,
+  key: string,
+  action: "adopt" | "discard" | "notes",
+): Promise<TPlace> {
+  return apiFetch<TPlace>(
+    `/places/${placeId}/foreign-fields/${encodeURIComponent(key)}`,
+    { method: "POST", body: { action } },
+  );
+}
+
+// ── custom field definitions: ROW-GRAIN, always ─────────────────────────────
+//
+// These used to go through `PATCH /users/me { placeCustomFields: [...] }` — a
+// whole-list reconcile of `{key,label,type,min,max}`. That path is GONE, and
+// its removal is not a tidy-up: the shape cannot express what a definition is
+// any more. It carries no `placeTypeIds` and no `appliesToAllTypes`, so every
+// save from a dialog that round-tripped the list would have wiped the scoping
+// off every definition — silently, because the payload does not mention it —
+// and it matched only the caller's own rows, so the SYSTEM definitions fell
+// through to the create branch and gave the user a private duplicate of every
+// built-in field, colliding under the same key.
+//
+// Per-row writes also mean two devices that each add a field both keep it,
+// which is the same reason the phone's definitions moved off the user record.
+
+/** Every definition for one entity, WITH its scoping. */
+export function getCustomFields(
+  entity: CustomFieldEntityKind,
+): Promise<ScopedCustomFieldDef[]> {
+  return apiFetch<{ fields: ScopedCustomFieldDef[] }>(
+    `/custom-fields/${entity}`,
+  ).then((res) => res.fields);
+}
+
+/**
+ * Add one definition. `placeTypeIds` says which types it appears on;
+ * `appliesToAllTypes` covers types created later, which join rows cannot.
+ * Neither given means the field appears on NO form — visible and fixable,
+ * unlike one that appears on every form.
+ */
+export function createCustomField(
+  entity: CustomFieldEntityKind,
+  field: TripLogCustomFieldDef,
+  scope?: { placeTypeIds?: string[]; appliesToAllTypes?: boolean },
+): Promise<ScopedCustomFieldDef[]> {
+  return apiFetch<{ fields: ScopedCustomFieldDef[] }>(`/custom-fields/${entity}`, {
+    method: "POST",
+    body: { field, ...scope },
+  }).then((res) => res.fields);
+}
+
+/**
+ * Change a definition in place, addressed by KEY. The key is not writable: it
+ * is what stored values are keyed by, so a rename that moved it would orphan
+ * every value the field already holds.
+ */
+export function updateCustomField(
+  entity: CustomFieldEntityKind,
+  key: string,
+  patch: {
+    label?: string;
+    type?: string;
+    min?: number | null;
+    max?: number | null;
+    position?: number;
+    placeTypeIds?: string[];
+    appliesToAllTypes?: boolean;
+  },
+): Promise<ScopedCustomFieldDef[]> {
+  return apiFetch<{ fields: ScopedCustomFieldDef[] }>(
+    `/custom-fields/${entity}/${encodeURIComponent(key)}`,
+    { method: "PATCH", body: patch },
+  ).then((res) => res.fields);
+}
 
 // How many of the user's rows (trip logs or places) carry a value for a custom
 // field. Shown as an impact warning before renaming or deleting the field. The
@@ -716,10 +866,10 @@ export function getCustomFieldImpact(
 export function deleteCustomField(
   entity: CustomFieldEntityKind,
   key: string,
-): Promise<{ remainingDefs: TripLogCustomFieldDef[]; removedCount: number }> {
+): Promise<{ remainingDefs: ScopedCustomFieldDef[]; removedCount: number }> {
   return apiFetch<{
-    tripLogCustomFields?: TripLogCustomFieldDef[];
-    placeCustomFields?: TripLogCustomFieldDef[];
+    tripLogCustomFields?: ScopedCustomFieldDef[];
+    placeCustomFields?: ScopedCustomFieldDef[];
     removedFromTripCount?: number;
     removedFromPlaceCount?: number;
   }>(`/custom-fields/${entity}/${encodeURIComponent(key)}`, {

@@ -4,7 +4,7 @@ import {
   distinctTripTypes,
   filterTrips,
   NO_TYPE_FILTER_VALUE,
-  type TripLogCustomFieldDef,
+    type ScopedCustomFieldDef,
 } from "@logjam/shared";
 import type { TPlace, TTripLog } from "../../../placeUtils";
 import { tripTitle } from "../../../placeUtils";
@@ -33,8 +33,8 @@ function TripLogsPanel({
   loading: boolean;
   onRefetchTripLogs: () => void;
   onRefetchAnalytics: () => void;
-  customFieldDefs: TripLogCustomFieldDef[];
-  onCustomFieldDefsChange: (defs: TripLogCustomFieldDef[]) => void;
+  customFieldDefs: ScopedCustomFieldDef[];
+  onCustomFieldDefsChange: (defs: ScopedCustomFieldDef[]) => void;
   places: TPlace[];
   onPickCoords: (onPicked: (lat: number, lng: number) => void) => void;
   pickingCoords: boolean;

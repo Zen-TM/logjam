@@ -39,6 +39,38 @@ export type TripLogCustomFieldDef = {
   max?: number;
 };
 
+/**
+ * A definition WITH its scoping — which place types it applies to, and whether
+ * it applies to every one of them including types created later.
+ *
+ * Separate from `TripLogCustomFieldDef` rather than folded into it, because the
+ * scoping answers a different question from the field itself: dozens of call
+ * sites want "what shape is this value" and only the form builders and the
+ * field editor want "where does it appear". The plain shape is what a value
+ * renderer, a filter and a validator take; this one is what decides which
+ * fields a form has at all.
+ *
+ * `appliesToAllTypes` is a FLAG rather than join rows for every type that
+ * exists today: rows would silently fail to apply to a type created tomorrow,
+ * and the user who ticked "All" would never find out.
+ */
+export type ScopedCustomFieldDef = TripLogCustomFieldDef & {
+  placeTypeIds: string[];
+  appliesToAllTypes: boolean;
+};
+
+/** The definitions a place of `placeTypeId` shows, in the order given. The one
+ *  rule both clients apply to build a form, so a phone and a browser cannot
+ *  disagree about which fields a campsite has. */
+export function defsForType(
+  defs: readonly ScopedCustomFieldDef[],
+  placeTypeId: string,
+): ScopedCustomFieldDef[] {
+  return defs.filter(
+    (def) => def.appliesToAllTypes || def.placeTypeIds.includes(placeTypeId),
+  );
+}
+
 export const CUSTOM_FIELD_TYPES: {
   value: TripLogCustomFieldType;
   label: string;

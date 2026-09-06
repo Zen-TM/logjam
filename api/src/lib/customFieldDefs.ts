@@ -19,6 +19,7 @@
 // number", "water level"). Nothing here logs a label, a key, or a value.
 import { Prisma } from "@prisma/client";
 import {
+  customFieldDefFromRow,
   customFieldDefsFromRows,
   isReservedFieldKey,
   isTripLogCustomFieldDef,
@@ -27,6 +28,7 @@ import {
   setFieldValues,
   userFieldValues,
   type CustomFieldEntity,
+  type ScopedCustomFieldDef,
   type TripLogCustomFieldDef,
 } from "@logjam/shared";
 
@@ -225,6 +227,44 @@ export async function loadDefs(
   entity: CustomFieldEntity,
 ): Promise<TripLogCustomFieldDef[]> {
   return customFieldDefsFromRows(await loadDefRows(userId), entity);
+}
+
+/**
+ * The same definitions WITH their scoping — what a form builder needs.
+ *
+ * `loadDefs` answers "what shape is this value", which is what a renderer, a
+ * filter and a validator want; this answers "where does it appear", which is
+ * what decides whether a campsite's form shows a V grade. Two reads rather than
+ * one type carrying both, because the scoped shape is wanted by two callers and
+ * the plain one by dozens.
+ */
+export async function loadScopedDefs(
+  userId: string,
+  entity: CustomFieldEntity,
+): Promise<ScopedCustomFieldDef[]> {
+  const rows = await prisma.customFieldDef.findMany({
+    where: { entity, OR: [{ ownerId: userId }, { ownerId: null }] },
+    select: {
+      ...DEF_SELECT,
+      appliesToAllTypes: true,
+      placeTypes: { select: { placeTypeId: true } },
+    },
+    orderBy: [{ position: "asc" }, { key: "asc" }],
+  });
+  return rows.flatMap((row) => {
+    const def = customFieldDefFromRow(row);
+    // A row that cannot become a definition (a type this build does not know,
+    // a bound that is not a number) is skipped rather than half-rendered —
+    // the same tolerance `customFieldDefsFromRows` applies.
+    if (!def) return [];
+    return [
+      {
+        ...def,
+        appliesToAllTypes: row.appliesToAllTypes,
+        placeTypeIds: row.placeTypes.map((link) => link.placeTypeId),
+      },
+    ];
+  });
 }
 
 /**

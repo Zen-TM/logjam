@@ -171,6 +171,12 @@ function LayersPanel({
       {/* Overlays section */}
       <div className={classes.sectionLabel}>Overlays</div>
 
+      {/* No per-TYPE rows here, deliberately. The Places panel's type tabs
+          already filter the map — `passesFilters` runs over the same filter
+          state for the list and for the pin layers — so a second per-type
+          control would be two switches for one thing, and they would disagree
+          the moment a user touched either. Owned/shared stays here because it
+          is a LAYER distinction (two sources, two colours), not a filter. */}
       <div className={classes.toggleRow}>
         <span>My Places</span>
         <Switch

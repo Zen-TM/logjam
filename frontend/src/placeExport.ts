@@ -193,9 +193,9 @@ function placesToGeoJson(places: TPlace[]): Blob {
   });
 }
 
-// Fixed CSV columns, in the exact order of the import template
-// (frontend/public/templates/canyon-import-template.csv) so an export can be
-// re-imported unchanged, followed by `sources`. altNames serialise
+// Fixed CSV columns, in the order the import template lays them out
+// (csvImport/placeTemplate.ts, which generates one per type) so an export can
+// be re-imported unchanged, followed by `sources`. altNames serialise
 // semicolon-separated, matching the template's "Alt Name 1; Alt Name 2"
 // convention and parseAltNames on import. Custom-field (`attr:<key>`) columns
 // are appended dynamically per exported set — see placesToCsv.

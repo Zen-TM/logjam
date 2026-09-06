@@ -6,17 +6,19 @@ import {
   exportUserData,
   type TUser,
 } from "../../../placeUtils";
+import type { TPlaceType } from "../../../placeUtils";
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,
   formatCredits,
   type NotificationPreferences,
-  type TripLogCustomFieldDef,
+    type ScopedCustomFieldDef,
 } from "@logjam/shared";
 import { useAuth } from "../../../useAuth";
 import { useThemePreferences } from "../../../themePreferences";
 import DeleteAccountDialog from "../../dialogs/DeleteAccountDialog";
 import ChangeEmailDialog from "../../dialogs/ChangeEmailDialog";
 import CustomFieldSection from "./CustomFieldSection";
+import PlaceTypeSection from "./PlaceTypeSection";
 import classes from "./AccountPanel.module.css";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
@@ -35,15 +37,21 @@ function AccountPanel({
   onCustomFieldDefsChange,
   placeCustomFieldDefs,
   onPlaceCustomFieldDefsChange,
+  placeTypes,
+  onPlaceTypesChange,
 }: {
   currentUser: TUser | null;
   // Custom trip-log field definitions (App-level state, shared with the trip
   // dialogs so a create/rename/delete here is immediately visible there).
-  customFieldDefs: TripLogCustomFieldDef[];
-  onCustomFieldDefsChange: (defs: TripLogCustomFieldDef[]) => void;
+  customFieldDefs: ScopedCustomFieldDef[];
+  onCustomFieldDefsChange: (defs: ScopedCustomFieldDef[]) => void;
   // Custom place field definitions (App-level state, shared with PlaceDialog).
-  placeCustomFieldDefs: TripLogCustomFieldDef[];
-  onPlaceCustomFieldDefsChange: (defs: TripLogCustomFieldDef[]) => void;
+  placeCustomFieldDefs: ScopedCustomFieldDef[];
+  /** Offered as the scoping choice when a PLACE field is created here, and
+   *  managed by the section above. */
+  placeTypes: TPlaceType[];
+  onPlaceTypesChange: (types: TPlaceType[]) => void;
+  onPlaceCustomFieldDefsChange: (defs: ScopedCustomFieldDef[]) => void;
 }) {
   const { signOut } = useAuth();
   const toast = useToast();
@@ -377,6 +385,14 @@ function AccountPanel({
         </div>
       )}
 
+      {/* Types come BEFORE the fields that are scoped to them: a user
+          reading downwards meets the categories, then what each one holds. */}
+      <PlaceTypeSection
+        types={placeTypes}
+        loading={!currentUser}
+        onTypesChange={onPlaceTypesChange}
+      />
+
       <CustomFieldSection
         entity="trip-log"
         sectionLabel="Custom trip fields"
@@ -395,6 +411,7 @@ function AccountPanel({
         loading={!currentUser}
         defs={placeCustomFieldDefs}
         onDefsChange={onPlaceCustomFieldDefsChange}
+        placeTypes={placeTypes}
       />
 
       <span className={classes.sectionLabel}>Your data</span>

@@ -15,8 +15,9 @@ import type {
   TUser,
   TRoute,
   PlaceTrack,
+  TPlaceType,
 } from "../../placeUtils";
-import type { StandaloneFile, TripLogCustomFieldDef, VectorStyleSettings, TopoExportJobView } from "@logjam/shared";
+import type { StandaloneFile, VectorStyleSettings, TopoExportJobView, ScopedCustomFieldDef } from "@logjam/shared";
 import type { TopoJob, GeoJsonPolygonal } from "../dialogs/TopoDialog";
 import type { CompletedTopoJob } from "../../topoLayerTypes";
 import type { GeoPdfTemplate } from "../dialogs/GeoPdfDialog";
@@ -160,6 +161,8 @@ function SidebarPanel({
   onCustomFieldDefsChange,
   placeCustomFieldDefs,
   onPlaceCustomFieldDefsChange,
+  placeTypes,
+  onPlaceTypesChange,
   // Analytics
   analytics,
   analyticsLoading,
@@ -274,10 +277,12 @@ function SidebarPanel({
   tripLogsLoading: boolean;
   onRefetchTripLogs: () => void;
   onRefetchAnalytics: () => void;
-  customFieldDefs: TripLogCustomFieldDef[];
-  onCustomFieldDefsChange: (defs: TripLogCustomFieldDef[]) => void;
-  placeCustomFieldDefs: TripLogCustomFieldDef[];
-  onPlaceCustomFieldDefsChange: (defs: TripLogCustomFieldDef[]) => void;
+  customFieldDefs: ScopedCustomFieldDef[];
+  onCustomFieldDefsChange: (defs: ScopedCustomFieldDef[]) => void;
+  placeCustomFieldDefs: ScopedCustomFieldDef[];
+  placeTypes: TPlaceType[];
+  onPlaceTypesChange: (types: TPlaceType[]) => void;
+  onPlaceCustomFieldDefsChange: (defs: ScopedCustomFieldDef[]) => void;
   // Analytics
   analytics: TAnalytics | null;
   analyticsLoading: boolean;
@@ -401,6 +406,7 @@ function SidebarPanel({
             setSelectedPlaceID={setSelectedPlaceID}
             setActivePanel={setActivePanel}
             placeCustomFieldDefs={placeCustomFieldDefs}
+            placeTypes={placeTypes}
             onExpandSheet={expandSheetToFull}
           />
         )}
@@ -491,6 +497,8 @@ function SidebarPanel({
             onCustomFieldDefsChange={onCustomFieldDefsChange}
             placeCustomFieldDefs={placeCustomFieldDefs}
             onPlaceCustomFieldDefsChange={onPlaceCustomFieldDefsChange}
+            placeTypes={placeTypes}
+            onPlaceTypesChange={onPlaceTypesChange}
           />
         )}
         {activePanel === "place-detail" && (
@@ -509,6 +517,7 @@ function SidebarPanel({
             onCustomFieldDefsChange={onCustomFieldDefsChange}
             placeCustomFieldDefs={placeCustomFieldDefs}
             onPlaceCustomFieldDefsChange={onPlaceCustomFieldDefsChange}
+            placeTypes={placeTypes}
             onQuotaChanged={onQuotaChanged}
             onRefetchTripLogs={onRefetchTripLogs}
             onAfterDelete={() => setActivePanel("places")}

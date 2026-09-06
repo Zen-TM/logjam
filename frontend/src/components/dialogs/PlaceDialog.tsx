@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useIsMobile } from "../../useIsMobile";
 import {
   Dialog,
@@ -16,7 +16,7 @@ import {
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
-import type { TripLogCustomFieldDef, TripLogCustomFieldType, MediaItem } from "@logjam/shared";
+import type { ScopedCustomFieldDef, TripLogCustomFieldType, MediaItem } from "@logjam/shared";
 import {
   coerceFieldValue,
   mediaCategory,
@@ -27,12 +27,15 @@ import {
   SOURCES_FIELD_KEY,
   SYSTEM_FIELD_DEFS,
   SYSTEM_PLACE_TYPE_IDS,
+  RESERVED_FIELD_KEYS,
+  defsForType,
   LATITUDE_RANGE,
   LONGITUDE_RANGE,
   isValidLatitude,
   isValidLongitude,
 } from "@logjam/shared";
 import { numericFieldError, type NumericFieldConstraints } from "../../numberInput";
+import type { TPlaceType } from "../../placeUtils";
 import ValidatedNumberField from "./ValidatedNumberField";
 import type { TPlace } from "../../placeUtils";
 import {
@@ -40,7 +43,7 @@ import {
   createPlace,
   deletePlace,
   getPlaceDetail,
-  updateUserPreferences,
+  createCustomField,
   isHttpUrl,
 } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
@@ -121,6 +124,7 @@ function PlaceDialog({
   onCancelPickCoords,
   customFieldDefs,
   onCustomFieldDefsChange,
+  placeTypes,
   onMediaChanged,
 }: {
   place: TPlace | null;
@@ -129,8 +133,14 @@ function PlaceDialog({
   onSaved: () => void;
   onPickCoords: (onPicked: (lat: number, lng: number) => void) => void;
   onCancelPickCoords: () => void;
-  customFieldDefs: TripLogCustomFieldDef[];
-  onCustomFieldDefsChange: (defs: TripLogCustomFieldDef[]) => void;
+  /** SCOPED definitions: which types each appears on decides which fields this
+   *  form has at all. */
+  customFieldDefs: ScopedCustomFieldDef[];
+  onCustomFieldDefsChange: (defs: ScopedCustomFieldDef[]) => void;
+  /** The types the user may file a place under — their own plus the system
+   *  three. Always ALL of them here, including empty ones: a picker that hid
+   *  a type with no places in it could never be used to make the first one. */
+  placeTypes: TPlaceType[];
   // Called after a media/track upload or delete so the opener (place detail
   // panel) can refresh its slideshow/track without waiting for a Save.
   onMediaChanged?: () => void;
@@ -153,6 +163,29 @@ function PlaceDialog({
   const [hours, setHours] = useState("");
   const [sources, setSources] = useState<Source[]>([]);
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
+  // THE TYPE, chosen first. It decides which fields the form below has, so it
+  // sits at the top of the dialog rather than among them.
+  const [placeTypeId, setPlaceTypeId] = useState<string>(
+    SYSTEM_PLACE_TYPE_IDS.canyon,
+  );
+  const isCanyonType = placeTypeId === SYSTEM_PLACE_TYPE_IDS.canyon;
+  /**
+   * The fields THIS type has, minus the ones already rendered above.
+   *
+   * `defsForType` is the shared rule (a definition appears on a type it is
+   * scoped to, or on every type when it is flagged) so the phone and the
+   * browser cannot disagree about which fields a campsite has. The reserved
+   * keys are excluded because the canyon block above renders them with the
+   * inputs they deserve — rendering them twice would give a canyon two V Grade
+   * boxes writing to one key.
+   */
+  const typeFieldDefs = useMemo(
+    () =>
+      defsForType(customFieldDefs, placeTypeId).filter(
+        (def) => !isCanyonType || !RESERVED_FIELD_KEYS.has(def.key),
+      ),
+    [customFieldDefs, placeTypeId, isCanyonType],
+  );
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -173,7 +206,7 @@ function PlaceDialog({
   const [addFieldError, setAddFieldError] = useState<string | null>(null);
 
   // Custom-field deletion confirmation
-  const [fieldToDelete, setFieldToDelete] = useState<TripLogCustomFieldDef | null>(null);
+  const [fieldToDelete, setFieldToDelete] = useState<ScopedCustomFieldDef | null>(null);
 
   // Media. In edit mode the place exists; in create mode a draft place is
   // lazily materialised on first upload so files have something to link to
@@ -214,6 +247,11 @@ function PlaceDialog({
     let initialHours: string;
     let initialSources: Source[];
     let initialFieldValues: Record<string, string>;
+    // Editing keeps the place's own type; creating defaults to Canyon, which
+    // is what this app is for. Retyping IS allowed on an edit: miscategorising
+    // is inevitable, and the server parks any value the new type has no
+    // definition for rather than dropping it (§2.6).
+    const initialPlaceTypeId = place?.placeTypeId ?? SYSTEM_PLACE_TYPE_IDS.canyon;
     if (place) {
       initialName = place.name;
       initialAltNames = place.altNames.join(", ");
@@ -271,6 +309,7 @@ function PlaceDialog({
     setHours(initialHours);
     setSources(initialSources);
     setFieldValues(initialFieldValues);
+    setPlaceTypeId(initialPlaceTypeId);
     initialFormSnapshotRef.current = JSON.stringify({
       name: initialName,
       altNames: initialAltNames,
@@ -286,6 +325,7 @@ function PlaceDialog({
       hours: initialHours,
       sources: initialSources,
       fieldValues: initialFieldValues,
+      placeTypeId: initialPlaceTypeId,
     });
     setError(null);
     setInvalidField(null);
@@ -375,10 +415,9 @@ function PlaceDialog({
       name: name.trim(),
       latitude: parsedLat,
       longitude: parsedLng,
-      // A media draft is always a new place, so there is no existing type to
-      // carry over. See the ponytail note above: the web creates canyons until
-      // phase 6 gives it a type picker.
-      placeTypeId: SYSTEM_PLACE_TYPE_IDS.canyon,
+      // A media draft is always a new place, so it takes whatever type the
+      // picker is showing.
+      placeTypeId,
     })
       .then((created) => {
         setDraftPlaceId(created.id);
@@ -521,7 +560,7 @@ function PlaceDialog({
           .filter(Boolean),
         latitude: parsedLat,
         longitude: parsedLng,
-        placeTypeId: place?.placeTypeId ?? SYSTEM_PLACE_TYPE_IDS.canyon,
+        placeTypeId,
         notes: notes || null,
         fieldValues: withFieldValues(place?.fieldValues ?? {}, {
           ...customFields,
@@ -578,8 +617,13 @@ function PlaceDialog({
     setAddingField(true);
     setAddFieldError(null);
     try {
-      const updatedDefs = [...customFieldDefs, result.def];
-      await updateUserPreferences({ placeCustomFields: updatedDefs });
+      // ROW-GRAIN (see the note in placeUtils.ts): the whole-list PATCH is
+      // gone, and it would have wiped the scoping off every definition.
+      // Scoped to the type this place IS, because that is the form the user
+      // was looking at when they added the field.
+      const updatedDefs = await createCustomField("place", result.def, {
+        placeTypeIds: [placeTypeId],
+      });
       onCustomFieldDefsChange(updatedDefs);
       setShowAddField(false);
       setNewFieldLabel("");
@@ -598,7 +642,7 @@ function PlaceDialog({
   // The unified delete (server strips the field's values from every place +
   // updates the def list) is handled by DeleteCustomFieldDialog; here we only
   // mirror the removal in local state after it succeeds.
-  function handleFieldDeleted(remainingDefs: TripLogCustomFieldDef[]) {
+  function handleFieldDeleted(remainingDefs: ScopedCustomFieldDef[]) {
     const key = fieldToDelete?.key;
     onCustomFieldDefsChange(remainingDefs);
     if (key) {
@@ -689,6 +733,33 @@ function PlaceDialog({
             />
             <FieldError message={invalidField === "name" ? "Name is required" : null} />
           </div>
+          {/* TYPE FIRST. It decides what the rest of this form is, so it goes
+              above the fields it governs rather than at the bottom with them.
+              Offered on an EDIT too: miscategorising is inevitable, and the
+              server parks any value the new type has no definition for rather
+              than dropping it — retyping is reversible, which is what makes it
+              safe to offer. */}
+          <TextField
+            label="Type"
+            value={placeTypeId}
+            onChange={(e) => setPlaceTypeId(e.target.value)}
+            select
+            size="small"
+            fullWidth
+            sx={selectSx}
+            SelectProps={{ MenuProps: menuPaperProps }}
+            helperText={
+              isEdit && place && placeTypeId !== place.placeTypeId
+                ? "Values this type has no field for are kept on the place and can be added to it later."
+                : undefined
+            }
+          >
+            {placeTypes.map((type) => (
+              <MenuItem key={type.id} value={type.id}>
+                {type.name}
+              </MenuItem>
+            ))}
+          </TextField>
           <TextField
             label="Alternative Names (comma-separated)"
             value={altNames}
@@ -736,6 +807,14 @@ function PlaceDialog({
               message={invalidField === "coords" ? "Valid coordinates are required" : null}
             />
           </div>
+          {/* THE SEVEN CANYON FIELDS keep their bespoke inputs — the v/a grade
+              selects, the French-rating links, the units in the labels. They
+              are the Canyon system type's definitions, and a generic renderer
+              would turn "v3 a4 III" into three unlabelled number boxes. Every
+              OTHER type's fields render generically below, from its
+              definitions. */}
+          {isCanyonType ? (
+          <>
           <Box sx={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 2 }}>
             <Tooltip
               title={
@@ -897,6 +976,8 @@ function PlaceDialog({
               />
             </Box>
           </Box>
+          </>
+          ) : null}
           <TextField
             label="Notes"
             value={notes}
@@ -909,13 +990,16 @@ function PlaceDialog({
             size="small"
           />
 
-          {/* Custom fields */}
-          {customFieldDefs.length > 0 && (
+          {/* The chosen type's own fields. `typeFieldDefs` is the definitions
+              in force for it — scoped to it, or flagged for every type — minus
+              the seven above, which have already rendered with the inputs they
+              deserve. */}
+          {typeFieldDefs.length > 0 && (
             <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
               <Typography variant="caption" sx={{ color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                 Custom Fields
               </Typography>
-              {customFieldDefs.map((def) => (
+              {typeFieldDefs.map((def) => (
                 <Box
                   key={def.key}
                   sx={{ display: "flex", gap: 1, alignItems: "center" }}

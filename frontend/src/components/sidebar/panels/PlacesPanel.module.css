@@ -469,3 +469,35 @@
   flex: 1;
   min-width: 0;
 }
+
+/* Type tabs: a horizontal strip that scrolls rather than wrapping, so a user
+   with six types keeps the list below at a predictable height. */
+.typeTabs {
+  display: flex;
+  gap: 0.3em;
+  overflow-x: auto;
+  padding: 0 0 0.4em;
+  scrollbar-width: none;
+}
+
+.typeTabs::-webkit-scrollbar {
+  display: none;
+}
+
+.typeTab,
+.typeTabActive {
+  flex: 0 0 auto;
+  padding: 0.25em 0.7em;
+  border-radius: 999px;
+  border: 1px solid var(--theme-bonus-2);
+  background: transparent;
+  color: var(--theme-text-muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.typeTabActive {
+  background: var(--theme-accent);
+  border-color: var(--theme-accent);
+  color: var(--theme-primary);
+}

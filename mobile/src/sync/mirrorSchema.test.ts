@@ -168,3 +168,16 @@ describe("the wipe derives from the schema", () => {
     }
   });
 });
+
+// The SCOPING columns, which arrived with the delta that carries them (mirror
+// version 8). A definition the phone cannot place is a definition it renders on
+// every form or on none — and the pair of columns is what makes the choice.
+describe("custom field definitions carry their scoping", () => {
+  it("has both columns, so a def can be placed on the right form", () => {
+    const table = MIRROR_TABLES.find((t) => t.name === "custom_field_defs");
+    expect(table).toBeDefined();
+    expect(Object.keys(table!.columns)).toEqual(
+      expect.arrayContaining(["applies_to_all_types", "place_type_ids_json"]),
+    );
+  });
+});

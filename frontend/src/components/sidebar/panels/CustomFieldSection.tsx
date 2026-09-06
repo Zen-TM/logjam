@@ -4,15 +4,17 @@ import {
   customFieldDisplayLabel,
   renameCustomFieldLabel,
   type TripLogCustomFieldDef,
+  type ScopedCustomFieldDef,
 } from "@logjam/shared";
 import {
-  updateUserPreferences,
+  updateCustomField,
   type CustomFieldEntityKind,
 } from "../../../placeUtils";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
 import DeleteCustomFieldDialog from "../../dialogs/DeleteCustomFieldDialog";
 import AddCustomFieldDialog from "../../dialogs/AddCustomFieldDialog";
 import { useCustomFieldImpact } from "../../dialogs/useCustomFieldImpact";
+import type { TPlaceType } from "../../../placeUtils";
 import { messageFromError } from "../../../errors/messageFromError";
 import { ErrorBanner } from "../../feedback/ErrorBanner";
 import classes from "./AccountPanel.module.css";
@@ -47,6 +49,7 @@ function CustomFieldSection({
   loading,
   defs,
   onDefsChange,
+  placeTypes,
 }: {
   entity: CustomFieldEntityKind;
   sectionLabel: string;
@@ -54,8 +57,14 @@ function CustomFieldSection({
   emptyText: string;
   // Owning user not yet loaded — show a loading state instead of the list.
   loading: boolean;
-  defs: TripLogCustomFieldDef[];
-  onDefsChange: (defs: TripLogCustomFieldDef[]) => void;
+  // Scoped for places, plain for trip logs — the section only reads the label
+  // and key, so it takes whichever the caller holds and hands back what the
+  // server returned rather than a locally-edited copy.
+  defs: ScopedCustomFieldDef[];
+  onDefsChange: (defs: ScopedCustomFieldDef[]) => void;
+  /** Passed through to the add dialog's scoping choice. Absent for trip-log
+   *  fields, which are scoped by the places a trip links rather than chosen. */
+  placeTypes?: TPlaceType[];
 }) {
   const meta = ENTITY_META[entity];
 
@@ -68,7 +77,6 @@ function CustomFieldSection({
     key: string;
     oldLabel: string;
     newLabel: string;
-    nextDefs: TripLogCustomFieldDef[];
   } | null>(null);
   const [renameSaving, setRenameSaving] = useState(false);
   const [deletingFieldDef, setDeletingFieldDef] = useState<TripLogCustomFieldDef | null>(null);
@@ -106,7 +114,6 @@ function CustomFieldSection({
       key: def.key,
       oldLabel: def.label,
       newLabel: renameInput.trim(),
-      nextDefs: result.defs,
     });
   }
 
@@ -114,8 +121,14 @@ function CustomFieldSection({
     if (!pendingRename) return;
     setRenameSaving(true);
     try {
-      await updateUserPreferences({ [meta.prefsKey]: pendingRename.nextDefs });
-      onDefsChange(pendingRename.nextDefs);
+      // ROW-GRAIN: one PATCH addressed by KEY. The whole-list write is gone,
+      // and it would have wiped the scoping off every definition — the key is
+      // deliberately not writable, so a rename moves the label and the stored
+      // values stay attached to it.
+      const updated = await updateCustomField(entity, pendingRename.key, {
+        label: pendingRename.newLabel,
+      });
+      onDefsChange(updated);
       setPendingRename(null);
       cancelRenameField();
     } catch (err) {
@@ -247,6 +260,7 @@ function CustomFieldSection({
         open={addOpen}
         entity={entity}
         existingDefs={defs}
+        placeTypes={placeTypes}
         onClose={() => setAddOpen(false)}
         onAdded={(updated) => onDefsChange(updated)}
       />

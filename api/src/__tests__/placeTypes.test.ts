@@ -1,5 +1,15 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import request from "supertest";
+
+import { throttleWrites } from "./_rateLimitGate";
+
+// A write in here may have to wait out `userPatchLimiter`'s 60-second window
+// (see `throttleWrites`): the budget is per user and the file that ran before
+// this one may have spent it. That wait is legitimate, and it does not fit the
+// suite's 15s default — so this FILE gets a longer one rather than the whole
+// suite, where it would mask a genuine hang.
+vi.setConfig({ testTimeout: 90_000 });
+
 import {
   SYSTEM_FIELD_DEFS,
   SYSTEM_PLACE_TYPE_IDS,
@@ -25,20 +35,36 @@ const createdFields: string[] = [];
 // way: read the budget off the response and sleep to the window reset when it
 // runs low. Without it the run dissolves into 429s that look like assertion
 // failures about types.
-async function afterWrite(res: { headers: Record<string, string> }) {
-  const remaining = Number(res.headers["ratelimit-remaining"] ?? "99");
-  const reset = Number(res.headers["ratelimit-reset"] ?? "60");
-  if (remaining <= 3) {
-    await new Promise((resolve) => setTimeout(resolve, (reset + 1) * 1000));
-  }
+/**
+ * Post-write throttle: read the tighter `userPatchLimiter` budget (30/60s on
+ * the write routes) off the response and sleep to the window reset when it
+ * runs low. `_rateLimitGate` cannot do this — it probes a READ route, so it
+ * sees the global limiter and nothing about this one.
+ */
+async function afterWrite(res: { status: number; headers: Record<string, string> }) {
+  await throttleWrites(res);
+}
+
+/**
+ * The same, for a write that must SUCCEED: if the budget was already spent by
+ * the file that ran before this one, the first attempt is a 429 and the retry
+ * lands after the window resets. Without it a 429 arrives as an assertion
+ * failure about place types, in whichever file happens to run second.
+ */
+async function write<T extends { status: number; headers: Record<string, string> }>(
+  send: () => Promise<T>,
+): Promise<T> {
+  const first = await send();
+  return (await throttleWrites(first)) ? await send() : first;
 }
 
 async function makeType(sub: string, name: string): Promise<string> {
-  const res = await request(API_URL)
-    .post("/place-types")
-    .set(as(sub))
-    .send({ name, iconKey: "map-pin", color: "#22C55E" });
-  await afterWrite(res);
+  const res = await write(() =>
+    request(API_URL)
+      .post("/place-types")
+      .set(as(sub))
+      .send({ name, iconKey: "map-pin", color: "#22C55E" }),
+  );
   expect(res.status, JSON.stringify(res.body)).toBe(201);
   created.push(res.body.id);
   return res.body.id as string;
