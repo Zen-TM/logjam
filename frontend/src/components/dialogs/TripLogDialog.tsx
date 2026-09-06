@@ -564,8 +564,11 @@ function TripLogDialog({
       name: creating.name.trim(),
       latitude: lat,
       longitude: lng,
-      // Creating a place inline from a trip log: the Canyon type, like every
-      // other web create path until phase 6 adds a type picker.
+      // Creating a place INLINE from a trip log, by typing a name that matches
+      // nothing. Canyon deliberately, and not a picker: the user is logging a
+      // trip, not filing a place, and interrupting that with a type question
+      // to answer a name they already typed is the wrong moment. The type is
+      // one tap to change on the place itself afterwards.
       placeTypeId: SYSTEM_PLACE_TYPE_IDS.canyon,
     });
     onPlaceCreated?.();

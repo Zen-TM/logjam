@@ -12,6 +12,13 @@ const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
                     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const DAY_ABBR = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 
+// ponytail: ANALYTICS STAYS CANYONING-SCOPED (plan §8). "Days Canyoning",
+// "Unique Places" and the hero tiles count canyoning trips, because that is
+// what this app is for and a "days out" number pooling canyoning with camping
+// answers a question nobody asked. Upgrade path when a user's other types earn
+// it: a type selector at the top of this panel, feeding the same server
+// aggregates with a type filter — the API already groups by place type.
+//
 // The Activity calendar counts trips of every type, matching the server's
 // tripDates (which no longer filters to canyoning). The drilldown day-list is
 // derived from the same all-types trip set, so heatmap counts and the list

@@ -19,7 +19,7 @@ import type { RefreshResult, TPlaceType } from "../../../placeUtils";
 import { useStoredState } from "../../../useStoredState";
 import type { PanelId } from "../panels";
 import type { TripLogCustomFieldDef, ScopedCustomFieldDef } from "@logjam/shared";
-import { customFieldDisplayLabel } from "@logjam/shared";
+import { customFieldDisplayLabel, defsForType } from "@logjam/shared";
 import RopeWikiReviewDialog from "../../dialogs/RopeWikiReviewDialog";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
 import { useToast } from "../../feedback/ToastProvider";
@@ -624,6 +624,14 @@ function PlacesPanel({
     ];
   }, [places, placeTypes]);
 
+  const filterFieldDefs = useMemo(
+    () =>
+      filters.placeTypeId == null
+        ? placeCustomFieldDefs
+        : defsForType(placeCustomFieldDefs, filters.placeTypeId),
+    [placeCustomFieldDefs, filters.placeTypeId],
+  );
+
   return (
     <div className={classes.root}>
       {/* Primary actions */}
@@ -800,11 +808,22 @@ function PlacesPanel({
                   {dateRangeCell("updated_at", "Updated")}
                 </div>
               </div>
-              {placeCustomFieldDefs.length > 0 && (
+              {/* The fields of the TYPE being filtered. On the All tab that is
+                  every definition — a user filtering across types may filter on
+                  anything they hold — but inside a type it is that type's own,
+                  because a campsite tab offering a V grade filter offers a
+                  filter that can only ever match nothing.
+
+                  A filter already SET on a field the new tab does not carry
+                  stays in `filters.custom` and keeps applying: silently
+                  dropping it would change the result set without telling
+                  anyone. It is visible again the moment the tab changes back,
+                  and Clear all removes it. */}
+              {filterFieldDefs.length > 0 && (
                 <div className={classes.section}>
                   <div className={classes.sectionHeader}>Custom fields</div>
                   <div className={classes.selectGrid}>
-                    {placeCustomFieldDefs.map((def) => customFieldCell(def))}
+                    {filterFieldDefs.map((def) => customFieldCell(def))}
                   </div>
                 </div>
               )}
