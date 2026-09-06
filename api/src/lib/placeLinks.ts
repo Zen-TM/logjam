@@ -19,6 +19,17 @@
 //     becomes rows, so both paths agree on ownership, canonical ordering and
 //     tombstones.
 //
+//     ponytail: online-only removes the OFFLINE window, not the concurrency
+//     one — two tabs, or web and phone at once, can still read → edit → save
+//     with a stale list in hand and drop the loser's link silently. That is the
+//     lost update fieldDefsStore.ts describes when it explains why definitions
+//     left a whole-list PATCH. Two things keep it small and neither is
+//     optional: the write below is a SET DIFFERENCE (add what is new, remove
+//     what is absent) so an unrelated edit never churns link ids or their
+//     tombstones, and both write paths land in this file. Upgrade path if the
+//     web ever goes offline-capable: per-link add/remove REST endpoints, which
+//     is what the sync ops already are.
+//
 // Removing a link needs a tombstone (the owner's OTHER devices hold the row and
 // nothing else would tell them); adding one does not, because the new row rides
 // the next delta on its own `updatedAt`.

@@ -28,6 +28,7 @@ import tripLogsRouter from "./routes/tripLogs";
 import tripLogsGlobalRouter from "./routes/tripLogsGlobal";
 import tripLogsBulkRouter from "./routes/tripLogsBulk";
 import placesBulkRouter from "./routes/placesBulk";
+import foreignFieldsRouter from "./routes/foreignFields";
 import sharingRouter from "./routes/sharing";
 import sharesRouter from "./routes/shares";
 import bulkShareRouter from "./routes/bulkShare";
@@ -201,6 +202,10 @@ app.use("/places/bulk", placesBulkRouter);
 app.use("/imports", importsRouter);
 app.use("/trips", tripLogsGlobalRouter);
 app.use("/places", sharingRouter);
+// Mounted on /places too: the actions are per PLACE, and keeping them under
+// the place's own path is what makes "owner only, 404 otherwise" the same
+// answer the rest of that path gives.
+app.use("/places", foreignFieldsRouter);
 app.use("/shares", sharesRouter);
 // Its own path, NOT /shares/bulk: it also ends a bulk action made entirely of
 // file copies, which grant no Share row at all, and mounting it under the

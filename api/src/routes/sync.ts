@@ -61,6 +61,7 @@ import {
   tripPlacesInclude,
 } from "./tripLogsGlobal";
 import { normalizePlaceTagsOrThrow, validatePlaceTextFields } from "./places";
+import { strandValuesOnTypeChange } from "../lib/placeCopy";
 import {
   assertValidDef,
   createFieldDef,
@@ -966,9 +967,9 @@ async function applyPlaceOp(userId: string, op: PushOp): Promise<PushOpResult> {
 
   // A type change is a legal edit (miscategorising is inevitable, and
   // delete-and-recreate would lose media, route, links and trips). Values the
-  // NEW type does not carry are not destroyed here — phase 4 moves them into
-  // foreignFields; until then they simply stay in fieldValues, which the
-  // "render any key that already has a value" rule keeps visible.
+  // NEW type has no definition for are PARKED in `foreignFields` rather than
+  // destroyed or left in `fieldValues` where nothing renders them — §2.6, and
+  // the second of that field's two writers (the other is copy).
   const typeId =
     fields.placeTypeId !== undefined
       ? await resolvePlaceTypeId(userId, fields.placeTypeId)
@@ -985,6 +986,24 @@ async function applyPlaceOp(userId: string, op: PushOp): Promise<PushOpResult> {
     fields,
     place as unknown as Record<string, unknown>,
   );
+  // Stranding runs over the values as they will be AFTER this op: an op that
+  // retypes and writes values in one go must reconcile what it wrote, not what
+  // the row held before it.
+  const nextValues =
+    fields.fieldValues !== undefined
+      ? asFieldValues(fields.fieldValues)
+      : asFieldValues(place.fieldValues);
+  const stranded =
+    fields.placeTypeId !== undefined && typeId !== place.placeTypeId
+      ? await strandValuesOnTypeChange({
+          ownerId: userId,
+          fromTypeId: place.placeTypeId,
+          toTypeId: typeId,
+          fieldValues: nextValues,
+          foreignFields: place.foreignFields,
+        })
+      : null;
+
   const updated = await prisma.place.update({
     where: { id: op.id },
     data: {
@@ -1009,6 +1028,16 @@ async function applyPlaceOp(userId: string, op: PushOp): Promise<PushOpResult> {
       ...(fields.fieldValues !== undefined && {
         fieldValues: asFieldValues(fields.fieldValues) as Prisma.InputJsonValue,
       }),
+      // The type change overrides both, because it is derived FROM them.
+      ...(stranded
+        ? {
+            fieldValues: stranded.fieldValues as Prisma.InputJsonValue,
+            foreignFields:
+              stranded.foreignFields.length > 0
+                ? (stranded.foreignFields as unknown as Prisma.InputJsonValue)
+                : Prisma.DbNull,
+          }
+        : {}),
     },
   });
   return conflicts.length > 0

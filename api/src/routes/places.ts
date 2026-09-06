@@ -8,6 +8,7 @@ import {
   linkedPlaceIdsFor,
   resolveLinkedPlaceIds,
 } from "../lib/placeLinks";
+import { reconcileCopiedPlace, resolveCopyPlaceType } from "../lib/placeCopy";
 import { Prisma } from "@prisma/client";
 import { getParam } from "../lib/getParam";
 import { getEnv } from "../lib/env";
@@ -130,6 +131,30 @@ export function placeListInclude(
   return { _count: { select: { tripLogLinks: true, shares: true } } };
 }
 
+/**
+ * A place as its RECIPIENT may see it: everything the record carries, minus
+ * `foreignFields`.
+ *
+ * OWNER-PRIVATE, and the rule is §2.6's, not a nicety. `foreignFields` records
+ * what the SENDER's definitions said about values this owner has no definition
+ * for; re-emitting it down a share chain is the propagation objection that got
+ * the "append it to notes" design rejected — B copies A's place, B shares it
+ * with C, and C reads A's field labels and values. What a sharee gets instead
+ * is `fieldDefsSnapshot`, derived LIVE from the owner's current definitions on
+ * the delta path (routes/sync.ts).
+ *
+ * Stripped HERE rather than by a `select`, because a select is a list that has
+ * to be kept in step with the schema and this only has to name the one field
+ * that must never leave. A new column is visible to a sharee by default, which
+ * is the right default for a record they are entitled to see.
+ */
+export function serializeSharedPlace<T extends { foreignFields?: unknown }>(
+  place: T,
+): Omit<T, "foreignFields"> {
+  const { foreignFields: _stripped, ...rest } = place;
+  return rest;
+}
+
 async function fetchPlaces(
   where: Prisma.PlaceWhereInput,
   scope: PlaceListScope,
@@ -185,7 +210,7 @@ router.get(
       prisma.place.count({ where }),
     ]);
     res.set("X-Total-Count", String(total));
-    res.json(rows);
+    res.json(rows.map(serializeSharedPlace));
   },
 );
 
@@ -372,6 +397,31 @@ router.post(
     // itself is visible to sharees).
     await requirePlaceAccess(user.id, place);
 
+    // WHICH TYPE, and it is the one decision a copy cannot take back silently
+    // (§2.6 rule 1): a system type resolves globally, a user type matches by
+    // NAME against the recipient's system types first and their own second, and
+    // only a genuine miss creates one. `placeTypeId` in the body is rule 2's
+    // explicit picker, which the copy sheet pre-fills with exactly this answer.
+    const typeResolution = await resolveCopyPlaceType(
+      user.id,
+      place.placeTypeId,
+      req.body?.placeTypeId,
+    );
+
+    // WHICH VALUES SURVIVE. A key the recipient defines with the same type
+    // lands in the field it belongs in; anything else is parked, self-
+    // describing, in `foreignFields` for the user to adopt, discard or append
+    // later. The source's OWN foreignFields are dropped rather than carried:
+    // a copy-of-a-copy reconciles field VALUES and nothing else, or residue
+    // accumulates down a share chain with no owner and no way to clear it.
+    const reconciled = await reconcileCopiedPlace({
+      recipientId: user.id,
+      sourceOwnerId: place.ownerId,
+      sourceTypeId: place.placeTypeId,
+      targetTypeId: typeResolution.placeTypeId,
+      fieldValues: place.fieldValues,
+    });
+
     // Create a copy of the place.
     // Drop ropeWikiId + ropeWikiSnapshot: @@unique([ownerId, ropeWikiId]) would
     // collide on self-copy, and preserving across owners would mis-attribute the
@@ -385,15 +435,15 @@ router.post(
         altNames: place.altNames,
         latitude: place.latitude,
         longitude: place.longitude,
-        // The sender's type carries straight over. A system type resolves
-        // globally (one row for every user), which is what makes a copy of a
-        // canyon need no reconciliation at all. Reconciling a copy of a USER
-        // type, and the foreignFields it strands, is phase 4.
-        placeTypeId: place.placeTypeId,
+        placeTypeId: typeResolution.placeTypeId,
         notes: place.notes,
         elevation: place.elevation,
         tags: place.tags,
-        fieldValues: (place.fieldValues ?? {}) as Prisma.InputJsonValue,
+        fieldValues: reconciled.fieldValues as Prisma.InputJsonValue,
+        foreignFields:
+          reconciled.foreignFields.length > 0
+            ? (reconciled.foreignFields as unknown as Prisma.InputJsonValue)
+            : Prisma.DbNull,
         ropeWikiId: null,
         ropeWikiSnapshot: Prisma.JsonNull,
         forkedFromId: placeId,
@@ -421,7 +471,14 @@ router.post(
       });
     }
 
-    res.status(201).json(copiedPlace);
+    // `createdPlaceType` is stated rather than left to be noticed: a new tab
+    // appearing unannounced reads as a bug, and the client says so in the
+    // toast that follows the copy.
+    res.status(201).json({
+      ...copiedPlace,
+      linkedPlaceIds: [],
+      createdPlaceType: typeResolution.created,
+    });
   },
 );
 
@@ -501,9 +558,9 @@ router.get(
       where: { linkedType: "place", linkedId: placeId },
       orderBy: { createdAt: "asc" },
     });
-    // No `linkedPlaceIds` on the sharee's copy — owner-private, like the trip
-    // list and the `_count` above.
-    res.json({ ...place, media: await toMediaItems(placeMedia) });
+    // No `linkedPlaceIds` and no `foreignFields` on the sharee's copy — both
+    // owner-private, like the trip list and the `_count` above.
+    res.json({ ...serializeSharedPlace(place), media: await toMediaItems(placeMedia) });
   },
 );
 
