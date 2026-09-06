@@ -38,13 +38,9 @@ UPDATE places
 SET name = 'place-' || substring(id::text, 1, 8),
     "altNames" = '{}',
     notes = NULL,
+    tags = '{}',
     field_values = '{}',
     foreign_fields = NULL;
-
-UPDATE waypoints
-SET name = 'waypoint-' || substring(id::text, 1, 8),
-    notes = NULL,
-    tags = '{}';
 
 UPDATE trip_logs
 SET notes = NULL,

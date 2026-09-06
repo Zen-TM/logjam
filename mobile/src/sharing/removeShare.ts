@@ -65,7 +65,7 @@ export async function removeSharedEntity(
   entityId: string,
 ): Promise<void> {
   await unshareItem(entityType, entityId, "me");
-  if (entityType !== "waypoint" && entityType !== "route") return;
+  if (entityType !== "route") return;
   const db = await getSyncDb();
   const orphaned = await withSyncTransaction(db, () =>
     applyTombstone(db, { type: entityType, id: entityId }),

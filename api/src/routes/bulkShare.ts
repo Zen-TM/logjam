@@ -229,12 +229,7 @@ router.post("/", requireAuth, async (req: AuthenticatedRequest, res: Response) =
       // `updateMany` per type, not one update per row.
       const now = new Date();
       for (const [entityType, ids] of plan.touchedIdsByType) {
-        if (entityType === "waypoint") {
-          await tx.waypoint.updateMany({
-            where: { id: { in: ids } },
-            data: { updatedAt: now },
-          });
-        } else if (entityType === "route") {
+        if (entityType === "route") {
           await tx.route.updateMany({
             where: { id: { in: ids } },
             data: { updatedAt: now },

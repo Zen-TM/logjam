@@ -14,14 +14,14 @@ import type {
   SyncDeltaTombstone,
   SyncEntityType,
   SyncDeltaTripRow,
-  SyncDeltaWaypointRow,
+  SyncDeltaPlaceLinkRow,
   SyncDeltaRouteRow,
   MediaMetadata,
 } from "@logjam/shared";
 import { isKnownSyncEntityType, readMediaMetadata } from "@logjam/shared";
 
 import type { TPlace, TTripLog } from "../api/types";
-import { withoutPlaceId, withoutPlaceLink } from "./placeLinks";
+import { withoutPlaceLink } from "./placeLinks";
 import { getSyncDb, notifyMirrorChanged } from "./syncDb";
 
 // ── extras split ─────────────────────────────────────────────────────────────
@@ -43,8 +43,9 @@ function splitExtras<Row extends Record<string, unknown>>(
 
 const PLACE_KNOWN = [
   "id", "syncRole", "name", "altNames", "latitude", "longitude",
-  "placeTypeId", "notes", "fieldValues", "fieldDefsSnapshot",
-  "foreignFields", "forkedFromId", "createdAt", "updatedAt",
+  "placeTypeId", "notes", "elevation", "tags", "fieldValues",
+  "fieldDefsSnapshot", "foreignFields", "forkedFromId", "createdAt",
+  "updatedAt",
 ] as const;
 
 const PLACE_TYPE_KNOWN = [
@@ -57,10 +58,8 @@ const TRIP_KNOWN = [
   "places", "createdAt", "updatedAt",
 ] as const;
 
-const WAYPOINT_KNOWN = [
-  "id", "ownerId", "placeIds", "tags", "syncRole", "name", "latitude",
-  "longitude", "elevation", "symbol", "notes", "sharedCount",
-  "createdAt", "updatedAt",
+const PLACE_LINK_KNOWN = [
+  "id", "ownerId", "aPlaceId", "bPlaceId", "createdAt", "updatedAt",
 ] as const;
 
 const ROUTE_KNOWN = [
@@ -96,10 +95,10 @@ export async function upsertPlace(
   await db.runAsync(
     `INSERT OR REPLACE INTO places
        (id, sync_role, name, latitude, longitude, alt_names_json,
-        place_type_id, notes, field_values_json, field_defs_snapshot_json,
-        foreign_fields_json, forked_from_id, created_at, updated_at,
-        extra_json, dirty_fields_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        place_type_id, notes, elevation, tags_json, field_values_json,
+        field_defs_snapshot_json, foreign_fields_json, forked_from_id,
+        created_at, updated_at, extra_json, dirty_fields_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     row.id,
     row.syncRole,
     row.name,
@@ -108,6 +107,8 @@ export async function upsertPlace(
     JSON.stringify(row.altNames ?? []),
     row.placeTypeId,
     row.notes,
+    row.elevation ?? null,
+    JSON.stringify(row.tags ?? []),
     JSON.stringify(row.fieldValues ?? {}),
     // Present only on a place of a type this account does not own — a shared
     // place of the sender's own type. Otherwise the viewer holds the
@@ -211,45 +212,26 @@ export async function rebasePendingPlaceLinks(
   };
 }
 
-export async function upsertWaypoint(
+export async function upsertPlaceLink(
   db: SQLiteDatabase,
-  row: SyncDeltaWaypointRow,
+  row: SyncDeltaPlaceLinkRow,
   dirtyFieldNames: string[],
 ): Promise<void> {
-  // sharedCount is OPTIONAL on the wire: absent means "unchanged", not zero
-  // (shared/src/sync.ts). The write-path response re-applied by flush omits it
-  // (waypointLink.serializeOwnWaypoint), and INSERT OR REPLACE would null the
-  // column and vanish the "Shared with N" pill. Carry the stored count forward.
-  const sharedCount =
-    row.sharedCount !== undefined
-      ? row.sharedCount
-      : (
-          await db.getFirstAsync<{ shared_count: number | null }>(
-            "SELECT shared_count FROM waypoints WHERE id = ?",
-            row.id,
-          )
-        )?.shared_count ?? null;
+  // No sharedCount carry-forward here (unlike routes): a link is owner-private,
+  // so there is no fan-out to report and no field the write-path response could
+  // omit.
   await db.runAsync(
-    `INSERT OR REPLACE INTO waypoints
-       (id, owner_id, place_ids_json, tags_json, sync_role, name, latitude,
-        longitude, elevation, symbol, notes, shared_count, created_at,
-        updated_at, extra_json, dirty_fields_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT OR REPLACE INTO place_links
+       (id, owner_id, a_place_id, b_place_id, created_at, updated_at,
+        extra_json, dirty_fields_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     row.id,
     row.ownerId,
-    JSON.stringify(row.placeIds ?? []),
-    JSON.stringify(row.tags ?? []),
-    row.syncRole,
-    row.name,
-    row.latitude,
-    row.longitude,
-    row.elevation,
-    row.symbol,
-    row.notes,
-    sharedCount,
+    row.aPlaceId,
+    row.bPlaceId,
     row.createdAt,
     row.updatedAt,
-    splitExtras(row, WAYPOINT_KNOWN),
+    splitExtras(row, PLACE_LINK_KNOWN),
     dirtyFieldNames.length ? JSON.stringify(dirtyFieldNames) : null,
   );
 }
@@ -259,7 +241,7 @@ export async function upsertRoute(
   row: SyncDeltaRouteRow,
   dirtyFieldNames: string[],
 ): Promise<void> {
-  // Same contract as upsertWaypoint: absent sharedCount means "unchanged", not
+  // Absent sharedCount means "unchanged", not
   // zero — carry the stored count forward rather than nulling it (see the
   // comment there).
   const sharedCount =
@@ -413,37 +395,24 @@ export async function upsertFriendship(
 /**
  * Take a dead place out of the mirror's JSON link columns.
  *
- * Waypoints have linked to places MANY-TO-MANY since the m2m change; the
- * cascade here used to null a `waypoints.place_id` column that no longer
- * exists on any fresh install, which threw inside the delta transaction, took
- * the cursor write down with the rollback, and froze the whole pull loop on
- * the first place delete the account ever saw. Trips carry the link with its
- * name (the derived title is built offline), so they need the same scrub in
- * their own shape.
+ * Only TRIPS carry one now: place↔place links became rows of their own in the
+ * phase 1c fold (`place_links`, deleted by the cascade above), while a trip
+ * still carries its places with their names because the derived title is built
+ * offline.
  *
- * Both the server tombstone and the local delete route through here — the two
- * used to differ, which is how waypoints kept dead links while trips didn't.
+ * The history is worth keeping, because it is what this function is FOR: the
+ * cascade once nulled a `waypoints.place_id` column that no longer existed on
+ * any fresh install, which threw inside the delta transaction, took the cursor
+ * write down with the rollback, and froze the whole pull loop on the first
+ * place delete the account ever saw. Both the server tombstone and the local
+ * delete route through here so the two cannot differ again.
  */
 export async function scrubPlaceLinks(
   db: SQLiteDatabase,
   placeId: string,
 ): Promise<void> {
   // LIKE narrows the rewrite to candidate rows (it matches substrings too, so
-  // the helpers decide); the alternative is parsing every waypoint on the phone.
-  const waypoints = await db.getAllAsync<{ id: string; place_ids_json: string | null }>(
-    "SELECT id, place_ids_json FROM waypoints WHERE place_ids_json LIKE ?",
-    `%${placeId}%`,
-  );
-  for (const waypoint of waypoints) {
-    const next = withoutPlaceId(waypoint.place_ids_json, placeId);
-    if (next === null) continue;
-    await db.runAsync(
-      "UPDATE waypoints SET place_ids_json = ? WHERE id = ?",
-      next,
-      waypoint.id,
-    );
-  }
-
+  // the helpers decide); the alternative is parsing every trip on the phone.
   const trips = await db.getAllAsync<{ id: string; places_json: string | null }>(
     "SELECT id, places_json FROM trip_logs WHERE places_json LIKE ?",
     `%${placeId}%`,
@@ -512,6 +481,14 @@ export async function cascadePlaceDelete(
   );
   await db.runAsync("DELETE FROM places WHERE id = ?", placeId);
   await db.runAsync("DELETE FROM place_shares WHERE place_id = ?", placeId);
+  // The links touching it go with it — server-side they cascade, and their
+  // tombstones arrive too, but the local cascade must not depend on delivery
+  // order. The place at the OTHER end survives: a link is not a container.
+  await db.runAsync(
+    "DELETE FROM place_links WHERE a_place_id = ? OR b_place_id = ?",
+    placeId,
+    placeId,
+  );
   // Route place links are SetNull server-side; mirror matches.
   await db.runAsync(
     "UPDATE routes SET place_id = NULL WHERE place_id = ?",
@@ -567,8 +544,10 @@ export async function applyTombstone(
     case "friendship":
       await db.runAsync("DELETE FROM friendships WHERE id = ?", tombstone.id);
       break;
-    case "waypoint":
-      await db.runAsync("DELETE FROM waypoints WHERE id = ?", tombstone.id);
+    case "placeLink":
+      // Just the link. Both places survive — deleting one because it lost a
+      // link would be the "a link is a container" mistake this model rejects.
+      await db.runAsync("DELETE FROM place_links WHERE id = ?", tombstone.id);
       break;
     case "route":
       // Also the signal for "unlinked from a place you can see" — the route
@@ -640,6 +619,8 @@ type PlaceRow = {
   alt_names_json: string | null;
   place_type_id: string;
   notes: string | null;
+  elevation: number | null;
+  tags_json: string | null;
   field_values_json: string | null;
   field_defs_snapshot_json: string | null;
   foreign_fields_json: string | null;
@@ -683,6 +664,20 @@ function parseJson<T>(value: string | null, fallback: T): T {
   }
 }
 
+/** Tolerant of the pre-tags rows an upgraded install still holds (null column
+ * reads as an empty list, never as a crash on the map screen). */
+function parseStringList(raw: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter((item): item is string => typeof item === "string")
+      : [];
+  } catch {
+    return [];
+  }
+}
+
 function rowToPlace(row: PlaceRow): MirrorPlace {
   const extras = parseJson<Record<string, unknown>>(row.extra_json, {});
   return {
@@ -697,6 +692,8 @@ function rowToPlace(row: PlaceRow): MirrorPlace {
     longitude: row.longitude,
     placeTypeId: row.place_type_id,
     notes: row.notes,
+    elevation: row.elevation,
+    tags: parseStringList(row.tags_json),
     fieldValues: parseJson(row.field_values_json, {}),
     fieldDefsSnapshot: row.field_defs_snapshot_json
       ? parseJson(row.field_defs_snapshot_json, [])
@@ -1016,88 +1013,57 @@ export async function listPlaceTrackMedia(
   return rows.map(rowToMirrorMedia);
 }
 
-type WaypointRow = {
+type PlaceLinkRow = {
   id: string;
   owner_id: string | null;
-  place_ids_json: string | null;
-  tags_json: string | null;
-  sync_role: string | null;
-  name: string;
-  latitude: number;
-  longitude: number;
-  elevation: number | null;
-  symbol: string | null;
-  notes: string | null;
-  shared_count: number | null;
+  a_place_id: string;
+  b_place_id: string;
   created_at: string | null;
   updated_at: string | null;
 };
 
-export type MirrorWaypoint = {
+/** One link, as stored. Symmetric: `aPlaceId` is simply the lower id, and a
+ *  screen renders it from whichever end the user is standing on. */
+export type MirrorPlaceLink = {
   id: string;
   ownerId: string | null;
-  placeIds: string[];
-  tags: string[];
-  /** 'shared' — arrived via a place share and is READ-ONLY on this device. */
-  syncRole: "owner" | "shared";
-  name: string;
-  latitude: number;
-  longitude: number;
-  elevation: number | null;
-  symbol: string | null;
-  notes: string | null;
-  /**
-   * People this waypoint is directly shared with. NULL means "not applicable
-   * or not known": a row shared WITH this user (the server withholds the
-   * count) or one created locally and not yet confirmed. 0 means the owner
-   * has shared it with nobody — a real answer, and a different one.
-   */
-  sharedCount: number | null;
+  aPlaceId: string;
+  bPlaceId: string;
   createdAt: string;
   updatedAt: string;
 };
 
-/** Tolerant of the pre-tags rows an upgraded install still holds (null column
- * reads as an empty list, never as a crash on the map screen). */
-function parseStringList(raw: string | null): string[] {
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed)
-      ? parsed.filter((item): item is string => typeof item === "string")
-      : [];
-  } catch {
-    return [];
-  }
-}
-
-function rowToWaypoint(row: WaypointRow): MirrorWaypoint {
+function rowToPlaceLink(row: PlaceLinkRow): MirrorPlaceLink {
   return {
     id: row.id,
     ownerId: row.owner_id,
-    placeIds: parseStringList(row.place_ids_json),
-    tags: parseStringList(row.tags_json),
-    // Absent on rows written before shared waypoints existed, and on every
-    // locally-created row — both are the user's own.
-    syncRole: row.sync_role === "shared" ? "shared" : "owner",
-    name: row.name,
-    latitude: row.latitude,
-    longitude: row.longitude,
-    elevation: row.elevation,
-    symbol: row.symbol,
-    notes: row.notes,
-    sharedCount: row.shared_count,
+    aPlaceId: row.a_place_id,
+    bPlaceId: row.b_place_id,
     createdAt: row.created_at ?? "",
     updatedAt: row.updated_at ?? "",
   };
 }
 
-export async function listMirrorWaypoints(): Promise<MirrorWaypoint[]> {
+export async function listMirrorPlaceLinks(): Promise<MirrorPlaceLink[]> {
   const db = await getSyncDb();
-  const rows = await db.getAllAsync<WaypointRow>(
-    "SELECT * FROM waypoints ORDER BY created_at DESC",
+  const rows = await db.getAllAsync<PlaceLinkRow>(
+    "SELECT * FROM place_links ORDER BY created_at DESC",
   );
-  return rows.map(rowToWaypoint);
+  return rows.map(rowToPlaceLink);
+}
+
+/** The other end of every link touching `placeId` — what the detail screen's
+ *  "Linked places" section reads. */
+export async function linkedPlaceIdsFor(placeId: string): Promise<string[]> {
+  const db = await getSyncDb();
+  const rows = await db.getAllAsync<{ a_place_id: string; b_place_id: string }>(
+    "SELECT a_place_id, b_place_id FROM place_links WHERE a_place_id = ? OR b_place_id = ?",
+    placeId,
+    placeId,
+  );
+  return rows.map((row) =>
+    row.a_place_id === placeId ? row.b_place_id : row.a_place_id,
+  );
 }
 
 type RouteRow = {

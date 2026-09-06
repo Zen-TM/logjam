@@ -14,8 +14,8 @@ export const SYNC_ENTITY_TYPES = [
   "tripLog",
   "media",
   "placeShare",
+  "placeLink",
   "friendship",
-  "waypoint",
   "route",
   "customFieldDef",
 ] as const;
@@ -64,8 +64,8 @@ export const DELTA_ENTITY_ORDER = [
   "placeTypes",
   "customFieldDefs",
   "places",
+  "placeLinks",
   "tripLogs",
-  "waypoints",
   "routes",
   "media",
   "placeShares",
@@ -102,8 +102,18 @@ export const SYNC_PUSH_OPS_BY_ENTITY = {
   // a phone can only reach the rows in its own mirror, so anything stripped
   // client-side would resurface the moment a later type slugged to the same id.
   placeType: ["create", "update", "delete"],
+  // A place<->place LINK. Create and delete only, and NO UPDATE — a link has
+  // no fields to change.
+  //
+  // A first-class entity rather than a `linkedPlaceIds` array on the place row,
+  // and the difference matters: `waypoint.canyonIds` was a whole-list field,
+  // safe only because the relationship was one-sided. A SYMMETRIC link edited
+  // from both ends means two devices clobber each other. The codebase already
+  // learned this — fieldDefsStore.ts documents that moving definitions from a
+  // whole-list PATCH to per-row writes is what made "two devices that each add
+  // a field now both keep it".
+  placeLink: ["create", "delete"],
   tripLog: ["create", "update", "delete"],
-  waypoint: ["create", "update", "delete"],
   route: ["create", "update", "delete"],
   notification: ["markRead", "markUnread", "delete"],
   // A custom field DEFINITION. `delete` is not a plain row delete: the server
@@ -165,12 +175,22 @@ export type SyncPushResponse = {
 export function pushOpDependencies(op: SyncPushOp): string[] {
   const deps: string[] = [];
   if (op.op === "update" || op.op === "delete") deps.push(op.id);
+  // `placeIds` is the TRIP-LOG link array; `placeId` is the ROUTE link. Both
+  // are place references whose create must land first.
   const placeIds = op.fields?.placeIds;
   if (Array.isArray(placeIds)) {
     deps.push(...placeIds.filter((v): v is string => typeof v === "string"));
   }
   const placeId = op.fields?.placeId;
   if (typeof placeId === "string") deps.push(placeId);
+  // A LINK depends on BOTH its endpoints. Without this, a link created offline
+  // in the same batch as the places it joins would be pushed before them and
+  // rejected — and the client's own flush engine reads this same function, so
+  // the two ends would disagree about the order.
+  for (const key of ["aPlaceId", "bPlaceId"] as const) {
+    const value = op.fields?.[key];
+    if (typeof value === "string") deps.push(value);
+  }
   return deps;
 }
 
@@ -198,6 +218,11 @@ export type SyncDeltaPlaceRow = {
   longitude: number;
   placeTypeId: string;
   notes: string | null;
+  /** Metres, or null. Folded in with the waypoints in phase 1c. */
+  elevation: number | null;
+  /** Free-text tags, also from the fold — NOT the place type, which is a row
+   *  of its own. */
+  tags: string[];
   /** Type-specific values, keyed by CustomFieldDef.key. Replaces the seven
    *  grade columns and the free-form `attributes` blob. */
   fieldValues: Record<string, unknown>;
@@ -252,37 +277,13 @@ export type SyncDeltaTripRow = {
   updatedAt: string;
 };
 
-export type SyncDeltaWaypointRow = {
+export type SyncDeltaPlaceLinkRow = {
   id: string;
   ownerId: string;
-  /**
-   * Mirrors SyncDeltaPlaceRow: 'shared' means the row arrives only because it
-   * is linked to a place shared with the caller, and is READ-ONLY there.
-   */
-  syncRole: "owner" | "shared";
-  /**
-   * Every place this waypoint is linked to THAT THE CALLER CAN SEE. A sharee
-   * never learns that an owner also filed the carpark under three places they
-   * were not shared on, so this list is scoped, not the raw link set.
-   */
-  placeIds: string[];
-  name: string;
-  latitude: number;
-  longitude: number;
-  elevation: number | null;
-  symbol: string | null;
-  notes: string | null;
-  tags: string[];
-  /**
-   * How many people this waypoint is directly shared with.
-   *
-   * OWNER ROWS ONLY. A share fan-out is owner-private derived cardinality
-   * (root CLAUDE.md): a recipient must not learn how many OTHER people hold
-   * the thing they were given. Optional rather than `number` for a second
-   * reason — the write paths return a row without it, where absent means
-   * "unchanged", not zero.
-   */
-  sharedCount?: number;
+  /** Lexicographically LOWER id. Symmetric and stored once; a client renders
+   *  the link from whichever end it is looking at. */
+  aPlaceId: string;
+  bPlaceId: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -311,7 +312,8 @@ export type SyncDeltaRouteRow = {
    * which reads as "every point is the user's".
    */
   anchors: number[] | null;
-  /** Owner rows only — see SyncDeltaWaypointRow.sharedCount. */
+  /** Owner rows only: a share fan-out is owner-private derived cardinality
+   *  (root CLAUDE.md), so a recipient's copy of a row never carries one. */
   sharedCount?: number;
   createdAt: string;
   updatedAt: string;
@@ -410,10 +412,11 @@ export type SyncDeltaResponse = {
   hasMore: boolean;
   resetRequired: boolean;
   changes: {
+    placeTypes: SyncDeltaPlaceTypeRow[];
     customFieldDefs: SyncDeltaCustomFieldDefRow[];
     places: SyncDeltaPlaceRow[];
+    placeLinks: SyncDeltaPlaceLinkRow[];
     tripLogs: SyncDeltaTripRow[];
-    waypoints: SyncDeltaWaypointRow[];
     routes: SyncDeltaRouteRow[];
     media: SyncDeltaMediaRow[];
     placeShares: SyncDeltaShareRow[];
@@ -474,6 +477,8 @@ const PLACE_ROW_SPEC: Record<string, FieldCheck> = {
   longitude: isNumber,
   placeTypeId: isString,
   notes: nullable(isString),
+  elevation: nullable(isNumber),
+  tags: arrayOf(isString),
   fieldValues: isPlainObject,
   ropeWikiId: nullable(isNumber),
   forkedFromId: nullable(isString),
@@ -511,18 +516,11 @@ const TRIP_ROW_SPEC: Record<string, FieldCheck> = {
   updatedAt: isString,
 };
 
-const WAYPOINT_ROW_SPEC: Record<string, FieldCheck> = {
+const PLACE_LINK_ROW_SPEC: Record<string, FieldCheck> = {
   id: isString,
   ownerId: isString,
-  syncRole: isSyncRole,
-  placeIds: arrayOf(isString),
-  name: isString,
-  latitude: isNumber,
-  longitude: isNumber,
-  elevation: nullable(isNumber),
-  symbol: nullable(isString),
-  notes: nullable(isString),
-  tags: arrayOf(isString),
+  aPlaceId: isString,
+  bPlaceId: isString,
   createdAt: isString,
   updatedAt: isString,
 };
@@ -633,8 +631,8 @@ export function parseSyncDeltaTripRow(value: unknown): SyncDeltaTripRow {
   return parseRow<SyncDeltaTripRow>("tripLog", value, TRIP_ROW_SPEC);
 }
 
-export function parseSyncDeltaWaypointRow(value: unknown): SyncDeltaWaypointRow {
-  return parseRow<SyncDeltaWaypointRow>("waypoint", value, WAYPOINT_ROW_SPEC);
+export function parseSyncDeltaPlaceLinkRow(value: unknown): SyncDeltaPlaceLinkRow {
+  return parseRow<SyncDeltaPlaceLinkRow>("placeLink", value, PLACE_LINK_ROW_SPEC);
 }
 
 export function parseSyncDeltaRouteRow(value: unknown): SyncDeltaRouteRow {

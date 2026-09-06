@@ -4,13 +4,13 @@ vi.mock("../services/prisma", () => ({
   default: {
     share: { findUnique: vi.fn(), findMany: vi.fn() },
     placeShare: { findFirst: vi.fn() },
-    placeWaypoint: { findFirst: vi.fn() },
-    waypoint: { findUnique: vi.fn() },
     route: { findUnique: vi.fn(), findFirst: vi.fn() },
     topoJob: { findUnique: vi.fn() },
     geoPdfJob: { findUnique: vi.fn() },
   },
 }));
+
+import { SHARABLE_ENTITY_TYPES } from "@logjam/shared";
 
 import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
@@ -23,8 +23,6 @@ import {
 const mocked = prisma as unknown as {
   share: { findUnique: Mock; findMany: Mock };
   placeShare: { findFirst: Mock };
-  placeWaypoint: { findFirst: Mock };
-  waypoint: { findUnique: Mock };
   route: { findUnique: Mock; findFirst: Mock };
   topoJob: { findUnique: Mock };
   geoPdfJob: { findUnique: Mock };
@@ -34,17 +32,15 @@ const OWNER = "user-owner";
 const SHAREE = "user-sharee";
 
 /** Every endpoint reaches its decision through this dispatcher, so the status
- *  a stranger sees is decided here — once, for all four entity types. */
-const ALL_TYPES = ["waypoint", "route", "topoJob", "geoPdfJob"] as const;
+ *  a stranger sees is decided here — once, for every sharable type. Read off
+ *  the vocabulary rather than retyped, so a new sharable kind fails here until
+ *  the dispatcher learns it. */
+const ALL_TYPES = SHARABLE_ENTITY_TYPES;
 
 beforeEach(() => {
   mocked.share.findUnique.mockReset().mockResolvedValue(null);
   mocked.share.findMany.mockReset().mockResolvedValue([]);
   mocked.placeShare.findFirst.mockReset().mockResolvedValue(null);
-  mocked.placeWaypoint.findFirst.mockReset().mockResolvedValue(null);
-  mocked.waypoint.findUnique
-    .mockReset()
-    .mockResolvedValue({ id: "wp-1", ownerId: OWNER });
   mocked.route.findUnique
     .mockReset()
     .mockResolvedValue({ id: "rt-1", ownerId: OWNER, placeId: null });
@@ -59,8 +55,8 @@ beforeEach(() => {
 
 describe("loadEntityRole — one dispatcher, four tables", () => {
   it("reads the owner column each type actually uses", async () => {
-    // TopoJob/GeoPdfJob name it `userId`, Waypoint/Route name it `ownerId`.
-    // Getting this wrong would make every job look unowned.
+    // TopoJob/GeoPdfJob name it `userId`, Route names it `ownerId`. Getting
+    // this wrong would make every job look unowned.
     for (const entityType of ALL_TYPES) {
       const loaded = await loadEntityRole(OWNER, entityType, "id-1");
       expect(loaded).toEqual({ ownerId: OWNER, role: "owner" });
@@ -68,7 +64,6 @@ describe("loadEntityRole — one dispatcher, four tables", () => {
   });
 
   it("returns null for a missing row, of every type", async () => {
-    mocked.waypoint.findUnique.mockResolvedValue(null);
     mocked.route.findUnique.mockResolvedValue(null);
     mocked.topoJob.findUnique.mockResolvedValue(null);
     mocked.geoPdfJob.findUnique.mockResolvedValue(null);
@@ -142,7 +137,7 @@ describe("directlySharedIds", () => {
   });
 
   it("is empty when nothing is shared, so the OR arm matches nothing", async () => {
-    expect(await directlySharedIds(SHAREE, "waypoint")).toEqual([]);
+    expect(await directlySharedIds(SHAREE, "route")).toEqual([]);
   });
 
   it("never keys off sharedById — a share I SENT is not one I can see", async () => {

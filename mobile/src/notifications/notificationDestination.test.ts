@@ -27,16 +27,16 @@ describe("notificationDestination", () => {
     ).toEqual({ tab: "friends", label: "View in Friends" });
   });
 
-  it("points a shared waypoint at its own row", () => {
+  it("points a shared route at its own row", () => {
     expect(
       notificationDestination(
-        notification("item_shared", { entityType: "waypoint", entityId: "w1" }),
+        notification("item_shared", { entityType: "route", entityId: "r1" }),
       ),
     ).toEqual({
       tab: "saved",
       label: "View in Saved",
-      filter: "waypoint",
-      highlightKey: "w1",
+      filter: "route",
+      highlightKey: "r1",
     });
   });
 
@@ -50,7 +50,7 @@ describe("notificationDestination", () => {
 
   it("has nowhere to send a share whose payload names no entity", () => {
     expect(
-      notificationDestination(notification("item_shared", { entityType: "waypoint" })),
+      notificationDestination(notification("item_shared", { entityType: "route" })),
     ).toBeNull();
     expect(
       notificationDestination(

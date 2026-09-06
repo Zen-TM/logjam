@@ -396,91 +396,16 @@ export function usePlaceTracks(enabled: boolean) {
 }
 
 
-// ── Waypoints ────────────────────────────────────────────────────────────
-// Marked points: a carpark, a campsite, an anchor, an exit. Authored mostly on
-// the phone; the web lists, edits and links them.
+// ponytail: the web has no marker-specific surface at all until phase 6 — a
+// marker is listed, edited and mapped as the place it is. Upgrade path: the
+// type-tabbed places panel and the Linked places section, which need the
+// type-management screens beside them.
 //
-// An UNLINKED waypoint is owner-private. One linked to a place shared with you
-// arrives here read-only (`syncRole: "shared"`) — same visibility rule as a
-// linked route. `placeIds` is scoped by the server to places the caller can
-// see, so a sharee never learns the owner's other filing.
-
-export type TWaypoint = {
-  id: string;
-  ownerId: string;
-  syncRole: "owner" | "shared";
-  placeIds: string[];
-  name: string;
-  latitude: number;
-  longitude: number;
-  elevation: number | null;
-  symbol: string | null;
-  notes: string | null;
-  tags: string[];
-  createdAt: string;
-  updatedAt: string;
-};
-
-export function getWaypoints(): Promise<TWaypoint[]> {
-  return apiFetch<TWaypoint[]>("/waypoints");
-}
-
-export function createWaypoint(data: {
-  name: string;
-  latitude: number;
-  longitude: number;
-  notes?: string | null;
-  tags?: string[];
-  placeIds?: string[];
-}): Promise<TWaypoint> {
-  return apiFetch<TWaypoint>("/waypoints", { method: "POST", body: data });
-}
-
-export function updateWaypoint(
-  id: string,
-  data: Partial<{
-    name: string;
-    latitude: number;
-    longitude: number;
-    notes: string | null;
-    tags: string[] | null;
-    placeIds: string[] | null;
-  }>,
-): Promise<TWaypoint> {
-  return apiFetch<TWaypoint>(`/waypoints/${id}`, { method: "PATCH", body: data });
-}
-
-export function deleteWaypoint(id: string): Promise<void> {
-  return apiFetch<void>(`/waypoints/${id}`, { method: "DELETE" });
-}
-
-/** Fetches waypoints only while something is showing them, mirroring useRoutes.
- *  Bump `refetch` after any write. */
-export function useWaypoints(enabled: boolean) {
-  const [waypoints, setWaypoints] = useState<TWaypoint[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [fetchCount, setFetchCount] = useState(0);
-
-  useEffect(() => {
-    if (!enabled) return;
-    setLoading(true);
-    // Guards a stale in-flight response landing after a newer one (FECO-001).
-    let cancelled = false;
-    getWaypoints()
-      .then((data) => { if (!cancelled) setWaypoints(data); })
-      .catch((err) => {
-        console.error(err);
-        if (!cancelled) setError(messageFromError(err, "Couldn't load waypoints."));
-      })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [enabled, fetchCount]);
-
-  const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
-
-  return { waypoints, loading, error, refetch };
-}
+// Waypoints are GONE as a separate thing: phase 1c folded them into places of
+// the system "Marker" type, so the list, the map pins and the detail view are
+// the PLACE ones. The web's own marker surfaces (a type-tabbed places list, a
+// Linked places section) land with the rest of the web rework — until then a
+// marker is a place in the places panel, which is where it already appears.
 
 // ── Routes ───────────────────────────────────────────────────────────────
 // User-authored lines. Unlike tracks, geometry arrives INLINE (no presigned

@@ -6,7 +6,7 @@ import {
   parseSyncDeltaPlaceRow,
   parseSyncDeltaTombstone,
   parseSyncDeltaTripRow,
-  parseSyncDeltaWaypointRow,
+  parseSyncDeltaPlaceLinkRow,
   SYNC_ENTITY_TYPES,
   SyncRowError,
 } from "./sync";
@@ -108,8 +108,12 @@ describe("SYNC_ENTITY_TYPES", () => {
       "tripLog",
       "media",
       "placeShare",
+      // A place<->place LINK. Its own entity rather than an array on the place
+      // row: a SYMMETRIC relationship edited from both ends means two devices
+      // clobber each other, which is why `waypoint.canyonIds` could be a
+      // whole-list field and this cannot.
+      "placeLink",
       "friendship",
-      "waypoint",
       "route",
       "customFieldDef",
     ]);
@@ -155,6 +159,8 @@ describe("delta row parsers", () => {
     longitude: 150.4,
     placeTypeId: "b0000000-0000-4000-8000-000000000001",
     notes: null,
+    elevation: null,
+    tags: [],
     fieldValues: { v_grade: 4, a_grade: 3, commitment: 3, num_abseils: 6, hours: 7 },
     ropeWikiId: null,
     forkedFromId: null,
@@ -173,18 +179,11 @@ describe("delta row parsers", () => {
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   };
-  const waypoint = {
-    id: "w1",
+  const placeLink = {
+    id: "l1",
     ownerId: "u1",
-    syncRole: "shared",
-    placeIds: ["c1"],
-    name: "Carpark",
-    latitude: -33.5,
-    longitude: 150.4,
-    elevation: null,
-    symbol: null,
-    notes: null,
-    tags: [],
+    aPlaceId: "c1",
+    bPlaceId: "c2",
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   };
@@ -195,7 +194,7 @@ describe("delta row parsers", () => {
       futureField: 1,
     });
     expect(parseSyncDeltaTripRow(trip).id).toBe("t1");
-    expect(parseSyncDeltaWaypointRow(waypoint).id).toBe("w1");
+    expect(parseSyncDeltaPlaceLinkRow(placeLink).id).toBe("l1");
   });
 
   it("rejects non-objects", () => {
@@ -217,12 +216,14 @@ describe("delta row parsers", () => {
     expect(() => parseSyncDeltaTripRow({ ...trip, places: [{ id: "c1" }] })).toThrow(
       /places/,
     );
+    // A link's endpoints are the whole row — a malformed one must not reach
+    // the mirror, where it would render as an edge to nowhere.
     expect(() =>
-      parseSyncDeltaWaypointRow({ ...waypoint, syncRole: "editor" }),
-    ).toThrow(/syncRole/);
-    expect(() => parseSyncDeltaWaypointRow({ ...waypoint, tags: [1] })).toThrow(
-      /tags/,
-    );
+      parseSyncDeltaPlaceLinkRow({ ...placeLink, aPlaceId: 7 }),
+    ).toThrow(/aPlaceId/);
+    expect(() =>
+      parseSyncDeltaPlaceLinkRow({ ...placeLink, bPlaceId: null }),
+    ).toThrow(/bPlaceId/);
   });
 
   it("never puts field VALUES in the message (they are names and coords)", () => {

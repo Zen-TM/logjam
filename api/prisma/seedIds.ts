@@ -7,7 +7,8 @@
 //
 // `prefix` is one hex digit naming the owner/space: "0" users, "1" alice's
 // places, "2" bob's, "3" carol's, "4" media, "5" custom field definitions,
-// "6" waypoints, "7" routes, "8" direct (per-item) shares, "9" user-created
+// "6" marker places and the links between places (the old waypoint space —
+// phase 1c preserved waypoint ids as place ids), "7" routes, "8" direct (per-item) shares, "9" user-created
 // place types.
 //
 // "a" and "b" are NOT here and MUST NOT BE: they are the SYSTEM field

@@ -32,7 +32,7 @@ describe("outboxMirrorTable", () => {
   it("maps the tables a create can orphan", () => {
     expect(outboxMirrorTable("place")).toBe("places");
     expect(outboxMirrorTable("tripLog")).toBe("trip_logs");
-    expect(outboxMirrorTable("waypoint")).toBe("waypoints");
+    expect(outboxMirrorTable("placeLink")).toBe("place_links");
     expect(outboxMirrorTable("media")).toBe("media");
   });
 

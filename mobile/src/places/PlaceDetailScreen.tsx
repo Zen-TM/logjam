@@ -67,7 +67,7 @@ import {
   useMirrorPlaces,
   useMirrorMedia,
   useMirrorRoutes,
-  useMirrorWaypoints,
+  useMirrorPlaceLinks,
   useMirrorTrips,
 } from "../sync/useSyncQueries";
 import {
@@ -90,7 +90,6 @@ import { formatTripDate } from "../logs/logbook";
 import { TripEditSheet } from "../logs/TripEditSheet";
 import { PlaceEditSheet } from "./PlaceEditSheet";
 import { placeDeleteConfirm } from "./placeDeleteConfirm";
-import { waypointSymbol } from "../map/waypointSymbol";
 import { PLACE_STATUS_META, placeStatus } from "./placeMeta";
 
 /** Extent of a drawn route's points, for "show it on the map". Built at
@@ -108,7 +107,7 @@ export function PlaceDetailScreen({
   onShowOnMap,
   onFocusOnMap,
   onDrawRoute,
-  onShowWaypointOnMap,
+  onShowPlaceOnMap,
   onDeleted,
 }: {
   placeId: string;
@@ -122,8 +121,8 @@ export function PlaceDetailScreen({
   onFocusOnMap: (bbox: [number, number, number, number]) => void;
   /** Opens the Map tab with the draw tool armed, saving into this place's slot. */
   onDrawRoute?: (placeId: string) => void;
-  /** Centres the map on one of this place's linked waypoints. */
-  onShowWaypointOnMap?: (waypoint: { latitude: number; longitude: number }) => void;
+  /** Centres the map on one of the places linked to this one. */
+  onShowPlaceOnMap?: (place: { latitude: number; longitude: number }) => void;
   /** The place this screen is showing is gone — leave, don't render a husk. */
   onDeleted: () => void;
 }) {
@@ -131,7 +130,7 @@ export function PlaceDetailScreen({
   const media = useMirrorMedia("place", placeId);
   const trips = useMirrorTrips();
   const routes = useMirrorRoutes();
-  const waypoints = useMirrorWaypoints();
+  const placeLinks = useMirrorPlaceLinks();
   const placesQuery = useMirrorPlaces();
   const online = useConnectivity() === "online";
   // The same capability gating every Share row spreads — removing a share is
@@ -185,10 +184,16 @@ export function PlaceDetailScreen({
   // appears to do nothing is worse than no link at all.
   const linkedRoute =
     (routes.data ?? []).find((route) => route.placeId === placeId) ?? null;
-  // Many-to-many, unlike the route slot: a carpark serving three places off
-  // one trailhead appears on all three.
-  const linkedWaypoints = (waypoints.data ?? [])
-    .filter((waypoint) => waypoint.placeIds.includes(placeId))
+  // Symmetric and many-to-many, unlike the route slot: a carpark serving three
+  // canyons off one trailhead is linked from all three, and the link is stored
+  // once with this place at either end.
+  const linkedPlaceIds = new Set(
+    (placeLinks.data ?? [])
+      .filter((link) => link.aPlaceId === placeId || link.bPlaceId === placeId)
+      .map((link) => (link.aPlaceId === placeId ? link.bPlaceId : link.aPlaceId)),
+  );
+  const linkedPlaces = (placesQuery.data ?? [])
+    .filter((row) => linkedPlaceIds.has(row.id))
     .sort((a, b) => a.name.localeCompare(b.name));
   const routeCount = attachments.filter(
     (item) => mediaCategory(item.mediaType) === "track",
@@ -460,41 +465,39 @@ export function PlaceDetailScreen({
           />
         )}
 
-        {/* Waypoints linked to this place — the carpark, the campsite, the
-            exit. Part of the SHARED record (a linked waypoint follows
-            place-level media), so unlike the trips below this section renders
-            for a recipient too; theirs are read-only, which their own detail
-            sheet says. Coordinates stay off the rows — this is a list. */}
-        <SectionHeader
-          label={
-            linkedWaypoints.length === 0
-              ? "Waypoints"
-              : `Waypoints · ${linkedWaypoints.length}`
-          }
-        />
-        {linkedWaypoints.length === 0 ? (
-          <Text style={styles.muted}>
-            {isOwner
-              ? "Link a waypoint to this place."
-              : "No waypoints on this place."}
-          </Text>
-        ) : (
-          linkedWaypoints.map((waypoint) => {
-            const symbol = waypointSymbol(waypoint);
-            return (
-              <Row
-                key={waypoint.id}
-                icon={symbol.icon}
-                hue={symbol.color}
-                title={waypoint.name}
-                subtitle={
-                  waypoint.tags.length > 0 ? waypoint.tags.join(" · ") : undefined
-                }
-                onPress={() => onShowWaypointOnMap?.(waypoint)}
-              />
-            );
-          })
-        )}
+        {/* ponytail: read-only. Linking and unlinking from the phone lands in
+            phase 5 with the type tabs and the create flow — the ops exist
+            (`createPlaceLinkLocal` / `deletePlaceLinkLocal`), the picker does
+            not. Until then a link is made on the web and read here.
+
+            Places linked to this one — the carpark, the campsite, the exit.
+            NAVIGATIONAL ONLY: a link grants no visibility, so this section is
+            the owner's own filing and a recipient sees nothing here (the
+            server sends them no links at all). Coordinates stay off the rows —
+            this is a list. */}
+        {isOwner ? (
+          <>
+            <SectionHeader
+              label={
+                linkedPlaces.length === 0
+                  ? "Linked places"
+                  : `Linked places · ${linkedPlaces.length}`
+              }
+            />
+            {linkedPlaces.length === 0 ? (
+              <Text style={styles.muted}>Link another place to this one.</Text>
+            ) : (
+              linkedPlaces.map((linked) => (
+                <Row
+                  key={linked.id}
+                  icon="map-pin"
+                  title={linked.name}
+                  onPress={() => onShowPlaceOnMap?.(linked)}
+                />
+              ))
+            )}
+          </>
+        ) : null}
 
         {/* Your own history here — the half a "done" badge can't tell you. Only
             ever your own trips: another person's visits to a place they shared

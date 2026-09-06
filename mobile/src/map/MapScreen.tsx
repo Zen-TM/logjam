@@ -57,6 +57,7 @@ import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import * as Location from "expo-location";
 import { DeviceMotion, Magnetometer, type DeviceMotionMeasurement } from "expo-sensors";
 import {
+  SYSTEM_PLACE_TYPE_IDS,
   DEM_ATTRIBUTION,
   TOPO_LAYERS,
   TRACK_MIME_TYPES,
@@ -69,8 +70,6 @@ import {
   formatDistanceM,
   haversineMeters,
   initialBearingDegrees,
-  isValidLatitude,
-  isValidLongitude,
   messageFromError,
   pickNextTrackColor,
   ROUTE_NAME_MAX_LENGTH,
@@ -97,7 +96,6 @@ import {
   useMirrorPlaces,
   useMirrorTrips,
   useMirrorPlaceTracks,
-  useMirrorWaypoints,
   useMirrorRoutes,
 } from "../sync/useSyncQueries";
 import { config } from "../config";
@@ -129,7 +127,6 @@ import {
   routeActions,
   trackActions,
   vectorImportActions,
-  waypointActions,
 } from "../saved/assetActions";
 import { ScaleBar, SCALE_BAR_HEIGHT, type ScaleBarHandle } from "./ScaleBar";
 import {
@@ -207,7 +204,7 @@ import { RouteDraftLayer } from "./RouteDraftLayer";
 import { RoutesLayer } from "./RoutesLayer";
 import { ROUTE_ARROW_SDF_URI } from "./routeArrowSdf";
 import { ROUTE_ARROW_IMAGE } from "./routeArrowStyle";
-import type { MirrorPlace, MirrorRoute, MirrorWaypoint } from "../sync/mirrorStore";
+import type { MirrorPlace, MirrorRoute } from "../sync/mirrorStore";
 import { RouteOptionsSheet } from "../routes/RouteOptionsSheet";
 import { BottomSheet } from "../ui/BottomSheet";
 import { Button } from "../ui/Button";
@@ -218,10 +215,6 @@ import { Toast, type ToastMessage } from "../ui/Toast";
 import { BASEMAP_THUMB_CREDIT } from "./BasemapThumb";
 import { PlaceRoutesLayer, type PlaceRoutesStatus } from "./PlaceRoutesLayer";
 import { MapLayersSheet, type LayerToggleEntry } from "./MapLayersSheet";
-import { waypointSymbol } from "./waypointSymbol";
-import { WaypointSheet } from "./WaypointSheet";
-import type { WaypointFormDraft } from "../waypoints/waypointSheetBodies";
-import { takePickedPoint } from "./pickedPoint";
 import { MapPointSheet, type MapPoint } from "./MapPointSheet";
 import { PlaceEditSheet } from "../places/PlaceEditSheet";
 import { fillRouteSlot } from "../places/fillRouteSlot";
@@ -248,7 +241,7 @@ import { useVectorImports } from "../imports/useVectorImports";
 import { importVectorSource } from "../imports/vectorImports";
 import { updateTrack, type Track, type Waypoint } from "../tracks/tracksDb";
 import {
-  createWaypointLocal,
+  createPlaceLocal,
   createRouteLocal,
   updateRouteLocal,
 } from "../sync/outbox";
@@ -483,9 +476,6 @@ function getCompletedOverlays(): Promise<CompletedOverlaysResponse> {
   return apiFetch<CompletedOverlaysResponse>("/topo-jobs/completed-overlays");
 }
 
-/** Stable identity for the waypoints-off case: a fresh `[]` per render would
- *  re-commit every marker prop on a layer that is drawing nothing. */
-const EMPTY_WAYPOINTS: Waypoint[] = [];
 
 // Contour layers get contour styling; every other vector layer is the OSM
 // features set (web parity: `id.includes("contours")`).
@@ -727,7 +717,7 @@ export function MapScreen({
   drawRouteFor,
   continueTrack,
   startRecording,
-  navigateWaypoint,
+  navigatePlace,
 }: {
   onOpenPlace: (placeId: string, name: string) => void;
   /**
@@ -742,15 +732,15 @@ export function MapScreen({
   // Opens the Saved tab on one category, from the layer sheet's regions row.
   onOpenSaved?: (category: "region") => void;
   /**
-   * Open the full-screen point picker for the waypoint form, starting on
+   * Open the full-screen point picker for the place form, starting on
    * `from` when the form already holds a coordinate. The answer comes back
    * through `map/pickedPoint.ts`, collected when this screen regains focus —
    * the same round trip the Saved tab's form makes.
    */
   onPickPoint: (
     from: { latitude: number; longitude: number } | null,
-    /** The waypoint being moved, so the picker can leave its pin off. */
-    hideWaypointId?: string,
+    /** The place being moved, so the picker can leave its pin off. */
+    hidePlaceId?: string,
   ) => void;
   // "Show on map" from the Saved tab: fit this bbox once on arrival. `nonce`
   // makes a repeat request for the same asset refocus instead of no-op.
@@ -785,10 +775,9 @@ export function MapScreen({
   // "Record a track" from the Saved tab's add sheet. Same reasoning as
   // `continueTrack`: the prompt and the recording mode both belong here.
   startRecording?: { nonce: number } | null;
-  // "Navigate to this waypoint" from the Saved tab. An id only — the point
-  // comes from the mirror this screen already reads, so no coordinate travels
-  // in navigation params.
-  navigateWaypoint?: { waypointId: string; nonce: number } | null;
+  // "Navigate to this place". An id only — the point comes from the mirror
+  // this screen already reads, so no coordinate travels in navigation params.
+  navigatePlace?: { placeId: string; nonce: number } | null;
 }) {
   // "Offline maps only" forces the resolver to local artifacts even with
   // signal — battery saver + predictability in the field.
@@ -933,7 +922,6 @@ export function MapScreen({
   // written from Saved now rather than from the map.
   const [showOwnedPlaces, setShowOwnedPlaces] = useState(true);
   const [showSharedPlaces, setShowSharedPlaces] = useState(true);
-  const [showWaypoints, setShowWaypoints] = useState(true);
   const [showGeoPdfs, setShowGeoPdfs] = useState(true);
   const [showVectorImports, setShowVectorImports] = useState(true);
   const [showOverlays, setShowOverlays] = useState(true);
@@ -1040,15 +1028,6 @@ export function MapScreen({
       setNorthReference(readNorthReference());
       setScaleBarEnabled(isScaleBarEnabled());
       setSpeedElevationEnabled(isSpeedElevationEnabled());
-      // Back from the point picker. `takePickedPoint` consumes the value, so a
-      // later ordinary return to the map cannot re-apply a coordinate that has
-      // since been typed over. The sheet reopens by itself: `openWaypoint` was
-      // left standing, only hidden.
-      if (waypointPickerAwayRef.current) {
-        setWaypointPickerAway(false);
-        const point = takePickedPoint();
-        if (point) setWaypointPicked(point);
-      }
       listEnabledOverlayKeys()
         .then((keys) => setEnabledOverlays(new Set(keys)))
         .catch(console.error);
@@ -2141,21 +2120,6 @@ export function MapScreen({
     const ready = live.reduce((sum, group) => sum + group.ready, 0);
     return `Downloading maps · ${Math.min(ready + 1, total)} of ${total}`;
   }, [regionJobs]);
-  // Waypoints are a synced entity since Stage 8: mirror-backed, offline
-  // writes queue through the outbox. TrackMapLayers keeps its lon/lat shape.
-  const mirrorWaypoints = useMirrorWaypoints();
-  const waypoints: Waypoint[] = useMemo(
-    () =>
-      (mirrorWaypoints.data ?? []).map((wp) => ({
-        id: wp.id,
-        name: wp.name,
-        lon: wp.longitude,
-        lat: wp.latitude,
-        createdAt: wp.createdAt,
-        color: waypointSymbol(wp).color,
-      })),
-    [mirrorWaypoints.data],
-  );
   const activeTrack =
     tracks.find(
       (track) => track.state === "recording" || track.state === "paused",
@@ -2230,59 +2194,6 @@ export function MapScreen({
   // any more. A fresh double tap already supersedes it (`startZoomRamp`
   // cancels first) — this is the "the user left" half.
   useEffect(() => cancelZoomRamp, [followMode, mapFocused, cancelZoomRamp]);
-  // Which waypoint's sheet is open, and whether it should land on the edit
-  // form (a fresh drop) rather than the verb list (a tap on an existing pin).
-  const [openWaypoint, setOpenWaypoint] = useState<{
-    id: string;
-    autoEdit: boolean;
-  } | null>(null);
-  /**
-   * The waypoint form's round trip to the point picker.
-   *
-   * The sheet is an RN Modal and would cover a full-screen map, so it closes on
-   * the way out and its body unmounts with it — `waypointDraft` is what makes
-   * that lossless and `waypointPicked` is what comes back. Same shape as the
-   * Saved tab's, for the same reason.
-   */
-  const [waypointDraft, setWaypointDraft] = useState<WaypointFormDraft | null>(null);
-  const [waypointPicked, setWaypointPicked] = useState<{
-    latitude: number;
-    longitude: number;
-  } | null>(null);
-  const [waypointPickerAway, setWaypointPickerAway] = useState(false);
-  /** Read by the focus effect, which must not re-subscribe when it changes. */
-  const waypointPickerAwayRef = useRef(waypointPickerAway);
-  waypointPickerAwayRef.current = waypointPickerAway;
-
-  /** Which waypoint the form is on, for the picker request below — a ref so
-   *  that callback stays stable across opening one. */
-  const openWaypointId = useRef<string | null>(null);
-  openWaypointId.current = openWaypoint?.id ?? null;
-
-  /** Leave for the picker, carrying what the form has in it. */
-  const openWaypointPicker = useCallback(
-    (current: WaypointFormDraft) => {
-      // EMPTY IS NOT ZERO: `Number("")` is 0, and 0/0 is a real place off the
-      // coast of Africa — a blank pair must open the picker with no marker.
-      const latitude = Number(current.latitude.trim());
-      const longitude = Number(current.longitude.trim());
-      const from =
-        current.latitude.trim() !== "" &&
-        current.longitude.trim() !== "" &&
-        isValidLatitude(latitude) &&
-        isValidLongitude(longitude)
-          ? { latitude, longitude }
-          : null;
-      setWaypointDraft(current);
-      setWaypointPicked(null);
-      setWaypointPickerAway(true);
-      // Reopening lands on the FORM rather than the verb list: the user is
-      // mid-edit, and the trip to the map is one step of that edit.
-      setOpenWaypoint((open) => (open ? { ...open, autoEdit: true } : open));
-      onPickPoint(from, openWaypointId.current ?? undefined);
-    },
-    [onPickPoint],
-  );
   const [navTarget, setNavTarget] = useState<Waypoint | null>(null);
   const navDistanceM =
     navTarget && userCoord
@@ -2356,29 +2267,37 @@ export function MapScreen({
     return () => subscription.remove();
   }, []);
 
-  // A press-and-hold is "something goes here". Two things can: a waypoint (a
-  // scratch mark) and a place (a real record). A sheet rather than an Alert now
-  // that there is more than one — Android's Alert drops buttons past three, and
-  // these entries carry glyphs and a subtitle (DESIGN.md §6).
+  // A press-and-hold is "something goes here". A sheet rather than an Alert —
+  // Android's Alert drops buttons past three, and these entries carry glyphs
+  // and a subtitle (DESIGN.md §6).
   const notify = useCallback((text: string, tone: "info" | "error") => {
     toastNonce.current += 1;
     setToast({ text, tone, nonce: toastNonce.current });
   }, []);
 
-  // The drop itself never waits on a form: the waypoint is written first, then
-  // its sheet opens on the name field. Cancelling the form leaves a saved,
-  // auto-named waypoint rather than losing the mark.
-  const dropWaypointAt = useCallback(
+  // Dropping a MARKER: a place of the system Marker type, which is what a
+  // waypoint became in the phase 1c fold. The drop never waits on a form — the
+  // place is written first and its verb sheet opens over it, so cancelling
+  // leaves a saved, auto-named marker rather than losing the mark.
+  //
+  // ponytail: the auto-name is a count of marker places, not of every place —
+  // "Marker 4" beside three canyons reads right. Phase 5 gives the create flow
+  // a type picker and this becomes one branch of it.
+  const dropMarkerAt = useCallback(
     (point: { latitude: number; longitude: number }) => {
-      createWaypointLocal({
-        name: `Waypoint ${waypoints.length + 1}`,
+      const markerCount = (places.data ?? []).filter(
+        (row) => row.placeTypeId === SYSTEM_PLACE_TYPE_IDS.marker,
+      ).length;
+      createPlaceLocal({
+        name: `Marker ${markerCount + 1}`,
         latitude: point.latitude,
         longitude: point.longitude,
+        placeTypeId: SYSTEM_PLACE_TYPE_IDS.marker,
       })
-        .then((id) => setOpenWaypoint({ id, autoEdit: true }))
+        .then((id) => setOptionsPlaceId(id))
         .catch(console.error);
     },
-    [waypoints.length],
+    [places.data],
   );
 
   // "Open in Logjam": ACTION_VIEW / share-sheet delivers a content:// URI.
@@ -2572,8 +2491,7 @@ export function MapScreen({
           break;
         }
         case "region":
-        case "waypoint":
-          // A region's layer is the basemap (above); a waypoint always draws.
+          // A region's layer is the basemap, handled above.
           break;
       }
     }
@@ -3766,7 +3684,7 @@ export function MapScreen({
       const point = { latitude: lat, longitude: lon };
       switch (longPressAction) {
         case "waypoint":
-          dropWaypointAt(point);
+          dropMarkerAt(point);
           return;
         case "navigate":
           navigateToPoint(point);
@@ -3789,7 +3707,7 @@ export function MapScreen({
     },
     [
       collectingPoints,
-      dropWaypointAt,
+      dropMarkerAt,
       insertAnchorNear,
       longPressAction,
       navigateToPoint,
@@ -3859,17 +3777,16 @@ export function MapScreen({
   }, [continueTrack, continueTrackNonce, handleContinueRecording, tracks]);
 
   /**
-   * Point the bearing line at one waypoint — what "Navigate to this waypoint"
-   * does, from the map's own sheet AND from the Saved tab's copy of it.
+   * Point the bearing line at one place — what "Navigate to this place" does.
    */
   const startNavigatingTo = useCallback(
-    (waypoint: MirrorWaypoint) => {
+    (place: MirrorPlace) => {
       setNavTarget({
-        id: waypoint.id,
-        name: waypoint.name,
-        lon: waypoint.longitude,
-        lat: waypoint.latitude,
-        createdAt: waypoint.createdAt,
+        id: place.id,
+        name: place.name,
+        lon: place.longitude,
+        lat: place.latitude,
+        createdAt: place.createdAt,
       });
       // A bearing with no "you are here" is half a navigation aid.
       if (!dotWanted) handleLocateMe();
@@ -3877,26 +3794,21 @@ export function MapScreen({
     [dotWanted, handleLocateMe],
   );
 
-  // The Saved tab's "Navigate to this waypoint", arriving as a navigation
-  // param. Same nonce shape as `continueTrack` above, and the same rule: a
-  // request the mirror cannot answer yet is left for the next render with rows.
-  const navigateWaypointNonce = navigateWaypoint?.nonce ?? null;
+  // "Navigate to this place", arriving as a navigation param. Same nonce shape
+  // as `continueTrack` above, and the same rule: a request the mirror cannot
+  // answer yet is left for the next render with rows.
+  const navigatePlaceNonce = navigatePlace?.nonce ?? null;
   const handledNavigateNonce = useRef<number | null>(null);
   useEffect(() => {
-    if (!navigateWaypoint) return;
-    if (handledNavigateNonce.current === navigateWaypoint.nonce) return;
-    const target = (mirrorWaypoints.data ?? []).find(
-      (row) => row.id === navigateWaypoint.waypointId,
+    if (!navigatePlace) return;
+    if (handledNavigateNonce.current === navigatePlace.nonce) return;
+    const target = (places.data ?? []).find(
+      (row) => row.id === navigatePlace.placeId,
     );
     if (!target) return;
-    handledNavigateNonce.current = navigateWaypoint.nonce;
+    handledNavigateNonce.current = navigatePlace.nonce;
     startNavigatingTo(target);
-  }, [
-    mirrorWaypoints.data,
-    navigateWaypoint,
-    navigateWaypointNonce,
-    startNavigatingTo,
-  ]);
+  }, [places.data, navigatePlace, navigatePlaceNonce, startNavigatingTo]);
 
   // The Saved tab's "Record a track", same shape as the one above with nothing
   // to look up first.
@@ -3930,19 +3842,6 @@ export function MapScreen({
         return;
       }
       setOptionsImportId(importId);
-    },
-    [addToolPoint, collectingPoints],
-  );
-
-  const handleWaypointPress = useCallback(
-    (waypoint: Waypoint) => {
-      // Same reason as a place pin: while a tool is armed, a marker under the
-      // thumb places a point rather than opening its menu.
-      if (collectingPoints) {
-        void addToolPoint(waypoint.lon, waypoint.lat);
-        return;
-      }
-      setOpenWaypoint({ id: waypoint.id, autoEdit: false });
     },
     [addToolPoint, collectingPoints],
   );
@@ -3995,15 +3894,6 @@ export function MapScreen({
         resolveBbox: async () =>
           bboxOfPoints([{ lon: place.longitude, lat: place.latitude }]),
       })),
-      ...(mirrorWaypoints.data ?? []).map((waypoint) => ({
-        key: `waypoint:${waypoint.id}`,
-        icon: "flag" as const,
-        hue: assetHue.waypoint,
-        title: waypoint.name,
-        kindLabel: "Waypoint",
-        alternates: waypoint.tags,
-        resolveBbox: waypointActions(waypoint).resolveBbox,
-      })),
       ...savedTracks.map((track) => ({
         key: `track:${track.id}`,
         icon: "activity" as const,
@@ -4029,7 +3919,7 @@ export function MapScreen({
         resolveBbox: vectorImportActions(imported).resolveBbox,
       })),
     ],
-    [ownedPlaces, sharedPlaces, mirrorWaypoints.data, savedTracks, routes.data, imports],
+    [ownedPlaces, sharedPlaces, savedTracks, routes.data, imports],
   );
 
   /**
@@ -4059,15 +3949,6 @@ export function MapScreen({
       count: sharedPlaces.length,
       value: showSharedPlaces,
       onChange: setShowSharedPlaces,
-    },
-    {
-      key: "waypoints",
-      icon: "flag",
-      hue: assetHue.waypoint,
-      title: "Waypoints",
-      count: waypoints.length,
-      value: showWaypoints,
-      onChange: setShowWaypoints,
     },
     {
       key: "routes",
@@ -4185,10 +4066,8 @@ export function MapScreen({
    */
   const topStackKey = [
     showTracks ? tracks.map((track) => track.id).join(",") : "",
-    waypoints.length > 0,
     showRoutes,
     showPlaceRoutes,
-    showWaypoints,
     drawingRoute,
     measuring,
     // The draft's LINE layer is added and removed as the point count crosses
@@ -4528,14 +4407,13 @@ export function MapScreen({
           onPressRoute={collectingPoints ? undefined : setOptionsRouteId}
         />
 
-        {/* Recorded tracks + waypoints (Stage 7): unpinned, mounted before
-            the place sources so places draw on top. */}
+        {/* Recorded tracks (Stage 7): unpinned, mounted before the place
+            sources so places draw on top. Markers are places now and draw with
+            them — one pin layer, not two. */}
         <TrackMapLayers
           tracks={tracks}
-          waypoints={showWaypoints ? waypoints : EMPTY_WAYPOINTS}
           liveCoord={userCoord}
           showTracks={showTracks}
-          onWaypointPress={handleWaypointPress}
           onTrackPress={handleTrackPress}
         />
 
@@ -5048,39 +4926,6 @@ export function MapScreen({
         <Text style={styles.attributionText}>{DEM_ATTRIBUTION}</Text>
       </BottomSheet>
 
-      {/* One waypoint's verbs, tags and place links. Looked up from the
-          mirror by id rather than held as an object, so an edit made inside
-          the sheet re-renders it instead of showing the stale copy the pin
-          was tapped with. */}
-      <WaypointSheet
-        // Open from the moment a pin is tapped until the sheet is dismissed —
-        // the trip to the point picker hides it without closing it.
-        visible={openWaypoint !== null}
-        waypoint={
-          // Hidden, not closed, while its form is away at the point picker:
-          // the sheet is a Modal and would cover the picker's map.
-          openWaypoint && !waypointPickerAway
-            ? ((mirrorWaypoints.data ?? []).find(
-                (row) => row.id === openWaypoint.id,
-              ) ?? null)
-            : null
-        }
-        userCoord={userCoord}
-        autoEdit={openWaypoint?.autoEdit ?? false}
-        draft={waypointDraft}
-        picked={waypointPicked}
-        onPickOnMap={openWaypointPicker}
-        onOpenPlace={onOpenPlace}
-        onClose={() => {
-          setOpenWaypoint(null);
-          setWaypointDraft(null);
-          setWaypointPicked(null);
-        }}
-        onNavigate={startNavigatingTo}
-        onInfo={(message) => notify(message, "info")}
-        onError={(message) => notify(message, "error")}
-      />
-
       {/* Tap: "what's there?" — the question that comes before the long
           press's "something goes here". */}
       <MapPointSheet
@@ -5089,11 +4934,12 @@ export function MapScreen({
         userCoord={userCoord}
         onClose={() => setTappedPoint(null)}
         onNavigate={navigateToPoint}
-        onDropWaypoint={dropWaypointAt}
+        onDropMarker={dropMarkerAt}
         onInfo={(text) => notify(text, "info")}
       />
 
-      {/* Press-and-hold: a waypoint is a scratch mark, a place is a record.
+      {/* Press-and-hold: a marker is a scratch mark, a canyon is a record —
+          both are places, and the type is the difference.
           The place form can't open from here directly — a second Modal over the
           first doesn't hold focus — so the point is parked and picked up in
           `onClosed`. */}
@@ -5118,7 +4964,7 @@ export function MapScreen({
             onPress={() => {
               const point = longPressPoint;
               setLongPressPoint(null);
-              if (point) dropWaypointAt(point);
+              if (point) dropMarkerAt(point);
             }}
           />
           <Row

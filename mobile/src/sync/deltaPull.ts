@@ -17,7 +17,7 @@ import {
   parseSyncDeltaShareRow,
   parseSyncDeltaTombstone,
   parseSyncDeltaTripRow,
-  parseSyncDeltaWaypointRow,
+  parseSyncDeltaPlaceLinkRow,
   DELTA_ENTITY_ORDER,
   SYNC_PROTOCOL,
   SyncRowError,
@@ -40,7 +40,7 @@ import {
   upsertShare,
   rebasePendingPlaceLinks,
   upsertTrip,
-  upsertWaypoint,
+  upsertPlaceLink,
   upsertRoute,
 } from "./mirrorStore";
 import {
@@ -189,9 +189,9 @@ export async function runDeltaPull(currentUserId: string): Promise<DeltaPullResu
       ),
       places: parsedRows(raw.places ?? [], parseSyncDeltaPlaceRow, skipped),
       tripLogs: parsedRows(raw.tripLogs ?? [], parseSyncDeltaTripRow, skipped),
-      waypoints: parsedRows(
-        raw.waypoints ?? [],
-        parseSyncDeltaWaypointRow,
+      placeLinks: parsedRows(
+        raw.placeLinks ?? [],
+        parseSyncDeltaPlaceLinkRow,
         skipped,
       ),
       routes: parsedRows(raw.routes ?? [], parseSyncDeltaRouteRow, skipped),
@@ -249,9 +249,11 @@ export async function runDeltaPull(currentUserId: string): Promise<DeltaPullResu
         );
         await upsertTrip(db, effective, dirtyNames);
       }
-      for (const row of changes.waypoints) {
-        const { effective, dirtyNames } = rebase(row, "waypoint", outbox);
-        await upsertWaypoint(db, effective, dirtyNames);
+      // Links after the places they join: a link whose endpoints land on a
+      // later page renders as nothing until they do, which is the same
+      // ordering rule the trip links follow.
+      for (const row of changes.placeLinks) {
+        await upsertPlaceLink(db, row, []);
       }
       for (const row of changes.routes) {
         const { effective, dirtyNames } = rebase(row, "route", outbox);
@@ -270,7 +272,7 @@ export async function runDeltaPull(currentUserId: string): Promise<DeltaPullResu
         changes.customFieldDefs.length +
         changes.places.length +
         changes.tripLogs.length +
-        changes.waypoints.length +
+        changes.placeLinks.length +
         changes.routes.length +
         changes.media.length +
         changes.placeShares.length +

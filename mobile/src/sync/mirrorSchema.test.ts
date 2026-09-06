@@ -118,10 +118,13 @@ describe("mirror SQL vs the schema declaration", () => {
       readFileSync(join(SYNC_DIR, "mirrorStore.ts"), "utf8"),
     );
     expect(tombstone.length).toBeGreaterThan(10);
-    expect(columnsOf("UPDATE waypoints SET place_id = NULL WHERE place_id = ?")).toContain(
+    expect(columnsOf("UPDATE routes SET place_id = NULL WHERE place_id = ?")).toContain(
       "place_id",
     );
-    expect("place_id" in tableSchema("waypoints")!.columns).toBe(false);
+    // The column that is NOT there: `places` has no `place_id`, and the
+    // scanner has to say so — this is the shape of the bug it exists to catch
+    // (a cascade writing a column that no fresh install has).
+    expect("place_id" in tableSchema("places")!.columns).toBe(false);
   });
 });
 
@@ -132,7 +135,7 @@ describe("the wipe derives from the schema", () => {
     // coordinates through places — on the phone for the next user's map.
     const names = MIRROR_TABLES.map((table) => table.name);
     expect(names).toContain("routes");
-    expect(names).toContain("waypoints");
+    expect(names).toContain("place_links");
     expect(names).toContain("places");
   });
 

@@ -103,6 +103,10 @@ export const SYNC_TABLES: readonly TableSchema[] = [
       alt_names_json: "TEXT",
       place_type_id: "TEXT NOT NULL DEFAULT ''",
       notes: "TEXT",
+      // Folded in from `waypoints` in phase 1c, along with the rows. `symbol`
+      // did NOT come with them: the icon is the place TYPE's now.
+      elevation: "REAL",
+      tags_json: "TEXT",
       // The seven grade columns and `attributes_json` collapsed into ONE JSON
       // column, keyed by definition key. That is the whole shape change of the
       // rework on this side: a campsite and a canyon are the same row now, and
@@ -196,33 +200,31 @@ export const SYNC_TABLES: readonly TableSchema[] = [
     ],
   },
   {
-    // owner_id + sync_role mirror the routes table: a waypoint linked to a
-    // place shared with this user arrives here read-only. Place links are
-    // many-to-many and live in place_ids_json — there is no place_id column.
-    name: "waypoints",
+    // Links between two places, symmetric and stored once (a_place_id is the
+    // lexicographically lower id). OWNER-PRIVATE: a link grants no visibility,
+    // so every row here belongs to this account and there is no sync_role or
+    // shared_count to carry.
+    //
+    // A row per link rather than a `place_ids_json` column on `places`,
+    // matching the server: the link has its own id, so create and delete are
+    // ops in their own right and two phones linking from opposite ends collide
+    // on one row instead of clobbering each other's whole list.
+    name: "place_links",
     kind: "mirror",
     columns: {
       id: "TEXT PRIMARY KEY",
       owner_id: "TEXT",
-      place_ids_json: "TEXT",
-      tags_json: "TEXT",
-      sync_role: "TEXT",
-      // Owner rows only: how many people it is directly shared with, for
-      // the Saved row's shared-out badge. NULL on a row shared WITH this
-      // user (the server withholds it — owner-private cardinality) and on
-      // one written by a local create, which has no server answer yet.
-      shared_count: "INTEGER",
-      name: "TEXT NOT NULL",
-      latitude: "REAL NOT NULL",
-      longitude: "REAL NOT NULL",
-      elevation: "REAL",
-      symbol: "TEXT",
-      notes: "TEXT",
+      a_place_id: "TEXT NOT NULL",
+      b_place_id: "TEXT NOT NULL",
       created_at: "TEXT",
       updated_at: "TEXT",
       extra_json: "TEXT",
       dirty_fields_json: "TEXT",
     },
+    indexes: [
+      { name: "place_links_a", on: "place_links(a_place_id)" },
+      { name: "place_links_b", on: "place_links(b_place_id)" },
+    ],
   },
   {
     // Drawn/imported routes. points_json holds the whole geometry

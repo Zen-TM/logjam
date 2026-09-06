@@ -16,7 +16,7 @@ import {
 // shared nothing.
 //
 // The rule under test: a route follows place-level MEDIA visibility, not the
-// owner-private waypoint rule.
+// owner-private rule a place LINK follows.
 //   - unlinked route            → owner-private, invisible to everyone else;
 //   - linked to a shared place → visible to the sharee, READ-ONLY;
 //   - unlinked again            → sharee visibility is revoked with NO delete

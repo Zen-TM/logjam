@@ -7,6 +7,9 @@ import {
   validatePlacePayload,
   constraintFromDef,
   validateFieldValues,
+  normalizePlaceTags,
+  canonicalLinkPair,
+  normalizeLinkedPlaceIds,
 } from "./placeValidation.js";
 import { SYSTEM_FIELD_DEFS } from "./placeTypes.js";
 
@@ -289,5 +292,63 @@ describe("validateFieldValues", () => {
 
   it("ignores nulls, which mean 'unset' rather than a value", () => {
     expect(validateFieldValues({ v_grade: null }, SYSTEM_FIELD_DEFS)).toBeNull();
+  });
+});
+
+// Moved from waypointValidation.test.ts when waypoints folded into places.
+// The rules did not change; the noun did.
+describe("normalizePlaceTags", () => {
+  it("trims, keeps order, and dedupes case-insensitively", () => {
+    expect(normalizePlaceTags([" Carpark ", "exit", "CARPARK"])).toEqual({
+      error: "tags contains case-insensitive duplicates",
+    });
+    expect(normalizePlaceTags([" Carpark ", "exit"])).toEqual({
+      tags: ["Carpark", "exit"],
+    });
+  });
+
+  it("distinguishes undefined (leave alone) from null (clear)", () => {
+    expect(normalizePlaceTags(undefined)).toEqual({ tags: undefined });
+    expect(normalizePlaceTags(null)).toEqual({ tags: [] });
+  });
+
+  it("refuses an empty entry, an over-long one, and too many", () => {
+    expect(normalizePlaceTags([""]).error).toMatch(/must not be empty/);
+    expect(normalizePlaceTags(["x".repeat(41)]).error).toMatch(/at most 40/);
+    expect(
+      normalizePlaceTags(Array.from({ length: 13 }, (_, i) => `t${i}`)).error,
+    ).toMatch(/At most 12/);
+  });
+
+  it("refuses a non-array and non-string entries", () => {
+    expect(normalizePlaceTags("carpark").error).toBeTruthy();
+    expect(normalizePlaceTags([1]).error).toBeTruthy();
+  });
+});
+
+describe("canonicalLinkPair", () => {
+  // A symmetric link is stored ONCE. The ordering is arbitrary but total, and
+  // both ends agreeing is the whole requirement — it is what lets the unique
+  // index enforce "stored once" instead of application code remembering to.
+  it("orders a pair the same way whichever end asks", () => {
+    expect(canonicalLinkPair("a", "b")).toEqual({ aPlaceId: "a", bPlaceId: "b" });
+    expect(canonicalLinkPair("b", "a")).toEqual({ aPlaceId: "a", bPlaceId: "b" });
+  });
+
+  it("is stable for a pair of real uuids", () => {
+    const x = "10000000-0000-4000-8000-000000000001";
+    const y = "b0000000-0000-4000-8000-000000000003";
+    expect(canonicalLinkPair(x, y)).toEqual(canonicalLinkPair(y, x));
+  });
+});
+
+describe("normalizeLinkedPlaceIds", () => {
+  it("dedupes and caps", () => {
+    expect(normalizeLinkedPlaceIds(["a", "a", "b"])).toEqual({
+      placeIds: ["a", "b"],
+    });
+    expect(
+      normalizeLinkedPlaceIds(Array.from({ length: 21 }, (_, i) => `p${i}`)).error,
+    ).toMatch(/At most 20/);
   });
 });

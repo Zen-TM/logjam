@@ -16,7 +16,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const applied = {
   places: [] as string[],
-  waypoints: [] as string[],
+  placeLinks: [] as string[],
   tombstones: [] as string[],
 };
 const stateWrites: Record<string, string> = {};
@@ -34,8 +34,8 @@ vi.mock("./mirrorStore", () => ({
     applied.places.push(row.id);
     return Promise.resolve();
   },
-  upsertWaypoint: (_db: unknown, row: { id: string }) => {
-    applied.waypoints.push(row.id);
+  upsertPlaceLink: (_db: unknown, row: { id: string }) => {
+    applied.placeLinks.push(row.id);
     return Promise.resolve();
   },
   upsertTrip: () => Promise.resolve(),
@@ -76,6 +76,8 @@ const goodPlace = {
   longitude: 150.4,
   placeTypeId: "b0000000-0000-4000-8000-000000000001",
   notes: null,
+  elevation: null,
+  tags: [],
   fieldValues: {},
   ropeWikiId: null,
   forkedFromId: null,
@@ -94,7 +96,7 @@ function page(over: Record<string, unknown>) {
     changes: {
       places: [],
       tripLogs: [],
-      waypoints: [],
+      placeLinks: [],
       routes: [],
       media: [],
       placeShares: [],
@@ -107,7 +109,7 @@ function page(over: Record<string, unknown>) {
 
 beforeEach(() => {
   applied.places = [];
-  applied.waypoints = [];
+  applied.placeLinks = [];
   applied.tombstones = [];
   for (const key of Object.keys(stateWrites)) delete stateWrites[key];
   fetchCount = 0;
@@ -122,7 +124,7 @@ describe("a malformed delta row", () => {
           // latitude as a string is the classic wire-shape slip.
           places: [goodPlace, { ...goodPlace, id: "place-bad", latitude: "-33.5" }],
           tripLogs: [],
-          waypoints: [],
+          placeLinks: [],
           routes: [],
           media: [],
           placeShares: [],
@@ -138,7 +140,7 @@ describe("a malformed delta row", () => {
   });
 
   it("does not stall the cursor — the pull completes and is counted as an issue", async () => {
-    pages = [page({ changes: { places: [{ id: "nope" }], tripLogs: [], waypoints: [], routes: [], media: [], placeShares: [], friendships: [] } })];
+    pages = [page({ changes: { places: [{ id: "nope" }], tripLogs: [], placeLinks: [], routes: [], media: [], placeShares: [], friendships: [] } })];
 
     // The whole point: this resolves. Before validation existed a bad row threw
     // out of the transaction, and before *skipping* existed it would have
@@ -190,7 +192,7 @@ describe("a malformed delta row", () => {
         changes: {
           places: [goodPlace],
           tripLogs: [],
-          waypoints: [],
+          placeLinks: [],
           routes: [],
           media: [],
           placeShares: [],
@@ -219,7 +221,7 @@ describe("a change key this app version does not consume", () => {
         changes: {
           places: [],
           tripLogs: [],
-          waypoints: [],
+          placeLinks: [],
           routes: [],
           media: [],
           placeShares: [],
@@ -239,7 +241,7 @@ describe("a change key this app version does not consume", () => {
         changes: {
           places: [],
           tripLogs: [],
-          waypoints: [],
+          placeLinks: [],
           routes: [],
           media: [],
           placeShares: [],

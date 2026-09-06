@@ -28,7 +28,7 @@ const schema = readFileSync(
 );
 
 /** Models holding what a user typed about where they have been. */
-const OWNER_DATA_MODELS = ["Place", "Waypoint", "TripLog", "CustomFieldDef"];
+const OWNER_DATA_MODELS = ["Place", "TripLog", "CustomFieldDef"];
 
 /**
  * Columns on those models that are NOT scrubbed, each with the reason. An
@@ -37,7 +37,6 @@ const OWNER_DATA_MODELS = ["Place", "Waypoint", "TripLog", "CustomFieldDef"];
 const SCRUB_EXEMPT: Record<string, string> = {
   "places.import_key": "derived from name+coords, but opaque and needed for re-import dedupe",
   "places.ropewiki_snapshot": "public RopeWiki text, not user-authored",
-  "waypoints.symbol": "never written by any code path (dropped in phase 1c)",
   "trip_logs.types": "free-text trip vocabulary, no location content",
   "trip_logs.import_key": "opaque",
   "custom_field_defs.key": "slug of the label, which IS scrubbed; kept so values stay addressable",

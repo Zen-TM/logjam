@@ -14,13 +14,10 @@ import { formatTripPlaceNames, TRIP_NAME_MAX_LENGTH } from "@logjam/shared";
 import { partitionPlaceMedia, unlinkStandaloneMedia } from "./mediaLink";
 import {
   placeDeleteTombstones,
+  placeLinkDeleteTombstones,
   tripDeleteTombstones,
   writeTombstones,
 } from "./syncTombstones";
-import {
-  snapshotWaypointVisibility,
-  writeWaypointVisibilityLoss,
-} from "./waypointLink";
 
 const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
 
@@ -143,17 +140,15 @@ export async function deletePlacesCascade(
       where: { placeId: { in: ownedIds } },
       select: { id: true, placeId: true },
     });
-    // Linked waypoints survive the same way, but their m2m links mean the loss
-    // has to be measured across the delete rather than assumed.
-    const waypointVisibility = await snapshotWaypointVisibility(
-      tx,
-      (
-        await tx.placeWaypoint.findMany({
-          where: { placeId: { in: ownedIds } },
-          select: { waypointId: true },
-        })
-      ).map((link) => link.waypointId),
-    );
+    // The PLACES at the other end of a link survive — the cascade takes the
+    // link row, not the place — but the link rows go, and only a tombstone
+    // tells the owner's mirror so. Owner-only: a link grants no visibility.
+    const links = await tx.placeLink.findMany({
+      where: {
+        OR: [{ aPlaceId: { in: ownedIds } }, { bPlaceId: { in: ownedIds } }],
+      },
+      select: { id: true },
+    });
     const tombstones = ownedIds.flatMap((placeId) =>
       placeDeleteTombstones({
         ownerId: userId,
@@ -169,7 +164,10 @@ export async function deletePlacesCascade(
           .map((m) => m.id),
       }),
     );
-    await writeTombstones(tx, tombstones);
+    await writeTombstones(tx, [
+      ...tombstones,
+      ...placeLinkDeleteTombstones({ ownerId: userId, linkIds: links.map((l) => l.id) }),
+    ]);
     await tx.placeShare.deleteMany({ where: { placeId: { in: ownedIds } } });
     // Purge place_shared notifications held by OTHER users (the share
     // recipients) that reference the deleted places (PRIV-003).
@@ -192,7 +190,6 @@ export async function deletePlacesCascade(
       data: { updatedAt: new Date() },
     });
     await tx.place.deleteMany({ where: { id: { in: ownedIds } } });
-    await writeWaypointVisibilityLoss(tx, waypointVisibility);
     await decrementStorageUsed(userId, totalBytes, tx);
   });
 

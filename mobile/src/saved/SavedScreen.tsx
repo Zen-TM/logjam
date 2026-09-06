@@ -46,8 +46,6 @@ import {
   TOPO_LAYERS,
   formatDistanceM,
   mediaDisplayName,
-  isValidLatitude,
-  isValidLongitude,
   routeLengthM,
   messageFromError,
   removeShareConfirm,
@@ -70,7 +68,6 @@ import { useApiQuery } from "../api/queries";
 import {
   useMirrorIncomingShareOwners,
   useMirrorRoutes,
-  useMirrorWaypoints,
   usePendingCreateIds,
   usePendingSyncCount,
 } from "../sync/useSyncQueries";
@@ -145,7 +142,6 @@ import {
   trackActions,
   routeActions,
   vectorImportActions,
-  waypointActions,
   type AssetActions,
 } from "./assetActions";
 import { removeSharedEntity } from "../sharing/removeShare";
@@ -155,15 +151,6 @@ import { BulkShareButton, BulkShareSheet } from "../sharing/BulkShareSheet";
 import { useTracks } from "../tracks/useTracks";
 import type { Bbox } from "./bboxOfPoints";
 import { bulkDeleteConfirmBody } from "./bulkDeleteConfirm";
-import { createWaypointLocal } from "../sync/outbox";
-import { takePickedPoint } from "../map/pickedPoint";
-import type { PickedPoint } from "../map/PickPointScreen";
-import {
-  WaypointFormBody,
-  type WaypointFormDraft,
-  type WaypointFormFields,
-} from "../waypoints/waypointSheetBodies";
-import { WaypointSheet } from "../map/WaypointSheet";
 import { RouteOptionsSheet } from "../routes/RouteOptionsSheet";
 
 
@@ -243,7 +230,6 @@ const CATEGORY_META: Record<
   // Marked points. Like routes they are records rather than files, and they are
   // the one kind here that can be SEARCHED and filtered by tag — see the
   // waypoint filter rail below.
-  waypoint: { label: "Waypoint", plural: "Waypoints", icon: "flag" },
   // NOT named for a format ("GPX & KML") and not for lines ("Ways"): a row
   // here is a whole FILE the user brought in from another app, and it may hold
   // points and polygons as readily as lines. "Files" alone was rejected as too
@@ -261,7 +247,6 @@ const CATEGORY_ORDER: Category[] = [
   "region",
   "overlay",
   "geoPdf",
-  "waypoint",
   "track",
   "route",
   "import",
@@ -372,7 +357,6 @@ export function SavedScreen({
   onContinueRecording,
   onRecordTrack,
   onDrawRoute,
-  onNavigateToWaypoint,
   onOpenPlace,
   initialFilter,
   initialHighlight,
@@ -417,14 +401,8 @@ export function SavedScreen({
    *  belongs to no place until the user says otherwise. */
   onDrawRoute: () => void;
   /**
-   * Start navigating to a waypoint. Handed to the MAP for the same reason
-   * `onContinueRecording` is: the bearing line, the distance readout and the
-   * user dot all live there. Needing the map is not a reason to leave the verb
-   * off this surface (DESIGN.md §7).
-   */
-  onNavigateToWaypoint: (waypointId: string) => void;
   /**
-   * Open a place's detail screen. Used by the waypoint and route sheets for
+   * Open a place's detail screen. Used by the route sheet for
    * ONE case: a row that is on this phone because it is linked to a place
    * shared with the user has no share of its own to hand back, so the sheet
    * sends them to the place, which is where that share ends.
@@ -517,30 +495,9 @@ export function SavedScreen({
   const [menuMode, setMenuMode] = useState<
     "actions" | "rename" | "share" | "sendCopy"
   >("actions");
-  /**
-   * What the waypoint form had in it when it left for the map picker, and what
-   * the picker sent back.
-   *
-   * They live HERE rather than in the form because the form is inside a
-   * `BottomSheet` — an RN Modal, which would cover a full-screen map, so the
-   * sheet has to close and the body unmounts with it. One pair of fields for
-   * both forms: only one of them can be open at a time.
-   */
-  const [waypointDraft, setWaypointDraft] = useState<WaypointFormDraft | null>(null);
-  const [pickedCoords, setPickedCoords] = useState<PickedPoint | null>(null);
-  /** Which form is away at the picker, and therefore hidden rather than
-   *  closed. Null the rest of the time. */
-  const [pickerAway, setPickerAway] = useState<"create" | "edit" | null>(null);
-  /** Read by the focus effect below, which must not re-subscribe when it
-   *  changes — the established mirror-ref pattern. */
-  const pickerAwayRef = useRef(pickerAway);
-  pickerAwayRef.current = pickerAway;
-
   const closeItemSheet = useCallback(() => {
     setMenuItemKey(null);
     setMenuMode("actions");
-    setWaypointDraft(null);
-    setPickedCoords(null);
   }, []);
   const openItemSheet = useCallback((key: string) => {
     setMenuMode("actions");
@@ -575,26 +532,11 @@ export function SavedScreen({
 
   // Leaving the tab drops any open per-item sheet: coming back to a rename form
   // for a row you have since navigated away from is a stale prompt, not a
-  // resumed task. The trip to the point picker is the exception — that is one
-  // task, not two, and it is the only blur that leaves the sheet standing.
+  // resumed task.
   useFocusEffect(
     useCallback(() => {
       refreshFreeSpace();
-      // Back from the point picker. `takePickedPoint` consumes the value, so an
-      // ordinary later return to this tab cannot re-apply a coordinate that has
-      // since been typed over.
-      const away = pickerAwayRef.current;
-      if (away) {
-        setPickerAway(null);
-        const point = takePickedPoint();
-        // Already trimmed to a sane number of decimals by the store.
-        if (point) setPickedCoords(point);
-        // The edit form is reached through the item sheet, which was left
-        // mounted and simply hidden — nothing to reopen.
-        if (away === "create") setCoordSheetOpen(true);
-      }
       return () => {
-        if (pickerAwayRef.current) return;
         closeItemSheet();
         // A selection is a transient mode over rows you can see. Coming back to
         // the tab holding a pending "delete these five" you no longer remember
@@ -617,7 +559,6 @@ export function SavedScreen({
       // different category would silently hide rows the user never searched
       // for. Same reasoning as the selection clear just above.
       setSearchQuery("");
-      setWaypointTag(null);
       setFilter(next);
     },
     [clearSelection, closeItemSheet],
@@ -841,16 +782,11 @@ export function SavedScreen({
 
   // --- Drawn routes (synced records, not device files) ---
   const routes = useMirrorRoutes();
-  const waypoints = useMirrorWaypoints();
   // Who shared each incoming place with this user — the name on a received
   // row's pill. Mirror-backed, so it reads the same with no signal.
   const shareOwners = useMirrorIncomingShareOwners();
-  // One field for every tab (item 8) — the waypoint TAG rail stays a
-  // waypoint-only narrowing control (DESIGN.md §3), but the name search
-  // beside it is now general.
+  // One search field for every tab (item 8).
   const [searchQuery, setSearchQuery] = useState("");
-  const [waypointTag, setWaypointTag] = useState<string | null>(null);
-  const [coordSheetOpen, setCoordSheetOpen] = useState(false);
 
   // --- Vector imports (GPX/KML/GeoJSON) ---
   const { imports } = useVectorImports();
@@ -1146,36 +1082,6 @@ export function SavedScreen({
       });
     }
 
-    for (const waypoint of waypoints.data ?? []) {
-      rows.push({
-        key: waypoint.id,
-        category: "waypoint",
-        title: waypoint.name,
-        // Tags and provenance ONLY — never the coordinate. This is a list
-        // surface, and the position lives one tap away on the detail sheet
-        // (DESIGN.md 11).
-        subtitle: waypoint.tags.length
-          ? waypoint.tags.join(" · ")
-          : `marked ${formatDay(waypoint.createdAt)}`,
-        // A synced row, not a file on this device — same treatment as routes
-        // and recordings, so it stays out of the capacity meter.
-        sizeBytes: 0,
-        ...shareMark({
-          syncRole: waypoint.syncRole,
-          sharedCount: waypoint.sharedCount,
-          placeIds: waypoint.placeIds,
-          ownersByPlace: shareOwners.data ?? {},
-        }),
-        // Notes are searchable but never rendered in the row — a note can hold
-        // anything, and this is a list surface.
-        search: {
-          haystack: `${waypoint.name} ${waypoint.notes ?? ""} ${waypoint.tags.join(" ")}`.toLowerCase(),
-          tags: waypoint.tags,
-        },
-        ...waypointActions(waypoint),
-      });
-    }
-
     for (const imported of imports) {
       rows.push({
         key: imported.id,
@@ -1274,7 +1180,6 @@ export function SavedScreen({
     geoPdfBusy,
     importRun?.importId,
     routes.data,
-    waypoints.data,
     shareOwners.data,
     geoPdfImports,
     handleResumeGeoPdf,
@@ -1293,7 +1198,6 @@ export function SavedScreen({
       overlay: 0,
       geoPdf: 0,
       route: 0,
-      waypoint: 0,
       import: 0,
       track: 0,
     };
@@ -1347,8 +1251,6 @@ export function SavedScreen({
         return null;
       case "geoPdf":
         return { label: "Import a GeoPDF", onPress: handleImportGeoPdf };
-      case "waypoint":
-        return { label: "Add a waypoint", onPress: () => setCoordSheetOpen(true) };
       case "track":
         return { label: "Record a track", onPress: onRecordTrack };
       case "route":
@@ -1363,51 +1265,24 @@ export function SavedScreen({
   // "All" is size-descending — the order that answers "what is filling the
   // device". Within a category, insertion order (newest registry rows last)
   // is more useful than size.
-  // The tag rail is the vocabulary IN USE, so it shrinks as waypoints are
-  // deleted and never offers a tag that would match nothing.
-  const waypointTagOptions = useMemo<SegmentOption<string>[]>(() => {
-    const tally = new Map<string, number>();
-    for (const item of items) {
-      if (item.category !== "waypoint") continue;
-      for (const tag of item.search?.tags ?? []) {
-        tally.set(tag, (tally.get(tag) ?? 0) + 1);
-      }
-    }
-    if (tally.size === 0) return [];
-    return [
-      { value: "all", label: "All tags" },
-      ...[...tally.entries()]
-        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-        .map(([tag, count]) => ({
-          value: tag,
-          label: tag,
-          count,
-          hue: assetHue.waypoint,
-        })),
-    ];
-  }, [items]);
-
   const inCategory =
     filter === "all"
       ? [...items].sort((a, b) => b.sizeBytes - a.sizeBytes)
       : items.filter((item) => item.category === filter);
 
   // Every row now carries a `search.haystack` (item 8), so the name search
-  // applies inside every tab, "All" included. The tag rail stays scoped to
-  // the waypoint filter, which is the only place a tag can be selected.
+  // applies inside every tab, "All" included.
   const needle = searchQuery.trim().toLowerCase();
   const visibleItems = inCategory.filter(
-    (item) =>
-      (!needle || (item.search?.haystack ?? "").includes(needle)) &&
-      (filter !== "waypoint" || !waypointTag || (item.search?.tags ?? []).includes(waypointTag)),
+    (item) => !needle || (item.search?.haystack ?? "").includes(needle),
   );
   // Whether the current tab is empty because a search/tag narrowed it there,
   // as against genuinely holding nothing — the two need different copy below.
-  const searching = needle !== "" || (filter === "waypoint" && waypointTag != null);
+  const searching = needle !== "";
 
   // --- Arrival highlight, part 2: blink the row a notification pointed at ---
   //
-  // A filter narrows the tab to the right KIND; in a list of forty waypoints it
+  // A filter narrows the tab to the right KIND; in a list of forty routes it
   // does not say which one. So the row blinks three times and the list scrolls
   // to it, and then it is an ordinary row again — nothing persists, because a
   // highlight that outstays the glance becomes a second selection state to
@@ -1461,77 +1336,6 @@ export function SavedScreen({
   // panel gets the whole screen body.
   const activeCategoryCount = filter === "all" ? items.length : counts[filter];
 
-  const closeCoordSheet = useCallback(() => {
-    setCoordSheetOpen(false);
-    setWaypointDraft(null);
-    setPickedCoords(null);
-  }, []);
-
-  /**
-   * Off to the map picker, from whichever waypoint form asked.
-   *
-   * The form's own fields come up with the request, because the sheet is a
-   * Modal that has to close for a full-screen map to be visible — the draft is
-   * what makes the round trip lossless, and a cancelled pick restores it just
-   * the same: they went to look at a map, not to throw away what they typed.
-   */
-  const openWaypointPicker = useCallback(
-    (
-      form: "create" | "edit",
-      current: WaypointFormDraft,
-      /** Only the edit form has one — a waypoint that does not exist yet has
-       *  no pin to hide. */
-      hideWaypointId?: string,
-    ) => {
-      // EMPTY IS NOT ZERO. `Number("")` is 0, and 0/0 is a valid coordinate —
-      // so testing the parsed value alone opened the picker on null island with
-      // a marker already placed, which reads as "the app thinks the waypoint is
-      // there".
-      const latitude = Number(current.latitude.trim());
-      const longitude = Number(current.longitude.trim());
-      const from =
-        current.latitude.trim() !== "" &&
-        current.longitude.trim() !== "" &&
-        isValidLatitude(latitude) &&
-        isValidLongitude(longitude)
-          ? { latitude, longitude }
-          : null;
-      setWaypointDraft(current);
-      setPickedCoords(null);
-      setPickerAway(form);
-      if (form === "create") setCoordSheetOpen(false);
-      onPickPoint(from, hideWaypointId);
-    },
-    [onPickPoint],
-  );
-
-  /** Create, from the form's own validated fields. */
-  const createWaypoint = useCallback(
-    (fields: WaypointFormFields) => {
-      // The form validates with the API's own predicates before it calls this,
-      // so a missing core field here is impossible rather than handled — the
-      // guard is what makes that statement checkable.
-      if (fields.name == null || fields.latitude == null || fields.longitude == null) {
-        return;
-      }
-      createWaypointLocal({
-        name: fields.name,
-        latitude: fields.latitude,
-        longitude: fields.longitude,
-        notes: fields.notes ?? null,
-      })
-        .then(() => {
-          info(`Saved “${fields.name ?? ""}”.`);
-          closeCoordSheet();
-        })
-        .catch((err: unknown) => {
-          console.error(err);
-          fail(messageFromError(err, "Couldn't save that waypoint."));
-        });
-    },
-    [closeCoordSheet, fail, info],
-  );
-
   // Everything picked that is still in the list, in list order.
   const selectedItems = useMemo(
     () => visibleItems.filter((item) => selectedKeys.includes(item.key)),
@@ -1545,9 +1349,7 @@ export function SavedScreen({
    *  `bulkDeleteConfirmBody`, which owns every count/kind combination. */
   const deleteSelected = useCallback(() => {
     const targets = selectedItems;
-    const syncedCount = targets.filter(
-      (item) => item.category === "route" || item.category === "waypoint",
-    ).length;
+    const syncedCount = targets.filter((item) => item.category === "route").length;
     const body = bulkDeleteConfirmBody({
       onDeviceCount: targets.length - syncedCount,
       syncedCount,
@@ -1694,16 +1496,6 @@ export function SavedScreen({
       ? ((routes.data ?? []).find((route) => route.id === menuItem.key) ?? null)
       : null;
   const showRouteSheet = menuRoute !== null;
-  // A waypoint's overflow IS the map's waypoint sheet — one component, so the
-  // two surfaces cannot offer different verbs for one point (DESIGN.md §7).
-  // Sharing only the sub-mode bodies was not enough: the rows around them
-  // drifted, and Saved lost "Navigate to this waypoint" while the map lost
-  // "Show on map".
-  const menuWaypoint =
-    menuItem?.category === "waypoint"
-      ? ((waypoints.data ?? []).find((row) => row.id === menuItem.key) ?? null)
-      : null;
-  const showWaypointSheet = menuWaypoint !== null;
   // A recorded track and an imported file each open the SAME sheet the map
   // opens when their line is tapped, so the two surfaces cannot offer different
   // verbs for one object (DESIGN.md §7). Only the kinds with no map tap surface
@@ -1838,32 +1630,6 @@ export function SavedScreen({
               // treatment, `editable={false}`) — a live-looking field that
               // silently eats taps read as broken, not as "not now".
               editable={!selecting}
-            />
-          </View>
-        ) : null}
-        {/* The tag rail stays waypoint-only (DESIGN.md §3) — every other
-            category is a handful of large files scanned by eye. Both this
-            and the search field above narrow the on-device mirror, so both
-            work with no signal. Inert the same way as the search field while
-            selecting, and dimmed the same way — a chip that still looks
-            pressable but does nothing is the same bug the search field had. */}
-        {filter === "waypoint" && waypointTagOptions.length > 0 ? (
-          <View
-            style={[styles.waypointTags, selecting && styles.railInert]}
-            // Dimming alone would be the same lie in a new place: the chips
-            // underneath stay pressable and a tap would still narrow the list
-            // out from under the selection. The look and the behaviour have to
-            // change together.
-            pointerEvents={selecting ? "none" : "auto"}
-          >
-            <SegmentedControl
-              options={waypointTagOptions}
-              value={waypointTag ?? "all"}
-              onChange={(value) => {
-                if (selecting) return;
-                setWaypointTag(value === "all" ? null : value);
-              }}
-              scroll
             />
           </View>
         ) : null}
@@ -2225,27 +1991,6 @@ export function SavedScreen({
         ) : null}
       </ScrollView>
 
-      {/* A waypoint you did not stand on: read off a printed guide, a trip
-          report, someone's message. The map's press-and-hold cannot express a
-          coordinate you were given rather than found. */}
-      <BottomSheet
-        visible={coordSheetOpen}
-        onClose={closeCoordSheet}
-        title="Create waypoint"
-      >
-        <View style={styles.sheetBody}>
-          {/* The same body the edit forms use — one definition of what a
-              waypoint has, so creating one can never offer fewer fields than
-              fixing one (DESIGN.md §7). */}
-          <WaypointFormBody
-            draft={waypointDraft}
-            picked={pickedCoords}
-            onPickOnMap={(current) => openWaypointPicker("create", current)}
-            submitLabel="Save waypoint"
-            onSubmit={createWaypoint}
-          />
-        </View>
-      </BottomSheet>
 
       {/* Share the whole selection — the same sheet the Places screen opens,
           so the two cannot word a bulk share differently. */}
@@ -2324,15 +2069,6 @@ export function SavedScreen({
                 : undefined
             }
           />
-          <Row
-            title="Create a waypoint"
-            icon="flag"
-            hue={assetHue.waypoint}
-            onPress={() => {
-              setAddSheetOpen(false);
-              setCoordSheetOpen(true);
-            }}
-          />
           {/* The two that are not "add a file" but "go and make one". They live
               here because this sheet is the answer to "how do I get something
               onto this device", and a user who has never drawn a route has no
@@ -2378,8 +2114,7 @@ export function SavedScreen({
           menuItem != null &&
           !showRouteSheet &&
           !showTrackSheet &&
-          !showImportSheet &&
-          !showWaypointSheet
+          !showImportSheet
         }
         onClose={closeItemSheet}
         title={
@@ -2581,34 +2316,6 @@ export function SavedScreen({
         onError={fail}
       />
 
-      {/* A waypoint's overflow is the MAP's waypoint sheet — same verbs, same
-          sub-modes, and the only row this surface adds is "Show on map"
-          (DESIGN.md §7). Hidden rather than closed while its edit form is away
-          at the point picker: the sheet is a Modal and would cover the picker's
-          map, and the form's fields ride the round trip in `waypointDraft`. */}
-      <WaypointSheet
-        visible={showWaypointSheet}
-        waypoint={pickerAway == null ? menuWaypoint : null}
-        // No live fix on this tab, so the distance/bearing pair is simply
-        // absent — the position and elevation still render.
-        userCoord={null}
-        draft={waypointDraft}
-        picked={pickedCoords}
-        onPickOnMap={(current) => {
-          if (menuWaypoint) openWaypointPicker("edit", current, menuWaypoint.id);
-        }}
-        onShowOnMap={(bbox) => {
-          if (menuWaypoint) {
-            onOpenMap(bbox, undefined, { category: "waypoint", key: menuWaypoint.id });
-          }
-        }}
-        onClose={closeItemSheet}
-        onNavigate={(waypoint) => onNavigateToWaypoint(waypoint.id)}
-        onOpenPlace={onOpenPlace}
-        onInfo={info}
-        onError={fail}
-      />
-
       <RouteOptionsSheet
         route={menuRoute}
         visible={showRouteSheet}
@@ -2675,10 +2382,6 @@ function EmptyPanel({
     route: {
       title: "No routes yet",
       hint: "Draw one on the map with the draw tool.",
-    },
-    waypoint: {
-      title: "No waypoints yet",
-      hint: "Press and hold the map to mark a spot.",
     },
     all: {
       title: "Nothing saved yet",
@@ -2800,7 +2503,6 @@ const styles = StyleSheet.create({
   // label, and search input → tag chips. Without it the controls read as one
   // dense block.
   searchField: { paddingTop: spacing(1.5), paddingRight: spacing(2) },
-  waypointTags: { paddingTop: spacing(1.5) },
   // Dims the tag rail while selecting, same treatment as TextField's own
   // `disabled` state — a control that still looks pressable but silently
   // no-ops is worse than one that visibly can't be touched.

@@ -98,12 +98,14 @@ describe("PLACE_FIELDS (the push allowlist)", () => {
   it("admits exactly the fields a user can edit", () => {
     expect([...PLACE_FIELDS].sort()).toEqual([
       "altNames",
+      "elevation",
       "fieldValues",
       "latitude",
       "longitude",
       "name",
       "notes",
       "placeTypeId",
+      "tags",
     ]);
   });
 

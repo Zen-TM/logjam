@@ -59,8 +59,11 @@ beforeAll(async () => {
     .prepare("INSERT INTO sync_state (key, value) VALUES ('schemaVersion', '4')")
     .run();
   queued("canyon", "op-canyon");
+  // Dead since phase 1c, exactly as `canyon` has been since 1a: a waypoint is
+  // a place now, and an op naming one is rejected by `parsePushOp` forever.
   queued("waypoint", "op-waypoint");
   queued("place", "op-place");
+  queued("placeLink", "op-link");
   sqlite
     .prepare(
       `INSERT INTO conflict_shelf (entity, entity_id, field, at)
@@ -79,6 +82,7 @@ describe("mirror version bump purges dead-vocabulary ops", () => {
       .all()
       .map((row) => (row as { entity: string }).entity);
     expect(entities).not.toContain("canyon");
+    expect(entities).not.toContain("waypoint");
   });
 
   it("keeps queued ops the protocol still accepts", () => {
@@ -86,7 +90,7 @@ describe("mirror version bump purges dead-vocabulary ops", () => {
       .prepare("SELECT entity FROM outbox ORDER BY entity")
       .all()
       .map((row) => (row as { entity: string }).entity);
-    expect(entities).toEqual(["place", "waypoint"]);
+    expect(entities).toEqual(["place", "placeLink"]);
   });
 
   it("clears the conflict shelf of the same dead entities", () => {

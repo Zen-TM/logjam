@@ -3,15 +3,18 @@ import { describe, expect, it, vi } from "vitest";
 // The "absent field = unchanged" contract for sharedCount (shared/src/sync.ts):
 // the flush path re-applies a server-confirmed write response that OMITS
 // sharedCount, and INSERT OR REPLACE must not null the column (which vanishes
-// the "Shared with N" pill). upsertWaypoint/upsertRoute therefore carry the
-// stored count forward when the incoming row lacks the field.
+// the "Shared with N" pill). upsertRoute therefore carries the stored count
+// forward when the incoming row lacks the field.
+//
+// Routes are the only rows this applies to now: a place is shared through
+// PlaceShare rather than the Share table, and a place LINK is owner-private
+// and has no fan-out at all.
 //
 // getSyncDb reaches for expo-sqlite (no native runtime here), so the database
 // is a recording stand-in — same pattern as tombstone.test.ts.
 
 type Call = { sql: string; args: unknown[] };
 const calls: Call[] = [];
-let storedWaypointCount: { shared_count: number | null } | null = null;
 let storedRouteCount: { shared_count: number | null } | null = null;
 
 const db = {
@@ -21,7 +24,6 @@ const db = {
   },
   getFirstAsync: (sql: string) => {
     calls.push({ sql, args: [] });
-    if (sql.includes("FROM waypoints")) return Promise.resolve(storedWaypointCount);
     if (sql.includes("FROM routes")) return Promise.resolve(storedRouteCount);
     return Promise.resolve(null);
   },
@@ -34,23 +36,7 @@ vi.mock("./syncDb", () => ({
   withSyncTransaction: async (_db: unknown, task: () => Promise<void>) => task(),
 }));
 
-const { upsertWaypoint, upsertRoute } = await import("./mirrorStore");
-
-const waypointRow = {
-  id: "wp-1",
-  ownerId: "u1",
-  placeIds: [],
-  tags: [],
-  syncRole: "owner" as const,
-  name: "Carpark",
-  latitude: -33.5,
-  longitude: 150.4,
-  elevation: null,
-  symbol: null,
-  notes: null,
-  createdAt: "2026-08-28T00:00:00.000Z",
-  updatedAt: "2026-08-28T00:00:00.000Z",
-};
+const { upsertRoute } = await import("./mirrorStore");
 
 const routeRow = {
   id: "rt-1",
@@ -68,7 +54,7 @@ const routeRow = {
   updatedAt: "2026-08-28T00:00:00.000Z",
 };
 
-function lastUpsert(entity: "waypoints" | "routes"): Call {
+function lastUpsert(entity: "routes"): Call {
   const upsert = calls
     .slice()
     .reverse()
@@ -78,26 +64,18 @@ function lastUpsert(entity: "waypoints" | "routes"): Call {
 }
 
 describe("sharedCount carry-forward (absent = unchanged)", () => {
-  it("keeps a stored waypoint count when the incoming row omits it", async () => {
-    storedWaypointCount = { shared_count: 2 };
-    calls.length = 0;
-    await upsertWaypoint(db as never, waypointRow, []);
-    // 12th positional value (index 11) is shared_count.
-    expect(lastUpsert("waypoints").args[11]).toBe(2);
-  });
-
   it("writes 0 (not the stored count) when the incoming row says 0", async () => {
-    storedWaypointCount = { shared_count: 2 };
+    storedRouteCount = { shared_count: 2 };
     calls.length = 0;
-    await upsertWaypoint(db as never, { ...waypointRow, sharedCount: 0 }, []);
-    expect(lastUpsert("waypoints").args[11]).toBe(0);
+    await upsertRoute(db as never, { ...routeRow, sharedCount: 0 }, []);
+    expect(lastUpsert("routes").args[8]).toBe(0);
   });
 
   it("writes null when the incoming row omits it and nothing is stored", async () => {
-    storedWaypointCount = null;
+    storedRouteCount = null;
     calls.length = 0;
-    await upsertWaypoint(db as never, waypointRow, []);
-    expect(lastUpsert("waypoints").args[11]).toBeNull();
+    await upsertRoute(db as never, routeRow, []);
+    expect(lastUpsert("routes").args[8]).toBeNull();
   });
 
   it("keeps a stored route count when the incoming row omits it", async () => {

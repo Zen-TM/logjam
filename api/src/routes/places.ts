@@ -3,6 +3,11 @@ import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
 import { defsForPlaceType, resolvePlaceTypeId } from "../lib/placeTypes";
+import {
+  applyPlaceLinks,
+  linkedPlaceIdsFor,
+  resolveLinkedPlaceIds,
+} from "../lib/placeLinks";
 import { Prisma } from "@prisma/client";
 import { getParam } from "../lib/getParam";
 import { getEnv } from "../lib/env";
@@ -12,11 +17,11 @@ import { toMediaItems, mediaItemsByLinkedId } from "../lib/mediaPresign";
 import { partitionPlaceMedia, unlinkStandaloneMedia } from "../lib/mediaLink";
 import { requirePlaceAccess, requirePlaceOwnerAccess } from "../lib/placeAccess";
 import { resolveUser } from "../lib/resolveUser";
-import { placeDeleteTombstones, writeTombstones } from "../lib/syncTombstones";
 import {
-  snapshotPlaceWaypointVisibility,
-  writeWaypointVisibilityLoss,
-} from "../lib/waypointLink";
+  placeDeleteTombstones,
+  placeLinkDeleteTombstones,
+  writeTombstones,
+} from "../lib/syncTombstones";
 import {
   assertClientIdReplayable,
   parseClientSuppliedId,
@@ -25,6 +30,7 @@ import {
   asFieldValues,
   TRACK_MIME_TYPES,
   validatePlacePayload,
+  normalizePlaceTags,
 } from "@logjam/shared";
 import { serializeTrip, tripPlacesInclude } from "./tripLogsGlobal";
 
@@ -148,7 +154,20 @@ router.get(
       prisma.place.count({ where }),
     ]);
     res.set("X-Total-Count", String(total));
-    res.json(rows);
+    // Links are OWNER-PRIVATE and ride the owned list only — the same rule the
+    // `_count` above follows, for the same reason: a sharee learning which
+    // other places the owner filed this one against is the disclosure the
+    // "a link grants no visibility" rule exists to prevent.
+    const linked = await linkedPlaceIdsFor(
+      user.id,
+      rows.map((row) => row.id),
+    );
+    res.json(
+      rows.map((row) => ({
+        ...row,
+        linkedPlaceIds: linked.get(row.id) ?? [],
+      })),
+    );
   },
 );
 
@@ -217,6 +236,16 @@ router.get(
 
 // ── POST /places ─────────────────────────────────────────────
 // Creates a new place
+/** The normalised tag list, or a 400. `validatePlacePayload` has already run
+ * the same normaliser for its error message; this re-runs it for the VALUE,
+ * because a tag list is stored trimmed and deduped rather than as typed.
+ * Exported so the sync push path stores exactly what the REST path does. */
+export function normalizePlaceTagsOrThrow(value: unknown): string[] | undefined {
+  const parsed = normalizePlaceTags(value);
+  if ("error" in parsed) throw new AppError(400, parsed.error);
+  return parsed.tags;
+}
+
 router.post(
   "/",
   requireAuth,
@@ -230,6 +259,9 @@ router.post(
       longitude,
       placeTypeId,
       notes,
+      elevation,
+      tags,
+      linkedPlaceIds,
       fieldValues,
     } = req.body;
 
@@ -266,6 +298,14 @@ router.post(
       }
     }
 
+    // Resolved BEFORE the create so a foreign id is a 404 rather than a place
+    // that exists with links silently missing.
+    const createLinkIds = await resolveLinkedPlaceIds(
+      user.id,
+      clientId ?? "",
+      linkedPlaceIds,
+    );
+
     let place;
     try {
       place = await prisma.place.create({
@@ -278,6 +318,10 @@ router.post(
           latitude,
           longitude,
           notes,
+          elevation: elevation ?? null,
+          // Stored trimmed and deduped, never as typed. `validatePlacePayload`
+          // has already refused a malformed list.
+          tags: normalizePlaceTagsOrThrow(tags) ?? [],
           fieldValues: asFieldValues(fieldValues) as Prisma.InputJsonValue,
         },
       });
@@ -298,7 +342,17 @@ router.post(
       throw err;
     }
 
-    res.status(201).json(place);
+    if (createLinkIds !== undefined && createLinkIds.length > 0) {
+      await prisma.$transaction((tx) =>
+        applyPlaceLinks(tx, {
+          ownerId: user.id,
+          placeId: place.id,
+          linkedPlaceIds: createLinkIds,
+        }),
+      );
+    }
+
+    res.status(201).json({ ...place, linkedPlaceIds: createLinkIds ?? [] });
   },
 );
 
@@ -337,6 +391,8 @@ router.post(
         // type, and the foreignFields it strands, is phase 4.
         placeTypeId: place.placeTypeId,
         notes: place.notes,
+        elevation: place.elevation,
+        tags: place.tags,
         fieldValues: (place.fieldValues ?? {}) as Prisma.InputJsonValue,
         ropeWikiId: null,
         ropeWikiSnapshot: Prisma.JsonNull,
@@ -429,7 +485,13 @@ router.get(
         ...serializeTrip(trip),
         media: mediaByTrip.get(trip.id) ?? [],
       }));
-      res.json({ ...place, media: await toMediaItems(placeMedia), tripLogs });
+      const linked = await linkedPlaceIdsFor(user.id, [placeId]);
+      res.json({
+        ...place,
+        linkedPlaceIds: linked.get(placeId) ?? [],
+        media: await toMediaItems(placeMedia),
+        tripLogs,
+      });
       return;
     }
 
@@ -439,6 +501,8 @@ router.get(
       where: { linkedType: "place", linkedId: placeId },
       orderBy: { createdAt: "asc" },
     });
+    // No `linkedPlaceIds` on the sharee's copy — owner-private, like the trip
+    // list and the `_count` above.
     res.json({ ...place, media: await toMediaItems(placeMedia) });
   },
 );
@@ -462,7 +526,17 @@ router.patch(
       "Only the owner can edit a place",
     );
 
-    const { name, altNames, latitude, longitude, notes, fieldValues } = req.body;
+    const {
+      name,
+      altNames,
+      latitude,
+      longitude,
+      notes,
+      elevation,
+      tags,
+      linkedPlaceIds,
+      fieldValues,
+    } = req.body;
 
     // Validate any supplied coordinate or field value (PLACE-1/PLACE-2).
     // requireCoords:false — PATCH may omit fields; only validate what's present.
@@ -473,6 +547,12 @@ router.patch(
       }) ?? validatePlaceTextFields(req.body);
     if (validationError) throw new AppError(400, validationError);
 
+    const patchLinkIds = await resolveLinkedPlaceIds(
+      user.id,
+      place.id,
+      linkedPlaceIds,
+    );
+
     const updated = await prisma.place.update({
       where: { id: getParam(req.params.id) },
       data: {
@@ -481,13 +561,29 @@ router.patch(
         ...(latitude !== undefined && { latitude }),
         ...(longitude !== undefined && { longitude }),
         ...(notes !== undefined && { notes }),
+        ...(elevation !== undefined && { elevation }),
+        ...(tags !== undefined && { tags: normalizePlaceTagsOrThrow(tags) ?? [] }),
         ...(fieldValues !== undefined && {
           fieldValues: asFieldValues(fieldValues) as Prisma.InputJsonValue,
         }),
       },
     });
 
-    res.json(updated);
+    // After the field write, in its own transaction: a link change writes
+    // tombstones and they must not be able to land without the deletes they
+    // describe.
+    if (patchLinkIds !== undefined) {
+      await prisma.$transaction((tx) =>
+        applyPlaceLinks(tx, {
+          ownerId: user.id,
+          placeId: place.id,
+          linkedPlaceIds: patchLinkIds,
+        }),
+      );
+    }
+    const linked = await linkedPlaceIdsFor(user.id, [place.id]);
+
+    res.json({ ...updated, linkedPlaceIds: linked.get(place.id) ?? [] });
   },
 );
 
@@ -588,11 +684,22 @@ router.delete(
         where: { placeId: id },
         select: { id: true },
       });
-      // Linked WAYPOINTS survive too (PlaceWaypoint cascades the link, not the
-      // waypoint), so this is the same revocation-without-a-delete as the route
-      // above — except the link is many-to-many, so which sharees actually lose
-      // sight of one can only be answered by diffing across the delete.
-      const waypointVisibility = await snapshotPlaceWaypointVisibility(tx, id);
+      // LINKED PLACES survive — the cascade takes the PlaceLink row, never the
+      // place at the other end — but the link rows themselves go, and nothing
+      // else would tell the owner's mirror about them. No sharee appears here:
+      // a link is owner-private and grants no visibility (lib/shareAccess.ts).
+      // Read before the delete, while the rows still exist.
+      const links = await tx.placeLink.findMany({
+        where: { OR: [{ aPlaceId: id }, { bPlaceId: id }] },
+        select: { id: true },
+      });
+      await writeTombstones(
+        tx,
+        placeLinkDeleteTombstones({
+          ownerId: user.id,
+          linkIds: links.map((link) => link.id),
+        }),
+      );
       await writeTombstones(
         tx,
         placeDeleteTombstones({
@@ -616,9 +723,6 @@ router.delete(
         },
       });
       await tx.place.delete({ where: { id } });
-      // After the delete: the link rows are gone, so this now sees the world as
-      // the sharees will.
-      await writeWaypointVisibilityLoss(tx, waypointVisibility);
       await decrementStorageUsed(user.id, totalBytes, tx);
     });
 

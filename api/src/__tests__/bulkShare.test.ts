@@ -278,14 +278,20 @@ describe("POST /bulk-share", () => {
     expect(res.status).toBe(413);
   });
 
-  it("shares a WAYPOINT and a place from one mixed list — two tables, one call", async () => {
+  it("shares a ROUTE and a place from one mixed list — two tables, one call", async () => {
     const placeId = await createPlace(ALICE_SUB, "Bulk share mixed");
-    const waypoint = await request(API_URL)
-      .post("/waypoints")
+    const route = await request(API_URL)
+      .post("/routes")
       .set(as(ALICE_SUB))
-      .send({ name: "Bulk share carpark", latitude: -33.7, longitude: 150.3 });
-    expect(waypoint.status).toBe(201);
-    const waypointId = waypoint.body.id as string;
+      .send({
+        name: "Bulk share line",
+        points: [
+          [150.3, -33.7],
+          [150.31, -33.71],
+        ],
+      });
+    expect(route.status).toBe(201);
+    const routeId = route.body.id as string;
     try {
       const res = await request(API_URL)
         .post("/bulk-share")
@@ -293,7 +299,7 @@ describe("POST /bulk-share", () => {
         .send({
           items: [
             { entityType: "place", entityId: placeId },
-            { entityType: "waypoint", entityId: waypointId },
+            { entityType: "route", entityId: routeId },
           ],
           recipientIds: [BOB_ID],
           batchId: randomUUID(),
@@ -301,18 +307,18 @@ describe("POST /bulk-share", () => {
       expect(res.status).toBe(200);
       expect(res.body).toEqual({ granted: 2, alreadyShared: 0, ineligible: 0 });
 
-      // The place went to PlaceShare, the waypoint to Share — different
-      // tables, one request.
+      // The place went to PlaceShare, the route to Share — different tables,
+      // one request.
       expect(await shareRecipientIds(ALICE_SUB, placeId)).toEqual([BOB_ID]);
       const shares = await request(API_URL)
-        .get(`/shares/waypoint/${waypointId}`)
+        .get(`/shares/route/${routeId}`)
         .set(as(ALICE_SUB));
       expect(shares.status).toBe(200);
       expect(
         shares.body.map((row: { sharedWith: { id: string } }) => row.sharedWith.id),
       ).toEqual([BOB_ID]);
     } finally {
-      await request(API_URL).delete(`/waypoints/${waypointId}`).set(as(ALICE_SUB));
+      await request(API_URL).delete(`/routes/${routeId}`).set(as(ALICE_SUB));
       await deletePlace(ALICE_SUB, placeId);
     }
   });

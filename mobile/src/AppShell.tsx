@@ -114,18 +114,18 @@ type MapStackParams = {
         continueTrack?: { trackId: string; nonce: number };
         // `startRecording` = "Record a track" from Saved's add sheet.
         startRecording?: { nonce: number };
-        // `navigateWaypoint` = "Navigate to this waypoint" from Saved. An id,
+        // `navigatePlace` = "Navigate to this place" from a place's verbs. An id,
         // never a coordinate: navigation params are persisted and dumped by
         // devtools, and the map reads the point from the mirror it already has.
-        navigateWaypoint?: { waypointId: string; nonce: number };
+        navigatePlace?: { placeId: string; nonce: number };
       }
     | undefined;
-  // Where the waypoint form went to point at a map. A coordinate already in
-  // the form arrives as params, with the id of the waypoint being moved so the
+  // Where the place form went to point at a map. A coordinate already in
+  // the form arrives as params, with the id of the place being moved so the
   // picker can leave its own pin off; the answer goes back through
   // `pickedPoint.ts`.
   MapPickPoint:
-    | { latitude: number; longitude: number; waypointId?: string }
+    | { latitude: number; longitude: number; placeId?: string }
     | undefined;
   MapPlaceDetail: { placeId: string; name: string };
   MapTripDetail: { trip: MirrorTrip };
@@ -179,14 +179,14 @@ type SavedStackParams = {
     | { filter?: SavedCategory; nonce?: number; highlightKey?: string }
     | undefined;
   /**
-   * The point picker for the "waypoint from coordinates" form — the same screen
+   * The point picker for the "place from coordinates" form — the same screen
    * the Places stack registers, because a stack can only push its own routes
    * and the alternative is a cross-tab jump that leaves the form behind.
    * Coordinates travel IN only (where to open); the answer comes back in memory
    * through `map/pickedPoint.ts`.
    */
   SavedPickPoint:
-    | { latitude: number; longitude: number; waypointId?: string }
+    | { latitude: number; longitude: number; placeId?: string }
     | undefined;
 };
 
@@ -278,12 +278,12 @@ function MapStackNav() {
             drawRouteFor={route.params?.drawRouteFor ?? null}
             continueTrack={route.params?.continueTrack ?? null}
             startRecording={route.params?.startRecording ?? null}
-            navigateWaypoint={route.params?.navigateWaypoint ?? null}
-            onPickPoint={(from, hideWaypointId) =>
+            navigatePlace={route.params?.navigatePlace ?? null}
+            onPickPoint={(from, hidePlaceId) =>
               navigation.navigate(
                 "MapPickPoint",
-                from || hideWaypointId
-                  ? { ...(from ?? undefined), waypointId: hideWaypointId }
+                from || hidePlaceId
+                  ? { ...(from ?? undefined), placeId: hidePlaceId }
                   : undefined,
               )
             }
@@ -293,8 +293,8 @@ function MapStackNav() {
       <MapStack.Screen name="MapPickPoint" options={{ headerShown: false }}>
         {({ navigation, route }) => (
           <PickPointScreen
-            // A request that carries only a waypoint id has no coordinate in
-            // it — the form was blank — so the picker must open with no marker.
+            // A request that carries only a place id has no coordinate in it —
+            // the form was blank — so the picker must open with no marker.
             initialPoint={
               route.params?.latitude != null && route.params?.longitude != null
                 ? {
@@ -303,8 +303,8 @@ function MapStackNav() {
                   }
                 : null
             }
-            subject="waypoint"
-            hideWaypointId={route.params?.waypointId ?? null}
+            subject="place"
+            hidePlaceId={route.params?.placeId ?? null}
             onCancel={() => navigation.goBack()}
             onConfirm={(point) => {
               setPickedPoint(point);
@@ -350,12 +350,12 @@ function MapStackNav() {
             onFocusOnMap={(bbox) =>
               navigation.navigate("MapView", { focus: { bbox, nonce: Date.now() } })
             }
-            onShowWaypointOnMap={(waypoint) =>
+            onShowPlaceOnMap={(linked) =>
               navigation.getParent()?.navigate("Map", {
                 screen: "MapView",
                 // placeFocus, not a route bbox: a single point yields a
                 // zero-span bbox, which the camera reads as "fit nothing".
-                params: { focus: placeFocus(waypoint) },
+                params: { focus: placeFocus(linked) },
               })
             }
             onDrawRoute={(id) =>
@@ -424,11 +424,11 @@ function SavedStackNav() {
                 params: { editRoute: { routeId, nonce: Date.now() } },
               })
             }
-            onPickPoint={(from, hideWaypointId) =>
+            onPickPoint={(from, hidePlaceId) =>
               navigation.navigate(
                 "SavedPickPoint",
-                from || hideWaypointId
-                  ? { ...(from ?? undefined), waypointId: hideWaypointId }
+                from || hidePlaceId
+                  ? { ...(from ?? undefined), placeId: hidePlaceId }
                   : undefined,
               )
             }
@@ -456,14 +456,6 @@ function SavedStackNav() {
             }
             // The bearing line and the user dot are the map's, so this hands
             // the id over rather than growing a second navigator.
-            onNavigateToWaypoint={(waypointId) =>
-              navigation.getParent()?.navigate("Map", {
-                screen: "MapView",
-                params: { navigateWaypoint: { waypointId, nonce: Date.now() } },
-              })
-            }
-            // A cross-tab jump rather than a place screen of this stack's own:
-            // the Saved tab has never held one, and the only thing that sends a
             // user there from here is a waypoint or route asking "which shared
             // place brought me?".
             onOpenPlace={(placeId, name) =>
@@ -479,7 +471,7 @@ function SavedStackNav() {
         {({ navigation, route }) => (
           <PickPointScreen
             // Same shape as the map stack's: a request may carry an id and no
-            // coordinate (a blank form on an existing waypoint), and that must
+            // coordinate (a blank form on an existing place), and that must
             // open with no marker rather than one at null island.
             initialPoint={
               route.params?.latitude != null && route.params?.longitude != null
@@ -489,8 +481,8 @@ function SavedStackNav() {
                   }
                 : null
             }
-            subject="waypoint"
-            hideWaypointId={route.params?.waypointId ?? null}
+            subject="place"
+            hidePlaceId={route.params?.placeId ?? null}
             onCancel={() => navigation.goBack()}
             onConfirm={(point) => {
               setPickedPoint(point);
@@ -575,12 +567,12 @@ function PlacesStackNav() {
                 params: { focus: { bbox, nonce: Date.now() } },
               })
             }
-            onShowWaypointOnMap={(waypoint) =>
+            onShowPlaceOnMap={(linked) =>
               navigation.getParent()?.navigate("Map", {
                 screen: "MapView",
                 // placeFocus, not a route bbox: a single point yields a
                 // zero-span bbox, which the camera reads as "fit nothing".
-                params: { focus: placeFocus(waypoint) },
+                params: { focus: placeFocus(linked) },
               })
             }
             onDrawRoute={(id) =>
@@ -659,12 +651,12 @@ function TripsStackNav() {
                 params: { focus: { bbox, nonce: Date.now() } },
               })
             }
-            onShowWaypointOnMap={(waypoint) =>
+            onShowPlaceOnMap={(linked) =>
               navigation.getParent()?.navigate("Map", {
                 screen: "MapView",
                 // placeFocus, not a route bbox: a single point yields a
                 // zero-span bbox, which the camera reads as "fit nothing".
-                params: { focus: placeFocus(waypoint) },
+                params: { focus: placeFocus(linked) },
               })
             }
             onDrawRoute={(id) =>
@@ -998,13 +990,13 @@ export function AppShell({
                         params: { focus: { bbox, nonce: Date.now() } },
                       })
                     }
-                    onShowWaypointOnMap={(waypoint) =>
+                    onShowPlaceOnMap={(linked) =>
                       navigation.getParent()?.navigate("Map", {
                         screen: "MapView",
                         // placeFocus, not a route bbox: a single point
                         // yields a zero-span bbox, which the camera reads as
                         // "fit nothing".
-                        params: { focus: placeFocus(waypoint) },
+                        params: { focus: placeFocus(linked) },
                       })
                     }
                     onDrawRoute={(id) =>

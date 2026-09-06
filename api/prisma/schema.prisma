@@ -45,7 +45,7 @@ model User {
   geoPdfTemplates         GeoPdfTemplate[]
   topoTemplates           TopoTemplate[]
   deviceTokens            DeviceToken[]
-  waypoints               Waypoint[]
+  placeLinks              PlaceLink[]
   routes                  Route[]
   syncTombstones          SyncTombstone[]
   directSharesSent        Share[]             @relation("directSharedBy")
@@ -177,13 +177,22 @@ model CustomFieldDefPlaceType {
 }
 
 model Place {
-  id               String          @id @default(uuid())
-  ownerId          String          @map("owner_id")
-  placeTypeId      String          @map("place_type_id")
+  id               String         @id @default(uuid())
+  ownerId          String         @map("owner_id")
+  placeTypeId      String         @map("place_type_id")
   name             String
-  altNames         String[]        @default([])
+  altNames         String[]       @default([])
   latitude         Float
   longitude        Float
+  /// STRUCTURAL, not a field definition — every point on earth has one, so it
+  /// is not type-specific. Carried over from Waypoint, which is live on every
+  /// waypoint surface today; dropping it in the fold would be silent data loss.
+  elevation        Float?
+  /// Free-text labels, same shape as TripLog.types: a seed vocabulary the user
+  /// extends by typing. No tag registry — the vocabulary IS the used values.
+  /// Appearance no longer derives from these (a type carries the icon and
+  /// colour now); they are for filtering.
+  tags             String[]       @default([])
   notes            String?
   /// Type-specific values, keyed by `CustomFieldDef.key`. Replaces the seven
   /// grade columns AND the free-form `attributes` blob. Values that were nested
@@ -192,28 +201,27 @@ model Place {
   /// `field_values.customFields.<key>` where nothing reads.
   /// Keys starting with `_` are internal (`_sources`, `_attributes`) and cannot
   /// collide with a user key: `makeCustomFieldKey` never produces one.
-  fieldValues      Json            @default("{}") @map("field_values")
+  fieldValues      Json           @default("{}") @map("field_values")
   /// Values that arrived on a COPY keyed by defs this owner does not have, or
   /// were stranded by a type change. Rendered read-only, per-item adoptable.
   /// OWNER-PRIVATE: never emitted on a delta row with syncRole "shared", and
   /// absent from the push allowlist — only copy and type-change write it.
-  foreignFields    Json?           @map("foreign_fields")
-  createdAt        DateTime        @default(now()) @map("created_at")
-  updatedAt        DateTime        @updatedAt @map("updated_at")
-  forkedFromId     String?         @map("forked_from_id")
-  ropeWikiId       Int?            @map("ropewiki_id")
-  ropeWikiSnapshot Json?           @map("ropewiki_snapshot")
-  importKey        String?         @map("import_key")
-  importBatchId    String?         @map("import_batch_id")
-  placeType        PlaceType       @relation(fields: [placeTypeId], references: [id])
+  foreignFields    Json?          @map("foreign_fields")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+  forkedFromId     String?        @map("forked_from_id")
+  ropeWikiId       Int?           @map("ropewiki_id")
+  ropeWikiSnapshot Json?          @map("ropewiki_snapshot")
+  importKey        String?        @map("import_key")
+  importBatchId    String?        @map("import_batch_id")
+  placeType        PlaceType      @relation(fields: [placeTypeId], references: [id])
   shares           PlaceShare[]
-  forkedFrom       Place?          @relation("PlaceForks", fields: [forkedFromId], references: [id], onDelete: SetNull)
-  forks            Place[]         @relation("PlaceForks")
-  owner            User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  forkedFrom       Place?         @relation("PlaceForks", fields: [forkedFromId], references: [id], onDelete: SetNull)
+  forks            Place[]        @relation("PlaceForks")
+  owner            User           @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   tripLogLinks     TripLogPlace[]
-  waypointLinks    PlaceWaypoint[]
-  /// @deprecated Back-relation for the pending place_id contract — see Waypoint.
-  legacyWaypoints  Waypoint[]      @relation("LegacyWaypointPlace")
+  linksA           PlaceLink[]    @relation("PlaceLinkA")
+  linksB           PlaceLink[]    @relation("PlaceLinkB")
   // At most one — the place's route slot. See Route.placeId.
   route            Route?
 
@@ -563,44 +571,48 @@ model TopoTemplate {
 // api/CLAUDE.md). Once a release carrying this comment is live, delete the
 // field, the `place` relation, and Place.legacyWaypoints in a follow-up
 // migration that drops the column.
-model Waypoint {
-  id         String          @id @default(uuid())
-  ownerId    String          @map("owner_id")
-  /// @deprecated Superseded by placeLinks. Never read or written.
-  placeId    String?         @map("place_id")
-  place      Place?          @relation("LegacyWaypointPlace", fields: [placeId], references: [id], onDelete: SetNull)
-  name       String
-  latitude   Float
-  longitude  Float
-  elevation  Float?
-  // Client icon key; server treats as opaque (length-capped in the route).
-  symbol     String?
-  notes      String?
-  // Free-text labels, same shape as TripLog.types: a seed vocabulary the user
-  // extends by typing. No tag registry — the vocabulary IS the used values.
-  tags       String[]        @default([])
-  createdAt  DateTime        @default(now()) @map("created_at")
-  updatedAt  DateTime        @updatedAt @map("updated_at")
-  owner      User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  placeLinks PlaceWaypoint[]
-
-  @@index([ownerId])
-  @@map("waypoints")
-}
-
 // Waypoint ↔ place, many-to-many. Cascade both ways deletes the LINK only:
 // deleting a place leaves its waypoints alive and standalone (what the old
 // SetNull place_id did), and deleting a waypoint leaves the place alone.
 // No `position` — unlike TripLogPlace nothing derives from the order here.
-model PlaceWaypoint {
-  placeId    String   @map("place_id")
-  waypointId String   @map("waypoint_id")
-  place      Place    @relation(fields: [placeId], references: [id], onDelete: Cascade)
-  waypoint   Waypoint @relation(fields: [waypointId], references: [id], onDelete: Cascade)
+/// Place <-> place, symmetric, STORED ONCE under a canonical low-id/high-id
+/// ordering and rendered in both directions.
+///
+/// A link is NAVIGATIONAL ONLY and grants NO VISIBILITY. That is what lets
+/// lib/waypointLink.ts die: a waypoint used to inherit visibility through the
+/// canyons it was linked to, reachable through two of them, which made
+/// revocation a 219-line problem. Sharing is explicit per place now.
+///
+/// DO NOT read "a link grants no visibility" as a blanket rule — a route still
+/// reaches a sharee through `Route.placeId`, a foreign key, and that is
+/// deliberate (the route is part of the shared record). Only LINKS grant
+/// nothing.
+model PlaceLink {
+  /// Its own id: create and delete are sync ops, and a tombstone needs one.
+  id        String   @id @default(uuid())
+  /// REQUIRED, for three reasons: SyncTombstone.userId needs it on a delete;
+  /// the visibility filter would otherwise need a two-hop join through
+  /// `places` on every delta page; and without it nothing stops an offline
+  /// client minting a link naming a place id it does not own.
+  ownerId   String   @map("owner_id")
+  /// Lexicographically LOWER id. Canonical ordering is what makes "stored
+  /// once" enforceable by the unique index rather than by convention.
+  aPlaceId  String   @map("a_place_id")
+  bPlaceId  String   @map("b_place_id")
+  /// REQUIRED: every delta entity is paged by keyset on a timestamp
+  /// (keysetWhere("updatedAt", ...)). A link with no timestamp cannot be a
+  /// delta entity at all.
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  @@id([placeId, waypointId])
-  @@index([waypointId])
-  @@map("place_waypoints")
+  owner  User  @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  aPlace Place @relation("PlaceLinkA", fields: [aPlaceId], references: [id], onDelete: Cascade)
+  bPlace Place @relation("PlaceLinkB", fields: [bPlaceId], references: [id], onDelete: Cascade)
+
+  @@unique([ownerId, aPlaceId, bPlaceId])
+  @@index([ownerId, updatedAt])
+  @@index([bPlaceId])
+  @@map("place_links")
 }
 
 // User-authored routes: the line the user drew, imported, or derived from a

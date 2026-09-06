@@ -143,6 +143,10 @@ export function invalidFieldValueKeys(
 export type PlaceFieldPayload = {
   latitude?: unknown;
   longitude?: unknown;
+  /** Metres. Optional on every place — a canyon has never carried one and a
+   *  GPX waypoint usually does. */
+  elevation?: unknown;
+  tags?: unknown;
   /** Type-specific values. Validated against the type's DEFINITIONS, which the
    *  caller supplies — this module has no way to load them. */
   fieldValues?: unknown;
@@ -155,6 +159,10 @@ export type PlaceFieldPayload = {
  * - `requireCoords: true` (create) demands latitude AND longitude be present
  *   and in range.
  * - `requireCoords: false` (patch) validates coordinates only when supplied.
+ *
+ * `elevation` and `tags` came from the waypoint payload in the phase 1c fold
+ * and keep their old rules verbatim: explicit null clears either, and a tag
+ * list is normalised by `normalizePlaceTags` (below) rather than re-parsed.
  *
  * `fieldValues` is validated only when `opts.defs` is given. The definitions
  * cannot be reached from here — they are rows — so a caller that has them
@@ -180,6 +188,15 @@ export function validatePlacePayload(
       return `Longitude must be a number between ${LONGITUDE_RANGE.min} and ${LONGITUDE_RANGE.max}`;
     }
   }
+
+  if (payload.elevation !== undefined && payload.elevation !== null) {
+    if (typeof payload.elevation !== "number" || !Number.isFinite(payload.elevation)) {
+      return "elevation must be a number";
+    }
+  }
+
+  const normalizedTags = normalizePlaceTags(payload.tags);
+  if ("error" in normalizedTags) return normalizedTags.error;
 
   if (opts.defs && payload.fieldValues !== undefined) {
     if (
@@ -223,6 +240,15 @@ export function invalidPlaceFields(
   if ("longitude" in fields && !isValidLongitude(fields.longitude)) {
     invalid.push("longitude");
   }
+  if (
+    fields.elevation != null &&
+    (typeof fields.elevation !== "number" || !Number.isFinite(fields.elevation))
+  ) {
+    invalid.push("elevation");
+  }
+  if ("tags" in fields && "error" in normalizePlaceTags(fields.tags)) {
+    invalid.push("tags");
+  }
   // An out-of-range VALUE names `fieldValues`, not the key inside it: the whole
   // blob is one dirty field on the wire, so that is the granularity the client
   // can act on when it decides which parked fields to resend.
@@ -233,4 +259,118 @@ export function invalidPlaceFields(
     }
   }
   return invalid;
+}
+
+// ── tags ────────────────────────────────────────────────────────────────────
+//
+// Moved here when waypoints folded into places (phase 1c). Tags were a
+// waypoint's only free-text vocabulary and are now a place's; the rules are
+// unchanged, the noun is not. `waypointTags.ts` is GONE with the fold — it
+// derived a colour and a glyph from a tag, which was a workaround for a
+// waypoint having no type to hang an icon off. A place has one.
+
+export const PLACE_TAG_MAX_LENGTH = 40;
+export const MAX_TAGS_PER_PLACE = 12;
+
+/**
+ * Built-in tag suggestions. Exactly the TRIP_TYPE_SUGGESTIONS contract: the UI
+ * unions these with the distinct tags already on the user's own places, and
+ * free text is always allowed. A seed vocabulary, not an enum — there is no tag
+ * registry to create, rename or delete.
+ */
+export const PLACE_TAG_SUGGESTIONS = [
+  "abseil",
+  "campsite",
+  "carpark",
+  "exit",
+] as const;
+
+/**
+ * Normalise a tags array: strings only, trimmed, non-empty, deduped
+ * case-insensitively, order preserved, capped.
+ *
+ * Pure and shared because the mobile outbox validates BEFORE enqueue — a queued
+ * op the server would reject is a sync issue the user has to resolve by hand,
+ * offline, in a gorge.
+ *
+ * undefined → undefined (PATCH: leave unchanged); null → [] (clears).
+ */
+export function normalizePlaceTags(
+  value: unknown,
+): { tags: string[] | undefined } | { error: string } {
+  if (value === undefined) return { tags: undefined };
+  if (value === null) return { tags: [] };
+  if (!Array.isArray(value)) {
+    return { error: "tags must be an array of strings or null" };
+  }
+
+  const tags: string[] = [];
+  const seen = new Set<string>();
+  for (const item of value) {
+    if (typeof item !== "string") {
+      return { error: "tags must be an array of strings" };
+    }
+    const trimmed = item.trim();
+    if (trimmed.length === 0) return { error: "tags entries must not be empty" };
+    if (trimmed.length > PLACE_TAG_MAX_LENGTH) {
+      return {
+        error: `tags entries must be at most ${PLACE_TAG_MAX_LENGTH} characters`,
+      };
+    }
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) {
+      return { error: "tags contains case-insensitive duplicates" };
+    }
+    seen.add(key);
+    tags.push(trimmed);
+  }
+  if (tags.length > MAX_TAGS_PER_PLACE) {
+    return { error: `At most ${MAX_TAGS_PER_PLACE} tags per place` };
+  }
+  return { tags };
+}
+
+/** How many other places one place may be linked to. The old
+ *  MAX_PLACES_PER_WAYPOINT, now symmetric. */
+export const MAX_LINKS_PER_PLACE = 20;
+
+/**
+ * Shape-check a list of place ids to link to. Only the SHAPE — whether the
+ * caller may link to them is an owner-scoped lookup that belongs on the server,
+ * and the answer is deliberately indistinguishable from "no such place" so the
+ * endpoint is not an existence oracle.
+ */
+export function normalizeLinkedPlaceIds(
+  value: unknown,
+): { placeIds: string[] | undefined } | { error: string } {
+  if (value === undefined) return { placeIds: undefined };
+  if (value === null) return { placeIds: [] };
+  if (!Array.isArray(value)) {
+    return { error: "placeIds must be an array of strings or null" };
+  }
+  const placeIds: string[] = [];
+  for (const item of value) {
+    if (typeof item !== "string") {
+      return { error: "placeIds must be an array of strings" };
+    }
+    if (!placeIds.includes(item)) placeIds.push(item);
+  }
+  if (placeIds.length > MAX_LINKS_PER_PLACE) {
+    return { error: `At most ${MAX_LINKS_PER_PLACE} linked places` };
+  }
+  return { placeIds };
+}
+
+/**
+ * The canonical (a, b) ordering for a symmetric link, so "stored once" is
+ * enforceable by a unique index rather than by convention. Lexicographic on the
+ * id, which is arbitrary but total — all that matters is that both ends agree.
+ */
+export function canonicalLinkPair(
+  first: string,
+  second: string,
+): { aPlaceId: string; bPlaceId: string } {
+  return first <= second
+    ? { aPlaceId: first, bPlaceId: second }
+    : { aPlaceId: second, bPlaceId: first };
 }

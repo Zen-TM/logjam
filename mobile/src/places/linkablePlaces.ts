@@ -1,5 +1,4 @@
-// Which places the waypoint place-link picker offers, and how many it had to
-// leave out.
+// Which places the link picker offers, and how many it had to leave out.
 //
 // The picker is a flat `.map()` inside a sheet — no FlatList, no scroll of its
 // own — so the list is capped. A cap with nothing said about it is a list that

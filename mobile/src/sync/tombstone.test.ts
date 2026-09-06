@@ -12,7 +12,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 type Call = { sql: string; args: unknown[] };
 const calls: Call[] = [];
-let waypointRows: { id: string; place_ids_json: string | null }[] = [];
+let linkRows: { id: string; a_place_id: string; b_place_id: string }[] = [];
 let tripRows: { id: string; places_json: string | null }[] = [];
 
 const DEAD = "dead-place";
@@ -25,7 +25,7 @@ const db = {
   getFirstAsync: () => Promise.resolve(null),
   getAllAsync: (sql: string) => {
     calls.push({ sql, args: [] });
-    if (sql.includes("FROM waypoints")) return Promise.resolve(waypointRows);
+    if (sql.includes("FROM place_links")) return Promise.resolve(linkRows);
     if (sql.includes("FROM trip_logs")) return Promise.resolve(tripRows);
     return Promise.resolve([]);
   },
@@ -75,41 +75,32 @@ describe("a tombstone type this build does not know", () => {
   });
 
   it("still cascades a type it DOES know", async () => {
-    await applyTombstone(db as never, { type: "waypoint", id: "wp-1" });
-    expect(sqlText()).toMatch(/DELETE FROM waypoints/);
+    await applyTombstone(db as never, { type: "placeLink", id: "link-1" });
+    expect(sqlText()).toMatch(/DELETE FROM place_links WHERE id = \?/);
   });
 });
 
 describe("place tombstone cascade", () => {
   beforeEach(() => {
     calls.length = 0;
-    waypointRows = [
-      { id: "wp-linked", place_ids_json: JSON.stringify([DEAD, "other"]) },
-      { id: "wp-substring", place_ids_json: JSON.stringify(["dead-place-2"]) },
-    ];
+    linkRows = [{ id: "link-1", a_place_id: DEAD, b_place_id: "other" }];
     tripRows = [{ id: "trip-1", places_json: JSON.stringify([{ id: DEAD, name: "X" }]) }];
   });
 
-  it("never writes the m2m column that no longer exists", async () => {
+  it("never writes a table the schema no longer declares", async () => {
     await applyTombstone(db as never, { type: "place", id: DEAD });
-    expect(sqlText()).not.toMatch(/UPDATE waypoints SET place_id\b/);
+    expect(sqlText()).not.toMatch(/waypoints/);
   });
 
-  it("takes the dead place out of each waypoint's link list", async () => {
+  it("deletes the links touching it, from BOTH ends", async () => {
     await applyTombstone(db as never, { type: "place", id: DEAD });
-    const update = calls.find((call) =>
-      call.sql.includes("UPDATE waypoints SET place_ids_json"),
+    const del = calls.find((call) =>
+      call.sql.includes("DELETE FROM place_links WHERE a_place_id = ? OR b_place_id = ?"),
     );
-    expect(update).toBeDefined();
-    expect(update!.args).toEqual([JSON.stringify(["other"]), "wp-linked"]);
-  });
-
-  it("leaves a row the LIKE prefilter matched by substring untouched", async () => {
-    await applyTombstone(db as never, { type: "place", id: DEAD });
-    const updates = calls.filter((call) =>
-      call.sql.includes("UPDATE waypoints SET place_ids_json"),
-    );
-    expect(updates).toHaveLength(1);
+    expect(del).toBeDefined();
+    // The place at the other end is NOT deleted — a link is not a container.
+    expect(del!.args).toEqual([DEAD, DEAD]);
+    expect(sqlText()).not.toMatch(/DELETE FROM places WHERE id = \?\n.*other/);
   });
 
   it("scrubs the trip link list in its own {id,name} shape", async () => {
@@ -144,7 +135,7 @@ describe("deletePlaceLocal runs the SAME cascade as the tombstone", () => {
   // for a guest, whose device is never registered for pulls at all.
   beforeEach(() => {
     calls.length = 0;
-    waypointRows = [];
+    linkRows = [];
     tripRows = [];
   });
 

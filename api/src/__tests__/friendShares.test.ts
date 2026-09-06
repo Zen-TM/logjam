@@ -9,7 +9,7 @@ import {
   BOB_ID,
   SHARED_PLACE_ID,
   BOB_SHARED_PLACE_ID,
-  BOB_SHARED_WAYPOINT_ID,
+  BOB_SHARED_ROUTE_ID,
   NONEXISTENT_ID,
   as,
   CANYON_TYPE_ID
@@ -19,13 +19,13 @@ import {
 //
 // BOTH SHARE TABLES. The payload used to be place-only; it now speaks the
 // (entityType, entityId) pair the bulk share speaks, and covers the `Share`
-// table too (waypoint / route / topo / GeoPDF) — so the phone's per-friend
+// table too (route / topo / GeoPDF) — so the phone's per-friend
 // screen can list everything a friend can see rather than the places alone.
 //
 // Requires `make dev` (Postgres + MiniStack + API on :8080) with AUTH_MODE=fake.
 // Seed baseline: alice owns 4 places shared with bob (incl. SHARED_PLACE_ID);
 // bob shares two rows back with alice (BOB_SHARED_PLACE_ID and
-// BOB_SHARED_WAYPOINT_ID); alice<->bob is an accepted friendship; carol->alice
+// BOB_SHARED_ROUTE_ID); alice<->bob is an accepted friendship; carol->alice
 // is PENDING and carol is shared nothing.
 //
 // The incoming pair is named in `_actors.ts` rather than assumed absent. Three
@@ -127,7 +127,7 @@ describe("GET /friends/:id/shares — the audit surface", () => {
     expect(res.status).toBe(200);
     const received = (res.body as SharesBody).sharedWithYou;
     expect(received.map((row) => row.entityId).sort()).toEqual(
-      [BOB_SHARED_PLACE_ID, BOB_SHARED_WAYPOINT_ID].sort(),
+      [BOB_SHARED_PLACE_ID, BOB_SHARED_ROUTE_ID].sort(),
     );
   });
 
@@ -143,13 +143,13 @@ describe("GET /friends/:id/shares — the audit surface", () => {
     // Bob's forward list is what HE owns and shares — the same two rows alice
     // saw as incoming, now read from the other end of the same friendship.
     expect(body.sharedWithThem.map((row) => row.entityId).sort()).toEqual(
-      [BOB_SHARED_PLACE_ID, BOB_SHARED_WAYPOINT_ID].sort(),
+      [BOB_SHARED_PLACE_ID, BOB_SHARED_ROUTE_ID].sort(),
     );
     // ...and alice's places appear in his received list.
     expect(placeIdsIn(body.sharedWithYou)).toContain(SHARED_PLACE_ID);
   });
 
-  // THE UNION. A waypoint/route/topo/GeoPDF share lives in the `Share` table,
+  // THE UNION. A route/topo/GeoPDF share lives in the `Share` table,
   // which this surface used not to read at all — so a friend holding six items
   // saw an audit screen that said "nothing shared".
   it("lists a directly-shared ROUTE alongside the places, in both directions", async () => {
@@ -184,7 +184,11 @@ describe("GET /friends/:id/shares — the audit surface", () => {
     // list — which holds only what the seed says bob owns and shares.
     expect(
       (theirs.body as SharesBody).sharedWithThem.map((r) => r.entityId).sort(),
-    ).toEqual([BOB_SHARED_PLACE_ID, BOB_SHARED_WAYPOINT_ID].sort());
+    ).toEqual([BOB_SHARED_PLACE_ID, BOB_SHARED_ROUTE_ID].sort());
+
+    // Alice's route is hers to clean up: it is shared with bob, so leaving it
+    // moves the baseline the exact-set assertions above read.
+    await request(API_URL).delete(`/routes/${routeId}`).set(as(ALICE_SUB));
   });
 
   // The ownership arm: the list is derived from who OWNS the row, not from the
@@ -201,12 +205,17 @@ describe("GET /friends/:id/shares — the audit surface", () => {
     expect(body.sharedWithYou.map((r) => r.entityId)).not.toContain(carolRoute);
   });
 
-  // THE FLAG THE CLIENTS CANNOT DERIVE. A waypoint shared directly AND linked
+  // THE FLAG THE CLIENTS CANNOT DERIVE. A ROUTE shared directly AND attached
   // to a place its owner also shared is visible for two reasons; dropping the
   // direct share changes nothing, so a Remove offered on it would appear to
   // work and be undone by the next delta pull. Only the server can answer this
   // — a client deriving it from its own mirror is wrong until that mirror has
   // pulled the linked row (seen on device, 2026-09-05).
+  //
+  // A route, not a waypoint, since the phase 1c fold: `Route.placeId` is a
+  // FOREIGN KEY and still carries the route to the place's sharees, while a
+  // PlaceLink grants no visibility at all (lib/shareAccess.ts §2.5). That
+  // distinction is the whole reason this two-arm case still exists.
   it("marks a received row that ALSO rides a place the friend shared", async () => {
     // A place of bob's, shared with alice.
     const place = await request(API_URL)
@@ -220,29 +229,37 @@ describe("GET /friends/:id/shares — the audit surface", () => {
       .set(as(BOB_SUB))
       .send({ sharedWithUserId: ALICE_ID });
 
-    // A waypoint LINKED to it, shared directly as well — the two-arm case.
+    // A route LINKED to it, shared directly as well — the two-arm case.
     const linked = await request(API_URL)
-      .post("/waypoints")
+      .post("/routes")
       .set(as(BOB_SUB))
       .send({
-        name: "friend-shares-linked-wp",
-        latitude: -33.571,
-        longitude: 150.391,
-        placeIds: [placeId],
+        name: "friend-shares-linked-route",
+        placeId,
+        points: [
+          [150.391, -33.571],
+          [150.392, -33.572],
+        ],
       });
     expect(linked.status).toBe(201);
     // ...and one linked to nothing, shared the same way.
     const loose = await request(API_URL)
-      .post("/waypoints")
+      .post("/routes")
       .set(as(BOB_SUB))
-      .send({ name: "friend-shares-loose-wp", latitude: -33.572, longitude: 150.392 });
+      .send({
+        name: "friend-shares-loose-route",
+        points: [
+          [150.393, -33.573],
+          [150.394, -33.574],
+        ],
+      });
     expect(loose.status).toBe(201);
 
     for (const id of [linked.body.id, loose.body.id]) {
       await request(API_URL)
         .post("/shares")
         .set(as(BOB_SUB))
-        .send({ entityType: "waypoint", entityId: id, sharedWithUserId: ALICE_ID });
+        .send({ entityType: "route", entityId: id, sharedWithUserId: ALICE_ID });
     }
 
     const res = await request(API_URL)
@@ -257,6 +274,14 @@ describe("GET /friends/:id/shares — the audit surface", () => {
     // by accident — a client reads it to decide whether to offer Remove at all.
     expect(looseRow).toBeTruthy();
     expect(looseRow?.alsoViaPlace).toBeUndefined();
+
+    // TEARDOWN, and it is not optional. Everything this test created is
+    // SHARED bob→alice, so leaving it behind changes the seed baseline the
+    // exact-set assertions above depend on — the file then passes on a fresh
+    // seed and fails on the second run, which is how this arrived.
+    await request(API_URL).delete(`/routes/${linked.body.id as string}`).set(as(BOB_SUB));
+    await request(API_URL).delete(`/routes/${loose.body.id as string}`).set(as(BOB_SUB));
+    await request(API_URL).delete(`/places/${placeId}`).set(as(BOB_SUB));
   });
 
   // Privacy rule: /friends never returns email. This surface joins shares to

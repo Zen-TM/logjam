@@ -44,9 +44,7 @@ import {
   validatePlacePayload,
   type TripLogCustomFieldDef,
   validateRoutePayload,
-  normalizeWaypointPlaceIds,
-  normalizeWaypointTags,
-  validateWaypointPayload,
+  canonicalLinkPair,
   parseRouteColor,
   parseRoutePoints,
   pickNextTrackColor,
@@ -62,7 +60,7 @@ import {
   serializeTrip,
   tripPlacesInclude,
 } from "./tripLogsGlobal";
-import { validatePlaceTextFields } from "./places";
+import { normalizePlaceTagsOrThrow, validatePlaceTextFields } from "./places";
 import {
   assertValidDef,
   createFieldDef,
@@ -73,7 +71,7 @@ import { deletePlacesCascade, deleteTripsCascade } from "../lib/bulkDelete";
 import {
   directShareRevokeTombstones,
   routeDeleteTombstones,
-  waypointDeleteTombstones,
+  placeLinkDeleteTombstones,
   placeTypeDeleteTombstones,
   writeTombstones,
 } from "../lib/syncTombstones";
@@ -83,14 +81,6 @@ import {
   parseAnchorsOrNull,
   resolveRoutePlaceId,
 } from "../lib/routeLink";
-import {
-  applyWaypointPlaceLinks,
-  resolveWaypointPlaceIds,
-  serializeOwnWaypoint,
-  serializeWaypointFor,
-  snapshotWaypointVisibility,
-  waypointInclude as waypointSyncInclude,
-} from "../lib/waypointLink";
 import {
   deleteSharesFor,
   directlySharedIds,
@@ -215,8 +205,8 @@ router.get(
           placeTypes: [],
           customFieldDefs: [],
           places: [],
+          placeLinks: [],
           tripLogs: [],
-          waypoints: [],
           routes: [],
           media: [],
           placeShares: [],
@@ -243,10 +233,7 @@ router.get(
     // Direct per-item shares — the second, independent source of visibility
     // (lib/shareAccess.ts). Share.entityId is polymorphic so there is no
     // relation filter to express this with; the ids come back as a set.
-    const [directWaypointIds, directRouteIds] = await Promise.all([
-      directlySharedIds(user.id, "waypoint"),
-      directlySharedIds(user.id, "route"),
-    ]);
+    const directRouteIds = await directlySharedIds(user.id, "route");
 
     // Generic budget-fill step: fetch up to remaining+1 rows for one entity,
     // truncate, record the keyset when the entity didn't drain. Entities run
@@ -390,6 +377,25 @@ router.get(
       );
     }
 
+    // A link is OWNER-PRIVATE: both its endpoints belong to `ownerId` (asserted
+    // server-side on create), so filtering to the caller's own rows IS the
+    // both-endpoints-visible rule of §2.5, expressed without a two-hop join on
+    // every page. A sharee gets no links at all — which is the point: they must
+    // never learn the owner also filed that carpark under three places they
+    // cannot see.
+    const placeLinks = await fill(
+      "placeLinks",
+      (after, take) =>
+        prisma.placeLink.findMany({
+          where: {
+            AND: [{ ownerId: user.id }, keysetWhere("updatedAt", since, after)],
+          },
+          orderBy: [{ updatedAt: "asc" }, { id: "asc" }],
+          take,
+        }),
+      (row) => row.updatedAt,
+    );
+
     const tripLogs = await fill(
       "tripLogs",
       (after, take) =>
@@ -400,37 +406,6 @@ router.get(
           orderBy: [{ updatedAt: "asc" }, { id: "asc" }],
           take,
           include: tripPlacesInclude,
-        }),
-      (row) => row.updatedAt,
-    );
-
-    // Own waypoints, waypoints LINKED to a place shared with me (the same
-    // visibility place-level media and linked routes have), and waypoints
-    // shared with me DIRECTLY. An unlinked, unshared waypoint of another owner
-    // can never match.
-    const waypoints = await fill(
-      "waypoints",
-      (after, take) =>
-        prisma.waypoint.findMany({
-          where: {
-            AND: [
-              {
-                OR: [
-                  { ownerId: user.id },
-                  {
-                    placeLinks: {
-                      some: { placeId: { in: sharedPlaceIds } },
-                    },
-                  },
-                  { id: { in: directWaypointIds } },
-                ],
-              },
-              keysetWhere("updatedAt", since, after),
-            ],
-          },
-          orderBy: [{ updatedAt: "asc" }, { id: "asc" }],
-          take,
-          include: waypointSyncInclude,
         }),
       (row) => row.updatedAt,
     );
@@ -615,8 +590,8 @@ router.get(
           placeTypes: placeTypes.length,
           customFieldDefs: customFieldDefs.length,
           places: places.length,
+          placeLinks: placeLinks.length,
           tripLogs: tripLogs.length,
-          waypoints: waypoints.length,
           routes: routes.length,
           media: media.length,
           placeShares: placeShares.length,
@@ -631,22 +606,16 @@ router.get(
     // rather than one per row. Scoped to OWNED ids at the call site: a share
     // count is owner-private derived cardinality (root CLAUDE.md), so a
     // recipient's copy of a row must not carry one.
-    const [waypointShareCounts, routeShareCounts] = await Promise.all([
-      shareCountsFor(
-        "waypoint",
-        waypoints.filter((row) => row.ownerId === user.id).map((row) => row.id),
-      ),
-      shareCountsFor(
-        "route",
-        routes.filter((row) => row.ownerId === user.id).map((row) => row.id),
-      ),
-    ]);
+    const routeShareCounts = await shareCountsFor(
+      "route",
+      routes.filter((row) => row.ownerId === user.id).map((row) => row.id),
+    );
 
     // Ids delivered as live rows in this same page, by tombstone entityType.
     const liveIds = new Map<string, Set<string>>([
       ["place", new Set(places.map((row) => row.id))],
       ["tripLog", new Set(tripLogs.map((row) => row.id))],
-      ["waypoint", new Set(waypoints.map((row) => row.id))],
+      ["placeLink", new Set(placeLinks.map((row) => row.id))],
       ["route", new Set(routes.map((row) => row.id))],
       ["media", new Set(media.map((row) => row.id))],
       ["placeShare", new Set(placeShares.map((row) => row.id))],
@@ -664,19 +633,10 @@ router.get(
         placeTypes,
         customFieldDefs,
         places: places.map((place) => serializePlace(place, user.id, sharedDefsByType)),
+        // No syncRole and no sharedCount: a link is owner-private, so every row
+        // here is the caller's own and neither field would ever vary.
+        placeLinks,
         tripLogs: tripLogs.map(serializeTrip),
-        // syncRole tells the client whether this is its own waypoint or one
-        // seen through a place share — a 'shared' waypoint is read-only there.
-        // placeIds is SCOPED: a sharee given the carpark must not learn which
-        // other places the owner filed it under.
-        waypoints: waypoints.map((waypoint) =>
-          serializeWaypointFor(
-            waypoint,
-            user.id,
-            new Set(sharedPlaceIds),
-            waypointShareCounts,
-          ),
-        ),
         // Geometry travels INLINE (no blob leg). syncRole tells the client
         // whether this is its own route or one seen through a place share —
         // a 'shared' route is read-only there.
@@ -685,8 +645,8 @@ router.get(
           return {
             syncRole: isOwner ? "owner" : "shared",
             ...route,
-            // Owner-only, for the reason serializeWaypointFor states: the
-            // fan-out of a share is owner-private derived cardinality.
+            // Owner-only: the fan-out of a share is owner-private derived
+            // cardinality (root CLAUDE.md).
             ...(isOwner
               ? { sharedCount: routeShareCounts.get(route.id) ?? 0 }
               : {}),
@@ -775,6 +735,12 @@ export const PLACE_FIELDS = new Set([
   "placeTypeId",
   "notes",
   "fieldValues",
+  // Folded in from WAYPOINT_FIELDS: every waypoint is a place now, and the two
+  // columns it carried that a canyon did not came with it. `symbol` did NOT —
+  // the icon is the place TYPE's, and mobile's waypointSymbol.ts said outright
+  // that nothing ever wrote the column.
+  "elevation",
+  "tags",
 ]);
 const TRIP_FIELDS = new Set([
   "date",
@@ -783,23 +749,6 @@ const TRIP_FIELDS = new Set([
   "notes",
   "customFields",
   "placeIds",
-]);
-const WAYPOINT_FIELDS = new Set([
-  "name",
-  "latitude",
-  "longitude",
-  "elevation",
-  "symbol",
-  "notes",
-  "tags",
-  "placeIds",
-  // Legacy single-link field from before waypoints went many-to-many. Still
-  // accepted because an outbox op can outlive the client that queued it: a
-  // phone that queued a waypoint offline, then took the app update before it
-  // ever regained signal, would otherwise have that op REJECTED on the first
-  // flush and land the user in the sync-issues shelf for a rename they made in
-  // a gorge. Normalised into placeIds below; never written.
-  "placeId",
 ]);
 // `color` is client-settable, but only to a value from TRACK_COLORS (see
 // parseRouteColor): routes share one palette with legacy track media so the map
@@ -997,6 +946,11 @@ async function applyPlaceOp(userId: string, op: PushOp): Promise<PushOpResult> {
         latitude: fields.latitude as number,
         longitude: fields.longitude as number,
         notes: (fields.notes as string | null | undefined) ?? null,
+        elevation: (fields.elevation as number | null | undefined) ?? null,
+        // Normalised, never taken as sent: `validatePlacePayload` has already
+        // refused a malformed list, and this is the one place the trimmed,
+        // deduped form is produced.
+        tags: normalizePlaceTagsOrThrow(fields.tags) ?? [],
         fieldValues: asFieldValues(fields.fieldValues) as Prisma.InputJsonValue,
       },
     });
@@ -1046,6 +1000,12 @@ async function applyPlaceOp(userId: string, op: PushOp): Promise<PushOpResult> {
       }),
       ...(fields.placeTypeId !== undefined && { placeTypeId: typeId }),
       ...(fields.notes !== undefined && { notes: fields.notes as string | null }),
+      ...(fields.elevation !== undefined && {
+        elevation: fields.elevation as number | null,
+      }),
+      ...(fields.tags !== undefined && {
+        tags: normalizePlaceTagsOrThrow(fields.tags) ?? [],
+      }),
       ...(fields.fieldValues !== undefined && {
         fieldValues: asFieldValues(fields.fieldValues) as Prisma.InputJsonValue,
       }),
@@ -1197,161 +1157,83 @@ async function applyTripOp(userId: string, op: PushOp): Promise<PushOpResult> {
     : { opId: op.opId, status: "applied", row: serializeTrip(updated) };
 }
 
-async function applyWaypointOp(
+// A LINK op carries no fields to edit — `create` names its two endpoints,
+// `delete` names the link id, and that is the whole vocabulary (there is no
+// `update` in SYNC_PUSH_OPS_BY_ENTITY, because a fieldless row has nothing to
+// merge). The pair is canonicalised here as well as on the client: two devices
+// linking the same two places from opposite ends must collide on the unique
+// index rather than store the link twice.
+const PLACE_LINK_FIELDS = new Set(["aPlaceId", "bPlaceId"]);
+
+async function applyPlaceLinkOp(
   userId: string,
   op: PushOp,
 ): Promise<PushOpResult> {
   if (op.op === "delete") {
-    const waypoint = await prisma.waypoint.findUnique({ where: { id: op.id } });
-    // Non-owner (including a sharee, who can see it but not change it) gets the
-    // same alreadyApplied as a missing row — no existence oracle.
-    if (!waypoint || waypoint.ownerId !== userId) {
+    const link = await prisma.placeLink.findUnique({ where: { id: op.id } });
+    // Non-owner gets the same alreadyApplied as a missing row — no existence
+    // oracle. (Nobody but the owner can see a link at all, so this is the
+    // stranger case only.)
+    if (!link || link.ownerId !== userId) {
       return { opId: op.opId, status: "alreadyApplied" };
     }
     await prisma.$transaction(async (tx) => {
-      const viewers = await snapshotWaypointVisibility(tx, [op.id]);
-      // Direct recipients likewise — read before the rows go, so the tombstone
-      // fan-out and the Share cleanup match the REST DELETE (waypoints.ts).
-      const directIds = await directShareeIds(tx, "waypoint", op.id);
-      await deleteSharesFor(tx, "waypoint", [op.id]);
-      await tx.waypoint.delete({ where: { id: op.id } });
-      await writeTombstones(tx, [
-        ...waypointDeleteTombstones({
-          ownerId: userId,
-          waypointId: op.id,
-          shareeIds: [...(viewers.get(op.id) ?? [])],
-        }),
-        ...directShareRevokeTombstones({
-          entityType: "waypoint",
-          entityId: op.id,
-          userIds: directIds,
-        }),
-      ]);
+      await tx.placeLink.delete({ where: { id: op.id } });
+      // Owner-only fan-out: a link grants no visibility, so no sharee ever held
+      // this row. The owner's OTHER devices still need to be told.
+      await writeTombstones(
+        tx,
+        placeLinkDeleteTombstones({ ownerId: userId, linkIds: [op.id] }),
+      );
     });
     return { opId: op.opId, status: "applied" };
   }
 
   const fields = op.fields ?? {};
-  assertKnownFields(fields, WAYPOINT_FIELDS);
-  const validationError = validateWaypointPayload(fields, {
-    requireCore: op.op === "create",
-  });
-  if (validationError) throw new AppError(400, validationError);
-
-  // Owner-scoped association — foreign place id ≡ nonexistent (same rule as
-  // routes/waypoints.ts, which shares the resolver).
-  // A legacy op carries `placeId` (string or null) where a current one carries
-  // `placeIds`. null meant "unlink", which is the empty list.
-  const placeIdsField =
-    fields.placeIds !== undefined
-      ? fields.placeIds
-      : fields.placeId === undefined
-        ? undefined
-        : fields.placeId === null
-          ? []
-          : [fields.placeId];
-  const parsedPlaceIds = normalizeWaypointPlaceIds(placeIdsField);
-  if ("error" in parsedPlaceIds) throw new AppError(400, parsedPlaceIds.error);
-  const resolvedPlaceIds =
-    parsedPlaceIds.placeIds === undefined
-      ? undefined
-      : await resolveWaypointPlaceIds(userId, parsedPlaceIds.placeIds);
-  const parsedTags = normalizeWaypointTags(fields.tags);
-  if ("error" in parsedTags) throw new AppError(400, parsedTags.error);
-
-  if (op.op === "create") {
-    const existing = await prisma.waypoint.findUnique({
-      where: { id: op.id },
-      include: waypointSyncInclude,
-    });
-    if (existing) {
-      if (existing.ownerId !== userId)
-        throw new AppError(404, "Waypoint not found");
-      return {
-        opId: op.opId,
-        status: "alreadyApplied",
-        row: serializeOwnWaypoint(existing),
-      };
-    }
-    if (await createAlreadyTombstoned(userId, "waypoint", op.id)) {
-      return { opId: op.opId, status: "alreadyApplied" };
-    }
-    const waypoint = await prisma.waypoint.create({
-      data: {
-        id: op.id,
-        ownerId: userId,
-        name: (fields.name as string).trim(),
-        latitude: fields.latitude as number,
-        longitude: fields.longitude as number,
-        elevation: (fields.elevation as number | null | undefined) ?? null,
-        symbol: (fields.symbol as string | null | undefined) ?? null,
-        notes: (fields.notes as string | null | undefined) ?? null,
-        tags: parsedTags.tags ?? [],
-        // New row: linking can only ADD viewers, so no revocation is possible.
-        placeLinks: {
-          create: (resolvedPlaceIds ?? []).map((placeId) => ({ placeId })),
-        },
-      },
-      include: waypointSyncInclude,
-    });
-    return {
-      opId: op.opId,
-      status: "applied",
-      row: serializeOwnWaypoint(waypoint),
-    };
+  assertKnownFields(fields, PLACE_LINK_FIELDS);
+  const first = fields.aPlaceId;
+  const second = fields.bPlaceId;
+  if (typeof first !== "string" || typeof second !== "string") {
+    throw new AppError(400, "aPlaceId and bPlaceId are required");
   }
+  if (first === second) {
+    throw new AppError(400, "A place cannot be linked to itself");
+  }
+  const { aPlaceId, bPlaceId } = canonicalLinkPair(first, second);
 
-  // update
-  const waypoint = await prisma.waypoint.findUnique({ where: { id: op.id } });
-  // A sharee may see this waypoint but never edit it — same 404 as a stranger,
-  // so the status is not an existence oracle either way.
-  if (!waypoint || waypoint.ownerId !== userId)
-    throw new AppError(404, "Waypoint not found");
-  const conflicts = conflictReceipts(
-    op.baseUpdatedAt,
-    waypoint.updatedAt,
-    fields,
-    waypoint as unknown as Record<string, unknown>,
-  );
-  const updated = await prisma.$transaction(async (tx) => {
-    // Same transaction as the field update: a link change is a visibility
-    // change and its tombstones must not be able to land without it.
-    if (resolvedPlaceIds !== undefined) {
-      await applyWaypointPlaceLinks(tx, {
-        waypointId: op.id,
-        placeIds: resolvedPlaceIds,
-      });
-    }
-    return tx.waypoint.update({
-      where: { id: op.id },
-      data: {
-        ...(fields.name !== undefined && {
-          name: (fields.name as string).trim(),
-        }),
-        ...(fields.latitude !== undefined && {
-          latitude: fields.latitude as number,
-        }),
-        ...(fields.longitude !== undefined && {
-          longitude: fields.longitude as number,
-        }),
-        ...(fields.elevation !== undefined && {
-          elevation: fields.elevation as number | null,
-        }),
-        ...(fields.symbol !== undefined && {
-          symbol: fields.symbol as string | null,
-        }),
-        ...(fields.notes !== undefined && {
-          notes: fields.notes as string | null,
-        }),
-        ...(parsedTags.tags !== undefined && { tags: parsedTags.tags }),
-      },
-      include: waypointSyncInclude,
-    });
+  // BOTH endpoints must be the caller's own. This is the assertion that makes
+  // `ownerId` trustworthy everywhere else — the delta filter, the tombstone
+  // fan-out and the "a link grants no visibility" rule all read it and none of
+  // them re-checks the endpoints. A foreign or nonexistent place id is the same
+  // 404 either way (404-not-403): an offline client must not be able to probe
+  // for place ids by watching which links the server accepts.
+  const owned = await prisma.place.count({
+    where: { id: { in: [aPlaceId, bPlaceId] }, ownerId: userId },
   });
-  const row = serializeOwnWaypoint(updated);
-  return conflicts.length > 0
-    ? { opId: op.opId, status: "appliedWithConflict", row, conflicts }
-    : { opId: op.opId, status: "applied", row };
+  if (owned !== 2) throw new AppError(404, "Place not found");
+
+  const existing = await prisma.placeLink.findUnique({ where: { id: op.id } });
+  if (existing) {
+    if (existing.ownerId !== userId) throw new AppError(404, "Link not found");
+    return { opId: op.opId, status: "alreadyApplied", row: existing };
+  }
+  if (await createAlreadyTombstoned(userId, "placeLink", op.id)) {
+    return { opId: op.opId, status: "alreadyApplied" };
+  }
+  // The same pair from a second device carries a DIFFERENT client-minted id, so
+  // the unique index is the only thing that stops a duplicate. Return the row
+  // that won rather than an error: both devices asked for the same state and
+  // they now both have it.
+  const duplicate = await prisma.placeLink.findUnique({
+    where: { ownerId_aPlaceId_bPlaceId: { ownerId: userId, aPlaceId, bPlaceId } },
+  });
+  if (duplicate) {
+    return { opId: op.opId, status: "alreadyApplied", row: duplicate };
+  }
+  const link = await prisma.placeLink.create({
+    data: { id: op.id, ownerId: userId, aPlaceId, bPlaceId },
+  });
+  return { opId: op.opId, status: "applied", row: link };
 }
 
 async function applyRouteOp(
@@ -1835,8 +1717,8 @@ router.post(
           case "tripLog":
             result = await applyTripOp(user.id, op);
             break;
-          case "waypoint":
-            result = await applyWaypointOp(user.id, op);
+          case "placeLink":
+            result = await applyPlaceLinkOp(user.id, op);
             break;
           case "route":
             result = await applyRouteOp(user.id, op);

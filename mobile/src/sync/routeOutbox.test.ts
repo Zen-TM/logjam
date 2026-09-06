@@ -216,9 +216,9 @@ describe("UPDATE_TARGETS column maps vs the schema declaration", () => {
   it("actually inspects every map", () => {
     // A totality guard that silently iterated nothing would pass forever.
     const mapped = Object.values(UPDATE_TARGETS).filter((target) => target !== null);
-    // place, placeType, tripLog, waypoint, route, customFieldDef —
-    // `notification` is the one null (a markRead materialises nothing).
-    expect(mapped).toHaveLength(6);
+    // place, placeType, tripLog, route, customFieldDef — `notification` and
+    // `placeLink` are the nulls (a markRead materialises nothing).
+    expect(mapped).toHaveLength(5);
     for (const target of mapped) {
       expect(Object.keys(target!.columns).length).toBeGreaterThan(0);
     }

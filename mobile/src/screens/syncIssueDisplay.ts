@@ -26,9 +26,13 @@ import { relativeTime } from "./syncHealth";
  */
 const ENTITY_NOUN: Record<string, string> = {
   place: "place",
+  placeType: "place type",
   tripLog: "trip",
-  waypoint: "waypoint",
+  // A LINK has no name of its own, so it is only ever the fallback subject
+  // ("Couldn't delete a link between places") — which is exactly what it is.
+  placeLink: "link between places",
   route: "route",
+  customFieldDef: "field",
   notification: "notification",
   media: "photo or file",
 };
@@ -180,18 +184,17 @@ export function opAdvice(op: ParkedOp): IssueAdvice {
  * subtitle "Saves what you typed as a new one" — which for a place or a trip
  * was a button that deleted the change instead.
  *
- * Waypoints only, and only with a position: a waypoint's op carries its whole
- * payload, and no other entity has a create surface this screen can reach.
+ * Places only. A CREATE op carries its whole payload; an UPDATE carries only
+ * what it dirtied, so that rebuild needs the phone's own copy of the row.
+ * (A link is not recreatable at all — it has no payload of its own and its
+ * endpoints may be gone.)
  */
 export function canRecreate(op: ParkedOp): boolean {
   if (op.state !== "deadRemote") return false;
-  // A waypoint's op carries its whole payload, so the op alone rebuilds it.
-  if (op.entity === "waypoint") {
-    return typeof op.fields?.latitude === "number" && typeof op.fields?.longitude === "number";
-  }
   // A place UPDATE carries only what it dirtied — never coordinates — so the
   // rebuild needs the phone's own copy of the row, which survives only until
-  // the next delta pull applies the tombstone.
+  // the next delta pull applies the tombstone. A create op carries everything,
+  // and either way the mirror row is what `recreateFromDeadRemote` reads.
   if (op.entity === "place") return op.hasLocalRow;
   return false;
 }

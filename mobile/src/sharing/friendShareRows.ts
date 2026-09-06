@@ -40,13 +40,12 @@ export type FriendShareDirection = "theySee" | "youSee";
 /**
  * The glyph per kind. Feather names, spelled as literals rather than imported
  * from `@expo/vector-icons`, so this module stays free of the RN runtime — and
- * the same five glyphs the rest of the app already uses for these kinds
- * (`map-pin` a place, `flag` a waypoint, `edit-3` a route, `layers` a LiDAR
- * topo, `file-text` a GeoPDF).
+ * the same four glyphs the rest of the app already uses for these kinds
+ * (`map-pin` a place, `edit-3` a route, `layers` a LiDAR topo, `file-text` a
+ * GeoPDF).
  */
 export const SHARE_KIND_ICON = {
   place: "map-pin",
-  waypoint: "flag",
   route: "edit-3",
   topoJob: "layers",
   geoPdfJob: "file-text",

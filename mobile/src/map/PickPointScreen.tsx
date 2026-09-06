@@ -1,7 +1,7 @@
 // "Select on map" — put a marker where the thing is, and hand the coordinates
 // back to the form that asked.
 //
-// TWO forms ask: adding a place (Places tab) and typing a waypoint from a
+// The form that asks: adding a place (Places tab) from a
 // coordinate (Saved tab). One screen, because "where is it" is the same
 // question and a second copy is how the two would end up with different
 // basemaps and different reference layers.
@@ -20,7 +20,7 @@
 //     topo, a creek junction on the imagery and a track on the vector map are
 //     three different ways to be sure, and switching between them is the whole
 //     reason this screen is not just a coordinate field.
-//   Your own things — places, waypoints and ways, all on. They are
+//   Your own things — places and ways, all on. They are
 //     the reference that answers "is this the one I already have?" and "does
 //     this line go where I think it does".
 //   NOT GeoPDFs, and not the topo overlay band. A GeoPDF is an opaque sheet of
@@ -50,11 +50,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { config } from "../config";
 import { fontSize, fontWeight, radius, scrim, spacing, theme } from "../theme";
 import { Button } from "../ui";
-import { useMirrorPlaces, useMirrorRoutes, useMirrorWaypoints } from "../sync/useSyncQueries";
+import { useMirrorPlaces, useMirrorRoutes } from "../sync/useSyncQueries";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
 import { useConnectivity } from "./connectivity";
 import { useTracks } from "../tracks/useTracks";
-import { waypointSymbol } from "./waypointSymbol";
 import { BasemapThumb } from "./BasemapThumb";
 import { MOBILE_BASEMAPS } from "./basemapMeta";
 import { readBasemapPreference } from "./basemapPreference";
@@ -75,7 +74,6 @@ import {
   type ResolveContext,
 } from "./sourceResolver";
 import { TrackMapLayers } from "../tracks/TrackMapLayers";
-import type { Waypoint } from "../tracks/tracksDb";
 
 /** The selection ring's width, and the amount its radius has to exceed the
  *  thumb's for the two curves to sit concentric. */
@@ -93,7 +91,7 @@ export type PickedPoint = { latitude: number; longitude: number };
 export function PickPointScreen({
   initialPoint,
   subject,
-  hideWaypointId = null,
+  hidePlaceId = null,
   onCancel,
   onConfirm,
 }: {
@@ -105,16 +103,16 @@ export function PickPointScreen({
    * thing matters because the screen is reached from two different forms and
    * arrives with no other context on it.
    */
-  subject: "place" | "waypoint";
+  subject: "place";
   /**
-   * The waypoint being MOVED, which must not draw itself.
+   * The place being MOVED, which must not draw itself.
    *
    * Its pin sits exactly where the dropped point starts, so leaving it in put a
-   * labelled waypoint under the cursor that does not move with it — two markers
-   * for one thing, the stale one wearing the name. Every OTHER waypoint stays:
+   * labelled pin under the cursor that does not move with it — two markers
+   * for one thing, the stale one wearing the name. Every OTHER place stays:
    * "not on top of the one next to it" is half of why this screen exists.
    */
-  hideWaypointId?: string | null;
+  hidePlaceId?: string | null;
   onCancel: () => void;
   onConfirm: (point: PickedPoint) => void;
 }) {
@@ -160,9 +158,11 @@ export function PickPointScreen({
   const ownedFc = useMemo(
     () =>
       toPlaceFeatureCollection(
-        (places.data ?? []).filter((place) => place.syncRole === "owner"),
+        (places.data ?? []).filter(
+          (place) => place.syncRole === "owner" && place.id !== hidePlaceId,
+        ),
       ),
-    [places.data],
+    [hidePlaceId, places.data],
   );
   const sharedFc = useMemo(
     () =>
@@ -172,21 +172,6 @@ export function PickPointScreen({
     [places.data],
   );
 
-  const mirrorWaypoints = useMirrorWaypoints();
-  const waypoints: Waypoint[] = useMemo(
-    () =>
-      (mirrorWaypoints.data ?? [])
-        .filter((wp) => wp.id !== hideWaypointId)
-        .map((wp) => ({
-          id: wp.id,
-          name: wp.name,
-          lon: wp.longitude,
-          lat: wp.latitude,
-          createdAt: wp.createdAt,
-          color: waypointSymbol(wp).color,
-        })),
-    [hideWaypointId, mirrorWaypoints.data],
-  );
   const { tracks } = useTracks();
   const routes = useMirrorRoutes();
 
@@ -260,10 +245,8 @@ export function PickPointScreen({
             on this screen means "the place is there". */}
         <TrackMapLayers
           tracks={tracks}
-          waypoints={waypoints}
           liveCoord={null}
           showTracks
-          onWaypointPress={noop}
           onTrackPress={noop}
         />
         <RoutesLayer routes={routes.data ?? EMPTY_ROUTES} hiddenRouteId={null} />

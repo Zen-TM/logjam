@@ -15,12 +15,12 @@
 //   4. tombstone the recipient — but ONLY where no other path to the row
 //      survives.
 //
-// STEP 4 IS THE WHOLE REASON THIS IS NOT A `deleteMany`. A waypoint or route
-// can be visible for two unrelated reasons (lib/shareAccess.ts): a direct
-// `Share` row, or a link to a place shared with that recipient. Revoking the
-// direct arm leaves the place arm standing, so tombstoning unconditionally
-// would tell the recipient to forget a row the next delta pull re-delivers —
-// and the row would flicker out and back on every sweep.
+// STEP 4 IS THE WHOLE REASON THIS IS NOT A `deleteMany`. A route can be visible
+// for two unrelated reasons (lib/shareAccess.ts): a direct `Share` row, or its
+// `placeId` pointing at a place shared with that recipient. Revoking the direct
+// arm leaves the place arm standing, so tombstoning unconditionally would tell
+// the recipient to forget a row the next delta pull re-delivers — and the row
+// would flicker out and back on every sweep.
 //
 // Jobs (topo, GeoPDF) are not delta-synced at all: their lists refetch, so they
 // get steps 1-2 and nothing else.
@@ -45,11 +45,14 @@ export type DirectShareRevocation = {
   sharedWithId: string;
 };
 
-/** The two kinds that ride delta sync, and therefore need a tombstone. */
+/** The one kind that rides delta sync, and therefore needs a tombstone. Still a
+ * function rather than an `=== "route"` at each site: it is the join between
+ * two vocabularies that grow independently (what can be shared directly, what
+ * syncs), and a new member of both must light up all three call sites at once. */
 export function syncedEntityType(
   entityType: SharableEntityType,
-): "waypoint" | "route" | null {
-  return entityType === "waypoint" || entityType === "route" ? entityType : null;
+): "route" | null {
+  return entityType === "route" ? entityType : null;
 }
 
 /** The key `stillVisible` is read by — one revocation, one entry. */
@@ -61,8 +64,8 @@ export function revocationKey(revocation: DirectShareRevocation): string {
  * Which revocations must tell the recipient to forget the row.
  *
  * Pure, so the branch that matters is testable without a database: a job is
- * never tombstoned (it is not delta-synced), and a waypoint or route is
- * tombstoned only for a recipient left with NO surviving path to it.
+ * never tombstoned (it is not delta-synced), and a route is tombstoned only for
+ * a recipient left with NO surviving path to it.
  */
 export function revocationsNeedingTombstones(
   revocations: DirectShareRevocation[],
@@ -90,12 +93,7 @@ export async function touchSharedForDelta(
   entityIds: string[],
 ): Promise<void> {
   if (entityIds.length === 0) return;
-  if (entityType === "waypoint") {
-    await tx.waypoint.updateMany({
-      where: { id: { in: entityIds } },
-      data: { updatedAt: new Date() },
-    });
-  } else if (entityType === "route") {
+  if (entityType === "route") {
     await tx.route.updateMany({
       where: { id: { in: entityIds } },
       data: { updatedAt: new Date() },

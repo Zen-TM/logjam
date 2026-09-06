@@ -4,7 +4,7 @@
 // A notification is a report about something that now exists somewhere else in
 // the app, and until now only one kind said where: a place share opened the
 // place. Everything else — a finished topo, a GeoPDF, a file a friend sent and
-// you kept, a waypoint someone shared — left the user to go and find the thing
+// you kept, a route someone shared — left the user to go and find the thing
 // themselves, in a tab with seven filters.
 //
 // So each row's ⋯ sheet offers one more verb: go to the tab, on the right

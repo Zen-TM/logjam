@@ -10,8 +10,7 @@ import {
   routeUnlinkTombstones,
   shareRevokeTombstones,
   tripDeleteTombstones,
-  waypointDeleteTombstones,
-  waypointRevokeTombstones,
+  placeLinkDeleteTombstones,
   type TombstoneRow,
 } from "./syncTombstones";
 
@@ -262,41 +261,18 @@ describe("friendshipDeleteTombstones", () => {
   });
 });
 
-describe("waypointDeleteTombstones", () => {
-  it("owner-only for an unlinked waypoint", () => {
+describe("placeLinkDeleteTombstones", () => {
+  it("is owner-only — a link grants no visibility, so no sharee holds one", () => {
     expect(
-      waypointDeleteTombstones({
-        ownerId: "alice",
-        waypointId: "w1",
-        shareeIds: [],
-      }),
-    ).toEqual([{ userId: "alice", entityType: "waypoint", entityId: "w1" }]);
-  });
-
-  it("fans out to everyone who saw it through a place share", () => {
-    expect(
-      waypointDeleteTombstones({
-        ownerId: "alice",
-        waypointId: "w1",
-        shareeIds: ["bob", "carol"],
-      }),
+      placeLinkDeleteTombstones({ ownerId: "alice", linkIds: ["l1", "l2"] }),
     ).toEqual([
-      { userId: "alice", entityType: "waypoint", entityId: "w1" },
-      { userId: "bob", entityType: "waypoint", entityId: "w1" },
-      { userId: "carol", entityType: "waypoint", entityId: "w1" },
+      { userId: "alice", entityType: "placeLink", entityId: "l1" },
+      { userId: "alice", entityType: "placeLink", entityId: "l2" },
     ]);
   });
-});
 
-describe("waypointRevokeTombstones", () => {
-  it("names only the losers — never the owner", () => {
-    expect(
-      waypointRevokeTombstones({ waypointId: "w1", userIds: ["bob"] }),
-    ).toEqual([{ userId: "bob", entityType: "waypoint", entityId: "w1" }]);
-  });
-
-  it("is empty when the change cost nobody their last path", () => {
-    expect(waypointRevokeTombstones({ waypointId: "w1", userIds: [] })).toEqual(
+  it("is empty for a place that was linked to nothing", () => {
+    expect(placeLinkDeleteTombstones({ ownerId: "alice", linkIds: [] })).toEqual(
       [],
     );
   });
@@ -304,7 +280,7 @@ describe("waypointRevokeTombstones", () => {
 
 // Direct sharing's revocation fan-out. The trap this guards: revoking a direct
 // share deletes NOTHING the owner can see, so without these rows the
-// recipient's mirror keeps the waypoint/route forever.
+// recipient's mirror keeps the route forever.
 describe("directShareRevokeTombstones", () => {
   it("tombstones each losing user, and never the owner", () => {
     expect(
@@ -317,16 +293,6 @@ describe("directShareRevokeTombstones", () => {
       { userId: "u1", entityType: "route", entityId: "rt-1" },
       { userId: "u2", entityType: "route", entityId: "rt-1" },
     ]);
-  });
-
-  it("carries the entity type through, so a waypoint isn't tombstoned as a route", () => {
-    expect(
-      directShareRevokeTombstones({
-        entityType: "waypoint",
-        entityId: "wp-1",
-        userIds: ["u1"],
-      }),
-    ).toEqual([{ userId: "u1", entityType: "waypoint", entityId: "wp-1" }]);
   });
 
   it("is empty when nothing was shared — no rows, no writeTombstones call", () => {
@@ -354,16 +320,16 @@ describe("accountDeleteTombstones", () => {
     placeInheritedOut: [],
   };
 
-  it("tombstones direct recipients of my waypoints and routes", () => {
+  it("tombstones direct recipients of my routes", () => {
     const rows = accountDeleteTombstones({
       ...base,
       directSharesOut: [
         { entityType: "route" as const, entityId: "rt-1", sharedWithId: "bob" },
-        { entityType: "waypoint" as const, entityId: "wp-1", sharedWithId: "carol" },
+        { entityType: "route" as const, entityId: "rt-2", sharedWithId: "carol" },
       ],
     });
     expect(has(rows, { userId: "bob", entityType: "route", entityId: "rt-1" })).toBe(true);
-    expect(has(rows, { userId: "carol", entityType: "waypoint", entityId: "wp-1" })).toBe(true);
+    expect(has(rows, { userId: "carol", entityType: "route", entityId: "rt-2" })).toBe(true);
   });
 
   it("never tombstones the departing user — their own log goes with them", () => {
@@ -406,20 +372,19 @@ describe("accountDeleteTombstones", () => {
     ]);
   });
 
-  // PRIV-107: the place tombstone does NOT imply the waypoints and routes a
-  // sharee could reach through that place. Account delete HARD-deletes both
-  // tables, so every current viewer must be told — the single-place delete
-  // path fans these out explicitly and this one has to match.
-  it("tombstones place sharees for waypoints and routes they saw through the place", () => {
+  // PRIV-107: the place tombstone does NOT imply the ROUTES a sharee could
+  // reach through that place (via Route.placeId — a foreign key, which is why
+  // it survived the waypoint fold). Account delete hard-deletes them, so every
+  // current viewer must be told — the single-place delete path fans these out
+  // explicitly and this one has to match.
+  it("tombstones place sharees for routes they saw through the place", () => {
     const rows = accountDeleteTombstones({
       ...base,
       placeSharesOut: [{ placeId: "c-1", sharedWithId: "bob" }],
       placeInheritedOut: [
-        { entityType: "waypoint" as const, entityId: "wp-1", userIds: ["bob"] },
         { entityType: "route" as const, entityId: "rt-1", userIds: ["bob", "carol"] },
       ],
     });
-    expect(has(rows, { userId: "bob", entityType: "waypoint", entityId: "wp-1" })).toBe(true);
     expect(has(rows, { userId: "bob", entityType: "route", entityId: "rt-1" })).toBe(true);
     expect(has(rows, { userId: "carol", entityType: "route", entityId: "rt-1" })).toBe(true);
     // Still never the departing user.
@@ -431,7 +396,7 @@ describe("accountDeleteTombstones", () => {
       accountDeleteTombstones({
         ...base,
         placeInheritedOut: [
-          { entityType: "waypoint" as const, entityId: "wp-1", userIds: [] },
+          { entityType: "route" as const, entityId: "rt-1", userIds: [] },
         ],
       }),
     ).toEqual([]);

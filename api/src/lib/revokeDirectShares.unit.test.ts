@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { SHARABLE_ENTITY_TYPES, SYNC_ENTITY_TYPES } from "@logjam/shared";
 
 import {
   revocationKey,
@@ -7,14 +8,14 @@ import {
   type DirectShareRevocation,
 } from "./revokeDirectShares";
 
-const WAYPOINT: DirectShareRevocation = {
-  entityType: "waypoint",
-  entityId: "w1",
-  sharedWithId: "bob",
-};
 const ROUTE: DirectShareRevocation = {
   entityType: "route",
   entityId: "r1",
+  sharedWithId: "bob",
+};
+const OTHER_ROUTE: DirectShareRevocation = {
+  entityType: "route",
+  entityId: "r2",
   sharedWithId: "bob",
 };
 const TOPO: DirectShareRevocation = {
@@ -33,11 +34,10 @@ const GEO_PDF: DirectShareRevocation = {
 // on every delta pull; withholding one where no path survives leaves it in the
 // mirror forever. Both failures are invisible in a passing revoke.
 describe("revocationsNeedingTombstones", () => {
-  it("tombstones a waypoint and a route with no surviving path", () => {
-    expect(revocationsNeedingTombstones([WAYPOINT, ROUTE], new Set())).toEqual([
-      WAYPOINT,
-      ROUTE,
-    ]);
+  it("tombstones every route with no surviving path", () => {
+    expect(
+      revocationsNeedingTombstones([OTHER_ROUTE, ROUTE], new Set()),
+    ).toEqual([OTHER_ROUTE, ROUTE]);
   });
 
   // The direct arm goes, the place arm stays: the recipient still sees it
@@ -45,8 +45,8 @@ describe("revocationsNeedingTombstones", () => {
   it("skips a row the recipient still sees through a shared place", () => {
     expect(
       revocationsNeedingTombstones(
-        [WAYPOINT, ROUTE],
-        new Set([revocationKey(WAYPOINT)]),
+        [OTHER_ROUTE, ROUTE],
+        new Set([revocationKey(OTHER_ROUTE)]),
       ),
     ).toEqual([ROUTE]);
   });
@@ -59,35 +59,50 @@ describe("revocationsNeedingTombstones", () => {
   });
 
   it("keys per recipient, so one friend's surviving path spares only theirs", () => {
-    const carol = { ...WAYPOINT, sharedWithId: "carol" };
+    const carol = { ...ROUTE, sharedWithId: "carol" };
     expect(
       revocationsNeedingTombstones(
-        [WAYPOINT, carol],
+        [ROUTE, carol],
         new Set([revocationKey(carol)]),
       ),
-    ).toEqual([WAYPOINT]);
+    ).toEqual([ROUTE]);
   });
 });
 
+// Read against the two vocabularies THEMSELVES rather than against a list
+// retyped here: this function is the join between "what can be shared
+// directly" and "what rides delta sync", so a kind that joins both lists and
+// not this function is exactly the drift worth catching. Asserting my own
+// constant back at myself would pass through that change untouched.
 describe("syncedEntityType", () => {
-  it("admits exactly the two delta-synced kinds", () => {
-    expect(syncedEntityType("waypoint")).toBe("waypoint");
-    expect(syncedEntityType("route")).toBe("route");
-    expect(syncedEntityType("topoJob")).toBeNull();
-    expect(syncedEntityType("geoPdfJob")).toBeNull();
+  it("admits a sharable kind exactly when delta sync carries it", () => {
+    const synced = new Set<string>(SYNC_ENTITY_TYPES);
+    for (const entityType of SHARABLE_ENTITY_TYPES) {
+      expect(syncedEntityType(entityType), entityType).toBe(
+        synced.has(entityType) ? entityType : null,
+      );
+    }
+  });
+
+  it("is not vacuous — something is sharable and synced, something is not", () => {
+    const admitted = SHARABLE_ENTITY_TYPES.filter(
+      (entityType) => syncedEntityType(entityType) !== null,
+    );
+    expect(admitted.length).toBeGreaterThan(0);
+    expect(admitted.length).toBeLessThan(SHARABLE_ENTITY_TYPES.length);
   });
 });
 
 describe("revocationKey", () => {
   it("separates the same id shared with two people", () => {
-    expect(revocationKey(WAYPOINT)).not.toBe(
-      revocationKey({ ...WAYPOINT, sharedWithId: "carol" }),
+    expect(revocationKey(ROUTE)).not.toBe(
+      revocationKey({ ...ROUTE, sharedWithId: "carol" }),
     );
   });
 
   it("separates the same id in two tables", () => {
-    expect(revocationKey({ ...WAYPOINT, entityType: "route" })).not.toBe(
-      revocationKey(WAYPOINT),
+    expect(revocationKey({ ...ROUTE, entityType: "topoJob" })).not.toBe(
+      revocationKey(ROUTE),
     );
   });
 });

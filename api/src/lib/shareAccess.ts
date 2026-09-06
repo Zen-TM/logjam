@@ -36,7 +36,6 @@ export type ShareRole = "owner" | "shared" | "none";
 
 /** Per-type "not found" text. Deliberately the same string a real miss gets. */
 const NOT_FOUND_MESSAGE: Record<SharableEntityType, string> = {
-  waypoint: "Waypoint not found",
   route: "Route not found",
   topoJob: "Topo job not found",
   geoPdfJob: "GeoPDF job not found",
@@ -67,25 +66,6 @@ async function hasDirectShare(
 }
 
 /**
- * A waypoint's role: owner, or shared either directly or through ANY place it
- * is linked to that the user can see.
- *
- * The place arm mirrors the delta-sync visibility rule in routes/sync.ts — a
- * waypoint linked to a shared place is part of that shared record. Both arms
- * live here so the two can never disagree.
- */
-export async function getWaypointRole(
-  userId: string,
-  waypoint: { id: string; ownerId: string },
-): Promise<ShareRole> {
-  if (waypoint.ownerId === userId) return "owner";
-  if (await hasDirectShare(userId, "waypoint", waypoint.id)) return "shared";
-  return (await hasPlaceInheritedAccess(userId, "waypoint", waypoint.id))
-    ? "shared"
-    : "none";
-}
-
-/**
  * A route's role: owner, or shared either directly or through the place it is
  * linked to (Route.placeId is a single nullable slot, so there is at most one
  * place to check).
@@ -102,28 +82,32 @@ export async function getRouteRole(
 }
 
 /**
- * Whether `userId` still sees a synced entity through place inheritance,
- * INDEPENDENT of any direct Share row. A waypoint or route can be visible for
- * two reasons — a direct share OR a link to a place shared with the user — and
- * revoking the direct share must not tombstone a user who keeps the place arm.
- * This is the single source of that arm, so the role helpers above and the
- * revoke path can never disagree on it.
+ * Whether `userId` still sees a ROUTE through place inheritance, INDEPENDENT of
+ * any direct Share row. A route can be visible for two reasons — a direct share
+ * OR a link to a place shared with the user — and revoking the direct share
+ * must not tombstone a user who keeps the place arm. This is the single source
+ * of that arm, so the role helper above and the revoke path cannot disagree.
+ *
+ * THE WAYPOINT ARM IS GONE, and the distinction is worth stating because
+ * getting it backwards silently strips routes from every shared place:
+ *
+ *   - A waypoint used to inherit visibility through the canyons it was LINKED
+ *     to, reachable through two of them at once, which is what made revocation
+ *     a 219-line problem (lib/waypointLink.ts, now deleted). A waypoint is a
+ *     place now and a PlaceLink grants NO visibility, so there is nothing to
+ *     inherit and nothing to revoke.
+ *   - A route reaches a sharee through `Route.placeId`, a FOREIGN KEY, not a
+ *     link. That is deliberate: the route is part of the shared record
+ *     (routes/places.ts states it), and it survives this rework unchanged.
+ *
+ * "A link grants no visibility" is a rule about LINKS. It is not a rule about
+ * foreign keys.
  */
 export async function hasPlaceInheritedAccess(
   userId: string,
-  entityType: "waypoint" | "route",
+  entityType: "route",
   entityId: string,
 ): Promise<boolean> {
-  if (entityType === "waypoint") {
-    const viaPlace = await prisma.placeWaypoint.findFirst({
-      where: {
-        waypointId: entityId,
-        place: { shares: { some: { sharedWithId: userId } } },
-      },
-      select: { waypointId: true },
-    });
-    return viaPlace != null;
-  }
   const viaPlace = await prisma.route.findFirst({
     where: {
       id: entityId,
@@ -190,15 +174,6 @@ export async function loadEntityRole(
   entityId: string,
 ): Promise<{ ownerId: string; role: ShareRole } | null> {
   switch (entityType) {
-    case "waypoint": {
-      const row = await prisma.waypoint.findUnique({
-        where: { id: entityId },
-        select: { id: true, ownerId: true },
-      });
-      return row
-        ? { ownerId: row.ownerId, role: await getWaypointRole(userId, row) }
-        : null;
-    }
     case "route": {
       const row = await prisma.route.findUnique({
         where: { id: entityId },
@@ -313,7 +288,7 @@ export async function revokeAllSharesBetween(
     await writeTombstones(
       tx,
       shares.flatMap((share) =>
-        share.entityType === "waypoint" || share.entityType === "route"
+        share.entityType === "route"
           ? directShareRevokeTombstones({
               entityType: share.entityType,
               entityId: share.entityId,
@@ -441,11 +416,11 @@ export async function shareCountsFor(
 
 /**
  * Which of these entity ids the user OWNS, for one entity type — the batch form
- * of the owner arm of `getWaypointRole` / `getRouteRole` / `getJobRole`, for the
+ * of the owner arm of `getRouteRole` / `getJobRole`, for the
  * bulk-share endpoint.
  *
  * Here rather than in the caller for the reason the whole file exists: which
- * column holds the owner (`Waypoint.ownerId` vs `TopoJob.userId`) is answered
+ * column holds the owner (`Route.ownerId` vs `TopoJob.userId`) is answered
  * once, and a bulk path that re-derived it would be the second source SEC-001
  * was about.
  *
@@ -462,24 +437,19 @@ export async function filterOwnedEntityIds(
   const where = { id: { in: entityIds } };
   const select = { id: true };
   const rows =
-    entityType === "waypoint"
-      ? await prisma.waypoint.findMany({
+    entityType === "route"
+      ? await prisma.route.findMany({
           where: { ...where, ownerId: userId },
           select,
         })
-      : entityType === "route"
-        ? await prisma.route.findMany({
-            where: { ...where, ownerId: userId },
+      : entityType === "topoJob"
+        ? await prisma.topoJob.findMany({
+            where: { ...where, userId },
             select,
           })
-        : entityType === "topoJob"
-          ? await prisma.topoJob.findMany({
-              where: { ...where, userId },
-              select,
-            })
-          : await prisma.geoPdfJob.findMany({
-              where: { ...where, userId },
-              select,
-            });
+        : await prisma.geoPdfJob.findMany({
+            where: { ...where, userId },
+            select,
+          });
   return new Set(rows.map((row) => row.id));
 }

@@ -27,7 +27,7 @@ export const CAROL_ID = "00000000-0000-4000-8000-000000000003";
 // carol is shared nothing (the stranger).
 export const SHARED_PLACE_ID = "10000000-0000-4000-8000-000000000001";
 
-// What bob shares WITH alice — bob's "Coin Slot" place and one waypoint. Named
+// What bob shares WITH alice — bob's "Coin Slot" place. Named
 // here rather than assumed absent: the seed grew an incoming share for alice
 // (so the phone's sharee-perspective surfaces are reachable in dev) and three
 // tests in friendShares.test.ts were asserting her received list was EMPTY.
@@ -36,7 +36,12 @@ export const SHARED_PLACE_ID = "10000000-0000-4000-8000-000000000001";
 // how a seed change broke a suite that is not in CI. Assert against these
 // instead of against `[]`, so the next seed change fails loudly here.
 export const BOB_SHARED_PLACE_ID = "20000000-0000-4000-8000-000000000002";
-export const BOB_SHARED_WAYPOINT_ID = "60000000-0000-4000-8000-000000000005";
+/** Bob's own Marker place, shared with nobody — the seed's "6" space is the
+ *  old waypoint space, preserved by the phase 1c migration. */
+export const BOB_MARKER_PLACE_ID = "60000000-0000-4000-8000-000000000005";
+/** Bob's route, DIRECTLY shared with alice — the incoming half of the seed's
+ *  sharing, and the only thing in alice's received `Share` list. */
+export const BOB_SHARED_ROUTE_ID = "70000000-0000-4000-8000-000000000003";
 
 // The system Canyon type. Every fixture that creates a place names a type,
 // because the API refuses one without — deliberately: a silent default would
@@ -48,6 +53,8 @@ export const BOB_SHARED_WAYPOINT_ID = "60000000-0000-4000-8000-000000000005";
 // type that does not exist.
 export { SYSTEM_PLACE_TYPE_IDS } from "@logjam/shared";
 export const CANYON_TYPE_ID = SYSTEM_PLACE_TYPE_IDS.canyon;
+/** The system Marker type — what a waypoint became in the phase 1c fold. */
+export const MARKER_TYPE_ID = SYSTEM_PLACE_TYPE_IDS.marker;
 
 // Well-formed UUIDv4 that no seeded row uses — the "unknown id" probe, so a
 // 404 assertion is testing not-found and not id-format rejection.

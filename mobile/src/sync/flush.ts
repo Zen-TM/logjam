@@ -8,7 +8,7 @@ import {
   isTransientSyncError,
   parseSyncDeltaPlaceRow,
   parseSyncDeltaTripRow,
-  parseSyncDeltaWaypointRow,
+  parseSyncDeltaPlaceLinkRow,
   selectFlushBatch,
   SYNC_PROTOCOL,
   SYNC_PUSH_MAX_OPS,
@@ -32,7 +32,7 @@ import {
   type MediaOpRow,
   type MediaOpOutcome,
 } from "./mediaUpload";
-import { upsertPlace, upsertTrip, upsertWaypoint } from "./mirrorStore";
+import { upsertPlace, upsertPlaceLink, upsertTrip } from "./mirrorStore";
 import { getSyncDb, notifyMirrorChanged } from "./syncDb";
 
 /**
@@ -52,7 +52,7 @@ export type FlushSummary = {
 };
 
 /** Flush to drain (or until only parked/deferred ops remain). Serialized by
- * the sync engine — never call concurrently. Push ops (place/trip/waypoint/
+ * the sync engine — never call concurrently. Push ops (place/trip/link/
  * notification) go through POST /sync/push in dependency-closure batches;
  * media ops run their own three-phase / REST flow (§7.1, §8.3 interleave). */
 export async function flushOutbox(): Promise<FlushSummary> {
@@ -324,10 +324,10 @@ async function applyConfirmedRow(
       await upsertTrip(db, effective, dirtyNames);
       break;
     }
-    case "waypoint": {
-      const base = parseSyncDeltaWaypointRow(serverRow);
-      const { effective, dirtyNames } = rebased(base);
-      await upsertWaypoint(db, effective, dirtyNames);
+    case "placeLink": {
+      // No rebase: a link has no updatable field, so there is never a pending
+      // local edit to lay over the server's row.
+      await upsertPlaceLink(db, parseSyncDeltaPlaceLinkRow(serverRow), []);
       break;
     }
     case "notification":

@@ -28,6 +28,11 @@ export type TPlace = {
   longitude: number;
   placeTypeId: string;
   notes: string | null;
+  /** Metres. Came in with the phase 1c waypoint fold — a canyon has never
+   *  carried one, a marker usually does. */
+  elevation: number | null;
+  /** Free-text tags, also from the fold. Not the place TYPE, which is a row. */
+  tags: string[];
   /** Type-specific values, keyed by CustomFieldDef.key. Replaces the seven
    *  grade columns and the free-form `attributes` blob; internal `_`-prefixed
    *  keys (`_sources`, `_attributes`) are not user fields. */
@@ -36,6 +41,12 @@ export type TPlace = {
    *  have. OWNER-PRIVATE — never present on a place shared WITH the viewer. */
   foreignFields?: ForeignFieldValue[] | null;
   ropeWikiId: number | null;
+  /** The other end of every link touching this place. OWNER-PRIVATE and
+   *  present on the OWNED list and the owner's detail response only: a link
+   *  grants no visibility, and a sharee must not learn which other places the
+   *  owner filed this one against. Absent means "not yours to know", never
+   *  "no links" — the same rule `_count` below follows. */
+  linkedPlaceIds?: string[];
   createdAt: string;
   updatedAt: string;
   // Populated only by the place-detail endpoint (GET /places/:id), not the list.

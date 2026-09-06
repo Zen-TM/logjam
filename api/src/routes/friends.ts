@@ -21,10 +21,6 @@ import {
   writeTombstones,
 } from "../lib/syncTombstones";
 import {
-  snapshotWaypointVisibility,
-  writeWaypointVisibilityLoss,
-} from "../lib/waypointLink";
-import {
   filterOwnedEntityIds,
   hasPlaceInheritedAccess,
   revokeAllSharesBetween,
@@ -380,19 +376,7 @@ router.delete(
       ),
     ];
 
-    // Interactive rather than array-form: the waypoint revocation has to READ
-    // the post-revoke world to know who actually lost sight of what, and that
-    // read must sit inside the same transaction as the deletes it measures.
     await prisma.$transaction(async (tx) => {
-      const waypointVisibility = await snapshotWaypointVisibility(
-        tx,
-        (
-          await tx.placeWaypoint.findMany({
-            where: { placeId: { in: revokedPlaceIds } },
-            select: { waypointId: true },
-          })
-        ).map((link) => link.waypointId),
-      );
       await writeTombstones(tx, unfriendTombstones);
       // Revoke any places shared between these two users
       await tx.placeShare.deleteMany({
@@ -409,7 +393,6 @@ router.delete(
       // block above; this is the rest of the same promise — unfriending takes
       // back all live access, not just places.
       await revokeAllSharesBetween(tx, user.id, otherId);
-      await writeWaypointVisibilityLoss(tx, waypointVisibility);
       // Drop the recipient's residual place_shared notifications for each
       // place whose share was just revoked.
       for (const s of revokedShares) {
@@ -596,29 +579,23 @@ async function nameDirectShares(
         return;
       }
       const rows =
-        entityType === "waypoint"
-          ? await prisma.waypoint.findMany({
+        entityType === "route"
+          ? await prisma.route.findMany({
               where: { id: { in: ids } },
               select: { id: true, name: true },
             })
-          : entityType === "route"
-            ? await prisma.route.findMany({
-                where: { id: { in: ids } },
-                select: { id: true, name: true },
-              })
-            : await prisma.topoJob.findMany({
-                where: { id: { in: ids } },
-                select: { id: true, name: true },
-              });
+          : await prisma.topoJob.findMany({
+              where: { id: { in: ids } },
+              select: { id: true, name: true },
+            });
       for (const row of rows) {
         nameById.set(key(entityType, row.id), row.name ?? null);
       }
     }),
   );
 
-  // Only the two delta-synced kinds can have a place arm at all (a job has no
-  // place link), so this is at most one query per waypoint/route in a list
-  // that is tens of rows long.
+  // Only a route can have a place arm at all (a job has no place), so this is
+  // at most one query per route in a list that is tens of rows long.
   const alsoViaPlace = new Set<string>();
   if (inheritedForUserId !== undefined) {
     await Promise.all(
@@ -836,18 +813,7 @@ router.delete(
       const routeIdByPlace = new Map(
         revokedRoutes.map((route) => [route.placeId!, route.id]),
       );
-      // Interactive: see the unfriend path above — the waypoint diff must read
-      // the world after the share rows are gone.
       await prisma.$transaction(async (tx) => {
-        const waypointVisibility = await snapshotWaypointVisibility(
-          tx,
-          (
-            await tx.placeWaypoint.findMany({
-              where: { placeId: { in: revoked.map((r) => r.placeId) } },
-              select: { waypointId: true },
-            })
-          ).map((link) => link.waypointId),
-        );
         await tx.syncTombstone.createMany({
           data: revoked.flatMap((r) =>
             shareRevokeTombstones({
@@ -863,7 +829,6 @@ router.delete(
         await tx.placeShare.deleteMany({
           where: { id: { in: revoked.map((r) => r.id) } },
         });
-        await writeWaypointVisibilityLoss(tx, waypointVisibility);
         for (const r of revoked) {
           await tx.notification.deleteMany({
             where: {

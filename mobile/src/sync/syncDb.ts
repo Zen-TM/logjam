@@ -41,8 +41,13 @@ import { OUTBOX_ENTITIES } from "./outboxTables";
  * 6: phase 1b. `places` loses its seven grade columns and its attributes blob
  * to one `field_values_json`, gains a `place_type_id`, and `place_types`
  * arrives as a table of its own.
+ *
+ * 7: phase 1c. `waypoints` is GONE — every waypoint is a place of the system
+ * Marker type — and `place_links` replaces it, holding place↔place links as
+ * rows of their own. `places` gains the two columns that came across with
+ * them, `elevation` and `tags_json`.
  */
-export const MIRROR_SCHEMA_VERSION = 6;
+export const MIRROR_SCHEMA_VERSION = 7;
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 

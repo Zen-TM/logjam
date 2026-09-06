@@ -31,7 +31,7 @@ function row(
 }
 
 const PLACE = row("place", "c1", "Claustral");
-const WAYPOINT = row("waypoint", "w1", "Car park");
+const ROUTE = row("route", "w1", "Descent line");
 const TOPO = row("topoJob", "t1", null);
 
 describe("buildShareCards", () => {
@@ -59,7 +59,7 @@ describe("buildShareCards", () => {
   // remove (I am not the recipient). The forward direction's verbs are share-on
   // and unshare, which every row supports.
   it("offers neither copy nor remove in the forward direction", () => {
-    const cards = buildShareCards([PLACE, WAYPOINT], {
+    const cards = buildShareCards([PLACE, ROUTE], {
       direction: "theySee",
       friendName: FRIEND,
     });
@@ -68,7 +68,7 @@ describe("buildShareCards", () => {
   });
 
   it("offers copy on a received place and not on a received waypoint", () => {
-    const cards = buildShareCards([PLACE, WAYPOINT], {
+    const cards = buildShareCards([PLACE, ROUTE], {
       direction: "youSee",
       friendName: FRIEND,
     });
@@ -78,12 +78,12 @@ describe("buildShareCards", () => {
     expect(cards.map((card) => card.removable)).toEqual([true, true]);
   });
 
-  // THE TRAP: a waypoint shared directly AND linked to a place this friend
+  // THE TRAP: a route shared directly AND linked to a place this friend
   // also shared. Revoking the direct arm leaves the place arm standing, so the
   // row would disappear and come back on the next pull — a Remove that appears
   // to work is worse than one that is absent with a reason.
   it("withholds Remove from a row that also rides a shared place, with the reason", () => {
-    const [card] = buildShareCards([row("waypoint", "w1", "Car park", true)], {
+    const [card] = buildShareCards([row("route", "w1", "Descent line", true)], {
       direction: "youSee",
       friendName: FRIEND,
     });
@@ -95,7 +95,7 @@ describe("buildShareCards", () => {
   // My own rows are not something I could lose access to, so the flag — which
   // the server only ever sets on received rows — means nothing here.
   it("ignores the flag in the forward direction", () => {
-    const [card] = buildShareCards([row("waypoint", "w1", "Car park", true)], {
+    const [card] = buildShareCards([row("route", "w1", "Descent line", true)], {
       direction: "theySee",
       friendName: FRIEND,
     });
@@ -110,7 +110,7 @@ describe("shareSelectionCountLabel", () => {
     buildShareCards(rows, { direction: "youSee", friendName: FRIEND });
 
   it("is a plain count in the forward direction", () => {
-    const cards = buildShareCards([PLACE, WAYPOINT], {
+    const cards = buildShareCards([PLACE, ROUTE], {
       direction: "theySee",
       friendName: FRIEND,
     });
@@ -118,7 +118,7 @@ describe("shareSelectionCountLabel", () => {
   });
 
   it("tallies the copyable subset when it differs from the total", () => {
-    expect(shareSelectionCountLabel(received([PLACE, WAYPOINT]), "youSee")).toBe(
+    expect(shareSelectionCountLabel(received([PLACE, ROUTE]), "youSee")).toBe(
       "2 selected · 1 copyable",
     );
   });
@@ -132,7 +132,7 @@ describe("shareSelectionCountLabel", () => {
   it("tallies both subsets when both bite", () => {
     expect(
       shareSelectionCountLabel(
-        received([PLACE, row("waypoint", "w1", "Car park", true)]),
+        received([PLACE, row("route", "w1", "Descent line", true)]),
         "youSee",
       ),
     ).toBe("2 selected · 1 copyable · 1 removable");

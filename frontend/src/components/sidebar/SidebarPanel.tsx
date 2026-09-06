@@ -14,7 +14,6 @@ import type {
   TAnalytics,
   TUser,
   TRoute,
-  TWaypoint,
   PlaceTrack,
 } from "../../placeUtils";
 import type { StandaloneFile, TripLogCustomFieldDef, VectorStyleSettings, TopoExportJobView } from "@logjam/shared";
@@ -31,7 +30,6 @@ import NotificationsPanel from "./panels/NotificationsPanel";
 import PlaceDetailPanel from "./panels/PlaceDetailPanel";
 import RouteDetailPanel from "./panels/RouteDetailPanel";
 import RoutesPanel from "./panels/RoutesPanel";
-import WaypointsPanel from "./panels/WaypointsPanel";
 import AccountPanel from "./panels/AccountPanel";
 import TripLogsPanel from "./panels/TripLogsPanel";
 import AnalyticsPanel from "./panels/AnalyticsPanel";
@@ -42,7 +40,6 @@ const PANEL_TITLES: Record<PanelId, string> = {
   geopdfs: "GeoPDFs",
   lidar: "LiDAR Topos",
   routes: "Routes",
-  waypoints: "Waypoints",
   "trip-logs": "Trip Logs",
   analytics: "Analytics",
   friends: "Friends",
@@ -70,18 +67,6 @@ function SidebarPanel({
   setShowPlaceTracks,
   showRoutes,
   setShowRoutes,
-  showWaypoints,
-  setShowWaypoints,
-  waypoints,
-  waypointsLoading,
-  waypointsError,
-  selectedWaypointId,
-  onSelectWaypoint,
-  onFlyToWaypoint,
-  onAddWaypoint,
-  onUpdateWaypoint,
-  onDeleteWaypoint,
-  onWaypointsChanged,
   onStartDrawingRoute,
   lidarEnabled,
   setLidarEnabled,
@@ -264,29 +249,6 @@ function SidebarPanel({
   // Routes
   showRoutes: boolean;
   setShowRoutes: (v: boolean) => void;
-  showWaypoints: boolean;
-  setShowWaypoints: (v: boolean) => void;
-  waypoints: TWaypoint[];
-  waypointsLoading: boolean;
-  waypointsError: string | null;
-  /** Which waypoint is expanded — lifted so a map marker click can open one. */
-  selectedWaypointId: string | null;
-  onSelectWaypoint: (id: string | null) => void;
-  onFlyToWaypoint: (waypoint: TWaypoint) => void;
-  /** Opens the add-waypoint dialog, which App owns. */
-  onAddWaypoint: () => void;
-  onUpdateWaypoint: (
-    id: string,
-    data: Partial<{
-      name: string;
-      notes: string | null;
-      tags: string[] | null;
-      placeIds: string[] | null;
-    }>,
-  ) => Promise<void>;
-  onDeleteWaypoint: (waypoint: TWaypoint) => Promise<void>;
-  /** Refetch — also the retry for the load-failure banner. */
-  onWaypointsChanged: () => void;
   onStartDrawingRoute: () => void;
   selectedRoute: TRoute | null;
   allRoutes: TRoute[];
@@ -405,8 +367,6 @@ function SidebarPanel({
             setShowPlaceTracks={setShowPlaceTracks}
             showRoutes={showRoutes}
             setShowRoutes={setShowRoutes}
-            showWaypoints={showWaypoints}
-            setShowWaypoints={setShowWaypoints}
             lidarEnabled={lidarEnabled}
             setLidarEnabled={setLidarEnabled}
             lidarLayerToggles={lidarLayerToggles}
@@ -567,24 +527,6 @@ function SidebarPanel({
             onClose={() => setActivePanel(null)}
             onOpenPlace={openPlaceDetail}
             onHoverPosition={onRouteHoverPosition}
-          />
-        )}
-        {activePanel === "waypoints" && (
-          <WaypointsPanel
-            friends={friends}
-            waypoints={waypoints}
-            loading={waypointsLoading}
-            error={waypointsError}
-            onRetry={onWaypointsChanged}
-            places={[...places, ...sharedPlaces]}
-            currentUserId={currentUserId}
-            selectedId={selectedWaypointId}
-            onSelect={onSelectWaypoint}
-            onFlyTo={onFlyToWaypoint}
-            onUpdate={onUpdateWaypoint}
-            onDelete={onDeleteWaypoint}
-            onAdd={onAddWaypoint}
-            onOpenPlace={openPlaceDetail}
           />
         )}
         {activePanel === "routes" && (

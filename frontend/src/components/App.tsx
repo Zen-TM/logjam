@@ -14,13 +14,12 @@ import type {
 import GeoPdfDialog from "./dialogs/GeoPdfDialog";
 import type { GeoPdfTemplate } from "./dialogs/GeoPdfDialog";
 import PlaceDialog from "./dialogs/PlaceDialog";
-import AddWaypointDialog from "./dialogs/AddWaypointDialog";
 import UnifiedImportDialog from "./dialogs/UnifiedImportDialog";
 import OnboardingChoiceDialog from "./dialogs/OnboardingChoiceDialog";
 import SelectedPlacesDialog from "./dialogs/SelectedPlacesDialog";
 import classes from "./App.module.css";
 import type { TBbox } from "./map/Map";
-import type { TFilters, TPlace, GeoPdfJobView, TWaypoint } from "../placeUtils";
+import type { TFilters, TPlace, GeoPdfJobView } from "../placeUtils";
 import type { StandaloneFile } from "@logjam/shared";
 import type { PanelId } from "./sidebar/panels";
 import { TOPO_LAYERS } from "../topoLayerTypes";
@@ -33,10 +32,6 @@ import {
   renameMedia,
   deleteMedia,
   useRoutes,
-  useWaypoints,
-  createWaypoint,
-  updateWaypoint,
-  deleteWaypoint,
   type TRoute,
   createRoute,
   updateRoute,
@@ -150,14 +145,6 @@ function App() {
   const [showSharedPlaces, setShowSharedPlaces] = useStoredState("logjam.showSharedPlaces", true);
   const [showPlaceTracks, setShowPlaceTracks] = useStoredState("logjam.showPlaceTracks", false);
   const [showRoutes, setShowRoutes] = useStoredState("logjam.showRoutes", true);
-  const [showWaypoints, setShowWaypoints] = useStoredState(
-    "logjam.showWaypoints",
-    true,
-  );
-  // Which waypoint the panel has expanded. Lifted because a marker click on the
-  // map opens it, so the map and the panel must agree on one selection.
-  const [selectedWaypointID, setSelectedWaypointID] = useState<string | null>(null);
-  const [showAddWaypoint, setShowAddWaypoint] = useState(false);
 
   // Route draw/edit mode. The vertex list lives here (not in Map) so the HUD
   // can show the running distance and drive undo. `editingRouteId` is null
@@ -451,7 +438,6 @@ function App() {
       geopdfs: "GeoPDFs",
       lidar: "LiDAR",
       routes: "Routes",
-      waypoints: "Waypoints",
       "trip-logs": "Trip Logs",
       analytics: "Analytics",
       friends: "Friends",
@@ -554,66 +540,7 @@ function App() {
   const { routes, refetch: refetchRoutes } = useRoutes(
     loadsUserData && (showRoutes || drawingRoute || activePanel === "routes"),
   );
-  // Waypoints load whenever the layer is on or the panel is open — the same
-  // rule routes follow.
-  const {
-    waypoints,
-    loading: waypointsLoading,
-    error: waypointsError,
-    refetch: refetchWaypoints,
-  } = useWaypoints(loadsUserData && (showWaypoints || activePanel === "waypoints"));
 
-  // Waypoint writes. Each refetches rather than patching local state: the list
-  // is small, the server owns the scoped placeIds it returns, and a stale
-  // link list is exactly the field that must not drift.
-  // Throws on failure by design: the caller is a dialog, and a submission
-  // failure belongs in its ErrorBanner rather than a toast behind it.
-  const handleCreateWaypoint = useCallback(
-    async (data: { name: string; latitude: number; longitude: number }) => {
-      const created = await createWaypoint(data);
-      refetchWaypoints();
-      setSelectedWaypointID(created.id);
-      setActivePanel("waypoints");
-    },
-    [refetchWaypoints],
-  );
-
-  const handleUpdateWaypoint = useCallback(
-    async (
-      id: string,
-      data: Partial<{
-        name: string;
-        notes: string | null;
-        tags: string[] | null;
-        placeIds: string[] | null;
-      }>,
-    ) => {
-      try {
-        await updateWaypoint(id, data);
-        refetchWaypoints();
-      } catch (err) {
-        console.error(err);
-        toast.error(messageFromError(err, "Couldn't save that change."));
-      }
-    },
-    [refetchWaypoints, toast],
-  );
-
-  const handleDeleteWaypoint = useCallback(
-    async (waypoint: TWaypoint) => {
-      try {
-        await deleteWaypoint(waypoint.id);
-        setSelectedWaypointID((current) =>
-          current === waypoint.id ? null : current,
-        );
-        refetchWaypoints();
-      } catch (err) {
-        console.error(err);
-        toast.error(messageFromError(err, "Couldn't delete that waypoint."));
-      }
-    },
-    [refetchWaypoints, toast],
-  );
 
   // A place list change (e.g. after a track upload) should refresh the layer.
   useEffect(() => {
@@ -1262,20 +1189,6 @@ function App() {
           showPlaceTracks={showPlaceTracks}
           setShowPlaceTracks={setShowPlaceTracks}
           showRoutes={showRoutes}
-          showWaypoints={showWaypoints}
-          setShowWaypoints={setShowWaypoints}
-          waypoints={waypoints}
-          waypointsLoading={waypointsLoading}
-          waypointsError={waypointsError}
-          selectedWaypointId={selectedWaypointID}
-          onSelectWaypoint={setSelectedWaypointID}
-          onFlyToWaypoint={(waypoint) =>
-            setFlyToPlace({ lat: waypoint.latitude, lng: waypoint.longitude })
-          }
-          onAddWaypoint={() => setShowAddWaypoint(true)}
-          onUpdateWaypoint={handleUpdateWaypoint}
-          onDeleteWaypoint={handleDeleteWaypoint}
-          onWaypointsChanged={refetchWaypoints}
           setShowRoutes={setShowRoutes}
           onStartDrawingRoute={startDrawingRoute}
           selectedRoute={selectedRoute}
@@ -1421,12 +1334,6 @@ function App() {
         placeTracks={placeTracks}
         standaloneTracks={standaloneTracks}
         showRoutes={showRoutes}
-        waypoints={waypoints}
-        showWaypoints={showWaypoints}
-        onSelectWaypoint={(id) => {
-          setSelectedWaypointID(id);
-          setActivePanel("waypoints");
-        }}
         routes={routes}
         routeHoverPosition={routeHoverPosition}
         selectRoute={(id) => {
@@ -1647,19 +1554,6 @@ function App() {
         onRefetchTripLogs={refetchTripLogs}
         onRefetchAnalytics={refetchAnalytics}
         onPickCoords={startPickingCoords}
-      />
-
-      {/* Hidden while a map pick is armed, exactly as the place dialog is:
-          the component stays mounted, so the half-filled form survives the
-          trip to the map. */}
-      <AddWaypointDialog
-        open={showAddWaypoint && !pickingCoords}
-        onCreate={handleCreateWaypoint}
-        onPickCoords={startPickingCoords}
-        onClose={() => {
-          setShowAddWaypoint(false);
-          cancelPickingCoords();
-        }}
       />
 
       {/* Add place dialog */}

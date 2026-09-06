@@ -25,7 +25,6 @@ import { getEnv } from "../lib/env";
 import { deleteS3Keys, deleteS3Prefix } from "../lib/s3Cleanup";
 import { logger, safeErrorForLog } from "../lib/logger";
 import { accountDeleteTombstones } from "../lib/syncTombstones";
-import { snapshotWaypointVisibility } from "../lib/waypointLink";
 
 const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
 const TOPO_BUCKET = getEnv().S3_BUCKET_TOPO ?? "";
@@ -525,7 +524,6 @@ router.delete(
       sharesOut,
       sharesIn,
       directSharesOut,
-      ownedWaypoints,
       placeLinkedRoutes,
     ] = await Promise.all([
       prisma.topoJob.findMany({ where: { userId: user.id }, select: { id: true } }),
@@ -574,25 +572,20 @@ router.delete(
       }),
       // Direct shares of synced entities this user OWNS. The account delete is
       // a delete site like any other, so each recipient's mirror must forget
-      // the waypoint/route (the Share row itself cascades away with the user,
-      // but a cascade writes no tombstone). Jobs are excluded: they are not
-      // synced entities, so there is no mirror row to revoke.
+      // the route (the Share row itself cascades away with the user, but a
+      // cascade writes no tombstone). Jobs are excluded: they are not synced
+      // entities, so there is no mirror row to revoke.
       prisma.share.findMany({
-        where: {
-          sharedById: user.id,
-          entityType: { in: ["waypoint", "route"] },
-        },
+        where: { sharedById: user.id, entityType: "route" },
         select: { entityType: true, entityId: true, sharedWithId: true },
       }),
-      // Waypoints and routes are hard-deleted below, and a place sharee could
-      // see them through the place link (they follow place-level media
-      // visibility). The place tombstone does NOT imply them — the
-      // single-place delete path fans them out explicitly — so they need
-      // their own rows or the sharee's mirror keeps the coordinates forever.
-      prisma.waypoint.findMany({
-        where: { ownerId: user.id },
-        select: { id: true },
-      }),
+      // Routes are hard-deleted below and a place sharee could see them
+      // through `Route.placeId`. The place tombstone does NOT imply them — the
+      // single-place delete path fans them out explicitly — so they need their
+      // own rows or the sharee's mirror keeps the geometry forever.
+      //
+      // PlaceLinks need no equivalent: they are owner-private, and the owner is
+      // the account going away.
       prisma.route.findMany({
         where: { ownerId: user.id, placeId: { not: null } },
         select: {
@@ -660,33 +653,12 @@ router.delete(
       list.push(m.id);
       mediaIdsByPlace.set(placeId, list);
     }
-    // Who can currently see each owned waypoint through a place share. Reuses
-    // the one helper that answers that question (lib/waypointLink.ts) rather
-    // than re-deriving the placeWaypoint → place.shares join here; no
-    // post-delete diff is needed because the waypoints themselves are going.
-    const waypointViewers = await snapshotWaypointVisibility(
-      prisma,
-      ownedWaypoints.map((w) => w.id),
-    );
-    const placeInheritedOut = [
-      ...[...waypointViewers].flatMap(([waypointId, viewers]) =>
-        viewers.size > 0
-          ? [
-              {
-                entityType: "waypoint" as const,
-                entityId: waypointId,
-                userIds: [...viewers],
-              },
-            ]
-          : [],
-      ),
-      ...placeLinkedRoutes.flatMap((route) => {
-        const userIds = (route.place?.shares ?? []).map((s) => s.sharedWithId);
-        return userIds.length > 0
-          ? [{ entityType: "route" as const, entityId: route.id, userIds }]
-          : [];
-      }),
-    ];
+    const placeInheritedOut = placeLinkedRoutes.flatMap((route) => {
+      const userIds = (route.place?.shares ?? []).map((s) => s.sharedWithId);
+      return userIds.length > 0
+        ? [{ entityType: "route" as const, entityId: route.id, userIds }]
+        : [];
+    });
 
     const accountTombstones = accountDeleteTombstones({
       userId: user.id,
@@ -696,12 +668,10 @@ router.delete(
       placeSharesIn: sharesIn,
       friendships,
       // Share.entityType is a plain string column; the query above already
-      // restricted it to the two synced types, so this narrows rather than
+      // restricted it to the one synced type, so this narrows rather than
       // widens.
       directSharesOut: directSharesOut.flatMap((share) =>
-        share.entityType === "waypoint" || share.entityType === "route"
-          ? [{ ...share, entityType: share.entityType }]
-          : [],
+        share.entityType === "route" ? [{ ...share, entityType: share.entityType }] : [],
       ),
     });
 
@@ -764,12 +734,13 @@ router.delete(
       prisma.geoPdfTemplate.deleteMany({ where: { userId: user.id } }),
       prisma.topoTemplate.deleteMany({ where: { userId: user.id } }),
       prisma.deviceToken.deleteMany({ where: { userId: user.id } }),
-      // No S3 objects involved (ARCH-001 checklist entry; cascade covers the
-      // rows — explicit per convention).
-      prisma.waypoint.deleteMany({ where: { ownerId: user.id } }),
-      // Routes store their geometry on the row, so like waypoints there is no
-      // S3 leg here — that is the point of the design (ARCH-001).
+      // Routes store their geometry on the row, so there is no S3 leg here —
+      // that is the point of the design (ARCH-001). No S3 objects involved;
+      // explicit per convention even though the cascade covers the rows.
       prisma.route.deleteMany({ where: { ownerId: user.id } }),
+      // Links between this account's places. Owner-private, no S3 leg, no
+      // tombstone fan-out — the only viewer is the account being deleted.
+      prisma.placeLink.deleteMany({ where: { ownerId: user.id } }),
       // Custom field definitions: user-authored labels, no S3 leg, and never
       // shared — so no tombstone fan-out either, the only viewer is the
       // account being deleted. Explicit per the ARCH-001 convention even

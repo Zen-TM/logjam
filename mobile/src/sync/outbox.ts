@@ -7,6 +7,8 @@ import * as Crypto from "expo-crypto";
 import * as FileSystem from "expo-file-system/legacy";
 import {
   isUuidV4,
+  canonicalLinkPair,
+  SYSTEM_PLACE_TYPE_IDS,
   pickNextTrackColor,
   planOutboxEnqueue,
   setFieldValues,
@@ -134,66 +136,56 @@ function mintUuid(): string {
   return id;
 }
 
-// ── waypoint mutation surface ────────────────────────────────────────────────
+// ── place link mutation surface ──────────────────────────────────────────────
 //
-// Waypoints are the first offline-writable entity (Stage 7's map UI already
-// drops/deletes them). Place/trip edit forms reuse enqueueOp when they land.
+// A link has no fields, so its vocabulary is `create` and `delete` and nothing
+// else — there is no update op and nothing for the §6 conflict machinery to
+// merge. Two phones linking the same pair from opposite ends both send a
+// create; the server canonicalises the pair, the unique index collides, and the
+// second one comes back alreadyApplied with the row that won.
+//
+// The pair is canonicalised HERE as well, so the optimistic mirror row matches
+// the row the server will return rather than flipping its ends on the next
+// pull.
 
-export type WaypointDraft = {
-  /** Client-minted id to reuse. Only the legacy-waypoint promotion passes it
-   * (see `migrateLegacyWaypoints`); every other caller lets one be minted. */
-  id?: string;
-  name: string;
-  latitude: number;
-  longitude: number;
-  elevation?: number | null;
-  symbol?: string | null;
-  notes?: string | null;
-  tags?: string[];
-  placeIds?: string[];
-};
-
-export async function createWaypointLocal(draft: WaypointDraft): Promise<string> {
-  const id = draft.id ?? mintUuid();
+export async function createPlaceLinkLocal(
+  firstPlaceId: string,
+  secondPlaceId: string,
+): Promise<string> {
+  if (firstPlaceId === secondPlaceId) {
+    throw new Error("A place cannot be linked to itself");
+  }
+  const { aPlaceId, bPlaceId } = canonicalLinkPair(firstPlaceId, secondPlaceId);
+  const id = mintUuid();
   const now = new Date().toISOString();
-  const fields: Record<string, unknown> = {
-    name: draft.name,
-    latitude: draft.latitude,
-    longitude: draft.longitude,
-    ...(draft.elevation != null && { elevation: draft.elevation }),
-    ...(draft.symbol != null && { symbol: draft.symbol }),
-    ...(draft.notes != null && { notes: draft.notes }),
-    ...(draft.tags?.length && { tags: draft.tags }),
-    ...(draft.placeIds?.length && { placeIds: draft.placeIds }),
-  };
+  const fields: Record<string, unknown> = { aPlaceId, bPlaceId };
 
   const db = await getSyncDb();
+  // Already linked (from either end) is not an error: the goal state is
+  // reached, and enqueueing a second create would only earn an alreadyApplied.
+  const existing = await db.getFirstAsync<{ id: string }>(
+    "SELECT id FROM place_links WHERE a_place_id = ? AND b_place_id = ?",
+    aPlaceId,
+    bPlaceId,
+  );
+  if (existing) return existing.id;
+
   await withSyncTransaction(db, async () => {
-    // Optimistic mirror row: every field is locally dirty until the create
-    // flushes (timestamps are provisional; the server row replaces them).
-    // sync_role is 'owner' — you cannot create someone else's waypoint.
     await db.runAsync(
-      `INSERT INTO waypoints
-         (id, place_ids_json, tags_json, sync_role, name, latitude, longitude,
-          elevation, symbol, notes, created_at, updated_at, extra_json,
-          dirty_fields_json)
-       VALUES (?, ?, ?, 'owner', ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)`,
+      `INSERT INTO place_links
+         (id, owner_id, a_place_id, b_place_id, created_at, updated_at,
+          extra_json, dirty_fields_json)
+       VALUES (?, NULL, ?, ?, ?, ?, NULL, ?)`,
       id,
-      JSON.stringify(draft.placeIds ?? []),
-      JSON.stringify(draft.tags ?? []),
-      draft.name,
-      draft.latitude,
-      draft.longitude,
-      draft.elevation ?? null,
-      draft.symbol ?? null,
-      draft.notes ?? null,
+      aPlaceId,
+      bPlaceId,
       now,
       now,
       JSON.stringify(Object.keys(fields)),
     );
     await appendOp(db, {
       opId: mintUuid(),
-      entity: "waypoint",
+      entity: "placeLink",
       op: "create",
       id,
       fields,
@@ -204,10 +196,24 @@ export async function createWaypointLocal(draft: WaypointDraft): Promise<string>
   return id;
 }
 
-// tags and placeIds are lists: the mirror stores them as JSON text while the
-// OUTBOX carries the real array, exactly as route geometry does, so a §6
-// conflict compares arrays against the server's arrays rather than against our
-// JSON encoding.
+export async function deletePlaceLinkLocal(id: string): Promise<void> {
+  const db = await getSyncDb();
+  await withSyncTransaction(db, async () => {
+    await db.runAsync("DELETE FROM place_links WHERE id = ?", id);
+    await appendOp(db, {
+      opId: mintUuid(),
+      entity: "placeLink",
+      op: "delete",
+      id,
+    });
+  });
+  notifyMirrorChanged();
+  scheduleMutationSync();
+}
+
+// tags is a list: the mirror stores it as JSON text while the OUTBOX carries
+// the real array, exactly as route geometry does, so a §6 conflict compares
+// arrays against the server's arrays rather than against our JSON encoding.
 const stringListColumn = (column: string): ColumnSpec => ({
   column,
   encode: (value) => JSON.stringify(value ?? []),
@@ -221,39 +227,6 @@ const stringListColumn = (column: string): ColumnSpec => ({
     }
   },
 });
-
-const WAYPOINT_UPDATE_COLUMNS: Record<string, ColumnSpec> = {
-  name: "name",
-  latitude: "latitude",
-  longitude: "longitude",
-  elevation: "elevation",
-  symbol: "symbol",
-  notes: "notes",
-  tags: stringListColumn("tags_json"),
-  placeIds: stringListColumn("place_ids_json"),
-};
-
-export async function updateWaypointLocal(
-  id: string,
-  fields: Record<string, unknown>,
-): Promise<void> {
-  await enqueueUpdate("waypoint", "waypoints", id, fields, WAYPOINT_UPDATE_COLUMNS);
-}
-
-export async function deleteWaypointLocal(id: string): Promise<void> {
-  const db = await getSyncDb();
-  await withSyncTransaction(db, async () => {
-    await db.runAsync("DELETE FROM waypoints WHERE id = ?", id);
-    await appendOp(db, {
-      opId: mintUuid(),
-      entity: "waypoint",
-      op: "delete",
-      id,
-    });
-  });
-  notifyMirrorChanged();
-  scheduleMutationSync();
-}
 
 // ── routes ───────────────────────────────────────────────────────────────────
 //
@@ -516,6 +489,10 @@ const PLACE_UPDATE_COLUMNS: Record<string, ColumnSpec> = {
   latitude: "latitude",
   longitude: "longitude",
   placeTypeId: "place_type_id",
+  // Folded in with the waypoints (phase 1c). `symbol` did not come: the icon
+  // is the place TYPE's.
+  elevation: "elevation",
+  tags: stringListColumn("tags_json"),
   altNames: {
     column: "alt_names_json",
     encode: (value) => JSON.stringify(value ?? []),
@@ -557,6 +534,9 @@ export async function updatePlaceLocal(
 /** The fields a place can be created with offline. Coordinates are required:
  * a place without a position isn't a place, and the server rejects it. */
 export type PlaceDraftFields = {
+  /** Client-minted id to reuse. Only the legacy-waypoint promotion passes one
+   *  (see `migrateLegacyWaypoints`); every other caller lets one be minted. */
+  id?: string;
   name: string;
   latitude: number;
   longitude: number;
@@ -564,6 +544,9 @@ export type PlaceDraftFields = {
   placeTypeId: string;
   altNames?: string[];
   notes?: string | null;
+  /** Metres. Optional on every place; a dropped marker usually has one. */
+  elevation?: number | null;
+  tags?: string[];
   /** Type-specific values, keyed by definition key — the seven grades
    *  included. Nulls are dropped rather than stored. */
   fieldValues?: Record<string, unknown>;
@@ -579,7 +562,7 @@ export type PlaceDraftFields = {
  * on the next flush.
  */
 export async function createPlaceLocal(draft: PlaceDraftFields): Promise<string> {
-  const id = mintUuid();
+  const id = draft.id ?? mintUuid();
   const now = new Date().toISOString();
   const altNames = draft.altNames ?? [];
   const fieldValues = setFieldValues({}, draft.fieldValues ?? {});
@@ -590,6 +573,8 @@ export async function createPlaceLocal(draft: PlaceDraftFields): Promise<string>
     placeTypeId: draft.placeTypeId,
     altNames,
     ...(draft.notes != null && { notes: draft.notes }),
+    ...(draft.elevation != null && { elevation: draft.elevation }),
+    ...(draft.tags?.length && { tags: draft.tags }),
     ...(Object.keys(fieldValues).length > 0 && { fieldValues }),
   };
 
@@ -607,10 +592,10 @@ export async function createPlaceLocal(draft: PlaceDraftFields): Promise<string>
     await db.runAsync(
       `INSERT INTO places
          (id, sync_role, name, latitude, longitude, alt_names_json,
-          place_type_id, notes, field_values_json, field_defs_snapshot_json,
-          foreign_fields_json, forked_from_id, created_at, updated_at,
-          extra_json, dirty_fields_json)
-       VALUES (?, 'owner', ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?, NULL, ?)`,
+          place_type_id, notes, elevation, tags_json, field_values_json,
+          field_defs_snapshot_json, foreign_fields_json, forked_from_id,
+          created_at, updated_at, extra_json, dirty_fields_json)
+       VALUES (?, 'owner', ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?, NULL, ?)`,
       id,
       draft.name,
       draft.latitude,
@@ -618,6 +603,8 @@ export async function createPlaceLocal(draft: PlaceDraftFields): Promise<string>
       JSON.stringify(altNames),
       draft.placeTypeId,
       draft.notes ?? null,
+      draft.elevation ?? null,
+      JSON.stringify(draft.tags ?? []),
       JSON.stringify(fieldValues),
       now,
       now,
@@ -1021,10 +1008,15 @@ async function enqueueUpdate(
 // ── Stage 7 → Stage 8 waypoint migration ─────────────────────────────────────
 //
 // Stage 7 stored dropped waypoints in a local-only table (logjam-offline.db
-// `waypoint`). Stage 8 makes waypoints a synced entity; promote any legacy
-// rows into the mirror + outbox once, then DROP the legacy table — a fresh
-// install never creates it (it is no longer in SCHEMA_SQL), so its absence is
-// the normal case and the promotion is a no-op from then on.
+// `waypoint`). Stage 8 made waypoints a synced entity; promote any legacy rows
+// into the mirror + outbox once, then DROP the legacy table — a fresh install
+// never creates it (it is no longer in SCHEMA_SQL), so its absence is the
+// normal case and the promotion is a no-op from then on.
+//
+// Since the phase 1c fold they are promoted as PLACES of the system Marker
+// type, which is what a waypoint is now. The path still has to exist: a phone
+// that has been offline since Stage 7 still holds these rows, and they are
+// points the user dropped in the field.
 
 export async function migrateLegacyWaypoints(): Promise<void> {
   // Lazy import: keeps offline/ and sync/ decoupled at module load.
@@ -1045,25 +1037,29 @@ export async function migrateLegacyWaypoints(): Promise<void> {
   }>("SELECT id, name, lon, lat FROM waypoint");
   const db = await getSyncDb();
   for (const row of rows) {
-    // Crash-idempotent: the promoted waypoint KEEPS the legacy id, so a kill
+    // Crash-idempotent: the promoted place KEEPS the legacy id, so a kill
     // between the insert and the legacy DELETE (two different SQLite files —
     // no transaction can span them) replays onto the row it already wrote
-    // instead of minting a second waypoint and a second create op.
+    // instead of minting a second place and a second create op.
     // Stage 7 ids that aren't UUIDv4 can't be pushed at all, so those get a
     // fresh one and accept the (narrow) duplicate window.
     const id = isUuidV4(row.id) ? row.id : undefined;
     const already =
       id != null &&
       (await db.getFirstAsync<{ id: string }>(
-        "SELECT id FROM waypoints WHERE id = ?",
+        "SELECT id FROM places WHERE id = ?",
         id,
       )) != null;
     if (!already) {
-      await createWaypointLocal({
+      await createPlaceLocal({
         id,
         name: row.name,
         latitude: row.lat,
         longitude: row.lon,
+        // Marker, not Canyon: a dropped point is a marked position, and
+        // filing it as a canyon would put it in the canyon tab and hand it
+        // seven grade fields it will never have.
+        placeTypeId: SYSTEM_PLACE_TYPE_IDS.marker,
       });
     }
     await legacyDb.runAsync("DELETE FROM waypoint WHERE id = ?", row.id);
@@ -1086,7 +1082,10 @@ export const UPDATE_TARGETS: Record<SyncPushEntity, UpdateTarget | null> = {
   place: { table: "places", columns: PLACE_UPDATE_COLUMNS },
   placeType: { table: "place_types", columns: PLACE_TYPE_UPDATE_COLUMNS },
   tripLog: { table: "trip_logs", columns: TRIP_UPDATE_COLUMNS },
-  waypoint: { table: "waypoints", columns: WAYPOINT_UPDATE_COLUMNS },
+  // A link has no fields, so there is no update op to discard and nothing to
+  // put back. Null, not an empty column map: the difference is "cannot be
+  // updated" versus "updatable, with no columns declared yet".
+  placeLink: null,
   route: { table: "routes", columns: ROUTE_UPDATE_COLUMNS },
   customFieldDef: {
     table: "custom_field_defs",
@@ -1191,7 +1190,7 @@ const UPDATE_COLUMNS_BY_ENTITY: Record<
   place: PLACE_UPDATE_COLUMNS,
   placeType: PLACE_TYPE_UPDATE_COLUMNS,
   tripLog: TRIP_UPDATE_COLUMNS,
-  waypoint: WAYPOINT_UPDATE_COLUMNS,
+  placeLink: null,
   route: ROUTE_UPDATE_COLUMNS,
   customFieldDef: CUSTOM_FIELD_DEF_UPDATE_COLUMNS,
   notification: null,

@@ -86,8 +86,12 @@ describe("opTitle", () => {
       "Couldn't delete a trip",
     );
     expect(
-      opTitle(parked({ entity: "waypoint", op: "create", entityName: "Car" })),
-    ).toBe("Couldn't add waypoint “Car”");
+      opTitle(parked({ entity: "place", op: "create", entityName: "Car park" })),
+    ).toBe("Couldn't add place “Car park”");
+    // A link has no name of its own, so it names what it is instead.
+    expect(opTitle(parked({ entity: "placeLink", op: "delete", fields: null }))).toBe(
+      "Couldn't delete a link between places",
+    );
   });
 
   it("names a media op by its filename and its own verb", () => {
@@ -343,7 +347,7 @@ describe("opTarget", () => {
 
   it("offers nothing where a tap would go nowhere", () => {
     // No screen to push, or — for a delete — nothing left to open.
-    expect(opTarget(parked({ entity: "waypoint" }))).toBeNull();
+    expect(opTarget(parked({ entity: "placeLink" }))).toBeNull();
     expect(opTarget(parked({ entity: "media" }))).toBeNull();
     expect(opTarget(parked({ entity: "place", op: "delete" }))).toBeNull();
   });
@@ -368,12 +372,6 @@ describe("discardExplanation", () => {
 
 describe("canRecreate", () => {
   it("is true only where recreateFromDeadRemote will really recreate", () => {
-    const waypoint = parked({
-      entity: "waypoint",
-      state: "deadRemote",
-      fields: { name: "Anchor", latitude: -33.5, longitude: 150.4 },
-    });
-    expect(canRecreate(waypoint)).toBe(true);
     // A place update carries no coordinates, so the rebuild comes from the
     // phone's own mirror row — which lasts only until the delta pull applies
     // the tombstone.
@@ -384,19 +382,22 @@ describe("canRecreate", () => {
 
   it("is false where that call would quietly discard instead", () => {
     // The button said "Saves what you typed as a new one" for every deadRemote
-    // op, and for anything but a positioned waypoint the implementation falls
-    // back to a discard — a button that deletes the change it promises to keep.
+    // op, and for anything but a place with a local row the implementation
+    // falls back to a discard — a button that deletes the change it promises
+    // to keep.
     expect(
       canRecreate(
         parked({ entity: "tripLog", state: "deadRemote", fields: { notes: "x" } }),
       ),
     ).toBe(false);
-    // A rename-only waypoint edit carries no coordinates, and a waypoint with
-    // no position is not a waypoint.
+    // A LINK carries no payload of its own and its endpoints may be gone, so
+    // there is nothing to rebuild from at all.
     expect(
-      canRecreate(parked({ entity: "waypoint", state: "deadRemote", fields: { name: "x" } })),
+      canRecreate(parked({ entity: "placeLink", state: "deadRemote", fields: null })),
     ).toBe(false);
-    expect(canRecreate(parked({ entity: "waypoint", state: "blocked" }))).toBe(false);
+    // Only a DEAD remote op can be recreated; a blocked one still has a server
+    // row waiting for it.
+    expect(canRecreate(parked({ entity: "place", state: "blocked" }))).toBe(false);
   });
 });
 

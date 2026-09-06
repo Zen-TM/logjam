@@ -8,10 +8,6 @@ import { resolveUser } from "../lib/resolveUser";
 import { sendPushToUser } from "../services/push";
 import { getPlaceRole, requirePlaceOwnerAccess } from "../lib/placeAccess";
 import { shareRevokeTombstones, writeTombstones } from "../lib/syncTombstones";
-import {
-  snapshotPlaceWaypointVisibility,
-  writeWaypointVisibilityLoss,
-} from "../lib/waypointLink";
 
 const router = Router();
 
@@ -166,12 +162,11 @@ router.delete(
         where: { placeId },
         select: { id: true },
       });
-      // Linked waypoints go the same way — but only those this recipient can no
-      // longer reach at all. A carpark they also see through a second shared
-      // place stays in their mirror (lib/waypointLink.ts).
-      const waypointVisibility = await snapshotPlaceWaypointVisibility(tx, placeId);
+      // Places LINKED to this one do NOT go: a PlaceLink grants no visibility,
+      // so the recipient never had them through this share and there is
+      // nothing to revoke. (A route does, through Route.placeId — a foreign
+      // key, not a link. The distinction is lib/shareAccess.ts's.)
       await tx.placeShare.delete({ where: { id: share.id } });
-      await writeWaypointVisibilityLoss(tx, waypointVisibility);
       await tx.notification.deleteMany({
         where: {
           userId: targetUserId,

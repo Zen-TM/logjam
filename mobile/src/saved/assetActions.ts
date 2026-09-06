@@ -14,7 +14,7 @@
 //   routes/RouteOptionsSheet.tsx   — routes,   from BOTH Saved and the map
 //   tracks/TrackOptionsSheet.tsx   — tracks,   from BOTH Saved and the map
 //   imports/ImportOptionsSheet.tsx — imports,  from BOTH Saved and the map
-//   map/WaypointSheet.tsx          — waypoints, from BOTH Saved and the map
+
 //   places/AddWaySheet.tsx        — a place's route slot, which renders a
 //                                    TRACK's createRouteFrom and an IMPORT's
 //                                    attachToPlace from the place's side
@@ -46,15 +46,12 @@ import {
   getMediaById,
   type MirrorMedia,
   type MirrorRoute,
-  type MirrorWaypoint,
 } from "../sync/mirrorStore";
 import { deleteTrack, listTrackPoints, updateTrack, type Track } from "../tracks/tracksDb";
 import {
   createRouteLocal,
   deleteRouteLocal,
-  deleteWaypointLocal,
   updateRouteLocal,
-  updateWaypointLocal,
 } from "../sync/outbox";
 import {
   type FileSendSourceKind,
@@ -89,7 +86,7 @@ import { scratchFileUri } from "../offline/localStores";
  * file's confirms already use. The words themselves live in
  * `removeShareConfirm` (shared/src/sharing.ts), with the web.
  *
- * No owner name: a mirrored waypoint or route carries an `ownerId` and no
+ * No owner name: a mirrored route carries an `ownerId` and no
  * username, and the copy falls back to "The owner" rather than this file
  * inventing a lookup for one line.
  */
@@ -116,7 +113,7 @@ export type AssetActions = {
    * Stop seeing something shared WITH you — the recipient's own revoke, and the
    * one verb a shared row does get.
    *
-   * Present only where the share is DIRECT. A waypoint or route that is on this
+   * Present only where the share is DIRECT. A route that is on this
    * phone because it is linked to a shared PLACE has no share row of its own,
    * so the server would answer 404 and, worse, a Remove that appeared to work
    * would bring the row back on the next pull — those carry
@@ -145,7 +142,7 @@ export type AssetActions = {
   resolveBbox: () => Promise<Bbox | null>;
   /**
    * Display-only rename; resolution still keys off ids. ABSENT for the same
-   * reason `delete` is: a shared route or waypoint is read-only, and the API
+   * reason `delete` is: a shared route is read-only, and the API
    * refuses the write. It used to be an `async () => undefined` stub, which
    * meant the surfaces offering Rename accepted the user's typing and threw it
    * away without a word.
@@ -154,16 +151,16 @@ export type AssetActions = {
   /** Change the asset's display colour. */
   setColor?: (color: string) => Promise<unknown>;
   /**
-   * ABSENT where the user may not delete this asset — today, a route or
-   * waypoint shared with them through someone else's place. The API's delete
-   * is owner-only (`requireOwnedRoute` / `requireWaypointOwner`), so offering
+   * ABSENT where the user may not delete this asset — today, a route shared
+   * with them through someone else's place. The API's delete is owner-only
+   * (`requireOwnedRoute`), so offering
    * the verb removes the row from this phone, parks the push in the outbox as
    * `blocked`, and the next delta pull brings the row back: a destructive
    * action that fails loudly in Sync issues and quietly does nothing.
    *
    * Optional rather than a `readOnly` flag beside it, because the type is then
-   * what stops a surface offering the verb — the map's waypoint sheet was the
-   * only one of three that remembered the guard.
+   * what stops a surface offering the verb — one of the three sheets that
+   * offered it used to be the only one that remembered the guard.
    */
   delete?: { confirmTitle: string; confirmBody: string; run: () => Promise<unknown> };
   /**
@@ -459,49 +456,6 @@ export function routeActions(
             run: () => deleteRouteLocal(route.id),
           },
           share: { entityType: "route", entityId: route.id },
-        }),
-  };
-}
-
-export function waypointActions(waypoint: MirrorWaypoint): AssetActions {
-  const readOnly = waypoint.syncRole === "shared";
-  // No place list needed, unlike a route's: `placeIds` is already SCOPED by
-  // the server to places this user can see, so a non-empty one on a shared
-  // waypoint means it is here because of them.
-  const shareVisibility = sharedRowVisibility({
-    syncRole: waypoint.syncRole,
-    visibleLinkedPlaceIds: waypoint.placeIds,
-  });
-  return {
-    ...(readOnly ? { sharedWithYou: true as const } : {}),
-    ...(shareVisibility === "via-place"
-      ? { sharedViaPlaceIds: waypoint.placeIds }
-      : {}),
-    ...(shareVisibility === "direct"
-      ? {
-          removeShare: {
-            ...removeConfirmFields("waypoint", waypoint.name),
-            run: () => removeSharedEntity("waypoint", waypoint.id),
-          },
-        }
-      : {}),
-    locatable: true,
-    // A point has no extent; the caller's camera treats a degenerate bbox as
-    // "centre here", which is exactly what showing a waypoint means.
-    resolveBbox: async () =>
-      bboxOfPoints([{ lon: waypoint.longitude, lat: waypoint.latitude }]),
-    // Same one gate as a route's: shared means every write verb is absent.
-    ...(readOnly
-      ? {}
-      : {
-          rename: (name: string) => updateWaypointLocal(waypoint.id, { name }),
-          delete: {
-            confirmTitle: "Delete waypoint?",
-            confirmBody:
-              "The waypoint is removed from every device on your account and from anyone you shared it with. This can't be undone.",
-            run: () => deleteWaypointLocal(waypoint.id),
-          },
-          share: { entityType: "waypoint", entityId: waypoint.id },
         }),
   };
 }

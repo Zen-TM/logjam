@@ -247,57 +247,34 @@ export function routeUnlinkTombstones(args: {
   );
 }
 
-/** DELETE /waypoints/:id: the owner forgets it, and so does everyone who could
- * see it through a place share (a linked waypoint follows place-level media
- * visibility, exactly as a linked route does). `shareeIds` is empty for an
- * unlinked waypoint, which is the owner-private case. */
-export function waypointDeleteTombstones(args: {
+/** Links of a place that is being deleted. A PlaceLink is OWNER-PRIVATE — both
+ * endpoints belong to `ownerId` and a link grants no visibility to anyone — so
+ * the fan-out is one row per link for the owner alone, and no sharee ever
+ * appears here. Without them the owner's mirror keeps link rows pointing at a
+ * place that no longer exists, because the cascade that removes them writes
+ * nothing to the delta. */
+export function placeLinkDeleteTombstones(args: {
   ownerId: string;
-  waypointId: string;
-  shareeIds: string[];
+  linkIds: string[];
 }): TombstoneRow[] {
-  const { ownerId, waypointId, shareeIds } = args;
-  return [
-    { userId: ownerId, entityType: "waypoint", entityId: waypointId },
-    ...shareeIds.map(
-      (userId): TombstoneRow => ({ userId, entityType: "waypoint", entityId: waypointId }),
-    ),
-  ];
-}
-
-/** A waypoint that specific users can no longer see, with no delete anywhere:
- * it was unlinked from the last place they shared, or that share was revoked,
- * or the place was deleted. The OWNER keeps it — it survives as a standalone
- * waypoint — so only the losing users appear here.
- *
- * `userIds` must come from waypointVisibilityLoss (lib/waypointLink.ts), never
- * from "the sharees of the place we just left": the link is many-to-many, and
- * a user still holding another shared path to the waypoint has lost nothing. */
-export function waypointRevokeTombstones(args: {
-  waypointId: string;
-  userIds: string[];
-}): TombstoneRow[] {
-  const { waypointId, userIds } = args;
-  return userIds.map(
-    (userId): TombstoneRow => ({
-      userId,
-      entityType: "waypoint",
-      entityId: waypointId,
-    }),
+  const { ownerId, linkIds } = args;
+  return linkIds.map(
+    (linkId): TombstoneRow => ({ userId: ownerId, entityType: "placeLink", entityId: linkId }),
   );
 }
 
 /** A DIRECT share revoked (DELETE /shares/...), or the entity it pointed at
  * hard-deleted: the named users lose sight of it, the owner keeps it. The
- * sibling of waypointRevokeTombstones/routeUnlinkTombstones for the sharing
- * path that does not run through a place.
+ * sibling of routeUnlinkTombstones for the sharing path that does not run
+ * through a place.
  *
- * Only waypoints and routes appear here because only they ride delta sync —
- * topo and GeoPDF jobs are fetched through their own list endpoints, so a
- * revoked job simply stops appearing there and the client reconciles its
- * downloaded artifact on the next fetch. */
+ * Only routes appear here because only they ride delta sync among the directly
+ * sharable entities — topo and GeoPDF jobs are fetched through their own list
+ * endpoints, so a revoked job simply stops appearing there and the client
+ * reconciles its downloaded artifact on the next fetch. (A place is shared
+ * through PlaceShare, not Share, and has its own path.) */
 export function directShareRevokeTombstones(args: {
-  entityType: Extract<SyncEntityType, "waypoint" | "route">;
+  entityType: Extract<SyncEntityType, "route">;
   entityId: string;
   userIds: string[];
 }): TombstoneRow[] {
@@ -312,12 +289,14 @@ export function directShareRevokeTombstones(args: {
  * Five counterpart groups, one per way another user could be holding a row:
  * place sharees (the place + its place-level media), friendship
  * counterparts (the edge), owners of places shared WITH the deleted user (the
- * PlaceShare row), DIRECT recipients of the deleted user's synced
- * waypoints/routes, and place sharees who could see a waypoint or route
- * through one of those shared places. The last two are the ones a cascade
- * silently drops: the Share rows vanish with the user and the waypoint/route
- * rows are hard-deleted, but neither writes a tombstone, so without these the
- * recipient's mirror keeps the item forever. */
+ * PlaceShare row), DIRECT recipients of the deleted user's synced routes, and
+ * place sharees who could see a route through one of those shared places. The
+ * last two are the ones a cascade silently drops: the Share rows vanish with
+ * the user and the route rows are hard-deleted, but neither writes a
+ * tombstone, so without these the recipient's mirror keeps the item forever.
+ *
+ * PlaceLinks need no group of their own: they are owner-private, and the owner
+ * is the account going away. */
 export function accountDeleteTombstones(args: {
   userId: string;
   /** Place-level media ids, keyed by place id. */
@@ -326,19 +305,19 @@ export function accountDeleteTombstones(args: {
   placeSharesIn: { id: string; sharedById: string }[];
   friendships: { id: string; requesterId: string; addresseeId: string }[];
   directSharesOut: {
-    entityType: Extract<SyncEntityType, "waypoint" | "route">;
+    entityType: Extract<SyncEntityType, "route">;
     entityId: string;
     sharedWithId: string;
   }[];
   /**
-   * Waypoints/routes of this account that OTHER users could see through a
-   * place share, with the users who could see each. No visibility DIFF is
-   * needed here (unlike an unlink or a single-place delete): the account
-   * delete hard-deletes every one of these rows, so no surviving path can
-   * exist and every current viewer loses the row.
+   * Routes of this account that OTHER users could see through a place share,
+   * with the users who could see each. No visibility DIFF is needed here
+   * (unlike an unlink or a single-place delete): the account delete
+   * hard-deletes every one of these rows, so no surviving path can exist and
+   * every current viewer loses the row.
    */
   placeInheritedOut: {
-    entityType: Extract<SyncEntityType, "waypoint" | "route">;
+    entityType: Extract<SyncEntityType, "route">;
     entityId: string;
     userIds: string[];
   }[];
@@ -385,15 +364,10 @@ export function accountDeleteTombstones(args: {
       }),
     ),
     ...placeInheritedOut.flatMap((entity): TombstoneRow[] =>
-      entity.entityType === "waypoint"
-        ? waypointRevokeTombstones({
-            waypointId: entity.entityId,
-            userIds: entity.userIds,
-          })
-        : routeUnlinkTombstones({
-            routeId: entity.entityId,
-            shareeIds: entity.userIds,
-          }),
+      routeUnlinkTombstones({
+        routeId: entity.entityId,
+        shareeIds: entity.userIds,
+      }),
     ),
   ];
 }

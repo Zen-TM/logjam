@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { SYSTEM_PLACE_TYPE_IDS } from "@logjam/shared";
 
-// The Stage 7 → Stage 8 waypoint promotion. Two SQLite FILES are involved
-// (logjam-offline.db holds the legacy rows, logjam.db the mirror + outbox), so
-// no transaction can span the "insert the new waypoint" / "delete the legacy
-// row" pair. A kill in that window used to promote the row AGAIN on the next
-// launch — the user saw duplicate waypoints, both queued for push. The fix is
-// a deterministic id: the promoted waypoint keeps the legacy one.
+// The Stage 7 → Stage 8 waypoint promotion, which since the phase 1c fold
+// lands the legacy rows as PLACES of the system Marker type. Two SQLite FILES
+// are involved (logjam-offline.db holds the legacy rows, logjam.db the mirror
+// + outbox), so no transaction can span the "insert the new row" / "delete the
+// legacy row" pair. A kill in that window used to promote the row AGAIN on the
+// next launch — the user saw duplicates, both queued for push. The fix is a
+// deterministic id: the promoted place keeps the legacy one.
 
 type Call = { sql: string; args: unknown[] };
 
@@ -14,20 +16,20 @@ const legacyCalls: Call[] = [];
 let legacyRows: { id: string; name: string; lon: number; lat: number }[] = [];
 let legacyTableExists = true;
 /** Ids already in the mirror — what a half-finished previous run left behind. */
-let mirrorWaypointIds = new Set<string>();
+let mirrorPlaceIds = new Set<string>();
 
 const mirrorDb = {
   runAsync: (sql: string, ...args: unknown[]) => {
     mirrorCalls.push({ sql, args });
-    if (sql.includes("INSERT INTO waypoints")) {
-      mirrorWaypointIds.add(args[0] as string);
+    if (sql.includes("INSERT INTO places")) {
+      mirrorPlaceIds.add(args[0] as string);
     }
     return Promise.resolve({ changes: 1, lastInsertRowId: 1 });
   },
   getFirstAsync: (sql: string, ...args: unknown[]) => {
-    if (sql.includes("FROM waypoints")) {
+    if (sql.includes("FROM places")) {
       const id = args[0] as string;
-      return Promise.resolve(mirrorWaypointIds.has(id) ? { id } : null);
+      return Promise.resolve(mirrorPlaceIds.has(id) ? { id } : null);
     }
     return Promise.resolve(null);
   },
@@ -84,7 +86,7 @@ const LEGACY_ID = "11111111-1111-4111-8111-111111111111";
 
 function promotedIds(): string[] {
   return mirrorCalls
-    .filter((call) => call.sql.includes("INSERT INTO waypoints"))
+    .filter((call) => call.sql.includes("INSERT INTO places"))
     .map((call) => call.args[0] as string);
 }
 
@@ -92,7 +94,7 @@ describe("migrateLegacyWaypoints", () => {
   beforeEach(() => {
     mirrorCalls.length = 0;
     legacyCalls.length = 0;
-    mirrorWaypointIds = new Set();
+    mirrorPlaceIds = new Set();
     legacyTableExists = true;
     legacyRows = [{ id: LEGACY_ID, name: "Notch", lon: 150.4, lat: -33.5 }];
   });
@@ -102,10 +104,19 @@ describe("migrateLegacyWaypoints", () => {
     expect(promotedIds()).toEqual([LEGACY_ID]);
   });
 
+  it("files it as a MARKER, not a canyon", async () => {
+    await migrateLegacyWaypoints();
+    const insert = mirrorCalls.find((call) => call.sql.includes("INSERT INTO places"));
+    // Read off the shared declaration rather than pasted here: filing a
+    // dropped point as a canyon would put it in the canyon tab and hand it
+    // seven grade fields it will never have.
+    expect(insert!.args).toContain(SYSTEM_PLACE_TYPE_IDS.marker);
+  });
+
   it("does not duplicate when a kill lost the legacy DELETE", async () => {
     // Simulate the crash window: the mirror insert landed, the legacy row
-    // survived. The next launch must NOT mint a second waypoint.
-    mirrorWaypointIds.add(LEGACY_ID);
+    // survived. The next launch must NOT mint a second place.
+    mirrorPlaceIds.add(LEGACY_ID);
     await migrateLegacyWaypoints();
     expect(promotedIds()).toEqual([]);
     expect(

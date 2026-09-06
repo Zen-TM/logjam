@@ -1,7 +1,15 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
 import { randomUUID } from "crypto";
-import { API_URL, ALICE_SUB, BOB_SUB, BOB_ID, as, CANYON_TYPE_ID} from "./_actors";
+import {
+  API_URL,
+  ALICE_SUB,
+  BOB_SUB,
+  BOB_ID,
+  as,
+  CANYON_TYPE_ID,
+  MARKER_TYPE_ID,
+} from "./_actors";
 
 // POST /sync/push contract (Stage 8 §8): FIFO order, per-op transactions,
 // per-op statuses, dependencyFailed propagation, conflict receipts, and the
@@ -38,7 +46,7 @@ describe("sync push — request contract", () => {
       ALICE_SUB,
       Array.from({ length: 51 }, () => ({
         opId: randomUUID(),
-        entity: "waypoint",
+        entity: "place",
         op: "delete",
         id: randomUUID(),
       })),
@@ -48,10 +56,11 @@ describe("sync push — request contract", () => {
 });
 
 describe("sync push — FIFO batch lifecycle", () => {
-  it("create place → trip linking it → waypoint on it; replay is alreadyApplied; delete wins", async () => {
+  it("create place → trip linking it → marker linked to it; replay is alreadyApplied; delete wins", async () => {
     const placeId = randomUUID();
     const tripId = randomUUID();
-    const waypointId = randomUUID();
+    const markerId = randomUUID();
+    const linkId = randomUUID();
     const ops = [
       {
         opId: "op-place",
@@ -73,22 +82,33 @@ describe("sync push — FIFO batch lifecycle", () => {
         fields: { date: "2026-07-10", placeIds: [placeId] },
       },
       {
-        opId: "op-wp",
-        entity: "waypoint",
+        opId: "op-marker",
+        entity: "place",
         op: "create",
-        id: waypointId,
+        id: markerId,
         fields: {
+          placeTypeId: MARKER_TYPE_ID,
           name: "Push anchor",
           latitude: -33.62,
           longitude: 150.22,
-          placeId,
         },
+      },
+      // The link is its own entity, and it DEPENDS on both endpoints — which
+      // is why it is last in the batch and why `pushOpDependencies` collects
+      // `aPlaceId`/`bPlaceId`.
+      {
+        opId: "op-link",
+        entity: "placeLink",
+        op: "create",
+        id: linkId,
+        fields: { aPlaceId: placeId, bPlaceId: markerId },
       },
     ];
 
     const first = await push(ALICE_SUB, ops);
     expect(first.status).toBe(200);
     expect(first.body.results.map((r: { status: string }) => r.status)).toEqual([
+      "applied",
       "applied",
       "applied",
       "applied",
@@ -105,11 +125,13 @@ describe("sync push — FIFO batch lifecycle", () => {
       "alreadyApplied",
       "alreadyApplied",
       "alreadyApplied",
+      "alreadyApplied",
     ]);
 
     // Deletes: applied, then alreadyApplied on replay.
     const deletes = [
-      { opId: "d-wp", entity: "waypoint", op: "delete", id: waypointId },
+      { opId: "d-link", entity: "placeLink", op: "delete", id: linkId },
+      { opId: "d-marker", entity: "place", op: "delete", id: markerId },
       { opId: "d-trip", entity: "tripLog", op: "delete", id: tripId },
       { opId: "d-place", entity: "place", op: "delete", id: placeId },
     ];
@@ -118,16 +140,22 @@ describe("sync push — FIFO batch lifecycle", () => {
       "applied",
       "applied",
       "applied",
+      "applied",
     ]);
     const delReplay = await push(ALICE_SUB, deletes);
     expect(
       delReplay.body.results.map((r: { status: string }) => r.status),
-    ).toEqual(["alreadyApplied", "alreadyApplied", "alreadyApplied"]);
+    ).toEqual([
+      "alreadyApplied",
+      "alreadyApplied",
+      "alreadyApplied",
+      "alreadyApplied",
+    ]);
   });
 
   it("a rejected create fails its dependents (dependencyFailed), independents still apply", async () => {
     const badPlaceId = randomUUID();
-    const goodWaypointId = randomUUID();
+    const goodMarkerId = randomUUID();
     const res = await push(ALICE_SUB, [
       {
         opId: "bad-place",
@@ -150,13 +178,16 @@ describe("sync push — FIFO batch lifecycle", () => {
         fields: { date: "2026-07-11", placeIds: [badPlaceId] },
       },
       {
-        opId: "independent-wp",
-        entity: "waypoint",
+        opId: "independent-marker",
+        entity: "place",
         op: "create",
-        id: goodWaypointId,
-        // NOT a place — no placeTypeId. A waypoint is still its own entity
-        // until phase 1c folds it in, and WAYPOINT_FIELDS would reject the key.
-        fields: { name: "Fine", latitude: -33.63, longitude: 150.23 },
+        id: goodMarkerId,
+        fields: {
+          placeTypeId: MARKER_TYPE_ID,
+          name: "Fine",
+          latitude: -33.63,
+          longitude: 150.23,
+        },
       },
     ]);
     const statuses = res.body.results.map((r: { status: string }) => r.status);
@@ -165,7 +196,7 @@ describe("sync push — FIFO batch lifecycle", () => {
 
     // cleanup
     await push(ALICE_SUB, [
-      { opId: "c", entity: "waypoint", op: "delete", id: goodWaypointId },
+      { opId: "c", entity: "place", op: "delete", id: goodMarkerId },
     ]);
   });
 
@@ -173,10 +204,11 @@ describe("sync push — FIFO batch lifecycle", () => {
     const res = await push(ALICE_SUB, [
       {
         opId: "unknown-field",
-        entity: "waypoint",
+        entity: "place",
         op: "create",
         id: randomUUID(),
         fields: {
+          placeTypeId: MARKER_TYPE_ID,
           name: "x",
           latitude: -33.6,
           longitude: 150.2,
@@ -527,7 +559,7 @@ describe("sync push — route anchors", () => {
 describe("sync push — direct-share delete cleanup", () => {
   // REST DELETE /routes/:id fans tombstones out to direct sharees and purges
   // their Share rows; the sync push delete used to do neither (finding 1), so a
-  // waypoint/route deleted from a phone while offline stranded the recipient's
+  // place/route deleted from a phone while offline stranded the recipient's
   // mirror AND left the Share row granting access to a dead id.
   it("a pushed route delete tombstones a direct sharee", async () => {
     const routeId = randomUUID();

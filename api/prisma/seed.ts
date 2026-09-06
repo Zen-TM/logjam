@@ -7,6 +7,7 @@ import {
   setFieldValues,
   SOURCES_FIELD_KEY,
   SYSTEM_FIELD_DEFS,
+  canonicalLinkPair,
   SYSTEM_PLACE_TYPE_IDS,
   SYSTEM_PLACE_TYPES,
   TRACK_COLORS,
@@ -57,7 +58,9 @@ const PLACE_IDS = [
 // path validates op ids with isUuidV4 and rejects the whole request on a
 // mismatch, so a hand-written id here would make alice's definitions
 // permanently unsyncable from the phone.
-/** Waypoint and route ids — prefixes "6" and "7" (prisma/seedIds.ts). */
+/** Marker-place and route ids — prefixes "6" and "7" (prisma/seedIds.ts). The
+ * "6" space is the old waypoint space: the phase 1c migration preserved
+ * waypoint ids as place ids, so the seed does too. */
 const wpid = (n: number) => seedId("6", n);
 const rtid = (n: number) => seedId("7", n);
 
@@ -361,8 +364,7 @@ async function main() {
     prisma.friendship.deleteMany(),
     prisma.media.deleteMany(),
     prisma.tripLog.deleteMany(),
-    prisma.placeWaypoint.deleteMany(),
-    prisma.waypoint.deleteMany(),
+    prisma.placeLink.deleteMany(),
     prisma.route.deleteMany(),
     prisma.place.deleteMany(),
     prisma.customFieldDefPlaceType.deleteMany(),
@@ -519,37 +521,38 @@ async function main() {
     },
   });
 
-  // Waypoints and routes. The seed had NONE of either, which left two whole
-  // Saved categories empty in dev and made both of that screen's share marks
-  // unverifiable without hand-creating data as two different users.
+  // MARKER places and routes. The seed had NO waypoints or routes at all until
+  // they were added for the Saved share marks; waypoints are places of the
+  // system Marker type since phase 1c, so what was five waypoints is five more
+  // places here.
   //
   // The set covers every combination the row builders branch on:
   //   owned, unshared            → no mark
-  //   owned + a DIRECT share     → the fan-out glyph. sharedCount comes from
-  //                                `shares`, never from the place share, so a
-  //                                waypoint on a shared place has no count.
-  //   received via place share  → "From bob": the owner resolves through the
+  //   owned + a place share      → the fan-out glyph
+  //   received via place share   → "From bob": the owner resolves through the
   //                                mirrored place_shares row.
-  //   received via direct share  → "Shared with you". Direct shares are not a
-  //                                delta entity, so no owner name reaches the
-  //                                phone — this is the fallback, exercised.
-  await prisma.waypoint.createMany({
+  //
+  // `symbol` is gone with the fold — the icon is the place TYPE's now — and the
+  // free-text tags came across unchanged.
+  await prisma.place.createMany({
     data: [
-      { id: wpid(1), ownerId: ALICE_ID, name: "Grand Canyon carpark", latitude: -33.6501, longitude: 150.3122, elevation: 1010, symbol: "parking", tags: ["carpark", "access"] },
-      { id: wpid(2), ownerId: ALICE_ID, name: "Claustral first abseil", latitude: -33.5611, longitude: 150.4041, elevation: 880, symbol: "anchor", notes: "Tree anchor on the true left.", tags: ["abseil"] },
-      { id: wpid(3), ownerId: ALICE_ID, name: "Ranger station", latitude: -33.7188, longitude: 150.3099, symbol: "flag" },
-      { id: wpid(4), ownerId: BOB_ID, name: "Coin Slot pothole", latitude: -33.1231, longitude: 150.3288, elevation: 720, symbol: "hazard", notes: "Bob's note — a sharee must not be able to edit this.", tags: ["hazard"] },
-      { id: wpid(5), ownerId: BOB_ID, name: "Galah exit gully", latitude: -33.2521, longitude: 150.3044, symbol: "flag", tags: ["exit"] },
+      { id: wpid(1), ownerId: ALICE_ID, placeTypeId: SYSTEM_PLACE_TYPE_IDS.marker, name: "Grand Canyon carpark", latitude: -33.6501, longitude: 150.3122, elevation: 1010, tags: ["carpark", "access"] },
+      { id: wpid(2), ownerId: ALICE_ID, placeTypeId: SYSTEM_PLACE_TYPE_IDS.marker, name: "Claustral first abseil", latitude: -33.5611, longitude: 150.4041, elevation: 880, notes: "Tree anchor on the true left.", tags: ["abseil"] },
+      { id: wpid(3), ownerId: ALICE_ID, placeTypeId: SYSTEM_PLACE_TYPE_IDS.marker, name: "Ranger station", latitude: -33.7188, longitude: 150.3099 },
+      { id: wpid(4), ownerId: BOB_ID, placeTypeId: SYSTEM_PLACE_TYPE_IDS.marker, name: "Coin Slot pothole", latitude: -33.1231, longitude: 150.3288, elevation: 720, notes: "Bob's note — a sharee must not be able to edit this.", tags: ["hazard"] },
+      { id: wpid(5), ownerId: BOB_ID, placeTypeId: SYSTEM_PLACE_TYPE_IDS.marker, name: "Galah exit gully", latitude: -33.2521, longitude: 150.3044, tags: ["exit"] },
     ],
   });
 
-  // Links are what make a waypoint part of a place record — and for wpid(4)
-  // they are what carries it to alice through bob's place share.
-  await prisma.placeWaypoint.createMany({
+  // Links between places — navigational only. A link grants NO visibility, so
+  // wpid(4) does NOT reach alice through bob's shared place any more: she sees
+  // the place she was shared, and nothing it points at. Both endpoints of every
+  // link belong to one owner, which the server asserts on create.
+  await prisma.placeLink.createMany({
     data: [
-      { placeId: PLACE_IDS[0], waypointId: wpid(1) },
-      { placeId: PLACE_IDS[1], waypointId: wpid(2) },
-      { placeId: BOB_SHARED_PLACE_ID, waypointId: wpid(4) },
+      { id: seedId("6", 101), ownerId: ALICE_ID, ...canonicalLinkPair(PLACE_IDS[0], wpid(1)) },
+      { id: seedId("6", 102), ownerId: ALICE_ID, ...canonicalLinkPair(PLACE_IDS[1], wpid(2)) },
+      { id: seedId("6", 103), ownerId: BOB_ID, ...canonicalLinkPair(BOB_SHARED_PLACE_ID, wpid(4)) },
     ],
   });
 
@@ -562,16 +565,19 @@ async function main() {
   });
 
   // Direct per-item shares — the second, independent visibility source
-  // (lib/shareAccess.ts), and the only thing that puts a number in a row's
-  // sharedCount. alice's fan-out is 1 because bob is her only friend: carol is
-  // shared nothing and is not her friend, and sharing.test.ts asserts a 403 on
-  // share->carol. The mark is a glyph rather than a count, so one recipient
-  // renders it exactly as ten would.
+  // (lib/shareAccess.ts), and the only thing that puts a number in a ROUTE's
+  // sharedCount. A place is never shared this way (PlaceShare is its own
+  // table), and a waypoint no longer exists to be, so what was three rows is
+  // one. alice's fan-out is 1 because bob is her only friend: carol is shared
+  // nothing and is not her friend, and sharing.test.ts asserts a 403 on
+  // share->carol.
   await prisma.share.createMany({
     data: [
-      { id: seedId("8", 1), entityType: "waypoint", entityId: wpid(1), sharedById: ALICE_ID, sharedWithId: BOB_ID },
       { id: seedId("8", 2), entityType: "route", entityId: rtid(1), sharedById: ALICE_ID, sharedWithId: BOB_ID },
-      { id: seedId("8", 3), entityType: "waypoint", entityId: wpid(5), sharedById: BOB_ID, sharedWithId: ALICE_ID },
+      // The INCOMING direction, so every sharee-perspective surface (a
+      // read-only row, a "Shared with you" mark, a refused delete) is
+      // reachable in dev without hand-creating data as two users.
+      { id: seedId("8", 3), entityType: "route", entityId: rtid(3), sharedById: BOB_ID, sharedWithId: ALICE_ID },
     ],
   });
 
@@ -631,8 +637,9 @@ async function main() {
   const placeCount = ALL_PLACES.length;
   console.log(
     `Seed complete: 3 users, ${placeCount} places (1 fork), 5 place shares ` +
-      `(1 incoming to alice), 3 direct shares, ${trips.length} trip logs, ` +
-      `5 waypoints, 3 routes, 4 media, 3 notifications, 0 topo jobs`,
+      `(1 incoming to alice), 2 direct route shares (1 each way), ` +
+      `${trips.length} trip logs, ` +
+      `5 marker places, 3 place links, 3 routes, 4 media, 3 notifications, 0 topo jobs`,
   );
 }
 

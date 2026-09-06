@@ -80,33 +80,6 @@ describe("client-supplied ids — trips", () => {
   });
 });
 
-describe("client-supplied ids — waypoints", () => {
-  it("create honours the id; replay 200; foreign 404", async () => {
-    const id = randomUUID();
-    const created = await request(API_URL)
-      .post("/waypoints")
-      .set(as(ALICE_SUB))
-      .send({ id, name: "Client-id wp", latitude: -33.64, longitude: 150.24 });
-    expect(created.status).toBe(201);
-    expect(created.body.id).toBe(id);
-
-    const replay = await request(API_URL)
-      .post("/waypoints")
-      .set(as(ALICE_SUB))
-      .send({ id, name: "Other", latitude: -33.65, longitude: 150.25 });
-    expect(replay.status).toBe(200);
-    expect(replay.body.name).toBe("Client-id wp");
-
-    const foreign = await request(API_URL)
-      .post("/waypoints")
-      .set(as(BOB_SUB))
-      .send({ id, name: "Hijack", latitude: -33.66, longitude: 150.26 });
-    expect(foreign.status).toBe(404);
-
-    await request(API_URL).delete(`/waypoints/${id}`).set(as(ALICE_SUB));
-  });
-});
-
 describe("client-supplied ids — media presign/confirm", () => {
   it("presign honours mediaId; completed-flow re-presign returns the item; foreign probes 404", async () => {
     const mediaId = randomUUID();

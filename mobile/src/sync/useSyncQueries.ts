@@ -13,14 +13,14 @@ import {
   listMediaForLinked,
   listMirrorPlaces,
   listMirrorTrips,
-  listMirrorWaypoints,
+  listMirrorPlaceLinks,
   listMirrorRoutes,
   getMirrorPlace,
   getMirrorTrip,
   type MirrorPlace,
   type MirrorMedia,
   type MirrorTrip,
-  type MirrorWaypoint,
+  type MirrorPlaceLink,
   type MirrorRoute,
 } from "./mirrorStore";
 import { mirrorQueryError } from "./mirrorQueryError";
@@ -101,7 +101,7 @@ function useMirrorQuery<T>(read: () => Promise<T>): MirrorQueryState<T> {
 
 const readPlaces = () => listMirrorPlaces();
 const readTrips = () => listMirrorTrips();
-const readWaypoints = () => listMirrorWaypoints();
+const readPlaceLinks = () => listMirrorPlaceLinks();
 const readShareCounts = () => countOutgoingSharesByPlace();
 const readIncomingShareOwners = () => incomingShareOwnerByPlace();
 
@@ -123,8 +123,8 @@ export function useMirrorTrip(id: string): MirrorQueryState<MirrorTrip | null> {
   return useMirrorQuery(read);
 }
 
-export function useMirrorWaypoints(): MirrorQueryState<MirrorWaypoint[]> {
-  return useMirrorQuery(readWaypoints);
+export function useMirrorPlaceLinks(): MirrorQueryState<MirrorPlaceLink[]> {
+  return useMirrorQuery(readPlaceLinks);
 }
 
 /** Every route the account can see (own + through a place share). */
@@ -161,7 +161,7 @@ export function useMirrorShareCounts(): MirrorQueryState<Record<string, number>>
 
 /**
  * Username of whoever shared each incoming place with the viewer, keyed by
- * place id — the "From <name>" mark on a shared route or waypoint in Saved.
+ * place id — the "From <name>" mark on a shared route or place in Saved.
  */
 export function useMirrorIncomingShareOwners(): MirrorQueryState<Record<string, string>> {
   return useMirrorQuery(readIncomingShareOwners);

@@ -175,7 +175,7 @@ export function OfflineSettingsScreen({
             the four above it are switches. Wrapping a statement of fact in the
             same card promises a tap that does nothing. */}
         <View style={styles.footnote}>
-          <Hint text="Waypoints, routes, imports and recordings are backed up to your account. Maps you downloaded stay on this device." />
+          <Hint text="Places, routes, imports and recordings are backed up to your account. Maps you downloaded stay on this device." />
         </View>
       </ScreenScroll>
 

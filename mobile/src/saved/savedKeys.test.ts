@@ -16,7 +16,7 @@ describe("the sync boundary", () => {
     // with it — that page states this rule in words and would otherwise lie.
     const synced = SAVED_CATEGORIES.filter((c) => CATEGORY_SYNCS[c]);
     const deviceOnly = SAVED_CATEGORIES.filter((c) => !CATEGORY_SYNCS[c]);
-    expect(synced.sort()).toEqual(["import", "route", "track", "waypoint"]);
+    expect(synced.sort()).toEqual(["import", "route", "track"]);
     expect(deviceOnly.sort()).toEqual(["geoPdf", "overlay", "region"]);
   });
 });

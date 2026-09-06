@@ -15,7 +15,7 @@ import {
 // Revocation, from the side that loses access. Three findings live here:
 //
 //   APIR-007  unfriending must revoke EVERY share type in both directions
-//             (place, waypoint, route, topo job, GeoPDF job) plus file sends
+//             (place, route, topo job, GeoPDF job) plus file sends
 //             the recipient has not taken yet — while leaving ACCEPTED sends
 //             alone, because those are copies the recipient already owns (D2).
 //   APIR-012  a place_shared notification must stop resolving the place NAME

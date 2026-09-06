@@ -35,8 +35,6 @@ export * from "./apiTypes.js";
 export * from "./sync.js";
 export * from "./sharing.js";
 export * from "./syncClient.js";
-export * from "./waypointTags.js";
-export * from "./waypointValidation.js";
 export * from "./routeExport.js";
 export * from "./routeValidation.js";
 export * from "./elevation.js";
