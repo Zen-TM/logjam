@@ -518,7 +518,10 @@ function PlaceDialog({
 
       // Custom numeric fields (integer/float) get the same treatment so an
       // invalid value can't reach coerceFieldValue and be silently mangled.
-      const customFieldInvalid = customFieldDefs.some(
+      // Scoped for the same reason the write below is: a field this form did
+      // not render cannot have an invalid value the user could go and fix, so
+      // blocking Save on one would be an unfixable error message.
+      const customFieldInvalid = typeFieldDefs.some(
         (def) => customFieldValueError(def, getFieldValue(def.key)) != null,
       );
       if (customFieldInvalid) {
@@ -543,8 +546,14 @@ function PlaceDialog({
         .filter((s) => s.label.trim())
         .map((s) => [s.label.trim(), s.url.trim()]);
 
+      // ONLY THE FIELDS THIS FORM SHOWED. Iterating every definition wrote a
+      // null for the ones scoped to other types — and `setFieldValues` treats a
+      // null as "remove this key", so saving a canyon deleted whatever was
+      // recorded under a campsite-scoped field. A definition this type does not
+      // carry was never asked here, and an unasked question has no answer to
+      // store.
       const customFields: Record<string, unknown> = {};
-      for (const def of customFieldDefs) {
+      for (const def of typeFieldDefs) {
         customFields[def.key] = coerceFieldValue(getFieldValue(def.key), def.type);
       }
 

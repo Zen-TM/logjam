@@ -1469,16 +1469,27 @@ function UnifiedImportDialog({
               promise stopped being true the moment a place could be a
               campsite. The logbook one below stays a file — a trip's columns
               do not depend on a place type. */}
-          <a
-            href="#"
-            onClick={(e) => {
-              e.preventDefault();
-              downloadPlaceTemplate();
+          {/* A BUTTON, not an anchor: this one is generated in the browser and
+              handed to the user, so there is no href to navigate to — and an
+              anchor with `href="#"` is a link that lies to a screen reader and
+              to a middle-click. Styled as a link because it sits inline in a
+              sentence beside a real one. */}
+          <Box
+            component="button"
+            type="button"
+            onClick={downloadPlaceTemplate}
+            sx={{
+              background: "none",
+              border: "none",
+              padding: 0,
+              font: "inherit",
+              color: "var(--theme-accent)",
+              textDecoration: "underline",
+              cursor: "pointer",
             }}
-            style={{ color: "var(--theme-accent)" }}
           >
             {importTypeName} template
-          </a>{" "}
+          </Box>{" "}
           ·{" "}
           <a href="/templates/logbook-import-template.csv" download style={{ color: "var(--theme-accent)" }}>
             Logbook template

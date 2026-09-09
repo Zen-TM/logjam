@@ -7,6 +7,7 @@ import {
   formatTripPlaceNames,
   MAX_PLACES_PER_TRIP,
   TRIP_TYPE_SUGGESTIONS,
+  tripFieldDefs,
   type ScopedCustomFieldDef,
 } from "@logjam/shared";
 
@@ -116,6 +117,31 @@ export function TripEditSheet({
   } = useFieldDefs("tripLog");
   const [editingField, setEditingField] = useState<ScopedCustomFieldDef | null>(null);
 
+  /**
+   * THE FIELDS THIS TRIP IS ASKED FOR: the ones scoped to the types of the
+   * places it links, union any key that already has a value (`tripFieldDefs`).
+   *
+   * A trip that visited a canyon is asked the canyon questions; one that
+   * visited nothing is asked only the always-on ones ("walked around the
+   * block" is the common case). The union half is what stops the form eating
+   * data: unlinking a place, deleting one, retyping it or rescoping a
+   * definition would each otherwise hide a value the user typed, and the save
+   * below writes exactly what the form knows about.
+   */
+  const visibleFieldDefs = useMemo(
+    () =>
+      tripFieldDefs(
+        customFieldDefs,
+        selected
+          .map(
+            (link) => places.find((place) => place.id === link.id)?.placeTypeId,
+          )
+          .filter((typeId): typeId is string => !!typeId),
+        trip?.customFields,
+      ),
+    [customFieldDefs, places, selected, trip],
+  );
+
   // Seed from the trip being edited (or today's blank form) each time the sheet
   // opens, so a cancelled edit never leaks into the next one.
   useEffect(() => {
@@ -212,7 +238,10 @@ export function TripEditSheet({
     // user just saw are exactly what the server will store (shared derivation).
     const effectiveTypes = enforceCanyoningTag(types, selected.length > 0);
     const isoDate = `${dateKey}T00:00:00.000Z`;
-    const effectiveCustomFields = coerceCustomFields(fieldValues, customFieldDefs);
+    // Only the fields the form actually showed. A definition scoped to a type
+    // this trip does not visit was never asked, and writing a null for it
+    // would be the form inventing an answer.
+    const effectiveCustomFields = coerceCustomFields(fieldValues, visibleFieldDefs);
     try {
       if (trip) {
         // Field-scoped: push only what actually changed, so a concurrent edit
@@ -264,7 +293,7 @@ export function TripEditSheet({
       setSaving(false);
     }
   }, [
-    customFieldDefs,
+    visibleFieldDefs,
     dateKey,
     displayName,
     fieldValues,
@@ -282,7 +311,7 @@ export function TripEditSheet({
     mode === "date"
       ? dateTarget.kind === "trip"
         ? "Trip date"
-        : (customFieldDefs.find((def) => def.key === dateTarget.key)?.label ?? "Date")
+        : (visibleFieldDefs.find((def) => def.key === dateTarget.key)?.label ?? "Date")
       : mode === "places"
         ? "Places on this trip"
         : mode === "fields"
@@ -432,7 +461,7 @@ export function TripEditSheet({
           </View>
 
           <CustomFieldValueInputs
-            defs={customFieldDefs}
+            defs={visibleFieldDefs}
             values={fieldValues}
             onChange={(key, next) =>
               setFieldValues((current) => ({ ...current, [key]: next }))

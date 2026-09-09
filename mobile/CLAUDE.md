@@ -94,8 +94,8 @@ such call on `onDidFinishLoadingMap`, and prefer the bounds carried on
 
 **A source's press bubbles to the MAP in MLRN 11.** MLRN 10 let a source's
 `onPress` consume the tap; MLRN 11 emits it on the source AND on the `Map`
-(documented on `MapProps.onPress`). Tapping a place, route, track, import or
-waypoint therefore also ran the map's handler and opened the "This point" sheet
+(documented on `MapProps.onPress`). Tapping a place, route, track or import
+therefore also ran the map's handler and opened the "This point" sheet
 on top of the one the user asked for — and with a point tool armed it placed a point
 at the same tap. Every pressable source handler calls `stopSourcePress(event)`
 (`src/map/sourcePress.ts`) FIRST, before any early return: a handler that bails
@@ -438,7 +438,7 @@ feature — a user who thinks a sent file can be taken back has been misled by
 the UI, not by the API.
 
 - **Share** — a LIVE, revocable view of a server-backed row the sender still
-  owns: waypoints, routes, LiDAR topo jobs, GeoPDF jobs, and places. The
+  owns: places, routes, LiDAR topo jobs and GeoPDF jobs. The
   recipient can view and export, never edit. `POST /shares` (places keep their
   own `/places/:id/share`).
 - **Send a copy** — a FILE handed over. Once accepted it is the recipient's own,
@@ -588,6 +588,58 @@ on offer. That resolve step and `GET /file-sends/inbox` share ONE filter,
 `inboxWhere` in `api/src/lib/fileSendAccess.ts`: anything the notification
 admits that the inbox would not is a live Accept button whose endpoint answers
 404. Guard: `api/src/__tests__/fileSends.test.ts`, "the actionable notification".
+
+## Places and their types (2026-09-10)
+
+**The type is the vocabulary, and every surface reads it from ONE place:
+`useMirrorPlaceTypes`.** The tab rail on Places, the create form's picker, the
+map layer sheet's children and the pin colours are all built from that hook, so
+they cannot disagree about which types exist. `listMirrorPlaceTypes` sorts
+system-first explicitly rather than trusting the engine — SQLite sorts NULLs
+first, Postgres sorts them last, and the leftmost tab is decided by it.
+
+**An EMPTY type mirror answers with the compiled-in system types.** A guest
+never syncs and a fresh account has not pulled yet, so a picker built from an
+empty table would make creating a place impossible for exactly the user who has
+no way to fix it. Same argument as `SYSTEM_FIELD_DEFS` being the bounds a
+validation uses with no signal. Guard: `sync/placeTypesFallback.test.ts`.
+
+**A type tab is decided over the WHOLE collection; its badge counts what the
+other axes leave.** A rail that reshuffles under the thumb on every keystroke is
+worse than a chip that goes quiet, so membership (does this tab exist?) is a
+fact about the library, while the number on it answers "how many would I get if
+I tapped this" — the same split the bucket rail already used.
+
+**The type rail is a filter the user can SEE, so it does not also count as a
+hidden one.** `filters.placeTypeId` is an ordinary `PlaceFilters` key and
+`activePlaceFilterCount` counts it, which is right for the sheet and wrong for
+the "N filters active" warning sitting directly under the rail that says so.
+The screen subtracts the rail's own axis while the rail is on screen; Reset
+leaves the tab standing (the rail is that axis's control, and "All" is one tap).
+
+**Definitions reach the phone WITH their scoping, or no form can be
+type-specific.** `customFieldDefsFromRows` drops `placeTypeIds` /
+`appliesToAllTypes` — a `TripLogCustomFieldDef` has no room for them — so
+`loadFieldDefs` builds `ScopedCustomFieldDef`s itself, the same flatMap the
+server's `loadScopedDefs` does. Two bugs lived in that gap: every place form
+rendered every place field (a campsite asking for a V grade), and a field
+created on the phone reached the server scoped to NOTHING, so it existed in
+Settings and on no form at all. The editor now asks where a field appears — or
+infers it, when opened from a place's own form, because the user already
+answered by being there — and refuses a definition scoped to nothing.
+
+**`foreignFields` actions are ONLINE-ONLY and that is deliberate, not an
+oversight.** The field is not client-writable (it is absent from the push
+allowlist by design), so an offline adopt would need an op carrying a definition
+create AND a value move atomically. The three rows say "Needs a connection"
+rather than failing at the tap — the same rule sharing follows. Upgrade path if
+the field asks for it: a `foreignField` push op with those two effects.
+
+**Tags are edited on the place form, and they came back from the dead.** The
+waypoint sheet had a tag editor; folding waypoints into places deleted the sheet
+and with it the only way to edit a place's tags on either client. The vocabulary
+is `PLACE_TAG_SUGGESTIONS` unioned with every tag already on the device — a seed
+list, never an enum.
 
 ## Inbox (2026-08-30)
 

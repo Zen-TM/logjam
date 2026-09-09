@@ -36,20 +36,16 @@ const createdFields: string[] = [];
 // runs low. Without it the run dissolves into 429s that look like assertion
 // failures about types.
 /**
- * Post-write throttle: read the tighter `userPatchLimiter` budget (30/60s on
- * the write routes) off the response and sleep to the window reset when it
- * runs low. `_rateLimitGate` cannot do this — it probes a READ route, so it
- * sees the global limiter and nothing about this one.
- */
-async function afterWrite(res: { status: number; headers: Record<string, string> }) {
-  await throttleWrites(res);
-}
-
-/**
- * The same, for a write that must SUCCEED: if the budget was already spent by
- * the file that ran before this one, the first attempt is a 429 and the retry
- * lands after the window resets. Without it a 429 arrives as an assertion
- * failure about place types, in whichever file happens to run second.
+ * EVERY write goes through this, not just the ones that must succeed.
+ *
+ * A throttle applied AFTER the response has already been asserted on is not a
+ * throttle: the 429 has landed, and it fails as "expected 429 to be 404" —
+ * about place types, in whichever file happens to run second. This reads the
+ * tighter `userPatchLimiter` budget (30/60s, per user) off the response,
+ * sleeps to the window reset when it is spent, and hands the request back to
+ * be retried, which is what a real client would do. `_rateLimitGate` cannot
+ * help: it probes a READ route, so it sees the global limiter and nothing
+ * about this one.
  */
 async function write<T extends { status: number; headers: Record<string, string> }>(
   send: () => Promise<T>,
@@ -61,7 +57,7 @@ async function write<T extends { status: number; headers: Record<string, string>
 async function makeType(sub: string, name: string): Promise<string> {
   const res = await write(() =>
     request(API_URL)
-      .post("/place-types")
+    .post("/place-types")
       .set(as(sub))
       .send({ name, iconKey: "map-pin", color: "#22C55E" }),
   );
@@ -156,19 +152,21 @@ describe("system types and definitions cannot be removed", () => {
   });
 
   it("refuses to edit a system type", async () => {
-    const res = await request(API_URL)
+    const res = await write(() =>
+      request(API_URL)
         .patch(`/place-types/${SYSTEM_PLACE_TYPE_IDS.canyon}`)
-      .set(as(ALICE_SUB))
-      .send({ name: "Mine now" });
-    await afterWrite(res);
+        .set(as(ALICE_SUB))
+        .send({ name: "Mine now" }),
+    );
     expect(res.status).toBe(404);
   });
 
   it("refuses to delete a system field definition", async () => {
-    const res = await request(API_URL)
+    const res = await write(() =>
+      request(API_URL)
         .delete("/custom-fields/place/v_grade")
-      .set(as(ALICE_SUB));
-    await afterWrite(res);
+        .set(as(ALICE_SUB)),
+    );
     expect(res.status).toBe(404);
     // And it still labels values.
     const fields = await request(API_URL).get("/custom-fields/place").set(as(ALICE_SUB));
@@ -192,11 +190,12 @@ describe("system types and definitions cannot be removed", () => {
 // which is the key RopeWiki import writes into Canyon: two writers, one key.
 describe("reserved keys are refused", () => {
   it("refuses a create whose key is reserved, and says what to do", async () => {
-    const res = await request(API_URL)
+    const res = await write(() =>
+      request(API_URL)
         .post("/custom-fields/place")
-      .set(as(ALICE_SUB))
-      .send({ field: { key: "v_grade", label: "V grade", type: "integer" } });
-    await afterWrite(res);
+        .set(as(ALICE_SUB))
+        .send({ field: { key: "v_grade", label: "V grade", type: "integer" } }),
+    );
     expect(res.status).toBe(409);
     expect(res.body.error).toMatch(/reserved/i);
     // A bare "that key is taken" leaves the user renaming by trial and error.
@@ -205,41 +204,45 @@ describe("reserved keys are refused", () => {
 
   it("refuses every reserved key, not just the memorable ones", async () => {
     for (const def of SYSTEM_FIELD_DEFS) {
-      const res = await request(API_URL)
+      const res = await write(() =>
+        request(API_URL)
           .post("/custom-fields/place")
-        .set(as(ALICE_SUB))
-        .send({ field: { key: def.key, label: def.label, type: "string" } });
-    await afterWrite(res);
+          .set(as(ALICE_SUB))
+          .send({ field: { key: def.key, label: def.label, type: "string" } }),
+      );
       expect(res.status, `${def.key} was accepted`).toBe(409);
     }
   });
 
   it("refuses a RENAME onto a reserved label", async () => {
-    const create = await request(API_URL)
+    const create = await write(() =>
+      request(API_URL)
         .post("/custom-fields/place")
-      .set(as(ALICE_SUB))
-      .send({ field: { key: "rope_notes", label: "Rope notes", type: "string" } });
-    await afterWrite(create);
+        .set(as(ALICE_SUB))
+        .send({ field: { key: "rope_notes", label: "Rope notes", type: "string" } }),
+    );
     expect(create.status).toBe(201);
     createdFields.push("rope_notes");
 
     // The KEY never moves on a rename — every stored value is keyed by it — so
     // this is not a data collision. It is two fields displaying the same name,
     // one of them the built-in, which is worse than useless on a form.
-    const rename = await request(API_URL)
+    const rename = await write(() =>
+      request(API_URL)
         .patch("/custom-fields/place/rope_notes")
-      .set(as(ALICE_SUB))
-      .send({ label: "V grade" });
-    await afterWrite(rename);
+        .set(as(ALICE_SUB))
+        .send({ label: "V grade" }),
+    );
     expect(rename.status).toBe(409);
   });
 
   it("allows an ordinary label", async () => {
-    const res = await request(API_URL)
+    const res = await write(() =>
+      request(API_URL)
         .post("/custom-fields/place")
-      .set(as(ALICE_SUB))
-      .send({ field: { key: "water_level", label: "Water level", type: "string" } });
-    await afterWrite(res);
+        .set(as(ALICE_SUB))
+        .send({ field: { key: "water_level", label: "Water level", type: "string" } }),
+    );
     expect(res.status).toBe(201);
     createdFields.push("water_level");
   });
@@ -251,14 +254,15 @@ describe("reserved keys are refused", () => {
 describe("appliesToAllTypes", () => {
   it("is inherited by a type created AFTER the definition", async () => {
     const key = `all_types_${Date.now()}`;
-    const create = await request(API_URL)
+    const create = await write(() =>
+      request(API_URL)
         .post("/custom-fields/place")
-      .set(as(ALICE_SUB))
-      .send({
-        field: { key, label: "Permit number", type: "string" },
-        appliesToAllTypes: true,
-      });
-    await afterWrite(create);
+        .set(as(ALICE_SUB))
+        .send({
+          field: { key, label: "Permit number", type: "string" },
+          appliesToAllTypes: true,
+        }),
+    );
     expect(create.status).toBe(201);
     createdFields.push(key);
 
@@ -267,17 +271,18 @@ describe("appliesToAllTypes", () => {
 
     // A place of the NEW type validates a value under the OLD definition,
     // which it could only do if the definition applies to it.
-    const place = await request(API_URL)
+    const place = await write(() =>
+      request(API_URL)
         .post("/places")
-      .set(as(ALICE_SUB))
-      .send({
-        name: "Inherits the all-types field",
-        latitude: -33.5,
-        longitude: 150.3,
-        placeTypeId: typeId,
-        fieldValues: { [key]: "NPWS-1" },
-      });
-    await afterWrite(place);
+        .set(as(ALICE_SUB))
+        .send({
+          name: "Inherits the all-types field",
+          latitude: -33.5,
+          longitude: 150.3,
+          placeTypeId: typeId,
+          fieldValues: { [key]: "NPWS-1" },
+        }),
+    );
     expect(place.status, JSON.stringify(place.body)).toBe(201);
     expect(place.body.fieldValues[key]).toBe("NPWS-1");
     await request(API_URL).delete(`/places/${place.body.id}`).set(as(ALICE_SUB));
@@ -286,46 +291,49 @@ describe("appliesToAllTypes", () => {
   it("does not make a type-scoped definition apply everywhere", async () => {
     const key = `scoped_${Date.now()}`;
     const typeId = await makeType(ALICE_SUB, `Scoped type ${Date.now()}`);
-    const create = await request(API_URL)
+    const create = await write(() =>
+      request(API_URL)
         .post("/custom-fields/place")
-      .set(as(ALICE_SUB))
-      .send({
-        field: { key, label: "Scoped field", type: "integer", min: 1, max: 5 },
-        placeTypeIds: [typeId],
-      });
-    await afterWrite(create);
+        .set(as(ALICE_SUB))
+        .send({
+          field: { key, label: "Scoped field", type: "integer", min: 1, max: 5 },
+          placeTypeIds: [typeId],
+        }),
+    );
     expect(create.status).toBe(201);
     createdFields.push(key);
 
     // Out of range for the definition — refused on the type it IS scoped to...
-    const scoped = await request(API_URL)
+    const scoped = await write(() =>
+      request(API_URL)
         .post("/places")
-      .set(as(ALICE_SUB))
-      .send({
-        name: "Scoped",
-        latitude: -33.5,
-        longitude: 150.3,
-        placeTypeId: typeId,
-        fieldValues: { [key]: 99 },
-      });
-    await afterWrite(scoped);
+        .set(as(ALICE_SUB))
+        .send({
+          name: "Scoped",
+          latitude: -33.5,
+          longitude: 150.3,
+          placeTypeId: typeId,
+          fieldValues: { [key]: 99 },
+        }),
+    );
     expect(scoped.status).toBe(400);
 
     // ...and NOT enforced on a type it is not scoped to, where the same key is
     // just an unrecognised value. Values outlive the definitions that describe
     // them (the trip-log union rule depends on exactly this), so an unknown key
     // is stored rather than rejected.
-    const elsewhere = await request(API_URL)
+    const elsewhere = await write(() =>
+      request(API_URL)
         .post("/places")
-      .set(as(ALICE_SUB))
-      .send({
-        name: "Elsewhere",
-        latitude: -33.5,
-        longitude: 150.3,
-        placeTypeId: SYSTEM_PLACE_TYPE_IDS.marker,
-        fieldValues: { [key]: 99 },
-      });
-    await afterWrite(elsewhere);
+        .set(as(ALICE_SUB))
+        .send({
+          name: "Elsewhere",
+          latitude: -33.5,
+          longitude: 150.3,
+          placeTypeId: SYSTEM_PLACE_TYPE_IDS.marker,
+          fieldValues: { [key]: 99 },
+        }),
+    );
     expect(elsewhere.status, JSON.stringify(elsewhere.body)).toBe(201);
     await request(API_URL).delete(`/places/${elsewhere.body.id}`).set(as(ALICE_SUB));
   });
@@ -335,11 +343,12 @@ describe("place type lifecycle", () => {
   it("refuses a second type with the same name", async () => {
     const name = `Duplicate ${Date.now()}`;
     await makeType(ALICE_SUB, name);
-    const again = await request(API_URL)
+    const again = await write(() =>
+      request(API_URL)
         .post("/place-types")
-      .set(as(ALICE_SUB))
-      .send({ name, iconKey: "map-pin", color: "#22C55E" });
-    await afterWrite(again);
+        .set(as(ALICE_SUB))
+        .send({ name, iconKey: "map-pin", color: "#22C55E" }),
+    );
     // Copy reconciliation matches an incoming type BY NAME, so two types with
     // one name would make that match ambiguous.
     expect(again.status).toBe(409);
@@ -348,28 +357,31 @@ describe("place type lifecycle", () => {
   it("lets two DIFFERENT users each have a type of the same name", async () => {
     const name = `Shared name ${Date.now()}`;
     await makeType(ALICE_SUB, name);
-    const bobs = await request(API_URL)
+    const bobs = await write(() =>
+      request(API_URL)
         .post("/place-types")
-      .set(as(BOB_SUB))
-      .send({ name, iconKey: "map-pin", color: "#22C55E" });
-    await afterWrite(bobs);
+        .set(as(BOB_SUB))
+        .send({ name, iconKey: "map-pin", color: "#22C55E" }),
+    );
     expect(bobs.status).toBe(201);
     created.push(bobs.body.id);
   });
 
   it("refuses an icon or colour that is not in the curated set", async () => {
-    const badIcon = await request(API_URL)
+    const badIcon = await write(() =>
+      request(API_URL)
         .post("/place-types")
-      .set(as(ALICE_SUB))
-      .send({ name: `Bad icon ${Date.now()}`, iconKey: "waves", color: "#22C55E" });
-    await afterWrite(badIcon);
+        .set(as(ALICE_SUB))
+        .send({ name: `Bad icon ${Date.now()}`, iconKey: "waves", color: "#22C55E" }),
+    );
     expect(badIcon.status).toBe(400);
 
-    const badColor = await request(API_URL)
+    const badColor = await write(() =>
+      request(API_URL)
         .post("/place-types")
-      .set(as(ALICE_SUB))
-      .send({ name: `Bad colour ${Date.now()}`, iconKey: "map-pin", color: "#123456" });
-    await afterWrite(badColor);
+        .set(as(ALICE_SUB))
+        .send({ name: `Bad colour ${Date.now()}`, iconKey: "map-pin", color: "#123456" }),
+    );
     expect(badColor.status).toBe(400);
   });
 
@@ -377,30 +389,33 @@ describe("place type lifecycle", () => {
   // delete is refused with the count and the caller offers a reassign.
   it("refuses to delete a type that still holds places, then allows it after a reassign", async () => {
     const typeId = await makeType(ALICE_SUB, `Occupied ${Date.now()}`);
-    const place = await request(API_URL)
+    const place = await write(() =>
+      request(API_URL)
         .post("/places")
-      .set(as(ALICE_SUB))
-      .send({
-        name: "In the way",
-        latitude: -33.5,
-        longitude: 150.3,
-        placeTypeId: typeId,
-      });
-    await afterWrite(place);
+        .set(as(ALICE_SUB))
+        .send({
+          name: "In the way",
+          latitude: -33.5,
+          longitude: 150.3,
+          placeTypeId: typeId,
+        }),
+    );
     expect(place.status).toBe(201);
 
-    const blocked = await request(API_URL)
+    const blocked = await write(() =>
+      request(API_URL)
         .delete(`/place-types/${typeId}`)
-      .set(as(ALICE_SUB));
-    await afterWrite(blocked);
+        .set(as(ALICE_SUB)),
+    );
     expect(blocked.status).toBe(409);
     expect(blocked.body.error).toMatch(/1 place/);
 
-    const moved = await request(API_URL)
+    const moved = await write(() =>
+      request(API_URL)
         .post(`/place-types/${typeId}/reassign`)
-      .set(as(ALICE_SUB))
-      .send({ placeTypeId: SYSTEM_PLACE_TYPE_IDS.marker });
-    await afterWrite(moved);
+        .set(as(ALICE_SUB))
+        .send({ placeTypeId: SYSTEM_PLACE_TYPE_IDS.marker }),
+    );
     expect(moved.status).toBe(200);
     expect(moved.body.movedCount).toBe(1);
 
@@ -409,7 +424,7 @@ describe("place type lifecycle", () => {
 
     // The place survived the delete of its old type, which is the point.
     const survivor = await request(API_URL)
-      .get(`/places/${place.body.id}`)
+    .get(`/places/${place.body.id}`)
       .set(as(ALICE_SUB));
     expect(survivor.status).toBe(200);
     expect(survivor.body.placeTypeId).toBe(SYSTEM_PLACE_TYPE_IDS.marker);
@@ -418,19 +433,21 @@ describe("place type lifecycle", () => {
 
   // 404, not 403: an id the caller does not own must not be confirmed to exist.
   it("gives a foreign type the same 404 a nonexistent one gets", async () => {
-    const bobsType = await request(API_URL)
+    const bobsType = await write(() =>
+      request(API_URL)
         .post("/place-types")
-      .set(as(BOB_SUB))
-      .send({ name: `Bobs ${Date.now()}`, iconKey: "map-pin", color: "#22C55E" });
-    await afterWrite(bobsType);
+        .set(as(BOB_SUB))
+        .send({ name: `Bobs ${Date.now()}`, iconKey: "map-pin", color: "#22C55E" }),
+    );
     expect(bobsType.status).toBe(201);
     created.push(bobsType.body.id);
 
-    const patched = await request(API_URL)
+    const patched = await write(() =>
+      request(API_URL)
         .patch(`/place-types/${bobsType.body.id}`)
-      .set(as(ALICE_SUB))
-      .send({ name: "Mine now" });
-    await afterWrite(patched);
+        .set(as(ALICE_SUB))
+        .send({ name: "Mine now" }),
+    );
     expect(patched.status).toBe(404);
   });
 
@@ -438,31 +455,34 @@ describe("place type lifecycle", () => {
   // campsite the client forgot to type under canyons, where the user would
   // never think to look for it — and the request would look like it worked.
   it("refuses a place with no type, and one naming a foreign type", async () => {
-    const none = await request(API_URL)
+    const none = await write(() =>
+      request(API_URL)
         .post("/places")
-      .set(as(ALICE_SUB))
-      // No placeTypeId AT ALL — that is the whole assertion.
-      .send({ name: "Typeless", latitude: -33.5, longitude: 150.3 });
-    await afterWrite(none);
+        .set(as(ALICE_SUB))
+        // No placeTypeId AT ALL — that is the whole assertion.
+        .send({ name: "Typeless", latitude: -33.5, longitude: 150.3 }),
+    );
     expect(none.status).toBe(400);
 
-    const bobsType = await request(API_URL)
+    const bobsType = await write(() =>
+      request(API_URL)
         .post("/place-types")
-      .set(as(BOB_SUB))
-      .send({ name: `Bobs other ${Date.now()}`, iconKey: "map-pin", color: "#22C55E" });
-    await afterWrite(bobsType);
+        .set(as(BOB_SUB))
+        .send({ name: `Bobs other ${Date.now()}`, iconKey: "map-pin", color: "#22C55E" }),
+    );
     created.push(bobsType.body.id);
 
-    const foreign = await request(API_URL)
+    const foreign = await write(() =>
+      request(API_URL)
         .post("/places")
-      .set(as(ALICE_SUB))
-      .send({
-        name: "Someone else's type",
-        latitude: -33.5,
-        longitude: 150.3,
-        placeTypeId: bobsType.body.id,
-      });
-    await afterWrite(foreign);
+        .set(as(ALICE_SUB))
+        .send({
+          name: "Someone else's type",
+          latitude: -33.5,
+          longitude: 150.3,
+          placeTypeId: bobsType.body.id,
+        }),
+    );
     expect(foreign.status).toBe(400);
   });
 });

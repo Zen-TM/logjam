@@ -10,8 +10,12 @@ import {
   tripLogHasCustomFieldValue,
   countTripLogsWithCustomField,
   renameCustomFieldLabel,
+  tripFieldDefs,
 } from "./tripLogFields.js";
-import type { TripLogCustomFieldDef } from "./tripLogFields.js";
+import type {
+  ScopedCustomFieldDef,
+  TripLogCustomFieldDef,
+} from "./tripLogFields.js";
 
 describe("makeCustomFieldKey", () => {
   it("lowercases and replaces non-alphanumeric runs with underscores", () => {
@@ -324,5 +328,62 @@ describe("customFieldDefFromRow with one-sided bounds", () => {
     const def = customFieldDefFromRow(row({}));
     expect(def).not.toHaveProperty("min");
     expect(def).not.toHaveProperty("max");
+  });
+});
+
+// §7.5 — the union clause. Without it, four ordinary actions each silently
+// destroy a value: unlink a place, delete one, change its type, rescope a
+// definition.
+describe("tripFieldDefs", () => {
+  const scoped = (
+    key: string,
+    placeTypeIds: string[],
+    appliesToAllTypes = false,
+  ): ScopedCustomFieldDef => ({
+    key,
+    label: key,
+    type: "string",
+    placeTypeIds,
+    appliesToAllTypes,
+  });
+
+  const water = scoped("water", ["canyon"]);
+  const firewood = scoped("firewood", ["campsite"]);
+  const weather = scoped("weather", [], true);
+  const defs = [water, firewood, weather];
+
+  it("asks the questions the linked places' types ask", () => {
+    expect(tripFieldDefs(defs, ["canyon"], {}).map((def) => def.key)).toEqual([
+      "water",
+      "weather",
+    ]);
+  });
+
+  it("unions the types of several linked places, showing a shared field once", () => {
+    const both = scoped("party", ["canyon", "campsite"]);
+    expect(
+      tripFieldDefs([...defs, both], ["canyon", "campsite"], {}).map((d) => d.key),
+    ).toEqual(["water", "firewood", "weather", "party"]);
+  });
+
+  // "Walked around the block" is the common case, not an edge case.
+  it("asks only the always-on fields when a trip links no place", () => {
+    expect(tripFieldDefs(defs, [], {}).map((def) => def.key)).toEqual(["weather"]);
+  });
+
+  // THE CLAUSE THAT STOPS IT EATING DATA. Unlinking a place, deleting one,
+  // retyping it or rescoping a definition would each otherwise hide a value the
+  // user typed — and the next save writes the object the form knows about, so
+  // hidden means gone.
+  it("keeps a field whose value is already recorded, whatever the scoping says", () => {
+    expect(
+      tripFieldDefs(defs, [], { water: "high" }).map((def) => def.key),
+    ).toEqual(["water", "weather"]);
+  });
+
+  it("does not resurrect a field whose value was cleared", () => {
+    expect(
+      tripFieldDefs(defs, [], { water: null }).map((def) => def.key),
+    ).toEqual(["weather"]);
   });
 });

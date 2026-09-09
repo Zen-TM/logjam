@@ -71,6 +71,38 @@ export function defsForType(
   );
 }
 
+/**
+ * The definitions a TRIP's form shows: the ones applicable to the types of the
+ * places it links, UNION any key that already has a value.
+ *
+ * The first half is the same scoping a place gets — a trip that visited a
+ * canyon is asked the canyon questions, one that visited nothing is asked only
+ * the `appliesToAllTypes` ones ("walked around the block" is the common case,
+ * not an edge case).
+ *
+ * THE UNION CLAUSE IS WHAT STOPS IT EATING DATA. Without it, unlinking a
+ * place, deleting one, changing its type or rescoping a definition all silently
+ * hide a value the user typed — the form stops rendering the field, the next
+ * save writes the object the form knows about, and the value is gone with no
+ * warning and no undo. One clause covers all four. A value is destroyed only by
+ * deleting its definition, which has its own impact count and confirmation.
+ *
+ * Order is the order given, so a field does not jump when a place is linked.
+ */
+export function tripFieldDefs(
+  defs: readonly ScopedCustomFieldDef[],
+  linkedPlaceTypeIds: readonly string[],
+  values: Record<string, unknown> | null | undefined,
+): ScopedCustomFieldDef[] {
+  const linked = new Set(linkedPlaceTypeIds);
+  return defs.filter(
+    (def) =>
+      def.appliesToAllTypes ||
+      def.placeTypeIds.some((typeId) => linked.has(typeId)) ||
+      (values != null && values[def.key] !== undefined && values[def.key] !== null),
+  );
+}
+
 export const CUSTOM_FIELD_TYPES: {
   value: TripLogCustomFieldType;
   label: string;

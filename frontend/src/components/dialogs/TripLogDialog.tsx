@@ -33,6 +33,7 @@ import {
   MAX_TRIP_TYPES_PER_TRIP,
   CANYONING_TRIP_TYPE,
   enforceCanyoningTag,
+  tripFieldDefs,
 } from "@logjam/shared";
 import type { TPlace, TTripLog } from "../../placeUtils";
 import {
@@ -290,6 +291,27 @@ function TripLogDialog({
     if (creating) chips.push({ kind: "create", name: creating.name });
     return chips;
   }, [selectedPlaceIds, places, creating]);
+
+  /**
+   * THE FIELDS THIS TRIP IS ASKED FOR: the ones scoped to the types of the
+   * places it links, union any key that already has a value (§2, `tripFieldDefs`).
+   *
+   * The union half is what stops the form eating data — unlinking a place,
+   * deleting one, retyping it or rescoping a definition would each otherwise
+   * hide a value the user typed, and the next save writes the object the form
+   * knows about. A value only ever goes when its definition is deleted, which
+   * has its own impact count.
+   *
+   * An inline pending create is a canyon (see `creating`), so it counts as one
+   * for the purpose of which questions to ask.
+   */
+  const visibleFieldDefs = useMemo(() => {
+    const linkedTypeIds = selectedPlaceIds
+      .map((id) => places.find((place) => place.id === id)?.placeTypeId)
+      .filter((typeId): typeId is string => !!typeId);
+    if (creating) linkedTypeIds.push(SYSTEM_PLACE_TYPE_IDS.canyon);
+    return tripFieldDefs(customFieldDefs, linkedTypeIds, tripLog?.customFields);
+  }, [creating, customFieldDefs, places, selectedPlaceIds, tripLog]);
 
   // Names of the currently selected places (incl. a pending create, for a live
   // placeholder preview), in selection order — feeds the trip-name placeholder.
@@ -583,7 +605,7 @@ function TripLogDialog({
     if (draftPromiseRef.current) return draftPromiseRef.current;
 
     const customFields: Record<string, unknown> = {};
-    for (const def of customFieldDefs) {
+    for (const def of visibleFieldDefs) {
       customFields[def.key] = coerceFieldValue(getFieldValue(def.key), def.type);
     }
     // placeIds and displayName are independent — an empty/unnamed draft is
@@ -671,7 +693,7 @@ function TripLogDialog({
     }
     // Block save if any custom numeric field is invalid (e.g. "5.5" in an
     // integer field) so it can't be silently mangled on save (TRIP-1/TRIP-2).
-    const customFieldInvalid = customFieldDefs.some(
+    const customFieldInvalid = visibleFieldDefs.some(
       (def) => customFieldValueError(def, getFieldValue(def.key)) != null,
     );
     if (customFieldInvalid) {
@@ -688,8 +710,11 @@ function TripLogDialog({
       const types = selectedTypes;
 
       // Build custom fields object — only include defined fields
+      // Only the fields the form actually showed. A definition scoped to a
+      // type this trip does not visit is not "empty" here — it was never asked,
+      // and writing a null for it would be this form inventing an answer.
       const customFields: Record<string, unknown> = {};
-      for (const def of customFieldDefs) {
+      for (const def of visibleFieldDefs) {
         const raw = getFieldValue(def.key);
         customFields[def.key] = coerceFieldValue(raw, def.type);
       }
@@ -1213,12 +1238,12 @@ function TripLogDialog({
           />
 
           {/* Custom fields */}
-          {customFieldDefs.length > 0 && (
+          {visibleFieldDefs.length > 0 && (
             <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
               <Typography variant="caption" sx={{ color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                 Custom Fields
               </Typography>
-              {customFieldDefs.map((def) => (
+              {visibleFieldDefs.map((def) => (
                 <Box
                   key={def.key}
                   sx={{ display: "flex", gap: 1, alignItems: "center" }}
