@@ -34,13 +34,16 @@ appId: com.logjamnsw.mobile
 - extendedWaitUntil:
     visible: "Name"
     timeout: 10000
+# TYPE FIRST — the form reshapes under this choice, and a guest gets the
+# built-in types even with nothing synced (they are compiled in).
+- assertVisible: "Canyon"
 - tapOn: "Name"
 - inputText: "Guest Test Canyon"
 - tapOn: "Latitude"
 - inputText: "-33.5603"
 - tapOn: "Longitude"
 - inputText: "150.4033"
-- tapOn: "Save"
+- tapOn: "Add place"
 - extendedWaitUntil:
     visible: "Guest Test Canyon"
     timeout: 10000

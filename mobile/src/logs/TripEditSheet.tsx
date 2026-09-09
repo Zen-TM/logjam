@@ -7,7 +7,7 @@ import {
   formatTripPlaceNames,
   MAX_PLACES_PER_TRIP,
   TRIP_TYPE_SUGGESTIONS,
-  type TripLogCustomFieldDef,
+  type ScopedCustomFieldDef,
 } from "@logjam/shared";
 
 import { fontSize, fontWeight, radius, spacing, surface, theme, withAlpha } from "../theme";
@@ -114,7 +114,7 @@ export function TripEditSheet({
     defs: customFieldDefs,
     setDefs: setCustomFieldDefs,
   } = useFieldDefs("tripLog");
-  const [editingField, setEditingField] = useState<TripLogCustomFieldDef | null>(null);
+  const [editingField, setEditingField] = useState<ScopedCustomFieldDef | null>(null);
 
   // Seed from the trip being edited (or today's blank form) each time the sheet
   // opens, so a cancelled edit never leaks into the next one.

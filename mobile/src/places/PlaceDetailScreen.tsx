@@ -61,7 +61,14 @@ import {
   theme,
 } from "../theme";
 import type { MirrorPlace, MirrorTrip } from "../sync/mirrorStore";
-import { deletePlaceLocal, updateRouteLocal } from "../sync/outbox";
+import {
+  createPlaceLinkLocal,
+  deletePlaceLinkLocal,
+  deletePlaceLocal,
+  updateRouteLocal,
+} from "../sync/outbox";
+import { resolveForeignField, type ForeignFieldAction } from "../api/foreignFields";
+import { linkablePlaces, truncationHint } from "./linkablePlaces";
 import {
   useMirrorPlace,
   useMirrorPlaces,
@@ -82,6 +89,7 @@ import {
   SectionHeader,
   StatGrid,
   StatusPill,
+  TextField,
   Toast,
   type Stat,
   type ToastMessage,
@@ -91,6 +99,16 @@ import { TripEditSheet } from "../logs/TripEditSheet";
 import { PlaceEditSheet } from "./PlaceEditSheet";
 import { placeDeleteConfirm } from "./placeDeleteConfirm";
 import { PLACE_STATUS_META, placeStatus } from "./placeMeta";
+
+/** A parked value as one line. Objects are stringified rather than dropped:
+ *  the point of the section is that the user can SEE what arrived before
+ *  deciding what to do with it. */
+function foreignValueText(value: unknown): string {
+  if (value === null || value === undefined) return "No value";
+  if (typeof value === "object") return JSON.stringify(value);
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  return String(value);
+}
 
 /** Extent of a drawn route's points, for "show it on the map". Built at
  *  render time and never stored — a region of interest stays off the server. */
@@ -155,6 +173,16 @@ export function PlaceDetailScreen({
   // Above the early returns — hooks cannot be conditional.
   const [addingWay, setAddingWay] = useState(false);
   const [routeSlotMenu, setRouteSlotMenu] = useState(false);
+  /** The link picker, and the text narrowing it. */
+  const [linking, setLinking] = useState(false);
+  const [linkQuery, setLinkQuery] = useState("");
+  /** A linked place whose row was tapped — the sheet that offers to unlink it. */
+  const [linkMenuId, setLinkMenuId] = useState<string | null>(null);
+  /** The parked value whose three actions are open, and whether one is running.
+   *  The KEY rather than the item: the item is re-read from the place, so the
+   *  sheet cannot go on showing a value the server has already moved. */
+  const [foreignKey, setForeignKey] = useState<string | null>(null);
+  const [resolvingForeign, setResolvingForeign] = useState(false);
 
   const place = query.data;
 
@@ -198,6 +226,11 @@ export function PlaceDetailScreen({
   const routeCount = attachments.filter(
     (item) => mediaCategory(item.mediaType) === "track",
   ).length;
+  /** Values that arrived on a COPY, keyed by definitions this account does not
+   *  have (§2.6). Owner-private — the server never sends them on a shared row,
+   *  so a sharee's place has none and this section does not render. */
+  const foreignFields = place.foreignFields ?? [];
+  const foreignItem = foreignFields.find((item) => item.key === foreignKey) ?? null;
 
   // The user-visible values, internal `_`-prefixed entries excluded. The
   // definitions that label them are the viewer's own — or, for a place shared
@@ -247,6 +280,35 @@ export function PlaceDetailScreen({
     notify("Coordinates copied.", "info");
   };
   stats.push({ label: "Position", value: position, wide: true, onPress: copyPosition });
+
+  /**
+   * One of the three actions on a parked value. The place is re-read from the
+   * mirror after it lands, because all three change the row — adopt also
+   * creates a definition, which the form above reads.
+   */
+  const runForeignAction = (action: ForeignFieldAction) => {
+    const item = foreignItem;
+    if (!item) return;
+    setResolvingForeign(true);
+    resolveForeignField(placeId, item.key, action)
+      .then(() => {
+        setForeignKey(null);
+        query.refresh();
+        notify(
+          action === "adopt"
+            ? `“${item.label}” is one of your fields now.`
+            : action === "notes"
+              ? "Added to the notes."
+              : "Discarded.",
+          "info",
+        );
+      })
+      .catch((err: unknown) => {
+        console.error(err);
+        notify(messageFromError(err, "Couldn't do that just now."), "error");
+      })
+      .finally(() => setResolvingForeign(false));
+  };
 
   const openInMapsApp = () => {
     const label = encodeURIComponent(place.name);
@@ -465,12 +527,12 @@ export function PlaceDetailScreen({
           />
         )}
 
-        {/* ponytail: read-only. Linking and unlinking from the phone lands in
-            phase 5 with the type tabs and the create flow — the ops exist
-            (`createPlaceLinkLocal` / `deletePlaceLinkLocal`), the picker does
-            not. Until then a link is made on the web and read here.
+        {/* Places linked to this one — the carpark, the campsite, the exit.
+            Editable from the phone: linking is an outbox op like everything
+            else, so it works standing at the carpark with no signal, which is
+            where you find out the two belong together.
 
-            Places linked to this one — the carpark, the campsite, the exit.
+
             NAVIGATIONAL ONLY: a link grants no visibility, so this section is
             the owner's own filing and a recipient sees nothing here (the
             server sends them no links at all). Coordinates stay off the rows —
@@ -493,9 +555,55 @@ export function PlaceDetailScreen({
                   icon="map-pin"
                   title={linked.name}
                   onPress={() => onShowPlaceOnMap?.(linked)}
+                  // The row's own action is "show me where that is"; the verb
+                  // that CHANGES something sits behind its own control, so a
+                  // thumb reaching for the map cannot unlink instead.
+                  right={
+                    <IconButton
+                      icon="more-vertical"
+                      accessibilityLabel={`Options for ${linked.name}`}
+                      onPress={() => setLinkMenuId(linked.id)}
+                    />
+                  }
                 />
               ))
             )}
+            <Row
+              icon="link"
+              title="Link a place"
+              subtitle="A carpark, a campsite, the exit."
+              onPress={() => {
+                setLinkQuery("");
+                setLinking(true);
+              }}
+            />
+          </>
+        ) : null}
+
+        {/* VALUES THAT ARRIVED ON A COPY, in their own read-only section (§2.6).
+            They are not in this account's form and not on its other places:
+            copying one campsite must not change the form on all forty. The
+            three actions below ARE the schema decision, made by the user with
+            the value in front of them.
+
+            Owner-private: a place shared WITH someone carries none of this, so
+            the labels and values of whoever they came from stop here. */}
+        {isOwner && foreignFields.length > 0 ? (
+          <>
+            <SectionHeader label={`Came with this place · ${foreignFields.length}`} />
+            <Text style={styles.muted}>
+              Recorded under fields you don&rsquo;t have. Keep one as a field of
+              your own, write it into the notes, or discard it.
+            </Text>
+            {foreignFields.map((item) => (
+              <Row
+                key={item.key}
+                icon="inbox"
+                title={item.label}
+                subtitle={foreignValueText(item.value)}
+                onPress={() => setForeignKey(item.key)}
+              />
+            ))}
           </>
         ) : null}
 
@@ -600,6 +708,138 @@ export function PlaceDetailScreen({
       {/* Changing what fills the route slot, from the place it belongs to —
           the same two verbs the route's own options offer, where the user is
           looking at the slot rather than at the route. */}
+      {/* The link picker: this account's own places, narrowed by typing. A
+          shared place is not offered — the server refuses a link to one, so
+          offering it would be a 400 waiting to happen (`linkablePlaces`). */}
+      <BottomSheet
+        visible={linking}
+        onClose={() => setLinking(false)}
+        title="Link a place"
+      >
+        <View style={styles.sheetBody}>
+          <TextField
+            label="Find a place"
+            value={linkQuery}
+            onChangeText={setLinkQuery}
+            autoCapitalize="none"
+          />
+          {(() => {
+            const candidates = (placesQuery.data ?? []).filter(
+              (row) => row.id !== placeId && !linkedPlaceIds.has(row.id),
+            );
+            const { visible, hiddenCount } = linkablePlaces(candidates, linkQuery);
+            const hint = truncationHint(visible.length, hiddenCount);
+            if (visible.length === 0) {
+              return (
+                <Text style={styles.muted}>
+                  {candidates.length === 0
+                    ? "Every other place is already linked to this one."
+                    : "No place matches that."}
+                </Text>
+              );
+            }
+            return (
+              <>
+                {visible.map((row) => (
+                  <Row
+                    key={row.id}
+                    icon="map-pin"
+                    title={row.name}
+                    onPress={() => {
+                      setLinking(false);
+                      createPlaceLinkLocal(placeId, row.id)
+                        .then(() => notify(`Linked to ${row.name}.`, "info"))
+                        .catch((err: unknown) => {
+                          console.error(err);
+                          notify("Couldn't link that place.", "error");
+                        });
+                    }}
+                  />
+                ))}
+                {hint ? <Text style={styles.muted}>{hint}</Text> : null}
+              </>
+            );
+          })()}
+        </View>
+      </BottomSheet>
+
+      {/* Unlinking, from the linked row's own sheet. A link grants no
+          visibility either way, so removing one takes nothing from anybody —
+          which is why it asks nothing and is not styled as destructive. */}
+      <BottomSheet
+        visible={linkMenuId !== null}
+        onClose={() => setLinkMenuId(null)}
+        title={
+          linkedPlaces.find((row) => row.id === linkMenuId)?.name ?? "Linked place"
+        }
+      >
+        <View style={styles.sheetBody}>
+          <Row
+            icon="link-2"
+            hue={theme.warning}
+            title="Unlink from this place"
+            subtitle="Both places are kept."
+            onPress={() => {
+              const target = (placeLinks.data ?? []).find(
+                (link) =>
+                  (link.aPlaceId === placeId && link.bPlaceId === linkMenuId) ||
+                  (link.bPlaceId === placeId && link.aPlaceId === linkMenuId),
+              );
+              setLinkMenuId(null);
+              if (!target) return;
+              deletePlaceLinkLocal(target.id)
+                .then(() => notify("Unlinked.", "info"))
+                .catch((err: unknown) => {
+                  console.error(err);
+                  notify("Couldn't unlink that place.", "error");
+                });
+            }}
+          />
+        </View>
+      </BottomSheet>
+
+      {/* The three actions on one parked value. ONLINE-ONLY: `foreignFields` is
+          not client-writable by design, so there is no op to queue — the rows
+          say "Needs a connection" rather than failing at the tap, the same rule
+          sharing follows. */}
+      <BottomSheet
+        visible={foreignItem !== null}
+        onClose={() => (resolvingForeign ? undefined : setForeignKey(null))}
+        title={foreignItem?.label ?? "Field"}
+      >
+        <View style={styles.sheetBody}>
+          <Text style={styles.muted}>
+            {foreignValueText(foreignItem?.value)}
+          </Text>
+          <Row
+            icon="plus-circle"
+            title="Keep as one of my fields"
+            subtitle={
+              online
+                ? "Adds it to this place's type, with this value filled in."
+                : "Needs a connection"
+            }
+            disabled={!online || resolvingForeign}
+            onPress={() => runForeignAction("adopt")}
+          />
+          <Row
+            icon="file-text"
+            title="Add to notes"
+            subtitle={online ? "Kept as a line of prose." : "Needs a connection"}
+            disabled={!online || resolvingForeign}
+            onPress={() => runForeignAction("notes")}
+          />
+          <Row
+            icon="trash-2"
+            hue={theme.warning}
+            title="Discard"
+            subtitle={online ? "Removes this value." : "Needs a connection"}
+            disabled={!online || resolvingForeign}
+            onPress={() => runForeignAction("discard")}
+          />
+        </View>
+      </BottomSheet>
+
       <BottomSheet
         visible={routeSlotMenu}
         onClose={() => setRouteSlotMenu(false)}

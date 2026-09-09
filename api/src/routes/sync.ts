@@ -1645,13 +1645,17 @@ async function applyCustomFieldDefOp(
     if (!isCustomFieldEntity(fields.entity)) {
       throw new AppError(400, "Invalid entity");
     }
+    // EACH BOUND INDEPENDENTLY. Gating on both dropped every one-sided bound
+    // on its way through this path — and one-sided is the normal case for a
+    // "how many" field, three of the system defs included. The def then landed
+    // unbounded, so the form stopped showing the range and nothing refused a
+    // negative. `assertValidDef` accepts either alone (§5.1).
     const def = assertValidDef({
       key: fields.key,
       label: fields.label,
       type: fields.type,
-      ...(typeof fields.min === "number" && typeof fields.max === "number"
-        ? { min: fields.min, max: fields.max }
-        : {}),
+      ...(typeof fields.min === "number" ? { min: fields.min } : {}),
+      ...(typeof fields.max === "number" ? { max: fields.max } : {}),
     });
     // A key this owner already uses for this entity is a 409, which the push
     // loop turns into a `rejected` op the user sees. Deliberately NOT folded

@@ -27,7 +27,7 @@
 import { useCallback, useState } from "react";
 import { StyleSheet, Text } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import { type TripLogCustomFieldDef } from "@logjam/shared";
+import { type ScopedCustomFieldDef } from "@logjam/shared";
 
 import { type CustomFieldEntity } from "../api/queries";
 import { useAccountState } from "../auth/AccountStateContext";
@@ -70,7 +70,7 @@ const PAGES: {
 type SheetMode =
   | { kind: "closed" }
   | { kind: "fields"; entity: CustomFieldEntity }
-  | { kind: "fieldForm"; entity: CustomFieldEntity; editing: TripLogCustomFieldDef | null };
+  | { kind: "fieldForm"; entity: CustomFieldEntity; editing: ScopedCustomFieldDef | null };
 
 export function SettingsScreen({ onOpenPage }: { onOpenPage: (page: SettingsPage) => void }) {
   const { accountState } = useAccountState();
@@ -89,7 +89,7 @@ export function SettingsScreen({ onOpenPage }: { onOpenPage: (page: SettingsPage
 
   const defsFor = (entity: CustomFieldEntity) =>
     entity === "tripLog" ? tripFields.defs : placeFields.defs;
-  const setDefsFor = (entity: CustomFieldEntity, next: TripLogCustomFieldDef[]) => {
+  const setDefsFor = (entity: CustomFieldEntity, next: ScopedCustomFieldDef[]) => {
     if (entity === "tripLog") tripFields.setDefs(next);
     else placeFields.setDefs(next);
   };

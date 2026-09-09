@@ -16,6 +16,10 @@ appId: com.logjamnsw.mobile
 - extendedWaitUntil:
     visible: "Claustral Canyon"
     timeout: 15000
+# The type rail: one tab per place type the account actually uses, which is
+# what replaced the old Canyons/Waypoints tab split. "All" is always first.
+- assertVisible: "All"
+- assertVisible: "Canyon"
 - tapOn: "Claustral Canyon"
 - extendedWaitUntil:
     visible: "Notes|Location|Grade"

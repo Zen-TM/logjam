@@ -372,6 +372,16 @@ const CUSTOM_FIELD_DEF_UPDATE_COLUMNS: Record<string, ColumnSpec> = {
   min: "min",
   max: "max",
   position: "position",
+  // WHERE the field appears. Editable, unlike `key` and `entity`: rescoping a
+  // field to another type moves the form it shows up on and leaves every
+  // stored value attached, which is the whole reason scoping is a property of
+  // the definition rather than a second definition.
+  placeTypeIds: stringListColumn("place_type_ids_json"),
+  appliesToAllTypes: {
+    column: "applies_to_all_types",
+    encode: (value) => (value ? 1 : 0),
+    decode: (raw) => raw === 1,
+  },
 };
 
 export type CustomFieldDefDraft = {

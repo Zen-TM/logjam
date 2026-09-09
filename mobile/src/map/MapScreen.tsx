@@ -94,6 +94,7 @@ import { getVectorStyle, useApiQuery } from "../api/queries";
 import { useAccountState } from "../auth/AccountStateContext";
 import {
   useMirrorPlaces,
+  useMirrorPlaceTypes,
   useMirrorTrips,
   useMirrorPlaceTracks,
   useMirrorRoutes,
@@ -922,6 +923,13 @@ export function MapScreen({
   // written from Saved now rather than from the map.
   const [showOwnedPlaces, setShowOwnedPlaces] = useState(true);
   const [showSharedPlaces, setShowSharedPlaces] = useState(true);
+  // Types whose pins are OFF, held as the exceptions rather than as the
+  // allowed set: types arrive from the server and one created on another
+  // device would otherwise be invisible here until this screen learned about
+  // it. An empty set is "draw everything", which is also the cold-start state.
+  const [hiddenPlaceTypeIds, setHiddenPlaceTypeIds] = useState<ReadonlySet<string>>(
+    () => new Set<string>(),
+  );
   const [showGeoPdfs, setShowGeoPdfs] = useState(true);
   const [showVectorImports, setShowVectorImports] = useState(true);
   const [showOverlays, setShowOverlays] = useState(true);
@@ -1401,10 +1409,32 @@ export function MapScreen({
   );
   const withholdingPlaces = isWithholdingPlaces(mapFilter);
 
+  // The type vocabulary: what colour each pin is drawn in, and what the layer
+  // sheet lists under Places. Mirror-backed like everything else here, so it
+  // works with no signal.
+  const placeTypes = useMirrorPlaceTypes();
+  // A plain record, not a `Map`: MapLibre's own `Map` is what that name means
+  // in this file.
+  const placeTypeColors = useMemo(() => {
+    const colors: Record<string, string> = {};
+    for (const type of placeTypes.data ?? []) colors[type.id] = type.color;
+    return colors;
+  }, [placeTypes.data]);
+
   const ownedPlaces = useMemo(
     () => (places.data ?? []).filter((c) => c.syncRole === "owner"),
     [places.data],
   );
+  /** How many places of each type this phone holds — owned AND shared, because
+   *  the per-type switch governs both and a count that ignored half of what it
+   *  hides would be wrong on the row that hides it. */
+  const placesByType = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const place of places.data ?? []) {
+      counts[place.placeTypeId] = (counts[place.placeTypeId] ?? 0) + 1;
+    }
+    return counts;
+  }, [places.data]);
   const sharedPlaces = useMemo(
     () => (places.data ?? []).filter((c) => c.syncRole === "shared"),
     [places.data],
@@ -1418,22 +1448,31 @@ export function MapScreen({
       toPlaceFeatureCollection(
         showOwnedPlaces
           ? ownedPlaces.filter(
-              (c) => allowedPlaceIds === null || allowedPlaceIds.has(c.id),
+              (c) =>
+                (allowedPlaceIds === null || allowedPlaceIds.has(c.id)) &&
+                !hiddenPlaceTypeIds.has(c.placeTypeId),
             )
           : [],
+        placeTypeColors,
       ),
-    [allowedPlaceIds, ownedPlaces, showOwnedPlaces],
+    [allowedPlaceIds, hiddenPlaceTypeIds, ownedPlaces, placeTypeColors, showOwnedPlaces],
   );
+  // A shared place obeys the per-type switches too: "stop drawing campsites"
+  // means campsites, not "my campsites". The global Shared switch is the other
+  // axis and stays separate — it answers "whose", not "what kind".
   const sharedFc = useMemo(
     () =>
       toPlaceFeatureCollection(
         showSharedPlaces
           ? sharedPlaces.filter(
-              (c) => allowedPlaceIds === null || allowedPlaceIds.has(c.id),
+              (c) =>
+                (allowedPlaceIds === null || allowedPlaceIds.has(c.id)) &&
+                !hiddenPlaceTypeIds.has(c.placeTypeId),
             )
           : [],
+        placeTypeColors,
       ),
-    [allowedPlaceIds, sharedPlaces, showSharedPlaces],
+    [allowedPlaceIds, hiddenPlaceTypeIds, placeTypeColors, sharedPlaces, showSharedPlaces],
   );
 
   /** Follow a track between two anchors, if snapping is on and finds one.
@@ -3940,6 +3979,30 @@ export function MapScreen({
       count: ownedPlaces.length,
       value: showOwnedPlaces,
       onChange: setShowOwnedPlaces,
+      // ONE CHILD PER TYPE, and the only place a user can say "stop drawing
+      // campsites". A type with no places is left out — the list has to stay
+      // short enough to read at a trailhead, and a switch for nothing is a
+      // switch that does nothing.
+      children: (placeTypes.data ?? [])
+        .map((type) => ({
+          type,
+          count: placesByType[type.id] ?? 0,
+        }))
+        .filter(({ count }) => count > 0)
+        .map(({ type, count }) => ({
+          key: `place-type:${type.id}`,
+          title: type.name,
+          hue: type.color,
+          count,
+          value: !hiddenPlaceTypeIds.has(type.id),
+          onChange: (next: boolean) =>
+            setHiddenPlaceTypeIds((current) => {
+              const hidden = new Set(current);
+              if (next) hidden.delete(type.id);
+              else hidden.add(type.id);
+              return hidden;
+            }),
+        })),
     },
     {
       key: "shared-places",

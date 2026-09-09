@@ -20,7 +20,14 @@ import {
 
 import { theme } from "../theme";
 
-/** The ink, exported because rows and chips elsewhere match the map. */
+/**
+ * The ink, exported because rows and chips elsewhere match the map.
+ *
+ * `OWNED_PLACE_COLOR` is no longer what a pin is drawn in — a pin's fill is
+ * its TYPE's colour now, and this is the fallback for a place whose type this
+ * device has not pulled yet, plus the hue of the "My places" row. Ownership
+ * moved to the RING, which is the axis that has only two values.
+ */
 export const OWNED_PLACE_COLOR = "#f97316";
 export const SHARED_PLACE_COLOR = "#629bf8";
 
@@ -54,7 +61,7 @@ export type PlaceFeatureCollection = {
     type: "Feature";
     id: string;
     geometry: { type: "Point"; coordinates: [number, number] };
-    properties: { id: string; name: string };
+    properties: { id: string; name: string; color: string };
   }[];
 };
 
@@ -87,18 +94,23 @@ export const PlacePinsLayer = memo(function PlacePinsLayer({
             you and your own copy of it very often sit on the SAME coordinate —
             that is what "copy" means — and owned draws on top, so an equal
             circle vanished completely underneath it and the layer looked
-            broken. The extra 3 px leaves a blue ring around the orange dot,
-            which is both the only hint that two things are stacked there and
-            the part of the pin a thumb can land on to open the shared one. */}
+            broken. The extra 3 px leaves the shared pin's ring showing around
+            your own dot, which is both the only hint that two things are
+            stacked there and the part of the pin a thumb can land on to open
+            the shared one. */}
         <Layer
           key={`${idPrefix}shared-place-circles`}
           type="circle"
           id={`${idPrefix}shared-place-circles`}
+          // FILL = TYPE, RING = SHARED (§2.8). Colour used to encode ownership
+          // and now cannot: it is saying which KIND of place this is, on both
+          // maps, for every type the user has invented. So "someone shared this
+          // with me" moved to the ring, which is the axis with two values.
           style={{
             circleRadius: 9,
-            circleColor: SHARED_PLACE_COLOR,
-            circleStrokeColor: "#ffffff",
-            circleStrokeWidth: 1.5,
+            circleColor: ["get", "color"] as unknown as string,
+            circleStrokeColor: SHARED_PLACE_COLOR,
+            circleStrokeWidth: 3,
           }}
         />
         <Layer
@@ -126,7 +138,9 @@ export const PlacePinsLayer = memo(function PlacePinsLayer({
           id={`${idPrefix}place-circles`}
           style={{
             circleRadius: 6,
-            circleColor: OWNED_PLACE_COLOR,
+            circleColor: ["get", "color"] as unknown as string,
+            // White, not a colour: an owned pin's ring is a separator against
+            // the map, not a second piece of information.
             circleStrokeColor: "#ffffff",
             circleStrokeWidth: 1.5,
           }}
@@ -142,9 +156,24 @@ export const PlacePinsLayer = memo(function PlacePinsLayer({
   );
 });
 
-/** The shape both maps hand this component. */
+/**
+ * The shape both maps hand this component.
+ *
+ * `typeColors` maps a place type id to its colour. A place whose type is not
+ * in it — one created on another device and not pulled yet — draws in the
+ * fallback rather than vanishing or drawing transparent: an unknown type is a
+ * gap in the vocabulary, not a reason to hide a place from someone standing
+ * next to it.
+ */
 export function toPlaceFeatureCollection(
-  places: { id: string; name: string; latitude: number; longitude: number }[],
+  places: {
+    id: string;
+    name: string;
+    latitude: number;
+    longitude: number;
+    placeTypeId?: string;
+  }[],
+  typeColors: Record<string, string> = {},
 ): PlaceFeatureCollection {
   return {
     type: "FeatureCollection",
@@ -155,7 +184,13 @@ export function toPlaceFeatureCollection(
         type: "Point" as const,
         coordinates: [place.longitude, place.latitude] as [number, number],
       },
-      properties: { id: place.id, name: place.name },
+      properties: {
+        id: place.id,
+        name: place.name,
+        color:
+          (place.placeTypeId ? typeColors[place.placeTypeId] : undefined) ??
+          OWNED_PLACE_COLOR,
+      },
     })),
   };
 }

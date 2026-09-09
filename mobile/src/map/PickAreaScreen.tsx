@@ -49,7 +49,7 @@ import type { RegionBbox } from "@logjam/shared";
 import { config } from "../config";
 import { fontSize, fontWeight, radius, scrim, spacing, theme } from "../theme";
 import { Button } from "../ui";
-import { useMirrorPlaces } from "../sync/useSyncQueries";
+import { useMirrorPlaces, useMirrorPlaceTypes } from "../sync/useSyncQueries";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
 import { useConnectivity } from "./connectivity";
 import { readBasemapPreference } from "./basemapPreference";
@@ -137,19 +137,30 @@ export function PickAreaScreen({
   );
 
   const places = useMirrorPlaces();
+  // The pins are drawn in their TYPE's colour here too — a picker that coloured
+  // places differently from the map they were picked off would be a second
+  // vocabulary.
+  const placeTypes = useMirrorPlaceTypes();
+  const placeTypeColors = useMemo(() => {
+    const colors: Record<string, string> = {};
+    for (const type of placeTypes.data ?? []) colors[type.id] = type.color;
+    return colors;
+  }, [placeTypes.data]);
   const ownedFc = useMemo(
     () =>
       toPlaceFeatureCollection(
         (places.data ?? []).filter((place) => place.syncRole === "owner"),
+        placeTypeColors,
       ),
-    [places.data],
+    [placeTypeColors, places.data],
   );
   const sharedFc = useMemo(
     () =>
       toPlaceFeatureCollection(
         (places.data ?? []).filter((place) => place.syncRole === "shared"),
+        placeTypeColors,
       ),
-    [places.data],
+    [placeTypeColors, places.data],
   );
 
   // Stable identity: SelectionFrame's gesture handlers are rebuilt whenever

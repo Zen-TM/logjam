@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { TripLogCustomFieldDef } from "@logjam/shared";
+import type { ScopedCustomFieldDef } from "@logjam/shared";
 
 // Definitions are rows in the local mirror now, written through the outbox.
 // These tests hold the two properties that change bought: every path works with
@@ -16,6 +16,8 @@ type DefRow = {
   min: number | null;
   max: number | null;
   position: number;
+  placeTypeIds: string[];
+  appliesToAllTypes: boolean;
 };
 
 let defRows: DefRow[] = [];
@@ -26,7 +28,7 @@ let places: {
   fieldValues: Record<string, unknown>;
 }[] = [];
 
-const created: { entity: string; def: TripLogCustomFieldDef }[] = [];
+const created: Record<string, unknown>[] = [];
 const updated: { id: string; fields: Record<string, unknown> }[] = [];
 const deleted: string[] = [];
 const tripUpdates: { id: string; fields: Record<string, unknown> }[] = [];
@@ -38,7 +40,7 @@ vi.mock("../sync/mirrorStore", () => ({
   listMirrorPlaces: () => Promise.resolve(places),
 }));
 vi.mock("../sync/outbox", () => ({
-  createCustomFieldDefLocal: (draft: { entity: string; def: TripLogCustomFieldDef }) => {
+  createCustomFieldDefLocal: (draft: Record<string, unknown>) => {
     created.push(draft);
     return Promise.resolve("new-id");
   },
@@ -70,10 +72,22 @@ vi.mock("../api/queries", () => ({
 const { countFieldValues, loadFieldDefs, removeFieldDef, saveFieldDefs } =
   await import("./fieldDefsStore");
 
-const water: TripLogCustomFieldDef = { key: "water", label: "Water level", type: "string" };
-const party: TripLogCustomFieldDef = { key: "party", label: "Party size", type: "integer" };
+const water: ScopedCustomFieldDef = {
+  key: "water",
+  label: "Water level",
+  type: "string",
+  placeTypeIds: [],
+  appliesToAllTypes: true,
+};
+const party: ScopedCustomFieldDef = {
+  key: "party",
+  label: "Party size",
+  type: "integer",
+  placeTypeIds: [],
+  appliesToAllTypes: true,
+};
 
-function row(def: TripLogCustomFieldDef, entity: string, position = 0): DefRow {
+function row(def: ScopedCustomFieldDef, entity: string, position = 0): DefRow {
   return {
     id: `row-${def.key}`,
     entity,
@@ -83,6 +97,8 @@ function row(def: TripLogCustomFieldDef, entity: string, position = 0): DefRow {
     min: def.min ?? null,
     max: def.max ?? null,
     position,
+    placeTypeIds: def.placeTypeIds,
+    appliesToAllTypes: def.appliesToAllTypes,
   };
 }
 
@@ -112,6 +128,19 @@ describe("loadFieldDefs", () => {
     ]);
   });
 
+  it("carries each row's scoping, which is what the type-specific form reads", async () => {
+    defRows = [
+      {
+        ...row(party, "place", 0),
+        placeTypeIds: ["type-campsite"],
+        appliesToAllTypes: false,
+      },
+    ];
+    expect(await loadFieldDefs("place")).toEqual([
+      { ...party, placeTypeIds: ["type-campsite"], appliesToAllTypes: false },
+    ]);
+  });
+
   it("drops a row that does not describe a usable field", async () => {
     defRows = [row(water, "tripLog"), { ...row(party, "tripLog", 1), type: "nonsense" }];
     expect(await loadFieldDefs("tripLog")).toEqual([water]);
@@ -122,7 +151,14 @@ describe("saveFieldDefs", () => {
   it("adds a new field as a create, touching nothing else", async () => {
     defRows = [row(water, "tripLog", 0)];
     await saveFieldDefs("tripLog", [water, party]);
-    expect(created).toEqual([{ entity: "tripLog", def: party }]);
+    expect(created).toEqual([
+      {
+        entity: "tripLog",
+        def: party,
+        placeTypeIds: party.placeTypeIds,
+        appliesToAllTypes: party.appliesToAllTypes,
+      },
+    ]);
     expect(updated).toEqual([]);
     expect(deleted).toEqual([]);
   });
@@ -156,6 +192,58 @@ describe("saveFieldDefs", () => {
     defRows = [row(water, "tripLog", 0), row(party, "tripLog", 1)];
     await saveFieldDefs("tripLog", [water]);
     expect(deleted).toEqual(["row-party"]);
+  });
+
+  // WITHOUT this, a field created on the phone reaches the server with no
+  // scoping at all — `appliesToAllTypes` false and no types — and appears on no
+  // form. The user made it from the campsite form and it is nowhere.
+  it("carries the scoping on a create", async () => {
+    const capacity: ScopedCustomFieldDef = {
+      key: "capacity",
+      label: "Capacity",
+      type: "integer",
+      placeTypeIds: ["type-campsite"],
+      appliesToAllTypes: false,
+    };
+    await saveFieldDefs("place", [capacity]);
+    expect(created).toEqual([
+      {
+        entity: "place",
+        def: capacity,
+        placeTypeIds: ["type-campsite"],
+        appliesToAllTypes: false,
+      },
+    ]);
+  });
+
+  it("rescopes an existing field with a patch, not a recreate", async () => {
+    defRows = [row(party, "place", 0)];
+    await saveFieldDefs("place", [
+      { ...party, appliesToAllTypes: false, placeTypeIds: ["type-canyon"] },
+    ]);
+    expect(created).toEqual([]);
+    expect(updated).toEqual([
+      {
+        id: "row-party",
+        fields: { appliesToAllTypes: false, placeTypeIds: ["type-canyon"] },
+      },
+    ]);
+  });
+
+  // Order is not meaningful in a scoping, so a reordered list is not a change —
+  // writing one would queue a push on every save and conflict for nothing.
+  it("does not rewrite a scoping whose ids only changed order", async () => {
+    defRows = [
+      row(
+        { ...party, appliesToAllTypes: false, placeTypeIds: ["a", "b"] },
+        "place",
+        0,
+      ),
+    ];
+    await saveFieldDefs("place", [
+      { ...party, appliesToAllTypes: false, placeTypeIds: ["b", "a"] },
+    ]);
+    expect([...created, ...updated]).toEqual([]);
   });
 
   it("leaves the other entity's definitions alone", async () => {

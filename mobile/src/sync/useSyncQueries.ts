@@ -12,12 +12,14 @@ import {
   listPlaceTrackMedia,
   listMediaForLinked,
   listMirrorPlaces,
+  listMirrorPlaceTypes,
   listMirrorTrips,
   listMirrorPlaceLinks,
   listMirrorRoutes,
   getMirrorPlace,
   getMirrorTrip,
   type MirrorPlace,
+  type MirrorPlaceType,
   type MirrorMedia,
   type MirrorTrip,
   type MirrorPlaceLink,
@@ -100,6 +102,7 @@ function useMirrorQuery<T>(read: () => Promise<T>): MirrorQueryState<T> {
 }
 
 const readPlaces = () => listMirrorPlaces();
+const readPlaceTypes = () => listMirrorPlaceTypes();
 const readTrips = () => listMirrorTrips();
 const readPlaceLinks = () => listMirrorPlaceLinks();
 const readShareCounts = () => countOutgoingSharesByPlace();
@@ -107,6 +110,15 @@ const readIncomingShareOwners = () => incomingShareOwnerByPlace();
 
 export function useMirrorPlaces(): MirrorQueryState<MirrorPlace[]> {
   return useMirrorQuery(readPlaces);
+}
+
+/**
+ * Every place type, mirror-backed — the vocabulary the tab bar, the create
+ * picker, the map layer sheet and the pin colours are all built from. One hook
+ * for all four so they can never disagree about what types exist.
+ */
+export function useMirrorPlaceTypes(): MirrorQueryState<MirrorPlaceType[]> {
+  return useMirrorQuery(readPlaceTypes);
 }
 
 export function useMirrorTrips(): MirrorQueryState<MirrorTrip[]> {

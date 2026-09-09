@@ -20,9 +20,9 @@
 // from SYNC_TABLES — the privacy boundary between two users of one phone. That
 // is precisely why they must not be kept anywhere else. Nothing here logs one.
 import {
-  customFieldDefsFromRows,
+  customFieldDefFromRow,
   type CustomFieldEntity,
-  type TripLogCustomFieldDef,
+  type ScopedCustomFieldDef,
   asFieldValues,
   fieldValue,
   setFieldValues,
@@ -37,11 +37,40 @@ import {
   updateTripLocal,
 } from "../sync/outbox";
 
-/** The definitions in force for this install, for one entity. */
+/**
+ * The definitions in force for this install, for one entity — WITH their
+ * scoping, which is what makes `defsForType` usable on the phone.
+ *
+ * `customFieldDefsFromRows` drops `placeTypeIds`/`appliesToAllTypes` (a
+ * `TripLogCustomFieldDef` has no room for them), and a form built from that
+ * shape can only render every place field on every type — a campsite asking
+ * for a V grade, which is the thing this rework exists to stop. Same
+ * flatMap-with-scoping the server does in `loadScopedDefs`.
+ *
+ * Order is the row order the user arranged. Sorted HERE as well as in the
+ * query: it is the property the form depends on, and a reader that relies on
+ * someone else's ORDER BY has no way to fail when that clause changes.
+ */
 export async function loadFieldDefs(
   entity: CustomFieldEntity,
-): Promise<TripLogCustomFieldDef[]> {
-  return customFieldDefsFromRows(await listMirrorCustomFieldDefs(), entity);
+): Promise<ScopedCustomFieldDef[]> {
+  const rows = await listMirrorCustomFieldDefs();
+  return rows
+    .filter((row) => row.entity === entity)
+    .sort((a, b) => a.position - b.position || a.key.localeCompare(b.key))
+    .flatMap((row) => {
+      const def = customFieldDefFromRow(row);
+      // A row that cannot become a definition is skipped rather than
+      // half-rendered — the same tolerance the server applies.
+      if (!def) return [];
+      return [
+        {
+          ...def,
+          placeTypeIds: row.placeTypeIds,
+          appliesToAllTypes: row.appliesToAllTypes,
+        },
+      ];
+    });
 }
 
 /**
@@ -58,7 +87,7 @@ export async function loadFieldDefs(
  */
 export async function saveFieldDefs(
   entity: CustomFieldEntity,
-  defs: TripLogCustomFieldDef[],
+  defs: ScopedCustomFieldDef[],
 ): Promise<void> {
   const rows = (await listMirrorCustomFieldDefs()).filter(
     (row) => row.entity === entity,
@@ -73,7 +102,16 @@ export async function saveFieldDefs(
   for (const [position, def] of defs.entries()) {
     const row = byKey.get(def.key);
     if (!row) {
-      await createCustomFieldDefLocal({ entity, def });
+      // The scoping travels WITH the create. A definition created with neither
+      // `placeTypeIds` nor `appliesToAllTypes` appears on NO form — the editor
+      // is what decides which, and it has to say so here or the field the user
+      // just made is invisible on the form they made it from.
+      await createCustomFieldDefLocal({
+        entity,
+        def,
+        placeTypeIds: def.placeTypeIds,
+        appliesToAllTypes: def.appliesToAllTypes,
+      });
       continue;
     }
     const patch: Record<string, unknown> = {};
@@ -82,10 +120,21 @@ export async function saveFieldDefs(
     if (row.min !== (def.min ?? null)) patch.min = def.min ?? null;
     if (row.max !== (def.max ?? null)) patch.max = def.max ?? null;
     if (row.position !== position) patch.position = position;
+    if (row.appliesToAllTypes !== def.appliesToAllTypes) {
+      patch.appliesToAllTypes = def.appliesToAllTypes;
+    }
+    if (!sameKeySet(row.placeTypeIds, def.placeTypeIds)) {
+      patch.placeTypeIds = def.placeTypeIds;
+    }
     if (Object.keys(patch).length > 0) {
       await updateCustomFieldDefLocal(row.id, patch);
     }
   }
+}
+
+/** Set equality over two id lists — order is not meaningful in a scoping. */
+function sameKeySet(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && [...a].sort().join() === [...b].sort().join();
 }
 
 /**

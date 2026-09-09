@@ -48,6 +48,7 @@ import type { MirrorPlace } from "../sync/mirrorStore";
 import { useConnectivity } from "../map/connectivity";
 import {
   useMirrorPlaces,
+  useMirrorPlaceTypes,
   useMirrorShareCounts,
   useMirrorTrips,
   usePendingSyncCount,
@@ -84,8 +85,14 @@ import {
   usePlaceMapFilter,
 } from "./placeMapFilter";
 import { PLACE_STATUS_META, placeStatus, placeSummary, qualityLabel, type PlaceStatus } from "./placeMeta";
+import { placeTypeFeatherIcon } from "./placeTypeIcon";
 
 type Bucket = "all" | PlaceStatus;
+
+/** The type rail's "every type" chip. A sentinel rather than `null`, because
+ *  `SegmentedControl` keys its chips by value. No place type can collide with
+ *  it — an id is a UUID. */
+const ALL_TYPES = "all";
 
 /** A place plus the tallies the shared predicate reads off `_count`. */
 type Countable = MirrorPlace & { _count?: { tripLogLinks: number; shares: number } };
@@ -118,9 +125,11 @@ export function PlacesScreen({
   const query = useMirrorPlaces();
   const tripsQuery = useMirrorTrips();
   const shareCounts = useMirrorShareCounts();
+  const typesQuery = useMirrorPlaceTypes();
   const syncStatus = useSyncStatus();
   const places = useMemo(() => query.data ?? [], [query.data]);
   const trips = useMemo(() => tripsQuery.data ?? [], [tripsQuery.data]);
+  const placeTypes = useMemo(() => typesQuery.data ?? [], [typesQuery.data]);
 
   const [bucket, setBucket] = useState<Bucket>("all");
   const [findOpen, setFindOpen] = useState(false);
@@ -391,6 +400,84 @@ export function PlacesScreen({
     return counts;
   }, [places, statusOf]);
 
+  // TYPE TABS. The vocabulary is the user's own, so this rail is built from
+  // their types rather than from a fixed list — and it is the one filter with a
+  // permanent control, because "which kind of place am I looking at" is the
+  // question people arrive with (§5.4).
+  //
+  // MEMBERSHIP is decided over the whole collection, not the filtered view: a
+  // type with no places at all never appears (a canyoner should not be offered
+  // a Campsite tab they have never used), but a tab does NOT come and go as the
+  // user types — the bucket rail's rule, for the same reason.
+  const typeTotals = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const place of places) {
+      const id = place.placeTypeId;
+      if (id) counts.set(id, (counts.get(id) ?? 0) + 1);
+    }
+    return counts;
+  }, [places]);
+
+  // Tallies over every axis EXCEPT the type itself, so a tab's badge answers
+  // "how many would I get if I tapped this" — same rule as the bucket chips.
+  const withoutType = useMemo(
+    () =>
+      countable.filter(
+        (place) =>
+          placeMatchesSearch(place, search) &&
+          passesPlaceFilters(
+            place,
+            { ...filters, placeTypeId: null },
+            place.syncRole === "owner",
+          ) &&
+          (bucket === "all" || statusOf(place) === bucket),
+      ),
+    [bucket, countable, filters, search, statusOf],
+  );
+  const typeCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const place of withoutType) {
+      const id = place.placeTypeId;
+      if (id) counts.set(id, (counts.get(id) ?? 0) + 1);
+    }
+    return counts;
+  }, [withoutType]);
+
+  const typeOptions: SegmentOption<string>[] = useMemo(
+    () => [
+      { value: ALL_TYPES, label: "All", count: withoutType.length },
+      ...placeTypes
+        .filter((type) => (typeTotals.get(type.id) ?? 0) > 0)
+        .map((type) => ({
+          value: type.id,
+          label: type.name,
+          icon: placeTypeFeatherIcon(type.iconKey),
+          hue: type.color,
+          count: typeCounts.get(type.id) ?? 0,
+          disabled:
+            (typeCounts.get(type.id) ?? 0) === 0 && filters.placeTypeId !== type.id,
+        })),
+    ],
+    [filters.placeTypeId, placeTypes, typeCounts, typeTotals, withoutType.length],
+  );
+  /** Null once a tab is doing the saying. */
+  const typeLabelOf = useCallback(
+    (typeId: string) =>
+      filters.placeTypeId != null
+        ? null
+        : (placeTypes.find((type) => type.id === typeId)?.name ?? null),
+    [filters.placeTypeId, placeTypes],
+  );
+
+  const selectType = useCallback(
+    (next: string) =>
+      setFilters((current) => ({
+        ...current,
+        placeTypeId: next === ALL_TYPES ? null : next,
+      })),
+    [],
+  );
+
   const bucketOptions: SegmentOption<Bucket>[] = useMemo(
     () => [
       { value: "all", label: "All", count: withoutBucket.length },
@@ -438,6 +525,15 @@ export function PlacesScreen({
   }, [places.length, visible]);
 
   const filterCount = activePlaceFilterCount(filters);
+  // The type tab IS a filter and the shared predicate counts it as one — but it
+  // is the one filter the user can already see, sitting selected in the rail.
+  // Counting it again in "1 filter active", under a control that says so, would
+  // send people into the sheet looking for something they had not set. So the
+  // rail's own axis is subtracted from what the *hidden* filter warnings count,
+  // and only while the rail is on screen to state it.
+  const railShowsType = typeOptions.length > 1 && !selecting;
+  const hiddenFilterCount =
+    filterCount - (railShowsType && filters.placeTypeId != null ? 1 : 0);
   const filtering = filterCount > 0 || search.trim() !== "";
   const menuPlace = places.find((place) => place.id === menuPlaceId) ?? null;
 
@@ -451,6 +547,7 @@ export function PlacesScreen({
       <PlaceRow
         place={item}
         status={statusOf(item)}
+        typeLabel={typeLabelOf(item.placeTypeId)}
         sharedWith={item._count?.shares ?? 0}
         onOpen={openPlace}
         onMenu={openMenu}
@@ -460,7 +557,15 @@ export function PlacesScreen({
         onToggle={() => selectItem(item)}
       />
     ),
-    [openPlace, openMenu, statusOf, selecting, selectedKeys, selectItem],
+    [
+      openPlace,
+      openMenu,
+      statusOf,
+      selecting,
+      selectedKeys,
+      selectItem,
+      typeLabelOf,
+    ],
   );
 
   const clearFind = useCallback(() => {
@@ -468,7 +573,18 @@ export function PlacesScreen({
     setFindOpen(false);
   }, []);
 
-  const resetFilters = useCallback(() => setFilters(EMPTY_PLACE_FILTERS), []);
+  /** Clears the SHEET's filters and leaves the type rail's selection standing —
+   *  the rail is that axis's own control, and a reset that silently jumped the
+   *  user back to All would be a second, invisible action. "All" is one tap
+   *  away and says what it does. */
+  const resetFilters = useCallback(
+    () =>
+      setFilters((current) => ({
+        ...EMPTY_PLACE_FILTERS,
+        placeTypeId: current.placeTypeId,
+      })),
+    [],
+  );
 
   if (query.loading && places.length === 0) return <LoadingState />;
   if (query.error && places.length === 0) {
@@ -515,8 +631,8 @@ export function PlacesScreen({
             <IconButton
               icon="sliders"
               accessibilityLabel="Sort and filter"
-              color={filterCount > 0 ? theme.accent : theme.textMuted}
-              filled={filterCount > 0}
+              color={hiddenFilterCount > 0 ? theme.accent : theme.textMuted}
+              filled={hiddenFilterCount > 0}
               onPress={() => {
                 // Drop the keyboard BEFORE the sheet mounts: a sheet opening
                 // over a live IME inherits the shrunk frame and stops short of
@@ -535,8 +651,8 @@ export function PlacesScreen({
             <IconButton
               icon="sliders"
               accessibilityLabel="Sort and filter"
-              color={filterCount > 0 ? theme.accent : theme.textMuted}
-              filled={filterCount > 0}
+              color={hiddenFilterCount > 0 ? theme.accent : theme.textMuted}
+              filled={hiddenFilterCount > 0}
               onPress={() => setSheet("filters")}
             />
           </View>
@@ -544,6 +660,21 @@ export function PlacesScreen({
 
         <SyncStatusPills online={online} pendingCount={pendingCount} />
       </HeroHeader>
+
+      {/* Two rails, and they answer different questions: WHAT kind of place
+          (the user's own vocabulary) and WHERE it is in the tick list. Only the
+          bucket rail gives way to the selection bar — the type rail is the
+          heading for what is selected, not a control over it. */}
+      {typeOptions.length > 1 && !selecting ? (
+        <View style={styles.typeRail}>
+          <SegmentedControl
+            scroll
+            options={typeOptions}
+            value={filters.placeTypeId ?? ALL_TYPES}
+            onChange={selectType}
+          />
+        </View>
+      ) : null}
 
       <View style={styles.rail}>
         {selecting ? (
@@ -566,10 +697,12 @@ export function PlacesScreen({
 
       {/* An active hidden filter has to announce itself, with the way out in
           reach (DESIGN.md §2). */}
-      {filterCount > 0 ? (
+      {hiddenFilterCount > 0 ? (
         <View style={styles.filterNote}>
           <Text style={styles.filterText} numberOfLines={1}>
-            {filterCount === 1 ? "1 filter active" : `${filterCount} filters active`}
+            {hiddenFilterCount === 1
+              ? "1 filter active"
+              : `${hiddenFilterCount} filters active`}
             {sort === "name" ? "" : ` · ${sortLabel(sort)}`}
           </Text>
           <IconButton
@@ -611,8 +744,10 @@ export function PlacesScreen({
             filtering={filtering}
             onAdd={() => startEditing(null)}
             onClear={() => {
+              // "Show me everything" — the ONE place the type tab clears too,
+              // because the user is looking at nothing and asking why.
               clearFind();
-              resetFilters();
+              setFilters(EMPTY_PLACE_FILTERS);
               setBucket("all");
             }}
           />
@@ -709,6 +844,7 @@ export function PlacesScreen({
 const PlaceRow = memo(function PlaceRow({
   place,
   status,
+  typeLabel,
   sharedWith,
   onOpen,
   onMenu,
@@ -719,6 +855,8 @@ const PlaceRow = memo(function PlaceRow({
 }: {
   place: MirrorPlace;
   status: PlaceStatus;
+  /** The place's type name, or null while a type tab is filtering the list. */
+  typeLabel: string | null;
   sharedWith: number;
   onOpen: (place: MirrorPlace) => void;
   onMenu: (place: MirrorPlace) => void;
@@ -731,13 +869,21 @@ const PlaceRow = memo(function PlaceRow({
 }) {
   const meta = PLACE_STATUS_META[status];
   const quality = qualityLabel(numericFieldValue(place.fieldValues, "quality"));
+  // The glyph stays the STATUS one — that is what the rail filters on, and the
+  // map is where a type is a colour. What the row owes a mixed list is the
+  // type's NAME, and only while the list is mixed: with a tab selected the
+  // strip above already says it, and a place of a type with no grades
+  // summarises to nothing at all, so this is often the only second line.
+  const subtitle = [typeLabel, placeSummary(place)]
+    .filter((part): part is string => Boolean(part))
+    .join(" · ");
   return (
     <Row
       icon={meta.icon}
       hue={meta.hue}
       title={place.name}
       titleNumberOfLines={2}
-      subtitle={placeSummary(place) || undefined}
+      subtitle={subtitle || undefined}
       selected={selected}
       disabled={selecting && !deletable}
       onLongPress={onToggle}
@@ -864,6 +1010,9 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.regular,
   },
   // The rail's bottom pad is the gap the list scrolls against (DESIGN.md §2).
+  // The type rail sits directly under the hero and carries the bucket rail's
+  // top padding, so the pair reads as one block rather than two stacked bars.
+  typeRail: { paddingLeft: spacing(2), paddingTop: spacing(1.5) },
   rail: { paddingLeft: spacing(2), paddingTop: spacing(1.5), paddingBottom: spacing(1.5) },
   filterNote: {
     flexDirection: "row",

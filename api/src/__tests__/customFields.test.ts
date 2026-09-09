@@ -1,6 +1,23 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import request from "supertest";
 import { API_URL } from "./_actors";
+import { throttleWrites } from "./_rateLimitGate";
+
+// This file WRITES — definitions, a place type, the legacy-PATCH refusals — and
+// `userPatchLimiter` (30/60s, per user) is a second, tighter limiter than the
+// global one `_rateLimitGate` handles. Its budget is shared with whichever
+// write-heavy file ran before this one, so a 429 here arrives as an assertion
+// failure about custom fields. `write()` sleeps to the window reset and retries
+// instead; a sleep is up to ~61s, hence the timeout.
+vi.setConfig({ testTimeout: 90_000 });
+
+/** A write that must succeed even if the previous file spent the budget. */
+async function write<T extends { status: number; headers: Record<string, string> }>(
+  send: () => Promise<T>,
+): Promise<T> {
+  const first = await send();
+  return (await throttleWrites(first)) ? await send() : first;
+}
 
 // Requires `make dev`. No auth header = alice, who is seeded with three trip
 // fields (water_level, rope_length_m, wetsuit) and no place fields.
@@ -72,28 +89,36 @@ describe("custom-fields route (fake auth)", () => {
 
   it("creates, relabels and deletes one definition, addressed by key", async () => {
     // Clean up a previous failed run so the suite is re-runnable.
-    await request(API_URL).delete("/custom-fields/place/permit_no").set(AUTH);
+    await write(() =>
+      request(API_URL).delete("/custom-fields/place/permit_no").set(AUTH),
+    );
 
-    const created = await request(API_URL)
-      .post("/custom-fields/place")
-      .set(AUTH)
-      .send({ field: { key: "permit_no", label: "Permit no.", type: "string" } });
+    const created = await write(() =>
+      request(API_URL)
+        .post("/custom-fields/place")
+        .set(AUTH)
+        .send({ field: { key: "permit_no", label: "Permit no.", type: "string" } }),
+    );
     expect(created.status).toBe(201);
 
     // A duplicate key is a 409, not a silent no-op — the label the user chose
     // is already taken and they have to see that.
-    const dup = await request(API_URL)
-      .post("/custom-fields/place")
-      .set(AUTH)
-      .send({ field: { key: "permit_no", label: "Permit no.", type: "string" } });
+    const dup = await write(() =>
+      request(API_URL)
+        .post("/custom-fields/place")
+        .set(AUTH)
+        .send({ field: { key: "permit_no", label: "Permit no.", type: "string" } }),
+    );
     expect(dup.status).toBe(409);
 
     // A rename moves the label and keeps the key, so stored values stay
     // attached. `key` is not writable at all.
-    const renamed = await request(API_URL)
-      .patch("/custom-fields/place/permit_no")
-      .set(AUTH)
-      .send({ label: "Permit number" });
+    const renamed = await write(() =>
+      request(API_URL)
+        .patch("/custom-fields/place/permit_no")
+        .set(AUTH)
+        .send({ label: "Permit number" }),
+    );
     expect(renamed.status).toBe(200);
     expect(renamed.body.fields).toContainEqual(
       expect.objectContaining({
@@ -114,9 +139,9 @@ describe("custom-fields route (fake auth)", () => {
       type: "string",
     });
 
-    const removed = await request(API_URL)
-      .delete("/custom-fields/place/permit_no")
-      .set(AUTH);
+    const removed = await write(() =>
+      request(API_URL).delete("/custom-fields/place/permit_no").set(AUTH),
+    );
     expect(removed.status).toBe(200);
     expect(removed.body.removedFromPlaceCount).toBe(0);
     // NOT `toEqual([])`: the list carries the SYSTEM definitions too, which
@@ -128,20 +153,24 @@ describe("custom-fields route (fake auth)", () => {
   });
 
   it("rejects a definition that is not valid", async () => {
-    const res = await request(API_URL)
-      .post("/custom-fields/trip-log")
-      .set(AUTH)
-      .send({ field: { key: "bad", label: "Bad", type: "nonsense" } });
+    const res = await write(() =>
+      request(API_URL)
+        .post("/custom-fields/trip-log")
+        .set(AUTH)
+        .send({ field: { key: "bad", label: "Bad", type: "nonsense" } }),
+    );
     expect(res.status).toBe(400);
   });
 
   // Validating the RESULT rather than the patch: moving only `min` can still
   // produce an invalid definition.
   it("rejects a patch whose result would be invalid", async () => {
-    const res = await request(API_URL)
-      .patch("/custom-fields/trip-log/rope_length_m")
-      .set(AUTH)
-      .send({ min: 50, max: 10 });
+    const res = await write(() =>
+      request(API_URL)
+        .patch("/custom-fields/trip-log/rope_length_m")
+        .set(AUTH)
+        .send({ min: 50, max: 10 }),
+    );
     expect(res.status).toBe(400);
   });
 
@@ -160,10 +189,12 @@ describe("custom-fields route (fake auth)", () => {
   // silent no-op, which is the difference between a migration and a trap.
   it("refuses the legacy whole-list write and says what to use instead", async () => {
     for (const key of ["placeCustomFields", "tripLogCustomFields"]) {
-      const res = await request(API_URL)
-        .patch("/users/me")
-        .set(AUTH)
-        .send({ [key]: [{ key: "access", label: "Access", type: "string" }] });
+      const res = await write(() =>
+        request(API_URL)
+          .patch("/users/me")
+          .set(AUTH)
+          .send({ [key]: [{ key: "access", label: "Access", type: "string" }] }),
+      );
       expect(res.status, key).toBe(400);
       expect(res.body.error).toContain("/custom-fields/");
     }
@@ -175,21 +206,25 @@ describe("custom-fields route (fake auth)", () => {
   // entity of its own, so the scoping rides ON the definition: flattened onto
   // the REST list, and onto the delta row.
   it("carries each definition's scoping on the REST list", async () => {
-    const type = await request(API_URL)
-      .post("/place-types")
-      .set(AUTH)
-      .send({ name: `Scoped ${Date.now()}`, iconKey: "map-pin", color: "#22C55E" });
+    const type = await write(() =>
+      request(API_URL)
+        .post("/place-types")
+        .set(AUTH)
+        .send({ name: `Scoped ${Date.now()}`, iconKey: "map-pin", color: "#22C55E" }),
+    );
     expect(type.status, JSON.stringify(type.body)).toBe(201);
     const typeId = type.body.id as string;
     const key = `scoped_${Date.now()}`.slice(0, 20);
 
-    const created = await request(API_URL)
-      .post("/custom-fields/place")
-      .set(AUTH)
-      .send({
-        field: { key, label: "Scoped field", type: "string" },
-        placeTypeIds: [typeId],
-      });
+    const created = await write(() =>
+      request(API_URL)
+        .post("/custom-fields/place")
+        .set(AUTH)
+        .send({
+          field: { key, label: "Scoped field", type: "string" },
+          placeTypeIds: [typeId],
+        }),
+    );
     expect(created.status, JSON.stringify(created.body)).toBe(201);
 
     const list = await request(API_URL).get("/custom-fields/place").set(AUTH);
@@ -221,7 +256,9 @@ describe("custom-fields route (fake auth)", () => {
     expect(row!.placeTypeIds).toEqual([typeId]);
     expect(row!.appliesToAllTypes).toBe(false);
 
-    await request(API_URL).delete(`/custom-fields/place/${key}`).set(AUTH);
-    await request(API_URL).delete(`/place-types/${typeId}`).set(AUTH);
+    await write(() =>
+      request(API_URL).delete(`/custom-fields/place/${key}`).set(AUTH),
+    );
+    await write(() => request(API_URL).delete(`/place-types/${typeId}`).set(AUTH));
   });
 });

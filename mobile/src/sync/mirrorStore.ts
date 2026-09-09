@@ -18,7 +18,11 @@ import type {
   SyncDeltaRouteRow,
   MediaMetadata,
 } from "@logjam/shared";
-import { isKnownSyncEntityType, readMediaMetadata } from "@logjam/shared";
+import {
+  isKnownSyncEntityType,
+  readMediaMetadata,
+  SYSTEM_PLACE_TYPES,
+} from "@logjam/shared";
 
 import type { TPlace, TTripLog } from "../api/types";
 import { withoutPlaceLink } from "./placeLinks";
@@ -753,6 +757,61 @@ export async function listMirrorCustomFieldDefs(): Promise<
     ...def,
     placeTypeIds: parseStringList(place_type_ids_json),
     appliesToAllTypes: applies_to_all_types === 1,
+  }));
+}
+
+/**
+ * Every place type this device knows: the user's own plus the SYSTEM ones.
+ *
+ * The ORDER is the server's (`GET /place-types`): system types first, then the
+ * user's by position, name as the tiebreak. SQLite sorts NULLs FIRST on a plain
+ * ASC, which is what the server had to say `nulls: "first"` to get — spelled
+ * out here rather than relied on, because the two engines disagree by default
+ * and the tab bar's leftmost tab is decided by it.
+ */
+export async function listMirrorPlaceTypes(): Promise<MirrorPlaceType[]> {
+  const db = await getSyncDb();
+  const rows = await db.getAllAsync<{
+    id: string;
+    owner_id: string | null;
+    name: string;
+    icon_key: string;
+    color: string;
+    position: number;
+    created_at: string | null;
+    updated_at: string | null;
+  }>(
+    `SELECT id, owner_id, name, icon_key, color, position, created_at, updated_at
+       FROM place_types
+      ORDER BY (owner_id IS NOT NULL) ASC, position ASC, name COLLATE NOCASE ASC`,
+  );
+  // NOTHING MIRRORED YET means a guest, or an account before its first pull —
+  // and a type picker with no types in it would make creating a place
+  // impossible for exactly the user who has no way to fix it. The system types
+  // are compiled in (they are global rows with pinned ids), so they are the
+  // honest answer here for the same reason `SYSTEM_FIELD_DEFS` is the honest
+  // answer to "what are this value's bounds" with no signal.
+  if (rows.length === 0) {
+    return SYSTEM_PLACE_TYPES.map((type) => ({
+      id: type.id,
+      ownerId: null,
+      name: type.name,
+      iconKey: type.iconKey,
+      color: type.color,
+      position: type.position,
+      createdAt: "",
+      updatedAt: "",
+    }));
+  }
+  return rows.map((row) => ({
+    id: row.id,
+    ownerId: row.owner_id,
+    name: row.name,
+    iconKey: row.icon_key,
+    color: row.color,
+    position: row.position,
+    createdAt: row.created_at ?? "",
+    updatedAt: row.updated_at ?? "",
   }));
 }
 

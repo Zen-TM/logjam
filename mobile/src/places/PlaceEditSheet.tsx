@@ -2,13 +2,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import {
+  defsForType,
+  normalizePlaceTags,
   numericFieldValue,
+  PLACE_TAG_SUGGESTIONS,
+  RESERVED_FIELD_KEYS,
   setFieldValues as withFieldValues,
   SYSTEM_FIELD_DEFS,
   SYSTEM_PLACE_TYPE_IDS,
   userFieldValues,
   validatePlacePayload,
-  type TripLogCustomFieldDef,
+  type ScopedCustomFieldDef,
 } from "@logjam/shared";
 
 import { fontSize, spacing, theme } from "../theme";
@@ -21,9 +25,12 @@ import {
   fieldValueStrings,
 } from "../customFields/CustomFieldValues";
 import { useFieldDefs } from "../customFields/useFieldDefs";
+import { useMirrorPlaces, useMirrorPlaceTypes } from "../sync/useSyncQueries";
+import { placeTypeFeatherIcon } from "./placeTypeIcon";
 import {
   BottomSheet,
   Button,
+  ChipPicker,
   DatePicker,
   ErrorBanner,
   Row,
@@ -111,15 +118,18 @@ export function PlaceEditSheet({
   const [longestAbseil, setLongestAbseil] = useState("");
   const [hours, setHours] = useState("");
   const [notes, setNotes] = useState("");
+  const [placeTypeId, setPlaceTypeId] = useState<string>(SYSTEM_PLACE_TYPE_IDS.canyon);
+  const [tags, setTags] = useState<string[]>([]);
   const [invalid, setInvalid] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [mode, setMode] = useState<Mode>("form");
   const { defs: customFieldDefs, setDefs: setCustomFieldDefs } = useFieldDefs("place");
+  const placeTypes = useMirrorPlaceTypes();
   // Values are strings while editing and coerced on save, like every other
   // custom-field form.
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   const [dateFieldKey, setDateFieldKey] = useState<string | null>(null);
-  const [editingField, setEditingField] = useState<TripLogCustomFieldDef | null>(null);
+  const [editingField, setEditingField] = useState<ScopedCustomFieldDef | null>(null);
 
   // Read through a ref so it is NOT a dependency: `resuming` and `visible` flip
   // in the same commit, and listing it would re-run the seed the moment the
@@ -150,6 +160,11 @@ export function PlaceEditSheet({
     );
     setHours(numberText(numericFieldValue(place?.fieldValues, "hours")));
     setNotes(place?.notes ?? "");
+    // A new place starts as a CANYON: this is a canyoning app, and a default
+    // that is right most of the time beats a picker with nothing chosen. The
+    // rail is right there to say otherwise.
+    setPlaceTypeId(place?.placeTypeId ?? SYSTEM_PLACE_TYPE_IDS.canyon);
+    setTags(place?.tags ?? []);
     setMode("form");
     setEditingField(null);
     setDateFieldKey(null);
@@ -165,6 +180,50 @@ export function PlaceEditSheet({
     setLatitude(seedCoord(pickedCoords.latitude));
     setLongitude(seedCoord(pickedCoords.longitude));
   }, [pickedCoords]);
+
+  const isCanyon = placeTypeId === SYSTEM_PLACE_TYPE_IDS.canyon;
+
+  /** Every type is offered here, including the empty ones — the list hides a
+   *  type with no places, but you have to be able to make the first one. */
+  const typeOptions: SegmentOption<string>[] = useMemo(
+    () =>
+      (placeTypes.data ?? []).map((type) => ({
+        value: type.id,
+        label: type.name,
+        icon: placeTypeFeatherIcon(type.iconKey),
+        hue: type.color,
+      })),
+    [placeTypes.data],
+  );
+
+  /** The tag vocabulary: a seed list unioned with every tag already in use on
+   *  this device. There is no registry to curate — same rule as trip types. */
+  const allPlaces = useMirrorPlaces();
+  const tagOptions = useMemo(() => {
+    const used = new Set<string>(PLACE_TAG_SUGGESTIONS);
+    for (const row of allPlaces.data ?? []) {
+      for (const tag of row.tags) used.add(tag);
+    }
+    return [...used]
+      .sort((a, b) => a.localeCompare(b))
+      .map((tag) => ({ value: tag, label: tag }));
+  }, [allPlaces.data]);
+  /**
+   * The fields THIS type's form asks for.
+   *
+   * The seven canyon grades have their own inputs above (a grade rail is a
+   * better control than a number box, and they are what this app is for), so
+   * on a canyon they are cut from the generic list rather than asked twice. On
+   * every other type they are not in the list at all — a campsite's defs do not
+   * include `v_grade`, which is the entire point of scoping.
+   */
+  const typeFieldDefs = useMemo(
+    () =>
+      defsForType(customFieldDefs, placeTypeId).filter(
+        (def) => !(isCanyon && RESERVED_FIELD_KEYS.has(def.key)),
+      ),
+    [customFieldDefs, isCanyon, placeTypeId],
+  );
 
   /** The form in the shape both the validator and the ops speak. */
   const draft = useMemo(
@@ -228,7 +287,16 @@ export function PlaceEditSheet({
       return;
     }
 
-    const effectiveCustomFields = coerceCustomFields(fieldValues, customFieldDefs);
+    const effectiveCustomFields = coerceCustomFields(fieldValues, typeFieldDefs);
+    // Normalised HERE for the same reason the outbox validates before enqueue:
+    // the server refuses a malformed list, and a rejected op is a sync issue
+    // the user has to resolve by hand rather than a message they can act on.
+    const normalizedTags = normalizePlaceTags(tags);
+    if ("error" in normalizedTags) {
+      setInvalid(normalizedTags.error);
+      return;
+    }
+    const nextTags = normalizedTags.tags ?? [];
     setSaving(true);
     try {
       if (place) {
@@ -244,13 +312,19 @@ export function PlaceEditSheet({
           changes.longitude = draft.longitude;
         }
         if (draft.notes !== place.notes) changes.notes = draft.notes;
+        if (placeTypeId !== place.placeTypeId) changes.placeTypeId = placeTypeId;
+        if (!sameList(nextTags, place.tags)) changes.tags = nextTags;
         // `fieldValues` is replaced wholesale by the server, so the edit is
         // built OVER the place's existing values — `_sources`, which only the
         // web writes, and any key another client added would otherwise be
         // dropped by an edit made on the phone.
+        // Built OVER the stored values, never rebuilt from the form: that is
+        // what keeps `_sources`, another client's key, and — on a type change —
+        // the OLD type's values, which the server needs in the payload to park
+        // them in `foreignFields` rather than lose them (§2.6).
         const nextValues = withFieldValues(place.fieldValues, {
           ...effectiveCustomFields,
-          ...definedGrades(draft),
+          ...(isCanyon ? definedGrades(draft) : {}),
         });
         if (
           JSON.stringify(nextValues) !==
@@ -272,13 +346,14 @@ export function PlaceEditSheet({
           longitude: draft.longitude as number,
           altNames: draft.altNames,
           notes: draft.notes,
-          // ponytail: the phone still creates CANYONS from this sheet. The
-          // "choose a type, then its form" flow is phase 5, where the Places
-          // screen grows its type tabs and there is somewhere to choose from.
-          placeTypeId: SYSTEM_PLACE_TYPE_IDS.canyon,
+          placeTypeId,
+          ...(nextTags.length > 0 && { tags: nextTags }),
           fieldValues: withFieldValues(
             {},
-            { ...effectiveCustomFields, ...definedGrades(draft) },
+            {
+              ...effectiveCustomFields,
+              ...(isCanyon ? definedGrades(draft) : {}),
+            },
           ),
         });
         onSaved("Place added.");
@@ -290,7 +365,19 @@ export function PlaceEditSheet({
     } finally {
       setSaving(false);
     }
-  }, [place, customFieldDefs, draft, editing, fieldValues, onClose, onFailed, onSaved]);
+  }, [
+    place,
+    draft,
+    editing,
+    fieldValues,
+    isCanyon,
+    onClose,
+    onFailed,
+    onSaved,
+    placeTypeId,
+    tags,
+    typeFieldDefs,
+  ]);
 
   const title =
     mode === "date"
@@ -344,7 +431,7 @@ export function PlaceEditSheet({
       {mode === "fields" ? (
         <CustomFieldList
           entity="place"
-          defs={customFieldDefs}
+          defs={typeFieldDefs}
           onAdd={() => {
             setEditingField(null);
             setMode("fieldForm");
@@ -361,6 +448,9 @@ export function PlaceEditSheet({
           entity="place"
           defs={customFieldDefs}
           editing={editingField}
+          // Opened from a place's own form, so the answer to "where does this
+          // field appear" is already given: on this type.
+          scopeToTypeId={placeTypeId}
           onSaved={(next, message) => {
             setCustomFieldDefs(next);
             onSaved(message);
@@ -373,6 +463,36 @@ export function PlaceEditSheet({
       {mode !== "form" ? null : (
       <View style={styles.form}>
         {invalid ? <ErrorBanner message={invalid} /> : null}
+
+        {/* TYPE FIRST, because everything below it depends on the answer: the
+            fields the form asks for, the colour of the pin, the tab it lands
+            under. A rail rather than a wizard step — the form reshapes under
+            it, so the choice is visible and reversible instead of a screen you
+            have to go back through.
+
+            Shown when editing too: miscategorising is inevitable, and
+            retyping a place keeps its media, routes, links and trips where
+            delete-and-recreate would lose them. Values the new type has no
+            field for are kept and offered back (§2.6), never dropped. */}
+        {typeOptions.length > 1 ? (
+          <View style={styles.field}>
+            <SectionHeader label="Type" />
+            <SegmentedControl
+              scroll
+              options={typeOptions}
+              value={placeTypeId}
+              onChange={setPlaceTypeId}
+            />
+            {editing && place && placeTypeId !== place.placeTypeId ? (
+              <Text style={styles.hint}>
+                Anything {typeName(place.placeTypeId, placeTypes.data)} records
+                that a {typeName(placeTypeId, placeTypes.data)} doesn&rsquo;t is
+                kept on this place — you can add it back or discard it from the
+                place&rsquo;s own screen.
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
 
         <TextField label="Name" value={name} onChangeText={setName} autoCapitalize="words" />
         <View style={styles.field}>
@@ -433,6 +553,11 @@ export function PlaceEditSheet({
           </View>
         ) : null}
 
+        {/* The seven canyon axes, and ONLY on a canyon. A campsite has no
+            vertical grade, and asking for one was the whole complaint this
+            rework answers. */}
+        {isCanyon ? (
+          <>
         <SectionHeader label="Grade" />
         <GradePicker label="Vertical (V)" axis="v_grade" value={vGrade} onChange={setVGrade} />
         <GradePicker label="Aquatic (A)" axis="a_grade" value={aGrade} onChange={setAGrade} />
@@ -458,6 +583,8 @@ export function PlaceEditSheet({
           keyboardType="numeric"
         />
         <TextField label="Hours" value={hours} onChangeText={setHours} keyboardType="numeric" />
+          </>
+        ) : null}
 
         <SectionHeader label="Notes" />
         <View style={styles.field}>
@@ -473,9 +600,40 @@ export function PlaceEditSheet({
           </Text>
         </View>
 
-        <SectionHeader label="Your own fields" />
+        {/* TAGS. Type-neutral — a carpark tag means the same thing on a
+            marker and on a canyon — and the vocabulary is what is already in
+            use plus a seed list, never a closed enum. This is where the old
+            waypoint sheet's tags mode went. */}
+        <SectionHeader label="Tags" />
+        <ChipPicker
+          label="Tags"
+          options={tagOptions}
+          selected={tags}
+          onToggle={(tag) =>
+            setTags((current) =>
+              current.includes(tag)
+                ? current.filter((existing) => existing !== tag)
+                : [...current, tag],
+            )
+          }
+          onAdd={(entry) => {
+            const tag = entry.trim();
+            // The server refuses case-insensitive duplicates, so a typed tag
+            // already on this place is a no-op rather than an add.
+            if (
+              !tag ||
+              tags.some((current) => current.toLowerCase() === tag.toLowerCase())
+            ) {
+              return;
+            }
+            setTags((current) => [...current, tag]);
+          }}
+          addPlaceholder="New tag"
+        />
+
+        <SectionHeader label={`${typeName(placeTypeId, placeTypes.data)} fields`} />
         <CustomFieldValueInputs
-          defs={customFieldDefs}
+          defs={typeFieldDefs}
           values={fieldValues}
           onChange={(key, next) =>
             setFieldValues((current) => ({ ...current, [key]: next }))
@@ -491,9 +649,9 @@ export function PlaceEditSheet({
           icon="sliders"
           title="Your place fields"
           subtitle={
-            customFieldDefs.length === 0
+            typeFieldDefs.length === 0
               ? "Add your own — permits, access notes, anything."
-              : `${customFieldDefs.length} field${customFieldDefs.length === 1 ? "" : "s"}`
+              : `${typeFieldDefs.length} field${typeFieldDefs.length === 1 ? "" : "s"} on this type`
           }
           right={<Feather name="chevron-right" size={20} color={theme.textMuted} />}
           onPress={() => setMode("fields")}
@@ -502,6 +660,16 @@ export function PlaceEditSheet({
       )}
     </BottomSheet>
   );
+}
+
+/** A type's name for user copy. Falls back to the neutral noun rather than an
+ *  id: a type this device has not pulled yet is a blank in a sentence, not a
+ *  UUID in one. */
+function typeName(
+  typeId: string,
+  types: { id: string; name: string }[] | null,
+): string {
+  return types?.find((type) => type.id === typeId)?.name ?? "place";
 }
 
 /**

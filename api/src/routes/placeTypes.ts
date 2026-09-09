@@ -47,7 +47,15 @@ router.get(
     const user = await resolveUser(req.user!.sub);
     const types = await prisma.placeType.findMany({
       where: visiblePlaceTypeWhere(user.id),
-      orderBy: [{ ownerId: "asc" }, { position: "asc" }, { name: "asc" }],
+      // `nulls: "first"` is load-bearing, not decoration: a system type has a
+      // NULL ownerId, and Postgres sorts NULLS LAST on a plain ASC — so the
+      // built-in types landed at the BOTTOM of every picker and tab bar while
+      // this route's own docstring promised the opposite.
+      orderBy: [
+        { ownerId: { sort: "asc", nulls: "first" } },
+        { position: "asc" },
+        { name: "asc" },
+      ],
     });
     const counts = await prisma.place.groupBy({
       by: ["placeTypeId"],

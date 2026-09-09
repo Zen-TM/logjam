@@ -1,11 +1,14 @@
 import { useCallback, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import {
+  defsForType,
+  RESERVED_FIELD_KEYS,
   SYSTEM_FIELD_DEFS,
   regionEdgesKm,
   type PlaceFilters,
   type PlaceSortKey,
   type PlaceThresholdFilter,
+  type ScopedCustomFieldDef,
 } from "@logjam/shared";
 
 import { fontSize, fontWeight, spacing, theme } from "../theme";
@@ -22,6 +25,7 @@ import {
   type NumberRange,
 } from "../ui";
 import { formatDateKey } from "../logs/logbook";
+import { useFieldDefs } from "../customFields/useFieldDefs";
 
 /**
  * Sort and filter for the Places screen — everything that isn't the rail.
@@ -35,9 +39,13 @@ import { formatDateKey } from "../logs/logbook";
  * - The three thresholds keep the web's full operator control, but lead with the
  *   presets people actually pick. "Custom" is one tap away and covers the rest.
  * - Dates, RopeWiki link and "shared by me" are straight ports.
- * - Custom-FIELD filters are the one real gap. The web builds a control per
- *   field type; on a phone that is a screenful of inputs for a rarely-used axis.
- *   Values still show on place detail.
+ * - Custom-FIELD filters ARE here now, and they are the same thing as the
+ *   grades: every axis below is a definition, and which ones appear is decided
+ *   by the type tab. On "All" you get every place field; on Campsite you get
+ *   the campsite's, and no V grade. `ponytail:` a DATE definition gets no row —
+ *   the date picker is a mode keyed to the two built-in date fields, and a
+ *   date on a PLACE (rather than on a trip) is rare enough to leave to the web.
+ *   Add one by widening `Mode` to carry a custom key.
  *
  * PRIVACY: filter state is local to the screen and dies with it. The "show only
  * these on the map" option passes place IDS to the map through an in-memory
@@ -207,6 +215,17 @@ export function PlaceFilterSheet({
   totalCount: number;
 }) {
   const [mode, setMode] = useState<Mode>({ kind: "main" });
+  // WHICH AXES EXIST is a property of the type tab, not of this sheet. On
+  // "All" every place field is offered; on a type, only that type's — which is
+  // what stops a campsite filter asking for a vertical grade.
+  const { defs } = useFieldDefs("place");
+  const typeDefs =
+    filters.placeTypeId == null ? defs : defsForType(defs, filters.placeTypeId);
+  // The reserved keys have bespoke controls below (a grade rail beats a number
+  // box), so they are rendered by hand and cut from the generic list.
+  const hasReserved = (key: string) =>
+    typeDefs.some((def) => def.key === key);
+  const ownFieldDefs = typeDefs.filter((def) => !RESERVED_FIELD_KEYS.has(def.key));
 
   const patch = useCallback(
     (next: Partial<PlaceFilters>) => onChangeFilters({ ...filters, ...next }),
@@ -303,45 +322,69 @@ export function PlaceFilterSheet({
           ))}
         </View>
 
-        <SectionHeader label="Grade" />
-        <RangePills
-          label="Vertical"
-          prefix="V"
-          bounds={boundsOf("v_grade")}
-          value={rangeOf(filters, "v_grade")}
-          onChange={(next) => patch(patchRange("v_grade", next)(filters))}
-        />
-        <RangePills
-          label="Aquatic"
-          prefix="A"
-          bounds={boundsOf("a_grade")}
-          value={rangeOf(filters, "a_grade")}
-          onChange={(next) => patch(patchRange("a_grade", next)(filters))}
-        />
-        <RangePills
-          label="Commitment"
-          bounds={boundsOf("commitment")}
-          value={rangeOf(filters, "commitment")}
-          onChange={(next) => patch(patchRange("commitment", next)(filters))}
-        />
-        <RangePills
-          label="Quality"
-          bounds={boundsOf("quality")}
-          value={rangeOf(filters, "quality")}
-          onChange={(next) => patch(patchRange("quality", next)(filters))}
-        />
+        {hasReserved("v_grade") ? (
+          <>
+            <SectionHeader label="Grade" />
+            <RangePills
+              label="Vertical"
+              prefix="V"
+              bounds={boundsOf("v_grade")}
+              value={rangeOf(filters, "v_grade")}
+              onChange={(next) => patch(patchRange("v_grade", next)(filters))}
+            />
+            <RangePills
+              label="Aquatic"
+              prefix="A"
+              bounds={boundsOf("a_grade")}
+              value={rangeOf(filters, "a_grade")}
+              onChange={(next) => patch(patchRange("a_grade", next)(filters))}
+            />
+            <RangePills
+              label="Commitment"
+              bounds={boundsOf("commitment")}
+              value={rangeOf(filters, "commitment")}
+              onChange={(next) => patch(patchRange("commitment", next)(filters))}
+            />
+            <RangePills
+              label="Quality"
+              bounds={boundsOf("quality")}
+              value={rangeOf(filters, "quality")}
+              onChange={(next) => patch(patchRange("quality", next)(filters))}
+            />
+          </>
+        ) : null}
 
-        <SectionHeader label="Logistics" />
-        {THRESHOLDS.map((spec) => (
-          <ThresholdFilter
-            key={spec.key}
-            label={spec.label}
-            unit={spec.unit}
-            presets={spec.presets}
-            value={thresholdOf(filters, spec.key)}
-            onChange={(next) => patch(patchThreshold(spec.key, next)(filters))}
-          />
-        ))}
+        {THRESHOLDS.some((spec) => hasReserved(spec.key)) ? (
+          <>
+            <SectionHeader label="Logistics" />
+            {THRESHOLDS.filter((spec) => hasReserved(spec.key)).map((spec) => (
+              <ThresholdFilter
+                key={spec.key}
+                label={spec.label}
+                unit={spec.unit}
+                presets={spec.presets}
+                value={thresholdOf(filters, spec.key)}
+                onChange={(next) => patch(patchThreshold(spec.key, next)(filters))}
+              />
+            ))}
+          </>
+        ) : null}
+
+        {/* A ROW PER DEFINITION — the user's own fields, filtered the same way
+            the grades are, because they ARE the same thing. */}
+        {ownFieldDefs.length > 0 ? (
+          <>
+            <SectionHeader label="Your fields" />
+            {ownFieldDefs.map((def) => (
+              <CustomFieldFilter
+                key={def.key}
+                def={def}
+                filters={filters}
+                onPatch={patch}
+              />
+            ))}
+          </>
+        ) : null}
 
         <SectionHeader label="Location" />
         <AreaFilter
@@ -433,6 +476,104 @@ export function PlaceFilterSheet({
       </View>
     </BottomSheet>
   );
+}
+
+/**
+ * ONE user-defined field as a filter row, with the control its type deserves:
+ *
+ *  - a bounded number is a pill range, the same control the grades get, because
+ *    the bounds make every stop nameable;
+ *  - an unbounded number is the operator + value control, since there is no
+ *    span to lay out;
+ *  - a yes/no is two chips, where the third state (neither) is "don't care";
+ *  - text is a contains-match — the search box above matches NAMES, so a field
+ *    value is otherwise unreachable from the phone.
+ *
+ * `ponytail:` a DATE definition renders nothing — see this file's header.
+ */
+function CustomFieldFilter({
+  def,
+  filters,
+  onPatch,
+}: {
+  def: ScopedCustomFieldDef;
+  filters: PlaceFilters;
+  onPatch: (next: Partial<PlaceFilters>) => void;
+}) {
+  const current = filters.custom?.[def.key];
+  const patchCustom = (value: PlaceFilters["custom"][string] | null) => {
+    const custom = { ...(filters.custom ?? {}) };
+    // Absent rather than present-at-its-default, so "is it active" stays
+    // `key in custom` for every kind.
+    if (value == null) delete custom[def.key];
+    else custom[def.key] = value;
+    onPatch({ custom });
+  };
+
+  if (def.type === "integer" || def.type === "float") {
+    return def.min != null && def.max != null ? (
+      <RangePills
+        label={def.label}
+        bounds={[def.min, def.max]}
+        value={rangeOf(filters, def.key)}
+        onChange={(next) =>
+          patchCustom(next == null ? null : { kind: "numberRange", range: next })
+        }
+      />
+    ) : (
+      <ThresholdFilter
+        label={def.label}
+        unit=""
+        presets={OPERATORS.map((op) => [op, def.min ?? 1] as PlaceThresholdFilter)}
+        value={thresholdOf(filters, def.key)}
+        onChange={(next) =>
+          patchCustom(
+            next == null || next[0] === "Any"
+              ? null
+              : { kind: "number", op: next[0], value: next[1] },
+          )
+        }
+      />
+    );
+  }
+
+  if (def.type === "boolean") {
+    const value = current?.kind === "boolean" ? current.value : null;
+    return (
+      <View style={styles.chipRow}>
+        <Text style={styles.blockLabel}>{def.label}</Text>
+        {[true, false].map((option) => (
+          <Chip
+            key={String(option)}
+            label={option ? "Yes" : "No"}
+            active={value === option}
+            // Tapping the active chip clears it: "either" is the third state
+            // and it needs to be reachable without a Reset.
+            onPress={() =>
+              patchCustom(
+                value === option ? null : { kind: "boolean", value: option },
+              )
+            }
+          />
+        ))}
+      </View>
+    );
+  }
+
+  if (def.type === "string") {
+    return (
+      <TextField
+        label={def.label}
+        value={current?.kind === "text" ? current.value : ""}
+        onChangeText={(next) =>
+          patchCustom(next.trim() === "" ? null : { kind: "text", value: next })
+        }
+        autoCapitalize="none"
+      />
+    );
+  }
+
+  return null;
 }
 
 /**

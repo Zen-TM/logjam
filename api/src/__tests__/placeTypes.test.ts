@@ -107,6 +107,23 @@ describe("GET /place-types", () => {
     expect(canyon.placeCount).toBeGreaterThan(0);
   });
 
+  // SYSTEM FIRST, and the clients depend on it: the leftmost tab on the Places
+  // screen and the first entry in every type picker are whatever this route
+  // returns first. Postgres sorts NULLS LAST on a plain `ASC`, and a system
+  // type's ownerId is NULL — so without an explicit `nulls: "first"` the
+  // built-in types come back at the BOTTOM. Cheap to assert, invisible to
+  // anything else.
+  it("returns the system types before the caller's own", async () => {
+    const res = await request(API_URL).get("/place-types").set(as(ALICE_SUB));
+    const flags = res.body.types.map((t: { isSystem: boolean }) => t.isSystem);
+    const firstOwn = flags.indexOf(false);
+    if (firstOwn === -1) return; // this account has no types of its own
+    expect(
+      flags.slice(firstOwn).every((isSystem: boolean) => !isSystem),
+      "a system type is listed after one of the user's own",
+    ).toBe(true);
+  });
+
   // System types are GLOBAL — one row shared by everyone, not a per-user copy.
   // That is what makes a shared or copied place of a system type resolve for
   // its recipient with no reconciliation at all.

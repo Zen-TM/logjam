@@ -76,6 +76,22 @@ export type LayerToggleEntry = {
   note?: string;
   value: boolean;
   onChange: (next: boolean) => void;
+  /**
+   * Sub-rows under a master, for a layer whose contents are a vocabulary
+   * rather than one thing — the place TYPES. Same master-plus-children shape
+   * the topo band already uses, so this is not a new pattern: the master row
+   * opens, its switch is "this layer at all", and each child is one type.
+   *
+   * Absent on a layer with nothing to break down, which is most of them.
+   */
+  children?: {
+    key: string;
+    title: string;
+    hue: string;
+    count: number;
+    value: boolean;
+    onChange: (next: boolean) => void;
+  }[];
 };
 
 export type OverlayEntry = {
@@ -243,6 +259,55 @@ function BasemapTab({
  * the user can see on the map behind the sheet (DESIGN.md §7).
  */
 function LayerRow({ entry }: { entry: LayerToggleEntry }) {
+  const [expanded, setExpanded] = useState(false);
+  const expandable = (entry.children?.length ?? 0) > 0;
+
+  if (expandable) {
+    return (
+      <View style={styles.group}>
+        <Row
+          icon={entry.icon}
+          hue={entry.hue}
+          title={entry.title}
+          subtitle={entry.note}
+          onPress={() => setExpanded((current) => !current)}
+          accessibilityLabel={`${entry.title} — ${expanded ? "hide" : "show"} the list`}
+          right={
+            <View style={styles.trailing}>
+              <Text style={styles.count}>{entry.count}</Text>
+              <Toggle
+                value={entry.value}
+                onValueChange={entry.onChange}
+                accessibilityLabel={`Show ${entry.title}`}
+              />
+              <Feather
+                name={expanded ? "chevron-up" : "chevron-down"}
+                size={20}
+                color={theme.textMuted}
+              />
+            </View>
+          }
+        />
+        {expanded ? (
+          <View style={styles.groupItems}>
+            {entry.children?.map((child) => (
+              <ItemRow
+                key={child.key}
+                hue={child.hue}
+                title={child.title}
+                // A child of a switched-OFF master draws nothing whatever its
+                // own switch says, so it reads as off — the master is the
+                // stronger statement and the row must not contradict it.
+                visible={entry.value && child.value}
+                onVisibility={() => child.onChange(!child.value)}
+              />
+            ))}
+          </View>
+        ) : null}
+      </View>
+    );
+  }
+
   return (
     <Row
       icon={entry.icon}

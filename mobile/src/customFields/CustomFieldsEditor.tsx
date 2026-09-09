@@ -4,14 +4,23 @@ import {
   buildCustomFieldDef,
   CUSTOM_FIELD_TYPES,
   customFieldDisplayLabel,
-  type TripLogCustomFieldDef,
+  type ScopedCustomFieldDef,
   type TripLogCustomFieldType,
 } from "@logjam/shared";
 
 import { fontSize, spacing, theme } from "../theme";
 import type { CustomFieldEntity } from "../api/queries";
 import { countFieldValues, removeFieldDef, saveFieldDefs } from "./fieldDefsStore";
-import { Button, Row, SectionHeader, SegmentedControl, TextField, Toggle } from "../ui";
+import { useMirrorPlaceTypes } from "../sync/useSyncQueries";
+import {
+  Button,
+  ChipPicker,
+  Row,
+  SectionHeader,
+  SegmentedControl,
+  TextField,
+  Toggle,
+} from "../ui";
 
 /**
  * Manage the user's own custom field definitions — the mobile counterpart of the
@@ -53,9 +62,9 @@ export function CustomFieldList({
   onEdit,
 }: {
   entity: CustomFieldEntity;
-  defs: TripLogCustomFieldDef[];
+  defs: ScopedCustomFieldDef[];
   onAdd: () => void;
-  onEdit: (def: TripLogCustomFieldDef) => void;
+  onEdit: (def: ScopedCustomFieldDef) => void;
 }) {
   const noun = ENTITY_NOUN[entity];
   return (
@@ -87,15 +96,24 @@ export function CustomFieldForm({
   entity,
   defs,
   editing,
+  scopeToTypeId,
   onSaved,
   onFailed,
   onDone,
 }: {
   entity: CustomFieldEntity;
-  defs: TripLogCustomFieldDef[];
+  defs: ScopedCustomFieldDef[];
   /** null = adding a new field. */
-  editing: TripLogCustomFieldDef | null;
-  onSaved: (defs: TripLogCustomFieldDef[], message: string) => void;
+  editing: ScopedCustomFieldDef | null;
+  /**
+   * The place type whose form this was opened from. A field added there is
+   * that type's field — the user asked for it while filling in a canyon, so
+   * asking them WHERE it should appear would be asking a question they have
+   * already answered. Absent from Settings, where the answer is genuinely
+   * theirs to make and the scope picker appears instead.
+   */
+  scopeToTypeId?: string;
+  onSaved: (defs: ScopedCustomFieldDef[], message: string) => void;
   onFailed: (message: string) => void;
   onDone: () => void;
 }) {
@@ -105,6 +123,16 @@ export function CustomFieldForm({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [bounded, setBounded] = useState(editing?.min != null);
+  // WHERE it appears. Only a PLACE field has anywhere to choose between — a
+  // trip log has no types — and only when the caller has not already answered.
+  const placeTypes = useMirrorPlaceTypes();
+  const scoping = entity === "place" && scopeToTypeId == null;
+  const [appliesToAll, setAppliesToAll] = useState(
+    editing ? editing.appliesToAllTypes : true,
+  );
+  const [typeIds, setTypeIds] = useState<string[]>(
+    editing ? editing.placeTypeIds : [],
+  );
   const [min, setMin] = useState(editing?.min != null ? String(editing.min) : "");
   const [max, setMax] = useState(editing?.max != null ? String(editing.max) : "");
   // Bounds are only meaningful on a number, and the API rejects them elsewhere.
@@ -122,13 +150,29 @@ export function CustomFieldForm({
       setError(built.error);
       return;
     }
+    // A place field that is on no type and not on all of them appears on NO
+    // form — it exists in Settings and nowhere else, which reads as the save
+    // having failed. Refused here rather than saved and puzzled over.
+    if (scoping && !appliesToAll && typeIds.length === 0) {
+      setError("Choose at least one place type, or turn on “All types”.");
+      return;
+    }
+    const scope =
+      entity === "place"
+        ? scopeToTypeId != null
+          ? { appliesToAllTypes: false, placeTypeIds: [scopeToTypeId] }
+          : { appliesToAllTypes: appliesToAll, placeTypeIds: appliesToAll ? [] : typeIds }
+        : // A trip-log field has no types to be scoped to; it is on every trip.
+          { appliesToAllTypes: true, placeTypeIds: [] };
     // A rename keeps the original key so the values already stored on trips stay
     // attached to it.
-    const next = editing
+    const next: ScopedCustomFieldDef[] = editing
       ? defs.map((def) =>
-          def.key === editing.key ? { ...built.def, key: editing.key } : def,
+          def.key === editing.key
+            ? { ...built.def, key: editing.key, ...scope }
+            : def,
         )
-      : [...defs, built.def];
+      : [...defs, { ...built.def, ...scope }];
     setSaving(true);
     try {
       await saveFieldDefs(entity, next);
@@ -143,7 +187,24 @@ export function CustomFieldForm({
     } finally {
       setSaving(false);
     }
-  }, [bounded, defs, editing, entity, label, max, min, numeric, onDone, onFailed, onSaved, type]);
+  }, [
+    appliesToAll,
+    bounded,
+    defs,
+    editing,
+    entity,
+    label,
+    max,
+    min,
+    numeric,
+    onDone,
+    onFailed,
+    onSaved,
+    scopeToTypeId,
+    scoping,
+    type,
+    typeIds,
+  ]);
 
   const confirmDelete = useCallback(() => {
     if (!editing) return;
@@ -214,6 +275,48 @@ export function CustomFieldForm({
         ) : null}
       </View>
 
+      {/* WHERE IT APPEARS. "All types" is a FLAG, not every box ticked: a
+          field scoped by ticking each type that exists today would silently
+          fail to apply to one created tomorrow, and the user who meant "all"
+          would never find out. */}
+      {scoping ? (
+        <View style={styles.typeBlock}>
+          <Row
+            icon="layers"
+            title="All place types"
+            subtitle={
+              appliesToAll
+                ? "Including types you add later"
+                : "Pick the types this field belongs to"
+            }
+            right={
+              <Toggle
+                value={appliesToAll}
+                onValueChange={setAppliesToAll}
+                accessibilityLabel="All place types"
+              />
+            }
+          />
+          {appliesToAll ? null : (
+            <ChipPicker
+              label="Types"
+              options={(placeTypes.data ?? []).map((type) => ({
+                value: type.id,
+                label: type.name,
+              }))}
+              selected={typeIds}
+              onToggle={(id) =>
+                setTypeIds((current) =>
+                  current.includes(id)
+                    ? current.filter((existing) => existing !== id)
+                    : [...current, id],
+                )
+              }
+            />
+          )}
+        </View>
+      ) : null}
+
       {/* Range is offered only for numbers, because that is the only place it
           means anything — and it is what makes the web's range slider work. */}
       {numeric ? (
@@ -270,7 +373,7 @@ export function CustomFieldForm({
   );
 }
 
-function fieldSummary(def: TripLogCustomFieldDef): string {
+function fieldSummary(def: ScopedCustomFieldDef): string {
   const base = typeLabel(def.type);
   return def.min != null && def.max != null ? `${base} · ${def.min}–${def.max}` : base;
 }

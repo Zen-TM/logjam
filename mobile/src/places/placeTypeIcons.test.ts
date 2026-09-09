@@ -13,6 +13,8 @@ import { PLACE_TYPE_ICON_KEYS, SYSTEM_PLACE_TYPES } from "@logjam/shared";
 // icon should be.
 import FEATHER_GLYPHS from "@expo/vector-icons/build/vendor/react-native-vector-icons/glyphmaps/Feather.json";
 
+import { placeTypeFeatherIcon } from "./placeTypeIcon";
+
 describe("place type icon keys resolve in Feather", () => {
   it("has every curated key", () => {
     const missing = PLACE_TYPE_ICON_KEYS.filter(
@@ -40,5 +42,18 @@ describe("place type icon keys resolve in Feather", () => {
     for (const type of SYSTEM_PLACE_TYPES) {
       expect(PLACE_TYPE_ICON_KEYS as readonly string[]).toContain(type.iconKey);
     }
+  });
+});
+
+describe("placeTypeFeatherIcon", () => {
+  it("passes a curated key straight through", () => {
+    for (const key of PLACE_TYPE_ICON_KEYS) {
+      expect(placeTypeFeatherIcon(key)).toBe(key);
+    }
+  });
+
+  // The case the fallback exists for: a type created against a newer server.
+  it("falls back to the pin for a key this build does not know", () => {
+    expect(placeTypeFeatherIcon("tent")).toBe("map-pin");
   });
 });

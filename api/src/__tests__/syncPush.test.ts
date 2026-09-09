@@ -606,3 +606,48 @@ describe("sync push — direct-share delete cleanup", () => {
     expect(after.body.tombstones).toContainEqual({ type: "route", id: routeId });
   });
 });
+
+// A "how many" field has a floor and no honest ceiling — three of the SYSTEM
+// definitions are exactly that shape. The push path gated `min` and `max` on
+// BOTH being numbers, so a one-sided definition created offline arrived
+// unbounded: the form stopped showing the range and nothing refused a
+// negative, leaving no check anywhere. The REST twin already passed them
+// independently, so this was also a REST/sync divergence.
+describe("sync push — a definition keeps a one-sided bound", () => {
+  it("stores a min with no max", async () => {
+    const defId = randomUUID();
+    const key = `party_size_${Date.now()}`.slice(0, 24);
+    const created = await push(ALICE_SUB, [
+      {
+        opId: `def-min-${defId}`,
+        entity: "customFieldDef",
+        op: "create",
+        id: defId,
+        fields: {
+          entity: "tripLog",
+          key,
+          label: "Party size",
+          type: "integer",
+          min: 1,
+        },
+      },
+    ]);
+    expect(created.body.results[0].status, JSON.stringify(created.body)).toBe(
+      "applied",
+    );
+
+    const list = await request(API_URL)
+      .get("/custom-fields/trip-log")
+      .set(as(ALICE_SUB));
+    const def = (list.body.fields as Record<string, unknown>[]).find(
+      (row) => row.key === key,
+    );
+    expect(def, "the definition should be listed").toBeTruthy();
+    expect(def!.min).toBe(1);
+    expect(def!.max ?? null).toBeNull();
+
+    await request(API_URL)
+      .delete(`/custom-fields/trip-log/${key}`)
+      .set(as(ALICE_SUB));
+  });
+});
