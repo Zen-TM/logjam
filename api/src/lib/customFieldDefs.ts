@@ -42,6 +42,10 @@ import {
 /** The columns a definition row needs to become a `TripLogCustomFieldDef`. */
 const DEF_SELECT = {
   id: true,
+  // WHOSE it is: null for a system definition. The clients need it to know
+  // which rows may be renamed or deleted — without it the phone offered both
+  // on a built-in field and did the local half of the delete for real.
+  ownerId: true,
   entity: true,
   key: true,
   label: true,
@@ -260,6 +264,7 @@ export async function loadScopedDefs(
     return [
       {
         ...def,
+        ownerId: row.ownerId,
         appliesToAllTypes: row.appliesToAllTypes,
         placeTypeIds: row.placeTypes.map((link) => link.placeTypeId),
       },

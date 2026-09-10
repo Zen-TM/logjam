@@ -86,12 +86,22 @@ function parseSchemes(src) {
 // Read from the shared declaration rather than restated: these two ARE palette
 // entries, and a copy here would be the list that drifts.
 const PLACE_TYPE_COLORS = parsePaletteColors();
-const OWNED_MARKER = "#F97316";
-const SHARED_MARKER = "#629BF8";
+const OWNED_MARKER = PLACE_TYPE_COLORS[0];
+// Read from the declaration, not restated: it is reserved precisely so it is
+// never a type colour, and a copy here is the half that would drift.
+const SHARED_MARKER = parseSharedPlaceColor();
 
 // ─── Rendered pairs → actual CSS usage. `min` is the WCAG threshold. ────────
 // Filled-accent buttons use the scheme's dark `primary` as their label colour
 // (.btnFilledAccent / MUI primary.contrastText), so the label pair is primary-on-accent.
+/** The one hue reserved for "shared", read from the same declaration. */
+function parseSharedPlaceColor() {
+  const src = readFileSync(placeTypesPath, "utf8");
+  const match = /export const SHARED_PLACE_COLOR = "(#[0-9A-Fa-f]{6})";/.exec(src);
+  if (!match) throw new Error("SHARED_PLACE_COLOR not found in placeTypes.ts");
+  return match[1];
+}
+
 function pairsFor(t) {
   const onAccent = t.primary;
   return [
@@ -120,6 +130,19 @@ function pairsFor(t) {
       fg: color,
       bg: t.primary,
       min: 3,
+    })),
+    // AND THE CHIP, which is a TEXT pair and therefore a different bar.
+    // A type's colour FILLS its chip on the Places rail and in the create
+    // form, with the scheme's dark `primary` as the label — the same shape as
+    // a filled-accent button. Checking only the marker pair above and reading
+    // it as proof the chip was legible is the "guard whose two sides share one
+    // assumption" failure: it passed while ten of twelve colours failed AA on
+    // the label. This is the pair the user actually reads.
+    ...PLACE_TYPE_COLORS.map((color) => ({
+      name: `place-type chip label on ${color} (text)`,
+      fg: onAccent,
+      bg: color,
+      min: 4.5,
     })),
   ];
 }

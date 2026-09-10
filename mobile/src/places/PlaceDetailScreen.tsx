@@ -24,10 +24,8 @@ import {
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import {
-  customFieldDisplayLabel,
   numericFieldValue,
   userFieldValues,
-  type TripLogCustomFieldDef,
   distinctTripTypes,
   formatCanyonGrade,
   formatDistanceM,
@@ -75,6 +73,7 @@ import {
   useMirrorMedia,
   useMirrorRoutes,
   useMirrorPlaceLinks,
+  useMirrorPlaceTypes,
   useMirrorTrips,
 } from "../sync/useSyncQueries";
 import {
@@ -149,6 +148,7 @@ export function PlaceDetailScreen({
   const trips = useMirrorTrips();
   const routes = useMirrorRoutes();
   const placeLinks = useMirrorPlaceLinks();
+  const placeTypes = useMirrorPlaceTypes();
   const placesQuery = useMirrorPlaces();
   const online = useConnectivity() === "online";
   // The same capability gating every Share row spreads — removing a share is
@@ -236,6 +236,9 @@ export function PlaceDetailScreen({
   // definitions that label them are the viewer's own — or, for a place shared
   // from a type they do not own, the snapshot the delta row carried, without
   // which they would see bare keys.
+  const placeTypeName =
+    (placeTypes.data ?? []).find((type) => type.id === place.placeTypeId)?.name ??
+    "Place";
   const storedFields = userFieldValues(place.fieldValues);
   const labellingDefs = [...fieldDefs, ...(place.fieldDefsSnapshot ?? [])];
   const customFields = [
@@ -244,7 +247,10 @@ export function PlaceDetailScreen({
       .map(
         (def) =>
           [
-            customFieldDisplayLabel(def as TripLogCustomFieldDef),
+            // The bare LABEL, not `customFieldDisplayLabel`: the "(1-5)" that
+            // helps someone typing into a box is noise beside a value that has
+            // already been typed.
+            def.label,
             storedFields[def.key],
           ] as const,
       ),
@@ -546,9 +552,7 @@ export function PlaceDetailScreen({
                   : `Linked places · ${linkedPlaces.length}`
               }
             />
-            {linkedPlaces.length === 0 ? (
-              <Text style={styles.muted}>Link another place to this one.</Text>
-            ) : (
+            {linkedPlaces.length === 0 ? null : (
               linkedPlaces.map((linked) => (
                 <Row
                   key={linked.id}
@@ -638,7 +642,10 @@ export function PlaceDetailScreen({
 
         {customFields.length > 0 ? (
           <>
-            <SectionHeader label="Your fields" />
+            {/* Named for the TYPE, like the form and the filter sheet: on a
+                campsite these are Capacity and Is-a-cave, which are the app's,
+                not the user's. */}
+            <SectionHeader label={`${placeTypeName} fields`} />
             <View style={styles.fieldCard}>
               {customFields.map(([label, value]) => (
                 <View key={label} style={styles.fieldRow}>
@@ -732,9 +739,11 @@ export function PlaceDetailScreen({
             if (visible.length === 0) {
               return (
                 <Text style={styles.muted}>
-                  {candidates.length === 0
-                    ? "Every other place is already linked to this one."
-                    : "No place matches that."}
+                  {(placesQuery.data ?? []).length <= 1
+                    ? "This is the only place you have."
+                    : candidates.length === 0
+                      ? "Every other place is already linked to this one."
+                      : "No place matches that."}
                 </Text>
               );
             }
@@ -835,7 +844,25 @@ export function PlaceDetailScreen({
             title="Discard"
             subtitle={online ? "Removes this value." : "Needs a connection"}
             disabled={!online || resolvingForeign}
-            onPress={() => runForeignAction("discard")}
+            // The only one of the three that LOSES something, one tap inside a
+            // sheet one tap from a row. Everything else destructive in this app
+            // asks first.
+            onPress={() => {
+              const item = foreignItem;
+              if (!item) return;
+              Alert.alert(
+                `Discard "${item.label}"?`,
+                "The value is removed from this place. This can't be undone.",
+                [
+                  { text: "Cancel", style: "cancel" },
+                  {
+                    text: "Discard",
+                    style: "destructive",
+                    onPress: () => runForeignAction("discard"),
+                  },
+                ],
+              );
+            }}
           />
         </View>
       </BottomSheet>

@@ -921,7 +921,7 @@ export function MapScreen({
   // and a switch whose value comes back from an async DB write lags the thumb.
   // The per-item columns still exist and are still ANDed in below — they are
   // written from Saved now rather than from the map.
-  const [showOwnedPlaces, setShowOwnedPlaces] = useState(true);
+  const [showPlaces, setShowPlaces] = useState(true);
   const [showSharedPlaces, setShowSharedPlaces] = useState(true);
   // Types whose pins are OFF, held as the exceptions rather than as the
   // allowed set: types arrive from the server and one created on another
@@ -1446,7 +1446,7 @@ export function MapScreen({
   const ownedFc = useMemo(
     () =>
       toPlaceFeatureCollection(
-        showOwnedPlaces
+        showPlaces
           ? ownedPlaces.filter(
               (c) =>
                 (allowedPlaceIds === null || allowedPlaceIds.has(c.id)) &&
@@ -1455,7 +1455,7 @@ export function MapScreen({
           : [],
         placeTypeColors,
       ),
-    [allowedPlaceIds, hiddenPlaceTypeIds, ownedPlaces, placeTypeColors, showOwnedPlaces],
+    [allowedPlaceIds, hiddenPlaceTypeIds, ownedPlaces, placeTypeColors, showPlaces],
   );
   // A shared place obeys the per-type switches too: "stop drawing campsites"
   // means campsites, not "my campsites". The global Shared switch is the other
@@ -1463,7 +1463,7 @@ export function MapScreen({
   const sharedFc = useMemo(
     () =>
       toPlaceFeatureCollection(
-        showSharedPlaces
+        showPlaces && showSharedPlaces
           ? sharedPlaces.filter(
               (c) =>
                 (allowedPlaceIds === null || allowedPlaceIds.has(c.id)) &&
@@ -1472,7 +1472,14 @@ export function MapScreen({
           : [],
         placeTypeColors,
       ),
-    [allowedPlaceIds, hiddenPlaceTypeIds, placeTypeColors, sharedPlaces, showSharedPlaces],
+    [
+      allowedPlaceIds,
+      hiddenPlaceTypeIds,
+      placeTypeColors,
+      sharedPlaces,
+      showPlaces,
+      showSharedPlaces,
+    ],
   );
 
   /** Follow a track between two anchors, if snapping is on and finds one.
@@ -2320,8 +2327,8 @@ export function MapScreen({
   // leaves a saved, auto-named marker rather than losing the mark.
   //
   // ponytail: the auto-name is a count of marker places, not of every place —
-  // "Marker 4" beside three canyons reads right. Phase 5 gives the create flow
-  // a type picker and this becomes one branch of it.
+  // "Marker 4" beside three canyons reads right: it is a place of the system
+  // Marker type, made without a form.
   const dropMarkerAt = useCallback(
     (point: { latitude: number; longitude: number }) => {
       const markerCount = (places.data ?? []).filter(
@@ -2334,9 +2341,13 @@ export function MapScreen({
         placeTypeId: SYSTEM_PLACE_TYPE_IDS.marker,
       })
         .then((id) => setOptionsPlaceId(id))
-        .catch(console.error);
+        .catch((err: unknown) => {
+          // A drop that fails silently leaves no marker and no reason.
+          console.error(err);
+          notify("Couldn't drop a marker here.", "error");
+        });
     },
-    [places.data],
+    [places.data, notify],
   );
 
   // "Open in Logjam": ACTION_VIEW / share-sheet delivers a content:// URI.
@@ -3604,7 +3615,7 @@ export function MapScreen({
       }
       // Third tap drops follow but KEEPS the dot and its watchers: "don't
       // chase me" is a different request from "stop showing me", and a
-      // placeer who wants to look at the next drop still wants to see where
+      // canyoner who wants to look at the next drop still wants to see where
       // they are. Stopping the watchers is what leaving the screen does.
       setFollowMode("off");
       // The ref too, and BEFORE recentre(): setCameraStop reads
@@ -3975,10 +3986,16 @@ export function MapScreen({
       key: "places",
       icon: "map-pin",
       hue: OWNED_PLACE_COLOR,
-      title: "My places",
-      count: ownedPlaces.length,
-      value: showOwnedPlaces,
-      onChange: setShowOwnedPlaces,
+      // "PLACES", not "My places", and the count is every place on the phone:
+      // the children under it are TYPES, and a type governs a shared campsite
+      // exactly as it governs one of yours ("stop drawing campsites" means
+      // campsites). Hanging them under an ownership row said the opposite of
+      // what the code does, and its count disagreed with the children's by the
+      // number of shared places.
+      title: "Places",
+      count: ownedPlaces.length + sharedPlaces.length,
+      value: showPlaces,
+      onChange: setShowPlaces,
       // ONE CHILD PER TYPE, and the only place a user can say "stop drawing
       // campsites". A type with no places is left out — the list has to stay
       // short enough to read at a trailhead, and a switch for nothing is a
@@ -4005,13 +4022,18 @@ export function MapScreen({
         })),
     },
     {
+      // The OTHER axis: whose, not what kind. It stays a row of its own rather
+      // than a child, because it crosses every type.
       key: "shared-places",
       icon: "share-2",
       hue: SHARED_PLACE_COLOR,
-      title: "Shared places",
+      title: "Shared with me",
       count: sharedPlaces.length,
       value: showSharedPlaces,
       onChange: setShowSharedPlaces,
+      // Places off means places off: a switch that flips real state while the
+      // map draws nothing is the same lie as a dead button.
+      inert: !showPlaces,
     },
     {
       key: "routes",
@@ -5023,7 +5045,11 @@ export function MapScreen({
         <View style={styles.sheetBody}>
           <Row
             icon="flag"
-            title="Drop a waypoint"
+            // A marker IS a place, of the system Marker type — the row two
+            // below makes one with a form, this one makes one with a name and
+            // nothing else. "Waypoint" is the noun the rework retired.
+            title="Drop a marker"
+            subtitle="A quick pin, no form"
             onPress={() => {
               const point = longPressPoint;
               setLongPressPoint(null);

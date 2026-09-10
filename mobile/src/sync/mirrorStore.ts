@@ -71,9 +71,11 @@ const ROUTE_KNOWN = [
   "sharedCount", "createdAt", "updatedAt",
 ] as const;
 
-// `ownerId` is a known key that gets no column: every definition the server
-// sends is the caller's own (they are never shared), so storing it would be a
-// constant. It is listed here so it does not fall into extra_json.
+// `ownerId` has a column of its own: NULL means a SYSTEM definition, which the
+// user may not rename or delete. Storing it was skipped once on the premise
+// that every definition is the caller's own — the delta has always sent the
+// global ones too, and without the column the phone offered Delete on a
+// built-in field.
 const CUSTOM_FIELD_DEF_KNOWN = [
   "id", "ownerId", "entity", "key", "label", "type", "min", "max",
   "position", "placeTypeIds", "appliesToAllTypes", "createdAt", "updatedAt",
@@ -286,11 +288,14 @@ export async function upsertCustomFieldDef(
 ): Promise<void> {
   await db.runAsync(
     `INSERT OR REPLACE INTO custom_field_defs
-       (id, entity, key, label, type, min, max, position,
+       (id, owner_id, entity, key, label, type, min, max, position,
         applies_to_all_types, place_type_ids_json, created_at,
         updated_at, extra_json, dirty_fields_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     row.id,
+    // NULL for a system definition — stored verbatim rather than coerced, the
+    // same way a system place type's owner is.
+    row.ownerId,
     row.entity,
     row.key,
     row.label,
@@ -721,6 +726,9 @@ function rowToPlace(row: PlaceRow): MirrorPlace {
  *  `TripLogCustomFieldDef`s the UI works in. */
 export type MirrorCustomFieldDef = {
   id: string;
+  /** NULL = a SYSTEM definition: global, belonging to no account, and neither
+   *  renameable nor deletable. A client must not read null as "mine". */
+  ownerId: string | null;
   entity: string;
   key: string;
   label: string;
@@ -736,8 +744,9 @@ export type MirrorCustomFieldDef = {
 
 type CustomFieldDefRow = Omit<
   MirrorCustomFieldDef,
-  "placeTypeIds" | "appliesToAllTypes"
+  "placeTypeIds" | "appliesToAllTypes" | "ownerId"
 > & {
+  owner_id: string | null;
   place_type_ids_json: string | null;
   applies_to_all_types: number | null;
 };
@@ -749,12 +758,13 @@ export async function listMirrorCustomFieldDefs(): Promise<
 > {
   const db = await getSyncDb();
   const rows = await db.getAllAsync<CustomFieldDefRow>(
-    `SELECT id, entity, key, label, type, min, max, position,
+    `SELECT id, owner_id, entity, key, label, type, min, max, position,
             applies_to_all_types, place_type_ids_json
        FROM custom_field_defs ORDER BY position ASC, key ASC`,
   );
-  return rows.map(({ place_type_ids_json, applies_to_all_types, ...def }) => ({
+  return rows.map(({ place_type_ids_json, applies_to_all_types, owner_id, ...def }) => ({
     ...def,
+    ownerId: owner_id,
     placeTypeIds: parseStringList(place_type_ids_json),
     appliesToAllTypes: applies_to_all_types === 1,
   }));

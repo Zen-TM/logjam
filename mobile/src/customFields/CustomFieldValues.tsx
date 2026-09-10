@@ -13,7 +13,6 @@
 import { Feather } from "@expo/vector-icons";
 import { StyleSheet, View } from "react-native";
 import {
-  coerceFieldValue,
   customFieldDisplayLabel,
   type TripLogCustomFieldDef,
 } from "@logjam/shared";
@@ -21,39 +20,6 @@ import {
 import { formatDateKey } from "../logs/logbook";
 import { spacing, theme } from "../theme";
 import { Row, TextField, Toggle } from "../ui";
-
-/** Seed the editing state from stored values: everything as a string, and a
- *  missing value as "" (or "false" for a toggle, which has no empty state). */
-export function fieldValueStrings(
-  stored: Record<string, unknown> | undefined,
-): Record<string, string> {
-  return Object.fromEntries(
-    Object.entries(stored ?? {}).map(([key, value]) => [
-      key,
-      value == null ? "" : String(value),
-    ]),
-  );
-}
-
-/**
- * String form → stored value, using the shared coercion so a number typed here
- * lands as a number, not a string. An empty value drops the key entirely rather
- * than storing "" — a field with no answer should read as unset, and the detail
- * screens' "—" placeholder depends on it.
- */
-export function coerceCustomFields(
-  values: Record<string, string>,
-  defs: TripLogCustomFieldDef[],
-): Record<string, unknown> {
-  const result: Record<string, unknown> = {};
-  for (const def of defs) {
-    const raw = values[def.key];
-    if (raw == null || raw.trim() === "") continue;
-    if (def.type === "boolean" && raw === "false") continue;
-    result[def.key] = coerceFieldValue(raw, def.type);
-  }
-  return result;
-}
 
 /** Every definition as an input, in the user's own order. */
 export function CustomFieldValueInputs({

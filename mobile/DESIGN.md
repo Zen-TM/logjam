@@ -341,7 +341,7 @@ BottomSheet(s)      acquisition + per-item actions
   MAGNETIC — numbers only.** The map, the location arrow and the navigate-to chip
   stay true in both settings, because they are drawn against a true-north map and
   a magnetic arrow on a true map is simply a wrong arrow. The switch exists
-  because a placeer transfers a bearing onto a plate compass, where true north is
+  because a canyoner transfers a bearing onto a plate compass, where true north is
   the wrong number by ~12.5°. In magnetic the tape carries an "M": the default
   gets no mark (every pixel of chrome is terrain), a non-default that silently
   reads 12° low gets one.
@@ -391,6 +391,17 @@ filters (free text, a date range) hide behind a hero `IconButton` that reveals
 them **in a slot the hero already occupies**: Logs swaps the activity spark for
 the search row, so opening search doesn't shove the list down, and the spark —
 retrospective decoration — isn't competing with a hunt for one trip.
+
+**Places is the ONE screen with two, and the second one earns it by being a
+different question.** "What kind of place is this" (the type rail) and "where is
+it in my tick list" (the buckets) are not narrowings of each other: a canyoner
+picking Saturday's trip filters by type first and status second, and folding
+them into one rail would mean a chip per combination. The cost is real and is
+paid deliberately — ~52pt of chrome — so the second rail is allowed only where
+the vocabulary is the USER'S OWN and cannot be collapsed into the first. Two
+rules keep it honest: neither rail may vanish mid-gesture (both stay mounted,
+dimmed and inert, while a multi-select is running — see §7 item 15), and only
+one of them may say "All" (the type rail's is "Any type").
 
 **Presets are the shortcut, not the ceiling.** A mobile filter that only offers
 "under 30 m" is friendlier than the desktop's operator + number, and strictly
@@ -509,7 +520,7 @@ means a new kind is one object literal, not a design decision.
 is what it is regardless of the user's theme, and remapping the hues per scheme
 would collapse them into that scheme's narrow range. All four schemes are dark,
 so mid-light muted hues work on every one. New hues: mid-light, muted, drawn
-from the NSW place palette (rock, scrub, water, heath). Never a saturated web
+from the NSW canyon palette (rock, scrub, water, heath). Never a saturated web
 primary.
 
 `region` intentionally aliases the active scheme's `accent`, so the biggest and
@@ -538,12 +549,28 @@ pattern as `usePlacePicker`'s "No place of yours matches that." Both controls
 narrow the on-device mirror, so both work with no signal; a narrowing control
 that needs the network does not belong here.
 
-**When a thing has no kinds, its STATE is the category.** Places are all the
-same sort of object, so `placeHue` keys off done / to do / shared instead
-(`PLACE_STATUS_META` in `src/places/placeMeta.ts`), and `done` takes the
-scheme accent for the same reason `region` does — the accent belongs on the state
-the screen is celebrating. The identity still appears in both places the rule
-requires: the row's icon tile and its rail chip.
+**A PLACE HAS BOTH, and they split by surface.** Places have kinds now — a type
+is user-definable and carries its own colour — so the screen runs two
+vocabularies at once, and each owns the surface it reads best on:
+
+- **On the map, the KIND is the colour** (fill = the type's hue) and sharing is
+  the ring. A pin is 6px and has no room for a second glyph, so the axis with a
+  dozen values takes the channel with a dozen values.
+- **On a list row, the STATE is the colour and the glyph** (`placeHue` +
+  `PLACE_STATUS_META`), because a row is read while deciding what to do next,
+  and `done` takes the scheme accent for the same reason `region` does. The type
+  appears there as a WORD, first in the row's subtitle, and only while the type
+  rail is not already filtering by it.
+- **A type's own hue appears on its chip** — the rail, the create form's picker,
+  the map layer sheet's rows.
+
+That is why `PLACE_TYPE_COLORS` is a curated, mid-light, muted palette rather
+than a free picker: a chip fills itself with the hue and writes a label on it,
+so every entry has to clear 4.5:1 against the scheme's `primary` AND 3:1 as a
+marker. `scripts/wcag-contrast.mjs` asserts both, under every scheme. One hue is
+RESERVED and never a type colour: `SHARED_PLACE_COLOR`, the heath the whole app
+uses for "someone shared this" — the ring on a pin, the layer row, the rail
+chip. Colour says one thing at a time.
 
 ### A notification borrows the hue of the thing it is about
 
@@ -1307,17 +1334,21 @@ which subsystem is talking.
   seeded from and send the difference (see `save()` in `TripEditSheet`). Sending
   the whole form makes every save a write to every column, which under
   field-scoped LWW clobbers a concurrent edit to a field the user never touched.
-- **Where the DEFINITIONS live depends on the account, and one file knows.**
-  Field VALUES always queue through the outbox. The definitions are an
-  account-level preference blob the web and every device share, so a linked user
-  needs a connection to edit them (an offline edit to a shared list would need
-  merge rules for a list they could be reordering in a browser at the same
-  time) — but a GUEST has no such blob, keeps their own list on the device, and
-  can add, rename and delete a field in a place with no signal.
-  `customFields/fieldDefsStore.ts` owns that branch and
-  `capabilities.fieldDefsBlockedReason` owns the reason string; no screen
-  re-derives either. Both entity forms (`TripEditSheet`, `PlaceEditSheet`) and
-  Settings reach the same editor as a MODE of their own sheet.
+- **DEFINITIONS ARE ROWS, so defining a field works with no signal for
+  everyone.** They used to be an account-level preference blob the web and every
+  device shared, which made editing them online-only for a linked user and gave
+  a guest a second, private store to carry up on link. Both halves are gone:
+  a definition is an ordinary synced row written through the outbox, exactly
+  like a place, so `fieldDefsStore.ts` no longer branches on account state and
+  `capabilities.fieldDefsBlockedReason` no longer exists. Both entity forms
+  (`TripEditSheet`, `PlaceEditSheet`) and Settings reach the same editor as a
+  MODE of their own sheet.
+  - **A BUILT-IN definition is not the account's to touch.** The system fields
+    (the seven canyon axes, the campsite's two) belong to no one, are listed
+    with a "Built in" subtitle, and get no verbs at all — the same treatment a
+    system place type gets, and for a harder reason: the local half of a delete
+    strips the value off every place carrying that key, and the server refuses
+    the other half, so a delete that looked like it worked destroyed data.
 - **A destructive action reports the part the user can't see.** Deleting a
   custom field also clears its value from every trip that had one, so the
   confirm counts the affected rows FIRST and puts the number in the dialog
@@ -1514,7 +1545,7 @@ which those are:
 
 | Works offline | Needs a connection |
 |---|---|
-| Reading trips, places, notes, fields | An ACCOUNT's custom field DEFINITIONS (a guest's are local) |
+| Reading trips, places, notes, fields | Adopting, discarding or noting a value that came in on a copy |
 | Logging, editing, deleting a trip | Downloading regions, topo overlays, GeoPDFs |
 | Adding, editing, deleting a place | Sharing a place (and reading who it's shared with) |
 | Attaching photos, videos, routes, tracks | Full-res media not yet downloaded |

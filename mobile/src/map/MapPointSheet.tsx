@@ -3,7 +3,7 @@
 // The map answers where things are; until now it could not answer anything
 // about a spot you were only pointing at. Long-press already meant "something
 // goes HERE" (a marker, a canyon), which is a commitment; a tap is the
-// question that comes before it, and it deserves the four facts a placeer
+// question that comes before it, and it deserves the four facts a canyoner
 // actually wants off a map — where it is, how high it is, and how far and which
 // way it is from them — plus the two things they might do about it.
 //

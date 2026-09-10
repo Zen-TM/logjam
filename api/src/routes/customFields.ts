@@ -4,12 +4,16 @@
 // value strip a delete carries. This router holds no storage knowledge — it
 // parses, authorizes and shapes responses.
 //
-// Two write surfaces exist deliberately, and this is the row-grain one:
-//  - here, and the sync push handler, address ONE definition at a time. That is
-//    the grain that lets a phone edit offline and merge rather than clobber.
-//  - `PATCH /users/me` still accepts a whole list (`replaceFieldDefs`) because
-//    that is how every dialog in the web app already writes, and a single
-//    browser tab has nothing to merge against.
+// ONE write surface, and this is it: here and the sync push handler, addressing
+// ONE definition at a time. That grain is what lets a phone edit offline and
+// merge rather than clobber.
+//
+// `PATCH /users/me` used to accept a whole list as well. It does not any more
+// and must not come back: that shape carries no `placeTypeIds` and no
+// `appliesToAllTypes`, so every save from a dialog that round-tripped the list
+// wiped the scoping off every definition — silently, because the payload simply
+// did not mention it. `routes/users.ts` answers it with a 400 naming the
+// replacement, and `__tests__/customFields.test.ts` pins that refusal.
 //
 // The impact/delete response key names (`tripLogCount`, `removedFromTripCount`
 // and their place equivalents) predate this rewrite and are kept verbatim —

@@ -66,7 +66,7 @@ export const SYSTEM_PLACE_TYPES: SystemPlaceType[] = [
     id: SYSTEM_PLACE_TYPE_IDS.canyon,
     name: "Canyon",
     iconKey: "droplet",
-    color: "#F97316",
+    color: "#E4C5AA",
     position: 0,
   },
   {
@@ -74,7 +74,7 @@ export const SYSTEM_PLACE_TYPES: SystemPlaceType[] = [
     id: SYSTEM_PLACE_TYPE_IDS.campsite,
     name: "Campsite",
     iconKey: "triangle",
-    color: "#22C55E",
+    color: "#BED9B5",
     position: 1,
   },
   {
@@ -82,7 +82,7 @@ export const SYSTEM_PLACE_TYPES: SystemPlaceType[] = [
     id: SYSTEM_PLACE_TYPE_IDS.marker,
     name: "Marker",
     iconKey: "map-pin",
-    color: "#629BF8",
+    color: "#B7D0E1",
     position: 2,
   },
 ];
@@ -151,19 +151,44 @@ export function isPlaceTypeIconKey(value: unknown): value is PlaceTypeIconKey {
  * guarantee and moves the check from two colours to every colour a type can be.
  */
 export const PLACE_TYPE_COLORS = [
-  "#F97316", // orange — the owned-place marker colour, kept as Canyon's
-  "#22C55E", // green
-  "#629BF8", // blue — the shared-place marker colour
-  "#FB7185", // rose
-  "#C084FC", // violet
-  "#14B8A6", // teal
-  "#EAB308", // amber
-  "#F472B6", // pink
-  "#84CC16", // lime
-  "#06B6D4", // cyan
-  "#FB923C", // light orange
-  "#94A3B8", // slate — the deliberate neutral
+  // MID-LIGHT AND MUTED, drawn from the NSW canyon palette the theme already
+  // speaks in (DESIGN.md §3: "Never a saturated web primary"). The first cut of
+  // this list was a Tailwind-500 ramp — orange-500, green-500, blue-400 — which
+  // read as a component from another app the moment it sat on a sheet, and had
+  // a harder problem underneath: a chip FILLS itself with its type's colour and
+  // writes a label on top, and a mid-tone hue carries no legible text in either
+  // direction. Every one of those twelve failed WCAG AA on the label (worst
+  // 3.17:1 against the sandstone scheme). Light hues carry dark ink; that is
+  // what makes the fill usable, and it is why the palette is light rather than
+  // merely tasteful. `scripts/wcag-contrast.mjs` asserts both pairs — the chip
+  // label at 4.5 and the map marker at 3 — under every scheme.
+  //
+  // The heath violet is deliberately ABSENT: it is reserved for "shared", which
+  // is a different axis (fill = type, ring = shared, §2.8) and must not collide
+  // with any type. `placeTypes.test.ts` pins that.
+  "#E4C5AA", // banksia orange — Canyon's, the closest to the ink it always had
+  "#E3D0AB", // ochre
+  "#E2D9AC", // wattle
+  "#D5DCB2", // lichen
+  "#BED9B5", // scrub green — Campsite's
+  "#B5D9C4", // fern
+  "#B5D9D6", // pool teal
+  "#B7D0E1", // water blue — Marker's
+  "#B9C2DF", // dusk blue
+  "#E1B7C5", // heath pink
+  "#E1BCB7", // clay rose
+  "#CDC8C1", // stone — the deliberate neutral
 ] as const;
+
+/**
+ * The ring on a pin someone shared with you, and the tint on every "shared"
+ * chip and row. ONE hue for one idea: it was the map's blue and the Places
+ * rail's heath at the same time, for the same word.
+ *
+ * Reserved — never a type colour, or a shared Marker would be a blue dot with a
+ * blue ring and the two axes would collapse into one.
+ */
+export const SHARED_PLACE_COLOR = "#B79EC0";
 
 export type PlaceTypeColor = (typeof PLACE_TYPE_COLORS)[number];
 

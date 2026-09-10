@@ -236,7 +236,7 @@ describe("parseVectorImport dispatcher", () => {
 
 // Every case here imported "successfully" before, with data missing or made
 // up — the failure mode the root CLAUDE.md no-silent-fallbacks rule exists to
-// prevent. A placeer cannot tell a short track from a truncated one.
+// prevent. A canyoner cannot tell a short track from a truncated one.
 describe("malformed input fails loudly", () => {
   it("rejects a GPX truncated mid-download instead of importing a short track", () => {
     const truncated =

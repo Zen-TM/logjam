@@ -14,7 +14,7 @@ import { throttleWrites } from "./_rateLimitGate";
 // still failed, in the hook, with a message about nothing.
 vi.setConfig({ testTimeout: 90_000, hookTimeout: 90_000 });
 
-import { SYSTEM_PLACE_TYPE_IDS } from "@logjam/shared";
+import { PLACE_TYPE_COLORS, SYSTEM_PLACE_TYPE_IDS } from "@logjam/shared";
 
 import { API_URL, ALICE_SUB, BOB_SUB, BOB_ID, ALICE_ID, as, CANYON_TYPE_ID } from "./_actors";
 
@@ -77,7 +77,7 @@ async function makeType(sub: string, name: string): Promise<string> {
     request(API_URL)
       .post("/place-types")
       .set(as(sub))
-      .send({ name, iconKey: "triangle", color: "#22C55E" }),
+      .send({ name, iconKey: "triangle", color: PLACE_TYPE_COLORS[1] }),
   );
   expect(res.status, JSON.stringify(res.body)).toBe(201);
   createdTypes.push({ sub, id: res.body.id as string });

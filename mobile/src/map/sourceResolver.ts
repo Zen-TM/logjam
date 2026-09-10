@@ -153,7 +153,7 @@ function localArtifactSource(
     // planner. Declaring 256 for both didn't move the map — z/x/y pin the
     // geography — but it made MapLibre pick a tile z one level deeper than it
     // should, so an import hit its maxZoom a level early and overzoomed:
-    // blurry at exactly the zoom a placeer reads it at.
+    // blurry at exactly the zoom a canyoner reads it at.
     ...(artifact.sourceType === "raster" && {
       tileSize:
         artifact.kind === "geopdf-import"

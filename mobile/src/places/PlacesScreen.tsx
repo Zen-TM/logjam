@@ -445,7 +445,10 @@ export function PlacesScreen({
 
   const typeOptions: SegmentOption<string>[] = useMemo(
     () => [
-      { value: ALL_TYPES, label: "All", count: withoutType.length },
+      // "Any type", not "All": the bucket rail directly below has its own
+      // "All" chip, and two identical words with the same number stacked six
+      // pixels apart read as a rendering bug.
+      { value: ALL_TYPES, label: "Any type", count: withoutType.length },
       ...placeTypes
         .filter((type) => (typeTotals.get(type.id) ?? 0) > 0)
         .map((type) => ({
@@ -531,10 +534,13 @@ export function PlacesScreen({
   // send people into the sheet looking for something they had not set. So the
   // rail's own axis is subtracted from what the *hidden* filter warnings count,
   // and only while the rail is on screen to state it.
-  const railShowsType = typeOptions.length > 1 && !selecting;
+  const railShowsType = typeOptions.length > 1;
   const hiddenFilterCount =
     filterCount - (railShowsType && filters.placeTypeId != null ? 1 : 0);
-  const filtering = filterCount > 0 || search.trim() !== "";
+  // What a CLEAR button could actually clear. A type tab is not it — the tab
+  // is visible, one tap from All, and an empty panel telling someone to clear
+  // "filters" they never opened is a dead end.
+  const filtering = hiddenFilterCount > 0 || search.trim() !== "";
   const menuPlace = places.find((place) => place.id === menuPlaceId) ?? null;
 
   // Stable identities so the memoised rows never re-render for a state change
@@ -665,8 +671,16 @@ export function PlacesScreen({
           (the user's own vocabulary) and WHERE it is in the tick list. Only the
           bucket rail gives way to the selection bar — the type rail is the
           heading for what is selected, not a control over it. */}
-      {typeOptions.length > 1 && !selecting ? (
-        <View style={styles.typeRail}>
+      {typeOptions.length > 1 ? (
+        // STAYS MOUNTED WHILE SELECTING, dimmed and inert. Unmounting it took
+        // ~52pt of chrome out from under the finger that had just long-pressed
+        // a row, sliding every row up mid-gesture — the same jump DESIGN.md §7
+        // fixed once for the bucket rail. A filter that cannot be changed
+        // during a selection still has to say what the selection is drawn from.
+        <View
+          style={[styles.typeRail, selecting && styles.railInert]}
+          pointerEvents={selecting ? "none" : "auto"}
+        >
           <SegmentedControl
             scroll
             options={typeOptions}
@@ -697,19 +711,26 @@ export function PlacesScreen({
 
       {/* An active hidden filter has to announce itself, with the way out in
           reach (DESIGN.md §2). */}
-      {hiddenFilterCount > 0 ? (
+      {hiddenFilterCount > 0 || sort !== "name" ? (
         <View style={styles.filterNote}>
           <Text style={styles.filterText} numberOfLines={1}>
-            {hiddenFilterCount === 1
-              ? "1 filter active"
-              : `${hiddenFilterCount} filters active`}
-            {sort === "name" ? "" : ` · ${sortLabel(sort)}`}
+            {hiddenFilterCount === 0
+              ? sortLabel(sort)
+              : hiddenFilterCount === 1
+                ? "1 filter active"
+                : `${hiddenFilterCount} filters active`}
+            {hiddenFilterCount === 0 || sort === "name" ? "" : ` · ${sortLabel(sort)}`}
           </Text>
           <IconButton
             icon="x"
             size={16}
-            accessibilityLabel="Clear all filters"
-            onPress={resetFilters}
+            accessibilityLabel={
+              hiddenFilterCount === 0 ? "Sort by name again" : "Clear all filters"
+            }
+            onPress={() => {
+              if (hiddenFilterCount === 0) setSort("name");
+              else resetFilters();
+            }}
           />
         </View>
       ) : null}
@@ -1013,6 +1034,8 @@ const styles = StyleSheet.create({
   // The type rail sits directly under the hero and carries the bucket rail's
   // top padding, so the pair reads as one block rather than two stacked bars.
   typeRail: { paddingLeft: spacing(2), paddingTop: spacing(1.5) },
+  // Dimmed, not gone: see the comment at the render site.
+  railInert: { opacity: 0.4 },
   rail: { paddingLeft: spacing(2), paddingTop: spacing(1.5), paddingBottom: spacing(1.5) },
   filterNote: {
     flexDirection: "row",

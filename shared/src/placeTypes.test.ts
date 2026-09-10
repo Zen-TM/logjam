@@ -5,7 +5,9 @@ import {
   SYSTEM_PLACE_TYPE_IDS,
   SYSTEM_FIELD_DEFS,
   CANYON_FORM_FIELD_KEYS,
+  PLACE_TYPE_COLORS,
   RESERVED_FIELD_KEYS,
+  SHARED_PLACE_COLOR,
   isReservedFieldKey,
   isInternalFieldValueKey,
   SOURCES_FIELD_KEY,
@@ -188,6 +190,34 @@ describe("CANYON_FORM_FIELD_KEYS", () => {
         CANYON_FORM_FIELD_KEYS.has(key),
         `${key} has no control of its own and must render generically`,
       ).toBe(false);
+    }
+  });
+});
+
+// FILL IS THE TYPE, RING IS SHARED (§2.8) — two axes, so they cannot share
+// ink. The first palette had the shared marker's own blue in it, and
+// `SYSTEM_PLACE_TYPES.marker` used exactly that value: a shared Marker was a
+// blue dot with a blue ring, i.e. indistinguishable from an owned one.
+describe("SHARED_PLACE_COLOR", () => {
+  it("is not available as a type colour", () => {
+    expect(
+      (PLACE_TYPE_COLORS as readonly string[]).map((c) => c.toUpperCase()),
+    ).not.toContain(SHARED_PLACE_COLOR.toUpperCase());
+  });
+
+  it("is not the colour of any system type", () => {
+    for (const type of SYSTEM_PLACE_TYPES) {
+      expect(type.color.toUpperCase()).not.toBe(SHARED_PLACE_COLOR.toUpperCase());
+    }
+  });
+
+  // A type colour that the palette does not contain cannot be checked for
+  // contrast, and the system types are the ones every account starts with.
+  it("gives every system type a colour from the curated palette", () => {
+    for (const type of SYSTEM_PLACE_TYPES) {
+      expect(
+        (PLACE_TYPE_COLORS as readonly string[]).map((c) => c.toUpperCase()),
+      ).toContain(type.color.toUpperCase());
     }
   });
 });

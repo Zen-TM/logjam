@@ -1,6 +1,6 @@
 // Snap a drawn segment to nearby trails and creeks.
 //
-// The problem: a placeer drawing an approach wants the line to follow the
+// The problem: a canyoner drawing an approach wants the line to follow the
 // actual track, not cut across a gully. Between two tapped points, if both sit
 // near mapped ways, walk the ways instead of drawing a straight line.
 //

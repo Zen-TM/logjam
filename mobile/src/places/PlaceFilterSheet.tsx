@@ -26,6 +26,7 @@ import {
 } from "../ui";
 import { formatDateKey } from "../logs/logbook";
 import { useFieldDefs } from "../customFields/useFieldDefs";
+import { useMirrorPlaceTypes } from "../sync/useSyncQueries";
 
 /**
  * Sort and filter for the Places screen — everything that isn't the rail.
@@ -219,6 +220,7 @@ export function PlaceFilterSheet({
   // "All" every place field is offered; on a type, only that type's — which is
   // what stops a campsite filter asking for a vertical grade.
   const { defs } = useFieldDefs("place");
+  const placeTypes = useMirrorPlaceTypes().data ?? [];
   const typeDefs =
     filters.placeTypeId == null ? defs : defsForType(defs, filters.placeTypeId);
   const hasReserved = (key: string) =>
@@ -233,7 +235,19 @@ export function PlaceFilterSheet({
     ...(canyonAxesShown ? CANYON_FORM_FIELD_KEYS : []),
     ...THRESHOLDS.filter((spec) => hasReserved(spec.key)).map((spec) => spec.key),
   ]);
-  const ownFieldDefs = typeDefs.filter((def) => !drawnByHand.has(def.key));
+  // A DATE definition gets no control (see the header), so it is cut from the
+  // list rather than from the renderer — a section header standing over
+  // nothing is worse than an axis you cannot filter on.
+  const ownFieldDefs = typeDefs.filter(
+    (def) => !drawnByHand.has(def.key) && def.type !== "date",
+  );
+
+  /** Named for the TYPE where there is one, the same way the place form names
+   *  it: on a Campsite these fields are ours, not the user's. */
+  const fieldSectionLabel =
+    filters.placeTypeId == null
+      ? "Fields"
+      : `${placeTypes.find((type) => type.id === filters.placeTypeId)?.name ?? "Place"} fields`;
 
   const patch = useCallback(
     (next: Partial<PlaceFilters>) => onChangeFilters({ ...filters, ...next }),
@@ -382,7 +396,7 @@ export function PlaceFilterSheet({
             the grades are, because they ARE the same thing. */}
         {ownFieldDefs.length > 0 ? (
           <>
-            <SectionHeader label="Your fields" />
+            <SectionHeader label={fieldSectionLabel} />
             {ownFieldDefs.map((def) => (
               <CustomFieldFilter
                 key={def.key}
@@ -660,7 +674,8 @@ function ThresholdFilter({
           />
         ))}
         <Chip
-          label="Custom"
+          // With no presets beside it, "Custom" is custom relative to nothing.
+          label={presets.length === 0 ? "Set a value" : "Custom"}
           active={custom}
           onPress={() => (custom ? closeCustom() : openCustom())}
         />

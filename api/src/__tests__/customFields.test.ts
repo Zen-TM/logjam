@@ -1,5 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import request from "supertest";
+import { PLACE_TYPE_COLORS } from "@logjam/shared";
+
 import { API_URL } from "./_actors";
 import { throttleWrites } from "./_rateLimitGate";
 
@@ -79,14 +81,15 @@ describe("custom-fields route (fake auth)", () => {
       "wetsuit",
     ]);
     // The /users/me projection is the PLAIN shape — key/label/type/bounds —
-    // while the row-grain list carries the scoping beside it. Same
-    // definitions, two reads, and the projection is what the legacy readers
-    // still consume; comparing them field-for-field would assert that a
-    // scoping key can never be added to one of them.
+    // while the row-grain list carries the row's own metadata beside it: where
+    // the definition appears, and whose it is. Same definitions, two reads, and
+    // the projection is what the legacy readers still consume; comparing them
+    // field-for-field would assert that nothing may ever be added to one of
+    // them.
     const projected = await defsFromUser("tripLogCustomFields");
     expect(projected).toEqual(
       (listed.body.fields as Record<string, unknown>[]).map(
-        ({ placeTypeIds: _s, appliesToAllTypes: _a, ...plain }) => plain,
+        ({ placeTypeIds: _s, appliesToAllTypes: _a, ownerId: _o, ...plain }) => plain,
       ),
     );
   });
@@ -214,7 +217,7 @@ describe("custom-fields route (fake auth)", () => {
       request(API_URL)
         .post("/place-types")
         .set(AUTH)
-        .send({ name: `Scoped ${Date.now()}`, iconKey: "map-pin", color: "#22C55E" }),
+        .send({ name: `Scoped ${Date.now()}`, iconKey: "map-pin", color: PLACE_TYPE_COLORS[1] }),
     );
     expect(type.status, JSON.stringify(type.body)).toBe(201);
     const typeId = type.body.id as string;

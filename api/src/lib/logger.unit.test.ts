@@ -102,6 +102,56 @@ describe("logger redaction", () => {
     expect(body.foreignFields).toBe("[redacted]");
   });
 
+  // THE SYNC PUSH is the phone's only write path: every place the app has ever
+  // created reached the server inside `ops[*].fields`, which no path in the list
+  // reached until 2026-09-10.
+  it("censors a place inside a sync push op", () => {
+    const out = captureLog({
+      req: {
+        body: {
+          protocol: 1,
+          ops: [
+            {
+              opId: "op-1",
+              entity: "place",
+              op: "create",
+              id: "p1",
+              fields: {
+                name: "Secret Canyon",
+                notes: "abseil from the tree",
+                latitude: -33.5,
+                longitude: 150.4,
+                tags: ["locked gate"],
+                fieldValues: { access_beta: "gate code 1234" },
+              },
+            },
+          ],
+        },
+      },
+    });
+    const op = (
+      (out.req as { body: { ops: { fields: Record<string, unknown> }[] } }).body.ops
+    )[0].fields;
+    for (const key of ["name", "notes", "latitude", "longitude", "tags", "fieldValues"]) {
+      expect(op[key], `${key} leaked out of a push op`).toBe("[redacted]");
+    }
+    // The envelope is not sensitive and stays readable — an id and an entity
+    // name are what makes a log line useful at all.
+    const body = out.req as { body: { ops: { entity: string }[] } };
+    expect(body.body.ops[0].entity).toBe("place");
+  });
+
+  // A place's TAGS are the user's own words about it, and a definition's LABEL
+  // is the same class of text on another route.
+  it("censors a place's tags and a field definition's label", () => {
+    const out = captureLog({
+      req: { body: { tags: ["leech hollow"], label: "Which slot for the exit" } },
+    });
+    const body = (out.req as { body: Record<string, unknown> }).body;
+    expect(body.tags).toBe("[redacted]");
+    expect(body.label).toBe("[redacted]");
+  });
+
   it("censors field values inside a bulk-import row", () => {
     const out = captureLog({
       req: {

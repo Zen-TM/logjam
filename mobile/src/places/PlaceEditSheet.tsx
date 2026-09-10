@@ -19,11 +19,11 @@ import { fontSize, spacing, theme } from "../theme";
 import type { MirrorPlace } from "../sync/mirrorStore";
 import { createPlaceLocal, updatePlaceLocal } from "../sync/outbox";
 import { CustomFieldForm, CustomFieldList } from "../customFields/CustomFieldsEditor";
+import { CustomFieldValueInputs } from "../customFields/CustomFieldValues";
 import {
   coerceCustomFields,
-  CustomFieldValueInputs,
   fieldValueStrings,
-} from "../customFields/CustomFieldValues";
+} from "../customFields/fieldValueCoercion";
 import { useFieldDefs } from "../customFields/useFieldDefs";
 import { useMirrorPlaces, useMirrorPlaceTypes } from "../sync/useSyncQueries";
 import { placeTypeFeatherIcon } from "./placeTypeIcon";
@@ -271,28 +271,32 @@ export function PlaceEditSheet({
       setInvalid("A place needs a name.");
       return;
     }
+    const effectiveCustomFields = coerceCustomFields(fieldValues, typeFieldDefs);
     // The same predicate the API applies, run before anything is queued: a
     // rejected op would otherwise sit in the outbox as a dead push whose reason
     // the user never sees.
     const problem = validatePlacePayload(
       {
-        fieldValues: definedNumbers(draft),
+        fieldValues: { ...definedNumbers(draft), ...effectiveCustomFields },
         ...(draft.latitude != null && { latitude: draft.latitude }),
         ...(draft.longitude != null && { longitude: draft.longitude }),
       },
-      // The bounds come from the DEFINITIONS. The system ones are what this
-      // form's seven inputs are, and they are available offline because they
-      // are compiled in rather than fetched — which matters, because this
-      // check exists precisely so a rejected op never reaches the outbox in a
-      // gorge with no signal.
-      { requireCoords: !editing, defs: SYSTEM_FIELD_DEFS },
+      // The bounds come from the DEFINITIONS — the system ones (compiled in,
+      // so the check works with no signal) AND the ones this type actually
+      // renders. Checking only the system defs left every user field
+      // unvalidated on the client: an out-of-range value queued, the server
+      // refused it, and it parked as a sync issue — exactly the outcome this
+      // check exists to prevent.
+      {
+        requireCoords: !editing,
+        defs: [...SYSTEM_FIELD_DEFS, ...typeFieldDefs],
+      },
     );
     if (problem) {
       setInvalid(problem);
       return;
     }
 
-    const effectiveCustomFields = coerceCustomFields(fieldValues, typeFieldDefs);
     // Normalised HERE for the same reason the outbox validates before enqueue:
     // the server refuses a malformed list, and a rejected op is a sync issue
     // the user has to resolve by hand rather than a message they can act on.
@@ -492,8 +496,8 @@ export function PlaceEditSheet({
               <Text style={styles.hint}>
                 Anything {typeName(place.placeTypeId, placeTypes.data)} records
                 that a {typeName(placeTypeId, placeTypes.data)} doesn&rsquo;t is
-                kept on this place — you can add it back or discard it from the
-                place&rsquo;s own screen.
+                kept on this place. Once you have a connection you can add it
+                back or discard it from the place&rsquo;s own screen.
               </Text>
             ) : null}
           </View>
@@ -591,7 +595,8 @@ export function PlaceEditSheet({
           </>
         ) : null}
 
-        <SectionHeader label="Notes" />
+        {/* No SectionHeader: the field's own label already says "Notes", and
+            the pair printed it twice. Same reason Tags has none. */}
         <View style={styles.field}>
           <TextField
             label="Notes"
@@ -637,7 +642,14 @@ export function PlaceEditSheet({
           addPlaceholder="New tag"
         />
 
-        <SectionHeader label={`${typeName(placeTypeId, placeTypes.data)} fields`} />
+        {/* Named for the TYPE, not for the user: on a Campsite these are
+            Capacity and Is-a-cave, which are ours, not theirs. The header is
+            absent when the type has no fields of its own rather than standing
+            over nothing — on a canyon the seven axes are drawn above by their
+            own controls, so the generic list is usually empty. */}
+        {typeFieldDefs.length > 0 ? (
+          <SectionHeader label={`${typeName(placeTypeId, placeTypes.data)} fields`} />
+        ) : null}
         <CustomFieldValueInputs
           defs={typeFieldDefs}
           values={fieldValues}

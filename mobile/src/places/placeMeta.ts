@@ -51,7 +51,7 @@ export type PlaceSummaryFields = {
 
 /**
  * The row's second line: what you'd want to know before committing a Saturday.
- * Grade first (it is the shorthand every placeer reads first), then the two
+ * Grade first (it is the shorthand every canyoner reads first), then the two
  * logistics numbers that decide whether today is the day — how long, and
  * whether your rope reaches.
  *

@@ -142,9 +142,9 @@ function collectLngLatPairs(node: unknown): [number, number][] {
 }
 
 function applyPlaceThemePaint(map: maplibregl.Map) {
-  const owned = readCssVar("--owned-place-color", "#f97316");
+  const owned = readCssVar("--owned-place-color", "#e4c5aa");
   const completed = readCssVar("--completed-place-color", "#22c55e");
-  const shared = readCssVar("--shared-place-color", "#629bf8");
+  const shared = readCssVar("--shared-place-color", "#b79ec0");
   const label = readCssVar("--theme-text-primary", "#ffffff");
   const halo = readCssVar("--theme-bonus-2", "#1a1a1a");
 

@@ -66,6 +66,11 @@ export async function loadFieldDefs(
       return [
         {
           ...def,
+          // NULL = a system definition. Carried so the editor can refuse to
+          // rename or delete one: the local half of a delete strips the value
+          // off every place with that key, and the server no-ops the other
+          // half, so offering the verb destroyed data and reported success.
+          ownerId: row.ownerId,
           placeTypeIds: row.placeTypeIds,
           appliesToAllTypes: row.appliesToAllTypes,
         },
@@ -96,6 +101,11 @@ export async function saveFieldDefs(
   const incomingKeys = new Set(defs.map((def) => def.key));
 
   for (const row of rows) {
+    // A system row is never the caller's to delete, whatever the list says.
+    // The editor refuses the verb; this is the belt to that braces, because
+    // the local half of a delete is destructive and runs before the server
+    // ever sees the op.
+    if (row.ownerId === null) continue;
     if (!incomingKeys.has(row.key)) await removeFieldDefById(row.id, entity, row.key);
   }
 
@@ -114,6 +124,9 @@ export async function saveFieldDefs(
       });
       continue;
     }
+    // Same rule for an edit: a built-in field's label, bounds and scoping are
+    // not this account's to move, and the push would 404 and park a sync issue.
+    if (row.ownerId === null) continue;
     const patch: Record<string, unknown> = {};
     if (row.label !== def.label) patch.label = def.label;
     if (row.type !== def.type) patch.type = def.type;
@@ -173,6 +186,13 @@ export async function removeFieldDef(
     (candidate) => candidate.entity === entity && candidate.key === key,
   );
   if (!row) return 0;
+  // The one that mattered: deleting a built-in stripped its value off every
+  // place in the account, and the server answered the def delete with
+  // "already applied" — so the definition came back on the next pull and the
+  // values did not.
+  if (row.ownerId === null) {
+    throw new Error("A built-in field can't be deleted.");
+  }
   return removeFieldDefById(row.id, entity, key);
 }
 

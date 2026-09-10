@@ -16,6 +16,7 @@ type DefRow = {
   min: number | null;
   max: number | null;
   position: number;
+  ownerId: string | null;
   placeTypeIds: string[];
   appliesToAllTypes: boolean;
 };
@@ -76,6 +77,7 @@ const water: ScopedCustomFieldDef = {
   key: "water",
   label: "Water level",
   type: "string",
+  ownerId: "user-1",
   placeTypeIds: [],
   appliesToAllTypes: true,
 };
@@ -83,6 +85,7 @@ const party: ScopedCustomFieldDef = {
   key: "party",
   label: "Party size",
   type: "integer",
+  ownerId: "user-1",
   placeTypeIds: [],
   appliesToAllTypes: true,
 };
@@ -97,6 +100,9 @@ function row(def: ScopedCustomFieldDef, entity: string, position = 0): DefRow {
     min: def.min ?? null,
     max: def.max ?? null,
     position,
+    // `??` would swallow the case this file exists for: a SYSTEM row's owner
+    // is null, and null is exactly what `??` falls back from.
+    ownerId: def.ownerId === undefined ? "user-1" : def.ownerId,
     placeTypeIds: def.placeTypeIds,
     appliesToAllTypes: def.appliesToAllTypes,
   };
@@ -321,5 +327,53 @@ describe("removeFieldDef", () => {
   it("is a no-op on a definition that is already gone", async () => {
     expect(await removeFieldDef("tripLog", "water")).toBe(0);
     expect(deleted).toEqual([]);
+  });
+});
+
+// A SYSTEM definition belongs to no account. The phone could not see that —
+// the mirror threw `ownerId` away — so the editor offered Delete on a built-in
+// field, and `removeFieldDefById` did its half FIRST: strip the value off every
+// owned place carrying the key. The server then answered the definition delete
+// with "already applied", so the field came back on the next pull and the
+// values did not. Every star rating in an account, gone in two taps.
+describe("a built-in definition is not the account's to change", () => {
+  const builtIn: ScopedCustomFieldDef = {
+    key: "quality",
+    label: "Quality",
+    type: "float",
+    min: 1,
+    max: 5,
+    ownerId: null,
+    placeTypeIds: ["type-canyon"],
+    appliesToAllTypes: false,
+  };
+
+  it("refuses to delete one, before anything is stripped", async () => {
+    defRows = [row(builtIn, "place", 0)];
+    places = [
+      { id: "p1", syncRole: "owner", fieldValues: { quality: 4 } },
+      { id: "p2", syncRole: "owner", fieldValues: { quality: 5 } },
+    ];
+    await expect(removeFieldDef("place", "quality")).rejects.toThrow(/built-in/i);
+    expect(placeUpdates, "no place may lose a value").toEqual([]);
+    expect(deleted).toEqual([]);
+  });
+
+  // The whole-list save is the other way in: the editor hands over the list it
+  // is holding, and a list that has simply lost a row means "delete it".
+  it("is not deleted by a whole-list save that omits it", async () => {
+    defRows = [row(builtIn, "place", 0)];
+    places = [{ id: "p1", syncRole: "owner", fieldValues: { quality: 4 } }];
+    await saveFieldDefs("place", []);
+    expect(deleted).toEqual([]);
+    expect(placeUpdates).toEqual([]);
+  });
+
+  it("is not renamed or rescoped by a whole-list save", async () => {
+    defRows = [row(builtIn, "place", 0)];
+    await saveFieldDefs("place", [
+      { ...builtIn, label: "Mine now", appliesToAllTypes: true },
+    ]);
+    expect([...created, ...updated]).toEqual([]);
   });
 });

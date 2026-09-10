@@ -31,11 +31,12 @@ import {
   type ChipOption,
 } from "../ui";
 import { CustomFieldForm, CustomFieldList } from "../customFields/CustomFieldsEditor";
+import { CustomFieldValueInputs } from "../customFields/CustomFieldValues";
 import {
   coerceCustomFields,
-  CustomFieldValueInputs,
   fieldValueStrings,
-} from "../customFields/CustomFieldValues";
+  withoutClearedFields,
+} from "../customFields/fieldValueCoercion";
 import { useFieldDefs } from "../customFields/useFieldDefs";
 import { formatDateKey } from "./logbook";
 import { tripTypeLabel, tripTypeMeta } from "./tripTypeMeta";
@@ -241,7 +242,12 @@ export function TripEditSheet({
     // Only the fields the form actually showed. A definition scoped to a type
     // this trip does not visit was never asked, and writing a null for it
     // would be the form inventing an answer.
-    const effectiveCustomFields = coerceCustomFields(fieldValues, visibleFieldDefs);
+    // A trip's `customFields` is REPLACED wholesale rather than merged, so a
+    // cleared field is absent here rather than null — there is nothing on the
+    // other side to clear.
+    const effectiveCustomFields = withoutClearedFields(
+      coerceCustomFields(fieldValues, visibleFieldDefs),
+    );
     try {
       if (trip) {
         // Field-scoped: push only what actually changed, so a concurrent edit

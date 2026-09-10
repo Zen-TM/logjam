@@ -57,7 +57,27 @@ export type TripLogCustomFieldDef = {
 export type ScopedCustomFieldDef = TripLogCustomFieldDef & {
   placeTypeIds: string[];
   appliesToAllTypes: boolean;
+  /**
+   * WHOSE definition this is. NULL means a SYSTEM one — the seven canyon axes,
+   * the campsite's two — global rows belonging to no account, which no user may
+   * rename or delete.
+   *
+   * A form builder needs it because the alternative is offering verbs the
+   * server refuses: on the phone that was worse than an error, because the
+   * local half of a delete (strip the value off every place carrying the key)
+   * ran before the server no-opped the other half.
+   *
+   * Optional so a definition assembled by an older client or a test is still a
+   * definition; absent reads as "not a system row", which is the safe
+   * direction — it offers the verbs, and the server still refuses.
+   */
+  ownerId?: string | null;
 };
+
+/** A definition nobody owns is a built-in: not renameable, not deletable. */
+export function isSystemFieldDef(def: ScopedCustomFieldDef): boolean {
+  return def.ownerId === null;
+}
 
 /** The definitions a place of `placeTypeId` shows, in the order given. The one
  *  rule both clients apply to build a form, so a phone and a browser cannot

@@ -4,6 +4,7 @@ import {
   buildCustomFieldDef,
   CUSTOM_FIELD_TYPES,
   customFieldDisplayLabel,
+  isSystemFieldDef,
   type ScopedCustomFieldDef,
   type TripLogCustomFieldType,
 } from "@logjam/shared";
@@ -76,15 +77,30 @@ export function CustomFieldList({
       ) : (
         <>
           <SectionHeader label={`${defs.length} field${defs.length === 1 ? "" : "s"}`} />
-          {defs.map((def) => (
-            <Row
-              key={def.key}
-              icon="tag"
-              title={customFieldDisplayLabel(def)}
-              subtitle={fieldSummary(def)}
-              onPress={() => onEdit(def)}
-            />
-          ))}
+          {defs.map((def) =>
+            // A BUILT-IN gets no verbs, the same way a system place type does:
+            // it belongs to no account, the server refuses a rename and a
+            // delete, and the phone's half of a delete (strip the value off
+            // every place carrying the key) would run first and for real.
+            // A row with no action reads as a fact; a row that fails reads as
+            // a bug.
+            isSystemFieldDef(def) ? (
+              <Row
+                key={def.key}
+                icon="lock"
+                title={customFieldDisplayLabel(def)}
+                subtitle={`Built in · ${fieldSummary(def)}`}
+              />
+            ) : (
+              <Row
+                key={def.key}
+                icon="tag"
+                title={customFieldDisplayLabel(def)}
+                subtitle={fieldSummary(def)}
+                onPress={() => onEdit(def)}
+              />
+            ),
+          )}
         </>
       )}
       <Row icon="plus" title="Add a field" onPress={onAdd} />
@@ -375,7 +391,14 @@ export function CustomFieldForm({
 
 function fieldSummary(def: ScopedCustomFieldDef): string {
   const base = typeLabel(def.type);
-  return def.min != null && def.max != null ? `${base} · ${def.min}–${def.max}` : base;
+  // ONE-SIDED BOUNDS COUNT. Requiring both printed a bare "Integer" for a
+  // min-only field whose own title says "(0+)" — the same both-or-neither
+  // assumption that has been fixed twice already, in the row reader and on the
+  // push path.
+  if (def.min != null && def.max != null) return `${base} · ${def.min}–${def.max}`;
+  if (def.min != null) return `${base} · ${def.min}+`;
+  if (def.max != null) return `${base} · up to ${def.max}`;
+  return base;
 }
 
 function typeLabel(type: TripLogCustomFieldType): string {

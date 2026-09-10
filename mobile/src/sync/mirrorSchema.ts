@@ -168,8 +168,15 @@ export const SYNC_TABLES: readonly TableSchema[] = [
     // deleting a field is now the same offline-capable write path as creating
     // a place, for a guest and for a linked user alike.
     //
-    // No owner_id / sync_role: definitions belong to one account and are never
-    // shared, so every row here is the user's own and always editable.
+    // `owner_id` IS NULL for a SYSTEM definition — the seven canyon grades and
+    // their kin are global rows belonging to no account, exactly like a system
+    // place type. It used to have no column at all, on the premise that "every
+    // definition the server sends is the caller's own"; the delta has sent both
+    // kinds since the types landed, so the phone could not tell them apart and
+    // offered Rename and Delete on a built-in field. Deleting one stripped its
+    // value off every place in the account while the server no-opped the def
+    // delete — the definition came back on the next pull and the values did
+    // not. There is no `sync_role`: a definition is never SHARED with anyone.
     //
     // PRIVACY: `label` is user-authored text about their canyoning. It is in
     // the mirror, so it is inside the sign-out wipe derived from SYNC_TABLES —
@@ -178,6 +185,8 @@ export const SYNC_TABLES: readonly TableSchema[] = [
     kind: "mirror",
     columns: {
       id: "TEXT PRIMARY KEY",
+      // NULL = a system definition. See the header above.
+      owner_id: "TEXT",
       // "tripLog" | "place".
       entity: "TEXT NOT NULL",
       // The slug the stored values are keyed by. Stable across a rename.

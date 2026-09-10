@@ -160,7 +160,7 @@ function App() {
   const [editingRouteId, setEditingRouteId] = useState<string | null>(null);
   const [savingRoute, setSavingRoute] = useState(false);
   const [namingRoute, setNamingRoute] = useState(false);
-  // Persisted: a placeer who wants creek-following wants it every session.
+  // Persisted: a canyoner who wants creek-following wants it every session.
   const [snapMode, setSnapMode] = useStoredState<SnapMode>(
     "logjam.snapMode",
     "off",

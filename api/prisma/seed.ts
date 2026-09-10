@@ -7,6 +7,7 @@ import {
   setFieldValues,
   SOURCES_FIELD_KEY,
   SYSTEM_FIELD_DEFS,
+  PLACE_TYPE_COLORS,
   canonicalLinkPair,
   SYSTEM_PLACE_TYPE_IDS,
   SYSTEM_PLACE_TYPES,
@@ -440,7 +441,9 @@ async function main() {
       ownerId: ALICE_ID,
       name: "Swimming hole",
       iconKey: "droplet",
-      color: "#06B6D4",
+      // From the curated palette, like any type a user could make — the seed
+      // must not be the one row that fails `isPlaceTypeColor`.
+      color: PLACE_TYPE_COLORS[6],
       position: 0,
     },
   });

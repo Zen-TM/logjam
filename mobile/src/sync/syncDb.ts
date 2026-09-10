@@ -42,6 +42,12 @@ import { OUTBOX_ENTITIES } from "./outboxTables";
  * to one `field_values_json`, gains a `place_type_id`, and `place_types`
  * arrives as a table of its own.
  *
+ * 9: `custom_field_defs` carries `owner_id`. NULL means a SYSTEM definition,
+ * and without the column the phone could not tell one from the user's own — so
+ * it offered Rename and Delete on a built-in field, and the delete stripped the
+ * value off every place carrying that key while the server no-opped the other
+ * half. A wipe-and-resync is the cheapest way to fill it.
+ *
  * 8: phase 6. `custom_field_defs` carries its SCOPING (`place_type_ids_json`,
  * `applies_to_all_types`), which the delta now sends — without it a client
  * holds every definition and cannot tell which type's form it belongs on.
@@ -51,7 +57,7 @@ import { OUTBOX_ENTITIES } from "./outboxTables";
  * rows of their own. `places` gains the two columns that came across with
  * them, `elevation` and `tags_json`.
  */
-export const MIRROR_SCHEMA_VERSION = 8;
+export const MIRROR_SCHEMA_VERSION = 9;
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 

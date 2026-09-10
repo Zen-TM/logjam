@@ -15,6 +15,7 @@ import { throttleWrites } from "./_rateLimitGate";
 vi.setConfig({ testTimeout: 90_000, hookTimeout: 90_000 });
 
 import {
+  PLACE_TYPE_COLORS,
   SYSTEM_FIELD_DEFS,
   SYSTEM_PLACE_TYPE_IDS,
   SYSTEM_PLACE_TYPES,
@@ -63,7 +64,7 @@ async function makeType(sub: string, name: string): Promise<string> {
     request(API_URL)
     .post("/place-types")
       .set(as(sub))
-      .send({ name, iconKey: "map-pin", color: "#22C55E" }),
+      .send({ name, iconKey: "map-pin", color: PLACE_TYPE_COLORS[1] }),
   );
   expect(res.status, JSON.stringify(res.body)).toBe(201);
   created.push(res.body.id);
@@ -168,6 +169,39 @@ describe("system types and definitions cannot be removed", () => {
         .send({ name: "Mine now" }),
     );
     expect(res.status).toBe(404);
+  });
+
+  // §7.7, THE PATH THE PHONE USES. The REST case below covers the web; a delete
+  // arriving as a PUSH OP answered `alreadyApplied` — success — while the row
+  // stayed put, which is how a client that had already stripped the values off
+  // its own rows was told everything went fine.
+  it("refuses to delete a system field definition through a push op", async () => {
+    const res = await write(() =>
+      request(API_URL)
+        .post("/sync/push")
+        .set(as(ALICE_SUB))
+        .set({ "x-logjam-client": "mobile/0.1.0-test" })
+        .send({
+          protocol: 1,
+          ops: [
+            {
+              opId: `sysdef-${Date.now()}`,
+              entity: "customFieldDef",
+              op: "delete",
+              id: SYSTEM_FIELD_DEFS[0].id,
+            },
+          ],
+        }),
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.results[0].status, JSON.stringify(res.body)).toBe("rejected");
+    expect(res.body.results[0].error?.status ?? res.body.results[0].status).toBeTruthy();
+
+    // And it is still there, labelling values.
+    const list = await request(API_URL).get("/custom-fields/place").set(as(ALICE_SUB));
+    expect(
+      (list.body.fields as { key: string }[]).map((def) => def.key),
+    ).toContain(SYSTEM_FIELD_DEFS[0].key);
   });
 
   it("refuses to delete a system field definition", async () => {
@@ -356,7 +390,7 @@ describe("place type lifecycle", () => {
       request(API_URL)
         .post("/place-types")
         .set(as(ALICE_SUB))
-        .send({ name, iconKey: "map-pin", color: "#22C55E" }),
+        .send({ name, iconKey: "map-pin", color: PLACE_TYPE_COLORS[1] }),
     );
     // Copy reconciliation matches an incoming type BY NAME, so two types with
     // one name would make that match ambiguous.
@@ -370,7 +404,7 @@ describe("place type lifecycle", () => {
       request(API_URL)
         .post("/place-types")
         .set(as(BOB_SUB))
-        .send({ name, iconKey: "map-pin", color: "#22C55E" }),
+        .send({ name, iconKey: "map-pin", color: PLACE_TYPE_COLORS[1] }),
     );
     expect(bobs.status).toBe(201);
     created.push(bobs.body.id);
@@ -381,7 +415,7 @@ describe("place type lifecycle", () => {
       request(API_URL)
         .post("/place-types")
         .set(as(ALICE_SUB))
-        .send({ name: `Bad icon ${Date.now()}`, iconKey: "waves", color: "#22C55E" }),
+        .send({ name: `Bad icon ${Date.now()}`, iconKey: "waves", color: PLACE_TYPE_COLORS[1] }),
     );
     expect(badIcon.status).toBe(400);
 
@@ -446,7 +480,7 @@ describe("place type lifecycle", () => {
       request(API_URL)
         .post("/place-types")
         .set(as(BOB_SUB))
-        .send({ name: `Bobs ${Date.now()}`, iconKey: "map-pin", color: "#22C55E" }),
+        .send({ name: `Bobs ${Date.now()}`, iconKey: "map-pin", color: PLACE_TYPE_COLORS[1] }),
     );
     expect(bobsType.status).toBe(201);
     created.push(bobsType.body.id);
@@ -477,7 +511,7 @@ describe("place type lifecycle", () => {
       request(API_URL)
         .post("/place-types")
         .set(as(BOB_SUB))
-        .send({ name: `Bobs other ${Date.now()}`, iconKey: "map-pin", color: "#22C55E" }),
+        .send({ name: `Bobs other ${Date.now()}`, iconKey: "map-pin", color: PLACE_TYPE_COLORS[1] }),
     );
     created.push(bobsType.body.id);
 

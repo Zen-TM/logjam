@@ -203,7 +203,7 @@ describe("delta row parsers", () => {
       ownerId: null,
       name: "Canyon",
       iconKey: "droplet",
-      color: "#F97316",
+      color: "#E4C5AA",
       position: 0,
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",

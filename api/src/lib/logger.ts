@@ -33,6 +33,32 @@ export const redactPaths = [
   'req.body.place.fieldValues',
   'req.body.rows[*].data.fieldValues',
   'req.body.places[*].fieldValues',
+  // TAGS are the user's own words about a place ("locked gate", "leech
+  // hollow"), and a definition's LABEL is the same class of text arriving on a
+  // different route. The mobile scrubber censors both; this file said they were
+  // as sensitive as `notes` in the comment above and then redacted neither.
+  'req.body.tags',
+  'req.body.place.tags',
+  'req.body.rows[*].data.tags',
+  'req.body.places[*].tags',
+  'req.body.label',
+  'req.body.field.label',
+  // THE SYNC PUSH IS THE PHONE'S ONLY WRITE PATH, and every name, note, tag and
+  // field value it has ever sent travels inside `ops[*].fields`, which nothing
+  // above reaches. Same defence-in-depth argument as the bulk rows below — no
+  // current log site emits this body — applied to the shape that now carries
+  // the most user data by far.
+  'req.body.ops[*].fields.name',
+  'req.body.ops[*].fields.altNames',
+  'req.body.ops[*].fields.notes',
+  'req.body.ops[*].fields.latitude',
+  'req.body.ops[*].fields.longitude',
+  'req.body.ops[*].fields.tags',
+  'req.body.ops[*].fields.fieldValues',
+  'req.body.ops[*].fields.customFields',
+  'req.body.ops[*].fields.label',
+  'req.body.ops[*].fields.displayName',
+  'req.body.ops[*].fields.points',
   // Generic wildcards for nested payloads
   '*.latitude',
   '*.longitude',

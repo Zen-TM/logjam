@@ -12,8 +12,12 @@
   --theme-bonus-2: #6b5f4b;
   --theme-bonus-3: #9c5a2e;
 
-  --owned-place-color: #f97316;
-  --shared-place-color: #629bf8;
+  /* A place's own colour is its TYPE's now; these two are the fallback for a
+     place whose type has not loaded, and the reserved "shared" hue. Both are
+     read from shared/src/placeTypes.ts — keep them in step (the contrast guard
+     checks the declaration, not this file). */
+  --owned-place-color: #e4c5aa;
+  --shared-place-color: #b79ec0;
   --completed-place-color: #22c55e; /* owned place with a logged trip */
 
   /* Layout */

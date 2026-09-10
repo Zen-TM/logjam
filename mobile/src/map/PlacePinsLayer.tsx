@@ -18,6 +18,8 @@ import {
   type PressEventWithFeatures,
 } from "@maplibre/maplibre-react-native";
 
+import { SHARED_PLACE_COLOR, SYSTEM_PLACE_TYPES } from "@logjam/shared";
+
 import { theme } from "../theme";
 
 /**
@@ -25,11 +27,17 @@ import { theme } from "../theme";
  *
  * `OWNED_PLACE_COLOR` is no longer what a pin is drawn in — a pin's fill is
  * its TYPE's colour now, and this is the fallback for a place whose type this
- * device has not pulled yet, plus the hue of the "My places" row. Ownership
- * moved to the RING, which is the axis that has only two values.
+ * device has not pulled yet, plus the hue of the "My places" row. It is the
+ * Canyon type's own colour rather than a literal, because a fallback that does
+ * not appear in the palette is a thirteenth colour nothing checks.
+ *
+ * Ownership moved to the RING, which is the axis that has only two values, and
+ * `SHARED_PLACE_COLOR` is RESERVED — never a type colour, or a shared Marker
+ * would be a dot and a ring of the same hue. It is re-exported here because
+ * every map file already imports its ink from this module.
  */
-export const OWNED_PLACE_COLOR = "#f97316";
-export const SHARED_PLACE_COLOR = "#629bf8";
+export const OWNED_PLACE_COLOR = SYSTEM_PLACE_TYPES[0].color;
+export { SHARED_PLACE_COLOR };
 
 const MAX_LABEL_CHARS = 40;
 

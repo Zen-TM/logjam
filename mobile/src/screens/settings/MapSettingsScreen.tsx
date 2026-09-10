@@ -74,9 +74,12 @@ import { radius, spacing, surface, theme, withAlpha } from "../../theme";
 import { ScreenScroll, SectionHeader, Toast, type ToastMessage } from "../../ui";
 import { ChoiceGroup, PreferenceRow } from "./settingsKit";
 
+// The action key stays `waypoint` (it is a stored preference), the WORD does
+// not: a waypoint is a place of the Marker type now, and this screen and the
+// long-press sheet are one vocabulary (DESIGN.md §2).
 const LONG_PRESS_LABELS: Record<LongPressAction, string> = {
   ask: "Ask each time",
-  waypoint: "Waypoint",
+  waypoint: "Drop a marker",
   navigate: "Navigate",
   route: "Draw route",
   measure: "Measure",

@@ -12,7 +12,7 @@
 import { Router, Response, NextFunction } from "express";
 import { Prisma, type Place } from "@prisma/client";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
-import { readMediaMetadata } from "@logjam/shared";
+import { readMediaMetadata, SYSTEM_FIELD_DEFS } from "@logjam/shared";
 import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
 import {
@@ -1609,11 +1609,23 @@ async function applyPlaceTypeOp(
   };
 }
 
+/** The ids no account owns. A push naming one is a client bug, not a race. */
+const SYSTEM_FIELD_DEF_IDS = new Set(SYSTEM_FIELD_DEFS.map((def) => def.id));
+
 async function applyCustomFieldDefOp(
   userId: string,
   op: PushOp,
 ): Promise<PushOpResult> {
   if (op.op === "delete") {
+    // A SYSTEM definition is REFUSED, loudly. It is not "already gone" — it is
+    // there, it belongs to no account, and it always will be, so answering
+    // `alreadyApplied` told a buggy client its delete had succeeded. That is
+    // exactly what let the phone destroy data quietly: its half of a delete
+    // (strip the value off every place carrying the key) had already run, the
+    // definition came back on the next pull, and the values did not.
+    if (SYSTEM_FIELD_DEF_IDS.has(op.id)) {
+      throw new AppError(404, "Custom field not found");
+    }
     // Strips the orphaned values off every trip log / place that carried one
     // and writes the tombstone, in one transaction (lib/customFieldDefs.ts).
     // A definition already gone is idempotent success — a delete's goal state

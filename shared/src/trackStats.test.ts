@@ -424,7 +424,7 @@ describe("rejectTrackFix drift and plausibility gates", () => {
     ).toBe("too-close");
   });
 
-  it("rejects a teleport no placeer can walk", () => {
+  it("rejects a teleport no canyoner can walk", () => {
     // 500 m in 10 s = 50 m/s — a re-acquired fix, not movement.
     expect(
       rejectTrackFix(
