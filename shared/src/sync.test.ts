@@ -3,7 +3,9 @@ import {
   decodeSyncCursor,
   encodeSyncCursor,
   isUuidV4,
+  parseSyncDeltaCustomFieldDefRow,
   parseSyncDeltaPlaceRow,
+  parseSyncDeltaPlaceTypeRow,
   parseSyncDeltaTombstone,
   parseSyncDeltaTripRow,
   parseSyncDeltaPlaceLinkRow,
@@ -187,6 +189,42 @@ describe("delta row parsers", () => {
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   };
+
+  // A SYSTEM row belongs to no account, and there are two kinds of them: the
+  // three place types and the nine field definitions. `ownerId: isString` on
+  // the definition spec dropped all nine off every delta page a phone pulled —
+  // the grades arrived on places with nothing to label or bound them — and no
+  // test saw it, because every test on both sides built its rows by hand.
+  // Ground truth for this now lives in `api/src/__tests__/syncBoundary.test.ts`,
+  // which parses what the live server actually sends.
+  it("accepts a global row, whichever kind it is, with a null owner", () => {
+    const systemType = {
+      id: "b0000000-0000-4000-8000-000000000001",
+      ownerId: null,
+      name: "Canyon",
+      iconKey: "droplet",
+      color: "#F97316",
+      position: 0,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    expect(parseSyncDeltaPlaceTypeRow(systemType).ownerId).toBeNull();
+
+    const systemDef = {
+      id: "c0000000-0000-4000-8000-000000000001",
+      ownerId: null,
+      entity: "place",
+      key: "v_grade",
+      label: "V Grade",
+      type: "integer",
+      min: 1,
+      max: 7,
+      position: 0,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    expect(parseSyncDeltaCustomFieldDefRow(systemDef).ownerId).toBeNull();
+  });
 
   it("accepts well-formed rows and preserves unknown extra keys", () => {
     expect(parseSyncDeltaPlaceRow({ ...place, futureField: 1 })).toMatchObject({

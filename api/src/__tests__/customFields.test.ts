@@ -9,7 +9,11 @@ import { throttleWrites } from "./_rateLimitGate";
 // write-heavy file ran before this one, so a 429 here arrives as an assertion
 // failure about custom fields. `write()` sleeps to the window reset and retries
 // instead; a sleep is up to ~61s, hence the timeout.
-vi.setConfig({ testTimeout: 90_000 });
+// `hookTimeout` too, not just `testTimeout`: teardown deletes are writes, they
+// draw on the same 30/60s per-user budget, and vitest's 10s default for hooks
+// is shorter than one window reset — so a suite that passed every assertion
+// still failed, in the hook, with a message about nothing.
+vi.setConfig({ testTimeout: 90_000, hookTimeout: 90_000 });
 
 /** A write that must succeed even if the previous file spent the budget. */
 async function write<T extends { status: number; headers: Record<string, string> }>(

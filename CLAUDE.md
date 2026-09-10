@@ -55,7 +55,27 @@ Additive only. Never silently delete existing conventions — flag stale entries
   - **On the map, FILL is the type and the RING is sharing.** Colour used to encode ownership and cannot any more, because it now says which kind of place this is. See `mobile/src/map/PlacePinsLayer.tsx`.
 - **A custom field DEFINITION is a row with a scope, and one rule builds every form.** Definitions live in `custom_field_defs` (they used to be an array on `User.uiPreferences`), and each carries `placeTypeIds` plus an `appliesToAllTypes` FLAG — a flag rather than join rows for every type that exists today, because rows would silently fail to apply to a type created tomorrow and the user who ticked "All" would never find out (`api/src/__tests__/placeTypes.test.ts`, §7.4). `defsForType` (`shared/src/tripLogFields.ts`) is the one rule both clients build a place form from, so a phone and a browser cannot disagree about which fields a campsite has.
   - **The seven canyon grades are ordinary field values now** (`fieldValues`, keyed by RESERVED keys the system definitions own). A user field that would collide with one is refused with a suggestion, on create AND on rename (`placeTypes.test.ts`, §7.6). Anything reading a grade goes through `numericFieldValue`/`fieldValue`, never a column.
+  - **"Reserved" and "already drawn by another control" are DIFFERENT SETS, and
+    conflating them deletes fields.** `RESERVED_FIELD_KEYS` answers "may a user
+    take this key" and covers every system definition — including the campsite's
+    `capacity` and `is a cave?`. Both clients cut reserved keys out of their
+    generic field list on the grounds that the canyon UI renders them, which
+    silently removed those two from the create form and the filter sheet: they
+    are system fields that nothing draws specially. `CANYON_FORM_FIELD_KEYS`
+    (derived from the canyon scoping, pinned by `shared/src/placeTypes.test.ts`)
+    is the set with bespoke controls. Found by running the app, not by a test.
   - **A TRIP's form is `tripFieldDefs(defs, linked place types, values)` — and the union clause is what stops it eating data.** Render the definitions applicable to the types of the places the trip links, UNION any key that already has a value. Without the second half, unlinking a place, deleting one, retyping it or rescoping a definition each silently hides a value the user typed — and the next save writes the object the form knows about, so hidden means gone. One clause covers all four; a value is destroyed only by deleting its definition, which has its own impact count. Guard: `shared/src/tripLogFields.test.ts`, "tripFieldDefs". The same rule in miniature applies to a place form: write only the fields the form SHOWED, over the stored object — iterating every definition wrote a null for the ones scoped to other types, and a null removes the key.
+- **A SYSTEM row belongs to no account, on the wire as well as in the database.**
+  Both kinds — the three place types and the nine field definitions — carry
+  `ownerId: null`, and the delta row spec must say so: `ownerId: isString` on the
+  definition spec dropped all nine off every page a phone pulled, so grades
+  arrived on places with no definition to label or bound them and `defsForType`
+  answered "no fields" for a canyon. Every parser test on both sides built its
+  rows by hand and saw nothing. Ground truth lives in
+  `api/src/__tests__/syncBoundary.test.ts`, which parses what the LIVE server
+  sends through the shared specs — the guard for this whole class, not just this
+  field.
+
 - **`foreignFields` is the park for a value whose definition the recipient does not have, and it has exactly two writers.** A copied place carries values keyed by the SENDER's definitions; they land in `Place.foreignFields` as `[{key,label,type,min,max,value}]`, rendered read-only in their own section with three per-item actions (adopt as a field of my type / append to notes / discard). Copy and place-type-change are the only writers — never a user edit, and it is absent from the `PLACE_FIELDS` push allowlist so a client cannot write one (guards: `api/src/routes/placeFields.unit.test.ts`, `api/src/__tests__/placeCopy.test.ts`, §7.13). It is OWNER-PRIVATE and never appears on a delta row where `syncRole === "shared"`; a sharee gets `fieldDefsSnapshot` instead, derived live from the OWNER's current definitions. Without that rule the design inherits the propagation objection that killed dumping the values into notes: B copies A's place, shares it with C, and C reads A's field labels.
 - **A `PlaceLink` grants NO visibility.** It is symmetric, stored once under the canonical (low id, high id) pair, and owner-private — which is why `where: { ownerId }` IS the both-endpoints-are-visible filter, and why the 219-line visibility-diffing module the old canyon↔waypoint join needed could be deleted outright. A route still reaches a sharee through `Route.placeId`, which is a FOREIGN KEY and a different thing. Guard: `api/src/__tests__/placeLinks.test.ts` (a sharee's link list is empty, §7.3, and the create→link→flush→delta round trip, §7.18).
 

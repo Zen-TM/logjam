@@ -27,7 +27,7 @@ import {
   SOURCES_FIELD_KEY,
   SYSTEM_FIELD_DEFS,
   SYSTEM_PLACE_TYPE_IDS,
-  RESERVED_FIELD_KEYS,
+  CANYON_FORM_FIELD_KEYS,
   defsForType,
   LATITUDE_RANGE,
   LONGITUDE_RANGE,
@@ -182,7 +182,11 @@ function PlaceDialog({
   const typeFieldDefs = useMemo(
     () =>
       defsForType(customFieldDefs, placeTypeId).filter(
-        (def) => !isCanyonType || !RESERVED_FIELD_KEYS.has(def.key),
+        // `CANYON_FORM_FIELD_KEYS`, not `RESERVED_FIELD_KEYS`: reserved means
+        // "a user may not take this key", which is also true of the campsite's
+        // own `capacity` and `is a cave?` — system fields nothing draws
+        // specially, which cutting by "reserved" would delete from the form.
+        (def) => !isCanyonType || !CANYON_FORM_FIELD_KEYS.has(def.key),
       ),
     [customFieldDefs, placeTypeId, isCanyonType],
   );

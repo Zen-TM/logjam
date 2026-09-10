@@ -4,6 +4,7 @@ import {
   SYSTEM_PLACE_TYPES,
   SYSTEM_PLACE_TYPE_IDS,
   SYSTEM_FIELD_DEFS,
+  CANYON_FORM_FIELD_KEYS,
   RESERVED_FIELD_KEYS,
   isReservedFieldKey,
   isInternalFieldValueKey,
@@ -159,5 +160,34 @@ describe("the internal `_` namespace", () => {
   it("does not claim an ordinary key", () => {
     expect(isInternalFieldValueKey("v_grade")).toBe(false);
     expect(isInternalFieldValueKey("water_temp")).toBe(false);
+  });
+});
+
+// The set the canyon form and filter draw themselves, and the reason it is not
+// `RESERVED_FIELD_KEYS`: both clients used "reserved" as a proxy for "already
+// drawn", which deleted the campsite's own system fields from the create form
+// and the filter sheet. Pinned so a new canyon-scoped system def has to come
+// with a decision about its control rather than silently disappearing.
+describe("CANYON_FORM_FIELD_KEYS", () => {
+  it("is the seven canyon axes, and nothing else", () => {
+    expect([...CANYON_FORM_FIELD_KEYS].sort()).toEqual([
+      "a_grade",
+      "commitment",
+      "hours",
+      "longest_abseil",
+      "num_abseils",
+      "quality",
+      "v_grade",
+    ]);
+  });
+
+  it("does not swallow a system field belonging to another type", () => {
+    for (const key of ["capacity", "is_cave"]) {
+      expect(RESERVED_FIELD_KEYS.has(key), `${key} is still reserved`).toBe(true);
+      expect(
+        CANYON_FORM_FIELD_KEYS.has(key),
+        `${key} has no control of its own and must render generically`,
+      ).toBe(false);
+    }
   });
 });

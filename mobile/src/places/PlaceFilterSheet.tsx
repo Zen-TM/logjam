@@ -1,8 +1,8 @@
 import { useCallback, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import {
+  CANYON_FORM_FIELD_KEYS,
   defsForType,
-  RESERVED_FIELD_KEYS,
   SYSTEM_FIELD_DEFS,
   regionEdgesKm,
   type PlaceFilters,
@@ -221,11 +221,19 @@ export function PlaceFilterSheet({
   const { defs } = useFieldDefs("place");
   const typeDefs =
     filters.placeTypeId == null ? defs : defsForType(defs, filters.placeTypeId);
-  // The reserved keys have bespoke controls below (a grade rail beats a number
-  // box), so they are rendered by hand and cut from the generic list.
   const hasReserved = (key: string) =>
     typeDefs.some((def) => def.key === key);
-  const ownFieldDefs = typeDefs.filter((def) => !RESERVED_FIELD_KEYS.has(def.key));
+  // WHAT IS ALREADY DRAWN, not what is reserved. The canyon axes get bespoke
+  // controls below (a grade rail beats a number box) and are cut from the
+  // generic list — but only when they are actually rendered. Cutting every
+  // RESERVED key instead deleted the campsite's own `capacity` and
+  // `is a cave?`: system fields with no control of their own.
+  const canyonAxesShown = hasReserved("v_grade");
+  const drawnByHand = new Set([
+    ...(canyonAxesShown ? CANYON_FORM_FIELD_KEYS : []),
+    ...THRESHOLDS.filter((spec) => hasReserved(spec.key)).map((spec) => spec.key),
+  ]);
+  const ownFieldDefs = typeDefs.filter((def) => !drawnByHand.has(def.key));
 
   const patch = useCallback(
     (next: Partial<PlaceFilters>) => onChangeFilters({ ...filters, ...next }),
@@ -322,7 +330,7 @@ export function PlaceFilterSheet({
           ))}
         </View>
 
-        {hasReserved("v_grade") ? (
+        {canyonAxesShown ? (
           <>
             <SectionHeader label="Grade" />
             <RangePills
@@ -524,7 +532,12 @@ function CustomFieldFilter({
       <ThresholdFilter
         label={def.label}
         unit=""
-        presets={OPERATORS.map((op) => [op, def.min ?? 1] as PlaceThresholdFilter)}
+        // NO PRESETS. The three built-in thresholds have them because someone
+        // chose the numbers that matter for abseils and hours; a field the user
+        // invented has no such numbers, and deriving them from the bounds gave
+        // "Under 0 / Over 0 / Exactly 0" on a min-0 field — three taps that all
+        // mean nothing. Custom is the whole control here.
+        presets={[]}
         value={thresholdOf(filters, def.key)}
         onChange={(next) =>
           patchCustom(

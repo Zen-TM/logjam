@@ -8,7 +8,11 @@ import { throttleWrites } from "./_rateLimitGate";
 // this one may have spent it. That wait is legitimate, and it does not fit the
 // suite's 15s default — so this FILE gets a longer one rather than the whole
 // suite, where it would mask a genuine hang.
-vi.setConfig({ testTimeout: 90_000 });
+// `hookTimeout` too, not just `testTimeout`: teardown deletes are writes, they
+// draw on the same 30/60s per-user budget, and vitest's 10s default for hooks
+// is shorter than one window reset — so a suite that passed every assertion
+// still failed, in the hook, with a message about nothing.
+vi.setConfig({ testTimeout: 90_000, hookTimeout: 90_000 });
 
 import { SYSTEM_PLACE_TYPE_IDS } from "@logjam/shared";
 

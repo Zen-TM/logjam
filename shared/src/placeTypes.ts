@@ -231,6 +231,29 @@ export const RESERVED_FIELD_KEYS: ReadonlySet<string> = new Set(
   SYSTEM_FIELD_DEFS.map((def) => def.key),
 );
 
+/**
+ * The system keys a CANYON form draws with a control of its own — the grade
+ * rails and the three "how many / how long" thresholds.
+ *
+ * This is NOT the same set as `RESERVED_FIELD_KEYS`, and conflating the two
+ * cost a bug: both clients cut "reserved" keys out of their generic field list
+ * on the grounds that the canyon UI renders them, which silently deleted the
+ * campsite's own `capacity` and `is a cave?` from the create form and the
+ * filter sheet — they are system defs too, and nothing draws them specially.
+ * Reserved answers "may a user take this key"; this answers "does some other
+ * control already draw it".
+ *
+ * DERIVED from the canyon scoping rather than restated, so a tenth system def
+ * cannot join one list and not the other. `placeTypes.test.ts` pins the
+ * membership, which is what forces the decision — a canyon-scoped def with no
+ * bespoke control would otherwise vanish from every form that has one.
+ */
+export const CANYON_FORM_FIELD_KEYS: ReadonlySet<string> = new Set(
+  SYSTEM_FIELD_DEFS.filter((def) => def.placeTypes.includes("canyon")).map(
+    (def) => def.key,
+  ),
+);
+
 export function isReservedFieldKey(key: string): boolean {
   return RESERVED_FIELD_KEYS.has(key);
 }

@@ -373,7 +373,9 @@ export type SyncDeltaFriendshipRow = {
  */
 export type SyncDeltaCustomFieldDefRow = {
   id: string;
-  ownerId: string;
+  /** NULL for a SYSTEM definition — the seven canyon grades and their kin are
+   *  GLOBAL rows owned by no account, exactly like a system place type. */
+  ownerId: string | null;
   entity: string;
   key: string;
   label: string;
@@ -586,7 +588,13 @@ const SHARE_ROW_SPEC: Record<string, FieldCheck> = {
 
 const CUSTOM_FIELD_DEF_ROW_SPEC: Record<string, FieldCheck> = {
   id: isString,
-  ownerId: isString,
+  // NULL for a SYSTEM definition — global, owned by no one, and the same shape
+  // a system place type has. Requiring a string here dropped all NINE system
+  // definitions off every delta page a phone pulled: the grades arrived on
+  // places with no definition to label or bound them, and `defsForType`
+  // answered "no fields" for a canyon. Found by running the app (2026-09-10),
+  // invisible to every unit test because they all built rows by hand.
+  ownerId: nullable(isString),
   entity: isString,
   key: isString,
   label: isString,

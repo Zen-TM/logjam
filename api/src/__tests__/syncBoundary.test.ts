@@ -1,6 +1,19 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
 import {
+  DELTA_ENTITY_ORDER,
+  parseSyncDeltaCustomFieldDefRow,
+  parseSyncDeltaFriendshipRow,
+  parseSyncDeltaMediaRow,
+  parseSyncDeltaPlaceRow,
+  parseSyncDeltaPlaceTypeRow,
+  parseSyncDeltaRouteRow,
+  parseSyncDeltaShareRow,
+  parseSyncDeltaTombstone,
+  parseSyncDeltaTripRow,
+} from "@logjam/shared";
+
+import {
   API_URL,
   ALICE_SUB,
   BOB_SUB,
@@ -269,5 +282,68 @@ describe("media download-urls boundary", () => {
       .set(as(BOB_SUB))
       .send({ ids: Array.from({ length: 101 }, (_, i) => String(i)) });
     expect(tooMany.status).toBe(413);
+  });
+});
+
+// THE ROW SPECS ARE A CONTRACT WITH THE PHONE, AND ONLY THE SERVER KNOWS WHAT
+// IT ACTUALLY SENDS.
+//
+// `shared/src/sync.ts` declares what a delta row must look like, and the mobile
+// pull runs every row through it — a row that fails is DROPPED, with a warning
+// that reads as data loss. Every test of those parsers, on both sides, built
+// its rows by hand, so a spec that disagreed with the server was invisible to
+// all of them: `ownerId: isString` on a custom field definition dropped all
+// NINE system definitions off every page a phone pulled (grades arriving on
+// places with nothing to label or bound them), and it took running the app to
+// see it. This is that class of bug's guard — the rows come from the live
+// server, so at least one side is ground truth.
+const ROW_PARSERS: Record<string, (row: unknown) => unknown> = {
+  placeTypes: parseSyncDeltaPlaceTypeRow,
+  customFieldDefs: parseSyncDeltaCustomFieldDefRow,
+  places: parseSyncDeltaPlaceRow,
+  tripLogs: parseSyncDeltaTripRow,
+  routes: parseSyncDeltaRouteRow,
+  media: parseSyncDeltaMediaRow,
+  placeShares: parseSyncDeltaShareRow,
+  friendships: parseSyncDeltaFriendshipRow,
+};
+
+describe("sync delta — every row the server sends parses on the client", () => {
+  it("parses each row of a full pull through the shared spec", async () => {
+    for (const sub of [ALICE_SUB, BOB_SUB]) {
+      const { changes, tombstones } = await fullPull(sub);
+      // `placeLinks` has no exported parser — the mirror stores it whole — so
+      // the map is checked against the delta's own entity list rather than
+      // assumed complete.
+      for (const key of Object.keys(changes)) {
+        expect(
+          (DELTA_ENTITY_ORDER as readonly string[]).includes(key),
+          `the delta carries "${key}", which is not in DELTA_ENTITY_ORDER`,
+        ).toBe(true);
+      }
+      for (const [key, parse] of Object.entries(ROW_PARSERS)) {
+        for (const row of changes[key] ?? []) {
+          expect(
+            () => parse(row),
+            `${sub} pulled a ${key} row the client spec rejects: ${JSON.stringify(row)}`,
+          ).not.toThrow();
+        }
+      }
+      for (const tombstone of tombstones) {
+        expect(() => parseSyncDeltaTombstone(tombstone)).not.toThrow();
+      }
+    }
+  });
+
+  // The case that actually broke: a SYSTEM definition belongs to no account.
+  it("sends system definitions with a null owner, and the spec accepts them", async () => {
+    const { changes } = await fullPull(ALICE_SUB);
+    const defs = (changes.customFieldDefs ?? []) as { ownerId: string | null }[];
+    expect(defs.length).toBeGreaterThan(0);
+    const system = defs.filter((def) => def.ownerId === null);
+    expect(system.length, "the seven grades and their kin are global rows").toBeGreaterThan(0);
+    for (const def of system) {
+      expect(() => parseSyncDeltaCustomFieldDefRow(def)).not.toThrow();
+    }
   });
 });

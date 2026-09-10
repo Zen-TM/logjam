@@ -4,9 +4,9 @@ import { Feather } from "@expo/vector-icons";
 import {
   defsForType,
   normalizePlaceTags,
+  CANYON_FORM_FIELD_KEYS,
   numericFieldValue,
   PLACE_TAG_SUGGESTIONS,
-  RESERVED_FIELD_KEYS,
   setFieldValues as withFieldValues,
   SYSTEM_FIELD_DEFS,
   SYSTEM_PLACE_TYPE_IDS,
@@ -211,16 +211,21 @@ export function PlaceEditSheet({
   /**
    * The fields THIS type's form asks for.
    *
-   * The seven canyon grades have their own inputs above (a grade rail is a
+   * The seven canyon axes have their own inputs above (a grade rail is a
    * better control than a number box, and they are what this app is for), so
    * on a canyon they are cut from the generic list rather than asked twice. On
    * every other type they are not in the list at all — a campsite's defs do not
    * include `v_grade`, which is the entire point of scoping.
+   *
+   * Cut by `CANYON_FORM_FIELD_KEYS` and NOT by `RESERVED_FIELD_KEYS`: reserved
+   * means "a user may not take this key", which is also true of the campsite's
+   * `capacity` and `is a cave?` — system fields that nothing draws specially
+   * and that must render generically or not at all.
    */
   const typeFieldDefs = useMemo(
     () =>
       defsForType(customFieldDefs, placeTypeId).filter(
-        (def) => !(isCanyon && RESERVED_FIELD_KEYS.has(def.key)),
+        (def) => !(isCanyon && CANYON_FORM_FIELD_KEYS.has(def.key)),
       ),
     [customFieldDefs, isCanyon, placeTypeId],
   );
@@ -604,7 +609,8 @@ export function PlaceEditSheet({
             marker and on a canyon — and the vocabulary is what is already in
             use plus a seed list, never a closed enum. This is where the old
             waypoint sheet's tags mode went. */}
-        <SectionHeader label="Tags" />
+        {/* No SectionHeader: `ChipPicker` renders its own label, and the pair
+            printed "TAGS" twice. */}
         <ChipPicker
           label="Tags"
           options={tagOptions}
