@@ -17,7 +17,7 @@
 //    integer to string while values are already stored, and a renderer that
 //    throws on the mismatch takes the whole screen down for one stale row.
 //    Writes are validated (assertValidDef / the push allowlist); reads forgive.
-//  * KEYS STARTING WITH `_` ARE INTERNAL (`_sources`, `_attributes`) and never
+//  * KEYS STARTING WITH `_` ARE INTERNAL (`_sources` today) and never
 //    appear as a user field. `makeCustomFieldKey` cannot produce one, so this
 //    is structural rather than a convention — see placeTypes.ts.
 

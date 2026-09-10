@@ -121,7 +121,6 @@ describe("normalizeUserUiPreferences", () => {
 describe("normalizeImportMergePolicy", () => {
   const POLICY = {
     notes: "keepExisting" as const,
-    _attributes: "useIncoming" as const,
     v_grade: "keepExisting" as const,
     water_temp: "useIncoming" as const,
   };
@@ -130,12 +129,12 @@ describe("normalizeImportMergePolicy", () => {
     expect(normalizeImportMergePolicy(POLICY)).toEqual(POLICY);
   });
 
-  // The legacy attributes bag is one policy entry, and it has to survive the
-  // round trip: this is the user's "Custom attributes: use file" choice, which
-  // an earlier normalizer silently dropped because it rebuilt the policy from a
-  // field list that did not contain it.
-  it("preserves the legacy attributes entry rather than dropping it", () => {
-    expect(normalizeImportMergePolicy(POLICY)?._attributes).toBe("useIncoming");
+  // A key the normalizer does not know has to survive the round trip: the
+  // policy is keyed by the user's own definition keys, and an earlier
+  // normalizer silently dropped anything it could not find in a field list it
+  // rebuilt from — losing the user's per-field "use file" choice.
+  it("preserves an entry keyed by a definition it does not know", () => {
+    expect(normalizeImportMergePolicy(POLICY)?.water_temp).toBe("useIncoming");
   });
 
   // BEHAVIOUR CHANGE, deliberate. The policy used to be a fixed seven-entry

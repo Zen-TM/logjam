@@ -43,13 +43,12 @@ describe("mergeableFieldsForDefs", () => {
   it("is the definitions' keys plus the structural fields", () => {
     expect(mergeableFieldsForDefs([{ key: "capacity" }])).toEqual([
       "notes",
-      "_attributes",
       "capacity",
     ]);
   });
 
   it("has no grade columns baked in — a type with no defs merges only notes", () => {
-    expect(mergeableFieldsForDefs([])).toEqual(["notes", "_attributes"]);
+    expect(mergeableFieldsForDefs([])).toEqual(["notes"]);
   });
 });
 
@@ -226,32 +225,6 @@ describe("mergePlace (shared, per-field policy)", () => {
     );
     expect(merged.fieldValues.terrain).toBe("open");
     expect(merged.fieldValues._sources).toEqual([["OzUltimate", "http://oz"]]);
-  });
-
-  // The legacy attributes bag moves as ONE unit under its own policy entry —
-  // per-key policy there would mean a UI over a key set the user invents at
-  // import time. Its per-key union rule still holds inside it.
-  it("merges the legacy attributes bag per key under one policy entry", () => {
-    const merged = mergePlace(
-      existingPlace({
-        fieldValues: { _attributes: { rockType: "sandstone", wetsuit: 3 } },
-      }),
-      { fieldValues: { _attributes: { rockType: "granite" } } },
-      { ...KEEP, _attributes: "useIncoming" },
-    );
-    expect(merged.fieldValues._attributes).toEqual({
-      rockType: "granite",
-      wetsuit: 3,
-    });
-  });
-
-  it("keeps the legacy bag's existing values under keepExisting", () => {
-    const merged = mergePlace(
-      existingPlace({ fieldValues: { _attributes: { rockType: "sandstone" } } }),
-      { fieldValues: { _attributes: { rockType: "granite" } } },
-      KEEP,
-    );
-    expect(merged.fieldValues._attributes).toEqual({ rockType: "sandstone" });
   });
 
   // An internal key must never be governed by the field policy of the same

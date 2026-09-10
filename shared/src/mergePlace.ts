@@ -23,7 +23,7 @@
 // than a lenient reader here.
 
 import { asFieldValues, setFieldValues } from "./fieldValues.js";
-import { SOURCES_FIELD_KEY, LEGACY_ATTRIBUTES_FIELD_KEY } from "./placeTypes.js";
+import { SOURCES_FIELD_KEY } from "./placeTypes.js";
 
 /**
  * A field the policy can govern: a definition key, or one of the structural
@@ -35,18 +35,9 @@ export type MergeableField = string;
 /**
  * Mergeable fields that are NOT custom-field values.
  *
- * `_attributes` is the one non-scalar entry: it is merged per key rather than
- * wholesale (a key only one side has always lands, whatever the policy says),
- * and its policy entry decides only the per-key conflicts. Before it was a
- * policy entry those conflicts were hardcoded to keepExisting with no way out,
- * so a corrected spreadsheet could not repair a value it had already imported.
- *
  * `_sources` is deliberately NOT here: it is always unioned, never a conflict.
  */
-export const STRUCTURAL_MERGEABLE_FIELDS: MergeableField[] = [
-  "notes",
-  LEGACY_ATTRIBUTES_FIELD_KEY,
-];
+export const STRUCTURAL_MERGEABLE_FIELDS: MergeableField[] = ["notes"];
 
 /**
  * The fields a policy may govern for a place of a type carrying `defs`.
@@ -161,8 +152,7 @@ function mergeSources(
 }
 
 /** Shallow per-key merge: a key only one side has always lands; a key both
- *  sides have defers to `policy`. Used for the field values and for the
- *  legacy `_attributes` bag, which behave identically. */
+ *  sides have defers to `policy`. */
 function mergeRecords(
   existing: Record<string, unknown>,
   incoming: Record<string, unknown>,
@@ -193,12 +183,10 @@ export function mergePlace(
   const existingValues = asFieldValues(existing.fieldValues);
   const incomingValues = asFieldValues(incoming.fieldValues);
 
-  // Field values, per key, under the policy entry for that key. The internal
-  // `_`-prefixed entries are handled separately below — `_sources` unions and
-  // `_attributes` merges under its own single policy entry — so they are
-  // excluded here rather than treated as ordinary fields.
-  const isInternal = (key: string) =>
-    key === SOURCES_FIELD_KEY || key === LEGACY_ATTRIBUTES_FIELD_KEY;
+  // Field values, per key, under the policy entry for that key. `_sources` is
+  // handled separately below — it unions rather than resolving — so it is
+  // excluded here rather than treated as an ordinary field.
+  const isInternal = (key: string) => key === SOURCES_FIELD_KEY;
   const userExisting: Record<string, unknown> = {};
   const userIncoming: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(existingValues)) {
@@ -217,18 +205,8 @@ export function mergePlace(
     incomingValues[SOURCES_FIELD_KEY],
   );
 
-  const legacy = mergeRecords(
-    asFieldValues(existingValues[LEGACY_ATTRIBUTES_FIELD_KEY]),
-    asFieldValues(incomingValues[LEGACY_ATTRIBUTES_FIELD_KEY]),
-    // One switch governs every legacy attribute key. Per-key policy would mean
-    // a UI over an open-ended key set the user invents at import time; the
-    // whole bag moves together instead.
-    () => mergePolicyFor(policy, LEGACY_ATTRIBUTES_FIELD_KEY),
-  );
-
   fieldValues = setFieldValues(fieldValues, {
     [SOURCES_FIELD_KEY]: sources ?? null,
-    [LEGACY_ATTRIBUTES_FIELD_KEY]: Object.keys(legacy).length ? legacy : null,
   });
 
   const hasExistingNotes = isPresent(existing.notes);

@@ -33,8 +33,7 @@ function placeSources(c: TPlace): [string, string][] {
 }
 
 // Every value the user can see on the place, WITHOUT the internal `_`-prefixed
-// entries (`_sources` leaves separately in its self-describing form,
-// `_attributes` is a migration bucket and not a field anyone authored).
+// entries (`_sources` leaves separately, in its self-describing form).
 function placeFieldValues(c: TPlace): Record<string, unknown> {
   return userFieldValues(c.fieldValues);
 }

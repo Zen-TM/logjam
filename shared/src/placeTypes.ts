@@ -293,9 +293,10 @@ export function reservedFieldKeyError(key: string, label: string): string {
 }
 
 /**
- * Keys under which the migration parks structured data that is NOT a custom
- * field: `_sources` for the source links a place carries, `_attributes` for
- * whatever else lived in the old free-form `attributes` blob.
+ * The key under which structured data that is NOT a custom field is parked:
+ * `_sources` for the source links a place carries. (`_attributes`, the bucket
+ * the 1b migration first parked the rest of the old `attributes` blob in, is
+ * gone — nothing rendered it, so the migration drops those keys instead.)
  *
  * The leading underscore is a STRUCTURAL reservation, not a convention someone
  * has to remember: `makeCustomFieldKey` collapses every non-alphanumeric run to
@@ -305,7 +306,6 @@ export function reservedFieldKeyError(key: string, label: string): string {
  */
 export const INTERNAL_FIELD_VALUE_PREFIX = "_";
 export const SOURCES_FIELD_KEY = "_sources";
-export const LEGACY_ATTRIBUTES_FIELD_KEY = "_attributes";
 
 export function isInternalFieldValueKey(key: string): boolean {
   return key.startsWith(INTERNAL_FIELD_VALUE_PREFIX);

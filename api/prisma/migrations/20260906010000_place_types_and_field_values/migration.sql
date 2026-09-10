@@ -10,7 +10,7 @@
 -- required to state (plan §4 step 3.2):
 --   * `attributes.customFields.<key>`  ->  field_values.<key>        (HOISTED)
 --   * `attributes.sources`             ->  field_values._sources
---   * every other attributes key       ->  field_values._attributes.<key>
+--   * every other attributes key       ->  DROPPED
 --
 -- The hoist is the whole point and the step that fails SILENTLY if done
 -- literally. Canyon custom-field values were stored NESTED, at
@@ -20,16 +20,25 @@
 -- predicate and mergePlace all fail to find them. No error, no warning: every
 -- value a user ever typed into a canyon custom field simply disappears.
 --
--- `_sources` and `_attributes` are a STRUCTURAL reservation, not a convention:
--- `makeCustomFieldKey` collapses non-alphanumeric runs to `_` and then strips a
--- leading and trailing one, so no user-authored key can begin with `_`.
--- Guarded by shared/src/placeTypes.unit.test.ts.
+-- `_sources` is a STRUCTURAL reservation, not a convention: `makeCustomFieldKey`
+-- collapses non-alphanumeric runs to `_` and then strips a leading and trailing
+-- one, so no user-authored key can begin with `_`. Guarded by
+-- shared/src/placeTypes.unit.test.ts.
 --
 -- `sources` is NOT promoted to a real field def: it is [label, url][] and no
 -- field type expresses that, and mergePlace has to keep unioning it.
--- `rockType`/`wetsuit` (dev-seed keys never declared in TPlaceAttributes) are
--- preserved under `_attributes` rather than promoted, because §2.2 fixes the
--- Canyon type at seven fields and the seeded set must not grow by accident.
+--
+-- THE REST IS DROPPED, and that is a decision rather than an oversight. An
+-- earlier revision parked it under `_attributes`, a bucket nothing renders:
+-- values in the database, invisible in Logjam Web and Logjam GPS, kept against
+-- a census of what prod actually held. That census cannot be run safely — the
+-- keys ARE user-authored labels, as sensitive as a note under CLAUDE.md's
+-- privacy rules, so enumerating them off prod discloses the thing the snapshot
+-- scrub exists to protect. Weighed against a beta the owner shipped with no
+-- data guarantee, holding unrenderable values cost more than it saved. The
+-- known contents were `rockType`/`wetsuit` — dev-seed keys never declared in
+-- TPlaceAttributes, which §2.2 declines to promote because it fixes the Canyon
+-- type at seven fields. A user who wants either defines a field and types it.
 
 -- ── place types ─────────────────────────────────────────────────────────────
 CREATE TABLE "place_types" (
@@ -186,8 +195,8 @@ UPDATE "places" SET "place_type_id" = 'b0000000-0000-4000-8000-000000000001';
 --   2. the seven grade columns, at the top level beside them, NULLs omitted
 --      (a stored null is not "no value" — it would render as an empty field
 --      and satisfy a "has a value" filter)
---   3. sources under _sources, and whatever else was in attributes under
---      _attributes, both in the reserved underscore namespace
+--   3. sources under _sources, in the reserved underscore namespace; every
+--      other attributes key dropped (see the header)
 UPDATE "places" SET "field_values" =
     COALESCE("attributes" -> 'customFields', '{}'::jsonb)
  || (CASE WHEN "v_grade"          IS NULL THEN '{}'::jsonb ELSE jsonb_build_object('v_grade', "v_grade") END)
@@ -198,9 +207,7 @@ UPDATE "places" SET "field_values" =
  || (CASE WHEN "num_abseils"      IS NULL THEN '{}'::jsonb ELSE jsonb_build_object('num_abseils', "num_abseils") END)
  || (CASE WHEN "longest_abseil_m" IS NULL THEN '{}'::jsonb ELSE jsonb_build_object('longest_abseil', "longest_abseil_m") END)
  || (CASE WHEN "attributes" -> 'sources' IS NULL THEN '{}'::jsonb
-          ELSE jsonb_build_object('_sources', "attributes" -> 'sources') END)
- || (CASE WHEN "attributes" - 'customFields' - 'sources' = '{}'::jsonb THEN '{}'::jsonb
-          ELSE jsonb_build_object('_attributes', "attributes" - 'customFields' - 'sources') END);
+          ELSE jsonb_build_object('_sources', "attributes" -> 'sources') END);
 
 -- Fail LOUDLY rather than leaving a place without a type. The FK below would
 -- report this as a constraint violation naming a column; this names the fault.

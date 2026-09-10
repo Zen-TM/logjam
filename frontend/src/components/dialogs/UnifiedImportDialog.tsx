@@ -349,11 +349,10 @@ function buildPlaceInput(
 // mergeable fields are the KEYS of the definitions the target type carries, an
 // open set that differs per user. So the label for a field is the DEFINITION'S
 // OWN label — which is better than a hand-written one anyway, because it is
-// what the user called the field — and only the two structural entries need
+// what the user called the field — and only the structural entry needs
 // spelling here.
 const STRUCTURAL_MERGE_LABELS: Record<string, string> = {
   notes: "Notes",
-  _attributes: "Custom attributes",
 };
 
 function mergeFieldLabel(

@@ -47,7 +47,7 @@ import type { TripLogCustomFieldDef } from "./tripLogFields.js";
  * filter that should find it and unfixable through a form that will not accept
  * it. Parking it keeps it visible and adoptable.
  *
- * INTERNAL KEYS (`_sources`, `_attributes`) are carried across untouched:
+ * INTERNAL KEYS (`_sources` today) are carried across untouched:
  * they are not user fields, no definition describes them, and they are exactly
  * the provenance a copy should keep. `_`-prefixed keys cannot collide with a
  * user key, because `makeCustomFieldKey` cannot produce one.

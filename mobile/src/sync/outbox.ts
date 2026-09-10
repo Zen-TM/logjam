@@ -529,8 +529,8 @@ const PLACE_UPDATE_COLUMNS: Record<string, ColumnSpec> = {
   // columns. Callers pass the WHOLE object — the server replaces it wholesale,
   // so an edit that drops a key another client put there loses it. Use
   // `setFieldValues` over the place's existing values rather than building a
-  // fresh object, which also keeps the internal `_sources` / `_attributes`
-  // entries that live in here now.
+  // fresh object, which also keeps the internal `_sources` entry that lives in
+  // here now.
   //
   // `foreignFields` is deliberately ABSENT and must stay absent: it is written
   // only by copy and by a type change, never by a user edit, and it is not in

@@ -194,7 +194,7 @@ model Place {
   /// at `attributes.customFields[key]` are HOISTED to the top level here — see
   /// the migration; a flat merge would have left them at
   /// `field_values.customFields.<key>` where nothing reads.
-  /// Keys starting with `_` are internal (`_sources`, `_attributes`) and cannot
+  /// Keys starting with `_` are internal (`_sources` today) and cannot
   /// collide with a user key: `makeCustomFieldKey` never produces one.
   fieldValues      Json           @default("{}") @map("field_values")
   /// Values that arrived on a COPY keyed by defs this owner does not have, or

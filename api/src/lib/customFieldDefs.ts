@@ -69,9 +69,9 @@ function isJsonObject(
 //
 // Values used to be NESTED, at `attributes.customFields[key]`, and are now at
 // the TOP level of `fieldValues` — the forward migration hoists them. The
-// internal `_`-prefixed entries (`_sources`, `_attributes`) are excluded here
-// because they are not fields: a delete would otherwise offer to strip the
-// source list off every place. Exported for unit testing.
+// internal `_`-prefixed entries (`_sources`) are excluded here because they are
+// not fields: a delete would otherwise offer to strip the source list off every
+// place. Exported for unit testing.
 export function placeCustomFieldsRecord(
   fieldValues: Prisma.JsonValue | null,
 ): Record<string, unknown> | null {
@@ -156,7 +156,7 @@ const placeEntity: EntityConfig = {
     return rows
       .filter((row) => hasValue(placeCustomFieldsRecord(row.fieldValues), key))
       .map((row): StripThunk => {
-        // Removes ONE key. The internal `_sources` / `_attributes` entries ride
+        // Removes ONE key. The internal `_sources` entry rides
         // in the same object and must survive — before the hoist they were
         // siblings of the customFields sub-object and survived structurally;
         // now they are siblings of the values themselves, so `setFieldValues`

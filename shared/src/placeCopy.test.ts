@@ -74,13 +74,17 @@ describe("reconcileCopiedFieldValues", () => {
   // copy that dropped it would lose where the place came from.
   it("carries internal keys across untouched", () => {
     const { fieldValues, foreignFields } = reconcileCopiedFieldValues({
-      fieldValues: { _sources: [["Wiki", "https://example.test/a"]], _attributes: { rockType: "sandstone" } },
+      fieldValues: {
+        _sources: [["Wiki", "https://example.test/a"]],
+        // Not a key the code knows by name: the filter is the `_` prefix.
+        _legacy: { note: "kept" },
+      },
       senderDefs: [],
       recipientDefs: [],
     });
     expect(fieldValues).toEqual({
       _sources: [["Wiki", "https://example.test/a"]],
-      _attributes: { rockType: "sandstone" },
+      _legacy: { note: "kept" },
     });
     expect(foreignFields).toEqual([]);
   });

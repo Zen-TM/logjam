@@ -42,9 +42,8 @@ describe("placeCustomFieldsRecord", () => {
     expect(
       placeCustomFieldsRecord({ _sources: [["Wiki", "http://x"]] }),
     ).toBeNull();
-    expect(
-      placeCustomFieldsRecord({ _attributes: { rockType: "sandstone" } }),
-    ).toBeNull();
+    // Not a key the code knows by name: the filter is the `_` prefix.
+    expect(placeCustomFieldsRecord({ _legacy: { note: "kept" } })).toBeNull();
     expect(
       placeCustomFieldsRecord({ _sources: [], water_level: "high" }),
     ).toEqual({ water_level: "high" });

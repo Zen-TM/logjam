@@ -11,7 +11,6 @@ import {
   isReservedFieldKey,
   isInternalFieldValueKey,
   SOURCES_FIELD_KEY,
-  LEGACY_ATTRIBUTES_FIELD_KEY,
   systemRowIds,
   assertSystemIdsAreUuidV4,
 } from "./placeTypes.js";
@@ -126,8 +125,8 @@ describe("reserved keys", () => {
 });
 
 describe("the internal `_` namespace", () => {
-  // THE INVARIANT THE WHOLE RESERVATION RESTS ON. `_sources` and `_attributes`
-  // are safe from user keys only because `makeCustomFieldKey` cannot produce a
+  // THE INVARIANT THE WHOLE RESERVATION RESTS ON. `_sources` is safe from user
+  // keys only because `makeCustomFieldKey` cannot produce a
   // leading underscore: it collapses every non-alphanumeric run to `_` and then
   // strips a leading and trailing one. Without this test that is a rule someone
   // has to remember; with it, breaking the slug function fails the build.
@@ -154,9 +153,8 @@ describe("the internal `_` namespace", () => {
     }
   });
 
-  it("covers the keys the migration parks data under", () => {
+  it("covers the key the migration parks data under", () => {
     expect(isInternalFieldValueKey(SOURCES_FIELD_KEY)).toBe(true);
-    expect(isInternalFieldValueKey(LEGACY_ATTRIBUTES_FIELD_KEY)).toBe(true);
   });
 
   it("does not claim an ordinary key", () => {

@@ -209,9 +209,9 @@ async function removeFieldDefById(
       await updateTripLocal(row.id, { customFields: remaining });
     } else {
       // `setFieldValues` removes the key and leaves everything else — including
-      // the internal `_sources` / `_attributes` entries, which live in the same
-      // object now rather than beside it. Rebuilding the object by hand here
-      // would drop them.
+      // the internal `_sources` entry, which lives in the same object now
+      // rather than beside it. Rebuilding the object by hand here would drop
+      // it.
       await updatePlaceLocal(row.id, {
         fieldValues: setFieldValues(row.values, { [key]: null }),
       });

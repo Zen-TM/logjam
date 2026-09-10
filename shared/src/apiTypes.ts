@@ -33,7 +33,7 @@ export type TPlace = {
   elevation: number | null;
   /** Type-specific values, keyed by CustomFieldDef.key. Replaces the seven
    *  grade columns and the free-form `attributes` blob; internal `_`-prefixed
-   *  keys (`_sources`, `_attributes`) are not user fields. */
+   *  keys (`_sources` today) are not user fields. */
   fieldValues: Record<string, unknown>;
   /** Values that came in on a copy keyed by definitions this owner does not
    *  have. OWNER-PRIVATE — never present on a place shared WITH the viewer. */
