@@ -329,7 +329,7 @@ export function PlaceFilterSheet({
         {/* Says where the missing axes went, so their absence reads as a
             decision rather than a gap. */}
         <Text style={styles.hint}>
-          Done, to do and shared are filtered by the tabs above.
+          Visited, not visited and shared are filtered by the tabs above.
         </Text>
 
         <SectionHeader label="Sort" />

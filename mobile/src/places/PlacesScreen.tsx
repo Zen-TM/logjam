@@ -5,7 +5,8 @@
 //
 // Built on the DESIGN.md skeleton (pinned hero + pinned filter rail + scrolling
 // list + one sheet), same as Saved and Logs. The rail's four buckets are a true
-// partition — every place is one of All/To do/Done/Shared — so it never hides
+// partition — every place is one of All/Not visited/Visited/Shared — so it
+// never hides
 // a row behind a combination the user has to reason about.
 //
 // Filtering shares the web panel's predicate (`passesPlaceFilters` in
@@ -501,8 +502,18 @@ export function PlacesScreen({
 
   const heroSegments: CapacitySegment[] = useMemo(
     () => [
-      { label: "Done", value: totals.done, color: placeHue.done, display: String(totals.done) },
-      { label: "To do", value: totals.todo, color: placeHue.todo, display: String(totals.todo) },
+      {
+        label: "Visited",
+        value: totals.done,
+        color: placeHue.done,
+        display: String(totals.done),
+      },
+      {
+        label: "Not visited",
+        value: totals.todo,
+        color: placeHue.todo,
+        display: String(totals.todo),
+      },
       {
         label: "Shared",
         value: totals.shared,

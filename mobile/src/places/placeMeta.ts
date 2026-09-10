@@ -24,8 +24,8 @@ export type PlaceStatusMeta = {
 };
 
 export const PLACE_STATUS_META: Record<PlaceStatus, PlaceStatusMeta> = {
-  done: { label: "Done", icon: "check-circle", hue: placeHue.done },
-  todo: { label: "To do", icon: "map-pin", hue: placeHue.todo },
+  done: { label: "Visited", icon: "check-circle", hue: placeHue.done },
+  todo: { label: "Not visited", icon: "map-pin", hue: placeHue.todo },
   shared: { label: "Shared", icon: "users", hue: placeHue.shared },
 };
 

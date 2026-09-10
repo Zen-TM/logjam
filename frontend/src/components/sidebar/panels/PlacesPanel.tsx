@@ -46,13 +46,15 @@ const ROPEWIKI_OPTIONS: { value: TFilters["ropewiki"]; label: string }[] = [
   { value: "unlinked", label: "Not linked" },
 ];
 
-// "Done" is the word the question gets asked in ("have I done Claustral?");
-// "Completion" is the label because that's what the analytics panel already
-// calls this exact measure (its ring counts places with >= 1 logged trip).
+// "Visited" rather than "Done": the measure is >= 1 logged trip and nothing
+// more, so a bailed descent counts and "Done" claimed otherwise. It also reads
+// on a campsite or a carpark, which "Done" stopped doing once a place was not
+// always a canyon. The filter keys stay `completion` / `done` / `not_done` —
+// they are the wire, and the analytics ring's name for this same measure.
 const COMPLETION_OPTIONS: { value: TFilters["completion"]; label: string }[] = [
   { value: "any", label: "Any" },
-  { value: "done", label: "Done" },
-  { value: "not_done", label: "Not done" },
+  { value: "done", label: "Visited" },
+  { value: "not_done", label: "Not visited" },
 ];
 
 // The V/A summary on a row. Reads the reserved canyon keys out of fieldValues;

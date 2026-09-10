@@ -242,7 +242,9 @@ export function placeMatchesSearch(
 // isOwned distinguishes the owner's own places from places shared with them.
 // It's structural (which list the place came from), so it can't be read off the
 // place — callers pass it per bucket.
-// "Done" = the viewer has run this place. Self-only: only readable for places
+// "Visited" = the viewer has at least one trip logged against this place, and
+// the label says exactly that: the predicate cannot tell a finished descent from
+// a bail, so "Done" overclaimed. Self-only: only readable for places
 // the viewer owns. A trip can only link to its own owner's places, so on a place
 // shared *with* the viewer `_count.tripLogLinks` is the OWNER's tally, not theirs —
 // reading it would answer the wrong question and leak how often that friend runs it.
