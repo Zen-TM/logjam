@@ -66,7 +66,7 @@ export type SavedSearchItem = {
   title: string;
   /** What kind of thing it is — "Place", "Waypoint". The row's only subtitle. */
   kindLabel: string;
-  /** Matched but never displayed: alt names, tags. */
+  /** Matched but never displayed: alt names. */
   alternates?: readonly string[];
   resolveBbox: () => Promise<Bbox | null>;
 };

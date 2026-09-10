@@ -76,11 +76,10 @@ describe("scrubStructure", () => {
   // grades included — and added `foreignFields`, which holds ANOTHER user's
   // labels and values. A crash report carrying either would leak more than the
   // notes key this list was written for.
-  it("censors a place's own field values, its tags and what arrived on a copy", () => {
+  it("censors a place's own field values and what arrived on a copy", () => {
     const input = {
       place: {
         fieldValues: { v_grade: 4, permit_number: "NP-1234" },
-        tags: ["carpark", "locked gate"],
         foreignFields: [{ key: "water", label: "Water level", value: "high" }],
         fieldDefsSnapshot: [{ key: "water", label: "Water level" }],
         placeTypeId: "type-1",
@@ -90,7 +89,6 @@ describe("scrubStructure", () => {
     expect(scrubStructure(input)).toEqual({
       place: {
         fieldValues: "[redacted]",
-        tags: "[redacted]",
         foreignFields: "[redacted]",
         fieldDefsSnapshot: "[redacted]",
         // Not sensitive: an id names a category, not a place.

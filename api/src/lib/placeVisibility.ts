@@ -60,7 +60,6 @@ export const SHAREE_VISIBLE_PLACE_FIELDS: readonly string[] = [
   "latitude",
   "longitude",
   "elevation",
-  "tags",
   // Place-level notes ARE shared (the hybrid model's central distinction —
   // per-TRIP notes are not).
   "notes",

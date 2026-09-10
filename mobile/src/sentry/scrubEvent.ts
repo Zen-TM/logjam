@@ -63,14 +63,13 @@ const SENSITIVE_KEYS = new Set([
   "notes",
   "displayname",
   // User-authored field LABELS and values ("permit number", "water level") are
-  // as sensitive as notes, and a place's tags are the user's own words about a
-  // place. `fieldvalues` also carries what used to be the seven grade columns,
-  // so this one key now covers everything a place records about itself.
+  // as sensitive as notes. `fieldvalues` also carries what used to be the seven
+  // grade columns, so this one key now covers everything a place records about
+  // itself.
   "fieldvalues",
   "customfields",
   "foreignfields",
   "fielddefssnapshot",
-  "tags",
   "authorization",
   "cookie",
 ]);

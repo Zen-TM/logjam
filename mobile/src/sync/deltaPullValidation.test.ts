@@ -77,7 +77,6 @@ const goodPlace = {
   placeTypeId: "b0000000-0000-4000-8000-000000000001",
   notes: null,
   elevation: null,
-  tags: [],
   fieldValues: {},
   ropeWikiId: null,
   forkedFromId: null,

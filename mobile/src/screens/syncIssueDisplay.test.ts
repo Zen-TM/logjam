@@ -420,7 +420,7 @@ describe("shelf copy", () => {
     // The rule is "a plural label ends in s, a singular one doesn't", which is
     // true of the whole map today and is what `isPluralLabel` reads. A future
     // label that breaks it (a "status") fails here rather than on a phone.
-    const plural = ["notes", "altNames", "tags", "placeIds", "customFields",
+    const plural = ["notes", "altNames", "placeIds", "customFields",
       "fieldValues"];
     // `types` is in here on purpose: the FIELD is plural and its LABEL — "trip
     // type" — is not, and the label is what the sentence has to agree with.

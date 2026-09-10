@@ -121,7 +121,6 @@ describe("logger redaction", () => {
                 notes: "abseil from the tree",
                 latitude: -33.5,
                 longitude: 150.4,
-                tags: ["locked gate"],
                 fieldValues: { access_beta: "gate code 1234" },
               },
             },
@@ -132,7 +131,7 @@ describe("logger redaction", () => {
     const op = (
       (out.req as { body: { ops: { fields: Record<string, unknown> }[] } }).body.ops
     )[0].fields;
-    for (const key of ["name", "notes", "latitude", "longitude", "tags", "fieldValues"]) {
+    for (const key of ["name", "notes", "latitude", "longitude", "fieldValues"]) {
       expect(op[key], `${key} leaked out of a push op`).toBe("[redacted]");
     }
     // The envelope is not sensitive and stays readable — an id and an entity
@@ -141,14 +140,13 @@ describe("logger redaction", () => {
     expect(body.body.ops[0].entity).toBe("place");
   });
 
-  // A place's TAGS are the user's own words about it, and a definition's LABEL
-  // is the same class of text on another route.
-  it("censors a place's tags and a field definition's label", () => {
+  // A definition's LABEL is the user's own words about a place, arriving on a
+  // route of its own.
+  it("censors a field definition's label", () => {
     const out = captureLog({
-      req: { body: { tags: ["leech hollow"], label: "Which slot for the exit" } },
+      req: { body: { label: "Which slot for the exit" } },
     });
     const body = (out.req as { body: Record<string, unknown> }).body;
-    expect(body.tags).toBe("[redacted]");
     expect(body.label).toBe("[redacted]");
   });
 

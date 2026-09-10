@@ -105,7 +105,6 @@ describe("PLACE_FIELDS (the push allowlist)", () => {
       "name",
       "notes",
       "placeTypeId",
-      "tags",
     ]);
   });
 

@@ -26,19 +26,21 @@ SET
 
 -- Everything a user typed. A place NAME is as sensitive as its notes under the
 -- NPWS guidance in CLAUDE.md — "Claustral" and "the one below the third
--- waterfall" are the same disclosure — and so are the free-text tags and the
--- field values. `field_values` holds what the user typed into every field they
--- defined, AND their source links and the legacy attributes bag; `foreign_fields`
--- holds the same thing copied from someone else, labels included. Both are as
--- sensitive as notes and neither is optional to scrub.
+-- waterfall" are the same disclosure — and so are the field values.
+-- `field_values` holds what the user typed into every field they defined, AND
+-- their source links and the legacy attributes bag; `foreign_fields` holds the
+-- same thing copied from someone else, labels included. Both are as sensitive
+-- as notes and neither is optional to scrub.
 --
--- `tags` joins `places` in phase 1c and the coverage test fails until it is
--- added here too — which is how these two arrived.
+-- The coverage test runs in BOTH directions, which is how `tags` left: dropping
+-- the column failed the "names only columns that exist" arm on the same run
+-- that dropped it, the way adding one fails the "covers every user-authored
+-- column" arm. Note that arm reads String/Json columns only — a numeric that
+-- needs scrubbing would have to be added here by hand.
 UPDATE places
 SET name = 'place-' || substring(id::text, 1, 8),
     "altNames" = '{}',
     notes = NULL,
-    tags = '{}',
     field_values = '{}',
     foreign_fields = NULL;
 

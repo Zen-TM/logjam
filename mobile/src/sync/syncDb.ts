@@ -42,6 +42,12 @@ import { OUTBOX_ENTITIES } from "./outboxTables";
  * to one `field_values_json`, gains a `place_type_id`, and `place_types`
  * arrives as a table of its own.
  *
+ * 10: `places` loses `tags_json`. Tags were the WAYPOINT's stand-in for a type
+ * and a place has a real one — the seed vocabulary was "abseil", "campsite",
+ * "carpark", "exit", which are type names. The column is dropped server-side in
+ * the same change, so a mirror still holding it would write a field no push op
+ * accepts.
+ *
  * 9: `custom_field_defs` carries `owner_id`. NULL means a SYSTEM definition,
  * and without the column the phone could not tell one from the user's own — so
  * it offered Rename and Delete on a built-in field, and the delete stripped the
@@ -57,7 +63,7 @@ import { OUTBOX_ENTITIES } from "./outboxTables";
  * rows of their own. `places` gains the two columns that came across with
  * them, `elevation` and `tags_json`.
  */
-export const MIRROR_SCHEMA_VERSION = 9;
+export const MIRROR_SCHEMA_VERSION = 10;
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 

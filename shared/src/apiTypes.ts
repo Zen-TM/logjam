@@ -31,8 +31,6 @@ export type TPlace = {
   /** Metres. Came in with the phase 1c waypoint fold — a canyon has never
    *  carried one, a marker usually does. */
   elevation: number | null;
-  /** Free-text tags, also from the fold. Not the place TYPE, which is a row. */
-  tags: string[];
   /** Type-specific values, keyed by CustomFieldDef.key. Replaces the seven
    *  grade columns and the free-form `attributes` blob; internal `_`-prefixed
    *  keys (`_sources`, `_attributes`) are not user fields. */

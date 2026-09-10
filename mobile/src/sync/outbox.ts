@@ -211,9 +211,9 @@ export async function deletePlaceLinkLocal(id: string): Promise<void> {
   scheduleMutationSync();
 }
 
-// tags is a list: the mirror stores it as JSON text while the OUTBOX carries
-// the real array, exactly as route geometry does, so a §6 conflict compares
-// arrays against the server's arrays rather than against our JSON encoding.
+// A string list: the mirror stores it as JSON text while the OUTBOX carries the
+// real array, exactly as route geometry does, so a §6 conflict compares arrays
+// against the server's arrays rather than against our JSON encoding.
 const stringListColumn = (column: string): ColumnSpec => ({
   column,
   encode: (value) => JSON.stringify(value ?? []),
@@ -520,7 +520,6 @@ const PLACE_UPDATE_COLUMNS: Record<string, ColumnSpec> = {
   // Folded in with the waypoints (phase 1c). `symbol` did not come: the icon
   // is the place TYPE's.
   elevation: "elevation",
-  tags: stringListColumn("tags_json"),
   altNames: {
     column: "alt_names_json",
     encode: (value) => JSON.stringify(value ?? []),
@@ -574,7 +573,6 @@ export type PlaceDraftFields = {
   notes?: string | null;
   /** Metres. Optional on every place; a dropped marker usually has one. */
   elevation?: number | null;
-  tags?: string[];
   /** Type-specific values, keyed by definition key — the seven grades
    *  included. Nulls are dropped rather than stored. */
   fieldValues?: Record<string, unknown>;
@@ -602,7 +600,6 @@ export async function createPlaceLocal(draft: PlaceDraftFields): Promise<string>
     altNames,
     ...(draft.notes != null && { notes: draft.notes }),
     ...(draft.elevation != null && { elevation: draft.elevation }),
-    ...(draft.tags?.length && { tags: draft.tags }),
     ...(Object.keys(fieldValues).length > 0 && { fieldValues }),
   };
 
@@ -620,10 +617,10 @@ export async function createPlaceLocal(draft: PlaceDraftFields): Promise<string>
     await db.runAsync(
       `INSERT INTO places
          (id, sync_role, name, latitude, longitude, alt_names_json,
-          place_type_id, notes, elevation, tags_json, field_values_json,
+          place_type_id, notes, elevation, field_values_json,
           field_defs_snapshot_json, foreign_fields_json, forked_from_id,
           created_at, updated_at, extra_json, dirty_fields_json)
-       VALUES (?, 'owner', ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?, NULL, ?)`,
+       VALUES (?, 'owner', ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?, NULL, ?)`,
       id,
       draft.name,
       draft.latitude,
@@ -632,7 +629,6 @@ export async function createPlaceLocal(draft: PlaceDraftFields): Promise<string>
       draft.placeTypeId,
       draft.notes ?? null,
       draft.elevation ?? null,
-      JSON.stringify(draft.tags ?? []),
       JSON.stringify(fieldValues),
       now,
       now,

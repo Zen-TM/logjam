@@ -32,7 +32,6 @@ import {
   asFieldValues,
   TRACK_MIME_TYPES,
   validatePlacePayload,
-  normalizePlaceTags,
 } from "@logjam/shared";
 import { serializeTrip, tripPlacesInclude } from "./tripLogsGlobal";
 
@@ -238,16 +237,6 @@ router.get(
 
 // ── POST /places ─────────────────────────────────────────────
 // Creates a new place
-/** The normalised tag list, or a 400. `validatePlacePayload` has already run
- * the same normaliser for its error message; this re-runs it for the VALUE,
- * because a tag list is stored trimmed and deduped rather than as typed.
- * Exported so the sync push path stores exactly what the REST path does. */
-export function normalizePlaceTagsOrThrow(value: unknown): string[] | undefined {
-  const parsed = normalizePlaceTags(value);
-  if ("error" in parsed) throw new AppError(400, parsed.error);
-  return parsed.tags;
-}
-
 router.post(
   "/",
   requireAuth,
@@ -262,7 +251,6 @@ router.post(
       placeTypeId,
       notes,
       elevation,
-      tags,
       linkedPlaceIds,
       fieldValues,
     } = req.body;
@@ -321,9 +309,6 @@ router.post(
           longitude,
           notes,
           elevation: elevation ?? null,
-          // Stored trimmed and deduped, never as typed. `validatePlacePayload`
-          // has already refused a malformed list.
-          tags: normalizePlaceTagsOrThrow(tags) ?? [],
           fieldValues: asFieldValues(fieldValues) as Prisma.InputJsonValue,
         },
       });
@@ -415,7 +400,6 @@ router.post(
         placeTypeId: typeResolution.placeTypeId,
         notes: place.notes,
         elevation: place.elevation,
-        tags: place.tags,
         fieldValues: reconciled.fieldValues as Prisma.InputJsonValue,
         foreignFields:
           reconciled.foreignFields.length > 0
@@ -567,7 +551,6 @@ router.patch(
       longitude,
       notes,
       elevation,
-      tags,
       linkedPlaceIds,
       fieldValues,
     } = req.body;
@@ -596,7 +579,6 @@ router.patch(
         ...(longitude !== undefined && { longitude }),
         ...(notes !== undefined && { notes }),
         ...(elevation !== undefined && { elevation }),
-        ...(tags !== undefined && { tags: normalizePlaceTagsOrThrow(tags) ?? [] }),
         ...(fieldValues !== undefined && {
           fieldValues: asFieldValues(fieldValues) as Prisma.InputJsonValue,
         }),

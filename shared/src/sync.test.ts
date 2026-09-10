@@ -162,7 +162,6 @@ describe("delta row parsers", () => {
     placeTypeId: "b0000000-0000-4000-8000-000000000001",
     notes: null,
     elevation: null,
-    tags: [],
     fieldValues: { v_grade: 4, a_grade: 3, commitment: 3, num_abseils: 6, hours: 7 },
     ropeWikiId: null,
     forkedFromId: null,

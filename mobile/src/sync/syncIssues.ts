@@ -555,9 +555,6 @@ export async function recreateFromDeadRemote(seq: number): Promise<string | null
         notes: pick<string>("notes"),
         elevation:
           typeof merged.elevation === "number" ? merged.elevation : null,
-        tags: Array.isArray(merged.tags)
-          ? merged.tags.filter((tag): tag is string => typeof tag === "string")
-          : [],
         // The recovered copy keeps the type it had. Falling back to Canyon
         // would file a recovered campsite under canyons — a recovery that
         // quietly changes what the thing IS is worse than one that fails.

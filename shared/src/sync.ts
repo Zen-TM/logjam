@@ -220,9 +220,6 @@ export type SyncDeltaPlaceRow = {
   notes: string | null;
   /** Metres, or null. Folded in with the waypoints in phase 1c. */
   elevation: number | null;
-  /** Free-text tags, also from the fold — NOT the place type, which is a row
-   *  of its own. */
-  tags: string[];
   /** Type-specific values, keyed by CustomFieldDef.key. Replaces the seven
    *  grade columns and the free-form `attributes` blob. */
   fieldValues: Record<string, unknown>;
@@ -486,7 +483,6 @@ const PLACE_ROW_SPEC: Record<string, FieldCheck> = {
   placeTypeId: isString,
   notes: nullable(isString),
   elevation: nullable(isNumber),
-  tags: arrayOf(isString),
   fieldValues: isPlainObject,
   ropeWikiId: nullable(isNumber),
   forkedFromId: nullable(isString),

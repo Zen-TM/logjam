@@ -60,7 +60,7 @@ import {
   serializeTrip,
   tripPlacesInclude,
 } from "./tripLogsGlobal";
-import { normalizePlaceTagsOrThrow, validatePlaceTextFields } from "./places";
+import { validatePlaceTextFields } from "./places";
 import { strandValuesOnTypeChange } from "../lib/placeCopy";
 import { serializeSharedPlace } from "../lib/placeVisibility";
 import {
@@ -751,7 +751,6 @@ export const PLACE_FIELDS = new Set([
   // the icon is the place TYPE's, and mobile's waypointSymbol.ts said outright
   // that nothing ever wrote the column.
   "elevation",
-  "tags",
 ]);
 const TRIP_FIELDS = new Set([
   "date",
@@ -958,10 +957,6 @@ async function applyPlaceOp(userId: string, op: PushOp): Promise<PushOpResult> {
         longitude: fields.longitude as number,
         notes: (fields.notes as string | null | undefined) ?? null,
         elevation: (fields.elevation as number | null | undefined) ?? null,
-        // Normalised, never taken as sent: `validatePlacePayload` has already
-        // refused a malformed list, and this is the one place the trimmed,
-        // deduped form is produced.
-        tags: normalizePlaceTagsOrThrow(fields.tags) ?? [],
         fieldValues: asFieldValues(fields.fieldValues) as Prisma.InputJsonValue,
       },
     });
@@ -1031,9 +1026,6 @@ async function applyPlaceOp(userId: string, op: PushOp): Promise<PushOpResult> {
       ...(fields.notes !== undefined && { notes: fields.notes as string | null }),
       ...(fields.elevation !== undefined && {
         elevation: fields.elevation as number | null,
-      }),
-      ...(fields.tags !== undefined && {
-        tags: normalizePlaceTagsOrThrow(fields.tags) ?? [],
       }),
       ...(fields.fieldValues !== undefined && {
         fieldValues: asFieldValues(fields.fieldValues) as Prisma.InputJsonValue,

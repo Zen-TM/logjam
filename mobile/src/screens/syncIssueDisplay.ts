@@ -64,7 +64,6 @@ const FIELD_LABEL: Record<string, string> = {
   placeIds: "linked places",
   elevation: "elevation",
   symbol: "symbol",
-  tags: "tags",
   color: "colour",
   latitude: "position",
   longitude: "position",

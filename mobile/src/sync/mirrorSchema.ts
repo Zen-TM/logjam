@@ -106,7 +106,6 @@ export const SYNC_TABLES: readonly TableSchema[] = [
       // Folded in from `waypoints` in phase 1c, along with the rows. `symbol`
       // did NOT come with them: the icon is the place TYPE's now.
       elevation: "REAL",
-      tags_json: "TEXT",
       // The seven grade columns and `attributes_json` collapsed into ONE JSON
       // column, keyed by definition key. That is the whole shape change of the
       // rework on this side: a campsite and a canyon are the same row now, and

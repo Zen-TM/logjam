@@ -7,7 +7,6 @@ import {
   validatePlacePayload,
   constraintFromDef,
   validateFieldValues,
-  normalizePlaceTags,
   canonicalLinkPair,
   normalizeLinkedPlaceIds,
 } from "./placeValidation.js";
@@ -292,37 +291,6 @@ describe("validateFieldValues", () => {
 
   it("ignores nulls, which mean 'unset' rather than a value", () => {
     expect(validateFieldValues({ v_grade: null }, SYSTEM_FIELD_DEFS)).toBeNull();
-  });
-});
-
-// Moved from waypointValidation.test.ts when waypoints folded into places.
-// The rules did not change; the noun did.
-describe("normalizePlaceTags", () => {
-  it("trims, keeps order, and dedupes case-insensitively", () => {
-    expect(normalizePlaceTags([" Carpark ", "exit", "CARPARK"])).toEqual({
-      error: "tags contains case-insensitive duplicates",
-    });
-    expect(normalizePlaceTags([" Carpark ", "exit"])).toEqual({
-      tags: ["Carpark", "exit"],
-    });
-  });
-
-  it("distinguishes undefined (leave alone) from null (clear)", () => {
-    expect(normalizePlaceTags(undefined)).toEqual({ tags: undefined });
-    expect(normalizePlaceTags(null)).toEqual({ tags: [] });
-  });
-
-  it("refuses an empty entry, an over-long one, and too many", () => {
-    expect(normalizePlaceTags([""]).error).toMatch(/must not be empty/);
-    expect(normalizePlaceTags(["x".repeat(41)]).error).toMatch(/at most 40/);
-    expect(
-      normalizePlaceTags(Array.from({ length: 13 }, (_, i) => `t${i}`)).error,
-    ).toMatch(/At most 12/);
-  });
-
-  it("refuses a non-array and non-string entries", () => {
-    expect(normalizePlaceTags("carpark").error).toBeTruthy();
-    expect(normalizePlaceTags([1]).error).toBeTruthy();
   });
 });
 

@@ -188,11 +188,6 @@ model Place {
   /// is not type-specific. Carried over from Waypoint, which is live on every
   /// waypoint surface today; dropping it in the fold would be silent data loss.
   elevation        Float?
-  /// Free-text labels, same shape as TripLog.types: a seed vocabulary the user
-  /// extends by typing. No tag registry — the vocabulary IS the used values.
-  /// Appearance no longer derives from these (a type carries the icon and
-  /// colour now); they are for filtering.
-  tags             String[]       @default([])
   notes            String?
   /// Type-specific values, keyed by `CustomFieldDef.key`. Replaces the seven
   /// grade columns AND the free-form `attributes` blob. Values that were nested

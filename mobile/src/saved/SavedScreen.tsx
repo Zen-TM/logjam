@@ -341,12 +341,9 @@ type SavedItem = {
    * revocable view of a row, this one gives away a copy for good.
    */
   sendCopy?: NonNullable<AssetActions["sendCopy"]>;
-  /**
-   * What the waypoint search matches against, and the tags its chip rail
-   * filters by. Only waypoints carry it — see the rail render below for why
-   * this is not a screen-wide search.
-   */
-  search?: { haystack: string; tags: string[] };
+  /** What the row's search matches against — lowercased, and wider than the
+   *  visible title. */
+  search?: { haystack: string };
 };
 
 export function SavedScreen({
@@ -1149,11 +1146,10 @@ export function SavedScreen({
       });
     }
 
-    // Every row is now searchable by name (item 8) — the waypoint rows above
-    // already set a richer haystack (name + notes + tags, notes deliberately
-    // searchable though never shown), so this only fills the other six kinds.
+    // Every row is searchable by name (item 8). A row that set a richer
+    // haystack of its own keeps it; this fills the rest.
     for (const row of rows) {
-      if (!row.search) row.search = { haystack: row.title.toLowerCase(), tags: [] };
+      if (!row.search) row.search = { haystack: row.title.toLowerCase() };
     }
 
     // The sync boundary, marked on the row — as a small cloud on what IS in the

@@ -3,10 +3,8 @@ import { StyleSheet, Text, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import {
   defsForType,
-  normalizePlaceTags,
   CANYON_FORM_FIELD_KEYS,
   numericFieldValue,
-  PLACE_TAG_SUGGESTIONS,
   setFieldValues as withFieldValues,
   SYSTEM_FIELD_DEFS,
   SYSTEM_PLACE_TYPE_IDS,
@@ -25,12 +23,11 @@ import {
   fieldValueStrings,
 } from "../customFields/fieldValueCoercion";
 import { useFieldDefs } from "../customFields/useFieldDefs";
-import { useMirrorPlaces, useMirrorPlaceTypes } from "../sync/useSyncQueries";
+import { useMirrorPlaceTypes } from "../sync/useSyncQueries";
 import { placeTypeFeatherIcon } from "./placeTypeIcon";
 import {
   BottomSheet,
   Button,
-  ChipPicker,
   DatePicker,
   ErrorBanner,
   Row,
@@ -119,7 +116,6 @@ export function PlaceEditSheet({
   const [hours, setHours] = useState("");
   const [notes, setNotes] = useState("");
   const [placeTypeId, setPlaceTypeId] = useState<string>(SYSTEM_PLACE_TYPE_IDS.canyon);
-  const [tags, setTags] = useState<string[]>([]);
   const [invalid, setInvalid] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [mode, setMode] = useState<Mode>("form");
@@ -164,7 +160,6 @@ export function PlaceEditSheet({
     // that is right most of the time beats a picker with nothing chosen. The
     // rail is right there to say otherwise.
     setPlaceTypeId(place?.placeTypeId ?? SYSTEM_PLACE_TYPE_IDS.canyon);
-    setTags(place?.tags ?? []);
     setMode("form");
     setEditingField(null);
     setDateFieldKey(null);
@@ -196,18 +191,6 @@ export function PlaceEditSheet({
     [placeTypes.data],
   );
 
-  /** The tag vocabulary: a seed list unioned with every tag already in use on
-   *  this device. There is no registry to curate — same rule as trip types. */
-  const allPlaces = useMirrorPlaces();
-  const tagOptions = useMemo(() => {
-    const used = new Set<string>(PLACE_TAG_SUGGESTIONS);
-    for (const row of allPlaces.data ?? []) {
-      for (const tag of row.tags) used.add(tag);
-    }
-    return [...used]
-      .sort((a, b) => a.localeCompare(b))
-      .map((tag) => ({ value: tag, label: tag }));
-  }, [allPlaces.data]);
   /**
    * The fields THIS type's form asks for.
    *
@@ -297,15 +280,6 @@ export function PlaceEditSheet({
       return;
     }
 
-    // Normalised HERE for the same reason the outbox validates before enqueue:
-    // the server refuses a malformed list, and a rejected op is a sync issue
-    // the user has to resolve by hand rather than a message they can act on.
-    const normalizedTags = normalizePlaceTags(tags);
-    if ("error" in normalizedTags) {
-      setInvalid(normalizedTags.error);
-      return;
-    }
-    const nextTags = normalizedTags.tags ?? [];
     setSaving(true);
     try {
       if (place) {
@@ -322,7 +296,6 @@ export function PlaceEditSheet({
         }
         if (draft.notes !== place.notes) changes.notes = draft.notes;
         if (placeTypeId !== place.placeTypeId) changes.placeTypeId = placeTypeId;
-        if (!sameList(nextTags, place.tags)) changes.tags = nextTags;
         // `fieldValues` is replaced wholesale by the server, so the edit is
         // built OVER the place's existing values — `_sources`, which only the
         // web writes, and any key another client added would otherwise be
@@ -356,7 +329,6 @@ export function PlaceEditSheet({
           altNames: draft.altNames,
           notes: draft.notes,
           placeTypeId,
-          ...(nextTags.length > 0 && { tags: nextTags }),
           fieldValues: withFieldValues(
             {},
             {
@@ -384,7 +356,6 @@ export function PlaceEditSheet({
     onFailed,
     onSaved,
     placeTypeId,
-    tags,
     typeFieldDefs,
   ]);
 
@@ -596,7 +567,7 @@ export function PlaceEditSheet({
         ) : null}
 
         {/* No SectionHeader: the field's own label already says "Notes", and
-            the pair printed it twice. Same reason Tags has none. */}
+            the pair printed it twice. */}
         <View style={styles.field}>
           <TextField
             label="Notes"
@@ -610,37 +581,6 @@ export function PlaceEditSheet({
           </Text>
         </View>
 
-        {/* TAGS. Type-neutral — a carpark tag means the same thing on a
-            marker and on a canyon — and the vocabulary is what is already in
-            use plus a seed list, never a closed enum. This is where the old
-            waypoint sheet's tags mode went. */}
-        {/* No SectionHeader: `ChipPicker` renders its own label, and the pair
-            printed "TAGS" twice. */}
-        <ChipPicker
-          label="Tags"
-          options={tagOptions}
-          selected={tags}
-          onToggle={(tag) =>
-            setTags((current) =>
-              current.includes(tag)
-                ? current.filter((existing) => existing !== tag)
-                : [...current, tag],
-            )
-          }
-          onAdd={(entry) => {
-            const tag = entry.trim();
-            // The server refuses case-insensitive duplicates, so a typed tag
-            // already on this place is a no-op rather than an add.
-            if (
-              !tag ||
-              tags.some((current) => current.toLowerCase() === tag.toLowerCase())
-            ) {
-              return;
-            }
-            setTags((current) => [...current, tag]);
-          }}
-          addPlaceholder="New tag"
-        />
 
         {/* Named for the TYPE, not for the user: on a Campsite these are
             Capacity and Is-a-cave, which are ours, not theirs. The header is

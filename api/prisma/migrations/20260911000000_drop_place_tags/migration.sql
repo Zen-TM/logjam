@@ -1,0 +1,26 @@
+-- Tags go away. They were the WAYPOINT's substitute for a type, and a place has
+-- a real one now.
+--
+-- The evidence is the seed vocabulary itself: `PLACE_TAG_SUGGESTIONS` was
+-- "abseil", "campsite", "carpark", "exit" — two of the four are place type
+-- names, and the other two are what a user would create a type for. Keeping
+-- both meant two overlapping classification axes with no rule saying which one
+-- answered "what kind of place is this", and the tag axis was the one that
+-- could not carry an icon, a colour or a field set.
+--
+-- `waypointTags.ts` already died in the 1c fold because it derived a marker's
+-- colour and glyph from a tag; this drops the column that made that necessary.
+--
+-- DATA LOSS, and deliberately un-preserved. The only writers were the mobile
+-- place sheet and the tag-bearing arms of POST/PATCH /places and the sync push
+-- — no importer ever wrote one (RopeWiki, CSV and GPX all leave `tags` alone),
+-- and the web app never shipped a tag editor at all. Logjam GPS is unreleased,
+-- so the only rows that can carry a tag are the operator's own dev data.
+-- Nothing is migrated into notes or into `foreign_fields`: parking a value the
+-- user cannot act on is the objection that killed the notes-dump in the copy
+-- design, and it applies to a self-inflicted one just as well.
+--
+-- Expand/contract (api/CLAUDE.md) DOES apply cleanly here, unlike 1a/1b/1c: an
+-- image that still selects `tags` breaks, so this is the contract half and the
+-- code that stopped reading the column ships first.
+ALTER TABLE "places" DROP COLUMN "tags";

@@ -536,14 +536,14 @@ async function main() {
   //                                mirrored place_shares row.
   //
   // `symbol` is gone with the fold — the icon is the place TYPE's now — and the
-  // free-text tags came across unchanged.
+  // notes came across unchanged.
   await prisma.place.createMany({
     data: [
-      { id: wpid(1), ownerId: ALICE_ID, placeTypeId: SYSTEM_PLACE_TYPE_IDS.marker, name: "Grand Canyon carpark", latitude: -33.6501, longitude: 150.3122, elevation: 1010, tags: ["carpark", "access"] },
-      { id: wpid(2), ownerId: ALICE_ID, placeTypeId: SYSTEM_PLACE_TYPE_IDS.marker, name: "Claustral first abseil", latitude: -33.5611, longitude: 150.4041, elevation: 880, notes: "Tree anchor on the true left.", tags: ["abseil"] },
+      { id: wpid(1), ownerId: ALICE_ID, placeTypeId: SYSTEM_PLACE_TYPE_IDS.marker, name: "Grand Canyon carpark", latitude: -33.6501, longitude: 150.3122, elevation: 1010 },
+      { id: wpid(2), ownerId: ALICE_ID, placeTypeId: SYSTEM_PLACE_TYPE_IDS.marker, name: "Claustral first abseil", latitude: -33.5611, longitude: 150.4041, elevation: 880, notes: "Tree anchor on the true left." },
       { id: wpid(3), ownerId: ALICE_ID, placeTypeId: SYSTEM_PLACE_TYPE_IDS.marker, name: "Ranger station", latitude: -33.7188, longitude: 150.3099 },
-      { id: wpid(4), ownerId: BOB_ID, placeTypeId: SYSTEM_PLACE_TYPE_IDS.marker, name: "Coin Slot pothole", latitude: -33.1231, longitude: 150.3288, elevation: 720, notes: "Bob's note — a sharee must not be able to edit this.", tags: ["hazard"] },
-      { id: wpid(5), ownerId: BOB_ID, placeTypeId: SYSTEM_PLACE_TYPE_IDS.marker, name: "Galah exit gully", latitude: -33.2521, longitude: 150.3044, tags: ["exit"] },
+      { id: wpid(4), ownerId: BOB_ID, placeTypeId: SYSTEM_PLACE_TYPE_IDS.marker, name: "Coin Slot pothole", latitude: -33.1231, longitude: 150.3288, elevation: 720, notes: "Bob's note — a sharee must not be able to edit this." },
+      { id: wpid(5), ownerId: BOB_ID, placeTypeId: SYSTEM_PLACE_TYPE_IDS.marker, name: "Galah exit gully", latitude: -33.2521, longitude: 150.3044 },
     ],
   });
 

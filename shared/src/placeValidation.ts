@@ -146,7 +146,6 @@ export type PlaceFieldPayload = {
   /** Metres. Optional on every place — a canyon has never carried one and a
    *  GPX waypoint usually does. */
   elevation?: unknown;
-  tags?: unknown;
   /** Type-specific values. Validated against the type's DEFINITIONS, which the
    *  caller supplies — this module has no way to load them. */
   fieldValues?: unknown;
@@ -160,9 +159,8 @@ export type PlaceFieldPayload = {
  *   and in range.
  * - `requireCoords: false` (patch) validates coordinates only when supplied.
  *
- * `elevation` and `tags` came from the waypoint payload in the phase 1c fold
- * and keep their old rules verbatim: explicit null clears either, and a tag
- * list is normalised by `normalizePlaceTags` (below) rather than re-parsed.
+ * `elevation` came from the waypoint payload in the phase 1c fold and keeps its
+ * old rule verbatim: an explicit null clears it.
  *
  * `fieldValues` is validated only when `opts.defs` is given. The definitions
  * cannot be reached from here — they are rows — so a caller that has them
@@ -194,9 +192,6 @@ export function validatePlacePayload(
       return "elevation must be a number";
     }
   }
-
-  const normalizedTags = normalizePlaceTags(payload.tags);
-  if ("error" in normalizedTags) return normalizedTags.error;
 
   if (opts.defs && payload.fieldValues !== undefined) {
     if (
@@ -246,9 +241,6 @@ export function invalidPlaceFields(
   ) {
     invalid.push("elevation");
   }
-  if ("tags" in fields && "error" in normalizePlaceTags(fields.tags)) {
-    invalid.push("tags");
-  }
   // An out-of-range VALUE names `fieldValues`, not the key inside it: the whole
   // blob is one dirty field on the wire, so that is the granularity the client
   // can act on when it decides which parked fields to resend.
@@ -259,75 +251,6 @@ export function invalidPlaceFields(
     }
   }
   return invalid;
-}
-
-// ── tags ────────────────────────────────────────────────────────────────────
-//
-// Moved here when waypoints folded into places (phase 1c). Tags were a
-// waypoint's only free-text vocabulary and are now a place's; the rules are
-// unchanged, the noun is not. `waypointTags.ts` is GONE with the fold — it
-// derived a colour and a glyph from a tag, which was a workaround for a
-// waypoint having no type to hang an icon off. A place has one.
-
-export const PLACE_TAG_MAX_LENGTH = 40;
-export const MAX_TAGS_PER_PLACE = 12;
-
-/**
- * Built-in tag suggestions. Exactly the TRIP_TYPE_SUGGESTIONS contract: the UI
- * unions these with the distinct tags already on the user's own places, and
- * free text is always allowed. A seed vocabulary, not an enum — there is no tag
- * registry to create, rename or delete.
- */
-export const PLACE_TAG_SUGGESTIONS = [
-  "abseil",
-  "campsite",
-  "carpark",
-  "exit",
-] as const;
-
-/**
- * Normalise a tags array: strings only, trimmed, non-empty, deduped
- * case-insensitively, order preserved, capped.
- *
- * Pure and shared because the mobile outbox validates BEFORE enqueue — a queued
- * op the server would reject is a sync issue the user has to resolve by hand,
- * offline, in a gorge.
- *
- * undefined → undefined (PATCH: leave unchanged); null → [] (clears).
- */
-export function normalizePlaceTags(
-  value: unknown,
-): { tags: string[] | undefined } | { error: string } {
-  if (value === undefined) return { tags: undefined };
-  if (value === null) return { tags: [] };
-  if (!Array.isArray(value)) {
-    return { error: "tags must be an array of strings or null" };
-  }
-
-  const tags: string[] = [];
-  const seen = new Set<string>();
-  for (const item of value) {
-    if (typeof item !== "string") {
-      return { error: "tags must be an array of strings" };
-    }
-    const trimmed = item.trim();
-    if (trimmed.length === 0) return { error: "tags entries must not be empty" };
-    if (trimmed.length > PLACE_TAG_MAX_LENGTH) {
-      return {
-        error: `tags entries must be at most ${PLACE_TAG_MAX_LENGTH} characters`,
-      };
-    }
-    const key = trimmed.toLowerCase();
-    if (seen.has(key)) {
-      return { error: "tags contains case-insensitive duplicates" };
-    }
-    seen.add(key);
-    tags.push(trimmed);
-  }
-  if (tags.length > MAX_TAGS_PER_PLACE) {
-    return { error: `At most ${MAX_TAGS_PER_PLACE} tags per place` };
-  }
-  return { tags };
 }
 
 /** How many other places one place may be linked to. The old

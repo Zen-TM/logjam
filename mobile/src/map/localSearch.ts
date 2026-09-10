@@ -21,7 +21,7 @@ export const LOCAL_QUERY_MIN_LENGTH = 2;
 export type LocalSearchCandidate<T> = {
   /** What the user reads and, first of all, what they are typing. */
   title: string;
-  /** Also matched, never displayed as the match: alt names, tags. */
+  /** Also matched, never displayed as the match: alt names. */
   alternates?: readonly string[];
   value: T;
 };

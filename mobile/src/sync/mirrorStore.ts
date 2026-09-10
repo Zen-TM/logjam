@@ -47,7 +47,7 @@ function splitExtras<Row extends Record<string, unknown>>(
 
 const PLACE_KNOWN = [
   "id", "syncRole", "name", "altNames", "latitude", "longitude",
-  "placeTypeId", "notes", "elevation", "tags", "fieldValues",
+  "placeTypeId", "notes", "elevation", "fieldValues",
   "fieldDefsSnapshot", "foreignFields", "forkedFromId", "createdAt",
   "updatedAt",
 ] as const;
@@ -101,10 +101,10 @@ export async function upsertPlace(
   await db.runAsync(
     `INSERT OR REPLACE INTO places
        (id, sync_role, name, latitude, longitude, alt_names_json,
-        place_type_id, notes, elevation, tags_json, field_values_json,
+        place_type_id, notes, elevation, field_values_json,
         field_defs_snapshot_json, foreign_fields_json, forked_from_id,
         created_at, updated_at, extra_json, dirty_fields_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     row.id,
     row.syncRole,
     row.name,
@@ -114,7 +114,6 @@ export async function upsertPlace(
     row.placeTypeId,
     row.notes,
     row.elevation ?? null,
-    JSON.stringify(row.tags ?? []),
     JSON.stringify(row.fieldValues ?? {}),
     // Present only on a place of a type this account does not own — a shared
     // place of the sender's own type. Otherwise the viewer holds the
@@ -635,7 +634,6 @@ type PlaceRow = {
   place_type_id: string;
   notes: string | null;
   elevation: number | null;
-  tags_json: string | null;
   field_values_json: string | null;
   field_defs_snapshot_json: string | null;
   foreign_fields_json: string | null;
@@ -679,8 +677,8 @@ function parseJson<T>(value: string | null, fallback: T): T {
   }
 }
 
-/** Tolerant of the pre-tags rows an upgraded install still holds (null column
- * reads as an empty list, never as a crash on the map screen). */
+/** Tolerant of a null column, which reads as an empty list rather than a crash
+ * on the map screen. */
 function parseStringList(raw: string | null): string[] {
   if (!raw) return [];
   try {
@@ -708,7 +706,6 @@ function rowToPlace(row: PlaceRow): MirrorPlace {
     placeTypeId: row.place_type_id,
     notes: row.notes,
     elevation: row.elevation,
-    tags: parseStringList(row.tags_json),
     fieldValues: parseJson(row.field_values_json, {}),
     fieldDefsSnapshot: row.field_defs_snapshot_json
       ? parseJson(row.field_defs_snapshot_json, [])
