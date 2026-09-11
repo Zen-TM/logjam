@@ -637,6 +637,7 @@ type PlaceRow = {
   field_values_json: string | null;
   field_defs_snapshot_json: string | null;
   foreign_fields_json: string | null;
+  forked_from_id: string | null;
   created_at: string | null;
   updated_at: string | null;
   extra_json: string | null;
@@ -644,6 +645,11 @@ type PlaceRow = {
 
 export type MirrorPlace = TPlace & {
   syncRole: "owner" | "shared";
+  /** The place this one was COPIED from, and null otherwise — a copy is the
+   *  only writer. It is how a screen tells the two causes of `foreignFields`
+   *  apart: a copy carried the sender's values in, a type change stranded the
+   *  owner's own. Owner-private, like everything else on that path. */
+  forkedFromId: string | null;
   /** Definitions for a shared place of a type this account does not own, so
    *  its values render with labels rather than bare keys. Absent otherwise. */
   fieldDefsSnapshot?: {
@@ -713,6 +719,7 @@ function rowToPlace(row: PlaceRow): MirrorPlace {
     foreignFields: row.foreign_fields_json
       ? parseJson(row.foreign_fields_json, [])
       : null,
+    forkedFromId: row.forked_from_id,
     ropeWikiId: (extras.ropeWikiId as number | null) ?? null,
     createdAt: row.created_at ?? "",
     updatedAt: row.updated_at ?? "",

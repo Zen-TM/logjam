@@ -17,6 +17,7 @@ import {
   Clipboard,
   Linking,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -24,7 +25,7 @@ import {
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import {
-  numericFieldValue,
+  isReservedFieldKey,
   userFieldValues,
   distinctTripTypes,
   formatCanyonGrade,
@@ -44,6 +45,7 @@ import {
 import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
 import { removeSharedPlace } from "../sharing/removeShare";
 import { useFieldDefs } from "../customFields/useFieldDefs";
+import { ATTRIBUTE_NOUN } from "../customFields/CustomFieldsEditor";
 import { useConnectivity } from "../map/connectivity";
 import { MediaStrip } from "../media/MediaStrip";
 import { resolveRouteAttachmentBbox } from "../media/routeAttachmentBbox";
@@ -53,7 +55,6 @@ import {
   fontSize,
   fontWeight,
   lineHeight,
-  radius,
   spacing,
   surface,
   theme,
@@ -231,6 +232,16 @@ export function PlaceDetailScreen({
    *  so a sharee's place has none and this section does not render. */
   const foreignFields = place.foreignFields ?? [];
   const foreignItem = foreignFields.find((item) => item.key === foreignKey) ?? null;
+  // Which of the two writers put them there. `forkedFromId` is set only by a
+  // copy, so its absence means the other one — a type change.
+  const isCopied = place.forkedFromId != null;
+  // A BUILT-IN KEY CANNOT BE ADOPTED, and the server says so with a 409: the
+  // system definitions own those keys, and a user definition over one would
+  // give the place two writers for it. Offering the action anyway meant the
+  // only way to find out was to tap it and be told no. Nothing is lost by the
+  // refusal — a built-in comes home by itself when the place is put back on a
+  // type that defines it (`strandValuesOnTypeChange`).
+  const foreignIsBuiltIn = foreignItem != null && isReservedFieldKey(foreignItem.key);
 
   // The user-visible values, internal `_`-prefixed entries excluded. The
   // definitions that label them are the viewer's own — or, for a place shared
@@ -259,25 +270,19 @@ export function PlaceDetailScreen({
       .map(([key, value]) => [humanizeFieldKey(key), value] as const),
   ];
 
-  // Grade is in the hero pill row, a few pixels above — no need to state it
-  // twice in a row.
+  // OVERVIEW IS WHAT EVERY PLACE HAS, and that is only its position.
   //
-  // These four are the canyon scalars, read from fieldValues by their reserved
-  // keys. A place of a type that carries none of them simply gets no stats, and
-  // its own fields show in the list above instead — no special case for either.
+  // It used to promote four canyon scalars — Rating, Abseils, Longest drop,
+  // Hours — into stat tiles by reading their reserved keys directly. Three
+  // things were wrong with that. They are not universal (a campsite has no
+  // longest drop, so the section's content depended on which type you were
+  // looking at while its heading did not); they were ALREADY listed below in
+  // the type's own attribute table, so a canyon printed each of them twice; and
+  // "Rating" was a bespoke relabelling of a definition whose label is
+  // "Quality", so the same field had two names on one screen. Everything a type
+  // records now renders in one place, under the type's own heading, by the one
+  // rule.
   const stats: Stat[] = [];
-  const quality = numericFieldValue(place.fieldValues, "quality");
-  const numAbseils = numericFieldValue(place.fieldValues, "num_abseils");
-  const longestAbseil = numericFieldValue(place.fieldValues, "longest_abseil");
-  const hours = numericFieldValue(place.fieldValues, "hours");
-  if (quality != null) stats.push({ label: "Rating", value: `${quality}/5` });
-  if (numAbseils != null) {
-    stats.push({ label: "Abseils", value: String(numAbseils) });
-  }
-  if (longestAbseil != null) {
-    stats.push({ label: "Longest drop", value: `${longestAbseil} m` });
-  }
-  if (hours != null) stats.push({ label: "Hours", value: String(hours) });
   const position = `${place.latitude.toFixed(5)}, ${place.longitude.toFixed(5)}`;
   const copyPosition = () => {
     // RN core Clipboard: deprecated upstream but still shipped, and it needs no
@@ -440,6 +445,66 @@ export function PlaceDetailScreen({
           onPress={openInMapsApp}
         />
 
+        {customFields.length > 0 ? (
+          <>
+            {/* Named for the TYPE, like the form and the filter sheet: on a
+                campsite these are Capacity and Is-a-cave, which are the app's,
+                not the user's. */}
+            <SectionHeader label={`${placeTypeName} ${ATTRIBUTE_NOUN.many}`} />
+            <View style={styles.fieldCard}>
+              {customFields.map(([label, value], index) => (
+                <View
+                  key={label}
+                  style={[
+                    styles.fieldRow,
+                    index === customFields.length - 1 ? styles.fieldRowLast : null,
+                  ]}
+                >
+                  <Text style={styles.fieldKey}>{label}</Text>
+                  <Text style={styles.fieldValue}>{formatFieldValue(value)}</Text>
+                </View>
+              ))}
+            </View>
+          </>
+        ) : null}
+
+        {isOwner && foreignFields.length > 0 ? (
+          <>
+            <SectionHeader
+              label={`Doesn\u2019t fit this type · ${foreignFields.length}`}
+            />
+            {/* Named for the CONDITION, not the cause, because there are two of
+                them: a type change strands what the new type has no definition
+                for, and a copy carries values keyed by the sender's. "Came with
+                this place" was only ever true of the second. The sentence below
+                names whichever one applies. */}
+            <Text style={styles.muted}>
+              {isCopied
+                ? `These came across when you copied this place. Tap one to decide what to do with it.`
+                : `These are left over from when you changed this place\u2019s type. Tap one to decide what to do with it.`}
+            </Text>
+            {/* The same two-column table the type's own attributes use, so a
+                value reads the same whichever side of the line it is on — with
+                a chevron, because unlike those this one has a decision on it. */}
+            {foreignFields.map((item, index) => (
+              <Pressable
+                key={item.key}
+                onPress={() => setForeignKey(item.key)}
+                style={[
+                  styles.fieldRow,
+                  index === foreignFields.length - 1 ? styles.fieldRowLast : null,
+                ]}
+              >
+                <Text style={styles.fieldKey}>{item.label}</Text>
+                <View style={styles.foreignValue}>
+                  <Text style={styles.fieldValue}>{foreignValueText(item.value)}</Text>
+                  <Feather name="chevron-right" size={18} color={theme.textMuted} />
+                </View>
+              </Pressable>
+            ))}
+          </>
+        ) : null}
+
         <SectionHeader label={place.notes ? "Notes · visible to anyone you share with" : "Notes"} />
         {place.notes ? (
           <Text style={styles.notes}>{place.notes}</Text>
@@ -592,25 +657,6 @@ export function PlaceDetailScreen({
 
             Owner-private: a place shared WITH someone carries none of this, so
             the labels and values of whoever they came from stop here. */}
-        {isOwner && foreignFields.length > 0 ? (
-          <>
-            <SectionHeader label={`Came with this place · ${foreignFields.length}`} />
-            <Text style={styles.muted}>
-              Recorded under fields you don&rsquo;t have. Keep one as a field of
-              your own, write it into the notes, or discard it.
-            </Text>
-            {foreignFields.map((item) => (
-              <Row
-                key={item.key}
-                icon="inbox"
-                title={item.label}
-                subtitle={foreignValueText(item.value)}
-                onPress={() => setForeignKey(item.key)}
-              />
-            ))}
-          </>
-        ) : null}
-
         {/* Your own history here — the half a "done" badge can't tell you. Only
             ever your own trips: another person's visits to a place they shared
             with you are theirs, and never reach this device. */}
@@ -639,23 +685,6 @@ export function PlaceDetailScreen({
               />
             ))
         )}
-
-        {customFields.length > 0 ? (
-          <>
-            {/* Named for the TYPE, like the form and the filter sheet: on a
-                campsite these are Capacity and Is-a-cave, which are the app's,
-                not the user's. */}
-            <SectionHeader label={`${placeTypeName} fields`} />
-            <View style={styles.fieldCard}>
-              {customFields.map(([label, value]) => (
-                <View key={label} style={styles.fieldRow}>
-                  <Text style={styles.fieldKey}>{label}</Text>
-                  <Text style={styles.fieldValue}>{formatFieldValue(value)}</Text>
-                </View>
-              ))}
-            </View>
-          </>
-        ) : null}
 
         {isOwner ? (
           <>
@@ -814,27 +843,40 @@ export function PlaceDetailScreen({
       <BottomSheet
         visible={foreignItem !== null}
         onClose={() => (resolvingForeign ? undefined : setForeignKey(null))}
-        title={foreignItem?.label ?? "Field"}
+        // The value's own LABEL used to be the title, with the bare value as
+        // the only body — a panel headed "A grade" over a lone "4" reads as a
+        // formatting accident rather than a question. The title says what the
+        // panel is for, and the label/value pair is shown as the same two-column
+        // row it has in the table it was tapped in, so the thing being decided
+        // about is recognisably the thing that was tapped.
+        title="What should this become?"
       >
         <View style={styles.sheetBody}>
-          <Text style={styles.muted}>
-            {foreignValueText(foreignItem?.value)}
-          </Text>
+          <View style={[styles.fieldRow, styles.fieldRowLast]}>
+            <Text style={styles.fieldKey}>{foreignItem?.label}</Text>
+            <Text style={styles.fieldValue}>{foreignValueText(foreignItem?.value)}</Text>
+          </View>
           <Row
             icon="plus-circle"
-            title="Keep as one of my fields"
+            title={`Create a new ${ATTRIBUTE_NOUN.one} for this place type`}
+            // No explanation line: the three titles say what they do, and a
+            // sentence under each turned a three-item menu into a wall. The
+            // slot is kept for the two things the user cannot see — no
+            // connection, and a name the app owns.
             subtitle={
-              online
-                ? "Adds it to this place's type, with this value filled in."
-                : "Needs a connection"
+              !online
+                ? "Needs a connection"
+                : foreignIsBuiltIn
+                  ? "Built in — switch the type back and it returns on its own"
+                  : undefined
             }
-            disabled={!online || resolvingForeign}
+            disabled={!online || resolvingForeign || foreignIsBuiltIn}
             onPress={() => runForeignAction("adopt")}
           />
           <Row
             icon="file-text"
-            title="Add to notes"
-            subtitle={online ? "Kept as a line of prose." : "Needs a connection"}
+            title="Add to notes as text"
+            subtitle={online ? undefined : "Needs a connection"}
             disabled={!online || resolvingForeign}
             onPress={() => runForeignAction("notes")}
           />
@@ -842,7 +884,7 @@ export function PlaceDetailScreen({
             icon="trash-2"
             hue={theme.warning}
             title="Discard"
-            subtitle={online ? "Removes this value." : "Needs a connection"}
+            subtitle={online ? undefined : "Needs a connection"}
             disabled={!online || resolvingForeign}
             // The only one of the three that LOSES something, one tap inside a
             // sheet one tap from a row. Everything else destructive in this app
@@ -1010,7 +1052,9 @@ function PlaceSharingSection({
 }
 
 function tickLabel(trips: number): string {
-  return trips === 1 ? "Done · 1 trip" : `Done · ${trips} trips`;
+  // "Visited", like the Places rail and the filter sheet. This chip was the one
+  // place "Done" survived the rename, directly under a list that said Visited.
+  return trips === 1 ? "Visited · 1 trip" : `Visited · ${trips} trips`;
 }
 
 /** Fallback label for a value whose DEFINITION is gone — deleted on another
@@ -1037,15 +1081,24 @@ const styles = StyleSheet.create({
   notes: { color: theme.textPrimary, fontSize: fontSize.base, lineHeight: lineHeight.body },
   spinner: { alignSelf: "flex-start" },
   sheetBody: { gap: spacing(1) },
-  fieldCard: {
-    backgroundColor: surface.card,
-    borderWidth: 1,
-    borderColor: surface.border,
-    borderRadius: radius.lg,
-    padding: spacing(1.5),
-    gap: spacing(1),
+  // A TABLE, NOT A CARD. The filled card read as a control — it had the
+  // surface, border and radius every tappable thing on this screen has — so a
+  // list of facts invited a tap that does nothing. And with the rows only
+  // spaced apart, a long label and a right-aligned value had nothing but white
+  // space between them, which is hard to track across on a phone. Hairline
+  // rules per row give the eye the line to follow and cost no colour.
+  fieldCard: { gap: 0 },
+  fieldRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "baseline",
+    gap: spacing(2),
+    paddingVertical: spacing(0.875),
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: surface.border,
   },
-  fieldRow: { flexDirection: "row", justifyContent: "space-between", gap: spacing(2) },
+  fieldRowLast: { borderBottomWidth: 0 },
+  foreignValue: { flexDirection: "row", alignItems: "center", gap: spacing(0.75), flexShrink: 1 },
   fieldKey: { color: theme.textMuted, fontSize: fontSize.sm, flexShrink: 1 },
   fieldValue: {
     color: theme.textPrimary,

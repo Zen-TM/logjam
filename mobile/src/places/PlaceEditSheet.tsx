@@ -3,8 +3,6 @@ import { StyleSheet, Text, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import {
   defsForType,
-  CANYON_FORM_FIELD_KEYS,
-  numericFieldValue,
   setFieldValues as withFieldValues,
   SYSTEM_FIELD_DEFS,
   SYSTEM_PLACE_TYPE_IDS,
@@ -16,11 +14,16 @@ import {
 import { fontSize, spacing, theme } from "../theme";
 import type { MirrorPlace } from "../sync/mirrorStore";
 import { createPlaceLocal, updatePlaceLocal } from "../sync/outbox";
-import { CustomFieldForm, CustomFieldList } from "../customFields/CustomFieldsEditor";
+import {
+  ATTRIBUTE_NOUN,
+  CustomFieldList,
+  useCustomFieldForm,
+} from "../customFields/CustomFieldsEditor";
 import { CustomFieldValueInputs } from "../customFields/CustomFieldValues";
 import {
   coerceCustomFields,
   fieldValueStrings,
+  withoutClearedFields,
 } from "../customFields/fieldValueCoercion";
 import { useFieldDefs } from "../customFields/useFieldDefs";
 import { useMirrorPlaceTypes } from "../sync/useSyncQueries";
@@ -107,13 +110,6 @@ export function PlaceEditSheet({
   const [altNames, setAltNames] = useState("");
   const [latitude, setLatitude] = useState("");
   const [longitude, setLongitude] = useState("");
-  const [vGrade, setVGrade] = useState("");
-  const [aGrade, setAGrade] = useState("");
-  const [commitment, setCommitment] = useState("");
-  const [quality, setQuality] = useState("");
-  const [numAbseils, setNumAbseils] = useState("");
-  const [longestAbseil, setLongestAbseil] = useState("");
-  const [hours, setHours] = useState("");
   const [notes, setNotes] = useState("");
   const [placeTypeId, setPlaceTypeId] = useState<string>(SYSTEM_PLACE_TYPE_IDS.canyon);
   const [invalid, setInvalid] = useState<string | null>(null);
@@ -145,16 +141,8 @@ export function PlaceEditSheet({
     // is trimmed, because a map press carries fifteen meaningless decimals.
     setLatitude(place ? numberText(place.latitude) : seedCoord(initialCoords?.latitude));
     setLongitude(place ? numberText(place.longitude) : seedCoord(initialCoords?.longitude));
-    // The seven grades are FIELD VALUES now, read by their reserved keys.
-    setVGrade(numberText(numericFieldValue(place?.fieldValues, "v_grade")));
-    setAGrade(numberText(numericFieldValue(place?.fieldValues, "a_grade")));
-    setCommitment(numberText(numericFieldValue(place?.fieldValues, "commitment")));
-    setQuality(numberText(numericFieldValue(place?.fieldValues, "quality")));
-    setNumAbseils(numberText(numericFieldValue(place?.fieldValues, "num_abseils")));
-    setLongestAbseil(
-      numberText(numericFieldValue(place?.fieldValues, "longest_abseil")),
-    );
-    setHours(numberText(numericFieldValue(place?.fieldValues, "hours")));
+    // The grades are ordinary field values, seeded by the one path every other
+    // field uses — there is no second reader for them any more.
     setNotes(place?.notes ?? "");
     // A new place starts as a CANYON: this is a canyoning app, and a default
     // that is right most of the time beats a picker with nothing chosen. The
@@ -176,8 +164,6 @@ export function PlaceEditSheet({
     setLongitude(seedCoord(pickedCoords.longitude));
   }, [pickedCoords]);
 
-  const isCanyon = placeTypeId === SYSTEM_PLACE_TYPE_IDS.canyon;
-
   /** Every type is offered here, including the empty ones — the list hides a
    *  type with no places, but you have to be able to make the first one. */
   const typeOptions: SegmentOption<string>[] = useMemo(
@@ -192,25 +178,22 @@ export function PlaceEditSheet({
   );
 
   /**
-   * The fields THIS type's form asks for.
+   * The fields THIS type's form asks for — ALL of them, with nothing cut.
    *
-   * The seven canyon axes have their own inputs above (a grade rail is a
-   * better control than a number box, and they are what this app is for), so
-   * on a canyon they are cut from the generic list rather than asked twice. On
-   * every other type they are not in the list at all — a campsite's defs do not
-   * include `v_grade`, which is the entire point of scoping.
-   *
-   * Cut by `CANYON_FORM_FIELD_KEYS` and NOT by `RESERVED_FIELD_KEYS`: reserved
-   * means "a user may not take this key", which is also true of the campsite's
-   * `capacity` and `is a cave?` — system fields that nothing draws specially
-   * and that must render generically or not at all.
+   * The seven canyon axes used to be seven hand-written controls above this
+   * list, with their keys spelled out, and were then subtracted from it so they
+   * were not asked twice. They are ordinary bounded field values with ordinary
+   * definitions, so the generic renderer draws them now: a bounded integer is a
+   * rail (`CustomFieldValues.tsx`), which is the same control by a rule instead
+   * of by name. Three consequences, all wanted — a canyon's own fields finally
+   * appear in "Your place attributes"; `quality` is a FLOAT and gets a decimal
+   * box rather than a rail that silently could not express the 4.5 the web
+   * stores; and a user's own "Difficulty, 1-5" is drawn exactly like a V grade
+   * without anything knowing about canyons.
    */
   const typeFieldDefs = useMemo(
-    () =>
-      defsForType(customFieldDefs, placeTypeId).filter(
-        (def) => !(isCanyon && CANYON_FORM_FIELD_KEYS.has(def.key)),
-      ),
-    [customFieldDefs, isCanyon, placeTypeId],
+    () => defsForType(customFieldDefs, placeTypeId),
+    [customFieldDefs, placeTypeId],
   );
 
   /** The form in the shape both the validator and the ops speak. */
@@ -223,29 +206,9 @@ export function PlaceEditSheet({
         .filter((entry) => entry !== ""),
       latitude: parseNumber(latitude),
       longitude: parseNumber(longitude),
-      vGrade: parseNumber(vGrade),
-      aGrade: parseNumber(aGrade),
-      commitment: parseNumber(commitment),
-      quality: parseNumber(quality),
-      numAbseils: parseNumber(numAbseils),
-      longestAbseil: parseNumber(longestAbseil),
-      hours: parseNumber(hours),
       notes: notes.trim() || null,
     }),
-    [
-      aGrade,
-      altNames,
-      commitment,
-      hours,
-      latitude,
-      longestAbseil,
-      longitude,
-      name,
-      notes,
-      numAbseils,
-      quality,
-      vGrade,
-    ],
+    [altNames, latitude, longitude, name, notes],
   );
 
   const save = useCallback(async () => {
@@ -260,7 +223,10 @@ export function PlaceEditSheet({
     // the user never sees.
     const problem = validatePlacePayload(
       {
-        fieldValues: { ...definedNumbers(draft), ...effectiveCustomFields },
+        // Cleared fields are dropped for the CHECK: `coerceCustomFields` writes
+        // an explicit null so the merge below can remove the key, and the
+        // validator must not be handed a null for a field simply not recorded.
+        fieldValues: withoutClearedFields(effectiveCustomFields),
         ...(draft.latitude != null && { latitude: draft.latitude }),
         ...(draft.longitude != null && { longitude: draft.longitude }),
       },
@@ -304,10 +270,7 @@ export function PlaceEditSheet({
         // what keeps `_sources`, another client's key, and — on a type change —
         // the OLD type's values, which the server needs in the payload to park
         // them in `foreignFields` rather than lose them (§2.6).
-        const nextValues = withFieldValues(place.fieldValues, {
-          ...effectiveCustomFields,
-          ...(isCanyon ? definedGrades(draft) : {}),
-        });
+        const nextValues = withFieldValues(place.fieldValues, effectiveCustomFields);
         if (
           JSON.stringify(nextValues) !==
           JSON.stringify(place.fieldValues ?? {})
@@ -329,13 +292,7 @@ export function PlaceEditSheet({
           altNames: draft.altNames,
           notes: draft.notes,
           placeTypeId,
-          fieldValues: withFieldValues(
-            {},
-            {
-              ...effectiveCustomFields,
-              ...(isCanyon ? definedGrades(draft) : {}),
-            },
-          ),
+          fieldValues: withFieldValues({}, effectiveCustomFields),
         });
         onSaved("Place added.");
       }
@@ -351,13 +308,29 @@ export function PlaceEditSheet({
     draft,
     editing,
     fieldValues,
-    isCanyon,
     onClose,
     onFailed,
     onSaved,
     placeTypeId,
     typeFieldDefs,
   ]);
+
+  const fieldForm = useCustomFieldForm({
+    entity: "place",
+    defs: customFieldDefs,
+    editing: editingField,
+    // Opened from a place's own form, so the type it is on is the default —
+    // and still changeable, which is the whole of finding #17: this used to
+    // REMOVE the scope picker, making the form reached from a place strictly
+    // less capable than the identical form in Settings.
+    initialTypeId: placeTypeId,
+    onSaved: (next, message) => {
+      setCustomFieldDefs(next);
+      onSaved(message);
+    },
+    onFailed,
+    onDone: () => setMode("fields"),
+  });
 
   const title =
     mode === "date"
@@ -381,6 +354,12 @@ export function PlaceEditSheet({
           : () => setMode(mode === "fieldForm" ? "fields" : "form")
       }
       title={title}
+      // A sub-mode gets an arrow back to the mode it came from.
+      onBack={
+        mode === "form"
+          ? undefined
+          : () => setMode(mode === "fieldForm" ? "fields" : "form")
+      }
       footer={
         mode === "form" ? (
           <Button
@@ -390,8 +369,19 @@ export function PlaceEditSheet({
             onPress={() => void save()}
           />
         ) : mode === "fieldForm" ? (
-          // Its own body carries the save action; this is just the way back.
-          <Button label="Cancel" variant="outlineAccent" onPress={() => setMode("fields")} />
+          fieldForm.footer
+        ) : mode === "fields" ? (
+          // PINNED. It used to be the last row of the list, which put the one
+          // action this mode exists for below however many rows were already
+          // there.
+          <Button
+            label={ATTRIBUTE_NOUN.add}
+            icon="plus"
+            onPress={() => {
+              setEditingField(null);
+              setMode("fieldForm");
+            }}
+          />
         ) : (
           <Button label="Done" icon="check" onPress={() => setMode("form")} />
         )
@@ -412,10 +402,6 @@ export function PlaceEditSheet({
         <CustomFieldList
           entity="place"
           defs={typeFieldDefs}
-          onAdd={() => {
-            setEditingField(null);
-            setMode("fieldForm");
-          }}
           onEdit={(def) => {
             setEditingField(def);
             setMode("fieldForm");
@@ -423,22 +409,7 @@ export function PlaceEditSheet({
         />
       ) : null}
 
-      {mode === "fieldForm" ? (
-        <CustomFieldForm
-          entity="place"
-          defs={customFieldDefs}
-          editing={editingField}
-          // Opened from a place's own form, so the answer to "where does this
-          // field appear" is already given: on this type.
-          scopeToTypeId={placeTypeId}
-          onSaved={(next, message) => {
-            setCustomFieldDefs(next);
-            onSaved(message);
-          }}
-          onFailed={onFailed}
-          onDone={() => setMode("fields")}
-        />
-      ) : null}
+      {mode === "fieldForm" ? fieldForm.body : null}
 
       {mode !== "form" ? null : (
       <View style={styles.form}>
@@ -463,14 +434,6 @@ export function PlaceEditSheet({
               value={placeTypeId}
               onChange={setPlaceTypeId}
             />
-            {editing && place && placeTypeId !== place.placeTypeId ? (
-              <Text style={styles.hint}>
-                Anything {typeName(place.placeTypeId, placeTypes.data)} records
-                that a {typeName(placeTypeId, placeTypes.data)} doesn&rsquo;t is
-                kept on this place. Once you have a connection you can add it
-                back or discard it from the place&rsquo;s own screen.
-              </Text>
-            ) : null}
           </View>
         ) : null}
 
@@ -533,39 +496,6 @@ export function PlaceEditSheet({
           </View>
         ) : null}
 
-        {/* The seven canyon axes, and ONLY on a canyon. A campsite has no
-            vertical grade, and asking for one was the whole complaint this
-            rework answers. */}
-        {isCanyon ? (
-          <>
-        <SectionHeader label="Grade" />
-        <GradePicker label="Vertical (V)" axis="v_grade" value={vGrade} onChange={setVGrade} />
-        <GradePicker label="Aquatic (A)" axis="a_grade" value={aGrade} onChange={setAGrade} />
-        <GradePicker
-          label="Commitment"
-          axis="commitment"
-          value={commitment}
-          onChange={setCommitment}
-        />
-        <GradePicker label="Quality" axis="quality" value={quality} onChange={setQuality} />
-
-        <SectionHeader label="Logistics" />
-        <TextField
-          label="Abseils"
-          value={numAbseils}
-          onChangeText={setNumAbseils}
-          keyboardType="number-pad"
-        />
-        <TextField
-          label="Longest abseil (m)"
-          value={longestAbseil}
-          onChangeText={setLongestAbseil}
-          keyboardType="numeric"
-        />
-        <TextField label="Hours" value={hours} onChangeText={setHours} keyboardType="numeric" />
-          </>
-        ) : null}
-
         {/* No SectionHeader: the field's own label already says "Notes", and
             the pair printed it twice. */}
         <View style={styles.field}>
@@ -583,12 +513,12 @@ export function PlaceEditSheet({
 
 
         {/* Named for the TYPE, not for the user: on a Campsite these are
-            Capacity and Is-a-cave, which are ours, not theirs. The header is
-            absent when the type has no fields of its own rather than standing
-            over nothing — on a canyon the seven axes are drawn above by their
-            own controls, so the generic list is usually empty. */}
+            Capacity and Is-a-cave, which are ours, not theirs. Absent when the
+            type has none rather than standing over nothing. */}
         {typeFieldDefs.length > 0 ? (
-          <SectionHeader label={`${typeName(placeTypeId, placeTypes.data)} fields`} />
+          <SectionHeader
+            label={`${typeName(placeTypeId, placeTypes.data)} ${ATTRIBUTE_NOUN.many}`}
+          />
         ) : null}
         <CustomFieldValueInputs
           defs={typeFieldDefs}
@@ -605,11 +535,11 @@ export function PlaceEditSheet({
             is open with no account and no signal, for everyone. */}
         <Row
           icon="sliders"
-          title="Your place fields"
+          title={`Your place ${ATTRIBUTE_NOUN.many}`}
           subtitle={
             typeFieldDefs.length === 0
               ? "Add your own — permits, access notes, anything."
-              : `${typeFieldDefs.length} field${typeFieldDefs.length === 1 ? "" : "s"} on this type`
+              : `${typeFieldDefs.length} on this type`
           }
           right={<Feather name="chevron-right" size={20} color={theme.textMuted} />}
           onPress={() => setMode("fields")}
@@ -628,74 +558,6 @@ function typeName(
   types: { id: string; name: string }[] | null,
 ): string {
   return types?.find((type) => type.id === typeId)?.name ?? "place";
-}
-
-/**
- * A graded axis as a single-select rail with an explicit "not recorded" stop.
- * Unset has to be reachable: most imported places have gaps, and a picker with
- * no way back to blank turns "I don't know" into a wrong answer.
- */
-function GradePicker({
-  label,
-  axis,
-  value,
-  onChange,
-}: {
-  label: string;
-  /** A reserved field key — the picker's stops come from that definition's
-   *  own bounds, which is the only place they are declared. */
-  axis: string;
-  value: string;
-  onChange: (next: string) => void;
-}) {
-  const def = SYSTEM_FIELD_DEFS.find((candidate) => candidate.key === axis);
-  const min = def?.min ?? 1;
-  const max = def?.max ?? 7;
-  const options: SegmentOption<string>[] = [{ value: "", label: "—" }];
-  for (let stop = min; stop <= max; stop += 1) {
-    options.push({ value: String(stop), label: String(stop) });
-  }
-  return (
-    <View style={styles.gradeRow}>
-      <Text style={styles.gradeLabel}>{label}</Text>
-      <SegmentedControl scroll options={options} value={value} onChange={onChange} />
-    </View>
-  );
-}
-
-// The form's seven numeric inputs, and the reserved key each one writes. The
-// draft still names them the way a canyon does; this is where that becomes a
-// field key.
-const GRADE_KEYS: Record<string, string> = {
-  vGrade: "v_grade",
-  aGrade: "a_grade",
-  commitment: "commitment",
-  quality: "quality",
-  numAbseils: "num_abseils",
-  longestAbseil: "longest_abseil",
-  hours: "hours",
-};
-
-/** Only the fields the user actually filled in — the validator must not be
- *  handed an explicit null for a field that simply isn't recorded. */
-function definedNumbers(draft: Record<string, unknown>): Record<string, number> {
-  const out: Record<string, number> = {};
-  for (const [draftKey, fieldKey] of Object.entries(GRADE_KEYS)) {
-    const value = draft[draftKey];
-    if (typeof value === "number") out[fieldKey] = value;
-  }
-  return out;
-}
-
-/** The same seven, but keeping the CLEARED ones as null so `setFieldValues`
- *  removes them — clearing a grade has to be expressible, and an omitted key
- *  would silently leave the old value in place. */
-function definedGrades(draft: Record<string, unknown>): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const [draftKey, fieldKey] of Object.entries(GRADE_KEYS)) {
-    out[fieldKey] = draft[draftKey] ?? null;
-  }
-  return out;
 }
 
 /** "" and an unparseable entry both mean "not recorded", not zero. */
@@ -732,6 +594,4 @@ const styles = StyleSheet.create({
   coordRow: { flexDirection: "row", gap: spacing(1) },
   coordField: { flex: 1 },
   fixNote: { flexDirection: "row", alignItems: "center", gap: spacing(0.75) },
-  gradeRow: { gap: spacing(0.5) },
-  gradeLabel: { color: theme.textPrimary, fontSize: fontSize.sm },
 });

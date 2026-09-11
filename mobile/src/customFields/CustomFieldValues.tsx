@@ -11,15 +11,30 @@
 // MODE of the host sheet (DESIGN.md §6 — never a second modal), and only the
 // host knows how to enter it.
 import { Feather } from "@expo/vector-icons";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import {
   customFieldDisplayLabel,
   type TripLogCustomFieldDef,
 } from "@logjam/shared";
 
 import { formatDateKey } from "../logs/logbook";
-import { spacing, theme } from "../theme";
-import { Row, TextField, Toggle } from "../ui";
+import { fontSize, spacing, theme } from "../theme";
+import { Row, SegmentedControl, TextField, Toggle, type SegmentOption } from "../ui";
+
+/**
+ * The widest span that still reads as a rail rather than a ruler.
+ *
+ * A bounded integer is drawn as a row of stops instead of a number box, which
+ * is how the canyon grades have always been drawn — they just used to be seven
+ * hand-written controls in `PlaceEditSheet` with their keys spelled out. They
+ * are ordinary bounded integers, so the rail is now a property of the TYPE and
+ * every field that shares that shape gets it: a user's own "Difficulty, 1-5"
+ * is drawn exactly like the V grade, without knowing anything about canyons.
+ *
+ * Above this the stops stop being tappable and a keyboard is faster. `hours`
+ * and `num_abseils` are unbounded and were never rail candidates.
+ */
+const MAX_RAIL_STOPS = 12;
 
 /** Every definition as an input, in the user's own order. */
 export function CustomFieldValueInputs({
@@ -62,6 +77,20 @@ function CustomFieldValueInput({
   onPickDate: () => void;
 }) {
   const label = customFieldDisplayLabel(def);
+  // A BOUNDED INTEGER IS A RAIL. Unset has to stay reachable — most imported
+  // places have gaps, and a picker with no way back to blank turns "I don't
+  // know" into a wrong answer, which is why the first stop is "—".
+  const stops = railStops(def);
+  if (stops) {
+    const options: SegmentOption<string>[] = [{ value: "", label: "—" }];
+    for (const stop of stops) options.push({ value: String(stop), label: String(stop) });
+    return (
+      <View style={styles.field}>
+        <Text style={styles.railLabel}>{def.label}</Text>
+        <SegmentedControl scroll options={options} value={value} onChange={onChange} />
+      </View>
+    );
+  }
   if (def.type === "boolean") {
     return (
       <Row
@@ -107,6 +136,20 @@ function CustomFieldValueInput({
   );
 }
 
+/** The stops a bounded integer draws, or null when it is not rail-shaped.
+ *  Derived from the definition's own bounds, which is the only place they are
+ *  declared — a rail that restated 1-7 would drift from the field it draws. */
+function railStops(def: TripLogCustomFieldDef): number[] | null {
+  if (def.type !== "integer") return null;
+  if (def.min == null || def.max == null) return null;
+  const span = def.max - def.min;
+  if (span < 1 || span + 1 > MAX_RAIL_STOPS) return null;
+  const stops: number[] = [];
+  for (let stop = def.min; stop <= def.max; stop += 1) stops.push(stop);
+  return stops;
+}
+
 const styles = StyleSheet.create({
   field: { gap: spacing(0.5) },
+  railLabel: { color: theme.textPrimary, fontSize: fontSize.sm },
 });

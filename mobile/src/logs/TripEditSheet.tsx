@@ -30,7 +30,11 @@ import {
   todayDateKey,
   type ChipOption,
 } from "../ui";
-import { CustomFieldForm, CustomFieldList } from "../customFields/CustomFieldsEditor";
+import {
+  ATTRIBUTE_NOUN,
+  CustomFieldList,
+  useCustomFieldForm,
+} from "../customFields/CustomFieldsEditor";
 import { CustomFieldValueInputs } from "../customFields/CustomFieldValues";
 import {
   coerceCustomFields,
@@ -312,6 +316,18 @@ export function TripEditSheet({
     types,
   ]);
 
+  const fieldForm = useCustomFieldForm({
+    entity: "tripLog",
+    defs: customFieldDefs,
+    editing: editingField,
+    onSaved: (next, message) => {
+      setCustomFieldDefs(next);
+      onSaved(message);
+    },
+    onFailed,
+    onDone: () => setMode("fields"),
+  });
+
   const derivedTitle = formatTripPlaceNames(selected.map((link) => link.name));
   const title =
     mode === "date"
@@ -321,9 +337,9 @@ export function TripEditSheet({
       : mode === "places"
         ? "Places on this trip"
         : mode === "fields"
-          ? "Your trip fields"
+          ? `Your trip ${ATTRIBUTE_NOUN.many}`
           : mode === "fieldForm"
-            ? (editingField ? "Edit field" : "New field")
+            ? (editingField ? editingField.label : `New trip ${ATTRIBUTE_NOUN.one}`)
             : editing
               ? "Edit trip"
               : "Log a trip";
@@ -339,6 +355,12 @@ export function TripEditSheet({
           : () => setMode(mode === "fieldForm" ? "fields" : "form")
       }
       title={title}
+      // A sub-mode gets an arrow back to the mode it came from.
+      onBack={
+        mode === "form"
+          ? undefined
+          : () => setMode(mode === "fieldForm" ? "fields" : "form")
+      }
       // Pinned, because the place list is longer than the sheet: a Done button
       // that scrolls out of reach leaves the handle as the only exit.
       footer={
@@ -350,13 +372,24 @@ export function TripEditSheet({
             onPress={() => void save()}
           />
         ) : mode === "fieldForm" ? (
-          // Its own body carries the save action; this is just the way back.
-          <Button label="Cancel" variant="outlineAccent" onPress={() => setMode("fields")} />
+          fieldForm.footer
+        ) : mode === "fields" ? (
+          // PINNED, for the same reason the Done button is: the one action this
+          // mode exists for must not sit below however many rows are already
+          // in the list.
+          <Button
+            label={ATTRIBUTE_NOUN.add}
+            icon="plus"
+            onPress={() => {
+              setEditingField(null);
+              setMode("fieldForm");
+            }}
+          />
         ) : (
           <Button
             label="Done"
             icon="check"
-            onPress={() => setMode(mode === "fields" ? "form" : "form")}
+            onPress={() => setMode("form")}
           />
         )
       }
@@ -377,10 +410,6 @@ export function TripEditSheet({
         <CustomFieldList
           entity="tripLog"
           defs={customFieldDefs}
-          onAdd={() => {
-            setEditingField(null);
-            setMode("fieldForm");
-          }}
           onEdit={(def) => {
             setEditingField(def);
             setMode("fieldForm");
@@ -388,19 +417,7 @@ export function TripEditSheet({
         />
       ) : null}
 
-      {mode === "fieldForm" ? (
-        <CustomFieldForm
-          entity="tripLog"
-          defs={customFieldDefs}
-          editing={editingField}
-          onSaved={(next, message) => {
-            setCustomFieldDefs(next);
-            onSaved(message);
-          }}
-          onFailed={onFailed}
-          onDone={() => setMode("fields")}
-        />
-      ) : null}
+      {mode === "fieldForm" ? fieldForm.body : null}
 
       {mode === "places" ? (
         <PlacePicker
