@@ -336,9 +336,9 @@ export function PlaceEditSheet({
     mode === "date"
       ? (customFieldDefs.find((def) => def.key === dateFieldKey)?.label ?? "Date")
       : mode === "fields"
-        ? "Your place fields"
+        ? `Your place ${ATTRIBUTE_NOUN.many}`
         : mode === "fieldForm"
-          ? (editingField ? "Edit field" : "New field")
+          ? (editingField ? editingField.label : `New place ${ATTRIBUTE_NOUN.one}`)
           : editing
             ? "Edit place"
             : "Add a place";

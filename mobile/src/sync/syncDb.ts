@@ -42,6 +42,18 @@ import { OUTBOX_ENTITIES } from "./outboxTables";
  * to one `field_values_json`, gains a `place_type_id`, and `place_types`
  * arrives as a table of its own.
  *
+ * 11: NOT a shape change — a REFILL. `place_types` rows were parsed off every
+ * delta page and never written (`upsertPlaceType` had no caller), so the table
+ * has been empty since the rework on every install, and the cursor has long
+ * since acknowledged the pages that carried them. The delta is incremental:
+ * there is no way to ask for a row again, so the fix in `deltaPull.ts` repairs
+ * new installs and leaves every existing one permanently without the user's own
+ * place types. This lever is the only thing that can refill them.
+ *
+ * That is what this version number is FOR, and it is worth saying once: a bump
+ * is not only for a column that moved. Any time a client has missed rows it
+ * cannot re-request, the wipe-and-refill is the mechanism.
+ *
  * 10: `places` loses `tags_json`. Tags were the WAYPOINT's stand-in for a type
  * and a place has a real one — the seed vocabulary was "abseil", "campsite",
  * "carpark", "exit", which are type names. The column is dropped server-side in
@@ -63,7 +75,7 @@ import { OUTBOX_ENTITIES } from "./outboxTables";
  * rows of their own. `places` gains the two columns that came across with
  * them, `elevation` and `tags_json`.
  */
-export const MIRROR_SCHEMA_VERSION = 10;
+export const MIRROR_SCHEMA_VERSION = 11;
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 

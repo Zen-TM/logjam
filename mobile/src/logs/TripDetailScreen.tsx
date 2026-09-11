@@ -22,6 +22,7 @@ import {
 import { useConnectivity } from "../map/connectivity";
 import { tripTitle } from "../api/tripTitle";
 import { useFieldDefs } from "../customFields/useFieldDefs";
+import { ATTRIBUTE_NOUN } from "../customFields/CustomFieldsEditor";
 import { MediaStrip } from "../media/MediaStrip";
 import { resolveRouteAttachmentBbox } from "../media/routeAttachmentBbox";
 import { fontSize, fontWeight, lineHeight, radius, spacing, surface, theme } from "../theme";
@@ -203,7 +204,7 @@ export function TripDetailScreen({
 
         {customFields.length > 0 ? (
           <>
-            <SectionHeader label="Your fields" />
+            <SectionHeader label={`Your ${ATTRIBUTE_NOUN.many}`} />
             <View style={styles.fieldCard}>
               {customFields.map(([label, value]) => (
                 <View key={label} style={styles.fieldRow}>

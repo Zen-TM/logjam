@@ -125,5 +125,14 @@ function CustomFieldValueInput({
 
 const styles = StyleSheet.create({
   field: { gap: spacing(0.5) },
-  railLabel: { color: theme.textPrimary, fontSize: fontSize.sm },
+  // Matches `TextField`'s own label exactly. A rail and a number box sit in one
+  // list under one heading now, so a sentence-case label beside an uppercase
+  // one reads as two different kinds of control.
+  railLabel: {
+    fontSize: fontSize.xs,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    color: theme.textMuted,
+  },
 });

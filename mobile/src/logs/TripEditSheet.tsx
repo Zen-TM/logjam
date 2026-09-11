@@ -499,11 +499,11 @@ export function TripEditSheet({
               door is open with no account and no signal, for everyone. */}
           <Row
             icon="sliders"
-            title="Your trip fields"
+            title={`Your trip ${ATTRIBUTE_NOUN.many}`}
             subtitle={
               customFieldDefs.length === 0
                 ? "Add your own — water level, party size, anything"
-                : `${customFieldDefs.length} field${customFieldDefs.length === 1 ? "" : "s"}`
+                : `${customFieldDefs.length} ${customFieldDefs.length === 1 ? ATTRIBUTE_NOUN.one : ATTRIBUTE_NOUN.many}`
             }
             right={<Feather name="chevron-right" size={20} color={theme.textMuted} />}
             onPress={() => setMode("fields")}
