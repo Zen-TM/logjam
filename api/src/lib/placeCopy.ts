@@ -15,7 +15,6 @@ import {
   asFieldValues,
   asForeignFields,
   matchPlaceTypeByName,
-  mergeForeignFields,
   reconcileCopiedFieldValues,
 } from "@logjam/shared";
 
@@ -134,6 +133,20 @@ export async function reconcileCopiedPlace(args: {
  *
  * APPENDS rather than clears, unlike a copy: the row keeps its owner, so an
  * earlier stranding is still theirs. Same key twice keeps the newest.
+ *
+ * AND IT RUNS BOTH WAYS. What is already parked is fed back through the same
+ * split, so a key the NEW type does define comes home to `fieldValues`
+ * automatically. Without that half, retyping was a one-way door in practice:
+ * canyon → campsite stranded the seven canyon axes, and campsite → canyon left
+ * them sitting in "doesn't fit this type" beside a form with an empty V-grade
+ * rail — asking the user to re-adopt values the type already has a definition
+ * for, which the adopt path then REFUSES (409) because those keys are reserved.
+ * A mistyped place was a trap you could walk into and not back out of.
+ *
+ * Feeding the park back in is also what dedups: one pass, keyed, so
+ * a separate merge step is not needed on top of it. Each parked item describes
+ * itself (`{key,label,type,min,max}` — the same shape a definition has), so it
+ * is its own "sender def" and its label survives any number of round trips.
  */
 export async function strandValuesOnTypeChange(args: {
   ownerId: string;
@@ -155,16 +168,39 @@ export async function strandValuesOnTypeChange(args: {
     defsForPlaceType(args.ownerId, args.fromTypeId),
     defsForPlaceType(args.ownerId, args.toTypeId),
   ]);
+  const parked = asForeignFields(args.foreignFields);
   const split = reconcileCopiedFieldValues({
-    fieldValues: args.fieldValues,
-    senderDefs: fromDefs,
+    // Parked first so a returning value keeps its place in the order, and a
+    // LIVE value of the same key wins — the live one is what the user last
+    // typed, and the park is where a copy of it went to wait.
+    fieldValues: {
+      ...Object.fromEntries(parked.map((item) => [item.key, item.value])),
+      ...asFieldValues(args.fieldValues),
+    },
+    // A parked item describes itself; the old type's definitions describe
+    // everything still live. `fromDefs` wins a tie, because a key that is both
+    // live and parked is live under the type we are leaving.
+    senderDefs: [
+      ...parked
+        .filter((item) => !fromDefs.some((def) => def.key === item.key))
+        .map(parkedItemAsDef),
+      ...fromDefs,
+    ],
     recipientDefs: toDefs,
   });
+  return { fieldValues: split.fieldValues, foreignFields: split.foreignFields };
+}
+
+/** A parked value read back as the definition it describes — the shape it was
+ *  written in, minus the value. `type` is widened to `string` in storage (the
+ *  column is JSON and outlives the code that wrote it), so it is narrowed here
+ *  at the one place that needs it to be a definition. */
+function parkedItemAsDef(item: ForeignFieldValue): TripLogCustomFieldDef {
   return {
-    fieldValues: split.fieldValues,
-    foreignFields: mergeForeignFields(
-      asForeignFields(args.foreignFields),
-      split.foreignFields,
-    ),
+    key: item.key,
+    label: item.label,
+    type: item.type as TripLogCustomFieldDef["type"],
+    ...(item.min != null ? { min: item.min } : {}),
+    ...(item.max != null ? { max: item.max } : {}),
   };
 }

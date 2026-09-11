@@ -34,6 +34,7 @@ import {
   applyTombstone,
   notifyMirrorChanged,
   upsertPlace,
+  upsertPlaceType,
   upsertCustomFieldDef,
   upsertFriendship,
   upsertMedia,
@@ -229,9 +230,14 @@ export async function runDeltaPull(currentUserId: string): Promise<DeltaPullResu
     );
     const db = await getSyncDb();
     await applyPage(db, async () => {
-      // Definitions first, matching the server's budget order: the place and
-      // trip rows below carry values keyed by them, so a page never leaves a
-      // value on screen with no label to render it under.
+      // TYPES first, then the definitions scoped to them, then the rows that
+      // carry values keyed by those definitions — the server's own budget
+      // order, so a page never leaves a value on screen with no label to
+      // render it under and no type to put it on.
+      for (const row of changes.placeTypes) {
+        const { effective, dirtyNames } = rebase(row, "placeType", outbox);
+        await upsertPlaceType(db, effective, dirtyNames);
+      }
       for (const row of changes.customFieldDefs) {
         const { effective, dirtyNames } = rebase(row, "customFieldDef", outbox);
         await upsertCustomFieldDef(db, effective, dirtyNames);
@@ -269,6 +275,7 @@ export async function runDeltaPull(currentUserId: string): Promise<DeltaPullResu
       }
 
       changedRows +=
+        changes.placeTypes.length +
         changes.customFieldDefs.length +
         changes.places.length +
         changes.tripLogs.length +

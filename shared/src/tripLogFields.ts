@@ -1,3 +1,7 @@
+// `isReservedFieldKey` only — placeTypes.ts imports this module for a TYPE,
+// which is erased, so this edge does not close a runtime cycle.
+import { isReservedFieldKey } from "./placeTypes.js";
+
 /**
  * The two surfaces a custom field can belong to. One declaration for the API's
  * table column, the sync protocol, the mobile store and the web dialogs — it
@@ -74,9 +78,28 @@ export type ScopedCustomFieldDef = TripLogCustomFieldDef & {
   ownerId?: string | null;
 };
 
-/** A definition nobody owns is a built-in: not renameable, not deletable. */
+/**
+ * A built-in: not renameable, not deletable.
+ *
+ * BOTH HALVES ARE LOAD-BEARING. `ownerId === null` is the server's answer and
+ * was once the whole test — but a definition created on the phone has no owner
+ * id until the server sends one back, because the local INSERT has no column
+ * for it. So a field the user had just added rendered with a padlock and no
+ * verbs for the few seconds until the next delta landed, which reads as the app
+ * refusing to let you edit your own field.
+ *
+ * The key settles it offline: `RESERVED_FIELD_KEYS` is derived from
+ * `SYSTEM_FIELD_DEFS`, so every built-in's key is reserved by construction, and
+ * `assertKeyNotReserved` refuses a reserved key on create AND on rename for
+ * BOTH entities — so no definition a user can make will ever have one. The test
+ * is therefore exact rather than a heuristic, and it works with no account and
+ * no signal, which is the same standard the rest of this file holds to.
+ *
+ * `ownerId === undefined` (an older client, a test) still reads as "not a
+ * built-in": it offers the verbs, and the server still refuses.
+ */
 export function isSystemFieldDef(def: ScopedCustomFieldDef): boolean {
-  return def.ownerId === null;
+  return def.ownerId === null && isReservedFieldKey(def.key);
 }
 
 /** The definitions a place of `placeTypeId` shows, in the order given. The one

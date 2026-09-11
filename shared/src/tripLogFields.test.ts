@@ -11,6 +11,7 @@ import {
   countTripLogsWithCustomField,
   renameCustomFieldLabel,
   tripFieldDefs,
+  isSystemFieldDef,
 } from "./tripLogFields.js";
 import type {
   ScopedCustomFieldDef,
@@ -385,5 +386,37 @@ describe("tripFieldDefs", () => {
     expect(
       tripFieldDefs(defs, [], { water: null }).map((def) => def.key),
     ).toEqual(["weather"]);
+  });
+});
+
+describe("isSystemFieldDef", () => {
+  const scoped = (over: Partial<ScopedCustomFieldDef>): ScopedCustomFieldDef => ({
+    key: "water_level",
+    label: "Water level",
+    type: "string",
+    placeTypeIds: [],
+    appliesToAllTypes: true,
+    ...over,
+  });
+
+  it("is true for a built-in", () => {
+    expect(isSystemFieldDef(scoped({ key: "v_grade", ownerId: null }))).toBe(true);
+  });
+
+  // THE REGRESSION. A definition created on the phone has no owner id until the
+  // server sends one back, and `ownerId === null` alone called that a built-in:
+  // the field the user had just added drew a padlock and no verbs until the
+  // next delta landed.
+  it("is false for a locally-created field that has no owner id yet", () => {
+    expect(isSystemFieldDef(scoped({ ownerId: null }))).toBe(false);
+  });
+
+  it("is false for an owned field, reserved key or not", () => {
+    expect(isSystemFieldDef(scoped({ ownerId: "alice" }))).toBe(false);
+    expect(isSystemFieldDef(scoped({ key: "v_grade", ownerId: "alice" }))).toBe(false);
+  });
+
+  it("is false when the owner id is absent entirely — offer the verbs, let the server refuse", () => {
+    expect(isSystemFieldDef(scoped({}))).toBe(false);
   });
 });

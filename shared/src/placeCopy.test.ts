@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   asForeignFields,
   matchPlaceTypeByName,
-  mergeForeignFields,
   reconcileCopiedFieldValues,
 } from "./placeCopy.js";
 import { SYSTEM_PLACE_TYPE_IDS } from "./placeTypes.js";
@@ -147,33 +146,6 @@ describe("matchPlaceTypeByName", () => {
   it("is null when nothing matches, which the caller reads as 'create one'", () => {
     expect(matchPlaceTypeByName("Cave", [systemCampsite, userCampsite])).toBeNull();
     expect(matchPlaceTypeByName("   ", [systemCampsite])).toBeNull();
-  });
-});
-
-describe("mergeForeignFields", () => {
-  const parked = (key: string, value: unknown) => ({
-    key,
-    label: key,
-    type: "string",
-    value,
-  });
-
-  it("appends, because a type change keeps the owner's earlier strandings", () => {
-    expect(
-      mergeForeignFields([parked("a", 1)], [parked("b", 2)]).map((f) => f.key),
-    ).toEqual(["a", "b"]);
-  });
-
-  it("keys the result, so retyping twice leaves ONE entry per key", () => {
-    const merged = mergeForeignFields([parked("a", 1)], [parked("a", 2)]);
-    expect(merged).toHaveLength(1);
-    // Newest wins: two rows for one key would offer "Add to my type" twice and
-    // only one of them would be right.
-    expect(merged[0].value).toBe(2);
-  });
-
-  it("treats a null existing list as empty", () => {
-    expect(mergeForeignFields(null, [parked("a", 1)])).toHaveLength(1);
   });
 });
 

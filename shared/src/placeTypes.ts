@@ -237,6 +237,7 @@ export const SYSTEM_FIELD_DEFS: SystemFieldDef[] = [
   { id: "a0000000-0000-4000-8000-000000000007", key: "longest_abseil", label: "Longest pitch", type: "float", min: 0, max: null, placeTypes: ["canyon"] },
   { id: "a0000000-0000-4000-8000-000000000008", key: "capacity", label: "Capacity", type: "integer", min: 0, max: null, placeTypes: ["campsite"] },
   { id: "a0000000-0000-4000-8000-000000000009", key: "is_cave", label: "Is a cave?", type: "boolean", min: null, max: null, placeTypes: ["campsite"] },
+  { id: "a0000000-0000-4000-8000-000000000010", key: "has_water", label: "Has a water source?", type: "boolean", min: null, max: null, placeTypes: ["campsite"] },
 ];
 
 /**

@@ -125,29 +125,6 @@ export function matchPlaceTypeByName<T extends { id: string; name: string; owner
   );
 }
 
-/**
- * Values stranded by a place-type CHANGE, folded into what the row already
- * parks.
- *
- * A type change is the second (and last) writer of `foreignFields`, and unlike
- * a copy it APPENDS: the row keeps its owner, so what was parked by an earlier
- * change or an earlier copy is still theirs to adopt. Keyed, with the newest
- * entry winning — retyping a place twice must not leave two rows for one key,
- * both offering "Add to my type" and only one of them right.
- *
- * Order is oldest-first so the section reads as a history rather than shuffling
- * on every change.
- */
-export function mergeForeignFields(
-  existing: readonly ForeignFieldValue[] | null | undefined,
-  incoming: readonly ForeignFieldValue[],
-): ForeignFieldValue[] {
-  const byKey = new Map<string, ForeignFieldValue>();
-  for (const item of existing ?? []) byKey.set(item.key, item);
-  for (const item of incoming) byKey.set(item.key, item);
-  return [...byKey.values()];
-}
-
 /** Whatever the database handed back, as foreign fields — tolerant, because
  *  the column is JSON and outlives the code that wrote it. A malformed entry
  *  is skipped rather than throwing: this is read on a detail screen, and one
