@@ -998,16 +998,19 @@ async function applyPlaceOp(userId: string, op: PushOp): Promise<PushOpResult> {
     fields.fieldValues !== undefined
       ? asFieldValues(fields.fieldValues)
       : asFieldValues(place.fieldValues);
-  const stranded =
-    fields.placeTypeId !== undefined && typeId !== place.placeTypeId
-      ? await strandValuesOnTypeChange({
-          ownerId: userId,
-          fromTypeId: place.placeTypeId,
-          toTypeId: typeId,
-          fieldValues: nextValues,
-          foreignFields: place.foreignFields,
-        })
-      : null;
+  //
+  // Run on EVERY update, not only on a retype. A same-type write strands
+  // nothing — that branch only ever brings a parked value HOME when the
+  // current type defines its key — and it is what heals a row stranded before
+  // the reconciliation ran both ways. Cheap: it returns immediately when the
+  // row has nothing parked, which is almost every place.
+  const stranded = await strandValuesOnTypeChange({
+    ownerId: userId,
+    fromTypeId: place.placeTypeId,
+    toTypeId: typeId,
+    fieldValues: nextValues,
+    foreignFields: place.foreignFields,
+  });
 
   const updated = await prisma.place.update({
     where: { id: op.id },
@@ -1030,16 +1033,12 @@ async function applyPlaceOp(userId: string, op: PushOp): Promise<PushOpResult> {
       ...(fields.fieldValues !== undefined && {
         fieldValues: asFieldValues(fields.fieldValues) as Prisma.InputJsonValue,
       }),
-      // The type change overrides both, because it is derived FROM them.
-      ...(stranded
-        ? {
-            fieldValues: stranded.fieldValues as Prisma.InputJsonValue,
-            foreignFields:
-              stranded.foreignFields.length > 0
-                ? (stranded.foreignFields as unknown as Prisma.InputJsonValue)
-                : Prisma.DbNull,
-          }
-        : {}),
+      // The reconciliation overrides both, because it is derived FROM them.
+      fieldValues: stranded.fieldValues as Prisma.InputJsonValue,
+      foreignFields:
+        stranded.foreignFields.length > 0
+          ? (stranded.foreignFields as unknown as Prisma.InputJsonValue)
+          : Prisma.DbNull,
     },
   });
   return conflicts.length > 0

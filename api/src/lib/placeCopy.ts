@@ -155,20 +155,43 @@ export async function strandValuesOnTypeChange(args: {
   fieldValues: unknown;
   foreignFields: unknown;
 }): Promise<{ fieldValues: Record<string, unknown>; foreignFields: ForeignFieldValue[] }> {
-  // Not a type change at all: nothing is stranded, and running the split with
-  // no definitions would park EVERY value (no recipient def matches), which is
-  // the opposite of what a same-type write means.
+  const parked = asForeignFields(args.foreignFields);
+
+  // NOT A TYPE CHANGE. Nothing may be stranded by an ordinary edit — running
+  // the full split here would park any live value with no definition on either
+  // side, which is a key another client is entitled to have written.
+  //
+  // The park is still re-matched, in the one direction that can only help: a
+  // value the CURRENT type defines comes home. That is what heals a row
+  // stranded BEFORE the round trip above existed — there is no migration for
+  // those, and the alternative was telling the user to retype the place twice
+  // to get their own grades back. Skipped entirely when nothing is parked,
+  // which is almost every write.
   if (args.fromTypeId === args.toTypeId) {
+    if (parked.length === 0) {
+      return {
+        fieldValues: asFieldValues(args.fieldValues),
+        foreignFields: [],
+      };
+    }
+    const toDefs = await defsForPlaceType(args.ownerId, args.toTypeId);
+    const split = reconcileCopiedFieldValues({
+      fieldValues: Object.fromEntries(parked.map((item) => [item.key, item.value])),
+      senderDefs: parked.map(parkedItemAsDef),
+      recipientDefs: toDefs,
+    });
     return {
-      fieldValues: asFieldValues(args.fieldValues),
-      foreignFields: asForeignFields(args.foreignFields),
+      // Live values last: what the user just typed beats an older copy of the
+      // same key waiting in the park.
+      fieldValues: { ...split.fieldValues, ...asFieldValues(args.fieldValues) },
+      foreignFields: split.foreignFields,
     };
   }
+
   const [fromDefs, toDefs]: TripLogCustomFieldDef[][] = await Promise.all([
     defsForPlaceType(args.ownerId, args.fromTypeId),
     defsForPlaceType(args.ownerId, args.toTypeId),
   ]);
-  const parked = asForeignFields(args.foreignFields);
   const split = reconcileCopiedFieldValues({
     // Parked first so a returning value keeps its place in the order, and a
     // LIVE value of the same key wins — the live one is what the user last

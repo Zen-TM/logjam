@@ -120,16 +120,50 @@ describe("strandValuesOnTypeChange", () => {
     expect(result.foreignFields[0].value).toBe(5);
   });
 
-  it("is a no-op when the type did not actually change", async () => {
+  it("strands nothing when the type did not change", async () => {
     const result = await strandValuesOnTypeChange({
       ownerId: "alice",
       fromTypeId: CANYON,
       toTypeId: CANYON,
-      fieldValues: { v_grade: 4 },
+      // `mystery` has no definition on any type. An ordinary edit must leave it
+      // exactly where it is: another client is entitled to have written it, and
+      // parking it would be this function inventing a schema decision nobody
+      // asked for.
+      fieldValues: { v_grade: 4, mystery: "kept" },
       foreignFields: [{ key: "gate_code", label: "Gate code", type: "string", value: "x" }],
     });
-    expect(result.fieldValues).toEqual({ v_grade: 4 });
+    expect(result.fieldValues).toEqual({ v_grade: 4, mystery: "kept" });
     expect(result.foreignFields).toHaveLength(1);
+  });
+
+  // THE HEAL. A row stranded before the reconciliation ran both ways has no
+  // migration behind it; this is what brings those values back, on the next
+  // ordinary save of the place, with no retyping dance.
+  it("brings a parked value home on a plain edit, when the type defines it", async () => {
+    const result = await strandValuesOnTypeChange({
+      ownerId: "alice",
+      fromTypeId: CANYON,
+      toTypeId: CANYON,
+      fieldValues: {},
+      foreignFields: [
+        { key: "v_grade", label: "V grade", type: "integer", value: 4 },
+        { key: "gate_code", label: "Gate code", type: "string", value: "1234" },
+      ],
+    });
+    expect(result.fieldValues).toEqual({ v_grade: 4 });
+    expect(result.foreignFields.map((item) => item.key)).toEqual(["gate_code"]);
+  });
+
+  it("does not let a parked value overwrite a live one on a plain edit", async () => {
+    const result = await strandValuesOnTypeChange({
+      ownerId: "alice",
+      fromTypeId: CANYON,
+      toTypeId: CANYON,
+      fieldValues: { v_grade: 6 },
+      foreignFields: [{ key: "v_grade", label: "V grade", type: "integer", value: 4 }],
+    });
+    expect(result.fieldValues).toEqual({ v_grade: 6 });
+    expect(result.foreignFields).toEqual([]);
   });
 
   it("carries internal keys across untouched", async () => {
