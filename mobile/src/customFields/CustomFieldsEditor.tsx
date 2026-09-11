@@ -105,7 +105,7 @@ export function CustomFieldList({
             // a bug.
             isSystemFieldDef(def) ? (
               <Row
-                key={def.key}
+                key={defRowKey(def)}
                 icon="lock"
                 // The BARE label, not `customFieldDisplayLabel`: that appends
                 // the range, and the subtitle one line down already says
@@ -116,7 +116,7 @@ export function CustomFieldList({
               />
             ) : (
               <Row
-                key={def.key}
+                key={defRowKey(def)}
                 icon="tag"
                 title={def.label}
                 subtitle={fieldSummary(def)}
@@ -468,6 +468,21 @@ type FieldDraft = {
   appliesToAll: boolean;
   typeIds: string[];
 };
+
+/**
+ * A list key that cannot collide.
+ *
+ * The obvious `def.key` is unique per OWNER, not per list, and this list holds
+ * the user's own definitions beside the built-ins. Nothing normally lets those
+ * two spaces meet — `assertKeyNotReserved` refuses a reserved key on create and
+ * rename — but adding a system definition makes a key reserved AFTER the fact,
+ * so anyone who already had that key holds a legal duplicate until the
+ * migration renames theirs. React answered that by rendering one row and
+ * dropping the other, which is a worse failure than showing both.
+ */
+function defRowKey(def: ScopedCustomFieldDef): string {
+  return `${def.ownerId ?? "system"}:${def.key}`;
+}
 
 /** The draft a given definition opens with. A NEW field opened from a place's
  *  own form starts scoped to that type — the user asked for it while filling in
