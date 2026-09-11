@@ -1,14 +1,21 @@
+// `isReservedFieldKey` only — placeTypes.ts imports this module for a TYPE,
+// which is erased, so this edge does not close a runtime cycle.
+import { isReservedFieldKey } from "./placeTypes.js";
+
 /**
  * The two surfaces a custom field can belong to. One declaration for the API's
  * table column, the sync protocol, the mobile store and the web dialogs — it
  * used to be spelled separately in `mobile/src/api/queries.ts` and in the
  * `entityConfigs` of `api/src/routes/customFields.ts`.
  *
- * The Place rework replaces `"canyon"` with a reference to a user-created
- * place type; until then these are the only two values `CustomFieldDef.entity`
- * may hold, and `isCustomFieldEntity` is the gate that says so.
+ * `"place"` stays ONE entity after the places rework rather than splitting per
+ * place type: scoping a definition to types is a separate axis, carried by
+ * `CustomFieldDefPlaceType` plus the `appliesToAllTypes` flag, precisely so a
+ * field key means the same thing wherever it appears in one owner's namespace.
+ * These remain the only two values `CustomFieldDef.entity` may hold, and
+ * `isCustomFieldEntity` is the gate that says so.
  */
-export const CUSTOM_FIELD_ENTITIES = ["tripLog", "canyon"] as const;
+export const CUSTOM_FIELD_ENTITIES = ["tripLog", "place"] as const;
 
 export type CustomFieldEntity = (typeof CUSTOM_FIELD_ENTITIES)[number];
 
@@ -28,11 +35,116 @@ export type TripLogCustomFieldDef = {
   label: string;
   type: TripLogCustomFieldType;
   // Optional inclusive bounds, only meaningful (and only valid) for
-  // integer/float fields. Present together or not at all. When set, the
-  // canyon filter renders a double-ended range slider instead of op+value.
+  // integer/float fields. EITHER, NEITHER OR BOTH — min-only is how every
+  // "how many" field is bounded, because there is no honest ceiling for it.
+  // The place filter renders a double-ended range slider only when both are
+  // present, and falls back to op+value otherwise.
   min?: number;
   max?: number;
 };
+
+/**
+ * A definition WITH its scoping — which place types it applies to, and whether
+ * it applies to every one of them including types created later.
+ *
+ * Separate from `TripLogCustomFieldDef` rather than folded into it, because the
+ * scoping answers a different question from the field itself: dozens of call
+ * sites want "what shape is this value" and only the form builders and the
+ * field editor want "where does it appear". The plain shape is what a value
+ * renderer, a filter and a validator take; this one is what decides which
+ * fields a form has at all.
+ *
+ * `appliesToAllTypes` is a FLAG rather than join rows for every type that
+ * exists today: rows would silently fail to apply to a type created tomorrow,
+ * and the user who ticked "All" would never find out.
+ */
+export type ScopedCustomFieldDef = TripLogCustomFieldDef & {
+  placeTypeIds: string[];
+  appliesToAllTypes: boolean;
+  /**
+   * WHOSE definition this is. NULL means a SYSTEM one — the seven canyon axes,
+   * the campsite's two — global rows belonging to no account, which no user may
+   * rename or delete.
+   *
+   * A form builder needs it because the alternative is offering verbs the
+   * server refuses: on the phone that was worse than an error, because the
+   * local half of a delete (strip the value off every place carrying the key)
+   * ran before the server no-opped the other half.
+   *
+   * Optional so a definition assembled by an older client or a test is still a
+   * definition; absent reads as "not a system row", which is the safe
+   * direction — it offers the verbs, and the server still refuses.
+   */
+  ownerId?: string | null;
+};
+
+/**
+ * A built-in: not renameable, not deletable.
+ *
+ * BOTH HALVES ARE LOAD-BEARING. `ownerId === null` is the server's answer and
+ * was once the whole test — but a definition created on the phone has no owner
+ * id until the server sends one back, because the local INSERT has no column
+ * for it. So a field the user had just added rendered with a padlock and no
+ * verbs for the few seconds until the next delta landed, which reads as the app
+ * refusing to let you edit your own field.
+ *
+ * The key settles it offline: `RESERVED_FIELD_KEYS` is derived from
+ * `SYSTEM_FIELD_DEFS`, so every built-in's key is reserved by construction, and
+ * `assertKeyNotReserved` refuses a reserved key on create AND on rename for
+ * BOTH entities — so no definition a user can make will ever have one. The test
+ * is therefore exact rather than a heuristic, and it works with no account and
+ * no signal, which is the same standard the rest of this file holds to.
+ *
+ * `ownerId === undefined` (an older client, a test) still reads as "not a
+ * built-in": it offers the verbs, and the server still refuses.
+ */
+export function isSystemFieldDef(def: ScopedCustomFieldDef): boolean {
+  return def.ownerId === null && isReservedFieldKey(def.key);
+}
+
+/** The definitions a place of `placeTypeId` shows, in the order given. The one
+ *  rule both clients apply to build a form, so a phone and a browser cannot
+ *  disagree about which fields a campsite has. */
+export function defsForType(
+  defs: readonly ScopedCustomFieldDef[],
+  placeTypeId: string,
+): ScopedCustomFieldDef[] {
+  return defs.filter(
+    (def) => def.appliesToAllTypes || def.placeTypeIds.includes(placeTypeId),
+  );
+}
+
+/**
+ * The definitions a TRIP's form shows: the ones applicable to the types of the
+ * places it links, UNION any key that already has a value.
+ *
+ * The first half is the same scoping a place gets — a trip that visited a
+ * canyon is asked the canyon questions, one that visited nothing is asked only
+ * the `appliesToAllTypes` ones ("walked around the block" is the common case,
+ * not an edge case).
+ *
+ * THE UNION CLAUSE IS WHAT STOPS IT EATING DATA. Without it, unlinking a
+ * place, deleting one, changing its type or rescoping a definition all silently
+ * hide a value the user typed — the form stops rendering the field, the next
+ * save writes the object the form knows about, and the value is gone with no
+ * warning and no undo. One clause covers all four. A value is destroyed only by
+ * deleting its definition, which has its own impact count and confirmation.
+ *
+ * Order is the order given, so a field does not jump when a place is linked.
+ */
+export function tripFieldDefs(
+  defs: readonly ScopedCustomFieldDef[],
+  linkedPlaceTypeIds: readonly string[],
+  values: Record<string, unknown> | null | undefined,
+): ScopedCustomFieldDef[] {
+  const linked = new Set(linkedPlaceTypeIds);
+  return defs.filter(
+    (def) =>
+      def.appliesToAllTypes ||
+      def.placeTypeIds.some((typeId) => linked.has(typeId)) ||
+      (values != null && values[def.key] !== undefined && values[def.key] !== null),
+  );
+}
 
 export const CUSTOM_FIELD_TYPES: {
   value: TripLogCustomFieldType;
@@ -59,9 +171,15 @@ export const VALID_CUSTOM_FIELD_TYPES = new Set<string>([
  * visible everywhere the field is shown, without polluting the stored label.
  */
 export function customFieldDisplayLabel(def: TripLogCustomFieldDef): string {
+  // One-sided bounds get shown too. This used to require BOTH, so a min-only
+  // field — which every "how many" field now is — displayed with no hint that
+  // it was bounded at all, and the user only found out when a write was
+  // refused.
   if (def.min != null && def.max != null) {
     return `${def.label} (${def.min}-${def.max})`;
   }
+  if (def.min != null) return `${def.label} (${def.min}+)`;
+  if (def.max != null) return `${def.label} (up to ${def.max})`;
   return def.label;
 }
 
@@ -163,7 +281,7 @@ export function renameCustomFieldLabel(
 }
 
 /**
- * Raw form state for the "Add Custom Field" sub-form. Both CanyonDialog and
+ * Raw form state for the "Add Custom Field" sub-form. Both PlaceDialog and
  * TripLogDialog feed this into `buildCustomFieldDef` to get a validated
  * `TripLogCustomFieldDef` or a user-facing error string.
  */
@@ -249,12 +367,17 @@ export type CustomFieldDefRow = {
 export function customFieldDefFromRow(
   row: CustomFieldDefRow,
 ): TripLogCustomFieldDef | null {
-  const bounded = row.min != null && row.max != null;
+  // ONE-SIDED BOUNDS SURVIVE. This used to require both, so a min-only
+  // definition — which every "how many" field is, and which three of the system
+  // fields are — came back through this reader with no bound at all: the form
+  // stopped showing the range and the client-side check stopped refusing a
+  // negative, leaving the server as the only thing that still said no.
   const candidate = {
     key: row.key,
     label: row.label,
     type: row.type,
-    ...(bounded ? { min: row.min, max: row.max } : {}),
+    ...(row.min != null ? { min: row.min } : {}),
+    ...(row.max != null ? { max: row.max } : {}),
   };
   return isTripLogCustomFieldDef(candidate) ? candidate : null;
 }
@@ -288,19 +411,27 @@ export function isTripLogCustomFieldDef(v: unknown): v is TripLogCustomFieldDef 
   ) {
     return false;
   }
-  // Bounds are optional, but if either is present both must be valid finite
-  // numbers with min < max, only on numeric field types (integers when
-  // type === "integer"). Fail loud rather than silently dropping.
-  const hasMin = c.min !== undefined;
-  const hasMax = c.max !== undefined;
+  // Bounds are optional and ONE-SIDED IS LEGAL: min alone, max alone, or both.
+  //
+  // They used to be both-or-neither, which the system defs cannot satisfy —
+  // `hours`, `num_abseils` and `longest_abseil` are min-0-no-max, exactly as
+  // the numeric constraints on the old grade columns were. Requiring both would
+  // have meant inventing a ceiling for "how many pitches", which is a number
+  // nobody knows and every user would eventually hit.
+  //
+  // Whatever is present must be a finite number of the right kind, and when
+  // both are present min must be below max. Fail loud rather than silently
+  // dropping — a dropped bound is a field that quietly stops validating.
+  const hasMin = c.min !== undefined && c.min !== null;
+  const hasMax = c.max !== undefined && c.max !== null;
   if (hasMin || hasMax) {
     if (c.type !== "integer" && c.type !== "float") return false;
-    if (typeof c.min !== "number" || typeof c.max !== "number") return false;
-    if (!Number.isFinite(c.min) || !Number.isFinite(c.max)) return false;
-    if (c.min >= c.max) return false;
-    if (c.type === "integer" && (!Number.isInteger(c.min) || !Number.isInteger(c.max))) {
-      return false;
+    for (const bound of [hasMin ? c.min : undefined, hasMax ? c.max : undefined]) {
+      if (bound === undefined) continue;
+      if (typeof bound !== "number" || !Number.isFinite(bound)) return false;
+      if (c.type === "integer" && !Number.isInteger(bound)) return false;
     }
+    if (hasMin && hasMax && (c.min as number) >= (c.max as number)) return false;
   }
   return true;
 }

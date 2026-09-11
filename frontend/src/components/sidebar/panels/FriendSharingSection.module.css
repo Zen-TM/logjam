@@ -54,7 +54,7 @@
   font-size: var(--text-sm);
 }
 
-.canyonName {
+.placeName {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

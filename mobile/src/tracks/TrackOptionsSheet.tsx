@@ -18,7 +18,7 @@ import { messageFromError, TRACK_COLORS } from "@logjam/shared";
 import { assetHue, radius, spacing, theme, withAlpha } from "../theme";
 import { BottomSheet, RenameForm, Row } from "../ui";
 import { trackActions } from "../saved/assetActions";
-import { useCanyonPicker } from "../canyons/useCanyonPicker";
+import { usePlacePicker } from "../places/usePlacePicker";
 import type { Bbox } from "../saved/bboxOfPoints";
 import { ExportUnsupportedError } from "../fileExport";
 import { type Track } from "./tracksDb";
@@ -117,19 +117,19 @@ export function TrackOptionsSheet({
     },
   });
 
-  // THE canyon picker, as a sub-mode of this sheet — the same panel a route's
+  // THE place picker, as a sub-mode of this sheet — the same panel a route's
   // and an import's options render. Called unconditionally, like the share
   // panel above it; with the sub-mode closed it issues nothing.
-  const canyonPicker = useCanyonPicker({
+  const placePicker = usePlacePicker({
     source: "track",
     active: attaching,
-    attach: async (canyonId, canyonName) => {
+    attach: async (placeId, placeName) => {
       if (!actions?.createRouteFrom) throw new Error("This track can't become a route.");
       // RDP always throws points away; saying how many survived is what stops
       // the user concluding the app lost their recording.
-      const { name, pointCount } = await actions.createRouteFrom(canyonId);
+      const { name, pointCount } = await actions.createRouteFrom(placeId);
       onInfo(
-        `Saved “${name}” — ${pointCount} points — as ${canyonName}'s route.`,
+        `Saved “${name}” — ${pointCount} points — as ${placeName}'s route.`,
       );
     },
     onDone: () => {
@@ -193,12 +193,12 @@ export function TrackOptionsSheet({
           : sending
             ? share.title
             : attaching
-              ? "Attach to a canyon"
+              ? "Attach to a place"
               : track.name
       }
       onBack={leaveSubMode ?? undefined}
       footer={sending ? share.footer : undefined}
-      header={attaching ? canyonPicker.header : undefined}
+      header={attaching ? placePicker.header : undefined}
     >
       {/* Send a copy REPLACES the verb list, like Rename does and like the
           route and waypoint sheets' Share — a picker rendered between the
@@ -206,7 +206,7 @@ export function TrackOptionsSheet({
       {sending && actions.sendCopy ? (
         share.body
       ) : attaching ? (
-        canyonPicker.body
+        placePicker.body
       ) : renaming ? (
         <View style={styles.body}>
           <RenameForm
@@ -356,8 +356,8 @@ export function TrackOptionsSheet({
               picker says before the fact (routeSlot.ts's promise). */}
           {actions.createRouteFrom ? (
             <Row
-              title="Attach to a canyon"
-              subtitle="As that canyon's route"
+              title="Attach to a place"
+              subtitle="As that place's route"
               icon="link"
               hue={assetHue.route}
               disabled={busy}

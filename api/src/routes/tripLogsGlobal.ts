@@ -5,7 +5,7 @@ import { AppError } from "../middleware/errorHandler";
 import { Prisma } from "@prisma/client";
 import {
   enforceCanyoningTag,
-  MAX_CANYONS_PER_TRIP,
+  MAX_PLACES_PER_TRIP,
   MAX_TRIP_TYPES_PER_TRIP,
   TRIP_NAME_MAX_LENGTH,
   TRIP_TYPE_MAX_LENGTH,
@@ -28,50 +28,50 @@ const router = Router();
 
 // Join rows are always fetched ordered by position; the derived trip title
 // joins the names in this order.
-export const tripCanyonsInclude = {
-  canyons: {
+export const tripPlacesInclude = {
+  places: {
     orderBy: { position: "asc" },
-    select: { canyon: { select: { id: true, name: true } } },
+    select: { place: { select: { id: true, name: true } } },
   },
 } satisfies Prisma.TripLogInclude;
 
-type TripWithCanyons = Prisma.TripLogGetPayload<{
-  include: typeof tripCanyonsInclude;
+type TripWithPlaces = Prisma.TripLogGetPayload<{
+  include: typeof tripPlacesInclude;
 }>;
 
-// Flattens the join rows into the API shape: canyons: [{ id, name }, …].
-export function serializeTrip(trip: TripWithCanyons) {
-  const { canyons, ...rest } = trip;
-  return { ...rest, canyons: canyons.map((link) => link.canyon) };
+// Flattens the join rows into the API shape: places: [{ id, name }, …].
+export function serializeTrip(trip: TripWithPlaces) {
+  const { places, ...rest } = trip;
+  return { ...rest, places: places.map((link) => link.place) };
 }
 
-// Validates that every supplied canyonId exists and is owned by the current
+// Validates that every supplied placeId exists and is owned by the current
 // user. Returns the ordered id list to persist ([] when unassigned). The
-// error never echoes which ids failed — that would confirm foreign canyon
+// error never echoes which ids failed — that would confirm foreign place
 // ids exist (SEC-001 anti-oracle).
-export async function resolveTripCanyonIds(
+export async function resolveTripPlaceIds(
   userId: string,
-  canyonIds: unknown,
+  placeIds: unknown,
 ): Promise<string[]> {
-  if (canyonIds === undefined || canyonIds === null) return [];
+  if (placeIds === undefined || placeIds === null) return [];
   if (
-    !Array.isArray(canyonIds) ||
-    canyonIds.some((id) => typeof id !== "string")
+    !Array.isArray(placeIds) ||
+    placeIds.some((id) => typeof id !== "string")
   ) {
-    throw new AppError(400, "canyonIds must be an array of strings");
+    throw new AppError(400, "placeIds must be an array of strings");
   }
-  if (canyonIds.length === 0) return [];
-  if (canyonIds.length > MAX_CANYONS_PER_TRIP)
-    throw new AppError(400, `At most ${MAX_CANYONS_PER_TRIP} canyons per trip`);
-  if (new Set(canyonIds).size !== canyonIds.length)
-    throw new AppError(400, "canyonIds contains duplicates");
+  if (placeIds.length === 0) return [];
+  if (placeIds.length > MAX_PLACES_PER_TRIP)
+    throw new AppError(400, `At most ${MAX_PLACES_PER_TRIP} places per trip`);
+  if (new Set(placeIds).size !== placeIds.length)
+    throw new AppError(400, "placeIds contains duplicates");
 
-  const owned = await prisma.canyon.count({
-    where: { id: { in: canyonIds }, ownerId: userId },
+  const owned = await prisma.place.count({
+    where: { id: { in: placeIds }, ownerId: userId },
   });
-  if (owned !== canyonIds.length)
-    throw new AppError(400, "One or more canyons were not found");
-  return canyonIds;
+  if (owned !== placeIds.length)
+    throw new AppError(400, "One or more places were not found");
+  return placeIds;
 }
 
 // Normalizes an optional free-text trip-type list: an array of strings, each
@@ -113,13 +113,13 @@ export function parseTripTypes(value: unknown): string[] | undefined {
 // Resolves the `types` array a PATCH should persist, enforcing the canyoning
 // tag across all four combinations of its two independently-optional fields.
 //
-//   types | canyonIds | tag decided from
+//   types | placeIds | tag decided from
 //   ------+-----------+---------------------------------------------------
 //   set   | set       | incoming types, incoming link state
 //   set   | absent    | incoming types, STORED link state  ← the trap: without
-//         |           |   the stored links, `types: []` on a canyon-linked
+//         |           |   the stored links, `types: []` on a place-linked
 //         |           |   trip silently strips the tag
-//   absent| set       | stored types, incoming link state (linking a canyon
+//   absent| set       | stored types, incoming link state (linking a place
 //         |           |   to an untagged trip tags it)
 //   absent| absent    | stored types, stored link state (no-op unless the trip
 //         |           |   predates enforcement, which this write then repairs)
@@ -129,16 +129,16 @@ export function parseTripTypes(value: unknown): string[] | undefined {
 export function resolvePatchedTripTypes(args: {
   parsedTypes: string[] | undefined;
   storedTypes: string[];
-  resolvedCanyonIds: string[] | undefined;
-  storedHasLinkedCanyon: boolean;
+  resolvedPlaceIds: string[] | undefined;
+  storedHasLinkedPlace: boolean;
 }): { types: string[]; changed: boolean } {
-  const { parsedTypes, storedTypes, resolvedCanyonIds, storedHasLinkedCanyon } =
+  const { parsedTypes, storedTypes, resolvedPlaceIds, storedHasLinkedPlace } =
     args;
-  const hasLinkedCanyon =
-    resolvedCanyonIds !== undefined
-      ? resolvedCanyonIds.length > 0
-      : storedHasLinkedCanyon;
-  const types = enforceCanyoningTag(parsedTypes ?? storedTypes, hasLinkedCanyon);
+  const hasLinkedPlace =
+    resolvedPlaceIds !== undefined
+      ? resolvedPlaceIds.length > 0
+      : storedHasLinkedPlace;
+  const types = enforceCanyoningTag(parsedTypes ?? storedTypes, hasLinkedPlace);
   // enforceCanyoningTag only ever appends, so against the stored array a length
   // change is the only way it can differ.
   const changed =
@@ -166,7 +166,7 @@ export function parseDisplayName(value: unknown): string | null | undefined {
 
 // ── GET /trips ────────────────────────────────────────────────
 // Returns all trip logs owned by the current user.
-// Query params: ?search= (trip name or linked canyon name), ?dateFrom=, ?dateTo=
+// Query params: ?search= (trip name or linked place name), ?dateFrom=, ?dateTo=
 router.get(
   "/",
   requireAuth,
@@ -200,9 +200,9 @@ router.get(
         ? {
             OR: [
               {
-                canyons: {
+                places: {
                   some: {
-                    canyon: {
+                    place: {
                       name: { contains: search, mode: "insensitive" },
                     },
                   },
@@ -231,7 +231,7 @@ router.get(
         where,
         orderBy: { date: "desc" },
         take: TRIP_LIST_TAKE,
-        include: tripCanyonsInclude,
+        include: tripPlacesInclude,
       }),
       prisma.tripLog.count({ where }),
     ]);
@@ -252,7 +252,7 @@ router.get(
     const id = getParam(req.params.id);
     const trip = await prisma.tripLog.findUnique({
       where: { id },
-      include: tripCanyonsInclude,
+      include: tripPlacesInclude,
     });
     // Owner-private resource — 404 (not 403) for non-owners so the response
     // is no existence oracle for trip IDs (SEC-001).
@@ -268,26 +268,26 @@ router.get(
 );
 
 // ── POST /trips ───────────────────────────────────────────────
-// Creates a trip log, optionally linked to any number of owned canyons
-// (canyonIds omitted or [] = unassigned). displayName and types are
+// Creates a trip log, optionally linked to any number of owned places
+// (placeIds omitted or [] = unassigned). displayName and types are
 // independent optional fields; a bare trip needs only a date. The default
-// title (joined canyon names) is derived at render time, never stored.
-// A canyon-linked trip is force-tagged `canyoning` (enforceCanyoningTag).
+// title (joined place names) is derived at render time, never stored.
+// A place-linked trip is force-tagged `canyoning` (enforceCanyoningTag).
 router.post(
   "/",
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await resolveUser(req.user!.sub);
 
-    const { date, notes, customFields, canyonIds, displayName, types } =
+    const { date, notes, customFields, placeIds, displayName, types } =
       req.body;
     if (!date) throw new AppError(400, "date is required");
 
-    const resolvedCanyonIds = await resolveTripCanyonIds(user.id, canyonIds);
+    const resolvedPlaceIds = await resolveTripPlaceIds(user.id, placeIds);
     const trimmedDisplayName = parseDisplayName(displayName) ?? null;
     const parsedTypes = enforceCanyoningTag(
       parseTripTypes(types) ?? [],
-      resolvedCanyonIds.length > 0,
+      resolvedPlaceIds.length > 0,
     );
 
     // Optional client-minted id (Stage 8 §3.5): own-id replay → 200 with the
@@ -296,7 +296,7 @@ router.post(
     if (clientId) {
       const existing = await prisma.tripLog.findUnique({
         where: { id: clientId },
-        include: tripCanyonsInclude,
+        include: tripPlacesInclude,
       });
       if (existing) {
         assertClientIdReplayable(existing.userId, user.id, "Trip log not found");
@@ -316,14 +316,14 @@ router.post(
           types: parsedTypes,
           notes,
           customFields: customFields ?? {},
-          canyons: {
-            create: resolvedCanyonIds.map((canyonId, position) => ({
-              canyonId,
+          places: {
+            create: resolvedPlaceIds.map((placeId, position) => ({
+              placeId,
               position,
             })),
           },
         },
-        include: tripCanyonsInclude,
+        include: tripPlacesInclude,
       });
     } catch (err) {
       // Concurrent replay of the same client id — return the winner's row,
@@ -335,7 +335,7 @@ router.post(
       ) {
         const winner = await prisma.tripLog.findUnique({
           where: { id: clientId },
-          include: tripCanyonsInclude,
+          include: tripPlacesInclude,
         });
         if (winner && winner.userId === user.id) {
           res.status(200).json(serializeTrip(winner));
@@ -350,7 +350,7 @@ router.post(
 );
 
 // ── PATCH /trips/:id ──────────────────────────────────────────
-// Updates a trip log. canyonIds, when present, replaces the full linked set
+// Updates a trip log. placeIds, when present, replaces the full linked set
 // (order included). displayName accepts explicit null to clear; types
 // accepts explicit null or [] to clear (types: [] and null both mean "no
 // types"); either replaces the full array when present.
@@ -366,35 +366,35 @@ router.patch(
     const id = getParam(req.params.id);
     const trip = await prisma.tripLog.findUnique({
       where: { id },
-      // The canyon links are fetched, not just the row: `canyonIds` and `types`
+      // The place links are fetched, not just the row: `placeIds` and `types`
       // are independently optional, so enforcement needs the trip's CURRENT
-      // link state whenever the request omits canyonIds. Without this, a PATCH
-      // of `types: []` on a canyon-linked trip would silently strip the tag.
+      // link state whenever the request omits placeIds. Without this, a PATCH
+      // of `types: []` on a place-linked trip would silently strip the tag.
       // take: 1 — only existence is needed, never the ids.
-      include: { canyons: { select: { canyonId: true }, take: 1 } },
+      include: { places: { select: { placeId: true }, take: 1 } },
     });
     // Owner-private resource — 404 (not 403) for non-owners (SEC-001).
     if (!trip || trip.userId !== user.id)
       throw new AppError(404, "Trip log not found");
 
-    const { date, notes, customFields, canyonIds, displayName, types } =
+    const { date, notes, customFields, placeIds, displayName, types } =
       req.body;
 
-    const resolvedCanyonIds =
-      canyonIds !== undefined
-        ? await resolveTripCanyonIds(user.id, canyonIds)
+    const resolvedPlaceIds =
+      placeIds !== undefined
+        ? await resolveTripPlaceIds(user.id, placeIds)
         : undefined;
     const trimmedDisplayName = parseDisplayName(displayName);
     const parsedTypes = parseTripTypes(types);
 
-    // "A canyon-linked trip carries the canyoning tag" is maintained on every
+    // "A place-linked trip carries the canyoning tag" is maintained on every
     // write, not only on writes that mention `types` — see the helper.
     const { types: effectiveTypes, changed: typesChanged } =
       resolvePatchedTripTypes({
         parsedTypes,
         storedTypes: trip.types,
-        resolvedCanyonIds,
-        storedHasLinkedCanyon: trip.canyons.length > 0,
+        resolvedPlaceIds,
+        storedHasLinkedPlace: trip.places.length > 0,
       });
 
     const updated = await prisma.tripLog.update({
@@ -409,22 +409,22 @@ router.patch(
           displayName: trimmedDisplayName,
         }),
         ...(typesChanged && { types: effectiveTypes }),
-        ...(resolvedCanyonIds !== undefined && {
-          canyons: {
+        ...(resolvedPlaceIds !== undefined && {
+          places: {
             deleteMany: {},
-            create: resolvedCanyonIds.map((canyonId, position) => ({
-              canyonId,
+            create: resolvedPlaceIds.map((placeId, position) => ({
+              placeId,
               position,
             })),
           },
-          // Force-touch the watermark: a canyonIds-only PATCH writes only
-          // nested TripLogCanyon rows, and Prisma's @updatedAt is not
+          // Force-touch the watermark: a placeIds-only PATCH writes only
+          // nested TripLogPlace rows, and Prisma's @updatedAt is not
           // guaranteed to bump the parent for nested-only writes. A trip whose
           // links changed MUST move past the delta cursor (stage8 §3.1 trap).
           updatedAt: new Date(),
         }),
       },
-      include: tripCanyonsInclude,
+      include: tripPlacesInclude,
     });
 
     res.json(serializeTrip(updated));

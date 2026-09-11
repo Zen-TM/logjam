@@ -6,7 +6,7 @@
 # beyond Metro. It does need a CLEAN app state — `adb shell pm clear
 # com.logjamnsw.mobile` first, or the stored entry choice skips the chooser.
 #
-# What it proves: a guest gets into the app, can create a canyon that lands in
+# What it proves: a guest gets into the app, can create a place that lands in
 # local SQLite, and sees account-backed features disabled with the reason rather
 # than hidden or crashing. Run: maestro test e2e/guest.yaml
 appId: com.logjamnsw.mobile
@@ -22,25 +22,28 @@ appId: com.logjamnsw.mobile
 
 # The shell mounts for a guest — same tabs as an authed user.
 - extendedWaitUntil:
-    visible: "Canyons"
+    visible: "Places"
     timeout: 20000
 
-# A local write: create a canyon and confirm it comes back from the mirror.
-- tapOn: "Canyons"
-# Empty list shows "Add a canyon"; a populated one shows the compact "Add" in
+# A local write: create a place and confirm it comes back from the mirror.
+- tapOn: "Places"
+# Empty list shows "Add a place"; a populated one shows the compact "Add" in
 # the hero. A fresh guest install is the former, but don't depend on it.
 - tapOn:
-    text: "Add a canyon|Add"
+    text: "Add a place|Add"
 - extendedWaitUntil:
     visible: "Name"
     timeout: 10000
+# TYPE FIRST — the form reshapes under this choice, and a guest gets the
+# built-in types even with nothing synced (they are compiled in).
+- assertVisible: "Canyon"
 - tapOn: "Name"
 - inputText: "Guest Test Canyon"
 - tapOn: "Latitude"
 - inputText: "-33.5603"
 - tapOn: "Longitude"
 - inputText: "150.4033"
-- tapOn: "Save"
+- tapOn: "Add place"
 - extendedWaitUntil:
     visible: "Guest Test Canyon"
     timeout: 10000

@@ -8,42 +8,46 @@ import {
 import CloseIcon from "@mui/icons-material/Close";
 import {
   buildCustomFieldDef,
+  type ScopedCustomFieldDef,
   type TripLogCustomFieldDef,
   type TripLogCustomFieldType,
 } from "@logjam/shared";
-import { updateUserPreferences, type CustomFieldEntityKind } from "../../canyonUtils";
+import { createCustomField, type CustomFieldEntityKind } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import AddCustomFieldForm from "./AddCustomFieldForm";
 
-// Entity → the User.uiPreferences key its defs live under, and the noun the
-// add-form uses ("This field will be created for all <noun>.").
-const ENTITY_META: Record<
-  CustomFieldEntityKind,
-  { prefsKey: "tripLogCustomFields" | "canyonCustomFields"; noun: string }
-> = {
-  "trip-log": { prefsKey: "tripLogCustomFields", noun: "trip logs" },
-  canyon: { prefsKey: "canyonCustomFields", noun: "canyons" },
+// Entity → the noun the add-form uses ("This field will be created for all
+// <noun>."). The `uiPreferences` key that used to live here went with the
+// whole-list write path: definitions are rows, addressed by key.
+const ENTITY_NOUN: Record<CustomFieldEntityKind, string> = {
+  "trip-log": "trip logs",
+  place: "places",
 };
 
 /**
  * MUI dialog that hosts the shared AddCustomFieldForm so a custom field can be
  * created from the Account panel (which, being a sidebar panel, can't render
  * MUI form controls itself). Owns the add-form draft state, runs the same
- * `buildCustomFieldDef` validation the CanyonDialog/TripLogDialog add-forms use,
+ * `buildCustomFieldDef` validation the PlaceDialog/TripLogDialog add-forms use,
  * persists the new def to User.uiPreferences, and reports the updated def list.
  */
 function AddCustomFieldDialog({
   open,
   entity,
   existingDefs,
+  placeTypes,
   onClose,
   onAdded,
 }: {
   open: boolean;
   entity: CustomFieldEntityKind;
   existingDefs: TripLogCustomFieldDef[];
+  /** Offered as the scoping choice for a PLACE field. Absent for trip logs,
+   *  whose fields are scoped by the types of the places a trip links (§2.7),
+   *  so they are created for every type. */
+  placeTypes?: { id: string; name: string }[];
   onClose: () => void;
-  onAdded: (defs: TripLogCustomFieldDef[]) => void;
+  onAdded: (defs: ScopedCustomFieldDef[]) => void;
 }) {
   const [label, setLabel] = useState("");
   const [type, setType] = useState<TripLogCustomFieldType>("string");
@@ -52,8 +56,11 @@ function AddCustomFieldDialog({
   const [max, setMax] = useState("");
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const meta = ENTITY_META[entity];
+  const [selectedTypeIds, setSelectedTypeIds] = useState<string[]>([]);
+  // Defaults to "all types" for a field created from the account panel: the
+  // user is defining a field with no place in front of them, so the honest
+  // default is the one that shows it everywhere rather than nowhere.
+  const [appliesToAllTypes, setAppliesToAllTypes] = useState(true);
 
   function reset() {
     setLabel("");
@@ -62,6 +69,8 @@ function AddCustomFieldDialog({
     setMin("");
     setMax("");
     setError(null);
+    setSelectedTypeIds([]);
+    setAppliesToAllTypes(true);
   }
 
   function handleClose() {
@@ -79,8 +88,13 @@ function AddCustomFieldDialog({
     setAdding(true);
     setError(null);
     try {
-      const updatedDefs = [...existingDefs, result.def];
-      await updateUserPreferences({ [meta.prefsKey]: updatedDefs });
+      // ROW-GRAIN. The whole-list PATCH is gone (see placeUtils.ts): it could
+      // not express the scoping, so every save through it wiped the scoping
+      // off every definition.
+      const updatedDefs = await createCustomField(entity, result.def, {
+        appliesToAllTypes,
+        ...(appliesToAllTypes ? {} : { placeTypeIds: selectedTypeIds }),
+      });
       onAdded(updatedDefs);
       reset();
       onClose();
@@ -120,7 +134,7 @@ function AddCustomFieldDialog({
       </DialogTitle>
       <DialogContent dividers sx={{ borderColor: "rgba(255,255,255,0.1)" }}>
         <AddCustomFieldForm
-          entityNoun={meta.noun}
+          entityNoun={ENTITY_NOUN[entity]}
           label={label}
           onLabelChange={setLabel}
           type={type}
@@ -137,6 +151,17 @@ function AddCustomFieldDialog({
             max,
             onMaxChange: setMax,
           }}
+          scope={
+            placeTypes && entity === "place"
+              ? {
+                  types: placeTypes,
+                  selectedTypeIds,
+                  onSelectedTypeIdsChange: setSelectedTypeIds,
+                  appliesToAllTypes,
+                  onAppliesToAllTypesChange: setAppliesToAllTypes,
+                }
+              : undefined
+          }
         />
       </DialogContent>
     </Dialog>

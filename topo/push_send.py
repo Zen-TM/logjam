@@ -7,7 +7,7 @@ needed). Sends are best-effort — callers create the in-app notification first,
 so a failure here is logged and swallowed, never raised.
 
 PRIVACY (hard rule): push payloads transit Apple/Google/Expo servers in
-plaintext. NEVER put canyon names, coordinates, usernames, or any free text in
+plaintext. NEVER put place names, coordinates, usernames, or any free text in
 a push. Titles are static per type; data carries the notification type and
 opaque IDs only. Keep PUSH_TITLES and ALLOWED_DATA_KEYS in sync with
 api/src/services/push.ts.
@@ -26,7 +26,7 @@ EXPO_PUSH_BATCH_LIMIT = 100
 PUSH_TITLES = {
     "friend_request": "New friend request",
     "friend_request_accepted": "Friend request accepted",
-    "canyon_shared": "A canyon was shared with you",
+    "place_shared": "A place was shared with you",
     "topo_complete": "Topo processing complete",
     "topo_failed": "Topo processing failed",
     "topo_export_complete": "Topo export finished",
@@ -35,14 +35,24 @@ PUSH_TITLES = {
 }
 GENERIC_TITLE = "Logjam notification"
 
+# MUST match ALLOWED_DATA_KEYS in api/src/services/push.ts exactly. The API
+# builds the payload and either sender may deliver it, and build_push_messages
+# RAISES on a key that is not here — so a key the API adds and this list lacks
+# is a send that throws, for an edit in a file this module never imports.
+# Guard: tests/test_push_constants_sync.py, which found these four missing.
+# Every key is an opaque id; that is the whole rule (no free text, ever).
 ALLOWED_DATA_KEYS = {
     "type",
     "notificationId",
     "friendshipId",
-    "canyonId",
+    "placeId",
     "jobId",
     "exportId",
     "geoPdfJobId",
+    "entityType",
+    "entityId",
+    "fileSendId",
+    "batchId",
 }
 
 

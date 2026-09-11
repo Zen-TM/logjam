@@ -15,7 +15,7 @@ interface State {
 }
 
 // Top-level safety net, mirroring the web RootErrorBoundary. React unmounts the
-// whole tree on an uncaught render/lifecycle error; on a phone in a canyon that
+// whole tree on an uncaught render/lifecycle error; on a phone in a place that
 // is a blank screen with no console and no way back. It catches render and
 // lifecycle throws only — event handlers and async rejections still need local
 // try/catch.
@@ -33,7 +33,7 @@ export class RootErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
-    // A render error + component stack carry no canyon data, and Sentry's
+    // A render error + component stack carry no place data, and Sentry's
     // beforeSend scrubber (sentry/scrubEvent.ts) runs over it regardless.
     console.error("Unhandled render error:", error, info.componentStack);
     Sentry.captureException(error);

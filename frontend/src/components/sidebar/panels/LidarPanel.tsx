@@ -10,7 +10,7 @@ import {
   shareEntityWith,
   unshareEntityWith,
   type TFriend,
-} from "../../../canyonUtils";
+} from "../../../placeUtils";
 import { messageFromError } from "../../../errors/messageFromError";
 import { useToast } from "../../feedback/ToastProvider";
 import { JobRibbonStack, JobRibbon, minutesEta } from "../../feedback/JobRibbon";
@@ -558,7 +558,7 @@ function LidarPanel({
                       <Trash2 size={14} />
                     </button>
                   )}
-                  {/* A topo is only ever shared DIRECTLY — it has no canyon to
+                  {/* A topo is only ever shared DIRECTLY — it has no place to
                       inherit visibility from — so a shared row always carries a
                       share of its own for the recipient to drop. */}
                   {!isOwner && (

@@ -1,11 +1,12 @@
 // Mirror row mapping: delta wire rows ⇄ SQLite mirror tables (§9). Known
 // fields land in typed columns; anything else the server sent is preserved
 // verbatim in extra_json (additive protocol §10.3, display-only). Reads
-// reassemble the client-facing shapes the screens already consume (TCanyon /
+// reassemble the client-facing shapes the screens already consume (TPlace /
 // TTripLog compatible).
 import type { SQLiteDatabase } from "expo-sqlite";
 import type {
-  SyncDeltaCanyonRow,
+  SyncDeltaPlaceRow,
+  SyncDeltaPlaceTypeRow,
   SyncDeltaCustomFieldDefRow,
   SyncDeltaFriendshipRow,
   SyncDeltaMediaRow,
@@ -13,14 +14,18 @@ import type {
   SyncDeltaTombstone,
   SyncEntityType,
   SyncDeltaTripRow,
-  SyncDeltaWaypointRow,
+  SyncDeltaPlaceLinkRow,
   SyncDeltaRouteRow,
   MediaMetadata,
 } from "@logjam/shared";
-import { isKnownSyncEntityType, readMediaMetadata } from "@logjam/shared";
+import {
+  isKnownSyncEntityType,
+  readMediaMetadata,
+  SYSTEM_PLACE_TYPES,
+} from "@logjam/shared";
 
-import type { TCanyon, TTripLog } from "../api/types";
-import { withoutCanyonId, withoutCanyonLink } from "./canyonLinks";
+import type { TPlace, TTripLog } from "../api/types";
+import { withoutPlaceLink } from "./placeLinks";
 import { getSyncDb, notifyMirrorChanged } from "./syncDb";
 
 // ── extras split ─────────────────────────────────────────────────────────────
@@ -40,35 +45,40 @@ function splitExtras<Row extends Record<string, unknown>>(
   return any ? JSON.stringify(extras) : null;
 }
 
-const CANYON_KNOWN = [
+const PLACE_KNOWN = [
   "id", "syncRole", "name", "altNames", "latitude", "longitude",
-  "numAbseils", "longestAbseil", "vGrade", "aGrade", "commitment",
-  "quality", "hours", "notes", "attributes", "forkedFromId",
+  "placeTypeId", "notes", "elevation", "fieldValues",
+  "fieldDefsSnapshot", "foreignFields", "forkedFromId", "createdAt",
+  "updatedAt",
+] as const;
+
+const PLACE_TYPE_KNOWN = [
+  "id", "ownerId", "name", "iconKey", "color", "position",
   "createdAt", "updatedAt",
 ] as const;
 
 const TRIP_KNOWN = [
   "id", "date", "displayName", "types", "notes", "customFields",
-  "canyons", "createdAt", "updatedAt",
+  "places", "createdAt", "updatedAt",
 ] as const;
 
-const WAYPOINT_KNOWN = [
-  "id", "ownerId", "canyonIds", "tags", "syncRole", "name", "latitude",
-  "longitude", "elevation", "symbol", "notes", "sharedCount",
-  "createdAt", "updatedAt",
+const PLACE_LINK_KNOWN = [
+  "id", "ownerId", "aPlaceId", "bPlaceId", "createdAt", "updatedAt",
 ] as const;
 
 const ROUTE_KNOWN = [
-  "id", "ownerId", "canyonId", "name", "color", "points", "syncRole",
+  "id", "ownerId", "placeId", "name", "color", "points", "syncRole",
   "sharedCount", "createdAt", "updatedAt",
 ] as const;
 
-// `ownerId` is a known key that gets no column: every definition the server
-// sends is the caller's own (they are never shared), so storing it would be a
-// constant. It is listed here so it does not fall into extra_json.
+// `ownerId` has a column of its own: NULL means a SYSTEM definition, which the
+// user may not rename or delete. Storing it was skipped once on the premise
+// that every definition is the caller's own — the delta has always sent the
+// global ones too, and without the column the phone offered Delete on a
+// built-in field.
 const CUSTOM_FIELD_DEF_KNOWN = [
   "id", "ownerId", "entity", "key", "label", "type", "min", "max",
-  "position", "createdAt", "updatedAt",
+  "position", "placeTypeIds", "appliesToAllTypes", "createdAt", "updatedAt",
 ] as const;
 
 const MEDIA_KNOWN = [
@@ -83,37 +93,65 @@ const MEDIA_KNOWN = [
 // field names for the dirty_fields_json column. No pending ops → dirtyFields
 // is empty and columns hold pure server state.
 
-export async function upsertCanyon(
+export async function upsertPlace(
   db: SQLiteDatabase,
-  row: SyncDeltaCanyonRow,
+  row: SyncDeltaPlaceRow,
   dirtyFieldNames: string[],
 ): Promise<void> {
   await db.runAsync(
-    `INSERT OR REPLACE INTO canyons
+    `INSERT OR REPLACE INTO places
        (id, sync_role, name, latitude, longitude, alt_names_json,
-        num_abseils, longest_abseil, v_grade, a_grade, commitment, quality,
-        hours, notes, attributes_json, forked_from_id, created_at, updated_at,
-        extra_json, dirty_fields_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        place_type_id, notes, elevation, field_values_json,
+        field_defs_snapshot_json, foreign_fields_json, forked_from_id,
+        created_at, updated_at, extra_json, dirty_fields_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     row.id,
     row.syncRole,
     row.name,
     row.latitude,
     row.longitude,
     JSON.stringify(row.altNames ?? []),
-    row.numAbseils,
-    row.longestAbseil,
-    row.vGrade,
-    row.aGrade,
-    row.commitment,
-    row.quality,
-    row.hours,
+    row.placeTypeId,
     row.notes,
-    JSON.stringify(row.attributes ?? {}),
+    row.elevation ?? null,
+    JSON.stringify(row.fieldValues ?? {}),
+    // Present only on a place of a type this account does not own — a shared
+    // place of the sender's own type. Otherwise the viewer holds the
+    // definitions themselves and needs no snapshot.
+    row.fieldDefsSnapshot ? JSON.stringify(row.fieldDefsSnapshot) : null,
+    // OWNER-PRIVATE: the server never emits it on a shared row, so anything
+    // stored here belongs to this account.
+    row.foreignFields ? JSON.stringify(row.foreignFields) : null,
     row.forkedFromId,
     row.createdAt,
     row.updatedAt,
-    splitExtras(row, CANYON_KNOWN),
+    splitExtras(row, PLACE_KNOWN),
+    dirtyFieldNames.length ? JSON.stringify(dirtyFieldNames) : null,
+  );
+}
+
+export async function upsertPlaceType(
+  db: SQLiteDatabase,
+  row: SyncDeltaPlaceTypeRow,
+  dirtyFieldNames: string[],
+): Promise<void> {
+  await db.runAsync(
+    `INSERT OR REPLACE INTO place_types
+       (id, owner_id, name, icon_key, color, position, created_at, updated_at,
+        extra_json, dirty_fields_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    row.id,
+    // NULL means a SYSTEM type — global, shared by every account, not this
+    // user's. Storing it verbatim rather than coercing to "" keeps that
+    // distinction readable at every call site.
+    row.ownerId,
+    row.name,
+    row.iconKey,
+    row.color,
+    row.position,
+    row.createdAt,
+    row.updatedAt,
+    splitExtras(row, PLACE_TYPE_KNOWN),
     dirtyFieldNames.length ? JSON.stringify(dirtyFieldNames) : null,
   );
 }
@@ -126,7 +164,7 @@ export async function upsertTrip(
   await db.runAsync(
     `INSERT OR REPLACE INTO trip_logs
        (id, date, display_name, types_json, notes, custom_fields_json,
-        canyons_json, created_at, updated_at, extra_json, dirty_fields_json)
+        places_json, created_at, updated_at, extra_json, dirty_fields_json)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     row.id,
     row.date,
@@ -134,7 +172,7 @@ export async function upsertTrip(
     JSON.stringify(row.types ?? []),
     row.notes,
     JSON.stringify(row.customFields ?? {}),
-    JSON.stringify(row.canyons ?? []),
+    JSON.stringify(row.places ?? []),
     row.createdAt,
     row.updatedAt,
     splitExtras(row, TRIP_KNOWN),
@@ -143,81 +181,62 @@ export async function upsertTrip(
 }
 
 /**
- * A trip's pending canyon-link edit, rebased onto a fresh server row.
+ * A trip's pending place-link edit, rebased onto a fresh server row.
  *
- * The push op carries `canyonIds: string[]` while the delta row carries
- * `canyons: {id,name}[]`, so the generic rebase — which merges op fields over
+ * The push op carries `placeIds: string[]` while the delta row carries
+ * `places: {id,name}[]`, so the generic rebase — which merges op fields over
  * row fields BY NAME — never overrode the link list: the server's value won
- * and `canyonIds` fell through into `extra_json` as junk. Re-link a trip
+ * and `placeIds` fell through into `extra_json` as junk. Re-link a trip
  * offline and the next pull visibly snapped it back.
  *
  * The local mirror column already holds the edit complete with names (that is
  * what `updateTripLocal` wrote), so the rebase keeps the local column rather
  * than trying to resolve id→name here.
  */
-export async function rebasePendingCanyonLinks(
+export async function rebasePendingPlaceLinks(
   db: SQLiteDatabase,
   row: SyncDeltaTripRow,
   dirtyNames: string[],
 ): Promise<{ effective: SyncDeltaTripRow; dirtyNames: string[] }> {
-  if (!dirtyNames.includes("canyonIds")) return { effective: row, dirtyNames };
-  const local = await db.getFirstAsync<{ canyons_json: string | null }>(
-    "SELECT canyons_json FROM trip_logs WHERE id = ?",
+  if (!dirtyNames.includes("placeIds")) return { effective: row, dirtyNames };
+  const local = await db.getFirstAsync<{ places_json: string | null }>(
+    "SELECT places_json FROM trip_logs WHERE id = ?",
     row.id,
   );
-  const { canyonIds: _discard, ...rest } = row as SyncDeltaTripRow & {
-    canyonIds?: unknown;
+  const { placeIds: _discard, ...rest } = row as SyncDeltaTripRow & {
+    placeIds?: unknown;
   };
   return {
     effective: {
       ...rest,
-      canyons: local?.canyons_json
-        ? (JSON.parse(local.canyons_json) as SyncDeltaTripRow["canyons"])
-        : row.canyons,
+      places: local?.places_json
+        ? (JSON.parse(local.places_json) as SyncDeltaTripRow["places"])
+        : row.places,
     },
-    dirtyNames: dirtyNames.map((name) => (name === "canyonIds" ? "canyons" : name)),
+    dirtyNames: dirtyNames.map((name) => (name === "placeIds" ? "places" : name)),
   };
 }
 
-export async function upsertWaypoint(
+export async function upsertPlaceLink(
   db: SQLiteDatabase,
-  row: SyncDeltaWaypointRow,
+  row: SyncDeltaPlaceLinkRow,
   dirtyFieldNames: string[],
 ): Promise<void> {
-  // sharedCount is OPTIONAL on the wire: absent means "unchanged", not zero
-  // (shared/src/sync.ts). The write-path response re-applied by flush omits it
-  // (waypointLink.serializeOwnWaypoint), and INSERT OR REPLACE would null the
-  // column and vanish the "Shared with N" pill. Carry the stored count forward.
-  const sharedCount =
-    row.sharedCount !== undefined
-      ? row.sharedCount
-      : (
-          await db.getFirstAsync<{ shared_count: number | null }>(
-            "SELECT shared_count FROM waypoints WHERE id = ?",
-            row.id,
-          )
-        )?.shared_count ?? null;
+  // No sharedCount carry-forward here (unlike routes): a link is owner-private,
+  // so there is no fan-out to report and no field the write-path response could
+  // omit.
   await db.runAsync(
-    `INSERT OR REPLACE INTO waypoints
-       (id, owner_id, canyon_ids_json, tags_json, sync_role, name, latitude,
-        longitude, elevation, symbol, notes, shared_count, created_at,
-        updated_at, extra_json, dirty_fields_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT OR REPLACE INTO place_links
+       (id, owner_id, a_place_id, b_place_id, created_at, updated_at,
+        extra_json, dirty_fields_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     row.id,
     row.ownerId,
-    JSON.stringify(row.canyonIds ?? []),
-    JSON.stringify(row.tags ?? []),
-    row.syncRole,
-    row.name,
-    row.latitude,
-    row.longitude,
-    row.elevation,
-    row.symbol,
-    row.notes,
-    sharedCount,
+    row.aPlaceId,
+    row.bPlaceId,
     row.createdAt,
     row.updatedAt,
-    splitExtras(row, WAYPOINT_KNOWN),
+    splitExtras(row, PLACE_LINK_KNOWN),
     dirtyFieldNames.length ? JSON.stringify(dirtyFieldNames) : null,
   );
 }
@@ -227,7 +246,7 @@ export async function upsertRoute(
   row: SyncDeltaRouteRow,
   dirtyFieldNames: string[],
 ): Promise<void> {
-  // Same contract as upsertWaypoint: absent sharedCount means "unchanged", not
+  // Absent sharedCount means "unchanged", not
   // zero — carry the stored count forward rather than nulling it (see the
   // comment there).
   const sharedCount =
@@ -241,13 +260,13 @@ export async function upsertRoute(
         )?.shared_count ?? null;
   await db.runAsync(
     `INSERT OR REPLACE INTO routes
-       (id, owner_id, canyon_id, name, color, points_json, anchors_json,
+       (id, owner_id, place_id, name, color, points_json, anchors_json,
         sync_role, shared_count, created_at, updated_at, extra_json,
         dirty_fields_json)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     row.id,
     row.ownerId,
-    row.canyonId,
+    row.placeId,
     row.name,
     row.color,
     JSON.stringify(row.points),
@@ -268,10 +287,14 @@ export async function upsertCustomFieldDef(
 ): Promise<void> {
   await db.runAsync(
     `INSERT OR REPLACE INTO custom_field_defs
-       (id, entity, key, label, type, min, max, position, created_at,
+       (id, owner_id, entity, key, label, type, min, max, position,
+        applies_to_all_types, place_type_ids_json, created_at,
         updated_at, extra_json, dirty_fields_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     row.id,
+    // NULL for a system definition — stored verbatim rather than coerced, the
+    // same way a system place type's owner is.
+    row.ownerId,
     row.entity,
     row.key,
     row.label,
@@ -279,6 +302,11 @@ export async function upsertCustomFieldDef(
     row.min,
     row.max,
     row.position,
+    // A server that predates the scoping fields sends neither. Defaulting to
+    // "no types, not all" renders the definition on NO form rather than on
+    // every one — the safe direction for a client that cannot tell.
+    row.appliesToAllTypes ? 1 : 0,
+    JSON.stringify(row.placeTypeIds ?? []),
     row.createdAt,
     row.updatedAt,
     splitExtras(row, CUSTOM_FIELD_DEF_KNOWN),
@@ -344,12 +372,12 @@ export async function upsertShare(
   const outgoing = row.sharedById === currentUserId;
   const counterpart = outgoing ? row.sharedWith : row.sharedBy;
   await db.runAsync(
-    `INSERT OR REPLACE INTO canyon_shares
-       (id, canyon_id, direction, counterpart_user_id, counterpart_username,
+    `INSERT OR REPLACE INTO place_shares
+       (id, place_id, direction, counterpart_user_id, counterpart_username,
         created_at, extra_json)
      VALUES (?, ?, ?, ?, ?, ?, NULL)`,
     row.id,
-    row.canyonId,
+    row.placeId,
     outgoing ? "out" : "in",
     counterpart.id,
     counterpart.username,
@@ -376,51 +404,38 @@ export async function upsertFriendship(
   );
 }
 
-// ── canyon link cascade ──────────────────────────────────────────────────────
+// ── place link cascade ──────────────────────────────────────────────────────
 
 /**
- * Take a dead canyon out of the mirror's JSON link columns.
+ * Take a dead place out of the mirror's JSON link columns.
  *
- * Waypoints have linked to canyons MANY-TO-MANY since the m2m change; the
- * cascade here used to null a `waypoints.canyon_id` column that no longer
- * exists on any fresh install, which threw inside the delta transaction, took
- * the cursor write down with the rollback, and froze the whole pull loop on
- * the first canyon delete the account ever saw. Trips carry the link with its
- * name (the derived title is built offline), so they need the same scrub in
- * their own shape.
+ * Only TRIPS carry one now: place↔place links became rows of their own in the
+ * phase 1c fold (`place_links`, deleted by the cascade above), while a trip
+ * still carries its places with their names because the derived title is built
+ * offline.
  *
- * Both the server tombstone and the local delete route through here — the two
- * used to differ, which is how waypoints kept dead links while trips didn't.
+ * The history is worth keeping, because it is what this function is FOR: the
+ * cascade once nulled a `waypoints.place_id` column that no longer existed on
+ * any fresh install, which threw inside the delta transaction, took the cursor
+ * write down with the rollback, and froze the whole pull loop on the first
+ * place delete the account ever saw. Both the server tombstone and the local
+ * delete route through here so the two cannot differ again.
  */
-export async function scrubCanyonLinks(
+export async function scrubPlaceLinks(
   db: SQLiteDatabase,
-  canyonId: string,
+  placeId: string,
 ): Promise<void> {
   // LIKE narrows the rewrite to candidate rows (it matches substrings too, so
-  // the helpers decide); the alternative is parsing every waypoint on the phone.
-  const waypoints = await db.getAllAsync<{ id: string; canyon_ids_json: string | null }>(
-    "SELECT id, canyon_ids_json FROM waypoints WHERE canyon_ids_json LIKE ?",
-    `%${canyonId}%`,
-  );
-  for (const waypoint of waypoints) {
-    const next = withoutCanyonId(waypoint.canyon_ids_json, canyonId);
-    if (next === null) continue;
-    await db.runAsync(
-      "UPDATE waypoints SET canyon_ids_json = ? WHERE id = ?",
-      next,
-      waypoint.id,
-    );
-  }
-
-  const trips = await db.getAllAsync<{ id: string; canyons_json: string | null }>(
-    "SELECT id, canyons_json FROM trip_logs WHERE canyons_json LIKE ?",
-    `%${canyonId}%`,
+  // the helpers decide); the alternative is parsing every trip on the phone.
+  const trips = await db.getAllAsync<{ id: string; places_json: string | null }>(
+    "SELECT id, places_json FROM trip_logs WHERE places_json LIKE ?",
+    `%${placeId}%`,
   );
   for (const trip of trips) {
-    const next = withoutCanyonLink(trip.canyons_json, canyonId);
+    const next = withoutPlaceLink(trip.places_json, placeId);
     if (next === null) continue;
     await db.runAsync(
-      "UPDATE trip_logs SET canyons_json = ? WHERE id = ?",
+      "UPDATE trip_logs SET places_json = ? WHERE id = ?",
       next,
       trip.id,
     );
@@ -454,38 +469,46 @@ async function collectMediaPaths(
 }
 
 /**
- * The canyon delete cascade, declared once. Both paths that remove a canyon
+ * The place delete cascade, declared once. Both paths that remove a place
  * from the mirror — the server tombstone and the local owner delete
- * (`deleteCanyonLocal`) — call this, because they diverged before: the local
- * path left the canyon's media rows and their cached blobs on disk (forever
+ * (`deletePlaceLocal`) — call this, because they diverged before: the local
+ * path left the place's media rows and their cached blobs on disk (forever
  * for a guest, who is never registered for delta pulls) and left
- * `routes.canyon_id` dangling.
+ * `routes.place_id` dangling.
  *
  * Returns cached blob paths to unlink AFTER the transaction commits.
  */
-export async function cascadeCanyonDelete(
+export async function cascadePlaceDelete(
   db: SQLiteDatabase,
-  canyonId: string,
+  placeId: string,
 ): Promise<string[]> {
   // Belt and braces both ends: the server fans out media tombstones too,
   // but the local cascade must not depend on their delivery order.
   const orphanedPaths = await collectMediaPaths(
     db,
-    "linked_type = 'canyon' AND linked_id = ?",
-    canyonId,
+    "linked_type = 'place' AND linked_id = ?",
+    placeId,
   );
   await db.runAsync(
-    "DELETE FROM media WHERE linked_type = 'canyon' AND linked_id = ?",
-    canyonId,
+    "DELETE FROM media WHERE linked_type = 'place' AND linked_id = ?",
+    placeId,
   );
-  await db.runAsync("DELETE FROM canyons WHERE id = ?", canyonId);
-  await db.runAsync("DELETE FROM canyon_shares WHERE canyon_id = ?", canyonId);
-  // Route canyon links are SetNull server-side; mirror matches.
+  await db.runAsync("DELETE FROM places WHERE id = ?", placeId);
+  await db.runAsync("DELETE FROM place_shares WHERE place_id = ?", placeId);
+  // The links touching it go with it — server-side they cascade, and their
+  // tombstones arrive too, but the local cascade must not depend on delivery
+  // order. The place at the OTHER end survives: a link is not a container.
   await db.runAsync(
-    "UPDATE routes SET canyon_id = NULL WHERE canyon_id = ?",
-    canyonId,
+    "DELETE FROM place_links WHERE a_place_id = ? OR b_place_id = ?",
+    placeId,
+    placeId,
   );
-  await scrubCanyonLinks(db, canyonId);
+  // Route place links are SetNull server-side; mirror matches.
+  await db.runAsync(
+    "UPDATE routes SET place_id = NULL WHERE place_id = ?",
+    placeId,
+  );
+  await scrubPlaceLinks(db, placeId);
   return orphanedPaths;
 }
 
@@ -505,8 +528,8 @@ export async function applyTombstone(
   const type: SyncEntityType = tombstone.type;
 
   switch (type) {
-    case "canyon": {
-      orphanedPaths.push(...(await cascadeCanyonDelete(db, tombstone.id)));
+    case "place": {
+      orphanedPaths.push(...(await cascadePlaceDelete(db, tombstone.id)));
       break;
     }
     case "tripLog": {
@@ -529,24 +552,33 @@ export async function applyTombstone(
       await db.runAsync("DELETE FROM media WHERE id = ?", tombstone.id);
       break;
     }
-    case "canyonShare":
-      await db.runAsync("DELETE FROM canyon_shares WHERE id = ?", tombstone.id);
+    case "placeShare":
+      await db.runAsync("DELETE FROM place_shares WHERE id = ?", tombstone.id);
       break;
     case "friendship":
       await db.runAsync("DELETE FROM friendships WHERE id = ?", tombstone.id);
       break;
-    case "waypoint":
-      await db.runAsync("DELETE FROM waypoints WHERE id = ?", tombstone.id);
+    case "placeLink":
+      // Just the link. Both places survive — deleting one because it lost a
+      // link would be the "a link is a container" mistake this model rejects.
+      await db.runAsync("DELETE FROM place_links WHERE id = ?", tombstone.id);
       break;
     case "route":
-      // Also the signal for "unlinked from a canyon you can see" — the route
+      // Also the signal for "unlinked from a place you can see" — the route
       // still exists for its owner, but this user must forget it.
       await db.runAsync("DELETE FROM routes WHERE id = ?", tombstone.id);
+      break;
+    case "placeType":
+      // Only the type row. The definitions scoped ONLY to it were deleted
+      // server-side in the same transaction and arrive as their own tombstones;
+      // the places that used it cannot exist, because a type holding places
+      // refuses to be deleted at all.
+      await db.runAsync("DELETE FROM place_types WHERE id = ?", tombstone.id);
       break;
     case "customFieldDef":
       // Only the definition. The VALUES it described were stripped server-side
       // in the same transaction as the delete, and reach this device as
-      // ordinary updates to the trip_logs / canyons rows that carried them —
+      // ordinary updates to the trip_logs / places rows that carried them —
       // so cascading a value strip here would be a second, racing writer of
       // rows the delta already owns.
       await db.runAsync(
@@ -574,7 +606,7 @@ export async function applyTombstone(
   //
   // A pending local DELETE is the exception — it wanted exactly what just
   // happened. Parking it raised a permanent "needs your attention" issue for
-  // work already done (delete the canyon on the phone offline, delete it on
+  // work already done (delete the place on the phone offline, delete it on
   // the web too, and the phone demanded a decision about it forever), whose
   // only resolution was Discard. Drop it instead: goal state reached.
   await db.runAsync(
@@ -592,28 +624,55 @@ export async function applyTombstone(
 
 // ── reads (screen-facing) ────────────────────────────────────────────────────
 
-type CanyonRow = {
+type PlaceRow = {
   id: string;
   sync_role: string;
   name: string;
   latitude: number;
   longitude: number;
   alt_names_json: string | null;
-  num_abseils: number | null;
-  longest_abseil: number | null;
-  v_grade: number | null;
-  a_grade: number | null;
-  commitment: number | null;
-  quality: number | null;
-  hours: number | null;
+  place_type_id: string;
   notes: string | null;
-  attributes_json: string | null;
+  elevation: number | null;
+  field_values_json: string | null;
+  field_defs_snapshot_json: string | null;
+  foreign_fields_json: string | null;
+  forked_from_id: string | null;
   created_at: string | null;
   updated_at: string | null;
   extra_json: string | null;
 };
 
-export type MirrorCanyon = TCanyon & { syncRole: "owner" | "shared" };
+export type MirrorPlace = TPlace & {
+  syncRole: "owner" | "shared";
+  /** The place this one was COPIED from, and null otherwise — a copy is the
+   *  only writer. It is how a screen tells the two causes of `foreignFields`
+   *  apart: a copy carried the sender's values in, a type change stranded the
+   *  owner's own. Owner-private, like everything else on that path. */
+  forkedFromId: string | null;
+  /** Definitions for a shared place of a type this account does not own, so
+   *  its values render with labels rather than bare keys. Absent otherwise. */
+  fieldDefsSnapshot?: {
+    key: string;
+    label: string;
+    type: string;
+    min?: number | null;
+    max?: number | null;
+  }[];
+};
+
+/** A place type as mirrored. `ownerId: null` means a SYSTEM type — global and
+ *  not editable — which a client must not read as "mine". */
+export type MirrorPlaceType = {
+  id: string;
+  ownerId: string | null;
+  name: string;
+  iconKey: string;
+  color: string;
+  position: number;
+  createdAt: string;
+  updatedAt: string;
+};
 
 function parseJson<T>(value: string | null, fallback: T): T {
   if (value == null) return fallback;
@@ -624,11 +683,25 @@ function parseJson<T>(value: string | null, fallback: T): T {
   }
 }
 
-function rowToCanyon(row: CanyonRow): MirrorCanyon {
+/** Tolerant of a null column, which reads as an empty list rather than a crash
+ * on the map screen. */
+function parseStringList(raw: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter((item): item is string => typeof item === "string")
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function rowToPlace(row: PlaceRow): MirrorPlace {
   const extras = parseJson<Record<string, unknown>>(row.extra_json, {});
   return {
     // Extras first — typed columns are authoritative for known fields.
-    ...(extras as Partial<TCanyon>),
+    ...(extras as Partial<TPlace>),
     id: row.id,
     ownerId: (extras.ownerId as string) ?? "",
     syncRole: row.sync_role === "owner" ? "owner" : "shared",
@@ -636,15 +709,17 @@ function rowToCanyon(row: CanyonRow): MirrorCanyon {
     altNames: parseJson<string[]>(row.alt_names_json, []),
     latitude: row.latitude,
     longitude: row.longitude,
-    numAbseils: row.num_abseils,
-    longestAbseil: row.longest_abseil,
-    vGrade: row.v_grade,
-    aGrade: row.a_grade,
-    commitment: row.commitment,
-    quality: row.quality,
-    hours: row.hours,
+    placeTypeId: row.place_type_id,
     notes: row.notes,
-    attributes: parseJson(row.attributes_json, {}),
+    elevation: row.elevation,
+    fieldValues: parseJson(row.field_values_json, {}),
+    fieldDefsSnapshot: row.field_defs_snapshot_json
+      ? parseJson(row.field_defs_snapshot_json, [])
+      : undefined,
+    foreignFields: row.foreign_fields_json
+      ? parseJson(row.foreign_fields_json, [])
+      : null,
+    forkedFromId: row.forked_from_id,
     ropeWikiId: (extras.ropeWikiId as number | null) ?? null,
     createdAt: row.created_at ?? "",
     updatedAt: row.updated_at ?? "",
@@ -655,6 +730,9 @@ function rowToCanyon(row: CanyonRow): MirrorCanyon {
  *  `TripLogCustomFieldDef`s the UI works in. */
 export type MirrorCustomFieldDef = {
   id: string;
+  /** NULL = a SYSTEM definition: global, belonging to no account, and neither
+   *  renameable nor deletable. A client must not read null as "mine". */
+  ownerId: string | null;
   entity: string;
   key: string;
   label: string;
@@ -662,6 +740,19 @@ export type MirrorCustomFieldDef = {
   min: number | null;
   max: number | null;
   position: number;
+  /** WHERE it appears. Read as a parsed list rather than the stored JSON so no
+   *  caller has to know the column is text. */
+  placeTypeIds: string[];
+  appliesToAllTypes: boolean;
+};
+
+type CustomFieldDefRow = Omit<
+  MirrorCustomFieldDef,
+  "placeTypeIds" | "appliesToAllTypes" | "ownerId"
+> & {
+  owner_id: string | null;
+  place_type_ids_json: string | null;
+  applies_to_all_types: number | null;
 };
 
 /** Every definition on this device, both entities. The ORDER BY matches the
@@ -670,27 +761,89 @@ export async function listMirrorCustomFieldDefs(): Promise<
   MirrorCustomFieldDef[]
 > {
   const db = await getSyncDb();
-  return db.getAllAsync<MirrorCustomFieldDef>(
-    `SELECT id, entity, key, label, type, min, max, position
+  const rows = await db.getAllAsync<CustomFieldDefRow>(
+    `SELECT id, owner_id, entity, key, label, type, min, max, position,
+            applies_to_all_types, place_type_ids_json
        FROM custom_field_defs ORDER BY position ASC, key ASC`,
   );
+  return rows.map(({ place_type_ids_json, applies_to_all_types, owner_id, ...def }) => ({
+    ...def,
+    ownerId: owner_id,
+    placeTypeIds: parseStringList(place_type_ids_json),
+    appliesToAllTypes: applies_to_all_types === 1,
+  }));
 }
 
-export async function listMirrorCanyons(): Promise<MirrorCanyon[]> {
+/**
+ * Every place type this device knows: the user's own plus the SYSTEM ones.
+ *
+ * The ORDER is the server's (`GET /place-types`): system types first, then the
+ * user's by position, name as the tiebreak. SQLite sorts NULLs FIRST on a plain
+ * ASC, which is what the server had to say `nulls: "first"` to get — spelled
+ * out here rather than relied on, because the two engines disagree by default
+ * and the tab bar's leftmost tab is decided by it.
+ */
+export async function listMirrorPlaceTypes(): Promise<MirrorPlaceType[]> {
   const db = await getSyncDb();
-  const rows = await db.getAllAsync<CanyonRow>(
-    "SELECT * FROM canyons ORDER BY name COLLATE NOCASE ASC",
+  const rows = await db.getAllAsync<{
+    id: string;
+    owner_id: string | null;
+    name: string;
+    icon_key: string;
+    color: string;
+    position: number;
+    created_at: string | null;
+    updated_at: string | null;
+  }>(
+    `SELECT id, owner_id, name, icon_key, color, position, created_at, updated_at
+       FROM place_types
+      ORDER BY (owner_id IS NOT NULL) ASC, position ASC, name COLLATE NOCASE ASC`,
   );
-  return rows.map(rowToCanyon);
+  // NOTHING MIRRORED YET means a guest, or an account before its first pull —
+  // and a type picker with no types in it would make creating a place
+  // impossible for exactly the user who has no way to fix it. The system types
+  // are compiled in (they are global rows with pinned ids), so they are the
+  // honest answer here for the same reason `SYSTEM_FIELD_DEFS` is the honest
+  // answer to "what are this value's bounds" with no signal.
+  if (rows.length === 0) {
+    return SYSTEM_PLACE_TYPES.map((type) => ({
+      id: type.id,
+      ownerId: null,
+      name: type.name,
+      iconKey: type.iconKey,
+      color: type.color,
+      position: type.position,
+      createdAt: "",
+      updatedAt: "",
+    }));
+  }
+  return rows.map((row) => ({
+    id: row.id,
+    ownerId: row.owner_id,
+    name: row.name,
+    iconKey: row.icon_key,
+    color: row.color,
+    position: row.position,
+    createdAt: row.created_at ?? "",
+    updatedAt: row.updated_at ?? "",
+  }));
 }
 
-export async function getMirrorCanyon(id: string): Promise<MirrorCanyon | null> {
+export async function listMirrorPlaces(): Promise<MirrorPlace[]> {
   const db = await getSyncDb();
-  const row = await db.getFirstAsync<CanyonRow>(
-    "SELECT * FROM canyons WHERE id = ?",
+  const rows = await db.getAllAsync<PlaceRow>(
+    "SELECT * FROM places ORDER BY name COLLATE NOCASE ASC",
+  );
+  return rows.map(rowToPlace);
+}
+
+export async function getMirrorPlace(id: string): Promise<MirrorPlace | null> {
+  const db = await getSyncDb();
+  const row = await db.getFirstAsync<PlaceRow>(
+    "SELECT * FROM places WHERE id = ?",
     id,
   );
-  return row ? rowToCanyon(row) : null;
+  return row ? rowToPlace(row) : null;
 }
 
 type TripRow = {
@@ -700,7 +853,7 @@ type TripRow = {
   types_json: string | null;
   notes: string | null;
   custom_fields_json: string | null;
-  canyons_json: string;
+  places_json: string;
   created_at: string | null;
   updated_at: string | null;
   extra_json: string | null;
@@ -719,7 +872,7 @@ function rowToTrip(row: TripRow): MirrorTrip {
     types: parseJson<string[]>(row.types_json, []),
     notes: row.notes,
     customFields: parseJson(row.custom_fields_json, {}),
-    canyons: parseJson<{ id: string; name: string }[]>(row.canyons_json, []),
+    places: parseJson<{ id: string; name: string }[]>(row.places_json, []),
     createdAt: row.created_at ?? "",
     updatedAt: row.updated_at ?? "",
   };
@@ -772,42 +925,42 @@ export type MirrorMedia = {
  * query per visible row.
  */
 /**
- * How many people each of the viewer's own canyons is shared WITH, keyed by
- * canyon id. Derived from the mirrored `canyon_shares` rows so the "Shared with
+ * How many people each of the viewer's own places is shared WITH, keyed by
+ * place id. Derived from the mirrored `place_shares` rows so the "Shared with
  * N" badge works offline — the server's `_count.shares` never reaches the
  * mirror.
  *
- * Outgoing only: an incoming share is the row that made a canyon visible to
- * the viewer, not evidence of their own fan-out. Canyons with no share have no
+ * Outgoing only: an incoming share is the row that made a place visible to
+ * the viewer, not evidence of their own fan-out. Places with no share have no
  * key, which is what "not shared" reads as.
  */
-export async function countOutgoingSharesByCanyon(): Promise<Record<string, number>> {
+export async function countOutgoingSharesByPlace(): Promise<Record<string, number>> {
   const db = await getSyncDb();
-  const rows = await db.getAllAsync<{ canyon_id: string; n: number }>(
-    `SELECT canyon_id, COUNT(*) AS n FROM canyon_shares
+  const rows = await db.getAllAsync<{ place_id: string; n: number }>(
+    `SELECT place_id, COUNT(*) AS n FROM place_shares
      WHERE direction = 'out'
-     GROUP BY canyon_id`,
+     GROUP BY place_id`,
   );
-  return Object.fromEntries(rows.map((row) => [row.canyon_id, row.n]));
+  return Object.fromEntries(rows.map((row) => [row.place_id, row.n]));
 }
 
 /**
- * Who shared each INCOMING canyon with the viewer, keyed by canyon id. The
- * counterpart on a `direction = 'in'` row is the owner, and a canyon has one
- * owner, so there is at most one row per canyon here.
+ * Who shared each INCOMING place with the viewer, keyed by place id. The
+ * counterpart on a `direction = 'in'` row is the owner, and a place has one
+ * owner, so there is at most one row per place here.
  *
  * The mirror side of the "From <name>" mark a shared route or waypoint wears in
  * Saved: the sync delta never carries an owner username on the asset rows
  * themselves, but it does carry it on the share row that made them visible.
  */
-export async function incomingShareOwnerByCanyon(): Promise<Record<string, string>> {
+export async function incomingShareOwnerByPlace(): Promise<Record<string, string>> {
   const db = await getSyncDb();
-  const rows = await db.getAllAsync<{ canyon_id: string; counterpart_username: string | null }>(
-    `SELECT canyon_id, counterpart_username FROM canyon_shares WHERE direction = 'in'`,
+  const rows = await db.getAllAsync<{ place_id: string; counterpart_username: string | null }>(
+    `SELECT place_id, counterpart_username FROM place_shares WHERE direction = 'in'`,
   );
   return Object.fromEntries(
     rows.flatMap((row) =>
-      row.counterpart_username ? [[row.canyon_id, row.counterpart_username]] : [],
+      row.counterpart_username ? [[row.place_id, row.counterpart_username]] : [],
     ),
   );
 }
@@ -933,15 +1086,15 @@ export async function getMediaById(id: string): Promise<MirrorMedia | null> {
 }
 
 /**
- * Every canyon route attachment (.gpx/.kml) the mirror knows about — the map's
- * "Canyon routes" layer.
+ * Every place route attachment (.gpx/.kml) the mirror knows about — the map's
+ * "Place routes" layer.
  *
- * Read from the MIRROR rather than `GET /canyons/tracks` (which is what the web
+ * Read from the MIRROR rather than `GET /places/tracks` (which is what the web
  * map uses): the rows and, for anything the user has looked at, the files are
- * already on the device, so the layer draws in a canyon with no signal. It also
+ * already on the device, so the layer draws in a place with no signal. It also
  * means the feature adds no new server call and no new coordinate traffic.
  */
-export async function listCanyonTrackMedia(
+export async function listPlaceTrackMedia(
   trackMimeTypes: readonly string[],
 ): Promise<MirrorMedia[]> {
   const db = await getSyncDb();
@@ -949,7 +1102,7 @@ export async function listCanyonTrackMedia(
   const rows = await db.getAllAsync<MediaSqlRow>(
     `SELECT ${MEDIA_SELECT}
      FROM media
-     WHERE linked_type = 'canyon' AND media_type IN (${placeholders})
+     WHERE linked_type = 'place' AND media_type IN (${placeholders})
        AND sync_state != 'pendingDelete'
      ORDER BY created_at ASC`,
     ...trackMimeTypes,
@@ -957,94 +1110,63 @@ export async function listCanyonTrackMedia(
   return rows.map(rowToMirrorMedia);
 }
 
-type WaypointRow = {
+type PlaceLinkRow = {
   id: string;
   owner_id: string | null;
-  canyon_ids_json: string | null;
-  tags_json: string | null;
-  sync_role: string | null;
-  name: string;
-  latitude: number;
-  longitude: number;
-  elevation: number | null;
-  symbol: string | null;
-  notes: string | null;
-  shared_count: number | null;
+  a_place_id: string;
+  b_place_id: string;
   created_at: string | null;
   updated_at: string | null;
 };
 
-export type MirrorWaypoint = {
+/** One link, as stored. Symmetric: `aPlaceId` is simply the lower id, and a
+ *  screen renders it from whichever end the user is standing on. */
+export type MirrorPlaceLink = {
   id: string;
   ownerId: string | null;
-  canyonIds: string[];
-  tags: string[];
-  /** 'shared' — arrived via a canyon share and is READ-ONLY on this device. */
-  syncRole: "owner" | "shared";
-  name: string;
-  latitude: number;
-  longitude: number;
-  elevation: number | null;
-  symbol: string | null;
-  notes: string | null;
-  /**
-   * People this waypoint is directly shared with. NULL means "not applicable
-   * or not known": a row shared WITH this user (the server withholds the
-   * count) or one created locally and not yet confirmed. 0 means the owner
-   * has shared it with nobody — a real answer, and a different one.
-   */
-  sharedCount: number | null;
+  aPlaceId: string;
+  bPlaceId: string;
   createdAt: string;
   updatedAt: string;
 };
 
-/** Tolerant of the pre-tags rows an upgraded install still holds (null column
- * reads as an empty list, never as a crash on the map screen). */
-function parseStringList(raw: string | null): string[] {
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed)
-      ? parsed.filter((item): item is string => typeof item === "string")
-      : [];
-  } catch {
-    return [];
-  }
-}
-
-function rowToWaypoint(row: WaypointRow): MirrorWaypoint {
+function rowToPlaceLink(row: PlaceLinkRow): MirrorPlaceLink {
   return {
     id: row.id,
     ownerId: row.owner_id,
-    canyonIds: parseStringList(row.canyon_ids_json),
-    tags: parseStringList(row.tags_json),
-    // Absent on rows written before shared waypoints existed, and on every
-    // locally-created row — both are the user's own.
-    syncRole: row.sync_role === "shared" ? "shared" : "owner",
-    name: row.name,
-    latitude: row.latitude,
-    longitude: row.longitude,
-    elevation: row.elevation,
-    symbol: row.symbol,
-    notes: row.notes,
-    sharedCount: row.shared_count,
+    aPlaceId: row.a_place_id,
+    bPlaceId: row.b_place_id,
     createdAt: row.created_at ?? "",
     updatedAt: row.updated_at ?? "",
   };
 }
 
-export async function listMirrorWaypoints(): Promise<MirrorWaypoint[]> {
+export async function listMirrorPlaceLinks(): Promise<MirrorPlaceLink[]> {
   const db = await getSyncDb();
-  const rows = await db.getAllAsync<WaypointRow>(
-    "SELECT * FROM waypoints ORDER BY created_at DESC",
+  const rows = await db.getAllAsync<PlaceLinkRow>(
+    "SELECT * FROM place_links ORDER BY created_at DESC",
   );
-  return rows.map(rowToWaypoint);
+  return rows.map(rowToPlaceLink);
+}
+
+/** The other end of every link touching `placeId` — what the detail screen's
+ *  "Linked places" section reads. */
+export async function linkedPlaceIdsFor(placeId: string): Promise<string[]> {
+  const db = await getSyncDb();
+  const rows = await db.getAllAsync<{ a_place_id: string; b_place_id: string }>(
+    "SELECT a_place_id, b_place_id FROM place_links WHERE a_place_id = ? OR b_place_id = ?",
+    placeId,
+    placeId,
+  );
+  return rows.map((row) =>
+    row.a_place_id === placeId ? row.b_place_id : row.a_place_id,
+  );
 }
 
 type RouteRow = {
   id: string;
   owner_id: string | null;
-  canyon_id: string | null;
+  place_id: string | null;
   name: string;
   color: string | null;
   points_json: string;
@@ -1058,13 +1180,13 @@ type RouteRow = {
 export type MirrorRoute = {
   id: string;
   ownerId: string | null;
-  canyonId: string | null;
+  placeId: string | null;
   name: string;
   color: string | null;
   points: [number, number][];
   /** Indices into `points` the user placed; null means "no record". */
   anchors: number[] | null;
-  /** 'shared' means this arrived through a canyon share — read-only here. */
+  /** 'shared' means this arrived through a place share — read-only here. */
   syncRole: string | null;
   /** See MirrorWaypoint.sharedCount — null is "not applicable", 0 is "nobody". */
   sharedCount: number | null;
@@ -1096,7 +1218,7 @@ function rowToRoute(row: RouteRow): MirrorRoute {
   return {
     id: row.id,
     ownerId: row.owner_id,
-    canyonId: row.canyon_id,
+    placeId: row.place_id,
     name: row.name,
     color: row.color,
     points,

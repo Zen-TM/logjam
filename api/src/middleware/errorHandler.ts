@@ -3,7 +3,7 @@ import { logger, safeErrorForLog } from "../lib/logger";
 
 // Safe, explicitly-typed shape for fields echoed to the client alongside an
 // error. Constrained to non-sensitive quota figures so a future caller cannot
-// accidentally leak canyon names/coords (CLAUDE.md privacy rule) — adding a new
+// accidentally leak place names/coords (CLAUDE.md privacy rule) — adding a new
 // key here is a deliberate, reviewable change, not an open-ended spread.
 export interface AppErrorDetails {
   used?: number | string;
@@ -36,7 +36,7 @@ export function errorHandler(
     (req as Request & { log?: typeof logger }).log ?? logger;
 
   if (err instanceof AppError) {
-    // Never log the raw Error — its message/stack can embed user-supplied canyon
+    // Never log the raw Error — its message/stack can embed user-supplied place
     // names/coords (e.g. a wrapped Prisma error). safeErrorForLog scrubs them;
     // pino's redact paths can't reach free text inside err.message/err.stack.
     reqLog.warn(

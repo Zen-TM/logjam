@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { CURRENT_CONSENT_VERSION, consentGate } from "./consent";
 
 // FECO-005: ConsentGate rendered instead of the app while every
-// `enabled=authenticated` data hook fetched the user's canyons, trips, friends
+// `enabled=authenticated` data hook fetched the user's places, trips, friends
 // and notifications behind it. `settled` is what those hooks now wait on, and
 // `blocked` is what renders the gate — one function so the two can't drift.
 describe("consentGate", () => {

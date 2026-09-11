@@ -34,7 +34,7 @@ export type ImportResultSummaryProps = {
 
   /**
    * Collapsed-accordion summary text for `details`. Defaults to "Details".
-   * Set it to say what is behind the disclosure (e.g. "26 canyons merged into
+   * Set it to say what is behind the disclosure (e.g. "26 places merged into
    * existing entries") so the summary line is informative while shut.
    */
   detailsLabel?: string;

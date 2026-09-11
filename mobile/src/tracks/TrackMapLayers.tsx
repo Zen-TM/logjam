@@ -1,16 +1,14 @@
-// Map layers for recorded tracks + waypoints (Stage 7). Rendered inside
+// Map layers for recorded tracks (Stage 7). Rendered inside
 // Map; sources are unpinned so they draw above the basemap/overlay bands —
-// mount this BEFORE the canyon sources so canyons stay on top.
+// mount this BEFORE the place sources so places stay on top.
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { GeoJSONSource, Layer } from "@maplibre/maplibre-react-native";
 import type { RecordedTrackPoint } from "@logjam/shared";
 
-import { theme } from "../theme";
-import { listTrackPoints, type Track, type Waypoint } from "./tracksDb";
+import { listTrackPoints, type Track } from "./tracksDb";
 import { trackPointsToFeature } from "./trackGeoJson";
 import { stopSourcePress } from "../map/sourcePress";
 
-const WAYPOINT_COLOR = "#f97316"; // matches the owned-canyon orange family
 
 /** Where on the map a press landed — passed through so a caller can place a
  *  point there when a tool is armed (the layer swallowed the press first). */
@@ -98,14 +96,11 @@ const TrackLine = memo(function TrackLine({
 // instead of re-walking every visible track on every compass sample.
 export const TrackMapLayers = memo(function TrackMapLayers({
   tracks,
-  waypoints,
   liveCoord,
   showTracks,
-  onWaypointPress,
   onTrackPress,
 }: {
   tracks: Track[];
-  waypoints: Waypoint[];
   /**
    * The map's own latest fix, drawn as the live tail of the track being
    * recorded. Recorded points reach SQLite through Android's JobScheduler,
@@ -119,7 +114,6 @@ export const TrackMapLayers = memo(function TrackMapLayers({
   /** The Tracks master switch. A live recording/paused track still draws even
    *  when this is off — the layer sheet's switch governs saved tracks. */
   showTracks: boolean;
-  onWaypointPress: (waypoint: Waypoint) => void;
   /** Tapping a recorded line opens its options. Stable identity required —
    *  TrackLine is memoised against MapScreen's compass-rate re-render. */
   onTrackPress: (track: Track, coordinates?: TrackPressCoordinates) => void;
@@ -173,30 +167,6 @@ export const TrackMapLayers = memo(function TrackMapLayers({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reloadKey]);
 
-  // Same reason as TrackLine: rebuilt when the waypoints change, not on every
-  // compass tick.
-  const waypointShape = useMemo(
-    () => ({
-      type: "FeatureCollection" as const,
-      features: waypoints.map((waypoint) => ({
-        type: "Feature" as const,
-        id: waypoint.id,
-        geometry: {
-          type: "Point" as const,
-          coordinates: [waypoint.lon, waypoint.lat],
-        },
-        properties: {
-          id: waypoint.id,
-          name: waypoint.name,
-          // Per-feature so one layer paints every tag; a match
-          // expression here would duplicate the lookup table.
-          color: waypoint.color ?? WAYPOINT_COLOR,
-        },
-      })),
-    }),
-    [waypoints],
-  );
-
   return (
     <>
       {visibleTracks.map((track) => (
@@ -208,47 +178,7 @@ export const TrackMapLayers = memo(function TrackMapLayers({
           onPress={onTrackPress}
         />
       ))}
-      {waypoints.length > 0 ? (
-        <GeoJSONSource
-          id="waypoints"
-          data={waypointShape}
-          onPress={(event) => {
-            stopSourcePress(event);
-            const id = event.nativeEvent.features[0]?.properties?.id as
-              | string
-              | undefined;
-            const waypoint = waypoints.find((w) => w.id === id);
-            if (waypoint) onWaypointPress(waypoint);
-          }}
-        >
-          <Layer
-            key="waypoint-markers"
-            type="circle"
-            id="waypoint-markers"
-            style={{
-              circleRadius: 6,
-              circleColor: ["get", "color"] as unknown as string,
-              circleStrokeColor: "#ffffff",
-              circleStrokeWidth: 2,
-            }}
-          />
-          <Layer
-            key="waypoint-labels"
-            type="symbol"
-            id="waypoint-labels"
-            style={{
-              textField: ["get", "name"] as unknown as string,
-              textFont: ["Noto Sans Medium"],
-              textSize: 11,
-              textColor: theme.textPrimary,
-              textHaloColor: theme.bonus2,
-              textHaloWidth: 1,
-              textAnchor: "top",
-              textOffset: [0, 0.8],
-            }}
-          />
-        </GeoJSONSource>
-      ) : null}
+
     </>
   );
 });

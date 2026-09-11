@@ -20,8 +20,8 @@ const CHUNK_SIZE = 200;
 const router = Router();
 
 type BulkTripInput = {
-  canyonId: string | null;
-  sourceCanyonName: string;
+  placeId: string | null;
+  sourcePlaceName: string;
   displayName?: string | null;
   date: string;
   notes?: string | null;
@@ -56,30 +56,30 @@ router.post(
     // ---- Phase 1: Validate ALL rows before ANY write ----
     const errors: { index: number; error: string }[] = [];
 
-    // Ownership-check all non-null canyonIds.
-    const canyonIds = Array.from(
+    // Ownership-check all non-null placeIds.
+    const placeIds = Array.from(
       new Set(
         body.trips
-          .map((t) => t.canyonId)
+          .map((t) => t.placeId)
           .filter((id): id is string => id != null && id !== ""),
       ),
     );
-    const ownedCanyons = canyonIds.length > 0
-      ? await prisma.canyon.findMany({
-          where: { id: { in: canyonIds } },
+    const ownedPlaces = placeIds.length > 0
+      ? await prisma.place.findMany({
+          where: { id: { in: placeIds } },
           select: { id: true, ownerId: true },
         })
       : [];
-    const ownerById = new Map(ownedCanyons.map((c) => [c.id, c.ownerId]));
+    const ownerById = new Map(ownedPlaces.map((c) => [c.id, c.ownerId]));
 
     type ValidatedTrip = {
       index: number;
-      canyonId: string | null;
+      placeId: string | null;
       displayName: string | null;
       date: Date;
       notes: string | null;
       customFields: Record<string, unknown>;
-      sourceCanyonName: string;
+      sourcePlaceName: string;
       types: string[];
     };
 
@@ -87,8 +87,8 @@ router.post(
     for (let i = 0; i < body.trips.length; i++) {
       const t = body.trips[i];
 
-      if (typeof t.sourceCanyonName !== "string") {
-        errors.push({ index: i, error: "sourceCanyonName is required" });
+      if (typeof t.sourcePlaceName !== "string") {
+        errors.push({ index: i, error: "sourcePlaceName is required" });
         continue;
       }
 
@@ -102,32 +102,32 @@ router.post(
         continue;
       }
 
-      // canyonId is nullable — a canyon-less trip is valid.
-      let canyonId: string | null = null;
-      if (t.canyonId != null && t.canyonId !== "") {
-        const ownerId = ownerById.get(t.canyonId);
+      // placeId is nullable — a place-less trip is valid.
+      let placeId: string | null = null;
+      if (t.placeId != null && t.placeId !== "") {
+        const ownerId = ownerById.get(t.placeId);
         if (ownerId === undefined) {
-          errors.push({ index: i, error: "canyon not found" });
+          errors.push({ index: i, error: "place not found" });
           continue;
         }
         if (ownerId !== user.id) {
-          errors.push({ index: i, error: "not the canyon owner" });
+          errors.push({ index: i, error: "not the place owner" });
           continue;
         }
-        canyonId = t.canyonId;
+        placeId = t.placeId;
       }
 
       // types is an optional free-text list (trip categories) — reuse the same
       // validator as the single-trip routes rather than re-deriving the rules
       // here. Row-level so a bad `types` value doesn't abort the whole batch.
-      // A canyon-linked trip always carries the `canyoning` tag — the same
+      // A place-linked trip always carries the `canyoning` tag — the same
       // invariant POST/PATCH /trips maintain (tripLogsGlobal.ts). displayName
       // gets the same trim + TRIP_NAME_MAX_LENGTH cap, or an imported row lands
       // over the limit and PATCH /trips/:id can never save it again.
       let types: string[];
       let displayName: string | null;
       try {
-        types = enforceCanyoningTag(parseTripTypes(t.types) ?? [], canyonId !== null);
+        types = enforceCanyoningTag(parseTripTypes(t.types) ?? [], placeId !== null);
         displayName = parseDisplayName(t.displayName) ?? null;
       } catch (e) {
         if (e instanceof AppError) {
@@ -139,12 +139,12 @@ router.post(
 
       validTrips.push({
         index: i,
-        canyonId,
+        placeId,
         displayName,
         date,
         notes: t.notes ?? null,
         customFields: t.customFields ?? {},
-        sourceCanyonName: t.sourceCanyonName,
+        sourcePlaceName: t.sourcePlaceName,
         types,
       });
     }
@@ -154,13 +154,13 @@ router.post(
     // but only valid trips will be processed. We need occurrence to be stable
     // relative to all rows that share the same contentHash in file order.
     // Since we filtered invalid rows, we assign keys only among the valid set.
-    // NOTE: the hash inputs below (sourceCanyonName/date/notes/customFields)
-    // must stay exactly as-is — adding `types` (or canyonId) here would change
+    // NOTE: the hash inputs below (sourcePlaceName/date/notes/customFields)
+    // must stay exactly as-is — adding `types` (or placeId) here would change
     // every previously-computed importKey and break idempotency for anyone
     // re-importing a batch from before this field existed.
     const keyAssignments = assignTripImportKeys(
       validTrips.map((t) => ({
-        sourceCanyonName: t.sourceCanyonName,
+        sourcePlaceName: t.sourcePlaceName,
         date: t.date.toISOString().slice(0, 10),
         notes: t.notes,
         customFields: t.customFields,
@@ -181,9 +181,9 @@ router.post(
     }
 
     // ---- Phase 3: Build create/update operations ----
-    // Creates use `.create()` (not `createMany`) because attaching the canyon
-    // join row is a nested write, which `createMany` cannot do — one canyon
-    // per CSV row, linked via TripLogCanyon at position 0.
+    // Creates use `.create()` (not `createMany`) because attaching the place
+    // join row is a nested write, which `createMany` cannot do — one place
+    // per CSV row, linked via TripLogPlace at position 0.
     type CreateOp = { data: Prisma.TripLogCreateInput };
     type UpdateOp = { id: string; data: Prisma.TripLogUpdateInput };
 
@@ -195,13 +195,13 @@ router.post(
       const { importKey } = keyAssignments[i];
       const existing = existingByKey.get(importKey);
 
-      const canyonLink = trip.canyonId
-        ? { create: [{ canyonId: trip.canyonId, position: 0 }] }
+      const placeLink = trip.placeId
+        ? { create: [{ placeId: trip.placeId, position: 0 }] }
         : {};
 
       if (existing) {
-        // Update in place — re-apply resolution outputs (canyon link,
-        // displayName, types) and fully replace the canyon join (single row,
+        // Update in place — re-apply resolution outputs (place link,
+        // displayName, types) and fully replace the place join (single row,
         // or none).
         updates.push({
           id: existing.id,
@@ -211,7 +211,7 @@ router.post(
             date: trip.date,
             notes: trip.notes,
             customFields: trip.customFields as Prisma.InputJsonValue,
-            canyons: { deleteMany: {}, ...canyonLink },
+            places: { deleteMany: {}, ...placeLink },
           },
         });
       } else {
@@ -226,7 +226,7 @@ router.post(
             customFields: trip.customFields as Prisma.InputJsonValue,
             importKey,
             importBatchId: body.importBatchId,
-            canyons: canyonLink,
+            places: placeLink,
           },
         });
       }

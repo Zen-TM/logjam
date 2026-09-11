@@ -15,11 +15,11 @@
 //
 // THE TWO DIRECTIONS GET DIFFERENT VERBS, and `friendShareRows.ts` owns which
 // and why. Forward: share these with someone else (the existing bulk-share
-// sheet, unchanged) and unshare them. Received: save a copy of a canyon, and
+// sheet, unchanged) and unshare them. Received: save a copy of a place, and
 // remove my own access. There is NO delete anywhere on this screen, in the bar
 // or in a sheet — every other verb here ends a RELATIONSHIP, while delete would
 // end the record for me and for everyone else I had shared it with, off a
-// screen scoped to one person. It belongs on Canyons and Saved, where a row
+// screen scoped to one person. It belongs on Places and Saved, where a row
 // means "my item" rather than "my grant to bob".
 //
 // ONLINE-ONLY, like the Friends screen that leads here and like every other
@@ -36,7 +36,7 @@ import { messageFromError, SHARE_KIND_LABEL } from "@logjam/shared";
 import type { FriendShares } from "@logjam/shared";
 
 import {
-  copySharedCanyon,
+  copySharedPlace,
   getFriendShares,
   unshareWithFriend,
 } from "../api/friends";
@@ -44,7 +44,7 @@ import { useAccountState } from "../auth/AccountStateContext";
 import { capabilityScreenBlock } from "../auth/capabilities";
 import { useConnectivity } from "../map/connectivity";
 import { requestSync } from "../sync/syncEngine";
-import { canyonHue, fontSize, spacing, theme } from "../theme";
+import { placeHue, fontSize, spacing, theme } from "../theme";
 import {
   BottomSheet,
   EmptyState,
@@ -77,7 +77,7 @@ import {
   type FriendShareCard,
   type FriendShareDirection,
 } from "./friendShareRows";
-import { removeSharedCanyon, removeSharedEntity } from "./removeShare";
+import { removeSharedPlace, removeSharedEntity } from "./removeShare";
 
 const cardKey = (card: FriendShareCard) => card.key;
 
@@ -85,13 +85,13 @@ export function FriendSharesScreen({
   friendshipId,
   username,
   onBack,
-  onOpenCanyon,
+  onOpenPlace,
 }: {
   friendshipId: string;
   username: string;
   onBack: () => void;
-  /** Open a canyon's detail page. Pushed in the caller's stack, so Back returns here. */
-  onOpenCanyon: (canyonId: string) => void;
+  /** Open a place's detail page. Pushed in the caller's stack, so Back returns here. */
+  onOpenPlace: (placeId: string) => void;
 }) {
   const { accountState } = useAccountState();
   const guestBlock = useMemo(
@@ -147,7 +147,7 @@ export function FriendSharesScreen({
 
   // A row a group verb can act on. Forward: all of them (unshare and re-share
   // apply to every row). Received: anything that can be copied or removed —
-  // which, for a row visible through a shared canyon, is neither, so it answers
+  // which, for a row visible through a shared place, is neither, so it answers
   // a long press with its reason rather than a checkbox (§7).
   const isSelectable = useCallback(
     (card: FriendShareCard) =>
@@ -198,7 +198,7 @@ export function FriendSharesScreen({
       const confirm = unshareAllConfirm({
         count: targets.length,
         friendName: username,
-        includesCanyon: targets.some((card) => card.row.entityType === "canyon"),
+        includesPlace: targets.some((card) => card.row.entityType === "place"),
       });
       Alert.alert(confirm.title, confirm.body, [
         { text: "Cancel", style: "cancel" },
@@ -226,18 +226,18 @@ export function FriendSharesScreen({
   );
 
   /**
-   * Save copies of the selected shared canyons.
+   * Save copies of the selected shared places.
    *
-   * A LOOP, not one request: `POST /canyons/:id/copy` already exists and a
+   * A LOOP, not one request: `POST /places/:id/copy` already exists and a
    * friend's shared list is tens of rows at most, so a bulk endpoint would buy
    * nothing but a second copy of the copy rules. One failure is one failure —
-   * aborting would strand the user with no way to tell which canyons landed —
+   * aborting would strand the user with no way to tell which places landed —
    * so the report names the ones that did not (`runBulkShare.ts`'s rule).
    */
   const runCopy = useCallback(
     (targets: FriendShareCard[]) => {
       // Confirms even though nothing is destroyed: "Save a copy" does not say
-      // where the copy goes, whether the friend's canyon changes, or what
+      // where the copy goes, whether the friend's place changes, or what
       // happens when they stop sharing — and a verb whose effect cannot be
       // predicted is one nobody presses.
       const confirm = copyConfirm({
@@ -256,7 +256,7 @@ export function FriendSharesScreen({
             void (async () => {
               for (const card of targets) {
                 try {
-                  await copySharedCanyon(card.row.entityId);
+                  await copySharedPlace(card.row.entityId);
                   copied += 1;
                 } catch (err) {
                   console.error(err);
@@ -303,8 +303,8 @@ export function FriendSharesScreen({
             void (async () => {
               for (const card of targets) {
                 try {
-                  if (card.row.entityType === "canyon") {
-                    await removeSharedCanyon(card.row.entityId);
+                  if (card.row.entityType === "place") {
+                    await removeSharedPlace(card.row.entityId);
                   } else {
                     await removeSharedEntity(card.row.entityType, card.row.entityId);
                   }
@@ -363,7 +363,7 @@ export function FriendSharesScreen({
       value: "youSee",
       label: "They share",
       count: yourCount,
-      hue: canyonHue.shared,
+      hue: placeHue.shared,
     },
   ];
 
@@ -384,13 +384,13 @@ export function FriendSharesScreen({
             showSelectAll={selectedItems.length < selectableItems.length}
             extra={
               direction === "theySee" ? (
-                // Share these with someone ELSE — the same sheet Canyons and
+                // Share these with someone ELSE — the same sheet Places and
                 // Saved open, so nothing about the promise is worded here.
                 <BulkShareButton online={online} onPress={() => setShareSheetOpen(true)} />
               ) : copyable.length > 0 ? (
                 <IconButton
                   icon="copy"
-                  accessibilityLabel={`Save a copy of ${copyable.length} selected canyons`}
+                  accessibilityLabel={`Save a copy of ${copyable.length} selected places`}
                   color={online ? theme.accent : theme.textMuted}
                   onPress={() =>
                     online
@@ -404,7 +404,7 @@ export function FriendSharesScreen({
             onSelectAll={selectAll}
             // The bar's destructive slot, renamed per direction: these end a
             // GRANT, not a record, and a trash can here would promise to
-            // destroy the canyon.
+            // destroy the place.
             deleteIcon={direction === "theySee" ? "user-minus" : "eye-off"}
             deleteLabel={
               direction === "theySee"
@@ -475,7 +475,7 @@ export function FriendSharesScreen({
             }
             hint={
               direction === "theySee"
-                ? "Share a canyon, waypoint, route or map from its own options."
+                ? "Share a place, waypoint, route or map from its own options."
                 : undefined
             }
           />
@@ -495,9 +495,9 @@ export function FriendSharesScreen({
             username={username}
             busy={busy}
             online={online}
-            onOpenCanyon={(canyonId) => {
+            onOpenPlace={(placeId) => {
               setSheetCard(null);
-              onOpenCanyon(canyonId);
+              onOpenPlace(placeId);
             }}
             onUnshare={(card) => {
               setSheetCard(null);
@@ -557,12 +557,12 @@ function ShareCardRow({
   return (
     <Row
       icon={card.icon}
-      hue={card.row.entityType === "canyon" ? undefined : canyonHue.shared}
+      hue={card.row.entityType === "place" ? undefined : placeHue.shared}
       title={card.title}
       subtitle={card.subtitle}
       selected={selected}
       // While selecting, a row no group verb can act on (one that came with a
-      // shared canyon) is greyed out and inert — the same dead look Saved gives
+      // shared place) is greyed out and inert — the same dead look Saved gives
       // an asset this user may not delete, rather than a checkbox that refuses.
       disabled={selecting && !selectable}
       onPress={openOrToggle}
@@ -588,7 +588,7 @@ function ShareCardMenu({
   username,
   busy,
   online,
-  onOpenCanyon,
+  onOpenPlace,
   onUnshare,
   onCopy,
   onRemove,
@@ -598,7 +598,7 @@ function ShareCardMenu({
   username: string;
   busy: boolean;
   online: boolean;
-  onOpenCanyon: (canyonId: string) => void;
+  onOpenPlace: (placeId: string) => void;
   onUnshare: (card: FriendShareCard) => void;
   onCopy: (card: FriendShareCard) => void;
   onRemove: (card: FriendShareCard) => void;
@@ -611,11 +611,11 @@ function ShareCardMenu({
   const live = { disabled: busy };
   return (
     <View style={styles.menuBody}>
-      {card.row.entityType === "canyon" ? (
+      {card.row.entityType === "place" ? (
         <Row
           icon="map-pin"
-          title="Open canyon"
-          onPress={() => onOpenCanyon(card.row.entityId)}
+          title="Open place"
+          onPress={() => onOpenPlace(card.row.entityId)}
         />
       ) : null}
 
@@ -636,7 +636,7 @@ function ShareCardMenu({
           title="Save a copy"
           subtitle={
             online
-              ? "Copies it into your own canyons, with its route. Yours to edit."
+              ? "Copies it into your own places, with its route. Yours to edit."
               : undefined
           }
           {...(online ? live : offline)}
@@ -659,7 +659,7 @@ function ShareCardMenu({
 
       {/* A verb that cannot deliver is absent WITH ITS REASON, rather than
           present and refused: removing the direct share of a row that also
-          rides a shared canyon would appear to work and bring it straight
+          rides a shared place would appear to work and bring it straight
           back on the next pull. */}
       {card.blockedReason ? (
         <Text style={styles.menuNote}>{card.blockedReason}</Text>

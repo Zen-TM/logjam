@@ -13,21 +13,21 @@
 // diverge from any more, and no fetch to fail, which is why `error` is gone
 // too — reading definitions can no longer depend on the network.
 import { useEffect, useState } from "react";
-import type { CustomFieldEntity, TripLogCustomFieldDef } from "@logjam/shared";
+import type { CustomFieldEntity, ScopedCustomFieldDef } from "@logjam/shared";
 
 import { onMirrorChanged } from "../sync/syncDb";
 import { loadFieldDefs } from "./fieldDefsStore";
 
 export type FieldDefsState = {
-  defs: TripLogCustomFieldDef[];
+  defs: ScopedCustomFieldDef[];
   /** Optimistic local update after a save, so a form that just saved can show
    *  the new list without waiting for the mirror notification to land. The
    *  store is still the thing that persisted it. */
-  setDefs: (next: TripLogCustomFieldDef[]) => void;
+  setDefs: (next: ScopedCustomFieldDef[]) => void;
 };
 
 export function useFieldDefs(entity: CustomFieldEntity): FieldDefsState {
-  const [defs, setDefs] = useState<TripLogCustomFieldDef[]>([]);
+  const [defs, setDefs] = useState<ScopedCustomFieldDef[]>([]);
 
   useEffect(() => {
     const read = () => {

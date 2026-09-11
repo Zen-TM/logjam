@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { shareMark, sharedWithLabel } from "./shareMark";
 
-const owners = { "canyon-a": "bob", "canyon-b": "carol" };
+const owners = { "place-a": "bob", "place-b": "carol" };
 
 describe("the two share marks", () => {
   it("names the owner on a row shared WITH the viewer", () => {
@@ -10,8 +10,8 @@ describe("the two share marks", () => {
       shareMark({
         syncRole: "shared",
         sharedCount: null,
-        canyonIds: ["canyon-a"],
-        ownersByCanyon: owners,
+        placeIds: ["place-a"],
+        ownersByPlace: owners,
       }),
     ).toEqual({ pill: { label: "From bob", tone: "outline" } });
   });
@@ -19,20 +19,20 @@ describe("the two share marks", () => {
   it("falls back to the whole phrase, never the bare word, when no owner resolves", () => {
     // The bare "Shared" is what collided with the owner's own fan-out mark.
     // Whatever the mirror is missing, the pill still says which direction.
-    for (const canyonIds of [[], [null], ["canyon-unknown"]]) {
+    for (const placeIds of [[], [null], ["place-unknown"]]) {
       expect(
-        shareMark({ syncRole: "shared", sharedCount: null, canyonIds, ownersByCanyon: owners }),
+        shareMark({ syncRole: "shared", sharedCount: null, placeIds, ownersByPlace: owners }),
       ).toEqual({ pill: { label: "Shared with you", tone: "outline" } });
     }
   });
 
-  it("takes the first canyon that resolves when a waypoint hangs off several", () => {
+  it("takes the first place that resolves when a waypoint hangs off several", () => {
     expect(
       shareMark({
         syncRole: "shared",
         sharedCount: null,
-        canyonIds: ["canyon-unknown", "canyon-b"],
-        ownersByCanyon: owners,
+        placeIds: ["place-unknown", "place-b"],
+        ownersByPlace: owners,
       }).pill?.label,
     ).toBe("From carol");
   });
@@ -42,8 +42,8 @@ describe("the two share marks", () => {
       shareMark({
         syncRole: "owner",
         sharedCount: 3,
-        canyonIds: ["canyon-a"],
-        ownersByCanyon: owners,
+        placeIds: ["place-a"],
+        ownersByPlace: owners,
       }),
     ).toEqual({ sharedWithCount: 3 });
   });
@@ -52,7 +52,7 @@ describe("the two share marks", () => {
     // 0 is a real answer ("nobody"), null is "not known yet" — both render bare.
     for (const sharedCount of [0, null]) {
       expect(
-        shareMark({ syncRole: "owner", sharedCount, canyonIds: [], ownersByCanyon: owners }),
+        shareMark({ syncRole: "owner", sharedCount, placeIds: [], ownersByPlace: owners }),
       ).toEqual({});
     }
   });
@@ -64,8 +64,8 @@ describe("the two share marks", () => {
     const mark = shareMark({
       syncRole: "shared",
       sharedCount: 5,
-      canyonIds: ["canyon-a"],
-      ownersByCanyon: owners,
+      placeIds: ["place-a"],
+      ownersByPlace: owners,
     });
     expect(mark.sharedWithCount).toBeUndefined();
     expect(mark.pill).toBeDefined();

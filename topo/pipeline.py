@@ -176,7 +176,7 @@ class Benchmark:
         """Record the per-footprint overlapping-survey resolution (see
         select_surveys_by_layer). None/empty when no footprint had more than one
         survey (the common single-survey job) or for DEM-only jobs. Privacy-safe:
-        numeric tile ids + area/date survey labels only, never canyon
+        numeric tile ids + area/date survey labels only, never place
         names/coords."""
         self._survey_decisions = decisions
 
@@ -1857,7 +1857,7 @@ class SurveySelection:
     terrain_tiles feeds the DTM (hillshade/slope/contours); veg_tiles feeds the
     vegetation-return counts. A footprint with a single survey contributes the
     same tile to both. `decisions` is a privacy-safe per-footprint audit
-    (numeric tile ids + area/date survey labels only, never canyon names/coords)
+    (numeric tile ids + area/date survey labels only, never place names/coords)
     folded into the job metrics.
     """
     terrain_tiles: List[str]

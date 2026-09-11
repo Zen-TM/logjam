@@ -22,11 +22,13 @@ import { AppError, errorHandler } from "./middleware/errorHandler";
 import { globalLimiter } from "./middleware/rateLimit";
 import { startTopoJobReaper } from "./lib/topoJobReaper";
 import usersRouter from "./routes/users";
-import canyonsRouter from "./routes/canyons";
+import placesRouter from "./routes/places";
+import placeTypesRouter from "./routes/placeTypes";
 import tripLogsRouter from "./routes/tripLogs";
 import tripLogsGlobalRouter from "./routes/tripLogsGlobal";
 import tripLogsBulkRouter from "./routes/tripLogsBulk";
-import canyonsBulkRouter from "./routes/canyonsBulk";
+import placesBulkRouter from "./routes/placesBulk";
+import foreignFieldsRouter from "./routes/foreignFields";
 import sharingRouter from "./routes/sharing";
 import sharesRouter from "./routes/shares";
 import bulkShareRouter from "./routes/bulkShare";
@@ -48,7 +50,6 @@ import importsRouter from "./routes/imports";
 import metaRouter from "./routes/meta";
 import devicesRouter from "./routes/devices";
 import basemapRouter from "./routes/basemap";
-import waypointsRouter from "./routes/waypoints";
 import routesRouter from "./routes/routes";
 import elevationRouter from "./routes/elevation";
 import syncRouter from "./routes/sync";
@@ -193,13 +194,18 @@ app.use(globalLimiter);
 
 app.use("/meta", metaRouter);
 app.use("/users", usersRouter);
-app.use("/canyons", canyonsRouter);
-app.use("/canyons/:canyonId/trips", tripLogsRouter);
+app.use("/place-types", placeTypesRouter);
+app.use("/places", placesRouter);
+app.use("/places/:placeId/trips", tripLogsRouter);
 app.use("/trips/bulk", tripLogsBulkRouter);
-app.use("/canyons/bulk", canyonsBulkRouter);
+app.use("/places/bulk", placesBulkRouter);
 app.use("/imports", importsRouter);
 app.use("/trips", tripLogsGlobalRouter);
-app.use("/canyons", sharingRouter);
+app.use("/places", sharingRouter);
+// Mounted on /places too: the actions are per PLACE, and keeping them under
+// the place's own path is what makes "owner only, 404 otherwise" the same
+// answer the rest of that path gives.
+app.use("/places", foreignFieldsRouter);
 app.use("/shares", sharesRouter);
 // Its own path, NOT /shares/bulk: it also ends a bulk action made entirely of
 // file copies, which grant no Share row at all, and mounting it under the
@@ -221,7 +227,6 @@ app.use("/vector-style", vectorStyleRouter);
 app.use("/geo-pdf", geoPdfRouter);
 app.use("/analytics", analyticsRouter);
 app.use("/custom-fields", customFieldsRouter);
-app.use("/waypoints", waypointsRouter);
 app.use("/routes", routesRouter);
 app.use("/elevation", elevationRouter);
 app.use("/sync", syncRouter);

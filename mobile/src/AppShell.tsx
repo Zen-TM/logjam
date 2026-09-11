@@ -1,4 +1,4 @@
-// The app shell: bottom tabs (Map / Canyons / Logs / Saved / More) with native
+// The app shell: bottom tabs (Map / Places / Logs / Saved / More) with native
 // stacks for detail screens, behind the consent gate. The More tab is a hub
 // folding Inbox, Account, Friends, Sync issues and Settings off the tab bar.
 //
@@ -40,8 +40,8 @@ import { notificationTapTarget } from "./notifications/tapTarget";
 import { SavedScreen, type SavedItemReveal } from "./saved/SavedScreen";
 import type { SavedCategory } from "./saved/savedKeys";
 import { AccountScreen } from "./screens/AccountScreen";
-import { CanyonDetailScreen } from "./canyons/CanyonDetailScreen";
-import { CanyonsScreen } from "./canyons/CanyonsScreen";
+import { PlaceDetailScreen } from "./places/PlaceDetailScreen";
+import { PlacesScreen } from "./places/PlacesScreen";
 import { PickPointScreen } from "./map/PickPointScreen";
 import { PickAreaScreen } from "./map/PickAreaScreen";
 import { readAreaPickerStart, setPickedArea } from "./map/pickedArea";
@@ -105,29 +105,29 @@ type MapStackParams = {
         // existing route. An id, never geometry — the map reads the points
         // from the mirror it already has.
         editRoute?: { routeId: string; nonce: number };
-        // `drawRouteFor` = "Draw one on the map": arm the pen. From a canyon
-        // page it carries that canyon's id and saves into its route slot;
+        // `drawRouteFor` = "Draw one on the map": arm the pen. From a place
+        // page it carries that place's id and saves into its route slot;
         // from Saved's add sheet the id is null and the route stands alone.
-        drawRouteFor?: { canyonId: string | null; nonce: number };
+        drawRouteFor?: { placeId: string | null; nonce: number };
         // `continueTrack` = "Continue recording" from Saved: pick a finished
         // track back up. An id, never points.
         continueTrack?: { trackId: string; nonce: number };
         // `startRecording` = "Record a track" from Saved's add sheet.
         startRecording?: { nonce: number };
-        // `navigateWaypoint` = "Navigate to this waypoint" from Saved. An id,
+        // `navigatePlace` = "Navigate to this place" from a place's verbs. An id,
         // never a coordinate: navigation params are persisted and dumped by
         // devtools, and the map reads the point from the mirror it already has.
-        navigateWaypoint?: { waypointId: string; nonce: number };
+        navigatePlace?: { placeId: string; nonce: number };
       }
     | undefined;
-  // Where the waypoint form went to point at a map. A coordinate already in
-  // the form arrives as params, with the id of the waypoint being moved so the
+  // Where the place form went to point at a map. A coordinate already in
+  // the form arrives as params, with the id of the place being moved so the
   // picker can leave its own pin off; the answer goes back through
   // `pickedPoint.ts`.
   MapPickPoint:
-    | { latitude: number; longitude: number; waypointId?: string }
+    | { latitude: number; longitude: number; placeId?: string }
     | undefined;
-  MapCanyonDetail: { canyonId: string; name: string };
+  MapPlaceDetail: { placeId: string; name: string };
   MapTripDetail: { trip: MirrorTrip };
   // Where the map was looking when "Save maps for offline use" was tapped, so
   // the download screen opens on the same ground. Params only, never persisted.
@@ -140,32 +140,32 @@ type MapStackParams = {
     | undefined;
 };
 
-type CanyonsStackParams = {
-  CanyonList: undefined;
-  CanyonDetail: { canyonId: string; name: string };
-  CanyonTripDetail: { trip: MirrorTrip };
+type PlacesStackParams = {
+  PlaceList: undefined;
+  PlaceDetail: { placeId: string; name: string };
+  PlaceTripDetail: { trip: MirrorTrip };
   /**
    * The full-screen point picker for the add/edit form. Its ANSWER does not
-   * come back through params — a canyon's coordinate must not be written into
+   * come back through params — a place's coordinate must not be written into
    * navigation state, which persists and is dumped by devtools — it comes back
-   * in memory through `canyons/pickedPoint.ts`. What travels here is only where
+   * in memory through `places/pickedPoint.ts`. What travels here is only where
    * to open, which is a coordinate the user typed themselves and is on screen
    * in front of them.
    */
-  CanyonPickPoint: { latitude: number; longitude: number } | undefined;
+  PlacePickPoint: { latitude: number; longitude: number } | undefined;
   /**
-   * The full-screen area picker for the canyon filter. NOTHING travels here —
-   * not even where to open. A drawn box is a region of canyons, which is the
+   * The full-screen area picker for the place filter. NOTHING travels here —
+   * not even where to open. A drawn box is a region of places, which is the
    * kind of value the point picker's params comment carves out an exception
    * AGAINST: both directions go through `map/pickedArea.ts` in memory.
    */
-  CanyonPickArea: undefined;
+  PlacePickArea: undefined;
 };
 
 type TripsStackParams = {
   TripList: undefined;
   TripDetail: { trip: MirrorTrip };
-  TripCanyonDetail: { canyonId: string; name: string };
+  TripPlaceDetail: { placeId: string; name: string };
 };
 
 type SavedStackParams = {
@@ -179,23 +179,23 @@ type SavedStackParams = {
     | { filter?: SavedCategory; nonce?: number; highlightKey?: string }
     | undefined;
   /**
-   * The point picker for the "waypoint from coordinates" form — the same screen
-   * the Canyons stack registers, because a stack can only push its own routes
+   * The point picker for the "place from coordinates" form — the same screen
+   * the Places stack registers, because a stack can only push its own routes
    * and the alternative is a cross-tab jump that leaves the form behind.
    * Coordinates travel IN only (where to open); the answer comes back in memory
    * through `map/pickedPoint.ts`.
    */
   SavedPickPoint:
-    | { latitude: number; longitude: number; waypointId?: string }
+    | { latitude: number; longitude: number; placeId?: string }
     | undefined;
 };
 
 type MoreStackParams = {
   MoreHome: undefined;
   Inbox: undefined;
-  // Reached from a notification that refers to a canyon — pushed inside the
+  // Reached from a notification that refers to a place — pushed inside the
   // More stack so Back returns to the inbox, not to another tab's history.
-  MoreCanyonDetail: { canyonId: string };
+  MorePlaceDetail: { placeId: string };
   MoreTripDetail: { trip: MirrorTrip };
   Account: undefined;
   Friends: undefined;
@@ -225,25 +225,25 @@ const SETTINGS_ROUTES: Record<SettingsPage, keyof MoreStackParams> = {
 };
 
 const MapStack = createNativeStackNavigator<MapStackParams>();
-const CanyonsStack = createNativeStackNavigator<CanyonsStackParams>();
+const PlacesStack = createNativeStackNavigator<PlacesStackParams>();
 const TripsStack = createNativeStackNavigator<TripsStackParams>();
 const SavedStack = createNativeStackNavigator<SavedStackParams>();
 const MoreStack = createNativeStackNavigator<MoreStackParams>();
 const Tabs = createBottomTabNavigator();
 
 /**
- * Map focus for one canyon — a tight box around its point (~1 km across), which
+ * Map focus for one place — a tight box around its point (~1 km across), which
  * is what `MapView`'s `focus` param takes. Built at navigation time and never
  * stored: a region of interest stays off the server (mobile/CLAUDE.md).
  */
-const CANYON_FOCUS_DEGREES = 0.005;
-function canyonFocus(canyon: { latitude: number; longitude: number }) {
+const PLACE_FOCUS_DEGREES = 0.005;
+function placeFocus(place: { latitude: number; longitude: number }) {
   return {
     bbox: [
-      canyon.longitude - CANYON_FOCUS_DEGREES,
-      canyon.latitude - CANYON_FOCUS_DEGREES,
-      canyon.longitude + CANYON_FOCUS_DEGREES,
-      canyon.latitude + CANYON_FOCUS_DEGREES,
+      place.longitude - PLACE_FOCUS_DEGREES,
+      place.latitude - PLACE_FOCUS_DEGREES,
+      place.longitude + PLACE_FOCUS_DEGREES,
+      place.latitude + PLACE_FOCUS_DEGREES,
     ] as [number, number, number, number],
     nonce: Date.now(),
   };
@@ -261,8 +261,8 @@ function MapStackNav() {
       <MapStack.Screen name="MapView" options={{ headerShown: false }}>
         {({ navigation, route }) => (
           <MapScreen
-            onOpenCanyon={(canyonId, name) =>
-              navigation.navigate("MapCanyonDetail", { canyonId, name })
+            onOpenPlace={(placeId, name) =>
+              navigation.navigate("MapPlaceDetail", { placeId, name })
             }
             onOpenSaved={(category) =>
               navigation.getParent()?.navigate("Saved", {
@@ -278,12 +278,12 @@ function MapStackNav() {
             drawRouteFor={route.params?.drawRouteFor ?? null}
             continueTrack={route.params?.continueTrack ?? null}
             startRecording={route.params?.startRecording ?? null}
-            navigateWaypoint={route.params?.navigateWaypoint ?? null}
-            onPickPoint={(from, hideWaypointId) =>
+            navigatePlace={route.params?.navigatePlace ?? null}
+            onPickPoint={(from, hidePlaceId) =>
               navigation.navigate(
                 "MapPickPoint",
-                from || hideWaypointId
-                  ? { ...(from ?? undefined), waypointId: hideWaypointId }
+                from || hidePlaceId
+                  ? { ...(from ?? undefined), placeId: hidePlaceId }
                   : undefined,
               )
             }
@@ -293,8 +293,8 @@ function MapStackNav() {
       <MapStack.Screen name="MapPickPoint" options={{ headerShown: false }}>
         {({ navigation, route }) => (
           <PickPointScreen
-            // A request that carries only a waypoint id has no coordinate in
-            // it — the form was blank — so the picker must open with no marker.
+            // A request that carries only a place id has no coordinate in it —
+            // the form was blank — so the picker must open with no marker.
             initialPoint={
               route.params?.latitude != null && route.params?.longitude != null
                 ? {
@@ -303,8 +303,8 @@ function MapStackNav() {
                   }
                 : null
             }
-            subject="waypoint"
-            hideWaypointId={route.params?.waypointId ?? null}
+            subject="place"
+            hidePlaceId={route.params?.placeId ?? null}
             onCancel={() => navigation.goBack()}
             onConfirm={(point) => {
               setPickedPoint(point);
@@ -336,32 +336,32 @@ function MapStackNav() {
           />
         )}
       </MapStack.Screen>
-      {/* Canyon and trip detail both carry their own HeroHeader, which owns the
+      {/* Place and trip detail both carry their own HeroHeader, which owns the
           back affordance (DESIGN.md §2). */}
-      <MapStack.Screen name="MapCanyonDetail" options={{ headerShown: false }}>
+      <MapStack.Screen name="MapPlaceDetail" options={{ headerShown: false }}>
         {({ navigation, route }) => (
-          <CanyonDetailScreen
-            canyonId={route.params.canyonId}
+          <PlaceDetailScreen
+            placeId={route.params.placeId}
             onBack={() => navigation.goBack()}
             onOpenTrip={(trip) => navigation.navigate("MapTripDetail", { trip })}
-            onShowOnMap={(canyon) =>
-              navigation.navigate("MapView", { focus: canyonFocus(canyon) })
+            onShowOnMap={(place) =>
+              navigation.navigate("MapView", { focus: placeFocus(place) })
             }
             onFocusOnMap={(bbox) =>
               navigation.navigate("MapView", { focus: { bbox, nonce: Date.now() } })
             }
-            onShowWaypointOnMap={(waypoint) =>
+            onShowPlaceOnMap={(linked) =>
               navigation.getParent()?.navigate("Map", {
                 screen: "MapView",
-                // canyonFocus, not a route bbox: a single point yields a
+                // placeFocus, not a route bbox: a single point yields a
                 // zero-span bbox, which the camera reads as "fit nothing".
-                params: { focus: canyonFocus(waypoint) },
+                params: { focus: placeFocus(linked) },
               })
             }
             onDrawRoute={(id) =>
               navigation.getParent()?.navigate("Map", {
                 screen: "MapView",
-                params: { drawRouteFor: { canyonId: id, nonce: Date.now() } },
+                params: { drawRouteFor: { placeId: id, nonce: Date.now() } },
               })
             }
             onDeleted={() => navigation.goBack()}
@@ -373,8 +373,8 @@ function MapStackNav() {
           <TripDetailScreen
             trip={route.params.trip}
             onBack={() => navigation.goBack()}
-            onOpenCanyon={(canyonId, name) =>
-              navigation.navigate("MapCanyonDetail", { canyonId, name })
+            onOpenPlace={(placeId, name) =>
+              navigation.navigate("MapPlaceDetail", { placeId, name })
             }
             onFocusOnMap={(bbox) =>
               navigation.navigate("MapView", { focus: { bbox, nonce: Date.now() } })
@@ -424,11 +424,11 @@ function SavedStackNav() {
                 params: { editRoute: { routeId, nonce: Date.now() } },
               })
             }
-            onPickPoint={(from, hideWaypointId) =>
+            onPickPoint={(from, hidePlaceId) =>
               navigation.navigate(
                 "SavedPickPoint",
-                from || hideWaypointId
-                  ? { ...(from ?? undefined), waypointId: hideWaypointId }
+                from || hidePlaceId
+                  ? { ...(from ?? undefined), placeId: hidePlaceId }
                   : undefined,
               )
             }
@@ -451,25 +451,17 @@ function SavedStackNav() {
             onDrawRoute={() =>
               navigation.getParent()?.navigate("Map", {
                 screen: "MapView",
-                params: { drawRouteFor: { canyonId: null, nonce: Date.now() } },
+                params: { drawRouteFor: { placeId: null, nonce: Date.now() } },
               })
             }
             // The bearing line and the user dot are the map's, so this hands
             // the id over rather than growing a second navigator.
-            onNavigateToWaypoint={(waypointId) =>
-              navigation.getParent()?.navigate("Map", {
-                screen: "MapView",
-                params: { navigateWaypoint: { waypointId, nonce: Date.now() } },
-              })
-            }
-            // A cross-tab jump rather than a canyon screen of this stack's own:
-            // the Saved tab has never held one, and the only thing that sends a
             // user there from here is a waypoint or route asking "which shared
-            // canyon brought me?".
-            onOpenCanyon={(canyonId, name) =>
-              navigation.getParent()?.navigate("Canyons", {
-                screen: "CanyonDetail",
-                params: { canyonId, name },
+            // place brought me?".
+            onOpenPlace={(placeId, name) =>
+              navigation.getParent()?.navigate("Places", {
+                screen: "PlaceDetail",
+                params: { placeId, name },
               })
             }
           />
@@ -479,7 +471,7 @@ function SavedStackNav() {
         {({ navigation, route }) => (
           <PickPointScreen
             // Same shape as the map stack's: a request may carry an id and no
-            // coordinate (a blank form on an existing waypoint), and that must
+            // coordinate (a blank form on an existing place), and that must
             // open with no marker rather than one at null island.
             initialPoint={
               route.params?.latitude != null && route.params?.longitude != null
@@ -489,8 +481,8 @@ function SavedStackNav() {
                   }
                 : null
             }
-            subject="waypoint"
-            hideWaypointId={route.params?.waypointId ?? null}
+            subject="place"
+            hidePlaceId={route.params?.placeId ?? null}
             onCancel={() => navigation.goBack()}
             onConfirm={(point) => {
               setPickedPoint(point);
@@ -503,34 +495,34 @@ function SavedStackNav() {
   );
 }
 
-function CanyonsStackNav() {
+function PlacesStackNav() {
   return (
-    <CanyonsStack.Navigator screenOptions={stackScreenOptions}>
+    <PlacesStack.Navigator screenOptions={stackScreenOptions}>
       {/* No native header on any of these: each screen leads with its own
           HeroHeader (DESIGN.md §2). */}
-      <CanyonsStack.Screen name="CanyonList" options={{ headerShown: false }}>
+      <PlacesStack.Screen name="PlaceList" options={{ headerShown: false }}>
         {({ navigation }) => (
-          <CanyonsScreen
-            onOpenCanyon={(canyon) =>
-              navigation.navigate("CanyonDetail", { canyonId: canyon.id, name: canyon.name })
+          <PlacesScreen
+            onOpenPlace={(place) =>
+              navigation.navigate("PlaceDetail", { placeId: place.id, name: place.name })
             }
-            onShowOnMap={(canyon) =>
+            onShowOnMap={(place) =>
               navigation.getParent()?.navigate("Map", {
                 screen: "MapView",
-                params: { focus: canyonFocus(canyon) },
+                params: { focus: placeFocus(place) },
               })
             }
             onPickPoint={(from) =>
-              navigation.navigate("CanyonPickPoint", from ?? undefined)
+              navigation.navigate("PlacePickPoint", from ?? undefined)
             }
-            onPickArea={() => navigation.navigate("CanyonPickArea")}
+            onPickArea={() => navigation.navigate("PlacePickArea")}
           />
         )}
-      </CanyonsStack.Screen>
-      {/* Registered on the Canyons stack alone: the filter that opens it lives
-          on the Canyons list, unlike the point picker, which three stacks
+      </PlacesStack.Screen>
+      {/* Registered on the Places stack alone: the filter that opens it lives
+          on the Places list, unlike the point picker, which three stacks
           reach. */}
-      <CanyonsStack.Screen name="CanyonPickArea" options={{ headerShown: false }}>
+      <PlacesStack.Screen name="PlacePickArea" options={{ headerShown: false }}>
         {({ navigation }) => (
           <PickAreaScreen
             initialArea={readAreaPickerStart()}
@@ -541,14 +533,14 @@ function CanyonsStackNav() {
             }}
           />
         )}
-      </CanyonsStack.Screen>
-      {/* The picker owns the whole screen — see PickCanyonPointScreen for why
+      </PlacesStack.Screen>
+      {/* The picker owns the whole screen — see PickPlacePointScreen for why
           it cannot be a mode of the sheet that opened it. */}
-      <CanyonsStack.Screen name="CanyonPickPoint" options={{ headerShown: false }}>
+      <PlacesStack.Screen name="PlacePickPoint" options={{ headerShown: false }}>
         {({ navigation, route }) => (
           <PickPointScreen
             initialPoint={route.params ?? null}
-            subject="canyon"
+            subject="place"
             onCancel={() => navigation.goBack()}
             onConfirm={(point) => {
               setPickedPoint(point);
@@ -556,17 +548,17 @@ function CanyonsStackNav() {
             }}
           />
         )}
-      </CanyonsStack.Screen>
-      <CanyonsStack.Screen name="CanyonDetail" options={{ headerShown: false }}>
+      </PlacesStack.Screen>
+      <PlacesStack.Screen name="PlaceDetail" options={{ headerShown: false }}>
         {({ navigation, route }) => (
-          <CanyonDetailScreen
-            canyonId={route.params.canyonId}
+          <PlaceDetailScreen
+            placeId={route.params.placeId}
             onBack={() => navigation.goBack()}
-            onOpenTrip={(trip) => navigation.navigate("CanyonTripDetail", { trip })}
-            onShowOnMap={(canyon) =>
+            onOpenTrip={(trip) => navigation.navigate("PlaceTripDetail", { trip })}
+            onShowOnMap={(place) =>
               navigation.getParent()?.navigate("Map", {
                 screen: "MapView",
-                params: { focus: canyonFocus(canyon) },
+                params: { focus: placeFocus(place) },
               })
             }
             onFocusOnMap={(bbox) =>
@@ -575,31 +567,31 @@ function CanyonsStackNav() {
                 params: { focus: { bbox, nonce: Date.now() } },
               })
             }
-            onShowWaypointOnMap={(waypoint) =>
+            onShowPlaceOnMap={(linked) =>
               navigation.getParent()?.navigate("Map", {
                 screen: "MapView",
-                // canyonFocus, not a route bbox: a single point yields a
+                // placeFocus, not a route bbox: a single point yields a
                 // zero-span bbox, which the camera reads as "fit nothing".
-                params: { focus: canyonFocus(waypoint) },
+                params: { focus: placeFocus(linked) },
               })
             }
             onDrawRoute={(id) =>
               navigation.getParent()?.navigate("Map", {
                 screen: "MapView",
-                params: { drawRouteFor: { canyonId: id, nonce: Date.now() } },
+                params: { drawRouteFor: { placeId: id, nonce: Date.now() } },
               })
             }
             onDeleted={() => navigation.goBack()}
           />
         )}
-      </CanyonsStack.Screen>
-      <CanyonsStack.Screen name="CanyonTripDetail" options={{ headerShown: false }}>
+      </PlacesStack.Screen>
+      <PlacesStack.Screen name="PlaceTripDetail" options={{ headerShown: false }}>
         {({ navigation, route }) => (
           <TripDetailScreen
             trip={route.params.trip}
             onBack={() => navigation.goBack()}
-            onOpenCanyon={(canyonId, name) =>
-              navigation.navigate("CanyonDetail", { canyonId, name })
+            onOpenPlace={(placeId, name) =>
+              navigation.navigate("PlaceDetail", { placeId, name })
             }
             onFocusOnMap={(bbox) =>
               navigation.getParent()?.navigate("Map", {
@@ -609,8 +601,8 @@ function CanyonsStackNav() {
             }
           />
         )}
-      </CanyonsStack.Screen>
-    </CanyonsStack.Navigator>
+      </PlacesStack.Screen>
+    </PlacesStack.Navigator>
   );
 }
 
@@ -629,8 +621,8 @@ function TripsStackNav() {
           <TripDetailScreen
             trip={route.params.trip}
             onBack={() => navigation.goBack()}
-            onOpenCanyon={(canyonId, name) =>
-              navigation.navigate("TripCanyonDetail", { canyonId, name })
+            onOpenPlace={(placeId, name) =>
+              navigation.navigate("TripPlaceDetail", { placeId, name })
             }
             onFocusOnMap={(bbox) =>
               navigation.getParent()?.navigate("Map", {
@@ -641,16 +633,16 @@ function TripsStackNav() {
           />
         )}
       </TripsStack.Screen>
-      <TripsStack.Screen name="TripCanyonDetail" options={{ headerShown: false }}>
+      <TripsStack.Screen name="TripPlaceDetail" options={{ headerShown: false }}>
         {({ navigation, route }) => (
-          <CanyonDetailScreen
-            canyonId={route.params.canyonId}
+          <PlaceDetailScreen
+            placeId={route.params.placeId}
             onBack={() => navigation.goBack()}
             onOpenTrip={(trip) => navigation.navigate("TripDetail", { trip })}
-            onShowOnMap={(canyon) =>
+            onShowOnMap={(place) =>
               navigation.getParent()?.navigate("Map", {
                 screen: "MapView",
-                params: { focus: canyonFocus(canyon) },
+                params: { focus: placeFocus(place) },
               })
             }
             onFocusOnMap={(bbox) =>
@@ -659,18 +651,18 @@ function TripsStackNav() {
                 params: { focus: { bbox, nonce: Date.now() } },
               })
             }
-            onShowWaypointOnMap={(waypoint) =>
+            onShowPlaceOnMap={(linked) =>
               navigation.getParent()?.navigate("Map", {
                 screen: "MapView",
-                // canyonFocus, not a route bbox: a single point yields a
+                // placeFocus, not a route bbox: a single point yields a
                 // zero-span bbox, which the camera reads as "fit nothing".
-                params: { focus: canyonFocus(waypoint) },
+                params: { focus: placeFocus(linked) },
               })
             }
             onDrawRoute={(id) =>
               navigation.getParent()?.navigate("Map", {
                 screen: "MapView",
-                params: { drawRouteFor: { canyonId: id, nonce: Date.now() } },
+                params: { drawRouteFor: { placeId: id, nonce: Date.now() } },
               })
             }
             onDeleted={() => navigation.goBack()}
@@ -721,7 +713,7 @@ export function AppShell({
   const navigationRef = useRef<NavigationContainerRef<never>>(null);
 
   // Register this device for pushes once authenticated (best-effort), and
-  // route notification taps: a canyon reference deep-links to its detail,
+  // route notification taps: a place reference deep-links to its detail,
   // everything else lands on the inbox. Payloads carry opaque IDs only — the
   // screen fetches details over the authed API.
   // Stage 8 sync triggers: initial cycle, app foreground, connectivity
@@ -802,10 +794,10 @@ export function AppShell({
         // things the user still has to deal with, and emptying it on the
         // strength of a tap-through takes rows out of the one list they are
         // looked for in. Opening the row is what reads it.
-        if (target.kind === "canyon") {
-          nav.navigate("Canyons", {
-            screen: "CanyonDetail",
-            params: { canyonId: target.canyonId, name: "Canyon" },
+        if (target.kind === "place") {
+          nav.navigate("Places", {
+            screen: "PlaceDetail",
+            params: { placeId: target.placeId, name: "Place" },
           });
         } else {
           // Inbox now lives inside the More stack.
@@ -906,10 +898,10 @@ export function AppShell({
           {() => <MapStackNav />}
         </Tabs.Screen>
         <Tabs.Screen
-          name="Canyons"
+          name="Places"
           options={{ tabBarIcon: ({ color }) => <TabIcon name="map-pin" color={color} /> }}
         >
-          {() => <CanyonsStackNav />}
+          {() => <PlacesStackNav />}
         </Tabs.Screen>
         <Tabs.Screen
           name="Logs"
@@ -954,11 +946,11 @@ export function AppShell({
                   <NotificationsScreen
                     onBack={() => navigation.goBack()}
                     onUnreadChanged={refreshUnread}
-                    // A share notification is a way in to the canyon it is
+                    // A share notification is a way in to the place it is
                     // about; the name is unknown here, so the detail screen
                     // resolves it from the id over the authed API.
-                    onOpenCanyon={(canyonId) =>
-                      navigation.navigate("MoreCanyonDetail", { canyonId })
+                    onOpenPlace={(placeId) =>
+                      navigation.navigate("MorePlaceDetail", { placeId })
                     }
                     // A notification about a saved item is a way in to that
                     // item: the Saved tab, on its filter, with the row pulsed.
@@ -974,22 +966,22 @@ export function AppShell({
                         },
                       })
                     }
-                    // Pushed INSIDE the More stack, like the canyon above, so
+                    // Pushed INSIDE the More stack, like the place above, so
                     // Back returns to the inbox rather than to another tab.
                     onOpenFriends={() => navigation.navigate("Friends")}
                   />
                 )}
               </MoreStack.Screen>
-              <MoreStack.Screen name="MoreCanyonDetail" options={{ headerShown: false }}>
+              <MoreStack.Screen name="MorePlaceDetail" options={{ headerShown: false }}>
                 {({ navigation, route }) => (
-                  <CanyonDetailScreen
-                    canyonId={route.params.canyonId}
+                  <PlaceDetailScreen
+                    placeId={route.params.placeId}
                     onBack={() => navigation.goBack()}
                     onOpenTrip={(trip) => navigation.navigate("MoreTripDetail", { trip })}
-                    onShowOnMap={(canyon) =>
+                    onShowOnMap={(place) =>
                       navigation.getParent()?.navigate("Map", {
                         screen: "MapView",
-                        params: { focus: canyonFocus(canyon) },
+                        params: { focus: placeFocus(place) },
                       })
                     }
                     onFocusOnMap={(bbox) =>
@@ -998,19 +990,19 @@ export function AppShell({
                         params: { focus: { bbox, nonce: Date.now() } },
                       })
                     }
-                    onShowWaypointOnMap={(waypoint) =>
+                    onShowPlaceOnMap={(linked) =>
                       navigation.getParent()?.navigate("Map", {
                         screen: "MapView",
-                        // canyonFocus, not a route bbox: a single point
+                        // placeFocus, not a route bbox: a single point
                         // yields a zero-span bbox, which the camera reads as
                         // "fit nothing".
-                        params: { focus: canyonFocus(waypoint) },
+                        params: { focus: placeFocus(linked) },
                       })
                     }
                     onDrawRoute={(id) =>
                       navigation.getParent()?.navigate("Map", {
                         screen: "MapView",
-                        params: { drawRouteFor: { canyonId: id, nonce: Date.now() } },
+                        params: { drawRouteFor: { placeId: id, nonce: Date.now() } },
                       })
                     }
                     onDeleted={() => navigation.goBack()}
@@ -1022,8 +1014,8 @@ export function AppShell({
                   <TripDetailScreen
                     trip={route.params.trip}
                     onBack={() => navigation.goBack()}
-                    onOpenCanyon={(canyonId) =>
-                      navigation.navigate("MoreCanyonDetail", { canyonId })
+                    onOpenPlace={(placeId) =>
+                      navigation.navigate("MorePlaceDetail", { placeId })
                     }
                     onFocusOnMap={(bbox) =>
                       navigation.getParent()?.navigate("Map", {
@@ -1057,10 +1049,10 @@ export function AppShell({
                     friendshipId={route.params.friendshipId}
                     username={route.params.username}
                     onBack={() => navigation.goBack()}
-                    // Inside the More stack, like the inbox's own canyon route,
+                    // Inside the More stack, like the inbox's own place route,
                     // so Back returns to the sharing list.
-                    onOpenCanyon={(canyonId) =>
-                      navigation.navigate("MoreCanyonDetail", { canyonId })
+                    onOpenPlace={(placeId) =>
+                      navigation.navigate("MorePlaceDetail", { placeId })
                     }
                   />
                 )}
@@ -1072,9 +1064,9 @@ export function AppShell({
                     // A stuck change is a way IN to the thing it failed on: the
                     // permanent-failure sheet offers "open it and change it a
                     // way that works". Pushed inside the More stack, like the
-                    // inbox's own canyon route, so Back returns to the issue.
-                    onOpenCanyon={(canyonId) =>
-                      navigation.navigate("MoreCanyonDetail", { canyonId })
+                    // inbox's own place route, so Back returns to the issue.
+                    onOpenPlace={(placeId) =>
+                      navigation.navigate("MorePlaceDetail", { placeId })
                     }
                     onOpenTrip={(trip) => navigation.navigate("MoreTripDetail", { trip })}
                   />

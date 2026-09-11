@@ -10,7 +10,7 @@
   composes: btn btnFilledAccent btnMd btnFull from '@styles/shared.module.css';
 }
 
-/* Matches the .truncationNote in CanyonsPanel/TripLogsPanel (UX-001/002). */
+/* Matches the .truncationNote in PlacesPanel/TripLogsPanel (UX-001/002). */
 .truncationNote {
   flex-shrink: 0;
   font-size: var(--text-xs);

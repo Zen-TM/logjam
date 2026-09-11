@@ -9,7 +9,7 @@ import {
   resetPassword as amplifyResetPassword,
   confirmResetPassword as amplifyConfirmResetPassword,
 } from "aws-amplify/auth";
-import { apiFetch, setSessionExpiredHandler } from "./canyonUtils";
+import { apiFetch, setSessionExpiredHandler } from "./placeUtils";
 import { messageFromError } from "./errors/messageFromError";
 import { mapAuthNextStep } from "./errors/authErrorMap";
 import { clearTripDraft } from "./tripDraft";
@@ -190,7 +190,7 @@ export function useAuth() {
   );
 
   const handleSignOut = useCallback(async () => {
-    // A trip draft is canyon names and notes in localStorage, readable by
+    // A trip draft is place names and notes in localStorage, readable by
     // anything on the origin and unaffected by the reload below. It must not
     // outlive the session that wrote it — sign-out is the line (privacy rules,
     // root CLAUDE.md). Cleared before the network call so a signOut failure

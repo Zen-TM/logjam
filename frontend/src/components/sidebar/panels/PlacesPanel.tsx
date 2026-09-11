@@ -1,0 +1,1001 @@
+import { useState, useCallback, useEffect, useMemo } from "react";
+import { ChevronDown, X } from "lucide-react";
+import { Button, Slider, Switch } from "@mui/material";
+import classes from "./PlacesPanel.module.css";
+import type {
+  TPlace,
+  TFilters,
+  TDateRange,
+  TCustomFieldFilter,
+} from "../../../placeUtils";
+import {
+  refreshFromRopeWiki,
+  passesFilters,
+  activeFilterCount,
+  emptyFilters,
+} from "../../../placeUtils";
+import { numericFieldValue, regionEdgesKm } from "@logjam/shared";
+import type { RefreshResult, TPlaceType } from "../../../placeUtils";
+import { useStoredState } from "../../../useStoredState";
+import type { PanelId } from "../panels";
+import type { TripLogCustomFieldDef, ScopedCustomFieldDef } from "@logjam/shared";
+import { customFieldDisplayLabel, defsForType } from "@logjam/shared";
+import RopeWikiReviewDialog from "../../dialogs/RopeWikiReviewDialog";
+import ConfirmDialog from "../../dialogs/ConfirmDialog";
+import { useToast } from "../../feedback/ToastProvider";
+import { messageFromError } from "../../../errors/messageFromError";
+
+
+type SortKey = "name" | "recent" | "grade";
+
+const SORT_OPTIONS: { value: SortKey; label: string }[] = [
+  { value: "name", label: "Name (A–Z)" },
+  { value: "recent", label: "Recently added" },
+  { value: "grade", label: "Grade (V/A)" },
+];
+
+const OWNERSHIP_OPTIONS: { value: TFilters["ownership"]; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "owned", label: "Mine" },
+  { value: "shared", label: "Shared with me" },
+];
+
+const ROPEWIKI_OPTIONS: { value: TFilters["ropewiki"]; label: string }[] = [
+  { value: "any", label: "Any" },
+  { value: "linked", label: "Linked" },
+  { value: "unlinked", label: "Not linked" },
+];
+
+// "Visited" rather than "Done": the measure is >= 1 logged trip and nothing
+// more, so a bailed descent counts and "Done" claimed otherwise. It also reads
+// on a campsite or a carpark, which "Done" stopped doing once a place was not
+// always a canyon. The filter keys stay `completion` / `done` / `not_done` —
+// they are the wire, and the analytics ring's name for this same measure.
+const COMPLETION_OPTIONS: { value: TFilters["completion"]; label: string }[] = [
+  { value: "any", label: "Any" },
+  { value: "done", label: "Visited" },
+  { value: "not_done", label: "Not visited" },
+];
+
+// The V/A summary on a row. Reads the reserved canyon keys out of fieldValues;
+// a place of a type that carries no grades summarises to "", which is what an
+// ungraded canyon always did.
+function gradeSummary(c: TPlace): string {
+  const parts: string[] = [];
+  const v = numericFieldValue(c.fieldValues, "v_grade");
+  const a = numericFieldValue(c.fieldValues, "a_grade");
+  if (v != null) parts.push(`V${v}`);
+  if (a != null) parts.push(`A${a}`);
+  return parts.join(" ");
+}
+
+function PlacesPanel({
+  places,
+  placesTotal,
+  sharedPlaces,
+  onAddPlace,
+  onOpenUnifiedImport,
+  onExportPlaces,
+  onStartAreaSelection,
+  onCancelAreaSelection,
+  selectingArea,
+  onRefetch,
+  filters,
+  onDrawFilterArea,
+  onFilterToMapView,
+  onChangeFilters,
+  filtersAccordionSignal,
+  onFlyToPlace,
+  setSelectedPlaceID,
+  setActivePanel,
+  placeCustomFieldDefs,
+  placeTypes,
+  onExpandSheet,
+}: {
+  places: TPlace[];
+  // True owned-place total before the server's list cap; null until known.
+  placesTotal: number | null;
+  sharedPlaces: TPlace[];
+  onAddPlace: () => void;
+  onOpenUnifiedImport: () => void;
+  // Hands the ids to the existing Selected Places dialog, which owns export.
+  onExportPlaces: (placeIds: string[]) => void;
+  onStartAreaSelection: () => void;
+  onCancelAreaSelection: () => void;
+  selectingArea: boolean;
+  onRefetch: () => void;
+  filters: TFilters;
+  /** Close the panel and arm the map's box-draw for the area filter. */
+  onDrawFilterArea: () => void;
+  /** Set the area filter to whatever the map is currently showing. */
+  onFilterToMapView: () => void;
+  onChangeFilters: (f: TFilters) => void;
+  filtersAccordionSignal: number;
+  onFlyToPlace: (lat: number, lng: number) => void;
+  setSelectedPlaceID: (id: string | null) => void;
+  setActivePanel: (panel: PanelId | null) => void;
+  placeCustomFieldDefs: ScopedCustomFieldDef[];
+  /** For the tab strip. Every type the user has, including empty ones — the
+   *  strip hides those itself, and hiding them here would make the count of
+   *  what exists unavailable to it. */
+  placeTypes: TPlaceType[];
+  // Mobile: request the bottom sheet expand to its full snap. No-op on desktop
+  // (SidebarPanel guards on isMobile). Used when opening the filters accordion,
+  // which needs the full sheet height to be usable (its scroll region collapses
+  // to an unusable sliver in the shorter "half" snap).
+  onExpandSheet?: () => void;
+}) {
+  // Search: a substring query that filters the place cards below (matches the
+  // primary name or any alternative name). ANDs with the filters. Session-scoped
+  // so it survives the panel's unmount-on-close (PLACE-12) but not the session:
+  // a search remembered for a month means the user returns to a filtered list
+  // and reads it as "my places are missing" (UX finding 5).
+  const [query, setQuery] = useStoredState("logjam.placeSearch", "", sessionStorage);
+  // Sort order is a preference, not a filter — it hides nothing, so it stays in
+  // localStorage and is expected back next month (PLACE-4).
+  const [sortKey, setSortKey] = useStoredState<SortKey>(
+    "logjam.placeSort",
+    "name",
+  );
+
+  // Filters accordion
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  useEffect(() => {
+    if (filtersAccordionSignal > 0) setFiltersOpen(true);
+  }, [filtersAccordionSignal]);
+
+  // On mobile the filters accordion's scroll region collapses to an unusable
+  // sliver in the "half" snap; expand the sheet to full whenever it opens so the
+  // filters get the height they need. Covers both the header toggle and the
+  // App-driven filtersAccordionSignal open. No-op on desktop.
+  useEffect(() => {
+    if (filtersOpen) onExpandSheet?.();
+  }, [filtersOpen, onExpandSheet]);
+
+  const activeCount = activeFilterCount(filters);
+
+  // Live results below the controls (owned bucket vs shared bucket — ownership
+  // is structural, so each list is filtered with its own isOwned flag).
+  const filteredPlaces = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const matchesSearch = (c: TPlace) =>
+      q === "" ||
+      c.name.toLowerCase().includes(q) ||
+      c.altNames.some((a) => a.toLowerCase().includes(q));
+    const rows = [
+      ...places
+        .filter((c) => matchesSearch(c) && passesFilters(c, filters, true))
+        .map((c) => ({ place: c, owned: true })),
+      ...sharedPlaces
+        .filter((c) => matchesSearch(c) && passesFilters(c, filters, false))
+        .map((c) => ({ place: c, owned: false })),
+    ];
+    // Nulls sort last for every key so places missing the sort field don't
+    // crowd the top. `recent` = newest first; `grade` = easiest first (V then A).
+    const compare = (a: TPlace, b: TPlace): number => {
+      switch (sortKey) {
+        case "recent":
+          return b.createdAt.localeCompare(a.createdAt);
+        case "grade": {
+          const av = numericFieldValue(a.fieldValues, "v_grade") ?? Infinity;
+          const bv = numericFieldValue(b.fieldValues, "v_grade") ?? Infinity;
+          if (av !== bv) return av - bv;
+          const aa = numericFieldValue(a.fieldValues, "a_grade") ?? Infinity;
+          const ba = numericFieldValue(b.fieldValues, "a_grade") ?? Infinity;
+          if (aa !== ba) return aa - ba;
+          return a.name.localeCompare(b.name);
+        }
+        case "name":
+        default:
+          return a.name.localeCompare(b.name);
+      }
+    };
+    return rows.sort((x, y) => compare(x.place, y.place));
+  }, [places, sharedPlaces, filters, query, sortKey]);
+
+  // ── Live filtering ─────────────────────────────────────────────
+  // Sliders keep a local draft so the thumb tracks the drag smoothly; the
+  // global filter only commits on release (onChangeCommitted). Full range
+  // commits as null — the canonical "inactive" value (see placeUtils).
+  // Bounded custom-field range sliders keep their own draft map, keyed by field
+  // key, synced from the committed filter (defaulting to the field's full span).
+  const customDraftFromFilters = useCallback(
+    (f: TFilters): Record<string, [number, number]> => {
+      const out: Record<string, [number, number]> = {};
+      for (const def of placeCustomFieldDefs) {
+        if (def.min == null || def.max == null) continue;
+        const cur = f.custom[def.key];
+        out[def.key] =
+          cur?.kind === "numberRange" ? cur.range : [def.min, def.max];
+      }
+      return out;
+    },
+    [placeCustomFieldDefs],
+  );
+  const [customSliderDraft, setCustomSliderDraft] = useState(() =>
+    customDraftFromFilters(filters),
+  );
+  useEffect(() => {
+    setCustomSliderDraft(customDraftFromFilters(filters));
+  }, [filters, customDraftFromFilters]);
+
+  function clearFilter(key: keyof TFilters, emptyValue: TFilters[keyof TFilters]) {
+    onChangeFilters({ ...filters, [key]: emptyValue });
+  }
+
+  function clearButton(onClick: () => void) {
+    return (
+      <button
+        type="button"
+        className={classes.clearFilterBtn}
+        onClick={onClick}
+        aria-label="Clear this filter"
+      >
+        <X size={12} />
+      </button>
+    );
+  }
+
+  function choiceCell<K extends "ownership" | "ropewiki" | "completion">(
+    key: K,
+    displayName: string,
+    options: { value: TFilters[K]; label: string }[],
+    inactiveValue: TFilters[K],
+  ) {
+    const value = filters[key];
+    const isActive = value !== inactiveValue;
+    return (
+      <div className={classes.selectCell} key={key}>
+        <div className={classes.selectLabel}>
+          <span>{displayName}</span>
+          {isActive && clearButton(() => clearFilter(key, inactiveValue))}
+        </div>
+        <select
+          className={classes.select}
+          value={value}
+          onChange={(e) =>
+            onChangeFilters({ ...filters, [key]: e.target.value as TFilters[K] })
+          }
+        >
+          {options.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </div>
+    );
+  }
+
+  function dateRangeCell(key: "created_at" | "updated_at", displayName: string) {
+    const range = filters[key];
+    const from = range?.[0] ?? "";
+    const to = range?.[1] ?? "";
+    const isActive = range != null && (range[0] != null || range[1] != null);
+    function update(nextFrom: string, nextTo: string) {
+      const start = nextFrom || null;
+      const end = nextTo || null;
+      const next: TDateRange | null =
+        start == null && end == null ? null : [start, end];
+      onChangeFilters({ ...filters, [key]: next });
+    }
+    return (
+      <div className={classes.selectCell} key={key}>
+        <div className={classes.selectLabel}>
+          <span>{displayName}</span>
+          {isActive && clearButton(() => clearFilter(key, null))}
+        </div>
+        <div className={classes.dateRow}>
+          <label className={classes.dateField}>
+            <span className={classes.dateLabel}>From</span>
+            <input
+              type="date"
+              className={classes.dateInput}
+              value={from}
+              onChange={(e) => update(e.target.value, to)}
+            />
+          </label>
+          <label className={classes.dateField}>
+            <span className={classes.dateLabel}>To</span>
+            <input
+              type="date"
+              className={classes.dateInput}
+              value={to}
+              onChange={(e) => update(from, e.target.value)}
+            />
+          </label>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Custom-field filters ───────────────────────────────────────
+  // Custom filters live in a single keyed map; setting a key activates that
+  // field's filter, passing null deletes it (the inactive state).
+  function setCustomFilter(key: string, value: TCustomFieldFilter | null) {
+    const nextCustom = { ...filters.custom };
+    if (value == null) delete nextCustom[key];
+    else nextCustom[key] = value;
+    onChangeFilters({ ...filters, custom: nextCustom });
+  }
+
+  function customTextCell(def: TripLogCustomFieldDef) {
+    const current = filters.custom[def.key];
+    const value = current?.kind === "text" ? current.value : "";
+    const isActive = current?.kind === "text";
+    return (
+      <div className={classes.selectCell} key={def.key}>
+        <div className={classes.selectLabel}>
+          <span>{def.label}</span>
+          {isActive && clearButton(() => setCustomFilter(def.key, null))}
+        </div>
+        <input
+          type="text"
+          aria-label={`Filter ${def.label} contains`}
+          className={classes.customTextInput}
+          placeholder="Contains…"
+          value={value}
+          onChange={(e) => {
+            const v = e.target.value;
+            setCustomFilter(def.key, v === "" ? null : { kind: "text", value: v });
+          }}
+        />
+      </div>
+    );
+  }
+
+  function customNumberCell(def: TripLogCustomFieldDef) {
+    const current = filters.custom[def.key];
+    const active = current?.kind === "number" ? current : null;
+    const op = active?.op ?? "Any";
+    const num = active?.value ?? 0;
+    return (
+      <div className={classes.selectCell} key={def.key}>
+        <div className={classes.selectLabel}>
+          <span>{def.label}</span>
+          {active && clearButton(() => setCustomFilter(def.key, null))}
+        </div>
+        <div className={classes.selectContainer}>
+          <select
+            className={classes.select}
+            value={op}
+            onChange={(e) => {
+              const nextOp = e.target.value as
+                | "Any"
+                | "Less than"
+                | "More than"
+                | "Exactly";
+              setCustomFilter(
+                def.key,
+                nextOp === "Any"
+                  ? null
+                  : { kind: "number", op: nextOp, value: num },
+              );
+            }}
+          >
+            <option value="Any">Any</option>
+            <option value="Less than">&lt;</option>
+            <option value="More than">&gt;</option>
+            <option value="Exactly">=</option>
+          </select>
+          {op !== "Any" && (
+            // FEUI-005: uncontrolled (defaultValue, not value) — see thresholdCell.
+            <input
+              type="number"
+              step={def.type === "float" ? "any" : 1}
+              aria-label={`${def.label} value`}
+              className={classes.numberInput}
+              defaultValue={num}
+              onChange={(e) => {
+                const v =
+                  def.type === "float"
+                    ? parseFloat(e.target.value)
+                    : parseInt(e.target.value, 10);
+                if (!isNaN(v))
+                  setCustomFilter(def.key, { kind: "number", op, value: v });
+              }}
+            />
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  function customDateCell(def: TripLogCustomFieldDef) {
+    const current = filters.custom[def.key];
+    const range = current?.kind === "date" ? current.range : null;
+    const from = range?.[0] ?? "";
+    const to = range?.[1] ?? "";
+    const isActive = current?.kind === "date";
+    function update(nextFrom: string, nextTo: string) {
+      const start = nextFrom || null;
+      const end = nextTo || null;
+      setCustomFilter(
+        def.key,
+        start == null && end == null
+          ? null
+          : { kind: "date", range: [start, end] },
+      );
+    }
+    return (
+      <div className={classes.selectCell} key={def.key}>
+        <div className={classes.selectLabel}>
+          <span>{def.label}</span>
+          {isActive && clearButton(() => setCustomFilter(def.key, null))}
+        </div>
+        <div className={classes.dateRow}>
+          <label className={classes.dateField}>
+            <span className={classes.dateLabel}>From</span>
+            <input
+              type="date"
+              className={classes.dateInput}
+              value={from}
+              onChange={(e) => update(e.target.value, to)}
+            />
+          </label>
+          <label className={classes.dateField}>
+            <span className={classes.dateLabel}>To</span>
+            <input
+              type="date"
+              className={classes.dateInput}
+              value={to}
+              onChange={(e) => update(from, e.target.value)}
+            />
+          </label>
+        </div>
+      </div>
+    );
+  }
+
+  function customBooleanCell(def: TripLogCustomFieldDef) {
+    const current = filters.custom[def.key];
+    const active = current?.kind === "boolean" ? current : null;
+    const value = active ? (active.value ? "yes" : "no") : "any";
+    return (
+      <div className={classes.selectCell} key={def.key}>
+        <div className={classes.selectLabel}>
+          <span>{def.label}</span>
+          {active && clearButton(() => setCustomFilter(def.key, null))}
+        </div>
+        <select
+          className={classes.select}
+          value={value}
+          onChange={(e) => {
+            const v = e.target.value;
+            setCustomFilter(
+              def.key,
+              v === "any" ? null : { kind: "boolean", value: v === "yes" },
+            );
+          }}
+        >
+          <option value="any">Any</option>
+          <option value="yes">Yes</option>
+          <option value="no">No</option>
+        </select>
+      </div>
+    );
+  }
+
+  function customSliderCell(def: TripLogCustomFieldDef) {
+    const min = def.min as number;
+    const max = def.max as number;
+    const current = filters.custom[def.key];
+    const draft = customSliderDraft[def.key] ?? [min, max];
+    const isFull = draft[0] === min && draft[1] === max;
+    const isActive = current?.kind === "numberRange";
+    const isInt = def.type === "integer";
+    // Continuous-ish step for floats; integer step (with ticks) when small.
+    const step = isInt ? 1 : (max - min) / 100 || 1;
+    const showMarks = isInt && max - min <= 20;
+    const fmt = (n: number) => (isInt ? String(n) : String(Math.round(n * 100) / 100));
+    return (
+      <div
+        className={`${classes.sliderCell} ${isFull ? classes.sliderInactive : ""}`}
+        key={def.key}
+      >
+        <div className={classes.sliderLabel}>
+          <span className={classes.sliderLabelText}>
+            {customFieldDisplayLabel(def)}
+          </span>
+          <span className={classes.sliderValueGroup}>
+            <span className={classes.sliderValue}>
+              {isFull ? "Any" : `${fmt(draft[0])}–${fmt(draft[1])}`}
+            </span>
+            {isActive && clearButton(() => setCustomFilter(def.key, null))}
+          </span>
+        </div>
+        <Slider
+          color="secondary"
+          marks={showMarks}
+          step={step}
+          min={min}
+          max={max}
+          value={draft}
+          valueLabelDisplay="auto"
+          onChange={(_e, v) => {
+            if (Array.isArray(v) && v.length === 2) {
+              setCustomSliderDraft((d) => ({ ...d, [def.key]: v as [number, number] }));
+            }
+          }}
+          onChangeCommitted={(_e, v) => {
+            if (Array.isArray(v) && v.length === 2) {
+              const full = v[0] === min && v[1] === max;
+              setCustomFilter(
+                def.key,
+                full ? null : { kind: "numberRange", range: v as [number, number] },
+              );
+            }
+          }}
+        />
+      </div>
+    );
+  }
+
+  function customFieldCell(def: TripLogCustomFieldDef) {
+    switch (def.type) {
+      case "string":
+        return customTextCell(def);
+      case "integer":
+      case "float":
+        return def.min != null && def.max != null
+          ? customSliderCell(def)
+          : customNumberCell(def);
+      case "date":
+        return customDateCell(def);
+      case "boolean":
+        return customBooleanCell(def);
+    }
+  }
+
+  function handleReset() {
+    // FEUI-004: was a hand-spelled duplicate of EMPTY_PLACE_FILTERS (the two
+    // lists that must agree = one declaration + a test anti-pattern) — a new
+    // PlaceFilters key would be silently missed here, so Reset would leave
+    // that filter active. `custom` gets a fresh object so the singleton's
+    // nested record is never shared/mutated.
+    onChangeFilters({ ...emptyFilters, custom: {} });
+  }
+
+  // RopeWiki refresh
+  const toast = useToast();
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshResult, setRefreshResult] = useState<RefreshResult | null>(null);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  // Confirm before firing POST /ropewiki/refresh — the request scrapes the public
+  // RopeWiki database and can add many places, so it shouldn't fire on a single
+  // click with no preface (IMPORT-11).
+  const [confirmRefreshOpen, setConfirmRefreshOpen] = useState(false);
+
+  const handleRefresh = useCallback(async () => {
+    setConfirmRefreshOpen(false);
+    setRefreshing(true);
+    setRefreshResult(null);
+    try {
+      const result = await refreshFromRopeWiki();
+      setRefreshResult(result);
+      onRefetch();
+      if (result.review.length > 0) setReviewOpen(true);
+      // Summarise everything the refresh did automatically, and flag the count
+      // still needing review, so the auto-import isn't silent (IMPORT-3).
+      const autoParts = [
+        result.added > 0 ? `${result.added} added` : null,
+        result.autoLinked > 0 ? `${result.autoLinked} linked` : null,
+        result.updated > 0 ? `${result.updated} updated` : null,
+      ].filter(Boolean);
+      const summary =
+        autoParts.length > 0 ? autoParts.join(", ") : "no new places";
+      const reviewSuffix =
+        result.review.length > 0
+          ? ` · ${result.review.length} possible duplicate${result.review.length === 1 ? "" : "s"} to review`
+          : "";
+      // The corpus is a periodically hand-refreshed snapshot (RopeWiki blocks
+      // server-side fetches), so date it — otherwise a months-old import is
+      // indistinguishable from a live one.
+      const sourceSuffix = result.sourceUpdatedAt
+        ? ` · source ${new Date(result.sourceUpdatedAt).toLocaleDateString()}`
+        : "";
+      toast.success(`RopeWiki import: ${summary}${reviewSuffix}${sourceSuffix}`);
+    } catch (err) {
+      console.error(err);
+      setRefreshResult(null);
+      toast.error(messageFromError(err, "Couldn't import from RopeWiki."));
+    } finally {
+      setRefreshing(false);
+    }
+  }, [onRefetch, toast]);
+
+  /**
+   * "All" plus every type that HAS places. A tab per empty type would be a tab
+   * onto an empty screen; the create dialog still offers every type, which is
+   * what stops this hiding a type you could never then use.
+   */
+  const typeTabs = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const place of places) {
+      counts.set(place.placeTypeId, (counts.get(place.placeTypeId) ?? 0) + 1);
+    }
+    return [
+      { id: null as string | null, name: "All", count: places.length },
+      ...placeTypes
+        .filter((type) => (counts.get(type.id) ?? 0) > 0)
+        .map((type) => ({
+          id: type.id as string | null,
+          name: type.name,
+          count: counts.get(type.id) ?? 0,
+        })),
+    ];
+  }, [places, placeTypes]);
+
+  const filterFieldDefs = useMemo(
+    () =>
+      filters.placeTypeId == null
+        ? placeCustomFieldDefs
+        : defsForType(placeCustomFieldDefs, filters.placeTypeId),
+    [placeCustomFieldDefs, filters.placeTypeId],
+  );
+
+  return (
+    <div className={classes.root}>
+      {/* Primary actions */}
+      <div className={classes.actions}>
+        <button className={classes.addButton} onClick={onAddPlace}>
+          + Add Place
+        </button>
+        <button
+          className={classes.selectButton}
+          onClick={selectingArea ? onCancelAreaSelection : onStartAreaSelection}
+        >
+          {selectingArea ? "Cancel Selection" : "Select Places"}
+        </button>
+      </div>
+
+      {/* TYPE TABS. The one filter that gets a permanent control rather than a
+          row in the accordion: a type is what a place IS, and the list reads as
+          a different list per type. A type with no places is hidden — it would
+          be a tab onto an empty screen — but "All" is always first, so a user
+          with places of one type sees no tabs at all rather than a single tab
+          that does nothing. */}
+      {typeTabs.length > 1 && (
+        <div className={classes.typeTabs}>
+          {typeTabs.map((tab) => (
+            <button
+              key={tab.id ?? "all"}
+              className={
+                (filters.placeTypeId ?? null) === tab.id
+                  ? classes.typeTabActive
+                  : classes.typeTab
+              }
+              onClick={() =>
+                onChangeFilters({ ...filters, placeTypeId: tab.id })
+              }
+            >
+              {tab.name}
+              {tab.count != null ? ` ${tab.count}` : ""}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Search — filters the cards below (by name or alternative names) */}
+      <div className={classes.searchWrapper}>
+        <input
+          className={classes.searchInput}
+          type="text"
+          aria-label="Search places"
+          placeholder="Search places…"
+          value={query}
+          onChange={(e) => {
+            const next = e.target.value;
+            // Collapse the filters accordion the instant a search begins so the
+            // cards sit right under the search box. Only on the empty→typed
+            // transition — don't fight a user who reopened filters mid-search.
+            if (query.trim() === "" && next.trim() !== "") setFiltersOpen(false);
+            setQuery(next);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setQuery("");
+          }}
+        />
+      </div>
+
+      {/* Filters accordion */}
+      <div className={`${classes.accordion} ${filtersOpen ? classes.accordionExpanded : ""}`}>
+        <button
+          className={classes.accordionHeader}
+          onClick={() => setFiltersOpen((v) => !v)}
+          aria-expanded={filtersOpen}
+        >
+          <span className={classes.accordionTitle}>
+            Filters
+            {activeCount > 0 && (
+              <span className={classes.filterBadge}>{activeCount}</span>
+            )}
+          </span>
+          <ChevronDown
+            size={16}
+            className={`${classes.chevron} ${filtersOpen ? classes.chevronOpen : ""}`}
+          />
+        </button>
+        {filtersOpen && (
+          <div className={classes.accordionBody}>
+            <div className={classes.accordionScroll}>
+              {/* First section: "have I done it?" is the question this panel
+                  gets asked most, so it's the first thing in the accordion. */}
+              <div className={classes.section}>
+                <div className={classes.sectionHeader}>Trips</div>
+                <div className={classes.selectGrid}>
+                  {choiceCell(
+                    "completion",
+                    "Completion",
+                    COMPLETION_OPTIONS,
+                    "any",
+                  )}
+                </div>
+              </div>
+              {/* The Grades and Logistics sections are GONE, and nothing was
+                  lost with them. Those seven axes are ordinary field
+                  definitions now, so they render through the same
+                  `customFieldCell` as every other field, below — a bounded one
+                  still gets its double-ended slider and a min-only one still
+                  gets op+value, because `customFilterKind` decides that from
+                  the definition's bounds rather than from a hardcoded list.
+                  The user's OWN bounded field gets the slider too now, which it
+                  never did. Grouping them back under their own headings is
+                  phase 6's job, along with the rest of the web UI. */}
+              {/* Location. Two ways in, because they answer different
+                  questions: most of the time the user has already panned to the
+                  country they mean, and "This view" is that with no gesture at
+                  all — drawing a box is for when the area they want is not the
+                  one they are looking at. The active state names the box's SIZE
+                  rather than its position: a coordinate pair would be both
+                  unreadable and the one value on this panel worth not printing.
+                  Redraw is how you see where it is. */}
+              <div className={classes.section}>
+                <div className={classes.sectionHeader}>Location</div>
+                <div className={classes.selectCell}>
+                  <div className={classes.selectLabel}>
+                    <span>Area</span>
+                    {filters.area != null &&
+                      clearButton(() => clearFilter("area", null))}
+                  </div>
+                  <div className={classes.areaButtons}>
+                    <Button
+                      size="small"
+                      variant={filters.area ? "contained" : "outlined"}
+                      color="secondary"
+                      onClick={onDrawFilterArea}
+                    >
+                      {filters.area
+                        ? `${Math.round(regionEdgesKm(filters.area)[0])} × ${Math.round(
+                            regionEdgesKm(filters.area)[1],
+                          )} km`
+                        : "Draw on map"}
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      color="secondary"
+                      onClick={onFilterToMapView}
+                    >
+                      This view
+                    </Button>
+                  </div>
+                </div>
+              </div>
+              <div className={classes.section}>
+                <div className={classes.sectionHeader}>Source</div>
+                <div className={classes.selectGrid}>
+                  {choiceCell("ownership", "Ownership", OWNERSHIP_OPTIONS, "all")}
+                  {choiceCell("ropewiki", "RopeWiki link", ROPEWIKI_OPTIONS, "any")}
+                </div>
+                <div
+                  className={classes.toggleRow}
+                  title="When on, show only places you've shared with at least one friend."
+                >
+                  <span>Shared by me</span>
+                  <Switch
+                    size="small"
+                    checked={filters.shared_by_me}
+                    onChange={(_, v) =>
+                      onChangeFilters({ ...filters, shared_by_me: v })
+                    }
+                    color="secondary"
+                  />
+                </div>
+              </div>
+              <div className={classes.section}>
+                <div className={classes.sectionHeader}>Dates</div>
+                <div className={classes.selectGrid}>
+                  {dateRangeCell("created_at", "Added")}
+                  {dateRangeCell("updated_at", "Updated")}
+                </div>
+              </div>
+              {/* The fields of the TYPE being filtered. On the All tab that is
+                  every definition — a user filtering across types may filter on
+                  anything they hold — but inside a type it is that type's own,
+                  because a campsite tab offering a V grade filter offers a
+                  filter that can only ever match nothing.
+
+                  A filter already SET on a field the new tab does not carry
+                  stays in `filters.custom` and keeps applying: silently
+                  dropping it would change the result set without telling
+                  anyone. It is visible again the moment the tab changes back,
+                  and Clear all removes it. */}
+              {filterFieldDefs.length > 0 && (
+                <div className={classes.section}>
+                  <div className={classes.sectionHeader}>Custom fields</div>
+                  <div className={classes.selectGrid}>
+                    {filterFieldDefs.map((def) => customFieldCell(def))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className={classes.accordionFooter}>
+              <div
+                className={classes.toggleRow}
+                title="When on, places missing data for an active filter field are still shown. When off, they're hidden as soon as that filter is changed from its default."
+              >
+                <span>Include unknowns</span>
+                <Switch
+                  size="small"
+                  checked={filters.include_unknowns}
+                  onChange={(_, v) =>
+                    onChangeFilters({ ...filters, include_unknowns: v })
+                  }
+                  color="secondary"
+                />
+              </div>
+              <button className={classes.resetButton} onClick={handleReset}>
+                Reset
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Live filtered results */}
+      <div className={classes.results}>
+        <div className={classes.resultsHeader}>
+          <span>
+            {filteredPlaces.length} place{filteredPlaces.length === 1 ? "" : "s"}
+          </span>
+          <label className={classes.sortControl}>
+            <span className={classes.visuallyHidden}>Sort places by</span>
+            <select
+              className={classes.select}
+              aria-label="Sort places"
+              value={sortKey}
+              onChange={(e) => setSortKey(e.target.value as SortKey)}
+            >
+              {SORT_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        {/* The server caps the owned-place list; warn when the loaded set is a
+            truncated view of the true total so the oldest places aren't
+            silently hidden (UX-001). */}
+        {placesTotal != null && placesTotal > places.length && (
+          <div className={classes.truncationNote}>
+            Showing your {places.length} most recent places of {placesTotal}.
+            Older ones aren&rsquo;t loaded.
+          </div>
+        )}
+        {filteredPlaces.length === 0 ? (
+          <span className={classes.resultsEmpty}>
+            {query.trim() !== "" || activeCount > 0
+              ? "No places match your search and filters."
+              : "No places yet."}
+          </span>
+        ) : (
+          <div className={classes.resultsList}>
+            {filteredPlaces.map(({ place, owned }) => {
+              const shareCount = place._count?.shares ?? 0;
+              // The filter answers "have I done it" for the list; this answers
+              // it per row, which is the half a filter can't — the complaint was
+              // having to open a place to see whether it had trips. Stated only
+              // when non-zero (matching the share badge beside it): a count is
+              // worth a word, an absence isn't worth one on 270 of 298 rows.
+              // Owned-only for the same reason the completion filter is — on a
+              // shared place this tally is the owner's, not the viewer's.
+              const tripCount = owned ? (place._count?.tripLogLinks ?? 0) : 0;
+              const meta = [
+                gradeSummary(place),
+                tripCount > 0
+                  ? `${tripCount} trip${tripCount === 1 ? "" : "s"}`
+                  : "",
+                owned
+                  ? shareCount > 0
+                    ? `Shared with ${shareCount}`
+                    : ""
+                  : "Shared",
+              ]
+                .filter(Boolean)
+                .join(" · ");
+              return (
+                <button
+                  key={place.id}
+                  className={classes.resultCard}
+                  onClick={() => {
+                    onFlyToPlace(place.latitude, place.longitude);
+                    setSelectedPlaceID(place.id);
+                    setActivePanel("place-detail");
+                  }}
+                >
+                  <span className={classes.resultName}>{place.name}</span>
+                  {meta && <span className={classes.resultMeta}>{meta}</span>}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Low-frequency actions */}
+      <div className={classes.footerActions}>
+        <div className={classes.divider} />
+        {/* Export sat behind "select an area on the map" — undiscoverable
+            unless you already knew it was there. It exports exactly the list
+            shown above (search + filters applied), so the count is stated on
+            the button and matches the header count. Opens the existing
+            Selected Places dialog; no separate export surface. */}
+        <button
+          className={classes.ghostButton}
+          onClick={() => onExportPlaces(filteredPlaces.map((r) => r.place.id))}
+          disabled={filteredPlaces.length === 0}
+        >
+          Export {filteredPlaces.length} place
+          {filteredPlaces.length === 1 ? "" : "s"}
+        </button>
+        <button
+          className={classes.ghostButton}
+          onClick={onOpenUnifiedImport}
+        >
+          Import from file
+        </button>
+        <button
+          className={classes.ghostButton}
+          onClick={() => setConfirmRefreshOpen(true)}
+          disabled={refreshing}
+        >
+          {refreshing ? "Importing..." : "Import from RopeWiki"}
+        </button>
+      </div>
+
+      <ConfirmDialog
+        open={confirmRefreshOpen}
+        title="Import from RopeWiki?"
+        message={
+          "This fetches the public NSW canyon list from ropewiki.com and adds any canyons you don't already have, updating RopeWiki-sourced ones you haven't edited. Canyons that look like ones you already have are set aside for you to review before they're imported. Nothing you've edited is overwritten."
+        }
+        confirmLabel="Fetch from RopeWiki"
+        confirmColor="secondary"
+        busy={refreshing}
+        onConfirm={handleRefresh}
+        onClose={() => setConfirmRefreshOpen(false)}
+      />
+
+      {refreshResult && (
+        <RopeWikiReviewDialog
+          open={reviewOpen}
+          review={refreshResult.review}
+          autoImported={{
+            added: refreshResult.added,
+            autoLinked: refreshResult.autoLinked,
+            updated: refreshResult.updated,
+          }}
+          onClose={() => setReviewOpen(false)}
+          onApplied={() => {
+            setRefreshResult({ ...refreshResult, review: [] });
+            onRefetch();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+export default PlacesPanel;

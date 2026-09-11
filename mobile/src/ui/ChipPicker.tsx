@@ -37,7 +37,7 @@ export function ChipPicker({
   onAdd?: (label: string) => void;
   addPlaceholder?: string;
   /** Values rendered locked — selected and not toggleable. The implied
-   *  `canyoning` tag on a canyon-linked trip is the case (the server force-adds
+   *  `canyoning` tag on a place-linked trip is the case (the server force-adds
    *  it, so letting the user "deselect" it would be a lie). */
   disabledValues?: ReadonlySet<string>;
 }) {

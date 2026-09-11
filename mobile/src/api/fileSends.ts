@@ -10,7 +10,7 @@
 // entity mutations, and queueing a send would tell the user they had given a
 // friend a file when they had not.
 //
-// PRIVACY: a filename is user text and routinely names a canyon. It travels in
+// PRIVACY: a filename is user text and routinely names a place. It travels in
 // request bodies and is rendered on screen, and it is never logged.
 import * as FileSystem from "expo-file-system/legacy";
 
@@ -126,7 +126,7 @@ export async function sendFileCopy({
  * Not apiFetch: the URL is presigned, so an auth header on it is both pointless
  * and a token where one is not needed. The landing spot is SCRATCH_DIR, which
  * is what puts these bytes inside the wipe (offline/localStores.ts) — a
- * received file is somebody's canyon coordinates and must not sit loose in the
+ * received file is somebody's place coordinates and must not sit loose in the
  * cache directory.
  */
 export async function downloadFileSend(

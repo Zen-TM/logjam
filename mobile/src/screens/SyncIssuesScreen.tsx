@@ -39,7 +39,7 @@
 //
 // PRIVACY: an op's own field values are what is in question here, so a name can
 // appear (user-supplied text, allowed). Never a coordinate: `previewValue`
-// deliberately refuses to render latitude/longitude, which a canyon create op
+// deliberately refuses to render latitude/longitude, which a place create op
 // carries (§11 — a list is what ends up in a screenshot).
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, FlatList, StyleSheet, Text, View } from "react-native";
@@ -108,13 +108,13 @@ const issueKey = (item: Issue) => item.key;
 
 export function SyncIssuesScreen({
   onBack,
-  onOpenCanyon,
+  onOpenPlace,
   onOpenTrip,
 }: {
   onBack: () => void;
   /** The "open it and make the change a way that works" a permanent rejection
    *  needs — pushed inside the More stack, so Back comes back here. */
-  onOpenCanyon: (canyonId: string) => void;
+  onOpenPlace: (placeId: string) => void;
   onOpenTrip: (trip: MirrorTrip) => void;
 }) {
   const [parked, setParked] = useState<ParkedOp[]>([]);
@@ -161,7 +161,7 @@ export function SyncIssuesScreen({
   const confirmResync = useCallback(() => {
     Alert.alert(
       "Get a fresh copy?",
-      "Re-downloads your canyons, trips and photos from scratch. " +
+      "Re-downloads your places, trips and photos from scratch. " +
         "Uploads still waiting are kept.",
       [
         { text: "Cancel", style: "cancel" },
@@ -210,7 +210,7 @@ export function SyncIssuesScreen({
     [parked, shelf],
   );
 
-  // Multi-select: the same hook and bar as Canyons, Logs, Saved and the Inbox.
+  // Multi-select: the same hook and bar as Places, Logs, Saved and the Inbox.
   const {
     selectedKeys,
     clearSelection,
@@ -454,8 +454,8 @@ export function SyncIssuesScreen({
       const target = opTarget(op);
       if (!target) return;
       setMenuIssue(null);
-      if (target.kind === "canyon") {
-        onOpenCanyon(target.id);
+      if (target.kind === "place") {
+        onOpenPlace(target.id);
         return;
       }
       void getMirrorTrip(target.id).then((trip) => {
@@ -465,7 +465,7 @@ export function SyncIssuesScreen({
         else notify("That trip isn't on this phone any more.", "error");
       });
     },
-    [notify, onOpenCanyon, onOpenTrip],
+    [notify, onOpenPlace, onOpenTrip],
   );
 
   // Stable identities so the memoised rows don't all re-render on an unrelated
@@ -589,8 +589,8 @@ export function SyncIssuesScreen({
             onRecreate={(op) =>
               act(
                 recreateFromDeadRemote(op.seq),
-                op.entity === "canyon"
-                  ? "Canyon recreated with your change."
+                op.entity === "place"
+                  ? "Place recreated with your change."
                   : "Waypoint recreated with your change.",
               )
             }
@@ -662,10 +662,10 @@ function StuckMenu({
       {canRecreate(op) ? (
         <Row
           icon="rotate-ccw"
-          title={op.entity === "canyon" ? "Recreate canyon" : "Recreate waypoint"}
+          title={op.entity === "place" ? "Recreate place" : "Recreate waypoint"}
           subtitle={
-            op.entity === "canyon"
-              ? "Makes a new canyon from this phone's copy, with your change."
+            op.entity === "place"
+              ? "Makes a new place from this phone's copy, with your change."
               : "Makes a new waypoint, with your change."
           }
           onPress={() => onRecreate(op)}
@@ -687,7 +687,7 @@ function StuckMenu({
       {target && !advice.canRetry && op.state !== "deadRemote" ? (
         <Row
           icon="external-link"
-          title={target.kind === "canyon" ? "Open the canyon and fix it" : "Open the trip and fix it"}
+          title={target.kind === "place" ? "Open the place and fix it" : "Open the trip and fix it"}
           subtitle="Change it there, and it'll save."
           onPress={() => onOpen(op)}
         />

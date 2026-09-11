@@ -36,7 +36,7 @@ export type SendableExtension = (typeof SENDABLE_EXTENSIONS)[number];
  * close the filename token. Length is capped so one user cannot store an
  * unbounded string on a row every recipient reads.
  *
- * PRIVACY: this is the one user-supplied string on a send, and a canyon's name
+ * PRIVACY: this is the one user-supplied string on a send, and a place's name
  * is exactly the kind of thing that ends up in it. It must never be logged.
  */
 export function sanitizeSendFilename(value: unknown): string {

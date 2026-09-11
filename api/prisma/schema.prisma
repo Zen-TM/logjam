@@ -8,55 +8,56 @@ datasource db {
 }
 
 model User {
-  id                   String              @id @default(uuid())
-  cognitoId            String              @unique @map("cognito_id")
-  username             String              @unique
-  email                String              @unique
-  uiPreferences        Json                @default("{}") @map("ui_preferences")
-  vectorStyle          Json?               @map("vector_style")
-  storageUsedBytes     BigInt              @default(0) @map("storage_used_bytes")
-  storageQuotaBytes    BigInt              @default(5368709120) @map("storage_quota_bytes")
+  id                      String              @id @default(uuid())
+  cognitoId               String              @unique @map("cognito_id")
+  username                String              @unique
+  email                   String              @unique
+  uiPreferences           Json                @default("{}") @map("ui_preferences")
+  vectorStyle             Json?               @map("vector_style")
+  storageUsedBytes        BigInt              @default(0) @map("storage_used_bytes")
+  storageQuotaBytes       BigInt              @default(5368709120) @map("storage_quota_bytes")
   // Monthly worker allowance in credits (= vCPU-minutes; see
   // shared/src/computeCredits.ts). Replaced monthly_tile_quota, which only
   // constrained one of the three workers and did not measure cost.
-  monthlyComputeCredits   Int      @default(1200) @map("monthly_compute_credits")
+  monthlyComputeCredits   Int                 @default(1200) @map("monthly_compute_credits")
   // Monthly S3 download allowance. usedBytes is written by the egress sweeper
   // from S3 access logs, and periodStart is what makes the reset lazy: the
   // sweeper zeroes usedBytes when it sees periodStart belongs to a past month,
   // so no scheduled job is needed to roll everyone over at midnight on the 1st.
-  monthlyEgressQuotaBytes BigInt   @default(53687091200) @map("monthly_egress_quota_bytes")
-  monthlyEgressUsedBytes  BigInt   @default(0) @map("monthly_egress_used_bytes")
-  egressPeriodStart       DateTime @default(now()) @map("egress_period_start")
-  consentedAt          DateTime?           @map("consented_at")
-  consentVersion       String?             @map("consent_version")
-  createdAt            DateTime            @default(now()) @map("created_at")
-  sharedBy             CanyonShare[]       @relation("sharedBy")
-  sharedWith           CanyonShare[]       @relation("sharedWith")
-  canyons              Canyon[]
-  receivedFriendships  Friendship[]        @relation("addressee")
-  sentFriendships      Friendship[]        @relation("requester")
-  media                Media[]
-  notifications        Notification[]
-  topoJobs             TopoJob[]
-  topoExportJobs       TopoExportJob[]
-  geoPdfJobs           GeoPdfJob[]
-  tripLogs             TripLog[]
-  geoPdfTemplates      GeoPdfTemplate[]
-  topoTemplates        TopoTemplate[]
-  deviceTokens         DeviceToken[]
-  waypoints            Waypoint[]
-  routes               Route[]
-  syncTombstones       SyncTombstone[]
-  directSharesSent     Share[]             @relation("directSharedBy")
-  directSharesReceived Share[]             @relation("directSharedWith")
-  fileSends            FileSend[]
-  fileSendsReceived    FileSendRecipient[]
-  customFieldDefs      CustomFieldDef[]
+  monthlyEgressQuotaBytes BigInt              @default(53687091200) @map("monthly_egress_quota_bytes")
+  monthlyEgressUsedBytes  BigInt              @default(0) @map("monthly_egress_used_bytes")
+  egressPeriodStart       DateTime            @default(now()) @map("egress_period_start")
+  consentedAt             DateTime?           @map("consented_at")
+  consentVersion          String?             @map("consent_version")
+  createdAt               DateTime            @default(now()) @map("created_at")
+  sharedBy                PlaceShare[]        @relation("sharedBy")
+  sharedWith              PlaceShare[]        @relation("sharedWith")
+  places                  Place[]
+  placeTypes              PlaceType[]
+  receivedFriendships     Friendship[]        @relation("addressee")
+  sentFriendships         Friendship[]        @relation("requester")
+  media                   Media[]
+  notifications           Notification[]
+  topoJobs                TopoJob[]
+  topoExportJobs          TopoExportJob[]
+  geoPdfJobs              GeoPdfJob[]
+  tripLogs                TripLog[]
+  geoPdfTemplates         GeoPdfTemplate[]
+  topoTemplates           TopoTemplate[]
+  deviceTokens            DeviceToken[]
+  placeLinks              PlaceLink[]
+  routes                  Route[]
+  syncTombstones          SyncTombstone[]
+  directSharesSent        Share[]             @relation("directSharedBy")
+  directSharesReceived    Share[]             @relation("directSharedWith")
+  fileSends               FileSend[]
+  fileSendsReceived       FileSendRecipient[]
+  customFieldDefs         CustomFieldDef[]
 
   @@map("users")
 }
 
-/// User-defined custom field DEFINITIONS, for both trip logs and canyons.
+/// User-defined custom field DEFINITIONS, for both trip logs and places.
 ///
 /// Previously an array inside `User.uiPreferences`. Promoted to rows so that
 /// (a) a definition can be created, renamed and deleted offline through the
@@ -65,79 +66,171 @@ model User {
 /// which a shared record carrying values keyed by these definitions needs.
 ///
 /// The VALUES still live on the owning rows, keyed by `key`:
-/// `TripLog.customFields` and `Canyon.attributes.customFields`.
+/// `TripLog.customFields` and `Place.fieldValues`. A place value sits at the
+/// TOP level of `fieldValues` — it was nested under `attributes.customFields`
+/// before the places rework, and the forward migration hoists it.
 model CustomFieldDef {
-  id      String @id @default(uuid())
-  ownerId String @map("owner_id")
-  owner   User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  /// Which surface this field belongs to: "tripLog" or "canyon".
-  entity  String
+  id                String  @id @default(uuid())
+  /// Null = a SYSTEM definition (the seeded canyon / campsite fields), visible
+  /// to every user and not deletable. Ids pinned in shared/src/placeTypes.ts.
+  ownerId           String? @map("owner_id")
+  owner             User?   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  /// Which surface this field belongs to: "tripLog" or "place".
+  entity            String
   /// Stable slug the stored VALUES are keyed by. Derived from the label once,
   /// at creation, and deliberately never re-derived on rename — re-deriving
   /// would orphan every value already stored under the old key.
-  key     String
-  label   String
+  key               String
+  label             String
   /// One of TripLogCustomFieldType: string | integer | float | date | boolean.
-  type    String
-  /// Optional inclusive bounds, numeric field types only. Both or neither.
+  type              String
+  /// Optional inclusive bounds, numeric field types only. EITHER, NEITHER OR
+  /// BOTH — they used to be both-or-neither, which the system defs cannot
+  /// satisfy: `hours`, `num_abseils` and `longest_abseil` are min-only. The
+  /// filter UI renders a double-ended slider only when both are present and
+  /// falls back to op+value otherwise.
   /// Float for both integer and float fields; integer-ness is enforced by
   /// `isTripLogCustomFieldDef`, which every write path runs.
-  min     Float?
-  max     Float?
+  min               Float?
+  max               Float?
   /// Display order within (owner, entity). The uiPreferences array carried
   /// this implicitly by index; rows need it stated.
-  position Int @default(0)
+  position          Int     @default(0)
+  /// Applies to EVERY place type, including types created after this def.
+  ///
+  /// A boolean rather than a join row per type that exists today: join rows
+  /// would silently fail to apply to tomorrow's types, which is exactly the
+  /// parallel-list drift the root CLAUDE.md rule targets. Guard:
+  /// `appliesToAllTypes` in customFieldScope.unit.test.ts.
+  appliesToAllTypes Boolean @default(false) @map("applies_to_all_types")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  placeTypes CustomFieldDefPlaceType[]
+
   /// One definition per key per surface — the uniqueness `buildCustomFieldDef`
   /// checked in application code, now enforced by the database.
+  /// Needs NULLS NOT DISTINCT (raw SQL in the migration) or the system rows,
+  /// which sit at ownerId = null, are not covered at all.
   @@unique([ownerId, entity, key])
   /// Delta sync pages by (updatedAt, id) within an owner.
   @@index([ownerId, updatedAt])
   @@map("custom_field_defs")
 }
 
-model Canyon {
-  id               String           @id @default(uuid())
-  ownerId          String           @map("owner_id")
+/// A category of place, with the custom field definitions scoped to it.
+///
+/// `ownerId = null` means a SYSTEM type — Canyon, Campsite, Marker — and those
+/// rows are GLOBAL, one row shared by every user rather than a per-user copy.
+/// That is what lets a shared place resolve for its recipient with no
+/// reconciliation at all: the sender's Canyon type IS the recipient's.
+/// Ids are pinned in `shared/src/placeTypes.ts`; see its header for why they
+/// must be real UUIDv4s.
+///
+/// System types are UNDELETABLE. RopeWiki import writes reserved field keys, so
+/// a deletable Canyon type would let import write values nothing can render.
+model PlaceType {
+  id        String   @id @default(uuid())
+  /// Null = a system type, shared by every user.
+  ownerId   String?  @map("owner_id")
+  name      String
+  /// Platform-neutral key from a curated grid; each client maps it to its own
+  /// icon set (mobile draws Feather, web draws lucide). Curated rather than
+  /// free text, or a key resolves on one platform and not the other.
+  iconKey   String   @map("icon_key")
+  /// From a curated palette, not a free hex picker: scripts/wcag-contrast.mjs
+  /// asserts every marker colour clears 3:1 against the map background under
+  /// every theme scheme (WCAG 1.4.11), and an arbitrary user hex would destroy
+  /// that guarantee rather than fail it.
+  color     String
+  position  Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  owner     User?                     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  places    Place[]
+  fieldDefs CustomFieldDefPlaceType[]
+
+  /// Copy reconciliation matches an incoming type by NAME (§2.6 rule 1), so
+  /// this has to hold. Postgres treats NULLs as distinct in a unique index and
+  /// Prisma emits a plain UNIQUE, which would let a re-run migration insert a
+  /// second global "Canyon"; the migration adds NULLS NOT DISTINCT by raw SQL.
+  @@unique([ownerId, name])
+  @@index([ownerId, updatedAt])
+  @@map("place_types")
+}
+
+/// Scoping of a field definition to the place types that carry it. Not a sync
+/// entity of its own — the `customFieldDef` push op carries `placeTypeIds`, so
+/// a def created offline and scoped to two types can express that on the wire.
+model CustomFieldDefPlaceType {
+  defId       String @map("def_id")
+  placeTypeId String @map("place_type_id")
+
+  def       CustomFieldDef @relation(fields: [defId], references: [id], onDelete: Cascade)
+  placeType PlaceType      @relation(fields: [placeTypeId], references: [id], onDelete: Cascade)
+
+  @@id([defId, placeTypeId])
+  @@index([placeTypeId])
+  @@map("custom_field_def_place_types")
+}
+
+model Place {
+  id               String         @id @default(uuid())
+  ownerId          String         @map("owner_id")
+  placeTypeId      String         @map("place_type_id")
   name             String
-  altNames         String[]         @default([])
+  altNames         String[]       @default([])
   latitude         Float
   longitude        Float
-  numAbseils       Int?             @map("num_abseils")
-  longestAbseil    Float?           @map("longest_abseil_m")
+  /// STRUCTURAL, not a field definition — every point on earth has one, so it
+  /// is not type-specific. Carried over from Waypoint, which is live on every
+  /// waypoint surface today; dropping it in the fold would be silent data loss.
+  elevation        Float?
   notes            String?
-  attributes       Json             @default("{}")
-  createdAt        DateTime         @default(now()) @map("created_at")
-  updatedAt        DateTime         @updatedAt @map("updated_at")
-  forkedFromId     String?          @map("forked_from_id")
-  ropeWikiId       Int?             @map("ropewiki_id")
-  ropeWikiSnapshot Json?            @map("ropewiki_snapshot")
-  vGrade           Int?             @map("v_grade")
-  aGrade           Int?             @map("a_grade")
-  commitment       Int?
-  quality          Float?
-  hours            Float?
-  importKey        String?          @map("import_key")
-  importBatchId    String?          @map("import_batch_id")
-  shares           CanyonShare[]
-  forkedFrom       Canyon?          @relation("CanyonForks", fields: [forkedFromId], references: [id], onDelete: SetNull)
-  forks            Canyon[]         @relation("CanyonForks")
-  owner            User             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  tripLogLinks     TripLogCanyon[]
-  waypointLinks    CanyonWaypoint[]
-  /// @deprecated Back-relation for the pending canyon_id contract — see Waypoint.
-  legacyWaypoints  Waypoint[]       @relation("LegacyWaypointCanyon")
-  // At most one — the canyon's route slot. See Route.canyonId.
+  /// Type-specific values, keyed by `CustomFieldDef.key`. Replaces the seven
+  /// grade columns AND the free-form `attributes` blob. Values that were nested
+  /// at `attributes.customFields[key]` are HOISTED to the top level here — see
+  /// the migration; a flat merge would have left them at
+  /// `field_values.customFields.<key>` where nothing reads.
+  /// Keys starting with `_` are internal (`_sources` today) and cannot
+  /// collide with a user key: `makeCustomFieldKey` never produces one.
+  fieldValues      Json           @default("{}") @map("field_values")
+  /// Values that arrived on a COPY keyed by defs this owner does not have, or
+  /// were stranded by a type change. Rendered read-only, per-item adoptable.
+  /// OWNER-PRIVATE: never emitted on a delta row with syncRole "shared", and
+  /// absent from the push allowlist — only copy and type-change write it.
+  foreignFields    Json?          @map("foreign_fields")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+  forkedFromId     String?        @map("forked_from_id")
+  ropeWikiId       Int?           @map("ropewiki_id")
+  ropeWikiSnapshot Json?          @map("ropewiki_snapshot")
+  importKey        String?        @map("import_key")
+  importBatchId    String?        @map("import_batch_id")
+  placeType        PlaceType      @relation(fields: [placeTypeId], references: [id])
+  shares           PlaceShare[]
+  forkedFrom       Place?         @relation("PlaceForks", fields: [forkedFromId], references: [id], onDelete: SetNull)
+  forks            Place[]        @relation("PlaceForks")
+  owner            User           @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  tripLogLinks     TripLogPlace[]
+  linksA           PlaceLink[]    @relation("PlaceLinkA")
+  linksB           PlaceLink[]    @relation("PlaceLinkB")
+  // At most one — the place's route slot. See Route.placeId.
   route            Route?
 
   @@unique([ownerId, ropeWikiId])
-  @@unique([ownerId, importKey])
+  /// TYPE-SCOPED, deliberately. `placeImportKey()` derives from name + rounded
+  /// coords with no type input (lib/importKeys.ts), so a type-blind constraint
+  /// would 409 a Marker CSV row that happens to share a name and position with
+  /// a canyon. Matching is scoped within a type everywhere else too; the two
+  /// rules have to agree.
+  @@unique([ownerId, placeTypeId, importKey])
   @@index([ownerId])
+  @@index([ownerId, placeTypeId])
   @@index([ownerId, importBatchId])
-  @@map("canyons")
+  @@map("places")
 }
 
 model Notification {
@@ -154,20 +247,20 @@ model Notification {
 }
 
 model TripLog {
-  id            String          @id @default(uuid())
-  userId        String          @map("user_id")
+  id            String         @id @default(uuid())
+  userId        String         @map("user_id")
   date          DateTime
-  displayName   String?         @map("display_name")
-  types         String[]        @default([])
+  displayName   String?        @map("display_name")
+  types         String[]       @default([])
   notes         String?
-  customFields  Json            @default("{}") @map("custom_fields")
-  createdAt     DateTime        @default(now()) @map("created_at")
+  customFields  Json           @default("{}") @map("custom_fields")
+  createdAt     DateTime       @default(now()) @map("created_at")
   // Delta-sync watermark (Stage 8). Backfilled from created_at by migration.
-  updatedAt     DateTime        @updatedAt @map("updated_at")
-  importKey     String?         @map("import_key")
-  importBatchId String?         @map("import_batch_id")
-  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  canyons       TripLogCanyon[]
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+  importKey     String?        @map("import_key")
+  importBatchId String?        @map("import_batch_id")
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  places        TripLogPlace[]
 
   @@unique([userId, importKey])
   @@index([userId])
@@ -175,43 +268,43 @@ model TripLog {
   @@map("trip_logs")
 }
 
-// Trip ↔ canyon many-to-many. `position` preserves the order the canyons were
+// Trip ↔ place many-to-many. `position` preserves the order the places were
 // linked in; the derived trip title joins names in this order. Deleting a
-// canyon or a trip removes only the link rows — trips outlive their canyons.
-model TripLogCanyon {
+// place or a trip removes only the link rows — trips outlive their places.
+model TripLogPlace {
   tripLogId String  @map("trip_log_id")
-  canyonId  String  @map("canyon_id")
+  placeId   String  @map("place_id")
   position  Int
   tripLog   TripLog @relation(fields: [tripLogId], references: [id], onDelete: Cascade)
-  canyon    Canyon  @relation(fields: [canyonId], references: [id], onDelete: Cascade)
+  place     Place   @relation(fields: [placeId], references: [id], onDelete: Cascade)
 
-  @@id([tripLogId, canyonId])
-  @@index([canyonId])
-  @@map("trip_log_canyons")
+  @@id([tripLogId, placeId])
+  @@index([placeId])
+  @@map("trip_log_places")
 }
 
 // One uploaded file belonging to one account.
 //
-// It may hang off a Canyon or a TripLog, or off NOTHING — `linkedType: "none"`
+// It may hang off a Place or a TripLog, or off NOTHING — `linkedType: "none"`
 // with a null `linkedId` is the user's own standalone file: an import they
 // brought in, or a track they recorded. That third state is what lets imports
 // and recordings sync at all; before it, every file needed a parent, so a file
 // the user simply owned had nowhere to live and stayed on the phone.
 //
-// A standalone file becomes a canyon's way by having its parent SET (PATCH
+// A standalone file becomes a place's way by having its parent SET (PATCH
 // /media/:id/link), never by being copied. So linking and unlinking are
-// visibility changes on one file — unlinking from a shared canyon must
-// tombstone it for that canyon's sharees, and deleting a canyon UNLINKS its
-// standalone way rather than destroying it (the Route.canyonId SetNull rule,
+// visibility changes on one file — unlinking from a shared place must
+// tombstone it for that place's sharees, and deleting a place UNLINKS its
+// standalone way rather than destroying it (the Route.placeId SetNull rule,
 // which this now matches deliberately).
 model Media {
   id             String   @id @default(uuid())
   ownerId        String   @map("owner_id")
-  // Polymorphic link to a Canyon or TripLog, or "none". Deliberately NO
+  // Polymorphic link to a Place or TripLog, or "none". Deliberately NO
   // database foreign key on linkedId: a single column cannot FK two tables (the
-  // previous schema declared FKs to both canyons and trip_logs, which made
+  // previous schema declared FKs to both places and trip_logs, which made
   // every insert fail). Integrity is enforced in the route layer (ownership
-  // checks on attach) and cleaned up explicitly on canyon/trip/account deletion.
+  // checks on attach) and cleaned up explicitly on place/trip/account deletion.
   linkedType     String   @map("linked_type")
   // Null exactly when linkedType is "none".
   linkedId       String?  @map("linked_id")
@@ -223,7 +316,7 @@ model Media {
   // Assigned only for track (GPX/KML/GeoJSON) media from the shared TRACK_COLORS
   // palette; null for image/video. Drives the track card icon tint and map track layer.
   color          String?
-  // "import" | "track" for a standalone file, null for a canyon/trip
+  // "import" | "track" for a standalone file, null for a place/trip
   // attachment. Vocabulary is MEDIA_ORIGINS (shared/src/mediaMetadata.ts) —
   // the same two kinds FileSend.sourceKind names. Distinguishes an imported
   // GPX from a recorded one, which are the same MIME type but different rows
@@ -234,7 +327,7 @@ model Media {
   // check and the download filename both read it). Set at import time from the
   // file's content name where it has one (mobile/src/imports/importName.ts) and
   // by a rename thereafter; null falls back to the filename. Same shape as
-  // TripLog.displayName. Null for canyon/trip attachments — a photo is
+  // TripLog.displayName. Null for place/trip attachments — a photo is
   // labelled by what it hangs off.
   displayName    String?  @map("display_name")
   // Row-level stats (bbox, distance, duration, counts) so another device can
@@ -271,20 +364,20 @@ model Friendship {
   @@map("friendships")
 }
 
-model CanyonShare {
+model PlaceShare {
   id           String   @id @default(uuid())
-  canyonId     String   @map("canyon_id")
+  placeId      String   @map("place_id")
   sharedById   String   @map("shared_by_id")
   sharedWithId String   @map("shared_with_id")
   createdAt    DateTime @default(now()) @map("created_at")
-  canyon       Canyon   @relation(fields: [canyonId], references: [id], onDelete: Cascade)
+  place        Place    @relation(fields: [placeId], references: [id], onDelete: Cascade)
   sharedBy     User     @relation("sharedBy", fields: [sharedById], references: [id], onDelete: Cascade)
   sharedWith   User     @relation("sharedWith", fields: [sharedWithId], references: [id], onDelete: Cascade)
 
-  @@index([canyonId])
+  @@index([placeId])
   @@index([sharedWithId])
   @@index([sharedById])
-  @@map("canyon_shares")
+  @@map("place_shares")
 }
 
 model TopoJob {
@@ -314,7 +407,7 @@ model TopoJob {
   outputBytes         BigInt?   @map("output_bytes")
   // Runtime instrumentation (set by the worker on completion from the
   // pipeline's metrics file). Feeds the adaptive runtime estimator — aggregate
-  // timing/tile counts only, never canyon data.
+  // timing/tile counts only, never place data.
   outputTileCount     Int?      @map("output_tile_count")
   pipelineMetrics     Json?     @map("pipeline_metrics")
   // pipelineMetrics shape: { schemaVersion, wallSeconds, phases: { key: seconds }, inputTileCount, outputTileCount, zoomMin, zoomMax }
@@ -366,7 +459,7 @@ model TopoExportJob {
   vectorStyleSnapshot Json      @map("vector_style_snapshot")
   // Snapshot of the source job's input tileCount at export creation. The
   // source TopoJob is deletable, so this can't be re-derived by join later —
-  // it feeds the adaptive runtime estimator (aggregate size only, no canyon
+  // it feeds the adaptive runtime estimator (aggregate size only, no place
   // data). Null on rows created before the column existed.
   sourceTileCount     Int?      @map("source_tile_count")
   // Adaptive processing-time estimate computed at create from past completed
@@ -453,70 +546,74 @@ model TopoTemplate {
 }
 
 // Field waypoints (Stage 7 mobile capture; web read/edit later). Owner-private:
-// NEVER visible through canyon shares — sharing a canyon shares the canyon
+// NEVER visible through place shares — sharing a place shares the place
 // record, not your marked anchors/exits (privacy default; revisit only as an
 // explicit per-waypoint opt-in feature).
 // A marked point: a carpark, a campsite, an anchor, an exit. Authored on the
-// phone, synced like canyons and trips.
+// phone, synced like places and trips.
 //
-// Visibility follows canyon-level MEDIA, exactly as a linked Route does: an
-// UNLINKED waypoint is owner-private, and a waypoint linked to a shared canyon
+// Visibility follows place-level MEDIA, exactly as a linked Route does: an
+// UNLINKED waypoint is owner-private, and a waypoint linked to a shared place
 // is part of that shared record (sharees may view and export, never edit).
 // Unlike a route, the link is MANY-TO-MANY — one carpark legitimately serves
-// several canyons off the same trailhead — which makes revocation the trap:
-// a sharee can reach one waypoint through two shared canyons, so unlinking one
+// several places off the same trailhead — which makes revocation the trap:
+// a sharee can reach one waypoint through two shared places, so unlinking one
 // of them must NOT revoke sight of it. Every visibility change therefore goes
 // through lib/waypointLink.ts, never through an inline tombstone write.
-// CONTRACT PENDING: `canyonId` below is DEAD to this code — every link now
-// lives in CanyonWaypoint — but the column still exists so the previously
+// CONTRACT PENDING: `placeId` below is DEAD to this code — every link now
+// lives in PlaceWaypoint — but the column still exists so the previously
 // deployed image keeps working through the deploy swap window (expand/contract,
 // api/CLAUDE.md). Once a release carrying this comment is live, delete the
-// field, the `canyon` relation, and Canyon.legacyWaypoints in a follow-up
+// field, the `place` relation, and Place.legacyWaypoints in a follow-up
 // migration that drops the column.
-model Waypoint {
-  id          String           @id @default(uuid())
-  ownerId     String           @map("owner_id")
-  /// @deprecated Superseded by canyonLinks. Never read or written.
-  canyonId    String?          @map("canyon_id")
-  canyon      Canyon?          @relation("LegacyWaypointCanyon", fields: [canyonId], references: [id], onDelete: SetNull)
-  name        String
-  latitude    Float
-  longitude   Float
-  elevation   Float?
-  // Client icon key; server treats as opaque (length-capped in the route).
-  symbol      String?
-  notes       String?
-  // Free-text labels, same shape as TripLog.types: a seed vocabulary the user
-  // extends by typing. No tag registry — the vocabulary IS the used values.
-  tags        String[]         @default([])
-  createdAt   DateTime         @default(now()) @map("created_at")
-  updatedAt   DateTime         @updatedAt @map("updated_at")
-  owner       User             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  canyonLinks CanyonWaypoint[]
+// Waypoint ↔ place, many-to-many. Cascade both ways deletes the LINK only:
+// deleting a place leaves its waypoints alive and standalone (what the old
+// SetNull place_id did), and deleting a waypoint leaves the place alone.
+// No `position` — unlike TripLogPlace nothing derives from the order here.
+/// Place <-> place, symmetric, STORED ONCE under a canonical low-id/high-id
+/// ordering and rendered in both directions.
+///
+/// A link is NAVIGATIONAL ONLY and grants NO VISIBILITY. That is what lets
+/// lib/waypointLink.ts die: a waypoint used to inherit visibility through the
+/// canyons it was linked to, reachable through two of them, which made
+/// revocation a 219-line problem. Sharing is explicit per place now.
+///
+/// DO NOT read "a link grants no visibility" as a blanket rule — a route still
+/// reaches a sharee through `Route.placeId`, a foreign key, and that is
+/// deliberate (the route is part of the shared record). Only LINKS grant
+/// nothing.
+model PlaceLink {
+  /// Its own id: create and delete are sync ops, and a tombstone needs one.
+  id        String   @id @default(uuid())
+  /// REQUIRED, for three reasons: SyncTombstone.userId needs it on a delete;
+  /// the visibility filter would otherwise need a two-hop join through
+  /// `places` on every delta page; and without it nothing stops an offline
+  /// client minting a link naming a place id it does not own.
+  ownerId   String   @map("owner_id")
+  /// Lexicographically LOWER id. Canonical ordering is what makes "stored
+  /// once" enforceable by the unique index rather than by convention.
+  aPlaceId  String   @map("a_place_id")
+  bPlaceId  String   @map("b_place_id")
+  /// REQUIRED: every delta entity is paged by keyset on a timestamp
+  /// (keysetWhere("updatedAt", ...)). A link with no timestamp cannot be a
+  /// delta entity at all.
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  @@index([ownerId])
-  @@map("waypoints")
-}
+  owner  User  @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  aPlace Place @relation("PlaceLinkA", fields: [aPlaceId], references: [id], onDelete: Cascade)
+  bPlace Place @relation("PlaceLinkB", fields: [bPlaceId], references: [id], onDelete: Cascade)
 
-// Waypoint ↔ canyon, many-to-many. Cascade both ways deletes the LINK only:
-// deleting a canyon leaves its waypoints alive and standalone (what the old
-// SetNull canyon_id did), and deleting a waypoint leaves the canyon alone.
-// No `position` — unlike TripLogCanyon nothing derives from the order here.
-model CanyonWaypoint {
-  canyonId   String   @map("canyon_id")
-  waypointId String   @map("waypoint_id")
-  canyon     Canyon   @relation(fields: [canyonId], references: [id], onDelete: Cascade)
-  waypoint   Waypoint @relation(fields: [waypointId], references: [id], onDelete: Cascade)
-
-  @@id([canyonId, waypointId])
-  @@index([waypointId])
-  @@map("canyon_waypoints")
+  @@unique([ownerId, aPlaceId, bPlaceId])
+  @@index([ownerId, updatedAt])
+  @@index([bPlaceId])
+  @@map("place_links")
 }
 
 // User-authored routes: the line the user drew, imported, or derived from a
 // recording. Geometry is a vertex list ON THE ROW, not an S3 blob — a route is
 // authored and edited in place, so it rides the delta-sync protocol like
-// canyons/waypoints (offline draw → outbox → flush) and an edit is a PATCH.
+// places/waypoints (offline draw → outbox → flush) and an edit is a PATCH.
 // GPX/KML is an EXPORT format, not storage.
 //
 // NOT a recording. A recorded GPS track is an observation — immutable,
@@ -525,18 +622,18 @@ model CanyonWaypoint {
 // "create route from recording" action, which simplifies to fit and leaves the
 // recording intact.
 //
-// Visibility follows canyon-level MEDIA, not waypoints: a route LINKED to a
-// shared canyon is part of that shared record (sharees may view and export,
+// Visibility follows place-level MEDIA, not waypoints: a route LINKED to a
+// shared place is part of that shared record (sharees may view and export,
 // never edit); an unlinked route is owner-private.
 model Route {
   id        String   @id @default(uuid())
   ownerId   String   @map("owner_id")
-  // The canyon's single route slot. @unique enforces one-route-per-canyon in
+  // The place's single route slot. @unique enforces one-route-per-place in
   // the DB rather than app code (many NULLs are allowed, so unlinked routes
-  // are unconstrained). Linking to an occupied canyon UNLINKS the incumbent,
+  // are unconstrained). Linking to an occupied place UNLINKS the incumbent,
   // which survives standalone — a link never destroys anything. SetNull keeps
-  // routes alive when a canyon dies.
-  canyonId  String?  @unique @map("canyon_id")
+  // routes alive when a place dies.
+  placeId   String?  @unique @map("place_id")
   name      String
   // From TRACK_COLORS (shared/src/media.ts), so routes and legacy track media
   // share one palette on the map. Assigned server-side.
@@ -557,7 +654,7 @@ model Route {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
   owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  canyon    Canyon?  @relation(fields: [canyonId], references: [id], onDelete: SetNull)
+  place     Place?   @relation(fields: [placeId], references: [id], onDelete: SetNull)
 
   @@index([ownerId])
   @@map("routes")
@@ -575,7 +672,7 @@ model SyncTombstone {
   // tombstones on account delete; fan-out rows written FOR other users
   // (their sharees) belong to those users and survive — that is the point.
   userId     String   @map("user_id")
-  // "canyon" | "tripLog" | "media" | "canyonShare" | "friendship" | "waypoint"
+  // "place" | "tripLog" | "media" | "placeShare" | "friendship" | "waypoint"
   // | "route"
   entityType String   @map("entity_type")
   entityId   String   @map("entity_id")
@@ -602,18 +699,18 @@ model DeviceToken {
   @@map("device_tokens")
 }
 
-// Direct, per-item sharing for the things that are not canyons: waypoints,
+// Direct, per-item sharing for the things that are not places: waypoints,
 // routes, LiDAR topo jobs, GeoPDF jobs. A row is a LIVE, REVOCABLE view of a
 // record the sender still owns — contrast FileSend below, which hands over a
 // copy and cannot be taken back.
 //
-// Canyons keep CanyonShare rather than folding in here: that table is
+// Places keep PlaceShare rather than folding in here: that table is
 // load-bearing in delta sync, notifications and the tombstone builders, and
 // migrating the one share path that already works buys nothing.
 //
 // THE ACCESS DECISION FOR A ROW HERE IS MADE ONLY IN
 // api/src/lib/shareAccess.ts, which unions these rows with the visibility a
-// waypoint or route already inherits from a shared canyon. Two sources of
+// waypoint or route already inherits from a shared place. Two sources of
 // visibility read in two places is exactly how SEC-001 happened.
 //
 // NO FOREIGN KEY to the shared entity — entityType is polymorphic, so Postgres

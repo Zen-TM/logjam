@@ -11,7 +11,7 @@ import { formatRange, isFullRange, nextRange, type NumberRange } from "./rangeSe
  * selection is readable without a tooltip, and it costs no gesture (a slider
  * inside a draggable sheet fights the sheet).
  *
- * Emits `null` for "any", which is exactly what the canyon filter treats as
+ * Emits `null` for "any", which is exactly what the place filter treats as
  * inactive — so a cleared axis and an untouched one are the same value.
  */
 export function RangePills({

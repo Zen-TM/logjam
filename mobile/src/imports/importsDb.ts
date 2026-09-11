@@ -13,7 +13,7 @@
 // no reason to merge them: both sides are tens of rows, and the wipes,
 // versioning and app-lock posture of the two stores are deliberately separate.
 //
-// PRIVACY: imports are the user's own tracks — canyon-area coordinates. Rows,
+// PRIVACY: imports are the user's own tracks — place-area coordinates. Rows,
 // bboxes and paths never reach logs, telemetry or crash reports; having any
 // import on disk arms the Stage 4 app lock (see AppLockGate).
 import { mediaDisplayName, type MediaMetadata } from "@logjam/shared";

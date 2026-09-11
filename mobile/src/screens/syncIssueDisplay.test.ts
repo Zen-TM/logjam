@@ -24,7 +24,7 @@ import {
 function parked(overrides: Partial<ParkedOp> = {}): ParkedOp {
   return {
     seq: 1,
-    entity: "canyon",
+    entity: "place",
     op: "update",
     entityId: "c1",
     state: "blocked",
@@ -41,7 +41,7 @@ function parked(overrides: Partial<ParkedOp> = {}): ParkedOp {
 function shelved(overrides: Partial<ShelfEntry> = {}): ShelfEntry {
   return {
     id: 1,
-    entity: "canyon",
+    entity: "place",
     entityId: "c1",
     field: "notes",
     shelvedValue: "Abseil 3 anchor spinning",
@@ -58,7 +58,7 @@ const NOW = Date.parse("2026-08-31T00:00:00.000Z");
 
 describe("previewValue", () => {
   it("never renders a coordinate", () => {
-    // A parked canyon create carries lat/lng. This screen is the one most likely
+    // A parked place create carries lat/lng. This screen is the one most likely
     // to be screenshotted into a bug report (DESIGN.md §11).
     expect(previewValue("latitude", -33.7)).toBe("(hidden)");
     expect(previewValue("longitude", 150.3)).toBe("(hidden)");
@@ -86,8 +86,12 @@ describe("opTitle", () => {
       "Couldn't delete a trip",
     );
     expect(
-      opTitle(parked({ entity: "waypoint", op: "create", entityName: "Car" })),
-    ).toBe("Couldn't add waypoint “Car”");
+      opTitle(parked({ entity: "place", op: "create", entityName: "Car park" })),
+    ).toBe("Couldn't add place “Car park”");
+    // A link has no name of its own, so it names what it is instead.
+    expect(opTitle(parked({ entity: "placeLink", op: "delete", fields: null }))).toBe(
+      "Couldn't delete a link between places",
+    );
   });
 
   it("names a media op by its filename and its own verb", () => {
@@ -103,7 +107,7 @@ describe("opTitle", () => {
 
   it("names the thing from the MIRROR, since an update carries no name", () => {
     // The regression this exists for: three rows reading "Couldn't save your
-    // changes to a canyon" on a list whose first job is saying WHICH canyon.
+    // changes to a place" on a list whose first job is saying WHICH place.
     // An update op's fields are only what it dirtied — notes, a grade — so the
     // name is resolved when the op is loaded and lives on `entityName`.
     expect(opTitle(parked({ fields: { notes: "n" }, entityName: "Claustral" }))).toBe(
@@ -111,7 +115,7 @@ describe("opTitle", () => {
     );
     // Deleted since, or an entity with no name: say what kind it was.
     expect(opTitle(parked({ fields: { notes: "n" } }))).toBe(
-      "Couldn't save your changes to a canyon",
+      "Couldn't save your changes to a place",
     );
   });
 
@@ -196,14 +200,17 @@ describe("opAdvice", () => {
 
 describe("rejectedFields / salvageableFields", () => {
   const badGrade = parked({
-    fields: { notes: "rebolted", vGrade: 9 },
+    fields: { notes: "rebolted", fieldValues: { v_grade: 9 } },
     error: { code: 400, message: "V grade must be between 1 and 7" },
   });
 
   it("splits a rejected edit into what the server refused and what it didn't", () => {
     // One bad number used to take a paragraph of notes down with it: the API
     // validates the whole payload, so the whole op parks.
-    expect(rejectedFields(badGrade)).toEqual(["vGrade"]);
+    // The whole `fieldValues` blob is ONE dirty field on the wire, so that is
+    // the granularity a "send the rest" offer can work at — the client cannot
+    // resend half a JSON column.
+    expect(rejectedFields(badGrade)).toEqual(["fieldValues"]);
     expect(salvageableFields(badGrade)).toEqual(["notes"]);
   });
 
@@ -211,7 +218,7 @@ describe("rejectedFields / salvageableFields", () => {
     // A transient failure is the engine's problem, and re-sending a SUBSET of
     // it would silently drop fields over a dropped connection.
     const transient = parked({
-      fields: { notes: "x", vGrade: 9 },
+      fields: { notes: "x", fieldValues: { v_grade: 9 } },
       error: { code: 503, message: "upstream" },
     });
     expect(rejectedFields(transient)).toEqual([]);
@@ -221,10 +228,10 @@ describe("rejectedFields / salvageableFields", () => {
   it("offers nothing when every dirty field was refused", () => {
     // Nothing to salvage — the sheet falls back to Discard, which is honest.
     const allBad = parked({
-      fields: { vGrade: 9 },
+      fields: { fieldValues: { v_grade: 9 } },
       error: { code: 400, message: "V grade must be between 1 and 7" },
     });
-    expect(rejectedFields(allBad)).toEqual(["vGrade"]);
+    expect(rejectedFields(allBad)).toEqual(["fieldValues"]);
     expect(salvageableFields(allBad)).toEqual([]);
   });
 
@@ -237,7 +244,7 @@ describe("rejectedFields / salvageableFields", () => {
   });
 
   it("offers nothing for an entity whose rules aren't shared", () => {
-    // Only canyons have their range rules in `shared/`. Guessing for a trip
+    // Only places have their range rules in `shared/`. Guessing for a trip
     // would mean parsing the server's English.
     expect(
       rejectedFields(
@@ -273,13 +280,13 @@ describe("opChanges", () => {
     // screenshot (DESIGN.md §11). Hidden entirely rather than "(hidden)": a row
     // reading "position: (hidden)" is noise, not caution.
     const changes = opChanges(
-      parked({ op: "create", fields: { name: "New canyon", latitude: -33.7, longitude: 150.3 } }),
+      parked({ op: "create", fields: { name: "New place", latitude: -33.7, longitude: 150.3 } }),
     );
-    expect(changes).toEqual([{ label: "Name", value: "New canyon", rejected: false }]);
+    expect(changes).toEqual([{ label: "Name", value: "New place", rejected: false }]);
   });
 
   it("drops plumbing the user never typed", () => {
-    const changes = opChanges(parked({ fields: { id: "x", canyonIds: ["a"], notes: "n" } }));
+    const changes = opChanges(parked({ fields: { id: "x", placeIds: ["a"], notes: "n" } }));
     expect(changes).toEqual([{ label: "Notes", value: "n", rejected: false }]);
   });
 
@@ -289,10 +296,12 @@ describe("opChanges", () => {
     // can point at the field without reading the server's English.
     const changes = opChanges(
       parked({
-        fields: { notes: "rebolted", vGrade: 9 },
+        fields: { notes: "rebolted", fieldValues: { v_grade: 9 } },
         error: { code: 400, message: "V grade must be between 1 and 7" },
       }),
     );
+    // `fieldValues` is one field on the wire but is expanded into a line per
+    // value, so the reader still sees WHICH value the complaint is about.
     expect(changes.map((change) => [change.label, change.rejected])).toEqual([
       ["Notes", false],
       ["Water grade", true],
@@ -326,8 +335,8 @@ describe("opChanges", () => {
 
 describe("opTarget", () => {
   it("offers the entity for the kinds that have a screen", () => {
-    expect(opTarget(parked({ entity: "canyon", entityId: "c1" }))).toEqual({
-      kind: "canyon",
+    expect(opTarget(parked({ entity: "place", entityId: "c1" }))).toEqual({
+      kind: "place",
       id: "c1",
     });
     expect(opTarget(parked({ entity: "tripLog", entityId: "t1" }))).toEqual({
@@ -338,9 +347,9 @@ describe("opTarget", () => {
 
   it("offers nothing where a tap would go nowhere", () => {
     // No screen to push, or — for a delete — nothing left to open.
-    expect(opTarget(parked({ entity: "waypoint" }))).toBeNull();
+    expect(opTarget(parked({ entity: "placeLink" }))).toBeNull();
     expect(opTarget(parked({ entity: "media" }))).toBeNull();
-    expect(opTarget(parked({ entity: "canyon", op: "delete" }))).toBeNull();
+    expect(opTarget(parked({ entity: "place", op: "delete" }))).toBeNull();
   });
 });
 
@@ -349,7 +358,7 @@ describe("discardExplanation", () => {
     // It used to shelve what was typed, and the row it left behind asked the
     // user to decide the same thing twice. This dialog is now the last place
     // the cost can be stated.
-    const text = discardExplanation(parked({ entity: "canyon" }));
+    const text = discardExplanation(parked({ entity: "place" }));
     expect(text).not.toMatch(/Lost/);
     expect(text).toMatch(/can't be got back/);
   });
@@ -363,35 +372,32 @@ describe("discardExplanation", () => {
 
 describe("canRecreate", () => {
   it("is true only where recreateFromDeadRemote will really recreate", () => {
-    const waypoint = parked({
-      entity: "waypoint",
-      state: "deadRemote",
-      fields: { name: "Anchor", latitude: -33.5, longitude: 150.4 },
-    });
-    expect(canRecreate(waypoint)).toBe(true);
-    // A canyon update carries no coordinates, so the rebuild comes from the
+    // A place update carries no coordinates, so the rebuild comes from the
     // phone's own mirror row — which lasts only until the delta pull applies
     // the tombstone.
-    const canyon = parked({ entity: "canyon", state: "deadRemote", fields: { notes: "x" } });
-    expect(canRecreate(canyon)).toBe(true);
-    expect(canRecreate({ ...canyon, hasLocalRow: false })).toBe(false);
+    const place = parked({ entity: "place", state: "deadRemote", fields: { notes: "x" } });
+    expect(canRecreate(place)).toBe(true);
+    expect(canRecreate({ ...place, hasLocalRow: false })).toBe(false);
   });
 
   it("is false where that call would quietly discard instead", () => {
     // The button said "Saves what you typed as a new one" for every deadRemote
-    // op, and for anything but a positioned waypoint the implementation falls
-    // back to a discard — a button that deletes the change it promises to keep.
+    // op, and for anything but a place with a local row the implementation
+    // falls back to a discard — a button that deletes the change it promises
+    // to keep.
     expect(
       canRecreate(
         parked({ entity: "tripLog", state: "deadRemote", fields: { notes: "x" } }),
       ),
     ).toBe(false);
-    // A rename-only waypoint edit carries no coordinates, and a waypoint with
-    // no position is not a waypoint.
+    // A LINK carries no payload of its own and its endpoints may be gone, so
+    // there is nothing to rebuild from at all.
     expect(
-      canRecreate(parked({ entity: "waypoint", state: "deadRemote", fields: { name: "x" } })),
+      canRecreate(parked({ entity: "placeLink", state: "deadRemote", fields: null })),
     ).toBe(false);
-    expect(canRecreate(parked({ entity: "waypoint", state: "blocked" }))).toBe(false);
+    // Only a DEAD remote op can be recreated; a blocked one still has a server
+    // row waiting for it.
+    expect(canRecreate(parked({ entity: "place", state: "blocked" }))).toBe(false);
   });
 });
 
@@ -400,13 +406,13 @@ describe("shelf copy", () => {
     expect(shelfTitle(shelved())).toBe("Your notes for “Claustral” were overwritten");
     // Agreement follows the FIELD, and got this wrong on a shipped row: "your
     // water grade WERE overwritten".
-    expect(shelfTitle(shelved({ field: "vGrade" }))).toBe(
+    expect(shelfTitle(shelved({ field: "v_grade" }))).toBe(
       "Your water grade for “Claustral” was overwritten",
     );
     // The name is captured when the value is shelved, so it survives the row
     // being deleted — this fallback is for entries shelved before that column.
     expect(shelfTitle(shelved({ entityName: null }))).toBe(
-      "Your notes on a canyon were overwritten",
+      "Your notes on a place were overwritten",
     );
   });
 
@@ -414,13 +420,13 @@ describe("shelf copy", () => {
     // The rule is "a plural label ends in s, a singular one doesn't", which is
     // true of the whole map today and is what `isPluralLabel` reads. A future
     // label that breaks it (a "status") fails here rather than on a phone.
-    const plural = ["notes", "altNames", "tags", "canyonIds", "attributes",
-      "customFields"];
+    const plural = ["notes", "altNames", "placeIds", "customFields",
+      "fieldValues"];
     // `types` is in here on purpose: the FIELD is plural and its LABEL — "trip
     // type" — is not, and the label is what the sentence has to agree with.
-    const singular = ["name", "types", "vGrade", "aGrade", "commitment", "quality",
-      "hours", "date", "displayName", "elevation", "symbol", "color", "numAbseils",
-      "longestAbseil"];
+    const singular = ["name", "types", "v_grade", "a_grade", "commitment",
+      "quality", "hours", "date", "displayName", "elevation", "symbol", "color",
+      "num_abseils", "longest_abseil"];
     for (const field of plural) {
       expect(shelfTitle(shelved({ field })), field).toContain(" were ");
     }
@@ -461,7 +467,7 @@ describe("shelf copy", () => {
     // And it NAMES the kind: the shelf row records the entity, so "the thing
     // this belonged to" was a sentence written without looking.
     expect(restoreBlockReason(shelved({ restoreBlock: "gone" }))).toBe(
-      "The canyon this belonged to has been deleted, so there's nothing to restore it into.",
+      "The place this belonged to has been deleted, so there's nothing to restore it into.",
     );
     expect(restoreBlockReason(shelved({ entity: "tripLog", restoreBlock: "gone" }))).toMatch(
       /^The trip this belonged to/,

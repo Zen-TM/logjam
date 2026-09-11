@@ -1,5 +1,5 @@
 // "Get this out of my account" for something a friend shared WITH you — the
-// one control behind it on every web surface that lists shared things: canyons,
+// one control behind it on every web surface that lists shared things: places,
 // waypoints, routes, LiDAR topos and GeoPDFs.
 //
 // It is NOT a delete and must never be styled or worded as one. The owner keeps
@@ -9,8 +9,8 @@
 // wording the same promise five ways.
 //
 // Only ever rendered where `sharedRowVisibility` says "direct". A waypoint or
-// route seen through a shared canyon has no share row of its own to drop, and
-// the surfaces point at the canyon instead.
+// route seen through a shared place has no share row of its own to drop, and
+// the surfaces point at the place instead.
 import { useState, type ReactNode } from "react";
 import { X } from "lucide-react";
 
@@ -31,7 +31,7 @@ export default function RemoveSharedButton({
   remove,
   onRemoved,
 }: {
-  /** Lower-case kind as it reads mid-sentence: "canyon", "waypoint", "topo". */
+  /** Lower-case kind as it reads mid-sentence: "place", "waypoint", "topo". */
   kindLabel: string;
   itemName: string;
   /** The owner's username where the surface knows it; the copy softens if not. */
@@ -41,7 +41,7 @@ export default function RemoveSharedButton({
   title?: string;
   children?: ReactNode;
   disabled?: boolean;
-  /** The revoke itself — `unshareCanyonWith(id, "me")` or its `/shares` twin. */
+  /** The revoke itself — `unsharePlaceWith(id, "me")` or its `/shares` twin. */
   remove: () => Promise<unknown>;
   /** Re-pull whatever list this row came from; the row is gone now. */
   onRemoved: () => void;

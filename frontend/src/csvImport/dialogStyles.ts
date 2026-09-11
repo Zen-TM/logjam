@@ -64,14 +64,14 @@ export const dialogActionButtonSx = {
 // which is the correct behaviour at that length.
 //
 // The resting height (`minRows`) stays a per-dialog choice — trip notes are the
-// headline field, canyon notes are one of twelve — but the cap is a single
+// headline field, place notes are one of twelve — but the cap is a single
 // shared decision and lives here.
 export const NOTES_MAX_ROWS = 12;
 
 // High-contrast filled chip for trip-type tags — same accent-fill/dark-label
 // system as .btnFilledAccent in styles/shared.module.css (accent is tuned
 // light enough that the dark primary is the AA-readable label on it, in every
-// theme scheme). Visually distinct from default-grey canyon chips. Used by
+// theme scheme). Visually distinct from default-grey place chips. Used by
 // TripLogDialog (selected-type chips) and TripLogViewDialog; the trip cards
 // in TripLogsPanel mirror it in CSS (.typeChip).
 export const typeChipSx = {

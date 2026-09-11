@@ -1,7 +1,7 @@
 // Track-recording preferences — Settings → Map → Recording.
 //
 // Two knobs, both of which were constants in `trackRecorder.ts` until the
-// settings split. They are exposed because a canyon is the one place their
+// settings split. They are exposed because a place is the one place their
 // defaults are wrong:
 //
 // - ACCURACY GATE. `rejectTrackFix` drops any fix whose reported accuracy is
@@ -11,7 +11,7 @@
 //   line at all; lowering it is for open ridgeline work where a wandering fix is
 //   the only thing that can spoil the distance.
 // - FIX RATE. How often the platform is asked for a position. Slower is fewer
-//   wakeups and a coarser line — an all-day trip's tradeoff, not a canyon's.
+//   wakeups and a coarser line — an all-day trip's tradeoff, not a place's.
 //
 // What is NOT exposed, deliberately: the minimum-distance gate. It is adaptive
 // (`max(5 m, this fix's accuracy, the last one's)`) precisely because a flat
@@ -61,7 +61,7 @@ export type FixRate = "finest" | "detailed" | "balanced" | "batterySaver";
 /**
  * Platform request parameters per rate. `accuracy` stays `High` (GPS-priority)
  * in every preset: the alternatives resolve from wifi and cell towers, which in
- * a canyon means a fix from the nearest town or none at all. What changes is
+ * a place means a fix from the nearest town or none at all. What changes is
  * how often we ask, and `timeInterval` is the only field here that moves the
  * power bill — it is what sets the GNSS duty cycle.
  *
@@ -143,7 +143,7 @@ export function writeAccuracyLimitM(limit: AccuracyLimitM): boolean {
  * the one thing in the app that runs for the whole trip, and the original
  * finest-by-default spent a phone's day drawing detail nobody asked for; a user
  * who wants the fine line can say so, and can't recharge a flat phone in a
- * canyon.
+ * place.
  */
 export function readFixRate(): FixRate {
   const stored = readPref(FIX_RATE_KEY);

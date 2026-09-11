@@ -16,7 +16,7 @@
 // per-instance for a file send: only this module has the filename and the
 // sender to put in the sentence.
 //
-// PRIVACY: `filename` is user text and routinely names a canyon. It reaches the
+// PRIVACY: `filename` is user text and routinely names a place. It reaches the
 // label and the confirm body because the recipient cannot answer "keep this?"
 // without knowing what it is. It is never logged, exactly as the sending side
 // treats it.

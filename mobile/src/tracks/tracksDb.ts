@@ -2,7 +2,7 @@
 // waypoints, in the same app-private SQLite DB as the offline registry (one
 // store, one backup-exclusion posture, one app-lock trigger).
 //
-// PRIVACY: a recorded track is precise user location history in a canyon —
+// PRIVACY: a recorded track is precise user location history in a place —
 // the most sensitive data the app holds. Rows are app-private,
 // backup-excluded, arm the Stage 4 app lock, stay local until Stage 8's
 // explicit sync, and never reach logs, telemetry or crash reports. Logging
@@ -61,8 +61,9 @@ export type Waypoint = {
   lon: number;
   lat: number;
   createdAt: string;
-  /** Marker hue, derived from the waypoint's tags by map/waypointSymbol.ts.
-   *  Optional so a caller with no tag context still renders. */
+  /** Marker hue as the GPX file gave it. Optional — a file that names no
+   *  colour still renders. (It used to be derived from the old waypoint tags by
+   *  map/waypointSymbol.ts; both are gone.) */
   color?: string;
 };
 

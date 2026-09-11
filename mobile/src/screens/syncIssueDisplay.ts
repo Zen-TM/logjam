@@ -7,7 +7,11 @@
 // The screen's job is to answer five questions per row, in order: which of my
 // things, what was I trying to do, why did it fail, can I fix it, and what
 // happens if I ignore it. Everything below exists to answer one of them.
-import { invalidCanyonFields, isTransientSyncError } from "@logjam/shared";
+import {
+  invalidPlaceFields,
+  isTransientSyncError,
+  SYSTEM_FIELD_DEFS,
+} from "@logjam/shared";
 
 import type { ParkedOp, ShelfEntry } from "../sync/syncIssues";
 import { relativeTime } from "./syncHealth";
@@ -15,23 +19,27 @@ import { relativeTime } from "./syncHealth";
 /**
  * The kinds, in the user's words. Lower case because every string here is a
  * SENTENCE about the user's thing ("Couldn't upload …", "Your notes on a
- * canyon") rather than a label — the capitalised `Attachment`/`Canyon` labels
- * this replaces only ever appeared in the old `Canyon “X” — update` row title.
+ * place") rather than a label — the capitalised `Attachment`/`Place` labels
+ * this replaces only ever appeared in the old `Place “X” — update` row title.
  * Media is "photo or file" because that is what the user attached; "attachment"
  * is our word for the row that carries it.
  */
 const ENTITY_NOUN: Record<string, string> = {
-  canyon: "canyon",
+  place: "place",
+  placeType: "place type",
   tripLog: "trip",
-  waypoint: "waypoint",
+  // A LINK has no name of its own, so it is only ever the fallback subject
+  // ("Couldn't delete a link between places") — which is exactly what it is.
+  placeLink: "link between places",
   route: "route",
+  customFieldDef: "field",
   notification: "notification",
   media: "photo or file",
 };
 
 /**
  * Field names in the user's words. The shelf stores the PROTOCOL field name,
- * which is a column to us and nothing at all to the reader — "Canyon · vGrade"
+ * which is a column to us and nothing at all to the reader — "Place · vGrade"
  * was the whole of a row's title. Anything not listed falls back to the raw
  * name rather than being hidden: an unlabelled field is a copy gap, not a
  * reason to withhold what the user typed.
@@ -40,22 +48,22 @@ const FIELD_LABEL: Record<string, string> = {
   name: "name",
   altNames: "other names",
   notes: "notes",
-  numAbseils: "abseil count",
-  longestAbseil: "longest abseil",
-  vGrade: "water grade",
-  aGrade: "difficulty grade",
+  // Keyed by FIELD KEY now, because the seven grades are field values rather
+  // than columns — same words, one level in.
+  num_abseils: "abseil count",
+  longest_abseil: "longest abseil",
+  v_grade: "water grade",
+  a_grade: "difficulty grade",
   commitment: "commitment grade",
   quality: "star rating",
   hours: "trip time",
-  attributes: "details",
   date: "date",
   displayName: "title",
   types: "trip type",
   customFields: "custom fields",
-  canyonIds: "linked canyons",
+  placeIds: "linked places",
   elevation: "elevation",
   symbol: "symbol",
-  tags: "tags",
   color: "colour",
   latitude: "position",
   longitude: "position",
@@ -63,7 +71,7 @@ const FIELD_LABEL: Record<string, string> = {
 
 /**
  * Fields whose VALUE must never be rendered, whatever the op happens to carry.
- * A parked canyon create holds latitude/longitude, and this screen is exactly the
+ * A parked place create holds latitude/longitude, and this screen is exactly the
  * kind of page that ends up in a screenshot attached to a bug report — which is
  * the reason DESIGN.md §11 keeps coordinates off lists entirely.
  */
@@ -172,22 +180,21 @@ export function opAdvice(op: ParkedOp): IssueAdvice {
  * Whether "Recreate" will actually recreate something, rather than quietly
  * discarding (`recreateFromDeadRemote` falls back to a discard for anything it
  * cannot rebuild). The row used to be offered for EVERY deadRemote op with the
- * subtitle "Saves what you typed as a new one" — which for a canyon or a trip
+ * subtitle "Saves what you typed as a new one" — which for a place or a trip
  * was a button that deleted the change instead.
  *
- * Waypoints only, and only with a position: a waypoint's op carries its whole
- * payload, and no other entity has a create surface this screen can reach.
+ * Places only. A CREATE op carries its whole payload; an UPDATE carries only
+ * what it dirtied, so that rebuild needs the phone's own copy of the row.
+ * (A link is not recreatable at all — it has no payload of its own and its
+ * endpoints may be gone.)
  */
 export function canRecreate(op: ParkedOp): boolean {
   if (op.state !== "deadRemote") return false;
-  // A waypoint's op carries its whole payload, so the op alone rebuilds it.
-  if (op.entity === "waypoint") {
-    return typeof op.fields?.latitude === "number" && typeof op.fields?.longitude === "number";
-  }
-  // A canyon UPDATE carries only what it dirtied — never coordinates — so the
+  // A place UPDATE carries only what it dirtied — never coordinates — so the
   // rebuild needs the phone's own copy of the row, which survives only until
-  // the next delta pull applies the tombstone.
-  if (op.entity === "canyon") return op.hasLocalRow;
+  // the next delta pull applies the tombstone. A create op carries everything,
+  // and either way the mirror row is what `recreateFromDeadRemote` reads.
+  if (op.entity === "place") return op.hasLocalRow;
   return false;
 }
 
@@ -196,7 +203,7 @@ export function canRecreate(op: ParkedOp): boolean {
  * tell — the whole of "send the rest".
  *
  * We can tell because the range rules are in `shared/` and the client runs the
- * same ones (`invalidCanyonFields`). No message parsing: the server's sentence
+ * same ones (`invalidPlaceFields`). No message parsing: the server's sentence
  * is English for a person, and a client that read it would break the day
  * someone reworded it.
  *
@@ -205,9 +212,14 @@ export function canRecreate(op: ParkedOp): boolean {
  * nothing rather than re-send an edit that will park again.
  */
 export function rejectedFields(op: ParkedOp): string[] {
-  if (op.state !== "blocked" || op.entity !== "canyon" || !op.fields) return [];
+  if (op.state !== "blocked" || op.entity !== "place" || !op.fields) return [];
   if (op.error && isTransientSyncError(op.error.code)) return [];
-  return invalidCanyonFields(op.fields);
+  // The SYSTEM definitions only. A value under a user definition can be out of
+  // range too, but its bounds live server-side — and answering "can't tell"
+  // there is the honest outcome: this function's empty result already means
+  // exactly that, and the caller offers nothing rather than re-sending an edit
+  // that would park again.
+  return invalidPlaceFields(op.fields, SYSTEM_FIELD_DEFS);
 }
 
 /**
@@ -254,6 +266,25 @@ export function opChanges(op: ParkedOp): OpChange[] {
     // typed; a coordinate renders as "(hidden)" and says nothing either.
     if (field === "id" || field.endsWith("Id") || field.endsWith("Ids")) continue;
     if (UNRENDERABLE_FIELDS.has(field)) continue;
+    // `fieldValues` is ONE field on the wire but several things to a reader, so
+    // it is expanded into a line per value. They share the blob's rejected
+    // state, because that is the truth: the server refused the whole column and
+    // "send the rest" cannot resend half of it — but the reader still gets to
+    // see WHICH value the complaint is about, which is the whole point of
+    // marking a line at all.
+    if (field === "fieldValues" && value && typeof value === "object") {
+      for (const [key, inner] of Object.entries(value as Record<string, unknown>)) {
+        // Internal `_`-prefixed entries are not something the user typed.
+        if (key.startsWith("_")) continue;
+        const innerLabel = fieldLabel(key);
+        changes.push({
+          label: innerLabel.charAt(0).toUpperCase() + innerLabel.slice(1),
+          value: fieldValueText(key, inner),
+          rejected: rejected.has("fieldValues"),
+        });
+      }
+      continue;
+    }
     const label = fieldLabel(field);
     changes.push({
       // Sentence case, because this is a line of its own rather than a phrase
@@ -270,7 +301,7 @@ export function opChanges(op: ParkedOp): OpChange[] {
  * A field's value with its unit, where the number alone is a riddle.
  *
  * "Trip time: 6" is not a fact about anything, and the rest of the app never
- * shows these bare either (the canyon screen labels them HOURS and LONGEST
+ * shows these bare either (the place screen labels them HOURS and LONGEST
  * DROP). Only the fields whose unit is not in their own name are listed — an
  * abseil count is a count.
  */
@@ -292,9 +323,9 @@ function fieldValueText(field: string, value: unknown): string {
  * Waypoints, routes and media are absent deliberately: none has a screen that
  * can be pushed from here, and a row that navigates nowhere is worse than none.
  */
-export function opTarget(op: ParkedOp): { kind: "canyon" | "trip"; id: string } | null {
+export function opTarget(op: ParkedOp): { kind: "place" | "trip"; id: string } | null {
   if (op.op === "delete") return null;
-  if (op.entity === "canyon") return { kind: "canyon", id: op.entityId };
+  if (op.entity === "place") return { kind: "place", id: op.entityId };
   if (op.entity === "tripLog") return { kind: "trip", id: op.entityId };
   return null;
 }

@@ -67,7 +67,7 @@ export type ConnectionState = {
  * `true` = costs money, `false` = definitely free, `null` = no answer (the
  * property is absent, or there are no details at all because there is no
  * connection). MAPP-002 needs the third: only a definite `false` may hard-block
- * a too-old build, because the user standing in a canyon on a hotspot has to
+ * a too-old build, because the user standing in a place on a hotspot has to
  * keep their maps and their in-progress track. Every OTHER caller here wants
  * the collapse below, so both live in this file rather than one being derived
  * at each call site.

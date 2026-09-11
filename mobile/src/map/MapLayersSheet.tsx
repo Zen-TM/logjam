@@ -76,6 +76,25 @@ export type LayerToggleEntry = {
   note?: string;
   value: boolean;
   onChange: (next: boolean) => void;
+  /** Dimmed and untappable because something above it already decided. A row
+   *  whose switch moves while the map draws nothing is a lie. */
+  inert?: boolean;
+  /**
+   * Sub-rows under a master, for a layer whose contents are a vocabulary
+   * rather than one thing — the place TYPES. Same master-plus-children shape
+   * the topo band already uses, so this is not a new pattern: the master row
+   * opens, its switch is "this layer at all", and each child is one type.
+   *
+   * Absent on a layer with nothing to break down, which is most of them.
+   */
+  children?: {
+    key: string;
+    title: string;
+    hue: string;
+    count: number;
+    value: boolean;
+    onChange: (next: boolean) => void;
+  }[];
 };
 
 export type OverlayEntry = {
@@ -243,23 +262,83 @@ function BasemapTab({
  * the user can see on the map behind the sheet (DESIGN.md §7).
  */
 function LayerRow({ entry }: { entry: LayerToggleEntry }) {
+  const [expanded, setExpanded] = useState(false);
+  const expandable = (entry.children?.length ?? 0) > 0;
+
+  if (expandable) {
+    return (
+      <View style={styles.group}>
+        <Row
+          icon={entry.icon}
+          hue={entry.hue}
+          title={entry.title}
+          subtitle={entry.note}
+          onPress={() => setExpanded((current) => !current)}
+          accessibilityLabel={`${entry.title} — ${expanded ? "hide" : "show"} the list`}
+          right={
+            <View style={styles.trailing}>
+              <Text style={styles.count}>{entry.count}</Text>
+              <Toggle
+                value={entry.value}
+                onValueChange={entry.onChange}
+                accessibilityLabel={`Show ${entry.title}`}
+              />
+              <Feather
+                name={expanded ? "chevron-up" : "chevron-down"}
+                size={20}
+                color={theme.textMuted}
+              />
+            </View>
+          }
+        />
+        {expanded ? (
+          <View style={styles.groupItems}>
+            {entry.children?.map((child) => (
+              <View
+                key={child.key}
+                style={entry.value ? undefined : styles.inert}
+                pointerEvents={entry.value ? "auto" : "none"}
+              >
+                <ItemRow
+                  hue={child.hue}
+                  title={child.title}
+                  count={child.count}
+                  // A child of a switched-OFF master draws nothing whatever its
+                  // own switch says, so it reads as off — the master is the
+                  // stronger statement and the row must not contradict it. It
+                  // is also untappable there: flipping hidden state behind a
+                  // master that is already hiding everything is a control that
+                  // answers a tap with nothing.
+                  visible={child.value}
+                  onVisibility={() => child.onChange(!child.value)}
+                />
+              </View>
+            ))}
+          </View>
+        ) : null}
+      </View>
+    );
+  }
+
   return (
-    <Row
-      icon={entry.icon}
-      hue={entry.hue}
-      title={entry.title}
-      subtitle={entry.note}
-      right={
-        <View style={styles.trailing}>
-          <Text style={styles.count}>{entry.count}</Text>
-          <Toggle
-            value={entry.value}
-            onValueChange={entry.onChange}
-            accessibilityLabel={`Show ${entry.title}`}
-          />
-        </View>
-      }
-    />
+    <View style={entry.inert ? styles.inert : undefined} pointerEvents={entry.inert ? "none" : "auto"}>
+      <Row
+        icon={entry.icon}
+        hue={entry.hue}
+        title={entry.title}
+        subtitle={entry.note}
+        right={
+          <View style={styles.trailing}>
+            <Text style={styles.count}>{entry.count}</Text>
+            <Toggle
+              value={entry.value}
+              onValueChange={entry.onChange}
+              accessibilityLabel={`Show ${entry.title}`}
+            />
+          </View>
+        }
+      />
+    </View>
   );
 }
 
@@ -433,11 +512,15 @@ function TopoOverlayList({
 function ItemRow({
   hue,
   title,
+  count,
   visible,
   onVisibility,
 }: {
   hue: string;
   title: string;
+  /** How many of this kind exist. Absent on a topo layer, where the row is a
+   *  layer TYPE over an area rather than a countable pile of things. */
+  count?: number;
   visible: boolean;
   onVisibility: () => void;
 }) {
@@ -447,11 +530,14 @@ function ItemRow({
       title={title}
       style={styles.itemRow}
       right={
-        <Toggle
-          value={visible}
-          onValueChange={onVisibility}
-          accessibilityLabel={`Show ${title}`}
-        />
+        <View style={styles.trailing}>
+          {count != null ? <Text style={styles.count}>{count}</Text> : null}
+          <Toggle
+            value={visible}
+            onValueChange={onVisibility}
+            accessibilityLabel={`Show ${title}`}
+          />
+        </View>
       }
     />
   );
@@ -541,6 +627,8 @@ const styles = StyleSheet.create({
   rail: { paddingBottom: spacing(1.5) },
   body: { gap: spacing(1) },
   group: { gap: spacing(0.5) },
+  // A row something above it has already decided for.
+  inert: { opacity: 0.4 },
   // Items hang off their group's row, indented so the hierarchy is visible
   // without a second card colour.
   groupItems: { gap: spacing(0.5), paddingLeft: spacing(2) },

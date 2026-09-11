@@ -15,7 +15,7 @@
 // helpers never log, and callers must keep points out of logs and error
 // messages (root privacy rules).
 
-import { haversineMeters } from "./canyonGeo.js";
+import { haversineMeters } from "./placeGeo.js";
 import type { RoutePoint } from "./routeValidation.js";
 
 /**

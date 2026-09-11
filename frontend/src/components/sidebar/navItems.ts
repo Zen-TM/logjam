@@ -4,7 +4,6 @@ import {
   MapPin,
   Mountain,
   Route,
-  Flag,
   BookOpen,
   BarChart3,
   Users,
@@ -13,10 +12,10 @@ import {
 } from "lucide-react";
 import type { PanelId } from "./panels";
 
-/** Panels reachable from the nav. `canyon-detail` and `route-detail` are opened
- *  programmatically (from the map / canyon list), never from a nav item, so
+/** Panels reachable from the nav. `place-detail` and `route-detail` are opened
+ *  programmatically (from the map / place list), never from a nav item, so
  *  neither is one. */
-export type NavItemId = Exclude<PanelId, "canyon-detail" | "route-detail">;
+export type NavItemId = Exclude<PanelId, "place-detail" | "route-detail">;
 
 export type NavItem = {
   id: NavItemId;
@@ -36,13 +35,10 @@ export type NavBadgeCounts = Partial<Record<NavItemId, number>>;
 /** Feature panels — the desktop rail's top group. */
 const TOP_ITEMS: NavItem[] = [
   { id: "layers", label: "Layers", Icon: Layers },
-  { id: "canyons", label: "Canyons", Icon: MapPin },
+  { id: "places", label: "Places", Icon: MapPin },
   { id: "geopdfs", label: "GeoPDFs", Icon: Map },
   { id: "lidar", label: "LiDAR", Icon: Mountain },
   { id: "routes", label: "Routes", Icon: Route },
-  // Flag, not MapPin: canyons already own the pin, and two pin glyphs a row
-  // apart on the rail read as the same feature twice.
-  { id: "waypoints", label: "Waypoints", Icon: Flag },
   { id: "trip-logs", label: "Trip Logs", Icon: BookOpen },
   { id: "analytics", label: "Analytics", Icon: BarChart3 },
   { id: "friends", label: "Friends", Icon: Users },
@@ -57,9 +53,9 @@ const BOTTOM_ITEMS: NavItem[] = [
 const ALL_ITEMS: NavItem[] = [...TOP_ITEMS, ...BOTTOM_ITEMS];
 
 /** The three panels that stay on the rail at phone widths, in rail order.
- *  Chosen as the surfaces used *during* a trip: what's on the map, which canyon,
+ *  Chosen as the surfaces used *during* a trip: what's on the map, which place,
  *  and logging it. Everything else is planning, review, or admin. */
-const MOBILE_RAIL_IDS: NavItemId[] = ["layers", "canyons", "trip-logs"];
+const MOBILE_RAIL_IDS: NavItemId[] = ["layers", "places", "trip-logs"];
 
 /** Order of the More sheet, most- to least-reachable.
  *
@@ -77,7 +73,6 @@ const MORE_ITEM_IDS: NavItemId[] = [
   "routes",
   // Beside routes: both are "the lines and marks I already have", and both are
   // consulted far more often on a phone than the authoring tools below.
-  "waypoints",
   "friends",
   "analytics",
   "geopdfs",
@@ -128,7 +123,7 @@ export function aggregateBadgeCount(items: NavItem[], counts: NavBadgeCounts): n
 }
 
 /** True when the open panel lives inside More, so More reads as the selected
- *  rail item. `canyon-detail` isn't a nav item and selects nothing. */
+ *  rail item. `place-detail` isn't a nav item and selects nothing. */
 export function isPanelInMore(moreItems: NavItem[], activePanel: PanelId | null): boolean {
   return moreItems.some((item) => item.id === activePanel);
 }

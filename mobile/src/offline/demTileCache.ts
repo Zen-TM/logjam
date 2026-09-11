@@ -1,7 +1,7 @@
 // Decoded DEM tiles held in memory, tagged with WHERE THEY CAME FROM.
 //
 // The origin matters because of "Simulating offline mode". That mode exists so
-// the user can find out, at home, what the map will do in the canyon — so a
+// the user can find out, at home, what the map will do in the place — so a
 // tile fetched over the network minutes ago must NOT answer while it is on.
 // It is not a privacy leak (no request goes out to read RAM), it is a HONESTY
 // one: answering from it fabricates coverage the field trip will not have, and

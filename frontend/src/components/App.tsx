@@ -13,34 +13,29 @@ import type {
 } from "./dialogs/TopoDialog";
 import GeoPdfDialog from "./dialogs/GeoPdfDialog";
 import type { GeoPdfTemplate } from "./dialogs/GeoPdfDialog";
-import CanyonDialog from "./dialogs/CanyonDialog";
-import AddWaypointDialog from "./dialogs/AddWaypointDialog";
+import PlaceDialog from "./dialogs/PlaceDialog";
 import UnifiedImportDialog from "./dialogs/UnifiedImportDialog";
 import OnboardingChoiceDialog from "./dialogs/OnboardingChoiceDialog";
-import SelectedCanyonsDialog from "./dialogs/SelectedCanyonsDialog";
+import SelectedPlacesDialog from "./dialogs/SelectedPlacesDialog";
 import classes from "./App.module.css";
 import type { TBbox } from "./map/Map";
-import type { TFilters, TCanyon, GeoPdfJobView, TWaypoint } from "../canyonUtils";
-import type { StandaloneFile } from "@logjam/shared";
+import type { TFilters, TPlace, TPlaceType, GeoPdfJobView } from "../placeUtils";
+import type { ScopedCustomFieldDef, StandaloneFile } from "@logjam/shared";
 import type { PanelId } from "./sidebar/panels";
 import { TOPO_LAYERS } from "../topoLayerTypes";
 import type { CompletedTopoJob, CompletedOverlaysResponse } from "../topoLayerTypes";
 import {
-  useCanyons,
-  useCanyonTracks,
+  usePlaces,
+  usePlaceTracks,
   useStandaloneFiles,
   useStandaloneTracks,
   renameMedia,
   deleteMedia,
   useRoutes,
-  useWaypoints,
-  createWaypoint,
-  updateWaypoint,
-  deleteWaypoint,
   type TRoute,
   createRoute,
   updateRoute,
-  useSharedCanyons,
+  useSharedPlaces,
   useFriends,
   useNotifications,
   useTripLogs,
@@ -50,6 +45,8 @@ import {
   useTopoExports,
   useGeoPdfJobs,
   fetchCurrentUser,
+  getCustomFields,
+  getPlaceTypes,
   recordConsent,
   passesFilters,
   hasActiveFilters,
@@ -57,7 +54,7 @@ import {
   reconcileCustomFilters,
   apiFetch,
   getTopoExport,
-} from "../canyonUtils";
+} from "../placeUtils";
 import FilterStatusChip from "./map/FilterStatusChip";
 import FilterEmptyState from "./map/FilterEmptyState";
 import {
@@ -67,7 +64,6 @@ import {
   needsReconsent,
 } from "../consent";
 import ConsentGate from "./ConsentGate";
-import type { TripLogCustomFieldDef } from "@logjam/shared";
 import { RouteDrawPanel } from "./routes/RouteDrawPanel";
 import RouteNameDialog from "./dialogs/RouteNameDialog";
 import ConfirmDialog from "./dialogs/ConfirmDialog";
@@ -98,13 +94,13 @@ function triggerDownload(url: string) {
 function App() {
   const toast = useToast();
   // Session-scoped, like the search box beside it: every member of TFilters
-  // hides canyons, and a filter the user set last month greets them as "my
-  // canyons are missing" rather than as a favour (UX finding 5). The search box
+  // hides places, and a filter the user set last month greets them as "my
+  // places are missing" rather than as a favour (UX finding 5). The search box
   // moved for that reason while this — grades, ownership, completion, dates,
   // custom fields, the larger hider — was left on localStorage. Same principle,
   // same polarity. Sort order is the counter-example and stays in localStorage:
   // it reorders, it never hides. Survives the panel's unmount-on-close
-  // (CANYON-12) without surviving the week.
+  // (PLACE-12) without surviving the week.
   const [storedFilters, setFilters] = useStoredState<TFilters>(
     "logjam.filters",
     emptyFilters,
@@ -112,8 +108,12 @@ function App() {
   );
   // Declared here (not with the other field-def state below) because the filters
   // memo needs it to prune custom filters whose definition no longer exists.
-  const [canyonCustomFieldDefs, setCanyonCustomFieldDefs] = useState<
-    TripLogCustomFieldDef[]
+  // SCOPED: each definition carries the place types it appears on, because a
+  // form built without that renders a canyon's grades on a campsite. Read from
+  // the row-grain endpoint rather than the /users/me projection, which is the
+  // plain shape kept for legacy readers.
+  const [placeCustomFieldDefs, setPlaceCustomFieldDefs] = useState<
+    ScopedCustomFieldDef[]
   >([]);
   // Backfill defaults for any filter keys missing from older persisted state, so
   // new fields (ownership, ropewiki, date ranges, custom) never read as undefined,
@@ -122,12 +122,12 @@ function App() {
     () =>
       reconcileCustomFilters(
         { ...emptyFilters, ...storedFilters },
-        canyonCustomFieldDefs,
+        placeCustomFieldDefs,
       ),
-    [storedFilters, canyonCustomFieldDefs],
+    [storedFilters, placeCustomFieldDefs],
   );
   const [filtersAccordionSignal, setFiltersAccordionSignal] = useState(0);
-  const [selectedCanyonID, setSelectedCanyonID] = useState<string | null>(null);
+  const [selectedPlaceID, setSelectedPlaceID] = useState<string | null>(null);
   const [activePanel, setActivePanel] = useState<PanelId | null>(null);
   // Vector by default: same OSM cartography as the old raster default, drawn
   // locally rather than fetched as pictures, and it carries the labels at every
@@ -146,18 +146,10 @@ function App() {
   const importChecked = useRef(false);
 
   // Layer visibility toggles
-  const [showOwnedCanyons, setShowOwnedCanyons] = useStoredState("logjam.showOwnedCanyons", true);
-  const [showSharedCanyons, setShowSharedCanyons] = useStoredState("logjam.showSharedCanyons", true);
-  const [showCanyonTracks, setShowCanyonTracks] = useStoredState("logjam.showCanyonTracks", false);
+  const [showOwnedPlaces, setShowOwnedPlaces] = useStoredState("logjam.showOwnedPlaces", true);
+  const [showSharedPlaces, setShowSharedPlaces] = useStoredState("logjam.showSharedPlaces", true);
+  const [showPlaceTracks, setShowPlaceTracks] = useStoredState("logjam.showPlaceTracks", false);
   const [showRoutes, setShowRoutes] = useStoredState("logjam.showRoutes", true);
-  const [showWaypoints, setShowWaypoints] = useStoredState(
-    "logjam.showWaypoints",
-    true,
-  );
-  // Which waypoint the panel has expanded. Lifted because a marker click on the
-  // map opens it, so the map and the panel must agree on one selection.
-  const [selectedWaypointID, setSelectedWaypointID] = useState<string | null>(null);
-  const [showAddWaypoint, setShowAddWaypoint] = useState(false);
 
   // Route draw/edit mode. The vertex list lives here (not in Map) so the HUD
   // can show the running distance and drive undo. `editingRouteId` is null
@@ -180,7 +172,7 @@ function App() {
     [number, number] | null
   >(null);
 
-  // Coordinate picking mode for CanyonDialog
+  // Coordinate picking mode for PlaceDialog
   const [pickingCoords, setPickingCoords] = useState(false);
   const coordsCallbackRef = useRef<((lat: number, lng: number) => void) | null>(
     null,
@@ -189,13 +181,13 @@ function App() {
   // Area selection mode
   const [selectingArea, setSelectingArea] = useState(false);
   /**
-   * The Canyons filter's "area on map" mode. Separate state from
+   * The Places filter's "area on map" mode. Separate state from
    * `selectingArea` above even though the gesture is identical: that one ends
    * in a bulk-actions dialog and this one in a filter, and one flag would send
    * the box to whichever the user was not in.
    */
   const [selectingFilterArea, setSelectingFilterArea] = useState(false);
-  const [selectedAreaCanyonIds, setSelectedAreaCanyonIds] = useState<string[]>(
+  const [selectedAreaPlaceIds, setSelectedAreaPlaceIds] = useState<string[]>(
     [],
   );
 
@@ -272,8 +264,8 @@ function App() {
   // list refreshes without waiting for an accordion re-open (TOPO-1)
   const [topoTemplateRefetch, setTopoTemplateRefetch] = useState(0);
 
-  // Canyon fly-to target
-  const [flyToCanyon, setFlyToCanyon] = useState<{ lat: number; lng: number } | null>(null);
+  // Place fly-to target
+  const [flyToPlace, setFlyToPlace] = useState<{ lat: number; lng: number } | null>(null);
 
   // LiDAR topo panel state — lifted so it persists across panel open/close
   const [lidarEnabled, setLidarEnabled] = useStoredState("logjam.lidarEnabled", false);
@@ -413,17 +405,17 @@ function App() {
 
   const startAreaSelection = useCallback(() => {
     setSelectingArea(true);
-    setSelectedAreaCanyonIds([]);
+    setSelectedAreaPlaceIds([]);
   }, []);
 
   const handleAreaSelected = useCallback((ids: string[]) => {
     setSelectingArea(false);
-    setSelectedAreaCanyonIds(ids);
+    setSelectedAreaPlaceIds(ids);
   }, []);
 
   const cancelAreaSelection = useCallback(() => {
     setSelectingArea(false);
-    setSelectedAreaCanyonIds([]);
+    setSelectedAreaPlaceIds([]);
   }, []);
 
   /**
@@ -447,34 +439,33 @@ function App() {
   useEffect(() => {
     const panelTitles: Record<PanelId, string> = {
       layers: "Layers",
-      canyons: "Canyons",
+      places: "Places",
       geopdfs: "GeoPDFs",
       lidar: "LiDAR",
       routes: "Routes",
-      waypoints: "Waypoints",
       "trip-logs": "Trip Logs",
       analytics: "Analytics",
       friends: "Friends",
       notifications: "Alerts",
       account: "Account",
-      "canyon-detail": "Canyon",
+      "place-detail": "Place",
       "route-detail": "Route",
     };
     document.title = activePanel ? `${panelTitles[activePanel]} — Logjam` : "Logjam";
   }, [activePanel]);
 
-  // When switching away from canyon-detail via NavRail, clear selectedCanyonID
+  // When switching away from place-detail via NavRail, clear selectedPlaceID
   const handlePanelChange = useCallback((panel: PanelId | null) => {
-    if (panel !== "canyon-detail") {
-      setSelectedCanyonID(null);
+    if (panel !== "place-detail") {
+      setSelectedPlaceID(null);
     }
     setActivePanel(panel);
   }, []);
 
   // When closing the panel
   const handlePanelClose = useCallback(() => {
-    if (activePanel === "canyon-detail") {
-      setSelectedCanyonID(null);
+    if (activePanel === "place-detail") {
+      setSelectedPlaceID(null);
     }
     setActivePanel(null);
   }, [activePanel]);
@@ -486,7 +477,7 @@ function App() {
   // FECO-005. `authenticated` is NOT enough to start fetching the user's data:
   // a user whose recorded consent is stale gets ConsentGate rendered instead of
   // the app, but rendering is all that used to stop — every hook and boot
-  // effect below still pulled their canyons, trips, friends and notifications
+  // effect below still pulled their places, trips, friends and notifications
   // out of the API behind the gate. `loadsUserData` is what they wait on now.
   //
   // `useCurrentUser` above and `useAuth` are the two that cannot: they are how
@@ -499,15 +490,15 @@ function App() {
     localStorage.getItem(PENDING_CONSENT_STORAGE_KEY),
   );
   const loadsUserData = authenticated && consentSettled;
-  const { canyons, total: canyonsTotal, loaded: canyonsLoaded, error: canyonsError, refetch } = useCanyons(loadsUserData);
-  const { canyons: sharedCanyons, error: sharedError, refetch: refetchShared } =
-    useSharedCanyons(loadsUserData);
+  const { places, total: placesTotal, loaded: placesLoaded, error: placesError, refetch } = usePlaces(loadsUserData);
+  const { places: sharedPlaces, error: sharedError, refetch: refetchShared } =
+    useSharedPlaces(loadsUserData);
   // Also fetched for the Routes panel, which lists the same track files.
-  const { tracks: canyonTracks, refetch: refetchCanyonTracks } = useCanyonTracks(
-    loadsUserData && (showCanyonTracks || activePanel === "routes"),
+  const { tracks: placeTracks, refetch: refetchPlaceTracks } = usePlaceTracks(
+    loadsUserData && (showPlaceTracks || activePanel === "routes"),
   );
   // Standalone files: the user's own imports and Logjam GPS recordings. They
-  // hang off no canyon, so the Routes panel is the only place they surface.
+  // hang off no place, so the Routes panel is the only place they surface.
   // Presigned URLs are minted only for the ones toggled onto the map (the
   // egress gate lives on POST /media/download-urls).
   const [shownStandaloneIds, setShownStandaloneIds] = useState<string[]>([]);
@@ -554,71 +545,12 @@ function App() {
   const { routes, refetch: refetchRoutes } = useRoutes(
     loadsUserData && (showRoutes || drawingRoute || activePanel === "routes"),
   );
-  // Waypoints load whenever the layer is on or the panel is open — the same
-  // rule routes follow.
-  const {
-    waypoints,
-    loading: waypointsLoading,
-    error: waypointsError,
-    refetch: refetchWaypoints,
-  } = useWaypoints(loadsUserData && (showWaypoints || activePanel === "waypoints"));
 
-  // Waypoint writes. Each refetches rather than patching local state: the list
-  // is small, the server owns the scoped canyonIds it returns, and a stale
-  // link list is exactly the field that must not drift.
-  // Throws on failure by design: the caller is a dialog, and a submission
-  // failure belongs in its ErrorBanner rather than a toast behind it.
-  const handleCreateWaypoint = useCallback(
-    async (data: { name: string; latitude: number; longitude: number }) => {
-      const created = await createWaypoint(data);
-      refetchWaypoints();
-      setSelectedWaypointID(created.id);
-      setActivePanel("waypoints");
-    },
-    [refetchWaypoints],
-  );
 
-  const handleUpdateWaypoint = useCallback(
-    async (
-      id: string,
-      data: Partial<{
-        name: string;
-        notes: string | null;
-        tags: string[] | null;
-        canyonIds: string[] | null;
-      }>,
-    ) => {
-      try {
-        await updateWaypoint(id, data);
-        refetchWaypoints();
-      } catch (err) {
-        console.error(err);
-        toast.error(messageFromError(err, "Couldn't save that change."));
-      }
-    },
-    [refetchWaypoints, toast],
-  );
-
-  const handleDeleteWaypoint = useCallback(
-    async (waypoint: TWaypoint) => {
-      try {
-        await deleteWaypoint(waypoint.id);
-        setSelectedWaypointID((current) =>
-          current === waypoint.id ? null : current,
-        );
-        refetchWaypoints();
-      } catch (err) {
-        console.error(err);
-        toast.error(messageFromError(err, "Couldn't delete that waypoint."));
-      }
-    },
-    [refetchWaypoints, toast],
-  );
-
-  // A canyon list change (e.g. after a track upload) should refresh the layer.
+  // A place list change (e.g. after a track upload) should refresh the layer.
   useEffect(() => {
-    if (showCanyonTracks) refetchCanyonTracks();
-  }, [canyons, sharedCanyons, showCanyonTracks, refetchCanyonTracks]);
+    if (showPlaceTracks) refetchPlaceTracks();
+  }, [places, sharedPlaces, showPlaceTracks, refetchPlaceTracks]);
   const {
     friends,
     requests: friendRequests,
@@ -639,11 +571,11 @@ function App() {
     error: tripLogsError,
     refetch: refetchTripLogs,
   } = useTripLogs(loadsUserData);
-  // Every trip write also moves canyon state, not just trip state: a canyon's
-  // map marker is green iff `_count.tripLogLinks > 0` (isCanyonDoneByViewer),
-  // and that tally is computed server-side on the OWNED canyon list. Nothing in
+  // Every trip write also moves place state, not just trip state: a place's
+  // map marker is green iff `_count.tripLogLinks > 0` (isPlaceDoneByViewer),
+  // and that tally is computed server-side on the OWNED place list. Nothing in
   // the client can maintain it locally without duplicating the server's join —
-  // a trip links many canyons, an edit can add and remove links in one save, and
+  // a trip links many places, an edit can add and remove links in one save, and
   // a delete drops all of them — so the honest refresh is to re-pull the list
   // the count came from. Every trip create/edit/delete/import already funnels
   // through onRefetchTripLogs, so pairing the two here covers all of them at
@@ -659,9 +591,17 @@ function App() {
     saveError: vectorStyleSaveError,
   } = useLiveVectorStyle(loadsUserData);
 
+  // Trip-log definitions, read from the same row-grain endpoint as the place
+  // ones. A trip field carries scoping too (§2.7 scopes a trip's fields by the
+  // types of the places it links), and reading both the same way means one
+  // shape reaches every dialog instead of two.
   const [customFieldDefs, setCustomFieldDefs] = useState<
-    TripLogCustomFieldDef[]
+    ScopedCustomFieldDef[]
   >([]);
+  // The types a place can be filed under. ALL of them, including empty ones:
+  // the tab bar and the layers list hide a type with no places, but the create
+  // dialog must offer every one or a user could never make their first canyon.
+  const [placeTypes, setPlaceTypes] = useState<TPlaceType[]>([]);
 
   // Refresh analytics whenever the analytics panel opens
   useEffect(() => {
@@ -669,7 +609,7 @@ function App() {
   }, [activePanel, loadsUserData]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Surface background data-load errors as toasts
-  useEffect(() => { if (canyonsError) toast.error(canyonsError); }, [canyonsError, toast]);
+  useEffect(() => { if (placesError) toast.error(placesError); }, [placesError, toast]);
   useEffect(() => { if (sharedError) toast.error(sharedError); }, [sharedError, toast]);
   useEffect(() => { if (friendsError) toast.error(friendsError); }, [friendsError, toast]);
   useEffect(() => { if (notificationsError) toast.error(notificationsError); }, [notificationsError, toast]);
@@ -682,10 +622,15 @@ function App() {
     // Best-effort: hydration prefetch for the map/sidebar; UI degrades
     // gracefully (panels show their own empty/error states) if this fails.
     hydrateFromUser().catch(console.error);
+    // The place definitions come from the row-grain endpoint because only it
+    // carries the scoping. Best-effort: a failure leaves the forms with the
+    // built-in fields alone, and the panels show their own error states.
+    getCustomFields("place").then(setPlaceCustomFieldDefs).catch(console.error);
+    getCustomFields("trip-log").then(setCustomFieldDefs).catch(console.error);
+    getPlaceTypes().then(setPlaceTypes).catch(console.error);
     fetchCurrentUser()
       .then((user) => {
-        setCustomFieldDefs(user.uiPreferences?.tripLogCustomFields ?? []);
-        setCanyonCustomFieldDefs(user.uiPreferences?.canyonCustomFields ?? []);
+
         // Record the consent given on the sign-up form. Only a pending value
         // matching the current version is recordable (the server 400s any
         // other), and only while the user's stored version is actually stale —
@@ -1033,36 +978,36 @@ function App() {
   }, [loadsUserData]);
 
   // First login (empty account): offer a non-forced onboarding choice once,
-  // after the first canyon fetch completes. The user picks RopeWiki, file
+  // after the first place fetch completes. The user picks RopeWiki, file
   // import, or starting empty — nothing auto-runs.
   useEffect(() => {
-    if (canyonsLoaded && !importChecked.current) {
+    if (placesLoaded && !importChecked.current) {
       importChecked.current = true;
-      if (canyons.length === 0) {
+      if (places.length === 0) {
         setShowOnboarding(true);
       }
     }
-  }, [canyonsLoaded, canyons.length]);
+  }, [placesLoaded, places.length]);
 
   // Derived values
-  const allCanyons = [...canyons, ...sharedCanyons];
-  const filteredCanyons = useMemo(
+  const allPlaces = [...places, ...sharedPlaces];
+  const filteredPlaces = useMemo(
     () => [
-      ...canyons.filter((c) => passesFilters(c, filters, true)),
-      ...sharedCanyons.filter((c) => passesFilters(c, filters, false)),
+      ...places.filter((c) => passesFilters(c, filters, true)),
+      ...sharedPlaces.filter((c) => passesFilters(c, filters, false)),
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [canyons, sharedCanyons, filters],
+    [places, sharedPlaces, filters],
   );
   const filtersActive = hasActiveFilters(filters);
   const clearFilters = () => setFilters(emptyFilters);
-  const canyon = allCanyons.find((c) => c.id === selectedCanyonID);
-  const ownedCanyonIds = new Set(canyons.map((c) => c.id));
-  const isOwnedCanyon = canyon != null && ownedCanyonIds.has(canyon.id);
+  const place = allPlaces.find((c) => c.id === selectedPlaceID);
+  const ownedPlaceIds = new Set(places.map((c) => c.id));
+  const isOwnedPlace = place != null && ownedPlaceIds.has(place.id);
 
-  const selectedAreaCanyons = selectedAreaCanyonIds
-    .map((id) => allCanyons.find((c) => c.id === id))
-    .filter((c): c is TCanyon => c != null);
+  const selectedAreaPlaces = selectedAreaPlaceIds
+    .map((id) => allPlaces.find((c) => c.id === id))
+    .filter((c): c is TPlace => c != null);
 
   const cancelDrawingRoute = () => {
     setDrawingRoute(false);
@@ -1230,8 +1175,8 @@ function App() {
         activeLayerId={activeLayerId}
         completedTopoJobs={completedTopoJobs}
         mapCenter={mapCenter}
-        canyons={canyons}
-        sharedCanyons={sharedCanyons}
+        places={places}
+        sharedPlaces={sharedPlaces}
         templateMode={editingGeoPdfTemplate !== undefined}
         editingTemplate={editingGeoPdfTemplate ?? undefined}
         onTemplateSaved={() => {
@@ -1255,32 +1200,18 @@ function App() {
             setLidarEnabled(true);
             setTopoFlyTarget(footprint);
           }}
-          showOwnedCanyons={showOwnedCanyons}
-          setShowOwnedCanyons={setShowOwnedCanyons}
-          showSharedCanyons={showSharedCanyons}
-          setShowSharedCanyons={setShowSharedCanyons}
-          showCanyonTracks={showCanyonTracks}
-          setShowCanyonTracks={setShowCanyonTracks}
+          showOwnedPlaces={showOwnedPlaces}
+          setShowOwnedPlaces={setShowOwnedPlaces}
+          showSharedPlaces={showSharedPlaces}
+          setShowSharedPlaces={setShowSharedPlaces}
+          showPlaceTracks={showPlaceTracks}
+          setShowPlaceTracks={setShowPlaceTracks}
           showRoutes={showRoutes}
-          showWaypoints={showWaypoints}
-          setShowWaypoints={setShowWaypoints}
-          waypoints={waypoints}
-          waypointsLoading={waypointsLoading}
-          waypointsError={waypointsError}
-          selectedWaypointId={selectedWaypointID}
-          onSelectWaypoint={setSelectedWaypointID}
-          onFlyToWaypoint={(waypoint) =>
-            setFlyToCanyon({ lat: waypoint.latitude, lng: waypoint.longitude })
-          }
-          onAddWaypoint={() => setShowAddWaypoint(true)}
-          onUpdateWaypoint={handleUpdateWaypoint}
-          onDeleteWaypoint={handleDeleteWaypoint}
-          onWaypointsChanged={refetchWaypoints}
           setShowRoutes={setShowRoutes}
           onStartDrawingRoute={startDrawingRoute}
           selectedRoute={selectedRoute}
           allRoutes={routes}
-          canyonTracks={canyonTracks}
+          placeTracks={placeTracks}
           standaloneFiles={standaloneFiles}
           standaloneFilesError={standaloneFilesError}
           shownStandaloneIds={shownStandaloneIds}
@@ -1295,7 +1226,7 @@ function App() {
             const bbox = file.metadata.bbox;
             if (!bbox) return;
             const [west, south, east, north] = bbox;
-            setFlyToCanyon({ lat: (south + north) / 2, lng: (west + east) / 2 });
+            setFlyToPlace({ lat: (south + north) / 2, lng: (west + east) / 2 });
           }}
           onSelectRoute={(id) => {
             setSelectedRouteID(id);
@@ -1316,14 +1247,14 @@ function App() {
           activeLayerId={activeLayerId}
           onActiveLayerChange={setActiveLayerId}
           mapView={mapCenter}
-          canyons={canyons}
-          canyonsTotal={canyonsTotal}
-          sharedCanyons={sharedCanyons}
-          onAddCanyon={() => setShowAdd(true)}
+          places={places}
+          placesTotal={placesTotal}
+          sharedPlaces={sharedPlaces}
+          onAddPlace={() => setShowAdd(true)}
           onOpenUnifiedImport={() => setShowUnifiedImport(true)}
-          // Reuses the area-selection state, which is what SelectedCanyonsDialog
+          // Reuses the area-selection state, which is what SelectedPlacesDialog
           // (the existing export surface) already renders from.
-          onExportCanyons={setSelectedAreaCanyonIds}
+          onExportPlaces={setSelectedAreaPlaceIds}
           onStartAreaSelection={startAreaSelection}
           selectingArea={selectingArea}
           onCancelAreaSelection={cancelAreaSelection}
@@ -1336,7 +1267,7 @@ function App() {
             if (bounds) setFilters({ ...filters, area: bounds });
           }}
           filtersAccordionSignal={filtersAccordionSignal}
-          onFlyToCanyon={(lat, lng) => setFlyToCanyon({ lat, lng })}
+          onFlyToPlace={(lat, lng) => setFlyToPlace({ lat, lng })}
           onOpenGeoPdf={() => {
             setEditingGeoPdfTemplate(undefined);
             setInitialGeoPdfTemplateId(null);
@@ -1386,10 +1317,10 @@ function App() {
           notifications={notifications}
           notificationsTotal={notificationsTotal}
           onRefetchNotifications={refetchNotifications}
-          setSelectedCanyonID={setSelectedCanyonID}
+          setSelectedPlaceID={setSelectedPlaceID}
           setActivePanel={setActivePanel}
-          canyon={canyon}
-          isOwnedCanyon={isOwnedCanyon}
+          place={place}
+          isOwnedPlace={isOwnedPlace}
           onPickCoords={startPickingCoords}
           pickingCoords={pickingCoords}
           onCancelPickCoords={cancelPickingCoords}
@@ -1400,8 +1331,10 @@ function App() {
           onRefetchAnalytics={refetchAnalytics}
           customFieldDefs={customFieldDefs}
           onCustomFieldDefsChange={setCustomFieldDefs}
-          canyonCustomFieldDefs={canyonCustomFieldDefs}
-          onCanyonCustomFieldDefsChange={setCanyonCustomFieldDefs}
+          placeCustomFieldDefs={placeCustomFieldDefs}
+          onPlaceCustomFieldDefsChange={setPlaceCustomFieldDefs}
+          placeTypes={placeTypes}
+          onPlaceTypesChange={setPlaceTypes}
           analytics={analytics}
           analyticsLoading={analyticsLoading}
           vectorStyle={vectorStyle}
@@ -1410,23 +1343,17 @@ function App() {
         />
       </div>
       <main id="main-content" className={classes.main}>
-      <h1 className={classes.visuallyHidden}>Logjam canyon map</h1>
+      <h1 className={classes.visuallyHidden}>Logjam place map</h1>
       <Map
         filters={filters}
-        canyons={canyons}
-        sharedCanyons={sharedCanyons}
-        showOwnedCanyons={showOwnedCanyons}
-        showSharedCanyons={showSharedCanyons}
-        showCanyonTracks={showCanyonTracks}
-        canyonTracks={canyonTracks}
+        places={places}
+        sharedPlaces={sharedPlaces}
+        showOwnedPlaces={showOwnedPlaces}
+        showSharedPlaces={showSharedPlaces}
+        showPlaceTracks={showPlaceTracks}
+        placeTracks={placeTracks}
         standaloneTracks={standaloneTracks}
         showRoutes={showRoutes}
-        waypoints={waypoints}
-        showWaypoints={showWaypoints}
-        onSelectWaypoint={(id) => {
-          setSelectedWaypointID(id);
-          setActivePanel("waypoints");
-        }}
         routes={routes}
         routeHoverPosition={routeHoverPosition}
         selectRoute={(id) => {
@@ -1445,9 +1372,9 @@ function App() {
         onDrawPointMove={routeDraft.moveAnchorAt}
         onDrawPointDelete={routeDraft.deleteAnchorAt}
         onDrawPointInsert={routeDraft.insertAnchorAt}
-        selectCanyon={(id) => {
-          setSelectedCanyonID(id);
-          setActivePanel("canyon-detail");
+        selectPlace={(id) => {
+          setSelectedPlaceID(id);
+          setActivePanel("place-detail");
         }}
         pickingCoords={pickingCoords}
         onCoordsPicked={handleCoordsPicked}
@@ -1460,7 +1387,7 @@ function App() {
           setFilters({ ...filters, area: bbox });
           // Straight back to where the button was, with the filters open — the
           // panel was closed to uncover the map, not dismissed.
-          setActivePanel("canyons");
+          setActivePanel("places");
           setFiltersAccordionSignal((n) => n + 1);
         }}
         onMapBoundsChange={(bounds) => {
@@ -1494,8 +1421,8 @@ function App() {
         initialView={mapCenter}
         topoFlyTarget={topoFlyTarget}
         onTopoFlyConsumed={() => setTopoFlyTarget(null)}
-        flyToCanyon={flyToCanyon}
-        onFlyToCanyonConsumed={() => setFlyToCanyon(null)}
+        flyToPlace={flyToPlace}
+        onFlyToPlaceConsumed={() => setFlyToPlace(null)}
         sidebarOpen={activePanel !== null}
         onTopoSourceUnavailable={handleTopoSourceUnavailable}
       />
@@ -1573,12 +1500,12 @@ function App() {
           <Button
             variant="contained"
             size="small"
-            onClick={() => handleAreaSelected(allCanyons.map((c) => c.id))}
+            onClick={() => handleAreaSelected(allPlaces.map((c) => c.id))}
           >
             Select All
           </Button>
           {/* Only render when filters are active. When they aren't, "filtered"
-              == all canyons (the button is redundant), and MUI's default
+              == all places (the button is redundant), and MUI's default
               disabled styling (grey-on-grey) is illegible floating over the
               map. Hiding it declutters the bar and drops it to two buttons that
               fit on one row on narrow phones. */}
@@ -1587,7 +1514,7 @@ function App() {
               variant="contained"
               size="small"
               onClick={() =>
-                handleAreaSelected(filteredCanyons.map((c) => c.id))
+                handleAreaSelected(filteredPlaces.map((c) => c.id))
               }
             >
               Select All Filtered
@@ -1598,16 +1525,16 @@ function App() {
 
       {filtersActive && !dimUI && (
         <FilterStatusChip
-          filteredCount={filteredCanyons.length}
-          totalCount={allCanyons.length}
+          filteredCount={filteredPlaces.length}
+          totalCount={allPlaces.length}
           onOpenFilters={() => {
-            setActivePanel("canyons");
+            setActivePanel("places");
             setFiltersAccordionSignal((n) => n + 1);
           }}
           onClearFilters={clearFilters}
         />
       )}
-      {filtersActive && canyonsLoaded && !dimUI && filteredCanyons.length === 0 && (
+      {filtersActive && placesLoaded && !dimUI && filteredPlaces.length === 0 && (
         <FilterEmptyState onClearFilters={clearFilters} />
       )}
 
@@ -1623,7 +1550,7 @@ function App() {
         onStartEmpty={() => setShowOnboarding(false)}
       />
 
-      {/* Unified file importer (canyons + logbooks) */}
+      {/* Unified file importer (places + logbooks) */}
       <UnifiedImportDialog
         open={showUnifiedImport && !pickingCoords}
         onClose={() => {
@@ -1639,53 +1566,44 @@ function App() {
               }
             : undefined
         }
-        canyons={canyons}
+        places={places}
         customFieldDefs={customFieldDefs}
         onCustomFieldDefsChange={setCustomFieldDefs}
+        placeCustomFieldDefs={placeCustomFieldDefs}
+        placeTypes={placeTypes}
         currentUser={currentUser}
-        onRefetchCanyons={refetch}
+        onRefetchPlaces={refetch}
         onRefetchTripLogs={refetchTripLogs}
         onRefetchAnalytics={refetchAnalytics}
         onPickCoords={startPickingCoords}
       />
 
-      {/* Hidden while a map pick is armed, exactly as the canyon dialog is:
-          the component stays mounted, so the half-filled form survives the
-          trip to the map. */}
-      <AddWaypointDialog
-        open={showAddWaypoint && !pickingCoords}
-        onCreate={handleCreateWaypoint}
-        onPickCoords={startPickingCoords}
-        onClose={() => {
-          setShowAddWaypoint(false);
-          cancelPickingCoords();
-        }}
-      />
-
-      {/* Add canyon dialog */}
-      <CanyonDialog
-        canyon={null}
+      {/* Add place dialog */}
+      <PlaceDialog
+        place={null}
         open={showAdd && !pickingCoords}
         onClose={() => setShowAdd(false)}
         onSaved={refetch}
         onPickCoords={startPickingCoords}
         onCancelPickCoords={cancelPickingCoords}
-        customFieldDefs={canyonCustomFieldDefs}
-        onCustomFieldDefsChange={setCanyonCustomFieldDefs}
+        customFieldDefs={placeCustomFieldDefs}
+        onCustomFieldDefsChange={setPlaceCustomFieldDefs}
+        placeTypes={placeTypes}
       />
 
-      <SelectedCanyonsDialog
-        open={selectedAreaCanyonIds.length > 0}
-        selectedCanyons={selectedAreaCanyons}
-        availableCanyons={allCanyons}
-        ownedCanyonIds={ownedCanyonIds}
+      <SelectedPlacesDialog
+        open={selectedAreaPlaceIds.length > 0}
+        selectedPlaces={selectedAreaPlaces}
+        placeCustomFieldDefs={placeCustomFieldDefs}
+        availablePlaces={allPlaces}
+        ownedPlaceIds={ownedPlaceIds}
         friends={friends}
-        onClose={() => setSelectedAreaCanyonIds([])}
+        onClose={() => setSelectedAreaPlaceIds([])}
         onDeleted={refetch}
         onQuotaChanged={refetchCurrentUser}
-        onRemoveCanyon={(id) => setSelectedAreaCanyonIds((ids) => ids.filter((x) => x !== id))}
-        onAddCanyon={(id) =>
-          setSelectedAreaCanyonIds((ids) => (ids.includes(id) ? ids : [...ids, id]))
+        onRemovePlace={(id) => setSelectedAreaPlaceIds((ids) => ids.filter((x) => x !== id))}
+        onAddPlace={(id) =>
+          setSelectedAreaPlaceIds((ids) => (ids.includes(id) ? ids : [...ids, id]))
         }
       />
     </div>

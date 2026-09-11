@@ -33,7 +33,7 @@ describe("parseMediaMetadata", () => {
     expect(parsed).toEqual(IMPORT);
   });
 
-  it("stores nothing for a canyon/trip attachment", () => {
+  it("stores nothing for a place/trip attachment", () => {
     expect(parseMediaMetadata(null, TRACK)).toEqual({});
   });
 

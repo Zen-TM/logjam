@@ -14,21 +14,21 @@
 //   routes/RouteOptionsSheet.tsx   — routes,   from BOTH Saved and the map
 //   tracks/TrackOptionsSheet.tsx   — tracks,   from BOTH Saved and the map
 //   imports/ImportOptionsSheet.tsx — imports,  from BOTH Saved and the map
-//   map/WaypointSheet.tsx          — waypoints, from BOTH Saved and the map
-//   canyons/AddWaySheet.tsx        — a canyon's route slot, which renders a
+
+//   places/AddWaySheet.tsx        — a place's route slot, which renders a
 //                                    TRACK's createRouteFrom and an IMPORT's
-//                                    attachToCanyon from the canyon's side
+//                                    attachToPlace from the place's side
 //   saved/SavedScreen.tsx          — regions, GeoPDFs and LiDAR overlays (its
 //                                    inline sheet). These are the kinds with
 //                                    no map tap surface of their own;
 //                                    everything that CAN be tapped on the map
 //                                    has one sheet, above.
 //
-// A verb whose panel needs a surface (Share, Send a copy, "Attach to a canyon")
+// A verb whose panel needs a surface (Share, Send a copy, "Attach to a place")
 // is rendered INSIDE the sheet that owns the verb, never handed to the caller
 // as a callback: a callback is only as good as the caller that remembers to
-// pass it, which is the same asymmetry in a different shape. The canyon picker
-// behind the last of those is `canyons/useCanyonPicker.tsx`, a sub-mode of the
+// pass it, which is the same asymmetry in a different shape. The place picker
+// behind the last of those is `places/usePlacePicker.tsx`, a sub-mode of the
 // route, track and import sheets alike.
 //
 // Regions and topo overlays are NOT here: they are registry artifacts with no
@@ -46,15 +46,12 @@ import {
   getMediaById,
   type MirrorMedia,
   type MirrorRoute,
-  type MirrorWaypoint,
 } from "../sync/mirrorStore";
 import { deleteTrack, listTrackPoints, updateTrack, type Track } from "../tracks/tracksDb";
 import {
   createRouteLocal,
   deleteRouteLocal,
-  deleteWaypointLocal,
   updateRouteLocal,
-  updateWaypointLocal,
 } from "../sync/outbox";
 import {
   type FileSendSourceKind,
@@ -89,7 +86,7 @@ import { scratchFileUri } from "../offline/localStores";
  * file's confirms already use. The words themselves live in
  * `removeShareConfirm` (shared/src/sharing.ts), with the web.
  *
- * No owner name: a mirrored waypoint or route carries an `ownerId` and no
+ * No owner name: a mirrored route carries an `ownerId` and no
  * username, and the copy falls back to "The owner" rather than this file
  * inventing a lookup for one line.
  */
@@ -116,11 +113,11 @@ export type AssetActions = {
    * Stop seeing something shared WITH you — the recipient's own revoke, and the
    * one verb a shared row does get.
    *
-   * Present only where the share is DIRECT. A waypoint or route that is on this
-   * phone because it is linked to a shared CANYON has no share row of its own,
+   * Present only where the share is DIRECT. A route that is on this
+   * phone because it is linked to a shared PLACE has no share row of its own,
    * so the server would answer 404 and, worse, a Remove that appeared to work
    * would bring the row back on the next pull — those carry
-   * `sharedViaCanyonIds` instead, and the sheets point at the canyon.
+   * `sharedViaPlaceIds` instead, and the sheets point at the place.
    * `sharedRowVisibility` (shared/src/sharing.ts) is the one place that decides
    * which of the two it is.
    *
@@ -134,18 +131,18 @@ export type AssetActions = {
     run: () => Promise<unknown>;
   };
   /**
-   * The shared canyons this row arrived WITH, when that is why it is here.
+   * The shared places this row arrived WITH, when that is why it is here.
    * Non-empty means there is nothing to remove on this row — the surfaces name
-   * the canyon and offer to open it, which is where its share ends.
+   * the place and offer to open it, which is where its share ends.
    */
-  sharedViaCanyonIds?: string[];
+  sharedViaPlaceIds?: string[];
   /** False when the asset has no geographic extent to fly to. */
   locatable: boolean;
   /** Resolved on tap — a track's extent needs its points read back. */
   resolveBbox: () => Promise<Bbox | null>;
   /**
    * Display-only rename; resolution still keys off ids. ABSENT for the same
-   * reason `delete` is: a shared route or waypoint is read-only, and the API
+   * reason `delete` is: a shared route is read-only, and the API
    * refuses the write. It used to be an `async () => undefined` stub, which
    * meant the surfaces offering Rename accepted the user's typing and threw it
    * away without a word.
@@ -154,16 +151,16 @@ export type AssetActions = {
   /** Change the asset's display colour. */
   setColor?: (color: string) => Promise<unknown>;
   /**
-   * ABSENT where the user may not delete this asset — today, a route or
-   * waypoint shared with them through someone else's canyon. The API's delete
-   * is owner-only (`requireOwnedRoute` / `requireWaypointOwner`), so offering
+   * ABSENT where the user may not delete this asset — today, a route shared
+   * with them through someone else's place. The API's delete is owner-only
+   * (`requireOwnedRoute`), so offering
    * the verb removes the row from this phone, parks the push in the outbox as
    * `blocked`, and the next delta pull brings the row back: a destructive
    * action that fails loudly in Sync issues and quietly does nothing.
    *
    * Optional rather than a `readOnly` flag beside it, because the type is then
-   * what stops a surface offering the verb — the map's waypoint sheet was the
-   * only one of three that remembered the guard.
+   * what stops a surface offering the verb — one of the three sheets that
+   * offered it used to be the only one that remembered the guard.
    */
   delete?: { confirmTitle: string; confirmBody: string; run: () => Promise<unknown> };
   /**
@@ -177,28 +174,28 @@ export type AssetActions = {
    * thousands of fixes and the cap is MAX_ROUTE_POINTS. Resolves with the
    * point count kept so the caller can say what happened.
    *
-   * `canyonId` fills that canyon's route slot in the SAME write: the track
+   * `placeId` fills that place's route slot in the SAME write: the track
    * itself is an immutable observation and is never linked to anything, so
-   * "attach this recording to a canyon" is this verb with a destination.
+   * "attach this recording to a place" is this verb with a destination.
    * Creating and then updating would leave a window where the route exists
    * unlinked, and a failed second write would strand it there.
    */
-  createRouteFrom?: (canyonId?: string) => Promise<{ name: string; pointCount: number }>;
+  createRouteFrom?: (placeId?: string) => Promise<{ name: string; pointCount: number }>;
   /**
-   * Fill a canyon's route slot with a COPY of this asset's stored original.
+   * Fill a place's route slot with a COPY of this asset's stored original.
    *
    * A COPY, and nothing in Saved changes: imports are device-local and never
-   * sync, while a canyon route attachment is synced media — which is the only
-   * reason a sharee sees one at all. So the file is uploaded against the canyon
+   * sync, while a place route attachment is synced media — which is the only
+   * reason a sharee sees one at all. So the file is uploaded against the place
    * and the import row stays exactly as it was.
    *
-   * Present only where there IS an original and it is a .gpx/.kml: a canyon
+   * Present only where there IS an original and it is a .gpx/.kml: a place
    * route attachment is TRACK media and the API takes nothing else. An import
    * is always one of those, so the verb is now unconditional on imports — it
    * LINKS the file rather than uploading a copy of it, which is also why it no
    * longer needs a retained original to work from.
    */
-  attachToCanyon?: (canyonId: string) => Promise<unknown>;
+  attachToPlace?: (placeId: string) => Promise<unknown>;
   /**
    * Ways to write this asset out as a file the user keeps, in menu order.
    *
@@ -352,13 +349,13 @@ export function vectorImportActions(imported: VectorImport): AssetActions {
           },
         }
       : {}),
-    // Attaching LINKS this file to the canyon; it does not upload a copy of it.
+    // Attaching LINKS this file to the place; it does not upload a copy of it.
     // The import stays in Saved, keeps its identity, and survives both being
-    // replaced and the canyon being deleted — which is why the promise the
+    // replaced and the place being deleted — which is why the promise the
     // panel makes could change from "a copy of the file is attached" to what it
-    // says now (routeSlot.ts, IMPORT_TO_CANYON_PROMISE).
-    attachToCanyon: (canyonId: string) =>
-      linkStandaloneMediaLocal(imported.id, canyonId),
+    // says now (routeSlot.ts, IMPORT_TO_PLACE_PROMISE).
+    attachToPlace: (placeId: string) =>
+      linkStandaloneMediaLocal(imported.id, placeId),
     delete: {
       confirmTitle: "Delete this import?",
       // Imports sync now, so this is not a local tidy-up: it removes the file
@@ -400,36 +397,36 @@ export function remoteTrackActions(file: MirrorMedia): AssetActions {
  * file on this device, so deleting it deletes it everywhere — which the confirm
  * has to say plainly.
  *
- * A route arriving through a canyon share is read-only: the API refuses the
+ * A route arriving through a place share is read-only: the API refuses the
  * write, so the UI must not offer it.
  */
 export function routeActions(
   route: MirrorRoute,
   /**
-   * Ids of the canyons this phone can actually see. A route carries its
-   * `canyonId` raw, so this is what separates "linked to a canyon shared with
-   * me" (removed at the canyon) from "linked to a canyon I cannot see, and here
+   * Ids of the places this phone can actually see. A route carries its
+   * `placeId` raw, so this is what separates "linked to a place shared with
+   * me" (removed at the place) from "linked to a place I cannot see, and here
    * on a share of its own" (removable). Omitted — by the surfaces that only
-   * need a bbox or an export — means neither Remove nor the canyon hint is
+   * need a bbox or an export — means neither Remove nor the place hint is
    * offered, which is what every caller got before this existed.
    */
-  visibleCanyonIds?: readonly string[],
+  visiblePlaceIds?: readonly string[],
 ): AssetActions {
   const readOnly = route.syncRole === "shared";
-  const viaCanyonIds =
-    route.canyonId && visibleCanyonIds?.includes(route.canyonId)
-      ? [route.canyonId]
+  const viaPlaceIds =
+    route.placeId && visiblePlaceIds?.includes(route.placeId)
+      ? [route.placeId]
       : [];
   const shareVisibility =
-    visibleCanyonIds === undefined
+    visiblePlaceIds === undefined
       ? "owned"
       : sharedRowVisibility({
           syncRole: route.syncRole,
-          visibleLinkedCanyonIds: viaCanyonIds,
+          visibleLinkedPlaceIds: viaPlaceIds,
         });
   return {
     ...(readOnly ? { sharedWithYou: true as const } : {}),
-    ...(shareVisibility === "via-canyon" ? { sharedViaCanyonIds: viaCanyonIds } : {}),
+    ...(shareVisibility === "via-place" ? { sharedViaPlaceIds: viaPlaceIds } : {}),
     ...(shareVisibility === "direct"
       ? {
           removeShare: {
@@ -463,49 +460,6 @@ export function routeActions(
   };
 }
 
-export function waypointActions(waypoint: MirrorWaypoint): AssetActions {
-  const readOnly = waypoint.syncRole === "shared";
-  // No canyon list needed, unlike a route's: `canyonIds` is already SCOPED by
-  // the server to canyons this user can see, so a non-empty one on a shared
-  // waypoint means it is here because of them.
-  const shareVisibility = sharedRowVisibility({
-    syncRole: waypoint.syncRole,
-    visibleLinkedCanyonIds: waypoint.canyonIds,
-  });
-  return {
-    ...(readOnly ? { sharedWithYou: true as const } : {}),
-    ...(shareVisibility === "via-canyon"
-      ? { sharedViaCanyonIds: waypoint.canyonIds }
-      : {}),
-    ...(shareVisibility === "direct"
-      ? {
-          removeShare: {
-            ...removeConfirmFields("waypoint", waypoint.name),
-            run: () => removeSharedEntity("waypoint", waypoint.id),
-          },
-        }
-      : {}),
-    locatable: true,
-    // A point has no extent; the caller's camera treats a degenerate bbox as
-    // "centre here", which is exactly what showing a waypoint means.
-    resolveBbox: async () =>
-      bboxOfPoints([{ lon: waypoint.longitude, lat: waypoint.latitude }]),
-    // Same one gate as a route's: shared means every write verb is absent.
-    ...(readOnly
-      ? {}
-      : {
-          rename: (name: string) => updateWaypointLocal(waypoint.id, { name }),
-          delete: {
-            confirmTitle: "Delete waypoint?",
-            confirmBody:
-              "The waypoint is removed from every device on your account and from anyone you shared it with. This can't be undone.",
-            run: () => deleteWaypointLocal(waypoint.id),
-          },
-          share: { entityType: "waypoint", entityId: waypoint.id },
-        }),
-  };
-}
-
 export function trackActions(track: Track): AssetActions {
   return {
     locatable: track.pointCount > 0,
@@ -517,7 +471,7 @@ export function trackActions(track: Track): AssetActions {
     // route from it, which is the editable thing. Both exist afterwards.
     ...(track.pointCount >= MIN_ROUTE_POINTS
       ? {
-          createRouteFrom: async (canyonId?: string) => {
+          createRouteFrom: async (placeId?: string) => {
             const fixes = await listTrackPoints(track.id);
             const { points } = simplifyToFit(
               fixes.map(({ lon, lat }): RoutePoint => [lon, lat]),
@@ -529,7 +483,7 @@ export function trackActions(track: Track): AssetActions {
               name,
               points,
               color: track.color,
-              ...(canyonId ? { canyonId } : {}),
+              ...(placeId ? { placeId } : {}),
             });
             return { name, pointCount: points.length };
           },

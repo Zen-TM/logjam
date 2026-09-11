@@ -8,7 +8,7 @@ function FilterEmptyState({
   return (
     <div className={classes.overlay}>
       <div className={classes.box}>
-        <span className={classes.message}>No canyons match the current filters.</span>
+        <span className={classes.message}>No places match the current filters.</span>
         <button className={classes.clearBtn} onClick={onClearFilters}>
           Clear filters
         </button>

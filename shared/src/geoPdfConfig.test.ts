@@ -15,7 +15,7 @@ function validConfig(): GeoPdfConfig {
     baseLayer: "osm",
     overlays: ["hillshade", "contours"],
     elements: { compass: true, scaleText: true, scaleBar: true },
-    canyonMarkers: [{ lat: -33.5, lon: 150.3, name: "Test", color: "owned" }],
+    placeMarkers: [{ lat: -33.5, lon: 150.3, name: "Test", color: "owned" }],
   };
 }
 
@@ -91,17 +91,17 @@ describe("validateGeoPdfConfig", () => {
     expect(validateGeoPdfConfig(c)).toBeNull();
   });
 
-  it("rejects a malformed canyon marker", () => {
+  it("rejects a malformed place marker", () => {
     const c = validConfig();
     // @ts-expect-error deliberately wrong color
-    c.canyonMarkers = [{ lat: -33.5, lon: 150.3, name: "X", color: "purple" }];
-    expect(validateGeoPdfConfig(c)).toBe("Invalid canyon marker entry");
+    c.placeMarkers = [{ lat: -33.5, lon: 150.3, name: "X", color: "purple" }];
+    expect(validateGeoPdfConfig(c)).toBe("Invalid place marker entry");
   });
 
-  it("rejects non-array canyonMarkers", () => {
+  it("rejects non-array placeMarkers", () => {
     // @ts-expect-error deliberately wrong type
-    expect(validateGeoPdfConfig({ ...validConfig(), canyonMarkers: {} })).toBe(
-      "Invalid canyonMarkers: must be an array",
+    expect(validateGeoPdfConfig({ ...validConfig(), placeMarkers: {} })).toBe(
+      "Invalid placeMarkers: must be an array",
     );
   });
 });

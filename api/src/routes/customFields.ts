@@ -1,19 +1,23 @@
-// Custom field management (account-level), for BOTH trip-log and canyon fields.
+// Custom field management (account-level), for BOTH trip-log and place fields.
 //
 // Row-grain REST over `lib/customFieldDefs.ts`, which owns every write and the
 // value strip a delete carries. This router holds no storage knowledge — it
 // parses, authorizes and shapes responses.
 //
-// Two write surfaces exist deliberately, and this is the row-grain one:
-//  - here, and the sync push handler, address ONE definition at a time. That is
-//    the grain that lets a phone edit offline and merge rather than clobber.
-//  - `PATCH /users/me` still accepts a whole list (`replaceFieldDefs`) because
-//    that is how every dialog in the web app already writes, and a single
-//    browser tab has nothing to merge against.
+// ONE write surface, and this is it: here and the sync push handler, addressing
+// ONE definition at a time. That grain is what lets a phone edit offline and
+// merge rather than clobber.
+//
+// `PATCH /users/me` used to accept a whole list as well. It does not any more
+// and must not come back: that shape carries no `placeTypeIds` and no
+// `appliesToAllTypes`, so every save from a dialog that round-tripped the list
+// wiped the scoping off every definition — silently, because the payload simply
+// did not mention it. `routes/users.ts` answers it with a 400 naming the
+// replacement, and `__tests__/customFields.test.ts` pins that refusal.
 //
 // The impact/delete response key names (`tripLogCount`, `removedFromTripCount`
-// and their canyon equivalents) predate this rewrite and are kept verbatim —
-// `frontend/src/canyonUtils.ts` reads them by name.
+// and their place equivalents) predate this rewrite and are kept verbatim —
+// `frontend/src/placeUtils.ts` reads them by name.
 //
 // PRIVACY: labels are user-authored text. Nothing here logs one.
 import { Router, Response } from "express";
@@ -32,13 +36,45 @@ import {
   entityConfig,
   findDefIdByKey,
   loadDefs,
+  loadScopedDefs,
   updateFieldDef,
   ENTITY_BY_SEGMENT,
 } from "../lib/customFieldDefs";
 
 const router = Router();
 
-/** `:entity` is the URL segment ("trip-log" | "canyon"), not the union value. */
+/**
+ * The type-scoping half of a definition write.
+ *
+ * `appliesToAllTypes` is a FLAG rather than "every type id we know about",
+ * which is the whole reason it exists: a list of today's types silently fails
+ * to apply to a type created tomorrow, and the user who ticked "All" would
+ * never find out. A definition sent with the flag needs no ids at all.
+ */
+function parseScoping(body: {
+  placeTypeIds?: unknown;
+  appliesToAllTypes?: unknown;
+}): { placeTypeIds?: string[]; appliesToAllTypes?: boolean } {
+  const out: { placeTypeIds?: string[]; appliesToAllTypes?: boolean } = {};
+  if (body.placeTypeIds !== undefined) {
+    if (
+      !Array.isArray(body.placeTypeIds) ||
+      body.placeTypeIds.some((id) => typeof id !== "string")
+    ) {
+      throw new AppError(400, "placeTypeIds must be an array of ids");
+    }
+    out.placeTypeIds = body.placeTypeIds as string[];
+  }
+  if (body.appliesToAllTypes !== undefined) {
+    if (typeof body.appliesToAllTypes !== "boolean") {
+      throw new AppError(400, "appliesToAllTypes must be a boolean");
+    }
+    out.appliesToAllTypes = body.appliesToAllTypes;
+  }
+  return out;
+}
+
+/** `:entity` is the URL segment ("trip-log" | "place"), not the union value. */
 function parseEntity(req: AuthenticatedRequest): CustomFieldEntity {
   const entity = ENTITY_BY_SEGMENT[getParam(req.params.entity)];
   if (!entity) throw new AppError(404, "Unknown custom field entity");
@@ -46,13 +82,18 @@ function parseEntity(req: AuthenticatedRequest): CustomFieldEntity {
 }
 
 // GET /custom-fields/:entity — the definitions in force for this user.
+//
+// WITH their scoping (`placeTypeIds`, `appliesToAllTypes`), because a client
+// that holds every definition and cannot tell which type each belongs to has to
+// render them all — a campsite form with seven canyon grades on it. The extra
+// two keys are additive: a caller that only wants the shape ignores them.
 router.get(
   "/:entity",
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await resolveUser(req.user!.sub);
     const entity = parseEntity(req);
-    res.json({ fields: await loadDefs(user.id, entity) });
+    res.json({ fields: await loadScopedDefs(user.id, entity) });
   },
 );
 
@@ -64,8 +105,18 @@ router.post(
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await resolveUser(req.user!.sub);
     const entity = parseEntity(req);
-    const def = assertValidDef((req.body as { field?: unknown })?.field);
-    res.status(201).json({ field: await createFieldDef(user.id, entity, { def }) });
+    const body = req.body as {
+      field?: unknown;
+      placeTypeIds?: unknown;
+      appliesToAllTypes?: unknown;
+    };
+    const def = assertValidDef(body?.field);
+    res.status(201).json({
+      field: await createFieldDef(user.id, entity, {
+        def,
+        ...parseScoping(body),
+      }),
+    });
   },
 );
 
@@ -86,6 +137,8 @@ router.patch(
     if (!id) throw new AppError(404, "Custom field not found");
 
     const body = req.body as {
+      placeTypeIds?: unknown;
+      appliesToAllTypes?: unknown;
       label?: unknown;
       type?: unknown;
       min?: unknown;
@@ -118,9 +171,10 @@ router.patch(
       ...(body.position !== undefined
         ? { position: body.position as number }
         : {}),
+      ...parseScoping(body),
     });
 
-    res.json({ fields: await loadDefs(user.id, entity) });
+    res.json({ fields: await loadScopedDefs(user.id, entity) });
   },
 );
 
@@ -172,8 +226,8 @@ router.delete(
     const config = entityConfig(entity);
     res.json({
       // Response key names are entity-specific and predate this router.
-      [entity === "tripLog" ? "tripLogCustomFields" : "canyonCustomFields"]:
-        await loadDefs(user.id, entity),
+      [entity === "tripLog" ? "tripLogCustomFields" : "placeCustomFields"]:
+        await loadScopedDefs(user.id, entity),
       [config.removedResponseKey]: result.removed,
     });
   },

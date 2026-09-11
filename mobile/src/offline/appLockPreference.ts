@@ -2,7 +2,7 @@
 // makes it safe.
 //
 // The lock is what stands between someone holding this unlocked phone and the
-// canyon coordinates on it (mobile/CLAUDE.md privacy mandate). So:
+// place coordinates on it (mobile/CLAUDE.md privacy mandate). So:
 //
 // - Turning it OFF requires the device authenticator — otherwise the switch is a
 //   one-tap bypass of the thing it controls, reachable by anyone holding the
@@ -21,7 +21,7 @@
 // side the app starts on, not how hard it is to lower once raised.
 //
 // What it gates is no longer conditional on downloads: the mirror holds synced
-// canyon names and coordinates from the moment the user signs in, so "there is
+// place names and coordinates from the moment the user signs in, so "there is
 // nothing to protect yet" was never true (see AppLockGate).
 import * as LocalAuthentication from "expo-local-authentication";
 import { Platform } from "react-native";
@@ -84,7 +84,7 @@ export async function setAppLockEnabled(enabled: boolean): Promise<AppLockChange
  *
  * Android captures the task-switcher thumbnail BEFORE the `AppState` change
  * that re-locks the app fires, so backgrounding from the map left a recents
- * thumbnail of canyon markers — or of a detail screen printing the
+ * thumbnail of place markers — or of a detail screen printing the
  * coordinates — readable in front of the lock by exactly the person the lock
  * exists to stop (someone holding the unlocked phone).
  *

@@ -51,7 +51,7 @@ export default function App() {
 
   // MAPP-002: the hard block is for a build that is too old AND on a
   // connection where the update is free and to hand. Everything else shows the
-  // same screen with a way past it and keeps working — a dead app in a canyon
+  // same screen with a way past it and keeps working — a dead app in a place
   // holds the user's offline maps and their in-progress track hostage to a Play
   // Store they may have no way to reach.
   const upgradeEnforcement =

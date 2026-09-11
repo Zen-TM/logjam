@@ -22,7 +22,7 @@ env:
     text: "Sign in"
     index: 1 # the button, not the heading
 - extendedWaitUntil:
-    visible: "Canyons"
+    visible: "Places"
     timeout: 30000
 - tapOn: "Account"
 - assertVisible: "Sign out"

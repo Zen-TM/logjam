@@ -3,7 +3,7 @@
 // last GET /notifications response is stored verbatim so the inbox renders
 // offline; a live fetch refreshes it and the cache follows.
 //
-// PRIVACY: notification payloads carry canyon references (ids only by the
+// PRIVACY: notification payloads carry place references (ids only by the
 // push-payload rule, but titles/names may appear) — app-private, behind the
 // app lock, never logged.
 import type { TNotification } from "../api/types";

@@ -28,39 +28,49 @@ import CloseIcon from "@mui/icons-material/Close";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import {
-  matchCanyon,
+  matchPlace,
   haversineMeters,
   defaultsToMergeOnImport,
-  DEFAULT_CANYON_MERGE_POLICY,
-  MERGEABLE_FIELDS,
+  defaultPlaceMergePolicy,
+  mergeableFieldsForDefs,
+  defsForType,
+  setFieldValues,
+  SYSTEM_PLACE_TYPE_IDS,
+  SOURCES_FIELD_KEY,
   type MatchCandidate,
-  type CanyonMergePolicy,
+  type PlaceMergePolicy,
   type MergeableField,
   type TripLogCustomFieldDef,
   type TripLogCustomFieldType,
+  type ScopedCustomFieldDef,
 } from "@logjam/shared";
 import {
   CUSTOM_FIELD_TYPES,
   makeCustomFieldKey,
   coerceFieldValueStrict,
 } from "@logjam/shared";
-import type { TCanyon, TUser, BulkCanyonInput, CanyonMergePair } from "../../canyonUtils";
+import type { TPlace, TUser, BulkPlaceInput, PlaceMergePair, TPlaceType } from "../../placeUtils";
 import {
   apiFetch,
-  bulkCanyonImport,
+  bulkPlaceImport,
   bulkCreateTripLogs,
   undoImport,
+  createCustomField,
   updateUserPreferences,
-} from "../../canyonUtils";
+} from "../../placeUtils";
 import { parseCsv } from "../../csvImport/parseCsv";
 import { detectFileKind, type FileKind } from "../../csvImport/detectFileKind";
 import {
-  detectCanyonColumns,
+  detectPlaceColumns,
   ROLE_LABELS,
-  ALL_ASSIGNABLE_ROLES,
+  assignableRolesForType,
   GRADE_RANGES,
-  type CanyonFieldRole,
-} from "../../csvImport/canyonColumns";
+  type PlaceFieldRole,
+} from "../../csvImport/placeColumns";
+import {
+  placeImportTemplateCsv,
+  placeImportTemplateFilename,
+} from "../../csvImport/placeTemplate";
 import { detectColumns, type ColumnRole } from "../../csvImport/detectColumns";
 import {
   detectDateFormat,
@@ -71,14 +81,14 @@ import {
 import {
   parseByRole,
   type MismatchKind,
-} from "../../csvImport/canyonValueParsers";
+} from "../../csvImport/placeValueParsers";
 import {
   fieldSx,
   selectSx,
   menuPaperProps,
 } from "../../csvImport/dialogStyles";
 import { SectionLabel } from "../../csvImport/SectionLabel";
-import { describeDroppedCanyonRow, describeDroppedTripRow } from "../../csvImport/rowSkip";
+import { describeDroppedPlaceRow, describeDroppedTripRow } from "../../csvImport/rowSkip";
 import { messageFromError } from "../../errors/messageFromError";
 import { ErrorBanner } from "../feedback/ErrorBanner";
 import { useToast } from "../feedback/ToastProvider";
@@ -106,34 +116,34 @@ type LoadedFile = {
   kind: FileKind;
 };
 
-// Per-canyon-row prepared input, plus the raw file name string used as the
+// Per-place-row prepared input, plus the raw file name string used as the
 // match key and stable provenance.
-type PreparedCanyonRow = {
+type PreparedPlaceRow = {
   rowIndex: number;
   sourceName: string;
-  input: BulkCanyonInput;
+  input: BulkPlaceInput;
 };
 
-// Per-trip-row prepared content. `sourceCanyonName` is the raw file string.
+// Per-trip-row prepared content. `sourcePlaceName` is the raw file string.
 // `types` is free text split on ";" (each trimmed, empties dropped, deduped
 // case-insensitively) — no enum validation.
 type PreparedTripRow = {
   rowIndex: number;
-  sourceCanyonName: string;
+  sourcePlaceName: string;
   date: string;
   notes: string | null;
   types: string[];
   customFields: Record<string, unknown>;
 };
 
-// A unique unmatched/ambiguous canyon name surfaced for review, plus the inline
-// create-canyon coords the user fills in when they pick "Create".
+// A unique unmatched/ambiguous place name surfaced for review, plus the inline
+// create-place coords the user fills in when they pick "Create".
 type CreateForm = { name: string; latitude: string; longitude: string };
 
-// What the user decided for each surfaced trip-canyon name. Mirrors ReviewItem
+// What the user decided for each surfaced trip-place name. Mirrors ReviewItem
 // decision kinds; `create` additionally requires a filled CreateForm.
 type ReviewState = {
-  // keyed by lowercased source canyon name
+  // keyed by lowercased source place name
   decisions: Record<string, ReviewDecision>;
   createForms: Record<string, CreateForm>;
   options: Record<string, MatchCandidate[]>; // ranked candidates for the name
@@ -144,18 +154,18 @@ type ReviewState = {
   // Original-cased source name (first occurrence) for each lowercased key, shown
   // in the review UI instead of the lowercased match key.
   displayName: Record<string, string>;
-  // Auto-resolved canyon merges (confidence "auto") that are never surfaced for
-  // review but still need to map a source name → an existing canyon id.
+  // Auto-resolved place merges (confidence "auto") that are never surfaced for
+  // review but still need to map a source name → an existing place id.
   autoMergeId: Record<string, string>;
 };
 
 type ImportOutcome =
-  // `skipped` is the server's merge-policy skip count (from bulkCanyonImport);
+  // `skipped` is the server's merge-policy skip count (from bulkPlaceImport);
   // `droppedRows` is unrelated — source CSV rows this client never sent at all
   // because a required field couldn't be read (FECO-006/D5). Both are real
   // counts kept under separate names so neither silently hides the other.
-  | { kind: "canyon"; batchId: string; created: number; merged: number; merges: CanyonMergePair[]; skipped: number; droppedRows: number; errors: string[]; warnings: string[] }
-  | { kind: "triplog"; batchId: string; imported: number; updated: number; createdCanyons: number; noCanyon: number; linked: number; discarded: number; droppedRows: number; errors: string[]; warnings: string[] };
+  | { kind: "place"; batchId: string; created: number; merged: number; merges: PlaceMergePair[]; skipped: number; droppedRows: number; errors: string[]; warnings: string[] }
+  | { kind: "triplog"; batchId: string; imported: number; updated: number; createdPlaces: number; noPlace: number; linked: number; discarded: number; droppedRows: number; errors: string[]; warnings: string[] };
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -163,7 +173,7 @@ function genBatchId(): string {
   return crypto.randomUUID();
 }
 
-// PapaParse parses the whole file into memory synchronously; a canyon/trip
+// PapaParse parses the whole file into memory synchronously; a place/trip
 // CSV is a few hundred KB at most, so this is generous headroom, not a tight
 // budget (FECO-003).
 const MAX_CSV_FILE_BYTES = 20 * 1024 * 1024;
@@ -185,7 +195,7 @@ function splitTripTypes(raw: string): string[] {
   return out;
 }
 
-function toMatchCandidate(c: TCanyon): MatchCandidate {
+function toMatchCandidate(c: TPlace): MatchCandidate {
   return {
     id: c.id,
     name: c.name,
@@ -195,10 +205,10 @@ function toMatchCandidate(c: TCanyon): MatchCandidate {
   };
 }
 
-// Numeric canyon fields that are silently left empty when a cell can't be
+// Numeric place fields that are silently left empty when a cell can't be
 // parsed. A non-empty-but-unparseable cell in one of these produces a per-field
 // coercion warning surfaced in the import result (IMPORT-5).
-const NUMERIC_WARN_ROLES = new Set<CanyonFieldRole>([
+const NUMERIC_WARN_ROLES = new Set<PlaceFieldRole>([
   "vGrade", "aGrade", "commitment", "quality", "numAbseils", "longestAbseil", "hours",
 ]);
 
@@ -232,7 +242,7 @@ const MISMATCH_EXPLANATIONS: Record<
 };
 
 function coercionWarning(
-  role: CanyonFieldRole,
+  role: PlaceFieldRole,
   raw: string,
   reason: MismatchKind,
 ): string {
@@ -241,18 +251,18 @@ function coercionWarning(
   return `${label} "${raw}" ${explanation} — left empty`;
 }
 
-// Build a BulkCanyonInput from a mapped canyon row. Mirrors the field mapping in
-// the (now removed) CanyonCsvImportDialog, but without the per-cell mismatch UI:
+// Build a BulkPlaceInput from a mapped place row. Mirrors the field mapping in
+// the (now removed) PlaceCsvImportDialog, but without the per-cell mismatch UI:
 // values that don't parse are dropped (left null) — the importer is additive and
 // merge fills nulls, so a bad cell never blocks the row. Non-empty cells that
 // fail to parse into a numeric field are collected as `warnings` so the result
 // summary can tell the user which values were left empty (IMPORT-5).
-function buildCanyonInput(
+function buildPlaceInput(
   row: Record<string, string>,
-  assignments: Record<string, CanyonFieldRole>,
-): { input: BulkCanyonInput; warnings: string[] } {
-  const input: BulkCanyonInput = { name: "", latitude: NaN, longitude: NaN };
-  const attrs: Record<string, unknown> = {};
+  assignments: Record<string, PlaceFieldRole>,
+): { input: BulkPlaceInput; warnings: string[] } {
+  const input: BulkPlaceInput = { name: "", latitude: NaN, longitude: NaN };
+  const values: Record<string, unknown> = {};
   const warnings: string[] = [];
 
   for (const [header, role] of Object.entries(assignments)) {
@@ -284,63 +294,77 @@ function buildCanyonInput(
       case "notes":
         input.notes = value != null && value !== "" ? String(value) : null;
         break;
+      // The seven grade roles are FIELD VALUES now, under their reserved keys.
+      // Rounding stays per-role because the CSV cell is free text and an
+      // integer field must not take 2.5 — the definition's bounds catch it
+      // server-side, but a silently truncated import is a worse error message.
       case "numAbseils":
-        input.numAbseils = value != null && !isNaN(Number(value)) ? Math.round(Number(value)) : null;
+        values["num_abseils"] = value != null && !isNaN(Number(value)) ? Math.round(Number(value)) : null;
         break;
       case "longestAbseil":
-        input.longestAbseil = value != null && !isNaN(Number(value)) ? Number(value) : null;
+        values["longest_abseil"] = value != null && !isNaN(Number(value)) ? Number(value) : null;
         break;
       case "hours":
-        input.hours = value != null && !isNaN(Number(value)) ? Number(value) : null;
+        values["hours"] = value != null && !isNaN(Number(value)) ? Number(value) : null;
         break;
       case "vGrade":
-        input.vGrade = value != null && !isNaN(Number(value)) ? Math.round(Number(value)) : null;
+        values["v_grade"] = value != null && !isNaN(Number(value)) ? Math.round(Number(value)) : null;
         break;
       case "aGrade":
-        input.aGrade = value != null && !isNaN(Number(value)) ? Math.round(Number(value)) : null;
+        values["a_grade"] = value != null && !isNaN(Number(value)) ? Math.round(Number(value)) : null;
         break;
       case "commitment":
-        input.commitment = value != null && !isNaN(Number(value)) ? Math.round(Number(value)) : null;
+        values["commitment"] = value != null && !isNaN(Number(value)) ? Math.round(Number(value)) : null;
         break;
       case "quality":
-        input.quality = value != null && !isNaN(Number(value)) ? Number(value) : null;
+        values["quality"] = value != null && !isNaN(Number(value)) ? Number(value) : null;
         break;
       case "sources":
-        attrs["sources"] = Array.isArray(value) ? value : [];
+        values[SOURCES_FIELD_KEY] = Array.isArray(value) ? value : [];
         break;
       default:
-        // attr:* / new-attr — store as a custom attribute. An `attr:<key>`
-        // column carries its storage key in the role (the exporter's
-        // convention); a brand-new attribute has no key yet, so the CSV header
-        // is the key.
+        // attr:* / new-attr — an ordinary field value. An `attr:<key>` column
+        // carries its storage key in the role (the exporter's convention); a
+        // brand-new attribute has no key yet, so the CSV header is the key.
         if (typeof role === "string" && role.startsWith("attr:")) {
-          attrs[role.slice(5)] = value ?? null;
+          values[role.slice(5)] = value ?? null;
         } else if (role === "new-attr") {
-          attrs[header] = value ?? null;
+          values[header] = value ?? null;
         }
         break;
     }
   }
 
-  if (Object.keys(attrs).length > 0) input.attributes = attrs;
+  // Nulls are dropped rather than stored: a stored null renders as an empty
+  // field and satisfies a "has a value" filter.
+  const cleaned = setFieldValues({}, values);
+  if (Object.keys(cleaned).length > 0) input.fieldValues = cleaned;
   return { input, warnings };
 }
 
-// Switch labels for the merge-settings accordion. A total Record over
-// MergeableField, so a new policy entry in shared fails the build here rather
-// than shipping an unlabelled (or missing) switch. Order comes from the shared
-// MERGEABLE_FIELDS, not from this map's key order.
-const MERGEABLE_FIELD_LABELS: Record<MergeableField, string> = {
-  vGrade: "V grade",
-  aGrade: "A grade",
-  commitment: "Commitment",
-  quality: "Quality",
-  numAbseils: "Pitches",
-  longestAbseil: "Longest pitch",
-  hours: "Hours",
+// Switch labels for the merge-settings accordion.
+//
+// This USED TO BE a total Record over a fixed nine-entry MergeableField union,
+// which is what made it a build-time check. It cannot be one any more: the
+// mergeable fields are the KEYS of the definitions the target type carries, an
+// open set that differs per user. So the label for a field is the DEFINITION'S
+// OWN label — which is better than a hand-written one anyway, because it is
+// what the user called the field — and only the structural entry needs
+// spelling here.
+const STRUCTURAL_MERGE_LABELS: Record<string, string> = {
   notes: "Notes",
-  attributes: "Custom attributes",
 };
+
+function mergeFieldLabel(
+  field: MergeableField,
+  defs: TripLogCustomFieldDef[],
+): string {
+  return (
+    STRUCTURAL_MERGE_LABELS[field] ??
+    defs.find((def) => def.key === field)?.label ??
+    field
+  );
+}
 
 // ── Component ────────────────────────────────────────────────────────────────
 
@@ -348,11 +372,13 @@ function UnifiedImportDialog({
   open,
   onClose,
   onBack,
-  canyons,
+  places,
   customFieldDefs,
   onCustomFieldDefsChange,
+  placeCustomFieldDefs,
+  placeTypes,
   currentUser,
-  onRefetchCanyons,
+  onRefetchPlaces,
   onRefetchTripLogs,
   onRefetchAnalytics,
   onPickCoords,
@@ -363,11 +389,15 @@ function UnifiedImportDialog({
   // Back button and the title-bar close return to the welcome hub instead of
   // dropping the user into an empty app.
   onBack?: () => void;
-  canyons: TCanyon[];
-  customFieldDefs: TripLogCustomFieldDef[];
-  onCustomFieldDefsChange: (defs: TripLogCustomFieldDef[]) => void;
+  places: TPlace[];
+  customFieldDefs: ScopedCustomFieldDef[];
+  onCustomFieldDefsChange: (defs: ScopedCustomFieldDef[]) => void;
+  /** PLACE definitions, scoped — the column map is built from the chosen
+   *  type's own fields. */
+  placeCustomFieldDefs: ScopedCustomFieldDef[];
+  placeTypes: TPlaceType[];
   currentUser: TUser | null;
-  onRefetchCanyons: () => void;
+  onRefetchPlaces: () => void;
   onRefetchTripLogs: () => void;
   onRefetchAnalytics: () => void;
   onPickCoords: (onPicked: (lat: number, lng: number) => void) => void;
@@ -384,23 +414,57 @@ function UnifiedImportDialog({
   // Step 1 (map) state
   const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [canyonFile, setCanyonFile] = useState<LoadedFile | null>(null);
+  const [placeFile, setPlaceFile] = useState<LoadedFile | null>(null);
   const [tripFile, setTripFile] = useState<LoadedFile | null>(null);
-  const [canyonAssignments, setCanyonAssignments] = useState<Record<string, CanyonFieldRole>>({});
+  const [placeAssignments, setPlaceAssignments] = useState<Record<string, PlaceFieldRole>>({});
+  // THE TYPE EVERY IMPORTED PLACE LANDS IN, chosen before the columns are
+  // mapped — the mapping is only meaningful against a type's fields, and a
+  // campsite list mapped onto canyon grades produces seven columns of nulls.
+  // Defaults to Canyon, which is what most imports are here.
+  const [importPlaceTypeId, setImportPlaceTypeId] = useState<string>(
+    SYSTEM_PLACE_TYPE_IDS.canyon,
+  );
+  /** The PLACE definitions in force for the chosen type — what the columns map
+   *  onto. `defsForType` is the shared rule, so a header matches the same field
+   *  here as it would in the place form. */
+  const placeDefsForImportType = useMemo(
+    () => defsForType(placeCustomFieldDefs, importPlaceTypeId),
+    [placeCustomFieldDefs, importPlaceTypeId],
+  );
+  // Changing the type re-detects the columns, because the mapping is against
+  // THAT type's fields — leaving the old assignments would keep a canyon's
+  // grade columns selected on a campsite import, where they cannot be saved.
+  useEffect(() => {
+    if (!placeFile) return;
+    setPlaceAssignments(
+      detectPlaceColumns(placeFile.headers, defsForType(placeCustomFieldDefs, importPlaceTypeId)),
+    );
+    // placeFile is re-parsed on load, which sets assignments itself.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [importPlaceTypeId]);
+
+  const placeRoleOptions = useMemo(
+    () =>
+      assignableRolesForType(
+        importPlaceTypeId === SYSTEM_PLACE_TYPE_IDS.canyon,
+        placeDefsForImportType,
+      ),
+    [importPlaceTypeId, placeDefsForImportType],
+  );
   const [tripAssignments, setTripAssignments] = useState<Record<string, ColumnRole>>({});
   const [tripNewCfForms, setTripNewCfForms] = useState<Record<string, { label: string; type: TripLogCustomFieldType }>>({});
   const [dateFormat, setDateFormat] = useState<DateFormat>("DD/MM/YYYY");
 
   // Step 2 (review) state — only one kind of file is active per import run.
-  const [activeKind, setActiveKind] = useState<"canyon" | "triplog" | null>(null);
-  const [preparedCanyonRows, setPreparedCanyonRows] = useState<PreparedCanyonRow[]>([]);
-  // Per-field coercion warnings collected while preparing canyon rows (IMPORT-5),
+  const [activeKind, setActiveKind] = useState<"place" | "triplog" | null>(null);
+  const [preparedPlaceRows, setPreparedPlaceRows] = useState<PreparedPlaceRow[]>([]);
+  // Per-field coercion warnings collected while preparing place rows (IMPORT-5),
   // plus per-row "couldn't be read — skipped" entries (FECO-006/D5).
-  const [canyonWarnings, setCanyonWarnings] = useState<string[]>([]);
+  const [placeWarnings, setPlaceWarnings] = useState<string[]>([]);
   // Source rows dropped entirely (missing name / unreadable lat-lon) before
   // reaching the server (FECO-006/D5) — reported in the outcome summary
   // alongside `created`/`merged`, distinct from the server's merge-skip count.
-  const [canyonDroppedRows, setCanyonDroppedRows] = useState<number>(0);
+  const [placeDroppedRows, setPlaceDroppedRows] = useState<number>(0);
   const [preparedTripRows, setPreparedTripRows] = useState<PreparedTripRow[]>([]);
   // Per-row coercion warnings collected while preparing trip rows (IMPORT-5),
   // plus per-row "couldn't be read — skipped" entries (FECO-006/D5).
@@ -419,7 +483,21 @@ function UnifiedImportDialog({
   });
 
   // Step 3 (confirm) state
-  const [mergePolicy, setMergePolicy] = useState<CanyonMergePolicy>(DEFAULT_CANYON_MERGE_POLICY);
+  // The fields a policy can govern depend on the definitions in force, so the
+  // default is built from them rather than being a constant.
+  // The merge policy governs PLACE fields — what happens to a value when an
+  // imported row folds into an existing place — so it is built from the
+  // definitions of the type being imported into, not from the trip-log ones.
+  // Reading `customFieldDefs` here listed a trip's fields against a place
+  // merge, and a policy keyed by a field the place cannot hold is a switch
+  // that does nothing.
+  const mergeableFields = useMemo(
+    () => mergeableFieldsForDefs(placeDefsForImportType),
+    [placeDefsForImportType],
+  );
+  const [mergePolicy, setMergePolicy] = useState<PlaceMergePolicy>(() =>
+    defaultPlaceMergePolicy(mergeableFieldsForDefs([])),
+  );
 
   // Map-pick bookkeeping: which surfaced trip name is awaiting a picked coord.
   const pickingRef = useRef(false);
@@ -428,7 +506,7 @@ function UnifiedImportDialog({
   // hides the dialog) doesn't reset the review scroll on reopen.
   const contentRef = useRef<HTMLDivElement>(null);
   const pickScrollRef = useRef(0);
-  // One batch id per import session, shared across the canyon + logbook stages so
+  // One batch id per import session, shared across the place + logbook stages so
   // a single Undo reverts both. Lazily created, cleared on reset.
   const batchIdRef = useRef<string | null>(null);
   function sessionBatchId(): string {
@@ -454,16 +532,16 @@ function UnifiedImportDialog({
     setOutcome(null);
     setUndoing(false);
     setError(null);
-    setCanyonFile(null);
+    setPlaceFile(null);
     setTripFile(null);
-    setCanyonAssignments({});
+    setPlaceAssignments({});
     setTripAssignments({});
     setTripNewCfForms({});
     setDateFormat("DD/MM/YYYY");
     setActiveKind(null);
-    setPreparedCanyonRows([]);
-    setCanyonWarnings([]);
-    setCanyonDroppedRows(0);
+    setPreparedPlaceRows([]);
+    setPlaceWarnings([]);
+    setPlaceDroppedRows(0);
     setPreparedTripRows([]);
     setTripWarnings([]);
     setTripDroppedRows(0);
@@ -474,14 +552,33 @@ function UnifiedImportDialog({
     // re-validation — which would silently drop every OTHER choice the user had
     // saved. Missing entry -> that field's default; stored entries still win.
     setMergePolicy({
-      ...DEFAULT_CANYON_MERGE_POLICY,
+      ...defaultPlaceMergePolicy(mergeableFields),
       ...(currentUser?.uiPreferences?.importMergePolicy ?? {}),
     });
   }, [open, currentUser]);
 
-  const noCanyonsYet = canyons.length === 0;
+  const noPlacesYet = places.length === 0;
 
   // ── File loading ────────────────────────────────────────────────────────────
+
+  const importTypeName =
+    placeTypes.find((type) => type.id === importPlaceTypeId)?.name ?? "Place";
+
+  /** The template for the chosen type, built and handed over in the browser —
+   *  there is no server round trip because the definitions are already here. */
+  function downloadPlaceTemplate() {
+    const csv = placeImportTemplateCsv(
+      importTypeName,
+      importPlaceTypeId,
+      placeDefsForImportType,
+    );
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = placeImportTemplateFilename(importTypeName);
+    link.click();
+    URL.revokeObjectURL(url);
+  }
 
   function handleDragOver(e: React.DragEvent<HTMLDivElement>) {
     e.preventDefault();
@@ -552,7 +649,7 @@ function UnifiedImportDialog({
     const kind = detectFileKind(parsed.headers);
     if (kind === "unknown") {
       setError(
-        "This file doesn't look like a canyon list or a logbook. We couldn't find a coordinates column (for canyons) or a date column (for trips). Canyons need name, latitude, longitude; logbooks need a canyon name and date.",
+        "This file doesn't look like a place list or a logbook. We couldn't find a coordinates column (for places) or a date column (for trips). Places need name, latitude, longitude; logbooks need a place name and date.",
       );
       return;
     }
@@ -569,9 +666,9 @@ function UnifiedImportDialog({
       kind,
     };
 
-    if (kind === "canyon") {
-      setCanyonFile(loaded);
-      setCanyonAssignments(detectCanyonColumns(parsed.headers));
+    if (kind === "place") {
+      setPlaceFile(loaded);
+      setPlaceAssignments(detectPlaceColumns(parsed.headers, placeDefsForImportType));
     } else {
       setTripFile(loaded);
       const detected = detectColumns(parsed.headers, customFieldDefs);
@@ -587,15 +684,15 @@ function UnifiedImportDialog({
     }
   }
 
-  function overrideKind(loaded: LoadedFile, which: "canyon" | "triplog", newKind: FileKind) {
+  function overrideKind(loaded: LoadedFile, which: "place" | "triplog", newKind: FileKind) {
     if (newKind === loaded.kind) return;
     // Reclassify: move the file to the other bucket and re-detect columns.
-    if (which === "canyon") setCanyonFile(null);
+    if (which === "place") setPlaceFile(null);
     else setTripFile(null);
     const moved: LoadedFile = { ...loaded, kind: newKind };
-    if (newKind === "canyon") {
-      setCanyonFile(moved);
-      setCanyonAssignments(detectCanyonColumns(moved.headers));
+    if (newKind === "place") {
+      setPlaceFile(moved);
+      setPlaceAssignments(detectPlaceColumns(moved.headers, placeDefsForImportType));
     } else if (newKind === "triplog") {
       setTripFile(moved);
       const detected = detectColumns(moved.headers, customFieldDefs);
@@ -614,11 +711,11 @@ function UnifiedImportDialog({
   // ── Map → Review ─────────────────────────────────────────────────────────────
 
   // Which mapped fields are present, for live feedback + validation.
-  const canyonMapValid = useMemo(() => {
-    if (!canyonFile) return false;
-    const roles = new Set(Object.values(canyonAssignments));
+  const placeMapValid = useMemo(() => {
+    if (!placeFile) return false;
+    const roles = new Set(Object.values(placeAssignments));
     return roles.has("name") && roles.has("latitude") && roles.has("longitude");
-  }, [canyonFile, canyonAssignments]);
+  }, [placeFile, placeAssignments]);
 
   const tripMapValid = useMemo(() => {
     if (!tripFile) return false;
@@ -631,15 +728,15 @@ function UnifiedImportDialog({
   }, [tripFile, tripAssignments, tripNewCfForms]);
 
   const canProceedFromMap =
-    (canyonFile ? canyonMapValid : false) || (tripFile ? tripMapValid : false);
+    (placeFile ? placeMapValid : false) || (tripFile ? tripMapValid : false);
 
   // Columns the importer will ignore (mapped to discard).
-  const ignoredCanyonCols = useMemo(
+  const ignoredPlaceCols = useMemo(
     () =>
-      canyonFile
-        ? canyonFile.headers.filter((h) => canyonAssignments[h] === "discard")
+      placeFile
+        ? placeFile.headers.filter((h) => placeAssignments[h] === "discard")
         : [],
-    [canyonFile, canyonAssignments],
+    [placeFile, placeAssignments],
   );
   const ignoredTripCols = useMemo(
     () =>
@@ -647,21 +744,21 @@ function UnifiedImportDialog({
     [tripFile, tripAssignments],
   );
 
-  function buildCanyonRows(): { rows: PreparedCanyonRow[]; warnings: string[]; droppedRows: number } {
-    if (!canyonFile) return { rows: [], warnings: [], droppedRows: 0 };
+  function buildPlaceRows(): { rows: PreparedPlaceRow[]; warnings: string[]; droppedRows: number } {
+    if (!placeFile) return { rows: [], warnings: [], droppedRows: 0 };
     // Raw source value for a row dropped on a missing/unreadable required field
     // (FECO-006/D5) — resolved once outside the loop since assignments don't
     // vary per row.
-    const latHeader = Object.entries(canyonAssignments).find(([, role]) => role === "latitude")?.[0];
-    const lonHeader = Object.entries(canyonAssignments).find(([, role]) => role === "longitude")?.[0];
-    const out: PreparedCanyonRow[] = [];
+    const latHeader = Object.entries(placeAssignments).find(([, role]) => role === "latitude")?.[0];
+    const lonHeader = Object.entries(placeAssignments).find(([, role]) => role === "longitude")?.[0];
+    const out: PreparedPlaceRow[] = [];
     const warnings: string[] = [];
     let droppedRows = 0;
-    canyonFile.rows.forEach((row, rowIndex) => {
-      const { input, warnings: rowWarnings } = buildCanyonInput(row, canyonAssignments);
+    placeFile.rows.forEach((row, rowIndex) => {
+      const { input, warnings: rowWarnings } = buildPlaceInput(row, placeAssignments);
       // CSV line number: header is line 1, so the first data row is line 2 (IMPORT-7).
       const line = rowIndex + 2;
-      const dropReason = describeDroppedCanyonRow({
+      const dropReason = describeDroppedPlaceRow({
         name: input.name,
         latitude: input.latitude,
         longitude: input.longitude,
@@ -715,13 +812,13 @@ function UnifiedImportDialog({
 
     const out: PreparedTripRow[] = [];
     // Per-row/per-field coercion notices: a non-empty cell that can't parse into
-    // its numeric field is left unset and reported (mirrors the canyon path's
+    // its numeric field is left unset and reported (mirrors the place path's
     // IMPORT-5 warnings) — a lenient coerce would silently store "5.5" as 5 or
     // "abc" as null.
     const warnings: string[] = [];
     let droppedRows = 0;
     rows.forEach((row, rowIndex) => {
-      const sourceCanyonName = (row[nameCol] ?? "").trim();
+      const sourcePlaceName = (row[nameCol] ?? "").trim();
       const rawDate = row[dateCol] ?? "";
       const isoDate = toIsoDate(rawDate, dateFormat);
       if (!isoDate) {
@@ -744,7 +841,7 @@ function UnifiedImportDialog({
       }
       out.push({
         rowIndex,
-        sourceCanyonName,
+        sourcePlaceName,
         date: isoDate,
         notes: notesCol ? row[notesCol] || null : null,
         types: typeCol ? splitTripTypes(row[typeCol] ?? "") : [],
@@ -755,14 +852,14 @@ function UnifiedImportDialog({
   }
 
   // Build the trip-stage review state and advance the dialog. Runs both from the
-  // initial map step (logbook-only or logbook-first) and after the canyon stage
-  // of a combined import, where `candidates` are the freshly imported canyons.
+  // initial map step (logbook-only or logbook-first) and after the place stage
+  // of a combined import, where `candidates` are the freshly imported places.
   function startTripStage(candidates: MatchCandidate[]): boolean {
     const { rows, warnings: tripRowWarnings, droppedRows } = buildTripRows();
     setTripDroppedRows(droppedRows);
     if (rows.length === 0) {
       setError(
-        "No valid trip rows found — each row needs a canyon name and a date we could read. " +
+        "No valid trip rows found — each row needs a place name and a date we could read. " +
           "If your dates look right, check the “Date format” selector on the previous step matches your file (ISO 8601 like 2023-06-15, or day-first like 15/06/2023).",
       );
       return false;
@@ -775,27 +872,27 @@ function UnifiedImportDialog({
     const createForms: Record<string, CreateForm> = {};
     const surfaced = new Set<string>();
     for (const row of rows) {
-      const key = row.sourceCanyonName.toLowerCase();
+      const key = row.sourcePlaceName.toLowerCase();
       if (key in decisions) continue;
-      if (!row.sourceCanyonName) {
-        // No name on the row → always canyon-less, never surfaced.
-        decisions[key] = { kind: "noCanyon" };
+      if (!row.sourcePlaceName) {
+        // No name on the row → always place-less, never surfaced.
+        decisions[key] = { kind: "noPlace" };
         continue;
       }
-      displayName[key] = row.sourceCanyonName;
-      const result = matchCanyon({ name: row.sourceCanyonName }, candidates);
+      displayName[key] = row.sourcePlaceName;
+      const result = matchPlace({ name: row.sourcePlaceName }, candidates);
       if (result.confidence === "auto" && result.best) {
         decisions[key] = { kind: "link", id: result.best.candidate.id };
       } else {
-        // review OR none → surfaced; none defaults to No canyon.
+        // review OR none → surfaced; none defaults to No place.
         surfaced.add(key);
         options[key] = result.candidates.map((c) => c.candidate);
         distances[key] = result.candidates.map((c) => c.distanceMeters);
         bestGuessId[key] = result.best?.candidate.id ?? null;
         decisions[key] = result.best
           ? { kind: "link", id: result.best.candidate.id }
-          : { kind: "noCanyon" };
-        createForms[key] = { name: row.sourceCanyonName, latitude: "", longitude: "" };
+          : { kind: "noPlace" };
+        createForms[key] = { name: row.sourcePlaceName, latitude: "", longitude: "" };
       }
     }
     setActiveKind("triplog");
@@ -808,18 +905,18 @@ function UnifiedImportDialog({
 
   function handleMapNext() {
     setError(null);
-    const candidates = canyons.map(toMatchCandidate);
+    const candidates = places.map(toMatchCandidate);
 
-    // Process the canyon file first so trips can match the just-imported canyons.
-    if (canyonFile && canyonMapValid) {
-      const { rows, warnings, droppedRows } = buildCanyonRows();
+    // Process the place file first so trips can match the just-imported places.
+    if (placeFile && placeMapValid) {
+      const { rows, warnings, droppedRows } = buildPlaceRows();
       if (rows.length === 0) {
-        setError("No valid canyon rows found (each needs a name, latitude and longitude).");
+        setError("No valid place rows found (each needs a name, latitude and longitude).");
         return;
       }
-      setCanyonWarnings(warnings);
-      setCanyonDroppedRows(droppedRows);
-      // Canyon files: auto-create on `none`; surface only the ambiguous middle.
+      setPlaceWarnings(warnings);
+      setPlaceDroppedRows(droppedRows);
+      // Place files: auto-create on `none`; surface only the ambiguous middle.
       const decisions: Record<string, ReviewDecision> = {};
       const options: Record<string, MatchCandidate[]> = {};
       const distances: Record<string, (number | null)[]> = {};
@@ -831,7 +928,7 @@ function UnifiedImportDialog({
         const key = row.sourceName.toLowerCase();
         if (key in decisions || key in autoMergeId) continue;
         displayName[key] = row.sourceName;
-        const result = matchCanyon(
+        const result = matchPlace(
           {
             name: row.sourceName,
             altNames: row.input.altNames,
@@ -847,7 +944,7 @@ function UnifiedImportDialog({
         } else {
           surfaced.add(key);
           options[key] = result.candidates.map((c) => c.candidate);
-          // matchCanyon reports Infinity for candidates beyond its coarse bbox
+          // matchPlace reports Infinity for candidates beyond its coarse bbox
           // (a matching-logic guard, not a real distance). For display, compute
           // the true great-circle distance from the row's coords so every
           // suggestion shows how far away it is.
@@ -870,8 +967,8 @@ function UnifiedImportDialog({
               : { kind: "create" };
         }
       }
-      setActiveKind("canyon");
-      setPreparedCanyonRows(rows);
+      setActiveKind("place");
+      setPreparedPlaceRows(rows);
       setReviewState({ decisions, createForms: {}, options, distances, bestGuessId, displayName, autoMergeId });
       setStep(surfaced.size > 0 ? "review" : "confirm");
       return;
@@ -890,20 +987,20 @@ function UnifiedImportDialog({
     return Object.keys(reviewState.options);
   }, [reviewState.options]);
 
-  // Rows whose canyon matched confidently (or is clearly new / canyon-less) and
+  // Rows whose place matched confidently (or is clearly new / place-less) and
   // therefore never appear in the review list — they'll be imported automatically
   // on Apply. Surfaced here for transparency so the review step can say how many
   // (IMPORT-3: the auto-import is intended; the silence about it was the problem).
   const autoResolvedCount = useMemo(() => {
     const surfaced = new Set(surfacedKeys);
-    if (activeKind === "canyon") {
-      return preparedCanyonRows.filter((r) => !surfaced.has(r.sourceName.toLowerCase())).length;
+    if (activeKind === "place") {
+      return preparedPlaceRows.filter((r) => !surfaced.has(r.sourceName.toLowerCase())).length;
     }
     if (activeKind === "triplog") {
-      return preparedTripRows.filter((r) => !surfaced.has(r.sourceCanyonName.toLowerCase())).length;
+      return preparedTripRows.filter((r) => !surfaced.has(r.sourcePlaceName.toLowerCase())).length;
     }
     return 0;
-  }, [activeKind, surfacedKeys, preparedCanyonRows, preparedTripRows]);
+  }, [activeKind, surfacedKeys, preparedPlaceRows, preparedTripRows]);
 
   const reviewItems = useMemo<ReviewItem[]>(() => {
     return surfacedKeys.map((key) => {
@@ -921,7 +1018,7 @@ function UnifiedImportDialog({
         })),
         allowCreate: true,
         allowSkip: activeKind === "triplog",
-        allowNoCanyon: activeKind === "triplog",
+        allowNoPlace: activeKind === "triplog",
         decision,
       };
     });
@@ -939,7 +1036,7 @@ function UnifiedImportDialog({
     [surfacedKeys],
   );
 
-  // Trip "Create canyon" needs an inline coord-required form before the row is
+  // Trip "Create place" needs an inline coord-required form before the row is
   // resolved. Surface the create form for any surfaced trip name whose decision
   // is "create".
   const tripCreateKeys = useMemo(() => {
@@ -983,87 +1080,92 @@ function UnifiedImportDialog({
 
   // ── Confirm → Import ─────────────────────────────────────────────────────────
 
-  // Resolved canyon rows for the POST. Each row's resolution is merge (when its
-  // name resolves to an existing canyon) or create.
-  function resolvedCanyonBody(batchId: string) {
-    const rows = preparedCanyonRows.map((row) => {
+  // Resolved place rows for the POST. Each row's resolution is merge (when its
+  // name resolves to an existing place) or create.
+  function resolvedPlaceBody(batchId: string) {
+    const rows = preparedPlaceRows.map((row) => {
       const key = row.sourceName.toLowerCase();
       const autoId = reviewState.autoMergeId[key];
       const decision = reviewState.decisions[key];
-      let resolution: { kind: "create" } | { kind: "merge"; canyonId: string };
+      let resolution: { kind: "create" } | { kind: "merge"; placeId: string };
       if (autoId) {
-        resolution = { kind: "merge", canyonId: autoId };
+        resolution = { kind: "merge", placeId: autoId };
       } else if (decision?.kind === "link") {
-        resolution = { kind: "merge", canyonId: decision.id };
+        resolution = { kind: "merge", placeId: decision.id };
       } else {
         resolution = { kind: "create" };
       }
       return { data: row.input, resolution };
     });
-    return { importBatchId: batchId, rows, mergePolicy };
+    return {
+      importBatchId: batchId,
+      placeTypeId: importPlaceTypeId,
+      rows,
+      mergePolicy,
+    };
   }
 
   // Server per-row errors carry a `rowIndex` into the POST body (== index into
-  // preparedCanyonRows, since resolvedCanyonBody maps them in order). Turn that
+  // preparedPlaceRows, since resolvedPlaceBody maps them in order). Turn that
   // back into the original CSV line number (header = line 1) so the message
   // matches the user's file — a single, consistent index (IMPORT-7).
-  function formatCanyonRowErrors(
+  function formatPlaceRowErrors(
     errs: { rowIndex: number; message: string }[],
   ): string[] {
     return errs.map((e) => {
-      const prepared = preparedCanyonRows[e.rowIndex];
+      const prepared = preparedPlaceRows[e.rowIndex];
       const line = prepared ? prepared.rowIndex + 2 : e.rowIndex + 1;
       return `Row ${line}: ${e.message}`;
     });
   }
 
-  async function handleImportCanyons() {
+  async function handleImportPlaces() {
     const batchId = sessionBatchId();
     setImporting(true);
     setError(null);
     try {
-      const result = await bulkCanyonImport(resolvedCanyonBody(batchId));
+      const result = await bulkPlaceImport(resolvedPlaceBody(batchId));
 
       // Staged combined import: if a logbook was also dropped, don't finish here.
-      // Refetch the canyon list (now including the just-imported canyons) and move
-      // into the logbook stage, matching trips against the fresh canyons.
+      // Refetch the place list (now including the just-imported places) and move
+      // into the logbook stage, matching trips against the fresh places.
       if (tripFile && tripMapValid) {
-        const all = await apiFetch<TCanyon[]>("/canyons");
-        onRefetchCanyons();
+        const all = await apiFetch<TPlace[]>("/places");
+        onRefetchPlaces();
         setImporting(false);
         const started = startTripStage(all.map(toMatchCandidate));
         if (!started) {
-          // No usable trip rows — fall back to reporting the canyon result.
+          // No usable trip rows — fall back to reporting the place result.
           setOutcome({
-            kind: "canyon",
+            kind: "place",
             batchId,
             created: result.created,
             merged: result.merged,
             merges: result.merges,
             skipped: result.skipped,
-            droppedRows: canyonDroppedRows,
-            errors: formatCanyonRowErrors(result.errors),
-            warnings: canyonWarnings,
+            droppedRows: placeDroppedRows,
+            errors: formatPlaceRowErrors(result.errors),
+            warnings: placeWarnings,
           });
         }
         return;
       }
 
-      onRefetchCanyons();
+      onRefetchPlaces();
       setOutcome({
-        kind: "canyon",
+        kind: "place",
         batchId,
         created: result.created,
         merged: result.merged,
         merges: result.merges,
         skipped: result.skipped,
-        droppedRows: canyonDroppedRows,
-        errors: formatCanyonRowErrors(result.errors),
-        warnings: canyonWarnings,
+        droppedRows: placeDroppedRows,
+        errors: formatPlaceRowErrors(result.errors),
+        warnings: placeWarnings,
       });
     } catch (err) {
       console.error(err);
-      setError(messageFromError(err, "Couldn't import canyons. Please try again."));
+      setError(messageFromError(err, "Couldn't import places. Please try again."));
     } finally {
       setImporting(false);
     }
@@ -1089,24 +1191,32 @@ function UnifiedImportDialog({
         }
       }
       if (newFieldDefs.length > 0) {
-        const merged = [...customFieldDefs, ...newFieldDefs];
-        await updateUserPreferences({ tripLogCustomFields: merged });
+        // One create per definition — the whole-list PATCH is gone, and per-row
+        // writes are also what lets a failure on the third field leave the
+        // first two standing. The last response is the surviving list.
+        let merged = customFieldDefs;
+        for (const def of newFieldDefs) {
+          merged = await createCustomField("trip-log", def, {
+            appliesToAllTypes: true,
+          });
+        }
         onCustomFieldDefsChange(merged);
       }
 
-      // Create the canyons the user resolved via "Create canyon" inline. The
+      // Create the places the user resolved via "Create place" inline. The
       // bulk endpoint stamps them with importBatchId (so undo removes them) but
-      // doesn't return ids — so after creating, refetch the canyon list and
-      // resolve each created canyon's id by exact name+coords match.
-      const createdCanyonIdByKey: Record<string, string> = {};
-      let createdCanyons = 0;
+      // doesn't return ids — so after creating, refetch the place list and
+      // resolve each created place's id by exact name+coords match.
+      const createdPlaceIdByKey: Record<string, string> = {};
+      let createdPlaces = 0;
       if (tripCreateKeys.length > 0) {
         const createRows = tripCreateKeys
           .map((key) => ({ key, form: reviewState.createForms[key] }))
           .filter((e): e is { key: string; form: CreateForm } => !!e.form);
         try {
-          const result = await bulkCanyonImport({
+          const result = await bulkPlaceImport({
             importBatchId: batchId,
+            placeTypeId: importPlaceTypeId,
             rows: createRows.map((e) => ({
               data: {
                 name: e.form.name.trim(),
@@ -1117,11 +1227,11 @@ function UnifiedImportDialog({
             })),
             mergePolicy,
           });
-          createdCanyons = result.created;
+          createdPlaces = result.created;
           // Surface server-rejected create rows with their REAL per-row message
-          // (the meaningful label here is the canyon name, not a CSV line) and
+          // (the meaningful label here is the place name, not a CSV line) and
           // skip the pointless id-match for them — a rejected row created no
-          // canyon to link. result.errors[].rowIndex indexes the POST body,
+          // place to link. result.errors[].rowIndex indexes the POST body,
           // which is createRows.map(...) in order.
           const rejectedRowIndexes = new Set<number>();
           for (const e of result.errors) {
@@ -1129,14 +1239,14 @@ function UnifiedImportDialog({
             const rejected = createRows[e.rowIndex];
             const label =
               rejected?.form.name.trim() || rejected?.key || `row ${e.rowIndex + 1}`;
-            errors.push(`Couldn't create canyon "${label}": ${e.message}`);
+            errors.push(`Couldn't create place "${label}": ${e.message}`);
           }
-          // Resolve ids from the freshly-fetched canyon list.
-          const all = await apiFetch<TCanyon[]>("/canyons");
+          // Resolve ids from the freshly-fetched place list.
+          const all = await apiFetch<TPlace[]>("/places");
           const candidates = all.map(toMatchCandidate);
           createRows.forEach((e, rowIndex) => {
             if (rejectedRowIndexes.has(rowIndex)) return;
-            const m = matchCanyon(
+            const m = matchPlace(
               {
                 name: e.form.name.trim(),
                 latitude: parseFloat(e.form.latitude),
@@ -1144,12 +1254,12 @@ function UnifiedImportDialog({
               },
               candidates,
             );
-            if (m.best) createdCanyonIdByKey[e.key] = m.best.candidate.id;
-            else errors.push(`Couldn't link the created canyon for "${e.key}".`);
+            if (m.best) createdPlaceIdByKey[e.key] = m.best.candidate.id;
+            else errors.push(`Couldn't link the created place for "${e.key}".`);
           });
         } catch (err) {
           console.error(err);
-          errors.push("Couldn't create one or more new canyons.");
+          errors.push("Couldn't create one or more new places.");
         }
       }
 
@@ -1160,30 +1270,30 @@ function UnifiedImportDialog({
       let discarded = 0;
       const sentRowCsvLines: number[] = [];
       const trips = preparedTripRows.flatMap((row) => {
-        const key = row.sourceCanyonName.toLowerCase();
+        const key = row.sourcePlaceName.toLowerCase();
         const decision = reviewState.decisions[key];
         if (decision?.kind === "skip") {
           discarded += 1;
           return [];
         }
         sentRowCsvLines.push(row.rowIndex + 2);
-        let canyonId: string | null = null;
+        let placeId: string | null = null;
         let displayName: string | null | undefined = undefined;
         if (decision?.kind === "link") {
-          canyonId = decision.id;
+          placeId = decision.id;
         } else if (decision?.kind === "create") {
-          canyonId = createdCanyonIdByKey[key] ?? null;
-          if (canyonId == null) {
-            displayName = row.sourceCanyonName || null;
+          placeId = createdPlaceIdByKey[key] ?? null;
+          if (placeId == null) {
+            displayName = row.sourcePlaceName || null;
           }
         } else {
-          // noCanyon (or unset) → canyon-less; name the trip after the raw string.
-          canyonId = null;
-          displayName = row.sourceCanyonName || null;
+          // noPlace (or unset) → place-less; name the trip after the raw string.
+          placeId = null;
+          displayName = row.sourcePlaceName || null;
         }
         return [{
-          canyonId,
-          sourceCanyonName: row.sourceCanyonName,
+          placeId,
+          sourcePlaceName: row.sourcePlaceName,
           displayName,
           types: row.types,
           date: row.date,
@@ -1193,19 +1303,19 @@ function UnifiedImportDialog({
       });
 
       const result = await bulkCreateTripLogs({ importBatchId: batchId, trips });
-      onRefetchCanyons();
+      onRefetchPlaces();
       onRefetchTripLogs();
       onRefetchAnalytics();
 
-      const linked = trips.filter((t) => t.canyonId != null).length;
-      const noCanyon = trips.filter((t) => t.canyonId == null).length;
+      const linked = trips.filter((t) => t.placeId != null).length;
+      const noPlace = trips.filter((t) => t.placeId == null).length;
       setOutcome({
         kind: "triplog",
         batchId,
         imported: result.imported,
         updated: result.updated,
-        createdCanyons,
-        noCanyon,
+        createdPlaces,
+        noPlace,
         linked,
         discarded,
         droppedRows: tripDroppedRows,
@@ -1230,12 +1340,12 @@ function UnifiedImportDialog({
     setUndoing(true);
     try {
       const result = await undoImport(outcome.batchId);
-      onRefetchCanyons();
+      onRefetchPlaces();
       onRefetchTripLogs();
       onRefetchAnalytics();
       const parts = [
-        result.deletedCanyons > 0
-          ? `${result.deletedCanyons} canyon${result.deletedCanyons === 1 ? "" : "s"}`
+        result.deletedPlaces > 0
+          ? `${result.deletedPlaces} place${result.deletedPlaces === 1 ? "" : "s"}`
           : null,
         result.deletedTrips > 0
           ? `${result.deletedTrips} trip${result.deletedTrips === 1 ? "" : "s"}`
@@ -1256,7 +1366,7 @@ function UnifiedImportDialog({
   // ── Persist merge policy edits to user prefs ─────────────────────────────────
 
   function updateMergeField(field: MergeableField, useIncoming: boolean) {
-    const next: CanyonMergePolicy = {
+    const next: PlaceMergePolicy = {
       ...mergePolicy,
       [field]: useIncoming ? "useIncoming" : "keepExisting",
     };
@@ -1267,13 +1377,13 @@ function UnifiedImportDialog({
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
-  // When both a canyon list and a logbook are queued, label which stage we're in.
-  const bothFiles = !!canyonFile && !!tripFile;
+  // When both a place list and a logbook are queued, label which stage we're in.
+  const bothFiles = !!placeFile && !!tripFile;
   const stageSuffix =
     bothFiles && !outcome
       ? activeKind === "triplog"
         ? " — logbook (2 of 2)"
-        : " — canyons (1 of 2)"
+        : " — places (1 of 2)"
       : "";
 
   const title = outcome
@@ -1286,7 +1396,7 @@ function UnifiedImportDialog({
             ? "Review matches"
             : "Confirm import") + stageSuffix;
 
-  function renderFileChip(loaded: LoadedFile, which: "canyon" | "triplog") {
+  function renderFileChip(loaded: LoadedFile, which: "place" | "triplog") {
     return (
       <Box className={classes.fileChip}>
         <span className={classes.fileName}>{loaded.fileName}</span>
@@ -1298,8 +1408,8 @@ function UnifiedImportDialog({
             if (v) overrideKind(loaded, which, v as FileKind);
           }}
         >
-          <ToggleButton value="canyon" sx={{ textTransform: "none", color: "var(--theme-text-primary)" }}>
-            Canyons
+          <ToggleButton value="place" sx={{ textTransform: "none", color: "var(--theme-text-primary)" }}>
+            Places
           </ToggleButton>
           <ToggleButton value="triplog" sx={{ textTransform: "none", color: "var(--theme-text-primary)" }}>
             Logbook
@@ -1331,8 +1441,8 @@ function UnifiedImportDialog({
             This tool is best used on a larger screen.
           </Typography>
         )}
-        {noCanyonsYet && (
-          <ErrorBanner message="You have no canyons yet. Importing a logbook works best after you load the RopeWiki canyon database — your trips can then match against it. You can still import now and link trips later." />
+        {noPlacesYet && (
+          <ErrorBanner message="You have no places yet. Importing a logbook works best after you load the RopeWiki place database — your trips can then match against it. You can still import now and link trips later." />
         )}
         <Box
           onDragOver={handleDragOver}
@@ -1343,32 +1453,73 @@ function UnifiedImportDialog({
         >
           <UploadFileIcon sx={{ fontSize: 36, color: "var(--theme-text-muted)", mb: 0.5 }} />
           <Typography variant="body2" sx={{ color: "var(--theme-text-muted)" }}>
-            Drop a CSV here, or click to browse. You can add a canyon list and a logbook together.
+            Drop a CSV here, or click to browse. You can add a place list and a logbook together.
           </Typography>
           <input ref={fileInputRef} type="file" accept=".csv" hidden multiple onChange={handleFileChange} />
         </Box>
 
         {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
         <Typography variant="caption" sx={{ color: "var(--theme-text-muted)" }}>
-          A canyon list needs a name, latitude and longitude (grades and notes are
-          optional). A logbook needs a canyon name and a date (notes optional).
+          A place list needs a name, latitude and longitude (grades and notes are
+          optional). A logbook needs a place name and a date (notes optional).
           Need a starting point?{" "}
-          <a href="/templates/canyon-import-template.csv" download style={{ color: "var(--theme-accent)" }}>
-            Canyon template
-          </a>{" "}
+          {/* GENERATED from the chosen type's own definitions, not a static
+              file: a static template promises what a place has, and that
+              promise stopped being true the moment a place could be a
+              campsite. The logbook one below stays a file — a trip's columns
+              do not depend on a place type. */}
+          {/* A BUTTON, not an anchor: this one is generated in the browser and
+              handed to the user, so there is no href to navigate to — and an
+              anchor with `href="#"` is a link that lies to a screen reader and
+              to a middle-click. Styled as a link because it sits inline in a
+              sentence beside a real one. */}
+          <Box
+            component="button"
+            type="button"
+            onClick={downloadPlaceTemplate}
+            sx={{
+              background: "none",
+              border: "none",
+              padding: 0,
+              font: "inherit",
+              color: "var(--theme-accent)",
+              textDecoration: "underline",
+              cursor: "pointer",
+            }}
+          >
+            {importTypeName} template
+          </Box>{" "}
           ·{" "}
           <a href="/templates/logbook-import-template.csv" download style={{ color: "var(--theme-accent)" }}>
             Logbook template
           </a>
         </Typography>
 
-        {canyonFile && (
+        {placeFile && (
           <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-            {renderFileChip(canyonFile, "canyon")}
-            <SectionLabel text="Canyon columns" />
+            {renderFileChip(placeFile, "place")}
+            {/* TYPE FIRST, then the columns — the mapping below is built from
+                this type's fields, so choosing it afterwards would re-map
+                everything the user had just set. */}
+            <SectionLabel text="Place type" />
+            <FormControl size="small" sx={{ minWidth: 200 }}>
+              <Select
+                value={importPlaceTypeId}
+                onChange={(e) => setImportPlaceTypeId(e.target.value)}
+                sx={selectSx}
+                MenuProps={menuPaperProps}
+              >
+                {placeTypes.map((type) => (
+                  <MenuItem key={type.id} value={type.id}>
+                    {type.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <SectionLabel text="Place columns" />
             {renderColumnMapHeader()}
-            {canyonFile.headers.map((header) => {
-              const role = canyonAssignments[header] ?? "discard";
+            {placeFile.headers.map((header) => {
+              const role = placeAssignments[header] ?? "discard";
               // An auto-detected `attr:<key>` role (from an `attr:<key>` export
               // header) isn't one of ALL_ASSIGNABLE_ROLES, so render a matching
               // option for it — otherwise the Select value is out of range.
@@ -1382,7 +1533,7 @@ function UnifiedImportDialog({
                     <Select
                       value={role}
                       onChange={(e) =>
-                        setCanyonAssignments((prev) => ({ ...prev, [header]: e.target.value as CanyonFieldRole }))
+                        setPlaceAssignments((prev) => ({ ...prev, [header]: e.target.value as PlaceFieldRole }))
                       }
                       sx={selectSx}
                       MenuProps={menuPaperProps}
@@ -1390,8 +1541,15 @@ function UnifiedImportDialog({
                       {isCustomAttr && (
                         <MenuItem value={role}>Custom field: {role.slice(5)}</MenuItem>
                       )}
-                      {ALL_ASSIGNABLE_ROLES.map((r) => (
-                        <MenuItem key={r} value={r}>{ROLE_LABELS[r] ?? r}</MenuItem>
+                      {placeRoleOptions.map((r) => (
+                        <MenuItem key={r} value={r}>
+                          {ROLE_LABELS[r] ??
+                            (r.startsWith("attr:")
+                              ? (placeDefsForImportType.find(
+                                  (d) => `attr:${d.key}` === r,
+                                )?.label ?? r.slice(5))
+                              : r)}
+                        </MenuItem>
                       ))}
                     </Select>
                   </FormControl>
@@ -1399,13 +1557,13 @@ function UnifiedImportDialog({
               );
             })}
             <Typography className={classes.mappingFeedback}>
-              {canyonMapValid
-                ? "Name, latitude and longitude found — canyons will be matched by name and coordinates."
-                : "Name, latitude and longitude are required for a canyon list."}
+              {placeMapValid
+                ? "Name, latitude and longitude found — places will be matched by name and coordinates."
+                : "Name, latitude and longitude are required for a place list."}
             </Typography>
-            {ignoredCanyonCols.length > 0 && (
+            {ignoredPlaceCols.length > 0 && (
               <Typography className={classes.ignoredNotice}>
-                Ignored columns: {ignoredCanyonCols.join(", ")}
+                Ignored columns: {ignoredPlaceCols.join(", ")}
               </Typography>
             )}
           </Box>
@@ -1434,7 +1592,7 @@ function UnifiedImportDialog({
                         sx={selectSx}
                         MenuProps={menuPaperProps}
                       >
-                        <MenuItem value="name">Canyon Name</MenuItem>
+                        <MenuItem value="name">Place Name</MenuItem>
                         <MenuItem value="date">Date</MenuItem>
                         <MenuItem value="notes">Notes</MenuItem>
                         <MenuItem value="type">Type</MenuItem>
@@ -1480,8 +1638,8 @@ function UnifiedImportDialog({
             })}
             <Typography className={classes.mappingFeedback}>
               {tripMapValid
-                ? "Canyon name and date found — trips will match canyons by name."
-                : "A canyon name column and a date column are required for a logbook."}
+                ? "Place name and date found — trips will match places by name."
+                : "A place name column and a date column are required for a logbook."}
             </Typography>
             {ignoredTripCols.length > 0 && (
               <Typography className={classes.ignoredNotice}>
@@ -1512,14 +1670,14 @@ function UnifiedImportDialog({
     );
   }
 
-  // Inline create-canyon coord form, rendered directly under the match whose
+  // Inline create-place coord form, rendered directly under the match whose
   // decision is "create" (trip imports only).
   function renderCreateForm(key: string) {
     const f = reviewState.createForms[key] ?? { name: key, latitude: "", longitude: "" };
     return (
       <Box className={classes.createForm}>
         <TextField
-          label="Canyon name"
+          label="Place name"
           value={f.name}
           onChange={(e) => updateCreateForm(key, { name: e.target.value })}
           size="small"
@@ -1560,15 +1718,15 @@ function UnifiedImportDialog({
     return (
       <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
         <Typography variant="body2" sx={{ color: "var(--theme-text-muted)" }}>
-          {activeKind === "canyon"
-            ? "These canyon names matched more than one option, or matched something far away. Choose what to do with each."
-            : "These canyon names couldn't be matched confidently. Link them, create a new canyon, import the trip without a canyon, or discard it."}
+          {activeKind === "place"
+            ? "These place names matched more than one option, or matched something far away. Choose what to do with each."
+            : "These place names couldn't be matched confidently. Link them, create a new place, import the trip without a place, or discard it."}
         </Typography>
         {autoResolvedCount > 0 && (
           <Typography variant="caption" sx={{ color: "var(--theme-text-muted)" }}>
-            {activeKind === "canyon"
-              ? `Plus ${autoResolvedCount} more ${autoResolvedCount === 1 ? "canyon" : "canyons"} matched confidently (new or existing) and will be imported automatically when you apply — only the ${surfacedKeys.length} above need a decision.`
-              : `Plus ${autoResolvedCount} more ${autoResolvedCount === 1 ? "trip" : "trips"} matched a canyon confidently (or have no canyon) and will be imported automatically when you apply — only the ${surfacedKeys.length} above need a decision.`}
+            {activeKind === "place"
+              ? `Plus ${autoResolvedCount} more ${autoResolvedCount === 1 ? "place" : "places"} matched confidently (new or existing) and will be imported automatically when you apply — only the ${surfacedKeys.length} above need a decision.`
+              : `Plus ${autoResolvedCount} more ${autoResolvedCount === 1 ? "trip" : "trips"} matched a place confidently (or have no place) and will be imported automatically when you apply — only the ${surfacedKeys.length} above need a decision.`}
           </Typography>
         )}
         <MatchReview
@@ -1588,7 +1746,7 @@ function UnifiedImportDialog({
   function renderConfirmStep() {
     if (outcome) {
       const headline: HeadlineCount[] =
-        outcome.kind === "canyon"
+        outcome.kind === "place"
           ? [
               { count: outcome.created, label: "created" },
               { count: outcome.merged, label: "merged" },
@@ -1602,22 +1760,22 @@ function UnifiedImportDialog({
               // Row-level parse failures (FECO-006/D5), reported next to imported.
               { count: outcome.droppedRows, label: "couldn't be read" },
               { count: outcome.updated, label: "updated" },
-              { count: outcome.linked, label: "linked to a canyon" },
-              { count: outcome.noCanyon, label: "without a canyon" },
+              { count: outcome.linked, label: "linked to a place" },
+              { count: outcome.noPlace, label: "without a place" },
               { count: outcome.discarded, label: "discarded" },
             ];
-      // A merge folds an imported row into a canyon that already existed, which
+      // A merge folds an imported row into a place that already existed, which
       // is the one outcome the headline count alone can't be checked against
       // ("26 merged" — into what?). List them, but stay out of the way: no
       // accordion at all when nothing merged, collapsed when something did.
       const details: DetailSection[] = [];
       let detailsLabel: string | undefined;
-      if (outcome.kind === "canyon" && outcome.merges.length > 0) {
+      if (outcome.kind === "place" && outcome.merges.length > 0) {
         details.push({
           items: outcome.merges.map((m) => `${m.sourceName} → ${m.targetName}`),
         });
         detailsLabel = `${outcome.merges.length} ${
-          outcome.merges.length === 1 ? "canyon" : "canyons"
+          outcome.merges.length === 1 ? "place" : "places"
         } merged into existing entries`;
       }
       const warnings =
@@ -1627,9 +1785,9 @@ function UnifiedImportDialog({
       // array and is never itself undoable, so it must not be what keeps the
       // button visible when nothing was actually created/imported.
       const hasUndoableChange =
-        outcome.kind === "canyon"
+        outcome.kind === "place"
           ? outcome.created > 0 || outcome.merged > 0
-          : outcome.imported > 0 || outcome.updated > 0 || outcome.createdCanyons > 0;
+          : outcome.imported > 0 || outcome.updated > 0 || outcome.createdPlaces > 0;
       return (
         <ImportResultSummary
           headline={headline}
@@ -1645,15 +1803,15 @@ function UnifiedImportDialog({
 
     // Pre-import preview
     const preview =
-      activeKind === "canyon"
-        ? `${preparedCanyonRows.length} canyon row${preparedCanyonRows.length !== 1 ? "s" : ""} ready to import.`
+      activeKind === "place"
+        ? `${preparedPlaceRows.length} place row${preparedPlaceRows.length !== 1 ? "s" : ""} ready to import.`
         : `${preparedTripRows.length} trip${preparedTripRows.length !== 1 ? "s" : ""} ready to import.`;
 
     return (
       <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
         <Typography variant="body2" sx={{ color: "var(--theme-text-primary)" }}>{preview}</Typography>
 
-        {activeKind === "canyon" && (
+        {activeKind === "place" && (
           <Accordion
             sx={{
               backgroundColor: "rgba(255,255,255,0.04)",
@@ -1666,12 +1824,12 @@ function UnifiedImportDialog({
             </AccordionSummary>
             <AccordionDetails sx={{ pt: 0 }}>
               <Typography variant="caption" sx={{ color: "var(--theme-text-muted)", display: "block", mb: 1 }}>
-                When a row matches an existing canyon, keep the existing value or use the value from your file.
+                When a row matches an existing place, keep the existing value or use the value from your file.
                 These settings only apply where both sides have a value: an empty field always fills in from your
                 file, and an empty cell in your file never clears what's already there. Names and coordinates
                 never change.
               </Typography>
-              {MERGEABLE_FIELDS.map((field) => (
+              {mergeableFields.map((field) => (
                 <FormControlLabel
                   key={field}
                   control={
@@ -1684,7 +1842,7 @@ function UnifiedImportDialog({
                   }
                   label={
                     <Typography variant="body2" sx={{ color: "var(--theme-text-primary)" }}>
-                      {MERGEABLE_FIELD_LABELS[field]}: {mergePolicy[field] === "useIncoming" ? "use file" : "keep existing"}
+                      {mergeFieldLabel(field, placeDefsForImportType)}: {mergePolicy[field] === "useIncoming" ? "use file" : "keep existing"}
                     </Typography>
                   }
                   sx={{ display: "flex" }}
@@ -1708,7 +1866,7 @@ function UnifiedImportDialog({
   // a loaded file/mapping/review is real, non-trivial work (IMPORT-8). Once an
   // outcome exists there's nothing left to lose, so handleDismiss (= onClose)
   // runs unguarded.
-  const isDirty = !outcome && (canyonFile != null || tripFile != null);
+  const isDirty = !outcome && (placeFile != null || tripFile != null);
   const guard = useUnsavedChangesGuard(isDirty, handleDismiss);
 
   function renderContent() {
@@ -1766,7 +1924,7 @@ function UnifiedImportDialog({
         <Button
           variant="contained"
           color="secondary"
-          onClick={activeKind === "canyon" ? handleImportCanyons : handleImportTrips}
+          onClick={activeKind === "place" ? handleImportPlaces : handleImportTrips}
         >
           Import
         </Button>

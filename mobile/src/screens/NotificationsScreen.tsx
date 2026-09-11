@@ -11,7 +11,7 @@
 // so it survives offline, patching the cache first for an immediate read state.
 //
 // A notification that REFERS to something is a way in to that thing: tapping a
-// canyon share opens the canyon. Previously every tap did nothing but mark the
+// place share opens the place. Previously every tap did nothing but mark the
 // row read, which made the inbox a dead end you had to navigate out of by hand.
 //
 // A notification that ASKS something is answered HERE, in the row (§5's inline
@@ -23,7 +23,7 @@
 // accepted file becomes an ordinary Saved import through the same pipeline any
 // picked file goes through, so it never needed a page of its own.
 //
-// PRIVACY: rows show the server-resolved label (which may include a canyon NAME —
+// PRIVACY: rows show the server-resolved label (which may include a place NAME —
 // user-supplied text, allowed) and a timestamp. Never a coordinate. Tapping
 // through passes an opaque id and the detail screen fetches over the authed API,
 // so a share revoked since the notification lands on the 404-not-403 path.
@@ -97,7 +97,7 @@ import {
 } from "../ui";
 import {
   groupNotificationsByDay,
-  notificationCanyonId,
+  notificationPlaceId,
   notificationHaystack,
   notificationLabel,
   notificationMeta,
@@ -231,13 +231,13 @@ function expandBatchSelection(
 export function NotificationsScreen({
   onBack,
   onUnreadChanged,
-  onOpenCanyon,
+  onOpenPlace,
   onOpenSaved,
   onOpenFriends,
 }: {
   onBack: () => void;
   onUnreadChanged?: () => void;
-  onOpenCanyon: (canyonId: string) => void;
+  onOpenPlace: (placeId: string) => void;
   /**
    * "View in Saved" — the tab, on the filter the subject lives under, with that
    * row pulsed on arrival. `highlightKey` is null when the notification names
@@ -303,7 +303,7 @@ export function NotificationsScreen({
 
   // The rail's tallies come from the OTHER axis only (the search), so a chip
   // answers "how many would I get if I tapped this" rather than restating the
-  // bucket already showing — the rule the Canyons rail follows. The HERO keeps
+  // bucket already showing — the rule the Places rail follows. The HERO keeps
   // counting the whole inbox: it answers a question about the inbox, not about
   // the filter being held.
   const searched = useMemo(
@@ -351,9 +351,9 @@ export function NotificationsScreen({
   const sections = useMemo(() => groupNotificationsByDay(rows), [rows]);
 
   // --- Multi-select (DESIGN.md §7) -----------------------------------------
-  // The same hook and the same bar as Canyons, Logs and Saved: press and hold a
+  // The same hook and the same bar as Places, Logs and Saved: press and hold a
   // row to start, tap to toggle, the last row deselected leaves the mode. Every
-  // notification is selectable — unlike a shared canyon, there is no row the
+  // notification is selectable — unlike a shared place, there is no row the
   // group verbs cannot act on.
   const {
     selectedKeys,
@@ -739,15 +739,15 @@ export function NotificationsScreen({
     [runBatch],
   );
 
-  // Reading it is what marks it read, so both happen on one tap; the canyon
+  // Reading it is what marks it read, so both happen on one tap; the place
   // then opens on top.
   const openNotification = useCallback(
     (n: TNotification) => {
       void markRead(n);
-      const canyonId = notificationCanyonId(n);
-      if (canyonId) onOpenCanyon(canyonId);
+      const placeId = notificationPlaceId(n);
+      if (placeId) onOpenPlace(placeId);
     },
-    [markRead, onOpenCanyon],
+    [markRead, onOpenPlace],
   );
 
   /**
@@ -1300,7 +1300,7 @@ function EmptyPanel({
       <View style={styles.empty}>
         <Text style={styles.emptyTitle}>Nothing matches</Text>
         <Text style={styles.emptyHint}>
-          The search runs over what a row says — a name, a canyon, a filename.
+          The search runs over what a row says — a name, a place, a filename.
         </Text>
         <Button label="Clear search" variant="ghost" onPress={onShowAll} />
       </View>

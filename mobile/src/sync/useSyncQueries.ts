@@ -7,20 +7,22 @@ import { useCallback, useEffect, useState } from "react";
 import {
   hasMirrorSynced,
   countMediaByLinkedId,
-  countOutgoingSharesByCanyon,
-  incomingShareOwnerByCanyon,
-  listCanyonTrackMedia,
+  countOutgoingSharesByPlace,
+  incomingShareOwnerByPlace,
+  listPlaceTrackMedia,
   listMediaForLinked,
-  listMirrorCanyons,
+  listMirrorPlaces,
+  listMirrorPlaceTypes,
   listMirrorTrips,
-  listMirrorWaypoints,
+  listMirrorPlaceLinks,
   listMirrorRoutes,
-  getMirrorCanyon,
+  getMirrorPlace,
   getMirrorTrip,
-  type MirrorCanyon,
+  type MirrorPlace,
+  type MirrorPlaceType,
   type MirrorMedia,
   type MirrorTrip,
-  type MirrorWaypoint,
+  type MirrorPlaceLink,
   type MirrorRoute,
 } from "./mirrorStore";
 import { mirrorQueryError } from "./mirrorQueryError";
@@ -99,22 +101,32 @@ function useMirrorQuery<T>(read: () => Promise<T>): MirrorQueryState<T> {
   };
 }
 
-const readCanyons = () => listMirrorCanyons();
+const readPlaces = () => listMirrorPlaces();
+const readPlaceTypes = () => listMirrorPlaceTypes();
 const readTrips = () => listMirrorTrips();
-const readWaypoints = () => listMirrorWaypoints();
-const readShareCounts = () => countOutgoingSharesByCanyon();
-const readIncomingShareOwners = () => incomingShareOwnerByCanyon();
+const readPlaceLinks = () => listMirrorPlaceLinks();
+const readShareCounts = () => countOutgoingSharesByPlace();
+const readIncomingShareOwners = () => incomingShareOwnerByPlace();
 
-export function useMirrorCanyons(): MirrorQueryState<MirrorCanyon[]> {
-  return useMirrorQuery(readCanyons);
+export function useMirrorPlaces(): MirrorQueryState<MirrorPlace[]> {
+  return useMirrorQuery(readPlaces);
+}
+
+/**
+ * Every place type, mirror-backed — the vocabulary the tab bar, the create
+ * picker, the map layer sheet and the pin colours are all built from. One hook
+ * for all four so they can never disagree about what types exist.
+ */
+export function useMirrorPlaceTypes(): MirrorQueryState<MirrorPlaceType[]> {
+  return useMirrorQuery(readPlaceTypes);
 }
 
 export function useMirrorTrips(): MirrorQueryState<MirrorTrip[]> {
   return useMirrorQuery(readTrips);
 }
 
-export function useMirrorCanyon(id: string): MirrorQueryState<MirrorCanyon | null> {
-  const read = useCallback(() => getMirrorCanyon(id), [id]);
+export function useMirrorPlace(id: string): MirrorQueryState<MirrorPlace | null> {
+  const read = useCallback(() => getMirrorPlace(id), [id]);
   return useMirrorQuery(read);
 }
 
@@ -123,24 +135,24 @@ export function useMirrorTrip(id: string): MirrorQueryState<MirrorTrip | null> {
   return useMirrorQuery(read);
 }
 
-export function useMirrorWaypoints(): MirrorQueryState<MirrorWaypoint[]> {
-  return useMirrorQuery(readWaypoints);
+export function useMirrorPlaceLinks(): MirrorQueryState<MirrorPlaceLink[]> {
+  return useMirrorQuery(readPlaceLinks);
 }
 
-/** Every route the account can see (own + through a canyon share). */
+/** Every route the account can see (own + through a place share). */
 export function useMirrorRoutes(): MirrorQueryState<MirrorRoute[]> {
   return useMirrorQuery(listMirrorRoutes);
 }
 
 /**
- * Every canyon route attachment on this account, for the map's "Canyon routes"
+ * Every place route attachment on this account, for the map's "Place routes"
  * layer. Mirror-backed, so it works with no signal.
  */
-export function useMirrorCanyonTracks(
+export function useMirrorPlaceTracks(
   trackMimeTypes: readonly string[],
 ): MirrorQueryState<MirrorMedia[]> {
   const read = useCallback(
-    () => listCanyonTrackMedia(trackMimeTypes),
+    () => listPlaceTrackMedia(trackMimeTypes),
     [trackMimeTypes],
   );
   return useMirrorQuery(read);
@@ -148,28 +160,28 @@ export function useMirrorCanyonTracks(
 
 /** Attachment counts keyed by linked row id — for list badges. */
 export function useMirrorMediaCounts(
-  linkedType: "canyon" | "tripLog",
+  linkedType: "place" | "tripLog",
 ): MirrorQueryState<Record<string, number>> {
   const read = useCallback(() => countMediaByLinkedId(linkedType), [linkedType]);
   return useMirrorQuery(read);
 }
 
-/** Share fan-out per owned canyon, for the "Shared with N" badge. */
+/** Share fan-out per owned place, for the "Shared with N" badge. */
 export function useMirrorShareCounts(): MirrorQueryState<Record<string, number>> {
   return useMirrorQuery(readShareCounts);
 }
 
 /**
- * Username of whoever shared each incoming canyon with the viewer, keyed by
- * canyon id — the "From <name>" mark on a shared route or waypoint in Saved.
+ * Username of whoever shared each incoming place with the viewer, keyed by
+ * place id — the "From <name>" mark on a shared route or place in Saved.
  */
 export function useMirrorIncomingShareOwners(): MirrorQueryState<Record<string, string>> {
   return useMirrorQuery(readIncomingShareOwners);
 }
 
-/** Media attached to one canyon or trip, pendingUpload rows included. */
+/** Media attached to one place or trip, pendingUpload rows included. */
 export function useMirrorMedia(
-  linkedType: "canyon" | "tripLog",
+  linkedType: "place" | "tripLog",
   linkedId: string,
 ): MirrorQueryState<MirrorMedia[]> {
   const read = useCallback(

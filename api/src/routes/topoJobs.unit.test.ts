@@ -10,7 +10,7 @@ import { TOPO_JOB_SELECT, serializeTopoJobFor } from "./topoJobs";
 // Two rules are load-bearing and both are privacy, not cosmetics: userId never
 // leaves the API (a recipient has no business learning the owner's internal
 // id), and s3OutputKeys is owner-only (raw bucket keys, and a key can name a
-// canyon).
+// place).
 
 const OWNER = "user-owner";
 const SHAREE = "user-sharee";

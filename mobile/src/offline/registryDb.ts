@@ -2,7 +2,7 @@
 // the single source of truth for "what offline map data is on disk". The
 // downloads manager writes it; the map resolver only reads it.
 //
-// PRIVACY: rows carry region bboxes — canyon-area coordinates. The DB lives
+// PRIVACY: rows carry region bboxes — place-area coordinates. The DB lives
 // in app-private storage (expo-sqlite's default dir, under the app sandbox,
 // covered by allowBackup=false), is surfaced only behind the Stage 4 app
 // lock, and its contents must never reach logs, telemetry, or crash reports.

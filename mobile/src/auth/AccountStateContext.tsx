@@ -1,7 +1,7 @@
 // Whether this install has an account, made available to every screen.
 //
 // Context rather than props: the gated surfaces (More, Account, Settings,
-// Saved, Map, canyon detail) sit at the bottom of five nested navigators, and
+// Saved, Map, place detail) sit at the bottom of five nested navigators, and
 // threading one enum through every `Stack.Screen` render callback would be more
 // code in more files than a provider, for a value that never changes during a
 // screen's life. `linkAccount` rides along because the same screens that

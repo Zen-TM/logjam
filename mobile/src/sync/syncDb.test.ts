@@ -155,8 +155,8 @@ describe("wipeMirror", () => {
     // offline nothing brought it back.
     wipeCalls.length = 0;
     await wipeMirror();
-    const canyons = wipeCalls.find((sql) => sql.startsWith("DELETE FROM canyons"));
-    expect(canyons).toContain(
+    const places = wipeCalls.find((sql) => sql.startsWith("DELETE FROM places"));
+    expect(places).toContain(
       "id NOT IN (SELECT entity_id FROM outbox WHERE op = 'create')",
     );
   });

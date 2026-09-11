@@ -1,5 +1,5 @@
 // Typed API calls + data hooks for the Stage 1 read-only screens. Follows the
-// web hook pattern (frontend/src/canyonUtils.ts): useState + useEffect +
+// web hook pattern (frontend/src/placeUtils.ts): useState + useEffect +
 // fetchCount + refetch, returning { data, loading, error, refetch } with
 // user-friendly error strings via messageFromError.
 import { useCallback, useEffect, useState } from "react";
@@ -20,7 +20,7 @@ export function updateConsent(consentVersion: string): Promise<TUser> {
   return apiFetch<TUser>("/users/me", { method: "PATCH", body: { consentVersion } });
 }
 
-// Canyon/trip list + detail reads moved to the Stage 8 offline mirror
+// Place/trip list + detail reads moved to the Stage 8 offline mirror
 // (src/sync/useSyncQueries.ts) — REST fetchers for them died with the swap.
 
 export function getNotifications(): Promise<{ data: TNotification[]; total: number | null }> {
@@ -43,10 +43,10 @@ export function getVectorStyle(): Promise<VectorStyleSettings> {
   return apiFetch<VectorStyleSettings>("/vector-style");
 }
 
-// ── Custom fields (trip logs AND canyons) ────────────────────────────────────
+// ── Custom fields (trip logs AND places) ────────────────────────────────────
 //
 // The DEFINITIONS live in User.uiPreferences (`tripLogCustomFields` /
-// `canyonCustomFields`), so adding and renaming both go through PATCH /users/me
+// `placeCustomFields`), so adding and renaming both go through PATCH /users/me
 // with the full list — the API takes the whole array, not a delta. Deleting is
 // its own endpoint because it must also strip the orphaned VALUES off every row
 // that carried one, which only the server can do transactionally.
@@ -59,7 +59,7 @@ export function getVectorStyle(): Promise<VectorStyleSettings> {
 // The two entities differ only in a route segment, a prefs key and two response
 // key names — all of them here, so no caller re-derives them.
 
-export type CustomFieldEntity = "tripLog" | "canyon";
+export type CustomFieldEntity = "tripLog" | "place";
 
 const CUSTOM_FIELD_ROUTES = {
   tripLog: {
@@ -68,11 +68,11 @@ const CUSTOM_FIELD_ROUTES = {
     countKey: "tripLogCount",
     removedKey: "removedFromTripCount",
   },
-  canyon: {
-    segment: "canyon",
-    defsKey: "canyonCustomFields",
-    countKey: "canyonCount",
-    removedKey: "removedFromCanyonCount",
+  place: {
+    segment: "place",
+    defsKey: "placeCustomFields",
+    countKey: "placeCount",
+    removedKey: "removedFromPlaceCount",
   },
 } as const;
 

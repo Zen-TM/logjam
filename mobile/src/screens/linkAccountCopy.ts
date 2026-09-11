@@ -3,10 +3,10 @@
 // Pure because it is the last thing a user reads before an irreversible,
 // unattended upload, and the numbers in it have to be right. Linking merges
 // this phone's data into the account and there is no unlink — a guest with 50
-// canyons who signs into an account holding 200 ends up with 250, permanently.
+// places who signs into an account holding 200 ends up with 250, permanently.
 // The confirmation is the only place that can say so.
 //
-// PRIVACY: counts only. Never a canyon name.
+// PRIVACY: counts only. Never a place name.
 import type { LocalEntityCounts } from "../sync/syncDb";
 
 function plural(count: number, singular: string, pluralForm: string): string {
@@ -14,16 +14,16 @@ function plural(count: number, singular: string, pluralForm: string): string {
 }
 
 /**
- * "42 canyons, 18 trips and 310 photos" — kinds with nothing in them are
+ * "42 places, 18 trips and 310 photos" — kinds with nothing in them are
  * dropped rather than reported as zero, so a user who only logs trips isn't
- * told about their 0 canyons.
+ * told about their 0 places.
  *
  * Returns null when there is nothing at all: the caller skips the whole
  * confirmation then, because there is nothing to warn about.
  */
 export function describeLocalData(counts: LocalEntityCounts): string | null {
   const parts: string[] = [];
-  if (counts.canyons > 0) parts.push(plural(counts.canyons, "canyon", "canyons"));
+  if (counts.places > 0) parts.push(plural(counts.places, "place", "places"));
   if (counts.trips > 0) parts.push(plural(counts.trips, "trip", "trips"));
   if (counts.media > 0) parts.push(plural(counts.media, "photo", "photos"));
 

@@ -2,7 +2,7 @@
 // shows it: the Saved tab's progress cards, the map's "Downloading maps"
 // banner, and the layers sheet's offline section.
 //
-// A module store rather than a context (same choice as `canyonMapFilter`): a
+// A module store rather than a context (same choice as `placeMapFilter`): a
 // download outlives the screen that started it — the whole point of the banner
 // on the map is that you can leave the download screen and keep walking around
 // the map while tiles land.

@@ -1,10 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { describeDroppedCanyonRow, describeDroppedTripRow } from "./rowSkip";
+import { describeDroppedPlaceRow, describeDroppedTripRow } from "./rowSkip";
 
-describe("describeDroppedCanyonRow", () => {
+describe("describeDroppedPlaceRow", () => {
   it("returns null when name and coords are all readable", () => {
     expect(
-      describeDroppedCanyonRow({
+      describeDroppedPlaceRow({
         name: "Claustral",
         latitude: -33.6,
         longitude: 150.3,
@@ -16,7 +16,7 @@ describe("describeDroppedCanyonRow", () => {
 
   it("reports a missing name", () => {
     expect(
-      describeDroppedCanyonRow({
+      describeDroppedPlaceRow({
         name: "",
         latitude: -33.6,
         longitude: 150.3,
@@ -28,7 +28,7 @@ describe("describeDroppedCanyonRow", () => {
 
   it("reports an unreadable latitude with the offending raw value", () => {
     expect(
-      describeDroppedCanyonRow({
+      describeDroppedPlaceRow({
         name: "Claustral",
         latitude: NaN,
         longitude: 150.3,
@@ -40,7 +40,7 @@ describe("describeDroppedCanyonRow", () => {
 
   it("reports an unreadable longitude with the offending raw value", () => {
     expect(
-      describeDroppedCanyonRow({
+      describeDroppedPlaceRow({
         name: "Claustral",
         latitude: -33.6,
         longitude: NaN,

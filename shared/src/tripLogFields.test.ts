@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
+import type { CustomFieldDefRow } from "./tripLogFields.js";
 import {
+  customFieldDefFromRow,
   makeCustomFieldKey,
   coerceFieldValue,
   coerceFieldValueStrict,
@@ -8,8 +10,13 @@ import {
   tripLogHasCustomFieldValue,
   countTripLogsWithCustomField,
   renameCustomFieldLabel,
+  tripFieldDefs,
+  isSystemFieldDef,
 } from "./tripLogFields.js";
-import type { TripLogCustomFieldDef } from "./tripLogFields.js";
+import type {
+  ScopedCustomFieldDef,
+  TripLogCustomFieldDef,
+} from "./tripLogFields.js";
 
 describe("makeCustomFieldKey", () => {
   it("lowercases and replaces non-alphanumeric runs with underscores", () => {
@@ -279,5 +286,137 @@ describe("renameCustomFieldLabel", () => {
   it("is a no-op when the label is unchanged", () => {
     const result = renameCustomFieldLabel(defs, "rope", "Rope Length");
     expect(result).toEqual({ defs });
+  });
+});
+
+// One-sided bounds, end to end through the row reader. Three of the system
+// definitions are min-only (`hours`, `num_abseils`, `longest_abseil`) — there
+// is no honest ceiling for "how many pitches" — and the both-or-neither rule
+// this replaces dropped their bound silently on the way out of the database.
+describe("customFieldDefFromRow with one-sided bounds", () => {
+  const row = (over: Partial<CustomFieldDefRow>): CustomFieldDefRow => ({
+    entity: "place",
+    key: "num_abseils",
+    label: "Pitches",
+    type: "integer",
+    min: null,
+    max: null,
+    position: 0,
+    ...over,
+  });
+
+  it("keeps a min with no max", () => {
+    expect(customFieldDefFromRow(row({ min: 0 }))).toEqual({
+      key: "num_abseils",
+      label: "Pitches",
+      type: "integer",
+      min: 0,
+    });
+  });
+
+  it("keeps a max with no min", () => {
+    expect(customFieldDefFromRow(row({ max: 10 }))).toMatchObject({ max: 10 });
+  });
+
+  it("keeps both when both are set", () => {
+    expect(customFieldDefFromRow(row({ min: 1, max: 7 }))).toMatchObject({
+      min: 1,
+      max: 7,
+    });
+  });
+
+  it("carries no bounds when neither is set", () => {
+    const def = customFieldDefFromRow(row({}));
+    expect(def).not.toHaveProperty("min");
+    expect(def).not.toHaveProperty("max");
+  });
+});
+
+// §7.5 — the union clause. Without it, four ordinary actions each silently
+// destroy a value: unlink a place, delete one, change its type, rescope a
+// definition.
+describe("tripFieldDefs", () => {
+  const scoped = (
+    key: string,
+    placeTypeIds: string[],
+    appliesToAllTypes = false,
+  ): ScopedCustomFieldDef => ({
+    key,
+    label: key,
+    type: "string",
+    placeTypeIds,
+    appliesToAllTypes,
+  });
+
+  const water = scoped("water", ["canyon"]);
+  const firewood = scoped("firewood", ["campsite"]);
+  const weather = scoped("weather", [], true);
+  const defs = [water, firewood, weather];
+
+  it("asks the questions the linked places' types ask", () => {
+    expect(tripFieldDefs(defs, ["canyon"], {}).map((def) => def.key)).toEqual([
+      "water",
+      "weather",
+    ]);
+  });
+
+  it("unions the types of several linked places, showing a shared field once", () => {
+    const both = scoped("party", ["canyon", "campsite"]);
+    expect(
+      tripFieldDefs([...defs, both], ["canyon", "campsite"], {}).map((d) => d.key),
+    ).toEqual(["water", "firewood", "weather", "party"]);
+  });
+
+  // "Walked around the block" is the common case, not an edge case.
+  it("asks only the always-on fields when a trip links no place", () => {
+    expect(tripFieldDefs(defs, [], {}).map((def) => def.key)).toEqual(["weather"]);
+  });
+
+  // THE CLAUSE THAT STOPS IT EATING DATA. Unlinking a place, deleting one,
+  // retyping it or rescoping a definition would each otherwise hide a value the
+  // user typed — and the next save writes the object the form knows about, so
+  // hidden means gone.
+  it("keeps a field whose value is already recorded, whatever the scoping says", () => {
+    expect(
+      tripFieldDefs(defs, [], { water: "high" }).map((def) => def.key),
+    ).toEqual(["water", "weather"]);
+  });
+
+  it("does not resurrect a field whose value was cleared", () => {
+    expect(
+      tripFieldDefs(defs, [], { water: null }).map((def) => def.key),
+    ).toEqual(["weather"]);
+  });
+});
+
+describe("isSystemFieldDef", () => {
+  const scoped = (over: Partial<ScopedCustomFieldDef>): ScopedCustomFieldDef => ({
+    key: "water_level",
+    label: "Water level",
+    type: "string",
+    placeTypeIds: [],
+    appliesToAllTypes: true,
+    ...over,
+  });
+
+  it("is true for a built-in", () => {
+    expect(isSystemFieldDef(scoped({ key: "v_grade", ownerId: null }))).toBe(true);
+  });
+
+  // THE REGRESSION. A definition created on the phone has no owner id until the
+  // server sends one back, and `ownerId === null` alone called that a built-in:
+  // the field the user had just added drew a padlock and no verbs until the
+  // next delta landed.
+  it("is false for a locally-created field that has no owner id yet", () => {
+    expect(isSystemFieldDef(scoped({ ownerId: null }))).toBe(false);
+  });
+
+  it("is false for an owned field, reserved key or not", () => {
+    expect(isSystemFieldDef(scoped({ ownerId: "alice" }))).toBe(false);
+    expect(isSystemFieldDef(scoped({ key: "v_grade", ownerId: "alice" }))).toBe(false);
+  });
+
+  it("is false when the owner id is absent entirely — offer the verbs, let the server refuse", () => {
+    expect(isSystemFieldDef(scoped({}))).toBe(false);
   });
 });

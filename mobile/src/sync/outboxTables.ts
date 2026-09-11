@@ -38,12 +38,14 @@ export function isOutboxEntity(value: string): value is OutboxEntity {
  */
 export function outboxMirrorTable(entity: OutboxEntity): string | null {
   switch (entity) {
-    case "canyon":
-      return "canyons";
+    case "place":
+      return "places";
+    case "placeType":
+      return "place_types";
     case "tripLog":
       return "trip_logs";
-    case "waypoint":
-      return "waypoints";
+    case "placeLink":
+      return "place_links";
     case "route":
       return "routes";
     case "customFieldDef":

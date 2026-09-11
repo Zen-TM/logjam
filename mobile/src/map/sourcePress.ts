@@ -5,7 +5,7 @@ import type { NativeSyntheticEvent } from "react-native";
  *
  * MLRN 10 let a source's `onPress` consume the tap. MLRN 11 emits it on the
  * source AND on the `Map` (documented on `MapProps.onPress`), so tapping a
- * canyon pin, a route, a track or a waypoint ALSO ran the map's own handler —
+ * place pin, a route, a track or a waypoint ALSO ran the map's own handler —
  * which opens the "This point" sheet. Both panels appeared, and the point one
  * had to be dismissed to reach the one the user had actually asked for.
  *

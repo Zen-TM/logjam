@@ -19,7 +19,7 @@ import {
   type ExportSelection,
   type TopoLayerKey,
 } from "@logjam/shared";
-import { apiFetch } from "../../canyonUtils";
+import { apiFetch } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import { ErrorBanner } from "../feedback/ErrorBanner";
 import { type CompletedTopoJob } from "../../topoLayerTypes";

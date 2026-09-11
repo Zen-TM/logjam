@@ -9,7 +9,7 @@
 // Saved" / "View in Friends" is the SAME idea for a notification whose subject
 // lives in a tab rather than on a screen of its own — where that is, and
 // whether there is one at all, is `notificationDestination.ts`; the two never
-// both appear, because a canyon share is the only kind with an Open. Read/
+// both appear, because a place share is the only kind with an Open. Read/
 // unread is ONE row whose direction follows the notification's current state.
 // Delete is last and warning-hued, as everywhere else.
 //
@@ -17,7 +17,7 @@
 // a question with two answers in two places is how one of them goes stale
 // (`notificationActions.ts` stays the single source of those).
 //
-// PRIVACY: the sheet's title is the row's own label, which may carry a canyon
+// PRIVACY: the sheet's title is the row's own label, which may carry a place
 // name or a filename — user text, rendered and never logged (DESIGN.md §11).
 import { Alert, StyleSheet, View } from "react-native";
 
@@ -28,7 +28,7 @@ import {
 } from "./notificationDestination";
 import { theme, spacing } from "../theme";
 import { BottomSheet, Row } from "../ui";
-import { notificationCanyonId, notificationLabel } from "../screens/notificationLabel";
+import { notificationPlaceId, notificationLabel } from "../screens/notificationLabel";
 
 export function NotificationOptionsSheet({
   notification,
@@ -52,7 +52,7 @@ export function NotificationOptionsSheet({
   if (!notification) return null;
 
   const label = notificationLabel(notification);
-  const openable = notificationCanyonId(notification) !== null;
+  const openable = notificationPlaceId(notification) !== null;
   const destination = notificationDestination(notification);
 
   const act = (run: () => void) => {

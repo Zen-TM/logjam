@@ -6,7 +6,7 @@
 // (`validateMediaType` in api/src/routes/media.ts), which is why the filename
 // handed to `attachMediaLocal` has to keep its extension.
 //
-// Shared by the media strip's own picker and the canyon's "Add a way" panel:
+// Shared by the media strip's own picker and the place's "Add a way" panel:
 // two copies of this is two answers to "is that a route file".
 import { mediaCategory } from "@logjam/shared";
 

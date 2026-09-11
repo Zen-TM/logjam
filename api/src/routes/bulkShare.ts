@@ -41,7 +41,7 @@ import { sendPushToUser } from "../services/push";
 import { parseClientSuppliedId } from "../lib/clientSuppliedId";
 import { parseFriendRecipientIds } from "../lib/friendRecipients";
 import { filterOwnedEntityIds } from "../lib/shareAccess";
-import { filterOwnedCanyonIds } from "../lib/canyonAccess";
+import { filterOwnedPlaceIds } from "../lib/placeAccess";
 import {
   parseBulkShareItems,
   planBulkShare,
@@ -54,11 +54,11 @@ const router = Router();
 /** The same bound one send carries, and for the same reason. */
 const MAX_RECIPIENTS = 25;
 
-/** The `Share`-table types — everything in the union except canyons. */
+/** The `Share`-table types — everything in the union except places. */
 function isEntityType(
   entityType: BulkShareItemType,
 ): entityType is SharableEntityType {
-  return entityType !== "canyon";
+  return entityType !== "place";
 }
 
 /**
@@ -104,7 +104,7 @@ router.post("/", requireAuth, async (req: AuthenticatedRequest, res: Response) =
 
   // ── What is actually the sender's to give ──────────────────────────────
   // Batched by type: five queries at most, whatever the list length. The owner
-  // rule itself stays in canyonAccess/shareAccess — nothing here re-derives it
+  // rule itself stays in placeAccess/shareAccess — nothing here re-derives it
   // (SEC-001), which is why those two grew a batch form rather than this file
   // growing a `WHERE ownerId` of its own.
   const idsByType = new Map<BulkShareItemType, string[]>();
@@ -118,7 +118,7 @@ router.post("/", requireAuth, async (req: AuthenticatedRequest, res: Response) =
     [...idsByType].map(async ([entityType, ids]) => {
       const owned = isEntityType(entityType)
         ? await filterOwnedEntityIds(user.id, entityType, ids)
-        : await filterOwnedCanyonIds(user.id, ids);
+        : await filterOwnedPlaceIds(user.id, ids);
       ownedIdsByType.set(entityType, owned);
     }),
   );
@@ -132,8 +132,8 @@ router.post("/", requireAuth, async (req: AuthenticatedRequest, res: Response) =
   const entityIdsByType = [...idsByType].filter(([entityType]) =>
     isEntityType(entityType),
   );
-  const canyonIds = idsByType.get("canyon") ?? [];
-  const [existingShares, existingCanyonShares] = await Promise.all([
+  const placeIds = idsByType.get("place") ?? [];
+  const [existingShares, existingPlaceShares] = await Promise.all([
     entityIdsByType.length > 0
       ? prisma.share.findMany({
           where: {
@@ -146,13 +146,13 @@ router.post("/", requireAuth, async (req: AuthenticatedRequest, res: Response) =
           select: { entityType: true, entityId: true, sharedWithId: true },
         })
       : Promise.resolve([]),
-    canyonIds.length > 0
-      ? prisma.canyonShare.findMany({
+    placeIds.length > 0
+      ? prisma.placeShare.findMany({
           where: {
-            canyonId: { in: canyonIds },
+            placeId: { in: placeIds },
             sharedWithId: { in: recipientIds },
           },
-          select: { canyonId: true, sharedWithId: true },
+          select: { placeId: true, sharedWithId: true },
         })
       : Promise.resolve([]),
   ]);
@@ -164,8 +164,8 @@ router.post("/", requireAuth, async (req: AuthenticatedRequest, res: Response) =
         row.sharedWithId,
       ),
     ),
-    ...existingCanyonShares.map((row) =>
-      sharePairKey("canyon", row.canyonId, row.sharedWithId),
+    ...existingPlaceShares.map((row) =>
+      sharePairKey("place", row.placeId, row.sharedWithId),
     ),
   ]);
 
@@ -192,11 +192,11 @@ router.post("/", requireAuth, async (req: AuthenticatedRequest, res: Response) =
 
   if (plan.grants.length > 0) {
     await prisma.$transaction(async (tx) => {
-      const canyonGrants = plan.grants.filter(
-        (grant) => grant.entityType === "canyon",
+      const placeGrants = plan.grants.filter(
+        (grant) => grant.entityType === "place",
       );
       const entityGrants = plan.grants.filter(
-        (grant) => grant.entityType !== "canyon",
+        (grant) => grant.entityType !== "place",
       );
 
       if (entityGrants.length > 0) {
@@ -213,10 +213,10 @@ router.post("/", requireAuth, async (req: AuthenticatedRequest, res: Response) =
           skipDuplicates: true,
         });
       }
-      if (canyonGrants.length > 0) {
-        await tx.canyonShare.createMany({
-          data: canyonGrants.map((grant) => ({
-            canyonId: grant.entityId,
+      if (placeGrants.length > 0) {
+        await tx.placeShare.createMany({
+          data: placeGrants.map((grant) => ({
+            placeId: grant.entityId,
             sharedById: user.id,
             sharedWithId: grant.sharedWithId,
           })),
@@ -229,18 +229,13 @@ router.post("/", requireAuth, async (req: AuthenticatedRequest, res: Response) =
       // `updateMany` per type, not one update per row.
       const now = new Date();
       for (const [entityType, ids] of plan.touchedIdsByType) {
-        if (entityType === "waypoint") {
-          await tx.waypoint.updateMany({
-            where: { id: { in: ids } },
-            data: { updatedAt: now },
-          });
-        } else if (entityType === "route") {
+        if (entityType === "route") {
           await tx.route.updateMany({
             where: { id: { in: ids } },
             data: { updatedAt: now },
           });
-        } else if (entityType === "canyon") {
-          await tx.canyon.updateMany({
+        } else if (entityType === "place") {
+          await tx.place.updateMany({
             where: { id: { in: ids } },
             data: { updatedAt: now },
           });
@@ -284,7 +279,7 @@ router.post("/", requireAuth, async (req: AuthenticatedRequest, res: Response) =
 });
 
 /**
- * The notification for one grant. A canyon share and a direct share are
+ * The notification for one grant. A place share and a direct share are
  * different types with different payload keys — the same split the two
  * single-item routes make, kept identical so `notifications.ts` needs no new
  * branch to resolve a bulk-created row.
@@ -294,11 +289,11 @@ function notificationFor(
   sharedById: string,
   batchId: string,
 ): Prisma.NotificationCreateManyInput {
-  if (grant.entityType === "canyon") {
+  if (grant.entityType === "place") {
     return {
       userId: grant.sharedWithId,
-      type: "canyon_shared",
-      payload: { canyonId: grant.entityId, sharedById, batchId },
+      type: "place_shared",
+      payload: { placeId: grant.entityId, sharedById, batchId },
     };
   }
   return {

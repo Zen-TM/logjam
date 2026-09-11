@@ -5,7 +5,7 @@ import BottomSheet from "./BottomSheet";
 import type { SheetSnap } from "./BottomSheet";
 import type { PanelId } from "./panels";
 import type {
-  TCanyon,
+  TPlace,
   TFilters,
   TFriend,
   TFriendRequest,
@@ -14,35 +14,33 @@ import type {
   TAnalytics,
   TUser,
   TRoute,
-  TWaypoint,
-  CanyonTrack,
-} from "../../canyonUtils";
-import type { StandaloneFile, TripLogCustomFieldDef, VectorStyleSettings, TopoExportJobView } from "@logjam/shared";
+  PlaceTrack,
+  TPlaceType,
+} from "../../placeUtils";
+import type { StandaloneFile, VectorStyleSettings, TopoExportJobView, ScopedCustomFieldDef } from "@logjam/shared";
 import type { TopoJob, GeoJsonPolygonal } from "../dialogs/TopoDialog";
 import type { CompletedTopoJob } from "../../topoLayerTypes";
 import type { GeoPdfTemplate } from "../dialogs/GeoPdfDialog";
 import classes from "./SidebarPanel.module.css";
 import LayersPanel from "./panels/LayersPanel";
-import CanyonsPanel from "./panels/CanyonsPanel";
+import PlacesPanel from "./panels/PlacesPanel";
 import GeoPdfsPanel from "./panels/GeoPdfsPanel";
 import LidarPanel from "./panels/LidarPanel";
 import FriendsPanel from "./panels/FriendsPanel";
 import NotificationsPanel from "./panels/NotificationsPanel";
-import CanyonDetailPanel from "./panels/CanyonDetailPanel";
+import PlaceDetailPanel from "./panels/PlaceDetailPanel";
 import RouteDetailPanel from "./panels/RouteDetailPanel";
 import RoutesPanel from "./panels/RoutesPanel";
-import WaypointsPanel from "./panels/WaypointsPanel";
 import AccountPanel from "./panels/AccountPanel";
 import TripLogsPanel from "./panels/TripLogsPanel";
 import AnalyticsPanel from "./panels/AnalyticsPanel";
 
 const PANEL_TITLES: Record<PanelId, string> = {
   layers: "Layers",
-  canyons: "Canyons",
+  places: "Places",
   geopdfs: "GeoPDFs",
   lidar: "LiDAR Topos",
   routes: "Routes",
-  waypoints: "Waypoints",
   "trip-logs": "Trip Logs",
   analytics: "Analytics",
   friends: "Friends",
@@ -53,7 +51,7 @@ const PANEL_TITLES: Record<PanelId, string> = {
   // a separate surface, out of scope here.
   notifications: "Alerts",
   account: "Account",
-  "canyon-detail": "Canyon Detail",
+  "place-detail": "Place Detail",
   "route-detail": "Route",
 };
 
@@ -62,26 +60,14 @@ function SidebarPanel({
   onClose,
   onTopoFlyTarget,
   // Layers (merged overlays+basemap)
-  showOwnedCanyons,
-  setShowOwnedCanyons,
-  showSharedCanyons,
-  setShowSharedCanyons,
-  showCanyonTracks,
-  setShowCanyonTracks,
+  showOwnedPlaces,
+  setShowOwnedPlaces,
+  showSharedPlaces,
+  setShowSharedPlaces,
+  showPlaceTracks,
+  setShowPlaceTracks,
   showRoutes,
   setShowRoutes,
-  showWaypoints,
-  setShowWaypoints,
-  waypoints,
-  waypointsLoading,
-  waypointsError,
-  selectedWaypointId,
-  onSelectWaypoint,
-  onFlyToWaypoint,
-  onAddWaypoint,
-  onUpdateWaypoint,
-  onDeleteWaypoint,
-  onWaypointsChanged,
   onStartDrawingRoute,
   lidarEnabled,
   setLidarEnabled,
@@ -94,13 +80,13 @@ function SidebarPanel({
   activeLayerId,
   onActiveLayerChange,
   mapView,
-  // Canyons
-  canyons,
-  canyonsTotal,
-  sharedCanyons,
-  onAddCanyon,
+  // Places
+  places,
+  placesTotal,
+  sharedPlaces,
+  onAddPlace,
   onOpenUnifiedImport,
-  onExportCanyons,
+  onExportPlaces,
   onStartAreaSelection,
   selectingArea,
   onCancelAreaSelection,
@@ -110,7 +96,7 @@ function SidebarPanel({
   onDrawFilterArea,
   onFilterToMapView,
   filtersAccordionSignal,
-  onFlyToCanyon,
+  onFlyToPlace,
   // GeoPDFs
   onOpenGeoPdf,
   onOpenGeoPdfWithTemplate,
@@ -142,14 +128,14 @@ function SidebarPanel({
   notifications,
   notificationsTotal,
   onRefetchNotifications,
-  setSelectedCanyonID,
+  setSelectedPlaceID,
   setActivePanel,
-  // Canyon detail
-  canyon,
-  isOwnedCanyon,
+  // Place detail
+  place,
+  isOwnedPlace,
   selectedRoute,
   allRoutes,
-  canyonTracks,
+  placeTracks,
   standaloneFiles,
   standaloneFilesError,
   shownStandaloneIds,
@@ -173,8 +159,10 @@ function SidebarPanel({
   onRefetchAnalytics,
   customFieldDefs,
   onCustomFieldDefsChange,
-  canyonCustomFieldDefs,
-  onCanyonCustomFieldDefsChange,
+  placeCustomFieldDefs,
+  onPlaceCustomFieldDefsChange,
+  placeTypes,
+  onPlaceTypesChange,
   // Analytics
   analytics,
   analyticsLoading,
@@ -188,12 +176,12 @@ function SidebarPanel({
   onClose: () => void;
   onTopoFlyTarget: (footprint: GeoJsonPolygonal) => void;
   // Layers
-  showOwnedCanyons: boolean;
-  setShowOwnedCanyons: (v: boolean) => void;
-  showSharedCanyons: boolean;
-  setShowSharedCanyons: (v: boolean) => void;
-  showCanyonTracks: boolean;
-  setShowCanyonTracks: (v: boolean) => void;
+  showOwnedPlaces: boolean;
+  setShowOwnedPlaces: (v: boolean) => void;
+  showSharedPlaces: boolean;
+  setShowSharedPlaces: (v: boolean) => void;
+  showPlaceTracks: boolean;
+  setShowPlaceTracks: (v: boolean) => void;
   lidarEnabled: boolean;
   setLidarEnabled: (v: boolean) => void;
   lidarLayerToggles: Record<string, boolean>;
@@ -206,13 +194,13 @@ function SidebarPanel({
   activeLayerId: string;
   onActiveLayerChange: (id: string) => void;
   mapView: { lng: number; lat: number; zoom: number } | null;
-  // Canyons
-  canyons: TCanyon[];
-  canyonsTotal: number | null;
-  sharedCanyons: TCanyon[];
-  onAddCanyon: () => void;
+  // Places
+  places: TPlace[];
+  placesTotal: number | null;
+  sharedPlaces: TPlace[];
+  onAddPlace: () => void;
   onOpenUnifiedImport: () => void;
-  onExportCanyons: (canyonIds: string[]) => void;
+  onExportPlaces: (placeIds: string[]) => void;
   onStartAreaSelection: () => void;
   selectingArea: boolean;
   onCancelAreaSelection: () => void;
@@ -224,7 +212,7 @@ function SidebarPanel({
   /** Set the area filter to whatever the map is currently showing. */
   onFilterToMapView: () => void;
   filtersAccordionSignal: number;
-  onFlyToCanyon: (lat: number, lng: number) => void;
+  onFlyToPlace: (lat: number, lng: number) => void;
   // GeoPDFs
   onOpenGeoPdf: () => void;
   onOpenGeoPdfWithTemplate: (id: string) => void;
@@ -256,41 +244,18 @@ function SidebarPanel({
   notifications: TNotification[];
   notificationsTotal: number | null;
   onRefetchNotifications: () => void;
-  setSelectedCanyonID: (id: string | null) => void;
+  setSelectedPlaceID: (id: string | null) => void;
   setActivePanel: (panel: PanelId | null) => void;
-  // Canyon detail
-  canyon: TCanyon | undefined;
-  isOwnedCanyon: boolean;
+  // Place detail
+  place: TPlace | undefined;
+  isOwnedPlace: boolean;
   // Routes
   showRoutes: boolean;
   setShowRoutes: (v: boolean) => void;
-  showWaypoints: boolean;
-  setShowWaypoints: (v: boolean) => void;
-  waypoints: TWaypoint[];
-  waypointsLoading: boolean;
-  waypointsError: string | null;
-  /** Which waypoint is expanded — lifted so a map marker click can open one. */
-  selectedWaypointId: string | null;
-  onSelectWaypoint: (id: string | null) => void;
-  onFlyToWaypoint: (waypoint: TWaypoint) => void;
-  /** Opens the add-waypoint dialog, which App owns. */
-  onAddWaypoint: () => void;
-  onUpdateWaypoint: (
-    id: string,
-    data: Partial<{
-      name: string;
-      notes: string | null;
-      tags: string[] | null;
-      canyonIds: string[] | null;
-    }>,
-  ) => Promise<void>;
-  onDeleteWaypoint: (waypoint: TWaypoint) => Promise<void>;
-  /** Refetch — also the retry for the load-failure banner. */
-  onWaypointsChanged: () => void;
   onStartDrawingRoute: () => void;
   selectedRoute: TRoute | null;
   allRoutes: TRoute[];
-  canyonTracks: CanyonTrack[];
+  placeTracks: PlaceTrack[];
   standaloneFiles: StandaloneFile[];
   standaloneFilesError: string | null;
   shownStandaloneIds: string[];
@@ -312,10 +277,12 @@ function SidebarPanel({
   tripLogsLoading: boolean;
   onRefetchTripLogs: () => void;
   onRefetchAnalytics: () => void;
-  customFieldDefs: TripLogCustomFieldDef[];
-  onCustomFieldDefsChange: (defs: TripLogCustomFieldDef[]) => void;
-  canyonCustomFieldDefs: TripLogCustomFieldDef[];
-  onCanyonCustomFieldDefsChange: (defs: TripLogCustomFieldDef[]) => void;
+  customFieldDefs: ScopedCustomFieldDef[];
+  onCustomFieldDefsChange: (defs: ScopedCustomFieldDef[]) => void;
+  placeCustomFieldDefs: ScopedCustomFieldDef[];
+  placeTypes: TPlaceType[];
+  onPlaceTypesChange: (types: TPlaceType[]) => void;
+  onPlaceCustomFieldDefsChange: (defs: ScopedCustomFieldDef[]) => void;
   // Analytics
   analytics: TAnalytics | null;
   analyticsLoading: boolean;
@@ -360,30 +327,30 @@ function SidebarPanel({
     }
   }, [activePanel]);
 
-  // Let a panel request the sheet expand to full (e.g. CanyonsPanel when its
+  // Let a panel request the sheet expand to full (e.g. PlacesPanel when its
   // filters accordion opens). Stable so the panel's effect only fires on the
   // actual open, not every render. No-op on desktop where there's no sheet.
   const expandSheetToFull = useCallback(() => {
     if (isMobile) setSheetSnap("full");
   }, [isMobile]);
 
-  // The same two calls CanyonsPanel and the inbox make. Handed to the waypoint
-  // and route surfaces so a row that is only visible BECAUSE of a shared canyon
-  // can send the user to the canyon that brought it — the one place its share
+  // The same two calls PlacesPanel and the inbox make. Handed to the waypoint
+  // and route surfaces so a row that is only visible BECAUSE of a shared place
+  // can send the user to the place that brought it — the one place its share
   // can actually be removed.
-  const openCanyonDetail = useCallback(
-    (canyonId: string) => {
-      setSelectedCanyonID(canyonId);
-      setActivePanel("canyon-detail");
+  const openPlaceDetail = useCallback(
+    (placeId: string) => {
+      setSelectedPlaceID(placeId);
+      setActivePanel("place-detail");
     },
-    [setSelectedCanyonID, setActivePanel],
+    [setSelectedPlaceID, setActivePanel],
   );
 
   if (!activePanel) return null;
 
   const title =
-    activePanel === "canyon-detail" && canyon
-      ? canyon.name
+    activePanel === "place-detail" && place
+      ? place.name
       : PANEL_TITLES[activePanel];
 
   const panelContent = (
@@ -397,16 +364,14 @@ function SidebarPanel({
       <div className={classes.panelBody} data-active-panel={activePanel}>
         {activePanel === "layers" && (
           <LayersPanel
-            showOwnedCanyons={showOwnedCanyons}
-            setShowOwnedCanyons={setShowOwnedCanyons}
-            showSharedCanyons={showSharedCanyons}
-            setShowSharedCanyons={setShowSharedCanyons}
-            showCanyonTracks={showCanyonTracks}
-            setShowCanyonTracks={setShowCanyonTracks}
+            showOwnedPlaces={showOwnedPlaces}
+            setShowOwnedPlaces={setShowOwnedPlaces}
+            showSharedPlaces={showSharedPlaces}
+            setShowSharedPlaces={setShowSharedPlaces}
+            showPlaceTracks={showPlaceTracks}
+            setShowPlaceTracks={setShowPlaceTracks}
             showRoutes={showRoutes}
             setShowRoutes={setShowRoutes}
-            showWaypoints={showWaypoints}
-            setShowWaypoints={setShowWaypoints}
             lidarEnabled={lidarEnabled}
             setLidarEnabled={setLidarEnabled}
             lidarLayerToggles={lidarLayerToggles}
@@ -420,14 +385,14 @@ function SidebarPanel({
             mapView={mapView}
           />
         )}
-        {activePanel === "canyons" && (
-          <CanyonsPanel
-            canyons={canyons}
-            canyonsTotal={canyonsTotal}
-            sharedCanyons={sharedCanyons}
-            onAddCanyon={onAddCanyon}
+        {activePanel === "places" && (
+          <PlacesPanel
+            places={places}
+            placesTotal={placesTotal}
+            sharedPlaces={sharedPlaces}
+            onAddPlace={onAddPlace}
             onOpenUnifiedImport={onOpenUnifiedImport}
-            onExportCanyons={onExportCanyons}
+            onExportPlaces={onExportPlaces}
             onStartAreaSelection={onStartAreaSelection}
             onCancelAreaSelection={onCancelAreaSelection}
             selectingArea={selectingArea}
@@ -437,10 +402,11 @@ function SidebarPanel({
             onDrawFilterArea={onDrawFilterArea}
             onFilterToMapView={onFilterToMapView}
             filtersAccordionSignal={filtersAccordionSignal}
-            onFlyToCanyon={onFlyToCanyon}
-            setSelectedCanyonID={setSelectedCanyonID}
+            onFlyToPlace={onFlyToPlace}
+            setSelectedPlaceID={setSelectedPlaceID}
             setActivePanel={setActivePanel}
-            canyonCustomFieldDefs={canyonCustomFieldDefs}
+            placeCustomFieldDefs={placeCustomFieldDefs}
+            placeTypes={placeTypes}
             onExpandSheet={expandSheetToFull}
           />
         )}
@@ -491,7 +457,7 @@ function SidebarPanel({
             notificationsTotal={notificationsTotal}
             onRefetchNotifications={onRefetchNotifications}
             onRefetchFriends={onRefetchFriends}
-            setSelectedCanyonID={setSelectedCanyonID}
+            setSelectedPlaceID={setSelectedPlaceID}
             setActivePanel={setActivePanel}
             onTopoFlyTarget={onTopoFlyTarget}
           />
@@ -516,11 +482,11 @@ function SidebarPanel({
             onRefetchAnalytics={onRefetchAnalytics}
             customFieldDefs={customFieldDefs}
             onCustomFieldDefsChange={onCustomFieldDefsChange}
-            canyons={canyons}
+            places={places}
             onPickCoords={onPickCoords}
             pickingCoords={pickingCoords}
             onQuotaChanged={onQuotaChanged}
-            onRefetchCanyons={onRefetch}
+            onRefetchPlaces={onRefetch}
             onOpenUnifiedImport={onOpenUnifiedImport}
           />
         )}
@@ -529,69 +495,54 @@ function SidebarPanel({
             currentUser={currentUser}
             customFieldDefs={customFieldDefs}
             onCustomFieldDefsChange={onCustomFieldDefsChange}
-            canyonCustomFieldDefs={canyonCustomFieldDefs}
-            onCanyonCustomFieldDefsChange={onCanyonCustomFieldDefsChange}
+            placeCustomFieldDefs={placeCustomFieldDefs}
+            onPlaceCustomFieldDefsChange={onPlaceCustomFieldDefsChange}
+            placeTypes={placeTypes}
+            onPlaceTypesChange={onPlaceTypesChange}
           />
         )}
-        {activePanel === "canyon-detail" && (
-          <CanyonDetailPanel
-            canyon={canyon}
-            canyons={canyons}
-            isOwnedCanyon={isOwnedCanyon}
+        {activePanel === "place-detail" && (
+          <PlaceDetailPanel
+            place={place}
+            places={places}
+            isOwnedPlace={isOwnedPlace}
             friends={friends}
             onRefetch={onRefetch}
             onRefetchShared={onRefetchShared}
-            setSelectedCanyonID={setSelectedCanyonID}
+            setSelectedPlaceID={setSelectedPlaceID}
             onPickCoords={onPickCoords}
             pickingCoords={pickingCoords}
             onCancelPickCoords={onCancelPickCoords}
             customFieldDefs={customFieldDefs}
             onCustomFieldDefsChange={onCustomFieldDefsChange}
-            canyonCustomFieldDefs={canyonCustomFieldDefs}
-            onCanyonCustomFieldDefsChange={onCanyonCustomFieldDefsChange}
+            placeCustomFieldDefs={placeCustomFieldDefs}
+            onPlaceCustomFieldDefsChange={onPlaceCustomFieldDefsChange}
+            placeTypes={placeTypes}
             onQuotaChanged={onQuotaChanged}
             onRefetchTripLogs={onRefetchTripLogs}
-            onAfterDelete={() => setActivePanel("canyons")}
+            onAfterDelete={() => setActivePanel("places")}
           />
         )}
         {activePanel === "route-detail" && (
           <RouteDetailPanel
             route={selectedRoute}
             currentUserId={currentUserId}
-            ownedCanyons={canyons}
-            sharedCanyons={sharedCanyons}
+            ownedPlaces={places}
+            sharedPlaces={sharedPlaces}
             friends={friends}
             allRoutes={allRoutes}
             onEdit={onEditRoute}
             onChanged={onRoutesChanged}
             onClose={() => setActivePanel(null)}
-            onOpenCanyon={openCanyonDetail}
+            onOpenPlace={openPlaceDetail}
             onHoverPosition={onRouteHoverPosition}
-          />
-        )}
-        {activePanel === "waypoints" && (
-          <WaypointsPanel
-            friends={friends}
-            waypoints={waypoints}
-            loading={waypointsLoading}
-            error={waypointsError}
-            onRetry={onWaypointsChanged}
-            canyons={[...canyons, ...sharedCanyons]}
-            currentUserId={currentUserId}
-            selectedId={selectedWaypointId}
-            onSelect={onSelectWaypoint}
-            onFlyTo={onFlyToWaypoint}
-            onUpdate={onUpdateWaypoint}
-            onDelete={onDeleteWaypoint}
-            onAdd={onAddWaypoint}
-            onOpenCanyon={openCanyonDetail}
           />
         )}
         {activePanel === "routes" && (
           <RoutesPanel
             routes={allRoutes}
             currentUserId={currentUserId}
-            canyonTracks={canyonTracks}
+            placeTracks={placeTracks}
             standaloneFiles={standaloneFiles}
             standaloneFilesError={standaloneFilesError}
             shownStandaloneIds={shownStandaloneIds}
@@ -599,10 +550,10 @@ function SidebarPanel({
             onRenameStandaloneFile={onRenameStandaloneFile}
             onDeleteStandaloneFile={onDeleteStandaloneFile}
             onFlyToStandaloneFile={onFlyToStandaloneFile}
-            canyons={[...canyons, ...sharedCanyons]}
+            places={[...places, ...sharedPlaces]}
             onStartDrawingRoute={onStartDrawingRoute}
             onSelectRoute={onSelectRoute}
-            setSelectedCanyonID={setSelectedCanyonID}
+            setSelectedPlaceID={setSelectedPlaceID}
             setActivePanel={setActivePanel}
           />
         )}

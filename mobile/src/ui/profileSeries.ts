@@ -13,7 +13,7 @@ export type ProfilePoint = { x: number; value: number | null };
  * What the chart draws. `min`/`max` are the SCALE, not the data's extremes —
  * a speed chart wants a floor of 0 (a stop must read as the bottom of the
  * chart) where an elevation chart scales between its own ends, because a
- * canyon between 700 and 840 m drawn from sea level is a flat bar.
+ * place between 700 and 840 m drawn from sea level is a flat bar.
  */
 export type ProfileSeries = {
   points: ProfilePoint[];

@@ -5,18 +5,20 @@ import {
   updateUserPreferences,
   exportUserData,
   type TUser,
-} from "../../../canyonUtils";
+} from "../../../placeUtils";
+import type { TPlaceType } from "../../../placeUtils";
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,
   formatCredits,
   type NotificationPreferences,
-  type TripLogCustomFieldDef,
+    type ScopedCustomFieldDef,
 } from "@logjam/shared";
 import { useAuth } from "../../../useAuth";
 import { useThemePreferences } from "../../../themePreferences";
 import DeleteAccountDialog from "../../dialogs/DeleteAccountDialog";
 import ChangeEmailDialog from "../../dialogs/ChangeEmailDialog";
 import CustomFieldSection from "./CustomFieldSection";
+import PlaceTypeSection from "./PlaceTypeSection";
 import classes from "./AccountPanel.module.css";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
@@ -33,17 +35,23 @@ function AccountPanel({
   currentUser,
   customFieldDefs,
   onCustomFieldDefsChange,
-  canyonCustomFieldDefs,
-  onCanyonCustomFieldDefsChange,
+  placeCustomFieldDefs,
+  onPlaceCustomFieldDefsChange,
+  placeTypes,
+  onPlaceTypesChange,
 }: {
   currentUser: TUser | null;
   // Custom trip-log field definitions (App-level state, shared with the trip
   // dialogs so a create/rename/delete here is immediately visible there).
-  customFieldDefs: TripLogCustomFieldDef[];
-  onCustomFieldDefsChange: (defs: TripLogCustomFieldDef[]) => void;
-  // Custom canyon field definitions (App-level state, shared with CanyonDialog).
-  canyonCustomFieldDefs: TripLogCustomFieldDef[];
-  onCanyonCustomFieldDefsChange: (defs: TripLogCustomFieldDef[]) => void;
+  customFieldDefs: ScopedCustomFieldDef[];
+  onCustomFieldDefsChange: (defs: ScopedCustomFieldDef[]) => void;
+  // Custom place field definitions (App-level state, shared with PlaceDialog).
+  placeCustomFieldDefs: ScopedCustomFieldDef[];
+  /** Offered as the scoping choice when a PLACE field is created here, and
+   *  managed by the section above. */
+  placeTypes: TPlaceType[];
+  onPlaceTypesChange: (types: TPlaceType[]) => void;
+  onPlaceCustomFieldDefsChange: (defs: ScopedCustomFieldDef[]) => void;
 }) {
   const { signOut } = useAuth();
   const toast = useToast();
@@ -352,7 +360,7 @@ function AccountPanel({
               onChange={() => handleToggleNotif("shareInApp")}
               disabled={notifSaving}
             />
-            <span className={classes.notifLabel}>In-app notification when a canyon is shared with me</span>
+            <span className={classes.notifLabel}>In-app notification when a place is shared with me</span>
           </label>
         </div>
       )}
@@ -377,6 +385,14 @@ function AccountPanel({
         </div>
       )}
 
+      {/* Types come BEFORE the fields that are scoped to them: a user
+          reading downwards meets the categories, then what each one holds. */}
+      <PlaceTypeSection
+        types={placeTypes}
+        loading={!currentUser}
+        onTypesChange={onPlaceTypesChange}
+      />
+
       <CustomFieldSection
         entity="trip-log"
         sectionLabel="Custom trip fields"
@@ -388,13 +404,14 @@ function AccountPanel({
       />
 
       <CustomFieldSection
-        entity="canyon"
-        sectionLabel="Custom canyon fields"
-        tooltip="Extra fields you've added to canyons (e.g. Water Level). Renaming keeps existing values; deleting removes the field and its values from all canyons."
-        emptyText="No custom canyon fields yet. Add one below or from a canyon."
+        entity="place"
+        sectionLabel="Custom place fields"
+        tooltip="Extra fields you've added to places (e.g. Water Level). Renaming keeps existing values; deleting removes the field and its values from all places."
+        emptyText="No custom place fields yet. Add one below or from a place."
         loading={!currentUser}
-        defs={canyonCustomFieldDefs}
-        onDefsChange={onCanyonCustomFieldDefsChange}
+        defs={placeCustomFieldDefs}
+        onDefsChange={onPlaceCustomFieldDefsChange}
+        placeTypes={placeTypes}
       />
 
       <span className={classes.sectionLabel}>Your data</span>

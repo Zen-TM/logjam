@@ -6,17 +6,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // local value stands, and the next pull corrects it. The pull path cannot. Its
 // upserts and its cursor write share one transaction, so a throw rolls back the
 // cursor with the page — and the client then re-fetches that same page forever.
-// That is exactly MSYNC-001 (a canyon tombstone hitting a dropped column killed
+// That is exactly MSYNC-001 (a place tombstone hitting a dropped column killed
 // delta pull permanently on every fresh install), reachable a second way: by
 // anything the server sends that this client version cannot read.
 //
-// So: drop the row, name it (fields only — these rows carry canyon names and
+// So: drop the row, name it (fields only — these rows carry place names and
 // coordinates), apply the rest of the page, advance the cursor, and count a
 // sync issue so it is visible rather than silent.
 
 const applied = {
-  canyons: [] as string[],
-  waypoints: [] as string[],
+  places: [] as string[],
+  placeLinks: [] as string[],
   tombstones: [] as string[],
 };
 const stateWrites: Record<string, string> = {};
@@ -30,12 +30,12 @@ vi.mock("expo-file-system/legacy", () => ({ deleteAsync: () => Promise.resolve()
 vi.mock("./outbox", () => ({ loadOutboxRows: () => Promise.resolve([]), rowToEntry: (r: unknown) => r }));
 vi.mock("./mirrorStore", () => ({
   notifyMirrorChanged: () => {},
-  upsertCanyon: (_db: unknown, row: { id: string }) => {
-    applied.canyons.push(row.id);
+  upsertPlace: (_db: unknown, row: { id: string }) => {
+    applied.places.push(row.id);
     return Promise.resolve();
   },
-  upsertWaypoint: (_db: unknown, row: { id: string }) => {
-    applied.waypoints.push(row.id);
+  upsertPlaceLink: (_db: unknown, row: { id: string }) => {
+    applied.placeLinks.push(row.id);
     return Promise.resolve();
   },
   upsertTrip: () => Promise.resolve(),
@@ -43,7 +43,7 @@ vi.mock("./mirrorStore", () => ({
   upsertMedia: () => Promise.resolve(),
   upsertShare: () => Promise.resolve(),
   upsertFriendship: () => Promise.resolve(),
-  rebasePendingCanyonLinks: (_db: unknown, effective: unknown, dirtyNames: unknown) =>
+  rebasePendingPlaceLinks: (_db: unknown, effective: unknown, dirtyNames: unknown) =>
     Promise.resolve({ effective, dirtyNames }),
   applyTombstone: (_db: unknown, t: { id: string }) => {
     applied.tombstones.push(t.id);
@@ -66,23 +66,18 @@ vi.mock("./syncDb", () => ({
 
 const { runDeltaPull } = await import("./deltaPull");
 
-const goodCanyon = {
-  id: "canyon-good",
+const goodPlace = {
+  id: "place-good",
   ownerId: "user-1",
   syncRole: "owner",
   name: "Somewhere",
   altNames: [],
   latitude: -33.5,
   longitude: 150.4,
-  numAbseils: null,
-  longestAbseil: null,
-  vGrade: null,
-  aGrade: null,
-  commitment: null,
-  quality: null,
-  hours: null,
+  placeTypeId: "b0000000-0000-4000-8000-000000000001",
   notes: null,
-  attributes: {},
+  elevation: null,
+  fieldValues: {},
   ropeWikiId: null,
   forkedFromId: null,
   createdAt: "2026-08-01T00:00:00.000Z",
@@ -98,12 +93,12 @@ function page(over: Record<string, unknown>) {
     hasMore: false,
     resetRequired: false,
     changes: {
-      canyons: [],
+      places: [],
       tripLogs: [],
-      waypoints: [],
+      placeLinks: [],
       routes: [],
       media: [],
-      canyonShares: [],
+      placeShares: [],
       friendships: [],
     },
     tombstones: [],
@@ -112,8 +107,8 @@ function page(over: Record<string, unknown>) {
 }
 
 beforeEach(() => {
-  applied.canyons = [];
-  applied.waypoints = [];
+  applied.places = [];
+  applied.placeLinks = [];
   applied.tombstones = [];
   for (const key of Object.keys(stateWrites)) delete stateWrites[key];
   fetchCount = 0;
@@ -126,12 +121,12 @@ describe("a malformed delta row", () => {
       page({
         changes: {
           // latitude as a string is the classic wire-shape slip.
-          canyons: [goodCanyon, { ...goodCanyon, id: "canyon-bad", latitude: "-33.5" }],
+          places: [goodPlace, { ...goodPlace, id: "place-bad", latitude: "-33.5" }],
           tripLogs: [],
-          waypoints: [],
+          placeLinks: [],
           routes: [],
           media: [],
-          canyonShares: [],
+          placeShares: [],
           friendships: [],
         },
       }),
@@ -139,12 +134,12 @@ describe("a malformed delta row", () => {
 
     const result = await runDeltaPull("user-1");
 
-    expect(applied.canyons).toEqual(["canyon-good"]);
+    expect(applied.places).toEqual(["place-good"]);
     expect(result.pages).toBe(1);
   });
 
   it("does not stall the cursor — the pull completes and is counted as an issue", async () => {
-    pages = [page({ changes: { canyons: [{ id: "nope" }], tripLogs: [], waypoints: [], routes: [], media: [], canyonShares: [], friendships: [] } })];
+    pages = [page({ changes: { places: [{ id: "nope" }], tripLogs: [], placeLinks: [], routes: [], media: [], placeShares: [], friendships: [] } })];
 
     // The whole point: this resolves. Before validation existed a bad row threw
     // out of the transaction, and before *skipping* existed it would have
@@ -162,7 +157,7 @@ describe("a malformed delta row", () => {
     pages = [
       page({
         tombstones: [
-          { type: "canyon", id: "gone" },
+          { type: "place", id: "gone" },
           { type: "placeType", id: "from-a-newer-server" },
         ],
       }),
@@ -178,8 +173,8 @@ describe("a malformed delta row", () => {
     pages = [
       page({
         tombstones: [
-          { type: "canyon", id: "gone" },
-          { type: "canyon" },
+          { type: "place", id: "gone" },
+          { type: "place" },
           { type: 7, id: "hostile" },
         ],
       }),
@@ -194,12 +189,12 @@ describe("a malformed delta row", () => {
     pages = [
       page({
         changes: {
-          canyons: [goodCanyon],
+          places: [goodPlace],
           tripLogs: [],
-          waypoints: [],
+          placeLinks: [],
           routes: [],
           media: [],
-          canyonShares: [],
+          placeShares: [],
           friendships: [],
         },
       }),
@@ -207,7 +202,7 @@ describe("a malformed delta row", () => {
 
     await runDeltaPull("user-1");
 
-    expect(applied.canyons).toEqual(["canyon-good"]);
+    expect(applied.places).toEqual(["place-good"]);
     expect(stateWrites.applyFailedAt).toBeUndefined();
   });
 });
@@ -223,12 +218,12 @@ describe("a change key this app version does not consume", () => {
     pages = [
       page({
         changes: {
-          canyons: [],
+          places: [],
           tripLogs: [],
-          waypoints: [],
+          placeLinks: [],
           routes: [],
           media: [],
-          canyonShares: [],
+          placeShares: [],
           friendships: [],
           gearLists: [{ id: "gear-1" }],
         },
@@ -243,12 +238,12 @@ describe("a change key this app version does not consume", () => {
     pages = [
       page({
         changes: {
-          canyons: [],
+          places: [],
           tripLogs: [],
-          waypoints: [],
+          placeLinks: [],
           routes: [],
           media: [],
-          canyonShares: [],
+          placeShares: [],
           friendships: [],
           gearLists: [],
         },

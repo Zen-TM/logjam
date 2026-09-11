@@ -1,11 +1,11 @@
 // Saved routes, drawn from the MIRROR.
 //
-// Unlike CanyonRoutesLayer (which parses GPX/KML out of the media cache and can
+// Unlike PlaceRoutesLayer (which parses GPX/KML out of the media cache and can
 // only draw what this phone has fetched), a route's geometry is a column on the
 // synced row — so there is nothing to fetch, nothing to parse, and no
 // "unavailable" count to report. It works offline the moment the delta lands.
 //
-// ONE GeoJSONSource for the same reason as CanyonRoutesLayer: per-feature colour
+// ONE GeoJSONSource for the same reason as PlaceRoutesLayer: per-feature colour
 // via a data-driven style beats N native sources.
 import { memo, useMemo } from "react";
 import { GeoJSONSource, Layer } from "@maplibre/maplibre-react-native";
@@ -79,7 +79,7 @@ export const RoutesLayer = memo(function RoutesLayer({
 
   // Always mounted — never `return null` when empty. A conditionally-mounted
   // source remounts on the 0↔1 route transition and re-adds its layers to the
-  // TOP of the stack, drawing over the waypoint/canyon markers that are meant to
+  // TOP of the stack, drawing over the waypoint/place markers that are meant to
   // sit above routes. An empty FeatureCollection keeps the source (and its four
   // layers) pinned where MapScreen mounts them, the same pattern RouteDraftLayer
   // uses for its own line.

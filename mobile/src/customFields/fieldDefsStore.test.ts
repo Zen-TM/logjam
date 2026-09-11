@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { TripLogCustomFieldDef } from "@logjam/shared";
+import type { ScopedCustomFieldDef } from "@logjam/shared";
 
 // Definitions are rows in the local mirror now, written through the outbox.
 // These tests hold the two properties that change bought: every path works with
@@ -16,29 +16,32 @@ type DefRow = {
   min: number | null;
   max: number | null;
   position: number;
+  ownerId: string | null;
+  placeTypeIds: string[];
+  appliesToAllTypes: boolean;
 };
 
 let defRows: DefRow[] = [];
 let trips: { id: string; customFields: Record<string, unknown> }[] = [];
-let canyons: {
+let places: {
   id: string;
   syncRole: string;
-  attributes: { sources?: [string, string][]; customFields?: Record<string, unknown> };
+  fieldValues: Record<string, unknown>;
 }[] = [];
 
-const created: { entity: string; def: TripLogCustomFieldDef }[] = [];
+const created: Record<string, unknown>[] = [];
 const updated: { id: string; fields: Record<string, unknown> }[] = [];
 const deleted: string[] = [];
 const tripUpdates: { id: string; fields: Record<string, unknown> }[] = [];
-const canyonUpdates: { id: string; fields: Record<string, unknown> }[] = [];
+const placeUpdates: { id: string; fields: Record<string, unknown> }[] = [];
 
 vi.mock("../sync/mirrorStore", () => ({
   listMirrorCustomFieldDefs: () => Promise.resolve(defRows),
   listMirrorTrips: () => Promise.resolve(trips),
-  listMirrorCanyons: () => Promise.resolve(canyons),
+  listMirrorPlaces: () => Promise.resolve(places),
 }));
 vi.mock("../sync/outbox", () => ({
-  createCustomFieldDefLocal: (draft: { entity: string; def: TripLogCustomFieldDef }) => {
+  createCustomFieldDefLocal: (draft: Record<string, unknown>) => {
     created.push(draft);
     return Promise.resolve("new-id");
   },
@@ -54,8 +57,8 @@ vi.mock("../sync/outbox", () => ({
     tripUpdates.push({ id, fields });
     return Promise.resolve();
   },
-  updateCanyonLocal: (id: string, fields: Record<string, unknown>) => {
-    canyonUpdates.push({ id, fields });
+  updatePlaceLocal: (id: string, fields: Record<string, unknown>) => {
+    placeUpdates.push({ id, fields });
     return Promise.resolve();
   },
 }));
@@ -70,10 +73,24 @@ vi.mock("../api/queries", () => ({
 const { countFieldValues, loadFieldDefs, removeFieldDef, saveFieldDefs } =
   await import("./fieldDefsStore");
 
-const water: TripLogCustomFieldDef = { key: "water", label: "Water level", type: "string" };
-const party: TripLogCustomFieldDef = { key: "party", label: "Party size", type: "integer" };
+const water: ScopedCustomFieldDef = {
+  key: "water",
+  label: "Water level",
+  type: "string",
+  ownerId: "user-1",
+  placeTypeIds: [],
+  appliesToAllTypes: true,
+};
+const party: ScopedCustomFieldDef = {
+  key: "party",
+  label: "Party size",
+  type: "integer",
+  ownerId: "user-1",
+  placeTypeIds: [],
+  appliesToAllTypes: true,
+};
 
-function row(def: TripLogCustomFieldDef, entity: string, position = 0): DefRow {
+function row(def: ScopedCustomFieldDef, entity: string, position = 0): DefRow {
   return {
     id: `row-${def.key}`,
     entity,
@@ -83,25 +100,30 @@ function row(def: TripLogCustomFieldDef, entity: string, position = 0): DefRow {
     min: def.min ?? null,
     max: def.max ?? null,
     position,
+    // `??` would swallow the case this file exists for: a SYSTEM row's owner
+    // is null, and null is exactly what `??` falls back from.
+    ownerId: def.ownerId === undefined ? "user-1" : def.ownerId,
+    placeTypeIds: def.placeTypeIds,
+    appliesToAllTypes: def.appliesToAllTypes,
   };
 }
 
 beforeEach(() => {
   defRows = [];
   trips = [];
-  canyons = [];
+  places = [];
   created.length = 0;
   updated.length = 0;
   deleted.length = 0;
   tripUpdates.length = 0;
-  canyonUpdates.length = 0;
+  placeUpdates.length = 0;
 });
 
 describe("loadFieldDefs", () => {
   it("reads the mirror, scoped to one entity", async () => {
-    defRows = [row(water, "tripLog", 0), row(party, "canyon", 0)];
+    defRows = [row(water, "tripLog", 0), row(party, "place", 0)];
     expect(await loadFieldDefs("tripLog")).toEqual([water]);
-    expect(await loadFieldDefs("canyon")).toEqual([party]);
+    expect(await loadFieldDefs("place")).toEqual([party]);
   });
 
   it("orders by position, not by insertion", async () => {
@@ -109,6 +131,19 @@ describe("loadFieldDefs", () => {
     expect((await loadFieldDefs("tripLog")).map((def) => def.key)).toEqual([
       "water",
       "party",
+    ]);
+  });
+
+  it("carries each row's scoping, which is what the type-specific form reads", async () => {
+    defRows = [
+      {
+        ...row(party, "place", 0),
+        placeTypeIds: ["type-campsite"],
+        appliesToAllTypes: false,
+      },
+    ];
+    expect(await loadFieldDefs("place")).toEqual([
+      { ...party, placeTypeIds: ["type-campsite"], appliesToAllTypes: false },
     ]);
   });
 
@@ -122,7 +157,14 @@ describe("saveFieldDefs", () => {
   it("adds a new field as a create, touching nothing else", async () => {
     defRows = [row(water, "tripLog", 0)];
     await saveFieldDefs("tripLog", [water, party]);
-    expect(created).toEqual([{ entity: "tripLog", def: party }]);
+    expect(created).toEqual([
+      {
+        entity: "tripLog",
+        def: party,
+        placeTypeIds: party.placeTypeIds,
+        appliesToAllTypes: party.appliesToAllTypes,
+      },
+    ]);
     expect(updated).toEqual([]);
     expect(deleted).toEqual([]);
   });
@@ -158,8 +200,60 @@ describe("saveFieldDefs", () => {
     expect(deleted).toEqual(["row-party"]);
   });
 
+  // WITHOUT this, a field created on the phone reaches the server with no
+  // scoping at all — `appliesToAllTypes` false and no types — and appears on no
+  // form. The user made it from the campsite form and it is nowhere.
+  it("carries the scoping on a create", async () => {
+    const capacity: ScopedCustomFieldDef = {
+      key: "capacity",
+      label: "Capacity",
+      type: "integer",
+      placeTypeIds: ["type-campsite"],
+      appliesToAllTypes: false,
+    };
+    await saveFieldDefs("place", [capacity]);
+    expect(created).toEqual([
+      {
+        entity: "place",
+        def: capacity,
+        placeTypeIds: ["type-campsite"],
+        appliesToAllTypes: false,
+      },
+    ]);
+  });
+
+  it("rescopes an existing field with a patch, not a recreate", async () => {
+    defRows = [row(party, "place", 0)];
+    await saveFieldDefs("place", [
+      { ...party, appliesToAllTypes: false, placeTypeIds: ["type-canyon"] },
+    ]);
+    expect(created).toEqual([]);
+    expect(updated).toEqual([
+      {
+        id: "row-party",
+        fields: { appliesToAllTypes: false, placeTypeIds: ["type-canyon"] },
+      },
+    ]);
+  });
+
+  // Order is not meaningful in a scoping, so a reordered list is not a change —
+  // writing one would queue a push on every save and conflict for nothing.
+  it("does not rewrite a scoping whose ids only changed order", async () => {
+    defRows = [
+      row(
+        { ...party, appliesToAllTypes: false, placeTypeIds: ["a", "b"] },
+        "place",
+        0,
+      ),
+    ];
+    await saveFieldDefs("place", [
+      { ...party, appliesToAllTypes: false, placeTypeIds: ["b", "a"] },
+    ]);
+    expect([...created, ...updated]).toEqual([]);
+  });
+
   it("leaves the other entity's definitions alone", async () => {
-    defRows = [row(water, "tripLog", 0), row(party, "canyon", 0)];
+    defRows = [row(water, "tripLog", 0), row(party, "place", 0)];
     await saveFieldDefs("tripLog", []);
     expect(deleted).toEqual(["row-water"]);
   });
@@ -176,12 +270,12 @@ describe("countFieldValues", () => {
 
   // A sharee cannot strip the owner's values, so they must not be counted as
   // rows this delete will clear either — the number and the effect must agree.
-  it("ignores canyons shared WITH this user", async () => {
-    canyons = [
-      { id: "c1", syncRole: "owner", attributes: { customFields: { party: 3 } } },
-      { id: "c2", syncRole: "shared", attributes: { customFields: { party: 4 } } },
+  it("ignores places shared WITH this user", async () => {
+    places = [
+      { id: "c1", syncRole: "owner", fieldValues: { party: 3 } },
+      { id: "c2", syncRole: "shared", fieldValues: { party: 4 } },
     ];
-    expect(await countFieldValues("canyon", "party")).toBe(1);
+    expect(await countFieldValues("place", "party")).toBe(1);
   });
 });
 
@@ -199,28 +293,31 @@ describe("removeFieldDef", () => {
     expect(deleted).toEqual(["row-water"]);
   });
 
-  // `sources` is written only by the web, so a strip that rebuilt `attributes`
-  // from the customFields alone would silently drop it.
-  it("preserves the rest of a canyon's attributes", async () => {
-    defRows = [row(party, "canyon", 0)];
-    canyons = [
+  // `_sources` is written only by the web, and it lives in the SAME object as
+  // the field values now rather than beside them — so a strip that rebuilt
+  // fieldValues from the user keys alone would silently drop it. That is a
+  // sharper trap than before the rework, not a milder one.
+  it("preserves the rest of a place's field values", async () => {
+    defRows = [row(party, "place", 0)];
+    places = [
       {
         id: "c1",
         syncRole: "owner",
-        attributes: {
-          sources: [["Wiki", "http://x"]],
-          customFields: { party: 3, permit: "yes" },
+        fieldValues: {
+          _sources: [["Wiki", "http://x"]],
+          party: 3,
+          permit: "yes",
         },
       },
     ];
-    expect(await removeFieldDef("canyon", "party")).toBe(1);
-    expect(canyonUpdates).toEqual([
+    expect(await removeFieldDef("place", "party")).toBe(1);
+    expect(placeUpdates).toEqual([
       {
         id: "c1",
         fields: {
-          attributes: {
-            sources: [["Wiki", "http://x"]],
-            customFields: { permit: "yes" },
+          fieldValues: {
+            _sources: [["Wiki", "http://x"]],
+            permit: "yes",
           },
         },
       },
@@ -230,5 +327,53 @@ describe("removeFieldDef", () => {
   it("is a no-op on a definition that is already gone", async () => {
     expect(await removeFieldDef("tripLog", "water")).toBe(0);
     expect(deleted).toEqual([]);
+  });
+});
+
+// A SYSTEM definition belongs to no account. The phone could not see that —
+// the mirror threw `ownerId` away — so the editor offered Delete on a built-in
+// field, and `removeFieldDefById` did its half FIRST: strip the value off every
+// owned place carrying the key. The server then answered the definition delete
+// with "already applied", so the field came back on the next pull and the
+// values did not. Every star rating in an account, gone in two taps.
+describe("a built-in definition is not the account's to change", () => {
+  const builtIn: ScopedCustomFieldDef = {
+    key: "quality",
+    label: "Quality",
+    type: "float",
+    min: 1,
+    max: 5,
+    ownerId: null,
+    placeTypeIds: ["type-canyon"],
+    appliesToAllTypes: false,
+  };
+
+  it("refuses to delete one, before anything is stripped", async () => {
+    defRows = [row(builtIn, "place", 0)];
+    places = [
+      { id: "p1", syncRole: "owner", fieldValues: { quality: 4 } },
+      { id: "p2", syncRole: "owner", fieldValues: { quality: 5 } },
+    ];
+    await expect(removeFieldDef("place", "quality")).rejects.toThrow(/built-in/i);
+    expect(placeUpdates, "no place may lose a value").toEqual([]);
+    expect(deleted).toEqual([]);
+  });
+
+  // The whole-list save is the other way in: the editor hands over the list it
+  // is holding, and a list that has simply lost a row means "delete it".
+  it("is not deleted by a whole-list save that omits it", async () => {
+    defRows = [row(builtIn, "place", 0)];
+    places = [{ id: "p1", syncRole: "owner", fieldValues: { quality: 4 } }];
+    await saveFieldDefs("place", []);
+    expect(deleted).toEqual([]);
+    expect(placeUpdates).toEqual([]);
+  });
+
+  it("is not renamed or rescoped by a whole-list save", async () => {
+    defRows = [row(builtIn, "place", 0)];
+    await saveFieldDefs("place", [
+      { ...builtIn, label: "Mine now", appliesToAllTypes: true },
+    ]);
+    expect([...created, ...updated]).toEqual([]);
   });
 });

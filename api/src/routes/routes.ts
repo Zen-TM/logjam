@@ -6,13 +6,13 @@
 // Visibility has TWO sources, and lib/shareAccess.ts is the only place they
 // are combined:
 //   - unlinked, unshared route → owner-private;
-//   - linked route             → visible to everyone the canyon is shared with;
+//   - linked route             → visible to everyone the place is shared with;
 //   - directly shared route    → visible to each Share recipient.
 // Either way a non-owner is read-only (view + export, never edit).
 // Non-owned ids are 404, never 403, so a status can't confirm a route exists
 // to someone who can't see it (SEC-001 anti-oracle). A SHAREE attempting a
 // mutation gets 403 — they legitimately see the route, they just can't change
-// it — matching requireCanyonOwnerAccess's split.
+// it — matching requirePlaceOwnerAccess's split.
 import { Router, Response } from "express";
 import { Prisma } from "@prisma/client";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
@@ -27,10 +27,10 @@ import {
   pickNextTrackColor,
 } from "@logjam/shared";
 import {
-  applyRouteCanyonLink,
-  canyonShareeIds,
+  applyRoutePlaceLink,
+  placeShareeIds,
   parseAnchorsOrNull,
-  resolveRouteCanyonId,
+  resolveRoutePlaceId,
 } from "../lib/routeLink";
 import {
   directShareRevokeTombstones,
@@ -53,7 +53,7 @@ import {
 const router = Router();
 
 // Hard cap on the list; true total rides X-Total-Count (UX-001 — matches
-// /canyons, /trips and /waypoints).
+// /places, /trips and /waypoints).
 const LIST_TAKE = 500;
 
 const NOT_FOUND = "Route not found";
@@ -71,17 +71,17 @@ async function requireOwnedRoute(userId: string, id: string) {
 }
 
 // ── GET /routes ───────────────────────────────────────────────
-// Owned routes, plus routes linked to canyons shared with the caller. Derived
-// purely from the caller's own access set (same shape as GET /canyons/tracks),
+// Owned routes, plus routes linked to places shared with the caller. Derived
+// purely from the caller's own access set (same shape as GET /places/tracks),
 // so it never accepts an arbitrary id.
 router.get("/", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   const user = await resolveUser(req.user!.sub);
-  // Owned, canyon-inherited, or directly shared — the same three-way union
+  // Owned, place-inherited, or directly shared — the same three-way union
   // lib/shareAccess.ts resolves for a single row, expressed as a query.
   const where: Prisma.RouteWhereInput = {
     OR: [
       { ownerId: user.id },
-      { canyon: { shares: { some: { sharedWithId: user.id } } } },
+      { place: { shares: { some: { sharedWithId: user.id } } } },
       { id: { in: await directlySharedIds(user.id, "route") } },
     ],
   };
@@ -119,7 +119,7 @@ router.post("/", requireAuth, async (req: AuthenticatedRequest, res: Response) =
   const parsed = parseRoutePoints(body.points);
   if ("error" in parsed) throw new AppError(400, parsed.error);
 
-  const canyonId = (await resolveRouteCanyonId(user.id, body.canyonId)) ?? null;
+  const placeId = (await resolveRoutePlaceId(user.id, body.placeId)) ?? null;
 
   // Optional client-minted id (Stage 8 §3.5): own-id replay → 200 with the
   // existing row; foreign id → 404 (see lib/clientSuppliedId.ts).
@@ -134,14 +134,14 @@ router.post("/", requireAuth, async (req: AuthenticatedRequest, res: Response) =
   }
 
   try {
-    // Create unlinked, then route the link through applyRouteCanyonLink so the
+    // Create unlinked, then route the link through applyRoutePlaceLink so the
     // displacement rule and its tombstones have exactly one implementation.
     const created = await prisma.$transaction(async (tx) => {
       let assignedColor = parseRouteColor(body.color);
       if (!assignedColor) {
         const existingRoutes = await tx.route.findMany({
-          where: canyonId
-            ? { OR: [{ ownerId: user.id }, { canyonId }] }
+          where: placeId
+            ? { OR: [{ ownerId: user.id }, { placeId }] }
             : { ownerId: user.id },
           select: { color: true },
         });
@@ -152,7 +152,7 @@ router.post("/", requireAuth, async (req: AuthenticatedRequest, res: Response) =
         data: {
           ...(clientId && { id: clientId }),
           ownerId: user.id,
-          canyonId: null,
+          placeId: null,
           name: (body.name as string).trim(),
           // The client may choose from the shared palette; when it doesn't,
           // the server picks avoiding collisions. Mobile picks at draw time so the line
@@ -163,11 +163,11 @@ router.post("/", requireAuth, async (req: AuthenticatedRequest, res: Response) =
           anchors: parseAnchorsOrNull(body.anchors, parsed.points.length),
         },
       });
-      if (canyonId === null) return { route, displacedRoute: null };
-      const { displacedRoute } = await applyRouteCanyonLink(tx, {
+      if (placeId === null) return { route, displacedRoute: null };
+      const { displacedRoute } = await applyRoutePlaceLink(tx, {
         routeId: route.id,
-        canyonId,
-        currentCanyonId: null,
+        placeId,
+        currentPlaceId: null,
       });
       const linked = await tx.route.findUniqueOrThrow({ where: { id: route.id } });
       return { route: linked, displacedRoute };
@@ -192,7 +192,7 @@ router.post("/", requireAuth, async (req: AuthenticatedRequest, res: Response) =
 });
 
 // ── PATCH /routes/:id ─────────────────────────────────────────
-// Field-sparse update. `canyonId` accepts an explicit null to unlink.
+// Field-sparse update. `placeId` accepts an explicit null to unlink.
 router.patch("/:id", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   const user = await resolveUser(req.user!.sub);
   const id = getParam(req.params.id);
@@ -214,7 +214,7 @@ router.patch("/:id", requireAuth, async (req: AuthenticatedRequest, res: Respons
     // as stale indices into geometry that has changed underneath them.
     anchors = parseAnchorsOrNull(body.anchors, parsed.points.length);
   }
-  const resolvedCanyonId = await resolveRouteCanyonId(user.id, body.canyonId);
+  const resolvedPlaceId = await resolveRoutePlaceId(user.id, body.placeId);
 
   const result = await prisma.$transaction(async (tx) => {
     if (body.name !== undefined || points !== undefined || color !== undefined) {
@@ -228,11 +228,11 @@ router.patch("/:id", requireAuth, async (req: AuthenticatedRequest, res: Respons
       });
     }
     let displacedRoute: { id: string; name: string } | null = null;
-    if (resolvedCanyonId !== undefined) {
-      ({ displacedRoute } = await applyRouteCanyonLink(tx, {
+    if (resolvedPlaceId !== undefined) {
+      ({ displacedRoute } = await applyRoutePlaceLink(tx, {
         routeId: id,
-        canyonId: resolvedCanyonId,
-        currentCanyonId: route.canyonId,
+        placeId: resolvedPlaceId,
+        currentPlaceId: route.placeId,
       }));
     }
     const updated = await tx.route.findUniqueOrThrow({ where: { id } });
@@ -249,10 +249,10 @@ router.delete("/:id", requireAuth, async (req: AuthenticatedRequest, res: Respon
   const route = await requireOwnedRoute(user.id, id);
 
   await prisma.$transaction(async (tx) => {
-    // Sharees of the linked canyon must forget it too (a linked route is part
-    // of the shared canyon record). Read the fan-out BEFORE the delete.
+    // Sharees of the linked place must forget it too (a linked route is part
+    // of the shared place record). Read the fan-out BEFORE the delete.
     const shareeIds =
-      route.canyonId === null ? [] : await canyonShareeIds(tx, route.canyonId);
+      route.placeId === null ? [] : await placeShareeIds(tx, route.placeId);
     // Direct recipients likewise — also read before the rows go.
     const directIds = await directShareeIds(tx, "route", id);
     // Share.entityId is polymorphic, so Postgres cannot cascade: without this

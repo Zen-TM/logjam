@@ -1,4 +1,4 @@
-// Friends — "who can I share a canyon with, and who is waiting on me?"
+// Friends — "who can I share a place with, and who is waiting on me?"
 //
 // LAYOUT (DESIGN.md §1, §2): hero answers with a count and owns the one
 // acquisition action (Add, which opens the username search in a sheet); a pinned
@@ -46,7 +46,7 @@ import {
 } from "../api/friends";
 import { useAccountState } from "../auth/AccountStateContext";
 import { capabilityScreenBlock } from "../auth/capabilities";
-import { canyonHue, fontSize, spacing, theme } from "../theme";
+import { placeHue, fontSize, spacing, theme } from "../theme";
 import {
   BottomSheet,
   Button,
@@ -71,7 +71,7 @@ type Bucket = "all" | "friends" | "requests";
 
 /**
  * One row shape for both populations, so a single renderer covers the list.
- * A request wears the heath hue a shared canyon wears — it is someone else
+ * A request wears the heath hue a shared place wears — it is someone else
  * reaching into your account, which is the same idea (§3).
  */
 type FriendItem =
@@ -161,7 +161,7 @@ export function FriendsScreen({
       // verb suggests (§7).
       Alert.alert(
         `Remove ${item.username}?`,
-        "This also revokes every canyon you've shared with them.",
+        "This also revokes every place you've shared with them.",
         [
           { text: "Cancel", style: "cancel" },
           {
@@ -246,7 +246,7 @@ export function FriendsScreen({
       value: "requests",
       label: "Requests",
       count: requests.length,
-      hue: canyonHue.shared,
+      hue: placeHue.shared,
       disabled: requests.length === 0,
     },
   ];
@@ -383,7 +383,7 @@ export function FriendsScreen({
  * the tap costs nothing, while the verbs that revoke stay behind the sheet. A
  * request has nowhere to open to, so both its body and its ⋯ reach the same
  * accept/decline sheet; it carries no inline Accept, because one trailing
- * control is what makes this the same card as a canyon's.
+ * control is what makes this the same card as a place's.
  *
  * Memoised, with callbacks that take the item rather than closing over it — §9.
  */
@@ -402,7 +402,7 @@ const FriendRow = memo(function FriendRow({
   return (
     <Row
       icon={request ? "user-plus" : "user"}
-      hue={request ? canyonHue.shared : undefined}
+      hue={request ? placeHue.shared : undefined}
       title={item.username}
       subtitle={request ? "Wants to be friends" : undefined}
       onPress={() => (request ? onMenu(item) : onOpen(item))}
@@ -544,7 +544,7 @@ function EmptyPanel({ bucket, onAdd }: { bucket: Bucket; onAdd: () => void }) {
     <View style={styles.empty}>
       <Text style={styles.emptyTitle}>No friends yet</Text>
       <Text style={styles.emptyHint}>
-        You need to be friends to share a canyon.
+        You need to be friends to share a place.
       </Text>
       <Button label="Add a friend" icon="user-plus" onPress={onAdd} />
     </View>

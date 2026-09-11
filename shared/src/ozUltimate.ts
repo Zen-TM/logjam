@@ -1,4 +1,4 @@
-import { norm, stripWaterwaySuffix } from "./canyonNameMatch.js";
+import { norm, stripWaterwaySuffix } from "./placeNameMatch.js";
 
 const BASE = "https://ozultimate.com/canyoning/track_notes/";
 
@@ -79,11 +79,11 @@ const OZULTIMATE: OzEntry[] = [
 ];
 
 export function matchOzUltimateUrl(
-  canyonName: string,
-  canyonAltNames: string[] = [],
+  placeName: string,
+  placeAltNames: string[] = [],
 ): string | null {
-  const query = stripWaterwaySuffix(canyonName);
-  const queryAlts = canyonAltNames.map(stripWaterwaySuffix);
+  const query = stripWaterwaySuffix(placeName);
+  const queryAlts = placeAltNames.map(stripWaterwaySuffix);
 
   const matches = OZULTIMATE.filter((entry) => {
     const entryNorm = norm(entry.name);

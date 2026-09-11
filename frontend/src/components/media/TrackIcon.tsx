@@ -1,5 +1,5 @@
 // A simple zig-zag "route" glyph, tinted with the track's assigned colour.
-// Used by the canyon track card, the trip-log track list, and as a colour
+// Used by the place track card, the trip-log track list, and as a colour
 // legend. Falls back to currentColor when no colour is supplied.
 export default function TrackIcon({
   color,

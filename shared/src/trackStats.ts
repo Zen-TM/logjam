@@ -7,7 +7,7 @@
 // never log, and callers must keep point data out of logs/telemetry/crash
 // reports (root privacy rules).
 
-import { haversineMeters } from "./canyonGeo.js";
+import { haversineMeters } from "./placeGeo.js";
 import {
   ELEVATION_PROFILE_MAX_SAMPLES,
   elevationGainLoss,
@@ -70,9 +70,9 @@ export type RecordedTrackPoint = CandidateFix & {
   stationaryMs?: number | null;
 };
 
-// Fixes worse than this are discarded — a 100 m-radius fix under a canyon
+// Fixes worse than this are discarded — a 100 m-radius fix under a place
 // wall adds noise distance, not track. 50 m keeps degraded-but-usable fixes
-// (deep canyon GPS is routinely 20–40 m) while dropping cell-tower garbage.
+// (deep place GPS is routinely 20–40 m) while dropping cell-tower garbage.
 //
 // The DEFAULT, not the rule: the recorder passes the user's own limit
 // (Settings → Map → Recording), because in a slot 50 m can be the best fix
@@ -118,7 +118,7 @@ export const MIN_POINT_DISTANCE_M = 5;
 // ceiling it always had.
 //
 // The bus trip above ran at a median accuracy of 6.3 m, so it gets the vehicle
-// ceiling; the canyon-noise tests run at 30 m and keep the walking one.
+// ceiling; the place-noise tests run at 30 m and keep the walking one.
 export const MAX_TRACK_SPEED_MPS = 5;
 
 /** Ceiling for a fix precise enough to demonstrate vehicle speed. 126 km/h
@@ -518,7 +518,7 @@ export function computeTrackDetail(
 
   // Distance walks a position-SMOOTHED copy of each segment: summing raw
   // fix-to-fix hops integrates the error circle as travel, which over-reads a
-  // 4.3 km walk as 32 km on 30 m-accurate canyon fixes. Smoothing is per
+  // 4.3 km walk as 32 km on 30 m-accurate place fixes. Smoothing is per
   // segment so a pause gap never averages across the two sides of it.
   for (let start = 0; start < points.length; ) {
     let end = start + 1;

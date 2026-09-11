@@ -5,7 +5,7 @@ import { groupNotificationsByDay } from "./notificationLabel";
 
 /** Local-midnight-relative helper: builds an instant N hours before `now`. */
 function at(iso: string): TNotification {
-  return { id: iso, type: "canyon_shared", payload: {}, read: false, createdAt: iso };
+  return { id: iso, type: "place_shared", payload: {}, read: false, createdAt: iso };
 }
 
 // A fixed LOCAL wall-clock "now". The grouping is about the user's calendar day,

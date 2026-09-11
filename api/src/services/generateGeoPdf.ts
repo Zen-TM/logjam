@@ -489,9 +489,9 @@ export async function generateGeoPdf(
     flushPendingLabels(mapCtx, pendingLabels);
   }
 
-  // 7b. Canyon markers
-  if (config.canyonMarkers && config.canyonMarkers.length > 0) {
-    drawCanyonMarkers(mapCtx, config, nativeW, nativeH, elementDpi);
+  // 7b. Place markers
+  if (config.placeMarkers && config.placeMarkers.length > 0) {
+    drawPlaceMarkers(mapCtx, config, nativeW, nativeH, elementDpi);
   }
 
   // 8. Draw map elements
@@ -1589,7 +1589,7 @@ function drawCompass(
   return boxY;
 }
 
-function drawCanyonMarkers(
+function drawPlaceMarkers(
   ctx: CanvasRenderingContext2D,
   config: GeoPdfConfig,
   widthPx: number,
@@ -1599,7 +1599,7 @@ function drawCanyonMarkers(
   const radius = mmToPx(2, dpi);
   const labelFontSize = mmToPx(2.5, dpi);
 
-  for (const marker of config.canyonMarkers!) {
+  for (const marker of config.placeMarkers!) {
     const { x, y } = latLonToCanvasPx(
       marker.lat,
       marker.lon,

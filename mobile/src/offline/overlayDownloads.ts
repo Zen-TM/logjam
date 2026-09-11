@@ -9,7 +9,7 @@
 // validateExportRequest rule binds export-creating surfaces; nothing here
 // requests an export.)
 //
-// PRIVACY: job bundles may include secret canyon-derived layers. Files live
+// PRIVACY: job bundles may include secret place-derived layers. Files live
 // in the same app-private, backup-excluded store as basemap regions, behind
 // the app lock (any artifact row arms it). Progress/errors are surfaced as
 // state words and counts — never paths or job/layer labels.

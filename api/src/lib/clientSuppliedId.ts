@@ -1,7 +1,7 @@
 // Optional client-minted entity ids on create (Stage 8 §3.5 — the outbox
 // idempotency backbone). Accepting the id at create time removes ALL
 // id-remapping from the mobile outbox: references between queued ops
-// (linkedId, canyonIds) are final at enqueue time.
+// (linkedId, placeIds) are final at enqueue time.
 //
 // Uniform rules, every accepting route:
 // - absent → server mints as before;

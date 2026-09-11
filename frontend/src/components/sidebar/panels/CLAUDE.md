@@ -31,4 +31,5 @@
 
 ## Conventions log (additive)
 
-_(none yet)_
+- **The place-type tabs are a permanent control, not a filter row.** "Which kind of place am I looking at" is the question people arrive with, so it gets a tab strip above the search box rather than a row inside the collapsed filter accordion — and it writes `filters.placeTypeId`, so the shared predicate and the map filter both honour it with no second code path. A type with zero places is left out of the strip (`typeTabs` in `PlacesPanel`); it is still offered in the create dialog, or you could never make your first one. (Places rework, 2026-09-10)
+- **The custom-field filter section follows the tab.** `defsForType(defs, filters.placeTypeId)` decides which fields the accordion offers, so a campsite tab cannot ask for a V grade. On "All" every place field is offered, which is the honest answer for a mixed list. (2026-09-10)

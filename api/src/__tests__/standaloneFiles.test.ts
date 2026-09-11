@@ -1,9 +1,9 @@
 // Standalone files: the account's own imports and recordings, which belong to
-// no canyon — and what happens when one is LINKED as a canyon's way.
+// no place — and what happens when one is LINKED as a place's way.
 //
 // This is the boundary test the root CLAUDE.md requires for any new endpoint on
-// shared canyons. The interesting cases are all about the second party: a
-// standalone file is owner-private, linking it to a shared canyon GRANTS a
+// shared places. The interesting cases are all about the second party: a
+// standalone file is owner-private, linking it to a shared place GRANTS a
 // sharee sight of it, and unlinking has to take that sight away again while the
 // owner keeps the file. A mocked-Prisma unit test cannot see any of that.
 //
@@ -18,7 +18,7 @@ import {
   BOB_SUB,
   CAROL_SUB,
   NONEXISTENT_ID,
-  SHARED_CANYON_ID,
+  SHARED_PLACE_ID,
 } from "./_actors";
 
 // The delta endpoint requires the client-version header the min-version lever
@@ -150,24 +150,24 @@ describe("a standalone file belongs to its owner and to nobody else", () => {
   });
 });
 
-describe("linking a standalone file as a canyon's way", () => {
-  it("grants the canyon's sharee sight of it, and unlinking takes it back", async () => {
-    const canyonId = SHARED_CANYON_ID;
+describe("linking a standalone file as a place's way", () => {
+  it("grants the place's sharee sight of it, and unlinking takes it back", async () => {
+    const placeId = SHARED_PLACE_ID;
     const mediaId = await createStandaloneImport(ALICE_SUB);
     try {
-      // Before linking: owner-private. Bob sees the canyon but not the file.
-      const before = await request(API_URL).get(`/canyons/${canyonId}`).set(as(BOB_SUB));
+      // Before linking: owner-private. Bob sees the place but not the file.
+      const before = await request(API_URL).get(`/places/${placeId}`).set(as(BOB_SUB));
       expect(before.status).toBe(200);
       expect(before.body.media.some((m: { id: string }) => m.id === mediaId)).toBe(false);
 
       const link = await request(API_URL)
         .patch(`/media/${mediaId}/link`)
         .set(as(ALICE_SUB))
-        .send({ linkedType: "canyon", linkedId: canyonId });
+        .send({ linkedType: "place", linkedId: placeId });
       expect(link.status).toBe(200);
-      expect(link.body.linkedId).toBe(canyonId);
+      expect(link.body.linkedId).toBe(placeId);
 
-      const after = await request(API_URL).get(`/canyons/${canyonId}`).set(as(BOB_SUB));
+      const after = await request(API_URL).get(`/places/${placeId}`).set(as(BOB_SUB));
       expect(after.body.media.some((m: { id: string }) => m.id === mediaId)).toBe(true);
 
       const unlink = await request(API_URL)
@@ -179,10 +179,10 @@ describe("linking a standalone file as a canyon's way", () => {
       expect(unlink.body.linkedId).toBeNull();
 
       // Revoked for the sharee...
-      const revoked = await request(API_URL).get(`/canyons/${canyonId}`).set(as(BOB_SUB));
+      const revoked = await request(API_URL).get(`/places/${placeId}`).set(as(BOB_SUB));
       expect(revoked.body.media.some((m: { id: string }) => m.id === mediaId)).toBe(false);
-      // ...and still the owner's. THIS is the change: displacing a canyon's way
-      // used to delete the file, because the canyon held a copy of it.
+      // ...and still the owner's. THIS is the change: displacing a place's way
+      // used to delete the file, because the place held a copy of it.
       const mine = await request(API_URL).get("/media/standalone").set(as(ALICE_SUB));
       expect(mine.body.some((file: { id: string }) => file.id === mediaId)).toBe(true);
     } finally {
@@ -193,11 +193,11 @@ describe("linking a standalone file as a canyon's way", () => {
   it("refuses a foreign file with 404, never 403 — the status is not an oracle", async () => {
     const mediaId = await createStandaloneImport(ALICE_SUB);
     try {
-      const canyonId = SHARED_CANYON_ID;
+      const placeId = SHARED_PLACE_ID;
       const res = await request(API_URL)
         .patch(`/media/${mediaId}/link`)
         .set(as(BOB_SUB))
-        .send({ linkedType: "canyon", linkedId: canyonId });
+        .send({ linkedType: "place", linkedId: placeId });
       expect(res.status).toBe(404);
 
       const rename = await request(API_URL)
@@ -210,29 +210,29 @@ describe("linking a standalone file as a canyon's way", () => {
     }
   });
 
-  it("refuses to link onto a canyon whose way is already taken", async () => {
-    const canyonId = SHARED_CANYON_ID;
+  it("refuses to link onto a place whose way is already taken", async () => {
+    const placeId = SHARED_PLACE_ID;
     const first = await createStandaloneImport(ALICE_SUB);
     const second = await createStandaloneImport(ALICE_SUB);
     try {
       const linkFirst = await request(API_URL)
         .patch(`/media/${first}/link`)
         .set(as(ALICE_SUB))
-        .send({ linkedType: "canyon", linkedId: canyonId });
+        .send({ linkedType: "place", linkedId: placeId });
       expect(linkFirst.status).toBe(200);
 
       const linkSecond = await request(API_URL)
         .patch(`/media/${second}/link`)
         .set(as(ALICE_SUB))
-        .send({ linkedType: "canyon", linkedId: canyonId });
+        .send({ linkedType: "place", linkedId: placeId });
       expect(linkSecond.status).toBe(409);
 
-      // Re-linking the INCUMBENT to the same canyon is a no-op, not a
+      // Re-linking the INCUMBENT to the same place is a no-op, not a
       // self-conflict: it is its own occupant.
       const relink = await request(API_URL)
         .patch(`/media/${first}/link`)
         .set(as(ALICE_SUB))
-        .send({ linkedType: "canyon", linkedId: canyonId });
+        .send({ linkedType: "place", linkedId: placeId });
       expect(relink.status).toBe(200);
     } finally {
       await deleteMedia(ALICE_SUB, first);
@@ -240,10 +240,10 @@ describe("linking a standalone file as a canyon's way", () => {
     }
   });
 
-  it("only a standalone file can be linked — a photo has no existence apart from its canyon", async () => {
-    const canyonId = SHARED_CANYON_ID;
-    const canyon = await request(API_URL).get(`/canyons/${canyonId}`).set(as(ALICE_SUB));
-    const photo = canyon.body.media.find(
+  it("only a standalone file can be linked — a photo has no existence apart from its place", async () => {
+    const placeId = SHARED_PLACE_ID;
+    const place = await request(API_URL).get(`/places/${placeId}`).set(as(ALICE_SUB));
+    const photo = place.body.media.find(
       (m: { mediaType: string }) => m.mediaType.startsWith("image/"),
     );
     if (!photo) return; // seed has one; skip rather than fail if it is ever dropped
@@ -287,16 +287,42 @@ describe("renaming a standalone file", () => {
 });
 
 describe("the delta pull carries standalone files", () => {
+  /**
+   * Drain the delta the way a client does — one page after another until
+   * `hasMore` is false — and hand back the last cursor with the rows.
+   *
+   * A single unpaged request is not the same thing: the budget is spent in the
+   * fixed entity order (§4.4), so media lands on page two the moment the
+   * account holds enough places, links and trips to fill page one. Asserting
+   * against ONE page passed only while the seed happened to be small, and it
+   * failed the day the seed grew — which is a fact about the fixture, not about
+   * the endpoint.
+   */
+  async function drainMedia(sub: string): Promise<{
+    media: Record<string, unknown>[];
+    cursor: string;
+  }> {
+    const media: Record<string, unknown>[] = [];
+    let cursor: string | undefined;
+    for (;;) {
+      const page = await request(API_URL)
+        .get("/sync/delta")
+        .query(cursor ? { cursor } : {})
+        .set(as(sub))
+        .set(CLIENT);
+      expect(page.status).toBe(200);
+      media.push(...(page.body.changes.media as Record<string, unknown>[]));
+      cursor = page.body.cursor as string;
+      if (!page.body.hasMore) return { media, cursor };
+    }
+  }
+
   it("delivers the owner's own, and re-delivers one whose parent moved", async () => {
-    const canyonId = SHARED_CANYON_ID;
+    const placeId = SHARED_PLACE_ID;
     const mediaId = await createStandaloneImport(ALICE_SUB);
     try {
-      const first = await request(API_URL)
-        .get("/sync/delta")
-        .set(as(ALICE_SUB))
-        .set(CLIENT);
-      expect(first.status).toBe(200);
-      const row = first.body.changes.media.find((m: { id: string }) => m.id === mediaId);
+      const first = await drainMedia(ALICE_SUB);
+      const row = first.media.find((m) => m.id === mediaId) as Record<string, unknown>;
       expect(row).toBeDefined();
       expect(row.linkedType).toBe("none");
       expect(row.linkedId).toBeNull();
@@ -306,11 +332,11 @@ describe("the delta pull carries standalone files", () => {
       // A cursor from AFTER the upload, then a link: the row must come back.
       // It would not on a createdAt keyset, which is what this column change
       // was for — the other device would show a stale parent forever.
-      const cursor = first.body.cursor;
+      const cursor = first.cursor;
       await request(API_URL)
         .patch(`/media/${mediaId}/link`)
         .set(as(ALICE_SUB))
-        .send({ linkedType: "canyon", linkedId: canyonId });
+        .send({ linkedType: "place", linkedId: placeId });
 
       const second = await request(API_URL)
         .get("/sync/delta")
@@ -320,7 +346,7 @@ describe("the delta pull carries standalone files", () => {
       expect(second.status).toBe(200);
       const moved = second.body.changes.media.find((m: { id: string }) => m.id === mediaId);
       expect(moved).toBeDefined();
-      expect(moved.linkedId).toBe(canyonId);
+      expect(moved.linkedId).toBe(placeId);
     } finally {
       await deleteMedia(ALICE_SUB, mediaId);
     }

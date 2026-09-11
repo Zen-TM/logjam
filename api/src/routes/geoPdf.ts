@@ -182,7 +182,7 @@ router.post(
     }
 
     // Estimator failure must never block submission — best-effort, and never
-    // logs the config itself (coords/canyon markers).
+    // logs the config itself (coords/place markers).
     let estimatedSeconds: number | null = null;
     try {
       estimatedSeconds = await estimateGeoPdfSeconds(config);

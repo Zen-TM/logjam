@@ -2,7 +2,7 @@
 //
 // The map answers where things are; until now it could not answer anything
 // about a spot you were only pointing at. Long-press already meant "something
-// goes HERE" (a waypoint, a canyon), which is a commitment; a tap is the
+// goes HERE" (a marker, a canyon), which is a commitment; a tap is the
 // question that comes before it, and it deserves the four facts a canyoner
 // actually wants off a map — where it is, how high it is, and how far and which
 // way it is from them — plus the two things they might do about it.
@@ -32,7 +32,7 @@ export function MapPointSheet({
   userCoord,
   onClose,
   onNavigate,
-  onDropWaypoint,
+  onDropMarker,
   onInfo,
   allowNetwork,
 }: {
@@ -41,7 +41,7 @@ export function MapPointSheet({
   userCoord: [number, number] | null;
   onClose: () => void;
   onNavigate: (point: MapPoint) => void;
-  onDropWaypoint: (point: MapPoint) => void;
+  onDropMarker: (point: MapPoint) => void;
   /** Transient feedback channel — the map's own toast. */
   onInfo: (message: string) => void;
   /**
@@ -61,7 +61,7 @@ export function MapPointSheet({
           userCoord={userCoord}
           onClose={onClose}
           onNavigate={onNavigate}
-          onDropWaypoint={onDropWaypoint}
+          onDropMarker={onDropMarker}
           onInfo={onInfo}
           allowNetwork={allowNetwork}
         />
@@ -75,7 +75,7 @@ function PointDetail({
   userCoord,
   onClose,
   onNavigate,
-  onDropWaypoint,
+  onDropMarker,
   onInfo,
   allowNetwork = true,
 }: {
@@ -83,7 +83,7 @@ function PointDetail({
   userCoord: [number, number] | null;
   onClose: () => void;
   onNavigate: (point: MapPoint) => void;
-  onDropWaypoint: (point: MapPoint) => void;
+  onDropMarker: (point: MapPoint) => void;
   onInfo: (message: string) => void;
   allowNetwork?: boolean;
 }) {
@@ -165,10 +165,10 @@ function PointDetail({
       />
       <Row
         icon="flag"
-        title="Drop a waypoint here"
+        title="Drop a marker here"
         subtitle="Saved, and synced"
         onPress={() => {
-          onDropWaypoint(point);
+          onDropMarker(point);
           onClose();
         }}
       />

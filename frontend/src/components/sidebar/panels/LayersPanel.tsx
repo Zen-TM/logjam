@@ -58,16 +58,14 @@ const LAYER_DESCRIPTIONS: Partial<Record<string, string>> = {
 
 function LayersPanel({
   // Overlays
-  showOwnedCanyons,
-  setShowOwnedCanyons,
-  showSharedCanyons,
-  setShowSharedCanyons,
-  showCanyonTracks,
-  setShowCanyonTracks,
+  showOwnedPlaces,
+  setShowOwnedPlaces,
+  showSharedPlaces,
+  setShowSharedPlaces,
+  showPlaceTracks,
+  setShowPlaceTracks,
   showRoutes,
   setShowRoutes,
-  showWaypoints,
-  setShowWaypoints,
   lidarEnabled,
   setLidarEnabled,
   lidarLayerToggles,
@@ -81,16 +79,14 @@ function LayersPanel({
   onActiveLayerChange,
   mapView,
 }: {
-  showOwnedCanyons: boolean;
-  setShowOwnedCanyons: (v: boolean) => void;
-  showSharedCanyons: boolean;
-  setShowSharedCanyons: (v: boolean) => void;
-  showCanyonTracks: boolean;
-  setShowCanyonTracks: (v: boolean) => void;
+  showOwnedPlaces: boolean;
+  setShowOwnedPlaces: (v: boolean) => void;
+  showSharedPlaces: boolean;
+  setShowSharedPlaces: (v: boolean) => void;
+  showPlaceTracks: boolean;
+  setShowPlaceTracks: (v: boolean) => void;
   showRoutes: boolean;
   setShowRoutes: (v: boolean) => void;
-  showWaypoints: boolean;
-  setShowWaypoints: (v: boolean) => void;
   lidarEnabled: boolean;
   setLidarEnabled: (v: boolean) => void;
   lidarLayerToggles: Record<string, boolean>;
@@ -175,30 +171,36 @@ function LayersPanel({
       {/* Overlays section */}
       <div className={classes.sectionLabel}>Overlays</div>
 
+      {/* No per-TYPE rows here, deliberately. The Places panel's type tabs
+          already filter the map — `passesFilters` runs over the same filter
+          state for the list and for the pin layers — so a second per-type
+          control would be two switches for one thing, and they would disagree
+          the moment a user touched either. Owned/shared stays here because it
+          is a LAYER distinction (two sources, two colours), not a filter. */}
       <div className={classes.toggleRow}>
-        <span>My Canyons</span>
+        <span>My Places</span>
         <Switch
           size="small"
-          checked={showOwnedCanyons}
-          onChange={(_, v) => setShowOwnedCanyons(v)}
-          sx={switchSx("var(--owned-canyon-color)")}
+          checked={showOwnedPlaces}
+          onChange={(_, v) => setShowOwnedPlaces(v)}
+          sx={switchSx("var(--owned-place-color)")}
         />
       </div>
       <div className={classes.toggleRow}>
-        <span>Shared Canyons</span>
+        <span>Shared Places</span>
         <Switch
           size="small"
-          checked={showSharedCanyons}
-          onChange={(_, v) => setShowSharedCanyons(v)}
-          sx={switchSx("var(--shared-canyon-color)")}
+          checked={showSharedPlaces}
+          onChange={(_, v) => setShowSharedPlaces(v)}
+          sx={switchSx("var(--shared-place-color)")}
         />
       </div>
       <div className={classes.toggleRow}>
-        <span>Canyon Tracks</span>
+        <span>Place Tracks</span>
         <Switch
           size="small"
-          checked={showCanyonTracks}
-          onChange={(_, v) => setShowCanyonTracks(v)}
+          checked={showPlaceTracks}
+          onChange={(_, v) => setShowPlaceTracks(v)}
           sx={switchSx("var(--theme-accent)")}
         />
       </div>
@@ -209,16 +211,6 @@ function LayersPanel({
           size="small"
           checked={showRoutes}
           onChange={(_, v) => setShowRoutes(v)}
-          sx={switchSx("var(--theme-accent)")}
-        />
-      </div>
-
-      <div className={classes.toggleRow}>
-        <span>Waypoints</span>
-        <Switch
-          size="small"
-          checked={showWaypoints}
-          onChange={(_, v) => setShowWaypoints(v)}
           sx={switchSx("var(--theme-accent)")}
         />
       </div>

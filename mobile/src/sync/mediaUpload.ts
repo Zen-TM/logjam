@@ -5,7 +5,7 @@
 // presign → PUT → confirm flow as one resumable unit, parking on quota
 // (507) / track-slot (409) races.
 //
-// PRIVACY: captured photos are canyon media — app-private media-cache/
+// PRIVACY: captured photos are place media — app-private media-cache/
 // (allowBackup=false), never logged. The three-phase flow reuses the same
 // authed endpoints + anti-oracle as the web client.
 import * as Crypto from "expo-crypto";
@@ -79,7 +79,7 @@ async function fileSize(uri: string): Promise<number> {
  * declares or wipes it, necessary) to delete once `attachMediaLocal` has
  * copied it. A path under one of OUR declared stores is not that — it's an
  * asset whose lifecycle is governed elsewhere, e.g. a vector import's
- * `sourcePath` reused by `saved/assetActions.ts`'s "attach to canyon" (the
+ * `sourcePath` reused by `saved/assetActions.ts`'s "attach to place" (the
  * app's only kept original of a lossy GPX/KML derivation — see mobile/
  * CLAUDE.md "Imports keep their ORIGINAL BYTES"). `localStores.test.ts`
  * guarantees nothing outside `localStores.ts` names a filesystem root, so
@@ -97,7 +97,7 @@ function mintUuid(): string {
 }
 
 /**
- * Attach a picked/captured file to a canyon or trip: copy it (plus a generated
+ * Attach a picked/captured file to a place or trip: copy it (plus a generated
  * thumbnail where the category has one) into the app-private cache, write the
  * pendingUpload mirror row, and enqueue the media.create op. Returns the new
  * mediaId.
@@ -109,7 +109,7 @@ function mintUuid(): string {
  * uploading something the server will reject at confirm.
  */
 export async function attachMediaLocal(
-  linkedType: "canyon" | "tripLog",
+  linkedType: "place" | "tripLog",
   linkedId: string,
   file: PickedFile,
 ): Promise<string> {
@@ -342,23 +342,23 @@ export async function renameStandaloneMediaLocal(
 }
 
 /**
- * Link a standalone file to a canyon as its way, or unlink it (`canyonId`
+ * Link a standalone file to a place as its way, or unlink it (`placeId`
  * null). The mirror moves immediately; the op carries the move to the server.
  *
  * Supersedes a queued link for the same file for the same reason a rename does:
  * a file has one parent, and replaying the intermediate ones would make a
- * sharee's mirror flicker through canyons the user never left it on.
+ * sharee's mirror flicker through places the user never left it on.
  */
 export async function linkStandaloneMediaLocal(
   mediaId: string,
-  canyonId: string | null,
+  placeId: string | null,
 ): Promise<void> {
   const db = await getSyncDb();
   await withSyncTransaction(db, async () => {
     await db.runAsync(
       "UPDATE media SET linked_type = ?, linked_id = ? WHERE id = ?",
-      canyonId === null ? "none" : "canyon",
-      canyonId,
+      placeId === null ? "none" : "place",
+      placeId,
       mediaId,
     );
     await db.runAsync(
@@ -373,7 +373,7 @@ export async function linkStandaloneMediaLocal(
        VALUES (?, 'media', 'link', ?, ?, 'queued', 0, ?)`,
       mintUuid(),
       mediaId,
-      JSON.stringify({ canyonId } satisfies LinkFields),
+      JSON.stringify({ placeId } satisfies LinkFields),
       new Date().toISOString(),
     );
   });
@@ -399,8 +399,8 @@ export type MediaOpRow = {
 export type MediaOpOutcome = "done" | "blocked";
 
 type MediaFields = {
-  linkedType: "canyon" | "tripLog" | "none";
-  /** Null on a standalone file — it belongs to no canyon or trip. */
+  linkedType: "place" | "tripLog" | "none";
+  /** Null on a standalone file — it belongs to no place or trip. */
   linkedId: string | null;
   filename: string;
   mediaType: string;
@@ -418,7 +418,7 @@ type MediaFields = {
 type RenameFields = { displayName: string | null };
 
 /** Fields of a link/unlink op (`op = 'link'`). */
-type LinkFields = { canyonId: string | null };
+type LinkFields = { placeId: string | null };
 
 /** The first of the op's local blobs that has gone missing, or null. */
 async function firstMissingFile(fields: MediaFields): Promise<string | null> {
@@ -531,7 +531,7 @@ export async function runMediaCreateOp(row: MediaOpRow): Promise<MediaOpOutcome>
     // Park only what a retry can never fix; rethrow the rest for the engine's
     // backoff. The old test was `>= 400 && < 600 && !== 500`, which swept in
     // 502/503/504 (an API deploy), 429 (rate limit) and 401 (an expired
-    // token) — so six photos attached in a canyon became six sync issues
+    // token) — so six photos attached in a place became six sync issues
     // needing six manual Retry taps the moment the user hit a mid-deploy API.
     // flush.ts classifies those same statuses as transient; this is the copy
     // that disagreed.
@@ -638,12 +638,12 @@ export async function runMediaRenameOp(row: MediaOpRow): Promise<MediaOpOutcome>
 }
 
 /**
- * Link a standalone file to a canyon as its way, or unlink it.
+ * Link a standalone file to a place as its way, or unlink it.
  *
- * This is what replaced uploading a COPY of an import into a canyon. The local
+ * This is what replaced uploading a COPY of an import into a place. The local
  * mirror row has already moved (the UI showed the change immediately), so a
  * success needs no further write; a 404 means the file is gone and the op has
- * nothing left to do. A 409 is the canyon's track slot being taken by
+ * nothing left to do. A 409 is the place's track slot being taken by
  * something this device has not pulled yet — a real conflict the user has to
  * see, so it parks rather than retrying forever.
  */
@@ -654,9 +654,9 @@ export async function runMediaLinkOp(row: MediaOpRow): Promise<MediaOpOutcome> {
     await apiFetch<ConfirmedMedia>(`/media/${row.entity_id}/link`, {
       method: "PATCH",
       body:
-        fields.canyonId === null
+        fields.placeId === null
           ? { linkedType: "none" }
-          : { linkedType: "canyon", linkedId: fields.canyonId },
+          : { linkedType: "place", linkedId: fields.placeId },
     });
   } catch (err) {
     const status = (err as { status?: number }).status;
@@ -705,7 +705,7 @@ export async function runMediaDeleteOp(row: MediaOpRow): Promise<MediaOpOutcome>
 
 function messageForBlock(status: number): string {
   if (status === 507) return "Not enough storage space. Free some space and retry.";
-  if (status === 409) return "This canyon already has a track. Remove it first.";
+  if (status === 409) return "This place already has a track. Remove it first.";
   return "The server rejected this upload.";
 }
 

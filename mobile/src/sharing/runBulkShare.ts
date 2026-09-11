@@ -19,7 +19,7 @@
 // hands the recipient 6 duplicates, and there is no unsend. So a partial run
 // names the files that did not go and leaves the user to send those.
 //
-// PRIVACY: filenames are user text and routinely name canyons. They reach the
+// PRIVACY: filenames are user text and routinely name places. They reach the
 // progress line and the failure report because a user cannot act on "2 files
 // failed" without knowing which. Never logged — the catch below records the
 // error, not the name.

@@ -23,18 +23,29 @@
 // because a count IS state, and Notifications keeps the reason slot free for
 // §10's "Needs an account".
 //
-// PRIVACY: nothing here reads canyon data.
+// PRIVACY: nothing here reads place data.
 import { useCallback, useState } from "react";
 import { StyleSheet, Text } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import { type TripLogCustomFieldDef } from "@logjam/shared";
+import { type ScopedCustomFieldDef } from "@logjam/shared";
 
 import { type CustomFieldEntity } from "../api/queries";
 import { useAccountState } from "../auth/AccountStateContext";
 import { capabilityRowProps } from "../auth/capabilities";
 import { CLIENT_VERSION } from "../config";
-import { CustomFieldForm, CustomFieldList } from "../customFields/CustomFieldsEditor";
+import {
+  ATTRIBUTE_NOUN,
+  CustomFieldList,
+  useCustomFieldForm,
+} from "../customFields/CustomFieldsEditor";
 import { useFieldDefs } from "../customFields/useFieldDefs";
+import {
+  isSystemPlaceType,
+  PlaceTypeList,
+  usePlaceTypeForm,
+} from "../places/PlaceTypesEditor";
+import { useMirrorPlaceTypes } from "../sync/useSyncQueries";
+import type { MirrorPlaceType } from "../sync/mirrorStore";
 import { useConnectivity } from "../map/connectivity";
 import { fontSize, theme } from "../theme";
 import {
@@ -70,7 +81,9 @@ const PAGES: {
 type SheetMode =
   | { kind: "closed" }
   | { kind: "fields"; entity: CustomFieldEntity }
-  | { kind: "fieldForm"; entity: CustomFieldEntity; editing: TripLogCustomFieldDef | null };
+  | { kind: "fieldForm"; entity: CustomFieldEntity; editing: ScopedCustomFieldDef | null }
+  | { kind: "placeTypes" }
+  | { kind: "placeTypeForm"; editing: MirrorPlaceType | null };
 
 export function SettingsScreen({ onOpenPage }: { onOpenPage: (page: SettingsPage) => void }) {
   const { accountState } = useAccountState();
@@ -85,14 +98,38 @@ export function SettingsScreen({ onOpenPage }: { onOpenPage: (page: SettingsPage
   // whose whole content is the two rows above it.
   const [sheet, setSheet] = useState<SheetMode>({ kind: "closed" });
   const tripFields = useFieldDefs("tripLog");
-  const canyonFields = useFieldDefs("canyon");
+  const placeFields = useFieldDefs("place");
 
   const defsFor = (entity: CustomFieldEntity) =>
-    entity === "tripLog" ? tripFields.defs : canyonFields.defs;
-  const setDefsFor = (entity: CustomFieldEntity, next: TripLogCustomFieldDef[]) => {
+    entity === "tripLog" ? tripFields.defs : placeFields.defs;
+  const setDefsFor = (entity: CustomFieldEntity, next: ScopedCustomFieldDef[]) => {
     if (entity === "tripLog") tripFields.setDefs(next);
-    else canyonFields.setDefs(next);
+    else placeFields.setDefs(next);
   };
+
+  const placeTypes = useMirrorPlaceTypes();
+  const placeTypeForm = usePlaceTypeForm({
+    editing: sheet.kind === "placeTypeForm" ? sheet.editing : null,
+    onSaved: (message) => notify(message),
+    onFailed: (message) => notify(message, "error"),
+    onDone: () => setSheet({ kind: "placeTypes" }),
+  });
+
+  // Called unconditionally — it is a hook. The entity it is bound to is
+  // whichever list is open; with the sheet closed the values are unused.
+  const formEntity =
+    sheet.kind === "fields" || sheet.kind === "fieldForm" ? sheet.entity : "place";
+  const fieldForm = useCustomFieldForm({
+    entity: formEntity,
+    defs: defsFor(formEntity),
+    editing: sheet.kind === "fieldForm" ? sheet.editing : null,
+    onSaved: (next, message) => {
+      setDefsFor(formEntity, next);
+      notify(message);
+    },
+    onFailed: (message) => notify(message, "error"),
+    onDone: () => setSheet({ kind: "fields", entity: formEntity }),
+  });
 
   return (
     <>
@@ -116,19 +153,33 @@ export function SettingsScreen({ onOpenPage }: { onOpenPage: (page: SettingsPage
           />
         ))}
 
-        <SectionHeader label="Your own fields" />
+        {/* A list you keep, not a preference you set — which is why the LIST
+            sits here with the attribute lists. The form is also one tap from
+            the Places tab's type rail ("New type", the chip at the end of it),
+            because that is where a user notices they want another one; editing
+            and deleting stay here, with the list of them. */}
+        <SectionHeader label="Your own categories" />
+        <Row
+          icon="layers"
+          title="Place types"
+          subtitle={placeTypeCountLabel(placeTypes.data ?? [])}
+          onPress={() => setSheet({ kind: "placeTypes" })}
+          right={<Feather name="chevron-right" size={20} color={theme.textMuted} />}
+        />
+
+        <SectionHeader label="Your own attributes" />
         <Row
           icon="tag"
-          title="Trip fields"
+          title="Trip attributes"
           subtitle={fieldCountLabel(tripFields.defs.length)}
           onPress={() => setSheet({ kind: "fields", entity: "tripLog" })}
           right={<Feather name="chevron-right" size={20} color={theme.textMuted} />}
         />
         <Row
           icon="tag"
-          title="Canyon fields"
-          subtitle={fieldCountLabel(canyonFields.defs.length)}
-          onPress={() => setSheet({ kind: "fields", entity: "canyon" })}
+          title="Place attributes"
+          subtitle={fieldCountLabel(placeFields.defs.length)}
+          onPress={() => setSheet({ kind: "fields", entity: "place" })}
           right={<Feather name="chevron-right" size={20} color={theme.textMuted} />}
         />
 
@@ -148,42 +199,55 @@ export function SettingsScreen({ onOpenPage }: { onOpenPage: (page: SettingsPage
           )
         }
         title={sheetTitle(sheet)}
+        // A sub-mode gets an arrow back to the list it came from, rather than
+        // only a button at the far end of a scroll.
+        onBack={
+          sheet.kind === "fieldForm"
+            ? () => setSheet({ kind: "fields", entity: sheet.entity })
+            : sheet.kind === "placeTypeForm"
+              ? () => setSheet({ kind: "placeTypes" })
+              : undefined
+        }
         footer={
-          sheet.kind === "fieldForm" ? (
-            // The form body carries its own save action; this is the way back.
+          sheet.kind === "placeTypeForm" ? (
+            placeTypeForm.footer
+          ) : sheet.kind === "placeTypes" ? (
             <Button
-              label="Cancel"
-              variant="outlineAccent"
-              onPress={() => setSheet({ kind: "fields", entity: sheet.entity })}
+              label="Add a place type"
+              icon="plus"
+              onPress={() => setSheet({ kind: "placeTypeForm", editing: null })}
             />
-          ) : (
-            <Button label="Done" icon="check" onPress={() => setSheet({ kind: "closed" })} />
-          )
+          ) : sheet.kind === "fieldForm" ? (
+            fieldForm.footer
+          ) : sheet.kind === "fields" ? (
+            // PINNED, not the last row of the list: "add" is what this screen is
+            // for, and a list long enough to need scrolling is exactly the list
+            // you came here to add to.
+            <Button
+              label={ATTRIBUTE_NOUN.add}
+              icon="plus"
+              onPress={() => setSheet({ kind: "fieldForm", entity: sheet.entity, editing: null })}
+            />
+          ) : null
         }
       >
         {sheet.kind === "fields" ? (
           <CustomFieldList
             entity={sheet.entity}
             defs={defsFor(sheet.entity)}
-            onAdd={() => setSheet({ kind: "fieldForm", entity: sheet.entity, editing: null })}
             onEdit={(def) =>
               setSheet({ kind: "fieldForm", entity: sheet.entity, editing: def })
             }
           />
         ) : null}
-        {sheet.kind === "fieldForm" ? (
-          <CustomFieldForm
-            entity={sheet.entity}
-            defs={defsFor(sheet.entity)}
-            editing={sheet.editing}
-            onSaved={(next, message) => {
-              setDefsFor(sheet.entity, next);
-              notify(message);
-            }}
-            onFailed={(message) => notify(message, "error")}
-            onDone={() => setSheet({ kind: "fields", entity: sheet.entity })}
+        {sheet.kind === "fieldForm" ? fieldForm.body : null}
+        {sheet.kind === "placeTypes" ? (
+          <PlaceTypeList
+            types={placeTypes.data ?? []}
+            onEdit={(type) => setSheet({ kind: "placeTypeForm", editing: type })}
           />
         ) : null}
+        {sheet.kind === "placeTypeForm" ? placeTypeForm.body : null}
       </BottomSheet>
 
       <Toast message={toast} onDismissed={() => setToast(null)} />
@@ -193,14 +257,28 @@ export function SettingsScreen({ onOpenPage }: { onOpenPage: (page: SettingsPage
 
 function sheetTitle(sheet: SheetMode): string {
   if (sheet.kind === "closed") return "";
-  const noun = sheet.entity === "tripLog" ? "Trip" : "Canyon";
-  if (sheet.kind === "fields") return `${noun} fields`;
-  return sheet.editing ? sheet.editing.label : `New ${noun.toLowerCase()} field`;
+  if (sheet.kind === "placeTypes") return "Place types";
+  if (sheet.kind === "placeTypeForm") {
+    return sheet.editing ? sheet.editing.name : "New place type";
+  }
+  const noun = sheet.entity === "tripLog" ? "Trip" : "Place";
+  if (sheet.kind === "fields") return `${noun} ${ATTRIBUTE_NOUN.many}`;
+  return sheet.editing
+    ? sheet.editing.label
+    : `New ${noun.toLowerCase()} ${ATTRIBUTE_NOUN.one}`;
 }
 
 function fieldCountLabel(count: number): string {
   if (count === 0) return "None yet";
-  return `${count} field${count === 1 ? "" : "s"}`;
+  return `${count} ${count === 1 ? ATTRIBUTE_NOUN.one : ATTRIBUTE_NOUN.many}`;
+}
+
+/** Only the user's OWN types are counted: "3 types" for an account that has
+ *  made none reads as a list they are already keeping. */
+function placeTypeCountLabel(types: MirrorPlaceType[]): string {
+  const own = types.filter((type) => !isSystemPlaceType(type)).length;
+  if (own === 0) return "Built-ins only";
+  return `${own} of your own`;
 }
 
 const styles = StyleSheet.create({

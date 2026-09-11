@@ -12,7 +12,7 @@
 //
 // Guest mode is what forced the issue: far more data now lives locally, and a
 // guest who links, signs out and hands the phone to a friend must not leave a
-// season of canyon coordinates behind. One guard in one place, rather than a
+// season of place coordinates behind. One guard in one place, rather than a
 // wipe in each caller that drifts apart again.
 //
 // **Deliberately not wiped:** device preferences (`logjam-prefs.db`). Theme,
@@ -59,7 +59,7 @@ const OFFLINE_TABLES = [
   // down with it. An upgraded device that has not run the promotion yet still
   // has rows, so the wipe DROPs it below instead.)
   "overlay_enabled",
-  // An unfinished route draft is coordinates through a canyon — the most
+  // An unfinished route draft is coordinates through a place — the most
   // sensitive shape of data this app holds.
   "route_draft",
 ] as const;

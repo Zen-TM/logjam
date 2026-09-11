@@ -21,7 +21,7 @@ import { messageFromError } from "@logjam/shared";
 import { assetHue, spacing, theme } from "../theme";
 import { BottomSheet, RenameForm, Row } from "../ui";
 import { vectorImportActions } from "../saved/assetActions";
-import { useCanyonPicker } from "../canyons/useCanyonPicker";
+import { usePlacePicker } from "../places/usePlacePicker";
 import type { Bbox } from "../saved/bboxOfPoints";
 import { ExportUnsupportedError } from "../fileExport";
 import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
@@ -105,15 +105,15 @@ export function ImportOptionsSheet({
     },
   });
 
-  // THE canyon picker, as a sub-mode of this sheet — the same panel the route
+  // THE place picker, as a sub-mode of this sheet — the same panel the route
   // and track sheets render. Called unconditionally, like the share panel.
-  const canyonPicker = useCanyonPicker({
+  const placePicker = usePlacePicker({
     source: "import",
     active: attaching,
-    attach: async (canyonId, canyonName) => {
-      if (!actions?.attachToCanyon) throw new Error("This import has no original file.");
-      await actions.attachToCanyon(canyonId);
-      onInfo(`Attached a copy as ${canyonName}'s route.`);
+    attach: async (placeId, placeName) => {
+      if (!actions?.attachToPlace) throw new Error("This import has no original file.");
+      await actions.attachToPlace(placeId);
+      onInfo(`Attached a copy as ${placeName}'s route.`);
     },
     onDone: () => {
       setAttaching(false);
@@ -175,17 +175,17 @@ export function ImportOptionsSheet({
           : sending
             ? share.title
             : attaching
-              ? "Attach to a canyon"
+              ? "Attach to a place"
               : imported.name
       }
       onBack={leaveSubMode ?? undefined}
       footer={sending ? share.footer : undefined}
-      header={attaching ? canyonPicker.header : undefined}
+      header={attaching ? placePicker.header : undefined}
     >
       {sending && actions.sendCopy ? (
         share.body
       ) : attaching ? (
-        canyonPicker.body
+        placePicker.body
       ) : renaming ? (
         <View style={styles.body}>
           <RenameForm
@@ -251,12 +251,12 @@ export function ImportOptionsSheet({
             onPress={() => setShowingStats(true)}
           />
           {/* Absent on a row with no retained original, and on a GeoJSON one:
-              a canyon route attachment is track media, so there would be
+              a place route attachment is track media, so there would be
               nothing legal to upload (assetActions.ts withholds the verb). */}
-          {actions.attachToCanyon ? (
+          {actions.attachToPlace ? (
             <Row
-              title="Attach to a canyon"
-              subtitle="As that canyon's route"
+              title="Attach to a place"
+              subtitle="As that place's route"
               icon="link"
               hue={assetHue.route}
               disabled={busy}

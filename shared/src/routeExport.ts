@@ -9,7 +9,7 @@
  * exactly what a Logjam route is, and our own importer already maps `rte` to a
  * LineString, so the round trip holds.
  *
- * PRIVACY: the output IS the line through a canyon — the most sensitive shape
+ * PRIVACY: the output IS the line through a place — the most sensitive shape
  * of data this app holds. It is written to a file the user chose or handed to
  * the share sheet; it never goes to the server, and callers must never log it.
  */

@@ -19,10 +19,10 @@ describe("notificationLabel", () => {
     ).toEqual({ text: "carol accepted your friend request" });
   });
 
-  it("labels canyon shares", () => {
+  it("labels place shares", () => {
     expect(
       notificationLabel(
-        notification("canyon_shared", { sharedByUsername: "bob", canyonName: "Claustral" }),
+        notification("place_shared", { sharedByUsername: "bob", placeName: "Claustral" }),
       ),
     ).toEqual({ text: "bob shared Claustral with you" });
   });
@@ -85,8 +85,8 @@ describe("notificationLabel", () => {
     expect(notificationLabel(notification("friend_request")).text).toBe(
       "Someone sent you a friend request",
     );
-    expect(notificationLabel(notification("canyon_shared")).text).toBe(
-      "Someone shared a canyon with you",
+    expect(notificationLabel(notification("place_shared")).text).toBe(
+      "Someone shared a place with you",
     );
   });
 
@@ -144,7 +144,7 @@ describe("file_sent", () => {
 describe("notificationHaystack — what the inbox search matches", () => {
   it("matches the words the row shows, case-insensitively", () => {
     const haystack = notificationHaystack(
-      notification("canyon_shared", { sharedByUsername: "bob", canyonName: "Claustral" }),
+      notification("place_shared", { sharedByUsername: "bob", placeName: "Claustral" }),
     );
     expect(haystack).toContain("claustral");
     expect(haystack).toContain("bob");

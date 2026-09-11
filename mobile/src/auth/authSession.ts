@@ -4,7 +4,7 @@
 // connect neither succeeds nor fails — the same failure `apiFetch` already
 // documents and guards for OUR requests ("observed on hardware (Pixel 9,
 // airplane mode) where a connect() neither succeeds nor fails"). Unguarded it
-// hangs two things that matter in a canyon:
+// hangs two things that matter in a place:
 //
 //  - `useAuth`'s mount effect, which leaves `App` rendering its loading screen
 //    for as long as the call takes — the "stuck on the logo screen" a cold

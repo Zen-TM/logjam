@@ -2,7 +2,7 @@
 // Asymmetric hysteresis: flip to offline immediately (a blank basemap request
 // should never wait), but require a short ONLINE_STABLE_MS of continuous
 // reachability before flipping back online — so reception flapping at a
-// canyon rim doesn't thrash source remounts.
+// place rim doesn't thrash source remounts.
 //
 // Reachability currently trusts NetInfo's isInternetReachable. The spec's
 // own-CDN healthz probe rides on the (operator-gated) CDN infra work —
@@ -21,7 +21,7 @@ export type Connectivity = "online" | "offline" | "forced-offline";
  * NATIVE-VALIDATED reachability signal rather than a bare `isConnected`, so a
  * flip through it is far less chatty than when the 10 s was chosen.
  *
- * ponytail: a fixed window, not a flap-aware one. If a rim-of-canyon link ever
+ * ponytail: a fixed window, not a flap-aware one. If a rim-of-place link ever
  * proves it can thrash the map's sources at 3 s, make the window grow when
  * offline follows online inside it, rather than raising the floor for everyone.
  */

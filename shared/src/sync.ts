@@ -9,12 +9,13 @@
  * means "that user must remove that entity from any local mirror".
  */
 export const SYNC_ENTITY_TYPES = [
-  "canyon",
+  "place",
+  "placeType",
   "tripLog",
   "media",
-  "canyonShare",
+  "placeShare",
+  "placeLink",
   "friendship",
-  "waypoint",
   "route",
   "customFieldDef",
 ] as const;
@@ -50,18 +51,24 @@ export const SYNC_PUSH_MAX_OPS = 50;
 export const SYNC_OVERLAP_MS = 60_000;
 
 /** The `changes` keys of a delta response, in the fixed budget-fill order
- * (§4.4). Order matters only for client convenience — canyons before the
+ * (§4.4). Order matters only for client convenience — places before the
  * trips that embed their names, and custom field definitions before both,
- * since a canyon's and a trip's stored values are keyed by them and a screen
- * that applies a page mid-pull would otherwise have values it cannot label. */
+ * since a place's and a trip's stored values are keyed by them and a screen
+ * that applies a page mid-pull would otherwise have values it cannot label.
+ *
+ * TYPES COME FIRST, ahead of the definitions, because a definition points at
+ * the types it is scoped to: a defs page applied before its types would carry
+ * scopings naming rows the mirror does not have yet. Same argument as defs
+ * before values, one level up. */
 export const DELTA_ENTITY_ORDER = [
+  "placeTypes",
   "customFieldDefs",
-  "canyons",
+  "places",
+  "placeLinks",
   "tripLogs",
-  "waypoints",
   "routes",
   "media",
-  "canyonShares",
+  "placeShares",
   "friendships",
 ] as const;
 
@@ -87,13 +94,30 @@ export const SYNC_DELTA_ROUTE_LIMIT = 50;
  * pair is last-writer-wins and the enqueue planner supersedes rather than
  * dedups them (see planOutboxEnqueue). */
 export const SYNC_PUSH_OPS_BY_ENTITY = {
-  canyon: ["create", "update", "delete"],
+  place: ["create", "update", "delete"],
+  // A place TYPE. Created, renamed and deleted OFFLINE like every other
+  // user-made row — deliberately not an online-only path, and that applies to
+  // guest installs too. A delete CASCADES SERVER-SIDE (the definitions scoped
+  // only to it go with it), for the same reason a customFieldDef delete does:
+  // a phone can only reach the rows in its own mirror, so anything stripped
+  // client-side would resurface the moment a later type slugged to the same id.
+  placeType: ["create", "update", "delete"],
+  // A place<->place LINK. Create and delete only, and NO UPDATE — a link has
+  // no fields to change.
+  //
+  // A first-class entity rather than a `linkedPlaceIds` array on the place row,
+  // and the difference matters: `waypoint.canyonIds` was a whole-list field,
+  // safe only because the relationship was one-sided. A SYMMETRIC link edited
+  // from both ends means two devices clobber each other. The codebase already
+  // learned this — fieldDefsStore.ts documents that moving definitions from a
+  // whole-list PATCH to per-row writes is what made "two devices that each add
+  // a field now both keep it".
+  placeLink: ["create", "delete"],
   tripLog: ["create", "update", "delete"],
-  waypoint: ["create", "update", "delete"],
   route: ["create", "update", "delete"],
   notification: ["markRead", "markUnread", "delete"],
   // A custom field DEFINITION. `delete` is not a plain row delete: the server
-  // also strips the now-orphaned values off every trip log or canyon that
+  // also strips the now-orphaned values off every trip log or place that
   // carried one, in the same transaction (lib/customFieldDefs.ts). That has to
   // stay server-side — a phone can only reach the rows in its own mirror, and
   // a value left behind on a row the phone has not pulled would resurface the
@@ -144,19 +168,29 @@ export type SyncPushResponse = {
 /**
  * Ids this op depends on having been created successfully (earlier in the
  * batch, or already server-side): its own target for update/delete, plus any
- * canyon references in its fields. Both ends use it — the server for
+ * place references in its fields. Both ends use it — the server for
  * dependencyFailed propagation, the client for the flush engine's
  * dependency-closure skip (§8.3).
  */
 export function pushOpDependencies(op: SyncPushOp): string[] {
   const deps: string[] = [];
   if (op.op === "update" || op.op === "delete") deps.push(op.id);
-  const canyonIds = op.fields?.canyonIds;
-  if (Array.isArray(canyonIds)) {
-    deps.push(...canyonIds.filter((v): v is string => typeof v === "string"));
+  // `placeIds` is the TRIP-LOG link array; `placeId` is the ROUTE link. Both
+  // are place references whose create must land first.
+  const placeIds = op.fields?.placeIds;
+  if (Array.isArray(placeIds)) {
+    deps.push(...placeIds.filter((v): v is string => typeof v === "string"));
   }
-  const canyonId = op.fields?.canyonId;
-  if (typeof canyonId === "string") deps.push(canyonId);
+  const placeId = op.fields?.placeId;
+  if (typeof placeId === "string") deps.push(placeId);
+  // A LINK depends on BOTH its endpoints. Without this, a link created offline
+  // in the same batch as the places it joins would be pushed before them and
+  // rejected — and the client's own flush engine reads this same function, so
+  // the two ends would disagree about the order.
+  for (const key of ["aPlaceId", "bPlaceId"] as const) {
+    const value = op.fields?.[key];
+    if (typeof value === "string") deps.push(value);
+  }
   return deps;
 }
 
@@ -169,9 +203,11 @@ export function pushOpDependencies(op: SyncPushOp): string[] {
 // clients must tolerate unknown extra keys (preserved via extra_json in the
 // mobile mirror, never round-tripped).
 
+import type { ForeignFieldValue } from "./fieldValues.js";
+
 export type SyncUserRef = { id: string; username: string };
 
-export type SyncDeltaCanyonRow = {
+export type SyncDeltaPlaceRow = {
   id: string;
   ownerId: string;
   /** 'owner' | 'shared' — the caller's relationship to the row. */
@@ -180,17 +216,46 @@ export type SyncDeltaCanyonRow = {
   altNames: string[];
   latitude: number;
   longitude: number;
-  numAbseils: number | null;
-  longestAbseil: number | null;
-  vGrade: number | null;
-  aGrade: number | null;
-  commitment: number | null;
-  quality: number | null;
-  hours: number | null;
+  placeTypeId: string;
   notes: string | null;
-  attributes: Record<string, unknown>;
+  /** Metres, or null. Folded in with the waypoints in phase 1c. */
+  elevation: number | null;
+  /** Type-specific values, keyed by CustomFieldDef.key. Replaces the seven
+   *  grade columns and the free-form `attributes` blob. */
+  fieldValues: Record<string, unknown>;
+  /**
+   * The definitions that label this row's values, for a place whose type the
+   * CALLER does not own — a place of the sender's own type, shared with them.
+   * Without it a sharee sees bare keys.
+   *
+   * Derived LIVE from the owner's current definitions, and present only when
+   * syncRole is "shared". `foreignFields` is the same shape persisted at copy
+   * time, which is why this is not a third field mechanism.
+   */
+  fieldDefsSnapshot?: { key: string; label: string; type: string; min?: number | null; max?: number | null }[];
+  /**
+   * OWNER-PRIVATE — present only when syncRole is "owner". The server strips
+   * it from every shared row, because it records what the SENDER's definitions
+   * said and re-emitting it down a share chain is the propagation problem that
+   * got the "append it to notes" design rejected.
+   */
+  foreignFields?: ForeignFieldValue[] | null;
   ropeWikiId: number | null;
   forkedFromId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SyncDeltaPlaceTypeRow = {
+  id: string;
+  /** Null for a SYSTEM type — one global row shared by every user, which is
+   *  what makes a shared place of a system type resolve with no
+   *  reconciliation. A client must not treat null as "mine". */
+  ownerId: string | null;
+  name: string;
+  iconKey: string;
+  color: string;
+  position: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -204,42 +269,18 @@ export type SyncDeltaTripRow = {
   notes: string | null;
   customFields: Record<string, unknown>;
   /** Ordered — order drives the derived title (shared/src/tripName.ts). */
-  canyons: { id: string; name: string }[];
+  places: { id: string; name: string }[];
   createdAt: string;
   updatedAt: string;
 };
 
-export type SyncDeltaWaypointRow = {
+export type SyncDeltaPlaceLinkRow = {
   id: string;
   ownerId: string;
-  /**
-   * Mirrors SyncDeltaCanyonRow: 'shared' means the row arrives only because it
-   * is linked to a canyon shared with the caller, and is READ-ONLY there.
-   */
-  syncRole: "owner" | "shared";
-  /**
-   * Every canyon this waypoint is linked to THAT THE CALLER CAN SEE. A sharee
-   * never learns that an owner also filed the carpark under three canyons they
-   * were not shared on, so this list is scoped, not the raw link set.
-   */
-  canyonIds: string[];
-  name: string;
-  latitude: number;
-  longitude: number;
-  elevation: number | null;
-  symbol: string | null;
-  notes: string | null;
-  tags: string[];
-  /**
-   * How many people this waypoint is directly shared with.
-   *
-   * OWNER ROWS ONLY. A share fan-out is owner-private derived cardinality
-   * (root CLAUDE.md): a recipient must not learn how many OTHER people hold
-   * the thing they were given. Optional rather than `number` for a second
-   * reason — the write paths return a row without it, where absent means
-   * "unchanged", not zero.
-   */
-  sharedCount?: number;
+  /** Lexicographically LOWER id. Symmetric and stored once; a client renders
+   *  the link from whichever end it is looking at. */
+  aPlaceId: string;
+  bPlaceId: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -248,8 +289,8 @@ export type SyncDeltaWaypointRow = {
  * A user-authored route. Unlike media, the geometry travels INLINE — a route
  * is a vertex list on the row, not a blob behind a presigned URL.
  *
- * `syncRole` mirrors SyncDeltaCanyonRow: 'shared' means the row arrives only
- * because it is LINKED to a canyon shared with the caller. A sharee may render
+ * `syncRole` mirrors SyncDeltaPlaceRow: 'shared' means the row arrives only
+ * because it is LINKED to a place shared with the caller. A sharee may render
  * and export it, never edit it — and unlinking it revokes their copy via a
  * tombstone with no delete anywhere.
  */
@@ -257,7 +298,7 @@ export type SyncDeltaRouteRow = {
   id: string;
   ownerId: string;
   syncRole: "owner" | "shared";
-  canyonId: string | null;
+  placeId: string | null;
   name: string;
   color: string;
   /** [[lon, lat], ...] — see MAX_ROUTE_POINTS in routeValidation.ts. */
@@ -268,7 +309,8 @@ export type SyncDeltaRouteRow = {
    * which reads as "every point is the user's".
    */
   anchors: number[] | null;
-  /** Owner rows only — see SyncDeltaWaypointRow.sharedCount. */
+  /** Owner rows only: a share fan-out is owner-private derived cardinality
+   *  (root CLAUDE.md), so a recipient's copy of a row never carries one. */
   sharedCount?: number;
   createdAt: string;
   updatedAt: string;
@@ -277,11 +319,11 @@ export type SyncDeltaRouteRow = {
 /** Metadata only — blobs come via POST /media/download-urls (§7.3).
  *
  * `linkedId` is null on a standalone file (`linkedType: "none"`): the user's
- * own import or recording, which belongs to no canyon. `metadata` is what lets
+ * own import or recording, which belongs to no place. `metadata` is what lets
  * such a row be LISTED without downloading the blob — see mediaMetadata.ts.
  *
  * Keysets on `updatedAt`, not `createdAt`: a media row used to be immutable, so
- * creation time was a sufficient watermark. Linking a file to a canyon (and
+ * creation time was a sufficient watermark. Linking a file to a place (and
  * unlinking it again) mutates the row, and a createdAt keyset would never
  * redeliver it — the other device would keep showing a stale parent forever. */
 export type SyncDeltaMediaRow = {
@@ -301,7 +343,7 @@ export type SyncDeltaMediaRow = {
 
 export type SyncDeltaShareRow = {
   id: string;
-  canyonId: string;
+  placeId: string;
   sharedById: string;
   sharedWithId: string;
   createdAt: string;
@@ -320,7 +362,7 @@ export type SyncDeltaFriendshipRow = {
 
 /**
  * A custom field DEFINITION. Always the caller's own — definitions are not
- * shared, so unlike a canyon or a route this row carries no `syncRole`.
+ * shared, so unlike a place or a route this row carries no `syncRole`.
  *
  * `min`/`max` are present together or both null; the type-specific rules
  * (numeric fields only, min < max, whole numbers on an integer field) are
@@ -328,7 +370,9 @@ export type SyncDeltaFriendshipRow = {
  */
 export type SyncDeltaCustomFieldDefRow = {
   id: string;
-  ownerId: string;
+  /** NULL for a SYSTEM definition — the seven canyon grades and their kin are
+   *  GLOBAL rows owned by no account, exactly like a system place type. */
+  ownerId: string | null;
   entity: string;
   key: string;
   label: string;
@@ -336,6 +380,12 @@ export type SyncDeltaCustomFieldDefRow = {
   min: number | null;
   max: number | null;
   position: number;
+  /** WHERE the definition appears. Without these two a client holds every
+   *  definition and cannot tell which form any of them belongs on — it would
+   *  render a canyon's grades on a campsite. `CustomFieldDefPlaceType` is not a
+   *  sync entity of its own, so the join rides here, flattened. */
+  placeTypeIds: string[];
+  appliesToAllTypes: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -367,13 +417,14 @@ export type SyncDeltaResponse = {
   hasMore: boolean;
   resetRequired: boolean;
   changes: {
+    placeTypes: SyncDeltaPlaceTypeRow[];
     customFieldDefs: SyncDeltaCustomFieldDefRow[];
-    canyons: SyncDeltaCanyonRow[];
+    places: SyncDeltaPlaceRow[];
+    placeLinks: SyncDeltaPlaceLinkRow[];
     tripLogs: SyncDeltaTripRow[];
-    waypoints: SyncDeltaWaypointRow[];
     routes: SyncDeltaRouteRow[];
     media: SyncDeltaMediaRow[];
-    canyonShares: SyncDeltaShareRow[];
+    placeShares: SyncDeltaShareRow[];
     friendships: SyncDeltaFriendshipRow[];
   };
   tombstones: SyncDeltaTombstone[];
@@ -388,7 +439,7 @@ export type SyncDeltaResponse = {
 // storage. They throw rather than coerce: a mirror is a rebuildable cache, so
 // failing the apply and re-pulling is always cheaper than storing junk.
 //
-// PRIVACY: messages name FIELDS ONLY, never values — a row carries canyon
+// PRIVACY: messages name FIELDS ONLY, never values — a row carries place
 // names and coordinates and these messages reach logs.
 // Unknown extra keys are ALLOWED (protocol §10.3 is additive-only).
 
@@ -416,12 +467,12 @@ const arrayOf =
   (check: FieldCheck): FieldCheck =>
   (value) =>
     Array.isArray(value) && value.every(check);
-const isCanyonRef: FieldCheck = (value) =>
+const isPlaceRef: FieldCheck = (value) =>
   isPlainObject(value) &&
   isString((value as Record<string, unknown>).id) &&
   isString((value as Record<string, unknown>).name);
 
-const CANYON_ROW_SPEC: Record<string, FieldCheck> = {
+const PLACE_ROW_SPEC: Record<string, FieldCheck> = {
   id: isString,
   ownerId: isString,
   syncRole: isSyncRole,
@@ -429,17 +480,29 @@ const CANYON_ROW_SPEC: Record<string, FieldCheck> = {
   altNames: arrayOf(isString),
   latitude: isNumber,
   longitude: isNumber,
-  numAbseils: nullable(isNumber),
-  longestAbseil: nullable(isNumber),
-  vGrade: nullable(isNumber),
-  aGrade: nullable(isNumber),
-  commitment: nullable(isNumber),
-  quality: nullable(isNumber),
-  hours: nullable(isNumber),
+  placeTypeId: isString,
   notes: nullable(isString),
-  attributes: isPlainObject,
+  elevation: nullable(isNumber),
+  fieldValues: isPlainObject,
   ropeWikiId: nullable(isNumber),
   forkedFromId: nullable(isString),
+  createdAt: isString,
+  updatedAt: isString,
+  // fieldDefsSnapshot and foreignFields are deliberately UNCHECKED here and
+  // therefore optional: one is present only on a shared row of a type the
+  // caller does not own, the other only on an owned row. Requiring either
+  // would reject the rows that legitimately lack it, and a row that fails
+  // validation takes its whole delta page with it.
+};
+
+const PLACE_TYPE_ROW_SPEC: Record<string, FieldCheck> = {
+  id: isString,
+  // NULL for a SYSTEM type — global, owned by no one. Not an error.
+  ownerId: nullable(isString),
+  name: isString,
+  iconKey: isString,
+  color: isString,
+  position: isNumber,
   createdAt: isString,
   updatedAt: isString,
 };
@@ -452,23 +515,16 @@ const TRIP_ROW_SPEC: Record<string, FieldCheck> = {
   types: arrayOf(isString),
   notes: nullable(isString),
   customFields: isPlainObject,
-  canyons: arrayOf(isCanyonRef),
+  places: arrayOf(isPlaceRef),
   createdAt: isString,
   updatedAt: isString,
 };
 
-const WAYPOINT_ROW_SPEC: Record<string, FieldCheck> = {
+const PLACE_LINK_ROW_SPEC: Record<string, FieldCheck> = {
   id: isString,
   ownerId: isString,
-  syncRole: isSyncRole,
-  canyonIds: arrayOf(isString),
-  name: isString,
-  latitude: isNumber,
-  longitude: isNumber,
-  elevation: nullable(isNumber),
-  symbol: nullable(isString),
-  notes: nullable(isString),
-  tags: arrayOf(isString),
+  aPlaceId: isString,
+  bPlaceId: isString,
   createdAt: isString,
   updatedAt: isString,
 };
@@ -486,7 +542,7 @@ const ROUTE_ROW_SPEC: Record<string, FieldCheck> = {
   id: isString,
   ownerId: isString,
   syncRole: isSyncRole,
-  canyonId: nullable(isString),
+  placeId: nullable(isString),
   name: isString,
   color: isString,
   points: arrayOf(isLonLatPair),
@@ -518,7 +574,7 @@ const MEDIA_ROW_SPEC: Record<string, FieldCheck> = {
 
 const SHARE_ROW_SPEC: Record<string, FieldCheck> = {
   id: isString,
-  canyonId: isString,
+  placeId: isString,
   sharedById: isString,
   sharedWithId: isString,
   createdAt: isString,
@@ -528,7 +584,13 @@ const SHARE_ROW_SPEC: Record<string, FieldCheck> = {
 
 const CUSTOM_FIELD_DEF_ROW_SPEC: Record<string, FieldCheck> = {
   id: isString,
-  ownerId: isString,
+  // NULL for a SYSTEM definition — global, owned by no one, and the same shape
+  // a system place type has. Requiring a string here dropped all NINE system
+  // definitions off every delta page a phone pulled: the grades arrived on
+  // places with no definition to label or bound them, and `defsForType`
+  // answered "no fields" for a canyon. Found by running the app (2026-09-10),
+  // invisible to every unit test because they all built rows by hand.
+  ownerId: nullable(isString),
   entity: isString,
   key: isString,
   label: isString,
@@ -536,6 +598,11 @@ const CUSTOM_FIELD_DEF_ROW_SPEC: Record<string, FieldCheck> = {
   min: nullable(isNumber),
   max: nullable(isNumber),
   position: isNumber,
+  // Deliberately UNCHECKED, and therefore optional: a row from a server that
+  // predates the scoping fields is still a definition, and rejecting it would
+  // take its whole delta page down (§10.3 is additive). A client reads them
+  // with a default of "no types, not all", which renders the definition on no
+  // form rather than on every one — the safe direction.
   createdAt: isString,
   updatedAt: isString,
 };
@@ -567,16 +634,20 @@ function parseRow<Row>(
   return value as Row;
 }
 
-export function parseSyncDeltaCanyonRow(value: unknown): SyncDeltaCanyonRow {
-  return parseRow<SyncDeltaCanyonRow>("canyon", value, CANYON_ROW_SPEC);
+export function parseSyncDeltaPlaceRow(value: unknown): SyncDeltaPlaceRow {
+  return parseRow<SyncDeltaPlaceRow>("place", value, PLACE_ROW_SPEC);
+}
+
+export function parseSyncDeltaPlaceTypeRow(value: unknown): SyncDeltaPlaceTypeRow {
+  return parseRow<SyncDeltaPlaceTypeRow>("placeType", value, PLACE_TYPE_ROW_SPEC);
 }
 
 export function parseSyncDeltaTripRow(value: unknown): SyncDeltaTripRow {
   return parseRow<SyncDeltaTripRow>("tripLog", value, TRIP_ROW_SPEC);
 }
 
-export function parseSyncDeltaWaypointRow(value: unknown): SyncDeltaWaypointRow {
-  return parseRow<SyncDeltaWaypointRow>("waypoint", value, WAYPOINT_ROW_SPEC);
+export function parseSyncDeltaPlaceLinkRow(value: unknown): SyncDeltaPlaceLinkRow {
+  return parseRow<SyncDeltaPlaceLinkRow>("placeLink", value, PLACE_LINK_ROW_SPEC);
 }
 
 export function parseSyncDeltaRouteRow(value: unknown): SyncDeltaRouteRow {
@@ -588,7 +659,7 @@ export function parseSyncDeltaMediaRow(value: unknown): SyncDeltaMediaRow {
 }
 
 export function parseSyncDeltaShareRow(value: unknown): SyncDeltaShareRow {
-  return parseRow<SyncDeltaShareRow>("canyonShare", value, SHARE_ROW_SPEC);
+  return parseRow<SyncDeltaShareRow>("placeShare", value, SHARE_ROW_SPEC);
 }
 
 /**

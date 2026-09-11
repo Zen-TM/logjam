@@ -3,7 +3,7 @@ import classes from "./NotificationsPanel.module.css";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
 import { isResolvedElsewhereError } from "./notificationActionError";
-import type { TNotification } from "../../../canyonUtils";
+import type { TNotification } from "../../../placeUtils";
 import type { PanelId } from "../panels";
 import type { GeoJsonPolygonal } from "../../dialogs/TopoDialog";
 import {
@@ -15,14 +15,14 @@ import {
   declineFriendRequest,
   getTopoExport,
   getGeoPdfJob,
-} from "../../../canyonUtils";
+} from "../../../placeUtils";
 
 function NotificationsPanel({
   notifications,
   notificationsTotal,
   onRefetchNotifications,
   onRefetchFriends,
-  setSelectedCanyonID,
+  setSelectedPlaceID,
   setActivePanel,
   onTopoFlyTarget,
 }: {
@@ -30,7 +30,7 @@ function NotificationsPanel({
   notificationsTotal: number | null;
   onRefetchNotifications: () => void;
   onRefetchFriends: () => void;
-  setSelectedCanyonID: (id: string | null) => void;
+  setSelectedPlaceID: (id: string | null) => void;
   setActivePanel: (panel: PanelId | null) => void;
   onTopoFlyTarget: (footprint: GeoJsonPolygonal) => void;
 }) {
@@ -155,13 +155,13 @@ function NotificationsPanel({
       } catch (err) {
         console.error(err);
         toast.error(messageFromError(err, "Couldn't mark notification read."));
-        // Fall through — still navigate on canyon_shared even if the
+        // Fall through — still navigate on place_shared even if the
         // read-marking call failed.
       }
     }
-    if (n.type === "canyon_shared" && n.payload.canyonId) {
-      setSelectedCanyonID(n.payload.canyonId as string);
-      setActivePanel("canyon-detail");
+    if (n.type === "place_shared" && n.payload.placeId) {
+      setSelectedPlaceID(n.payload.placeId as string);
+      setActivePanel("place-detail");
     }
   }
 
@@ -202,8 +202,8 @@ function NotificationsPanel({
                     `${n.payload.requesterUsername} sent you a friend request`}
                   {n.type === "friend_request_accepted" &&
                     `${n.payload.acceptedByUsername} accepted your friend request`}
-                  {n.type === "canyon_shared" &&
-                    `${n.payload.sharedByUsername} shared ${n.payload.canyonName} with you`}
+                  {n.type === "place_shared" &&
+                    `${n.payload.sharedByUsername} shared ${n.payload.placeName} with you`}
                   {n.type === "topo_complete" && (
                     <>
                       {n.payload.jobName

@@ -3,14 +3,14 @@
 // blob (stage8-sync.md §7.3: delta rows are metadata only).
 //
 // Lives in a `Json` column rather than a dozen nullable ones, the same shape
-// `Canyon.attributes` and `TripLog.customFields` already take. The cost of a
+// `Place.attributes` and `TripLog.customFields` already take. The cost of a
 // Json column is that nothing enforces its shape, so this file IS the
 // enforcement: the API parses every write through `parseMediaMetadata` and both
 // clients read through `readMediaMetadata`. A field that is not declared here
 // does not survive a round trip.
 //
-// PRIVACY: a bbox is coarse canyon location and rides the same delta page as
-// the canyon coordinates themselves — no new exposure. It is nonetheless real
+// PRIVACY: a bbox is coarse place location and rides the same delta page as
+// the place coordinates themselves — no new exposure. It is nonetheless real
 // location data: never log a parsed metadata object, and never put one in an
 // error message (the parse errors below name FIELDS, never values).
 
@@ -18,8 +18,8 @@
 export type MediaBbox = [number, number, number, number];
 
 /**
- * How a standalone file came to exist. Canyon/trip attachments carry `null`:
- * they are "a file on this canyon" and need no further provenance.
+ * How a standalone file came to exist. Place/trip attachments carry `null`:
+ * they are "a file on this place" and need no further provenance.
  *
  * The vocabulary is deliberately `FileSend.sourceKind`'s — the same two kinds
  * of file, and a send is how one of them reaches another account.
@@ -150,7 +150,7 @@ export function parseMediaMetadata(
   value: unknown,
 ): MediaMetadata {
   if (origin === null) {
-    // A canyon/trip attachment has no stats. Anything sent is a client bug,
+    // A place/trip attachment has no stats. Anything sent is a client bug,
     // and storing it would make `origin` stop meaning what it says.
     return {};
   }

@@ -1,8 +1,8 @@
-// FEUI-012: canyon `attributes.sources` URLs are free text stored verbatim
+// FEUI-012: place `attributes.sources` URLs are free text stored verbatim
 // and later emitted into an <a href>. isHttpUrl is the one gate both the
-// CanyonDialog save path and the CanyonDetailPanel render path go through.
+// PlaceDialog save path and the PlaceDetailPanel render path go through.
 import { describe, it, expect, vi } from "vitest";
-import { isHttpUrl } from "./canyonUtils";
+import { isHttpUrl } from "./placeUtils";
 
 vi.mock("aws-amplify/auth", () => ({
   fetchAuthSession: vi.fn().mockResolvedValue({

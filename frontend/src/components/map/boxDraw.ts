@@ -1,7 +1,7 @@
 // Drag-a-box on the map, as the two pure pieces of it.
 //
-// Three surfaces draw the same rubber band — the topo job's bbox, the canyon
-// multi-select, and the Canyons filter's area — and the first two shipped as
+// Three surfaces draw the same rubber band — the topo job's bbox, the place
+// multi-select, and the Places filter's area — and the first two shipped as
 // two ~110-line copies of one another, differing only in what they did with the
 // finished box. This is the arithmetic they share; `useBoxDraw` is the event
 // wiring around it.

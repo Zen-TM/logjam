@@ -40,9 +40,9 @@ export function notificationLabel(n: TNotification): NotificationLabel {
       return { text: `${str(p.requesterUsername) ?? "Someone"} sent you a friend request` };
     case "friend_request_accepted":
       return { text: `${str(p.acceptedByUsername) ?? "Someone"} accepted your friend request` };
-    case "canyon_shared":
+    case "place_shared":
       return {
-        text: `${str(p.sharedByUsername) ?? "Someone"} shared ${str(p.canyonName) ?? "a canyon"} with you`,
+        text: `${str(p.sharedByUsername) ?? "Someone"} shared ${str(p.placeName) ?? "a place"} with you`,
       };
     // A directly-shared saved item. The payload carries the entity's TYPE and
     // its id, and deliberately no name: the recipient already holds the row
@@ -57,7 +57,7 @@ export function notificationLabel(n: TNotification): NotificationLabel {
       };
     // The filename is deliberately IN the label: the row carries Accept and
     // Turn down, and nobody can answer that without knowing what is on offer.
-    // It is user text (routinely a canyon name), resolved from the live send at
+    // It is user text (routinely a place name), resolved from the live send at
     // read time — rendered here, never logged.
     case "file_sent":
       return {
@@ -140,7 +140,7 @@ export function notificationHaystack(n: TNotification): string {
 // Notifications are a genuine open-ended vocabulary of KINDS, so they get the
 // §3 treatment. The hues are borrowed, not invented: a notification about a
 // topo overlay wears the same eucalypt the overlay wears in Saved, and a
-// canyon-share wears the same heath a shared canyon wears on the Canyons
+// place-share wears the same heath a shared place wears on the Places
 // screen. The inbox is where you first hear about a thing — recognising it
 // again where it lives is the point.
 
@@ -177,7 +177,7 @@ const KIND_META: Record<NotificationKind, { icon: NotificationMeta["icon"]; hue:
 function notificationKind(n: TNotification): NotificationKind {
   const failed = n.payload.status === "failed";
   switch (n.type) {
-    case "canyon_shared":
+    case "place_shared":
     // Same verb, same promise: a live view of a row someone else still owns.
     case "item_shared":
       return "share";
@@ -213,16 +213,16 @@ export function notificationMeta(n: TNotification): NotificationMeta {
 }
 
 /**
- * The canyon this notification is ABOUT, if any — so tapping a share opens the
- * canyon instead of only marking the row read. Mirrors the push-tap routing in
- * AppShell, and reads the same `canyonId` the server puts in the payload.
+ * The place this notification is ABOUT, if any — so tapping a share opens the
+ * place instead of only marking the row read. Mirrors the push-tap routing in
+ * AppShell, and reads the same `placeId` the server puts in the payload.
  *
  * PRIVACY: an id, resolved against the authed API by the screen it opens. The
  * 404-not-403 rule covers a share revoked between the notification and the tap.
  */
-export function notificationCanyonId(n: TNotification): string | null {
-  const canyonId = n.payload.canyonId;
-  return typeof canyonId === "string" && canyonId.length > 0 ? canyonId : null;
+export function notificationPlaceId(n: TNotification): string | null {
+  const placeId = n.payload.placeId;
+  return typeof placeId === "string" && placeId.length > 0 ? placeId : null;
 }
 
 // ── Day grouping ─────────────────────────────────────────────────────────────

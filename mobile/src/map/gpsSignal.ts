@@ -2,7 +2,7 @@
 //
 // The arrow is the one thing on this map a person acts on directly, and until
 // this existed it looked exactly the same whether the fix behind it was two
-// seconds old or two hours: walking into a slot canyon takes the sky away, the
+// seconds old or two hours: walking into a slot place takes the sky away, the
 // watcher simply stops being called, and the last fix stays drawn — confident,
 // coloured, and increasingly a lie. Losing a signal is the ABSENCE of an event,
 // so nothing but a clock can notice it; this module is the rule, and the ticker
@@ -19,7 +19,7 @@
  *
  * The map's watcher asks for 3 s, so this is six missed deliveries — long
  * enough that an ordinary skipped fix (a tree, a turn under an overhang)
- * doesn't flicker the arrow grey, short enough that walking into a canyon shows
+ * doesn't flicker the arrow grey, short enough that walking into a place shows
  * up while the person is still near where the arrow says they are.
  *
  * This is only answerable because the watcher no longer carries a

@@ -12,10 +12,10 @@ import {
 
 /**
  * A numeric text field with inline range/format validation, shared across
- * dialogs (CanyonDialog, TripLogDialog custom fields; adoptable by TopoDialog's
+ * dialogs (PlaceDialog, TripLogDialog custom fields; adoptable by TopoDialog's
  * hillshade tab and GeoPdfDialog's extent fields).
  *
- * Design (the CANYON-1/CANYON-2/TRIP-1/TRIP-2 fix):
+ * Design (the PLACE-1/PLACE-2/TRIP-1/TRIP-2 fix):
  * - Renders `type="text"` + `inputMode` so there is no native spinbutton (the
  *   widget-inconsistency the UAT flagged) and so paste/IME can't inject junk.
  * - Every keystroke passes through `sanitizeDecimalInput`: letters are dropped,

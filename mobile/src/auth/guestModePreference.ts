@@ -16,7 +16,7 @@
 // collapsing "not asked" into "not a guest" would put a fresh install straight
 // on the sign-in form, which is exactly the barrier guest mode removes.
 //
-// PRIVACY: one enum string. No account identifiers, no canyon data.
+// PRIVACY: one enum string. No account identifiers, no place data.
 import { readPref, writePref } from "../prefsDb";
 
 const GUEST_MODE_PREF_KEY = "guestMode";

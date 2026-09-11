@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useIsMobile } from "../../useIsMobile";
+import { SYSTEM_PLACE_TYPE_IDS } from "@logjam/shared";
 import {
   Dialog,
   DialogTitle,
@@ -20,28 +21,29 @@ import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import { ErrorBanner } from "../feedback/ErrorBanner";
 import { useToast } from "../feedback/ToastProvider";
 import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
-import type { TripLogCustomFieldDef, TripLogCustomFieldType, MediaItem } from "@logjam/shared";
+import type { TripLogCustomFieldDef, TripLogCustomFieldType, MediaItem, ScopedCustomFieldDef } from "@logjam/shared";
 import {
   coerceFieldValue,
   buildCustomFieldDef,
-  formatTripCanyonNames,
+  formatTripPlaceNames,
   isValidLatitude,
   isValidLongitude,
   TRIP_TYPE_SUGGESTIONS,
-  MAX_CANYONS_PER_TRIP,
+  MAX_PLACES_PER_TRIP,
   MAX_TRIP_TYPES_PER_TRIP,
   CANYONING_TRIP_TYPE,
   enforceCanyoningTag,
+  tripFieldDefs,
 } from "@logjam/shared";
-import type { TCanyon, TTripLog } from "../../canyonUtils";
+import type { TPlace, TTripLog } from "../../placeUtils";
 import {
   createTripLog,
   updateTripLog,
   deleteTripLog,
   getTripLog,
-  createCanyon,
-  updateUserPreferences,
-} from "../../canyonUtils";
+  createPlace,
+  createCustomField,
+} from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import {
   clearTripDraft,
@@ -86,25 +88,25 @@ function isFutureDate(dateString: string): boolean {
   return dateString > todayDateString();
 }
 
-// ── Canyon option union ──────────────────────────────────────
-// "no-marker" (name-only, no canyon) is gone — an empty selection plus the
-// trip name field covers that case now that canyons[] and displayName are
+// ── Place option union ──────────────────────────────────────
+// "no-marker" (name-only, no place) is gone — an empty selection plus the
+// trip name field covers that case now that places[] and displayName are
 // independent.
-type CanyonOption =
-  | { kind: "existing"; canyon: TCanyon }
+type PlaceOption =
+  | { kind: "existing"; place: TPlace }
   | { kind: "create"; name: string };
 
-function getOptionLabel(opt: CanyonOption | string): string {
+function getOptionLabel(opt: PlaceOption | string): string {
   if (typeof opt === "string") return opt;
   switch (opt.kind) {
     case "existing":
-      return opt.canyon.name;
+      return opt.place.name;
     case "create":
       return opt.name;
   }
 }
 
-const canyonFilter = createFilterOptions<CanyonOption>();
+const placeFilter = createFilterOptions<PlaceOption>();
 
 // The pending inline-create is part of the persisted draft, so its shape is
 // declared once in tripDraft.ts and derived here rather than repeated.
@@ -128,7 +130,7 @@ function formatDraftSavedAt(iso: string): string {
 }
 
 // ── Type option union ────────────────────────────────────────
-// Mirrors the Canyons picker: existing suggestions plus a synthetic
+// Mirrors the Places picker: existing suggestions plus a synthetic
 // `Add "<input>"` row when the typed text matches nothing.
 type TypeOption =
   | { kind: "existing"; label: string }
@@ -156,51 +158,51 @@ function TripLogDialog({
   open,
   onClose,
   onSaved,
-  canyons,
-  defaultCanyonId = null,
+  places,
+  defaultPlaceId = null,
   tripLog,
   customFieldDefs,
   onCustomFieldDefsChange,
   existingTripTypes,
   onPickCoords,
-  onCanyonCreated,
+  onPlaceCreated,
 }: {
   open: boolean;
   onClose: () => void;
   onSaved: () => void;
-  canyons: TCanyon[];
-  // Create-mode default selection (e.g. the canyon whose detail panel opened the
+  places: TPlace[];
+  // Create-mode default selection (e.g. the place whose detail panel opened the
   // dialog) — seeds the initial multi-selection. Edit mode always uses the
-  // trip's own canyons. Defaults to none.
-  defaultCanyonId?: string | null;
+  // trip's own places. Defaults to none.
+  defaultPlaceId?: string | null;
   tripLog?: TTripLog;
-  customFieldDefs: TripLogCustomFieldDef[];
-  onCustomFieldDefsChange: (defs: TripLogCustomFieldDef[]) => void;
+  customFieldDefs: ScopedCustomFieldDef[];
+  onCustomFieldDefsChange: (defs: ScopedCustomFieldDef[]) => void;
   // Raw (non-deduped) trip.types values flattened from whichever trip list the
   // caller has on hand — unioned with TRIP_TYPE_SUGGESTIONS for the types
   // field's autocomplete options.
   existingTripTypes: string[];
   onPickCoords?: (onPicked: (lat: number, lng: number) => void) => void;
-  // Fired when an inline "Create new canyon" makes a real canyon, so the parent
-  // can refetch the canyon list/map (otherwise the new marker only shows after a
+  // Fired when an inline "Create new place" makes a real place, so the parent
+  // can refetch the place list/map (otherwise the new marker only shows after a
   // manual refresh).
-  onCanyonCreated?: () => void;
+  onPlaceCreated?: () => void;
 }) {
   const isMobile = useIsMobile();
   const toast = useToast();
   const [date, setDate] = useState(todayDateString());
   const [notes, setNotes] = useState("");
-  // Ordered ids of selected existing canyons — order is meaningful (drives the
+  // Ordered ids of selected existing places — order is meaningful (drives the
   // derived title placeholder).
-  const [selectedCanyonIds, setSelectedCanyonIds] = useState<string[]>([]);
+  const [selectedPlaceIds, setSelectedPlaceIds] = useState<string[]>([]);
   // User's trip-name override. "" means unset (falls back to the derived
-  // placeholder); independent of canyon selection.
+  // placeholder); independent of place selection.
   const [displayNameInput, setDisplayNameInput] = useState("");
   // Ordered selected trip types (user vocab, case preserved as typed) —
   // capped at MAX_TRIP_TYPES_PER_TRIP, deduped case-insensitively on add.
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
-  // At most one pending inline "create new canyon" at a time (mirrors the old
-  // single-canyon dialog's one-create-at-a-time behaviour).
+  // At most one pending inline "create new place" at a time (mirrors the old
+  // single-place dialog's one-create-at-a-time behaviour).
   const [creating, setCreating] = useState<CreateForm | null>(null);
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
@@ -209,16 +211,16 @@ function TripLogDialog({
   // at once (before that, errors only show after a field is blurred).
   const [showFieldErrors, setShowFieldErrors] = useState(false);
 
-  // Linking a canyon means "I did that canyon on this trip", so the API
+  // Linking a place means "I did that place on this trip", so the API
   // force-tags `canyoning` on save. Mirror that in the selection itself (rather
   // than only in the rendered chips) so the tag is visible before the user hits
   // Save instead of appearing afterwards, and so the cap checks below count it
   // exactly as storage does. enforceCanyoningTag returns its input unchanged
   // when there's nothing to add, so this settles immediately.
-  const hasLinkedCanyon = selectedCanyonIds.length > 0;
+  const hasLinkedPlace = selectedPlaceIds.length > 0;
   useEffect(() => {
-    setSelectedTypes((prev) => enforceCanyoningTag(prev, hasLinkedCanyon));
-  }, [hasLinkedCanyon]);
+    setSelectedTypes((prev) => enforceCanyoningTag(prev, hasLinkedPlace));
+  }, [hasLinkedPlace]);
 
   // The full known-type vocabulary: built-in suggestions ∪ the user's own
   // history, deduped case-insensitively (first casing wins).
@@ -254,7 +256,7 @@ function TripLogDialog({
   // Tracks pick-on-map cycle so the reset useEffect skips when returning.
   const pickingRef = useRef(false);
   // First field, focused on a fresh open by the reset effect below.
-  const canyonInputRef = useRef<HTMLInputElement>(null);
+  const placeInputRef = useRef<HTMLInputElement>(null);
 
   // Add custom field form state
   const [showAddField, setShowAddField] = useState(false);
@@ -269,36 +271,57 @@ function TripLogDialog({
   // the Account panel's field manager).
   const [fieldToDelete, setFieldToDelete] = useState<TripLogCustomFieldDef | null>(null);
 
-  // Selectable canyons — already-selected ones are excluded so they don't
+  // Selectable places — already-selected ones are excluded so they don't
   // linger (duplicated) in the dropdown once chipped.
-  const canyonOptions: CanyonOption[] = useMemo(
+  const placeOptions: PlaceOption[] = useMemo(
     () =>
-      canyons
-        .filter((c) => !selectedCanyonIds.includes(c.id))
-        .map((c) => ({ kind: "existing" as const, canyon: c })),
-    [canyons, selectedCanyonIds],
+      places
+        .filter((c) => !selectedPlaceIds.includes(c.id))
+        .map((c) => ({ kind: "existing" as const, place: c })),
+    [places, selectedPlaceIds],
   );
 
   // The current selection rendered as Autocomplete chips, in selection order.
   // The pending inline-create (if any) always renders last.
-  const canyonValue: CanyonOption[] = useMemo(() => {
-    const chips: CanyonOption[] = selectedCanyonIds
-      .map((id) => canyons.find((c) => c.id === id))
-      .filter((c): c is TCanyon => !!c)
-      .map((c) => ({ kind: "existing" as const, canyon: c }));
+  const placeValue: PlaceOption[] = useMemo(() => {
+    const chips: PlaceOption[] = selectedPlaceIds
+      .map((id) => places.find((c) => c.id === id))
+      .filter((c): c is TPlace => !!c)
+      .map((c) => ({ kind: "existing" as const, place: c }));
     if (creating) chips.push({ kind: "create", name: creating.name });
     return chips;
-  }, [selectedCanyonIds, canyons, creating]);
+  }, [selectedPlaceIds, places, creating]);
 
-  // Names of the currently selected canyons (incl. a pending create, for a live
+  /**
+   * THE FIELDS THIS TRIP IS ASKED FOR: the ones scoped to the types of the
+   * places it links, union any key that already has a value (§2, `tripFieldDefs`).
+   *
+   * The union half is what stops the form eating data — unlinking a place,
+   * deleting one, retyping it or rescoping a definition would each otherwise
+   * hide a value the user typed, and the next save writes the object the form
+   * knows about. A value only ever goes when its definition is deleted, which
+   * has its own impact count.
+   *
+   * An inline pending create is a canyon (see `creating`), so it counts as one
+   * for the purpose of which questions to ask.
+   */
+  const visibleFieldDefs = useMemo(() => {
+    const linkedTypeIds = selectedPlaceIds
+      .map((id) => places.find((place) => place.id === id)?.placeTypeId)
+      .filter((typeId): typeId is string => !!typeId);
+    if (creating) linkedTypeIds.push(SYSTEM_PLACE_TYPE_IDS.canyon);
+    return tripFieldDefs(customFieldDefs, linkedTypeIds, tripLog?.customFields);
+  }, [creating, customFieldDefs, places, selectedPlaceIds, tripLog]);
+
+  // Names of the currently selected places (incl. a pending create, for a live
   // placeholder preview), in selection order — feeds the trip-name placeholder.
-  const selectedCanyonNames = useMemo(() => {
-    const names = selectedCanyonIds
-      .map((id) => canyons.find((c) => c.id === id)?.name)
+  const selectedPlaceNames = useMemo(() => {
+    const names = selectedPlaceIds
+      .map((id) => places.find((c) => c.id === id)?.name)
       .filter((n): n is string => !!n);
     if (creating?.name) names.push(creating.name);
     return names;
-  }, [selectedCanyonIds, canyons, creating]);
+  }, [selectedPlaceIds, places, creating]);
 
   // Snapshot of the form fields as populated below, taken in the same effect
   // that sets them — used by the unsaved-changes guard to tell a real edit
@@ -340,14 +363,14 @@ function TripLogDialog({
     }
     let initialDate: string;
     let initialNotes: string;
-    let initialSelectedCanyonIds: string[];
+    let initialSelectedPlaceIds: string[];
     let initialDisplayNameInput: string;
     let initialSelectedTypes: string[];
     let initialFieldValues: Record<string, string>;
     if (tripLog) {
       initialDate = tripLog.date.split("T")[0];
       initialNotes = tripLog.notes ?? "";
-      initialSelectedCanyonIds = tripLog.canyons.map((c) => c.id);
+      initialSelectedPlaceIds = tripLog.places.map((c) => c.id);
       initialDisplayNameInput = tripLog.displayName ?? "";
       // Enforce here rather than letting the effect below do it, so the
       // unsaved-changes snapshot taken next already includes the tag — a trip
@@ -355,7 +378,7 @@ function TripLogDialog({
       // opened, and prompt on close without the user touching anything.
       initialSelectedTypes = enforceCanyoningTag(
         tripLog.types,
-        initialSelectedCanyonIds.length > 0,
+        initialSelectedPlaceIds.length > 0,
       );
       // Populate existing custom field values as strings
       const vals: Record<string, string> = {};
@@ -367,17 +390,17 @@ function TripLogDialog({
     } else {
       initialDate = todayDateString();
       initialNotes = "";
-      initialSelectedCanyonIds = defaultCanyonId ? [defaultCanyonId] : [];
+      initialSelectedPlaceIds = defaultPlaceId ? [defaultPlaceId] : [];
       initialDisplayNameInput = "";
       initialSelectedTypes = enforceCanyoningTag(
         [],
-        initialSelectedCanyonIds.length > 0,
+        initialSelectedPlaceIds.length > 0,
       );
       initialFieldValues = {};
     }
     setDate(initialDate);
     setNotes(initialNotes);
-    setSelectedCanyonIds(initialSelectedCanyonIds);
+    setSelectedPlaceIds(initialSelectedPlaceIds);
     setDisplayNameInput(initialDisplayNameInput);
     setSelectedTypes(initialSelectedTypes);
     setCreating(null);
@@ -385,7 +408,7 @@ function TripLogDialog({
     const initialFingerprint = tripFormFingerprint({
       date: initialDate,
       notes: initialNotes,
-      selectedCanyonIds: initialSelectedCanyonIds,
+      selectedPlaceIds: initialSelectedPlaceIds,
       displayNameInput: initialDisplayNameInput,
       selectedTypes: initialSelectedTypes,
       fieldValues: initialFieldValues,
@@ -417,7 +440,7 @@ function TripLogDialog({
     // than an `autoFocus` prop because the decision depends on `foundDraft`,
     // which only exists on this line: `restorableDraft` is state, so during the
     // render that mounts the field it is still null and an `autoFocus={!draft}`
-    // prop would focus the canyon input before the offer banner ever rendered —
+    // prop would focus the place input before the offer banner ever rendered —
     // the same one-commit lag documented on `draftOfferPendingRef` above.
     //
     // Two deliberate opt-outs:
@@ -429,7 +452,7 @@ function TripLogDialog({
     // The pick-on-map return leg is already excluded — that path returns early
     // above, so it never reaches this line and can't yank focus off the
     // coordinates the user just picked.
-    if (!isMobile && foundDraft === null) canyonInputRef.current?.focus();
+    if (!isMobile && foundDraft === null) placeInputRef.current?.focus();
   }, [open, tripLog?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The form as the draft stores it — one object feeding both the dirty-check
@@ -438,13 +461,13 @@ function TripLogDialog({
     () => ({
       date,
       notes,
-      selectedCanyonIds,
+      selectedPlaceIds,
       displayNameInput,
       selectedTypes,
       fieldValues,
       creating,
     }),
-    [date, notes, selectedCanyonIds, displayNameInput, selectedTypes, fieldValues, creating],
+    [date, notes, selectedPlaceIds, displayNameInput, selectedTypes, fieldValues, creating],
   );
   const currentFingerprint = useMemo(() => tripFormFingerprint(currentForm), [currentForm]);
 
@@ -510,7 +533,7 @@ function TripLogDialog({
     const { form } = restorableDraft;
     setDate(form.date);
     setNotes(form.notes);
-    setSelectedCanyonIds(form.selectedCanyonIds);
+    setSelectedPlaceIds(form.selectedPlaceIds);
     setDisplayNameInput(form.displayNameInput);
     setSelectedTypes(form.selectedTypes);
     setFieldValues(form.fieldValues);
@@ -546,11 +569,11 @@ function TripLogDialog({
       .finally(() => setMediaLoading(false));
   }, [open, tripLog?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Resolve the ordered canyonIds for the trip payload, creating the pending
-  // inline canyon (if any) first and appending it last.
-  async function resolveCanyonIds(): Promise<string[]> {
-    if (!creating) return selectedCanyonIds;
-    if (!creating.name.trim()) throw new Error("Canyon name is required.");
+  // Resolve the ordered placeIds for the trip payload, creating the pending
+  // inline place (if any) first and appending it last.
+  async function resolvePlaceIds(): Promise<string[]> {
+    if (!creating) return selectedPlaceIds;
+    if (!creating.name.trim()) throw new Error("Place name is required.");
     const lat = parseFloat(creating.latitude);
     const lng = parseFloat(creating.longitude);
     if (!Number.isFinite(lat) || !Number.isFinite(lng))
@@ -559,13 +582,19 @@ function TripLogDialog({
       throw new Error(
         "Latitude must be between -90 and 90, and longitude between -180 and 180.",
       );
-    const c = await createCanyon({
+    const c = await createPlace({
       name: creating.name.trim(),
       latitude: lat,
       longitude: lng,
+      // Creating a place INLINE from a trip log, by typing a name that matches
+      // nothing. Canyon deliberately, and not a picker: the user is logging a
+      // trip, not filing a place, and interrupting that with a type question
+      // to answer a name they already typed is the wrong moment. The type is
+      // one tap to change on the place itself afterwards.
+      placeTypeId: SYSTEM_PLACE_TYPE_IDS.canyon,
     });
-    onCanyonCreated?.();
-    return [...selectedCanyonIds, c.id];
+    onPlaceCreated?.();
+    return [...selectedPlaceIds, c.id];
   }
 
   // The trip id media should link to: a real trip in edit mode, otherwise a
@@ -576,16 +605,16 @@ function TripLogDialog({
     if (draftPromiseRef.current) return draftPromiseRef.current;
 
     const customFields: Record<string, unknown> = {};
-    for (const def of customFieldDefs) {
+    for (const def of visibleFieldDefs) {
       customFields[def.key] = coerceFieldValue(getFieldValue(def.key), def.type);
     }
-    // canyonIds and displayName are independent — an empty/unnamed draft is
+    // placeIds and displayName are independent — an empty/unnamed draft is
     // valid (derives "Untitled trip" until the user fills in either).
     const promise = createTripLog({
       date,
       notes: notes || null,
       customFields,
-      canyonIds: selectedCanyonIds,
+      placeIds: selectedPlaceIds,
       displayName: displayNameInput.trim() || null,
       types: selectedTypes,
     })
@@ -664,7 +693,7 @@ function TripLogDialog({
     }
     // Block save if any custom numeric field is invalid (e.g. "5.5" in an
     // integer field) so it can't be silently mangled on save (TRIP-1/TRIP-2).
-    const customFieldInvalid = customFieldDefs.some(
+    const customFieldInvalid = visibleFieldDefs.some(
       (def) => customFieldValueError(def, getFieldValue(def.key)) != null,
     );
     if (customFieldInvalid) {
@@ -675,14 +704,17 @@ function TripLogDialog({
     setSaving(true);
     setError(null);
     try {
-      // Resolve canyon selection (may create a canyon inline)
-      const canyonIds = await resolveCanyonIds();
+      // Resolve place selection (may create a place inline)
+      const placeIds = await resolvePlaceIds();
       const displayName = displayNameInput.trim() || null;
       const types = selectedTypes;
 
       // Build custom fields object — only include defined fields
+      // Only the fields the form actually showed. A definition scoped to a
+      // type this trip does not visit is not "empty" here — it was never asked,
+      // and writing a null for it would be this form inventing an answer.
       const customFields: Record<string, unknown> = {};
-      for (const def of customFieldDefs) {
+      for (const def of visibleFieldDefs) {
         const raw = getFieldValue(def.key);
         customFields[def.key] = coerceFieldValue(raw, def.type);
       }
@@ -692,7 +724,7 @@ function TripLogDialog({
           date,
           notes: notes || null,
           customFields,
-          canyonIds,
+          placeIds,
           displayName,
           types,
         });
@@ -702,7 +734,7 @@ function TripLogDialog({
           date,
           notes: notes || null,
           customFields,
-          canyonIds,
+          placeIds,
           displayName,
           types,
         });
@@ -711,7 +743,7 @@ function TripLogDialog({
           date,
           notes: notes || null,
           customFields,
-          canyonIds,
+          placeIds,
           displayName,
           types,
         });
@@ -744,8 +776,17 @@ function TripLogDialog({
     setAddingField(true);
     setAddFieldError(null);
     try {
-      const updatedDefs = [...customFieldDefs, result.def];
-      await updateUserPreferences({ tripLogCustomFields: updatedDefs });
+      // ROW-GRAIN, not a whole-list PATCH: definitions are rows, and the list
+      // write would have wiped the scoping off every one of them. The server
+      // returns the surviving list, so this uses the server's answer rather
+      // than a locally-appended guess.
+      //
+      // `appliesToAllTypes` because a TRIP field is scoped by the types of the
+      // places the trip links (plan §2.7) — a trip with no places would
+      // otherwise get a field that appears nowhere.
+      const updatedDefs = await createCustomField("trip-log", result.def, {
+        appliesToAllTypes: true,
+      });
       onCustomFieldDefsChange(updatedDefs);
       setShowAddField(false);
       setNewFieldLabel("");
@@ -816,7 +857,7 @@ function TripLogDialog({
           {/* Autosaved-draft offer. An offer rather than a silent repopulate:
               the form stays fresh until the user asks for the draft back, so
               nobody has to work out why last Tuesday's text is in today's
-              trip. Carries only a timestamp — no canyon names, no notes — so
+              trip. Carries only a timestamp — no place names, no notes — so
               the prompt itself can't leak the payload. */}
           {restorableDraft && (
             <Box
@@ -855,11 +896,11 @@ function TripLogDialog({
             </Box>
           )}
 
-          {/* Canyon(s) — search existing markers (ordered, chip-per-canyon) or
-             create a new canyon inline. Order is meaningful: it drives the
+          {/* Place(s) — search existing markers (ordered, chip-per-place) or
+             create a new place inline. Order is meaningful: it drives the
              derived-title placeholder below. Empty selection is valid — the
-             trip name field covers the no-canyon case. */}
-          <Autocomplete<CanyonOption, true, false, false>
+             trip name field covers the no-place case. */}
+          <Autocomplete<PlaceOption, true, false, false>
             multiple
             // Without this, typing "Claustral" and pressing Enter selects
             // nothing — there's no highlighted option to select, so the
@@ -868,21 +909,21 @@ function TripLogDialog({
             // one". MUI calls preventDefault() when Enter selects a highlighted
             // option, so this Enter cannot also submit the surrounding form.
             autoHighlight
-            options={canyonOptions}
+            options={placeOptions}
             getOptionLabel={getOptionLabel}
             getOptionKey={(option) =>
               // create shares its typed text as its label; a distinct key keeps
               // React from reconciling stale ghost rows across keystrokes.
               option.kind === "existing"
-                ? option.canyon.id
+                ? option.place.id
                 : `${option.kind}:${option.name}`
             }
-            value={canyonValue}
+            value={placeValue}
             onChange={(_, vals) => {
               const ids: string[] = [];
               let nextCreating: CreateForm | null = null;
               for (const val of vals) {
-                if (val.kind === "existing") ids.push(val.canyon.id);
+                if (val.kind === "existing") ids.push(val.place.id);
                 else {
                   nextCreating = {
                     name: val.name,
@@ -891,18 +932,18 @@ function TripLogDialog({
                   };
                 }
               }
-              // Cap at MAX_CANYONS_PER_TRIP (a pending create counts towards it).
-              if (ids.length + (nextCreating ? 1 : 0) > MAX_CANYONS_PER_TRIP) return;
-              setSelectedCanyonIds(ids);
+              // Cap at MAX_PLACES_PER_TRIP (a pending create counts towards it).
+              if (ids.length + (nextCreating ? 1 : 0) > MAX_PLACES_PER_TRIP) return;
+              setSelectedPlaceIds(ids);
               setCreating(nextCreating);
             }}
             filterOptions={(options, params) => {
-              // Filter only real canyons; only offer "create" when there's no
+              // Filter only real places; only offer "create" when there's no
               // pending create already (one inline create at a time) and the
               // cap hasn't been reached.
-              const filtered = canyonFilter(options, params);
+              const filtered = placeFilter(options, params);
               const input = params.inputValue.trim();
-              const atCap = selectedCanyonIds.length + (creating ? 1 : 0) >= MAX_CANYONS_PER_TRIP;
+              const atCap = selectedPlaceIds.length + (creating ? 1 : 0) >= MAX_PLACES_PER_TRIP;
               if (input && !creating && !atCap) {
                 filtered.push({ kind: "create", name: input });
               }
@@ -911,7 +952,7 @@ function TripLogDialog({
             isOptionEqualToValue={(opt, val) => {
               if (opt.kind !== val.kind) return false;
               if (opt.kind === "existing" && val.kind === "existing")
-                return opt.canyon.id === val.canyon.id;
+                return opt.place.id === val.place.id;
               return getOptionLabel(opt) === getOptionLabel(val);
             }}
             renderOption={(props, option) => {
@@ -923,7 +964,7 @@ function TripLogDialog({
                       {getOptionLabel(option)}
                     </span>
                     {option.kind === "create" && (
-                      <Chip label="Create new canyon" size="small" color="primary" sx={{ fontSize: "0.7em", height: 20 }} />
+                      <Chip label="Create new place" size="small" color="primary" sx={{ fontSize: "0.7em", height: 20 }} />
                     )}
                   </Box>
                 </li>
@@ -947,15 +988,15 @@ function TripLogDialog({
             renderInput={(params) => (
               <TextField
                 {...params}
-                label="Canyons"
+                label="Places"
                 placeholder={
-                  selectedCanyonIds.length + (creating ? 1 : 0) >= MAX_CANYONS_PER_TRIP
+                  selectedPlaceIds.length + (creating ? 1 : 0) >= MAX_PLACES_PER_TRIP
                     ? undefined
-                    : "Search canyons, or type to create one"
+                    : "Search places, or type to create one"
                 }
                 // Focused imperatively by the form-reset effect above, which is
                 // the only place that knows whether a draft is being offered.
-                inputRef={canyonInputRef}
+                inputRef={placeInputRef}
                 size="small"
                 sx={fieldSx}
               />
@@ -968,8 +1009,8 @@ function TripLogDialog({
             sx={{ "& .MuiInputBase-input": { color: "var(--theme-text-primary)" } }}
           />
 
-          {/* Inline canyon creation — lat/long + pick on map. Name comes from
-              the canyon field text; no separate name input. */}
+          {/* Inline place creation — lat/long + pick on map. Name comes from
+              the place field text; no separate name input. */}
           {creating && (
             <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
               <TextField
@@ -1010,13 +1051,13 @@ function TripLogDialog({
             </Box>
           )}
 
-          {/* Trip name — overrides the derived title (joined canyon names).
+          {/* Trip name — overrides the derived title (joined place names).
               Placeholder previews what the title would be if left blank. */}
           <TextField
             label="Trip name"
             value={displayNameInput}
             onChange={(e) => setDisplayNameInput(e.target.value)}
-            placeholder={formatTripCanyonNames(selectedCanyonNames) ?? "Untitled trip"}
+            placeholder={formatTripPlaceNames(selectedPlaceNames) ?? "Untitled trip"}
             size="small"
             fullWidth
             sx={fieldSx}
@@ -1024,7 +1065,7 @@ function TripLogDialog({
 
           {/* Types — free text, multiple, seeded with built-in suggestions plus
               whatever the user has already typed across their trip history.
-              Mirrors the Canyons picker: chips in the field, an `Add "<input>"`
+              Mirrors the Places picker: chips in the field, an `Add "<input>"`
               row for unseen text, case-insensitive dedupe, capped. */}
           <Autocomplete<TypeOption, true, false, true>
             multiple
@@ -1059,13 +1100,13 @@ function TripLogDialog({
                 seen.add(key);
                 next.push(label);
               }
-              // Cap at MAX_TRIP_TYPES_PER_TRIP (mirrors the canyon cap).
+              // Cap at MAX_TRIP_TYPES_PER_TRIP (mirrors the place cap).
               if (next.length > MAX_TRIP_TYPES_PER_TRIP) return;
               // Re-enforce: the locked chip has no delete button, but Backspace
               // in the input still pops the last tag, so the tag has to be put
               // back here too. enforceCanyoningTag skips at the cap, so this
               // can never push `next` past the check above.
-              setSelectedTypes(enforceCanyoningTag(next, hasLinkedCanyon));
+              setSelectedTypes(enforceCanyoningTag(next, hasLinkedPlace));
             }}
             filterOptions={(options, params) => {
               const filtered = typeFilter(options, params);
@@ -1107,11 +1148,11 @@ function TripLogDialog({
                 const { key, ...tagProps } = getTagProps({ index });
                 const label = getTypeOptionLabel(option);
                 // The canyoning tag is locked (visible, not removable) while a
-                // canyon is linked — the API re-adds it on save, so offering a
+                // place is linked — the API re-adds it on save, so offering a
                 // delete that silently undoes itself would be a lie. Unlink the
-                // canyons and it becomes an ordinary, removable tag.
+                // places and it becomes an ordinary, removable tag.
                 const locked =
-                  hasLinkedCanyon && label.toLowerCase() === CANYONING_TRIP_TYPE;
+                  hasLinkedPlace && label.toLowerCase() === CANYONING_TRIP_TYPE;
                 return (
                   <Chip
                     key={key}
@@ -1121,7 +1162,7 @@ function TripLogDialog({
                     {...tagProps}
                     {...(locked && {
                       onDelete: undefined,
-                      title: "Trips with a linked canyon are always tagged canyoning.",
+                      title: "Trips with a linked place are always tagged canyoning.",
                     })}
                   />
                 );
@@ -1197,12 +1238,12 @@ function TripLogDialog({
           />
 
           {/* Custom fields */}
-          {customFieldDefs.length > 0 && (
+          {visibleFieldDefs.length > 0 && (
             <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
               <Typography variant="caption" sx={{ color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                 Custom Fields
               </Typography>
-              {customFieldDefs.map((def) => (
+              {visibleFieldDefs.map((def) => (
                 <Box
                   key={def.key}
                   sx={{ display: "flex", gap: 1, alignItems: "center" }}

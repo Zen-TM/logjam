@@ -19,7 +19,7 @@ const TTL_MS = 60 * 60 * 1000;
  * live fetch therefore cannot be the default source any more.
  *
  * Instead the corpus is a CSV snapshot exported by hand from a browser and
- * uploaded to S3. NSW canyons change a handful of times a year, so a manual
+ * uploaded to S3. NSW places change a handful of times a year, so a manual
  * refresh every few months loses nothing:
  *
  *   aws s3 cp ropewiki_nsw.csv \
@@ -37,7 +37,7 @@ const TTL_MS = 60 * 60 * 1000;
 const SNAPSHOT_KEY = "reference/ropewiki-nsw.csv";
 
 export type RopeWikiData = {
-  canyons: RopeWikiCanyon[];
+  places: RopeWikiCanyon[];
   errors: string[];
   /**
    * When the underlying CSV last changed at its source — the S3 object's
@@ -82,8 +82,8 @@ async function loadSnapshotFromS3(): Promise<RopeWikiData> {
     );
   }
 
-  const { canyons, errors } = parseRopeWikiCsv(body);
-  return { canyons, errors, sourceUpdatedAt: lastModified ?? null };
+  const { places, errors } = parseRopeWikiCsv(body);
+  return { places, errors, sourceUpdatedAt: lastModified ?? null };
 }
 
 /**

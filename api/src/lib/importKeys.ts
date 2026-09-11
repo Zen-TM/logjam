@@ -2,15 +2,15 @@
 // are deterministic hash functions suitable for unit testing.
 
 import { createHash } from "crypto";
-import { normalizeCanyonName } from "@logjam/shared";
+import { normalizePlaceName } from "@logjam/shared";
 
 /**
- * Canyon import key: deterministic from the normalized name + rounded coords.
- * Two CSV rows that refer to the same canyon (modulo formatting noise) produce
+ * Place import key: deterministic from the normalized name + rounded coords.
+ * Two CSV rows that refer to the same place (modulo formatting noise) produce
  * the same key, so re-import is idempotent.
  */
-export function canyonImportKey(name: string, latitude: number, longitude: number): string {
-  const base = normalizeCanyonName(name).base;
+export function placeImportKey(name: string, latitude: number, longitude: number): string {
+  const base = normalizePlaceName(name).base;
   const coordStr = latitude.toFixed(5) + "," + longitude.toFixed(5);
   const hash = createHash("sha256").update(base + "|" + coordStr).digest("hex");
   return "csv:" + hash;
@@ -33,22 +33,22 @@ export function stableJson(value: unknown): string {
 
 /**
  * Content hash for a single trip row. Inputs only (not resolution outputs like
- * canyonId or displayName) so the hash is stable across re-imports where
+ * placeId or displayName) so the hash is stable across re-imports where
  * resolution may change.
  */
 export function tripContentHash(
-  sourceCanyonName: string,
+  sourcePlaceName: string,
   isoDate: string,
   notes: string | null | undefined,
   customFields: Record<string, unknown> | null | undefined,
 ): string {
-  const payload = sourceCanyonName + "|" + isoDate + "|" + (notes ?? "") + "|" + stableJson(customFields ?? {});
+  const payload = sourcePlaceName + "|" + isoDate + "|" + (notes ?? "") + "|" + stableJson(customFields ?? {});
   return createHash("sha256").update(payload).digest("hex");
 }
 
 /**
  * Trip import key: content hash + occurrence index for disambiguating
- * same-content rows (e.g. two trips to the same canyon on the same day).
+ * same-content rows (e.g. two trips to the same place on the same day).
  */
 export function tripImportKey(contentHash: string, occurrence: number): string {
   return "trip:" + contentHash + ":" + occurrence;
@@ -61,7 +61,7 @@ export function tripImportKey(contentHash: string, occurrence: number): string {
  */
 export function assignTripImportKeys(
   trips: Array<{
-    sourceCanyonName: string;
+    sourcePlaceName: string;
     date: string;
     notes?: string | null;
     customFields?: Record<string, unknown> | null;
@@ -69,7 +69,7 @@ export function assignTripImportKeys(
 ): Array<{ contentHash: string; occurrence: number; importKey: string }> {
   const occurrenceCounts = new Map<string, number>();
   return trips.map((trip) => {
-    const hash = tripContentHash(trip.sourceCanyonName, trip.date, trip.notes, trip.customFields);
+    const hash = tripContentHash(trip.sourcePlaceName, trip.date, trip.notes, trip.customFields);
     const occurrence = occurrenceCounts.get(hash) ?? 0;
     occurrenceCounts.set(hash, occurrence + 1);
     return {

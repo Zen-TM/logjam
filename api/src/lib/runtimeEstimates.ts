@@ -5,7 +5,7 @@
 // self-corrects as the pipeline's performance changes.
 //
 // Privacy: reads only aggregate timings + sizes (tile counts, render
-// megapixels) across jobs — never canyon names, coordinates, or footprints.
+// megapixels) across jobs — never place names, coordinates, or footprints.
 
 import prisma from "../services/prisma";
 import { getEnv } from "./env";
@@ -131,7 +131,7 @@ export async function estimateGeoPdfSeconds(config: GeoPdfConfig): Promise<numbe
  * configurable cold-start default below TOPO_ESTIMATE_MIN_SAMPLES so the
  * estimate self-corrects as the pipeline's performance changes.
  *
- * Privacy: reads only aggregate timing + tile counts across jobs — never canyon
+ * Privacy: reads only aggregate timing + tile counts across jobs — never place
  * names, coordinates, or footprints.
  */
 export async function estimateTopoSeconds(

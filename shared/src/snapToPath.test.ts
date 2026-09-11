@@ -6,7 +6,7 @@ import {
   snapSegment,
   type SnapLine,
 } from "./snapToPath.js";
-import { haversineMeters } from "./canyonGeo.js";
+import { haversineMeters } from "./placeGeo.js";
 import type { RoutePoint } from "./routeValidation.js";
 
 const LAT = -33.56;

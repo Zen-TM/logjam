@@ -3,25 +3,25 @@
 // lost an edit↔delete race (deadRemote), plus shelved conflict values, are
 // never silently dropped — they surface here with explicit user actions.
 //
-// PRIVACY: parked ops and shelf entries carry canyon field values (names,
+// PRIVACY: parked ops and shelf entries carry place field values (names,
 // coords). Rendered only behind the app lock; never logged.
 import * as FileSystem from "expo-file-system/legacy";
 
 import {
+  asFieldValues,
+  SYSTEM_PLACE_TYPE_IDS,
   collectDirtyFields,
   type SyncPushEntity,
   type SyncPushOp,
 } from "@logjam/shared";
 
-import { getMirrorCanyon } from "./mirrorStore";
+import { getMirrorPlace } from "./mirrorStore";
 import {
   canKeepBothField,
   canRestoreField,
-  createCanyonLocal,
-  createWaypointLocal,
+  createPlaceLocal,
   revertDiscardedUpdate,
   updateEntityFieldLocal,
-  type WaypointDraft,
 } from "./outbox";
 import { loadOutboxEntries } from "./deltaPull";
 import { isOutboxEntity, outboxMirrorTable, type OutboxEntity } from "./outboxTables";
@@ -53,14 +53,14 @@ export type ParkedOp = {
    *
    * An UPDATE carries only the fields it DIRTIED, so an edit to notes or a
    * grade holds no name at all and every such row read "Couldn't save your
-   * changes to a canyon". Which of the user's things it is happens to be the
+   * changes to a place". Which of the user's things it is happens to be the
    * first question the list has to answer, and the op alone cannot answer it.
    */
   entityName: string | null;
   /**
    * Whether the row this op edits still exists in the local mirror.
    *
-   * The deciding fact for "Recreate": a canyon deleted on another device can be
+   * The deciding fact for "Recreate": a place deleted on another device can be
    * rebuilt from the phone's own copy plus the pending edit, but only while
    * that copy is still here — the next delta pull applies the tombstone and
    * takes it. Resolved on the LIST so the verb is absent rather than failing
@@ -244,12 +244,12 @@ function isMergeablePair(shelved: unknown, server: unknown): boolean {
 /**
  * Whether one shelved value can be written back, and why not when it cannot.
  *
- * `unsupported` covers a field no local update op can carry (a trip's canyon
+ * `unsupported` covers a field no local update op can carry (a trip's place
  * links, whose column is built from resolved link names); `gone`, a row deleted
  * since — there is nothing left to restore it into.
  *
  * There is deliberately no `readOnly`: a shelf entry only exists because a push
- * was APPLIED (flush.ts), and `sync.ts` 404s an update to a canyon you do not
+ * was APPLIED (flush.ts), and `sync.ts` 404s an update to a place you do not
  * own. So a conflict receipt can only ever be about a row of the user's own,
  * and a block for "someone shared this with you" was unreachable code that only
  * hand-seeded rows could produce.
@@ -398,7 +398,7 @@ export async function discardParkedOp(seq: number): Promise<void> {
     // change, read what it would cost, and pressed a destructive confirm. The
     // confirm is where the cost is stated; see `discardExplanation`.
     // A create that never synced leaves an orphan optimistic mirror row — the
-    // pendingUpload tile in a media strip, the ghost canyon in a list. Guard on
+    // pendingUpload tile in a media strip, the ghost place in a list. Guard on
     // null: an entity with no id-keyed mirror row must SKIP this, not build
     // `DELETE FROM null` and roll the whole transaction back (which is how
     // "Discard" came to do nothing at all for a media op).
@@ -511,13 +511,17 @@ export async function retryWithoutFields(seq: number, drop: string[]): Promise<v
  * user's edits are still here — one tap re-creates the entity with a FRESH id
  * and then discards the dead op.
  *
- * TWO SOURCES, and the second is why canyons work at all. A waypoint's op
- * carries its whole payload, so the op alone rebuilds it. A canyon UPDATE
- * carries only what it dirtied — never coordinates, and a canyon without those
- * is not a canyon — so the rebuild reads the phone's own mirror row and lays
- * the pending edit over it. That copy is only here until the next delta pull
- * applies the tombstone, which is exactly what `hasLocalRow` reports and what
- * the screen gates the verb on.
+ * TWO SOURCES, and the second is why an UPDATE works at all. A CREATE op
+ * carries its whole payload, so the op alone rebuilds it. An UPDATE carries
+ * only what it dirtied — never coordinates, and a place without those is not a
+ * place — so the rebuild reads the phone's own mirror row and lays the pending
+ * edit over it. That copy is only here until the next delta pull applies the
+ * tombstone, which is exactly what `hasLocalRow` reports and what the screen
+ * gates the verb on.
+ *
+ * A LINK is not recreatable and deliberately so: it has no payload of its own,
+ * and both its endpoints may since have been deleted. It falls through to the
+ * discard below.
  */
 export async function recreateFromDeadRemote(seq: number): Promise<string | null> {
   const parked = await listParkedOps();
@@ -525,57 +529,42 @@ export async function recreateFromDeadRemote(seq: number): Promise<string | null
   const fields = op?.fields ?? {};
   if (!op) return null;
 
-  if (op.entity === "waypoint") {
-    // `Number(undefined)` used to put NaN in a NOT NULL REAL column: the insert
-    // threw, the op stayed parked, and Recreate was permanently broken for it
-    // until Discard. A rename-only edit has no position, so it falls through.
-    if (typeof fields.latitude === "number" && typeof fields.longitude === "number") {
-      const draft: WaypointDraft = {
-        name: typeof fields.name === "string" ? fields.name : "Recovered waypoint",
-        latitude: fields.latitude,
-        longitude: fields.longitude,
-        elevation: typeof fields.elevation === "number" ? fields.elevation : null,
-        symbol: typeof fields.symbol === "string" ? fields.symbol : null,
-        notes: typeof fields.notes === "string" ? fields.notes : null,
-        tags: Array.isArray(fields.tags)
-          ? fields.tags.filter((tag): tag is string => typeof tag === "string")
-          : [],
-        // Links are deliberately NOT carried over: the parked op names canyons
-        // that may since have been deleted or unshared, and a recreate that
-        // silently re-published a coordinate would be the worst possible time
-        // to guess. The user re-links from the sheet, seeing what they link to.
-        canyonIds: [],
-      };
-      const newId = await createWaypointLocal(draft);
-      await dropOp(seq);
-      return newId;
-    }
-  }
-
-  if (op.entity === "canyon") {
-    const existing = await getMirrorCanyon(op.entityId);
+  if (op.entity === "place") {
+    const existing = await getMirrorPlace(op.entityId);
     if (existing) {
       const merged = { ...existing, ...fields } as Record<string, unknown>;
       const pick = <T,>(key: string): T | null => (merged[key] ?? null) as T | null;
-      const newId = await createCanyonLocal({
-        name: typeof merged.name === "string" ? merged.name : "Recovered canyon",
-        latitude: Number(merged.latitude),
-        longitude: Number(merged.longitude),
+      // `Number(undefined)` would put NaN in a NOT NULL REAL column: the
+      // insert throws, the op stays parked, and Recreate is permanently broken
+      // for it until Discard. The mirror row supplies the coordinates, so this
+      // only bites if that row went too — in which case there is nothing to
+      // rebuild and the discard below is the honest answer.
+      const latitude = Number(merged.latitude);
+      const longitude = Number(merged.longitude);
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+        await discardParkedOp(seq);
+        return null;
+      }
+      const newId = await createPlaceLocal({
+        name: typeof merged.name === "string" ? merged.name : "Recovered place",
+        latitude,
+        longitude,
         altNames: Array.isArray(merged.altNames)
           ? merged.altNames.filter((alt): alt is string => typeof alt === "string")
           : [],
-        numAbseils: pick<number>("numAbseils"),
-        longestAbseil: pick<number>("longestAbseil"),
-        vGrade: pick<number>("vGrade"),
-        aGrade: pick<number>("aGrade"),
-        commitment: pick<number>("commitment"),
-        quality: pick<number>("quality"),
-        hours: pick<number>("hours"),
         notes: pick<string>("notes"),
-        attributes:
-          merged.attributes && typeof merged.attributes === "object"
-            ? (merged.attributes as Record<string, unknown>)
-            : {},
+        elevation:
+          typeof merged.elevation === "number" ? merged.elevation : null,
+        // The recovered copy keeps the type it had. Falling back to Canyon
+        // would file a recovered campsite under canyons — a recovery that
+        // quietly changes what the thing IS is worse than one that fails.
+        placeTypeId:
+          typeof merged.placeTypeId === "string" && merged.placeTypeId
+            ? merged.placeTypeId
+            : SYSTEM_PLACE_TYPE_IDS.canyon,
+        // Every field value in one go, including what used to be the seven
+        // grade columns.
+        fieldValues: asFieldValues(merged.fieldValues),
       });
       await dropOp(seq);
       return newId;

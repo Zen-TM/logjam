@@ -11,11 +11,11 @@ import {
   Box,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
-import { applyRopeWikiImport } from "../../canyonUtils";
+import { applyRopeWikiImport } from "../../placeUtils";
 import type {
   RopeWikiApplyDecision,
   RopeWikiCandidatePayload,
-} from "../../canyonUtils";
+} from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import { ErrorBanner } from "../feedback/ErrorBanner";
 import { useToast } from "../feedback/ToastProvider";
@@ -33,14 +33,14 @@ function toReviewItem(row: RopeWikiCandidatePayload): ReviewItem {
     topCandidate.distanceMeters <= 1000;
 
   const options = row.candidates.map((c, i) => ({
-    id: c.canyonId,
+    id: c.placeId,
     label: c.name,
     distanceMeters: c.distanceMeters,
     isGuess: i === 0 && topIsGuess,
   }));
 
   const decision: ReviewDecision = topIsGuess
-    ? { kind: "link" as const, id: topCandidate.canyonId }
+    ? { kind: "link" as const, id: topCandidate.placeId }
     : { kind: "create" as const };
 
   return {
@@ -48,7 +48,7 @@ function toReviewItem(row: RopeWikiCandidatePayload): ReviewItem {
     options,
     allowCreate: true,
     allowSkip: true,
-    allowNoCanyon: false,
+    allowNoPlace: false,
     decision,
   };
 }
@@ -64,12 +64,12 @@ function toApplyDecision(
       return {
         ropeWikiId: row.ropeWikiId,
         action: "link",
-        targetCanyonId: decision.id,
+        targetPlaceId: decision.id,
       };
     case "create":
       return { ropeWikiId: row.ropeWikiId, action: "create" };
     case "skip":
-    case "noCanyon":
+    case "noPlace":
       return { ropeWikiId: row.ropeWikiId, action: "skip" };
   }
 }
@@ -187,13 +187,13 @@ function RopeWikiReviewDialog({
         {autoParts.length > 0 && (
           <Typography className={classes.intro} sx={{ color: "var(--theme-text-muted)" }}>
             Already imported automatically: {autoParts.join(", ")}. The{" "}
-            {review.length} below looked like canyons you may already have —
+            {review.length} below looked like places you may already have —
             they were NOT imported yet.
           </Typography>
         )}
         <Typography className={classes.intro}>
-          These RopeWiki canyons may already exist in your collection. For each
-          one, pick whether to link it to an existing canyon, create it as new,
+          These RopeWiki places may already exist in your collection. For each
+          one, pick whether to link it to an existing place, create it as new,
           or skip it.
         </Typography>
         {error && (

@@ -2,7 +2,7 @@
  * GPX 1.1 and KML 2.2 serialisation for a RECORDED track.
  *
  * The counterpart to `vectorImport`'s GPX parsing: a track recorded in the app
- * is attached to a canyon or trip as a `application/gpx+xml` media item, which
+ * is attached to a place or trip as a `application/gpx+xml` media item, which
  * is the shape both clients already understand (`TRACK_MIME_TYPES`) and which
  * the web renders on the map. Writing GPX rather than inventing a wire format
  * also means the file the user syncs is one they can open anywhere.

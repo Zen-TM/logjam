@@ -134,7 +134,7 @@ describe("users routes (fake auth = alice)", () => {
     expect(res.status).toBe(200);
     expect(res.body.schemaVersion).toBe(2);
     expect(res.body.user.username).toBe("alice");
-    expect(Array.isArray(res.body.canyons)).toBe(true);
+    expect(Array.isArray(res.body.places)).toBe(true);
     expect(Array.isArray(res.body.tripLogs)).toBe(true);
     expect(Array.isArray(res.body.media)).toBe(true);
     for (const item of res.body.media) {

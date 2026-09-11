@@ -19,9 +19,9 @@
 import { deleteAsync } from "expo-file-system/legacy";
 import type { SharableEntityType } from "@logjam/shared";
 
-import { unshareCanyon } from "../api/friends";
+import { unsharePlace } from "../api/friends";
 import { unshareItem } from "../api/shares";
-import { applyTombstone, cascadeCanyonDelete } from "../sync/mirrorStore";
+import { applyTombstone, cascadePlaceDelete } from "../sync/mirrorStore";
 import { getSyncDb, notifyMirrorChanged, withSyncTransaction } from "../sync/syncDb";
 
 /** Cached blobs of rows we just dropped. Best-effort, outside the transaction —
@@ -33,17 +33,17 @@ async function unlinkAll(paths: string[]): Promise<void> {
 }
 
 /**
- * Stop seeing a canyon someone shared with you.
+ * Stop seeing a place someone shared with you.
  *
  * The cascade is the local half of `shareRevokeTombstones` (api/src/lib/
- * syncTombstones.ts): the canyon takes its canyon-level media and its linked
+ * syncTombstones.ts): the place takes its place-level media and its linked
  * route with it, because those were only ever visible through this share.
  */
-export async function removeSharedCanyon(canyonId: string): Promise<void> {
-  await unshareCanyon(canyonId, "me");
+export async function removeSharedPlace(placeId: string): Promise<void> {
+  await unsharePlace(placeId, "me");
   const db = await getSyncDb();
   const orphaned = await withSyncTransaction(db, () =>
-    cascadeCanyonDelete(db, canyonId),
+    cascadePlaceDelete(db, placeId),
   );
   notifyMirrorChanged();
   await unlinkAll(orphaned);
@@ -53,9 +53,9 @@ export async function removeSharedCanyon(canyonId: string): Promise<void> {
  * Stop seeing a waypoint, route, LiDAR topo or GeoPDF shared with you directly.
  *
  * Only ever called where `sharedRowVisibility` says "direct": a waypoint or
- * route that is on this phone because it is LINKED to a shared canyon has no
+ * route that is on this phone because it is LINKED to a shared place has no
  * share row of its own, and the server would answer 404. Those are removed by
- * removing the canyon, which is what the sheets point at instead.
+ * removing the place, which is what the sheets point at instead.
  *
  * Topo and GeoPDF jobs are not delta-synced entities, so there is nothing in
  * the mirror to drop — their lists refetch.
@@ -65,7 +65,7 @@ export async function removeSharedEntity(
   entityId: string,
 ): Promise<void> {
   await unshareItem(entityType, entityId, "me");
-  if (entityType !== "waypoint" && entityType !== "route") return;
+  if (entityType !== "route") return;
   const db = await getSyncDb();
   const orphaned = await withSyncTransaction(db, () =>
     applyTombstone(db, { type: entityType, id: entityId }),

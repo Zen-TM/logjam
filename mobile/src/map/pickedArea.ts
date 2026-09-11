@@ -1,12 +1,12 @@
 // The area the map picker handed back, waiting for the filter that asked for
 // it. `pickedPoint.ts`'s twin, and deliberately its twin rather than a
 // generalisation of it: one slot holding "a point OR a box" would let the
-// waypoint form read an answer meant for the canyon filter, and the two have
+// waypoint form read an answer meant for the place filter, and the two have
 // nothing in common but the hand-off shape.
 //
 // A module store rather than a navigation param, for the reason spelled out in
 // `pickedPoint.ts`: react-navigation serializes params into state that persists
-// and gets logged by devtools, and this box is a region of canyons — the same
+// and gets logged by devtools, and this box is a region of places — the same
 // class of value as the coordinate that store exists to keep out of there.
 //
 // TAKE, not read: consumed exactly once, by the screen that regains focus when
@@ -25,9 +25,9 @@ let start: RegionBbox | null = null;
  * Where the picker should OPEN — the area the filter already holds, if any.
  *
  * A module store rather than a navigation param, and here the rule bites harder
- * than it does for a picked point: `CanyonPickPoint` carries its start
+ * than it does for a picked point: `PlacePickPoint` carries its start
  * coordinate in params because that is a number the user typed and is looking
- * at, whereas this box is a region of canyons drawn on a map. Navigation state
+ * at, whereas this box is a region of places drawn on a map. Navigation state
  * persists and is dumped by devtools; a region of interest does not go in it.
  *
  * READ, not taken: the picker reads it while rendering, and honours it on its

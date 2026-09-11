@@ -5,7 +5,7 @@
 //     rendered projected map, including rotated grid-north-up sheets);
 //   • GEOGCS → EPSG:3857 (exact for Logjam exports, whose page raster is an
 //     affine image of Web Mercator; bow error for hypothetical plate-carrée
-//     files is sub-line-width at canyon scale).
+//     files is sub-line-width at place scale).
 // Fit a least-squares affine on the control points; if n = 4 and the residual
 // exceeds 0.1 % of the map width, fall back to an exact projective homography.
 import proj4 from "proj4";

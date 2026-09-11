@@ -187,7 +187,7 @@ describe("backing a finished recording up", () => {
   });
 });
 
-// The rule this file exists for: someone who has just walked a canyon must not
+// The rule this file exists for: someone who has just walked a place must not
 // lose their track because an upload could not be queued.
 describe("a failure leaves the recording alone", () => {
   it("keeps the track row untouched and deletes the orphaned GPX", async () => {

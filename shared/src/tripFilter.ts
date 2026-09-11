@@ -1,7 +1,7 @@
 /**
  * Trip-log list filtering — the single derivation shared by the web Trip Logs
  * panel and the mobile Logs screen. Both offer the same four axes (free-text
- * over canyon/trip name, an inclusive from/to date range, and a trip type), so
+ * over place/trip name, an inclusive from/to date range, and a trip type), so
  * the predicate lives here rather than being written twice with subtly
  * different edge cases.
  *
@@ -16,7 +16,7 @@
 export const NO_TYPE_FILTER_VALUE = "__no_type__";
 
 export type TripFilterCriteria = {
-  /** Matches canyon names or the trip's own display name, case-insensitively. */
+  /** Matches place names or the trip's own display name, case-insensitively. */
   search?: string;
   /** Inclusive lower bound, "YYYY-MM-DD". */
   dateFrom?: string;
@@ -32,7 +32,7 @@ export type FilterableTrip = {
   date: string;
   displayName: string | null;
   types: string[];
-  canyons: { name: string }[];
+  places: { name: string }[];
 };
 
 export function tripMatchesFilter(
@@ -42,7 +42,7 @@ export function tripMatchesFilter(
   const search = criteria.search?.trim().toLowerCase();
   if (search) {
     const matches =
-      trip.canyons.some((canyon) => canyon.name.toLowerCase().includes(search)) ||
+      trip.places.some((place) => place.name.toLowerCase().includes(search)) ||
       (trip.displayName?.toLowerCase().includes(search) ?? false);
     if (!matches) return false;
   }

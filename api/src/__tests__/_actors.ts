@@ -8,6 +8,8 @@
 // api/src/middleware/auth.ts) so a single test process can act as any seeded
 // user per request. Spread `as(SUB)` onto a supertest `.set(...)`.
 
+import { SYSTEM_PLACE_TYPE_IDS } from "@logjam/shared";
+
 export const API_URL = process.env.API_URL ?? "http://localhost:8080";
 
 // Cognito subs of the seeded fake users (api/prisma/seed.ts).
@@ -21,16 +23,45 @@ export const ALICE_ID = "00000000-0000-4000-8000-000000000001";
 export const BOB_ID = "00000000-0000-4000-8000-000000000002";
 export const CAROL_ID = "00000000-0000-4000-8000-000000000003";
 
-// Seed canyon IDs (all alice-owned). Canyons 0 and 1 are shared with bob;
+// Seed place IDs (all alice-owned). Places 0 and 1 are shared with bob;
 // carol is shared nothing (the stranger).
-export const SHARED_CANYON_ID = "10000000-0000-4000-8000-000000000001";
+export const SHARED_PLACE_ID = "10000000-0000-4000-8000-000000000001";
+
+// What bob shares WITH alice — bob's "Coin Slot" place. Named
+// here rather than assumed absent: the seed grew an incoming share for alice
+// (so the phone's sharee-perspective surfaces are reachable in dev) and three
+// tests in friendShares.test.ts were asserting her received list was EMPTY.
+// They passed for as long as the seed had no incoming shares, and the header
+// comment stating that baseline was the only thing linking the two — which is
+// how a seed change broke a suite that is not in CI. Assert against these
+// instead of against `[]`, so the next seed change fails loudly here.
+export const BOB_SHARED_PLACE_ID = "20000000-0000-4000-8000-000000000002";
+/** Bob's own Marker place, shared with nobody — the seed's "6" space is the
+ *  old waypoint space, preserved by the phase 1c migration. */
+export const BOB_MARKER_PLACE_ID = "60000000-0000-4000-8000-000000000005";
+/** Bob's route, DIRECTLY shared with alice — the incoming half of the seed's
+ *  sharing, and the only thing in alice's received `Share` list. */
+export const BOB_SHARED_ROUTE_ID = "70000000-0000-4000-8000-000000000003";
+
+// The system Canyon type. Every fixture that creates a place names a type,
+// because the API refuses one without — deliberately: a silent default would
+// file a campsite under canyons, where the user would never look for it, and
+// the request would look like it had worked.
+//
+// Re-exported from the shared declaration rather than restated as a literal,
+// so a change to the pinned id cannot leave the suite creating places of a
+// type that does not exist.
+export { SYSTEM_PLACE_TYPE_IDS } from "@logjam/shared";
+export const CANYON_TYPE_ID = SYSTEM_PLACE_TYPE_IDS.canyon;
+/** The system Marker type — what a waypoint became in the phase 1c fold. */
+export const MARKER_TYPE_ID = SYSTEM_PLACE_TYPE_IDS.marker;
 
 // Well-formed UUIDv4 that no seeded row uses — the "unknown id" probe, so a
 // 404 assertion is testing not-found and not id-format rejection.
 export const NONEXISTENT_ID = "99999999-9999-4999-8999-999999999999";
 
 // Header bundle authenticating the request as `sub`. Usage:
-//   request(API_URL).get("/canyons").set(as(BOB_SUB))
+//   request(API_URL).get("/places").set(as(BOB_SUB))
 export function as(sub: string): Record<string, string> {
   return { Authorization: "Bearer fake-token", "x-fake-sub": sub };
 }

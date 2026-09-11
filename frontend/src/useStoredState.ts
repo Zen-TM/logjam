@@ -12,7 +12,7 @@ import { useState, useEffect, type Dispatch, type SetStateAction } from "react";
  * - `sessionStorage` — an **ephemeral filter**. Something that must survive a
  *   remount (sidebar panels unmount on close) or a tab switch, but must NOT
  *   greet the user weeks later: search boxes, date ranges. A month-old filter
- *   reads as "my canyons are missing", not as a favour (UX finding 5).
+ *   reads as "my places are missing", not as a favour (UX finding 5).
  *
  * Storage is resolved lazily inside the try/catch blocks so an environment
  * without web storage (SSR, hardened private mode) lands in the existing catch

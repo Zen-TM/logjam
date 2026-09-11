@@ -16,7 +16,7 @@ Exact sizing, spacing, opacity and animation values live in `NavRail.module.css`
 
 Clicking the active NavRail icon **closes** the panel (`activePanel → null`).
 Clicking a different icon **switches** to that panel.
-`canyon-detail` can also be opened programmatically.
+`place-detail` can also be opened programmatically.
 
 ## Conventions log (additive)
 

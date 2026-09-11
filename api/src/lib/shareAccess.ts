@@ -1,12 +1,12 @@
 // Single source of the DIRECT-share access decision, and the sibling of
-// canyonAccess.ts. Read that file first — the 404-not-403 anti-oracle rule and
+// placeAccess.ts. Read that file first — the 404-not-403 anti-oracle rule and
 // the reasoning behind it are stated there and are identical here.
 //
 // The problem this file exists to solve: after direct sharing, a waypoint or
 // route can be visible to a user for TWO unrelated reasons —
 //
-//   1. it is LINKED to a canyon that is shared with them (the pre-existing
-//      rule: routes/waypoints inherit canyon-level visibility), or
+//   1. it is LINKED to a place that is shared with them (the pre-existing
+//      rule: routes/waypoints inherit place-level visibility), or
 //   2. it is shared with them DIRECTLY (a Share row).
 //
 // Any endpoint that answers half of that question answers it wrong. SEC-001
@@ -29,14 +29,13 @@ import { directShareRevokeTombstones, writeTombstones } from "./syncTombstones";
 
 /**
  * "owner"  → full access, including edit/delete/share.
- * "shared" → read (and export) only, whether reached directly or via a canyon.
+ * "shared" → read (and export) only, whether reached directly or via a place.
  * "none"   → no access; callers must render this as 404.
  */
 export type ShareRole = "owner" | "shared" | "none";
 
 /** Per-type "not found" text. Deliberately the same string a real miss gets. */
 const NOT_FOUND_MESSAGE: Record<SharableEntityType, string> = {
-  waypoint: "Waypoint not found",
   route: "Route not found",
   topoJob: "Topo job not found",
   geoPdfJob: "GeoPDF job not found",
@@ -45,7 +44,7 @@ const NOT_FOUND_MESSAGE: Record<SharableEntityType, string> = {
 /**
  * Does a direct Share row grant this user access to this entity?
  *
- * Split out so the canyon-inheritance branches below read as "direct OR
+ * Split out so the place-inheritance branches below read as "direct OR
  * inherited" rather than burying the direct check inside each one.
  */
 async function hasDirectShare(
@@ -67,75 +66,60 @@ async function hasDirectShare(
 }
 
 /**
- * A waypoint's role: owner, or shared either directly or through ANY canyon it
- * is linked to that the user can see.
- *
- * The canyon arm mirrors the delta-sync visibility rule in routes/sync.ts — a
- * waypoint linked to a shared canyon is part of that shared record. Both arms
- * live here so the two can never disagree.
- */
-export async function getWaypointRole(
-  userId: string,
-  waypoint: { id: string; ownerId: string },
-): Promise<ShareRole> {
-  if (waypoint.ownerId === userId) return "owner";
-  if (await hasDirectShare(userId, "waypoint", waypoint.id)) return "shared";
-  return (await hasCanyonInheritedAccess(userId, "waypoint", waypoint.id))
-    ? "shared"
-    : "none";
-}
-
-/**
- * A route's role: owner, or shared either directly or through the canyon it is
- * linked to (Route.canyonId is a single nullable slot, so there is at most one
- * canyon to check).
+ * A route's role: owner, or shared either directly or through the place it is
+ * linked to (Route.placeId is a single nullable slot, so there is at most one
+ * place to check).
  */
 export async function getRouteRole(
   userId: string,
-  route: { id: string; ownerId: string; canyonId: string | null },
+  route: { id: string; ownerId: string; placeId: string | null },
 ): Promise<ShareRole> {
   if (route.ownerId === userId) return "owner";
   if (await hasDirectShare(userId, "route", route.id)) return "shared";
-  return (await hasCanyonInheritedAccess(userId, "route", route.id))
+  return (await hasPlaceInheritedAccess(userId, "route", route.id))
     ? "shared"
     : "none";
 }
 
 /**
- * Whether `userId` still sees a synced entity through canyon inheritance,
- * INDEPENDENT of any direct Share row. A waypoint or route can be visible for
- * two reasons — a direct share OR a link to a canyon shared with the user — and
- * revoking the direct share must not tombstone a user who keeps the canyon arm.
- * This is the single source of that arm, so the role helpers above and the
- * revoke path can never disagree on it.
+ * Whether `userId` still sees a ROUTE through place inheritance, INDEPENDENT of
+ * any direct Share row. A route can be visible for two reasons — a direct share
+ * OR a link to a place shared with the user — and revoking the direct share
+ * must not tombstone a user who keeps the place arm. This is the single source
+ * of that arm, so the role helper above and the revoke path cannot disagree.
+ *
+ * THE WAYPOINT ARM IS GONE, and the distinction is worth stating because
+ * getting it backwards silently strips routes from every shared place:
+ *
+ *   - A waypoint used to inherit visibility through the canyons it was LINKED
+ *     to, reachable through two of them at once, which is what made revocation
+ *     a 219-line problem (lib/waypointLink.ts, now deleted). A waypoint is a
+ *     place now and a PlaceLink grants NO visibility, so there is nothing to
+ *     inherit and nothing to revoke.
+ *   - A route reaches a sharee through `Route.placeId`, a FOREIGN KEY, not a
+ *     link. That is deliberate: the route is part of the shared record
+ *     (routes/places.ts states it), and it survives this rework unchanged.
+ *
+ * "A link grants no visibility" is a rule about LINKS. It is not a rule about
+ * foreign keys.
  */
-export async function hasCanyonInheritedAccess(
+export async function hasPlaceInheritedAccess(
   userId: string,
-  entityType: "waypoint" | "route",
+  entityType: "route",
   entityId: string,
 ): Promise<boolean> {
-  if (entityType === "waypoint") {
-    const viaCanyon = await prisma.canyonWaypoint.findFirst({
-      where: {
-        waypointId: entityId,
-        canyon: { shares: { some: { sharedWithId: userId } } },
-      },
-      select: { waypointId: true },
-    });
-    return viaCanyon != null;
-  }
-  const viaCanyon = await prisma.route.findFirst({
+  const viaPlace = await prisma.route.findFirst({
     where: {
       id: entityId,
-      canyon: { shares: { some: { sharedWithId: userId } } },
+      place: { shares: { some: { sharedWithId: userId } } },
     },
     select: { id: true },
   });
-  return viaCanyon != null;
+  return viaPlace != null;
 }
 
 /**
- * A topo or GeoPDF job's role. These have no canyon link and never had any
+ * A topo or GeoPDF job's role. These have no place link and never had any
  * visibility rule before direct sharing, so a Share row is the whole answer.
  */
 export async function getJobRole(
@@ -161,7 +145,7 @@ export function requireShareAccess(
 
 /**
  * Assert ownership, for the owner-only actions (edit, delete, share, list
- * recipients). Role-aware denial, exactly as requireCanyonOwnerAccess:
+ * recipients). Role-aware denial, exactly as requirePlaceOwnerAccess:
  *   none   → 404 (the caller cannot see this at all)
  *   shared → 403 (the caller sees it, but this action is not theirs)
  */
@@ -190,19 +174,10 @@ export async function loadEntityRole(
   entityId: string,
 ): Promise<{ ownerId: string; role: ShareRole } | null> {
   switch (entityType) {
-    case "waypoint": {
-      const row = await prisma.waypoint.findUnique({
-        where: { id: entityId },
-        select: { id: true, ownerId: true },
-      });
-      return row
-        ? { ownerId: row.ownerId, role: await getWaypointRole(userId, row) }
-        : null;
-    }
     case "route": {
       const row = await prisma.route.findUnique({
         where: { id: entityId },
-        select: { id: true, ownerId: true, canyonId: true },
+        select: { id: true, ownerId: true, placeId: true },
       });
       return row
         ? { ownerId: row.ownerId, role: await getRouteRole(userId, row) }
@@ -272,10 +247,10 @@ export async function deleteSharesFor(
 }
 
 /**
- * Revoke every non-canyon share between two users, in BOTH directions, inside
+ * Revoke every non-place share between two users, in BOTH directions, inside
  * the caller's transaction. The unfriend leg of the share lifecycle (APIR-007):
  * shares can only be CREATED between friends, so removing the friendship must
- * take them all back — canyon shares are revoked by the caller, this is the
+ * take them all back — place shares are revoked by the caller, this is the
  * rest.
  *
  * Two different promises, so two different rules:
@@ -288,9 +263,9 @@ export async function deleteSharesFor(
  *     sweep — deliberately no second delete path here.
  *
  * Tombstones are unconditional for the two synced entity types, with no
- * `hasCanyonInheritedAccess` check (unlike the single revoke in routes/
- * shares.ts): the caller deletes every canyon share between the pair in the
- * same transaction, and only an entity's owner can share their own canyon, so
+ * `hasPlaceInheritedAccess` check (unlike the single revoke in routes/
+ * shares.ts): the caller deletes every place share between the pair in the
+ * same transaction, and only an entity's owner can share their own place, so
  * no surviving path exists. A row duplicated with the caller's
  * visibility-loss fan-out is harmless — a tombstone is an idempotent
  * "forget this id".
@@ -313,7 +288,7 @@ export async function revokeAllSharesBetween(
     await writeTombstones(
       tx,
       shares.flatMap((share) =>
-        share.entityType === "waypoint" || share.entityType === "route"
+        share.entityType === "route"
           ? directShareRevokeTombstones({
               entityType: share.entityType,
               entityId: share.entityId,
@@ -366,7 +341,7 @@ export async function revokeAllSharesBetween(
  *
  * The list/delta queries need the direct-share arm as a set of ids because
  * Share.entityId is polymorphic — there is no foreign key, so Prisma cannot
- * express it as a relation filter the way `canyon: { shares: { some } }` does.
+ * express it as a relation filter the way `place: { shares: { some } }` does.
  * One helper rather than the same findMany inlined at five call sites, so the
  * membership rule stays in the file that owns the access decision.
  *
@@ -441,11 +416,11 @@ export async function shareCountsFor(
 
 /**
  * Which of these entity ids the user OWNS, for one entity type — the batch form
- * of the owner arm of `getWaypointRole` / `getRouteRole` / `getJobRole`, for the
+ * of the owner arm of `getRouteRole` / `getJobRole`, for the
  * bulk-share endpoint.
  *
  * Here rather than in the caller for the reason the whole file exists: which
- * column holds the owner (`Waypoint.ownerId` vs `TopoJob.userId`) is answered
+ * column holds the owner (`Route.ownerId` vs `TopoJob.userId`) is answered
  * once, and a bulk path that re-derived it would be the second source SEC-001
  * was about.
  *
@@ -462,24 +437,19 @@ export async function filterOwnedEntityIds(
   const where = { id: { in: entityIds } };
   const select = { id: true };
   const rows =
-    entityType === "waypoint"
-      ? await prisma.waypoint.findMany({
+    entityType === "route"
+      ? await prisma.route.findMany({
           where: { ...where, ownerId: userId },
           select,
         })
-      : entityType === "route"
-        ? await prisma.route.findMany({
-            where: { ...where, ownerId: userId },
+      : entityType === "topoJob"
+        ? await prisma.topoJob.findMany({
+            where: { ...where, userId },
             select,
           })
-        : entityType === "topoJob"
-          ? await prisma.topoJob.findMany({
-              where: { ...where, userId },
-              select,
-            })
-          : await prisma.geoPdfJob.findMany({
-              where: { ...where, userId },
-              select,
-            });
+        : await prisma.geoPdfJob.findMany({
+            where: { ...where, userId },
+            select,
+          });
   return new Set(rows.map((row) => row.id));
 }

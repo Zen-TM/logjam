@@ -6,17 +6,14 @@ import {
   isThemeSchemeId,
   normalizeUserUiPreferences,
   normalizeImportMergePolicy,
-  isTripLogCustomFieldDef,
   isNotificationPreferences,
-  type TripLogCustomFieldDef,
 } from "@logjam/shared";
 import {
   defsForUserResponse,
-  replaceFieldDefs,
 } from "../lib/customFieldDefs";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
-import { canyonIdOfMedia } from "../lib/mediaLink";
+import { placeIdOfMedia } from "../lib/mediaLink";
 import { AppError } from "../middleware/errorHandler";
 import { resolveUser } from "../lib/resolveUser";
 import { userPatchLimiter } from "../middleware/rateLimit";
@@ -28,7 +25,6 @@ import { getEnv } from "../lib/env";
 import { deleteS3Keys, deleteS3Prefix } from "../lib/s3Cleanup";
 import { logger, safeErrorForLog } from "../lib/logger";
 import { accountDeleteTombstones } from "../lib/syncTombstones";
-import { snapshotWaypointVisibility } from "../lib/waypointLink";
 
 const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
 const TOPO_BUCKET = getEnv().S3_BUCKET_TOPO ?? "";
@@ -146,7 +142,7 @@ const usernameSchema = z
 
 const router = Router();
 
-// `uiPreferences.tripLogCustomFields` / `.canyonCustomFields` are a PROJECTION,
+// `uiPreferences.tripLogCustomFields` / `.placeCustomFields` are a PROJECTION,
 // not storage: the definitions live in `custom_field_defs` and are read back
 // onto the response under the two key names the web and mobile already consume
 // (`customFieldDefsOf`, `App.tsx`). Keeping the response shape meant not
@@ -299,16 +295,40 @@ router.patch(
   userPatchLimiter,
   async (req: AuthenticatedRequest, res: Response) => {
     const { sub } = req.user!;
-    const { username, themeSchemeId, tripLogCustomFields, canyonCustomFields, notifications, autoDownloadGeoPdfs, importMergePolicy, consentVersion } = req.body as {
+    // `tripLogCustomFields` / `placeCustomFields` USED TO BE ACCEPTED HERE, as
+    // a whole list reconciled by `replaceFieldDefs`. Both are gone, and the
+    // deletion is deliberate rather than a tidy-up — the whole-list shape
+    // cannot express what a definition now is:
+    //
+    //  * It carried `{key,label,type,min,max}` and nothing else, so every save
+    //    from a dialog that round-tripped the list would have wiped
+    //    `placeTypeIds` and `appliesToAllTypes` on every definition — silently,
+    //    because the payload simply did not mention them.
+    //  * It matched `existing` scoped to `ownerId: userId`, so the SYSTEM
+    //    definitions (ownerId null) fell through to the create branch and the
+    //    user acquired a private duplicate of every built-in field, colliding
+    //    with the real one under the same key.
+    //
+    // Definitions have been rows since the custom_field_defs table landed; the
+    // row-grain endpoints in routes/customFields.ts and the sync push op are
+    // the write paths. A client sending the old key gets a 400 naming the
+    // replacement rather than a silent no-op.
+    const { username, themeSchemeId, notifications, autoDownloadGeoPdfs, importMergePolicy, consentVersion } = req.body as {
       username?: unknown;
       themeSchemeId?: unknown;
-      tripLogCustomFields?: unknown;
-      canyonCustomFields?: unknown;
       notifications?: unknown;
       autoDownloadGeoPdfs?: unknown;
       importMergePolicy?: unknown;
       consentVersion?: unknown;
     };
+    for (const legacy of ["tripLogCustomFields", "placeCustomFields"] as const) {
+      if ((req.body as Record<string, unknown>)[legacy] !== undefined) {
+        throw new AppError(
+          400,
+          `${legacy} is no longer accepted here — use /custom-fields/:entity.`,
+        );
+      }
+    }
 
     const user = await resolveUser(sub);
 
@@ -343,30 +363,12 @@ router.patch(
 
     if (
       themeSchemeId !== undefined ||
-      tripLogCustomFields !== undefined ||
-      canyonCustomFields !== undefined ||
       notifications !== undefined ||
       autoDownloadGeoPdfs !== undefined ||
       importMergePolicy !== undefined
     ) {
       if (themeSchemeId !== undefined && !isThemeSchemeId(themeSchemeId)) {
         throw new AppError(400, "Invalid themeSchemeId");
-      }
-      if (tripLogCustomFields !== undefined) {
-        if (
-          !Array.isArray(tripLogCustomFields) ||
-          !tripLogCustomFields.every(isTripLogCustomFieldDef)
-        ) {
-          throw new AppError(400, "Invalid tripLogCustomFields");
-        }
-      }
-      if (canyonCustomFields !== undefined) {
-        if (
-          !Array.isArray(canyonCustomFields) ||
-          !canyonCustomFields.every(isTripLogCustomFieldDef)
-        ) {
-          throw new AppError(400, "Invalid canyonCustomFields");
-        }
       }
       if (notifications !== undefined && !isNotificationPreferences(notifications)) {
         throw new AppError(400, "Invalid notifications");
@@ -381,35 +383,13 @@ router.patch(
         }
       }
 
-      // Custom field definitions are NOT part of the preferences blob any more
-      // — they are rows. The two keys stay accepted here because that is how
-      // every dialog in the web app writes them (a whole list at a time), and
-      // `replaceFieldDefs` reconciles the list into row creates/updates/deletes,
-      // carrying the value strip a dropped field needs. They are deliberately
-      // absent from `updates.uiPreferences` below: a copy left in the blob
-      // would be a second source of the same list.
-      if (tripLogCustomFields !== undefined) {
-        await replaceFieldDefs(
-          user.id,
-          "tripLog",
-          tripLogCustomFields as TripLogCustomFieldDef[],
-        );
-      }
-      if (canyonCustomFields !== undefined) {
-        await replaceFieldDefs(
-          user.id,
-          "canyon",
-          canyonCustomFields as TripLogCustomFieldDef[],
-        );
-      }
-
       const current = normalizeUserUiPreferences(user.uiPreferences);
       updates.uiPreferences = {
         ...current,
         // The projection this object was built from carries the two custom
         // field keys; drop them so they are never written back to storage.
         tripLogCustomFields: undefined,
-        canyonCustomFields: undefined,
+        placeCustomFields: undefined,
         ...(themeSchemeId !== undefined ? { themeSchemeId } : {}),
         ...(notifications !== undefined
           ? { notifications: { ...current.notifications, ...(notifications as Record<string, boolean>) } }
@@ -457,7 +437,7 @@ router.get(
     const user = await resolveUser(sub);
 
     const [
-      canyons,
+      places,
       tripLogs,
       geoPdfTemplates,
       sharesGiven,
@@ -468,14 +448,14 @@ router.get(
       topoTemplates,
       notifications,
     ] = await Promise.all([
-      prisma.canyon.findMany({ where: { ownerId: user.id } }),
+      prisma.place.findMany({ where: { ownerId: user.id } }),
       prisma.tripLog.findMany({ where: { userId: user.id } }),
       prisma.geoPdfTemplate.findMany({ where: { userId: user.id } }),
-      prisma.canyonShare.findMany({
+      prisma.placeShare.findMany({
         where: { sharedById: user.id },
         include: { sharedWith: { select: { id: true, username: true } } },
       }),
-      prisma.canyonShare.findMany({
+      prisma.placeShare.findMany({
         where: { sharedWithId: user.id },
         include: { sharedBy: { select: { id: true, username: true } } },
       }),
@@ -495,7 +475,7 @@ router.get(
       // v2: adds topoJobs, topoExportJobs, topoTemplates, notifications.
       schemaVersion: 2,
       user: await serializeUserForResponse(user),
-      canyons,
+      places,
       tripLogs,
       geoPdfTemplates,
       sharesGiven,
@@ -539,13 +519,12 @@ router.delete(
       topoExportJobs,
       geoPdfJobs,
       media,
-      ownedCanyons,
+      ownedPlaces,
       friendships,
       sharesOut,
       sharesIn,
       directSharesOut,
-      ownedWaypoints,
-      canyonLinkedRoutes,
+      placeLinkedRoutes,
     ] = await Promise.all([
       prisma.topoJob.findMany({ where: { userId: user.id }, select: { id: true } }),
       prisma.topoExportJob.findMany({
@@ -554,7 +533,7 @@ router.delete(
       }),
       prisma.geoPdfJob.findMany({ where: { userId: user.id }, select: { id: true } }),
       // linkedType/linkedId feed the sync-tombstone fan-out below (which
-      // canyon each media row belonged to).
+      // place each media row belonged to).
       prisma.media.findMany({
         where: { ownerId: user.id },
         select: {
@@ -565,11 +544,11 @@ router.delete(
           s3KeyThumbnail: true,
         },
       }),
-      // Canyon IDs and friendship IDs are needed to purge cross-user
+      // Place IDs and friendship IDs are needed to purge cross-user
       // notifications that reference this user's data (PRIV-003); the party
       // ids feed the sync-tombstone fan-out (counterparts must forget the
       // friendship edge).
-      prisma.canyon.findMany({
+      prisma.place.findMany({
         where: { ownerId: user.id },
         select: { id: true },
       }),
@@ -579,49 +558,44 @@ router.delete(
         },
         select: { id: true, requesterId: true, addresseeId: true },
       }),
-      // Shares of canyons this user OWNS: each sharee's mirror must forget the
-      // canyon + its canyon-level media (sync tombstones).
-      prisma.canyonShare.findMany({
-        where: { canyon: { ownerId: user.id } },
-        select: { canyonId: true, sharedWithId: true },
+      // Shares of places this user OWNS: each sharee's mirror must forget the
+      // place + its place-level media (sync tombstones).
+      prisma.placeShare.findMany({
+        where: { place: { ownerId: user.id } },
+        select: { placeId: true, sharedWithId: true },
       }),
-      // Shares this user RECEIVED: the canyon owner's mirror must forget the
+      // Shares this user RECEIVED: the place owner's mirror must forget the
       // share row.
-      prisma.canyonShare.findMany({
+      prisma.placeShare.findMany({
         where: { sharedWithId: user.id },
         select: { id: true, sharedById: true },
       }),
       // Direct shares of synced entities this user OWNS. The account delete is
       // a delete site like any other, so each recipient's mirror must forget
-      // the waypoint/route (the Share row itself cascades away with the user,
-      // but a cascade writes no tombstone). Jobs are excluded: they are not
-      // synced entities, so there is no mirror row to revoke.
+      // the route (the Share row itself cascades away with the user, but a
+      // cascade writes no tombstone). Jobs are excluded: they are not synced
+      // entities, so there is no mirror row to revoke.
       prisma.share.findMany({
-        where: {
-          sharedById: user.id,
-          entityType: { in: ["waypoint", "route"] },
-        },
+        where: { sharedById: user.id, entityType: "route" },
         select: { entityType: true, entityId: true, sharedWithId: true },
       }),
-      // Waypoints and routes are hard-deleted below, and a canyon sharee could
-      // see them through the canyon link (they follow canyon-level media
-      // visibility). The canyon tombstone does NOT imply them — the
-      // single-canyon delete path fans them out explicitly — so they need
-      // their own rows or the sharee's mirror keeps the coordinates forever.
-      prisma.waypoint.findMany({
-        where: { ownerId: user.id },
-        select: { id: true },
-      }),
+      // Routes are hard-deleted below and a place sharee could see them
+      // through `Route.placeId`. The place tombstone does NOT imply them — the
+      // single-place delete path fans them out explicitly — so they need their
+      // own rows or the sharee's mirror keeps the geometry forever.
+      //
+      // PlaceLinks need no equivalent: they are owner-private, and the owner is
+      // the account going away.
       prisma.route.findMany({
-        where: { ownerId: user.id, canyonId: { not: null } },
+        where: { ownerId: user.id, placeId: { not: null } },
         select: {
           id: true,
-          canyon: { select: { shares: { select: { sharedWithId: true } } } },
+          place: { select: { shares: { select: { sharedWithId: true } } } },
         },
       }),
     ]);
 
-    const ownedCanyonIds = ownedCanyons.map((c) => c.id);
+    const ownedPlaceIds = ownedPlaces.map((c) => c.id);
     const friendshipIds = friendships.map((f) => f.id);
 
     const mediaKeys = media.flatMap((m) =>
@@ -671,56 +645,33 @@ router.delete(
     // own tombstones are pointless (the cascade wipes their account, and
     // SyncTombstone.userId cascades too), so every row here targets a
     // counterpart. Ids only — never names/coords.
-    const mediaIdsByCanyon = new Map<string, string[]>();
+    const mediaIdsByPlace = new Map<string, string[]>();
     for (const m of media) {
-      const canyonId = canyonIdOfMedia(m);
-      if (canyonId === null) continue;
-      const list = mediaIdsByCanyon.get(canyonId) ?? [];
+      const placeId = placeIdOfMedia(m);
+      if (placeId === null) continue;
+      const list = mediaIdsByPlace.get(placeId) ?? [];
       list.push(m.id);
-      mediaIdsByCanyon.set(canyonId, list);
+      mediaIdsByPlace.set(placeId, list);
     }
-    // Who can currently see each owned waypoint through a canyon share. Reuses
-    // the one helper that answers that question (lib/waypointLink.ts) rather
-    // than re-deriving the canyonWaypoint → canyon.shares join here; no
-    // post-delete diff is needed because the waypoints themselves are going.
-    const waypointViewers = await snapshotWaypointVisibility(
-      prisma,
-      ownedWaypoints.map((w) => w.id),
-    );
-    const canyonInheritedOut = [
-      ...[...waypointViewers].flatMap(([waypointId, viewers]) =>
-        viewers.size > 0
-          ? [
-              {
-                entityType: "waypoint" as const,
-                entityId: waypointId,
-                userIds: [...viewers],
-              },
-            ]
-          : [],
-      ),
-      ...canyonLinkedRoutes.flatMap((route) => {
-        const userIds = (route.canyon?.shares ?? []).map((s) => s.sharedWithId);
-        return userIds.length > 0
-          ? [{ entityType: "route" as const, entityId: route.id, userIds }]
-          : [];
-      }),
-    ];
+    const placeInheritedOut = placeLinkedRoutes.flatMap((route) => {
+      const userIds = (route.place?.shares ?? []).map((s) => s.sharedWithId);
+      return userIds.length > 0
+        ? [{ entityType: "route" as const, entityId: route.id, userIds }]
+        : [];
+    });
 
     const accountTombstones = accountDeleteTombstones({
       userId: user.id,
-      canyonInheritedOut,
-      mediaIdsByCanyon,
-      canyonSharesOut: sharesOut,
-      canyonSharesIn: sharesIn,
+      placeInheritedOut,
+      mediaIdsByPlace,
+      placeSharesOut: sharesOut,
+      placeSharesIn: sharesIn,
       friendships,
       // Share.entityType is a plain string column; the query above already
-      // restricted it to the two synced types, so this narrows rather than
+      // restricted it to the one synced type, so this narrows rather than
       // widens.
       directSharesOut: directSharesOut.flatMap((share) =>
-        share.entityType === "waypoint" || share.entityType === "route"
-          ? [{ ...share, entityType: share.entityType }]
-          : [],
+        share.entityType === "route" ? [{ ...share, entityType: share.entityType }] : [],
       ),
     });
 
@@ -733,17 +684,17 @@ router.delete(
       prisma.syncTombstone.deleteMany({ where: { userId: user.id } }),
       prisma.notification.deleteMany({ where: { userId: user.id } }),
       // Purge notifications held by OTHER users that reference this user's data
-      // (PRIV-003): canyon_shared rows pointing at any of the deleted user's
-      // canyons, and friend_request(_accepted) rows pointing at any friendship
-      // this user was party to. The cascade removes the canyons/shares/
+      // (PRIV-003): place_shared rows pointing at any of the deleted user's
+      // places, and friend_request(_accepted) rows pointing at any friendship
+      // this user was party to. The cascade removes the places/shares/
       // friendships but not the recipient's denormalised notification rows.
-      ...(ownedCanyonIds.length > 0
+      ...(ownedPlaceIds.length > 0
         ? [
             prisma.notification.deleteMany({
               where: {
-                type: "canyon_shared",
-                OR: ownedCanyonIds.map((canyonId) => ({
-                  payload: { path: ["canyonId"], equals: canyonId },
+                type: "place_shared",
+                OR: ownedPlaceIds.map((placeId) => ({
+                  payload: { path: ["placeId"], equals: placeId },
                 })),
               },
             }),
@@ -761,7 +712,7 @@ router.delete(
             }),
           ]
         : []),
-      prisma.canyonShare.deleteMany({
+      prisma.placeShare.deleteMany({
         where: { OR: [{ sharedById: user.id }, { sharedWithId: user.id }] },
       }),
       prisma.friendship.deleteMany({
@@ -772,23 +723,24 @@ router.delete(
       prisma.geoPdfJob.deleteMany({ where: { userId: user.id } }),
       prisma.fileSend.deleteMany({ where: { senderId: user.id } }),
       prisma.media.deleteMany({ where: { ownerId: user.id } }),
-      // Explicit even though TripLogCanyon.tripLogId cascades on TripLog
+      // Explicit even though TripLogPlace.tripLogId cascades on TripLog
       // delete — ARCH-001 convention: never rely solely on an implicit
       // cascade for the account-delete purge list.
-      prisma.tripLogCanyon.deleteMany({
+      prisma.tripLogPlace.deleteMany({
         where: { tripLog: { userId: user.id } },
       }),
       prisma.tripLog.deleteMany({ where: { userId: user.id } }),
-      prisma.canyon.deleteMany({ where: { ownerId: user.id } }),
+      prisma.place.deleteMany({ where: { ownerId: user.id } }),
       prisma.geoPdfTemplate.deleteMany({ where: { userId: user.id } }),
       prisma.topoTemplate.deleteMany({ where: { userId: user.id } }),
       prisma.deviceToken.deleteMany({ where: { userId: user.id } }),
-      // No S3 objects involved (ARCH-001 checklist entry; cascade covers the
-      // rows — explicit per convention).
-      prisma.waypoint.deleteMany({ where: { ownerId: user.id } }),
-      // Routes store their geometry on the row, so like waypoints there is no
-      // S3 leg here — that is the point of the design (ARCH-001).
+      // Routes store their geometry on the row, so there is no S3 leg here —
+      // that is the point of the design (ARCH-001). No S3 objects involved;
+      // explicit per convention even though the cascade covers the rows.
       prisma.route.deleteMany({ where: { ownerId: user.id } }),
+      // Links between this account's places. Owner-private, no S3 leg, no
+      // tombstone fan-out — the only viewer is the account being deleted.
+      prisma.placeLink.deleteMany({ where: { ownerId: user.id } }),
       // Custom field definitions: user-authored labels, no S3 leg, and never
       // shared — so no tombstone fan-out either, the only viewer is the
       // account being deleted. Explicit per the ARCH-001 convention even

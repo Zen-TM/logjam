@@ -6,9 +6,9 @@ import { MIRROR_TABLES, SYNC_TABLES, createSchemaSql, tableSchema } from "./mirr
 import { OUTBOX_ENTITIES, outboxMirrorTable } from "./outboxTables";
 
 // The regression this file exists for: a tombstone cascade wrote
-// `waypoints.canyon_id`, a column the schema had stopped declaring. Nothing
+// `waypoints.place_id`, a column the schema had stopped declaring. Nothing
 // caught it — typecheck can't see inside a SQL string, and no test ever opened
-// the real database — so the first canyon delete an account saw rolled back the
+// the real database — so the first place delete an account saw rolled back the
 // delta transaction, took the cursor write with it, and froze sync forever on
 // every fresh install. The suite was green throughout.
 //
@@ -118,10 +118,13 @@ describe("mirror SQL vs the schema declaration", () => {
       readFileSync(join(SYNC_DIR, "mirrorStore.ts"), "utf8"),
     );
     expect(tombstone.length).toBeGreaterThan(10);
-    expect(columnsOf("UPDATE waypoints SET canyon_id = NULL WHERE canyon_id = ?")).toContain(
-      "canyon_id",
+    expect(columnsOf("UPDATE routes SET place_id = NULL WHERE place_id = ?")).toContain(
+      "place_id",
     );
-    expect("canyon_id" in tableSchema("waypoints")!.columns).toBe(false);
+    // The column that is NOT there: `places` has no `place_id`, and the
+    // scanner has to say so — this is the shape of the bug it exists to catch
+    // (a cascade writing a column that no fresh install has).
+    expect("place_id" in tableSchema("places")!.columns).toBe(false);
   });
 });
 
@@ -129,11 +132,11 @@ describe("the wipe derives from the schema", () => {
   it("holds every mirror table, routes included", () => {
     // `routes` was added to the schema and never to the wipe list, so sign-out
     // and account-switch left the previous user's route geometry — their
-    // coordinates through canyons — on the phone for the next user's map.
+    // coordinates through places — on the phone for the next user's map.
     const names = MIRROR_TABLES.map((table) => table.name);
     expect(names).toContain("routes");
-    expect(names).toContain("waypoints");
-    expect(names).toContain("canyons");
+    expect(names).toContain("place_links");
+    expect(names).toContain("places");
   });
 
   it("keeps unsent local work out of the mirror set", () => {
@@ -163,5 +166,18 @@ describe("the wipe derives from the schema", () => {
         expect(ddl).toContain(`  ${column} `);
       }
     }
+  });
+});
+
+// The SCOPING columns, which arrived with the delta that carries them (mirror
+// version 8). A definition the phone cannot place is a definition it renders on
+// every form or on none — and the pair of columns is what makes the choice.
+describe("custom field definitions carry their scoping", () => {
+  it("has both columns, so a def can be placed on the right form", () => {
+    const table = MIRROR_TABLES.find((t) => t.name === "custom_field_defs");
+    expect(table).toBeDefined();
+    expect(Object.keys(table!.columns)).toEqual(
+      expect.arrayContaining(["applies_to_all_types", "place_type_ids_json"]),
+    );
   });
 });

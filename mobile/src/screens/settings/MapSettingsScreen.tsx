@@ -74,13 +74,16 @@ import { radius, spacing, surface, theme, withAlpha } from "../../theme";
 import { ScreenScroll, SectionHeader, Toast, type ToastMessage } from "../../ui";
 import { ChoiceGroup, PreferenceRow } from "./settingsKit";
 
+// The action key stays `waypoint` (it is a stored preference), the WORD does
+// not: a waypoint is a place of the Marker type now, and this screen and the
+// long-press sheet are one vocabulary (DESIGN.md §2).
 const LONG_PRESS_LABELS: Record<LongPressAction, string> = {
   ask: "Ask each time",
-  waypoint: "Waypoint",
+  waypoint: "Drop a marker",
   navigate: "Navigate",
   route: "Draw route",
   measure: "Measure",
-  canyon: "Add canyon",
+  place: "Add place",
 };
 
 /**
@@ -402,7 +405,7 @@ export function MapSettingsScreen() {
             as a feature: it costs battery, it produces a file only a laptop
             can read, and nothing in the app gets better while it is on. It is
             here rather than behind a hidden gesture because the person who
-            needs it is the person carrying the phone into the canyon, and a
+            needs it is the person carrying the phone into the place, and a
             setting they cannot find is a trip's data lost. */}
         {sensorLoggingAvailable() && sensorCaps != null && (
           <PreferenceRow

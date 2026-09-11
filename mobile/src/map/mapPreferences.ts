@@ -33,7 +33,7 @@ export type LongPressAction =
   | "navigate"
   | "route"
   | "measure"
-  | "canyon";
+  | "place";
 
 /** When the screen is held awake. Defaults to `off` — battery is a field resource. */
 export type KeepAwakeMode = "off" | "recording" | "map";
@@ -74,7 +74,7 @@ const LONG_PRESS_ACTIONS: readonly LongPressAction[] = [
   "navigate",
   "route",
   "measure",
-  "canyon",
+  "place",
 ];
 const NORTH_REFERENCES: readonly NorthReference[] = ["true", "magnetic"];
 const KEEP_AWAKE_MODES: readonly KeepAwakeMode[] = ["off", "recording", "map"];
@@ -101,7 +101,7 @@ export const MARKER_COLORS = {
   red: "#F2635F",
   /** Fluoro green — a colour bushland does not contain. */
   green: "#4ADE80",
-  /** Heath flower, as on the Canyons rail. */
+  /** Heath flower, as on the Places rail. */
   violet: "#C77DD6",
   /** No hue at all, for anyone who finds a coloured arrow noisy. */
   white: "#FFFFFF",

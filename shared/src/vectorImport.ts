@@ -226,7 +226,7 @@ function gpxCoordTimes(pts: GpxPoint[]): string[] | undefined {
  * fast-xml-parser's XMLParser does NOT validate — it never throws on a
  * mismatched, unclosed or crossed tag, which made the try/catch around
  * `.parse()` near-dead code. A GPX truncated mid-download therefore imported
- * as a SUCCESSFUL shorter track: a route that stops in the middle of a canyon,
+ * as a SUCCESSFUL shorter track: a route that stops in the middle of a place,
  * with nothing on screen to say so.
  */
 function parseXmlStrict(text: string): Record<string, unknown> {

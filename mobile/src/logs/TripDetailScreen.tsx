@@ -1,12 +1,12 @@
 // Trip detail — one logbook entry. Answers "what did I do that day?": the
-// date and activity up top, then the canyons, the photos, and the notes.
+// date and activity up top, then the places, the photos, and the notes.
 //
 // Reads live from the offline mirror so an optimistic edit shows immediately,
 // falling back to the navigation snapshot before the first mirror read
 // resolves. Editing reuses the Logs screen's TripEditSheet — one trip form in
 // the app, so the fields can't drift between "log" and "edit".
 //
-// PRIVACY: everything here (canyon names, notes, photos) is already on the
+// PRIVACY: everything here (place names, notes, photos) is already on the
 // device in the mirror. Nothing is logged, and photos leave only through the
 // outbox's authed upload.
 import { useCallback, useRef, useState } from "react";
@@ -22,12 +22,13 @@ import {
 import { useConnectivity } from "../map/connectivity";
 import { tripTitle } from "../api/tripTitle";
 import { useFieldDefs } from "../customFields/useFieldDefs";
+import { ATTRIBUTE_NOUN } from "../customFields/CustomFieldsEditor";
 import { MediaStrip } from "../media/MediaStrip";
 import { resolveRouteAttachmentBbox } from "../media/routeAttachmentBbox";
 import { fontSize, fontWeight, lineHeight, radius, spacing, surface, theme } from "../theme";
 import type { MirrorTrip } from "../sync/mirrorStore";
 import {
-  useMirrorCanyons,
+  useMirrorPlaces,
   useMirrorMedia,
   useMirrorTrip,
   useMirrorTrips,
@@ -48,12 +49,12 @@ import { primaryTripType, tripTypeLabel, tripTypeMeta } from "./tripTypeMeta";
 export function TripDetailScreen({
   trip,
   onBack,
-  onOpenCanyon,
+  onOpenPlace,
   onFocusOnMap,
 }: {
   trip: MirrorTrip;
   onBack: () => void;
-  onOpenCanyon: (canyonId: string, name: string) => void;
+  onOpenPlace: (placeId: string, name: string) => void;
   /** Opens the Map tab framed on this route attachment's extent (resolved
    *  here, first) — nothing is drawn on the map. */
   onFocusOnMap: (bbox: [number, number, number, number]) => void;
@@ -61,7 +62,7 @@ export function TripDetailScreen({
   const live = useMirrorTrip(trip.id);
   const current = live.data ?? trip;
   const media = useMirrorMedia("tripLog", trip.id);
-  const canyonsQuery = useMirrorCanyons();
+  const placesQuery = useMirrorPlaces();
   const allTrips = useMirrorTrips();
   const online = useConnectivity() === "online";
   // Definitions give each stored value its real label and ordering; without
@@ -131,24 +132,24 @@ export function TripDetailScreen({
       <ScrollView contentContainerStyle={styles.body}>
         <SectionHeader
           label={
-            current.canyons.length === 1
-              ? "Canyon"
-              : `Canyons · ${current.canyons.length}`
+            current.places.length === 1
+              ? "Place"
+              : `Places · ${current.places.length}`
           }
         />
-        {current.canyons.length === 0 ? (
+        {current.places.length === 0 ? (
           <Text style={styles.muted}>
-            No canyons linked. Edit the trip to add one.
+            No places linked. Edit the trip to add one.
           </Text>
         ) : (
-          current.canyons.map((canyon) => (
+          current.places.map((place) => (
             <Row
-              key={canyon.id}
+              key={place.id}
               icon="map-pin"
               hue={theme.accent}
-              title={canyon.name}
+              title={place.name}
               right={<Feather name="chevron-right" size={20} color={theme.textMuted} />}
-              onPress={() => onOpenCanyon(canyon.id, canyon.name)}
+              onPress={() => onOpenPlace(place.id, place.name)}
             />
           ))
         )}
@@ -203,7 +204,7 @@ export function TripDetailScreen({
 
         {customFields.length > 0 ? (
           <>
-            <SectionHeader label="Your fields" />
+            <SectionHeader label={`Your ${ATTRIBUTE_NOUN.many}`} />
             <View style={styles.fieldCard}>
               {customFields.map(([label, value]) => (
                 <View key={label} style={styles.fieldRow}>
@@ -220,7 +221,7 @@ export function TripDetailScreen({
         online={online}
         visible={editing}
         trip={current}
-        canyons={canyonsQuery.data ?? []}
+        places={placesQuery.data ?? []}
         existingTypes={distinctTripTypes(allTrips.data ?? [])}
         onClose={() => setEditing(false)}
         onSaved={(text) => notify(text, "info")}

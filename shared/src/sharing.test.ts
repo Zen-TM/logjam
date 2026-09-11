@@ -4,10 +4,10 @@ import { removeShareConfirm, sharedRowVisibility } from "./sharing";
 
 // The rule these pin is the reason the helper exists: a row that is visible
 // BOTH ways must not offer a Remove, because revoking the direct share leaves
-// the canyon arm standing and the row comes back on the next pull.
+// the place arm standing and the row comes back on the next pull.
 describe("sharedRowVisibility", () => {
   it("calls an owned row owned, whatever it is linked to", () => {
-    expect(sharedRowVisibility({ syncRole: "owner", visibleLinkedCanyonIds: ["c1"] })).toBe(
+    expect(sharedRowVisibility({ syncRole: "owner", visibleLinkedPlaceIds: ["c1"] })).toBe(
       "owned",
     );
   });
@@ -17,28 +17,28 @@ describe("sharedRowVisibility", () => {
     expect(sharedRowVisibility({ syncRole: undefined })).toBe("owned");
   });
 
-  it("calls a shared row with no visible canyon link a direct share", () => {
+  it("calls a shared row with no visible place link a direct share", () => {
     expect(sharedRowVisibility({ syncRole: "shared" })).toBe("direct");
-    expect(sharedRowVisibility({ syncRole: "shared", visibleLinkedCanyonIds: [] })).toBe(
+    expect(sharedRowVisibility({ syncRole: "shared", visibleLinkedPlaceIds: [] })).toBe(
       "direct",
     );
   });
 
-  it("calls a shared row linked to a canyon the caller can see inherited", () => {
+  it("calls a shared row linked to a place the caller can see inherited", () => {
     expect(
-      sharedRowVisibility({ syncRole: "shared", visibleLinkedCanyonIds: ["c1"] }),
-    ).toBe("via-canyon");
+      sharedRowVisibility({ syncRole: "shared", visibleLinkedPlaceIds: ["c1"] }),
+    ).toBe("via-place");
   });
 });
 
 describe("removeShareConfirm", () => {
   it("names the owner and never promises a delete", () => {
     const { title, body } = removeShareConfirm({
-      kindLabel: "canyon",
+      kindLabel: "place",
       itemName: "Claustral",
       ownerName: "alice",
     });
-    expect(title).toBe("Remove shared canyon?");
+    expect(title).toBe("Remove shared place?");
     expect(body).toContain("Claustral");
     expect(body).toContain("alice keeps the original");
     // The two words this copy must never contain: it is not destructive and it

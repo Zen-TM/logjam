@@ -6,7 +6,7 @@
 //   SHARE ("Share")        — a live, revocable view of a row the sender still
 //                            owns. The recipient sees the sender's copy; the
 //                            sender can take it back; the recipient can never
-//                            edit it. Waypoints, routes, LiDAR topos, GeoPDFs.
+//                            edit it. Routes, LiDAR topos, GeoPDFs.
 //
 //   SEND A COPY ("Send a   — a file handed over. Once accepted it is the
 //   copy")                   recipient's own, editable, permanent, and NOT
@@ -18,13 +18,17 @@
 /**
  * What a `Share` row may point at.
  *
- * Canyons are absent deliberately: they keep `CanyonShare`, which is
+ * Places are absent deliberately: they keep `PlaceShare`, which is
  * load-bearing in sync, notifications and tombstones. Two tables, ONE reader —
  * `api/src/lib/shareAccess.ts` unions them, and nothing else re-derives the
  * decision (root CLAUDE.md, SEC-001).
  */
 export const SHARABLE_ENTITY_TYPES = [
-  "waypoint",
+  // `waypoint` LEFT this list when waypoints became places: a place is shared
+  // through a `PlaceShare` row, not a polymorphic `Share` one, and admitting
+  // "place" here would silently widen /shares to a table it cannot write.
+  // See BULK_SHARE_ITEM_TYPES below, which is where "place" is admitted and
+  // the only caller that fans a mixed list across both tables.
   "route",
   "topoJob",
   "geoPdfJob",
@@ -93,7 +97,7 @@ export const FILE_SEND_FILENAME_MAX_LENGTH = 255;
 //
 // ONE user action — "share these 23 things with these 3 friends" — spanning
 // BOTH verbs above. The mechanism is picked per item and never by the user:
-// a waypoint gets a Share, a recorded track gets a Send a copy, because that
+// a route gets a Share, a recorded track gets a Send a copy, because that
 // is the only thing each kind supports. The UI's job is to say which items
 // went which way BEFORE the action runs (the confirm), not to make the user
 // choose.
@@ -101,15 +105,15 @@ export const FILE_SEND_FILENAME_MAX_LENGTH = 255;
 /**
  * What one bulk-share line may point at.
  *
- * `canyon` is admitted HERE and nowhere else: a canyon share is a `CanyonShare`
+ * `place` is admitted HERE and nowhere else: a place share is a `PlaceShare`
  * row, not a `Share` row (see `SHARABLE_ENTITY_TYPES` above), and the bulk
  * endpoint is the one caller that fans a mixed list across both tables. Keeping
- * the union bulk-only stops "canyon" leaking into `SHARABLE_ENTITY_TYPES`,
+ * the union bulk-only stops "place" leaking into `SHARABLE_ENTITY_TYPES`,
  * where it would silently widen `/shares` to a table it cannot write.
  */
 export const BULK_SHARE_ITEM_TYPES = [
   ...SHARABLE_ENTITY_TYPES,
-  "canyon",
+  "place",
 ] as const;
 
 export type BulkShareItemType = (typeof BULK_SHARE_ITEM_TYPES)[number];
@@ -165,20 +169,21 @@ export type BulkShareResult = {
 // directions, and DELETE /friends/:id/shares is the bulk revoke of the forward
 // one.
 //
-// A ROW IS NOT A CANYON. The payload used to be canyon-only (`canyonId`), which
+// A ROW IS NOT A PLACE. The payload used to be place-only (`placeId`), which
 // made the surface understate itself the moment direct item sharing shipped:
-// waypoints, routes, LiDAR topos and GeoPDFs live in the `Share` table, and a
+// routes, LiDAR topos and GeoPDFs live in the `Share` table, and a
 // friend holding six of them saw an audit screen that said "nothing shared".
 // The row therefore carries the same (entityType, entityId) pair the bulk share
 // speaks, so the two halves of the feature cannot disagree about what a
 // shareable thing is.
 //
-// WHAT IT STILL DOES NOT SAY: a shared canyon carries its canyon-level notes,
-// its canyon-level media and its linked route with it, and a waypoint linked to
-// it inherits visibility with no `Share` row of its own. Those are not rows
-// here and cannot be revoked individually — unsharing the CANYON is what takes
-// them back. Every surface listing these rows has to say so, or the user
-// unshares three waypoints and believes the friend is blind.
+// WHAT IT STILL DOES NOT SAY: a shared place carries its place-level notes,
+// its place-level media and its linked route with it, with no `Share` row of
+// their own. Those are not rows here and cannot be revoked individually —
+// unsharing the PLACE is what takes them back. Every surface listing these
+// rows has to say so, or the user unshares three routes and believes the
+// friend is blind. (A place LINKED to a shared place carries nothing: a link
+// grants no visibility at all, which is what phase 1c settled.)
 
 /**
  * One thing one friend can see, in either direction.
@@ -193,16 +198,16 @@ export type FriendShareRow = {
   name: string | null;
   sharedAt: string;
   /**
-   * RECEIVED ROWS ONLY: this row is ALSO visible through a canyon its owner
-   * shared, so dropping its direct share would change nothing — the canyon arm
+   * RECEIVED ROWS ONLY: this row is ALSO visible through a place its owner
+   * shared, so dropping its direct share would change nothing — the place arm
    * survives and the next delta pull brings the row straight back.
    *
    * The SERVER answers this, because only the server can. A client deriving it
    * from its own mirror is right only once the mirror has pulled the linked
-   * row: on a phone that had not yet synced, the same waypoint offered a Remove
+   * row: on a phone that had not yet synced, the same route offered a Remove
    * that would silently undo itself (seen on device, 2026-09-05).
    */
-  alsoViaCanyon?: true;
+  alsoViaPlace?: true;
 };
 
 export type FriendShares = {
@@ -213,7 +218,7 @@ export type FriendShares = {
 };
 
 /**
- * The kind, lower-case, as it reads mid-sentence — "canyon", "topo", "GeoPDF".
+ * The kind, lower-case, as it reads mid-sentence — "place", "topo", "GeoPDF".
  *
  * Feeds `removeShareConfirm`'s `kindLabel` and the row subtitles on both
  * clients, so a kind cannot be worded two ways on two screens. A
@@ -221,8 +226,7 @@ export type FriendShares = {
  * added without naming it here.
  */
 export const SHARE_KIND_LABEL: Record<BulkShareItemType, string> = {
-  canyon: "canyon",
-  waypoint: "waypoint",
+  place: "place",
   route: "route",
   topoJob: "topo",
   geoPdfJob: "GeoPDF",
@@ -236,32 +240,32 @@ export function shareRowTitle(row: FriendShareRow): string {
 /**
  * Whether a row someone else shared with me can be COPIED into my own account.
  *
- * Canyons only, because `POST /canyons/:id/copy` is the only copy the API has.
+ * Places only, because `POST /places/:id/copy` is the only copy the API has.
  *
- * TODO: waypoints and routes deserve the same verb — a shared waypoint you want
- * to keep can currently only be removed, never kept. That needs
- * `POST /waypoints/:id/copy` and `POST /routes/:id/copy` (read via
- * shareAccess, create as the caller) plus the local mirror insert, so it is a
- * feature of its own rather than a widening of this predicate. Jobs stay
- * uncopyable regardless: they are S3 artefacts with a quota charge, not rows.
+ * A shared WAYPOINT used to be uncopyable too; it is a place now, so it copies
+ * like any other. Routes still cannot: that needs `POST /routes/:id/copy`
+ * (read via shareAccess, create as the caller) plus the local mirror insert,
+ * so it is a feature of its own rather than a widening of this predicate.
+ * Jobs stay uncopyable regardless: they are S3 artefacts with a quota charge,
+ * not rows.
  */
 export function isCopyableSharedRow(row: FriendShareRow): boolean {
-  return row.entityType === "canyon";
+  return row.entityType === "place";
 }
 
 // ── Getting rid of something shared WITH you ─────────────────────────────────
 //
-// The recipient's half of both share tables. `DELETE /canyons/:id/share/me` and
+// The recipient's half of both share tables. `DELETE /places/:id/share/me` and
 // `DELETE /shares/:entityType/:entityId/me` have always accepted a recipient
 // revoking their own access; what follows is the ONE statement of when a client
 // may offer that, and the one wording it offers it with.
 //
-// Why it is not simply "is this row shared with me": a waypoint or a route can
-// be visible for TWO unrelated reasons (api/src/lib/shareAccess.ts) — a direct
-// `Share` row, or a link to a canyon shared with the caller. Revoking the
-// direct row leaves the canyon arm standing, so a Remove offered on an
+// Why it is not simply "is this row shared with me": a ROUTE can be visible for
+// TWO unrelated reasons (api/src/lib/shareAccess.ts) — a direct `Share` row, or
+// its `placeId` pointing at a place shared with the caller. Revoking the
+// direct row leaves the place arm standing, so a Remove offered on an
 // inherited row would appear to work and bring the row straight back on the
-// next pull. What came with a canyon is removed by removing THAT canyon, and
+// next pull. What came with a place is removed by removing THAT place, and
 // the surfaces say so rather than offering a verb that cannot deliver.
 
 /**
@@ -269,10 +273,10 @@ export function isCopyableSharedRow(row: FriendShareRow): boolean {
  * anything, they can do about it.
  *
  * "direct"     → a share row of their own: Remove is theirs to use.
- * "via-canyon" → it arrived with a shared canyon: point at that canyon.
+ * "via-place" → it arrived with a shared place: point at that place.
  * "owned"      → theirs; not a share at all.
  */
-export type SharedRowVisibility = "owned" | "direct" | "via-canyon";
+export type SharedRowVisibility = "owned" | "direct" | "via-place";
 
 export function sharedRowVisibility(row: {
   /**
@@ -284,18 +288,17 @@ export function sharedRowVisibility(row: {
    */
   syncRole: string | null | undefined;
   /**
-   * Canyons THE CALLER CAN SEE that this row is linked to. Empty — or omitted,
-   * for the kinds with no canyon link at all (topo and GeoPDF jobs) — means no
+   * Places THE CALLER CAN SEE that this row is linked to. Empty — or omitted,
+   * for the kinds with no place link at all (topo and GeoPDF jobs) — means no
    * inherited arm exists, so a direct share is the whole reason it is here.
    *
-   * Both clients already hold this: a waypoint's `canyonIds` is server-scoped
-   * to canyons the caller can see, and a route's single `canyonId` counts only
-   * when that canyon is in the caller's own canyon list.
+   * Both clients already hold this: a route's single `placeId` counts only
+   * when that place is in the caller's own place list.
    */
-  visibleLinkedCanyonIds?: readonly string[];
+  visibleLinkedPlaceIds?: readonly string[];
 }): SharedRowVisibility {
   if (row.syncRole !== "shared") return "owned";
-  return (row.visibleLinkedCanyonIds ?? []).length > 0 ? "via-canyon" : "direct";
+  return (row.visibleLinkedPlaceIds ?? []).length > 0 ? "via-place" : "direct";
 }
 
 /**
@@ -308,11 +311,11 @@ export function sharedRowVisibility(row: {
  * neither Logjam Web nor Logjam GPS may be named as the place it happens).
  *
  * The verb is Remove everywhere, never Delete: a recipient tapping Delete on
- * someone else's canyon has every reason to fear they are destroying the
+ * someone else's place has every reason to fear they are destroying the
  * original.
  */
 export function removeShareConfirm(args: {
-  /** Lower-case kind as it reads mid-sentence: "canyon", "waypoint", "topo". */
+  /** Lower-case kind as it reads mid-sentence: "place", "route", "topo". */
   kindLabel: string;
   itemName: string;
   /** The owner's username, on the surfaces that know it. */

@@ -44,7 +44,7 @@ describe("fetchAuthSessionWithTimeout", () => {
 
   // Load-bearing: a timeout must NOT read as "Cognito rejected this session",
   // which is what forces re-auth. Offline-first rule — a timed-out refresh in a
-  // canyon keeps the session and keeps local data usable.
+  // place keeps the session and keeps local data usable.
   it("classifies a timeout as transient, never rejected", () => {
     expect(classifySessionError(new AuthSessionTimeoutError())).toBe("transient");
   });

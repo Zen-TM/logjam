@@ -15,8 +15,8 @@ const signedMock = getSignedUrl as unknown as Mock;
 function imageRow(overrides: Partial<MediaRow> = {}): MediaRow {
   return {
     id: "m1",
-    linkedType: "canyon",
-    linkedId: "canyon-1",
+    linkedType: "place",
+    linkedId: "place-1",
     mediaType: "image/jpeg",
     filename: "photo.jpg",
     fileSizeBytes: 2048n,
@@ -36,7 +36,7 @@ describe("toMediaItem", () => {
   it("maps a Prisma row to the client DTO with both URLs", async () => {
     const item = await toMediaItem(imageRow());
     expect(item.id).toBe("m1");
-    expect(item.linkedId).toBe("canyon-1");
+    expect(item.linkedId).toBe("place-1");
     expect(item.fileSizeBytes).toBe(2048); // bigint → number
     expect(item.createdAt).toBe("2026-06-01T00:00:00.000Z");
     expect(item.displayUrl).toContain("display/m1.jpg");
@@ -137,10 +137,10 @@ describe("standalone files", () => {
 
   it("is skipped by linkedId grouping — it is nobody's attachment", async () => {
     const grouped = await mediaItemsByLinkedId([
-      imageRow({ id: "a", linkedId: "canyon-1" }),
+      imageRow({ id: "a", linkedId: "place-1" }),
       imageRow({ id: "b", linkedType: "none", linkedId: null, origin: "import" }),
     ]);
-    expect([...grouped.keys()]).toEqual(["canyon-1"]);
-    expect(grouped.get("canyon-1")).toHaveLength(1);
+    expect([...grouped.keys()]).toEqual(["place-1"]);
+    expect(grouped.get("place-1")).toHaveLength(1);
   });
 });

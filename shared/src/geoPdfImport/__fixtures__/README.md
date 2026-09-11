@@ -2,7 +2,7 @@
 
 Committed binary fixtures for `shared/src/geoPdfImport/`. All coordinates are
 the synthetic test extent (150.2–150.3 E, 33.6–33.7 S) or round fake MGA grid
-numbers — no real canyon locations.
+numbers — no real place locations.
 
 | File | What | Regeneration |
 |---|---|---|

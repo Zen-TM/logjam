@@ -13,7 +13,7 @@
 // its own job. `logjam:build_state` present ⇒ incomplete ⇒ never registered as a
 // usable artifact.
 //
-// PRIVACY: these files hold canyon-area coordinates in their `bounds` metadata
+// PRIVACY: these files hold place-area coordinates in their `bounds` metadata
 // and live in app-private, backup-excluded storage behind the app lock. Never
 // log a path or a bbox from here — progress logging is counts and state words.
 import * as FileSystem from "expo-file-system/legacy";

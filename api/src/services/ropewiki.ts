@@ -1,4 +1,6 @@
 import { parse } from "csv-parse/sync";
+import { SOURCES_FIELD_KEY } from "@logjam/shared";
+
 import { AppError } from "../middleware/errorHandler";
 
 // notes is a Logjam user-only field — never sourced from RopeWiki.
@@ -34,8 +36,8 @@ export type RopeWikiCanyon = {
   };
 };
 
-// Scalar fields that RopeWiki may own on a linked canyon.
-// name/latitude/longitude are always user-owned on link (Canyon requires them).
+// Scalar fields that RopeWiki may own on a linked place.
+// name/latitude/longitude are always user-owned on link (Place requires them).
 export type RopeWikiOwnableField =
   | "numAbseils"
   | "longestAbseil"
@@ -55,7 +57,49 @@ export const ROPE_WIKI_OWNABLE_FIELDS: RopeWikiOwnableField[] = [
   "hours",
 ];
 
-// Snapshot stored alongside the canyon to detect user edits on refresh.
+/**
+ * RopeWiki's field name -> the reserved `fieldValues` key it writes.
+ *
+ * The DTO and the stored `ropeWikiSnapshot` keep their camelCase names on
+ * purpose: the snapshot is PERSISTED on the row and compared field-by-field on
+ * every refresh, so renaming its keys would make every existing snapshot look
+ * like a user edit and freeze RopeWiki out of every field it owns. The
+ * translation happens here, at the boundary where a value is written to a
+ * place.
+ *
+ * Guard: ropewiki.unit.test.ts asserts every value is a RESERVED key, so a
+ * typo cannot invent a field nobody can render.
+ */
+export const ROPE_WIKI_FIELD_KEYS: Record<RopeWikiOwnableField, string> = {
+  numAbseils: "num_abseils",
+  longestAbseil: "longest_abseil",
+  vGrade: "v_grade",
+  aGrade: "a_grade",
+  commitment: "commitment",
+  quality: "quality",
+  hours: "hours",
+};
+
+/**
+ * A RopeWiki canyon as `fieldValues`. Nulls are omitted rather than stored:
+ * a stored null renders as an empty field and satisfies a "has a value"
+ * filter, where an absent key correctly reads as "not recorded".
+ */
+export function ropeWikiFieldValues(c: RopeWikiCanyon): Record<string, unknown> {
+  const values: Record<string, unknown> = {};
+  for (const field of ROPE_WIKI_OWNABLE_FIELDS) {
+    const value = c[field];
+    if (value !== null && value !== undefined) {
+      values[ROPE_WIKI_FIELD_KEYS[field]] = value;
+    }
+  }
+  if (c.attributes?.sources?.length) {
+    values[SOURCES_FIELD_KEY] = c.attributes.sources;
+  }
+  return values;
+}
+
+// Snapshot stored alongside the place to detect user edits on refresh.
 // Values are always the RopeWiki upstream values at last sync time.
 // ropeWikiOwnedFields lists scalar fields RopeWiki contributed on link.
 // "*" means all fields are RopeWiki-owned (fresh create, no pre-existing data).
@@ -74,7 +118,7 @@ export type RopeWikiSnapshot = {
   ropeWikiOwnedFields: RopeWikiOwnableField[] | "*";
 };
 
-// For canyons created fresh from RopeWiki — all fields are RopeWiki-owned.
+// For places created fresh from RopeWiki — all fields are RopeWiki-owned.
 export function snapshotFromCreate(c: RopeWikiCanyon): RopeWikiSnapshot {
   return {
     name: c.name,
@@ -92,7 +136,7 @@ export function snapshotFromCreate(c: RopeWikiCanyon): RopeWikiSnapshot {
   };
 }
 
-// For canyons linked from an existing local canyon — only null-filled fields
+// For places linked from an existing local place — only null-filled fields
 // are RopeWiki-owned. The caller supplies the ownership mask (from mergeFillNulls).
 export function snapshotFromLink(
   c: RopeWikiCanyon,
@@ -296,7 +340,7 @@ function parseQuality(value: string): number | null {
 }
 
 /**
- * Fetch the NSW canyon CSV straight from RopeWiki.
+ * Fetch the NSW place CSV straight from RopeWiki.
  *
  * As of 2026-08-30 this cannot succeed from a server: RopeWiki sits behind a
  * Cloudflare managed challenge that 403s every non-browser client on every
@@ -305,7 +349,7 @@ function parseQuality(value: string): number | null {
  * hand-uploaded S3 snapshot by default and only comes here on ?fresh=true.
  */
 export async function fetchAndParseRopeWiki(): Promise<{
-  canyons: RopeWikiCanyon[];
+  places: RopeWikiCanyon[];
   errors: string[];
 }> {
   const response = await fetch(ROPEWIKI_CSV_URL, {
@@ -328,9 +372,9 @@ export async function fetchAndParseRopeWiki(): Promise<{
   return parseRopeWikiCsv(await response.text());
 }
 
-/** Parse a RopeWiki Special:Ask CSV export into canyons plus per-row errors. */
+/** Parse a RopeWiki Special:Ask CSV export into places plus per-row errors. */
 export function parseRopeWikiCsv(csvText: string): {
-  canyons: RopeWikiCanyon[];
+  places: RopeWikiCanyon[];
   errors: string[];
 } {
   const records: string[][] = parse(csvText, {
@@ -375,7 +419,7 @@ export function parseRopeWikiCsv(csvText: string): {
   const maxTimeCol = optionalCol("max time");
   const timeCol = optionalCol("min time", "time");
 
-  const canyons: RopeWikiCanyon[] = [];
+  const places: RopeWikiCanyon[] = [];
   const errors: string[] = [];
 
   for (let i = 1; i < records.length; i++) {
@@ -414,7 +458,7 @@ export function parseRopeWikiCsv(csvText: string): {
       const minTimeRaw = timeCol >= 0 ? row[timeCol] || "" : "";
       const hours = parseHours(maxTimeRaw) ?? parseHours(minTimeRaw);
 
-      canyons.push({
+      places.push({
         ropeWikiId: pageId,
         name,
         latitude: coords.latitude,
@@ -439,5 +483,5 @@ export function parseRopeWikiCsv(csvText: string): {
     }
   }
 
-  return { canyons, errors };
+  return { places, errors };
 }

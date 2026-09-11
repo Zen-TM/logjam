@@ -9,17 +9,18 @@ import {
   CAROL_ID,
   NONEXISTENT_ID,
   as,
+  CANYON_TYPE_ID
 } from "./_actors";
 
 // Revocation, from the side that loses access. Three findings live here:
 //
 //   APIR-007  unfriending must revoke EVERY share type in both directions
-//             (canyon, waypoint, route, topo job, GeoPDF job) plus file sends
+//             (place, route, topo job, GeoPDF job) plus file sends
 //             the recipient has not taken yet — while leaving ACCEPTED sends
 //             alone, because those are copies the recipient already owns (D2).
-//   APIR-012  a canyon_shared notification must stop resolving the canyon NAME
-//             once the share is revoked. The canyon row outlives the share, so
-//             the old "does the canyon exist" fallback could never catch this.
+//   APIR-012  a place_shared notification must stop resolving the place NAME
+//             once the share is revoked. The place row outlives the share, so
+//             the old "does the place exist" fallback could never catch this.
 //   APIR-013  a foreign notification id answers 404, never 403.
 //
 // Requires `make dev`. Uses the BOB <-> CAROL friendship (seed.ts) rather than
@@ -225,23 +226,23 @@ describe("unfriend revokes every share type (APIR-007 / decision D2)", () => {
   });
 });
 
-describe("revoked canyon share stops resolving the canyon name (APIR-012)", () => {
-  it("drops the recipient's canyon_shared notification once the share is gone", async () => {
-    // Alice shares a throwaway canyon with bob, then revokes it. The canyon row
+describe("revoked place share stops resolving the place name (APIR-012)", () => {
+  it("drops the recipient's place_shared notification once the share is gone", async () => {
+    // Alice shares a throwaway place with bob, then revokes it. The place row
     // survives under alice, so only a live-share check can drop the notification
-    // — an existence check on the canyon cannot.
-    const canyon = await request(API_URL)
-      .post("/canyons")
+    // — an existence check on the place cannot.
+    const place = await request(API_URL)
+      .post("/places")
       .set(as(ALICE_SUB))
       .set(CLIENT)
-      .send({ name: "revoke-notification-probe", latitude: -33.4, longitude: 150.4 });
-    expect(canyon.status).toBe(201);
-    const canyonId = canyon.body.id as string;
+      .send({ placeTypeId: CANYON_TYPE_ID, name: "revoke-notification-probe", latitude: -33.4, longitude: 150.4 });
+    expect(place.status).toBe(201);
+    const placeId = place.body.id as string;
 
     expect(
       (
         await request(API_URL)
-          .post(`/canyons/${canyonId}/share`)
+          .post(`/places/${placeId}/share`)
           .set(as(ALICE_SUB))
           .set(CLIENT)
           .send({ sharedWithUserId: BOB_ID })
@@ -251,7 +252,7 @@ describe("revoked canyon share stops resolving the canyon name (APIR-012)", () =
     const notified = await request(API_URL).get("/notifications").set(as(BOB_SUB));
     expect(notified.status).toBe(200);
     const seen = (notified.body as { type: string; payload: Record<string, unknown> }[]).some(
-      (n) => n.type === "canyon_shared" && n.payload.canyonId === canyonId,
+      (n) => n.type === "place_shared" && n.payload.placeId === placeId,
     );
     // Only assert the drop below if the grant actually produced a notification
     // (bob may have share notifications disabled in a customised dev DB).
@@ -260,7 +261,7 @@ describe("revoked canyon share stops resolving the canyon name (APIR-012)", () =
     expect(
       (
         await request(API_URL)
-          .delete(`/canyons/${canyonId}/share/${BOB_ID}`)
+          .delete(`/places/${placeId}/share/${BOB_ID}`)
           .set(as(ALICE_SUB))
       ).status,
     ).toBe(204);
@@ -271,9 +272,9 @@ describe("revoked canyon share stops resolving the canyon name (APIR-012)", () =
       type: string;
       payload: Record<string, unknown>;
     }[]) {
-      if (n.type !== "canyon_shared") continue;
-      expect(n.payload.canyonId).not.toBe(canyonId);
-      // And in particular the canyon NAME must not have been resolved for it.
+      if (n.type !== "place_shared") continue;
+      expect(n.payload.placeId).not.toBe(placeId);
+      // And in particular the place NAME must not have been resolved for it.
       expect(JSON.stringify(n.payload)).not.toContain("revoke-notification-probe");
     }
   });

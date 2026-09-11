@@ -1,4 +1,4 @@
-// "Area on map" — frame a box of country, and hand it back to the Canyons
+// "Area on map" — frame a box of country, and hand it back to the Places
 // filter that asked for it.
 //
 // A SCREEN, not a mode of the filter sheet, and forced for the same reason
@@ -16,10 +16,10 @@
 // gesture handlers that must not be rebuilt mid-drag, `pointerEvents` that
 // leave the map draggable through the dimmed area); reusing it gets all of it.
 //
-// WHAT IT DRAWS: canyon pins, and NOTHING else — no waypoints, no ways, no
+// WHAT IT DRAWS: place pins, and NOTHING else — no waypoints, no ways, no
 // basemap rail. `PickPointScreen` carries all of those because its question is
 // "is this the thing I already have?", which is about individual objects a
-// metre apart. This screen's question is "which canyons", answered at
+// metre apart. This screen's question is "which places", answered at
 // kilometres, so everything else is clutter over the box being drawn.
 //
 // The basemap rail in particular was tried and removed. Anything pinned to a
@@ -30,7 +30,7 @@
 // round trip that changed nothing. The basemap carries over from the map the
 // user was last looking at (`lastCamera`), which is the one they know.
 //
-// PRIVACY: canyon positions are drawn from the local mirror and never leave the
+// PRIVACY: place positions are drawn from the local mirror and never leave the
 // device. The framed box is returned in memory (`pickedArea.ts`) and reaches
 // nothing but the filter state on the screen that asked.
 import { useCallback, useMemo, useRef, useState } from "react";
@@ -49,14 +49,14 @@ import type { RegionBbox } from "@logjam/shared";
 import { config } from "../config";
 import { fontSize, fontWeight, radius, scrim, spacing, theme } from "../theme";
 import { Button } from "../ui";
-import { useMirrorCanyons } from "../sync/useSyncQueries";
+import { useMirrorPlaces, useMirrorPlaceTypes } from "../sync/useSyncQueries";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
 import { useConnectivity } from "./connectivity";
 import { readBasemapPreference } from "./basemapPreference";
 import { useBasemapAssets } from "./basemap/basemapAssets";
 import { ProtomapsLayers } from "./basemap/ProtomapsLayers";
 import { buildShellStyle } from "./basemap/shellStyle";
-import { CanyonPinsLayer, toCanyonFeatureCollection } from "./CanyonPinsLayer";
+import { PlacePinsLayer, toPlaceFeatureCollection } from "./PlacePinsLayer";
 import { readLastMapCamera } from "./lastCamera";
 import { DEFAULT_CENTER, DEFAULT_ZOOM } from "./mapChrome";
 import { ResolvedSource, sourceIdFor } from "./ResolvedSource";
@@ -136,20 +136,31 @@ export function PickAreaScreen({
     [basemapId, ctx],
   );
 
-  const canyons = useMirrorCanyons();
+  const places = useMirrorPlaces();
+  // The pins are drawn in their TYPE's colour here too — a picker that coloured
+  // places differently from the map they were picked off would be a second
+  // vocabulary.
+  const placeTypes = useMirrorPlaceTypes();
+  const placeTypeColors = useMemo(() => {
+    const colors: Record<string, string> = {};
+    for (const type of placeTypes.data ?? []) colors[type.id] = type.color;
+    return colors;
+  }, [placeTypes.data]);
   const ownedFc = useMemo(
     () =>
-      toCanyonFeatureCollection(
-        (canyons.data ?? []).filter((canyon) => canyon.syncRole === "owner"),
+      toPlaceFeatureCollection(
+        (places.data ?? []).filter((place) => place.syncRole === "owner"),
+        placeTypeColors,
       ),
-    [canyons.data],
+    [placeTypeColors, places.data],
   );
   const sharedFc = useMemo(
     () =>
-      toCanyonFeatureCollection(
-        (canyons.data ?? []).filter((canyon) => canyon.syncRole === "shared"),
+      toPlaceFeatureCollection(
+        (places.data ?? []).filter((place) => place.syncRole === "shared"),
+        placeTypeColors,
       ),
-    [canyons.data],
+    [placeTypeColors, places.data],
   );
 
   // Stable identity: SelectionFrame's gesture handlers are rebuilt whenever
@@ -269,7 +280,7 @@ export function PickAreaScreen({
             ) : null,
           )}
 
-          <CanyonPinsLayer
+          <PlacePinsLayer
             ownedFc={ownedFc}
             sharedFc={sharedFc}
             idPrefix="pick-area-"

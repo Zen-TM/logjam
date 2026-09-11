@@ -1,5 +1,5 @@
 // Authenticated API client — port of the web apiFetch (frontend/src/
-// canyonUtils.ts) with mobile offline-session semantics.
+// placeUtils.ts) with mobile offline-session semantics.
 //
 // Differences from web, both deliberate (MOBILE_APP_PLAN Stage 1):
 //  - Every request carries the x-logjam-client version header (forced-upgrade
@@ -105,7 +105,7 @@ async function throwApiError(res: Response, path: string, method: string): Promi
 // ── the user record, cached for a minute ─────────────────────────────────────
 //
 // Eight screens fetch `/users/me` on mount with nothing between them and no
-// cache of any kind, so opening five canyons was five identical round-trips —
+// cache of any kind, so opening five places was five identical round-trips —
 // each one a radio wakeup, an Amplify token check and a 15 s timeout's worth of
 // hang when there is no signal. The record only changes through a PATCH from
 // this device (which lands its own response in the cache below) or from another

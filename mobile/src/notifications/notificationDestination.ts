@@ -2,9 +2,9 @@
 // as data.
 //
 // A notification is a report about something that now exists somewhere else in
-// the app, and until now only one kind said where: a canyon share opened the
-// canyon. Everything else — a finished topo, a GeoPDF, a file a friend sent and
-// you kept, a waypoint someone shared — left the user to go and find the thing
+// the app, and until now only one kind said where: a place share opened the
+// place. Everything else — a finished topo, a GeoPDF, a file a friend sent and
+// you kept, a route someone shared — left the user to go and find the thing
 // themselves, in a tab with seven filters.
 //
 // So each row's ⋯ sheet offers one more verb: go to the tab, on the right
@@ -15,7 +15,7 @@
 //
 // NOT EVERY NOTIFICATION HAS ONE. A failed job, a skipped export and a file
 // send still waiting to be answered are about something that does not exist to
-// be looked at; a canyon share already has "Open" in the same sheet, and two
+// be looked at; a place share already has "Open" in the same sheet, and two
 // rows going to the same place is how one of them goes stale.
 //
 // PRIVACY: ids and a category, both already in the payload the row renders.
@@ -103,7 +103,7 @@ export function notificationDestination(
       return saved(filename.toLowerCase().endsWith(".pdf") ? "geoPdf" : "import", null);
     }
 
-    // canyon_shared already has "Open" in the same sheet.
+    // place_shared already has "Open" in the same sheet.
     // topo_failed / topo_export_* / a failed GeoPDF are about something that
     // does not exist to be looked at.
     default:

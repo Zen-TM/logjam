@@ -13,7 +13,7 @@
 // filesystem root, so a new store cannot be added without joining this file —
 // and joining this file means joining the wipe.
 //
-// PRIVACY: these trees hold canyon coordinates (regions, imports, route/track
+// PRIVACY: these trees hold place coordinates (regions, imports, route/track
 // exports) and photos. `wipeAllLocalData` deleting all of them IS the privacy
 // boundary between two users of one phone (mobile/CLAUDE.md).
 import * as FileSystem from "expo-file-system/legacy";
@@ -73,7 +73,7 @@ export const BASEMAP_ASSETS_DIR = `${FileSystem.documentDirectory}basemap-assets
 /**
  * Raw sensor logs from the developer-only research logger
  * (modules/logjam-sensors, private/todo/track-accuracy.md). WIPED: the samples
- * describe how one person moved through a canyon for a day, which is location
+ * describe how one person moved through a place for a day, which is location
  * history by another name even though no coordinate is written — so it leaves
  * with the account like everything else.
  */
@@ -106,7 +106,7 @@ let backupExclusionApplied = false;
  * iOS half of `allowBackup=false`).
  *
  * `NSDocumentDirectory` is backed up by default, which would send the sync
- * mirror, every downloaded region and every imported GeoPDF — canyon names,
+ * mirror, every downloaded region and every imported GeoPDF — place names,
  * coordinates, notes and photos — to Apple. The flag set on the directory
  * covers everything inside it, so one call at startup is the whole fix.
  * Android needs nothing: `app.json` sets `allowBackup: false`.

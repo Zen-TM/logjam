@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 //
 // The guard this test exists to pin: a source under one of THIS APP's own
 // declared stores must survive, because its lifecycle is governed elsewhere.
-// The live case is saved/assetActions.ts's "attach to canyon" for a vector
+// The live case is saved/assetActions.ts's "attach to place" for a vector
 // import, which reuses `vector_import.sourcePath` — the app's only kept
 // original of a lossy GPX/KML derivation (mobile/CLAUDE.md, "Imports keep
 // their ORIGINAL BYTES"). A naive "always delete file.uri" would destroy it.
@@ -95,7 +95,7 @@ describe("attachMediaLocal", () => {
     // from here (localStores.test.ts enforces that nothing else in this
     // codebase names a filesystem root).
     const source = "file:///data/user/0/app/cache/ImagePicker/abc.jpg";
-    await attachMediaLocal("canyon", "canyon-1", {
+    await attachMediaLocal("place", "place-1", {
       uri: source,
       mimeType: "application/gpx+xml",
       fileName: "track.gpx",
@@ -105,7 +105,7 @@ describe("attachMediaLocal", () => {
 
   it("does not delete a source this app already owns the lifecycle of", async () => {
     const source = "file:///docs/imports/geopdf-or-vector/original.gpx";
-    await attachMediaLocal("canyon", "canyon-1", {
+    await attachMediaLocal("place", "place-1", {
       uri: source,
       mimeType: "application/gpx+xml",
       fileName: "track.gpx",
@@ -131,8 +131,8 @@ describe("runMediaCreateOp", () => {
     entity_id: "media-1",
     op: "create",
     fields_json: JSON.stringify({
-      linkedType: "canyon",
-      linkedId: "canyon-1",
+      linkedType: "place",
+      linkedId: "place-1",
       filename: "a.jpg",
       mediaType: "image/jpeg",
       sizeBytes: 1,
@@ -165,8 +165,8 @@ describe("runMediaCreateOp", () => {
     });
     apiFetch.mockResolvedValueOnce({
       id: "media-1",
-      linkedType: "canyon",
-      linkedId: "canyon-1",
+      linkedType: "place",
+      linkedId: "place-1",
       mediaType: "image/jpeg",
       filename: "a.jpg",
       fileSizeBytes: 1,

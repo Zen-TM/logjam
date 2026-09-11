@@ -93,7 +93,7 @@ function str(payload: Record<string, unknown>, key: string): string | null {
 
 function groupOf(n: TNotification): BatchGroup | null {
   if (n.type === "file_sent") return "files";
-  if (n.type === "item_shared" || n.type === "canyon_shared") return "shares";
+  if (n.type === "item_shared" || n.type === "place_shared") return "shares";
   return null;
 }
 
@@ -190,7 +190,7 @@ export function collapseBatches(
 /**
  * The grouped row's own sentence.
  *
- * Counts, never names: listing 23 canyon names in a header is both unreadable
+ * Counts, never names: listing 23 place names in a header is both unreadable
  * and the kind of plaintext this inbox keeps out of anything but a row the user
  * has to act on. The two verbs keep their own word — "shared" is live and
  * revocable, "sent" is a copy for keeps — which is the distinction the whole

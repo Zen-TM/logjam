@@ -29,45 +29,45 @@ beforeEach(() => {
 });
 
 // These tests encode the access boundary of the sharing-audit surface (fix 24).
-// The invariant they defend: you can only ever see or revoke shares on canyons
+// The invariant they defend: you can only ever see or revoke shares on places
 // YOU OWN, and only for a friendship you are actually a member of.
 
 describe("ownedSharesToFriendWhere — the forward list/revoke filter", () => {
-  it("scopes to canyons the CALLER owns, shared with the friend", () => {
+  it("scopes to places the CALLER owns, shared with the friend", () => {
     expect(ownedSharesToFriendWhere(ME, FRIEND)).toEqual({
       sharedWithId: FRIEND,
-      canyon: { ownerId: ME },
+      place: { ownerId: ME },
     });
   });
 
   // The privacy-critical assertion. Filtering on the share's `sharedById` would
-  // trust a denormalised value; filtering on the canyon's `ownerId` derives the
-  // set from ownership itself, so no canyon the caller doesn't own can ever
+  // trust a denormalised value; filtering on the place's `ownerId` derives the
+  // set from ownership itself, so no place the caller doesn't own can ever
   // enter the result — or be revoked by the bulk delete that reuses this.
-  it("derives from canyon ownership, never from the share's sharedById", () => {
+  it("derives from place ownership, never from the share's sharedById", () => {
     const where = ownedSharesToFriendWhere(ME, FRIEND);
-    expect(where.canyon.ownerId).toBe(ME);
+    expect(where.place.ownerId).toBe(ME);
     expect(where).not.toHaveProperty("sharedById");
   });
 
-  it("is not symmetric — swapping the args flips whose canyons are in scope", () => {
+  it("is not symmetric — swapping the args flips whose places are in scope", () => {
     expect(ownedSharesToFriendWhere(FRIEND, ME)).toEqual({
       sharedWithId: ME,
-      canyon: { ownerId: FRIEND },
+      place: { ownerId: FRIEND },
     });
   });
 });
 
 describe("receivedSharesFromFriendWhere — the reverse (read-only) list filter", () => {
-  it("scopes to canyons the FRIEND owns, shared with the caller", () => {
+  it("scopes to places the FRIEND owns, shared with the caller", () => {
     expect(receivedSharesFromFriendWhere(ME, FRIEND)).toEqual({
       sharedWithId: ME,
-      canyon: { ownerId: FRIEND },
+      place: { ownerId: FRIEND },
     });
   });
 
-  // Guards the direction confusion that would turn "canyons Bob shares with
-  // you" into a list of YOUR canyons — i.e. the bulk revoke hitting the wrong
+  // Guards the direction confusion that would turn "places Bob shares with
+  // you" into a list of YOUR places — i.e. the bulk revoke hitting the wrong
   // set entirely.
   it("is the exact mirror of the forward filter", () => {
     expect(receivedSharesFromFriendWhere(ME, FRIEND)).toEqual(
@@ -125,7 +125,7 @@ describe("resolveFriendCounterpart — the friendship membership check", () => {
   });
 
   // A pending request is not a sharing relationship — shares can't exist yet
-  // (POST /canyons/:id/share requires an accepted friendship), and a pending
+  // (POST /places/:id/share requires an accepted friendship), and a pending
   // addressee must not get an audit surface on the requester.
   it("throws 400 for a pending (not accepted) friendship", async () => {
     findUnique.mockResolvedValue({
@@ -158,8 +158,8 @@ describe("resolveFriendCounterpart — the friendship membership check", () => {
 // not own must not widen the set it was intersected with.
 describe("selectRequested — what a bulk revoke body may narrow", () => {
   const MINE = [
-    { entityType: "canyon", entityId: "c1" },
-    { entityType: "canyon", entityId: "c2" },
+    { entityType: "place", entityId: "c1" },
+    { entityType: "place", entityId: "c2" },
     { entityType: "waypoint", entityId: "w1" },
   ];
 
@@ -176,7 +176,7 @@ describe("selectRequested — what a bulk revoke body may narrow", () => {
   it("narrows to the named items", () => {
     expect(
       selectRequested(MINE, [
-        { entityType: "canyon", entityId: "c2" },
+        { entityType: "place", entityId: "c2" },
         { entityType: "waypoint", entityId: "w1" },
       ]),
     ).toEqual([MINE[1], MINE[2]]);
@@ -186,11 +186,11 @@ describe("selectRequested — what a bulk revoke body may narrow", () => {
   // in the set being narrowed, so it cannot be added by asking for it.
   it("cannot introduce a row that was not in the caller's own set", () => {
     expect(
-      selectRequested(MINE, [{ entityType: "canyon", entityId: "someone-elses" }]),
+      selectRequested(MINE, [{ entityType: "place", entityId: "someone-elses" }]),
     ).toEqual([]);
   });
 
-  // Type and id are one key: the same uuid as a waypoint and as a canyon are
+  // Type and id are one key: the same uuid as a waypoint and as a place are
   // different rows in different tables.
   it("matches on entityType AND entityId, not the id alone", () => {
     expect(

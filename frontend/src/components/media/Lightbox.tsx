@@ -4,7 +4,7 @@ import { mediaCategory, type MediaItem } from "@logjam/shared";
 import classes from "./Lightbox.module.css";
 
 // Full-res image/video overlay with a focus trap (WCAG 2.1.2 / 4.1.2). Shared
-// by MediaGallery (grid thumbnails) and CanyonSlideshow so the close/Esc/focus
+// by MediaGallery (grid thumbnails) and PlaceSlideshow so the close/Esc/focus
 // behaviour lives in one place. Mounts only while an item is selected.
 export default function Lightbox({
   item,

@@ -6,10 +6,9 @@ import {
   routeActions,
   trackActions,
   vectorImportActions,
-  waypointActions,
 } from "./assetActions";
 import type { Track } from "../tracks/tracksDb";
-import type { MirrorRoute, MirrorWaypoint } from "../sync/mirrorStore";
+import type { MirrorRoute } from "../sync/mirrorStore";
 import type { VectorImport } from "../imports/importsDb";
 
 // The descriptor's own modules all reach SQLite / the filesystem; this test is
@@ -26,9 +25,7 @@ vi.mock("../tracks/tracksDb", () => ({
 vi.mock("../sync/outbox", () => ({
   createRouteLocal: vi.fn(),
   deleteRouteLocal: vi.fn(),
-  deleteWaypointLocal: vi.fn(),
   updateRouteLocal: vi.fn(),
-  updateWaypointLocal: vi.fn(),
 }));
 vi.mock("../fileExport", () => ({ exportTrack: vi.fn(), exportStoredFile: vi.fn() }));
 vi.mock("../sync/mediaUpload", () => ({
@@ -51,11 +48,11 @@ vi.mock("../offline/localStores", () => ({
 
 vi.mock("../sharing/removeShare", () => ({ removeSharedEntity: vi.fn() }));
 
-const route = (syncRole: "owner" | "shared", canyonId: string | null = null) =>
+const route = (syncRole: "owner" | "shared", placeId: string | null = null) =>
   ({
     id: "r1",
     name: "Creek",
-    canyonId,
+    placeId,
     points: [
       [150.1, -33.5],
       [150.2, -33.6],
@@ -63,18 +60,7 @@ const route = (syncRole: "owner" | "shared", canyonId: string | null = null) =>
     syncRole,
   }) as unknown as MirrorRoute;
 
-const waypoint = (syncRole: "owner" | "shared", canyonIds: string[] = []) =>
-  ({
-    id: "w1",
-    name: "Carpark",
-    latitude: -33.5,
-    longitude: 150.1,
-    tags: [],
-    canyonIds,
-    syncRole,
-  }) as unknown as MirrorWaypoint;
-
-// The API's route/waypoint DELETE and PATCH are owner-only, so a write verb
+// The API's route DELETE and PATCH are owner-only, so a write verb
 // offered on a shared row removes it locally, parks the push as `blocked` and
 // lets the next delta pull put it back. Absence of the verb is what every
 // surface reads — the map sheet, the Saved overflow and the multi-select all
@@ -97,19 +83,6 @@ describe("assetActions ownership", () => {
     expect(actions.locatable).toBe(true);
   });
 
-  it("gives an owned waypoint its write verbs", () => {
-    const actions = waypointActions(waypoint("owner"));
-    expect(actions.delete).toBeDefined();
-    expect(actions.rename).toBeDefined();
-  });
-
-  it("withholds them on a shared waypoint", () => {
-    const actions = waypointActions(waypoint("shared"));
-    expect(actions.delete).toBeUndefined();
-    expect(actions.rename).toBeUndefined();
-    expect(actions.locatable).toBe(true);
-  });
-
   // `sharedWithYou` is the descriptor's own statement that someone else owns
   // this, and it must agree with the verbs beside it: a row that claims to be
   // shared while offering a write verb is one the API will refuse, and one that
@@ -119,7 +92,6 @@ describe("assetActions ownership", () => {
   // descriptor" as the proxy for shared, and a topo's delete is device-local.
   it.each([
     ["route", routeActions(route("shared"))],
-    ["waypoint", waypointActions(waypoint("shared"))],
   ])("flags a shared %s and withholds every write verb with it", (_kind, actions) => {
     expect(actions.sharedWithYou).toBe(true);
     expect(actions.share).toBeUndefined();
@@ -129,7 +101,6 @@ describe("assetActions ownership", () => {
 
   it.each([
     ["route", routeActions(route("owner"))],
-    ["waypoint", waypointActions(waypoint("owner"))],
   ])("leaves the flag off an owned %s, which keeps its verbs", (_kind, actions) => {
     expect(actions.sharedWithYou).toBeUndefined();
     expect(actions.share).toBeDefined();
@@ -227,7 +198,6 @@ describe("the share / send-a-copy verb matrix", () => {
   it("never gives one kind BOTH verbs", () => {
     const descriptors = [
       routeActions(route("owner")),
-      waypointActions(waypoint("owner")),
       vectorImportActions(importRow()),
       trackActions(track(2)),
     ];
@@ -236,18 +206,17 @@ describe("the share / send-a-copy verb matrix", () => {
     }
   });
 
-  it("gives an owned route and waypoint Share, and never sendCopy", () => {
-    for (const actions of [routeActions(route("owner")), waypointActions(waypoint("owner"))]) {
+  it("gives an owned route Share, and never sendCopy", () => {
+    for (const actions of [routeActions(route("owner"))]) {
       expect(actions.share).toBeDefined();
       // A route is a synced row, not a file — there is nothing to hand over.
       expect(actions.sendCopy).toBeUndefined();
     }
   });
 
-  it("withholds Share on a route or waypoint shared WITH this user", () => {
+  it("withholds Share on a route shared WITH this user", () => {
     // The API's share endpoint is owner-only; offering it would 403.
     expect(routeActions(route("shared")).share).toBeUndefined();
-    expect(waypointActions(waypoint("shared")).share).toBeUndefined();
   });
 
   it("gives a recording Send a copy, and never Share", () => {
@@ -276,31 +245,30 @@ describe("the share / send-a-copy verb matrix", () => {
     expect(vectorImportActions(importRow({ sourcePath: null })).sendCopy).toBeUndefined();
   });
 
-  // A canyon's route slot takes TRACK media and nothing else, so this verb has
+  // A place's route slot takes TRACK media and nothing else, so this verb has
   // a narrower gate than Send a copy over the very same file — the row that can
   // only fail is absent, not offered (DESIGN.md §7).
-  it("gives EVERY import Attach to a canyon — attaching links the row", () => {
+  it("gives EVERY import Attach to a place — attaching links the row", () => {
     for (const sourcePath of [
       "/imports/i1-source.gpx",
       "/imports/i1-source.kml",
       // GeoJSON joined TRACK_MIME_TYPES when standalone imports became media —
-      // a canyon's way may be any format an import may be.
+      // a place's way may be any format an import may be.
       "/imports/i1-source.geojson",
       // No bytes on this phone at all: a file that synced from another device
       // and has not been downloaded here. Linking is a row change, so there is
       // nothing for it to need locally.
       null,
     ]) {
-      expect(vectorImportActions(importRow({ sourcePath })).attachToCanyon).toBeDefined();
+      expect(vectorImportActions(importRow({ sourcePath })).attachToPlace).toBeDefined();
     }
   });
 
-  it("never offers Attach to a canyon on the kinds that are not files", () => {
-    expect(routeActions(route("owner")).attachToCanyon).toBeUndefined();
-    expect(waypointActions(waypoint("owner")).attachToCanyon).toBeUndefined();
+  it("never offers Attach to a place on the kinds that are not files", () => {
+    expect(routeActions(route("owner")).attachToPlace).toBeUndefined();
     // A recording gets there through createRouteFrom instead: the track itself
     // is never linked, a route made from it is.
-    expect(trackActions(track(3)).attachToCanyon).toBeUndefined();
+    expect(trackActions(track(3)).attachToPlace).toBeUndefined();
     expect(trackActions(track(3)).createRouteFrom).toBeDefined();
   });
 
@@ -315,61 +283,52 @@ describe("the share / send-a-copy verb matrix", () => {
 
   // The recipient's own verb, and the one rule that decides whether it exists
   // at all: a share held DIRECTLY is theirs to hand back, one seen only because
-  // a canyon was shared with them is not — dropping the (nonexistent) share row
+  // a place was shared with them is not — dropping the (nonexistent) share row
   // would 404, and offering it would promise a removal the next pull undoes.
-  it("offers Remove on a route shared directly, with no canyon named", () => {
+  it("offers Remove on a route shared directly, with no place named", () => {
     const actions = routeActions(route("shared"), ["c1"]);
     expect(actions.removeShare).toBeDefined();
-    expect(actions.sharedViaCanyonIds).toBeUndefined();
+    expect(actions.sharedViaPlaceIds).toBeUndefined();
     expect(actions.removeShare?.confirmTitle).toBe("Remove shared route?");
     // Not a delete: the owner keeps theirs, so the copy must not threaten one.
     expect(actions.removeShare?.confirmBody).not.toMatch(/delete|permanent/i);
   });
 
-  it("points a canyon-inherited route at its canyon instead of offering Remove", () => {
+  it("points a place-inherited route at its place instead of offering Remove", () => {
     const actions = routeActions(route("shared", "c1"), ["c1"]);
     expect(actions.removeShare).toBeUndefined();
-    expect(actions.sharedViaCanyonIds).toEqual(["c1"]);
+    expect(actions.sharedViaPlaceIds).toEqual(["c1"]);
   });
 
-  it("treats a link to a canyon the user cannot see as no link at all", () => {
-    // The canyon exists for its owner; this user was given only the route.
+  it("treats a link to a place the user cannot see as no link at all", () => {
+    // The place exists for its owner; this user was given only the route.
     const actions = routeActions(route("shared", "c9"), ["c1"]);
     expect(actions.removeShare).toBeDefined();
-    expect(actions.sharedViaCanyonIds).toBeUndefined();
+    expect(actions.sharedViaPlaceIds).toBeUndefined();
   });
 
   it("offers neither on an owned route, whatever it is linked to", () => {
     const actions = routeActions(route("owner", "c1"), ["c1"]);
     expect(actions.removeShare).toBeUndefined();
-    expect(actions.sharedViaCanyonIds).toBeUndefined();
+    expect(actions.sharedViaPlaceIds).toBeUndefined();
   });
 
-  it("says nothing about shares when the caller passed no canyon list", () => {
+  it("says nothing about shares when the caller passed no place list", () => {
     // The surfaces that only want a bbox or an export get what they always got
     // — silence, rather than a Remove derived from a list they never sent.
     const actions = routeActions(route("shared"));
     expect(actions.removeShare).toBeUndefined();
-    expect(actions.sharedViaCanyonIds).toBeUndefined();
-  });
-
-  it("reads a shared waypoint's own scoped canyonIds, with no list to pass", () => {
-    expect(waypointActions(waypoint("shared")).removeShare).toBeDefined();
-    const inherited = waypointActions(waypoint("shared", ["c1"]));
-    expect(inherited.removeShare).toBeUndefined();
-    expect(inherited.sharedViaCanyonIds).toEqual(["c1"]);
+    expect(actions.sharedViaPlaceIds).toBeUndefined();
   });
 
   it("never offers Remove on something the user owns", () => {
-    expect(waypointActions(waypoint("owner", ["c1"])).removeShare).toBeUndefined();
+    expect(routeActions(route("owner"), ["c1"]).removeShare).toBeUndefined();
   });
 
   it("revokes through the one online path, not through the outbox", async () => {
     const { removeSharedEntity } = await import("../sharing/removeShare");
     await routeActions(route("shared"), []).removeShare?.run();
     expect(removeSharedEntity).toHaveBeenCalledWith("route", "r1");
-    await waypointActions(waypoint("shared")).removeShare?.run();
-    expect(removeSharedEntity).toHaveBeenCalledWith("waypoint", "w1");
   });
 
   it("passes track.color to createRouteLocal in createRouteFrom", async () => {

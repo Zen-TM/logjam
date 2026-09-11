@@ -1,15 +1,15 @@
 // THE sharing panel. One component, both verbs, every kind of item.
 //
-// Canyons, waypoints, routes, LiDAR topos, GeoPDFs, imports and recorded
+// Places, waypoints, routes, LiDAR topos, GeoPDFs, imports and recorded
 // tracks all render this — from Saved's item sheet, the route sheet, the track
-// sheet, the map's waypoint sheet and the canyon detail screen. The only
+// sheet, the map's waypoint sheet and the place detail screen. The only
 // per-kind parts are the API calls behind `target` and the sentence describing
 // what the recipient gets; the layout, the search, the recipient list, the
 // empty states and the offline door live here once.
 //
 // TWO VERBS, ONE PANEL, AND THE WORDING IS THE DIFFERENCE:
 //
-//   Share ("share"/"canyon" targets) — a LIVE, revocable view of a row the
+//   Share ("share"/"place" targets) — a LIVE, revocable view of a row the
 //     sender still owns. Tapping a friend acts IMMEDIATELY, because the action
 //     can be taken back; there is no confirm step and no footer button.
 //   Send a copy ("copy" target) — a FILE handed over. Tapping a friend ticks a
@@ -52,7 +52,7 @@ import {
   unavailableReasonText,
 } from "../auth/capabilities";
 import { usePendingCreateIds } from "../sync/useSyncQueries";
-import { getFriends, getCanyonShares, shareCanyon, unshareCanyon, type Friend } from "../api/friends";
+import { getFriends, getPlaceShares, sharePlace, unsharePlace, type Friend } from "../api/friends";
 import { getShares, shareItem, unshareItem } from "../api/shares";
 import { sendFileCopy } from "../api/fileSends";
 import type { AssetActions } from "../saved/assetActions";
@@ -82,13 +82,13 @@ import {
 
 /**
  * What this panel is acting on. The three cases are the three API shapes:
- * canyons keep their own endpoints (the hybrid share model lives behind them),
+ * places keep their own endpoints (the hybrid share model lives behind them),
  * every other shareable row uses `/shares`, and a file has no server row to
  * grant access to at all — it can only be copied.
  */
 export type SharePanelTarget =
   | { kind: "entity"; entityType: SharableEntityType; entityId: string }
-  | { kind: "canyon"; canyonId: string }
+  | { kind: "place"; placeId: string }
   | { kind: "copy"; sendCopy: NonNullable<AssetActions["sendCopy"]> }
   /**
    * A whole multi-selection, which may need BOTH verbs at once — some rows can
@@ -103,8 +103,8 @@ export type SharePanelTarget =
  * THE PROMISE, per kind, and the only place either sentence is written.
  *
  * Not a prop: two call sites wording the same grant differently is the drift
- * this panel exists to end, and a canyon is now shared from two screens (its
- * detail page and the Canyons list's options sheet). A canyon sharee sees
+ * this panel exists to end, and a place is now shared from two screens (its
+ * detail page and the Places list's options sheet). A place sharee sees
  * notes and photos — a bigger promise than a line on a map — so it says so,
  * and says what stays private.
  */
@@ -118,8 +118,8 @@ const SHARE_BLURB =
  */
 const BULK_SHARE_BLURB =
   "Friends you pick can view and export these, but can't change them. You can stop sharing anytime.";
-const CANYON_SHARE_BLURB =
-  "Friends you pick can see this canyon and its notes and photos. Your trip logs stay private. You can stop sharing at anytime.";
+const PLACE_SHARE_BLURB =
+  "Friends you pick can see this place and its notes and photos. Your trip logs stay private. You can stop sharing at anytime.";
 
 /**
  * Row props for a Share / Send a copy verb: `disabled` plus the REASON as a
@@ -190,7 +190,7 @@ export function useSharePanel({
   // depending on the object itself made the reset effect below fire on each
   // render and clear the user's ticks as fast as they made them (a tap on a
   // friend appeared to do nothing at all). Deps are keyed on these instead.
-  const canyonId = target?.kind === "canyon" ? target.canyonId : null;
+  const placeId = target?.kind === "place" ? target.placeId : null;
   const entityType = target?.kind === "entity" ? target.entityType : null;
   const entityId = target?.kind === "entity" ? target.entityId : null;
   const targetKey =
@@ -205,16 +205,16 @@ export function useSharePanel({
             ...target.plan.shares.map((item) => `${item.entityType}:${item.entityId}`),
             ...target.plan.copies.map((candidate) => candidate.key),
           ].join(",")}`
-        : (canyonId ?? (entityId ? `${entityType}:${entityId}` : null));
+        : (placeId ?? (entityId ? `${entityType}:${entityId}` : null));
 
   // The API calls are the only per-kind part. A copy target has none, and its
   // sharing state is never read — `enabled` below keeps it from ever loading.
   const calls = useMemo((): SharingCalls => {
-    if (canyonId) {
+    if (placeId) {
       return {
-        load: () => getCanyonShares(canyonId),
-        grant: (userId) => shareCanyon(canyonId, userId),
-        revoke: (userId) => unshareCanyon(canyonId, userId),
+        load: () => getPlaceShares(placeId),
+        grant: (userId) => sharePlace(placeId, userId),
+        revoke: (userId) => unsharePlace(placeId, userId),
       };
     }
     if (entityType && entityId) {
@@ -225,15 +225,15 @@ export function useSharePanel({
       };
     }
     return NO_CALLS;
-  }, [canyonId, entityId, entityType]);
+  }, [placeId, entityId, entityType]);
 
   // Does the account hold this row yet? A route drawn in the field, a waypoint
-  // dropped on the trail or a canyon added offline has a `create` op still in
+  // dropped on the trail or a place added offline has a `create` op still in
   // the outbox, so `/shares/<kind>/<id>` 404s — the panel's door closes with
   // the reason, AND `useSharing` never fires the doomed lookup. Kinds the phone
   // cannot create (a LiDAR topo, a GeoPDF job) are never in this set.
   const pendingCreates = usePendingCreateIds();
-  const shareRowId = canyonId ?? entityId;
+  const shareRowId = placeId ?? entityId;
   const onServer = shareRowId == null || !pendingCreates.has(shareRowId);
 
   const sharing = useSharing({
@@ -245,7 +245,7 @@ export function useSharePanel({
     enabled: enabled && target != null && !isCopy && bulkPlan === null,
     itemLabel,
     revokeBody: (): string =>
-      canyonId
+      placeId
         ? `They'll lose access to ${itemLabel} and its photos.`
         : `They'll no longer see ${itemLabel}.`,
   });
@@ -515,7 +515,7 @@ export function useSharePanel({
         ) : null}
         <PromiseBanner
           tone="share"
-          text={canyonId ? CANYON_SHARE_BLURB : SHARE_BLURB}
+          text={placeId ? PLACE_SHARE_BLURB : SHARE_BLURB}
         />
         {search}
         {recipients.length > 0 ? (

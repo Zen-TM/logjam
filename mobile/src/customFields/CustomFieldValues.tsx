@@ -1,5 +1,5 @@
 // The user's own fields, as inputs on an entity form — one implementation for
-// trips and canyons, because the two forms ask the same question of the same
+// trips and places, because the two forms ask the same question of the same
 // definition list and a second copy would drift the moment a type is added.
 //
 // Values are held as STRINGS while editing (like the web's forms) and coerced
@@ -11,49 +11,17 @@
 // MODE of the host sheet (DESIGN.md §6 — never a second modal), and only the
 // host knows how to enter it.
 import { Feather } from "@expo/vector-icons";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import {
-  coerceFieldValue,
   customFieldDisplayLabel,
   type TripLogCustomFieldDef,
 } from "@logjam/shared";
 
+import { railStops } from "./fieldValueCoercion";
 import { formatDateKey } from "../logs/logbook";
-import { spacing, theme } from "../theme";
-import { Row, TextField, Toggle } from "../ui";
+import { fontSize, spacing, theme } from "../theme";
+import { Row, SegmentedControl, TextField, Toggle, type SegmentOption } from "../ui";
 
-/** Seed the editing state from stored values: everything as a string, and a
- *  missing value as "" (or "false" for a toggle, which has no empty state). */
-export function fieldValueStrings(
-  stored: Record<string, unknown> | undefined,
-): Record<string, string> {
-  return Object.fromEntries(
-    Object.entries(stored ?? {}).map(([key, value]) => [
-      key,
-      value == null ? "" : String(value),
-    ]),
-  );
-}
-
-/**
- * String form → stored value, using the shared coercion so a number typed here
- * lands as a number, not a string. An empty value drops the key entirely rather
- * than storing "" — a field with no answer should read as unset, and the detail
- * screens' "—" placeholder depends on it.
- */
-export function coerceCustomFields(
-  values: Record<string, string>,
-  defs: TripLogCustomFieldDef[],
-): Record<string, unknown> {
-  const result: Record<string, unknown> = {};
-  for (const def of defs) {
-    const raw = values[def.key];
-    if (raw == null || raw.trim() === "") continue;
-    if (def.type === "boolean" && raw === "false") continue;
-    result[def.key] = coerceFieldValue(raw, def.type);
-  }
-  return result;
-}
 
 /** Every definition as an input, in the user's own order. */
 export function CustomFieldValueInputs({
@@ -96,6 +64,20 @@ function CustomFieldValueInput({
   onPickDate: () => void;
 }) {
   const label = customFieldDisplayLabel(def);
+  // A BOUNDED INTEGER IS A RAIL. Unset has to stay reachable — most imported
+  // places have gaps, and a picker with no way back to blank turns "I don't
+  // know" into a wrong answer, which is why the first stop is "—".
+  const stops = railStops(def);
+  if (stops) {
+    const options: SegmentOption<string>[] = [{ value: "", label: "—" }];
+    for (const stop of stops) options.push({ value: String(stop), label: String(stop) });
+    return (
+      <View style={styles.field}>
+        <Text style={styles.railLabel}>{def.label}</Text>
+        <SegmentedControl scroll options={options} value={value} onChange={onChange} />
+      </View>
+    );
+  }
   if (def.type === "boolean") {
     return (
       <Row
@@ -143,4 +125,14 @@ function CustomFieldValueInput({
 
 const styles = StyleSheet.create({
   field: { gap: spacing(0.5) },
+  // Matches `TextField`'s own label exactly. A rail and a number box sit in one
+  // list under one heading now, so a sentence-case label beside an uppercase
+  // one reads as two different kinds of control.
+  railLabel: {
+    fontSize: fontSize.xs,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    color: theme.textMuted,
+  },
 });

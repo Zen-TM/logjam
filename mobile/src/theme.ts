@@ -3,7 +3,7 @@
 //
 // The user's scheme (`uiPreferences.themeSchemeId`) is resolved HERE, at module
 // evaluation, from a synchronous on-device preference — because everything
-// derived from it (`surface`, `assetHue`, `canyonHue`, and the ~45 files whose
+// derived from it (`surface`, `assetHue`, `placeHue`, and the ~45 files whose
 // `StyleSheet.create` reads these tokens) is a module constant snapshotted at
 // import time. That is also why a change applies at the next launch rather
 // than repainting the running app: see `persistThemeSchemeId` and DESIGN.md §12.
@@ -214,7 +214,7 @@ export function withAlpha(hex: string, alpha: number): string {
  * `region` reuses the active scheme's accent, so the largest, most common
  * asset class always feels native to the chosen theme.
  *
- * Rule for adding one: mid-light, muted, and drawn from the NSW canyon
+ * Rule for adding one: mid-light, muted, and drawn from the NSW place
  * palette (rock, scrub, water, heath) — never a saturated web primary.
  */
 export const assetHue = {
@@ -240,12 +240,12 @@ export const assetHue = {
 export type AssetHue = keyof typeof assetHue;
 
 /**
- * Canyon status identity for the Canyons screen — the same hue on a row's icon
+ * Place status identity for the Places screen — the same hue on a row's icon
  * tile and on its filter chip, exactly as `assetHue` works for saved assets
- * (DESIGN.md §3). Scheme-independent for the same reason: a canyon you have run
+ * (DESIGN.md §3). Scheme-independent for the same reason: a place you have run
  * is what it is regardless of the user's theme.
  */
-export const canyonHue = {
+export const placeHue = {
   /** Run at least once — the scheme's own accent, because this is the win. */
   done: theme.accent,
   /** On the list, not yet run — dry sandstone, the resting state. */
@@ -258,7 +258,7 @@ export const canyonHue = {
  * Inbox identity — BORROWED, not invented (DESIGN.md §3). A notification is
  * always about something that lives somewhere else in the app, so it wears that
  * thing's hue: a topo notification is the same eucalypt as a topo overlay in
- * Saved, a canyon-share is the same heath as a shared canyon on the Canyons
+ * Saved, a place-share is the same heath as a shared place on the Places
  * screen. Recognising a thing again where it lives is what makes the inbox part
  * of the app rather than a log of unrelated events.
  *
@@ -266,8 +266,8 @@ export const canyonHue = {
  * no hue yet, that is the gap to fill first.
  */
 export const notificationHue = {
-  /** A canyon shared with you — as on the Canyons rail. */
-  share: canyonHue.shared,
+  /** A place shared with you — as on the Places rail. */
+  share: placeHue.shared,
   /** Friends and requests — the account class takes the scheme accent. */
   people: theme.accent,
   /** LiDAR topo jobs — as in Saved. */

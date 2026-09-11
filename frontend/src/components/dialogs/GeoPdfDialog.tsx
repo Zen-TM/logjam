@@ -18,7 +18,7 @@ import type { TBbox } from "../map/Map";
 import { BASE_LAYERS } from "../map/Map";
 import { TOPO_LAYERS } from "../../topoLayerTypes";
 import type { CompletedTopoJob } from "../../topoLayerTypes";
-import { apiFetch, type TCanyon, type GeoPdfJobView } from "../../canyonUtils";
+import { apiFetch, type TPlace, type GeoPdfJobView } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import { ApiError } from "../../errors/ApiError";
 import { ErrorBanner } from "../feedback/ErrorBanner";
@@ -57,7 +57,7 @@ import {
 } from "@logjam/shared";
 import type { GeoPdfConfig } from "@logjam/shared";
 import { useStoredState } from "../../useStoredState";
-import { buildCanyonMarkers } from "./geoPdfCanyonMarkers";
+import { buildPlaceMarkers } from "./geoPdfPlaceMarkers";
 import classes from "./GeoPdfDialog.module.css";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -113,8 +113,8 @@ function GeoPdfDialog({
   activeLayerId,
   completedTopoJobs,
   mapCenter,
-  canyons,
-  sharedCanyons,
+  places,
+  sharedPlaces,
   templateMode,
   editingTemplate,
   onTemplateSaved,
@@ -134,8 +134,8 @@ function GeoPdfDialog({
   activeLayerId: string;
   completedTopoJobs: CompletedTopoJob[];
   mapCenter?: { lat: number; lng: number } | null;
-  canyons?: TCanyon[];
-  sharedCanyons?: TCanyon[];
+  places?: TPlace[];
+  sharedPlaces?: TPlace[];
   templateMode?: boolean;
   editingTemplate?: GeoPdfTemplate | null;
   onTemplateSaved?: () => void;
@@ -173,15 +173,15 @@ function GeoPdfDialog({
   const [gridLinesEnabled, setGridLinesEnabled] = useState(false);
   const [gridLinesMode, setGridLinesMode] = useState<CoordMode>("latlon");
 
-  // Canyon overlays. Persisted so a deliberate opt-in survives reopen.
-  // Shared canyons default OFF (PRIV-006): a friend consented to in-app
+  // Place overlays. Persisted so a deliberate opt-in survives reopen.
+  // Shared places default OFF (PRIV-006): a friend consented to in-app
   // viewing, not to being named on a printable artifact — opt-in only.
-  const [showOwnedCanyonsOnPdf, setShowOwnedCanyonsOnPdf] = useStoredState(
-    "logjam.geoPdf.showOwnedCanyons",
+  const [showOwnedPlacesOnPdf, setShowOwnedPlacesOnPdf] = useStoredState(
+    "logjam.geoPdf.showOwnedPlaces",
     true,
   );
-  const [showSharedCanyonsOnPdf, setShowSharedCanyonsOnPdf] = useStoredState(
-    "logjam.geoPdf.showSharedCanyons",
+  const [showSharedPlacesOnPdf, setShowSharedPlacesOnPdf] = useStoredState(
+    "logjam.geoPdf.showSharedPlaces",
     false,
   );
 
@@ -247,7 +247,7 @@ function GeoPdfDialog({
     setScaleBarEnabled(true);
     setGridLinesEnabled(false);
     setGridLinesMode("latlon");
-    // Canyon-marker toggles are deliberately NOT reset — they persist via
+    // Place-marker toggles are deliberately NOT reset — they persist via
     // localStorage so the user's explicit choice carries across sessions.
     setError(null);
     setEditTemplateName("");
@@ -629,15 +629,15 @@ function GeoPdfDialog({
       },
     };
 
-    // Build canyon markers from canyons within the current extent. Shared
-    // canyons are opt-in only (PRIV-006) — boundary enforced and tested in
-    // buildCanyonMarkers.
-    const markers = buildCanyonMarkers(canyons, sharedCanyons, config.extent, {
-      includeOwned: showOwnedCanyonsOnPdf,
-      includeShared: showSharedCanyonsOnPdf,
+    // Build place markers from places within the current extent. Shared
+    // places are opt-in only (PRIV-006) — boundary enforced and tested in
+    // buildPlaceMarkers.
+    const markers = buildPlaceMarkers(places, sharedPlaces, config.extent, {
+      includeOwned: showOwnedPlacesOnPdf,
+      includeShared: showSharedPlacesOnPdf,
     });
     if (markers.length > 0) {
-      config.canyonMarkers = markers;
+      config.placeMarkers = markers;
     }
 
     try {
@@ -1275,20 +1275,20 @@ function GeoPdfDialog({
               <label className={classes.layerOption}>
                 <input
                   type="checkbox"
-                  checked={showOwnedCanyonsOnPdf}
-                  onChange={(e) => setShowOwnedCanyonsOnPdf(e.target.checked)}
+                  checked={showOwnedPlacesOnPdf}
+                  onChange={(e) => setShowOwnedPlacesOnPdf(e.target.checked)}
                   style={{ accentColor: "var(--theme-accent)" }}
                 />
-                My Canyons
+                My Places
               </label>
               <label className={classes.layerOption}>
                 <input
                   type="checkbox"
-                  checked={showSharedCanyonsOnPdf}
-                  onChange={(e) => setShowSharedCanyonsOnPdf(e.target.checked)}
+                  checked={showSharedPlacesOnPdf}
+                  onChange={(e) => setShowSharedPlacesOnPdf(e.target.checked)}
                   style={{ accentColor: "var(--theme-accent)" }}
                 />
-                Shared Canyons
+                Shared Places
               </label>
             </div>
           </div>

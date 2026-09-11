@@ -5,7 +5,7 @@
 // See FECO-006 / 01-decisions.md D5: every drop must be reported with the
 // source row number and offending value, not silently discarded.
 
-export function describeDroppedCanyonRow(args: {
+export function describeDroppedPlaceRow(args: {
   name: string;
   latitude: number;
   longitude: number;

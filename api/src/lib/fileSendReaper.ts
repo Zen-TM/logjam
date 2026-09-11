@@ -93,7 +93,7 @@ export async function sweepExpiredFileSends(
           // THE ONE PLACE A FILENAME IS WRITTEN INTO A PAYLOAD, and the only
           // one that may be. Everywhere else these notifications resolve their
           // filename from the live send at read time (PRIV-005), because a
-          // filename is user text that routinely names a canyon and must not
+          // filename is user text that routinely names a place and must not
           // sit at rest for something the reader can no longer reach. That
           // reasoning runs out here: the row about to be deleted is the last
           // copy, and a recipient who never got the file is owed the name of

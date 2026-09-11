@@ -26,14 +26,14 @@ export type ShareMark = {
 };
 
 /**
- * A row can arrive shared TWO ways (api/src/routes/sync.ts): through a canyon
+ * A row can arrive shared TWO ways (api/src/routes/sync.ts): through a place
  * share, or through a direct per-item share. Only the first carries an owner
  * identity to the phone — direct `shares` are not a delta entity, so there is
  * no username in the mirror for them and they land on the "Shared with you"
  * fallback. That is the honest answer rather than a gap: naming the owner would
  * take a new delta entity, not a change here.
  *
- * `canyonIds` is every canyon the row hangs off (a route has at most one, a
+ * `placeIds` is every place the row hangs off (a route has at most one, a
  * waypoint can have several). The first that resolves to an incoming share
  * names the owner — a row visible through two shares is still one person's, and
  * whichever share is found says the same thing.
@@ -41,12 +41,12 @@ export type ShareMark = {
 export function shareMark(input: {
   syncRole: string | null;
   sharedCount: number | null;
-  canyonIds: readonly (string | null)[];
-  ownersByCanyon: Record<string, string>;
+  placeIds: readonly (string | null)[];
+  ownersByPlace: Record<string, string>;
 }): ShareMark {
   if (input.syncRole === "shared") {
-    const owner = input.canyonIds
-      .map((canyonId) => (canyonId ? input.ownersByCanyon[canyonId] : undefined))
+    const owner = input.placeIds
+      .map((placeId) => (placeId ? input.ownersByPlace[placeId] : undefined))
       .find((username) => username != null);
     // No owner resolved (the share row hasn't reached the mirror yet, or the
     // asset outlived it) still says the whole phrase. Never the bare word

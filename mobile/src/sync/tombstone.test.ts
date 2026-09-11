@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// The canyon tombstone cascade — the code path that killed sync on every fresh
-// install. It ran `UPDATE waypoints SET canyon_id = NULL`, a column the schema
-// stopped declaring when waypoint→canyon links went many-to-many, so the whole
+// The place tombstone cascade — the code path that killed sync on every fresh
+// install. It ran `UPDATE waypoints SET place_id = NULL`, a column the schema
+// stopped declaring when waypoint→place links went many-to-many, so the whole
 // delta transaction rolled back, the cursor never advanced, and the same page
 // re-failed every cycle forever.
 //
@@ -12,10 +12,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 type Call = { sql: string; args: unknown[] };
 const calls: Call[] = [];
-let waypointRows: { id: string; canyon_ids_json: string | null }[] = [];
-let tripRows: { id: string; canyons_json: string | null }[] = [];
+let linkRows: { id: string; a_place_id: string; b_place_id: string }[] = [];
+let tripRows: { id: string; places_json: string | null }[] = [];
 
-const DEAD = "dead-canyon";
+const DEAD = "dead-place";
 
 const db = {
   runAsync: (sql: string, ...args: unknown[]) => {
@@ -25,7 +25,7 @@ const db = {
   getFirstAsync: () => Promise.resolve(null),
   getAllAsync: (sql: string) => {
     calls.push({ sql, args: [] });
-    if (sql.includes("FROM waypoints")) return Promise.resolve(waypointRows);
+    if (sql.includes("FROM place_links")) return Promise.resolve(linkRows);
     if (sql.includes("FROM trip_logs")) return Promise.resolve(tripRows);
     return Promise.resolve([]);
   },
@@ -46,7 +46,7 @@ vi.mock("expo-crypto", () => ({
 }));
 
 const { applyTombstone } = await import("./mirrorStore");
-const { deleteCanyonLocal } = await import("./outbox");
+const { deletePlaceLocal } = await import("./outbox");
 
 function sqlText(): string {
   return calls.map((call) => call.sql).join("\n");
@@ -62,8 +62,12 @@ describe("a tombstone type this build does not know", () => {
   });
 
   it("issues no statement at all", async () => {
+    // `placeType` used to stand in for "an entity a NEWER server knows and this
+    // build does not". It is a real entity now, so the stand-in has to be
+    // something genuinely unknown — which is the point of the test, not the
+    // particular word.
     const orphaned = await applyTombstone(db as never, {
-      type: "placeType",
+      type: "somethingFromTheFuture",
       id: "from-a-newer-server",
     });
     expect(orphaned).toEqual([]);
@@ -71,98 +75,89 @@ describe("a tombstone type this build does not know", () => {
   });
 
   it("still cascades a type it DOES know", async () => {
-    await applyTombstone(db as never, { type: "waypoint", id: "wp-1" });
-    expect(sqlText()).toMatch(/DELETE FROM waypoints/);
+    await applyTombstone(db as never, { type: "placeLink", id: "link-1" });
+    expect(sqlText()).toMatch(/DELETE FROM place_links WHERE id = \?/);
   });
 });
 
-describe("canyon tombstone cascade", () => {
+describe("place tombstone cascade", () => {
   beforeEach(() => {
     calls.length = 0;
-    waypointRows = [
-      { id: "wp-linked", canyon_ids_json: JSON.stringify([DEAD, "other"]) },
-      { id: "wp-substring", canyon_ids_json: JSON.stringify(["dead-canyon-2"]) },
-    ];
-    tripRows = [{ id: "trip-1", canyons_json: JSON.stringify([{ id: DEAD, name: "X" }]) }];
+    linkRows = [{ id: "link-1", a_place_id: DEAD, b_place_id: "other" }];
+    tripRows = [{ id: "trip-1", places_json: JSON.stringify([{ id: DEAD, name: "X" }]) }];
   });
 
-  it("never writes the m2m column that no longer exists", async () => {
-    await applyTombstone(db as never, { type: "canyon", id: DEAD });
-    expect(sqlText()).not.toMatch(/UPDATE waypoints SET canyon_id\b/);
+  it("never writes a table the schema no longer declares", async () => {
+    await applyTombstone(db as never, { type: "place", id: DEAD });
+    expect(sqlText()).not.toMatch(/waypoints/);
   });
 
-  it("takes the dead canyon out of each waypoint's link list", async () => {
-    await applyTombstone(db as never, { type: "canyon", id: DEAD });
-    const update = calls.find((call) =>
-      call.sql.includes("UPDATE waypoints SET canyon_ids_json"),
+  it("deletes the links touching it, from BOTH ends", async () => {
+    await applyTombstone(db as never, { type: "place", id: DEAD });
+    const del = calls.find((call) =>
+      call.sql.includes("DELETE FROM place_links WHERE a_place_id = ? OR b_place_id = ?"),
     );
-    expect(update).toBeDefined();
-    expect(update!.args).toEqual([JSON.stringify(["other"]), "wp-linked"]);
-  });
-
-  it("leaves a row the LIKE prefilter matched by substring untouched", async () => {
-    await applyTombstone(db as never, { type: "canyon", id: DEAD });
-    const updates = calls.filter((call) =>
-      call.sql.includes("UPDATE waypoints SET canyon_ids_json"),
-    );
-    expect(updates).toHaveLength(1);
+    expect(del).toBeDefined();
+    // The place at the other end is NOT deleted — a link is not a container.
+    expect(del!.args).toEqual([DEAD, DEAD]);
+    expect(sqlText()).not.toMatch(/DELETE FROM places WHERE id = \?\n.*other/);
   });
 
   it("scrubs the trip link list in its own {id,name} shape", async () => {
-    await applyTombstone(db as never, { type: "canyon", id: DEAD });
+    await applyTombstone(db as never, { type: "place", id: DEAD });
     const update = calls.find((call) =>
-      call.sql.includes("UPDATE trip_logs SET canyons_json"),
+      call.sql.includes("UPDATE trip_logs SET places_json"),
     );
     expect(update!.args).toEqual(["[]", "trip-1"]);
   });
 
-  it("still deletes the canyon, its media, its shares and nulls route links", async () => {
-    await applyTombstone(db as never, { type: "canyon", id: DEAD });
+  it("still deletes the place, its media, its shares and nulls route links", async () => {
+    await applyTombstone(db as never, { type: "place", id: DEAD });
     const text = sqlText();
-    expect(text).toContain("DELETE FROM canyons WHERE id = ?");
-    expect(text).toContain("DELETE FROM media WHERE linked_type = 'canyon'");
-    expect(text).toContain("DELETE FROM canyon_shares WHERE canyon_id = ?");
-    expect(text).toContain("UPDATE routes SET canyon_id = NULL");
+    expect(text).toContain("DELETE FROM places WHERE id = ?");
+    expect(text).toContain("DELETE FROM media WHERE linked_type = 'place'");
+    expect(text).toContain("DELETE FROM place_shares WHERE place_id = ?");
+    expect(text).toContain("UPDATE routes SET place_id = NULL");
   });
 
   it("drops a pending local delete and parks the other pending ops", async () => {
-    await applyTombstone(db as never, { type: "canyon", id: DEAD });
+    await applyTombstone(db as never, { type: "place", id: DEAD });
     const text = sqlText();
     expect(text).toContain("DELETE FROM outbox WHERE entity_id = ? AND op = 'delete'");
     expect(text).toContain("UPDATE outbox SET state = 'deadRemote'");
   });
 });
 
-describe("deleteCanyonLocal runs the SAME cascade as the tombstone", () => {
+describe("deletePlaceLocal runs the SAME cascade as the tombstone", () => {
   // The divergence this pins: the local delete used to scrub links and shares
-  // only, so the canyon's media rows (and their cached blobs) and any route
+  // only, so the place's media rows (and their cached blobs) and any route
   // pointing at it survived until a later delta pull tidied up — i.e. forever
   // for a guest, whose device is never registered for pulls at all.
   beforeEach(() => {
     calls.length = 0;
-    waypointRows = [];
+    linkRows = [];
     tripRows = [];
   });
 
-  it("deletes the canyon's media rows, shares and route links", async () => {
-    await deleteCanyonLocal(DEAD);
+  it("deletes the place's media rows, shares and route links", async () => {
+    await deletePlaceLocal(DEAD);
     const text = sqlText();
-    expect(text).toContain("DELETE FROM canyons WHERE id = ?");
-    expect(text).toContain("DELETE FROM media WHERE linked_type = 'canyon'");
-    expect(text).toContain("DELETE FROM canyon_shares WHERE canyon_id = ?");
-    expect(text).toContain("UPDATE routes SET canyon_id = NULL");
+    expect(text).toContain("DELETE FROM places WHERE id = ?");
+    expect(text).toContain("DELETE FROM media WHERE linked_type = 'place'");
+    expect(text).toContain("DELETE FROM place_shares WHERE place_id = ?");
+    expect(text).toContain("UPDATE routes SET place_id = NULL");
   });
 
-  it("still queues the canyon delete op", async () => {
-    await deleteCanyonLocal(DEAD);
+  it("still queues the place delete op", async () => {
+    await deletePlaceLocal(DEAD);
     const op = calls.find((call) => call.sql.includes("INSERT INTO outbox"));
     expect(op).toBeDefined();
-    expect(op!.args).toContain("canyon");
+    expect(op!.args).toContain("place");
     expect(op!.args).toContain("delete");
   });
 
   it("issues every statement the tombstone cascade issues", async () => {
-    await applyTombstone(db as never, { type: "canyon", id: DEAD });
+    await applyTombstone(db as never, { type: "place", id: DEAD });
     const tombstoneSql = calls
       .map((call) => call.sql)
       // The tombstone additionally reconciles the outbox; the local delete
@@ -170,7 +165,7 @@ describe("deleteCanyonLocal runs the SAME cascade as the tombstone", () => {
       .filter((sql) => !sql.includes("outbox"));
     expect(tombstoneSql.length).toBeGreaterThan(3); // the scan really ran
     calls.length = 0;
-    await deleteCanyonLocal(DEAD);
+    await deletePlaceLocal(DEAD);
     const localSql = new Set(calls.map((call) => call.sql));
     expect(tombstoneSql.filter((sql) => !localSql.has(sql))).toEqual([]);
   });

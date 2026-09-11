@@ -3,10 +3,12 @@ import {
   decodeSyncCursor,
   encodeSyncCursor,
   isUuidV4,
-  parseSyncDeltaCanyonRow,
+  parseSyncDeltaCustomFieldDefRow,
+  parseSyncDeltaPlaceRow,
+  parseSyncDeltaPlaceTypeRow,
   parseSyncDeltaTombstone,
   parseSyncDeltaTripRow,
-  parseSyncDeltaWaypointRow,
+  parseSyncDeltaPlaceLinkRow,
   SYNC_ENTITY_TYPES,
   SyncRowError,
 } from "./sync";
@@ -63,7 +65,7 @@ describe("sync cursor codec", () => {
     const encoded = encodeSyncCursor({
       v: 1,
       ts: "2026-07-24T01:00:00.000Z",
-      k: { canyons: ["2026-07-24T00:00:00.000Z", "x".repeat(37)] },
+      k: { places: ["2026-07-24T00:00:00.000Z", "x".repeat(37)] },
     });
     expect(encoded).toMatch(/^[A-Za-z0-9_-]+$/);
   });
@@ -97,14 +99,23 @@ describe("sync cursor codec", () => {
 });
 
 describe("SYNC_ENTITY_TYPES", () => {
-  it("covers the eight synced entities", () => {
+  it("covers the nine synced entities", () => {
     expect(SYNC_ENTITY_TYPES).toEqual([
-      "canyon",
+      "place",
+      // A place TYPE is a synced entity of its own: it is created, renamed and
+      // deleted OFFLINE like every other user-made row (§2.9), which an
+      // online-only path could not do — and would break guest installs, which
+      // never reach the server at all until they link.
+      "placeType",
       "tripLog",
       "media",
-      "canyonShare",
+      "placeShare",
+      // A place<->place LINK. Its own entity rather than an array on the place
+      // row: a SYMMETRIC relationship edited from both ends means two devices
+      // clobber each other, which is why `waypoint.canyonIds` could be a
+      // whole-list field and this cannot.
+      "placeLink",
       "friendship",
-      "waypoint",
       "route",
       "customFieldDef",
     ]);
@@ -133,14 +144,14 @@ describe("parseSyncDeltaTombstone", () => {
   });
 
   it("still rejects a malformed SHAPE", () => {
-    expect(() => parseSyncDeltaTombstone({ type: "canyon" })).toThrow(SyncRowError);
+    expect(() => parseSyncDeltaTombstone({ type: "place" })).toThrow(SyncRowError);
     expect(() => parseSyncDeltaTombstone({ type: 7, id: "x" })).toThrow(SyncRowError);
     expect(() => parseSyncDeltaTombstone(null)).toThrow(SyncRowError);
   });
 });
 
 describe("delta row parsers", () => {
-  const canyon = {
+  const place = {
     id: "c1",
     ownerId: "u1",
     syncRole: "owner",
@@ -148,15 +159,10 @@ describe("delta row parsers", () => {
     altNames: [],
     latitude: -33.5,
     longitude: 150.4,
-    numAbseils: 6,
-    longestAbseil: null,
-    vGrade: 4,
-    aGrade: 3,
-    commitment: 3,
-    quality: null,
-    hours: 7,
+    placeTypeId: "b0000000-0000-4000-8000-000000000001",
     notes: null,
-    attributes: {},
+    elevation: null,
+    fieldValues: { v_grade: 4, a_grade: 3, commitment: 3, num_abseils: 6, hours: 7 },
     ropeWikiId: null,
     forkedFromId: null,
     createdAt: "2026-01-01T00:00:00.000Z",
@@ -167,68 +173,99 @@ describe("delta row parsers", () => {
     userId: "u1",
     date: "2026-01-01T00:00:00.000Z",
     displayName: null,
-    types: ["canyon"],
+    types: ["place"],
     notes: null,
     customFields: {},
-    canyons: [{ id: "c1", name: "Claustral" }],
+    places: [{ id: "c1", name: "Claustral" }],
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   };
-  const waypoint = {
-    id: "w1",
+  const placeLink = {
+    id: "l1",
     ownerId: "u1",
-    syncRole: "shared",
-    canyonIds: ["c1"],
-    name: "Carpark",
-    latitude: -33.5,
-    longitude: 150.4,
-    elevation: null,
-    symbol: null,
-    notes: null,
-    tags: [],
+    aPlaceId: "c1",
+    bPlaceId: "c2",
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   };
 
+  // A SYSTEM row belongs to no account, and there are two kinds of them: the
+  // three place types and the nine field definitions. `ownerId: isString` on
+  // the definition spec dropped all nine off every delta page a phone pulled —
+  // the grades arrived on places with nothing to label or bound them — and no
+  // test saw it, because every test on both sides built its rows by hand.
+  // Ground truth for this now lives in `api/src/__tests__/syncBoundary.test.ts`,
+  // which parses what the live server actually sends.
+  it("accepts a global row, whichever kind it is, with a null owner", () => {
+    const systemType = {
+      id: "b0000000-0000-4000-8000-000000000001",
+      ownerId: null,
+      name: "Canyon",
+      iconKey: "droplet",
+      color: "#E4C5AA",
+      position: 0,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    expect(parseSyncDeltaPlaceTypeRow(systemType).ownerId).toBeNull();
+
+    const systemDef = {
+      id: "c0000000-0000-4000-8000-000000000001",
+      ownerId: null,
+      entity: "place",
+      key: "v_grade",
+      label: "V Grade",
+      type: "integer",
+      min: 1,
+      max: 7,
+      position: 0,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    expect(parseSyncDeltaCustomFieldDefRow(systemDef).ownerId).toBeNull();
+  });
+
   it("accepts well-formed rows and preserves unknown extra keys", () => {
-    expect(parseSyncDeltaCanyonRow({ ...canyon, futureField: 1 })).toMatchObject({
+    expect(parseSyncDeltaPlaceRow({ ...place, futureField: 1 })).toMatchObject({
       id: "c1",
       futureField: 1,
     });
     expect(parseSyncDeltaTripRow(trip).id).toBe("t1");
-    expect(parseSyncDeltaWaypointRow(waypoint).id).toBe("w1");
+    expect(parseSyncDeltaPlaceLinkRow(placeLink).id).toBe("l1");
   });
 
   it("rejects non-objects", () => {
     for (const value of [null, undefined, 7, "row", []]) {
-      expect(() => parseSyncDeltaCanyonRow(value)).toThrow(SyncRowError);
+      expect(() => parseSyncDeltaPlaceRow(value)).toThrow(SyncRowError);
     }
   });
 
   it("rejects a missing or wrongly-typed field, naming it", () => {
     expect(() =>
-      parseSyncDeltaCanyonRow({ ...canyon, latitude: "-33.5" }),
+      parseSyncDeltaPlaceRow({ ...place, latitude: "-33.5" }),
     ).toThrow(/latitude/);
-    const { name: _dropped, ...noName } = canyon;
-    expect(() => parseSyncDeltaCanyonRow(noName)).toThrow(/name/);
+    const { name: _dropped, ...noName } = place;
+    expect(() => parseSyncDeltaPlaceRow(noName)).toThrow(/name/);
     // Required-but-nullable stays required: undefined is not null.
-    expect(() => parseSyncDeltaCanyonRow({ ...canyon, notes: undefined })).toThrow(
+    expect(() => parseSyncDeltaPlaceRow({ ...place, notes: undefined })).toThrow(
       /notes/,
     );
-    expect(() => parseSyncDeltaTripRow({ ...trip, canyons: [{ id: "c1" }] })).toThrow(
-      /canyons/,
+    expect(() => parseSyncDeltaTripRow({ ...trip, places: [{ id: "c1" }] })).toThrow(
+      /places/,
     );
+    // A link's endpoints are the whole row — a malformed one must not reach
+    // the mirror, where it would render as an edge to nowhere.
     expect(() =>
-      parseSyncDeltaWaypointRow({ ...waypoint, syncRole: "editor" }),
-    ).toThrow(/syncRole/);
-    expect(() => parseSyncDeltaWaypointRow({ ...waypoint, tags: [1] })).toThrow(
-      /tags/,
-    );
+      parseSyncDeltaPlaceLinkRow({ ...placeLink, aPlaceId: 7 }),
+    ).toThrow(/aPlaceId/);
+    expect(() =>
+      parseSyncDeltaPlaceLinkRow({ ...placeLink, bPlaceId: null }),
+    ).toThrow(/bPlaceId/);
   });
 
   it("never puts field VALUES in the message (they are names and coords)", () => {
     try {
-      parseSyncDeltaCanyonRow({ ...canyon, latitude: "-33.5", name: 7 });
+      parseSyncDeltaPlaceRow({ ...place, latitude: "-33.5", name: 7 });
       throw new Error("expected a throw");
     } catch (err) {
       const message = (err as Error).message;

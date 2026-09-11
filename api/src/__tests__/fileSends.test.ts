@@ -38,7 +38,7 @@ import prisma from "../services/prisma";
 // answer to a setup problem. `ensureFriends` is idempotent, so the suite is
 // correct on a fresh seed and on a stale one alike.
 //
-// Synthetic content only — never a real canyon name in a filename here.
+// Synthetic content only — never a real place name in a filename here.
 
 const CLIENT = { "x-logjam-client": "mobile/0.1.0-test" } as const;
 
