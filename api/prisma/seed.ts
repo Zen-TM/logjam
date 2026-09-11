@@ -98,10 +98,15 @@ const COIN_SLOT_LINE: [number, number][] = [
   [150.3259, -33.1258],
 ];
 
+// `appliesToAllTypes` SPELLED OUT, not left to the column default: a definition
+// with the flag off and no place types scoped to it appears on no form at all,
+// and a trip-log definition has no type picker to answer the question with. The
+// seed wrote all three with the default and they were invisible on the trip
+// form until 20260911140000 repaired them.
 const ALICE_TRIP_FIELD_DEFS = [
-  { key: "water_level", label: "Water Level", type: "string" },
-  { key: "rope_length_m", label: "Rope Length (m)", type: "integer" },
-  { key: "wetsuit", label: "Wetsuit", type: "boolean" },
+  { key: "water_level", label: "Water Level", type: "string", appliesToAllTypes: true },
+  { key: "rope_length_m", label: "Rope Length (m)", type: "integer", appliesToAllTypes: true },
+  { key: "wetsuit", label: "Wetsuit", type: "boolean", appliesToAllTypes: true },
 ];
 
 // A place type ALICE made herself, so copy reconciliation (§2.6) is

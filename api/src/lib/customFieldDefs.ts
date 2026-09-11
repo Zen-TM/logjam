@@ -398,7 +398,16 @@ export async function createFieldDef(
         min: def.min ?? null,
         max: def.max ?? null,
         position: input.position ?? (await nextPosition(userId, entity)),
-        appliesToAllTypes: input.appliesToAllTypes ?? false,
+        // A DEFINITION THAT NAMES NO TYPES IS ON EVERY FORM, because the
+        // alternative is a row that appears on none of them: `defsForType` and
+        // `tripFieldDefs` both ask "all types, or one of these?", so a def with
+        // the flag off and an empty scoping exists in the settings list and
+        // nowhere else. That is what a caller that never heard of the scoping
+        // produces, which is every pre-rework caller and every trip-log write
+        // (a trip field has no type picker at all). Defaulting false made all
+        // three of alice's trip fields invisible on the trip form — found by
+        // reading the phone's mirror, not by a test.
+        appliesToAllTypes: input.appliesToAllTypes ?? placeTypeIds.length === 0,
         ...(placeTypeIds.length
           ? {
               placeTypes: {

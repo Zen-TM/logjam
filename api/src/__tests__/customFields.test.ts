@@ -132,10 +132,13 @@ describe("custom-fields route (fake auth)", () => {
         key: "permit_no",
         label: "Permit number",
         type: "string",
-        // Created with no scoping, so it applies to no type — visible and
-        // fixable, unlike a definition that appears on every form.
+        // Created with no scoping, so it applies to ALL types. This used to
+        // assert the opposite — "applies to no type, visible and fixable" —
+        // which was neither: a definition on no form is invisible everywhere
+        // except the settings list, and the same default made every trip-log
+        // field disappear (see the unscoped-definition test above).
         placeTypeIds: [],
-        appliesToAllTypes: false,
+        appliesToAllTypes: true,
       }),
     );
 
@@ -212,6 +215,46 @@ describe("custom-fields route (fake auth)", () => {
   // rendering seven canyon grades. `CustomFieldDefPlaceType` is not a sync
   // entity of its own, so the scoping rides ON the definition: flattened onto
   // the REST list, and onto the delta row.
+  // THE INVISIBLE DEFINITION. A row with the flag off and no place types
+  // scoped to it is on no form at all — both readers ask "all types, or one of
+  // these?" — so it lists in Settings and appears nowhere else, which reads as
+  // the save having failed. Every trip-log definition was in that state until
+  // 20260911140000, alice's three seeded ones included.
+  it("puts a definition that names no place types on every form", async () => {
+    const key = `unscoped_${Date.now()}`.slice(0, 20);
+    const created = await write(() =>
+      request(API_URL)
+        .post("/custom-fields/trip-log")
+        .set(AUTH)
+        .send({ field: { key, label: "Unscoped field", type: "string" } }),
+    );
+    expect(created.status, JSON.stringify(created.body)).toBe(201);
+
+    const list = await request(API_URL).get("/custom-fields/trip-log").set(AUTH);
+    const def = (list.body.fields as Record<string, unknown>[]).find(
+      (f) => f.key === key,
+    );
+    expect(def, "the definition should be listed").toBeTruthy();
+    expect(def!.appliesToAllTypes).toBe(true);
+    expect(def!.placeTypeIds).toEqual([]);
+
+    // And the seeded three, which is where this was found.
+    for (const seeded of ["water_level", "rope_length_m", "wetsuit"]) {
+      const row = (list.body.fields as Record<string, unknown>[]).find(
+        (f) => f.key === seeded,
+      );
+      expect(row, `${seeded} should be listed`).toBeTruthy();
+      expect(
+        row!.appliesToAllTypes,
+        `${seeded} is on no form unless it applies to all types`,
+      ).toBe(true);
+    }
+
+    await write(() =>
+      request(API_URL).delete(`/custom-fields/trip-log/${key}`).set(AUTH),
+    );
+  });
+
   it("carries each definition's scoping on the REST list", async () => {
     const type = await write(() =>
       request(API_URL)
