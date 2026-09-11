@@ -676,13 +676,53 @@ REFUSED (409) because those keys are reserved. The UI disables adopt on a
 reserved key rather than 409ing on the tap, and says it comes back by itself.
 
 **Place types are managed in SETTINGS** (`places/PlaceTypesEditor.tsx`), beside
-the attribute lists — a list you keep, not a preference you set. Not on the
-Places tab's type rail: that rail is a filter, and hanging "and also make one"
-off a filter is how a filter stops reading as a filter. The sync push has
+the attribute lists — a list you keep, not a preference you set. The FORM is
+also reachable from the Places tab's type rail, as a trailing "New type" chip
+(`NEW_TYPE` in `PlacesScreen.tsx`): the rail is a filter, but it is also the
+only place a user looks at their own types and thinks about them, and "there is
+no tab for the kind of place I mean" is the moment to offer one. The chip is an
+ACTION — `selectType` intercepts it and leaves the selection alone — and the
+rail is now always on screen, because hiding it until a second type has places
+in it would have hidden the affordance from exactly the accounts that need it.
+Only ADD is offered there; editing and deleting belong with the list. The sync
+push has
 accepted `placeType` create/update/delete since the rework; the phone simply had
 no screen for it, so a phone-only user could not add a type at all. A delete is
 refused locally when places still use the type, because the server refuses it
 too (409) and a queued op would park as a dead push.
+
+**A definition that names no place types must be ON EVERY FORM, not none.**
+Both readers ask "all types, or one of these?" (`defsForType`,
+`tripFieldDefs`), so a row with `appliesToAllTypes` false and an empty scoping
+lists in Settings and appears nowhere else — which reads as the save having
+failed. That is what every caller predating the scoping produced, and what every
+trip-log write produces (a trip field has no type picker to answer with):
+`20260906010000` backfilled `entity = 'place'` only, so ALL THREE of alice's
+trip attributes were invisible on the trip form. `createFieldDef` now defaults
+the flag to "on when no types were named", `20260911140000` repairs the existing
+rows, and the mobile editor still refuses the state outright for a place field.
+Found by reading the phone's mirror, not by a test; guard is
+`api/src/__tests__/customFields.test.ts`, "puts a definition that names no place
+types on every form".
+
+**BUILT-INS SORT LAST in a list you keep, and FIRST in a rail you filter with.**
+Two different questions. `CustomFieldList` and `PlaceTypeList` put the rows with
+no verbs on them at the bottom, because the half above is what the user came to
+change; `GET /place-types` and the Places rail keep system types first, because
+the leftmost tab and a new place's default type are decided by that order.
+
+**A parked attribute is a CARD; a recorded one is a table row.** The
+"Doesn't fit this type" rows use the shared `Row` (surface, chevron, press) and
+the type's own attributes use a transparent hairline table. They look different
+because they are different: one is a list of facts, the other is a list of
+decisions. The table style that stopped the facts inviting a tap took the
+invitation off the decisions too.
+
+**An action that can NEVER apply is hidden, not disabled.** "Create a new
+attribute for this place type" is absent on a reserved key rather than greyed
+with an explanation — the system definition owns that key and the API answers
+409, so it is not unavailable right now, it does not exist for this value. A
+disabled row invites a tap and then explains itself.
 
 **A definition with no owner id is not necessarily a built-in.** A definition
 created on the phone has none until the server sends one back, and

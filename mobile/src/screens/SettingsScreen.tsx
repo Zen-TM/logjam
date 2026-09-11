@@ -153,10 +153,11 @@ export function SettingsScreen({ onOpenPage }: { onOpenPage: (page: SettingsPage
           />
         ))}
 
-        {/* A list you keep, not a preference you set — which is why it sits
-            here with the attribute lists rather than on the Places tab's type
-            rail, where "and also make one" would stop the rail reading as the
-            filter it is. */}
+        {/* A list you keep, not a preference you set — which is why the LIST
+            sits here with the attribute lists. The form is also one tap from
+            the Places tab's type rail ("New type", the chip at the end of it),
+            because that is where a user notices they want another one; editing
+            and deleting stay here, with the list of them. */}
         <SectionHeader label="Your own categories" />
         <Row
           icon="layers"

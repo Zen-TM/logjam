@@ -56,6 +56,7 @@ import {
   useSyncStatus,
 } from "../sync/useSyncQueries";
 import {
+  BottomSheet,
   Button,
   CapacityBar,
   HeroHeader,
@@ -78,6 +79,7 @@ import { PlaceEditSheet } from "./PlaceEditSheet";
 import { takePickedPoint } from "../map/pickedPoint";
 import { setAreaPickerStart, takePickedArea } from "../map/pickedArea";
 import { PlaceOptionsSheet } from "./PlaceOptionsSheet";
+import { usePlaceTypeForm } from "./PlaceTypesEditor";
 import { BulkShareButton, BulkShareSheet } from "../sharing/BulkShareSheet";
 import { PlaceFilterSheet, sortLabel } from "./PlaceFilterSheet";
 import {
@@ -94,6 +96,9 @@ type Bucket = "all" | PlaceStatus;
  *  `SegmentedControl` keys its chips by value. No place type can collide with
  *  it — an id is a UUID. */
 const ALL_TYPES = "all";
+/** The rail's trailing ACTION chip. Not a type id and cannot collide with one:
+ *  every real id is a UUID. */
+const NEW_TYPE = "__new_type__";
 
 /** A place plus the tallies the shared predicate reads off `_count`. */
 type Countable = MirrorPlace & { _count?: { tripLogLinks: number; shares: number } };
@@ -137,7 +142,9 @@ export function PlacesScreen({
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<PlaceFilters>(EMPTY_PLACE_FILTERS);
   const [sort, setSort] = useState<PlaceSortKey>("name");
-  const [sheet, setSheet] = useState<"filters" | "bulkShare" | null>(null);
+  const [sheet, setSheet] = useState<"filters" | "bulkShare" | "placeTypeForm" | null>(
+    null,
+  );
   const mapFilter = usePlaceMapFilter();
   const [menuPlaceId, setMenuPlaceId] = useState<string | null>(null);
   /** The sheet owns its own share sub-mode and forgets it on close. */
@@ -464,6 +471,21 @@ export function PlacesScreen({
     ],
     [filters.placeTypeId, placeTypes, typeCounts, typeTotals, withoutType.length],
   );
+  /**
+   * What the rail actually draws: the type chips, then a way to make one.
+   *
+   * "There is no tab for the kind of place I'm looking at" is where a user
+   * notices they want a new type, and Settings is three taps and a different
+   * mental mode away. The chip is drawn last so it never moves as types come
+   * and go, and it is an action rather than a selectable value — `selectType`
+   * intercepts it (DESIGN.md §5: a control that changes mode says so by what it
+   * does, not by looking different).
+   */
+  const railOptions: SegmentOption<string>[] = useMemo(
+    () => [...typeOptions, { value: NEW_TYPE, label: "New type", icon: "plus" }],
+    [typeOptions],
+  );
+
   /** Null once a tab is doing the saying. */
   const typeLabelOf = useCallback(
     (typeId: string) =>
@@ -474,13 +496,28 @@ export function PlacesScreen({
   );
 
   const selectType = useCallback(
-    (next: string) =>
+    (next: string) => {
+      // The last chip is an ACTION, not a filter state — it opens the form and
+      // leaves the selection where it was, so a user who changes their mind
+      // comes back to the tab they were on.
+      if (next === NEW_TYPE) {
+        setSheet("placeTypeForm");
+        return;
+      }
       setFilters((current) => ({
         ...current,
         placeTypeId: next === ALL_TYPES ? null : next,
-      })),
+      }));
+    },
     [],
   );
+
+  const placeTypeForm = usePlaceTypeForm({
+    editing: null,
+    onSaved: info,
+    onFailed: fail,
+    onDone: () => setSheet(null),
+  });
 
   const bucketOptions: SegmentOption<Bucket>[] = useMemo(
     () => [
@@ -682,24 +719,26 @@ export function PlacesScreen({
           (the user's own vocabulary) and WHERE it is in the tick list. Only the
           bucket rail gives way to the selection bar — the type rail is the
           heading for what is selected, not a control over it. */}
-      {typeOptions.length > 1 ? (
-        // STAYS MOUNTED WHILE SELECTING, dimmed and inert. Unmounting it took
-        // ~52pt of chrome out from under the finger that had just long-pressed
-        // a row, sliding every row up mid-gesture — the same jump DESIGN.md §7
-        // fixed once for the bucket rail. A filter that cannot be changed
-        // during a selection still has to say what the selection is drawn from.
-        <View
-          style={[styles.typeRail, selecting && styles.railInert]}
-          pointerEvents={selecting ? "none" : "auto"}
-        >
-          <SegmentedControl
-            scroll
-            options={typeOptions}
-            value={filters.placeTypeId ?? ALL_TYPES}
-            onChange={selectType}
-          />
-        </View>
-      ) : null}
+      {/* ALWAYS ON SCREEN now, where it used to appear only once a second type
+          had places in it: the rail carries the only way to create a type from
+          this tab, and hiding it from exactly the accounts that have not made
+          one yet would have hidden the affordance from everyone who needs it. */}
+      {/* STAYS MOUNTED WHILE SELECTING, dimmed and inert. Unmounting it took
+          ~52pt of chrome out from under the finger that had just long-pressed a
+          row, sliding every row up mid-gesture — the same jump DESIGN.md §7
+          fixed once for the bucket rail. A filter that cannot be changed during
+          a selection still has to say what the selection is drawn from. */}
+      <View
+        style={[styles.typeRail, selecting && styles.railInert]}
+        pointerEvents={selecting ? "none" : "auto"}
+      >
+        <SegmentedControl
+          scroll
+          options={railOptions}
+          value={filters.placeTypeId ?? ALL_TYPES}
+          onChange={selectType}
+        />
+      </View>
 
       <View style={styles.rail}>
         {selecting ? (
@@ -817,6 +856,18 @@ export function PlacesScreen({
           else info(report.text);
         }}
       />
+
+      {/* Making a type without leaving the tab that made you want one. The
+          same form Settings uses, so the two cannot drift; only ADD is offered
+          here — editing and deleting a type belong with the list of them. */}
+      <BottomSheet
+        visible={sheet === "placeTypeForm"}
+        onClose={() => setSheet(null)}
+        title="New place type"
+        footer={placeTypeForm.footer}
+      >
+        {placeTypeForm.body}
+      </BottomSheet>
 
       <PlaceFilterSheet
         visible={sheet === "filters"}

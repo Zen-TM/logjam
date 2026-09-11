@@ -17,7 +17,6 @@ import {
   Clipboard,
   Linking,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -483,24 +482,22 @@ export function PlaceDetailScreen({
                 ? `These came across when you copied this place. Tap one to decide what to do with it.`
                 : `These are left over from when you changed this place\u2019s type. Tap one to decide what to do with it.`}
             </Text>
-            {/* The same two-column table the type's own attributes use, so a
-                value reads the same whichever side of the line it is on — with
-                a chevron, because unlike those this one has a decision on it. */}
-            {foreignFields.map((item, index) => (
-              <Pressable
+            {/* A CARD PER ROW, not the hairline table above it. The two
+                sections look different because they ARE different: the one
+                above is a list of facts, and every row here is a decision the
+                user has to make. The table style that stopped the facts
+                inviting a tap took the invitation off these too, where it is
+                the whole point — so these use the same `Row` as every other
+                tappable thing in the app, chevron and all. */}
+            {foreignFields.map((item) => (
+              <Row
                 key={item.key}
+                icon="help-circle"
+                title={item.label}
+                subtitle={foreignValueText(item.value)}
+                right={<Feather name="chevron-right" size={20} color={theme.textMuted} />}
                 onPress={() => setForeignKey(item.key)}
-                style={[
-                  styles.fieldRow,
-                  index === foreignFields.length - 1 ? styles.fieldRowLast : null,
-                ]}
-              >
-                <Text style={styles.fieldKey}>{item.label}</Text>
-                <View style={styles.foreignValue}>
-                  <Text style={styles.fieldValue}>{foreignValueText(item.value)}</Text>
-                  <Feather name="chevron-right" size={18} color={theme.textMuted} />
-                </View>
-              </Pressable>
+              />
             ))}
           </>
         ) : null}
@@ -856,23 +853,31 @@ export function PlaceDetailScreen({
             <Text style={styles.fieldKey}>{foreignItem?.label}</Text>
             <Text style={styles.fieldValue}>{foreignValueText(foreignItem?.value)}</Text>
           </View>
-          <Row
-            icon="plus-circle"
-            title={`Create a new ${ATTRIBUTE_NOUN.one} for this place type`}
-            // No explanation line: the three titles say what they do, and a
-            // sentence under each turned a three-item menu into a wall. The
-            // slot is kept for the two things the user cannot see — no
-            // connection, and a name the app owns.
-            subtitle={
-              !online
-                ? "Needs a connection"
-                : foreignIsBuiltIn
-                  ? "Built in — switch the type back and it returns on its own"
-                  : undefined
-            }
-            disabled={!online || resolvingForeign || foreignIsBuiltIn}
-            onPress={() => runForeignAction("adopt")}
-          />
+          {/* HIDDEN on a built-in key, not greyed out. A reserved key cannot be
+              adopted at all — the system definition already owns it, and the
+              API answers 409 — so this is not an action that is unavailable
+              right now, it is one that does not exist for this value. A
+              disabled row invites a tap and then explains itself; an absent row
+              asks nothing. The sentence that explanation carried moves under
+              the title, where it belongs to the panel rather than to a verb. */}
+          {foreignIsBuiltIn ? (
+            <Text style={styles.muted}>
+              This is one of the app&rsquo;s own {ATTRIBUTE_NOUN.many}. Switch this
+              place back to a type that uses it and the value returns on its own.
+            </Text>
+          ) : (
+            <Row
+              icon="plus-circle"
+              title={`Create a new ${ATTRIBUTE_NOUN.one} for this place type`}
+              // No explanation line: the three titles say what they do, and a
+              // sentence under each turned a three-item menu into a wall. The
+              // slot is kept for the one thing the user cannot see — no
+              // connection.
+              subtitle={online ? undefined : "Needs a connection"}
+              disabled={!online || resolvingForeign}
+              onPress={() => runForeignAction("adopt")}
+            />
+          )}
           <Row
             icon="file-text"
             title="Add to notes as text"
@@ -1098,7 +1103,6 @@ const styles = StyleSheet.create({
     borderBottomColor: surface.border,
   },
   fieldRowLast: { borderBottomWidth: 0 },
-  foreignValue: { flexDirection: "row", alignItems: "center", gap: spacing(0.75), flexShrink: 1 },
   fieldKey: { color: theme.textMuted, fontSize: fontSize.sm, flexShrink: 1 },
   fieldValue: {
     color: theme.textPrimary,

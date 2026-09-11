@@ -84,9 +84,18 @@ export function CustomFieldList({
   onEdit: (def: ScopedCustomFieldDef) => void;
 }) {
   const noun = ENTITY_NOUN[entity];
+  // BUILT-INS LAST. The list is two things stacked: what the user made, and
+  // what the app ships. Theirs is the half they came here to change, so it
+  // reads first — and the built-ins, which carry no verbs at all, stop
+  // interrupting it. `position` (the order they arranged) still decides within
+  // each half, which is why this is a stable partition and not a sort key.
+  const ordered = [
+    ...defs.filter((def) => !isSystemFieldDef(def)),
+    ...defs.filter(isSystemFieldDef),
+  ];
   return (
     <View style={styles.body}>
-      {defs.length === 0 ? (
+      {ordered.length === 0 ? (
         <Text style={styles.hint}>
           Add your own {ATTRIBUTE_NOUN.one} to record on every {noun.one} — e.g. water
           level or party size.
@@ -94,9 +103,9 @@ export function CustomFieldList({
       ) : (
         <>
           <SectionHeader
-            label={`${defs.length} ${defs.length === 1 ? ATTRIBUTE_NOUN.one : ATTRIBUTE_NOUN.many}`}
+            label={`${ordered.length} ${ordered.length === 1 ? ATTRIBUTE_NOUN.one : ATTRIBUTE_NOUN.many}`}
           />
-          {defs.map((def) =>
+          {ordered.map((def) =>
             // A BUILT-IN gets no verbs, the same way a system place type does:
             // it belongs to no account, the server refuses a rename and a
             // delete, and the phone's half of a delete (strip the value off

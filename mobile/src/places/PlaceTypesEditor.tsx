@@ -7,11 +7,14 @@
 // api/src/routes/sync.ts); the phone simply had no screen for it, so a user
 // with only a phone could not add one at all.
 //
-// It lives in SETTINGS, beside the two attribute lists, for the same reason
-// they do: it is a list you keep rather than a preference you set, and it is
-// the same answer for trips and places. Not on the Places tab's type rail —
-// that rail is a filter, and hanging "and also create one" off a filter is how
-// a filter stops reading as a filter.
+// The LIST lives in Settings, beside the two attribute lists, for the same
+// reason they do: it is a list you keep rather than a preference you set, and
+// it is the same answer for trips and places. The FORM is also reachable from
+// the Places tab's type rail, as a chip at the end of it — the rail is a
+// filter, but it is also the only place in the app where a user is looking at
+// their own types and thinking about them, and "there is no tab for the thing I
+// want" is exactly the moment to offer one. The chip is an action, never a
+// filter state: it opens this form and leaves the selection alone.
 //
 // Offline like everything else the user makes: rows go into the local mirror
 // through the outbox, so adding a type standing at a trailhead works.
@@ -24,7 +27,14 @@
 // is as sensitive as a note. Nothing here logs one.
 import type { ReactNode } from "react";
 import { useCallback, useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  Alert,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  type LayoutChangeEvent,
+} from "react-native";
 import { Feather } from "@expo/vector-icons";
 import {
   PLACE_TYPE_COLORS,
@@ -56,10 +66,20 @@ export function PlaceTypeList({
   types: MirrorPlaceType[];
   onEdit: (type: MirrorPlaceType) => void;
 }) {
+  // BUILT-INS LAST, the same way the attribute list orders itself: the user's
+  // own types are the half with verbs on them, and the three that ship with the
+  // app are a footnote to that. Note this is the EDITOR's order only — the
+  // Places tab's rail and `GET /place-types` still put the system types first,
+  // because there the leftmost tab and the default type for a new place are
+  // decided by that order.
+  const ordered = [
+    ...types.filter((type) => !isSystemPlaceType(type)),
+    ...types.filter(isSystemPlaceType),
+  ];
   return (
     <View style={styles.body}>
-      <SectionHeader label={`${types.length} type${types.length === 1 ? "" : "s"}`} />
-      {types.map((type) =>
+      <SectionHeader label={`${ordered.length} type${ordered.length === 1 ? "" : "s"}`} />
+      {ordered.map((type) =>
         isSystemPlaceType(type) ? (
           <Row
             key={type.id}
@@ -108,6 +128,7 @@ export function usePlaceTypeForm({
   }
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { cellSize, onGridLayout } = useGridCellSize();
 
   const save = useCallback(async () => {
     const name = draft.name.trim();
@@ -206,15 +227,21 @@ export function usePlaceTypeForm({
           that can only be asserted over a closed set (`scripts/wcag-contrast.mjs`).
           A hex picker would not fail that check, it would delete it. */}
       <SectionHeader label="Icon" />
-      <View style={styles.grid}>
-        {PLACE_TYPE_ICON_KEYS.map((iconKey) => (
+      <View style={styles.grid} onLayout={onGridLayout}>
+        {/* Nothing until the row has been measured — one frame, and the
+            alternative is every cell flashing at its intrinsic size first. */}
+        {cellSize == null ? null : PLACE_TYPE_ICON_KEYS.map((iconKey) => (
           <Pressable
             key={iconKey}
             accessibilityRole="button"
             accessibilityLabel={iconKey}
             accessibilityState={{ selected: draft.iconKey === iconKey }}
             onPress={() => setDraft((current) => ({ ...current, iconKey }))}
-            style={[styles.iconCell, draft.iconKey === iconKey ? styles.cellChosen : null]}
+            style={[
+              styles.cell,
+              cellSize,
+              draft.iconKey === iconKey ? styles.cellChosen : null,
+            ]}
           >
             <Feather
               name={placeTypeFeatherIcon(iconKey)}
@@ -226,8 +253,8 @@ export function usePlaceTypeForm({
       </View>
 
       <SectionHeader label="Colour" />
-      <View style={styles.grid}>
-        {PLACE_TYPE_COLORS.map((color) => (
+      <View style={styles.grid} onLayout={onGridLayout}>
+        {cellSize == null ? null : PLACE_TYPE_COLORS.map((color) => (
           <Pressable
             key={color}
             accessibilityRole="button"
@@ -235,7 +262,9 @@ export function usePlaceTypeForm({
             accessibilityState={{ selected: draft.color === color }}
             onPress={() => setDraft((current) => ({ ...current, color }))}
             style={[
+              styles.cell,
               styles.swatch,
+              cellSize,
               { backgroundColor: color },
               draft.color === color ? styles.cellChosen : null,
             ]}
@@ -250,8 +279,7 @@ export function usePlaceTypeForm({
       </View>
 
       <Text style={styles.hint}>
-        The colour fills this type&rsquo;s pins on the map. A ring around a pin means
-        the place is shared.
+        A ring around a pin means the place was shared with you by a friend.
       </Text>
 
       {editing ? (
@@ -279,6 +307,37 @@ export function usePlaceTypeForm({
   return { body, footer };
 }
 
+/** Cells per row. Both grids use the same count so the two blocks line up with
+ *  each other as well as with the name field above them. */
+const GRID_COLUMNS = 6;
+
+/**
+ * Cell width MEASURED from the row, not fixed.
+ *
+ * A grid of fixed 44pt cells leaves whatever the row width happens not to
+ * divide into as a ragged margin down the right-hand side, so a full row of
+ * icons sat inset from the edge the name field reached — which reads as a
+ * misalignment rather than as a grid. Measuring once and dividing makes a full
+ * row exactly as wide as every other control on the form.
+ *
+ * Null until the first layout: a cell with no width would flash at its
+ * intrinsic size, so the grid renders nothing rather than the wrong thing.
+ */
+function useGridCellSize(): {
+  cellSize: { width: number; height: number } | null;
+  onGridLayout: (event: LayoutChangeEvent) => void;
+} {
+  const [width, setWidth] = useState<number | null>(null);
+  const size =
+    width == null
+      ? null
+      : Math.floor((width - GRID_GAP * (GRID_COLUMNS - 1)) / GRID_COLUMNS);
+  return {
+    cellSize: size == null ? null : { width: size, height: size },
+    onGridLayout: (event: LayoutChangeEvent) => setWidth(event.nativeEvent.layout.width),
+  };
+}
+
 type PlaceTypeDraft = { name: string; iconKey: PlaceTypeIconKey; color: string };
 
 /** A NEW type starts on the neutral pin and the first palette entry rather than
@@ -292,29 +351,21 @@ function seedDraft(editing: MirrorPlaceType | null): PlaceTypeDraft {
   };
 }
 
+const GRID_GAP = spacing(1);
+
 const styles = StyleSheet.create({
   body: { gap: spacing(1) },
   actions: { flexDirection: "row", gap: spacing(1) },
   action: { flex: 1 },
-  grid: { flexDirection: "row", flexWrap: "wrap", gap: spacing(1) },
-  iconCell: {
-    width: 44,
-    height: 44,
+  grid: { flexDirection: "row", flexWrap: "wrap", gap: GRID_GAP },
+  cell: {
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: surface.border,
     alignItems: "center",
     justifyContent: "center",
   },
-  swatch: {
-    width: 44,
-    height: 44,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: "transparent",
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  swatch: { borderColor: "transparent" },
   cellChosen: { borderWidth: 2, borderColor: theme.accent },
   hint: { color: theme.textMuted, fontSize: fontSize.sm },
 });
