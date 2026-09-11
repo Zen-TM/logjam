@@ -853,19 +853,14 @@ export function PlaceDetailScreen({
             <Text style={styles.fieldKey}>{foreignItem?.label}</Text>
             <Text style={styles.fieldValue}>{foreignValueText(foreignItem?.value)}</Text>
           </View>
-          {/* HIDDEN on a built-in key, not greyed out. A reserved key cannot be
-              adopted at all — the system definition already owns it, and the
-              API answers 409 — so this is not an action that is unavailable
-              right now, it is one that does not exist for this value. A
-              disabled row invites a tap and then explains itself; an absent row
-              asks nothing. The sentence that explanation carried moves under
-              the title, where it belongs to the panel rather than to a verb. */}
-          {foreignIsBuiltIn ? (
-            <Text style={styles.muted}>
-              This is one of the app&rsquo;s own {ATTRIBUTE_NOUN.many}. Switch this
-              place back to a type that uses it and the value returns on its own.
-            </Text>
-          ) : (
+          {/* HIDDEN on a built-in key, not greyed out, and with no sentence
+              standing in for it either. A reserved key cannot be adopted at all
+              — the system definition already owns it, and the API answers 409 —
+              so this is not an action that is unavailable right now, it is one
+              that does not exist for this value. An absent row asks nothing and
+              needs no explaining; a disabled row, or a paragraph about a verb
+              that is not on screen, is the panel apologising for itself. */}
+          {foreignIsBuiltIn ? null : (
             <Row
               icon="plus-circle"
               title={`Create a new ${ATTRIBUTE_NOUN.one} for this place type`}

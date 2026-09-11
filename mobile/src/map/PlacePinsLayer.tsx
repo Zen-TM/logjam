@@ -1,5 +1,7 @@
 // The place pins: a dot and a name per place, shared first so owned draws on
-// top of it.
+// top of it. A shared place gets the same dot as an owned one plus a thin halo
+// (fill = type, ring = shared); the halo is also the only part of it a thumb
+// can reach when your own copy sits on the same coordinate.
 //
 // Extracted from `MapScreen` when the place point-picker needed the same pins
 // as reference ("is there already a place there?" is most of what a picker is
@@ -98,27 +100,48 @@ export const PlacePinsLayer = memo(function PlacePinsLayer({
         data={sharedFc}
         onPress={onPress}
       >
-        {/* WIDER THAN AN OWNED PIN, deliberately. A place someone shared with
-            you and your own copy of it very often sit on the SAME coordinate —
-            that is what "copy" means — and owned draws on top, so an equal
-            circle vanished completely underneath it and the layer looked
-            broken. The extra 3 px leaves the shared pin's ring showing around
-            your own dot, which is both the only hint that two things are
-            stacked there and the part of the pin a thumb can land on to open
-            the shared one. */}
+        {/* A RING SET APART FROM THE DOT, not a bigger, heavier dot.
+            "Shared" used to be drawn as a 9 px disc under a 3 px stroke — 12 px
+            across against an owned pin's 7.5 — so the one kind of place the
+            user did not make shouted louder than everything they did. The
+            weight is the problem, not the ink: this draws the SAME dot an owned
+            place gets and hangs a thin halo around it, which reads as a mark ON
+            a pin rather than as a louder pin.
+
+            The halo is also what keeps a shared place reachable. A shared place
+            and your own copy of it very often sit on the SAME coordinate — that
+            is what "copy" means — and the owned source draws on top, so two
+            identical circles leave nothing of the shared one showing and
+            nothing for a thumb to land on. The gap between dot and halo is that
+            margin, now a ring's width instead of a pin's. */}
+        <Layer
+          key={`${idPrefix}shared-place-halos`}
+          type="circle"
+          id={`${idPrefix}shared-place-halos`}
+          // FILL = TYPE, RING = SHARED (§2.8). Colour used to encode ownership
+          // and now cannot: it is saying which KIND of place this is, on both
+          // maps, for every type the user has invented. So "someone shared this
+          // with me" is the ring, which is the axis with two values — and here
+          // it is only the ring: the fill is transparent so the halo adds no
+          // mass of its own, whatever it is drawn over.
+          style={{
+            circleRadius: 9,
+            circleOpacity: 0,
+            circleStrokeColor: SHARED_PLACE_COLOR,
+            circleStrokeWidth: 1.5,
+          }}
+        />
         <Layer
           key={`${idPrefix}shared-place-circles`}
           type="circle"
           id={`${idPrefix}shared-place-circles`}
-          // FILL = TYPE, RING = SHARED (§2.8). Colour used to encode ownership
-          // and now cannot: it is saying which KIND of place this is, on both
-          // maps, for every type the user has invented. So "someone shared this
-          // with me" moved to the ring, which is the axis with two values.
+          // Identical to an owned pin, deliberately: the halo says what is
+          // different about this place, so the dot does not have to.
           style={{
-            circleRadius: 9,
+            circleRadius: 6,
             circleColor: ["get", "color"] as unknown as string,
-            circleStrokeColor: SHARED_PLACE_COLOR,
-            circleStrokeWidth: 3,
+            circleStrokeColor: "#ffffff",
+            circleStrokeWidth: 1.5,
           }}
         />
         <Layer
@@ -126,13 +149,16 @@ export const PlacePinsLayer = memo(function PlacePinsLayer({
           type="symbol"
           id={`${idPrefix}shared-place-labels`}
           // Pushed clear of an owned label, and exempt from collision, for the
-          // same reason the circle is wider: stacked on one coordinate the two
+          // same reason the halo exists: stacked on one coordinate the two
           // labels collide, and MapLibre places symbol layers top-down — so
           // the owned label, being the higher layer, wins every time and the
           // shared place loses both its dot and its name. The offset keeps
           // the pair legible; `textAllowOverlap` is what stops the one the
-          // user cannot otherwise see from being the one that is dropped.
-          style={{ ...LABEL_STYLE, textOffset: [0, 2.6], textAllowOverlap: true }}
+          // user cannot otherwise see from being the one that is dropped. It
+          // dropped from 2.6em with the pin: the label hung off a 12 px disc
+          // that is now a 6 px dot, and an offset measured for the old one left
+          // the name floating away from its pin.
+          style={{ ...LABEL_STYLE, textOffset: [0, 2.0], textAllowOverlap: true }}
         />
       </GeoJSONSource>
       <GeoJSONSource
