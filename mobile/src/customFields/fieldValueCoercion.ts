@@ -72,3 +72,32 @@ export function withoutClearedFields(
     Object.entries(values).filter(([, value]) => value !== null),
   );
 }
+
+/**
+ * The widest span that still reads as a rail rather than a ruler.
+ *
+ * A bounded integer is drawn as a row of stops instead of a number box, which
+ * is how the canyon grades have always been drawn — they just used to be seven
+ * hand-written controls in `PlaceEditSheet` with their keys spelled out. They
+ * are ordinary bounded integers, so the rail is now a property of the TYPE and
+ * every field that shares that shape gets it: a user's own "Difficulty, 1-5"
+ * is drawn exactly like the V grade, without knowing anything about canyons.
+ *
+ * Above this the stops stop being tappable and a keyboard is faster. `hours`
+ * and `num_abseils` are unbounded and were never rail candidates.
+ */
+const MAX_RAIL_STOPS = 12;
+
+/** The stops a bounded integer draws, or null when it is not rail-shaped.
+ *  Derived from the definition's own bounds, which is the only place they are
+ *  declared — a rail that restated 1-7 would drift from the field it draws. */
+export function railStops(def: TripLogCustomFieldDef): number[] | null {
+  if (def.type !== "integer") return null;
+  if (def.min == null || def.max == null) return null;
+  const span = def.max - def.min;
+  if (span < 1 || span + 1 > MAX_RAIL_STOPS) return null;
+  const stops: number[] = [];
+  for (let stop = def.min; stop <= def.max; stop += 1) stops.push(stop);
+  return stops;
+}
+

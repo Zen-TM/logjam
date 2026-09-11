@@ -502,6 +502,87 @@ export async function deleteCustomFieldDefLocal(id: string): Promise<void> {
   scheduleMutationSync();
 }
 
+// ── place types ─────────────────────────────────────────────────────────────
+//
+// A place type is created, renamed, recoloured and deleted OFFLINE like
+// everything else the user makes: the server's push path already accepted all
+// three ops (`PLACE_TYPE_FIELDS` in api/src/routes/sync.ts) and the phone
+// simply had no way to send them, so a type could only ever be made on the web.
+//
+// SYSTEM types are not touched from here. They belong to no account, the server
+// refuses a rename and a delete with a 404 (anti-oracle, root CLAUDE.md), and
+// the local half of a delete would run first and for real — so the editor
+// refuses the verbs rather than offering ones that destroy locally and fail
+// remotely.
+
+/** How many positions the built-ins occupy, so a user's first type starts
+ *  after them. Derived, never a literal 3. */
+const SYSTEM_PLACE_TYPE_COUNT = Object.keys(SYSTEM_PLACE_TYPE_IDS).length;
+
+export async function createPlaceTypeLocal(draft: {
+  name: string;
+  iconKey: string;
+  color: string;
+}): Promise<string> {
+  const id = mintUuid();
+  const now = new Date().toISOString();
+  const db = await getSyncDb();
+
+  // Append after the user's own types. System types hold 0-2 and sort first by
+  // their null owner, so a user's first type starting at 3 keeps the two orders
+  // agreeing without the client having to know how many built-ins there are.
+  const last = await db.getFirstAsync<{ position: number }>(
+    "SELECT position FROM place_types WHERE owner_id IS NOT NULL ORDER BY position DESC LIMIT 1",
+  );
+  const position = last ? last.position + 1 : SYSTEM_PLACE_TYPE_COUNT;
+  const fields = { name: draft.name, iconKey: draft.iconKey, color: draft.color, position };
+
+  await withSyncTransaction(db, async () => {
+    await db.runAsync(
+      `INSERT INTO place_types
+         (id, owner_id, name, icon_key, color, position, created_at, updated_at,
+          extra_json, dirty_fields_json)
+       VALUES (?, NULL, ?, ?, ?, ?, ?, ?, NULL, ?)`,
+      id,
+      draft.name,
+      draft.iconKey,
+      draft.color,
+      position,
+      now,
+      now,
+      JSON.stringify(Object.keys(fields)),
+    );
+    await appendOp(db, { opId: mintUuid(), entity: "placeType", op: "create", id, fields });
+  });
+  notifyMirrorChanged();
+  scheduleMutationSync();
+  return id;
+}
+
+export async function updatePlaceTypeLocal(
+  id: string,
+  fields: Record<string, unknown>,
+): Promise<void> {
+  await enqueueUpdate("placeType", "place_types", id, fields, PLACE_TYPE_UPDATE_COLUMNS);
+}
+
+/**
+ * Delete a type of the user's own.
+ *
+ * The PLACES ON IT ARE NOT TOUCHED here — the server decides what happens to
+ * them, and the phone must not invent a second answer. The editor counts them
+ * first and says the number, the same way deleting a field definition does.
+ */
+export async function deletePlaceTypeLocal(id: string): Promise<void> {
+  const db = await getSyncDb();
+  await withSyncTransaction(db, async () => {
+    await db.runAsync("DELETE FROM place_types WHERE id = ?", id);
+    await appendOp(db, { opId: mintUuid(), entity: "placeType", op: "delete", id });
+  });
+  notifyMirrorChanged();
+  scheduleMutationSync();
+}
+
 // ── place / trip update surface ─────────────────────────────────────────────
 //
 // Field-scoped updates over the generic enqueueUpdate path (§8.2 coalescing,

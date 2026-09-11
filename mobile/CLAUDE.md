@@ -635,11 +635,66 @@ create AND a value move atomically. The three rows say "Needs a connection"
 rather than failing at the tap — the same rule sharing follows. Upgrade path if
 the field asks for it: a `foreignField` push op with those two effects.
 
-**Tags are edited on the place form, and they came back from the dead.** The
-waypoint sheet had a tag editor; folding waypoints into places deleted the sheet
-and with it the only way to edit a place's tags on either client. The vocabulary
-is `PLACE_TAG_SUGGESTIONS` unioned with every tag already on the device — a seed
-list, never an enum.
+**A user's own field is an ATTRIBUTE in the UI and a field in the code.**
+"Field" names the box, not the thing the box records. `ATTRIBUTE_NOUN`
+(`customFields/CustomFieldsEditor.tsx`) is the one declaration every surface
+reads, including the article in "Add an attribute" — a rename that composes
+"a"/"an" from the noun is how this kind of constant half-works. The column, the
+table, the sync entity and every function keep saying field.
+
+**A bounded integer is a RAIL, by shape rather than by name.** The seven canyon
+axes were seven hand-written controls in `PlaceEditSheet` with their reserved
+keys spelled out, and were then subtracted from the generic list (via
+`CANYON_FORM_FIELD_KEYS`) so they were not asked twice. They are ordinary field
+values with ordinary definitions: `railStops`
+(`customFields/fieldValueCoercion.ts`, tested) answers from the definition's own
+bounds, and `CustomFieldValueInput` draws the rail. Three things fell out —
+canyon fields finally appear in "Your place attributes", `quality` gets a
+decimal box because it is a FLOAT and a rail could never express the 4.5 the web
+stores, and a user's own "Difficulty, 1-5" is drawn like a V grade without
+anything knowing about canyons. The web still draws its own canyon controls;
+`CANYON_FORM_FIELD_KEYS` survives for `PlaceDialog.tsx` alone.
+
+**A place's OVERVIEW holds what every place has, which is its position.** It
+used to promote four canyon scalars into stat tiles by reading their reserved
+keys — not universal, already listed below in the type's own table, and
+"Rating" was a bespoke relabelling of a definition labelled "Quality", so one
+field had two names on one screen.
+
+**`foreignFields` has two causes and the section is named for the CONDITION:
+"Doesn't fit this type".** A type change strands what the new type has no
+definition for; a copy carries values keyed by the sender's. "Came with this
+place" was only ever true of the second. `forkedFromId` (carried through the
+mirror read) is how a screen tells them apart for the sentence underneath.
+
+**A type change runs BOTH WAYS.** `strandValuesOnTypeChange` feeds the park back
+through the same split, so a key the new type defines comes home to
+`fieldValues` automatically. Without that half retyping was a one-way door:
+canyon -> campsite stranded the canyon axes and campsite -> canyon left them
+stranded beside a form with an empty V-grade rail, while adopting them is
+REFUSED (409) because those keys are reserved. The UI disables adopt on a
+reserved key rather than 409ing on the tap, and says it comes back by itself.
+
+**Place types are managed in SETTINGS** (`places/PlaceTypesEditor.tsx`), beside
+the attribute lists — a list you keep, not a preference you set. Not on the
+Places tab's type rail: that rail is a filter, and hanging "and also make one"
+off a filter is how a filter stops reading as a filter. The sync push has
+accepted `placeType` create/update/delete since the rework; the phone simply had
+no screen for it, so a phone-only user could not add a type at all. A delete is
+refused locally when places still use the type, because the server refuses it
+too (409) and a queued op would park as a dead push.
+
+**A definition with no owner id is not necessarily a built-in.** A definition
+created on the phone has none until the server sends one back, and
+`ownerId === null` alone drew a padlock on the field the user had just added.
+`isSystemFieldDef` also requires a RESERVED key, which is exact rather than
+heuristic: every built-in's key is reserved by construction, and
+`assertKeyNotReserved` refuses a reserved key on create and rename for both
+entities.
+
+**REMOVED 2026-09-11 — tags.** The entry that stood here described editing a
+place's tags on the place form. `Place.tags` is gone (`drop_place_tags`), and
+with it `PLACE_TAG_SUGGESTIONS` and the form's `ChipPicker`.
 
 ## Inbox (2026-08-30)
 

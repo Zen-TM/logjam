@@ -39,6 +39,13 @@ import {
   useCustomFieldForm,
 } from "../customFields/CustomFieldsEditor";
 import { useFieldDefs } from "../customFields/useFieldDefs";
+import {
+  isSystemPlaceType,
+  PlaceTypeList,
+  usePlaceTypeForm,
+} from "../places/PlaceTypesEditor";
+import { useMirrorPlaceTypes } from "../sync/useSyncQueries";
+import type { MirrorPlaceType } from "../sync/mirrorStore";
 import { useConnectivity } from "../map/connectivity";
 import { fontSize, theme } from "../theme";
 import {
@@ -74,7 +81,9 @@ const PAGES: {
 type SheetMode =
   | { kind: "closed" }
   | { kind: "fields"; entity: CustomFieldEntity }
-  | { kind: "fieldForm"; entity: CustomFieldEntity; editing: ScopedCustomFieldDef | null };
+  | { kind: "fieldForm"; entity: CustomFieldEntity; editing: ScopedCustomFieldDef | null }
+  | { kind: "placeTypes" }
+  | { kind: "placeTypeForm"; editing: MirrorPlaceType | null };
 
 export function SettingsScreen({ onOpenPage }: { onOpenPage: (page: SettingsPage) => void }) {
   const { accountState } = useAccountState();
@@ -98,9 +107,18 @@ export function SettingsScreen({ onOpenPage }: { onOpenPage: (page: SettingsPage
     else placeFields.setDefs(next);
   };
 
+  const placeTypes = useMirrorPlaceTypes();
+  const placeTypeForm = usePlaceTypeForm({
+    editing: sheet.kind === "placeTypeForm" ? sheet.editing : null,
+    onSaved: (message) => notify(message),
+    onFailed: (message) => notify(message, "error"),
+    onDone: () => setSheet({ kind: "placeTypes" }),
+  });
+
   // Called unconditionally — it is a hook. The entity it is bound to is
   // whichever list is open; with the sheet closed the values are unused.
-  const formEntity = sheet.kind === "closed" ? "place" : sheet.entity;
+  const formEntity =
+    sheet.kind === "fields" || sheet.kind === "fieldForm" ? sheet.entity : "place";
   const fieldForm = useCustomFieldForm({
     entity: formEntity,
     defs: defsFor(formEntity),
@@ -134,6 +152,19 @@ export function SettingsScreen({ onOpenPage }: { onOpenPage: (page: SettingsPage
             right={<Feather name="chevron-right" size={20} color={theme.textMuted} />}
           />
         ))}
+
+        {/* A list you keep, not a preference you set — which is why it sits
+            here with the attribute lists rather than on the Places tab's type
+            rail, where "and also make one" would stop the rail reading as the
+            filter it is. */}
+        <SectionHeader label="Your own categories" />
+        <Row
+          icon="layers"
+          title="Place types"
+          subtitle={placeTypeCountLabel(placeTypes.data ?? [])}
+          onPress={() => setSheet({ kind: "placeTypes" })}
+          right={<Feather name="chevron-right" size={20} color={theme.textMuted} />}
+        />
 
         <SectionHeader label="Your own attributes" />
         <Row
@@ -172,10 +203,20 @@ export function SettingsScreen({ onOpenPage }: { onOpenPage: (page: SettingsPage
         onBack={
           sheet.kind === "fieldForm"
             ? () => setSheet({ kind: "fields", entity: sheet.entity })
-            : undefined
+            : sheet.kind === "placeTypeForm"
+              ? () => setSheet({ kind: "placeTypes" })
+              : undefined
         }
         footer={
-          sheet.kind === "fieldForm" ? (
+          sheet.kind === "placeTypeForm" ? (
+            placeTypeForm.footer
+          ) : sheet.kind === "placeTypes" ? (
+            <Button
+              label="Add a place type"
+              icon="plus"
+              onPress={() => setSheet({ kind: "placeTypeForm", editing: null })}
+            />
+          ) : sheet.kind === "fieldForm" ? (
             fieldForm.footer
           ) : sheet.kind === "fields" ? (
             // PINNED, not the last row of the list: "add" is what this screen is
@@ -199,6 +240,13 @@ export function SettingsScreen({ onOpenPage }: { onOpenPage: (page: SettingsPage
           />
         ) : null}
         {sheet.kind === "fieldForm" ? fieldForm.body : null}
+        {sheet.kind === "placeTypes" ? (
+          <PlaceTypeList
+            types={placeTypes.data ?? []}
+            onEdit={(type) => setSheet({ kind: "placeTypeForm", editing: type })}
+          />
+        ) : null}
+        {sheet.kind === "placeTypeForm" ? placeTypeForm.body : null}
       </BottomSheet>
 
       <Toast message={toast} onDismissed={() => setToast(null)} />
@@ -208,6 +256,10 @@ export function SettingsScreen({ onOpenPage }: { onOpenPage: (page: SettingsPage
 
 function sheetTitle(sheet: SheetMode): string {
   if (sheet.kind === "closed") return "";
+  if (sheet.kind === "placeTypes") return "Place types";
+  if (sheet.kind === "placeTypeForm") {
+    return sheet.editing ? sheet.editing.name : "New place type";
+  }
   const noun = sheet.entity === "tripLog" ? "Trip" : "Place";
   if (sheet.kind === "fields") return `${noun} ${ATTRIBUTE_NOUN.many}`;
   return sheet.editing
@@ -218,6 +270,14 @@ function sheetTitle(sheet: SheetMode): string {
 function fieldCountLabel(count: number): string {
   if (count === 0) return "None yet";
   return `${count} ${count === 1 ? ATTRIBUTE_NOUN.one : ATTRIBUTE_NOUN.many}`;
+}
+
+/** Only the user's OWN types are counted: "3 types" for an account that has
+ *  made none reads as a list they are already keeping. */
+function placeTypeCountLabel(types: MirrorPlaceType[]): string {
+  const own = types.filter((type) => !isSystemPlaceType(type)).length;
+  if (own === 0) return "Built-ins only";
+  return `${own} of your own`;
 }
 
 const styles = StyleSheet.create({
