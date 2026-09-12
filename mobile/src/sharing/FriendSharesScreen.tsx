@@ -83,6 +83,9 @@ import { removeSharedPlace, removeSharedEntity } from "./removeShare";
 
 const cardKey = (card: FriendShareCard) => card.key;
 
+/** See the CopySheet call site: a stable identity for "nothing selected". */
+const NO_TARGETS: CopyAndRemoveTarget[] = [];
+
 /**
  * A card as the copy verbs see it.
  *
@@ -558,7 +561,9 @@ export function FriendSharesScreen({
           Alert cannot (see CopySheet). */}
       <CopySheet
         visible={copyRequest !== null}
-        targets={copyRequest?.targets ?? []}
+        // A stable empty array while closed: `?? []` mints a new one per
+        // render, which re-runs the panel's media tally effect forever.
+        targets={copyRequest?.targets ?? NO_TARGETS}
         mode={copyRequest?.mode ?? "copy"}
         friendName={username}
         busy={busy}

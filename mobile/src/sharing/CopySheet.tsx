@@ -102,10 +102,14 @@ export function useCopyPanel({
 }: CopyPanelArgs): { title: string; body: React.ReactNode; footer: React.ReactNode } {
   const visible = active;
   const { accountState } = useAccountState();
+  // Gated on `active` as well as on having an account: this hook now lives
+  // inside two sheets that stay MOUNTED between openings, so an ungated query
+  // would fetch on every sheet mount for a panel nobody opened. (`/users/me` is
+  // cached for 60 s in apiFetch, which makes the open itself free anyway.)
   const userQuery = useApiQuery(
     fetchCurrentUser,
     "Couldn't load your settings.",
-    accountState !== "guest",
+    active && accountState !== "guest",
   );
 
   const [media, setMedia] = useState<PlaceMediaTally>(NO_MEDIA);
