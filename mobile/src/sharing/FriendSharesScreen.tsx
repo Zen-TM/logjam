@@ -714,10 +714,20 @@ function ShareCardMenu({
 
       {/* The two verbs above it, as one tap — and only where BOTH of them are
           available, because a bundle that silently skipped its second half
-          would be the same button making a different promise per row. */}
+          would be the same button making a different promise per row.
+
+          `archive`, and NEITHER of the two obvious alternatives. Not `copy`,
+          the glyph of the row directly above: these lists are scanned by
+          glyph, and giving the irreversible verb the same one as the
+          recoverable verb beside it is how a user taps the wrong one. Not
+          `download`, which everywhere else in this app means BYTES ONTO THIS
+          DEVICE (Save as GPX/KML, region downloads, the auto-download
+          settings) — in the route sheet it would be the third `download` in
+          one list, two rows under "Save as KML". Archiving is exactly this
+          promise: keep it in your own things, take it off the active list. */}
       {card.copyable && card.removable ? (
         <Row
-          icon="download"
+          icon="archive"
           title="Save a copy and remove"
           subtitle={
             online

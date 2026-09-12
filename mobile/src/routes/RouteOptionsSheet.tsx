@@ -470,7 +470,7 @@ export function RouteOptionsSheet({
         {actions.sharedWithYou && actions.removeShare ? (
           <Row
             title="Save a copy and remove"
-            icon="download"
+            icon="archive"
             {...shareRowProps}
             disabled={busy || shareRowProps.disabled}
             onPress={() => setCopyMode("copyAndRemove")}

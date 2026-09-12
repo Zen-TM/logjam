@@ -327,7 +327,7 @@ export function PlaceOptionsSheet({
                 onPress={() => setCopyMode("copy")}
               />
               <Row
-                icon="download"
+                icon="archive"
                 title="Save a copy and remove"
                 {...shareRowProps}
                 onPress={() => setCopyMode("copyAndRemove")}
