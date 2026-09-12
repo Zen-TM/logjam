@@ -20,13 +20,24 @@
 // the user could not see while deciding. Edit now opens the map's draw tool on
 // this route, and reverse and colour are controls in the tool's own panel,
 // acting on the draft (DraftToolPanel.tsx).
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Alert, StyleSheet, View } from "react-native";
 import { messageFromError } from "@logjam/shared";
 
 import { assetHue, placeHue, theme } from "../theme";
 import { BottomSheet, RenameForm, Row } from "../ui";
 import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
+import { useCopyPanel } from "../sharing/CopySheet";
+import { requestSync } from "../sync/syncEngine";
+import {
+  copyShared,
+  runCopyAndRemove,
+  type CopyAndRemoveTarget,
+} from "../sharing/copyAndRemove";
+import {
+  copyAndRemoveOutcomeMessage,
+  copyOutcomeMessage,
+} from "../sharing/friendShareRows";
 import { useConnectivity } from "../map/connectivity";
 import { routeActions } from "../saved/assetActions";
 import { usePlacePicker } from "../places/usePlacePicker";
@@ -81,6 +92,7 @@ export function RouteOptionsSheet({
   const [renaming, setRenaming] = useState(false);
   const [showingStats, setShowingStats] = useState(false);
   const [linking, setLinking] = useState(false);
+  const [copyMode, setCopyMode] = useState<"copy" | "copyAndRemove" | null>(null);
 
   // Reset every sub-mode when the sheet closes. This component stays mounted
   // between openings — `visible` is a prop, not a remount — so a sub-mode left
@@ -93,6 +105,7 @@ export function RouteOptionsSheet({
       setRenaming(false);
       setShowingStats(false);
       setLinking(false);
+      setCopyMode(null);
     }
   }, [visible]);
   const online = useConnectivity() === "online";
@@ -121,6 +134,59 @@ export function RouteOptionsSheet({
     online,
     enabled: visible && route != null,
     active: sharing,
+  });
+
+  // THE copy panel, a sub-mode for the same reason the share panel is one.
+  //
+  // Offered on a route SHARED WITH this user, whichever arm it arrived on: a
+  // route inherited from a shared place is copyable too (the server decides
+  // that, and it allows it), even though it has no direct share to remove — so
+  // the bundled verb below is gated on `removeShare` while the plain copy is
+  // not. No owner username reaches a mirrored route, so the copy says "the
+  // owner", as `removeConfirmFields` already does.
+  const sharedWithMe = actions?.sharedWithYou === true;
+  const copyTargets = useMemo<CopyAndRemoveTarget[]>(
+    () =>
+      route && sharedWithMe
+        ? [{ entityType: "route", entityId: route.id, title: route.name }]
+        : [],
+    [route, sharedWithMe],
+  );
+  const copy = useCopyPanel({
+    active: copyMode !== null,
+    targets: copyTargets,
+    mode: copyMode ?? "copy",
+    friendName: "the owner",
+    busy,
+    online,
+    onConfirm: (options) => {
+      const [target] = copyTargets;
+      if (!target) return;
+      const bundled = copyMode === "copyAndRemove";
+      setBusy(true);
+      void (async () => {
+        if (bundled) {
+          const report = copyAndRemoveOutcomeMessage(
+            await runCopyAndRemove([target], options),
+          );
+          (report.tone === "error" ? onError : onInfo)(report.text);
+        } else {
+          try {
+            await copyShared(target, options);
+            const report = copyOutcomeMessage({ copied: 1, failed: [] });
+            onInfo(report.text);
+          } catch (err) {
+            // Our own copy, never the error's: it may carry the name.
+            console.error(err);
+            onError("Couldn't save a copy of this route.");
+          }
+          void requestSync().catch((syncErr: unknown) => console.error(syncErr));
+        }
+        setBusy(false);
+        setCopyMode(null);
+        close();
+      })();
+    },
   });
 
   // THE place picker, as a sub-mode of this sheet rather than a second sheet
@@ -226,7 +292,9 @@ export function RouteOptionsSheet({
         ? () => setShowingStats(false)
         : linking
           ? () => setLinking(false)
-          : null;
+          : copyMode
+            ? () => setCopyMode(null)
+            : null;
 
   return (
     <BottomSheet
@@ -243,18 +311,22 @@ export function RouteOptionsSheet({
               ? route.placeId
                 ? "Change linked place"
                 : "Link to a place"
-              : route.name
+              : copyMode
+                ? copy.title
+                : route.name
       }
       // A sub-mode REPLACES the verb list rather than expanding inside it —
       // same shape as the waypoint sheet and the place sheet. Shown inline the
       // share panel pushed "Delete route" below the friend picker, which put a
       // destructive verb in the middle of a sharing flow.
       onBack={leaveSubMode ?? undefined}
-      footer={sharing ? share.footer : undefined}
+      footer={sharing ? share.footer : copyMode ? copy.footer : undefined}
       header={linking ? placePicker.header : undefined}
     >
       {sharing && actions.share ? (
         share.body
+      ) : copyMode ? (
+        copy.body
       ) : linking ? (
         placePicker.body
       ) : renaming && actions.rename ? (
@@ -374,6 +446,31 @@ export function RouteOptionsSheet({
             hue={theme.warning}
             disabled={busy}
             onPress={confirmDelete}
+          />
+        ) : null}
+        {/* The recipient's keep. Offered on EITHER arm — a route inherited
+            from a shared place is copyable too — which is why it is gated on
+            "someone else owns this" and not on there being a share row. */}
+        {actions.sharedWithYou ? (
+          <Row
+            title="Save a copy"
+            icon="copy"
+            {...shareRowProps}
+            disabled={busy || shareRowProps.disabled}
+            onPress={() => setCopyMode("copy")}
+          />
+        ) : null}
+        {/* The bundled verb, gated on the SECOND half being possible: an
+            inherited route has no share of its own to drop, and a button that
+            silently did only its first half would be the same button making
+            two different promises. */}
+        {actions.sharedWithYou && actions.removeShare ? (
+          <Row
+            title="Save a copy and remove"
+            icon="download"
+            {...shareRowProps}
+            disabled={busy || shareRowProps.disabled}
+            onPress={() => setCopyMode("copyAndRemove")}
           />
         ) : null}
         {/* The recipient's own verb. Present only on a DIRECT share; it needs a

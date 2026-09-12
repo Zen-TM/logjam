@@ -35,11 +35,7 @@ import { Alert, FlatList, RefreshControl, StyleSheet, Text, View } from "react-n
 import { messageFromError, SHARE_KIND_LABEL } from "@logjam/shared";
 import type { FriendShares } from "@logjam/shared";
 
-import {
-  copySharedPlace,
-  getFriendShares,
-  unshareWithFriend,
-} from "../api/friends";
+import { getFriendShares, unshareWithFriend } from "../api/friends";
 import { useAccountState } from "../auth/AccountStateContext";
 import { capabilityScreenBlock } from "../auth/capabilities";
 import { useConnectivity } from "../map/connectivity";
@@ -63,9 +59,15 @@ import {
   type ToastMessage,
 } from "../ui";
 import { BulkShareButton, BulkShareSheet } from "./BulkShareSheet";
+import { CopySheet } from "./CopySheet";
+import {
+  copyShared,
+  runCopyAndRemove,
+  type CopyAndRemoveTarget,
+} from "./copyAndRemove";
 import {
   buildShareCards,
-  copyConfirm,
+  copyAndRemoveOutcomeMessage,
   copyOutcomeMessage,
   removeRowSubtitle,
   removeAllConfirm,
@@ -80,6 +82,18 @@ import {
 import { removeSharedPlace, removeSharedEntity } from "./removeShare";
 
 const cardKey = (card: FriendShareCard) => card.key;
+
+/**
+ * A card as the copy verbs see it.
+ *
+ * The cast is safe by construction: `copyable` is `isCopyableSharedRow`, which
+ * admits only the two ROW kinds, and every caller here filters on it first.
+ */
+const copyTargetOf = (card: FriendShareCard): CopyAndRemoveTarget => ({
+  entityType: card.row.entityType as CopyAndRemoveTarget["entityType"],
+  entityId: card.row.entityId,
+  title: card.title,
+});
 
 export function FriendSharesScreen({
   friendshipId,
@@ -226,55 +240,82 @@ export function FriendSharesScreen({
   );
 
   /**
-   * Save copies of the selected shared places.
+   * Both copy verbs open the SAME sheet, which is what asks about photos —
+   * `CopySheet` says why that question cannot live in an Alert.
    *
-   * A LOOP, not one request: `POST /places/:id/copy` already exists and a
+   * A LOOP, not one request: the per-item copy endpoints already exist and a
    * friend's shared list is tens of rows at most, so a bulk endpoint would buy
    * nothing but a second copy of the copy rules. One failure is one failure —
-   * aborting would strand the user with no way to tell which places landed —
-   * so the report names the ones that did not (`runBulkShare.ts`'s rule).
+   * aborting would strand the user with no way to tell which rows landed — so
+   * the report names the ones that did not (`runBulkShare.ts`'s rule).
    */
-  const runCopy = useCallback(
-    (targets: FriendShareCard[]) => {
-      // Confirms even though nothing is destroyed: "Save a copy" does not say
-      // where the copy goes, whether the friend's place changes, or what
-      // happens when they stop sharing — and a verb whose effect cannot be
-      // predicted is one nobody presses.
-      const confirm = copyConfirm({
-        count: targets.length,
-        friendName: username,
-        ...(targets.length === 1 ? { itemName: targets[0].title } : {}),
-      });
-      Alert.alert(confirm.title, confirm.body, [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Save a copy",
-          onPress: () => {
-            setBusy(true);
-            const failed: string[] = [];
-            let copied = 0;
-            void (async () => {
-              for (const card of targets) {
-                try {
-                  await copySharedPlace(card.row.entityId);
-                  copied += 1;
-                } catch (err) {
-                  console.error(err);
-                  failed.push(card.title);
-                }
-              }
-              clearSelection();
-              const report = copyOutcomeMessage({ copied, failed });
-              notify(report.text, report.tone);
-              // The copies are server-side rows: they reach this phone on the pull.
-              await settle(copied > 0);
-              setBusy(false);
-            })();
-          },
-        },
-      ]);
+  const [copyRequest, setCopyRequest] = useState<{
+    targets: CopyAndRemoveTarget[];
+    mode: "copy" | "copyAndRemove";
+  } | null>(null);
+
+  const requestCopy = useCallback(
+    (targets: FriendShareCard[], mode: "copy" | "copyAndRemove") => {
+      setSheetCard(null);
+      setCopyRequest({ targets: targets.map(copyTargetOf), mode });
     },
-    [clearSelection, notify, settle, username],
+    [],
+  );
+
+  const runCopy = useCallback(
+    (targets: CopyAndRemoveTarget[], options: { copyMedia?: boolean }) => {
+      setBusy(true);
+      const failed: string[] = [];
+      let copied = 0;
+      let mediaSkipped = 0;
+      let mediaOutOfSpace = false;
+      void (async () => {
+        for (const target of targets) {
+          try {
+            const media = await copyShared(target, options);
+            mediaSkipped += media.skipped;
+            if (media.outOfSpace) mediaOutOfSpace = true;
+            copied += 1;
+          } catch (err) {
+            console.error(err);
+            failed.push(target.title);
+          }
+        }
+        setCopyRequest(null);
+        clearSelection();
+        const report = copyOutcomeMessage({
+          copied,
+          failed,
+          mediaSkipped,
+          mediaOutOfSpace,
+        });
+        notify(report.text, report.tone);
+        // The copies are server-side rows: they reach this phone on the pull.
+        await settle(copied > 0);
+        setBusy(false);
+      })();
+    },
+    [clearSelection, notify, settle],
+  );
+
+  /**
+   * The bundled verb. The ORDER is in `runCopyAndRemove` and matters — nothing
+   * is given up until its copy is proven to have landed.
+   */
+  const runCopyThenRemove = useCallback(
+    (targets: CopyAndRemoveTarget[], options: { copyMedia?: boolean }) => {
+      setBusy(true);
+      void (async () => {
+        const outcome = await runCopyAndRemove(targets, options);
+        setCopyRequest(null);
+        clearSelection();
+        const report = copyAndRemoveOutcomeMessage(outcome);
+        notify(report.text, report.tone);
+        await settle(outcome.done.length + outcome.copiedNotRemoved.length > 0);
+        setBusy(false);
+      })();
+    },
+    [clearSelection, notify, settle],
   );
 
   /**
@@ -390,11 +431,11 @@ export function FriendSharesScreen({
               ) : copyable.length > 0 ? (
                 <IconButton
                   icon="copy"
-                  accessibilityLabel={`Save a copy of ${copyable.length} selected places`}
+                  accessibilityLabel={`Save a copy of ${copyable.length} selected items`}
                   color={online ? theme.accent : theme.textMuted}
                   onPress={() =>
                     online
-                      ? runCopy(copyable)
+                      ? requestCopy(copyable, "copy")
                       : notify("Saving a copy needs a connection.", "error")
                   }
                 />
@@ -503,10 +544,8 @@ export function FriendSharesScreen({
               setSheetCard(null);
               runUnshare([card]);
             }}
-            onCopy={(card) => {
-              setSheetCard(null);
-              runCopy([card]);
-            }}
+            onCopy={(card) => requestCopy([card], "copy")}
+            onCopyAndRemove={(card) => requestCopy([card], "copyAndRemove")}
             onRemove={(card) => {
               setSheetCard(null);
               runRemove([card]);
@@ -514,6 +553,26 @@ export function FriendSharesScreen({
           />
         ) : null}
       </BottomSheet>
+
+      {/* Both copy verbs land here — it is what asks about photos, which an
+          Alert cannot (see CopySheet). */}
+      <CopySheet
+        visible={copyRequest !== null}
+        targets={copyRequest?.targets ?? []}
+        mode={copyRequest?.mode ?? "copy"}
+        friendName={username}
+        busy={busy}
+        online={online}
+        onClose={() => setCopyRequest(null)}
+        onConfirm={(options) => {
+          if (!copyRequest) return;
+          if (copyRequest.mode === "copyAndRemove") {
+            runCopyThenRemove(copyRequest.targets, options);
+            return;
+          }
+          runCopy(copyRequest.targets, options);
+        }}
+      />
 
       {/* Re-sharing my own rows with other friends. The selection carries no
           `sendCopy` descriptors — everything here is a server-backed row — so
@@ -591,6 +650,7 @@ function ShareCardMenu({
   onOpenPlace,
   onUnshare,
   onCopy,
+  onCopyAndRemove,
   onRemove,
 }: {
   card: FriendShareCard;
@@ -601,6 +661,7 @@ function ShareCardMenu({
   onOpenPlace: (placeId: string) => void;
   onUnshare: (card: FriendShareCard) => void;
   onCopy: (card: FriendShareCard) => void;
+  onCopyAndRemove: (card: FriendShareCard) => void;
   onRemove: (card: FriendShareCard) => void;
 }) {
   const kind = SHARE_KIND_LABEL[card.row.entityType];
@@ -636,11 +697,31 @@ function ShareCardMenu({
           title="Save a copy"
           subtitle={
             online
-              ? "Copies it into your own places, with its route. Yours to edit."
+              ? card.row.entityType === "place"
+                ? "Copies it into your own places, with its route. Yours to edit."
+                : "Copies it into your own routes, unlinked. Yours to edit."
               : undefined
           }
           {...(online ? live : offline)}
           onPress={() => onCopy(card)}
+        />
+      ) : null}
+
+      {/* The two verbs above it, as one tap — and only where BOTH of them are
+          available, because a bundle that silently skipped its second half
+          would be the same button making a different promise per row. */}
+      {card.copyable && card.removable ? (
+        <Row
+          icon="download"
+          title="Save a copy and remove"
+          subtitle={
+            online
+              ? `Keeps a copy of your own, then stops ${username} sharing this one with you.`
+              : undefined
+          }
+          subtitleNumberOfLines={2}
+          {...(online ? live : offline)}
+          onPress={() => onCopyAndRemove(card)}
         />
       ) : null}
 

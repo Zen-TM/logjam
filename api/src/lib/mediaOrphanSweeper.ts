@@ -24,7 +24,7 @@ export interface MediaObjectListing {
   lastModified: Date;
 }
 
-// Keys are minted exclusively by mediaKeys() in routes/media.ts as
+// Keys are minted exclusively by mediaKeys() in lib/mediaKeys.ts as
 // media/<ownerId>/<mediaId>/<basename>. Anything else under the prefix is not
 // ours to delete — parse failures are skipped, never swept.
 const MEDIA_KEY_PATTERN = /^media\/[^/]+\/([^/]+)\/[^/]+$/;

@@ -215,11 +215,15 @@ export function removeAllConfirm(args: {
     body:
       `${things} ${one ? "is" : "are"} removed from your account, on every device. ` +
       `${args.friendName} keeps the ${one ? "original" : "originals"}.` +
+      // "place" was right while places were the only copyable kind; a route
+      // copies now, and naming the wrong kind in the one sentence that offers
+      // the safe alternative is how a user decides the alternative isn't for
+      // them.
       (args.copyableCount === 0
         ? ""
         : one
-          ? " It's a place you could save a copy of first."
-          : ` ${args.copyableCount === 1 ? "1 of them is a place you" : `${args.copyableCount} of them are places you`} could save a copy of first.`),
+          ? " You could save a copy of it first."
+          : ` ${args.copyableCount === 1 ? "1 of them is something you" : `${args.copyableCount} of them are things you`} could save a copy of first.`),
   };
 }
 
@@ -251,16 +255,23 @@ export function copyConfirm(args: {
   friendName: string;
   /** The single row's name, when only one is being copied. */
   itemName?: string;
+  /**
+   * The kind, lower-case, when only one row is being copied — a place brings
+   * its route with it and a route does not, and the sentence has to be right
+   * about which. Omit for a mixed or multi-row copy, which says neither.
+   */
+  kindLabel?: string;
 }): { title: string; body: string } {
   const one = args.count === 1;
+  const withRoute = one && args.kindLabel === "place" ? ", with its route" : "";
   return {
     title: one ? "Save a copy?" : `Save ${args.count} copies?`,
     body:
       (one && args.itemName
-        ? `“${args.itemName}” is copied into your own places, with its route. `
-        : `${args.count} places are copied into your own places, with their routes. `) +
+        ? `“${args.itemName}” is copied into your own account${withRoute}. `
+        : `${args.count} items are copied into your own account. `) +
       `The ${one ? "copy is" : "copies are"} yours to edit, and ${one ? "stays" : "stay"} if ${args.friendName} stops sharing. ` +
-      `${args.friendName}'s ${one ? "place is" : "places are"} untouched.`,
+      `${args.friendName}'s ${one ? "original is" : "originals are"} untouched.`,
   };
 }
 
@@ -268,25 +279,106 @@ export function copyOutcomeMessage(outcome: {
   copied: number;
   /** Titles that failed — named, because a user cannot retry "2 failed". */
   failed: string[];
+  /**
+   * Place-level media the copies did not get. Reported even on an otherwise
+   * clean run: a copy that quietly arrived without its photos is the failure
+   * this whole option exists to make visible.
+   */
+  mediaSkipped?: number;
+  /** The skip was the account's storage filling up, not a transfer fault. */
+  mediaOutOfSpace?: boolean;
 }): { text: string; tone: "info" | "error" } {
   const { copied, failed } = outcome;
-  const saved =
-    copied === 1 ? "Saved 1 copy to your places" : `Saved ${copied} copies to your places`;
+  const skipped = outcome.mediaSkipped ?? 0;
+  const media =
+    skipped === 0
+      ? ""
+      : outcome.mediaOutOfSpace
+        ? ` Your storage is full, so ${skipped === 1 ? "1 photo or file" : `${skipped} photos and files`} weren't copied.`
+        : ` ${skipped === 1 ? "1 photo or file" : `${skipped} photos and files`} couldn't be copied.`;
+  const saved = copied === 1 ? "Saved 1 copy" : `Saved ${copied} copies`;
   if (failed.length === 0) {
-    return { text: `${saved}.`, tone: "info" };
+    return {
+      text: `${saved}.${media}`,
+      tone: skipped > 0 ? "error" : "info",
+    };
   }
   if (copied === 0) {
     return {
       text:
         failed.length === 1
           ? `Couldn't copy ${failed[0]}.`
-          : `Couldn't copy ${failed.length} places: ${failed.join(", ")}.`,
+          : `Couldn't copy ${failed.length} items: ${failed.join(", ")}.`,
       tone: "error",
     };
   }
   return {
-    text: `${saved}. Couldn't copy ${failed.join(", ")}.`,
+    text: `${saved}. Couldn't copy ${failed.join(", ")}.${media}`,
     tone: "error",
+  };
+}
+
+/**
+ * What "save a copy and remove" did.
+ *
+ * THREE OUTCOMES, and they are not degrees of the same thing — each one leaves
+ * the user somewhere different, and a message that blurs them leaves them
+ * guessing which:
+ *
+ *   done              — copied and the share dropped. Nothing to do.
+ *   copiedNotRemoved  — the copy is safe, the share is still there. Untidy, and
+ *                       fixable with Remove. Must not read as a failure.
+ *   failed            — the copy did not happen, so NOTHING was given up. This
+ *                       is the one that has to name rows: it is the retryable
+ *                       one, and the reassurance ("still shared with you") is
+ *                       the point of saying it at all.
+ *
+ * Media is reported separately and always, because it is the loss the action
+ * cannot undo — see `copyAndRemoveConfirm`, which warns about the same count
+ * beforehand.
+ */
+export function copyAndRemoveOutcomeMessage(outcome: {
+  done: string[];
+  copiedNotRemoved: string[];
+  failed: string[];
+  mediaSkipped: number;
+  mediaOutOfSpace: boolean;
+}): { text: string; tone: "info" | "error" } {
+  const { done, copiedNotRemoved, failed, mediaSkipped, mediaOutOfSpace } = outcome;
+  const parts: string[] = [];
+
+  if (done.length > 0) {
+    parts.push(
+      done.length === 1
+        ? "Saved 1 copy and removed the shared one."
+        : `Saved ${done.length} copies and removed the shared ones.`,
+    );
+  }
+  if (copiedNotRemoved.length > 0) {
+    parts.push(
+      copiedNotRemoved.length === 1
+        ? `Copied ${copiedNotRemoved[0]}, but it's still shared with you — use Remove to finish.`
+        : `Copied ${copiedNotRemoved.length} items, but they're still shared with you — use Remove to finish.`,
+    );
+  }
+  if (failed.length > 0) {
+    parts.push(
+      failed.length === 1
+        ? `Couldn't copy ${failed[0]}, so it's still shared with you.`
+        : `Couldn't copy ${failed.join(", ")} — they're still shared with you.`,
+    );
+  }
+  if (mediaSkipped > 0) {
+    parts.push(
+      mediaOutOfSpace
+        ? `Your storage is full, so ${mediaSkipped === 1 ? "1 photo or file" : `${mediaSkipped} photos and files`} weren't copied.`
+        : `${mediaSkipped === 1 ? "1 photo or file" : `${mediaSkipped} photos and files`} couldn't be copied.`,
+    );
+  }
+
+  return {
+    text: parts.join(" "),
+    tone: failed.length > 0 || copiedNotRemoved.length > 0 || mediaSkipped > 0 ? "error" : "info",
   };
 }
 

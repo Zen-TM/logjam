@@ -19,8 +19,18 @@
 // wherever it is listed); re-listing downloads here would be a second place for
 // them to go stale.
 //
-// PRIVACY: five booleans. No place names, no regions named.
-import { useCallback, useState } from "react";
+// ONE ROW HERE IS ACCOUNT-SCOPED, and it is the exception the page states rather
+// than hides: "Photos with copied places" lives on the user record
+// (`uiPreferences.copyPlaceMedia`) because the SERVER reads it — it is the
+// fallback when a copy request does not say, which is what lets Logjam Web
+// honour a choice made here. It is on THIS page rather than a page of its own
+// because what it decides is storage: whether a copied place's photos are
+// duplicated into this account's quota. It carries the "Needs an account"
+// treatment the notifications page states once, because unlike its neighbours
+// it cannot be changed offline.
+//
+// PRIVACY: six booleans. No place names, no regions named.
+import { useCallback, useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import {
@@ -36,6 +46,13 @@ import {
   isTopoAutoDownloadEnabled,
   setTopoAutoDownloadEnabled,
 } from "../../offline/topoAutoDownload";
+import { apiFetch } from "../../api/apiFetch";
+import { fetchCurrentUser, useApiQuery } from "../../api/queries";
+import { useAccountState } from "../../auth/AccountStateContext";
+import { capabilityStatus, unavailableReasonText } from "../../auth/capabilities";
+import { useConnectivity } from "../../map/connectivity";
+import type { TUser } from "../../api/types";
+import { messageFromError } from "@logjam/shared";
 import { Row, ScreenScroll, SectionHeader, Toast, type ToastMessage } from "../../ui";
 import { Hint, PreferenceRow } from "./settingsKit";
 import { spacing } from "../../theme";
@@ -108,6 +125,51 @@ export function OfflineSettingsScreen({
     mediaUpload: isMeteredAllowed("mediaUpload"),
   }));
 
+  // ── The one account-scoped row (see the header) ──────────────────────────
+  const { accountState } = useAccountState();
+  const online = useConnectivity() === "online";
+  const userQuery = useApiQuery(
+    fetchCurrentUser,
+    "Couldn't load your settings.",
+    accountState !== "guest",
+  );
+  // Optimistic with rollback, and re-seeded on the VALUE rather than on the
+  // user id — a preference changed on another device and pulled in by a
+  // refetch while this screen stayed mounted was otherwise silently dropped
+  // (the notifications page learnt this first).
+  const [copyMedia, setCopyMedia] = useState<boolean | null>(null);
+  const serverCopyMedia = userQuery.data
+    ? (userQuery.data.uiPreferences?.copyPlaceMedia ?? true)
+    : null;
+  useEffect(() => {
+    if (serverCopyMedia === null) return;
+    setCopyMedia(serverCopyMedia);
+  }, [serverCopyMedia]);
+
+  const toggleCopyMedia = useCallback(() => {
+    setCopyMedia((current) => {
+      if (current === null) return current;
+      const next = !current;
+      apiFetch<TUser>("/users/me", {
+        method: "PATCH",
+        body: { copyPlaceMedia: next },
+      }).catch((err: unknown) => {
+        console.error(err);
+        setCopyMedia(current);
+        notify(messageFromError(err, "Couldn't save that setting."));
+      });
+      return next;
+    });
+  }, [notify]);
+
+  const serverPrefs = capabilityStatus("serverPrefs", accountState, online);
+  const copyMediaBlocked: string | undefined =
+    serverPrefs.status === "unavailable"
+      ? unavailableReasonText(serverPrefs.reason)
+      : userQuery.error
+        ? "Couldn't reach your account"
+        : undefined;
+
   return (
     <>
       <ScreenScroll>
@@ -157,6 +219,23 @@ export function OfflineSettingsScreen({
             />
           );
         })}
+
+        <SectionHeader label="When you save a copy" />
+        {/* The default for the switch that appears on the copy sheet itself,
+            which is where it is usually changed. Here so it can be found and
+            so Logjam Web — which has no switch of its own — follows it too. */}
+        <PreferenceRow
+          icon="image"
+          title="Photos with copied places"
+          subtitle={
+            copyMediaBlocked ??
+            "Copies a shared place's photos and files into your storage too."
+          }
+          subtitleNumberOfLines={2}
+          value={copyMedia ?? true}
+          ready={copyMediaBlocked === undefined && copyMedia !== null}
+          onToggle={toggleCopyMedia}
+        />
 
         <SectionHeader label="On this phone" />
         <Row

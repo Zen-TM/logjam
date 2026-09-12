@@ -3,6 +3,7 @@ import type { FriendShareRow } from "@logjam/shared";
 
 import {
   buildShareCards,
+  copyAndRemoveOutcomeMessage,
   copyConfirm,
   copyOutcomeMessage,
   removeAllConfirm,
@@ -67,15 +68,24 @@ describe("buildShareCards", () => {
     expect(cards.map((card) => card.removable)).toEqual([false, false]);
   });
 
-  it("offers copy on a received place and not on a received waypoint", () => {
+  // Both ROW kinds copy into the account now (`isCopyableSharedRow`); the two
+  // job kinds do not, because their copy is the device download.
+  it("offers copy on a received place and a received route", () => {
     const cards = buildShareCards([PLACE, ROUTE], {
       direction: "youSee",
       friendName: FRIEND,
     });
-    expect(cards[0].copyable).toBe(true);
-    expect(cards[1].copyable).toBe(false);
+    expect(cards.map((card) => card.copyable)).toEqual([true, true]);
     // Removable either way — copy is the extra verb, not the gate.
     expect(cards.map((card) => card.removable)).toEqual([true, true]);
+  });
+
+  it("withholds copy from a received topo and GeoPDF", () => {
+    const cards = buildShareCards(
+      [row("topoJob", "j1", "Kanangra"), row("geoPdfJob", "g1", "Sheet 1")],
+      { direction: "youSee", friendName: FRIEND },
+    );
+    expect(cards.map((card) => card.copyable)).toEqual([false, false]);
   });
 
   // THE TRAP: a route shared directly AND linked to a place this friend
@@ -118,7 +128,9 @@ describe("shareSelectionCountLabel", () => {
   });
 
   it("tallies the copyable subset when it differs from the total", () => {
-    expect(shareSelectionCountLabel(received([PLACE, ROUTE]), "youSee")).toBe(
+    // A topo is the uncopyable kind now that routes copy — its keep is the
+    // device download, not an account copy.
+    expect(shareSelectionCountLabel(received([PLACE, TOPO]), "youSee")).toBe(
       "2 selected · 1 copyable",
     );
   });
@@ -132,7 +144,7 @@ describe("shareSelectionCountLabel", () => {
   it("tallies both subsets when both bite", () => {
     expect(
       shareSelectionCountLabel(
-        received([PLACE, row("route", "w1", "Descent line", true)]),
+        received([TOPO, row("route", "w1", "Descent line", true)]),
         "youSee",
       ),
     ).toBe("2 selected · 1 copyable · 1 removable");
@@ -204,7 +216,7 @@ describe("removeAllConfirm", () => {
       friendName: FRIEND,
       copyableCount: 1,
     }).body;
-    expect(body).toContain("It's a place you could save a copy of first.");
+    expect(body).toContain("You could save a copy of it first.");
     expect(body).not.toContain("of them");
   });
 
@@ -213,10 +225,10 @@ describe("removeAllConfirm", () => {
   it("mentions copying first when the selection holds places", () => {
     expect(
       removeAllConfirm({ count: 3, friendName: FRIEND, copyableCount: 2 }).body,
-    ).toContain("2 of them are places you could save a copy of first");
+    ).toContain("2 of them are things you could save a copy of first");
     expect(
       removeAllConfirm({ count: 3, friendName: FRIEND, copyableCount: 1 }).body,
-    ).toContain("1 of them is a place you could save a copy of first");
+    ).toContain("1 of them is something you could save a copy of first");
   });
 });
 
@@ -225,7 +237,7 @@ describe("removeAllConfirm", () => {
 describe("outcome messages", () => {
   it("reports a clean copy run as info", () => {
     expect(copyOutcomeMessage({ copied: 2, failed: [] })).toEqual({
-      text: "Saved 2 copies to your places.",
+      text: "Saved 2 copies.",
       tone: "info",
     });
   });
@@ -233,7 +245,7 @@ describe("outcome messages", () => {
   it("names the failures in a partial copy run", () => {
     const message = copyOutcomeMessage({ copied: 1, failed: ["Claustral"] });
     expect(message.tone).toBe("error");
-    expect(message.text).toBe("Saved 1 copy to your places. Couldn't copy Claustral.");
+    expect(message.text).toBe("Saved 1 copy. Couldn't copy Claustral.");
   });
 
   it("does not claim a save when nothing was copied", () => {
@@ -263,20 +275,95 @@ describe("outcome messages", () => {
 // alone does not say where the copy goes or what happens to the original.
 describe("copyConfirm", () => {
   it("names the single item, and says the copy outlives the share", () => {
-    const confirm = copyConfirm({ count: 1, friendName: FRIEND, itemName: "Claustral" });
+    const confirm = copyConfirm({
+      count: 1,
+      friendName: FRIEND,
+      itemName: "Claustral",
+      kindLabel: "place",
+    });
     expect(confirm.title).toBe("Save a copy?");
     expect(confirm.body).toContain("“Claustral”");
     expect(confirm.body).toContain("yours to edit");
     expect(confirm.body).toContain("stays if bob stops sharing");
-    // Never suggests the friend's own place is affected.
-    expect(confirm.body).toContain("bob's place is untouched");
+    // Never suggests the friend's own row is affected.
+    expect(confirm.body).toContain("bob's original is untouched");
   });
 
-  it("counts in the plural without naming rows", () => {
+  // A place brings its route; a route does not bring anything. Promising a
+  // route that never arrives is the kind of small lie that costs the copy
+  // button its credibility.
+  it("promises the route only on a place", () => {
+    expect(
+      copyConfirm({ count: 1, friendName: FRIEND, itemName: "X", kindLabel: "place" }).body,
+    ).toContain("with its route");
+    expect(
+      copyConfirm({ count: 1, friendName: FRIEND, itemName: "X", kindLabel: "route" }).body,
+    ).not.toContain("with its route");
+  });
+
+  it("counts in the plural without naming rows or kinds", () => {
     const confirm = copyConfirm({ count: 3, friendName: FRIEND });
     expect(confirm.title).toBe("Save 3 copies?");
-    expect(confirm.body).toContain("3 places are copied");
+    expect(confirm.body).toContain("3 items are copied");
+    expect(confirm.body).not.toContain("route");
     expect(confirm.body).toContain("stay if bob stops sharing");
+  });
+});
+
+// THE BUNDLED VERB'S REPORT. Three outcomes that leave the user in three
+// different places, and the media line that is the loss it cannot undo.
+describe("copyAndRemoveOutcomeMessage", () => {
+  const clean = {
+    done: [] as string[],
+    copiedNotRemoved: [] as string[],
+    failed: [] as string[],
+    mediaSkipped: 0,
+    mediaOutOfSpace: false,
+  };
+
+  it("reports a clean run as info", () => {
+    expect(copyAndRemoveOutcomeMessage({ ...clean, done: ["Claustral"] })).toEqual({
+      text: "Saved 1 copy and removed the shared one.",
+      tone: "info",
+    });
+  });
+
+  // Not a failure: the copy is safe and the share is still there. The message
+  // has to point at the verb that finishes the job.
+  it("tells the user to finish a half-done one with Remove", () => {
+    const message = copyAndRemoveOutcomeMessage({
+      ...clean,
+      copiedNotRemoved: ["Claustral"],
+    });
+    expect(message.text).toContain("still shared with you");
+    expect(message.text).toContain("use Remove to finish");
+  });
+
+  // The reassurance IS the message: a failed copy means nothing was given up.
+  it("names a failed copy and says nothing was lost", () => {
+    const message = copyAndRemoveOutcomeMessage({ ...clean, failed: ["Claustral"] });
+    expect(message.text).toBe("Couldn't copy Claustral, so it's still shared with you.");
+    expect(message.tone).toBe("error");
+  });
+
+  it("reports skipped media even when both halves worked", () => {
+    const message = copyAndRemoveOutcomeMessage({
+      ...clean,
+      done: ["Claustral"],
+      mediaSkipped: 3,
+    });
+    expect(message.text).toContain("3 photos and files couldn't be copied");
+    expect(message.tone).toBe("error");
+  });
+
+  it("blames the storage when that is what happened", () => {
+    const message = copyAndRemoveOutcomeMessage({
+      ...clean,
+      done: ["Claustral"],
+      mediaSkipped: 1,
+      mediaOutOfSpace: true,
+    });
+    expect(message.text).toContain("Your storage is full");
   });
 });
 

@@ -19,6 +19,7 @@ import {
 import { deleteS3Keys, deleteS3KeysBestEffort } from "../lib/s3Cleanup";
 import { validateUploadSizes } from "../lib/mediaUploadValidation";
 import { toMediaItem } from "../lib/mediaPresign";
+import { mediaKeys } from "../lib/mediaKeys";
 import { exhaustedEgressOwnerIds } from "../lib/egressQuota";
 import { requirePlaceOwnerAccess } from "../lib/placeAccess";
 import { placeIdOfMedia } from "../lib/mediaLink";
@@ -208,16 +209,6 @@ function validateMediaType(
       throw new AppError(400, `Track file must have a .${expected} extension`);
   }
   return { category, mediaType, filename };
-}
-
-// Keys are derived entirely from server-side values (ownerId + mediaId + MIME),
-// so the client can never point a confirm at someone else's object.
-function mediaKeys(ownerId: string, mediaId: string, mediaType: string) {
-  const ext = MEDIA_EXTENSION_BY_MIME[mediaType];
-  return {
-    displayKey: `media/${ownerId}/${mediaId}/display.${ext}`,
-    thumbnailKey: `media/${ownerId}/${mediaId}/thumb.jpg`,
-  };
 }
 
 // POST /media/presign — validate ownership + type, return presigned PUT URL(s).

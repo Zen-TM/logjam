@@ -28,7 +28,15 @@ import { removeShareConfirm } from "@logjam/shared";
 import { spacing, theme } from "../theme";
 import { BottomSheet, Row } from "../ui";
 import { removeSharedPlace } from "../sharing/removeShare";
+import { useCopyPanel } from "../sharing/CopySheet";
+import {
+  copyShared,
+  runCopyAndRemove,
+  type CopyAndRemoveTarget,
+} from "../sharing/copyAndRemove";
+import { copyAndRemoveOutcomeMessage, copyOutcomeMessage } from "../sharing/friendShareRows";
 import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
+import { requestSync } from "../sync/syncEngine";
 import { useConnectivity } from "../map/connectivity";
 import { useMirrorTrips } from "../sync/useSyncQueries";
 import type { MirrorPlace } from "../sync/mirrorStore";
@@ -100,10 +108,73 @@ export function PlaceOptionsSheet({
     active: sharing,
   });
 
+  // THE RECIPIENT'S OTHER TWO VERBS, as a second sub-mode of this sheet for the
+  // same reason sharing is one: the copy panel has a photos switch to draw and
+  // §6 says swap the content, never stack a sheet on a sheet.
+  //
+  // No owner USERNAME here — a mirrored place carries an `ownerId` and no name
+  // (`removeShareConfirm`'s own note) — so the copy states "the owner", rather
+  // than this sheet inventing a lookup for one line.
+  const [copyMode, setCopyMode] = useState<"copy" | "copyAndRemove" | null>(null);
+  const [copyBusy, setCopyBusy] = useState(false);
+  useEffect(() => {
+    if (!visible) setCopyMode(null);
+  }, [visible]);
+
+  const copyTargets = useMemo<CopyAndRemoveTarget[]>(
+    () =>
+      place ? [{ entityType: "place", entityId: place.id, title: place.name }] : [],
+    [place],
+  );
+
+  const copy = useCopyPanel({
+    active: copyMode !== null,
+    targets: copyTargets,
+    mode: copyMode ?? "copy",
+    friendName: "the owner",
+    busy: copyBusy,
+    online,
+    onConfirm: (options) => {
+      const [target] = copyTargets;
+      if (!target) return;
+      const bundled = copyMode === "copyAndRemove";
+      setCopyBusy(true);
+      void (async () => {
+        if (bundled) {
+          const outcome = await runCopyAndRemove([target], options);
+          const report = copyAndRemoveOutcomeMessage(outcome);
+          (report.tone === "error" ? onError : onInfo)(report.text);
+        } else {
+          try {
+            const media = await copyShared(target, options);
+            const report = copyOutcomeMessage({
+              copied: 1,
+              failed: [],
+              mediaSkipped: media.skipped,
+              mediaOutOfSpace: media.outOfSpace,
+            });
+            (report.tone === "error" ? onError : onInfo)(report.text);
+          } catch (err) {
+            // Our own copy, never the error's: it may carry the name.
+            console.error(err);
+            onError("Couldn't save a copy of this place.");
+          }
+          // A plain copy leaves nothing locally to update, so the pull is what
+          // brings the new row in. The bundled verb does its own pull mid-way.
+          void requestSync().catch((syncErr: unknown) => console.error(syncErr));
+        }
+        setCopyBusy(false);
+        setCopyMode(null);
+        onClose();
+      })();
+    },
+  });
+
   if (!place) return null;
 
   const close = () => {
     setSharing(false);
+    setCopyMode(null);
     onClose();
   };
 
@@ -162,13 +233,25 @@ export function PlaceOptionsSheet({
   return (
     <BottomSheet
       visible={visible}
-      // The sub-mode backs out to the verb list; only the list closes the sheet.
-      onClose={sharing ? () => setSharing(false) : close}
-      title={sharing ? share.title : place.name}
-      onBack={sharing ? () => setSharing(false) : undefined}
+      // Either sub-mode backs out to the verb list; only the list closes the
+      // sheet.
+      onClose={
+        sharing ? () => setSharing(false) : copyMode ? () => setCopyMode(null) : close
+      }
+      title={sharing ? share.title : copyMode ? copy.title : place.name}
+      onBack={
+        sharing
+          ? () => setSharing(false)
+          : copyMode
+            ? () => setCopyMode(null)
+            : undefined
+      }
+      footer={copyMode ? copy.footer : undefined}
     >
       {sharing ? (
         share.body
+      ) : copyMode ? (
+        copy.body
       ) : (
         <View style={styles.body}>
           <Row
@@ -222,18 +305,38 @@ export function PlaceOptionsSheet({
               />
             </>
           ) : (
-            // The recipient's own verb, in the same slot the owner's Delete
-            // takes. This sheet IS the place's options button, so a shared
-            // place has to be removable from here and not only from its detail
-            // screen — the sheet used to explain the missing owner verbs with a
-            // sentence instead of offering the one verb that is the sharee's.
-            <Row
-              icon="x-circle"
-              hue={theme.warning}
-              title="Remove from my account"
-              {...shareRowProps}
-              onPress={confirmRemoveShare}
-            />
+            // The recipient's own verbs, in the slot the owner's Edit / Share /
+            // Delete take. This sheet IS the place's options button, so a
+            // shared place has to be keepable and removable from here and not
+            // only from its detail screen — the sheet used to explain the
+            // missing owner verbs with a sentence instead of offering the ones
+            // that are the sharee's.
+            //
+            // Copy sits ABOVE Remove deliberately: the bundled verb between
+            // them is the recoverable path through the destructive one, and a
+            // user who reads the list top to bottom meets it before the tap
+            // that cannot be undone.
+            <>
+              <Row
+                icon="copy"
+                title="Save a copy"
+                {...shareRowProps}
+                onPress={() => setCopyMode("copy")}
+              />
+              <Row
+                icon="download"
+                title="Save a copy and remove"
+                {...shareRowProps}
+                onPress={() => setCopyMode("copyAndRemove")}
+              />
+              <Row
+                icon="x-circle"
+                hue={theme.warning}
+                title="Remove from my account"
+                {...shareRowProps}
+                onPress={confirmRemoveShare}
+              />
+            </>
           )}
         </View>
       )}

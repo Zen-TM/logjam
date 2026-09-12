@@ -87,6 +87,7 @@ export type TUser = {
     notifications?: NotificationPreferences;
     autoDownloadGeoPdfs?: boolean;
     importMergePolicy?: PlaceMergePolicy;
+    copyPlaceMedia?: boolean;
   } | null;
 };
 

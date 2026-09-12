@@ -57,6 +57,22 @@ describe("normalizeUserUiPreferences", () => {
     expect(result.notifications).toEqual(DEFAULT_NOTIFICATION_PREFERENCES);
   });
 
+  // The direction of the default is the whole point: an account that predates
+  // the field, or one whose stored value is junk, COPIES media. Not copying is
+  // the silent loss — the sharee's photos go, and on the phone so do the cached
+  // blobs — while copying fails loudly at the quota with a 507 they can read.
+  it("defaults copyPlaceMedia to true, including for junk and absent values", () => {
+    expect(normalizeUserUiPreferences(null).copyPlaceMedia).toBe(true);
+    expect(normalizeUserUiPreferences({}).copyPlaceMedia).toBe(true);
+    expect(normalizeUserUiPreferences({ copyPlaceMedia: "no" }).copyPlaceMedia).toBe(true);
+  });
+
+  it("keeps an explicit copyPlaceMedia of false", () => {
+    expect(normalizeUserUiPreferences({ copyPlaceMedia: false }).copyPlaceMedia).toBe(
+      false,
+    );
+  });
+
   it("clamps an invalid themeSchemeId to the default", () => {
     const result = normalizeUserUiPreferences({ themeSchemeId: "granite" });
     expect(result.themeSchemeId).toBe(DEFAULT_THEME_SCHEME_ID);

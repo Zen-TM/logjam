@@ -191,6 +191,53 @@ router.post("/", requireAuth, async (req: AuthenticatedRequest, res: Response) =
   }
 });
 
+// ── POST /routes/:id/copy ─────────────────────────────────────
+// Copy a route someone shared with you into your own account — the sibling of
+// POST /places/:id/copy, and the same promise: the copy is yours to edit and it
+// outlives the share.
+//
+// NOT owner-only. A sharee copying is the whole point, so this reads with
+// requireShareAccess (404 for no access) and never reaches the 403 branch —
+// the owner may copy their own route too, which is an ordinary duplicate.
+//
+// THE COPY IS UNLINKED, always. `Route.placeId` is a @unique slot on the
+// OWNER's place; pointing a copy at it would displace the original out of the
+// place it belongs to. A sharee who wants the route attached to a place copies
+// the PLACE, which brings this route with it (routes/places.ts).
+router.post("/:id/copy", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  const user = await resolveUser(req.user!.sub);
+  const id = getParam(req.params.id);
+  const source = await prisma.route.findUnique({ where: { id } });
+  if (!source) throw new AppError(404, NOT_FOUND);
+  requireShareAccess(await getRouteRole(user.id, source), "route");
+
+  const copy = await prisma.$transaction(async (tx) => {
+    // A fresh colour from the COPIER's palette, not the source's: the owner's
+    // choice was made to keep their own lines apart, and carrying it over is
+    // how two routes end up the same colour on the copier's map.
+    const existingRoutes = await tx.route.findMany({
+      where: { ownerId: user.id },
+      select: { color: true },
+    });
+    return tx.route.create({
+      data: {
+        ownerId: user.id,
+        placeId: null,
+        name: source.name,
+        color: pickNextTrackColor(existingRoutes.map((r) => r.color)),
+        points: source.points as Prisma.InputJsonValue,
+        // Carried as-is: anchors are INDICES into `points`, and the points are
+        // copied verbatim, so the two cannot fall out of step. Null stays null
+        // — "every vertex is the user's" is the honest reading of a route drawn
+        // before anchors existed, and inventing one here would claim otherwise.
+        anchors: source.anchors === null ? Prisma.DbNull : (source.anchors as Prisma.InputJsonValue),
+      },
+    });
+  });
+
+  res.status(201).json(copy);
+});
+
 // ── PATCH /routes/:id ─────────────────────────────────────────
 // Field-sparse update. `placeId` accepts an explicit null to unlink.
 router.patch("/:id", requireAuth, async (req: AuthenticatedRequest, res: Response) => {

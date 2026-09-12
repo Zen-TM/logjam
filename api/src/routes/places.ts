@@ -14,7 +14,8 @@ import { Prisma } from "@prisma/client";
 import { getParam } from "../lib/getParam";
 import { getEnv } from "../lib/env";
 import { deleteS3Keys } from "../lib/s3Cleanup";
-import { decrementStorageUsed } from "../lib/storageQuota";
+import { assertHasStorageQuota, decrementStorageUsed } from "../lib/storageQuota";
+import { copyPlaceMedia, placeMediaToCopy } from "../lib/copyPlaceMedia";
 import { toMediaItems, mediaItemsByLinkedId } from "../lib/mediaPresign";
 import { partitionPlaceMedia, unlinkStandaloneMedia } from "../lib/mediaLink";
 import { requirePlaceAccess, requirePlaceOwnerAccess } from "../lib/placeAccess";
@@ -30,6 +31,7 @@ import {
 } from "../lib/clientSuppliedId";
 import {
   asFieldValues,
+  normalizeUserUiPreferences,
   TRACK_MIME_TYPES,
   validatePlacePayload,
 } from "@logjam/shared";
@@ -359,6 +361,24 @@ router.post(
     // itself is visible to sharees).
     await requirePlaceAccess(user.id, place);
 
+    // WHETHER THE PHOTOS COME TOO. The body wins when it says; otherwise the
+    // caller's remembered preference decides, which is what lets a client with
+    // no switch of its own (Logjam Web, today) still do what the user asked for
+    // on Logjam GPS rather than quietly doing the other thing.
+    const copyMedia =
+      typeof req.body?.copyMedia === "boolean"
+        ? req.body.copyMedia
+        : normalizeUserUiPreferences(user.uiPreferences).copyPlaceMedia;
+
+    // PREFLIGHT BEFORE ANYTHING IS CREATED. An over-quota copy is a 507 with no
+    // place, no route and no orphaned objects; the authoritative check still
+    // runs with the charge (copyPlaceMedia.ts), which is what catches the race
+    // this cannot.
+    const { rows: mediaRows, totalBytes: mediaBytes } = copyMedia
+      ? await placeMediaToCopy(placeId)
+      : { rows: [], totalBytes: 0n };
+    if (mediaBytes > 0n) await assertHasStorageQuota(user.id, mediaBytes);
+
     // WHICH TYPE, and it is the one decision a copy cannot take back silently
     // (§2.6 rule 1): a system type resolves globally, a user type matches by
     // NAME against the recipient's system types first and their own second, and
@@ -432,13 +452,30 @@ router.post(
       });
     }
 
+    // Media last, and never fatal: by here the place the user asked for
+    // exists, so a failure is reported as a count rather than as a failed copy
+    // (copyPlaceMedia.ts states the reasoning).
+    const media = mediaRows.length
+      ? await copyPlaceMedia({
+          sourcePlaceId: placeId,
+          targetPlaceId: copiedPlace.id,
+          recipientId: user.id,
+        })
+      : { copied: 0, skipped: 0 };
+
     // `createdPlaceType` is stated rather than left to be noticed: a new tab
     // appearing unannounced reads as a bug, and the client says so in the
     // toast that follows the copy.
+    //
+    // `mediaSkipped` is stated for the harder version of the same reason: after
+    // a copy-and-remove there is no second chance to notice photos are missing.
     res.status(201).json({
       ...copiedPlace,
       linkedPlaceIds: [],
       createdPlaceType: typeResolution.created,
+      mediaCopied: media.copied,
+      mediaSkipped: media.skipped,
+      ...(media.outOfSpace ? { mediaOutOfSpace: true } : {}),
     });
   },
 );

@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { removeShareConfirm, sharedRowVisibility } from "./sharing";
+import {
+  BULK_SHARE_ITEM_TYPES,
+  copyAndRemoveConfirm,
+  isCopyableSharedRow,
+  removeShareConfirm,
+  sharedRowVisibility,
+} from "./sharing";
 
 // The rule these pin is the reason the helper exists: a row that is visible
 // BOTH ways must not offer a Remove, because revoking the direct share leaves
@@ -50,5 +56,80 @@ describe("removeShareConfirm", () => {
     expect(
       removeShareConfirm({ kindLabel: "waypoint", itemName: "Carpark" }).body,
     ).toContain("The owner keeps the original");
+  });
+});
+
+// The predicate that decides which shared rows get a "Save a copy" verb. The
+// split it pins is not arbitrary: rows copy into the account, map artefacts are
+// downloaded to the device and already outlive the share there.
+describe("isCopyableSharedRow", () => {
+  it("copies the two ROW kinds into the account", () => {
+    expect(isCopyableSharedRow({ entityType: "place" })).toBe(true);
+    expect(isCopyableSharedRow({ entityType: "route" })).toBe(true);
+  });
+
+  it("leaves the two MAP ARTEFACT kinds to the device download", () => {
+    expect(isCopyableSharedRow({ entityType: "topoJob" })).toBe(false);
+    expect(isCopyableSharedRow({ entityType: "geoPdfJob" })).toBe(false);
+  });
+
+  // Every sharable kind has to be answered for, so a fifth one cannot join the
+  // union and quietly inherit "not copyable" without someone deciding.
+  it("answers for every kind a bulk share can name", () => {
+    for (const entityType of BULK_SHARE_ITEM_TYPES) {
+      expect(typeof isCopyableSharedRow({ entityType })).toBe("boolean");
+    }
+  });
+});
+
+describe("copyAndRemoveConfirm", () => {
+  it("promises the copy survives, and that the original is untouched", () => {
+    const { title, body } = copyAndRemoveConfirm({
+      kindLabel: "place",
+      itemName: "Claustral",
+      ownerName: "alice",
+    });
+    expect(title).toBe("Save a copy and remove?");
+    expect(body).toContain("Claustral");
+    expect(body).toContain("alice keeps the original");
+    // Nothing is destroyed at the owner's end, so the copy must not say so.
+    expect(body).not.toMatch(/permanent|cannot be undone/i);
+  });
+
+  // THE POINT OF THIS CONFIRM. After the remove there is no second chance to
+  // notice the photos did not come — on the phone the cached blobs go in the
+  // same tap — so the count has to be in the sentence before it.
+  it("names the media the copy leaves behind", () => {
+    expect(
+      copyAndRemoveConfirm({
+        kindLabel: "place",
+        itemName: "Claustral",
+        mediaLeftBehind: 4,
+      }).body,
+    ).toContain("4 photos and files are NOT copied");
+    expect(
+      copyAndRemoveConfirm({
+        kindLabel: "place",
+        itemName: "Claustral",
+        mediaLeftBehind: 1,
+      }).body,
+    ).toContain("1 photo or file is NOT copied");
+  });
+
+  it("says nothing about media when none is left behind", () => {
+    for (const mediaLeftBehind of [0, undefined]) {
+      expect(
+        copyAndRemoveConfirm({
+          kindLabel: "route",
+          itemName: "Exit track",
+          ...(mediaLeftBehind === undefined ? {} : { mediaLeftBehind }),
+        }).body,
+      ).not.toMatch(/NOT copied/);
+    }
+  });
+
+  it("falls back to an unnamed owner", () => {
+    const body = copyAndRemoveConfirm({ kindLabel: "route", itemName: "Exit track" }).body;
+    expect(body).toContain("the owner keeps the original");
   });
 });

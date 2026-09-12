@@ -313,12 +313,21 @@ router.patch(
     // row-grain endpoints in routes/customFields.ts and the sync push op are
     // the write paths. A client sending the old key gets a 400 naming the
     // replacement rather than a silent no-op.
-    const { username, themeSchemeId, notifications, autoDownloadGeoPdfs, importMergePolicy, consentVersion } = req.body as {
+    const {
+      username,
+      themeSchemeId,
+      notifications,
+      autoDownloadGeoPdfs,
+      importMergePolicy,
+      copyPlaceMedia,
+      consentVersion,
+    } = req.body as {
       username?: unknown;
       themeSchemeId?: unknown;
       notifications?: unknown;
       autoDownloadGeoPdfs?: unknown;
       importMergePolicy?: unknown;
+      copyPlaceMedia?: unknown;
       consentVersion?: unknown;
     };
     for (const legacy of ["tripLogCustomFields", "placeCustomFields"] as const) {
@@ -365,7 +374,8 @@ router.patch(
       themeSchemeId !== undefined ||
       notifications !== undefined ||
       autoDownloadGeoPdfs !== undefined ||
-      importMergePolicy !== undefined
+      importMergePolicy !== undefined ||
+      copyPlaceMedia !== undefined
     ) {
       if (themeSchemeId !== undefined && !isThemeSchemeId(themeSchemeId)) {
         throw new AppError(400, "Invalid themeSchemeId");
@@ -375,6 +385,9 @@ router.patch(
       }
       if (autoDownloadGeoPdfs !== undefined && typeof autoDownloadGeoPdfs !== "boolean") {
         throw new AppError(400, "Invalid autoDownloadGeoPdfs");
+      }
+      if (copyPlaceMedia !== undefined && typeof copyPlaceMedia !== "boolean") {
+        throw new AppError(400, "Invalid copyPlaceMedia");
       }
       if (importMergePolicy !== undefined) {
         const normalized = normalizeImportMergePolicy(importMergePolicy);
@@ -395,6 +408,7 @@ router.patch(
           ? { notifications: { ...current.notifications, ...(notifications as Record<string, boolean>) } }
           : {}),
         ...(autoDownloadGeoPdfs !== undefined ? { autoDownloadGeoPdfs } : {}),
+        ...(copyPlaceMedia !== undefined ? { copyPlaceMedia } : {}),
         ...(importMergePolicy !== undefined ? { importMergePolicy: normalizeImportMergePolicy(importMergePolicy) } : {}),
       };
     }

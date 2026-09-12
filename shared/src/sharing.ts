@@ -240,17 +240,77 @@ export function shareRowTitle(row: FriendShareRow): string {
 /**
  * Whether a row someone else shared with me can be COPIED into my own account.
  *
- * Places only, because `POST /places/:id/copy` is the only copy the API has.
+ * THE TWO HALVES OF "SAVE A COPY" ARE DIFFERENT MECHANISMS, and this predicate
+ * covers only the first:
  *
- * A shared WAYPOINT used to be uncopyable too; it is a place now, so it copies
- * like any other. Routes still cannot: that needs `POST /routes/:id/copy`
- * (read via shareAccess, create as the caller) plus the local mirror insert,
- * so it is a feature of its own rather than a widening of this predicate.
- * Jobs stay uncopyable regardless: they are S3 artefacts with a quota charge,
- * not rows.
+ *   ROWS — a place (`POST /places/:id/copy`) and a route
+ *          (`POST /routes/:id/copy`) are copied INTO THE ACCOUNT. They sync,
+ *          they are the copier's to edit, and they outlive the share.
+ *   MAP  — a LiDAR topo and a GeoPDF are downloaded ONTO THE DEVICE, which is
+ *   ARTEFACTS  what "things you made sync, maps you downloaded stay on this
+ *          device" already says (`mobile/src/saved/savedKeys.ts`). The download
+ *          is the copy and it ALREADY outlives the share: the phone's Saved
+ *          cards for both kinds are built from its local registry, not from the
+ *          server's job list, and `removeSharedEntity` deliberately drops
+ *          nothing local for them.
+ *
+ * So jobs are absent here not because a sharee cannot keep one, but because
+ * keeping one is not an account copy. Making it one would duplicate multi-GB
+ * S3 output against the recipient's 5 GiB quota and mint a `completed` job row
+ * that never ran — which the adaptive runtime estimator reads.
+ *
+ * Takes only the kind, so the option sheets (which hold an entity type, not a
+ * `FriendShareRow`) can ask the same question the audit screen asks.
  */
-export function isCopyableSharedRow(row: FriendShareRow): boolean {
-  return row.entityType === "place";
+export function isCopyableSharedRow(row: {
+  entityType: BulkShareItemType;
+}): boolean {
+  return row.entityType === "place" || row.entityType === "route";
+}
+
+/**
+ * The confirm before "save a copy, then stop sharing" — ONE action, two server
+ * calls, and the reason it needs its own wording rather than the two it bundles.
+ *
+ * `copyConfirm` says the copy is yours and survives; `removeShareConfirm` says
+ * the owner keeps the original and can share it again. Run back to back, those
+ * two promises leave the one question this button actually raises unanswered:
+ * WHAT DOES NOT COME WITH THE COPY. After the remove there is no second chance
+ * to notice, so the gap has to be named before the tap, not after.
+ *
+ * `mediaLeftBehind` is that gap. A place copy takes its route; its photos and
+ * files come only when the copier asked for them (or their remembered
+ * `copyPlaceMedia` did), and on the phone the removal deletes the cached blobs
+ * too — so a silent omission here is not "you can ask them again", it is gone
+ * from the device in the same tap.
+ */
+export function copyAndRemoveConfirm(args: {
+  /** Lower-case kind as it reads mid-sentence: "place", "route". */
+  kindLabel: string;
+  itemName: string;
+  /** The owner's username, on the surfaces that know it. */
+  ownerName?: string | null;
+  /**
+   * How many place-level media items the copy will NOT bring. Zero — because
+   * there are none, or because they are being copied — says nothing.
+   */
+  mediaLeftBehind?: number;
+}): { title: string; body: string } {
+  const owner = args.ownerName ?? "the owner";
+  const left = args.mediaLeftBehind ?? 0;
+  const leftBehind =
+    left === 0
+      ? ""
+      : left === 1
+        ? ` Its 1 photo or file is NOT copied, and stops being available to you.`
+        : ` Its ${left} photos and files are NOT copied, and stop being available to you.`;
+  return {
+    title: `Save a copy and remove?`,
+    body:
+      `A copy of “${args.itemName}” is saved to your own ${args.kindLabel}s — yours to edit, and it stays whether or not ${owner} keeps sharing.` +
+      leftBehind +
+      ` The shared ${args.kindLabel} is then removed from your account, on every device. ${owner} keeps the original.`,
+  };
 }
 
 // ── Getting rid of something shared WITH you ─────────────────────────────────

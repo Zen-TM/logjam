@@ -71,6 +71,20 @@ export function bulkShare(args: {
   });
 }
 
+/**
+ * Keep a route a friend shared: the route sibling of `copySharedPlace`.
+ *
+ * The copy is UNLINKED — it takes no place with it, because `Route.placeId` is
+ * the owner's place's single slot. A user who wants the route attached copies
+ * the PLACE, which brings its route along.
+ *
+ * Like the place copy, the new row arrives on the next delta pull rather than
+ * being inserted here: the server mints the id and picks the colour.
+ */
+export function copySharedRoute(routeId: string): Promise<{ id: string }> {
+  return apiFetch<{ id: string }>(`/routes/${routeId}/copy`, { method: "POST" });
+}
+
 export function unshareItem(
   entityType: SharableEntityType,
   entityId: string,

@@ -57,6 +57,27 @@ export type UserUiPreferences = {
   notifications: NotificationPreferences;
   autoDownloadGeoPdfs: boolean;
   importMergePolicy?: import("./mergePlace.js").PlaceMergePolicy;
+  /**
+   * Whether saving a copy of a shared place brings that place's place-level
+   * media (photos, videos, and attached track files) with it.
+   *
+   * A REMEMBERED DEFAULT, never a decision taken out of the user's hands: the
+   * copy sheet shows a switch — but only when the place actually has media —
+   * pre-set from this field, and flipping it writes back here. Same shape as
+   * `importMergePolicy`, which is the other remembered per-operation choice and
+   * lives in its operation's own dialog rather than behind a first-run modal.
+   *
+   * TRUE by default, and the direction matters. Not copying is the silent
+   * failure: the sharee loses photos they could see, and on the phone the
+   * cached blobs go with them (`cascadePlaceDelete`). Copying is the LOUD one —
+   * the server refuses with 507 when the quota will not take it, which the user
+   * can read and act on.
+   *
+   * The SERVER reads this as the fallback when `POST /places/:id/copy` carries
+   * no `copyMedia`, so a client with no switch of its own (Logjam Web, today)
+   * still honours the user's choice instead of quietly doing the other thing.
+   */
+  copyPlaceMedia: boolean;
 };
 
 export function isNotificationPreferences(
@@ -247,7 +268,11 @@ export function normalizeUserUiPreferences(value: unknown): UserUiPreferences {
     const autoDownloadGeoPdfs =
       typeof prefs.autoDownloadGeoPdfs === "boolean" ? prefs.autoDownloadGeoPdfs : true;
     const importMergePolicy = normalizeImportMergePolicy(prefs.importMergePolicy);
-    const result: UserUiPreferences = { themeSchemeId, tripLogCustomFields, placeCustomFields, notifications, autoDownloadGeoPdfs };
+    // Absent reads as TRUE, so every account that predates the field copies
+    // media rather than silently dropping it — see the field's own comment.
+    const copyPlaceMedia =
+      typeof prefs.copyPlaceMedia === "boolean" ? prefs.copyPlaceMedia : true;
+    const result: UserUiPreferences = { themeSchemeId, tripLogCustomFields, placeCustomFields, notifications, autoDownloadGeoPdfs, copyPlaceMedia };
     if (importMergePolicy) result.importMergePolicy = importMergePolicy;
     return result;
   }
@@ -258,5 +283,6 @@ export function normalizeUserUiPreferences(value: unknown): UserUiPreferences {
     placeCustomFields: [],
     notifications: { ...DEFAULT_NOTIFICATION_PREFERENCES },
     autoDownloadGeoPdfs: true,
+    copyPlaceMedia: true,
   };
 }

@@ -105,15 +105,42 @@ export function unshareWithFriend(
   });
 }
 
+/** What a place copy DID, beyond minting the row. */
+export type PlaceCopyResult = {
+  id: string;
+  /** A place type was created for the copy — the client says so in its toast. */
+  createdPlaceType?: boolean;
+  /** Place-level media the copy now owns. */
+  mediaCopied?: number;
+  /** Media the copy did NOT get. Never silent: see `copyOutcomeMessage`. */
+  mediaSkipped?: number;
+  /** The skip was the copier's storage filling up, not a transfer failure. */
+  mediaOutOfSpace?: true;
+};
+
 /**
  * Keep a place a friend shared: copies the record (and its linked route) into
  * my own account, server-side. The copy is MINE — editable, and unaffected if
  * the friend later revokes the share.
  *
+ * `copyMedia` decides whether the place's photos and files come too, and is
+ * charged to this account's storage quota when it does. OMITTING it is not the
+ * same as false: the server then falls back to `uiPreferences.copyPlaceMedia`,
+ * which is what the user last chose. Only pass it when the user answered the
+ * question on THIS copy.
+ *
  * The new place reaches this device through the next delta pull, so callers
  * `requestSync()` afterwards rather than inserting into the mirror themselves
  * (there is no local id to insert: the server mints it).
  */
-export function copySharedPlace(placeId: string): Promise<{ id: string }> {
-  return apiFetch<{ id: string }>(`/places/${placeId}/copy`, { method: "POST" });
+export function copySharedPlace(
+  placeId: string,
+  options?: { copyMedia?: boolean },
+): Promise<PlaceCopyResult> {
+  return apiFetch<PlaceCopyResult>(`/places/${placeId}/copy`, {
+    method: "POST",
+    ...(options?.copyMedia === undefined
+      ? {}
+      : { body: { copyMedia: options.copyMedia } }),
+  });
 }
