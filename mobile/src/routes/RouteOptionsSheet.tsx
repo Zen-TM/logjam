@@ -156,7 +156,10 @@ export function RouteOptionsSheet({
     active: copyMode !== null,
     targets: copyTargets,
     mode: copyMode ?? "copy",
-    friendName: "the owner",
+    // No username reaches a mirrored row, so the confirms spell their own
+    // fallback — in both sentence positions. Passing "the owner" here is what
+    // put a lowercase word at the start of a sentence on the device.
+    friendName: null,
     busy,
     online,
     onConfirm: (options) => {

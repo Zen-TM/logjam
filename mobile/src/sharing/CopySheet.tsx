@@ -69,8 +69,12 @@ export type CopyPanelArgs = {
   targets: CopyAndRemoveTarget[];
   /** "copy" keeps the share; "copyAndRemove" drops it once the copy lands. */
   mode: "copy" | "copyAndRemove";
-  /** The owner's username, where the surface knows it. */
-  friendName: string;
+  /**
+   * The owner's username, where the surface knows it. NULL where it does not —
+   * the confirms spell the generic fallback themselves, in both the
+   * mid-sentence and the sentence-initial position.
+   */
+  friendName?: string | null;
   busy: boolean;
   online: boolean;
   /**

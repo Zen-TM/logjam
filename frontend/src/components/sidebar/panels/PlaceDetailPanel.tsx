@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import {
+  copyAndRemoveConfirm,
   fieldValue,
   numericFieldValue,
   SOURCES_FIELD_KEY,
@@ -127,6 +128,10 @@ function PlaceDetailPanel({
     () => localStorage.getItem('logjam.safetyDismissed') === '1'
   );
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  // Copy and Remove shipped with NO confirm while plain Remove had one — the
+  // more consequential button asking less. `copyAndRemoveConfirm` is the same
+  // wording Logjam GPS shows.
+  const [confirmCopyAndRemove, setConfirmCopyAndRemove] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [trackToDelete, setTrackToDelete] = useState<MediaItem | null>(null);
@@ -268,6 +273,15 @@ function PlaceDetailPanel({
     return <span className={classes.caption}>No place selected.</span>;
   }
 
+  // NO `mediaLeftBehind`: whether photos come is the account's remembered
+  // preference and this app has no switch for it, so the confirm promises
+  // nothing about them and `handleCopyPlace` reports what actually happened.
+  const copyAndRemoveCopy = copyAndRemoveConfirm({
+    kindLabel: "place",
+    itemName: place.name,
+    ownerName: ownerUsername(friends, place.ownerId),
+  });
+
   // Owner-only "shared with" line: list up to 3 names, else 2 + "N more" link.
   const sharedNames = placeShares.map((s) => s.sharedWith.username);
   const sharedWithNode =
@@ -308,15 +322,37 @@ function PlaceDetailPanel({
     }
   }
 
+  /**
+   * Copy, and optionally drop the share once the copy has landed.
+   *
+   * THE ORDER IS THE DESIGN, and it is the same one Logjam GPS follows: a copy
+   * that fails takes its remove with it, so nothing is given up that was not
+   * saved first. Never the other way round, and never "remove anyway".
+   *
+   * The media report comes back on the response rather than being predicted in
+   * the confirm. Whether photos come is the account's remembered
+   * `copyPlaceMedia`, which this app has no switch for yet, so the honest thing
+   * is to promise nothing beforehand and say what happened after.
+   */
   async function handleCopyPlace(andRemove: boolean) {
     if (!place) return;
     setCopying(true);
     try {
-      await copyPlace(place.id);
+      const copied = await copyPlace(place.id);
+      const skipped = copied.mediaSkipped ?? 0;
       if (andRemove) {
         await unsharePlaceWith(place.id, "me");
         onRefetchShared();
         setSelectedPlaceID(null);
+      }
+      if (skipped > 0) {
+        toast.error(
+          copied.mediaOutOfSpace
+            ? `Copied, but your storage is full — ${skipped === 1 ? "1 photo or file" : `${skipped} photos and files`} weren't copied.`
+            : `Copied, but ${skipped === 1 ? "1 photo or file" : `${skipped} photos and files`} couldn't be copied.`,
+        );
+      } else {
+        toast.success(andRemove ? "Copied, and the shared one removed." : "Copied.");
       }
       onRefetch();
     } catch (err) {
@@ -324,6 +360,7 @@ function PlaceDetailPanel({
       toast.error(messageFromError(err, "Couldn't copy place. Please try again."));
     } finally {
       setCopying(false);
+      setConfirmCopyAndRemove(false);
     }
   }
 
@@ -746,7 +783,7 @@ function PlaceDetailPanel({
               <button
                 className={classes.ghostBtnFull}
                 title="Copy to My Places, then remove the share"
-                onClick={() => handleCopyPlace(true)}
+                onClick={() => setConfirmCopyAndRemove(true)}
                 disabled={copying}
               >
                 Copy and Remove
@@ -803,6 +840,15 @@ function PlaceDetailPanel({
           unshare={(userId) => unsharePlaceWith(place.id, userId)}
         />
       )}
+
+      <ConfirmDialog
+        open={confirmCopyAndRemove}
+        title={copyAndRemoveCopy.title}
+        message={copyAndRemoveCopy.body}
+        busy={copying}
+        onConfirm={() => handleCopyPlace(true)}
+        onClose={() => setConfirmCopyAndRemove(false)}
+      />
 
       <ConfirmDialog
         open={showDeleteConfirm}

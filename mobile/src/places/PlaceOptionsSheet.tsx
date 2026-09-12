@@ -113,8 +113,8 @@ export function PlaceOptionsSheet({
   // §6 says swap the content, never stack a sheet on a sheet.
   //
   // No owner USERNAME here — a mirrored place carries an `ownerId` and no name
-  // (`removeShareConfirm`'s own note) — so the copy states "the owner", rather
-  // than this sheet inventing a lookup for one line.
+  // (`removeShareConfirm`'s own note) — so the confirms fall back to "the
+  // owner" themselves, rather than this sheet inventing a lookup for one line.
   const [copyMode, setCopyMode] = useState<"copy" | "copyAndRemove" | null>(null);
   const [copyBusy, setCopyBusy] = useState(false);
   useEffect(() => {
@@ -131,7 +131,10 @@ export function PlaceOptionsSheet({
     active: copyMode !== null,
     targets: copyTargets,
     mode: copyMode ?? "copy",
-    friendName: "the owner",
+    // No username reaches a mirrored row, so the confirms spell their own
+    // fallback — in both sentence positions. Passing "the owner" here is what
+    // put a lowercase word at the start of a sentence on the device.
+    friendName: null,
     busy: copyBusy,
     online,
     onConfirm: (options) => {

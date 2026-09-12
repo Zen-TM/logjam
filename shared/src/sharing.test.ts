@@ -128,8 +128,23 @@ describe("copyAndRemoveConfirm", () => {
     }
   });
 
-  it("falls back to an unnamed owner", () => {
+  // FOUND ON THE EMULATOR, not by a test: the unnamed fallback appears in two
+  // positions and one of them starts a sentence, so a single lower-case form
+  // rendered "…on every device. the owner keeps the original."
+  it("capitalises the unnamed owner where it starts a sentence, and not where it does not", () => {
     const body = copyAndRemoveConfirm({ kindLabel: "route", itemName: "Exit track" }).body;
-    expect(body).toContain("the owner keeps the original");
+    expect(body).toContain("The owner keeps the original");
+    expect(body).toContain("whether or not the owner keeps sharing");
+    expect(body).not.toMatch(/\. the owner/);
+  });
+
+  it("uses a real username as given, in both positions", () => {
+    const body = copyAndRemoveConfirm({
+      kindLabel: "place",
+      itemName: "Claustral",
+      ownerName: "bob",
+    }).body;
+    expect(body).toContain("whether or not bob keeps sharing");
+    expect(body).toContain("bob keeps the original");
   });
 });

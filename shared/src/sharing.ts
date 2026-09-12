@@ -296,7 +296,13 @@ export function copyAndRemoveConfirm(args: {
    */
   mediaLeftBehind?: number;
 }): { title: string; body: string } {
+  // TWO FORMS OF THE SAME FALLBACK, because it appears in two positions and
+  // the generic one is not a proper noun: "…on every device. the owner keeps
+  // the original." shipped to the emulator and reads as a rendering fault.
+  // `removeShareConfirm` has always capitalised its sentence-initial one; this
+  // needs both, so it spells both.
   const owner = args.ownerName ?? "the owner";
+  const Owner = args.ownerName ?? "The owner";
   const left = args.mediaLeftBehind ?? 0;
   const leftBehind =
     left === 0
@@ -309,7 +315,7 @@ export function copyAndRemoveConfirm(args: {
     body:
       `A copy of “${args.itemName}” is saved to your own ${args.kindLabel}s — yours to edit, and it stays whether or not ${owner} keeps sharing.` +
       leftBehind +
-      ` The shared ${args.kindLabel} is then removed from your account, on every device. ${owner} keeps the original.`,
+      ` The shared ${args.kindLabel} is then removed from your account, on every device. ${Owner} keeps the original.`,
   };
 }
 

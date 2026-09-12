@@ -252,7 +252,14 @@ export function removeRowSubtitle(args: {
  */
 export function copyConfirm(args: {
   count: number;
-  friendName: string;
+  /**
+   * The owner's username, where the surface knows it. The item sheets do NOT —
+   * a mirrored place or route carries an `ownerId` and no name — so this is
+   * optional and the fallback is spelled in both positions below. Passing the
+   * literal "the owner" instead is what put a lowercase word at the start of a
+   * sentence on the device.
+   */
+  friendName?: string | null;
   /** The single row's name, when only one is being copied. */
   itemName?: string;
   /**
@@ -264,14 +271,16 @@ export function copyConfirm(args: {
 }): { title: string; body: string } {
   const one = args.count === 1;
   const withRoute = one && args.kindLabel === "place" ? ", with its route" : "";
+  const owner = args.friendName ?? "the owner";
+  const Owner = args.friendName ?? "The owner";
   return {
     title: one ? "Save a copy?" : `Save ${args.count} copies?`,
     body:
       (one && args.itemName
         ? `“${args.itemName}” is copied into your own account${withRoute}. `
         : `${args.count} items are copied into your own account. `) +
-      `The ${one ? "copy is" : "copies are"} yours to edit, and ${one ? "stays" : "stay"} if ${args.friendName} stops sharing. ` +
-      `${args.friendName}'s ${one ? "original is" : "originals are"} untouched.`,
+      `The ${one ? "copy is" : "copies are"} yours to edit, and ${one ? "stays" : "stay"} if ${owner} stops sharing. ` +
+      `${Owner}'s ${one ? "original is" : "originals are"} untouched.`,
   };
 }
 

@@ -1532,8 +1532,29 @@ export function unshareAllWithFriend(
   });
 }
 
-export function copyPlace(placeId: string): Promise<TPlace> {
-  return apiFetch<TPlace>(`/places/${placeId}/copy`, { method: "POST" });
+/** What a place copy did beyond minting the row — see `PlaceCopyResult`. */
+export type CopiedPlace = TPlace & {
+  mediaCopied?: number;
+  mediaSkipped?: number;
+  mediaOutOfSpace?: true;
+};
+
+/**
+ * Copy a shared place into my own account.
+ *
+ * NO `copyMedia` IN THE BODY, deliberately: the server then falls back to the
+ * account's `uiPreferences.copyPlaceMedia`, which is what the user last chose
+ * on Logjam GPS. Sending a value here would silently override a preference this
+ * app has no switch for. The response says what actually happened to the media,
+ * which is what the caller reports.
+ */
+export function copyPlace(placeId: string): Promise<CopiedPlace> {
+  return apiFetch<CopiedPlace>(`/places/${placeId}/copy`, { method: "POST" });
+}
+
+/** The route sibling. A copy is always unlinked — see api/src/routes/routes.ts. */
+export function copyRoute(routeId: string): Promise<TRoute> {
+  return apiFetch<TRoute>(`/routes/${routeId}/copy`, { method: "POST" });
 }
 
 // ── Notifications ─────────────────────────────────────────────

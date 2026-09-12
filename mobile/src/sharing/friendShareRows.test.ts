@@ -308,6 +308,16 @@ describe("copyConfirm", () => {
     expect(confirm.body).not.toContain("route");
     expect(confirm.body).toContain("stay if bob stops sharing");
   });
+
+  // FOUND ON THE EMULATOR. The item sheets know no username, and passing the
+  // literal "the owner" put a lower-case word at the start of a sentence:
+  // "…stops sharing. the owner's original is untouched."
+  it("capitalises the unnamed owner where it starts a sentence", () => {
+    const body = copyConfirm({ count: 1, itemName: "Claustral", kindLabel: "place" }).body;
+    expect(body).toContain("stays if the owner stops sharing");
+    expect(body).toContain("The owner's original is untouched");
+    expect(body).not.toMatch(/\. the owner/);
+  });
 });
 
 // THE BUNDLED VERB'S REPORT. Three outcomes that leave the user in three
