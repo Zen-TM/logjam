@@ -8,7 +8,7 @@ export { Chip } from "./Chip";
 export { ChipPicker, type ChipOption } from "./ChipPicker";
 export { DatePicker } from "./DatePicker";
 export { RangePills } from "./RangePills";
-export { formatRange, isFullRange, nextRange, type NumberRange } from "./rangeSelect";
+export { formatRange, isFullRange, nextRange, type NumberRange } from "@logjam/shared";
 export { HeroHeader } from "./HeroHeader";
 export { toDateKey, fromDateKey, todayDateKey } from "./monthGrid";
 export { IconButton } from "./IconButton";

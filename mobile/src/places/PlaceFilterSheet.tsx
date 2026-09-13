@@ -3,6 +3,12 @@ import { StyleSheet, Text, View } from "react-native";
 import {
   CANYON_FORM_FIELD_KEYS,
   defsForType,
+  formatThreshold,
+  PLACE_ROPEWIKI_OPTIONS as ROPEWIKI,
+  PLACE_SORT_OPTIONS as SORTS,
+  PLACE_THRESHOLDS as THRESHOLDS,
+  THRESHOLD_OPERATOR_LABELS as OPERATOR_LABEL,
+  THRESHOLD_OPERATORS as OPERATORS,
   SYSTEM_FIELD_DEFS,
   regionEdgesKm,
   type PlaceFilters,
@@ -63,25 +69,6 @@ type Mode =
 
 type DateField = "created_at" | "updated_at";
 
-/** Exported so the screen's active-filter strip can name the order without
- * keeping a second copy of these labels. */
-export function sortLabel(sort: PlaceSortKey): string {
-  return SORTS.find((option) => option.key === sort)?.label ?? "Name";
-}
-
-const SORTS: { key: PlaceSortKey; label: string }[] = [
-  { key: "name", label: "Name" },
-  { key: "recent", label: "Recently added" },
-  { key: "grade", label: "Easiest first" },
-  { key: "quality", label: "Best rated" },
-];
-
-const ROPEWIKI: { value: PlaceFilters["ropewiki"]; label: string }[] = [
-  { value: "any", label: "Any" },
-  { value: "linked", label: "From RopeWiki" },
-  { value: "unlinked", label: "Not from RopeWiki" },
-];
-
 /** Presets are the shortcut, not the ceiling — "Custom" reaches everything else. */
 // The seven graded axes live in `filters.custom` now, keyed by their reserved
 // FIELD keys — they are ordinary custom-field filters, and two of them changed
@@ -132,54 +119,6 @@ function boundsOf(key: string): [number, number] {
   const def = SYSTEM_FIELD_DEFS.find((candidate) => candidate.key === key);
   return [def?.min ?? 1, def?.max ?? 7];
 }
-
-const THRESHOLDS: {
-  key: string;
-  label: string;
-  unit: string;
-  presets: PlaceThresholdFilter[];
-}[] = [
-  {
-    key: "num_abseils",
-    label: "Abseils",
-    unit: "",
-    presets: [
-      ["Exactly", 0],
-      ["Less than", 5],
-      ["More than", 10],
-    ],
-  },
-  {
-    key: "longest_abseil",
-    label: "Longest abseil",
-    unit: "m",
-    presets: [
-      ["Less than", 20],
-      ["Less than", 30],
-      ["Less than", 45],
-      ["Less than", 60],
-    ],
-  },
-  {
-    key: "hours",
-    label: "Time out",
-    unit: "h",
-    presets: [
-      ["Less than", 4],
-      ["Less than", 6],
-      ["Less than", 8],
-    ],
-  },
-];
-
-const OPERATORS: PlaceThresholdFilter[0][] = ["Less than", "More than", "Exactly"];
-
-const OPERATOR_LABEL: Record<PlaceThresholdFilter[0], string> = {
-  Any: "Any",
-  "Less than": "Under",
-  "More than": "Over",
-  Exactly: "Exactly",
-};
 
 export function PlaceFilterSheet({
   visible,
@@ -712,9 +651,6 @@ function ThresholdFilter({
   );
 }
 
-function formatThreshold(filter: PlaceThresholdFilter, unit: string): string {
-  return `${OPERATOR_LABEL[filter[0]]} ${filter[1]}${unit ? ` ${unit}` : ""}`;
-}
 
 /** A date range as two tappable bounds — the same two-level shape the Logs
  * screen uses, so the picker is never more than one step away. */

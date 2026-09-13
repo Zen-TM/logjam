@@ -8,6 +8,7 @@ export { Hero, Meter, type MeterSegment } from "./Hero";
 export { SwitchRow, Toggle } from "./Toggle";
 export { SearchField, TextField } from "./TextField";
 export { Menu, Popover, type MenuEntry, type MenuItem } from "./Menu";
+export { RangePills } from "./RangePills";
 export { Tooltip } from "./Tooltip";
 export { SheetSection, SideSheet } from "./SideSheet";
 export { EmptyState, SelectionBar, Toast, type ToastSeverity } from "./Feedback";

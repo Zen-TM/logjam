@@ -39,6 +39,7 @@ export function Row({
   leading,
   title,
   subtitle,
+  description,
   trailing,
   onOpen,
   selected = false,
@@ -50,6 +51,9 @@ export function Row({
   leading?: ReactNode;
   title: string;
   subtitle?: string;
+  /** Read after the title by assistive tech but not shown — what the leading
+   *  glyph says to a sighted reader (a status). */
+  description?: string;
   trailing?: ReactNode;
   onOpen?: () => void;
   selected?: boolean;
@@ -58,6 +62,8 @@ export function Row({
   disabled?: boolean;
 }) {
   const subtitleId = useId();
+  const descriptionId = useId();
+  const describedBy = [description && descriptionId, subtitle && subtitleId].filter(Boolean).join(" ") || undefined;
   return (
     <div
       className={[classes.row, className].filter(Boolean).join(" ")}
@@ -74,12 +80,17 @@ export function Row({
             className={classes.open}
             onClick={onOpen}
             disabled={disabled}
-            aria-describedby={subtitle ? subtitleId : undefined}
+            aria-describedby={describedBy}
           >
             <span className={classes.title}>{title}</span>
           </button>
         ) : (
           <span className={classes.title}>{title}</span>
+        )}
+        {description && (
+          <span id={descriptionId} className={classes.hidden}>
+            {description}
+          </span>
         )}
         {subtitle && (
           <span id={subtitleId} className={classes.subtitle}>

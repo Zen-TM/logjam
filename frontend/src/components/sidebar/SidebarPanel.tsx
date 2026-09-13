@@ -17,13 +17,13 @@ import type {
   PlaceTrack,
   TPlaceType,
 } from "../../placeUtils";
-import type { StandaloneFile, VectorStyleSettings, TopoExportJobView, ScopedCustomFieldDef } from "@logjam/shared";
+import type { RegionBbox, StandaloneFile, VectorStyleSettings, TopoExportJobView, ScopedCustomFieldDef } from "@logjam/shared";
 import type { TopoJob, GeoJsonPolygonal } from "../dialogs/TopoDialog";
 import type { CompletedTopoJob } from "../../topoLayerTypes";
 import type { GeoPdfTemplate } from "../dialogs/GeoPdfDialog";
 import { ChipRail, IconButton } from "../../ui";
 import classes from "./SidebarPanel.module.css";
-import PlacesPanel from "./panels/PlacesPanel";
+import PlacesPanel, { type MapKind } from "./panels/PlacesPanel";
 import GeoPdfsPanel from "./panels/GeoPdfsPanel";
 import LidarPanel from "./panels/LidarPanel";
 import FriendsPanel from "./panels/FriendsPanel";
@@ -56,20 +56,23 @@ function SidebarPanel({
   onStartDrawingRoute,
   // Places
   places,
+  placesLoaded,
   placesTotal,
   sharedPlaces,
   onAddPlace,
   onOpenUnifiedImport,
-  onExportPlaces,
-  onStartAreaSelection,
-  selectingArea,
-  onCancelAreaSelection,
   onRefetch,
   filters,
   onChangeFilters,
   onDrawFilterArea,
   onFilterToMapView,
-  filtersAccordionSignal,
+  filtersOpenSignal,
+  onFiltersOpenChange,
+  onHoverPlace,
+  revealPlaceId,
+  onRevealConsumed,
+  onMakeMap,
+  onSharePlaces,
   onFlyToPlace,
   // GeoPDFs
   onOpenGeoPdf,
@@ -156,14 +159,11 @@ function SidebarPanel({
   onStartDrawingRoute: () => void;
   // Places
   places: TPlace[];
+  placesLoaded: boolean;
   placesTotal: number | null;
   sharedPlaces: TPlace[];
   onAddPlace: () => void;
   onOpenUnifiedImport: () => void;
-  onExportPlaces: (placeIds: string[]) => void;
-  onStartAreaSelection: () => void;
-  selectingArea: boolean;
-  onCancelAreaSelection: () => void;
   onRefetch: () => void;
   filters: TFilters;
   onChangeFilters: (f: TFilters) => void;
@@ -171,7 +171,13 @@ function SidebarPanel({
   onDrawFilterArea: () => void;
   /** Set the area filter to whatever the map is currently showing. */
   onFilterToMapView: () => void;
-  filtersAccordionSignal: number;
+  filtersOpenSignal: number;
+  onFiltersOpenChange: (open: boolean) => void;
+  onHoverPlace: (id: string | null) => void;
+  revealPlaceId: string | null;
+  onRevealConsumed: () => void;
+  onMakeMap: (bounds: RegionBbox, kind: MapKind) => void;
+  onSharePlaces: (ids: string[]) => void;
   onFlyToPlace: (lat: number, lng: number) => void;
   // GeoPDFs
   onOpenGeoPdf: () => void;
@@ -337,25 +343,29 @@ function SidebarPanel({
         {activePanel === "places" && (
           <PlacesPanel
             places={places}
+            placesLoaded={placesLoaded}
             placesTotal={placesTotal}
             sharedPlaces={sharedPlaces}
-            onAddPlace={onAddPlace}
-            onOpenUnifiedImport={onOpenUnifiedImport}
-            onExportPlaces={onExportPlaces}
-            onStartAreaSelection={onStartAreaSelection}
-            onCancelAreaSelection={onCancelAreaSelection}
-            selectingArea={selectingArea}
-            onRefetch={onRefetch}
+            placeTypes={placeTypes}
+            placeCustomFieldDefs={placeCustomFieldDefs}
             filters={filters}
             onChangeFilters={onChangeFilters}
+            onAddPlace={onAddPlace}
+            onOpenUnifiedImport={onOpenUnifiedImport}
+            onRefetch={onRefetch}
+            onQuotaChanged={onQuotaChanged}
             onDrawFilterArea={onDrawFilterArea}
             onFilterToMapView={onFilterToMapView}
-            filtersAccordionSignal={filtersAccordionSignal}
+            filtersOpenSignal={filtersOpenSignal}
+            onFiltersOpenChange={onFiltersOpenChange}
             onFlyToPlace={onFlyToPlace}
             setSelectedPlaceID={setSelectedPlaceID}
             setActivePanel={setActivePanel}
-            placeCustomFieldDefs={placeCustomFieldDefs}
-            placeTypes={placeTypes}
+            onHoverPlace={onHoverPlace}
+            revealPlaceId={revealPlaceId}
+            onRevealConsumed={onRevealConsumed}
+            onMakeMap={onMakeMap}
+            onSharePlaces={onSharePlaces}
             onExpandSheet={expandSheetToFull}
           />
         )}

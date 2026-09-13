@@ -32,6 +32,8 @@ export * from "./topoRuntimeEstimate.js";
 export * from "./apiErrors.js";
 export * from "./canyonGrade.js";
 export * from "./placeFilter.js";
+export * from "./placeFilterOptions.js";
+export * from "./rangeSelect.js";
 export * from "./mapRegionEstimate.js";
 export * from "./vectorImport.js";
 export * from "./trackStats.js";

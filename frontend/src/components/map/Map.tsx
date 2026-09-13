@@ -58,13 +58,12 @@ function isTerminalTopoSourceError(error: unknown): boolean {
         : "";
   return /bad response code:\s*(403|404)\b/i.test(message);
 }
-import { useMediaQuery } from "@mui/material";
 import classes from "./Map.module.css";
 import MapSearchBox from "./MapSearchBox";
 import MapChrome, { type MapTool } from "./MapChrome";
 import { collectLngLatPairs } from "./topoFootprint";
 import type { ReactNode } from "react";
-import { MOBILE_MAX_WIDTH_PX } from "../../useIsMobile";
+import { MOBILE_MAX_WIDTH_PX, useMediaQuery } from "../../useIsMobile";
 import type {
   TPlace,
   TFilters,
@@ -73,7 +72,7 @@ import type {
   TRoute,
 } from "../../placeUtils";
 import type { GeoJsonPolygonal } from "../../topoLayerTypes";
-import { passesFilters, isPlaceDoneByViewer } from "../../placeUtils";
+import { passesFilters, isPlaceDoneByViewer, type TPlaceType } from "../../placeUtils";
 import { fetchTrackGeoJSON } from "../media/trackGeo";
 import { useToast } from "../feedback/ToastProvider";
 import { messageFromError } from "../../errors/messageFromError";
@@ -129,23 +128,29 @@ function readCssVar(name: string, fallback: string): string {
 
 
 function applyPlaceThemePaint(map: maplibregl.Map) {
-  const owned = readCssVar("--owned-place-color", "#e4c5aa");
-  const completed = readCssVar("--completed-place-color", "#22c55e");
+  const fallback = readCssVar("--owned-place-color", "#e4c5aa");
   const shared = readCssVar("--shared-place-color", "#b79ec0");
+  const ink = readCssVar("--ink", "#1e1b18");
+  const accent = readCssVar("--theme-accent", "#deb188");
   const label = readCssVar("--theme-text-primary", "#ffffff");
   const halo = readCssVar("--theme-bonus-2", "#1a1a1a");
 
+  // FILL is the place's type; the RING says someone shared it with you — the
+  // same two axes Logjam GPS draws (mobile/src/map/PlacePinsLayer.tsx).
   if (map.getLayer("place-circles")) {
-    // Completed (owned + logged trip) places render green; the rest stay orange.
-    map.setPaintProperty("place-circles", "circle-color", [
-      "case",
-      ["==", ["get", "done"], true],
-      completed,
-      owned,
-    ]);
+    map.setPaintProperty("place-circles", "circle-color", ["coalesce", ["get", "color"], fallback]);
+    map.setPaintProperty("place-circles", "circle-stroke-color", ink);
+    map.setPaintProperty("place-circles", "circle-stroke-width", 1.5);
   }
   if (map.getLayer("shared-place-circles")) {
-    map.setPaintProperty("shared-place-circles", "circle-color", shared);
+    map.setPaintProperty("shared-place-circles", "circle-color", ["coalesce", ["get", "color"], fallback]);
+    map.setPaintProperty("shared-place-circles", "circle-stroke-color", shared);
+    map.setPaintProperty("shared-place-circles", "circle-stroke-width", 3);
+  }
+  for (const id of ["place-highlight", "shared-place-highlight"]) {
+    if (!map.getLayer(id)) continue;
+    map.setPaintProperty(id, "circle-color", accent);
+    map.setPaintProperty(id, "circle-stroke-color", accent);
   }
   if (map.getLayer("place-labels")) {
     map.setPaintProperty("place-labels", "text-color", label);
@@ -508,8 +513,6 @@ function Map({
   onDrawPointDelete,
   onDrawPointInsert,
   onDrawPointMove,
-  selectingArea,
-  onAreaSelected,
   selectingBbox,
   onBboxSelected,
   selectingFilterArea,
@@ -533,6 +536,8 @@ function Map({
   onFlyToPlaceConsumed,
   panelOpen,
   sheetOpen = false,
+  highlightedPlaceId = null,
+  placeTypes,
   layersButton,
   mapTools,
   notices,
@@ -590,8 +595,6 @@ function Map({
   onDrawPointDelete: (index: number) => void;
   /** Drag the line between two anchors to introduce one there. */
   onDrawPointInsert: (segmentIndex: number, lngLat: [number, number]) => void;
-  selectingArea: boolean;
-  onAreaSelected: (ids: string[]) => void;
   selectingBbox?: boolean;
   onBboxSelected?: (bbox: TBbox) => void;
   /** The Places filter's "area on map" mode — the third box-draw on this map. */
@@ -644,6 +647,10 @@ function Map({
   panelOpen: boolean;
   /** A sheet is open beside that page (the Places filters). */
   sheetOpen?: boolean;
+  /** The Places row under the pointer; its pin is lit. */
+  highlightedPlaceId?: string | null;
+  /** A pin's FILL is its type's colour. */
+  placeTypes: TPlaceType[];
   /** The Layers control, owned by App because App owns what it toggles. */
   layersButton?: ReactNode;
   mapTools: readonly MapTool[];
@@ -694,7 +701,6 @@ function Map({
   useEffect(() => {
     pickModeRef.current =
       pickingCoords ||
-      selectingArea ||
       (selectingFilterArea ?? false) ||
       // The topo bbox draw belongs here too and was missing: without it, the
       // click that anchors a corner over a place marker also opened that
@@ -703,7 +709,6 @@ function Map({
       (selectingGeoPdfExtent ?? false);
   }, [
     pickingCoords,
-    selectingArea,
     selectingFilterArea,
     selectingBbox,
     selectingGeoPdfExtent,
@@ -1191,7 +1196,27 @@ function Map({
         data: { type: "FeatureCollection", features: [] },
       });
 
-      // Owned place circle markers (orange)
+      // The pin of the Places row under the pointer, lit from underneath.
+      for (const [id, source] of [
+        ["place-highlight", "places"],
+        ["shared-place-highlight", "shared-places"],
+      ] as const) {
+        map.addLayer({
+          id,
+          type: "circle",
+          source,
+          filter: ["==", ["get", "id"], ""],
+          paint: {
+            "circle-radius": ["interpolate", ["linear"], ["zoom"], 7, 12, 14, 18],
+            "circle-color": readCssVar("--theme-accent", "#deb188"),
+            "circle-opacity": 0.35,
+            "circle-stroke-color": readCssVar("--theme-accent", "#deb188"),
+            "circle-stroke-width": 2,
+          },
+        });
+      }
+
+      // Owned place circle markers
       map.addLayer({
         id: "place-circles",
         type: "circle",
@@ -1204,7 +1229,7 @@ function Map({
         },
       });
 
-      // Shared place circle markers (blue)
+      // Shared place circle markers
       map.addLayer({
         id: "shared-place-circles",
         type: "circle",
@@ -1375,6 +1400,7 @@ function Map({
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
 
+    const typeColor = new globalThis.Map(placeTypes.map((type) => [type.id, type.color]));
     const toFeatureCollection = (list: TPlace[], isOwned: boolean) => ({
       type: "FeatureCollection" as const,
       features: list.map((c) => ({
@@ -1387,6 +1413,7 @@ function Map({
           id: c.id,
           name: c.name,
           done: isPlaceDoneByViewer(c, isOwned),
+          color: typeColor.get(c.placeTypeId) ?? null,
         },
       })),
     });
@@ -1414,7 +1441,15 @@ function Map({
         ),
       );
     }
-  }, [places, sharedPlaces, filters, mapLoaded]);
+  }, [places, sharedPlaces, filters, mapLoaded, placeTypes]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!mapLoaded || !map) return;
+    for (const id of ["place-highlight", "shared-place-highlight"]) {
+      map.setFilter(id, ["==", ["get", "id"], highlightedPlaceId ?? ""]);
+    }
+  }, [highlightedPlaceId, mapLoaded]);
 
   // Fetch + parse place track files into the line layer when enabled. Parsing
   // is client-side (the API never echoes track contents — privacy rule); parsed
@@ -1568,48 +1603,6 @@ function Map({
       map.getCanvas().style.cursor = "";
     }
   }, [pickingCoords, mapLoaded]);
-
-  // Area selection: the same drawn box as the topo picker and the filter, ending
-  // in the places it covers rather than in the box itself.
-  const onAreaSelectedRef = useRef(onAreaSelected);
-  useEffect(() => {
-    onAreaSelectedRef.current = onAreaSelected;
-  }, [onAreaSelected]);
-
-  const handleAreaBox = useCallback(
-    (bbox: RegionBbox) => {
-      const map = mapRef.current;
-      if (!map) return;
-      // Back to pixels for the feature query: `queryRenderedFeatures` works in
-      // screen space, and the corners project back exactly because they came
-      // from this same map moments ago.
-      const northWest = map.project([bbox.west, bbox.north]);
-      const southEast = map.project([bbox.east, bbox.south]);
-      const pixels: [maplibregl.PointLike, maplibregl.PointLike] = [
-        [Math.min(northWest.x, southEast.x), Math.min(northWest.y, southEast.y)],
-        [Math.max(northWest.x, southEast.x), Math.max(northWest.y, southEast.y)],
-      ];
-      const features = map.queryRenderedFeatures(pixels, {
-        layers: ["place-circles", "shared-place-circles"],
-      });
-      const ids = [
-        ...new Set(
-          features.map((f) => f.properties?.id as string).filter(Boolean),
-        ),
-      ];
-      onAreaSelectedRef.current(ids);
-    },
-    [],
-  );
-
-  // TODO: this and the filter's area box are two rubber bands on one map, and a
-  // user who draws one expecting the other gets the wrong outcome. The plan is
-  // to fold bulk actions into a selection mode over the FILTERED list (draw a
-  // box -> filter -> select all -> share/export/delete), which subsumes this
-  // mode entirely; `SelectedPlacesDialog` already takes ids and has add/remove
-  // props, so it is an entry-point rewiring rather than a rewrite. Deferred to
-  // the web UI rework rather than done alongside the filter.
-  useBoxDraw({ map: drawableMap, enabled: selectingArea, onBox: handleAreaBox });
 
   // Toggle place layer visibility
   useEffect(() => {
@@ -2852,11 +2845,6 @@ function Map({
             </button>
           </div>
         </>
-      )}
-      {selectingArea && (
-        <div className={classes.pickBanner}>
-          {pickVerb} to set a corner, then {pickVerb.toLowerCase()} again to select the area
-        </div>
       )}
       {selectingBbox && (
         <div className={classes.pickBanner}>

@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { fontSize, fontWeight, spacing, theme } from "../theme";
 import { Chip } from "./Chip";
 import { IconButton } from "./IconButton";
-import { formatRange, isFullRange, nextRange, type NumberRange } from "./rangeSelect";
+import { formatRange, isFullRange, nextRange, type NumberRange } from "@logjam/shared";
 
 /**
  * A graded axis as a row of numbered pills — the mobile form of the web's

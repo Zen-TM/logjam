@@ -1,0 +1,57 @@
+.hint {
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--theme-text-muted);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.blockHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 24px;
+}
+
+.blockLabel {
+  font-size: var(--font-sm);
+  color: var(--theme-text-primary);
+}
+
+.blockValue {
+  font-size: var(--font-sm);
+  color: var(--theme-text-muted);
+}
+
+.blockValue[data-active="true"] {
+  color: var(--theme-accent);
+  font-weight: 600;
+}
+
+.customRow {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dateRow {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.count {
+  flex: 1;
+  font-size: var(--font-sm);
+  color: var(--theme-text-muted);
+}

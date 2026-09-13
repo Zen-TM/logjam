@@ -57,7 +57,8 @@ import {
 } from "../placeUtils";
 import LayersPopover from "./map/LayersPopover";
 import type { MapTool } from "./map/MapChrome";
-import { IconButton, MapButton, Notice } from "../ui";
+import type { MapKind } from "./sidebar/panels/PlacesPanel";
+import { Button, IconButton, MapButton, Notice } from "../ui";
 import {
   FileText,
   Filter,
@@ -87,7 +88,6 @@ import {
 import type { OverlaySource } from "@logjam/shared";
 import { useAuth } from "../useAuth";
 import { useStoredState } from "../useStoredState";
-import { Button } from "@mui/material";
 import { useThemePreferences } from "../themePreferences";
 import { useToast } from "./feedback/ToastProvider";
 import { messageFromError } from "../errors/messageFromError";
@@ -196,18 +196,22 @@ function App() {
     null,
   );
 
-  // Area selection mode
-  const [selectingArea, setSelectingArea] = useState(false);
   /**
-   * The Places filter's "area on map" mode. Separate state from
-   * `selectingArea` above even though the gesture is identical: that one ends
-   * in a bulk-actions dialog and this one in a filter, and one flag would send
-   * the box to whichever the user was not in.
+   * The Places filter's "area on map" mode: the panel closes, the user draws a
+   * box, and it lands in the filter.
    */
   const [selectingFilterArea, setSelectingFilterArea] = useState(false);
+  // The places handed to the share-and-export dialog.
   const [selectedAreaPlaceIds, setSelectedAreaPlaceIds] = useState<string[]>(
     [],
   );
+  // Places ↔ map: the sheet beside the list pushes the map's chrome over, the
+  // row under the pointer lights its pin, and a pin pressed while the list is
+  // open scrolls to its row instead of leaving the list.
+  const [placesSheetOpen, setPlacesSheetOpen] = useState(false);
+  const [hoveredPlaceId, setHoveredPlaceId] = useState<string | null>(null);
+  const [revealPlaceId, setRevealPlaceId] = useState<string | null>(null);
+  const consumeReveal = useCallback(() => setRevealPlaceId(null), []);
 
   // Topo dialog
   const [showTopo, setShowTopo] = useState(false);
@@ -419,21 +423,6 @@ function App() {
   const cancelPickingCoords = useCallback(() => {
     coordsCallbackRef.current = null;
     setPickingCoords(false);
-  }, []);
-
-  const startAreaSelection = useCallback(() => {
-    setSelectingArea(true);
-    setSelectedAreaPlaceIds([]);
-  }, []);
-
-  const handleAreaSelected = useCallback((ids: string[]) => {
-    setSelectingArea(false);
-    setSelectedAreaPlaceIds(ids);
-  }, []);
-
-  const cancelAreaSelection = useCallback(() => {
-    setSelectingArea(false);
-    setSelectedAreaPlaceIds([]);
   }, []);
 
   /**
@@ -1129,7 +1118,7 @@ function App() {
   }
 
   const dimUI =
-    pickingCoords || selectingArea || selectingFilterArea || selectingGeoPdfExtent;
+    pickingCoords || selectingFilterArea || selectingGeoPdfExtent;
 
   // A filter changes what the MAP shows too, so the map says so while the
   // Places page is closed or scrolled away.
@@ -1142,6 +1131,25 @@ function App() {
         Showing {filteredPlaces.length} of {allPlaces.length} places
       </Notice>
     ) : null;
+
+  // "Make a map" from Places: the selection's bounds prefill the chosen product.
+  // A topo goes straight to its dialog with the box; a GeoPDF opens its paper
+  // frame on the map over the box, because the paper decides the final extent.
+  const makeMap = (bounds: TBbox, kind: MapKind) => {
+    if (kind === "topo") {
+      setPendingTopoBbox(bounds);
+      setShowTopo(true);
+      return;
+    }
+    setEditingGeoPdfTemplate(undefined);
+    setInitialGeoPdfTemplateId(null);
+    setGeoPdfPaperAspect(210 / 297);
+    setGeoPdfPaperDimensions({ w: 210, h: 297 });
+    setGeoPdfInitialExtent(bounds);
+    setGeoPdfInitialScale(undefined);
+    setActivePanel(null);
+    setSelectingGeoPdfExtent(true);
+  };
 
   // Verbs that START on the map. Each opens an existing flow; there is no web
   // measure tool, so none is offered.
@@ -1179,7 +1187,6 @@ function App() {
   // map is tappable. Collapses the sheet to peek; restored when the flow ends.
   const mapInteractionActive =
     pickingCoords ||
-    selectingArea ||
     selectingFilterArea ||
     selectingGeoPdfExtent ||
     selectingTopoBbox;
@@ -1287,16 +1294,17 @@ function App() {
           onEditRoute={startEditingRoute}
           onRoutesChanged={refetchRoutes}
           places={places}
+          placesLoaded={placesLoaded}
           placesTotal={placesTotal}
           sharedPlaces={sharedPlaces}
           onAddPlace={() => setShowAdd(true)}
           onOpenUnifiedImport={() => setShowUnifiedImport(true)}
-          // Reuses the area-selection state, which is what SelectedPlacesDialog
-          // (the existing export surface) already renders from.
-          onExportPlaces={setSelectedAreaPlaceIds}
-          onStartAreaSelection={startAreaSelection}
-          selectingArea={selectingArea}
-          onCancelAreaSelection={cancelAreaSelection}
+          onSharePlaces={setSelectedAreaPlaceIds}
+          onMakeMap={makeMap}
+          onHoverPlace={setHoveredPlaceId}
+          revealPlaceId={revealPlaceId}
+          onRevealConsumed={consumeReveal}
+          onFiltersOpenChange={setPlacesSheetOpen}
           onRefetch={refetch}
           filters={filters}
           onChangeFilters={setFilters}
@@ -1305,7 +1313,7 @@ function App() {
             const bounds = mapBoundsRef.current;
             if (bounds) setFilters({ ...filters, area: bounds });
           }}
-          filtersAccordionSignal={filtersAccordionSignal}
+          filtersOpenSignal={filtersAccordionSignal}
           onFlyToPlace={(lat, lng) => setFlyToPlace({ lat, lng })}
           onOpenGeoPdf={() => {
             setEditingGeoPdfTemplate(undefined);
@@ -1412,14 +1420,16 @@ function App() {
         onDrawPointDelete={routeDraft.deleteAnchorAt}
         onDrawPointInsert={routeDraft.insertAnchorAt}
         selectPlace={(id) => {
+          if (activePanel === "places") {
+            setRevealPlaceId(id);
+            return;
+          }
           setSelectedPlaceID(id);
           setActivePanel("place-detail");
         }}
         pickingCoords={pickingCoords}
         onCoordsPicked={handleCoordsPicked}
         onCancelPickCoords={cancelPickingCoords}
-        selectingArea={selectingArea}
-        onAreaSelected={handleAreaSelected}
         selectingFilterArea={selectingFilterArea}
         onFilterAreaSelected={(bbox) => {
           setSelectingFilterArea(false);
@@ -1464,6 +1474,9 @@ function App() {
         flyToPlace={flyToPlace}
         onFlyToPlaceConsumed={() => setFlyToPlace(null)}
         panelOpen={activePanel !== null}
+        sheetOpen={placesSheetOpen && activePanel === "places"}
+        highlightedPlaceId={activePanel === "places" ? hoveredPlaceId : null}
+        placeTypes={placeTypes}
         layersButton={
           <MapButton
             ref={layersButtonRef}
@@ -1565,44 +1578,9 @@ function App() {
 
       {selectingFilterArea && (
         <div className={classes.selectAllButtons}>
-          <Button
-            variant="outlined"
-            size="small"
-            onClick={cancelFilterAreaSelection}
-          >
+          <Button compact variant="filled" onClick={cancelFilterAreaSelection}>
             Cancel
           </Button>
-        </div>
-      )}
-
-      {selectingArea && (
-        <div className={classes.selectAllButtons}>
-          <Button variant="outlined" size="small" onClick={cancelAreaSelection}>
-            Cancel
-          </Button>
-          <Button
-            variant="contained"
-            size="small"
-            onClick={() => handleAreaSelected(allPlaces.map((c) => c.id))}
-          >
-            Select All
-          </Button>
-          {/* Only render when filters are active. When they aren't, "filtered"
-              == all places (the button is redundant), and MUI's default
-              disabled styling (grey-on-grey) is illegible floating over the
-              map. Hiding it declutters the bar and drops it to two buttons that
-              fit on one row on narrow phones. */}
-          {filtersActive && (
-            <Button
-              variant="contained"
-              size="small"
-              onClick={() =>
-                handleAreaSelected(filteredPlaces.map((c) => c.id))
-              }
-            >
-              Select All Filtered
-            </Button>
-          )}
         </div>
       )}
 

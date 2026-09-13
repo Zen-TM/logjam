@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatRange, isFullRange, nextRange } from "./rangeSelect";
+import { formatRange, isFullRange, nextRange } from "./rangeSelect.js";
 
 describe("nextRange", () => {
   it("starts a range from nothing", () => {
