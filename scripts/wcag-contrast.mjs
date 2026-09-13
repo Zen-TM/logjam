@@ -74,6 +74,11 @@ function flatten(fgHex, bgHex) {
   const toHex = (n) => n.toString(16).padStart(2, "0");
   return `#${toHex(mix(fg.r, bg.r))}${toHex(mix(fg.g, bg.g))}${toHex(mix(fg.b, bg.b))}`;
 }
+/** `color` at `alpha` laid over the opaque `over` — a CSS color-mix tint. */
+function tint(color, alpha, over) {
+  const alphaHex = Math.round(alpha * 255).toString(16).padStart(2, "0");
+  return flatten(`${color}${alphaHex}`, over);
+}
 function ratio(fgHex, bgHex) {
   const l1 = luminance(flatten(fgHex, bgHex));
   const l2 = luminance(bgHex);
@@ -116,6 +121,17 @@ const LABELLED_FILLS = [
   ...STATUS_HUES.map(([name, color]) => [`status hue ${name}`, color]),
 ];
 
+/** Logjam GPS `Row` tile: hue glyph on `withAlpha(hue, 0.16)` over the card. */
+function worstTilePair(t) {
+  const pairs = [["done", t.accent], ...STATUS_HUES, ...ASSET_HUES].map(([name, color]) => ({
+    hue: name,
+    fg: color,
+    bg: tint(color, 0.16, t.secondary),
+  }));
+  const worst = pairs.reduce((a, b) => (ratio(a.fg, a.bg) <= ratio(b.fg, b.bg) ? a : b));
+  return { name: "hue glyph on its 16% wash over a card (Logjam GPS Row tile, worst hue)", fg: worst.fg, bg: worst.bg, min: 3 };
+}
+
 /**
  * Pairs that fail today and are KNOWN to, each with where it renders. They are
  * printed but do not fail the run — and a known failure that starts PASSING
@@ -127,6 +143,8 @@ const KNOWN_FAILURES = new Map([
   // Sandstone (muted 3.94:1) and Ironbark (bonus2 is a LIGHT green there).
   ["textPrimary on bonus2 (Logjam GPS hero fill)", "mobile/src/ui/HeroHeader.tsx"],
   ["textMuted on bonus2 (Logjam GPS hero fill)", "mobile/src/ui/HeroHeader.tsx"],
+  // Found 2026-09-13 building the web kit, which fills its tiles instead.
+  ["hue glyph on its 16% wash over a card (Logjam GPS Row tile, worst hue)", "mobile/src/ui/Row.tsx"],
 ]);
 
 // ─── Rendered pairs → actual CSS usage. `min` is the WCAG threshold. ────────
@@ -200,6 +218,31 @@ function pairsFor(t) {
       bg: t.primary,
       min: 3,
     })),
+    // ── Logjam Web kit (frontend/src/ui) ──
+    { name: "ink on textPrimary (toast, tooltip)", fg: INK, bg: t.textPrimary, min: 4.5 },
+    { name: "ink on warning (nav badge)", fg: INK, bg: t.warning, min: 4.5 },
+    {
+      name: "textPrimary on accent-tinted strip (filters-active strip)",
+      fg: t.textPrimary,
+      bg: tint(t.accent, 0.12, t.primary),
+      min: 4.5,
+    },
+    { name: "accent edge on secondary (selected row, toggle on a card)", fg: t.accent, bg: t.secondary, min: 3 },
+    {
+      name: "accent glyph on its own tint (filled icon button)",
+      fg: t.accent,
+      bg: tint(t.accent, 0.16, t.primary),
+      min: 3,
+    },
+    // A web row's identity tile is a solid hue with an ink glyph — covered by
+    // the ink-on-fill pairs above. Logjam GPS's tile is the hue glyph on a 16%
+    // wash of itself on a card; measured at its worst hue, because it fails for
+    // several and one line per hue would bury the rest of the report.
+    worstTilePair(t),
+    // A chip's leading glyph, inactive: the hue on the chip's card colour.
+    ...[...PLACE_TYPE_COLORS.map((color) => [`place-type ${color}`, color]), ...STATUS_HUES].map(
+      ([name, color]) => ({ name: `${name} chip glyph on secondary (UI)`, fg: color, bg: t.secondary, min: 3 }),
+    ),
     { name: "textPrimary on bonus2 (Logjam GPS hero fill)", fg: t.textPrimary, bg: t.bonus2, min: 4.5 },
     { name: "textMuted on bonus2 (Logjam GPS hero fill)", fg: t.textMuted, bg: t.bonus2, min: 4.5 },
   ];

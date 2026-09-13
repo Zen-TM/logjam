@@ -1,0 +1,103 @@
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: var(--radius-pill);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--theme-text-primary);
+  font: inherit;
+  font-size: var(--font-base);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.compact {
+  min-height: 36px;
+  padding: 0 12px;
+  font-size: var(--font-sm);
+}
+
+/* The label on a fill is the fixed ink, never the scheme's primary (root
+   CLAUDE.md: text ON a colour fill). */
+.filled {
+  background: var(--theme-accent);
+  color: var(--ink);
+}
+
+.filled:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--theme-accent) 85%, var(--theme-text-primary));
+}
+
+.outline {
+  border-color: var(--theme-accent);
+  color: var(--theme-accent);
+}
+
+.danger {
+  border-color: var(--theme-warning);
+  color: var(--theme-warning);
+}
+
+.plain:hover:not(:disabled),
+.outline:hover:not(:disabled),
+.danger:hover:not(:disabled) {
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+
+.button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.iconButton {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--theme-text-muted);
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.iconButton:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--theme-text-primary) 10%, transparent);
+  color: var(--theme-text-primary);
+}
+
+.iconButton:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* An icon button that is "on" takes a tint rather than a fill, so it cannot
+   outshout the page's primary action. */
+.iconButton.tinted {
+  background: color-mix(in srgb, var(--theme-accent) 16%, transparent);
+  color: var(--theme-accent);
+}
+
+.iconButton.danger {
+  color: var(--theme-warning);
+}
+
+/* An icon button sitting on a light fill (a toast, a tooltip). */
+.iconButton.onFill {
+  color: var(--ink);
+}
+
+.iconButton.onFill:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--ink) 10%, transparent);
+  color: var(--ink);
+}

@@ -25,16 +25,34 @@
   --panel-width: 280px;
   --bottom-nav-height: 56px;
 
-  /* Border radius */
+  /* Border radius — the same scale as Logjam GPS (RADIUS in @logjam/shared). */
   --radius-sm: 4px;
   --radius-md: 8px;
   --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-pill: 999px;
   --radius-full: 50%;
 
-  /* Shadows */
+  /* `--ink` and the `--hue-*` identity colours are scheme-independent and are
+     set from @logjam/shared at startup (themePreferences.tsx), not restated
+     here. */
+
+  /* Type — rem, so a browser text-size setting reaches every label. */
+  --font-xs: 0.75rem;
+  --font-sm: 0.875rem;
+  --font-base: 1rem;
+  --font-lg: 1.25rem;
+  --font-xl: 1.5rem;
+
+  /* Kit surfaces. A text field sits a step darker than the page it is on. */
+  --surface-field: color-mix(in srgb, black 12%, var(--theme-primary));
+  --hairline: 1px solid var(--theme-bonus-2);
+
+  /* Shadows. Only things floating OVER THE MAP cast one; panels and sheets
+     separate with a hairline. */
   --shadow-nav: 8px 0 8px -4px rgba(0, 0, 0, 0.2);
   --shadow-panel: 4px 0 12px rgba(0, 0, 0, 0.2);
-  --shadow-float: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-float: 0 2px 10px rgba(0, 0, 0, 0.28);
   --shadow-modal: 0 4px 12px rgba(0, 0, 0, 0.3);
 
   /* Transitions */
@@ -57,6 +75,17 @@ body {
   padding: 0;
   background-color: var(--theme-primary);
   color: var(--theme-text-primary);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* One focus ring for everything keyboard-reachable (WCAG 2.4.7): a 2px ring in
+   the text colour, 2px off the element, so it reads on a filled accent button
+   and on the page alike. An outline rather than a box-shadow because forced-
+   colours mode keeps outlines and drops shadows. */
+:focus-visible {
+  outline: 2px solid var(--theme-text-primary);
+  outline-offset: 2px;
 }
 
 @media (prefers-color-scheme: dark) {

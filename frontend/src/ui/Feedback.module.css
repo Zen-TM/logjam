@@ -1,0 +1,75 @@
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 24px 20px;
+  text-align: center;
+}
+
+.emptyGlyph {
+  color: var(--theme-accent);
+}
+
+.emptyTitle {
+  margin: 0;
+  font-size: var(--font-base);
+  font-weight: 600;
+}
+
+.emptyBody {
+  margin: 0;
+  max-width: 300px;
+  font-size: var(--font-sm);
+  color: var(--theme-text-muted);
+}
+
+.emptyActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+.selectionBar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 36px;
+}
+
+.selectionCount {
+  flex: 1;
+  min-width: 0;
+  padding-left: 4px;
+  font-size: var(--font-sm);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Light fill, ink text — the inverted surface, like the tooltip. */
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 360px;
+  max-width: 100%;
+  min-height: 44px;
+  box-sizing: border-box;
+  padding: 4px 4px 4px 16px;
+  border-radius: var(--radius-pill);
+  background: var(--theme-text-primary);
+  color: var(--ink);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  box-shadow: var(--shadow-float);
+}
+
+.toastGlyph {
+  flex: none;
+}
+
+.toastText {
+  flex: 1;
+  min-width: 0;
+}

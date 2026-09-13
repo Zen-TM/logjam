@@ -1,0 +1,110 @@
+.row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 60px;
+  padding: 9px 4px 9px 10px;
+  box-sizing: border-box;
+  border-radius: var(--radius-lg);
+  border: var(--hairline);
+  background: var(--theme-secondary);
+  transition: border-color var(--transition-fast);
+}
+
+.row:hover,
+.row[data-highlighted="true"] {
+  border-color: color-mix(in srgb, var(--theme-accent) 70%, var(--theme-bonus-2));
+}
+
+.row[data-selected="true"] {
+  border-color: var(--theme-accent);
+  box-shadow: inset 0 0 0 1px var(--theme-accent);
+}
+
+.row[data-disabled="true"] {
+  opacity: 0.45;
+}
+
+/* The focus ring belongs to the card the stretched button covers. */
+.row:has(.open:focus-visible) {
+  outline: 2px solid var(--theme-text-primary);
+  outline-offset: 2px;
+}
+
+.leading,
+.trailing {
+  position: relative;
+  z-index: 1;
+  flex: none;
+  display: flex;
+  align-items: center;
+}
+
+.trailing {
+  gap: 4px;
+  color: var(--theme-text-muted);
+  font-size: var(--font-xs);
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.open {
+  all: unset;
+  display: block;
+  cursor: pointer;
+}
+
+.open::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.open:focus-visible {
+  outline: none;
+}
+
+.open:disabled {
+  cursor: default;
+}
+
+/* Two lines: a title is often a user-supplied name, and one line cut the
+   rest off with no way to read it. */
+.title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  font-size: var(--font-base);
+  font-weight: 600;
+  color: var(--theme-text-primary);
+}
+
+.subtitle {
+  font-size: var(--font-sm);
+  color: var(--theme-text-muted);
+}
+
+.tile {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  /* A SOLID fill with the ink glyph, not Logjam GPS's hue glyph on a 16% wash:
+     on a card that pair cannot reach 3:1 for the clay and waratah hues at any
+     wash, and misses it for most hues under Sandstone (scripts/wcag-contrast.mjs). */
+  background: var(--tile-hue);
+  color: var(--ink);
+}

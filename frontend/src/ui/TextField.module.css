@@ -1,0 +1,82 @@
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.label {
+  font-size: var(--font-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--theme-text-muted);
+}
+
+.input {
+  min-height: 44px;
+  box-sizing: border-box;
+  padding: 0 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--theme-text-muted);
+  background: var(--surface-field);
+  color: var(--theme-text-primary);
+  font: inherit;
+  font-size: var(--font-base);
+}
+
+.input::placeholder {
+  color: var(--theme-text-muted);
+}
+
+.input:focus-visible {
+  outline: none;
+  border-color: var(--theme-accent);
+  box-shadow: 0 0 0 1px var(--theme-accent);
+}
+
+.input[aria-invalid="true"] {
+  border-color: var(--theme-warning);
+}
+
+.search {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  box-sizing: border-box;
+  padding: 0 8px 0 14px;
+  border-radius: var(--radius-pill);
+  border: 1px solid color-mix(in srgb, var(--theme-accent) 45%, transparent);
+  background: var(--surface-field);
+  color: var(--theme-text-muted);
+}
+
+.search:focus-within {
+  border-color: var(--theme-accent);
+  box-shadow: 0 0 0 1px var(--theme-accent);
+}
+
+.searchGlyph {
+  flex: none;
+}
+
+.searchInput {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--theme-text-primary);
+  font: inherit;
+  font-size: var(--font-sm);
+}
+
+.searchInput::placeholder {
+  color: var(--theme-text-muted);
+}
+
+/* The pill draws the focus state. */
+.searchInput:focus-visible {
+  outline: none;
+}
