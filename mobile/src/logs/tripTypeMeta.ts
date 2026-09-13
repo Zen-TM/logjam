@@ -1,6 +1,6 @@
 import type { Feather } from "@expo/vector-icons";
 
-import { theme } from "../theme";
+import { assetHue, theme } from "../theme";
 
 /**
  * TRIP TYPE IDENTITY — glyph + hue per activity.
@@ -24,9 +24,9 @@ type TripTypeMeta = { icon: React.ComponentProps<typeof Feather>["name"]; hue: s
 
 const SEEDED: Record<string, TripTypeMeta> = {
   canyoning: { icon: "droplet", hue: theme.accent },
-  bushwalking: { icon: "trending-up", hue: "#9DBE8B" },
-  bikepacking: { icon: "navigation", hue: "#C97B4A" },
-  packrafting: { icon: "anchor", hue: "#86B5D4" },
+  bushwalking: { icon: "trending-up", hue: assetHue.overlay },
+  bikepacking: { icon: "navigation", hue: assetHue.geoPdf },
+  packrafting: { icon: "anchor", hue: assetHue.import },
 };
 
 /** Hues for user-typed activities, indexed by a hash of the label. */

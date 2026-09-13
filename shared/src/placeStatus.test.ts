@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { placeStatus, placeSummary, qualityLabel } from "./placeMeta";
+import { placeStatus, placeSummary, qualityLabel } from "./placeStatus.js";
 
 describe("placeStatus", () => {
   it("is done for an owned place with at least one of the viewer's trips", () => {

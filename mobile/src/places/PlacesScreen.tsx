@@ -41,6 +41,10 @@ import {
   type PlaceFilters,
   type PlaceSortKey,
   type RegionBbox,
+  placeStatus,
+  placeSummary,
+  qualityLabel,
+  type PlaceStatus,
 } from "@logjam/shared";
 
 import { useAccountState } from "../auth/AccountStateContext";
@@ -87,7 +91,7 @@ import {
   setPlaceMapFilterEnabled,
   usePlaceMapFilter,
 } from "./placeMapFilter";
-import { PLACE_STATUS_META, placeStatus, placeSummary, qualityLabel, type PlaceStatus } from "./placeMeta";
+import { PLACE_STATUS_META } from "./placeMeta";
 import { placeTypeFeatherIcon } from "./placeTypeIcon";
 
 type Bucket = "all" | PlaceStatus;

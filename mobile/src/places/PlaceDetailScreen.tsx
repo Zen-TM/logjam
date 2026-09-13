@@ -33,6 +33,7 @@ import {
   messageFromError,
   removeShareConfirm,
   routeLengthM,
+  placeStatus,
 } from "@logjam/shared";
 
 import { tripTitle } from "../api/tripTitle";
@@ -97,7 +98,7 @@ import { formatTripDate } from "../logs/logbook";
 import { TripEditSheet } from "../logs/TripEditSheet";
 import { PlaceEditSheet } from "./PlaceEditSheet";
 import { placeDeleteConfirm } from "./placeDeleteConfirm";
-import { PLACE_STATUS_META, placeStatus } from "./placeMeta";
+import { PLACE_STATUS_META } from "./placeMeta";
 
 /** A parked value as one line. Objects are stringified rather than dropped:
  *  the point of the section is that the user can SEE what arrived before

@@ -17,6 +17,7 @@ import { dirname, join } from "node:path";
 const here = dirname(fileURLToPath(import.meta.url));
 const schemesPath = join(here, "..", "shared", "src", "themeSchemes.ts");
 const placeTypesPath = join(here, "..", "shared", "src", "placeTypes.ts");
+const designTokensPath = join(here, "..", "shared", "src", "designTokens.ts");
 
 // Parsed out of the TypeScript source rather than imported: this script runs on
 // bare node with no build step, exactly as the scheme parsing below does.
@@ -27,6 +28,22 @@ function parsePaletteColors() {
   const colors = [...block[1].matchAll(/"(#[0-9A-Fa-f]{6})"/g)].map((m) => m[1]);
   if (colors.length === 0) throw new Error("PLACE_TYPE_COLORS parsed empty");
   return colors;
+}
+
+// The scheme-independent tokens (`INK`, `ASSET_HUES`, `PLACE_STATUS_HUES`),
+// parsed the same way so a retuned hue is measured the moment it changes.
+function parseDesignTokens() {
+  const src = readFileSync(designTokensPath, "utf8");
+  const ink = /export const INK = "(#[0-9A-Fa-f]{6})";/.exec(src);
+  if (!ink) throw new Error("INK not found in designTokens.ts");
+  const hues = (name) => {
+    const block = new RegExp(`export const ${name} = \\{([\\s\\S]*?)\\} as const;`).exec(src);
+    if (!block) throw new Error(`${name} not found in designTokens.ts`);
+    const entries = [...block[1].matchAll(/(\w+):\s*"(#[0-9A-Fa-f]{6})"/g)].map((m) => [m[1], m[2]]);
+    if (entries.length === 0) throw new Error(`${name} parsed empty`);
+    return entries;
+  };
+  return { ink: ink[1], assetHues: hues("ASSET_HUES"), statusHues: hues("PLACE_STATUS_HUES") };
 }
 
 // ─── WCAG relative luminance + contrast ratio ───────────────────────────────
@@ -90,6 +107,27 @@ const OWNED_MARKER = PLACE_TYPE_COLORS[0];
 // Read from the declaration, not restated: it is reserved precisely so it is
 // never a type colour, and a copy here is the half that would drift.
 const SHARED_MARKER = parseSharedPlaceColor();
+const { ink: INK, assetHues: ASSET_HUES, statusHues: STATUS_HUES } = parseDesignTokens();
+// Every hue that fills a chip, tile or badge with a label on it.
+const LABELLED_FILLS = [
+  ...PLACE_TYPE_COLORS.map((color) => [`place-type ${color}`, color]),
+  ["shared heath", SHARED_MARKER],
+  ...ASSET_HUES.map(([name, color]) => [`asset hue ${name}`, color]),
+  ...STATUS_HUES.map(([name, color]) => [`status hue ${name}`, color]),
+];
+
+/**
+ * Pairs that fail today and are KNOWN to, each with where it renders. They are
+ * printed but do not fail the run — and a known failure that starts PASSING
+ * does fail it, so this list can only shrink: fix the pair, delete its line.
+ * Adding to it is a decision to ship an inaccessible pair, and needs saying.
+ */
+const KNOWN_FAILURES = new Map([
+  // Logjam GPS HeroHeader fills with bonus2 (found 2026-09-13). Fails in
+  // Sandstone (muted 3.94:1) and Ironbark (bonus2 is a LIGHT green there).
+  ["textPrimary on bonus2 (Logjam GPS hero fill)", "mobile/src/ui/HeroHeader.tsx"],
+  ["textMuted on bonus2 (Logjam GPS hero fill)", "mobile/src/ui/HeroHeader.tsx"],
+]);
 
 // ─── Rendered pairs → actual CSS usage. `min` is the WCAG threshold. ────────
 // Filled-accent buttons use the scheme's dark `primary` as their label colour
@@ -144,6 +182,26 @@ function pairsFor(t) {
       bg: color,
       min: 4.5,
     })),
+    // THE INK. Every label or glyph drawn on a fill — an active chip, a filled
+    // button, a hue tile — uses the one fixed dark ink on both clients, because
+    // `primary` fails on the heath and on the GeoPDF clay.
+    { name: "ink on accent (filled button / active chip label)", fg: INK, bg: t.accent, min: 4.5 },
+    ...LABELLED_FILLS.map(([label, color]) => ({
+      name: `ink label on ${label} ${color} (text)`,
+      fg: INK,
+      bg: color,
+      min: 4.5,
+    })),
+    // A hue as a GLYPH on the page colour (a row's type/status tile, a legend
+    // swatch): non-text, so 3:1.
+    ...[...ASSET_HUES, ...STATUS_HUES].map(([name, color]) => ({
+      name: `${name} hue glyph on primary (UI)`,
+      fg: color,
+      bg: t.primary,
+      min: 3,
+    })),
+    { name: "textPrimary on bonus2 (Logjam GPS hero fill)", fg: t.textPrimary, bg: t.bonus2, min: 4.5 },
+    { name: "textMuted on bonus2 (Logjam GPS hero fill)", fg: t.textMuted, bg: t.bonus2, min: 4.5 },
   ];
 }
 
@@ -153,21 +211,35 @@ const schemes = parseSchemes(src);
 const failuresOnly = process.argv.includes("--failures");
 
 let totalFail = 0;
+const knownPassing = new Set();
+const knownFailing = new Set();
 for (const [id, tokens] of Object.entries(schemes)) {
   const rows = pairsFor(tokens).map((p) => {
     const r = ratio(p.fg, p.bg);
-    return { ...p, ratio: r, pass: r >= p.min };
+    return { ...p, ratio: r, pass: r >= p.min, known: KNOWN_FAILURES.has(p.name) };
   });
-  const fails = rows.filter((r) => !r.pass);
+  const fails = rows.filter((r) => !r.pass && !r.known);
   totalFail += fails.length;
+  for (const r of rows) if (r.pass && r.known) knownPassing.add(r.name);
+  for (const r of rows) if (!r.pass && r.known) knownFailing.add(r.name);
   if (failuresOnly && fails.length === 0) continue;
   console.log(`\n=== ${id} ${fails.length ? `(${fails.length} FAIL)` : "(all pass)"} ===`);
-  for (const r of failuresOnly ? fails : rows) {
-    const tag = r.pass ? "PASS" : "FAIL";
+  for (const r of failuresOnly ? rows.filter((row) => !row.pass) : rows) {
+    const tag = r.pass ? "PASS" : r.known ? "KNOWN" : "FAIL";
     console.log(
       `  [${tag}] ${r.ratio.toFixed(2)}:1 (need ${r.min}) ${r.fg}→${r.bg}  ${r.name}`,
     );
   }
 }
-console.log(`\n${totalFail === 0 ? "✓ ALL PASS" : `✗ ${totalFail} failing pair(s)`}`);
-process.exit(totalFail === 0 ? 0 : 1);
+// A known failure passes only once it passes under EVERY scheme.
+const fixedKnown = [...KNOWN_FAILURES.keys()].filter(
+  (name) => knownPassing.has(name) && !knownFailing.has(name),
+);
+for (const name of fixedKnown) {
+  console.log(`\n✗ "${name}" now passes in every scheme — delete it from KNOWN_FAILURES.`);
+}
+const knownStill = [...knownFailing].map((name) => `${name} (${KNOWN_FAILURES.get(name)})`);
+if (knownStill.length) console.log(`\n! ${knownStill.length} known failing pair(s): ${knownStill.join("; ")}`);
+const ok = totalFail === 0 && fixedKnown.length === 0;
+console.log(`\n${ok ? "✓ ALL PASS" : `✗ ${totalFail} failing pair(s)`}`);
+process.exit(ok ? 0 : 1);
