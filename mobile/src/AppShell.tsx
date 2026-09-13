@@ -60,6 +60,7 @@ import { PrivacySettingsScreen } from "./screens/settings/PrivacySettingsScreen"
 import { SyncIssuesScreen } from "./screens/SyncIssuesScreen";
 import type { MirrorTrip } from "./sync/mirrorStore";
 import { LogsScreen } from "./logs/LogsScreen";
+import { StatsScreen } from "./logs/StatsScreen";
 import { TripDetailScreen } from "./logs/TripDetailScreen";
 import { LoadingState } from "./ui/ScreenStates";
 
@@ -164,6 +165,12 @@ type PlacesStackParams = {
 
 type TripsStackParams = {
   TripList: undefined;
+  /**
+   * The retrospective screen, pushed from the Logs hero. `activity` scopes it
+   * to one trip type — the drill-down is the SAME screen with a narrower set,
+   * so a stack route carrying a tag is all the second surface needs.
+   */
+  TripStats: { activity?: string } | undefined;
   TripDetail: { trip: MirrorTrip };
   TripPlaceDetail: { placeId: string; name: string };
 };
@@ -613,7 +620,23 @@ function TripsStackNav() {
           header is off and the hero owns the back affordance (DESIGN.md §2). */}
       <TripsStack.Screen name="TripList" options={{ headerShown: false }}>
         {({ navigation }) => (
-          <LogsScreen onOpenTrip={(trip) => navigation.navigate("TripDetail", { trip })} />
+          <LogsScreen
+            onOpenTrip={(trip) => navigation.navigate("TripDetail", { trip })}
+            onOpenStats={() => navigation.navigate("TripStats")}
+          />
+        )}
+      </TripsStack.Screen>
+      <TripsStack.Screen name="TripStats" options={{ headerShown: false }}>
+        {({ navigation, route }) => (
+          <StatsScreen
+            activity={route.params?.activity ?? null}
+            onBack={() => navigation.goBack()}
+            // Pushed rather than swapped in place, so Back returns to the whole
+            // picture the user drilled down from.
+            onOpenActivity={(activity) =>
+              navigation.push("TripStats", { activity })
+            }
+          />
         )}
       </TripsStack.Screen>
       <TripsStack.Screen name="TripDetail" options={{ headerShown: false }}>

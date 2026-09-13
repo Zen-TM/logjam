@@ -2,11 +2,15 @@ import { describe, expect, it } from "vitest";
 
 import {
   countTripsInLastMonths,
+  datePresets,
   distinctPlaceCount,
   formatTripDate,
   groupTripsByYear,
+  logbookRanges,
+  monthBucketsForYear,
   monthlyTripCounts,
   tripYear,
+  yearBuckets,
 } from "./logbook";
 
 import { fromDateKey, todayDateKey } from "../ui/monthGrid";
@@ -184,5 +188,89 @@ describe("the current-month bucket in a non-UTC timezone", () => {
       const buckets = monthlyTripCounts([{ date: storedToday.toISOString() }], lateOnTheLast);
       expect(buckets[11]).toMatchObject({ label: "J", current: true, count: 1 });
     });
+  });
+});
+
+describe("logbookRanges", () => {
+  it("leads with all time and the relative presets", () => {
+    expect(logbookRanges([], "2026-09-13").slice(0, 4).map((r) => r.label)).toEqual([
+      "All time",
+      "This year",
+      "Last 12 months",
+      "2025",
+    ]);
+  });
+
+  it("adds a pill per earlier year the user has trips in, newest first", () => {
+    expect(
+      logbookRanges([2022, 2024, 2024, 2023], "2026-09-13").map((r) => r.label),
+    ).toEqual(["All time", "This year", "Last 12 months", "2025", "2024", "2023", "2022"]);
+  });
+
+  it("never repeats a year the presets already cover", () => {
+    const labels = logbookRanges([2026, 2025], "2026-09-13").map((r) => r.label);
+    expect(labels.filter((label) => label === "2025")).toHaveLength(1);
+    expect(labels).not.toContain("2026");
+  });
+
+  it("bounds a year pill to that calendar year", () => {
+    expect(logbookRanges([2023], "2026-09-13").at(-1)).toEqual({
+      label: "2023",
+      from: "2023-01-01",
+      to: "2023-12-31",
+    });
+  });
+
+  it("shares its relative presets with the Logs filter sheet", () => {
+    const ranges = logbookRanges([], "2026-09-13");
+    for (const preset of datePresets("2026-09-13")) {
+      expect(ranges).toContainEqual(preset);
+    }
+  });
+});
+
+describe("stats spark buckets", () => {
+  it("draws twelve months for one year, whatever months have trips", () => {
+    const buckets = monthBucketsForYear(
+      [
+        { year: 2025, month: 2, count: 3 },
+        { year: 2026, month: 2, count: 9 },
+      ],
+      2025,
+      new Date("2026-09-13T00:00:00.000Z"),
+    );
+    expect(buckets).toHaveLength(12);
+    expect(buckets[2]).toMatchObject({ count: 3, current: false });
+    // A past year has no "you are here" bucket.
+    expect(buckets.some((bucket) => bucket.current)).toBe(false);
+  });
+
+  it("marks the current month of the current year", () => {
+    inTimeZone("Australia/Sydney", () => {
+      const buckets = monthBucketsForYear([], 2026, new Date("2026-09-13T00:00:00.000Z"));
+      expect(buckets.filter((bucket) => bucket.current)).toHaveLength(1);
+      expect(buckets[8].current).toBe(true);
+    });
+  });
+
+  it("keeps an empty year in the year axis rather than closing the gap", () => {
+    expect(
+      yearBuckets(
+        [
+          { year: 2023, count: 2 },
+          { year: 2026, count: 5 },
+        ],
+        new Date("2026-09-13T00:00:00.000Z"),
+      ),
+    ).toEqual([
+      { label: "23", count: 2, current: false },
+      { label: "24", count: 0, current: false },
+      { label: "25", count: 0, current: false },
+      { label: "26", count: 5, current: true },
+    ]);
+  });
+
+  it("has no year axis with no trips", () => {
+    expect(yearBuckets([])).toEqual([]);
   });
 });

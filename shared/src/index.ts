@@ -5,6 +5,7 @@ export * from "./themeSchemes.js";
 export * from "./tripLogFields.js";
 export * from "./tripName.js";
 export * from "./tripFilter.js";
+export * from "./logbookStats.js";
 export * from "./trackExport.js";
 export * from "./elvisZip.js";
 export * from "./placeNameMatch.js";
