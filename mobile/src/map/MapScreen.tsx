@@ -250,6 +250,7 @@ import {
   reconcileTrackRecording,
   refreshActiveTrackStats,
   continueTrackRecording,
+  setRecordingMapFocusBoost,
   startTrackRecording,
 } from "../tracks/trackRecorder";
 import { TrackMapLayers } from "../tracks/TrackMapLayers";
@@ -3078,6 +3079,19 @@ export function MapScreen({
   }, []);
   const sensorsActive = mapFocused && appActive;
 
+  // A recording follows the same lifecycle: while someone is looking at the map
+  // it records at the finest rate, and it drops back to their "Track detail"
+  // rate the moment the tab loses focus or the app backgrounds.
+  // `setRecordingMapFocusBoost` says why the dot watcher below cannot do this
+  // on its own. Keyed on `sensorsActive` so the two cannot disagree about
+  // whether anyone is looking.
+  useEffect(() => {
+    setRecordingMapFocusBoost(sensorsActive).catch(console.error);
+    return () => {
+      setRecordingMapFocusBoost(false).catch(console.error);
+    };
+  }, [sensorsActive]);
+
   /**
    * Whether the marker is shown. ALWAYS TRUE once the map exists.
    *
@@ -3270,12 +3284,12 @@ export function MapScreen({
   // foreground, which is the phone out of the pack with the screen on, and the
   // screen dominates the power bill in that state anyway.
   //
-  // What that costs during a recording, stated plainly: Android's fused
-  // provider serves concurrent clients at the fastest interval any of them
-  // asked for, so while the map is open the recording runs at 3 s too,
-  // whatever the fix rate says. The fix-rate setting therefore governs the
-  // recording's battery cost for the (large) majority of a trip when the map
-  // is not on screen, and not while the user is looking at it.
+  // It does NOT speed a recording up, though this comment once said it did.
+  // expo-location pins each request's minimum update interval to its own
+  // interval, so the fused provider kept delivering to the recorder at the
+  // recorder's rate while this watcher moved the dot every 3 s — and a short
+  // sky window under a wall moved the dot without ever reaching the track. The
+  // recorder is sped up explicitly instead, by the boost effect above.
   useEffect(() => {
     if (!sensorsActive || !fixWanted) return;
     let subscription: Location.LocationSubscription | null = null;

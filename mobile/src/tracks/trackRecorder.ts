@@ -65,10 +65,13 @@ export const TRACK_RECORDING_TASK = "logjam-track-recording";
 // not wifi centroids). What the user's "Track detail" choice moves is the RATE
 // (`FIX_RATE_OPTIONS`), and it is read at start/resume rather than cached: the
 // setting has to apply to the next track, and this module lives for the life of
-// the process.
+// the process. While the map is on screen the rate is the finest preset
+// whatever the setting says — see `setRecordingMapFocusBoost`.
+let mapFocusBoosted = false;
+
 function locationOptions(): Location.LocationTaskOptions {
   return {
-    ...FIX_RATE_OPTIONS[readFixRate()],
+    ...FIX_RATE_OPTIONS[mapFocusBoosted ? "finest" : readFixRate()],
     showsBackgroundLocationIndicator: true,
     activityType: Location.ActivityType.Fitness,
     foregroundService: {
@@ -102,6 +105,48 @@ export async function applyRecordingOptionsToActiveTrack(): Promise<boolean> {
   }
   await Location.startLocationUpdatesAsync(TRACK_RECORDING_TASK, locationOptions());
   return true;
+}
+
+/**
+ * Record at the finest rate while the map is being LOOKED AT, and at the user's
+ * "Track detail" rate otherwise. Returns false when nothing was re-registered —
+ * no change, or nothing recording — which is not an error.
+ *
+ * The map's own 3 s dot watcher does NOT speed the recording up. expo-location
+ * builds every request with `setMinUpdateIntervalMillis` equal to its interval
+ * (`LocationHelpers.prepareLocationRequest`), a per-client ceiling on delivery,
+ * so at the 30 s default the fused provider WITHHELD from the recorder the fixes
+ * it was handing the map. Under a canyon wall the sky arrives in 5-10 s windows:
+ * the dot moved, the window closed before the recorder's 30 s were up, and the
+ * track drew a live tail to the dot with no anchor behind it.
+ *
+ * What it costs is GNSS duty cycle while the screen is lit, which the screen
+ * already dwarfs. Anchor placement is unchanged: `rejectTrackFix` still decides
+ * by displacement, so someone standing still reading the map gets refusals
+ * counted, not points.
+ *
+ * The flag is deliberately NOT cleared when the recorder stops. It describes the
+ * SCREEN, not the recording: a pause and resume on the map must come back
+ * boosted, and nothing re-fires the map's effect when only the recording
+ * changed. Start, resume and continue all read it through `locationOptions()`.
+ *
+ * TURNING IT DOWN NEEDS A NATIVE PATCH (`patches/expo-location+*.patch`). The
+ * unboost happens as the app backgrounds, and stock expo-location refuses
+ * `startLocationUpdatesAsync` with a foreground service from the background —
+ * its foreground flag flips at the same moment React Native emits the event, so
+ * JS always arrives too late. Measured on the Pixel before the patch: Home with
+ * the map open left the recorder at 3 s. The patch lets an update to an
+ * already-running task through (it starts no service); `expoLocationPatch.test.ts`
+ * fails if the installed copy lacks it.
+ *
+ * Module state, so per JS context — a headless relaunch starts unboosted, which
+ * is right, since nobody is looking. A boost the PLATFORM persisted across a
+ * process death is put back by `reconcileTrackRecording`.
+ */
+export async function setRecordingMapFocusBoost(boosted: boolean): Promise<boolean> {
+  if (mapFocusBoosted === boosted) return false;
+  mapFocusBoosted = boosted;
+  return applyRecordingOptionsToActiveTrack();
 }
 
 /**
@@ -517,7 +562,8 @@ export async function discardTrackRecording(trackId: string): Promise<void> {
 
 /**
  * Reconciliation. Three cases:
- *  - active row + task running: recording survived a kill — leave it alone.
+ *  - active row + task running: recording survived a kill — leave it alone,
+ *    except for its RATE (below).
  *  - active row + task NOT running (reboot, force-stop): mark it paused —
  *    an honest gap the user resumes manually, never a silently dead recorder.
  *  - task running + no active row (crash between stop and delete): stop it.
@@ -546,5 +592,17 @@ export async function reconcileTrackRecording(): Promise<void> {
     });
   } else if (!active && taskRunning) {
     await Location.stopLocationUpdatesAsync(TRACK_RECORDING_TASK);
+  } else if (active?.state === "recording" && taskRunning) {
+    // The platform persists a task's options and keeps delivering across a
+    // process death, so a process that died with the map boost on leaves the
+    // recorder at 3 s with nothing left to turn it down — for the rest of the
+    // trip, if the app then reopens on another tab. Re-register only on a
+    // mismatch, so an ordinary return to the foreground costs no re-request.
+    const stored = await TaskManager.getTaskOptionsAsync<Location.LocationTaskOptions>(
+      TRACK_RECORDING_TASK,
+    );
+    if (stored?.timeInterval !== locationOptions().timeInterval) {
+      await Location.startLocationUpdatesAsync(TRACK_RECORDING_TASK, locationOptions());
+    }
   }
 }
