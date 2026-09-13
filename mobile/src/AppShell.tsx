@@ -20,6 +20,7 @@ import * as Notifications from "expo-notifications";
 import { isRouteEditing } from "./map/routeEditLock";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { isThemeSchemeId, needsReconsent } from "@logjam/shared";
 
 import { fetchCurrentUser, getUnreadNotificationCount, useApiQuery } from "./api/queries";
@@ -28,7 +29,7 @@ import type { AccountState } from "./auth/capabilities";
 import { getCachedUnreadCount } from "./sync/notificationsCache";
 import { onMirrorChanged } from "./sync/syncDb";
 import { registerSyncTriggers } from "./sync/syncEngine";
-import { activeThemeSchemeId, persistThemeSchemeId, theme, withAlpha } from "./theme";
+import { activeThemeSchemeId, persistThemeSchemeId, spacing, theme, withAlpha } from "./theme";
 import { MapScreen } from "./map/MapScreen";
 import { RegionDownloadScreen } from "./map/RegionDownloadScreen";
 import type { BasemapId } from "./map/sourceResolver";
@@ -237,6 +238,9 @@ const TripsStack = createNativeStackNavigator<TripsStackParams>();
 const SavedStack = createNativeStackNavigator<SavedStackParams>();
 const MoreStack = createNativeStackNavigator<MoreStackParams>();
 const Tabs = createBottomTabNavigator();
+/** `@react-navigation/bottom-tabs`' own TABBAR_HEIGHT_UIKIT, which it does not export. */
+const TAB_BAR_BASE_HEIGHT = 49;
+const TAB_BAR_TOP_PAD = spacing(0.75);
 
 /**
  * Map focus for one place — a tight box around its point (~1 km across), which
@@ -734,6 +738,7 @@ export function AppShell({
   const [consented, setConsented] = useState(false);
   const [unreadCount, setUnreadCount] = useState<number | null>(null);
   const navigationRef = useRef<NavigationContainerRef<never>>(null);
+  const insets = useSafeAreaInsets();
 
   // Register this device for pushes once authenticated (best-effort), and
   // route notification taps: a place reference deep-links to its detail,
@@ -909,6 +914,14 @@ export function AppShell({
             backgroundColor: theme.secondary,
             borderTopColor: withAlpha(theme.textPrimary, 0.25),
             borderTopWidth: 1,
+            // Breathing room between the border and the icons. The library's
+            // bar is iOS-sized (49pt plus the bottom inset) and sits the icons
+            // hard against the top edge on Android. Padding alone would squeeze
+            // icon and label into the same height, so the height grows by the
+            // same amount — and a set height replaces the library's, so it has
+            // to carry the bottom inset itself (the library still pads by it).
+            paddingTop: TAB_BAR_TOP_PAD,
+            height: TAB_BAR_BASE_HEIGHT + TAB_BAR_TOP_PAD + insets.bottom,
           },
           tabBarActiveTintColor: theme.accent,
           tabBarInactiveTintColor: theme.textMuted,

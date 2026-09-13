@@ -1545,6 +1545,14 @@ same rule sent the map's badges to two lines: a warning that reads "Showing 5 of
 2…" is a warning nobody can act on. Drop a trailing pill beside a long subtitle
 — the pill's width is what forced the ellipsis in the first place.
 
+**A tile that does something on tap says so on the tile.** A coordinate tile
+copies its value, and for months the only way to learn that was to tap it.
+`StatGrid`'s `onCopy` draws a muted copy glyph at the value's trailing edge, in
+the value's row rather than pinned to the corner, so a long value wraps before
+the glyph instead of running under it. The prop is named for the one thing it
+does: a generic `onPress` beside a copy glyph would promise a copy on the next
+tile that wires a tap to something else.
+
 **The two map INSTRUMENTS size themselves in text.** The compass tape's label
 slot and height, and the scale bar's height, are computed from `textScale`
 (`theme.ts`) rather than fixed: their type grows with everyone else's, and a

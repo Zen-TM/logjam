@@ -121,7 +121,7 @@ function PointDetail({
     onInfo("Coordinates copied.");
   };
   const stats: Stat[] = [
-    { label: "Position", value: position, wide: true, onPress: copyPosition },
+    { label: "Position", value: position, wide: true, onCopy: copyPosition },
     {
       label: "Elevation",
       value:

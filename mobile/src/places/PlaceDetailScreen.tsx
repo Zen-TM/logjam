@@ -289,7 +289,7 @@ export function PlaceDetailScreen({
     Clipboard.setString(position);
     notify("Coordinates copied.", "info");
   };
-  stats.push({ label: "Position", value: position, wide: true, onPress: copyPosition });
+  stats.push({ label: "Position", value: position, wide: true, onCopy: copyPosition });
 
   /**
    * One of the three actions on a parked value. The place is re-read from the
