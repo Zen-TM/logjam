@@ -1,0 +1,20 @@
+diff --git a/node_modules/expo-location/android/src/main/java/expo/modules/location/LocationModule.kt b/node_modules/expo-location/android/src/main/java/expo/modules/location/LocationModule.kt
+index 46e2ec5..4a35761 100644
+--- a/node_modules/expo-location/android/src/main/java/expo/modules/location/LocationModule.kt
++++ b/node_modules/expo-location/android/src/main/java/expo/modules/location/LocationModule.kt
+@@ -255,7 +255,14 @@ class LocationModule : Module(), LifecycleEventListener, SensorEventListener, Ac
+       if (!shouldUseForegroundService && isMissingBackgroundPermissions()) {
+         throw LocationBackgroundUnauthorizedException()
+       }
+-      if (!AppForegroundedSingleton.isForegrounded && options.foregroundService != null) {
++      // LOGJAM PATCH (patches/expo-location+*.patch): an options UPDATE to a task that is
++      // already running starts no foreground service — TaskService.registerTask routes it to
++      // LocationTaskConsumer.setOptions, whose maybeStartForegroundService returns early while
++      // backgrounded — so it must not be refused from the background. Without this, the
++      // recorder's map-focus boost (mobile/src/tracks/trackRecorder.ts) can never be turned
++      // back down when the screen goes off.
++      val isUpdatingRunningTask = mTaskManager.taskHasConsumerOfClass(taskName, LocationTaskConsumer::class.java)
++      if (!AppForegroundedSingleton.isForegrounded && options.foregroundService != null && !isUpdatingRunningTask) {
+         throw ForegroundServiceStartNotAllowedException()
+       }
+ 
