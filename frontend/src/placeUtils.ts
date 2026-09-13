@@ -635,7 +635,7 @@ export function fetchComputeEstimate(
 ): Promise<ComputeEstimate> {
   return apiFetch<ComputeEstimate>("/compute-estimate", {
     method: "POST",
-    body: JSON.stringify(request),
+    body: request,
   });
 }
 
