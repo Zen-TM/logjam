@@ -221,24 +221,6 @@ describe("computeLogbookStats", () => {
       expect(grade.best).toEqual({ value: 6, label: "Claustral" });
     });
 
-    it("reports a rating's progression per year, oldest first", () => {
-      const stats = run({ trips, places, placeDefs });
-      const grade = stat(allPlaceStats(stats), "v_grade");
-      if (grade.kind !== "rating") throw new Error("expected a rating");
-      expect(grade.byYear).toEqual([
-        { year: 2025, max: 6, average: 6 },
-        { year: 2026, max: 4, average: 4 },
-      ]);
-    });
-
-    it("withholds a progression that covers one year — a single bar says nothing", () => {
-      const oneYear = [trip("2026-01-01", { places: [{ id: "p1", name: "Claustral" }] })];
-      const stats = run({ trips: oneYear, places, placeDefs });
-      const grade = stat(allPlaceStats(stats), "v_grade");
-      if (grade.kind !== "rating") throw new Error("expected a rating");
-      expect(grade.byYear).toEqual([]);
-    });
-
     it("summarises a field scoped to two types ONCE PER TYPE, over that type's own samples", () => {
       // The quality of the canyons someone does and the quality of the
       // campsites they stay at are two distributions, not one.
@@ -331,6 +313,24 @@ describe("computeLogbookStats", () => {
         { value: "High", count: 2 },
         { value: "low", count: 1 },
       ]);
+    });
+
+    it("drops a vocabulary with only one answer in it — a tally of one says nothing", () => {
+      // Four trips to one canyon repeat its permit number four times: repeated,
+      // short, under the cardinality cap, and still not a distribution.
+      const placeDefs = [def({ key: "permit", type: "string", placeTypeIds: [CANYON] })];
+      const places = [
+        { id: "p1", name: "Claustral", placeTypeId: CANYON, fieldValues: { permit: "NPWS-2026-114" } },
+      ];
+      const answered = [
+        trip("2026-01-01", { places: [{ id: "p1", name: "Claustral" }] }),
+        trip("2026-02-01", { places: [{ id: "p1", name: "Claustral" }] }),
+      ];
+      expect(
+        allPlaceStats(run({ trips: answered, places, placeDefs })).find(
+          (entry) => entry.key === "permit",
+        ),
+      ).toBeUndefined();
     });
 
     it("drops a prose answer even when only a few of them are distinct", () => {

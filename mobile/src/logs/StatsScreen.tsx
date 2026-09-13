@@ -527,11 +527,7 @@ function AttributeSections({
         <View key={group.typeId} style={styles.section}>
           <SectionHeader label={`${group.name} attributes`} />
           {group.stats.map((entry) => (
-            <AttributeStat
-              key={`${group.typeId}:${entry.key}`}
-              stat={entry}
-              owner="place"
-            />
+            <AttributeStat key={`${group.typeId}:${entry.key}`} stat={entry} />
           ))}
         </View>
       ))}
@@ -539,7 +535,7 @@ function AttributeSections({
         <View style={styles.section}>
           <SectionHeader label="Your trip attributes" />
           {stats.tripFieldStats.map((entry) => (
-            <AttributeStat key={`trip:${entry.key}`} stat={entry} owner="trip" />
+            <AttributeStat key={`trip:${entry.key}`} stat={entry} />
           ))}
         </View>
       ) : null}
@@ -556,28 +552,14 @@ function AttributeSections({
  * spaced. `Row`'s `footer` slot exists for exactly this: full-width content
  * pinned under the row's own line, inside the same card.
  */
-function AttributeStat({
-  stat,
-  owner,
-}: {
-  stat: FieldStat;
-  /** Which list the stat came from — a trip's own answer, or a property of a
-   *  place that was visited. Only the quantity arm cares, and it cares a lot. */
-  owner: "trip" | "place";
-}) {
+function AttributeStat({ stat }: { stat: FieldStat }) {
   if (stat.kind === "rating") {
-    const progression =
-      stat.byYear.length >= 2
-        ? `${stat.byYear[0].year}→${stat.byYear[stat.byYear.length - 1].year}: ${formatNumber(
-            stat.byYear[0].max,
-          )} → ${formatNumber(stat.byYear[stat.byYear.length - 1].max)}`
-        : null;
-    const caption = [
-      stat.best ? `highest ${formatNumber(stat.best.value)} · ${stat.best.label}` : null,
-      progression,
-    ]
-      .filter(Boolean)
-      .join(" · ");
+    // No per-year progression line. It read as a claim about the user getting
+    // better, which is not what a grade distribution over trips measures, is
+    // not how canyon grades work, and is not a thing every user is doing.
+    const caption = stat.best
+      ? `highest ${formatNumber(stat.best.value)} · ${stat.best.label}`
+      : undefined;
     return (
       <Row
         title={stat.label}
@@ -589,7 +571,7 @@ function AttributeStat({
               label: `${bucket.value}`,
               count: bucket.count,
             }))}
-            caption={caption || undefined}
+            caption={caption}
           />
         }
       />
@@ -597,14 +579,16 @@ function AttributeStat({
   }
 
   if (stat.kind === "quantity") {
-    // A TOTAL is only honest for a quantity the trip SPENDS. "471 pitches
-    // abseiled" is a journey; "1996 longest pitch" and "48 capacity" are what
-    // summing a place PROPERTY across trips produces, and both appeared on the
-    // first device run. Nothing in a definition separates the two — bounds
-    // don't, `min` doesn't — so the total belongs to a trip's own answer, and a
-    // place attribute reports its average instead. Upgrade path: an "adds up
-    // each trip" flag on the definition.
-    const summable = owner === "trip";
+    // NO TOTALS, on either side, and that is a decision rather than an
+    // omission. A total is only honest for a quantity a trip SPENDS, and
+    // nothing in a definition says which ones those are — not the bounds, not
+    // `min`, not which list the value came from. Summing a place property gave
+    // "1996 longest pitch" and "48 capacity"; summing a trip property gave
+    // "1530 rope length". An average and a highest are never wrong for either.
+    //
+    // "471 pitches abseiled" is worth having back, and needs the one thing that
+    // could make it correct: an "adds up each trip" flag on the definition,
+    // answered by the person who created the field.
     return (
       <Row
         title={stat.label}
@@ -614,12 +598,7 @@ function AttributeStat({
             ? `highest ${formatNumber(stat.best.value)}, ${stat.best.label}`
             : undefined
         }
-        right={
-          <RowMetric
-            value={formatNumber(summable ? stat.total : stat.average)}
-            suffix={summable ? "total" : "avg"}
-          />
-        }
+        right={<RowMetric value={formatNumber(stat.average)} suffix="avg" />}
       />
     );
   }
@@ -639,8 +618,11 @@ function AttributeStat({
     <Row
       title={stat.label}
       titleNumberOfLines={1}
+      // "×" rather than a space: a value can contain spaces of its own, and
+      // "NPWS-2026-114 4" read as part of the identifier. The multiplication
+      // sign is what the places section already counts repeats with.
       subtitle={stat.values
-        .map((entry) => `${entry.value} ${entry.count}`)
+        .map((entry) => `${entry.value} ×${entry.count}`)
         .join(" · ")}
     />
   );
