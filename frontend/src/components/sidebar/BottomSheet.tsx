@@ -7,7 +7,7 @@ export type SheetSnap = "peek" | "half" | "full";
 const PEEK_REVEAL_PX = 96;
 // Bottom nav strip height; the sheet sits above it. Keep in sync with
 // --bottom-nav-height in index.css.
-const NAV_HEIGHT_PX = 56;
+const NAV_HEIGHT_PX = 68;
 // Fraction of viewport height revealed at the "half" snap. Panels with pinned
 // top-of-list chrome (search box, action buttons, a collapsed filter
 // accordion) were eating most of a plain 50% reveal, leaving as little as

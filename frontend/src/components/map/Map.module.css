@@ -1,4 +1,5 @@
 .map {
+  --map-inset-left: 0px;
   position: absolute;
   top: 0;
   left: var(--nav-rail-width);
@@ -6,32 +7,108 @@
   bottom: 0;
 }
 
+/* Where the visible map starts: MapChrome and MapLibre's corner controls are
+   measured from it, so they slide clear of the open page and any sheet beside
+   it. Derived from the layout widths rather than passed in as numbers. */
+.map[data-panel-open="true"] {
+  --map-inset-left: var(--panel-width);
+}
+
+.map[data-panel-open="true"][data-sheet-open="true"] {
+  --map-inset-left: calc(var(--panel-width) + var(--filter-sheet-width));
+}
+
+/* ── MapLibre's own controls, restyled into the kit ───────────────────────── */
+
+/* The GeolocateControl's button: MapChrome's locate button drives the control,
+   which still draws the dot and accuracy circle. */
+:global(#map .maplibregl-ctrl-top-right) {
+  display: none;
+}
+
+/* The scale bar sits on the instrument edge, beside MapChrome's compass. */
 :global(#map .maplibregl-ctrl-bottom-left) {
-  margin-left: 0;
-  transition: margin-left var(--transition-med) ease-out;
+  left: calc(var(--map-inset-left) + 16px + 44px + 10px);
+  bottom: 27px;
+  transition: left var(--transition-med) ease-out;
 }
 
-:global(#map[data-sidebar-open="true"] .maplibregl-ctrl-bottom-left) {
-  margin-left: var(--panel-width);
+:global(#map .maplibregl-ctrl-bottom-left .maplibregl-ctrl),
+:global(#map .maplibregl-ctrl-bottom-right .maplibregl-ctrl) {
+  margin: 0;
 }
 
-/* Mobile (≤768px): the panel is a bottom sheet, not a left flyout — don't shift
-   controls right. Lift bottom controls and the GeoPDF confirm bar above the
-   bottom nav strip. Keep in sync with useIsMobile() / MOBILE_MAX_WIDTH_PX. */
+:global(#map .maplibregl-ctrl-scale) {
+  box-sizing: border-box;
+  min-height: 22px;
+  padding: 2px 6px 0;
+  border: 2px solid var(--theme-text-primary);
+  border-top: none;
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  background: var(--theme-primary);
+  color: var(--theme-text-primary);
+  font-size: var(--font-xs);
+  box-shadow: var(--shadow-float);
+}
+
+:global(#map .maplibregl-ctrl-bottom-right) {
+  right: 16px;
+  bottom: 12px;
+}
+
+:global(#map .maplibregl-ctrl-attrib) {
+  background: var(--theme-primary);
+  color: var(--theme-text-primary);
+  box-shadow: var(--shadow-float);
+}
+
+:global(#map .maplibregl-ctrl-attrib a) {
+  color: var(--theme-accent);
+}
+
+:global(#map .maplibregl-ctrl-attrib.maplibregl-compact) {
+  border-radius: var(--radius-pill);
+}
+
+/* MapLibre draws the (i) as a dark data-URI icon; every scheme is dark. */
+:global(#map .maplibregl-ctrl-attrib-button) {
+  filter: invert(1);
+}
+
+/* MapLibre's blue focus glow → the app's one focus ring. */
+:global(#map .maplibregl-ctrl button:focus-visible) {
+  box-shadow: none;
+  outline: 2px solid var(--theme-text-primary);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :global(#map .maplibregl-ctrl-bottom-left) {
+    transition: none;
+  }
+}
+
+/* Narrow web (≤768px): the page is a bottom sheet, not a left panel, so nothing
+   insets; bottom controls lift above the tab bar. Keep in sync with
+   useIsMobile() / MOBILE_MAX_WIDTH_PX. */
 @media (max-width: 768px) {
-  :global(#map[data-sidebar-open="true"] .maplibregl-ctrl-bottom-left) {
-    margin-left: 0;
+  .map[data-panel-open="true"],
+  .map[data-panel-open="true"][data-sheet-open="true"] {
+    --map-inset-left: 0px;
   }
 
-  :global(#map .maplibregl-ctrl-bottom-left),
+  :global(#map .maplibregl-ctrl-bottom-left) {
+    left: calc(12px + 44px + 10px);
+    bottom: calc(var(--bottom-nav-height) + 23px);
+  }
+
   :global(#map .maplibregl-ctrl-bottom-right) {
-    margin-bottom: var(--bottom-nav-height);
+    right: 12px;
+    bottom: calc(var(--bottom-nav-height) + 8px);
   }
 
-  /* The attribution control starts in its expanded "compact-show" state (full
-     credit text, not just the (i) icon) until the map is first dragged. On a
-     390px-wide viewport that expanded pill can grow wide enough to run under
-     the bottom-right scale control — cap it and ellipsize (MOBILE-10). */
+  /* The attribution starts expanded until the map is first moved; on a 390px
+     viewport that pill can run under the scale bar — cap it (MOBILE-10). */
   :global(#map .maplibregl-ctrl-attrib.maplibregl-compact-show) {
     max-width: calc(100vw - 130px);
   }
@@ -49,16 +126,16 @@
 
 .pickBanner {
   position: absolute;
-  top: 50px;
-  left: 50%;
+  top: 72px;
+  left: calc(var(--map-inset-left) + (100% - var(--map-inset-left)) / 2);
   transform: translateX(-50%);
   z-index: 2;
+  padding: 8px 16px;
+  border-radius: var(--radius-pill);
   background: var(--theme-primary);
   color: var(--theme-text-primary);
-  padding: 0.6em 1.2em;
-  border-radius: var(--radius-sm);
+  font-size: var(--font-sm);
   box-shadow: var(--shadow-float);
-  font-size: var(--text-sm);
   pointer-events: none;
 }
 
@@ -87,39 +164,23 @@
   gap: 8px;
 }
 
+/* Ink on the accent: the text colour on the accent failed AA. */
 .geoPdfButton {
-  padding: 0.6em 1.5em;
-  background: var(--theme-accent);
-  color: var(--theme-text-primary);
+  min-height: 44px;
+  padding: 0 20px;
   border: none;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-size: var(--text-sm);
-  font-weight: 500;
+  border-radius: var(--radius-pill);
+  background: var(--theme-accent);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--font-sm);
+  font-weight: 600;
   box-shadow: var(--shadow-float);
+  cursor: pointer;
 }
 
 .geoPdfButton:hover {
-  background: color-mix(in srgb, var(--theme-accent) 80%, transparent);
-}
-
-/* FEUI-003: 3D terrain toggle — same floating-control shape as .pickBanner
-   (theme tokens, not hardcoded white/black). */
-.terrainToggle {
-  position: absolute;
-  top: 145px;
-  right: 10px;
-  z-index: 1000;
-  width: 29px;
-  height: 29px;
-  color: var(--theme-text-primary);
-  background: var(--theme-primary);
-  border: none;
-  border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-float);
-  font-size: var(--text-sm);
-  font-weight: bold;
-  cursor: pointer;
+  background: color-mix(in srgb, var(--theme-accent) 85%, var(--theme-text-primary));
 }
 
 /* Draggable vertex handle for the route draw/edit tool. Larger than the

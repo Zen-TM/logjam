@@ -21,9 +21,10 @@
   --completed-place-color: #22c55e; /* owned place with a logged trip */
 
   /* Layout */
-  --nav-rail-width: 56px;
-  --panel-width: 280px;
-  --bottom-nav-height: 56px;
+  --nav-rail-width: 84px;
+  --panel-width: 440px;
+  --filter-sheet-width: 380px;
+  --bottom-nav-height: 68px;
 
   /* Border radius — the same scale as Logjam GPS (RADIUS in @logjam/shared). */
   --radius-sm: 4px;

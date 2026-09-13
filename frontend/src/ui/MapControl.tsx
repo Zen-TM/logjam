@@ -3,22 +3,25 @@ import type { LucideIcon } from "lucide-react";
 import classes from "./MapControl.module.css";
 
 /**
- * A button floating over the map. `pressed` makes it a toggle (Layers open,
- * 3D on) and fills it with the accent. Floating over the map is the ONLY place
- * the kit casts a shadow.
+ * A button floating over the map. `pressed` makes it a toggle (3D on);
+ * `expanded` makes it a disclosure for the panel it opens (Layers, Tools).
+ * Either fills it with the accent while on. Floating over the map is the ONLY
+ * place the kit casts a shadow.
  */
 export function MapButton({
   icon: Icon,
   label,
   pressed,
+  expanded,
   className,
   ref,
   type = "button",
   ...rest
-}: Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children" | "aria-label" | "aria-pressed"> & {
+}: Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children" | "aria-label" | "aria-pressed" | "aria-expanded"> & {
   icon: LucideIcon;
   label: string;
   pressed?: boolean;
+  expanded?: boolean;
   ref?: Ref<HTMLButtonElement>;
 }) {
   return (
@@ -28,6 +31,7 @@ export function MapButton({
       aria-label={label}
       title={label}
       aria-pressed={pressed}
+      aria-expanded={expanded}
       className={[classes.mapButton, className].filter(Boolean).join(" ")}
       {...rest}
     >

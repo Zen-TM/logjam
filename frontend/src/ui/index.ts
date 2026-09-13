@@ -12,3 +12,4 @@ export { Tooltip } from "./Tooltip";
 export { SheetSection, SideSheet } from "./SideSheet";
 export { EmptyState, SelectionBar, Toast, type ToastSeverity } from "./Feedback";
 export { MapButton, MapButtonGroup, Notice } from "./MapControl";
+export { useEscape } from "./useEscape";

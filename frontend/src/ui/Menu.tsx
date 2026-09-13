@@ -22,6 +22,11 @@ export type MenuItem = {
   danger?: boolean;
   /** A keyboard shortcut, shown right-aligned. */
   hint?: string;
+  /** A count, shown right-aligned as a badge. The badge is hidden from
+   *  assistive tech, so put the count in `accessibleLabel`. */
+  badge?: number;
+  /** The item's accessible name when it must say more than `label`. */
+  accessibleLabel?: string;
   disabled?: boolean;
 };
 
@@ -176,6 +181,7 @@ export function Menu({
               type="button"
               role="menuitem"
               tabIndex={-1}
+              aria-label={entry.accessibleLabel}
               disabled={entry.disabled}
               className={[classes.item, entry.danger && classes.danger].filter(Boolean).join(" ")}
               onClick={() => {
@@ -186,6 +192,11 @@ export function Menu({
               {Icon && <Icon size={18} aria-hidden className={classes.glyph} />}
               <span className={classes.label}>{entry.label}</span>
               {entry.hint && <kbd className={classes.hint}>{entry.hint}</kbd>}
+              {entry.badge != null && entry.badge > 0 && (
+                <span className={classes.badge} aria-hidden>
+                  {entry.badge}
+                </span>
+              )}
             </button>
           );
         })}

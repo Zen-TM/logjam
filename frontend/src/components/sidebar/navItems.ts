@@ -1,84 +1,58 @@
 import {
-  Layers,
+  Bell,
+  BookOpen,
+  CircleUser,
   Map,
   MapPin,
-  Mountain,
   Route,
-  BookOpen,
-  BarChart3,
+  Settings,
   Users,
-  Bell,
-  CircleUser,
+  type LucideIcon,
 } from "lucide-react";
 import type { PanelId } from "./panels";
 
 /** Panels reachable from the nav. `place-detail` and `route-detail` are opened
- *  programmatically (from the map / place list), never from a nav item, so
- *  neither is one. */
+ *  programmatically (from the map / a list), never from a nav item. */
 export type NavItemId = Exclude<PanelId, "place-detail" | "route-detail">;
 
 export type NavItem = {
   id: NavItemId;
   label: string;
-  Icon: typeof Layers;
+  Icon: LucideIcon;
 };
 
 /** Unread/attention counts keyed by the item they belong to. A count of 0 or an
- *  absent key means "no badge".
- *
- *  Adding a second badged item is one key here plus one line at the App call
- *  site — `More`'s aggregate badge and the in-sheet per-item badges both fall
- *  out of this map with no change to NavRail. (`friends` is the likely next
- *  one: App.tsx already loads `friendRequests` for the Friends panel.) */
+ *  absent key means "no badge". */
 export type NavBadgeCounts = Partial<Record<NavItemId, number>>;
 
-/** Feature panels — the desktop rail's top group. */
-const TOP_ITEMS: NavItem[] = [
-  { id: "layers", label: "Layers", Icon: Layers },
+/** The pages — the rail's top group. */
+const PAGE_ITEMS: NavItem[] = [
   { id: "places", label: "Places", Icon: MapPin },
-  { id: "geopdfs", label: "GeoPDFs", Icon: Map },
-  { id: "lidar", label: "LiDAR", Icon: Mountain },
-  { id: "routes", label: "Routes", Icon: Route },
-  { id: "trip-logs", label: "Trip Logs", Icon: BookOpen },
-  { id: "analytics", label: "Analytics", Icon: BarChart3 },
+  { id: "logs", label: "Logs", Icon: BookOpen },
+  // The umbrella for routes, recorded tracks and imports. "Routes" would name
+  // one of its own three kinds.
+  { id: "ways", label: "Ways", Icon: Route },
+  { id: "maps", label: "Maps", Icon: Map },
   { id: "friends", label: "Friends", Icon: Users },
 ];
 
-/** Personal/status panels — the desktop rail's bottom group, below the spacer. */
-const BOTTOM_ITEMS: NavItem[] = [
-  { id: "notifications", label: "Alerts", Icon: Bell },
+/** Personal and status pages — the rail's bottom group, below the spacer. */
+const PERSONAL_ITEMS: NavItem[] = [
+  { id: "inbox", label: "Inbox", Icon: Bell },
   { id: "account", label: "Account", Icon: CircleUser },
+  { id: "settings", label: "Settings", Icon: Settings },
 ];
 
-const ALL_ITEMS: NavItem[] = [...TOP_ITEMS, ...BOTTOM_ITEMS];
+const ALL_ITEMS: NavItem[] = [...PAGE_ITEMS, ...PERSONAL_ITEMS];
 
-/** The three panels that stay on the rail at phone widths, in rail order.
- *  Chosen as the surfaces used *during* a trip: what's on the map, which place,
- *  and logging it. Everything else is planning, review, or admin. */
-const MOBILE_RAIL_IDS: NavItemId[] = ["layers", "places", "trip-logs"];
+/** Narrow web keeps Logjam GPS's tab bar — Map · Places · Logs · Ways · More —
+ *  so a user who knows one knows the other. `Map` is not a page (it closes the
+ *  open one), so it is not in this list. */
+const NARROW_TAB_IDS: NavItemId[] = ["places", "logs", "ways"];
 
-/** Order of the More sheet, most- to least-reachable.
- *
- *  - `notifications` first: it is the only badged item today and the reason the
- *    sheet is acceptable at all — landing on it means More's badge pays off in
- *    one glance rather than a scan.
- *  - `routes` next: the drawing tool and the lines you already have — a
- *    planning surface, but one you reach for far more than a review one.
- *  - `friends` / `analytics` next: read-only review surfaces, cheap to open.
- *  - `geopdfs` / `lidar` last of the features: frontend/CLAUDE.md calls the
- *    heavy authoring tools desktop-first, so they rank lowest on a phone.
- *  - `account` last, preserving the desktop rail's bottom-group convention. */
-const MORE_ITEM_IDS: NavItemId[] = [
-  "notifications",
-  "routes",
-  // Beside routes: both are "the lines and marks I already have", and both are
-  // consulted far more often on a phone than the authoring tools below.
-  "friends",
-  "analytics",
-  "geopdfs",
-  "lidar",
-  "account",
-];
+/** The More menu, most- to least-reached. Inbox first: it is the badged item,
+ *  and landing on it is what makes More's badge pay off in one glance. */
+const MORE_ITEM_IDS: NavItemId[] = ["inbox", "maps", "friends", "account", "settings"];
 
 function itemById(id: NavItemId): NavItem {
   const item = ALL_ITEMS.find((candidate) => candidate.id === id);
@@ -87,45 +61,44 @@ function itemById(id: NavItemId): NavItem {
 }
 
 export type NavPartition = {
-  /** Rendered directly on the rail. */
+  /** Rendered directly on the rail (or as tabs on narrow web). */
   railItems: NavItem[];
-  /** Rendered inside the More sheet. Empty on desktop, where More isn't shown. */
+  /** Rendered inside More. Empty on desktop, where More isn't shown. */
   moreItems: NavItem[];
   /** Desktop renders a flex spacer between the top and bottom groups. */
   spacerAfterIndex: number | null;
 };
 
-/** Split the nav into rail items and More-sheet items.
- *
- *  Desktop keeps every item on the rail: the rail is vertical and ~492px of
- *  items has room to spare, so More would cost a click and buy nothing. At
- *  phone widths the rail is a horizontal strip and nine items measure 484px
- *  against a 390px viewport, so six of them move into More. */
-export function partitionNavItems(isMobile: boolean): NavPartition {
-  if (!isMobile) {
+/** Split the nav into rail items and More items. The 84px desktop rail holds
+ *  all eight; narrow web holds three tabs beside Map and More. */
+export function partitionNavItems(isNarrow: boolean): NavPartition {
+  if (!isNarrow) {
     return {
       railItems: ALL_ITEMS,
       moreItems: [],
-      spacerAfterIndex: TOP_ITEMS.length - 1,
+      spacerAfterIndex: PAGE_ITEMS.length - 1,
     };
   }
   return {
-    railItems: MOBILE_RAIL_IDS.map(itemById),
+    railItems: NARROW_TAB_IDS.map(itemById),
     moreItems: MORE_ITEM_IDS.map(itemById),
     spacerAfterIndex: null,
   };
 }
 
-/** Total badge count across the given items. Drives More's badge: More is
- *  badged whenever anything inside it is. */
+/** Total badge count across the given items. Drives More's badge. */
 export function aggregateBadgeCount(items: NavItem[], counts: NavBadgeCounts): number {
   return items.reduce((sum, item) => sum + (counts[item.id] ?? 0), 0);
 }
 
-/** True when the open panel lives inside More, so More reads as the selected
- *  rail item. `place-detail` isn't a nav item and selects nothing. */
+/** True when the open panel lives inside More, so More reads as selected. */
 export function isPanelInMore(moreItems: NavItem[], activePanel: PanelId | null): boolean {
   return moreItems.some((item) => item.id === activePanel);
 }
 
-export const NAV_ITEMS_FOR_TEST = { ALL_ITEMS, TOP_ITEMS, BOTTOM_ITEMS };
+/** "Inbox, 3 unread" — the badge is aria-hidden, so its count joins the name. */
+export function labelWithBadge(label: string, count: number): string {
+  return count > 0 ? `${label}, ${count} unread` : label;
+}
+
+export const NAV_ITEMS_FOR_TEST = { ALL_ITEMS, PAGE_ITEMS, PERSONAL_ITEMS };

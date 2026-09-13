@@ -21,7 +21,7 @@ import classes from "./App.module.css";
 import type { TBbox } from "./map/Map";
 import type { TFilters, TPlace, TPlaceType, GeoPdfJobView } from "../placeUtils";
 import type { ScopedCustomFieldDef, StandaloneFile } from "@logjam/shared";
-import type { PanelId } from "./sidebar/panels";
+import { PANEL_TITLES, type LogsView, type MapsView, type PanelId } from "./sidebar/panels";
 import { TOPO_LAYERS } from "../topoLayerTypes";
 import type { CompletedTopoJob, CompletedOverlaysResponse } from "../topoLayerTypes";
 import {
@@ -55,8 +55,19 @@ import {
   apiFetch,
   getTopoExport,
 } from "../placeUtils";
-import FilterStatusChip from "./map/FilterStatusChip";
-import FilterEmptyState from "./map/FilterEmptyState";
+import LayersPopover from "./map/LayersPopover";
+import type { MapTool } from "./map/MapChrome";
+import { IconButton, MapButton, Notice } from "../ui";
+import {
+  FileText,
+  Filter,
+  Layers,
+  MapPinPlus,
+  Mountain,
+  PenTool,
+  SquareDashed,
+  X,
+} from "lucide-react";
 import {
   CURRENT_CONSENT_VERSION,
   PENDING_CONSENT_STORAGE_KEY,
@@ -129,6 +140,13 @@ function App() {
   const [filtersAccordionSignal, setFiltersAccordionSignal] = useState(0);
   const [selectedPlaceID, setSelectedPlaceID] = useState<string | null>(null);
   const [activePanel, setActivePanel] = useState<PanelId | null>(null);
+  // Which view the two-view pages open on — remembered for the session, so a
+  // return to Logs lands where the user left it.
+  const [logsView, setLogsView] = useStoredState<LogsView>("logjam.logsView", "logs", sessionStorage);
+  const [mapsView, setMapsView] = useStoredState<MapsView>("logjam.mapsView", "geopdfs", sessionStorage);
+  // What is on the map is a popover over the map, not a page.
+  const [layersOpen, setLayersOpen] = useState(false);
+  const layersButtonRef = useRef<HTMLButtonElement>(null);
   // Vector by default: same OSM cartography as the old raster default, drawn
   // locally rather than fetched as pictures, and it carries the labels at every
   // zoom instead of stopping where the raster cache does.
@@ -425,6 +443,9 @@ function App() {
    * renders.
    */
   const mapBoundsRef = useRef<TBbox | null>(null);
+  // The same bounds as state, for the Layers popover's "In this view". Set on
+  // moveend only, so it re-renders once per gesture rather than per frame.
+  const [mapBounds, setMapBounds] = useState<TBbox | null>(null);
 
   const startFilterAreaSelection = useCallback(() => {
     setActivePanel(null);
@@ -437,21 +458,7 @@ function App() {
 
   // Reflect the active panel in the document title (WCAG 2.4.2 Page Titled).
   useEffect(() => {
-    const panelTitles: Record<PanelId, string> = {
-      layers: "Layers",
-      places: "Places",
-      geopdfs: "GeoPDFs",
-      lidar: "LiDAR",
-      routes: "Routes",
-      "trip-logs": "Trip Logs",
-      analytics: "Analytics",
-      friends: "Friends",
-      notifications: "Alerts",
-      account: "Account",
-      "place-detail": "Place",
-      "route-detail": "Route",
-    };
-    document.title = activePanel ? `${panelTitles[activePanel]} — Logjam` : "Logjam";
+    document.title = activePanel ? `${PANEL_TITLES[activePanel]} — Logjam Web` : "Logjam Web";
   }, [activePanel]);
 
   // When switching away from place-detail via NavRail, clear selectedPlaceID
@@ -495,7 +502,7 @@ function App() {
     useSharedPlaces(loadsUserData);
   // Also fetched for the Routes panel, which lists the same track files.
   const { tracks: placeTracks, refetch: refetchPlaceTracks } = usePlaceTracks(
-    loadsUserData && (showPlaceTracks || activePanel === "routes"),
+    loadsUserData && (showPlaceTracks || activePanel === "ways"),
   );
   // Standalone files: the user's own imports and Logjam GPS recordings. They
   // hang off no place, so the Routes panel is the only place they surface.
@@ -507,7 +514,7 @@ function App() {
     error: standaloneFilesError,
     refetch: refetchStandaloneFiles,
   } = useStandaloneFiles(
-    loadsUserData && (activePanel === "routes" || shownStandaloneIds.length > 0),
+    loadsUserData && (activePanel === "ways" || shownStandaloneIds.length > 0),
   );
   const { tracks: standaloneTracks } = useStandaloneTracks(
     standaloneFiles,
@@ -543,7 +550,7 @@ function App() {
   // Routes load whenever the layer is on OR a draw/edit session is live (the
   // editor needs the row it is editing even with the layer toggled off).
   const { routes, refetch: refetchRoutes } = useRoutes(
-    loadsUserData && (showRoutes || drawingRoute || activePanel === "routes"),
+    loadsUserData && (showRoutes || drawingRoute || activePanel === "ways"),
   );
 
 
@@ -603,10 +610,10 @@ function App() {
   // dialog must offer every one or a user could never make their first canyon.
   const [placeTypes, setPlaceTypes] = useState<TPlaceType[]>([]);
 
-  // Refresh analytics whenever the analytics panel opens
+  // Refresh analytics whenever Logs opens on its Stats view
   useEffect(() => {
-    if (activePanel === "analytics" && loadsUserData) refetchAnalytics();
-  }, [activePanel, loadsUserData]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (activePanel === "logs" && logsView === "stats" && loadsUserData) refetchAnalytics();
+  }, [activePanel, logsView, loadsUserData]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Surface background data-load errors as toasts
   useEffect(() => { if (placesError) toast.error(placesError); }, [placesError, toast]);
@@ -955,15 +962,16 @@ function App() {
         if (view.downloadUrl) {
           triggerDownload(view.downloadUrl);
         } else {
-          setActivePanel("lidar");
-          toast.error("Export download expired — re-open it from the LiDAR panel.");
+          setMapsView("lidar");
+          setActivePanel("maps");
+          toast.error("Export download expired. Open it again from Maps, LiDAR topos.");
         }
       })
       .catch((err) => {
         console.error(err);
         toast.error(messageFromError(err, "Couldn't load the export."));
       });
-  }, [loadsUserData, toast]);
+  }, [loadsUserData, toast, setMapsView]);
 
   // Resolve a stashed ?geoPdfJob=<id> deep link: open the GeoPDFs panel, whose
   // job list carries per-item download buttons (and auto-download for jobs this
@@ -973,9 +981,10 @@ function App() {
     const geoPdfJobId = sessionStorage.getItem("pendingGeoPdfJobId");
     if (!geoPdfJobId) return;
     sessionStorage.removeItem("pendingGeoPdfJobId");
-    setActivePanel("geopdfs");
+    setMapsView("geopdfs");
+    setActivePanel("maps");
     setGeoPdfJobsRefetch((n) => n + 1);
-  }, [loadsUserData]);
+  }, [loadsUserData, setMapsView]);
 
   // First login (empty account): offer a non-forced onboarding choice once,
   // after the first place fetch completes. The user picks RopeWiki, file
@@ -1121,6 +1130,51 @@ function App() {
 
   const dimUI =
     pickingCoords || selectingArea || selectingFilterArea || selectingGeoPdfExtent;
+
+  // A filter changes what the MAP shows too, so the map says so while the
+  // Places page is closed or scrolled away.
+  const notices =
+    filtersActive && !dimUI ? (
+      <Notice
+        icon={Filter}
+        action={<IconButton icon={X} label="Clear filters" size={16} onClick={clearFilters} />}
+      >
+        Showing {filteredPlaces.length} of {allPlaces.length} places
+      </Notice>
+    ) : null;
+
+  // Verbs that START on the map. Each opens an existing flow; there is no web
+  // measure tool, so none is offered.
+  const mapTools: MapTool[] = [
+    { id: "route", label: "Draw a route", icon: PenTool, onSelect: startDrawingRoute },
+    { id: "place", label: "Add a place", icon: MapPinPlus, onSelect: () => setShowAdd(true) },
+    {
+      id: "make-map",
+      label: "Make a map of an area",
+      icon: SquareDashed,
+      menu: [
+        {
+          id: "topo",
+          label: "LiDAR topo",
+          icon: Mountain,
+          onSelect: () => {
+            setActivePanel(null);
+            setSelectingTopoBbox(true);
+          },
+        },
+        {
+          id: "geopdf",
+          label: "GeoPDF",
+          icon: FileText,
+          onSelect: () => {
+            setEditingGeoPdfTemplate(undefined);
+            setInitialGeoPdfTemplateId(null);
+            setShowGeoPdf(true);
+          },
+        },
+      ],
+    },
+  ];
   // Mobile: any map-selection flow needs the bottom sheet out of the way so the
   // map is tappable. Collapses the sheet to peek; restored when the flow ends.
   const mapInteractionActive =
@@ -1191,7 +1245,7 @@ function App() {
         <NavRail
           activePanel={activePanel}
           onPanelChange={handlePanelChange}
-          badgeCounts={{ notifications: unreadCount }}
+          badgeCounts={{ inbox: unreadCount }}
         />
         <SidebarPanel
           activePanel={activePanel}
@@ -1200,14 +1254,10 @@ function App() {
             setLidarEnabled(true);
             setTopoFlyTarget(footprint);
           }}
-          showOwnedPlaces={showOwnedPlaces}
-          setShowOwnedPlaces={setShowOwnedPlaces}
-          showSharedPlaces={showSharedPlaces}
-          setShowSharedPlaces={setShowSharedPlaces}
-          showPlaceTracks={showPlaceTracks}
-          setShowPlaceTracks={setShowPlaceTracks}
-          showRoutes={showRoutes}
-          setShowRoutes={setShowRoutes}
+          logsView={logsView}
+          onLogsViewChange={setLogsView}
+          mapsView={mapsView}
+          onMapsViewChange={setMapsView}
           onStartDrawingRoute={startDrawingRoute}
           selectedRoute={selectedRoute}
           allRoutes={routes}
@@ -1236,17 +1286,6 @@ function App() {
           currentUserId={currentUser?.id ?? null}
           onEditRoute={startEditingRoute}
           onRoutesChanged={refetchRoutes}
-          lidarEnabled={lidarEnabled}
-          setLidarEnabled={setLidarEnabled}
-          lidarLayerToggles={lidarLayerToggles}
-          setLidarLayerToggles={setLidarLayerToggles}
-          lidarLayerOrder={lidarLayerOrder}
-          setLidarLayerOrder={setLidarLayerOrder}
-          unavailableTopoLayerNames={unavailableTopoLayerNames}
-          baseLayers={BASE_LAYERS}
-          activeLayerId={activeLayerId}
-          onActiveLayerChange={setActiveLayerId}
-          mapView={mapCenter}
           places={places}
           placesTotal={placesTotal}
           sharedPlaces={sharedPlaces}
@@ -1392,6 +1431,7 @@ function App() {
         }}
         onMapBoundsChange={(bounds) => {
           mapBoundsRef.current = bounds;
+          setMapBounds(bounds);
         }}
         selectingBbox={selectingTopoBbox}
         onBboxSelected={(bbox) => {
@@ -1423,10 +1463,53 @@ function App() {
         onTopoFlyConsumed={() => setTopoFlyTarget(null)}
         flyToPlace={flyToPlace}
         onFlyToPlaceConsumed={() => setFlyToPlace(null)}
-        sidebarOpen={activePanel !== null}
+        panelOpen={activePanel !== null}
+        layersButton={
+          <MapButton
+            ref={layersButtonRef}
+            icon={Layers}
+            label="Layers"
+            expanded={layersOpen}
+            onClick={() => setLayersOpen((open) => !open)}
+          />
+        }
+        mapTools={mapTools}
+        notices={notices}
         onTopoSourceUnavailable={handleTopoSourceUnavailable}
       />
       </main>
+
+      <LayersPopover
+        open={layersOpen}
+        onClose={() => setLayersOpen(false)}
+        anchorRef={layersButtonRef}
+        showOwnedPlaces={showOwnedPlaces}
+        setShowOwnedPlaces={setShowOwnedPlaces}
+        showSharedPlaces={showSharedPlaces}
+        setShowSharedPlaces={setShowSharedPlaces}
+        showPlaceTracks={showPlaceTracks}
+        setShowPlaceTracks={setShowPlaceTracks}
+        showRoutes={showRoutes}
+        setShowRoutes={setShowRoutes}
+        ownedPlaceCount={places.length}
+        sharedPlaceCount={sharedPlaces.length}
+        routeCount={showRoutes ? routes.length : null}
+        lidarEnabled={lidarEnabled}
+        setLidarEnabled={setLidarEnabled}
+        lidarLayerToggles={lidarLayerToggles}
+        setLidarLayerToggles={setLidarLayerToggles}
+        lidarLayerOrder={lidarLayerOrder}
+        setLidarLayerOrder={setLidarLayerOrder}
+        unavailableTopoLayerNames={unavailableTopoLayerNames}
+        completedTopoJobs={completedTopoJobs}
+        lidarJobToggles={lidarJobToggles}
+        setLidarJobToggles={setLidarJobToggles}
+        mapBounds={mapBounds}
+        baseLayers={BASE_LAYERS}
+        activeLayerId={activeLayerId}
+        onActiveLayerChange={setActiveLayerId}
+        mapView={mapCenter}
+      />
 
       {drawingRoute && (
         <RouteDrawPanel
@@ -1521,21 +1604,6 @@ function App() {
             </Button>
           )}
         </div>
-      )}
-
-      {filtersActive && !dimUI && (
-        <FilterStatusChip
-          filteredCount={filteredPlaces.length}
-          totalCount={allPlaces.length}
-          onOpenFilters={() => {
-            setActivePanel("places");
-            setFiltersAccordionSignal((n) => n + 1);
-          }}
-          onClearFilters={clearFilters}
-        />
-      )}
-      {filtersActive && placesLoaded && !dimUI && filteredPlaces.length === 0 && (
-        <FilterEmptyState onClearFilters={clearFilters} />
       )}
 
       {/* First-login onboarding choice */}

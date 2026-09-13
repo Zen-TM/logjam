@@ -3,7 +3,7 @@ import { X } from "lucide-react";
 import { useIsMobile } from "../../useIsMobile";
 import BottomSheet from "./BottomSheet";
 import type { SheetSnap } from "./BottomSheet";
-import type { PanelId } from "./panels";
+import { PANEL_TITLES, type LogsView, type MapsView, type PanelId } from "./panels";
 import type {
   TPlace,
   TFilters,
@@ -21,8 +21,8 @@ import type { StandaloneFile, VectorStyleSettings, TopoExportJobView, ScopedCust
 import type { TopoJob, GeoJsonPolygonal } from "../dialogs/TopoDialog";
 import type { CompletedTopoJob } from "../../topoLayerTypes";
 import type { GeoPdfTemplate } from "../dialogs/GeoPdfDialog";
+import { ChipRail, IconButton } from "../../ui";
 import classes from "./SidebarPanel.module.css";
-import LayersPanel from "./panels/LayersPanel";
 import PlacesPanel from "./panels/PlacesPanel";
 import GeoPdfsPanel from "./panels/GeoPdfsPanel";
 import LidarPanel from "./panels/LidarPanel";
@@ -35,51 +35,25 @@ import AccountPanel from "./panels/AccountPanel";
 import TripLogsPanel from "./panels/TripLogsPanel";
 import AnalyticsPanel from "./panels/AnalyticsPanel";
 
-const PANEL_TITLES: Record<PanelId, string> = {
-  layers: "Layers",
-  places: "Places",
-  geopdfs: "GeoPDFs",
-  lidar: "LiDAR Topos",
-  routes: "Routes",
-  "trip-logs": "Trip Logs",
-  analytics: "Analytics",
-  friends: "Friends",
-  // Matches the NavRail label "Alerts" (MOBILE-11) — the nav item can't take
-  // the longer "Notifications" without overflowing its fixed-width slot in
-  // the already-crowded bottom nav strip (see MOBILE-7), so this header
-  // aligns to the nav instead. NotificationsPanel.tsx's own internal copy is
-  // a separate surface, out of scope here.
-  notifications: "Alerts",
-  account: "Account",
-  "place-detail": "Place Detail",
-  "route-detail": "Route",
-};
+const LOGS_VIEWS = [
+  { value: "logs", label: "Logs" },
+  { value: "stats", label: "Stats" },
+] as const;
+
+const MAPS_VIEWS = [
+  { value: "geopdfs", label: "GeoPDFs" },
+  { value: "lidar", label: "LiDAR topos" },
+] as const;
 
 function SidebarPanel({
   activePanel,
   onClose,
   onTopoFlyTarget,
-  // Layers (merged overlays+basemap)
-  showOwnedPlaces,
-  setShowOwnedPlaces,
-  showSharedPlaces,
-  setShowSharedPlaces,
-  showPlaceTracks,
-  setShowPlaceTracks,
-  showRoutes,
-  setShowRoutes,
+  logsView,
+  onLogsViewChange,
+  mapsView,
+  onMapsViewChange,
   onStartDrawingRoute,
-  lidarEnabled,
-  setLidarEnabled,
-  lidarLayerToggles,
-  setLidarLayerToggles,
-  lidarLayerOrder,
-  setLidarLayerOrder,
-  unavailableTopoLayerNames,
-  baseLayers,
-  activeLayerId,
-  onActiveLayerChange,
-  mapView,
   // Places
   places,
   placesTotal,
@@ -175,25 +149,11 @@ function SidebarPanel({
   activePanel: PanelId | null;
   onClose: () => void;
   onTopoFlyTarget: (footprint: GeoJsonPolygonal) => void;
-  // Layers
-  showOwnedPlaces: boolean;
-  setShowOwnedPlaces: (v: boolean) => void;
-  showSharedPlaces: boolean;
-  setShowSharedPlaces: (v: boolean) => void;
-  showPlaceTracks: boolean;
-  setShowPlaceTracks: (v: boolean) => void;
-  lidarEnabled: boolean;
-  setLidarEnabled: (v: boolean) => void;
-  lidarLayerToggles: Record<string, boolean>;
-  setLidarLayerToggles: (v: Record<string, boolean> | ((prev: Record<string, boolean>) => Record<string, boolean>)) => void;
-  lidarLayerOrder: string[];
-  setLidarLayerOrder: (v: string[] | ((prev: string[]) => string[])) => void;
-  // Layer names whose PMTiles source failed to load (LAYERS-1 badge).
-  unavailableTopoLayerNames: Set<string>;
-  baseLayers: readonly { id: string; name: string; tiles: string[]; maxzoom: number }[];
-  activeLayerId: string;
-  onActiveLayerChange: (id: string) => void;
-  mapView: { lng: number; lat: number; zoom: number } | null;
+  logsView: LogsView;
+  onLogsViewChange: (view: LogsView) => void;
+  mapsView: MapsView;
+  onMapsViewChange: (view: MapsView) => void;
+  onStartDrawingRoute: () => void;
   // Places
   places: TPlace[];
   placesTotal: number | null;
@@ -249,10 +209,7 @@ function SidebarPanel({
   // Place detail
   place: TPlace | undefined;
   isOwnedPlace: boolean;
-  // Routes
-  showRoutes: boolean;
-  setShowRoutes: (v: boolean) => void;
-  onStartDrawingRoute: () => void;
+  // Ways
   selectedRoute: TRoute | null;
   allRoutes: TRoute[];
   placeTracks: PlaceTrack[];
@@ -312,7 +269,7 @@ function SidebarPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [collapseToPeek]);
 
-  // Switching panels (NavRail tap) while the sheet is at peek would otherwise
+  // Switching panels (a tab tap) while the sheet is at peek would otherwise
   // swap the panel content behind an almost-fully-collapsed sheet — the new
   // panel is effectively invisible (MOBILE-9). Raise to "half" on any panel
   // change, unless a map-pick flow is the one driving the sheet to peek (that
@@ -328,8 +285,8 @@ function SidebarPanel({
   }, [activePanel]);
 
   // Let a panel request the sheet expand to full (e.g. PlacesPanel when its
-  // filters accordion opens). Stable so the panel's effect only fires on the
-  // actual open, not every render. No-op on desktop where there's no sheet.
+  // filters open). Stable so the panel's effect only fires on the actual open,
+  // not every render. No-op on desktop where there's no sheet.
   const expandSheetToFull = useCallback(() => {
     if (isMobile) setSheetSnap("full");
   }, [isMobile]);
@@ -349,42 +306,34 @@ function SidebarPanel({
   if (!activePanel) return null;
 
   const title =
-    activePanel === "place-detail" && place
-      ? place.name
-      : PANEL_TITLES[activePanel];
+    activePanel === "place-detail" && place ? place.name : PANEL_TITLES[activePanel];
+
+  // Places opens with its own hero, which names the page; every other page
+  // keeps a plain header until it is redesigned.
+  const header =
+    activePanel === "places" ? null : (
+      <header className={classes.panelHeader}>
+        <h2 className={classes.panelTitle}>{title}</h2>
+        <IconButton icon={X} label="Close panel" onClick={onClose} />
+      </header>
+    );
+
+  const views =
+    activePanel === "logs" ? (
+      <div className={classes.views}>
+        <ChipRail label="Logs view" options={LOGS_VIEWS} value={logsView} onChange={onLogsViewChange} />
+      </div>
+    ) : activePanel === "maps" ? (
+      <div className={classes.views}>
+        <ChipRail label="Maps view" options={MAPS_VIEWS} value={mapsView} onChange={onMapsViewChange} />
+      </div>
+    ) : null;
 
   const panelContent = (
     <>
-      <div className={classes.panelHeader}>
-        <h2 className={classes.panelTitle}>{title}</h2>
-        <button className={classes.closeButton} onClick={onClose} aria-label="Close panel">
-          <X size={18} />
-        </button>
-      </div>
+      {header}
+      {views}
       <div className={classes.panelBody} data-active-panel={activePanel}>
-        {activePanel === "layers" && (
-          <LayersPanel
-            showOwnedPlaces={showOwnedPlaces}
-            setShowOwnedPlaces={setShowOwnedPlaces}
-            showSharedPlaces={showSharedPlaces}
-            setShowSharedPlaces={setShowSharedPlaces}
-            showPlaceTracks={showPlaceTracks}
-            setShowPlaceTracks={setShowPlaceTracks}
-            showRoutes={showRoutes}
-            setShowRoutes={setShowRoutes}
-            lidarEnabled={lidarEnabled}
-            setLidarEnabled={setLidarEnabled}
-            lidarLayerToggles={lidarLayerToggles}
-            setLidarLayerToggles={setLidarLayerToggles}
-            lidarLayerOrder={lidarLayerOrder}
-            setLidarLayerOrder={setLidarLayerOrder}
-            unavailableTopoLayerNames={unavailableTopoLayerNames}
-            layers={baseLayers}
-            activeLayerId={activeLayerId}
-            onActiveLayerChange={onActiveLayerChange}
-            mapView={mapView}
-          />
-        )}
         {activePanel === "places" && (
           <PlacesPanel
             places={places}
@@ -410,7 +359,7 @@ function SidebarPanel({
             onExpandSheet={expandSheetToFull}
           />
         )}
-        {activePanel === "geopdfs" && (
+        {activePanel === "maps" && mapsView === "geopdfs" && (
           <GeoPdfsPanel
             friends={friends}
             onOpenGeoPdf={onOpenGeoPdf}
@@ -421,7 +370,7 @@ function SidebarPanel({
             geoPdfJobsRefetch={geoPdfJobsRefetch}
           />
         )}
-        {activePanel === "lidar" && (
+        {activePanel === "maps" && mapsView === "lidar" && (
           <LidarPanel
             friends={friends}
             activeTopoJobs={activeTopoJobs}
@@ -451,7 +400,7 @@ function SidebarPanel({
             onRefetchNotifications={onRefetchNotifications}
           />
         )}
-        {activePanel === "notifications" && (
+        {activePanel === "inbox" && (
           <NotificationsPanel
             notifications={notifications}
             notificationsTotal={notificationsTotal}
@@ -462,7 +411,7 @@ function SidebarPanel({
             onTopoFlyTarget={onTopoFlyTarget}
           />
         )}
-        {activePanel === "analytics" && (
+        {activePanel === "logs" && logsView === "stats" && (
           <AnalyticsPanel
             analytics={analytics}
             loading={analyticsLoading}
@@ -473,7 +422,7 @@ function SidebarPanel({
             onQuotaChanged={onQuotaChanged}
           />
         )}
-        {activePanel === "trip-logs" && (
+        {activePanel === "logs" && logsView === "logs" && (
           <TripLogsPanel
             tripLogs={tripLogs}
             tripLogsTotal={tripLogsTotal}
@@ -490,8 +439,9 @@ function SidebarPanel({
             onOpenUnifiedImport={onOpenUnifiedImport}
           />
         )}
-        {activePanel === "account" && (
+        {(activePanel === "account" || activePanel === "settings") && (
           <AccountPanel
+            view={activePanel}
             currentUser={currentUser}
             customFieldDefs={customFieldDefs}
             onCustomFieldDefsChange={onCustomFieldDefsChange}
@@ -538,7 +488,7 @@ function SidebarPanel({
             onHoverPosition={onRouteHoverPosition}
           />
         )}
-        {activePanel === "routes" && (
+        {activePanel === "ways" && (
           <RoutesPanel
             routes={allRoutes}
             currentUserId={currentUserId}
@@ -569,7 +519,11 @@ function SidebarPanel({
     );
   }
 
-  return <div className={classes.panel}>{panelContent}</div>;
+  return (
+    <aside className={classes.panel} aria-label={title}>
+      {panelContent}
+    </aside>
+  );
 }
 
 export default SidebarPanel;

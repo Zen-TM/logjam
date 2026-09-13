@@ -61,6 +61,9 @@ function isTerminalTopoSourceError(error: unknown): boolean {
 import { useMediaQuery } from "@mui/material";
 import classes from "./Map.module.css";
 import MapSearchBox from "./MapSearchBox";
+import MapChrome, { type MapTool } from "./MapChrome";
+import { collectLngLatPairs } from "./topoFootprint";
+import type { ReactNode } from "react";
 import { MOBILE_MAX_WIDTH_PX } from "../../useIsMobile";
 import type {
   TPlace,
@@ -124,22 +127,6 @@ function readCssVar(name: string, fallback: string): string {
   return value || fallback;
 }
 
-/**
- * Collect every [lng, lat] position out of a GeoJSON geometry's `coordinates`,
- * regardless of nesting depth. A topo footprint is a Polygon for a contiguous
- * capture but a MultiPolygon for a disconnected one — the extra nesting level
- * meant a plain `.flat()` left rings (not positions), so Math.min(...) of arrays
- * produced NaN and fitBounds threw "Invalid LngLat object: (NaN, NaN)". Walking
- * to the numeric leaf pairs handles Polygon, MultiPolygon, and GeometryCollection
- * coordinate shapes alike.
- */
-function collectLngLatPairs(node: unknown): [number, number][] {
-  if (!Array.isArray(node)) return [];
-  if (typeof node[0] === "number" && typeof node[1] === "number") {
-    return [[node[0], node[1]]];
-  }
-  return node.flatMap(collectLngLatPairs);
-}
 
 function applyPlaceThemePaint(map: maplibregl.Map) {
   const owned = readCssVar("--owned-place-color", "#e4c5aa");
@@ -544,7 +531,11 @@ function Map({
   onTopoFlyConsumed,
   flyToPlace,
   onFlyToPlaceConsumed,
-  sidebarOpen,
+  panelOpen,
+  sheetOpen = false,
+  layersButton,
+  mapTools,
+  notices,
   onTopoSourceUnavailable,
 }: {
   filters: TFilters;
@@ -649,7 +640,15 @@ function Map({
   onTopoFlyConsumed?: () => void;
   flyToPlace?: { lat: number; lng: number } | null;
   onFlyToPlaceConsumed?: () => void;
-  sidebarOpen?: boolean;
+  /** A page is open over the map's left edge; the chrome moves clear of it. */
+  panelOpen: boolean;
+  /** A sheet is open beside that page (the Places filters). */
+  sheetOpen?: boolean;
+  /** The Layers control, owned by App because App owns what it toggles. */
+  layersButton?: ReactNode;
+  mapTools: readonly MapTool[];
+  /** Pinned notices about what the map shows right now. */
+  notices?: ReactNode;
   // Fired once per topo overlay entry (jobId-layerName) whose PMTiles source
   // failed to load (e.g. the S3 object is gone). The entry's layers/source are
   // removed so MapLibre stops retrying; App surfaces the failure (LAYERS-1).
@@ -657,6 +656,7 @@ function Map({
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  const geolocateRef = useRef<maplibregl.GeolocateControl | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
   /**
    * The map, once it is safe to attach handlers to — null before load, so the
@@ -843,46 +843,45 @@ function Map({
       attributionControl: false,
     });
 
-    map.addControl(new maplibregl.NavigationControl(), "top-right");
-    // "Where am I" is a primary question in the field, so the geolocate control
-    // sits with the navigation control rather than in a panel.
+    // Zoom, compass and locate are MapChrome's buttons over the map, driving it
+    // through its public API; MapLibre's NavigationControl is not added.
+    //
+    // "Where am I" is a primary question in the field. MapChrome's locate button
+    // calls this control's `trigger()`; the control's own button is hidden
+    // (Map.module.css) while it still draws the dot, the accuracy circle and
+    // follow mode.
     //
     // Privacy: this is entirely browser-native. MapLibre reads the position via
     // navigator.geolocation and renders it as a map marker in this page — the
     // position is never sent to the API, and no analytics/telemetry observes it.
     // Keep it that way: do not wire the `geolocate` event to anything that
     // persists or transmits the coordinates.
+    const geolocate = new maplibregl.GeolocateControl({
+      // High accuracy: the difference between the right side of a creek and
+      // the wrong one. Costs battery, which is the correct trade for a
+      // control the user taps deliberately rather than a background watch.
+      positionOptions: { enableHighAccuracy: true, timeout: 10_000 },
+      // Follow the user as they walk. Panning away drops the camera lock into
+      // MapLibre's background state — the dot keeps updating but stops
+      // recentring, so the control can't fight the user for the viewport
+      // while they read the map ahead. Pressing it again re-locks.
+      trackUserLocation: true,
+      // Under canopy or in a slot, a confident-looking dot with 40 m of error
+      // is worse than no dot. The accuracy circle makes the error legible.
+      showAccuracyCircle: true,
+      showUserLocation: true,
+    });
+    map.addControl(geolocate, "top-right");
+    geolocateRef.current = geolocate;
+    // Compact: it collapses to an (i) once the map is moved, which OSMF's
+    // attribution guideline allows while the credit stays one press away.
+    map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-right");
     map.addControl(
-      new maplibregl.GeolocateControl({
-        // High accuracy: the difference between the right side of a creek and
-        // the wrong one. Costs battery, which is the correct trade for a
-        // control the user taps deliberately rather than a background watch.
-        positionOptions: { enableHighAccuracy: true, timeout: 10_000 },
-        // Follow the user as they walk. Panning away drops the camera lock into
-        // MapLibre's background state — the dot keeps updating but stops
-        // recentring, so the control can't fight the user for the viewport
-        // while they read the map ahead. Tapping it again re-locks.
-        trackUserLocation: true,
-        // Under canopy or in a slot, a confident-looking dot with 40 m of error
-        // is worse than no dot. The accuracy circle makes the error legible.
-        showAccuracyCircle: true,
-        showUserLocation: true,
-      }),
-      "top-right",
-    );
-    map.addControl(
-      new maplibregl.AttributionControl({ compact: true }),
-      "bottom-left",
-    );
-    map.addControl(
-      // Narrower on phone-sized viewports (MOBILE-10) so the scale bar can't
-      // grow wide enough to collide with the bottom-left attribution control,
-      // which starts in its expanded (non-icon) state until first dragged.
       new maplibregl.ScaleControl({
         unit: "metric",
-        maxWidth: window.innerWidth <= MOBILE_MAX_WIDTH_PX ? 100 : 200,
+        maxWidth: window.innerWidth <= MOBILE_MAX_WIDTH_PX ? 100 : 160,
       }),
-      "bottom-right",
+      "bottom-left",
     );
 
     // A completed topo job whose S3 outputs are gone otherwise 404s on every
@@ -1316,6 +1315,7 @@ function Map({
     return () => {
       map.remove();
       mapRef.current = null;
+      geolocateRef.current = null;
       // Reset mapLoaded so the place update effect re-runs when the map
       // reinitialises (required in React Strict Mode, which mounts twice).
       setMapLoaded(false);
@@ -2800,20 +2800,42 @@ function Map({
   };
 
   return (
-    <div id="map" className={classes.map} data-sidebar-open={sidebarOpen ? "true" : "false"}>
+    <div
+      id="map"
+      className={classes.map}
+      data-panel-open={panelOpen}
+      data-sheet-open={sheetOpen}
+    >
       <div ref={containerRef} style={{ height: "100%", width: "100%" }} />
-      {/* Button to toggle 3D terrain on and off. */}
-      <button onClick={toggleTerrain} className={classes.terrainToggle}>
-        3D
-      </button>
-
-      {/* Persistent place search — always available; stays usable during pick
-          modes for a quick fly-to. Slides right with the sidebar like the
-          attribution control. */}
-      <MapSearchBox
-        shifted={!!sidebarOpen}
-        onSelect={(lat, lon) =>
-          mapRef.current?.flyTo({ center: [lon, lat], zoom: 13, duration: 1200 })
+      <MapChrome
+        map={drawableMap}
+        geolocate={mapLoaded ? geolocateRef.current : null}
+        is3D={is3D}
+        onToggle3D={toggleTerrain}
+        layersButton={layersButton}
+        tools={mapTools}
+        notices={notices}
+        search={
+          // Always available, including during pick modes for a quick fly-to.
+          <MapSearchBox
+            places={places}
+            sharedPlaces={sharedPlaces}
+            onSelectPlace={(place) => {
+              selectPlaceRef.current(place.id);
+              if (isValidLatitude(place.latitude) && isValidLongitude(place.longitude)) {
+                setTimeout(() => {
+                  mapRef.current?.flyTo({
+                    center: [place.longitude, place.latitude],
+                    zoom: 15,
+                    duration: 1200,
+                  });
+                }, SIDEBAR_TRANSITION_MS);
+              }
+            }}
+            onSelectLocation={(lat, lon) =>
+              mapRef.current?.flyTo({ center: [lon, lat], zoom: 13, duration: 1200 })
+            }
+          />
         }
       />
       {pickingCoords && (

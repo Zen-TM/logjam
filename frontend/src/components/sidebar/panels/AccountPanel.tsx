@@ -32,6 +32,7 @@ function formatBytes(bytes: number): string {
 }
 
 function AccountPanel({
+  view,
   currentUser,
   customFieldDefs,
   onCustomFieldDefsChange,
@@ -40,6 +41,9 @@ function AccountPanel({
   placeTypes,
   onPlaceTypesChange,
 }: {
+  /** Account is who you are and what you hold; Settings is how the app behaves.
+   *  One component for now because both read the same user record. */
+  view: "account" | "settings";
   currentUser: TUser | null;
   // Custom trip-log field definitions (App-level state, shared with the trip
   // dialogs so a create/rename/delete here is immediately visible there).
@@ -160,6 +164,8 @@ function AccountPanel({
 
   return (
     <div className={classes.root}>
+      {view === "account" && (
+        <>
       <span className={classes.sectionLabel}>Username</span>
       <div className={classes.divider} />
       {currentUsername === null ? (
@@ -275,6 +281,42 @@ function AccountPanel({
         </>
       )}
 
+      <span className={classes.sectionLabel}>Your data</span>
+      <div className={classes.divider} />
+      <button
+        className={classes.exportBtn}
+        onClick={handleExport}
+        disabled={exporting}
+      >
+        {exporting ? "Preparing..." : "Download my data"}
+      </button>
+
+      <button className={classes.signOutBtn} onClick={signOut}>
+        Sign out
+      </button>
+      <button className={classes.deleteAccountBtn} onClick={() => setDeleteAccountOpen(true)}>
+        Delete account
+      </button>
+
+      {currentUsername !== null && (
+        <DeleteAccountDialog
+          open={deleteAccountOpen}
+          onClose={() => setDeleteAccountOpen(false)}
+          username={currentUsername}
+          onDeleted={signOut}
+        />
+      )}
+      <ChangeEmailDialog
+        open={changeEmailOpen}
+        onClose={() => setChangeEmailOpen(false)}
+        onSuccess={(newEmail) => setEmail(newEmail)}
+        currentEmail={email ?? ""}
+      />
+
+        </>
+      )}
+      {view === "settings" && (
+        <>
       <span className={classes.sectionLabel}>Theme</span>
       <div className={classes.divider} />
 
@@ -414,39 +456,10 @@ function AccountPanel({
         placeTypes={placeTypes}
       />
 
-      <span className={classes.sectionLabel}>Your data</span>
-      <div className={classes.divider} />
-      <button
-        className={classes.exportBtn}
-        onClick={handleExport}
-        disabled={exporting}
-      >
-        {exporting ? "Preparing..." : "Download my data"}
-      </button>
-
-      <button className={classes.signOutBtn} onClick={signOut}>
-        Sign out
-      </button>
-      <button className={classes.deleteAccountBtn} onClick={() => setDeleteAccountOpen(true)}>
-        Delete account
-      </button>
-
-      {currentUsername !== null && (
-        <DeleteAccountDialog
-          open={deleteAccountOpen}
-          onClose={() => setDeleteAccountOpen(false)}
-          username={currentUsername}
-          onDeleted={signOut}
-        />
+        </>
       )}
-      <ChangeEmailDialog
-        open={changeEmailOpen}
-        onClose={() => setChangeEmailOpen(false)}
-        onSuccess={(newEmail) => setEmail(newEmail)}
-        currentEmail={email ?? ""}
-      />
 
-      <Footer />
+      {view === "account" && <Footer />}
     </div>
   );
 }
