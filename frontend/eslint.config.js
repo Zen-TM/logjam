@@ -5,8 +5,77 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import jsxA11y from 'eslint-plugin-jsx-a11y'
 import tseslint from 'typescript-eslint'
 
+
+/**
+ * Files that still import MUI. Logjam Web is moving to its own kit
+ * (src/ui, frontend/DESIGN.md), so MUI is an ERROR everywhere else — a new file
+ * cannot reach for it. This list may only SHRINK: when a file is rebuilt on the
+ * kit, delete its line. When it is empty, delete it, the rule's exception and
+ * the @mui dependencies.
+ */
+const MUI_LEGACY_FILES = [
+  'src/components/common/ColourPicker.tsx',
+  'src/components/ConsentGate.tsx',
+  'src/components/dialogs/AddCustomFieldDialog.tsx',
+  'src/components/dialogs/AddCustomFieldForm.tsx',
+  'src/components/dialogs/ChangeEmailDialog.tsx',
+  'src/components/dialogs/ConfirmDialog.tsx',
+  'src/components/dialogs/CustomFieldInput.tsx',
+  'src/components/dialogs/DeleteAccountDialog.tsx',
+  'src/components/dialogs/DeleteCustomFieldDialog.tsx',
+  'src/components/dialogs/GeoPdfDialog.tsx',
+  'src/components/dialogs/ImportResultSummary.tsx',
+  'src/components/dialogs/MatchReview.tsx',
+  'src/components/dialogs/OnboardingChoiceDialog.tsx',
+  'src/components/dialogs/PlaceDialog.tsx',
+  'src/components/dialogs/RopeWikiReviewDialog.tsx',
+  'src/components/dialogs/RouteNameDialog.tsx',
+  'src/components/dialogs/SelectedPlacesDialog.tsx',
+  'src/components/dialogs/ShareDialog.tsx',
+  'src/components/dialogs/TopoDialog.tsx',
+  'src/components/dialogs/TopoExportControls.tsx',
+  'src/components/dialogs/TopoExportDialog.tsx',
+  'src/components/dialogs/topoSettings/AdvancedSettings.tsx',
+  'src/components/dialogs/topoSettings/AutoExportSettings.tsx',
+  'src/components/dialogs/topoSettings/HillshadeSettings.tsx',
+  'src/components/dialogs/topoSettings/SettingsRow.tsx',
+  'src/components/dialogs/topoSettings/SlopeSettings.tsx',
+  'src/components/dialogs/topoSettings/VegetationSettings.tsx',
+  'src/components/dialogs/TopoTemplateEditDialog.tsx',
+  'src/components/dialogs/TripLogDialog.tsx',
+  'src/components/dialogs/TripLogViewDialog.tsx',
+  'src/components/dialogs/UnifiedImportDialog.tsx',
+  'src/components/dialogs/ValidatedNumberField.tsx',
+  'src/components/feedback/JobRibbon.tsx',
+  'src/components/sidebar/panels/FriendSharingSection.tsx',
+  'src/components/sidebar/panels/LidarPanel.tsx',
+  'src/components/sidebar/panels/vectorStyles/VectorFeaturesForm.tsx',
+  'src/components/sidebar/panels/vectorStyles/VectorLabelSizeForm.tsx',
+  'src/components/SignIn.tsx',
+  'src/csvImport/SectionLabel.tsx',
+  'src/main.tsx',
+  'src/theme.ts',
+]
+
 export default tseslint.config(
   { ignores: ['dist'] },
+  {
+    files: ['src/**/*.{ts,tsx}'],
+    ignores: MUI_LEGACY_FILES,
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['@mui/*', '@emotion/*'],
+              message: 'Logjam Web builds on its own kit — import from src/ui (frontend/DESIGN.md).',
+            },
+          ],
+        },
+      ],
+    },
+  },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ['**/*.{ts,tsx}'],
