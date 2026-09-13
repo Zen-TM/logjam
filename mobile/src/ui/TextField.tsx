@@ -15,6 +15,9 @@ type TextFieldProps = {
    * `.focus()` once the animation has settled.
    */
   inputRef?: React.Ref<TextInput>;
+  /** Drawn beside the input box, centred on IT rather than on the label above
+   *  — e.g. a remove button. */
+  accessory?: React.ReactNode;
 } & Pick<
   TextInputProps,
   | "secureTextEntry"
@@ -40,6 +43,7 @@ export function TextField({
   error,
   multiline,
   inputRef,
+  accessory,
   ...inputProps
 }: TextFieldProps) {
   // `editable={false}` is a DISABLED field, not a live one that silently
@@ -47,19 +51,29 @@ export function TextField({
   // (dim, don't hide). Undeclared `editable` (the common case) stays full
   // opacity.
   const disabled = inputProps.editable === false;
+  const input = (
+    <TextInput
+      ref={inputRef}
+      style={[styles.input, multiline && styles.multiline, accessory != null && styles.grow]}
+      value={value}
+      onChangeText={onChangeText}
+      placeholderTextColor={theme.textMuted}
+      accessibilityLabel={label}
+      multiline={multiline}
+      {...inputProps}
+    />
+  );
   return (
     <View style={[styles.container, disabled && styles.disabled]}>
       <Text style={styles.label}>{label}</Text>
-      <TextInput
-        ref={inputRef}
-        style={[styles.input, multiline && styles.multiline]}
-        value={value}
-        onChangeText={onChangeText}
-        placeholderTextColor={theme.textMuted}
-        accessibilityLabel={label}
-        multiline={multiline}
-        {...inputProps}
-      />
+      {accessory != null ? (
+        <View style={styles.inputRow}>
+          {input}
+          {accessory}
+        </View>
+      ) : (
+        input
+      )}
       {/* Announced when it appears: a validation message that only exists on
           screen is a message a screen-reader user has to go hunting for after
           the fact. */}
@@ -92,6 +106,8 @@ const styles = StyleSheet.create({
     fontSize: fontSize.base,
     color: theme.textPrimary,
   },
+  inputRow: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
+  grow: { flex: 1 },
   multiline: { minHeight: 96, textAlignVertical: "top" },
   error: { fontSize: fontSize.sm, color: theme.warning },
 });

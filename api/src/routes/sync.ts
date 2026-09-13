@@ -41,6 +41,7 @@ import {
   SYNC_PUSH_OPS_BY_ENTITY,
   pushOpDependencies,
   asFieldValues,
+  linksCanyon,
   validatePlacePayload,
   type TripLogCustomFieldDef,
   validateRoutePayload,
@@ -55,6 +56,7 @@ import {
 import {
   parseDisplayName,
   parseTripTypes,
+  placeTypeIdsOf,
   resolvePatchedTripTypes,
   resolveTripPlaceIds,
   serializeTrip,
@@ -1080,7 +1082,7 @@ async function applyTripOp(userId: string, op: PushOp): Promise<PushOpResult> {
     const trimmedDisplayName = parseDisplayName(fields.displayName) ?? null;
     const parsedTypes = enforceCanyoningTag(
       parseTripTypes(fields.types) ?? [],
-      resolvedPlaceIds.length > 0,
+      linksCanyon(await placeTypeIdsOf(resolvedPlaceIds)),
     );
     const trip = await prisma.tripLog.create({
       data: {
@@ -1107,7 +1109,12 @@ async function applyTripOp(userId: string, op: PushOp): Promise<PushOpResult> {
   // canyoning-tag enforcement, same watermark force-touch).
   const trip = await prisma.tripLog.findUnique({
     where: { id: op.id },
-    include: { places: { orderBy: { position: "asc" }, select: { placeId: true } } },
+    include: {
+      places: {
+        orderBy: { position: "asc" },
+        select: { placeId: true, place: { select: { placeTypeId: true } } },
+      },
+    },
   });
   if (!trip || trip.userId !== userId)
     throw new AppError(404, "Trip log not found");
@@ -1122,8 +1129,11 @@ async function applyTripOp(userId: string, op: PushOp): Promise<PushOpResult> {
     resolvePatchedTripTypes({
       parsedTypes,
       storedTypes: trip.types,
-      resolvedPlaceIds,
-      storedHasLinkedPlace: trip.places.length > 0,
+      resolvedPlaceTypeIds:
+        resolvedPlaceIds !== undefined
+          ? await placeTypeIdsOf(resolvedPlaceIds)
+          : undefined,
+      storedPlaceTypeIds: trip.places.map((link) => link.place.placeTypeId),
     });
 
   const currentForConflicts: Record<string, unknown> = {
@@ -1434,10 +1444,11 @@ async function applyNotificationOp(
 // is keyed by — changing either orphans data rather than editing it. A rename
 // moves `label` only (renameCustomFieldLabel).
 //
-// `placeTypeIds` and `appliesToAllTypes` are on BOTH lists deliberately.
-// CustomFieldDefPlaceType is not a sync entity of its own, so without them a
-// definition created offline and scoped to two types could not express that
-// scoping on the wire — it would arrive unscoped and apply to nothing.
+// The scoping fields (`placeTypeIds`, `tripTypes`, `appliesToAllTypes`) are on
+// BOTH lists deliberately. CustomFieldDefPlaceType is not a sync entity of its
+// own, so without them a definition created offline and scoped to two types
+// could not express that scoping on the wire — it would arrive unscoped and
+// apply to nothing.
 const CUSTOM_FIELD_DEF_CREATE_FIELDS = new Set([
   "entity",
   "key",
@@ -1447,6 +1458,7 @@ const CUSTOM_FIELD_DEF_CREATE_FIELDS = new Set([
   "max",
   "position",
   "placeTypeIds",
+  "tripTypes",
   "appliesToAllTypes",
 ]);
 const CUSTOM_FIELD_DEF_UPDATE_FIELDS = new Set([
@@ -1456,6 +1468,7 @@ const CUSTOM_FIELD_DEF_UPDATE_FIELDS = new Set([
   "max",
   "position",
   "placeTypeIds",
+  "tripTypes",
   "appliesToAllTypes",
 ]);
 
@@ -1675,6 +1688,9 @@ async function applyCustomFieldDefOp(
       ...(parsePlaceTypeIds(fields.placeTypeIds) !== undefined
         ? { placeTypeIds: parsePlaceTypeIds(fields.placeTypeIds) }
         : {}),
+      ...(parseTripTypes(fields.tripTypes) !== undefined
+        ? { tripTypes: parseTripTypes(fields.tripTypes) }
+        : {}),
       ...(typeof fields.appliesToAllTypes === "boolean"
         ? { appliesToAllTypes: fields.appliesToAllTypes }
         : {}),
@@ -1706,6 +1722,9 @@ async function applyCustomFieldDefOp(
       : {}),
     ...(parsePlaceTypeIds(fields.placeTypeIds) !== undefined
       ? { placeTypeIds: parsePlaceTypeIds(fields.placeTypeIds) }
+      : {}),
+    ...(parseTripTypes(fields.tripTypes) !== undefined
+      ? { tripTypes: parseTripTypes(fields.tripTypes) }
       : {}),
     ...(fields.appliesToAllTypes !== undefined
       ? { appliesToAllTypes: Boolean(fields.appliesToAllTypes) }

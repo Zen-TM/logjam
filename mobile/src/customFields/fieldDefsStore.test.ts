@@ -18,6 +18,7 @@ type DefRow = {
   position: number;
   ownerId: string | null;
   placeTypeIds: string[];
+  tripTypes: string[];
   appliesToAllTypes: boolean;
 };
 
@@ -79,6 +80,7 @@ const water: ScopedCustomFieldDef = {
   type: "string",
   ownerId: "user-1",
   placeTypeIds: [],
+  tripTypes: [],
   appliesToAllTypes: true,
 };
 const party: ScopedCustomFieldDef = {
@@ -87,6 +89,7 @@ const party: ScopedCustomFieldDef = {
   type: "integer",
   ownerId: "user-1",
   placeTypeIds: [],
+  tripTypes: [],
   appliesToAllTypes: true,
 };
 
@@ -104,6 +107,7 @@ function row(def: ScopedCustomFieldDef, entity: string, position = 0): DefRow {
     // is null, and null is exactly what `??` falls back from.
     ownerId: def.ownerId === undefined ? "user-1" : def.ownerId,
     placeTypeIds: def.placeTypeIds,
+    tripTypes: def.tripTypes,
     appliesToAllTypes: def.appliesToAllTypes,
   };
 }
@@ -162,6 +166,7 @@ describe("saveFieldDefs", () => {
         entity: "tripLog",
         def: party,
         placeTypeIds: party.placeTypeIds,
+        tripTypes: party.tripTypes,
         appliesToAllTypes: party.appliesToAllTypes,
       },
     ]);
@@ -209,6 +214,7 @@ describe("saveFieldDefs", () => {
       label: "Capacity",
       type: "integer",
       placeTypeIds: ["type-campsite"],
+      tripTypes: [],
       appliesToAllTypes: false,
     };
     await saveFieldDefs("place", [capacity]);
@@ -217,8 +223,41 @@ describe("saveFieldDefs", () => {
         entity: "place",
         def: capacity,
         placeTypeIds: ["type-campsite"],
+        tripTypes: [],
         appliesToAllTypes: false,
       },
+    ]);
+  });
+
+  // A TRIP field is scoped by trip types (tags). Without them on the create and
+  // on the patch, a field set up for packrafting reaches the server scoped to
+  // nothing, or keeps its old tags after the user changed them.
+  it("carries a trip field's trip types on a create and on a rescope", async () => {
+    const flow: ScopedCustomFieldDef = {
+      key: "flow",
+      label: "Flow",
+      type: "integer",
+      placeTypeIds: [],
+      tripTypes: ["packrafting"],
+      appliesToAllTypes: false,
+    };
+    await saveFieldDefs("tripLog", [flow]);
+    expect(created).toEqual([
+      {
+        entity: "tripLog",
+        def: flow,
+        placeTypeIds: [],
+        tripTypes: ["packrafting"],
+        appliesToAllTypes: false,
+      },
+    ]);
+
+    created.length = 0;
+    defRows = [row(flow, "tripLog", 0)];
+    await saveFieldDefs("tripLog", [{ ...flow, tripTypes: ["packrafting", "bushwalking"] }]);
+    expect(created).toEqual([]);
+    expect(updated).toEqual([
+      { id: "row-flow", fields: { tripTypes: ["packrafting", "bushwalking"] } },
     ]);
   });
 
@@ -345,6 +384,7 @@ describe("a built-in definition is not the account's to change", () => {
     max: 5,
     ownerId: null,
     placeTypeIds: ["type-canyon"],
+    tripTypes: [],
     appliesToAllTypes: false,
   };
 

@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { SYSTEM_PLACE_TYPE_IDS } from "./placeTypes.js";
 import {
   CANYONING_TRIP_TYPE,
   enforceCanyoningTag,
   formatTripPlaceNames,
+  linksCanyon,
   MAX_TRIP_TYPES_PER_TRIP,
   TRIP_TYPE_SUGGESTIONS,
 } from "./tripName.js";
@@ -37,6 +39,27 @@ describe("TRIP_TYPE_SUGGESTIONS", () => {
   it("includes the core seed types", () => {
     expect(TRIP_TYPE_SUGGESTIONS).toContain("canyoning");
     expect(TRIP_TYPE_SUGGESTIONS).toContain("bushwalking");
+  });
+});
+
+describe("linksCanyon", () => {
+  it("is true when any linked place is a canyon", () => {
+    expect(
+      linksCanyon([SYSTEM_PLACE_TYPE_IDS.campsite, SYSTEM_PLACE_TYPE_IDS.canyon]),
+    ).toBe(true);
+  });
+
+  // THE REGRESSION. "Links any place" tagged a night at a campsite as
+  // canyoning, and the tag decides which trip attributes a trip is asked.
+  it("is false for a trip that links only non-canyon places", () => {
+    expect(
+      linksCanyon([SYSTEM_PLACE_TYPE_IDS.campsite, SYSTEM_PLACE_TYPE_IDS.marker]),
+    ).toBe(false);
+    expect(linksCanyon(["a-user-type-id"])).toBe(false);
+  });
+
+  it("is false for a trip that links nothing", () => {
+    expect(linksCanyon([])).toBe(false);
   });
 });
 

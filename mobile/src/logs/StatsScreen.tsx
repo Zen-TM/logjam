@@ -520,7 +520,14 @@ function AttributeSections({
   tripOnly?: boolean;
 }) {
   const groups = tripOnly ? [] : stats.placeFieldStats;
-  if (groups.length === 0 && stats.tripFieldStats.length === 0) return null;
+  const underActivities = stats.tripFieldsUnderActivities;
+  if (
+    groups.length === 0 &&
+    stats.tripFieldStats.length === 0 &&
+    underActivities === 0
+  ) {
+    return null;
+  }
   return (
     <View style={styles.section}>
       {groups.map((group) => (
@@ -531,12 +538,22 @@ function AttributeSections({
           ))}
         </View>
       ))}
-      {stats.tripFieldStats.length > 0 ? (
+      {stats.tripFieldStats.length > 0 || underActivities > 0 ? (
         <View style={styles.section}>
-          <SectionHeader label="Your trip attributes" />
+          <SectionHeader label="Trip attributes" />
           {stats.tripFieldStats.map((entry) => (
             <AttributeStat key={`trip:${entry.key}`} stat={entry} />
           ))}
+          {/* Load-bearing, like the multi-tag caption: an attribute scoped to
+              one activity is summarised on that activity's screen only, so
+              without this it reads as having vanished from the logbook. */}
+          {underActivities > 0 ? (
+            <Text style={styles.caption}>
+              {underActivities === 1
+                ? "1 more attribute belongs to a single activity — open that activity above to see it"
+                : `${underActivities} more attributes belong to single activities — open an activity above to see them`}
+            </Text>
+          ) : null}
         </View>
       ) : null}
     </View>

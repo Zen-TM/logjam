@@ -16,6 +16,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { TRIP_TYPE_SUGGESTIONS } from "@logjam/shared";
 
 const REPO_ROOT = join(import.meta.dirname, "..", "..", "..");
 const scrubSql = readFileSync(
@@ -37,7 +38,6 @@ const OWNER_DATA_MODELS = ["Place", "TripLog", "CustomFieldDef"];
 const SCRUB_EXEMPT: Record<string, string> = {
   "places.import_key": "derived from name+coords, but opaque and needed for re-import dedupe",
   "places.ropewiki_snapshot": "public RopeWiki text, not user-authored",
-  "trip_logs.types": "free-text trip vocabulary, no location content",
   "trip_logs.import_key": "opaque",
   "custom_field_defs.key": "slug of the label, which IS scrubbed; kept so values stay addressable",
   "custom_field_defs.entity": "protocol vocabulary, not user text",
@@ -145,6 +145,16 @@ describe("snapshot-scrub.sql", () => {
       "these columns hold what a user typed and are neither scrubbed nor exempted " +
         "in SCRUB_EXEMPT — decide which, don't leave the snapshot to chance",
     ).toEqual([]);
+  });
+
+  // The app's suggested trip types survive the scrub — they are not user text,
+  // and dev analytics key on `canyoning`. The SQL spells that list itself, so it
+  // has to agree with the one declaration or a new suggestion gets pseudonymised.
+  it("keeps exactly TRIP_TYPE_SUGGESTIONS when scrubbing trip types", () => {
+    const kept = /lower\(tag\) = ANY \(ARRAY\[([^\]]*)\]\)/.exec(scrubSql);
+    expect(kept, "scrub_trip_types' kept-vocabulary array").not.toBeNull();
+    const words = [...kept![1].matchAll(/'([^']*)'/g)].map(([, word]) => word);
+    expect(words).toEqual([...TRIP_TYPE_SUGGESTIONS]);
   });
 
   it("has no stale exemptions", () => {

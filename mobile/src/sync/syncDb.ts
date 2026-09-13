@@ -42,6 +42,11 @@ import { OUTBOX_ENTITIES } from "./outboxTables";
  * to one `field_values_json`, gains a `place_type_id`, and `place_types`
  * arrives as a table of its own.
  *
+ * 12: `custom_field_defs` carries `trip_types_json`. A TRIP definition is
+ * scoped by the trip's own types (tags), which the delta now sends; without the
+ * column every trip attribute would read as scoped to no tag and appear only
+ * where it is flagged for all trips.
+ *
  * 11: NOT a shape change — a REFILL. `place_types` rows were parsed off every
  * delta page and never written (`upsertPlaceType` had no caller), so the table
  * has been empty since the rework on every install, and the cursor has long
@@ -75,7 +80,7 @@ import { OUTBOX_ENTITIES } from "./outboxTables";
  * rows of their own. `places` gains the two columns that came across with
  * them, `elevation` and `tags_json`.
  */
-export const MIRROR_SCHEMA_VERSION = 11;
+export const MIRROR_SCHEMA_VERSION = 12;
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 

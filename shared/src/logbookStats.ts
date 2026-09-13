@@ -19,7 +19,11 @@
 // never enters this module — the caller resolves the range to date keys first
 // (mobile/src/ui/monthGrid.ts has the local-vs-UTC rules for that conversion).
 
-import { defsForType, type ScopedCustomFieldDef } from "./tripLogFields.js";
+import {
+  defsForType,
+  tripFieldDefs,
+  type ScopedCustomFieldDef,
+} from "./tripLogFields.js";
 import { asFieldValues } from "./fieldValues.js";
 
 // ── Inputs ─────────────────────────────────────────────────────────────
@@ -172,8 +176,23 @@ export type LogbookStats = {
     total: number;
     logged: number;
   }[];
-  /** The user's own trip-level attributes — one answer per trip. */
+  /**
+   * The user's own trip-level attributes — one answer per trip.
+   *
+   * WHICH ONES depends on the scope, for the same reason place attributes wait
+   * for a drill-down. On the All screen: only the attributes EVERY trip is
+   * asked (`appliesToAllTypes`) — a "river level" scoped to packrafting pooled
+   * with a canyoning answer to the same question would be one figure over two
+   * distributions. On an activity's screen: the attributes that activity asks,
+   * summarised over its own trips, plus any attribute those trips hold a value
+   * for — the same rule the trip form uses (`tripFieldDefs`), so every recorded
+   * value is counted on some screen.
+   */
   tripFieldStats: FieldStat[];
+  /** On the All screen, how many activity-scoped attributes hold a value in
+   *  range and so appear only under their activities — what the screen needs
+   *  to say they have not gone missing. Always 0 on an activity's screen. */
+  tripFieldsUnderActivities: number;
   /**
    * Place attributes, GROUPED BY THE TYPE OF PLACE THEY BELONG TO, most-visited
    * type first.
@@ -484,19 +503,29 @@ export function computeLogbookStats(input: StatsInput): LogbookStats {
     }
   }
 
-  // WHICH definitions get asked, and the union clause is the same one
-  // `tripFieldDefs` needs and for the same reason: a value the user typed under
-  // a definition since rescoped must still be counted, or the screen quietly
-  // disagrees with the trip it came from.
-  const tripFieldStats = tripDefs
-    .filter(
-      (def) =>
-        def.appliesToAllTypes ||
-        def.placeTypeIds.some((id) => visitsByTypeId.has(id)) ||
-        tripValueKeys.has(def.key),
-    )
+  // WHICH definitions get asked — see `tripFieldStats` on the output type. On
+  // a drill-down the union clause is `tripFieldDefs`'s own and for the same
+  // reason: a value typed under a definition since rescoped, or on a trip since
+  // retagged, must still be counted, or the screen quietly disagrees with the
+  // trip it came from.
+  const askedTripDefs =
+    activity == null
+      ? tripDefs.filter((def) => def.appliesToAllTypes)
+      : tripFieldDefs(
+          tripDefs,
+          activity === UNTAGGED_ACTIVITY ? [] : [activity],
+          null,
+          tripValueKeys,
+        );
+  const tripFieldStats = askedTripDefs
     .map((def) => summarizeField(def, tripSamplesByKey.get(def.key) ?? []))
     .filter((stat): stat is FieldStat => stat != null);
+  const tripFieldsUnderActivities =
+    activity == null
+      ? tripDefs.filter(
+          (def) => !def.appliesToAllTypes && tripValueKeys.has(def.key),
+        ).length
+      : 0;
 
   const placeFieldStats = [...visitsByTypeId.entries()]
     // Most-visited type first: on a canyoning trip the canyons are the subject
@@ -540,6 +569,7 @@ export function computeLogbookStats(input: StatsInput): LogbookStats {
     mostReturned: mostReturned && mostReturned.trips > 1 ? mostReturned : null,
     completion,
     tripFieldStats,
+    tripFieldsUnderActivities,
     placeFieldStats,
   };
 }

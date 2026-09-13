@@ -72,6 +72,7 @@ export async function loadFieldDefs(
           // half, so offering the verb destroyed data and reported success.
           ownerId: row.ownerId,
           placeTypeIds: row.placeTypeIds,
+          tripTypes: row.tripTypes,
           appliesToAllTypes: row.appliesToAllTypes,
         },
       ];
@@ -112,14 +113,15 @@ export async function saveFieldDefs(
   for (const [position, def] of defs.entries()) {
     const row = byKey.get(def.key);
     if (!row) {
-      // The scoping travels WITH the create. A definition created with neither
-      // `placeTypeIds` nor `appliesToAllTypes` appears on NO form — the editor
-      // is what decides which, and it has to say so here or the field the user
-      // just made is invisible on the form they made it from.
+      // The scoping travels WITH the create. A definition created with no types
+      // and no `appliesToAllTypes` appears on NO form — the editor is what
+      // decides which, and it has to say so here or the field the user just
+      // made is invisible on the form they made it from.
       await createCustomFieldDefLocal({
         entity,
         def,
         placeTypeIds: def.placeTypeIds,
+        tripTypes: def.tripTypes,
         appliesToAllTypes: def.appliesToAllTypes,
       });
       continue;
@@ -138,6 +140,9 @@ export async function saveFieldDefs(
     }
     if (!sameKeySet(row.placeTypeIds, def.placeTypeIds)) {
       patch.placeTypeIds = def.placeTypeIds;
+    }
+    if (!sameKeySet(row.tripTypes, def.tripTypes)) {
+      patch.tripTypes = def.tripTypes;
     }
     if (Object.keys(patch).length > 0) {
       await updateCustomFieldDefLocal(row.id, patch);

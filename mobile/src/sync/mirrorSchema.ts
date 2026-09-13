@@ -201,6 +201,9 @@ export const SYNC_TABLES: readonly TableSchema[] = [
       // flag rather than a row per type so a type created tomorrow inherits it.
       applies_to_all_types: "INTEGER NOT NULL DEFAULT 0",
       place_type_ids_json: "TEXT",
+      // A TRIP definition's scoping: the trip types (tags) it applies to. A
+      // place definition's is `place_type_ids_json`; the other is always empty.
+      trip_types_json: "TEXT",
       created_at: "TEXT",
       updated_at: "TEXT",
       extra_json: "TEXT",

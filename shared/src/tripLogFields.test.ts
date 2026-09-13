@@ -332,60 +332,83 @@ describe("customFieldDefFromRow with one-sided bounds", () => {
   });
 });
 
-// §7.5 — the union clause. Without it, four ordinary actions each silently
-// destroy a value: unlink a place, delete one, change its type, rescope a
-// definition.
+// A trip's attributes are scoped by its TAGS, and the union clauses are what
+// stop the form eating data: both clients save exactly the fields it shows.
 describe("tripFieldDefs", () => {
   const scoped = (
     key: string,
-    placeTypeIds: string[],
+    tripTypes: string[],
     appliesToAllTypes = false,
   ): ScopedCustomFieldDef => ({
     key,
     label: key,
     type: "string",
-    placeTypeIds,
+    placeTypeIds: [],
+    tripTypes,
     appliesToAllTypes,
   });
 
-  const water = scoped("water", ["canyon"]);
-  const firewood = scoped("firewood", ["campsite"]);
+  const flow = scoped("flow", ["packrafting"]);
+  const pitches = scoped("pitches", ["canyoning"]);
   const weather = scoped("weather", [], true);
-  const defs = [water, firewood, weather];
+  const defs = [flow, pitches, weather];
 
-  it("asks the questions the linked places' types ask", () => {
-    expect(tripFieldDefs(defs, ["canyon"], {}).map((def) => def.key)).toEqual([
-      "water",
+  it("asks the questions the trip's own types ask", () => {
+    expect(tripFieldDefs(defs, ["packrafting"], {}).map((def) => def.key)).toEqual([
+      "flow",
       "weather",
     ]);
   });
 
-  it("unions the types of several linked places, showing a shared field once", () => {
-    const both = scoped("party", ["canyon", "campsite"]);
+  it("unions several tags, showing a field scoped to two of them once", () => {
+    const wet = scoped("wetsuit", ["canyoning", "packrafting"]);
     expect(
-      tripFieldDefs([...defs, both], ["canyon", "campsite"], {}).map((d) => d.key),
-    ).toEqual(["water", "firewood", "weather", "party"]);
+      tripFieldDefs([...defs, wet], ["canyoning", "packrafting"], {}).map((d) => d.key),
+    ).toEqual(["flow", "pitches", "weather", "wetsuit"]);
   });
 
-  // "Walked around the block" is the common case, not an edge case.
-  it("asks only the always-on fields when a trip links no place", () => {
+  // The API refuses case-variant duplicates, so "Packrafting" and "packrafting"
+  // are one tag — a field scoped to one must appear for the other.
+  it("matches tags case-insensitively in both directions", () => {
+    expect(tripFieldDefs(defs, ["Packrafting"], {}).map((def) => def.key)).toContain("flow");
+    expect(
+      tripFieldDefs([scoped("x", ["BushWalking"])], ["bushwalking"], {}).map((d) => d.key),
+    ).toEqual(["x"]);
+  });
+
+  // An untagged trip is a real trip, not an unfinished one.
+  it("asks only the always-on fields when a trip has no tags", () => {
     expect(tripFieldDefs(defs, [], {}).map((def) => def.key)).toEqual(["weather"]);
   });
 
-  // THE CLAUSE THAT STOPS IT EATING DATA. Unlinking a place, deleting one,
-  // retyping it or rescoping a definition would each otherwise hide a value the
-  // user typed — and the next save writes the object the form knows about, so
-  // hidden means gone.
+  // A trip is not scoped by the places it links any more: a field that names a
+  // place type (a stale row from before tags) asks nothing on its own.
+  it("ignores place-type scoping on a trip field", () => {
+    const stale: ScopedCustomFieldDef = { ...scoped("stale", []), placeTypeIds: ["canyon"] };
+    expect(tripFieldDefs([stale], ["canyoning"], {})).toEqual([]);
+  });
+
+  // THE STORED-VALUE CLAUSE. Untagging a trip or rescoping a definition would
+  // otherwise hide a recorded answer, and the next save would drop it.
   it("keeps a field whose value is already recorded, whatever the scoping says", () => {
     expect(
-      tripFieldDefs(defs, [], { water: "high" }).map((def) => def.key),
-    ).toEqual(["water", "weather"]);
+      tripFieldDefs(defs, [], { flow: "high" }).map((def) => def.key),
+    ).toEqual(["flow", "weather"]);
   });
 
   it("does not resurrect a field whose value was cleared", () => {
     expect(
-      tripFieldDefs(defs, [], { water: null }).map((def) => def.key),
+      tripFieldDefs(defs, [], { flow: null }).map((def) => def.key),
     ).toEqual(["weather"]);
+  });
+
+  // THE UNSAVED-EDIT CLAUSE. Tick packrafting, type a flow, untick it: the
+  // stored values know nothing about the typing, so without `keep` the field
+  // unmounts and the save writes the form without it.
+  it("keeps a field the form edited, even with its tag unticked and nothing saved", () => {
+    expect(
+      tripFieldDefs(defs, [], {}, new Set(["flow"])).map((def) => def.key),
+    ).toEqual(["flow", "weather"]);
   });
 });
 

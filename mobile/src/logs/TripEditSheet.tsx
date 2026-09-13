@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import {
   CANYONING_TRIP_TYPE,
   enforceCanyoningTag,
   formatTripPlaceNames,
+  linksCanyon,
   MAX_PLACES_PER_TRIP,
   TRIP_TYPE_SUGGESTIONS,
   tripFieldDefs,
@@ -39,6 +40,7 @@ import { CustomFieldValueInputs } from "../customFields/CustomFieldValues";
 import {
   coerceCustomFields,
   fieldValueStrings,
+  sameFieldValues,
   withoutClearedFields,
 } from "../customFields/fieldValueCoercion";
 import { useFieldDefs } from "../customFields/useFieldDefs";
@@ -62,7 +64,7 @@ import { tripTypeLabel, tripTypeMeta } from "./tripTypeMeta";
  */
 type Mode = "form" | "date" | "places" | "fields" | "fieldForm";
 
-/** The `canyoning` tag is locked on while a place is linked — the server
+/** The `canyoning` tag is locked on while a canyon is linked — the server
  *  force-adds it, so the picker shows it selected and not toggleable. */
 const CANYONING_LOCKED = new Set([CANYONING_TRIP_TYPE]);
 
@@ -121,36 +123,62 @@ export function TripEditSheet({
     setDefs: setCustomFieldDefs,
   } = useFieldDefs("tripLog");
   const [editingField, setEditingField] = useState<ScopedCustomFieldDef | null>(null);
+  // The attribute keys this form keeps whatever the tags say. See
+  // `visibleFieldDefs`.
+  const [keptKeys, setKeptKeys] = useState<ReadonlySet<string>>(() => new Set());
+  const keepField = useCallback((key: string) => {
+    setKeptKeys((current) => (current.has(key) ? current : new Set(current).add(key)));
+  }, []);
+  // The trip as it was when the sheet OPENED. Save diffs against this, not the
+  // live row: a sync landing mid-edit must neither reset the form nor make a
+  // field the user never touched look changed (and so get pushed over the
+  // newer value).
+  const openedWith = useRef<MirrorTrip | null>(null);
 
   /**
-   * THE FIELDS THIS TRIP IS ASKED FOR: the ones scoped to the types of the
-   * places it links, union any key that already has a value (`tripFieldDefs`).
+   * THE FIELDS THIS TRIP IS ASKED FOR — the ones scoped to the trip's own TYPES
+   * (the chips below) — and, after them, the ones it only KEEPS.
    *
-   * A trip that visited a canyon is asked the canyon questions; one that
-   * visited nothing is asked only the always-on ones ("walked around the
-   * block" is the common case). The union half is what stops the form eating
-   * data: unlinking a place, deleting one, retyping it or rescoping a
-   * definition would each otherwise hide a value the user typed, and the save
-   * below writes exactly what the form knows about.
+   * A packrafting trip is asked the packrafting questions; an untagged one only
+   * the always-on ones. The save below writes exactly the fields the form
+   * shows, so anything that already holds a value must stay on screen when a
+   * tag comes off, or the save drops it: the keys stored when the sheet opened,
+   * and the keys typed into since (tick a tag, fill in its attribute, untick
+   * it). Keyed on EDITED, not on "has a value now", or backspacing to empty
+   * would unmount the field under the cursor.
+   *
+   * Kept-only fields sit in their own section with a remove button, because
+   * clearing is not a way out for every kind — a date had no empty state until
+   * "Clear date", and nothing said which fields were leftovers. Removing drops
+   * the key from `keptKeys`, so the field leaves the form and the save leaves it
+   * out; closing without saving brings it back, which is why there is no
+   * confirm.
    */
   const visibleFieldDefs = useMemo(
-    () =>
-      tripFieldDefs(
-        customFieldDefs,
-        selected
-          .map(
-            (link) => places.find((place) => place.id === link.id)?.placeTypeId,
-          )
-          .filter((typeId): typeId is string => !!typeId),
-        trip?.customFields,
-      ),
-    [customFieldDefs, places, selected, trip],
+    () => tripFieldDefs(customFieldDefs, types, null, keptKeys),
+    [customFieldDefs, keptKeys, types],
   );
+  const askedFieldDefs = useMemo(
+    () => tripFieldDefs(customFieldDefs, types, null),
+    [customFieldDefs, types],
+  );
+  const keptOnlyFieldDefs = visibleFieldDefs.filter(
+    (def) => !askedFieldDefs.includes(def),
+  );
+  const removeField = useCallback((key: string) => {
+    setKeptKeys((current) => {
+      const next = new Set(current);
+      next.delete(key);
+      return next;
+    });
+    setFieldValues((current) => ({ ...current, [key]: "" }));
+  }, []);
 
   // Seed from the trip being edited (or today's blank form) each time the sheet
   // opens, so a cancelled edit never leaks into the next one.
   useEffect(() => {
     if (!visible) return;
+    openedWith.current = trip ?? null;
     setMode("form");
     setPlaceSearch("");
     setCustomTypes([]);
@@ -165,24 +193,38 @@ export function TripEditSheet({
     setDateTarget({ kind: "trip" });
     setEditingField(null);
     setFieldValues(fieldValueStrings(trip?.customFields));
-    // Deliberately keyed on the sheet OPENING, not on `initialPlaces`: callers
-    // build that array inline, so a new identity every render would re-seed the
-    // form under the user mid-edit.
+    setKeptKeys(
+      new Set(
+        Object.entries(trip?.customFields ?? {})
+          .filter(([, value]) => value != null)
+          .map(([key]) => key),
+      ),
+    );
+    // Deliberately keyed on the sheet OPENING — the trip's ID, not the object.
+    // A detail screen hands this a fresh object on every mirror change (a sync
+    // pull, an upload tick, an inbox refresh), and re-seeding on that wiped
+    // whatever the user was halfway through typing. `initialPlaces` is left out
+    // for the same reason: callers build that array inline.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trip, visible]);
+  }, [trip?.id, visible]);
 
-  // Linking a place means "I did that place", so the API force-tags
+  // Linking a CANYON means "I did that canyon", so the API force-tags
   // `canyoning` on save. Mirror that into the selection so the chip reads
-  // SELECTED the moment a place is linked — and it is LOCKED (see
+  // SELECTED the moment a canyon is linked — and it is LOCKED (see
   // CANYONING_LOCKED) rather than toggleable, because the server re-adds it on
   // save anyway, so a chip the user could "deselect" would be a lie.
-  // enforceCanyoningTag only ever force-ADDS, so unlinking the last place
-  // leaves an existing `canyoning` alone (a place-less trip can still be
-  // canyoning) — and with no place linked the chip is a normal toggle.
-  const hasLinkedPlace = selected.length > 0;
+  // enforceCanyoningTag only ever force-ADDS, so unlinking the canyon leaves an
+  // existing `canyoning` alone (a canyon-less trip can still be canyoning) —
+  // and with no canyon linked the chip is a normal toggle. A campsite or a
+  // marker is not a canyon: linking one tags nothing.
+  const linkedCanyon = linksCanyon(
+    selected
+      .map((link) => places.find((place) => place.id === link.id)?.placeTypeId)
+      .filter((typeId): typeId is string => !!typeId),
+  );
   useEffect(() => {
-    setTypes((prev) => enforceCanyoningTag(prev, hasLinkedPlace));
-  }, [hasLinkedPlace]);
+    setTypes((prev) => enforceCanyoningTag(prev, linkedCanyon));
+  }, [linkedCanyon]);
 
   const typeOptions: ChipOption[] = useMemo(() => {
     const vocabulary = [
@@ -235,13 +277,21 @@ export function TripEditSheet({
     [onFailed],
   );
 
+  const setFieldValue = useCallback(
+    (key: string, next: string) => {
+      keepField(key);
+      setFieldValues((current) => ({ ...current, [key]: next }));
+    },
+    [keepField],
+  );
+
   const save = useCallback(async () => {
     setSaving(true);
     const trimmedName = displayName.trim();
     const trimmedNotes = notes.trim();
-    // The canyoning tag a linked place implies — applied here so the chips the
+    // The canyoning tag a linked canyon implies — applied here so the chips the
     // user just saw are exactly what the server will store (shared derivation).
-    const effectiveTypes = enforceCanyoningTag(types, selected.length > 0);
+    const effectiveTypes = enforceCanyoningTag(types, linkedCanyon);
     const isoDate = `${dateKey}T00:00:00.000Z`;
     // Only the fields the form actually showed. A definition scoped to a type
     // this trip does not visit was never asked, and writing a null for it
@@ -252,26 +302,26 @@ export function TripEditSheet({
     const effectiveCustomFields = withoutClearedFields(
       coerceCustomFields(fieldValues, visibleFieldDefs),
     );
+    const base = openedWith.current ?? trip;
     try {
-      if (trip) {
-        // Field-scoped: push only what actually changed, so a concurrent edit
-        // to another field on another device isn't clobbered (§6 LWW).
+      if (trip && base) {
+        // Field-scoped: push only what the user changed since the sheet opened,
+        // so a concurrent edit to another field on another device isn't
+        // clobbered (§6 LWW).
         const changes: Parameters<typeof updateTripLocal>[1] = {};
-        if (isoDate !== new Date(trip.date).toISOString()) changes.date = isoDate;
-        if ((trimmedName || null) !== trip.displayName) {
+        if (isoDate !== new Date(base.date).toISOString()) changes.date = isoDate;
+        if ((trimmedName || null) !== base.displayName) {
           changes.displayName = trimmedName || null;
         }
-        if ((trimmedNotes || null) !== trip.notes) changes.notes = trimmedNotes || null;
-        if (!sameOrder(effectiveTypes, trip.types)) changes.types = effectiveTypes;
-        if (
-          JSON.stringify(effectiveCustomFields) !== JSON.stringify(trip.customFields ?? {})
-        ) {
+        if ((trimmedNotes || null) !== base.notes) changes.notes = trimmedNotes || null;
+        if (!sameOrder(effectiveTypes, base.types)) changes.types = effectiveTypes;
+        if (!sameFieldValues(effectiveCustomFields, base.customFields ?? {})) {
           changes.customFields = effectiveCustomFields;
         }
         if (
           !sameOrder(
             selected.map((link) => link.id),
-            trip.places.map((link) => link.id),
+            base.places.map((link) => link.id),
           )
         ) {
           changes.places = selected;
@@ -307,6 +357,7 @@ export function TripEditSheet({
     dateKey,
     displayName,
     fieldValues,
+    linkedCanyon,
     notes,
     onClose,
     onFailed,
@@ -343,6 +394,11 @@ export function TripEditSheet({
             : editing
               ? "Edit trip"
               : "Log a trip";
+
+  const pickFieldDate = (key: string) => {
+    setDateTarget({ kind: "field", key });
+    setMode("date");
+  };
 
   return (
     <BottomSheet
@@ -399,10 +455,27 @@ export function TripEditSheet({
           <DatePicker
             value={dateTarget.kind === "trip" ? dateKey : (fieldValues[dateTarget.key] || null)}
             onChange={(key) => {
-              if (dateTarget.kind === "trip") setDateKey(key);
-              else setFieldValues((current) => ({ ...current, [dateTarget.key]: key }));
+              if (dateTarget.kind === "trip") {
+                setDateKey(key);
+                return;
+              }
+              setFieldValue(dateTarget.key, key);
             }}
           />
+          {/* A trip always has a date; an attribute date may be unknown, and
+              a picker with no way back to blank turns that into a wrong
+              answer — the same reason a rail starts with "—". */}
+          {dateTarget.kind === "field" && fieldValues[dateTarget.key] ? (
+            <Button
+              label="Clear date"
+              icon="x"
+              variant="ghost"
+              onPress={() => {
+                setFieldValue(dateTarget.key, "");
+                setMode("form");
+              }}
+            />
+          ) : null}
         </View>
       ) : null}
 
@@ -470,7 +543,7 @@ export function TripEditSheet({
             onToggle={toggleType}
             onAdd={addType}
             addPlaceholder="Other"
-            disabledValues={hasLinkedPlace ? CANYONING_LOCKED : undefined}
+            disabledValues={linkedCanyon ? CANYONING_LOCKED : undefined}
           />
 
           <View style={styles.field}>
@@ -484,16 +557,33 @@ export function TripEditSheet({
           </View>
 
           <CustomFieldValueInputs
-            defs={visibleFieldDefs}
+            defs={askedFieldDefs}
             values={fieldValues}
-            onChange={(key, next) =>
-              setFieldValues((current) => ({ ...current, [key]: next }))
-            }
-            onPickDate={(key) => {
-              setDateTarget({ kind: "field", key });
-              setMode("date");
-            }}
+            onChange={setFieldValue}
+            onPickDate={pickFieldDate}
           />
+
+          {/* Not a place's "Doesn't fit this type" and its three actions:
+              these are the user's own definitions, so there is nothing to
+              adopt — only keep or remove. */}
+          {keptOnlyFieldDefs.length > 0 ? (
+            <>
+              <SectionHeader
+                label={`Leftover ${ATTRIBUTE_NOUN.many} · ${keptOnlyFieldDefs.length}`}
+              />
+              <Text style={styles.hint}>
+                These {ATTRIBUTE_NOUN.many} are left over from when this trip was saved
+                as a different type.
+              </Text>
+              <CustomFieldValueInputs
+                defs={keptOnlyFieldDefs}
+                values={fieldValues}
+                onChange={setFieldValue}
+                onPickDate={pickFieldDate}
+                onRemove={removeField}
+              />
+            </>
+          ) : null}
 
           {/* Definitions are local rows written through the outbox, so this
               door is open with no account and no signal, for everyone. */}

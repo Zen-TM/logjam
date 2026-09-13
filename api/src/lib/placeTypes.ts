@@ -98,50 +98,6 @@ export async function defsForPlaceType(
   }));
 }
 
-/**
- * The definitions in force for a TRIP, which is the union over the types of the
- * places it links, plus every `appliesToAllTypes` definition.
- *
- * A trip with NO linked places gets the `All` definitions alone — a common
- * case, not an edge one ("walked around the block").
- *
- * NOTE the caller still has to apply the other half of §2.7's union rule:
- * render these PLUS any key that already has a value. Never hide a value the
- * user entered. That clause covers unlink, place-delete, place-type-change and
- * def-rescope in one, and it lives at the render site because only the render
- * site knows what values the row holds.
- */
-export async function defsForTrip(
-  userId: string,
-  placeTypeIds: string[],
-): Promise<TripLogCustomFieldDef[]> {
-  const rows = await prisma.customFieldDef.findMany({
-    where: {
-      entity: "tripLog",
-      OR: [{ ownerId: userId }, { ownerId: null }],
-      AND: [
-        {
-          OR: [
-            { appliesToAllTypes: true },
-            ...(placeTypeIds.length
-              ? [{ placeTypes: { some: { placeTypeId: { in: placeTypeIds } } } }]
-              : []),
-          ],
-        },
-      ],
-    },
-    select: { key: true, label: true, type: true, min: true, max: true },
-    orderBy: [{ position: "asc" }, { key: "asc" }],
-  });
-  return rows.map((row) => ({
-    key: row.key,
-    label: row.label,
-    type: row.type as TripLogCustomFieldDef["type"],
-    ...(row.min !== null ? { min: row.min } : {}),
-    ...(row.max !== null ? { max: row.max } : {}),
-  }));
-}
-
 // ── lifecycle ───────────────────────────────────────────────────────────────
 //
 // One implementation for both write paths. The REST router and the sync push

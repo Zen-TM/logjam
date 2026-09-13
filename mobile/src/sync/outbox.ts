@@ -377,6 +377,7 @@ const CUSTOM_FIELD_DEF_UPDATE_COLUMNS: Record<string, ColumnSpec> = {
   // stored value attached, which is the whole reason scoping is a property of
   // the definition rather than a second definition.
   placeTypeIds: stringListColumn("place_type_ids_json"),
+  tripTypes: stringListColumn("trip_types_json"),
   appliesToAllTypes: {
     column: "applies_to_all_types",
     encode: (value) => (value ? 1 : 0),
@@ -387,9 +388,11 @@ const CUSTOM_FIELD_DEF_UPDATE_COLUMNS: Record<string, ColumnSpec> = {
 export type CustomFieldDefDraft = {
   entity: CustomFieldEntity;
   def: TripLogCustomFieldDef;
-  /** WHERE it appears. A definition created with neither appears on no form —
-   *  which is visible and fixable, unlike one that appears on every form. */
+  /** WHERE it appears. A definition created with none of these appears on no
+   *  form — which is visible and fixable, unlike one that appears on every
+   *  form. `placeTypeIds` scopes a place field, `tripTypes` a trip field. */
   placeTypeIds?: string[];
+  tripTypes?: string[];
   appliesToAllTypes?: boolean;
 };
 
@@ -426,6 +429,7 @@ export async function createCustomFieldDefLocal(
     // could not express that scoping any other way — it would arrive unscoped
     // and apply nowhere.
     ...(draft.placeTypeIds?.length ? { placeTypeIds: draft.placeTypeIds } : {}),
+    ...(draft.tripTypes?.length ? { tripTypes: draft.tripTypes } : {}),
     ...(draft.appliesToAllTypes ? { appliesToAllTypes: true } : {}),
   };
 
@@ -433,9 +437,9 @@ export async function createCustomFieldDefLocal(
     await db.runAsync(
       `INSERT INTO custom_field_defs
          (id, entity, key, label, type, min, max, position,
-          applies_to_all_types, place_type_ids_json, created_at,
-          updated_at, extra_json, dirty_fields_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)`,
+          applies_to_all_types, place_type_ids_json, trip_types_json,
+          created_at, updated_at, extra_json, dirty_fields_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)`,
       id,
       entity,
       def.key,
@@ -446,6 +450,7 @@ export async function createCustomFieldDefLocal(
       position,
       draft.appliesToAllTypes ? 1 : 0,
       JSON.stringify(draft.placeTypeIds ?? []),
+      JSON.stringify(draft.tripTypes ?? []),
       now,
       now,
       JSON.stringify(Object.keys(fields)),

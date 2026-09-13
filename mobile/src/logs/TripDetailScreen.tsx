@@ -13,7 +13,6 @@ import { useCallback, useRef, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import {
-  customFieldDisplayLabel,
   distinctTripTypes,
   mediaCategory,
   messageFromError,
@@ -23,9 +22,11 @@ import { useConnectivity } from "../map/connectivity";
 import { tripTitle } from "../api/tripTitle";
 import { useFieldDefs } from "../customFields/useFieldDefs";
 import { ATTRIBUTE_NOUN } from "../customFields/CustomFieldsEditor";
+import { AttributeTable } from "../customFields/CustomFieldValues";
+import { attributeRows } from "../customFields/fieldValueCoercion";
 import { MediaStrip } from "../media/MediaStrip";
 import { resolveRouteAttachmentBbox } from "../media/routeAttachmentBbox";
-import { fontSize, fontWeight, lineHeight, radius, spacing, surface, theme } from "../theme";
+import { fontSize, lineHeight, spacing, theme } from "../theme";
 import type { MirrorTrip } from "../sync/mirrorStore";
 import {
   useMirrorPlaces,
@@ -87,14 +88,7 @@ export function TripDetailScreen({
   const routeCount = attachments.filter(
     (item) => mediaCategory(item.mediaType) === "track",
   ).length;
-  const storedFields = current.customFields;
-  const definedFirst = fieldDefs
-    .filter((def) => storedFields[def.key] !== undefined)
-    .map((def) => [customFieldDisplayLabel(def), storedFields[def.key]] as const);
-  const orphaned = Object.entries(storedFields)
-    .filter(([key]) => !fieldDefs.some((def) => def.key === key))
-    .map(([key, value]) => [humanizeFieldKey(key), value] as const);
-  const customFields = [...definedFirst, ...orphaned];
+  const customFields = attributeRows(fieldDefs, current.customFields);
 
   return (
     <View style={styles.screen}>
@@ -204,15 +198,10 @@ export function TripDetailScreen({
 
         {customFields.length > 0 ? (
           <>
-            <SectionHeader label={`Your ${ATTRIBUTE_NOUN.many}`} />
-            <View style={styles.fieldCard}>
-              {customFields.map(([label, value]) => (
-                <View key={label} style={styles.fieldRow}>
-                  <Text style={styles.fieldKey}>{label}</Text>
-                  <Text style={styles.fieldValue}>{formatFieldValue(value)}</Text>
-                </View>
-              ))}
-            </View>
+            {/* "Trip attributes", the way a place's section is "Canyon
+                attributes" — "Your attributes" did not say whose. */}
+            <SectionHeader label={`Trip ${ATTRIBUTE_NOUN.many}`} />
+            <AttributeTable rows={customFields} />
           </>
         ) : null}
       </ScrollView>
@@ -233,22 +222,6 @@ export function TripDetailScreen({
   );
 }
 
-/**
- * Fallback label for a value whose DEFINITION is gone — deleted on another
- * device, or not loaded because we are offline. Keys are slugs of the original
- * label (`makeCustomFieldKey`), so un-slugging beats showing `water_level` raw.
- */
-function humanizeFieldKey(key: string): string {
-  const spaced = key.replace(/[_-]+/g, " ").trim();
-  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
-}
-
-function formatFieldValue(value: unknown): string {
-  if (value === null || value === undefined || value === "") return "—";
-  if (typeof value === "boolean") return value ? "Yes" : "No";
-  return String(value);
-}
-
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: theme.primary },
   typeRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing(0.75) },
@@ -262,22 +235,5 @@ const styles = StyleSheet.create({
     color: theme.textPrimary,
     fontSize: fontSize.base,
     lineHeight: lineHeight.body,
-  },
-  fieldCard: {
-    backgroundColor: surface.card,
-    borderWidth: 1,
-    borderColor: surface.border,
-    borderRadius: radius.lg,
-    padding: spacing(1.5),
-    gap: spacing(1),
-  },
-  fieldRow: { flexDirection: "row", justifyContent: "space-between", gap: spacing(2) },
-  fieldKey: { color: theme.textMuted, fontSize: fontSize.sm, flexShrink: 1 },
-  fieldValue: {
-    color: theme.textPrimary,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
-    textAlign: "right",
-    flexShrink: 1,
   },
 });

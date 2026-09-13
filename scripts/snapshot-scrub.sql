@@ -44,14 +44,45 @@ SET name = 'place-' || substring(id::text, 1, 8),
     field_values = '{}',
     foreign_fields = NULL;
 
+-- TRIP TYPES are user-authored tags ("Claustral recon", "with Dad"), held in two
+-- places that must keep MATCHING after the scrub: a trip's own `types`, and the
+-- `trip_types` a trip attribute is scoped to (compared case-insensitively). So
+-- each tag becomes a stable pseudonym of its LOWERCASED text — the same tag
+-- scrubs the same way in both columns, and "Packrafting"/"packrafting" stay one
+-- tag — in its original order, which picks a trip's glyph.
+--
+-- The app's own suggested types are not user text and survive: dev stats and
+-- analytics key on `canyoning`. That list is TRIP_TYPE_SUGGESTIONS
+-- (shared/src/tripName.ts), and snapshotScrub.unit.test.ts fails when the two
+-- disagree.
+CREATE FUNCTION pg_temp.scrub_trip_types(tags text[]) RETURNS text[]
+LANGUAGE sql IMMUTABLE AS $$
+  SELECT coalesce(
+    array_agg(
+      CASE
+        WHEN lower(tag) = ANY (ARRAY['canyoning', 'bushwalking', 'bikepacking', 'packrafting'])
+          THEN tag
+        ELSE 'type-' || substring(md5(lower(tag)), 1, 8)
+      END
+      ORDER BY ord
+    ),
+    '{}'
+  )
+  FROM unnest(tags) WITH ORDINALITY AS u(tag, ord)
+$$;
+
 UPDATE trip_logs
 SET notes = NULL,
     display_name = NULL,
-    custom_fields = '{}';
+    custom_fields = '{}',
+    types = pg_temp.scrub_trip_types(types);
 
 -- User-authored field LABELS name the thing they describe ("Which slot for the
--- Ranon exit"), so they go the same way as the values keyed by them.
-UPDATE custom_field_defs SET label = 'field-' || substring(id::text, 1, 8);
+-- Ranon exit"), so they go the same way as the values keyed by them. A trip
+-- attribute's `trip_types` go the way of the trip types above.
+UPDATE custom_field_defs
+SET label = 'field-' || substring(id::text, 1, 8),
+    trip_types = pg_temp.scrub_trip_types(trip_types);
 
 UPDATE routes SET name = 'route-' || substring(id::text, 1, 8);
 UPDATE media SET display_name = NULL, filename = 'file-' || substring(id::text, 1, 8);

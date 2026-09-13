@@ -3,6 +3,8 @@
 // the join lives here so api and frontend can never drift. displayName, when
 // set, always overrides the derived name.
 
+import { SYSTEM_PLACE_TYPE_IDS } from "./placeTypes.js";
+
 export const TRIP_NAME_MAX_LENGTH = 200;
 export const TRIP_TYPE_MAX_LENGTH = 40;
 export const MAX_PLACES_PER_TRIP = 20;
@@ -39,24 +41,41 @@ export function formatTripPlaceNames(names: string[]): string | null {
 }
 
 /**
- * Linking a place to a trip means "I completed that place on that trip", so a
- * place-linked trip is a canyoning trip. This derives the type list to persist
- * from the user's own list plus that rule — the single derivation, called by the
- * API (POST/PATCH /trips), the seed, and TripLogDialog, so the tag the dialog
- * shows is exactly the tag the server stores.
+ * Whether a trip linking places of these types is a canyoning trip: it links a
+ * place of the system CANYON type.
  *
- * Force-add only, never force-remove: unlinking the last place leaves an
- * existing `canyoning` tag alone, because a place-less trip may legitimately be
- * canyoning ("I did a place that isn't in my library").
+ * Bespoke to one type on purpose. It used to be "links any place", which was
+ * right while every place was a canyon and wrong the day a campsite could be
+ * linked — a night at a campsite tagged the trip canyoning, and the canyoning
+ * tag is what decides which trip attributes a trip is asked. Canyon is already
+ * special everywhere that counts (a system type with a pinned id, the reserved
+ * grade keys, `isCanyoningTrip` in the analytics route), so this is the tag
+ * catching up with the rest of the model rather than a new exception.
+ */
+export function linksCanyon(linkedPlaceTypeIds: readonly string[]): boolean {
+  return linkedPlaceTypeIds.includes(SYSTEM_PLACE_TYPE_IDS.canyon);
+}
+
+/**
+ * Linking a canyon to a trip means "I did that canyon on that trip", so it is a
+ * canyoning trip. This derives the type list to persist from the user's own
+ * list plus that rule — the single derivation, called by the API (POST/PATCH
+ * /trips, the sync push, bulk import), the seed, and both trip forms, so the
+ * tag a form shows is exactly the tag the server stores. Callers answer
+ * `linksACanyon` with `linksCanyon`, never with their own test.
+ *
+ * Force-add only, never force-remove: unlinking the canyon leaves an existing
+ * `canyoning` tag alone, because a canyon-less trip may legitimately be
+ * canyoning ("I did a canyon that isn't in my library").
  *
  * Returns `types` unchanged (same reference) when it has nothing to add, so
  * callers can cheaply detect a no-op.
  */
 export function enforceCanyoningTag(
   types: string[],
-  hasLinkedPlace: boolean,
+  linksACanyon: boolean,
 ): string[] {
-  if (!hasLinkedPlace) return types;
+  if (!linksACanyon) return types;
   // Case-insensitive: the API rejects case-insensitive duplicates, so pushing
   // "canyoning" onto ["Canyoning"] would build a list its own validator 400s.
   // The user's casing wins.

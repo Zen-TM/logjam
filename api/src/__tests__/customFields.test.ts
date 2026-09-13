@@ -89,7 +89,13 @@ describe("custom-fields route (fake auth)", () => {
     const projected = await defsFromUser("tripLogCustomFields");
     expect(projected).toEqual(
       (listed.body.fields as Record<string, unknown>[]).map(
-        ({ placeTypeIds: _s, appliesToAllTypes: _a, ownerId: _o, ...plain }) => plain,
+        ({
+          placeTypeIds: _s,
+          tripTypes: _t,
+          appliesToAllTypes: _a,
+          ownerId: _o,
+          ...plain
+        }) => plain,
       ),
     );
   });
@@ -238,21 +244,108 @@ describe("custom-fields route (fake auth)", () => {
     expect(def!.appliesToAllTypes).toBe(true);
     expect(def!.placeTypeIds).toEqual([]);
 
-    // And the seeded three, which is where this was found.
-    for (const seeded of ["water_level", "rope_length_m", "wetsuit"]) {
+    // And the seeded three, which is where this was found. Each is on SOME
+    // form: two on every trip, `rope_length_m` on canyoning trips.
+    const seededScoping: Record<string, { appliesToAllTypes: boolean; tripTypes: string[] }> = {
+      water_level: { appliesToAllTypes: true, tripTypes: [] },
+      rope_length_m: { appliesToAllTypes: false, tripTypes: ["canyoning"] },
+      wetsuit: { appliesToAllTypes: true, tripTypes: [] },
+    };
+    for (const [seeded, scoping] of Object.entries(seededScoping)) {
       const row = (list.body.fields as Record<string, unknown>[]).find(
         (f) => f.key === seeded,
       );
       expect(row, `${seeded} should be listed`).toBeTruthy();
-      expect(
-        row!.appliesToAllTypes,
-        `${seeded} is on no form unless it applies to all types`,
-      ).toBe(true);
+      expect(row, `${seeded} is on no form unless it is scoped somewhere`).toMatchObject(
+        scoping,
+      );
     }
 
     await write(() =>
       request(API_URL).delete(`/custom-fields/trip-log/${key}`).set(AUTH),
     );
+  });
+
+  // A TRIP attribute is scoped by the trip's own types (tags), and that scoping
+  // has to survive both write paths' readers — the REST list the web reads and
+  // the delta the phone mirrors — or the phone shows it on every trip or none.
+  it("scopes a trip attribute by trip type, on the REST list and the delta", async () => {
+    const key = `flow_${Date.now()}`.slice(0, 20);
+    const created = await write(() =>
+      request(API_URL)
+        .post("/custom-fields/trip-log")
+        .set(AUTH)
+        .send({
+          field: { key, label: "Flow", type: "integer" },
+          // Trimmed by the same normaliser a trip's own tags go through.
+          tripTypes: [" packrafting "],
+        }),
+    );
+    expect(created.status, JSON.stringify(created.body)).toBe(201);
+
+    try {
+      const list = await request(API_URL).get("/custom-fields/trip-log").set(AUTH);
+      const def = (list.body.fields as Record<string, unknown>[]).find(
+        (f) => f.key === key,
+      );
+      expect(def).toMatchObject({
+        tripTypes: ["packrafting"],
+        placeTypeIds: [],
+        appliesToAllTypes: false,
+      });
+
+      const rescoped = await write(() =>
+        request(API_URL)
+          .patch(`/custom-fields/trip-log/${key}`)
+          .set(AUTH)
+          .send({ tripTypes: ["packrafting", "Bushwalking"] }),
+      );
+      expect(rescoped.status, JSON.stringify(rescoped.body)).toBe(200);
+
+      const delta = await request(API_URL)
+        .get("/sync/delta")
+        .set({ ...AUTH, "x-logjam-client": "mobile/0.1.0-test" })
+        .query({ limit: 500 });
+      expect(delta.status).toBe(200);
+      const row = (delta.body.changes.customFieldDefs as Record<string, unknown>[]).find(
+        (f) => f.key === key,
+      );
+      expect(row, "the delta should carry the definition").toMatchObject({
+        tripTypes: ["packrafting", "Bushwalking"],
+        appliesToAllTypes: false,
+      });
+    } finally {
+      await write(() =>
+        request(API_URL).delete(`/custom-fields/trip-log/${key}`).set(AUTH),
+      );
+    }
+  });
+
+  // Each entity has ONE kind of scoping. The other list is refused, not
+  // dropped: a scoping the server threw away would put the field on forms the
+  // user never chose.
+  it("refuses place types on a trip attribute and trip types on a place attribute", async () => {
+    const tripWithPlaceTypes = await write(() =>
+      request(API_URL)
+        .post("/custom-fields/trip-log")
+        .set(AUTH)
+        .send({
+          field: { key: "mismatched_trip", label: "Mismatched trip", type: "string" },
+          placeTypeIds: ["00000000-0000-4000-8000-000000000000"],
+        }),
+    );
+    expect(tripWithPlaceTypes.status).toBe(400);
+
+    const placeWithTripTypes = await write(() =>
+      request(API_URL)
+        .post("/custom-fields/place")
+        .set(AUTH)
+        .send({
+          field: { key: "mismatched_place", label: "Mismatched place", type: "string" },
+          tripTypes: ["canyoning"],
+        }),
+    );
+    expect(placeWithTripTypes.status).toBe(400);
   });
 
   it("carries each definition's scoping on the REST list", async () => {
