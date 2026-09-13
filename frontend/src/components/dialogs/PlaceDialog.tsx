@@ -511,8 +511,8 @@ function PlaceDialog({
         numericFieldError(longitude, LNG_CONSTRAINTS) ??
         numericFieldError(quality, fieldConstraints("quality")) ??
         numericFieldError(hours, fieldConstraints("hours")) ??
-        numericFieldError(numAbseils, fieldConstraints("numAbseils")) ??
-        numericFieldError(longestAbseil, fieldConstraints("longestAbseil"));
+        numericFieldError(numAbseils, fieldConstraints("num_abseils")) ??
+        numericFieldError(longestAbseil, fieldConstraints("longest_abseil"));
       if (numericInvalid) {
         setShowFieldErrors(true);
         setError("Please fix the highlighted fields.");
@@ -973,7 +973,7 @@ function PlaceDialog({
                 label="Pitches"
                 value={numAbseils}
                 onChange={setNumAbseils}
-                constraints={fieldConstraints("numAbseils")}
+                constraints={fieldConstraints("num_abseils")}
                 showError={showFieldErrors}
                 tooltip="Number of abseils."
               />
@@ -983,7 +983,7 @@ function PlaceDialog({
                 label="Longest Pitch (m)"
                 value={longestAbseil}
                 onChange={setLongestAbseil}
-                constraints={fieldConstraints("longestAbseil")}
+                constraints={fieldConstraints("longest_abseil")}
                 showError={showFieldErrors}
                 tooltip="Length of the longest single abseil in metres, measured along the rope."
               />
