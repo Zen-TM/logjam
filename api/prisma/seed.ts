@@ -305,9 +305,21 @@ function buildTrips(): SeedTrip[] {
         notes: `${NOTE_TEMPLATES[seed % NOTE_TEMPLATES.length]} Party: ${party.join(", ")}.`,
         customFields: withFields
           ? {
-              water_level: WATER[seed % WATER.length],
-              rope_length_m: String(15 + ((seed * 5) % 50)),
-              wetsuit: seed % 2 === 0 ? "true" : "false",
+              // NOT `seed % WATER.length`: the gate above is `seed % 3` and
+              // WATER has three entries, so that expression is zero every time
+              // it is reached — every seeded trip got "low" and the vocabulary
+              // tally rendered as a single row. Any sampling index has to be
+              // coprime with the gate that decides whether it runs at all.
+              water_level: WATER[(seed / 3) % WATER.length | 0],
+              // TYPED to match their definitions, not stringified. A value of
+              // the wrong type READS AS ABSENT everywhere (the forgiving-read
+              // rule in shared/src/fieldValues.ts), so a stringified integer is
+              // not a harmless variation — it is a value no reader can use.
+              // Seeded as strings until 2026-09-13, which made two of alice's
+              // three trip attributes invisible to anything that aggregates
+              // them while still rendering as text on the trip screen.
+              rope_length_m: 15 + ((seed * 5) % 50),
+              wetsuit: seed % 2 === 0,
             }
           : undefined,
       });

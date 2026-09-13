@@ -90,6 +90,18 @@ Additive only. Never silently delete existing conventions — flag stale entries
 - **Parser fixtures are the source's real output, not a tidied version of it.** The RopeWiki parser tests passed for months against synthetic CSV with lowercase headers and clean cells, while the live export sends `PAGEID`, `15r`, `229.659 ft` and HTML-wrapped ratings — none of that was covered, so a header-casing regression would have shipped green. Commit a few real rows under `__fixtures__/` and parse those too (`api/src/services/__fixtures__/ropewiki-nsw-sample.csv`).
 - **An external data source can be withdrawn without notice.** RopeWiki went behind a Cloudflare managed challenge that 403s every non-browser client on every path regardless of User-Agent (2026-08-30) — no header or retry fixes it, and their own robots.txt still permits us, so the block is WAF config disagreeing with stated policy. Slow-changing third-party corpora are held as a hand-refreshed S3 snapshot (`reference/` in the media bucket, read by `getRopeWikiCanyons`), with the live fetch kept behind `?fresh=true` so re-enabling it is a default, not a rebuild.
 
+- **A TOTAL needs a declaration, not a heuristic.** An aggregate screen can
+  read a number's SHAPE — bounded on both sides with a small span is a rating,
+  open-ended is a quantity (`shared/src/logbookStats.ts`) — but no property of a
+  definition says whether a quantity ACCUMULATES. `min`/`max` don't, and neither
+  does which entity it hangs off: summing a place attribute over trips produced
+  "1996 longest pitch" and "48 capacity", and the obvious correction (a trip's
+  own answers are the ones it spends) produced "1530 rope length" one commit
+  later. Both directions shipped and both were wrong. Until a definition carries
+  an explicit "adds up each trip" flag, an average and a highest are the honest
+  pair — they are never wrong for either kind. The same rule in miniature:
+  a tally over ONE distinct value is a constant, not a distribution.
+
 ## Testing
 
 Integration suites (`api` `npm test`, topo Docker runbooks) are **NOT** in CI — run them locally before committing changes they cover. Everything else (unit suites, lint, typecheck) gates PRs via `.github/workflows/ci.yml`.

@@ -11,6 +11,8 @@
  * timezone.
  */
 
+import { todayDateKey } from "../ui/monthGrid";
+
 export type LogbookTrip = {
   date: string;
   places: { id: string; name: string }[];
@@ -132,4 +134,105 @@ export function countTripsInLastMonths(
   const total = year * 12 + month - (months - 1);
   const start = Date.UTC(Math.floor(total / 12), ((total % 12) + 12) % 12, 1);
   return trips.filter((trip) => new Date(trip.date).getTime() >= start).length;
+}
+
+// ── Ranges and spark buckets for the stats screen ──────────────────────
+
+export type LogbookRange = { label: string; from: string | null; to: string | null };
+
+/**
+ * The relative ranges people actually ask for, relative to now.
+ *
+ * LOCAL today, not UTC. In AEDT before 11:00 the UTC date is yesterday, so
+ * "This year" was labelled with last year on New Year's morning and, every
+ * other morning, set `to` = yesterday and hid a trip logged today. The Logs
+ * screen already disables future days by local today, so the sheet was
+ * disagreeing with itself.
+ *
+ * Declared once and read twice: the Logs filter sheet offers these as presets,
+ * and the stats screen's pill rail leads with them. The two surfaces must mean
+ * the same thing by "This year".
+ */
+export function datePresets(today: string = todayDateKey()): LogbookRange[] {
+  const year = Number(today.slice(0, 4));
+  const month = Number(today.slice(5, 7)) - 1;
+  const twelveMonths = new Date(Date.UTC(year, month - 11, 1))
+    .toISOString()
+    .slice(0, 10);
+  return [
+    { label: "This year", from: `${year}-01-01`, to: today },
+    { label: "Last 12 months", from: twelveMonths, to: today },
+    { label: `${year - 1}`, from: `${year - 1}-01-01`, to: `${year - 1}-12-31` },
+  ];
+}
+
+/**
+ * The stats screen's pill rail: all time, the relative presets, then one pill
+ * per EARLIER year the user actually has trips in.
+ *
+ * Derived from the data rather than hardcoded, which is what makes a
+ * side-scrolling rail earn itself — it grows a pill per season rather than
+ * offering four empty windows to someone who started last month. The two years
+ * `datePresets` already covers are skipped so no year appears twice.
+ */
+export function logbookRanges(
+  years: number[],
+  today: string = todayDateKey(),
+): LogbookRange[] {
+  const thisYear = Number(today.slice(0, 4));
+  const covered = new Set([thisYear, thisYear - 1]);
+  return [
+    { label: "All time", from: null, to: null },
+    ...datePresets(today),
+    ...[...new Set(years)]
+      .filter((year) => !covered.has(year))
+      .sort((a, b) => b - a)
+      .map((year) => ({
+        label: `${year}`,
+        from: `${year}-01-01`,
+        to: `${year}-12-31`,
+      })),
+  ];
+}
+
+/** Twelve calendar-month buckets for ONE year — the spark for a year pill,
+ *  where "the last twelve months ending now" would be twelve empty bars. */
+export function monthBucketsForYear(
+  monthly: { year: number; month: number; count: number }[],
+  year: number,
+  now: Date = new Date(),
+): MonthBucket[] {
+  const current = currentCalendarMonth(now);
+  return Array.from({ length: 12 }, (_, month) => ({
+    label: new Date(Date.UTC(2000, month, 1))
+      .toLocaleDateString("en-AU", { month: "narrow", timeZone: "UTC" })
+      .charAt(0),
+    count:
+      monthly.find((entry) => entry.year === year && entry.month === month)?.count ??
+      0,
+    current: current.year === year && current.month === month,
+  }));
+}
+
+/**
+ * One bucket per calendar year from the first with a trip to the last, EMPTY
+ * YEARS INCLUDED — a year off is part of the shape, and dropping it would draw
+ * a continuous run of seasons that never happened.
+ */
+export function yearBuckets(
+  yearly: { year: number; count: number }[],
+  now: Date = new Date(),
+): MonthBucket[] {
+  if (yearly.length === 0) return [];
+  const first = yearly[0].year;
+  const last = yearly[yearly.length - 1].year;
+  const thisYear = now.getFullYear();
+  return Array.from({ length: last - first + 1 }, (_, offset) => {
+    const year = first + offset;
+    return {
+      label: `${year}`.slice(2),
+      count: yearly.find((entry) => entry.year === year)?.count ?? 0,
+      current: year === thisYear,
+    };
+  });
 }

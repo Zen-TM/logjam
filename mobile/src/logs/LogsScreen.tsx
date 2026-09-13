@@ -60,13 +60,13 @@ import {
   SelectionBar,
   SyncStatusPills,
   Toast,
-  todayDateKey,
   useBulkSelection,
   type SegmentOption,
   type ToastMessage,
 } from "../ui";
 import {
   countTripsInLastMonths,
+  datePresets,
   distinctPlaceCount,
   formatDateKey,
   formatTripDate,
@@ -78,7 +78,13 @@ import { TripEditSheet } from "./TripEditSheet";
 
 const ALL_TYPES = "";
 
-export function LogsScreen({ onOpenTrip }: { onOpenTrip: (trip: MirrorTrip) => void }) {
+export function LogsScreen({
+  onOpenTrip,
+  onOpenStats,
+}: {
+  onOpenTrip: (trip: MirrorTrip) => void;
+  onOpenStats: () => void;
+}) {
   const connectivity = useConnectivity();
   const online = connectivity === "online";
   const pendingCount = usePendingSyncCount();
@@ -330,6 +336,17 @@ export function LogsScreen({ onOpenTrip }: { onOpenTrip: (trip: MirrorTrip) => v
         title={trips.length === 1 ? "1 trip" : `${trips.length} trips`}
         action={
           <View style={styles.heroActions}>
+            {/* The retrospective lives one tap away rather than on this screen:
+                Logs answers "what have I done?", stats answers "am I getting
+                out, and is it going anywhere?" — two questions, so two screens
+                (DESIGN.md §1). It sits beside search because both are ways of
+                asking the logbook something, rather than adding to it. */}
+            <IconButton
+              icon="bar-chart-2"
+              accessibilityLabel="Logbook stats"
+              color={theme.textMuted}
+              onPress={onOpenStats}
+            />
             <IconButton
               icon="search"
               accessibilityLabel={findOpen ? "Hide search" : "Search trips"}
@@ -724,26 +741,6 @@ function rangeLabel(from: string | null, to: string | null): string {
   const start = from ? formatDateKey(`${from}T00:00:00.000Z`) : "Any time";
   const end = to ? formatDateKey(`${to}T00:00:00.000Z`) : "Today";
   return `${start} → ${end}`;
-}
-
-/** The ranges people actually ask for, relative to now. */
-function datePresets(): { label: string; from: string; to: string }[] {
-  // LOCAL today, not UTC. In AEDT before 11:00 the UTC date is yesterday, so
-  // "This year" was labelled with last year on New Year's morning and, every
-  // other morning, set `to` = yesterday and hid a trip logged today. The rest
-  // of this screen already disables future days by local today, so the sheet
-  // was disagreeing with itself.
-  const today = todayDateKey();
-  const year = Number(today.slice(0, 4));
-  const month = Number(today.slice(5, 7)) - 1;
-  const twelveMonths = new Date(Date.UTC(year, month - 11, 1))
-    .toISOString()
-    .slice(0, 10);
-  return [
-    { label: "This year", from: `${year}-01-01`, to: today },
-    { label: "Last 12 months", from: twelveMonths, to: today },
-    { label: `${year - 1}`, from: `${year - 1}-01-01`, to: `${year - 1}-12-31` },
-  ];
 }
 
 const styles = StyleSheet.create({
