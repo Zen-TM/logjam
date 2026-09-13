@@ -14,6 +14,8 @@ React 19 + TypeScript + Vite SPA. MapLibre GL JS = core UI surface; most feature
 
 > **Self-updating:** when user establishes new design conventions, ask before appending here.
 
+- **`frontend/DESIGN.md` and the `src/ui` kit govern new and rebuilt UI** (2026-09-13 redesign). MUI is an ESLint error outside `MUI_LEGACY_FILES` (`eslint.config.js`), a list that may only shrink. The MUI, `sx`, `shared.module.css` and `@mui/icons-material` rules below describe the files still on that list, and are flagged for removal once it is empty.
+
 - **CSS Modules** (`.module.css` co-located) for layout + color.
 - **All colors via CSS custom properties** (`var(--theme-*)`) — never hardcode hex in CSS.
 - **MUI `sx` prop** only for one-off layout tweaks on MUI components.
