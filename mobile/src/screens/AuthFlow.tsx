@@ -32,11 +32,6 @@ export function AuthFlow({ auth }: { auth: Auth }) {
     >
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <Text style={styles.appTitle}>Logjam</Text>
-        {auth.error ? (
-          <View style={styles.bannerSlot}>
-            <ErrorBanner message={auth.error} />
-          </View>
-        ) : null}
         {auth.state === "signUp" && <SignUpForm auth={auth} />}
         {auth.state === "confirmSignUp" && <ConfirmSignUpForm auth={auth} />}
         {auth.state === "forgotPassword" && <ForgotPasswordForm auth={auth} />}
@@ -80,6 +75,9 @@ function SignUpForm({ auth }: { auth: Auth }) {
         autoCapitalize="none"
         textContentType="newPassword"
       />
+      {/* A server refusal (username taken, weak password), directly above
+          the submit it belongs to — never at the top of the form (§8). */}
+      {auth.error ? <ErrorBanner message={auth.error} /> : null}
       <Button label="Create account" onPress={submit} loading={submitting} />
       <FooterLink label="Have an account? Sign in" onPress={auth.goToSignIn} />
     </View>
@@ -117,6 +115,7 @@ function ConfirmSignUpForm({ auth }: { auth: Auth }) {
         secureTextEntry
         autoCapitalize="none"
       />
+      {auth.error ? <ErrorBanner message={auth.error} /> : null}
       <Button label="Confirm and sign in" onPress={submit} loading={submitting} />
       <FooterLink label="Resend code" onPress={resend} />
       {resendMessage ? <Text style={styles.hint}>{resendMessage}</Text> : null}
@@ -145,6 +144,7 @@ function ForgotPasswordForm({ auth }: { auth: Auth }) {
         autoComplete="email"
         keyboardType="email-address"
       />
+      {auth.error ? <ErrorBanner message={auth.error} /> : null}
       <Button label="Send reset code" onPress={submit} loading={submitting} />
       <FooterLink label="Back to sign in" onPress={auth.goToSignIn} />
     </View>
@@ -177,6 +177,7 @@ function ConfirmForgotPasswordForm({ auth }: { auth: Auth }) {
         autoCapitalize="none"
         textContentType="newPassword"
       />
+      {auth.error ? <ErrorBanner message={auth.error} /> : null}
       <Button label="Reset password" onPress={submit} loading={submitting} />
       <FooterLink label="Back to sign in" onPress={auth.goToSignIn} />
     </View>
@@ -206,7 +207,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: spacing(2),
   },
-  bannerSlot: { marginBottom: spacing(1) },
   form: { gap: spacing(2) },
   heading: { fontSize: fontSize.lg, fontWeight: fontWeight.medium, color: theme.textPrimary },
   hint: { fontSize: fontSize.sm, color: theme.textMuted },

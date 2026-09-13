@@ -111,7 +111,6 @@ export function SettingsScreen({ onOpenPage }: { onOpenPage: (page: SettingsPage
   const placeTypeForm = usePlaceTypeForm({
     editing: sheet.kind === "placeTypeForm" ? sheet.editing : null,
     onSaved: (message) => notify(message),
-    onFailed: (message) => notify(message, "error"),
     onDone: () => setSheet({ kind: "placeTypes" }),
   });
 
@@ -127,7 +126,6 @@ export function SettingsScreen({ onOpenPage }: { onOpenPage: (page: SettingsPage
       setDefsFor(formEntity, next);
       notify(message);
     },
-    onFailed: (message) => notify(message, "error"),
     onDone: () => setSheet({ kind: "fields", entity: formEntity }),
   });
 

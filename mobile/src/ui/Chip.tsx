@@ -23,6 +23,7 @@ export function Chip({
   hue,
   icon,
   count,
+  starred = false,
   onPress,
 }: {
   label: string;
@@ -31,12 +32,15 @@ export function Chip({
   hue?: string;
   icon?: React.ComponentProps<typeof Feather>["name"];
   count?: number;
+  /** Trailing star: this chip is the one that counts (ChipPicker's `primaryValue`). */
+  starred?: boolean;
   onPress: () => void;
 }) {
   const tint = hue ?? theme.accent;
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={starred ? `${label}, starred` : undefined}
       accessibilityState={{ selected: active, disabled }}
       disabled={disabled}
       onPress={onPress}
@@ -54,6 +58,9 @@ export function Chip({
       <Text style={[styles.label, active && styles.labelActive, disabled && styles.labelDisabled]}>
         {label}
       </Text>
+      {starred ? (
+        <Feather name="star" size={12} color={active ? theme.primary : tint} />
+      ) : null}
       {count != null ? (
         <View style={[styles.badge, active && styles.badgeActive]}>
           <Text style={[styles.badgeText, active && styles.badgeTextActive]}>{count}</Text>

@@ -61,8 +61,6 @@ export function LandingScreen({ auth }: { auth: Auth }) {
           <Text style={styles.tagline}>Your canyoning logbook and offline maps.</Text>
         </View>
 
-        {auth.error ? <ErrorBanner message={auth.error} /> : null}
-
         {mode === "signIn" ? (
           <SignInPanel
             auth={auth}
@@ -71,6 +69,7 @@ export function LandingScreen({ auth }: { auth: Auth }) {
           />
         ) : (
           <GuestExplainer
+            auth={auth}
             onBack={() => setMode("signIn")}
             onCreateAccount={auth.goToSignUp}
             onContinue={auth.chooseGuest}
@@ -121,6 +120,9 @@ function SignInPanel({
         returnKeyType="go"
         onSubmitEditing={submit}
       />
+      {/* Directly above the submit it belongs to, not at the top of the
+          screen — never at the top of the form (§8). */}
+      {auth.error ? <ErrorBanner message={auth.error} /> : null}
       <Button label="Sign in" onPress={submit} loading={submitting} />
       <FooterLink label="Forgot password?" onPress={auth.goToForgotPassword} />
 
@@ -142,10 +144,12 @@ function SignInPanel({
 }
 
 function GuestExplainer({
+  auth,
   onBack,
   onCreateAccount,
   onContinue,
 }: {
+  auth: Auth;
   onBack: () => void;
   onCreateAccount: () => void;
   /** Returns false when the choice could not be stored (auth.error says why). */
@@ -163,6 +167,9 @@ function GuestExplainer({
         Sharing with friends and LiDAR maps from Logjam Web need an account.
         Downloaded topos work without one.
       </Text>
+      {/* "Continue anyway" is this panel's submit — a failure to store the
+          choice belongs directly above it (§8). */}
+      {auth.error ? <ErrorBanner message={auth.error} /> : null}
       <View style={styles.secondary}>
         <Button label="Continue anyway" variant="outlineAccent" onPress={onContinue} />
         <Button label="Create an account" variant="ghost" onPress={onCreateAccount} />

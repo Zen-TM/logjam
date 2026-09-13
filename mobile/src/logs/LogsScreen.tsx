@@ -616,7 +616,6 @@ export function LogsScreen({
         existingTypes={distinctTypes}
         onClose={() => setEditing(null)}
         onSaved={info}
-        onFailed={fail}
       />
 
       <Toast message={toast} onDismissed={() => setToast(null)} />

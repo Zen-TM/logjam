@@ -724,7 +724,6 @@ export function PlaceDetailScreen({
         place={place}
         onClose={() => setEditing(false)}
         onSaved={(text) => notify(text, "info")}
-        onFailed={(text) => notify(text, "error")}
       />
 
       <TripEditSheet
@@ -735,7 +734,6 @@ export function PlaceDetailScreen({
         existingTypes={distinctTripTypes(trips.data ?? [])}
         onClose={() => setLogging(false)}
         onSaved={(text) => notify(text, "info")}
-        onFailed={(text) => notify(text, "error")}
       />
 
       {/* Changing what fills the route slot, from the place it belongs to —

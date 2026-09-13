@@ -3,6 +3,7 @@ import { StyleSheet, TextInput, View } from "react-native";
 
 import { fontSize, radius, spacing, surface, theme } from "../theme";
 import { Chip } from "./Chip";
+import { FieldError } from "./FieldError";
 import { SectionHeader } from "./SectionHeader";
 
 export type ChipOption = {
@@ -17,9 +18,11 @@ export type ChipOption = {
  * seed list unioned with whatever they have typed before, and free text is
  * always allowed (`TRIP_TYPE_SUGGESTIONS` is a seed, not an enum).
  *
- * Selected values are shown first so a long vocabulary can't hide a choice
- * that is already made. `onAdd` renders a trailing "+ Add" chip that swaps
- * into an inline field; omit it for a closed vocabulary.
+ * Chips stay in VOCABULARY order whatever is selected. Moving a chip to the
+ * front on selection made the user re-read the whole layout after every tap,
+ * and put the chip they were reaching for somewhere else. `onAdd` renders a
+ * trailing "+ Add" chip that swaps into an inline field; omit it for a closed
+ * vocabulary.
  */
 export function ChipPicker({
   label,
@@ -29,6 +32,8 @@ export function ChipPicker({
   onAdd,
   addPlaceholder = "Add",
   disabledValues,
+  primaryValue,
+  error,
 }: {
   label: string;
   options: ChipOption[];
@@ -40,6 +45,12 @@ export function ChipPicker({
    *  `canyoning` tag on a place-linked trip is the case (the server force-adds
    *  it, so letting the user "deselect" it would be a lie). */
   disabledValues?: ReadonlySet<string>;
+  /** A selected value whose place in the SELECTION means something — a trip's
+   *  first type picks its glyph and hue. Starred rather than moved to the
+   *  front, since chips keep their positions. */
+  primaryValue?: string;
+  /** The problem with this choice (DESIGN.md §8, "Form errors"). */
+  error?: string | null;
 }) {
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState("");
@@ -52,22 +63,13 @@ export function ChipPicker({
     setAdding(false);
   };
 
-  // Selected chips lead, in SELECTION order rather than vocabulary order: for
-  // trip types the first entry is the primary one (it picks the row's glyph and
-  // hue), so the picker has to show which that is.
   const isSelected = new Set(selected);
-  const ordered = [
-    ...selected
-      .map((value) => options.find((option) => option.value === value))
-      .filter((option): option is ChipOption => option != null),
-    ...options.filter((option) => !isSelected.has(option.value)),
-  ];
 
   return (
     <View style={styles.wrap}>
       <SectionHeader label={label} />
       <View style={styles.chips}>
-        {ordered.map((option) => (
+        {options.map((option) => (
           <Chip
             key={option.value}
             label={option.label}
@@ -75,6 +77,7 @@ export function ChipPicker({
             disabled={disabledValues?.has(option.value) ?? false}
             hue={option.hue}
             icon={option.icon}
+            starred={option.value === primaryValue}
             onPress={() => onToggle(option.value)}
           />
         ))}
@@ -105,6 +108,7 @@ export function ChipPicker({
           />
         ) : null}
       </View>
+      <FieldError message={error} />
     </View>
   );
 }

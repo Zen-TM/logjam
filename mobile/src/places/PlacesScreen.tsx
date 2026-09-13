@@ -515,7 +515,6 @@ export function PlacesScreen({
   const placeTypeForm = usePlaceTypeForm({
     editing: null,
     onSaved: info,
-    onFailed: fail,
     onDone: () => setSheet(null),
   });
 
@@ -898,7 +897,6 @@ export function PlacesScreen({
           setPickedCoords(null);
         }}
         onSaved={info}
-        onFailed={fail}
       />
 
       {/* Logging from a place: the same trip form, with this place already
@@ -913,7 +911,6 @@ export function PlacesScreen({
         existingTypes={tripTypes}
         onClose={() => setLoggingFor(null)}
         onSaved={info}
-        onFailed={fail}
       />
 
       <Toast message={toast} onDismissed={() => setToast(null)} />

@@ -5110,7 +5110,6 @@ export function MapScreen({
           setEditingPlace(null);
         }}
         onSaved={(text) => notify(text, "info")}
-        onFailed={(text) => notify(text, "error")}
       />
 
       {/* One place's verbs, from the pin the user tapped — the same sheet the
@@ -5144,7 +5143,6 @@ export function MapScreen({
         existingTypes={tripTypes}
         onClose={() => setLoggingPlace(null)}
         onSaved={(text) => notify(text, "info")}
-        onFailed={(text) => notify(text, "error")}
       />
 
       {/* Tapping a route line opens its VERBS; the stats are a sub-mode one tap
@@ -5254,6 +5252,9 @@ function RouteNameForm({
   onSubmit: (name: string) => void;
 }) {
   const [draft, setDraft] = useState(initialName);
+  // Empty-name requirement shows on SUBMIT, not while typing (DESIGN.md §8);
+  // clears as soon as the field is edited.
+  const [showEmptyError, setShowEmptyError] = useState(false);
   const inputRef = useRef<TextInput>(null);
 
   useEffect(() => {
@@ -5281,7 +5282,11 @@ function RouteNameForm({
   const trimmed = draft.trim();
   const tooLong = trimmed.length > ROUTE_NAME_MAX_LENGTH;
   const commit = () => {
-    if (!trimmed || tooLong || saving) return;
+    if (saving) return;
+    if (!trimmed || tooLong) {
+      setShowEmptyError(true);
+      return;
+    }
     onSubmit(trimmed);
   };
 
@@ -5290,18 +5295,25 @@ function RouteNameForm({
       <TextField
         label="Name"
         value={draft}
-        onChangeText={setDraft}
+        onChangeText={(text) => {
+          setDraft(text);
+          setShowEmptyError(false);
+        }}
         inputRef={inputRef}
         returnKeyType="done"
         onSubmitEditing={commit}
         error={
-          tooLong ? `Must be at most ${ROUTE_NAME_MAX_LENGTH} characters` : undefined
+          tooLong
+            ? `Names can be at most ${ROUTE_NAME_MAX_LENGTH} characters.`
+            : showEmptyError && !trimmed
+              ? "A route needs a name."
+              : undefined
         }
       />
       <Button
         label={saving ? "Saving…" : "Save"}
         icon="check"
-        disabled={!trimmed || tooLong || saving}
+        disabled={saving}
         onPress={commit}
       />
     </View>

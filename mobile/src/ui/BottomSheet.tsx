@@ -54,6 +54,12 @@ export const SheetScrollLock = createContext<{
   setLocked: (locked: boolean) => void;
 } | null>(null);
 
+/**
+ * How a `FieldError` that has just appeared asks the sheet to bring it into
+ * view (DESIGN.md §8, "Form errors"). Null outside a sheet.
+ */
+export const SheetErrorReveal = createContext<((target: View) => void) | null>(null);
+
 export function BottomSheet({
   visible,
   onClose,
@@ -113,6 +119,37 @@ export function BottomSheet({
   const [scrollLocked, setScrollLocked] = useState(false);
   const scrollLock = useMemo(
     () => ({ setLocked: (locked: boolean) => setScrollLocked(locked) }),
+    [],
+  );
+  // A submit can turn up several errors at once. Each reports itself; the
+  // topmost of the frame wins, and the sheet scrolls only when THAT one is out
+  // of view — so a live limit appearing under the field being typed in never
+  // moves the sheet.
+  const scrollRef = useRef<ScrollView>(null);
+  const contentRef = useRef<View>(null);
+  const viewport = useRef({ y: 0, height: 0 });
+  const pendingReveal = useRef<{ y: number; height: number } | null>(null);
+  const revealError = useMemo(
+    () => (target: View) => {
+      const content = contentRef.current;
+      if (content == null) return;
+      target.measureLayout(content, (_left, top, _width, height) => {
+        const pending = pendingReveal.current;
+        if (pending != null) {
+          if (top < pending.y) pendingReveal.current = { y: top, height };
+          return;
+        }
+        pendingReveal.current = { y: top, height };
+        requestAnimationFrame(() => {
+          const first = pendingReveal.current;
+          pendingReveal.current = null;
+          if (first == null) return;
+          const { y, height: visible } = viewport.current;
+          if (first.y >= y && first.y + first.height <= y + visible) return;
+          scrollRef.current?.scrollTo({ y: Math.max(0, first.y - visible / 2), animated: true });
+        });
+      });
+    },
     [],
   );
   // Keyboard handling is done by hand rather than with KeyboardAvoidingView.
@@ -275,6 +312,14 @@ export function BottomSheet({
               full content height and pushes the footer off-screen. */}
           <View style={styles.scrollArea}>
             <ScrollView
+              ref={scrollRef}
+              onLayout={(event) => {
+                viewport.current = { ...viewport.current, height: event.nativeEvent.layout.height };
+              }}
+              onScroll={(event) => {
+                viewport.current = { ...viewport.current, y: event.nativeEvent.contentOffset.y };
+              }}
+              scrollEventThrottle={32}
               contentContainerStyle={styles.scrollContent}
               showsVerticalScrollIndicator={false}
               // Without this the FIRST tap on any control while the keyboard is
@@ -287,7 +332,13 @@ export function BottomSheet({
               scrollEnabled={overlay == null && !scrollLocked}
             >
               <SheetScrollLock.Provider value={scrollLock}>
-                {children}
+                <SheetErrorReveal.Provider value={revealError}>
+                  {/* The frame an error measures itself against. Not
+                      collapsable, or Android flattens it away. */}
+                  <View ref={contentRef} collapsable={false}>
+                    {children}
+                  </View>
+                </SheetErrorReveal.Provider>
               </SheetScrollLock.Provider>
             </ScrollView>
             {overlay != null ? <View style={styles.overlay}>{overlay}</View> : null}

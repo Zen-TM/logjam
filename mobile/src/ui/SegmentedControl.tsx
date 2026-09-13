@@ -65,9 +65,12 @@ export function SegmentedControl<T extends string>({
   return <Rail value={value}>{chips}</Rail>;
 }
 
-// A rail keeps the selected chip in view. Selection can change from outside the
-// rail (an import lands, a rename jumps to that category); leaving the active
-// chip scrolled off makes the list below look unfiltered.
+// A rail brings the selected chip into view ONLY when it is entirely off
+// screen. Selection can change from outside the rail (an import lands, a rename
+// jumps to that category), and an active chip scrolled out of sight makes the
+// list below look unfiltered. A chip the user just TAPPED is on screen by
+// definition, so a tap never moves the rail: pinning every tapped chip to the
+// left edge scrolled away the neighbour the user was about to tap next.
 function Rail<T extends string>({
   value,
   children,
@@ -76,7 +79,8 @@ function Rail<T extends string>({
   children: React.ReactNode[];
 }) {
   const scrollRef = useRef<ScrollView>(null);
-  const offsets = useRef(new Map<number, number>());
+  const offsets = useRef(new Map<number, { x: number; width: number }>());
+  const viewport = useRef({ x: 0, width: 0 });
   const childArray = children as React.ReactElement<{ children?: unknown }>[];
   const activeIndex = childArray.findIndex((chip) => chip.key === String(value));
   // Which ends have content beyond them — each edge only fades when there is
@@ -85,13 +89,20 @@ function Rail<T extends string>({
   const [overflow, setOverflow] = useState({ start: false, end: false });
 
   useEffect(() => {
-    const x = offsets.current.get(activeIndex);
-    if (x == null) return;
-    scrollRef.current?.scrollTo({ x: Math.max(0, x - spacing(2)), animated: true });
+    const chip = offsets.current.get(activeIndex);
+    if (chip == null) return;
+    const { x, width } = viewport.current;
+    if (chip.x + chip.width <= x) {
+      scrollRef.current?.scrollTo({ x: Math.max(0, chip.x - spacing(2)), animated: true });
+    } else if (chip.x >= x + width) {
+      // Clear of the end fade, not merely under it.
+      scrollRef.current?.scrollTo({ x: chip.x + chip.width - width + spacing(6), animated: true });
+    }
   }, [activeIndex]);
 
   const trackOverflow = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    viewport.current = { x: contentOffset.x, width: layoutMeasurement.width };
     const start = contentOffset.x > 1;
     const end = contentOffset.x + layoutMeasurement.width < contentSize.width - 1;
     setOverflow((current) =>
@@ -107,6 +118,9 @@ function Rail<T extends string>({
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.rail}
         onScroll={trackOverflow}
+        onLayout={(event) => {
+          viewport.current = { ...viewport.current, width: event.nativeEvent.layout.width };
+        }}
         onContentSizeChange={() =>
           // Seed the end fade before any scroll happens.
           setOverflow((current) => (current.end ? current : { ...current, end: true }))
@@ -116,7 +130,10 @@ function Rail<T extends string>({
         {childArray.map((chip, index) => (
           <View
             key={chip.key}
-            onLayout={(event) => offsets.current.set(index, event.nativeEvent.layout.x)}
+            onLayout={(event) => {
+              const { x, width } = event.nativeEvent.layout;
+              offsets.current.set(index, { x, width });
+            }}
           >
             {chip}
           </View>
