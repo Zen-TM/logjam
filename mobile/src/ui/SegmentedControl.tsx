@@ -65,12 +65,12 @@ export function SegmentedControl<T extends string>({
   return <Rail value={value}>{chips}</Rail>;
 }
 
-// A rail brings the selected chip into view ONLY when it is entirely off
-// screen. Selection can change from outside the rail (an import lands, a rename
-// jumps to that category), and an active chip scrolled out of sight makes the
-// list below look unfiltered. A chip the user just TAPPED is on screen by
-// definition, so a tap never moves the rail: pinning every tapped chip to the
-// left edge scrolled away the neighbour the user was about to tap next.
+// A rail moves only as far as it must to show the selected chip WHOLE, and not
+// at all when it already is. Selection can change from outside the rail (an
+// import lands, a rename jumps to that category), and an active chip out of
+// sight makes the list below look unfiltered; a tapped chip half under an edge
+// fade reads as cut off. Pinning every selected chip to the left edge scrolled
+// away the neighbour the user was about to tap next, so the nudge is minimal.
 function Rail<T extends string>({
   value,
   children,
@@ -92,11 +92,14 @@ function Rail<T extends string>({
     const chip = offsets.current.get(activeIndex);
     if (chip == null) return;
     const { x, width } = viewport.current;
-    if (chip.x + chip.width <= x) {
-      scrollRef.current?.scrollTo({ x: Math.max(0, chip.x - spacing(2)), animated: true });
-    } else if (chip.x >= x + width) {
-      // Clear of the end fade, not merely under it.
-      scrollRef.current?.scrollTo({ x: chip.x + chip.width - width + spacing(6), animated: true });
+    // The visible band stops at the fades, which are drawn only where there is
+    // more rail beyond them.
+    const bandStart = x > 1 ? x + FADE_WIDTH : x;
+    const bandEnd = x + width - FADE_WIDTH;
+    if (chip.x < bandStart) {
+      scrollRef.current?.scrollTo({ x: Math.max(0, chip.x - FADE_WIDTH), animated: true });
+    } else if (chip.x + chip.width > bandEnd) {
+      scrollRef.current?.scrollTo({ x: chip.x + chip.width - width + FADE_WIDTH, animated: true });
     }
   }, [activeIndex]);
 
@@ -165,11 +168,13 @@ function EdgeFade({ side }: { side: "start" | "end" }) {
   );
 }
 
+const FADE_WIDTH = spacing(6);
+
 const styles = StyleSheet.create({
   group: { flexDirection: "row", flexWrap: "wrap", gap: spacing(1) },
   // The trailing pad lets the last chip clear the fade instead of sitting under it.
-  rail: { flexDirection: "row", gap: spacing(1), paddingRight: spacing(6) },
-  fade: { position: "absolute", top: 0, bottom: 0, width: spacing(6) },
+  rail: { flexDirection: "row", gap: spacing(1), paddingRight: FADE_WIDTH },
+  fade: { position: "absolute", top: 0, bottom: 0, width: FADE_WIDTH },
   fadeStart: { left: 0 },
   fadeEnd: { right: 0 },
 });

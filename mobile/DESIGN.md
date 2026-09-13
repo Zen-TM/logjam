@@ -1507,11 +1507,12 @@ driven by scroll offset — a fade on only one end still leaves a hard-sliced ch
 at the other, and a fade shown at rest dims a chip with nothing behind it. Use a
 real gradient for any fade; stacked alpha steps band visibly.
 
-**A rail scrolls itself only to reveal a selection made ELSEWHERE.** A chip the
-user tapped is already on screen. Scrolling each tapped chip to the left edge
-slid its neighbours away, and the next tap is as often the chip before as the
-one after. The rail moves only when the active chip is wholly out of view — an
-import lands, a rename jumps to another category.
+**A rail nudges, it never recentres.** Scrolling each tapped chip to the left
+edge slid its neighbours away, and the next tap is as often the chip before as
+the one after. So a rail moves only when the active chip is not shown WHOLE —
+cut off by the screen edge or under an edge fade, whether the user tapped it
+there or it was selected elsewhere (an import lands, a rename jumps to another
+category) — and then only far enough to clear the fade.
 
 **A multi-select vocabulary never reorders under the thumb.** `ChipPicker` keeps
 vocabulary order whatever is selected; moving picked chips to the front made
