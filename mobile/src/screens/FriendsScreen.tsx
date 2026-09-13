@@ -304,7 +304,6 @@ export function FriendsScreen({
         <AddFriendBody
           existingIds={friends.map((friend) => friend.id)}
           onSent={() => void load()}
-          onFailed={(message) => notify(message, "error")}
         />
       </BottomSheet>
 
@@ -427,38 +426,44 @@ const FriendRow = memo(function FriendRow({
 function AddFriendBody({
   existingIds,
   onSent,
-  onFailed,
 }: {
   existingIds: string[];
   onSent: () => void;
-  onFailed: (message: string) => void;
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<UserSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [sentIds, setSentIds] = useState<string[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  // The search field's own problem (§8, rule 1).
+  const [searchError, setSearchError] = useState<string | null>(null);
+  // Not this field's problem — it's the tapped "Add" row's — so it goes in a
+  // banner rather than under the search box (§8, rule 2). The sheet stays open
+  // on a failed send, so this is a banner, never the toast a closed form gets.
+  const [sendError, setSendError] = useState<string | null>(null);
 
   useEffect(() => {
     const trimmed = query.trim();
+    // A fresh search supersedes whichever row's send just failed.
+    setSendError(null);
     if (trimmed.length < SEARCH_MIN_CHARS) {
       setResults([]);
-      setError(null);
+      setSearchError(null);
       return;
     }
     let cancelled = false;
     setSearching(true);
+    setSearchError(null);
     const timer = setTimeout(() => {
       searchUsers(trimmed)
         .then((users) => {
           if (!cancelled) {
             setResults(users);
-            setError(null);
+            setSearchError(null);
           }
         })
         .catch((err: unknown) => {
           console.error(err);
-          if (!cancelled) setError(messageFromError(err, "Search failed."));
+          if (!cancelled) setSearchError(messageFromError(err, "Search failed."));
         })
         .finally(() => {
           if (!cancelled) setSearching(false);
@@ -472,17 +477,17 @@ function AddFriendBody({
 
   const send = useCallback(
     async (user: UserSearchResult) => {
-      setError(null);
+      setSendError(null);
       try {
         await sendFriendRequest(user.id);
         setSentIds((current) => [...current, user.id]);
         onSent();
       } catch (err) {
         console.error(err);
-        onFailed(messageFromError(err, "Couldn't send that request."));
+        setSendError(messageFromError(err, "Couldn't send that request."));
       }
     },
-    [onFailed, onSent],
+    [onSent],
   );
 
   const trimmed = query.trim();
@@ -493,8 +498,8 @@ function AddFriendBody({
         value={query}
         onChangeText={setQuery}
         autoCapitalize="none"
+        error={searchError}
       />
-      {error ? <ErrorBanner message={error} /> : null}
       {searching ? <ActivityIndicator color={theme.accent} style={styles.spinner} /> : null}
       {!searching && trimmed.length >= SEARCH_MIN_CHARS && results.length === 0 ? (
         <Text style={styles.hint}>No one by that name.</Text>
@@ -527,6 +532,7 @@ function AddFriendBody({
           />
         );
       })}
+      {sendError ? <ErrorBanner message={sendError} /> : null}
     </View>
   );
 }

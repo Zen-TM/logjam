@@ -372,7 +372,6 @@ export function useSharePanel({
       sharing,
       body: (
         <View style={styles.body}>
-          {sendError ? <ErrorBanner message={sendError} /> : null}
           {friends.error ? (
             <ErrorBanner message={friends.error} onRetry={friends.retry} />
           ) : null}
@@ -412,17 +411,22 @@ export function useSharePanel({
         </View>
       ),
       footer: (
-        // No `loading`: `Button` replaces the label with a spinner, and the
-        // label is where the upload queue reports itself ("Sending 3 of 8 —
-        // Ranon.gpx"). A bulk send is minutes on trail signal, and a silent
-        // spinner for that long is indistinguishable from a hang. `disabled`
-        // still dims it and refuses taps.
-        <Button
-          label={bulkShareButtonLabel(plan, selected.size, bulkProgress)}
-          icon="share-2"
-          onPress={confirmBulk}
-          disabled={selected.size === 0 || sending || plan.actionableCount === 0}
-        />
+        // The send failure reports directly above the button it failed under
+        // (DESIGN.md §8) — the form is still open, so this is not a toast.
+        <View style={styles.footerStack}>
+          {sendError ? <ErrorBanner message={sendError} /> : null}
+          {/* No `loading`: `Button` replaces the label with a spinner, and the
+              label is where the upload queue reports itself ("Sending 3 of 8 —
+              Ranon.gpx"). A bulk send is minutes on trail signal, and a silent
+              spinner for that long is indistinguishable from a hang. `disabled`
+              still dims it and refuses taps. */}
+          <Button
+            label={bulkShareButtonLabel(plan, selected.size, bulkProgress)}
+            icon="share-2"
+            onPress={confirmBulk}
+            disabled={selected.size === 0 || sending || plan.actionableCount === 0}
+          />
+        </View>
       ),
     };
   }
@@ -448,7 +452,6 @@ export function useSharePanel({
       sharing,
       body: (
         <View style={styles.body}>
-          {sendError ? <ErrorBanner message={sendError} /> : null}
           {friends.error ? (
             <ErrorBanner message={friends.error} onRetry={friends.retry} />
           ) : null}
@@ -473,13 +476,18 @@ export function useSharePanel({
         </View>
       ),
       footer: (
-        <Button
-          label={selected.size === 0 ? "Send a copy" : `Send a copy to ${selected.size}`}
-          icon="send"
-          onPress={() => void send()}
-          disabled={selected.size === 0 || sending}
-          loading={sending}
-        />
+        // Same reasoning as the bulk footer above: a send that fails while
+        // this sheet is still open reports here, not as a toast.
+        <View style={styles.footerStack}>
+          {sendError ? <ErrorBanner message={sendError} /> : null}
+          <Button
+            label={selected.size === 0 ? "Send a copy" : `Send a copy to ${selected.size}`}
+            icon="send"
+            onPress={() => void send()}
+            disabled={selected.size === 0 || sending}
+            loading={sending}
+          />
+        </View>
       ),
     };
   }
@@ -747,6 +755,7 @@ function SearchField({
 
 const styles = StyleSheet.create({
   body: { gap: spacing(1) },
+  footerStack: { gap: spacing(1.5) },
   muted: { color: theme.textMuted, fontSize: fontSize.sm },
   spinner: { alignSelf: "flex-start" },
   promise: {

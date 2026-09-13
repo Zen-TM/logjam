@@ -65,9 +65,12 @@ export function SegmentedControl<T extends string>({
   return <Rail value={value}>{chips}</Rail>;
 }
 
-// A rail keeps the selected chip in view. Selection can change from outside the
-// rail (an import lands, a rename jumps to that category); leaving the active
-// chip scrolled off makes the list below look unfiltered.
+// A rail moves only as far as it must to show the selected chip WHOLE, and not
+// at all when it already is. Selection can change from outside the rail (an
+// import lands, a rename jumps to that category), and an active chip out of
+// sight makes the list below look unfiltered; a tapped chip half under an edge
+// fade reads as cut off. Pinning every selected chip to the left edge scrolled
+// away the neighbour the user was about to tap next, so the nudge is minimal.
 function Rail<T extends string>({
   value,
   children,
@@ -76,7 +79,8 @@ function Rail<T extends string>({
   children: React.ReactNode[];
 }) {
   const scrollRef = useRef<ScrollView>(null);
-  const offsets = useRef(new Map<number, number>());
+  const offsets = useRef(new Map<number, { x: number; width: number }>());
+  const viewport = useRef({ x: 0, width: 0 });
   const childArray = children as React.ReactElement<{ children?: unknown }>[];
   const activeIndex = childArray.findIndex((chip) => chip.key === String(value));
   // Which ends have content beyond them — each edge only fades when there is
@@ -85,13 +89,23 @@ function Rail<T extends string>({
   const [overflow, setOverflow] = useState({ start: false, end: false });
 
   useEffect(() => {
-    const x = offsets.current.get(activeIndex);
-    if (x == null) return;
-    scrollRef.current?.scrollTo({ x: Math.max(0, x - spacing(2)), animated: true });
+    const chip = offsets.current.get(activeIndex);
+    if (chip == null) return;
+    const { x, width } = viewport.current;
+    // The visible band stops at the fades, which are drawn only where there is
+    // more rail beyond them.
+    const bandStart = x > 1 ? x + FADE_WIDTH : x;
+    const bandEnd = x + width - FADE_WIDTH;
+    if (chip.x < bandStart) {
+      scrollRef.current?.scrollTo({ x: Math.max(0, chip.x - FADE_WIDTH), animated: true });
+    } else if (chip.x + chip.width > bandEnd) {
+      scrollRef.current?.scrollTo({ x: chip.x + chip.width - width + FADE_WIDTH, animated: true });
+    }
   }, [activeIndex]);
 
   const trackOverflow = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    viewport.current = { x: contentOffset.x, width: layoutMeasurement.width };
     const start = contentOffset.x > 1;
     const end = contentOffset.x + layoutMeasurement.width < contentSize.width - 1;
     setOverflow((current) =>
@@ -107,6 +121,9 @@ function Rail<T extends string>({
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.rail}
         onScroll={trackOverflow}
+        onLayout={(event) => {
+          viewport.current = { ...viewport.current, width: event.nativeEvent.layout.width };
+        }}
         onContentSizeChange={() =>
           // Seed the end fade before any scroll happens.
           setOverflow((current) => (current.end ? current : { ...current, end: true }))
@@ -116,7 +133,10 @@ function Rail<T extends string>({
         {childArray.map((chip, index) => (
           <View
             key={chip.key}
-            onLayout={(event) => offsets.current.set(index, event.nativeEvent.layout.x)}
+            onLayout={(event) => {
+              const { x, width } = event.nativeEvent.layout;
+              offsets.current.set(index, { x, width });
+            }}
           >
             {chip}
           </View>
@@ -148,11 +168,13 @@ function EdgeFade({ side }: { side: "start" | "end" }) {
   );
 }
 
+const FADE_WIDTH = spacing(6);
+
 const styles = StyleSheet.create({
   group: { flexDirection: "row", flexWrap: "wrap", gap: spacing(1) },
   // The trailing pad lets the last chip clear the fade instead of sitting under it.
-  rail: { flexDirection: "row", gap: spacing(1), paddingRight: spacing(6) },
-  fade: { position: "absolute", top: 0, bottom: 0, width: spacing(6) },
+  rail: { flexDirection: "row", gap: spacing(1), paddingRight: FADE_WIDTH },
+  fade: { position: "absolute", top: 0, bottom: 0, width: FADE_WIDTH },
   fadeStart: { left: 0 },
   fadeEnd: { right: 0 },
 });

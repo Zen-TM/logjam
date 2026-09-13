@@ -1830,23 +1830,10 @@ export function SavedScreen({
                     <StatusPill label={item.pill.label} tone={item.pill.tone} />
                   </View>
                 ) : null}
-                {/* Backed up. A glyph rather than a pill: it is on most rows
-                    most of the time, and a word repeated down a list stops
-                    being read. It marks the POSITIVE — a row with no cloud is
-                    on this phone only, which is the ordinary state of a
-                    downloaded map and needs no announcement. */}
-                {item.backedUp ? (
-                  <Feather
-                    name="cloud"
-                    size={15}
-                    color={theme.success}
-                    accessibilityLabel="Backed up to your account"
-                  />
-                ) : null}
-                {/* Shared out, by the same argument as the cloud: the row's
-                    own fan-out is a fact the user is not asking about while
-                    scanning, and "Shared with 3" spelled out down a list eats
-                    the title's width to say it. The count survives in the
+                {/* Shared out, by the same argument as the cloud below: the
+                    row's own fan-out is a fact the user is not asking about
+                    while scanning, and "Shared with 3" spelled out down a list
+                    eats the title's width to say it. The count survives in the
                     screen-reader label and on the sharing sheet behind ⋯.
                     Muted, not accent: this is information, not a state to fix. */}
                 {item.sharedWithCount ? (
@@ -1855,6 +1842,21 @@ export function SavedScreen({
                     size={15}
                     color={theme.textMuted}
                     accessibilityLabel={sharedWithLabel(item.sharedWithCount)}
+                  />
+                ) : null}
+                {/* Backed up. A glyph rather than a pill: it is on most rows
+                    most of the time, and a word repeated down a list stops
+                    being read. It marks the POSITIVE — a row with no cloud is
+                    on this phone only, which is the ordinary state of a
+                    downloaded map and needs no announcement. LAST of the
+                    glyphs, so the column it sits in is the same on every row;
+                    the share glyph appearing on some rows must not push it. */}
+                {item.backedUp ? (
+                  <Feather
+                    name="cloud"
+                    size={15}
+                    color={theme.success}
+                    accessibilityLabel="Backed up to your account"
                   />
                 ) : null}
                 {item.inlineAction ? (
@@ -2492,9 +2494,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
   },
   screen: { flex: 1, backgroundColor: theme.primary },
-  // The rail's own bottom pad is the gap the list scrolls against — without it
-  // rows slide flush into the chips.
-  coordError: { color: theme.warning, fontSize: fontSize.sm },
   // Breathing room on both seams: category chips/selection bar → search
   // label, and search input → tag chips. Without it the controls read as one
   // dense block.

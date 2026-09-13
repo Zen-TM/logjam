@@ -225,7 +225,6 @@ export function TripDetailScreen({
         existingTypes={distinctTripTypes(allTrips.data ?? [])}
         onClose={() => setEditing(false)}
         onSaved={(text) => notify(text, "info")}
-        onFailed={(text) => notify(text, "error")}
       />
 
       <Toast message={toast} onDismissed={() => setToast(null)} />

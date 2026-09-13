@@ -74,7 +74,6 @@ export function PlaceEditSheet({
   pickedCoords,
   resuming = false,
   onSaved,
-  onFailed,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -103,7 +102,6 @@ export function PlaceEditSheet({
    */
   resuming?: boolean;
   onSaved: (message: string) => void;
-  onFailed: (message: string) => void;
 }) {
   const editing = place != null;
   const [name, setName] = useState("");
@@ -112,7 +110,15 @@ export function PlaceEditSheet({
   const [longitude, setLongitude] = useState("");
   const [notes, setNotes] = useState("");
   const [placeTypeId, setPlaceTypeId] = useState<string>(SYSTEM_PLACE_TYPE_IDS.canyon);
-  const [invalid, setInvalid] = useState<string | null>(null);
+  // Attributed to their own control (DESIGN.md §8): the name check and
+  // `validatePlacePayload`'s coordinate messages ("Latitude must be…",
+  // "Longitude must be…") each go under the field they're about. Everything
+  // else — a field-value range, a save the outbox rejected — belongs to no
+  // single control and is `formError`, the banner above Save.
+  const [nameError, setNameError] = useState<string | null>(null);
+  const [latitudeError, setLatitudeError] = useState<string | null>(null);
+  const [longitudeError, setLongitudeError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [mode, setMode] = useState<Mode>("form");
   const { defs: customFieldDefs, setDefs: setCustomFieldDefs } = useFieldDefs("place");
@@ -133,7 +139,10 @@ export function PlaceEditSheet({
   // next one.
   useEffect(() => {
     if (!visible || resumingRef.current) return;
-    setInvalid(null);
+    setNameError(null);
+    setLatitudeError(null);
+    setLongitudeError(null);
+    setFormError(null);
     setSaving(false);
     setName(place?.name ?? "");
     setAltNames((place?.altNames ?? []).join(", "));
@@ -162,6 +171,8 @@ export function PlaceEditSheet({
     if (!pickedCoords) return;
     setLatitude(seedCoord(pickedCoords.latitude));
     setLongitude(seedCoord(pickedCoords.longitude));
+    setLatitudeError(null);
+    setLongitudeError(null);
   }, [pickedCoords]);
 
   /** Every type is offered here, including the empty ones — the list hides a
@@ -212,9 +223,12 @@ export function PlaceEditSheet({
   );
 
   const save = useCallback(async () => {
-    setInvalid(null);
+    setNameError(null);
+    setLatitudeError(null);
+    setLongitudeError(null);
+    setFormError(null);
     if (draft.name === "") {
-      setInvalid("A place needs a name.");
+      setNameError("A place needs a name.");
       return;
     }
     const effectiveCustomFields = coerceCustomFields(fieldValues, typeFieldDefs);
@@ -242,7 +256,12 @@ export function PlaceEditSheet({
       },
     );
     if (problem) {
-      setInvalid(problem);
+      // The two coordinate fields are separate controls, so a message that
+      // names one goes under it; anything else (a field-value range) is not
+      // attributable to a single control and is the banner instead.
+      if (problem.startsWith("Latitude")) setLatitudeError(problem);
+      else if (problem.startsWith("Longitude")) setLongitudeError(problem);
+      else setFormError(problem);
       return;
     }
 
@@ -299,7 +318,10 @@ export function PlaceEditSheet({
       onClose();
     } catch (err) {
       console.error(err);
-      onFailed("Couldn't save this place.");
+      // The sheet is still open here — onClose() only runs on success — so a
+      // toast would render under it and never be seen (DESIGN.md §8). The
+      // banner above Save is what reports it.
+      setFormError("Couldn't save this place.");
     } finally {
       setSaving(false);
     }
@@ -309,7 +331,6 @@ export function PlaceEditSheet({
     editing,
     fieldValues,
     onClose,
-    onFailed,
     onSaved,
     placeTypeId,
     typeFieldDefs,
@@ -328,7 +349,6 @@ export function PlaceEditSheet({
       setCustomFieldDefs(next);
       onSaved(message);
     },
-    onFailed,
     onDone: () => setMode("fields"),
   });
 
@@ -362,12 +382,19 @@ export function PlaceEditSheet({
       }
       footer={
         mode === "form" ? (
-          <Button
-            label={editing ? "Save changes" : "Add place"}
-            icon="check"
-            loading={saving}
-            onPress={() => void save()}
-          />
+          <View style={styles.footer}>
+            {/* Not attributable to one control (a field-value range, a save
+                the outbox rejected) — directly above Save, never at the top
+                of the form where it can sit out of sight of the button
+                (DESIGN.md §8). */}
+            {formError ? <ErrorBanner message={formError} /> : null}
+            <Button
+              label={editing ? "Save changes" : "Add place"}
+              icon="check"
+              loading={saving}
+              onPress={() => void save()}
+            />
+          </View>
         ) : mode === "fieldForm" ? (
           fieldForm.footer
         ) : mode === "fields" ? (
@@ -413,8 +440,6 @@ export function PlaceEditSheet({
 
       {mode !== "form" ? null : (
       <View style={styles.form}>
-        {invalid ? <ErrorBanner message={invalid} /> : null}
-
         {/* TYPE FIRST, because everything below it depends on the answer: the
             fields the form asks for, the colour of the pin, the tab it lands
             under. A rail rather than a wizard step — the form reshapes under
@@ -437,7 +462,16 @@ export function PlaceEditSheet({
           </View>
         ) : null}
 
-        <TextField label="Name" value={name} onChangeText={setName} autoCapitalize="words" />
+        <TextField
+          label="Name"
+          value={name}
+          onChangeText={(next) => {
+            setName(next);
+            if (nameError) setNameError(null);
+          }}
+          error={nameError}
+          autoCapitalize="words"
+        />
         <View style={styles.field}>
           <TextField
             label="Also known as"
@@ -456,7 +490,11 @@ export function PlaceEditSheet({
             <TextField
               label="Latitude"
               value={latitude}
-              onChangeText={setLatitude}
+              onChangeText={(next) => {
+                setLatitude(next);
+                if (latitudeError) setLatitudeError(null);
+              }}
+              error={latitudeError}
               keyboardType="numbers-and-punctuation"
             />
           </View>
@@ -464,7 +502,11 @@ export function PlaceEditSheet({
             <TextField
               label="Longitude"
               value={longitude}
-              onChangeText={setLongitude}
+              onChangeText={(next) => {
+                setLongitude(next);
+                if (longitudeError) setLongitudeError(null);
+              }}
+              error={longitudeError}
               keyboardType="numbers-and-punctuation"
             />
           </View>
@@ -588,6 +630,7 @@ function sameList(a: string[], b: string[]): boolean {
 
 const styles = StyleSheet.create({
   form: { gap: spacing(1.5) },
+  footer: { gap: spacing(1.5) },
   modeBody: { gap: spacing(2) },
   field: { gap: spacing(0.5) },
   hint: { color: theme.textMuted, fontSize: fontSize.sm, flex: 1 },

@@ -50,7 +50,7 @@ import {
   deletePlaceTypeLocal,
   updatePlaceTypeLocal,
 } from "../sync/outbox";
-import { Button, Row, SectionHeader, TextField } from "../ui";
+import { Button, ErrorBanner, Row, SectionHeader, TextField } from "../ui";
 import { placeTypeFeatherIcon } from "./placeTypeIcon";
 
 /** A type nobody owns is a built-in: not renameable, not deletable. Same rule
@@ -110,13 +110,11 @@ export function PlaceTypeList({
 export function usePlaceTypeForm({
   editing,
   onSaved,
-  onFailed,
   onDone,
 }: {
   /** null = adding. */
   editing: MirrorPlaceType | null;
   onSaved: (message: string) => void;
-  onFailed: (message: string) => void;
   onDone: () => void;
 }): { body: ReactNode; footer: ReactNode } {
   const formKey = editing?.id ?? "__new__";
@@ -127,7 +125,13 @@ export function usePlaceTypeForm({
     setDraft(seedDraft(editing));
   }
   const [saving, setSaving] = useState(false);
+  // The name check (attributed to the Name field) and a save/delete failure
+  // (attributable to no single control, so it is the footer's `ErrorBanner`)
+  // are different problems and render in different places — conflating them
+  // into one state would put "Couldn't save that type on this phone." under
+  // the Name label.
   const [error, setError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
   const { cellSize, onGridLayout } = useGridCellSize();
 
   const save = useCallback(async () => {
@@ -137,6 +141,7 @@ export function usePlaceTypeForm({
       return;
     }
     setError(null);
+    setFormError(null);
     setSaving(true);
     try {
       if (editing) {
@@ -157,14 +162,16 @@ export function usePlaceTypeForm({
       onDone();
     } catch (err) {
       console.error(err);
-      // A local write, so this is a broken database rather than a missing
-      // connection — do not offer a network explanation for something
-      // reconnecting cannot fix.
-      onFailed("Couldn't save that type on this phone.");
+      // The sheet is still open here (onDone only runs on success) — a toast
+      // would render under it and never be seen (DESIGN.md §8), so this is the
+      // footer's banner, not a toast. A local write, so this is a broken
+      // database rather than a missing connection — do not offer a network
+      // explanation for something reconnecting cannot fix.
+      setFormError("Couldn't save that type on this phone.");
     } finally {
       setSaving(false);
     }
-  }, [draft, editing, onDone, onFailed, onSaved]);
+  }, [draft, editing, onDone, onSaved]);
 
   const confirmDelete = useCallback(() => {
     if (!editing) return;
@@ -199,7 +206,9 @@ export function usePlaceTypeForm({
                   })
                   .catch((err: unknown) => {
                     console.error(err);
-                    onFailed("Couldn't delete that type.");
+                    // Same reasoning as `save`'s catch: the sheet is still up,
+                    // so this is the banner, not a toast under it.
+                    setFormError("Couldn't delete that type.");
                   });
               },
             },
@@ -208,16 +217,21 @@ export function usePlaceTypeForm({
       })
       .catch((err: unknown) => {
         console.error(err);
-        onFailed("Couldn't check which places use this type.");
+        setFormError("Couldn't check which places use this type.");
       });
-  }, [editing, onDone, onFailed, onSaved]);
+  }, [editing, onDone, onSaved]);
 
   const body = (
     <View style={styles.body}>
       <TextField
         label="Name"
         value={draft.name}
-        onChangeText={(next) => setDraft((current) => ({ ...current, name: next }))}
+        onChangeText={(next) => {
+          setDraft((current) => ({ ...current, name: next }));
+          // The empty-name requirement is checked on Save (DESIGN.md §8); once
+          // shown it clears the moment the field it's about is edited.
+          if (error) setError(null);
+        }}
         error={error}
         autoCapitalize="sentences"
       />
@@ -289,17 +303,23 @@ export function usePlaceTypeForm({
   );
 
   const footer = (
-    <View style={styles.actions}>
-      <View style={styles.action}>
-        <Button label="Cancel" variant="outlineAccent" onPress={onDone} />
-      </View>
-      <View style={styles.action}>
-        <Button
-          label={editing ? "Save" : "Add type"}
-          icon="check"
-          loading={saving}
-          onPress={() => void save()}
-        />
+    <View style={styles.footer}>
+      {/* Not attributable to one control (a local write failing, or the
+          places-in-use check itself failing) — the banner sits directly above
+          Save, same as every other form (DESIGN.md §8). */}
+      {formError ? <ErrorBanner message={formError} /> : null}
+      <View style={styles.actions}>
+        <View style={styles.action}>
+          <Button label="Cancel" variant="outlineAccent" onPress={onDone} />
+        </View>
+        <View style={styles.action}>
+          <Button
+            label={editing ? "Save" : "Add type"}
+            icon="check"
+            loading={saving}
+            onPress={() => void save()}
+          />
+        </View>
       </View>
     </View>
   );
@@ -355,6 +375,7 @@ const GRID_GAP = spacing(1);
 
 const styles = StyleSheet.create({
   body: { gap: spacing(1) },
+  footer: { gap: spacing(1) },
   actions: { flexDirection: "row", gap: spacing(1) },
   action: { flex: 1 },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: GRID_GAP },

@@ -289,7 +289,7 @@ export function PlaceDetailScreen({
     Clipboard.setString(position);
     notify("Coordinates copied.", "info");
   };
-  stats.push({ label: "Position", value: position, wide: true, onPress: copyPosition });
+  stats.push({ label: "Position", value: position, wide: true, onCopy: copyPosition });
 
   /**
    * One of the three actions on a parked value. The place is re-read from the
@@ -724,7 +724,6 @@ export function PlaceDetailScreen({
         place={place}
         onClose={() => setEditing(false)}
         onSaved={(text) => notify(text, "info")}
-        onFailed={(text) => notify(text, "error")}
       />
 
       <TripEditSheet
@@ -735,7 +734,6 @@ export function PlaceDetailScreen({
         existingTypes={distinctTripTypes(trips.data ?? [])}
         onClose={() => setLogging(false)}
         onSaved={(text) => notify(text, "info")}
-        onFailed={(text) => notify(text, "error")}
       />
 
       {/* Changing what fills the route slot, from the place it belongs to —

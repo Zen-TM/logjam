@@ -28,6 +28,7 @@ export { useBulkSelection } from "./useBulkSelection";
 export { TextField } from "./TextField";
 export { EmptyState, ErrorState, LoadingState } from "./ScreenStates";
 export { ErrorBanner } from "./ErrorBanner";
+export { FieldError } from "./FieldError";
 export { RootErrorBoundary } from "./RootErrorBoundary";
 export { RenameForm } from "./RenameForm";
 export { Screen, ScreenScroll } from "./Screen";
