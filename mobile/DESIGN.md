@@ -1457,6 +1457,15 @@ driven by scroll offset — a fade on only one end still leaves a hard-sliced ch
 at the other, and a fade shown at rest dims a chip with nothing behind it. Use a
 real gradient for any fade; stacked alpha steps band visibly.
 
+**A list of one KIND of thing is one kind of card.** `Row` is `radius.lg` and
+`Card` is `radius.md`, so a list that draws some entries with one and some with
+the other reads as two lists badly interleaved — and only `ScreenScroll`'s own
+children get its gap, so a section that wraps its rows in a `View` has to repeat
+`gap: spacing(1)` or they sit flush. The logbook's attribute list shipped both
+faults at once: the entries with a chart were `Card`s, the rest were `Row`s.
+Where a row needs a chart or any full-width content under its own line, that is
+what **`Row`'s `footer`** is for — inside the same card, same corner, same gap.
+
 **A primitive's `alignSelf` belongs to the primitive; fix the AXIS at the usage
 site.** `StatusPill` sets `alignSelf: "flex-start"` so it never stretches to the
 width of the column it usually sits in — correct there, and wrong in a
