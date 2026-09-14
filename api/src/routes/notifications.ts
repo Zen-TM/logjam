@@ -349,7 +349,9 @@ router.get(
 );
 
 // ── PATCH /notifications/:id/read ─────────────────────────────
-// Mark a single notification as read
+// Mark a single notification read, or unread again with `{ "read": false }` —
+// the REST twin of the sync push's markRead / markUnread ops, for Logjam Web.
+// Anything but a boolean `read` (including no body) marks it read, as before.
 router.patch(
   "/:id/read",
   requireAuth,
@@ -365,9 +367,10 @@ router.patch(
     });
     if (!notification) throw new AppError(404, "Notification not found");
 
+    const read = req.body?.read === false ? false : true;
     const updated = await prisma.notification.update({
       where: { id },
-      data: { read: true },
+      data: { read },
     });
 
     res.json(updated);

@@ -45,6 +45,27 @@ const MAPS_VIEWS = [
   { value: "lidar", label: "LiDAR topos" },
 ] as const;
 
+/**
+ * Pages not yet rebuilt onto DESIGN.md: they keep the plain header and scroll
+ * inside the panel body, which gives them their gutter. Every other page owns
+ * both — a hero, and pinned chrome over a list that scrolls by itself.
+ *
+ * A list of the OLD pages rather than of the new ones, so a rebuilt page gets
+ * the right layout by being taken off it. The Inbox pilot was built against an
+ * opt-in list of rebuilt pages, never joined it, and shipped with a doubled
+ * gutter and a hero that scrolled away. Like `MUI_LEGACY_FILES`, it may only
+ * shrink.
+ */
+const LEGACY_PAGES: ReadonlySet<PanelId> = new Set<PanelId>([
+  "logs",
+  "ways",
+  "maps",
+  "friends",
+  "account",
+  "settings",
+  "route-detail",
+]);
+
 function SidebarPanel({
   activePanel,
   onClose,
@@ -104,6 +125,8 @@ function SidebarPanel({
   onRefetchShared,
   // Notifications
   notifications,
+  notificationsLoaded,
+  notificationsError,
   notificationsTotal,
   onRefetchNotifications,
   setSelectedPlaceID,
@@ -211,6 +234,10 @@ function SidebarPanel({
   onRefetchShared: () => void;
   // Notifications
   notifications: TNotification[];
+  /** False until the first fetch settles — an empty inbox before then is not
+   *  "Nothing yet". */
+  notificationsLoaded: boolean;
+  notificationsError: string | null;
   notificationsTotal: number | null;
   onRefetchNotifications: () => void;
   setSelectedPlaceID: (id: string | null) => void;
@@ -317,10 +344,12 @@ function SidebarPanel({
   const title =
     activePanel === "place-detail" && place ? place.name : PANEL_TITLES[activePanel];
 
-  // Places opens with its own hero, which names the page; every other page
-  // keeps a plain header until it is redesigned.
+  // A rebuilt page opens with its own hero and owns its scrolling; a legacy one
+  // keeps the plain header and scrolls inside the body. place-detail already
+  // owns its scrolling but keeps the header (its name) until it is rebuilt.
+  const legacy = LEGACY_PAGES.has(activePanel);
   const header =
-    activePanel === "places" ? null : (
+    !legacy && activePanel !== "place-detail" ? null : (
       <header className={classes.panelHeader}>
         <h2 className={classes.panelTitle}>{title}</h2>
         <IconButton icon={X} label="Close panel" onClick={onClose} />
@@ -342,7 +371,7 @@ function SidebarPanel({
     <>
       {header}
       {views}
-      <div className={classes.panelBody} data-active-panel={activePanel}>
+      <div className={classes.panelBody} data-active-panel={activePanel} data-legacy={legacy}>
         {activePanel === "places" && (
           <PlacesPanel
             places={places}
@@ -417,11 +446,14 @@ function SidebarPanel({
         {activePanel === "inbox" && (
           <NotificationsPanel
             notifications={notifications}
+            notificationsLoaded={notificationsLoaded}
+            notificationsError={notificationsError}
             notificationsTotal={notificationsTotal}
             onRefetchNotifications={onRefetchNotifications}
             onRefetchFriends={onRefetchFriends}
             setSelectedPlaceID={setSelectedPlaceID}
             setActivePanel={setActivePanel}
+            onMapsViewChange={onMapsViewChange}
             onTopoFlyTarget={onTopoFlyTarget}
           />
         )}

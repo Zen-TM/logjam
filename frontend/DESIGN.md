@@ -28,6 +28,10 @@ Drift between the clients happened because each kept its own copy of the same de
 | Range pills (tap to start, widen, narrow, clear) | `shared/src/rangeSelect.ts` |
 | Which filter control a numeric attribute gets | `filterPillStops` in `shared/src/placeFilterOptions.ts` |
 | The filter predicate, search and sort | `shared/src/placeFilter.ts` |
+| A notification's words, kind, order and day sections | `shared/src/notificationLabel.ts` |
+| Collapsing a bulk share, and counting it as one | `shared/src/notificationBatches.ts` |
+| What a notification's row lets you answer, and the confirm copy | `shared/src/notificationActions.ts` |
+| Which way the one read/unread button goes | `shared/src/bulkReadAction.ts` |
 | Theme schemes | `shared/src/themeSchemes.ts` |
 | Every colour pair either client renders | `scripts/wcag-contrast.mjs` (CI) |
 
@@ -66,7 +70,7 @@ rail 84px │ panel 380px             │ sheet 380px (optional) │ map
 - **The rail is fixed at 84px** and labels every page: Places, Logs, Ways, Maps and Friends, then a spacer, then Inbox, Account and Settings. The active page's icon sits in an accent pill with an ink glyph. It is the only filled thing on the rail. Pressing the open page closes it.
 - **Narrow web (≤768px) is Logjam GPS's tab bar**: Map · Places · Logs · Ways · More. The panel becomes the bottom sheet, and Map closes the panel. More is a menu, with Inbox first because it is the badged one. Keep `useIsMobile()` and every `max-width: 768px` query in step.
 - **A page with two views swaps them under one chip rail** (Logs | Stats, GeoPDFs | LiDAR topos), never two pages and never tabs that change the URL.
-- **Pin the hero and the rails; only the list scrolls.**
+- **Pin the hero and the rails; only the list scrolls.** The shell does this for every page by default: the panel body neither scrolls nor adds a gutter, and the page's own list does both. `LEGACY_PAGES` in `SidebarPanel.tsx` names the pages not yet rebuilt, which still scroll inside the body; rebuilding a page takes it off that list. It lists the old pages rather than the new ones because the first page rebuilt against an opt-in list never opted in.
 - **One pinned filter axis per page; Places is the exception with two** (type, then status), for the reason mobile §2 gives. Only one rail may say "All" (the type rail's is "Any type").
 - **Precise filters live in a sheet that opens BESIDE the list**, not over it. The list it narrows stays visible and updates live. It is non-modal: focus moves to its heading on open and back to its button on close, and Escape closes it. On narrow web it swaps the panel's content instead. **It never opens by itself** when the page is visited; the one exception is returning from drawing an area, which it asks for as a consumed request (§9).
 - **Every filter in the sheet wears `FilterField`**: its label, what it is set to ("Any", "3–5", "Yes"), and a clear × while set. So every filter shares one label style and one way to clear, whatever sits beneath.
@@ -132,7 +136,7 @@ surface-field       text fields         a step darker than the page
 
 - **The hero has no fill.** Logjam GPS's hero fills with `bonus2`, which fails AA in Sandstone and Ironbark. The web hero separates with a 25%-accent hairline.
 - **Text or a glyph ON a fill is `--ink`**: filled buttons, active chips, tiles, badges, the rail's active pill. Never the scheme's `primary` (root CLAUDE.md).
-- **Accent as TEXT only on the page colour** (4.5:1 there, not on a card). On a card, accent is an edge or a glyph (3:1).
+- **Accent as TEXT only on the page colour** (4.5:1 there, not on a card). On a card, accent is an edge or a glyph (3:1). So an **outline button** is an accent border around a text-coloured label: it also sits on cards (a notification's Decline), where an accent label measured 3.6:1 under Sandstone.
 - **One focus ring for everything**: 2px text-coloured outline, 2px off. Composite widgets draw it on the part that has focus (a menu item, the card behind a stretched row button). On a light fill (a toast) the ring is ink, since the text colour IS that fill.
 - **An icon button at the end of a pill is `round`** (a `--control-sm` circle), and the pill pads that end by `calc((its height − var(--control-sm)) / 2)`, written as that calc so it holds under both pointer sizes. The circle is then concentric with the pill's end cap, so neither its hover fill nor its focus ring, drawn flush, crosses the pill's edge. A square button there clipped the pill's curve.
 
@@ -146,6 +150,9 @@ surface-field       text fields         a step darker than the page
 - **A row's verbs are the pin's verbs.** ⋯ holds the same list a pin opens: Open, Show on map, Make a map here, then Share or export, then Delete.
 - **Selected is a state of the row: an accent edge, never a fill.** A tinted fill dropped subtitles below 4.5:1.
 - **What the tile says to a sighted reader goes in `description`** (read by assistive tech, not shown).
+- **A row that asks a question is answered inside its card** (`footer`: Accept · Decline, Save a copy · Turn down, Zoom to map, Download), on a line under the text. Below the card, a pair reads as a caption for the next row down. The filled button is yes; the outline is no. The footer goes inert while a selection runs.
+- **Unread is an accent edge** down the row's left side (`accentEdge`), not a "New" pill: the pill cost a title a line at 380px, and the hero already says how many. The edge is an inset shadow, so it never changes the row's size, and it survives the row being selected too.
+- **A chronological list runs newest first in day sections** with sticky headings ("Today", "Yesterday", "12 Sept") and a count each, and never re-sorts itself by state: marking a row read must not move it (`newestNotificationsFirst`). A bulk share is one row that opens in place, its members a step in; it counts as one everywhere a count is shown.
 - **Rows and pins light each other.** Hovering a row lights its pin; pressing a pin while the list is open scrolls to its row and lights it for 2s, rather than leaving the list.
 
 ## 6. Surfaces: popover, menu, sheet, dialog, toast
@@ -161,6 +168,8 @@ surface-field       text fields         a step darker than the page
 - **One acquisition affordance per page**: a compact filled `Add ▾` in the hero, opening a menu of the ways in (Add a place · Import from file · Import from RopeWiki). Never a footer of ghost buttons.
 - **Selection starts from a row's tile**, which is also its checkbox: the status glyph at rest, a circle under the pointer, on focus and during a selection. Shift-click selects a range, Ctrl/⌘+A selects all, and Escape clears. Only items the user may act on are selectable (your own places); the rest dim. The type rail stays mounted but inert.
 - **The selection bar takes the status rail's slot at the same height, and the list does not move** when selection starts or ends (chips and icon buttons are both `--control-md`). Clear, the count, then only verbs that are better in bulk (mobile §7), **as icon buttons**, so the bar stays one line at 380px. For places: Make a map (its menu names LiDAR topo and GeoPDF), Share or export, Export as, and Delete. Make a map was a filled labelled button until it pushed the bar onto a second line.
+- **A page's housekeeping verbs sit behind the hero's ⋯**, never in a footer: the Inbox's Mark all as read and Clear read notifications. Disabled, not hidden, when there is nothing for them to do.
+- **The tile-as-checkbox is the kit's `TileCheckbox`**, shared by every selectable list. Where a picked row stands for several things (an Inbox batch), the verbs act on all of them (`expandBatchSelection`). The Inbox's bar carries ONE read/unread button whose direction follows the selection (`bulkReadAction`, glyph eye / eye-off), then Delete; its count line states the unread tally that decides the direction.
 - **Make a map is always enabled.** No area cap exists: a topo is bounded by the monthly quota and a GeoPDF by paper at a chosen scale. What fits is said in the next step, not by a greyed button. A topo opens its dialog with the selection's box; a GeoPDF opens its paper frame on the map over the box.
 - **Destructive verbs confirm, and the confirm says what goes and what stays** ("Their photos, tracks and shares go too. Trips that link to them stay in your logbook, unlinked.").
 - **Absent, not disabled, when the verb cannot exist here**; disabled, with the reason, when it can but not now (mobile §8).
@@ -225,7 +234,8 @@ Mobile §13 holds. For the web in particular:
 
 - Dialogs (§6) and every file in `MUI_LEGACY_FILES` are still to be rebuilt.
 - Logjam GPS's hero fill and row tile fail contrast (`KNOWN_FAILURES`); fixing them changes the phone, so the operator decides when.
-- Logs, Ways, Maps, Friends, Inbox and Account still render their pre-redesign content inside the new shell.
+- Logs, Ways, Maps, Friends and Account still render their pre-redesign content inside the new shell (`LEGACY_PAGES`).
+- **A batch of sent files is answered one file at a time on Logjam Web.** Logjam GPS's batch row carries Save all · Turn all down; a browser allows one download per press, so "Save all 8" would deliver one file and block the rest. The batch opens in place and each file keeps its own buttons.
 - **Logjam GPS's filter sheet still draws the canyon axes with bespoke controls** and `PLACE_THRESHOLDS` presets; Logjam Web draws every attribute by shape (§2). Moving the phone onto `filterPillStops` would let `PLACE_THRESHOLDS` and `CANYON_FORM_FIELD_KEYS` go. On the web, `PlaceDialog.tsx` is the last user of `CANYON_FORM_FIELD_KEYS`.
 - Logjam GPS's `TextField` label is uppercase; Logjam Web's field labels are sentence case (§4).
 - A one-value pill filter (just "4") excludes a stored 4.5 on a float axis such as quality. It always did for canyons; campsites now share the control.

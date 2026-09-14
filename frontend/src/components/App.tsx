@@ -92,16 +92,7 @@ import { useStoredState } from "../useStoredState";
 import { useThemePreferences } from "../themePreferences";
 import { useToast } from "./feedback/ToastProvider";
 import { messageFromError } from "../errors/messageFromError";
-
-// Programmatically trigger a browser download for a presigned URL.
-function triggerDownload(url: string) {
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "";
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-}
+import { triggerDownload } from "../download";
 
 function App() {
   const toast = useToast();
@@ -563,6 +554,7 @@ function App() {
   const {
     notifications,
     total: notificationsTotal,
+    loaded: notificationsLoaded,
     unreadCount,
     error: notificationsError,
     refetch: refetchNotifications,
@@ -1370,6 +1362,8 @@ function App() {
           onRefetchFriends={refetchFriends}
           onRefetchShared={refetchShared}
           notifications={notifications}
+          notificationsLoaded={notificationsLoaded}
+          notificationsError={notificationsError}
           notificationsTotal={notificationsTotal}
           onRefetchNotifications={refetchNotifications}
           setSelectedPlaceID={setSelectedPlaceID}

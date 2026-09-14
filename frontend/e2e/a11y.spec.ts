@@ -57,6 +57,26 @@ test.describe("desktop", () => {
     await expectNoViolations(page, "[role='menu']");
   });
 
+  test("the Inbox, a row menu and a selection", async ({ page }) => {
+    await openApp(page);
+    await page.getByRole("button", { name: /^Inbox/ }).click();
+    const inbox = page.locator("aside");
+    await expect(inbox.getByRole("checkbox").first()).toBeVisible({ timeout: 15_000 });
+    await expectNoViolations(page, "aside");
+
+    await inbox.getByRole("button", { name: /^Actions for / }).first().click();
+    await expect(page.getByRole("menu")).toBeVisible();
+    await expectNoViolations(page, "[role='menu']");
+    await page.keyboard.press("Escape");
+
+    // Selecting swaps the rail for the bar; Escape clears it.
+    await inbox.getByRole("checkbox").first().click();
+    await expect(inbox.getByRole("group", { name: "Selection" })).toBeVisible();
+    await expectNoViolations(page, "aside");
+    await page.keyboard.press("Escape");
+    await expect(inbox.getByRole("radiogroup", { name: "Show" })).toBeVisible();
+  });
+
   test("the Layers popover", async ({ page }) => {
     await openApp(page);
     await page.getByRole("button", { name: "Layers", exact: true }).click();

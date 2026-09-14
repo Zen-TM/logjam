@@ -1559,8 +1559,9 @@ export function copyRoute(routeId: string): Promise<TRoute> {
 
 // ── Notifications ─────────────────────────────────────────────
 
-export function markNotificationRead(id: string): Promise<void> {
-  return apiFetch<void>(`/notifications/${id}/read`, { method: "PATCH" });
+/** `read: false` marks it unread again (the Inbox's ⋯ and its selection bar). */
+export function markNotificationRead(id: string, read = true): Promise<void> {
+  return apiFetch<void>(`/notifications/${id}/read`, { method: "PATCH", body: { read } });
 }
 
 export function markAllNotificationsRead(): Promise<void> {
@@ -1579,6 +1580,9 @@ export function useNotifications(enabled: boolean) {
   const [notifications, setNotifications] = useState<TNotification[]>([]);
   // True total (pre server-side list cap); null until known.
   const [total, setTotal] = useState<number | null>(null);
+  // True once the first fetch has SETTLED, either way: an empty list before
+  // then is not "Nothing yet".
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fetchCount, setFetchCount] = useState(0);
 
@@ -1587,8 +1591,9 @@ export function useNotifications(enabled: boolean) {
     // Guards a stale in-flight response landing after a newer one (FECO-001).
     let cancelled = false;
     apiFetchWithTotal<TNotification[]>("/notifications")
-      .then(({ data, total }) => { if (!cancelled) { setNotifications(data); setTotal(total); } })
-      .catch((err) => { console.error(err); if (!cancelled) setError(messageFromError(err, "Couldn't load notifications.")); });
+      .then(({ data, total }) => { if (!cancelled) { setNotifications(data); setTotal(total); setError(null); } })
+      .catch((err) => { console.error(err); if (!cancelled) setError(messageFromError(err, "Couldn't load notifications.")); })
+      .finally(() => { if (!cancelled) setLoaded(true); });
     return () => { cancelled = true; };
   }, [enabled, fetchCount]);
 
@@ -1600,7 +1605,7 @@ export function useNotifications(enabled: boolean) {
   // said 11 over an inbox that said "5 unread". A batch counts once, as its row.
   const unreadCount = useMemo(() => tallyNotifications(notifications).unread, [notifications]);
 
-  return { notifications, total, unreadCount, error, refetch };
+  return { notifications, total, loaded, unreadCount, error, refetch };
 }
 
 // ── Filters ───────────────────────────────────────────────────
