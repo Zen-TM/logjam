@@ -814,10 +814,14 @@ export function createCustomField(
   field: TripLogCustomFieldDef,
   scope?: { placeTypeIds?: string[]; appliesToAllTypes?: boolean },
 ): Promise<ScopedCustomFieldDef[]> {
-  return apiFetch<{ fields: ScopedCustomFieldDef[] }>(`/custom-fields/${entity}`, {
+  // The server answers with the ONE definition it made ({ field }), and every
+  // caller wants the list that definition now belongs to, in the server's
+  // order — so read the list back. Taking `res.fields` off that answer handed
+  // callers `undefined`, and the trip form crashed on its next render.
+  return apiFetch<{ field: ScopedCustomFieldDef }>(`/custom-fields/${entity}`, {
     method: "POST",
     body: { field, ...scope },
-  }).then((res) => res.fields);
+  }).then(() => getCustomFields(entity));
 }
 
 /**
