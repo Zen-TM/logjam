@@ -16,6 +16,8 @@ React 19 + TypeScript + Vite SPA. MapLibre GL JS = core UI surface; most feature
 
 - **`frontend/DESIGN.md` and the `src/ui` kit govern new and rebuilt UI** (2026-09-13 redesign). MUI is an ESLint error outside `MUI_LEGACY_FILES` (`eslint.config.js`), a list that may only shrink. The MUI, `sx`, `shared.module.css` and `@mui/icons-material` rules below describe the files still on that list, and are flagged for removal once it is empty.
 
+- **A control's size is a token, never px** (2026-09-14). Heights and hit targets read `--control-lg` / `--control-md` / `--control-sm` (36/32/24 under a mouse), margins `--gutter`, type `--font-*` with 12px as the floor; `@media (pointer: coarse)` in `index.css` gives a touch screen Logjam GPS's 44/40/32. The phone's sizes made the 380px panel feel cramped because the content was too big, and a hard-coded height silently opts out of both the density and the touch step. Map chrome keeps its own larger step (42). Guard: `src/ui/controlSizes.test.ts`, scoped to the kit (screens compose it); see `DESIGN.md` §4.
+
 - **CSS Modules** (`.module.css` co-located) for layout + color.
 - **All colors via CSS custom properties** (`var(--theme-*)`) — never hardcode hex in CSS.
 - **MUI `sx` prop** only for one-off layout tweaks on MUI components.
