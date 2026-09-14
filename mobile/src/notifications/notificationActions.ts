@@ -20,7 +20,7 @@
 // label and the confirm body because the recipient cannot answer "keep this?"
 // without knowing what it is. It is never logged, exactly as the sending side
 // treats it.
-import { ApiError, isResolvedElsewhereError } from "@logjam/shared";
+import { ApiError } from "@logjam/shared";
 
 import type { TNotification } from "../api/types";
 
@@ -193,4 +193,19 @@ export function notificationActions(n: TNotification): NotificationActions | nul
   return null;
 }
 
-export { isResolvedElsewhereError };
+/**
+ * Is this failure "the question was already answered somewhere else"?
+ *
+ * A friend request accepted in the Friends screen, or a send declined on the
+ * web, leaves a notification whose buttons are permanently dead rather than
+ * retryable — so the row should clear like a successful action rather than pop
+ * back with live buttons that will fail again (web's NOTIF-1, ported).
+ *   400 — no longer pending / already actioned.
+ *   404 — the friendship or the recipient row is gone (declining DELETES it).
+ *   409 — conflicting state.
+ * Anything else (a network blip, a 5xx) is retryable and the row comes back.
+ */
+export function isResolvedElsewhereError(err: unknown): boolean {
+  if (!(err instanceof ApiError)) return false;
+  return err.status === 400 || err.status === 404 || err.status === 409;
+}

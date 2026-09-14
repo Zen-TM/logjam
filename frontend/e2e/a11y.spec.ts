@@ -67,13 +67,6 @@ test.describe("desktop", () => {
     await page.keyboard.press("Escape");
     await expect(page.getByRole("button", { name: "Layers", exact: true })).toBeFocused();
   });
-
-  test("the Inbox panel", async ({ page }) => {
-    await openApp(page);
-    await page.getByRole("button", { name: /^Inbox/ }).click();
-    await expect(page.locator("section[aria-label='Inbox']")).toBeVisible({ timeout: 15_000 });
-    await expectNoViolations(page, "section[aria-label='Inbox']");
-  });
 });
 
 test.describe("narrow web", () => {
@@ -85,13 +78,5 @@ test.describe("narrow web", () => {
     await page.getByRole("button", { name: /^More/ }).click();
     await expect(page.getByRole("menu", { name: "More pages" })).toBeVisible();
     await expectNoViolations(page, "[role='menu']");
-  });
-
-  test("the Inbox panel on narrow web", async ({ page }) => {
-    await openApp(page);
-    await page.getByRole("button", { name: /^More/ }).click();
-    await page.getByRole("menuitem", { name: /^Inbox/ }).click();
-    await expect(page.locator("section[aria-label='Inbox']")).toBeVisible({ timeout: 15_000 });
-    await expectNoViolations(page, "section[aria-label='Inbox']");
   });
 });

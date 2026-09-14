@@ -364,10 +364,9 @@ router.patch(
     });
     if (!notification) throw new AppError(404, "Notification not found");
 
-    const read = typeof req.body?.read === "boolean" ? req.body.read : true;
     const updated = await prisma.notification.update({
       where: { id },
-      data: { read },
+      data: { read: true },
     });
 
     res.json(updated);

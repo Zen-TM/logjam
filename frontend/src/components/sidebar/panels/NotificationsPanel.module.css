@@ -1,94 +1,117 @@
-.panel {
-  position: relative;
+/* Styles for NotificationsPanel — notification list, accept/decline actions */
+
+.root {
   display: flex;
   flex-direction: column;
-  flex: 1;
-  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  gap: 0.5em;
 }
 
-.rails {
-  position: relative;
+/* Matches the .truncationNote in PlacesPanel/TripLogsPanel (UX-001/002). */
+.truncationNote {
   flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  padding: 8px var(--gutter);
-  border-bottom: var(--hairline);
-  min-height: 48px;
-  box-sizing: border-box;
+  font-size: var(--text-xs);
+  color: var(--theme-warning);
+  opacity: 0.85;
+  padding: 0 2px;
 }
 
-.truncationBanner {
-  margin: 8px var(--gutter) 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border-radius: var(--radius-md);
-  border: var(--hairline);
-  background: var(--theme-secondary);
-  color: var(--theme-text-muted);
-  font-size: var(--font-xs);
+.markAllReadButton {
+  composes: btn btnOutlineAccent btnSm btnFull from '@styles/shared.module.css';
 }
 
-.list {
-  flex: 1;
+.notificationList {
   overflow-y: auto;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: var(--gutter);
+  flex: 1;
 }
 
-.row {
-  /* Class hook for nested hover rules */
+.notificationItem {
+  padding: 0.6em 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--theme-text-primary) 14%, transparent);
+  font-size: var(--text-sm);
 }
 
-/* A row's tile is also its checkbox: the status glyph at rest, a circle to tick
-   under the pointer, on focus and throughout a selection. */
-.pick {
-  position: relative;
-  display: flex;
-  padding: 0;
+.notificationItem:last-child {
+  border-bottom: none;
+}
+
+.notificationUnread {
+  border-left: 3px solid var(--theme-accent);
+  padding-left: 0.5em;
+}
+
+/* Button-reset: the clickable read/navigate area of a row. A real <button>
+   (not a role="button" div) so it can never end up with another <button>
+   nested inside it — see NotificationsPanel.tsx. */
+.notificationActivateArea {
+  display: block;
+  width: 100%;
+  background: none;
   border: none;
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--theme-text-muted);
+  margin: 0;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
   cursor: pointer;
 }
 
-/* The tile's own size, so ticking swaps the glyph without moving the row. */
-.pickMark {
-  width: 32px;
-  height: 32px;
-  display: none;
-  align-items: center;
-  justify-content: center;
+.notificationActivateArea:focus-visible {
+  outline: 2px solid var(--theme-accent);
+  outline-offset: -2px;
 }
 
-.pick[aria-checked="true"] .pickMark {
-  color: var(--theme-accent);
+.notificationText {
+  margin-bottom: 0.3em;
 }
 
-.row:hover .pickTile,
-.pick:focus-visible .pickTile,
-.pick[data-selecting="true"] .pickTile {
-  display: none;
+.notificationTime {
+  font-size: var(--text-xs);
+  opacity: var(--opacity-muted);
 }
 
-.row:hover .pickMark,
-.pick:focus-visible .pickMark,
-.pick[data-selecting="true"] .pickMark {
+.emptyText {
+  font-size: var(--text-xs);
+  color: var(--theme-text-muted);
+  opacity: 0.6;
+  padding: 0.5em 0;
+  display: block;
+}
+
+.notificationActions {
   display: flex;
+  gap: 0.3em;
+  margin-top: 0.3em;
 }
 
-.pickTile {
-  display: flex;
+.notificationWarning {
+  margin-top: 0.3em;
+  font-size: var(--text-xs);
+  color: var(--theme-warning);
 }
 
-.actions {
+.acceptButton {
+  composes: btn btnSm btnOutlineAccent from '@styles/shared.module.css';
+}
+
+.declineButton {
+  composes: btn btnSm btnOutlineWarning from '@styles/shared.module.css';
+}
+
+.footerActions {
+  flex-shrink: 0;
+  margin-top: auto;
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  gap: 0.4em;
+}
+
+.divider {
+  composes: divider from '@styles/shared.module.css';
+  margin: 0;
+}
+
+.clearAllButton {
+  composes: btn btnOutlineAccent btnSm btnFull from '@styles/shared.module.css';
 }

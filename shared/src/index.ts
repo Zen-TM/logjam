@@ -48,4 +48,3 @@ export * from "./demTiles.js";
 export * from "./snapToPath.js";
 export * from "./snapTiles.js";
 export * from "./routeDraft.js";
-export * from "./notifications.js";

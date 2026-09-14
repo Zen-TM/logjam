@@ -13,6 +13,5 @@ export { RangePills } from "./RangePills";
 export { Tooltip } from "./Tooltip";
 export { SheetSection, SideSheet } from "./SideSheet";
 export { EmptyState, SelectionBar, Toast, type ToastSeverity } from "./Feedback";
-export { StatusPill, type PillTone } from "./StatusPill";
 export { MapButton, MapButtonGroup, Notice } from "./MapControl";
 export { useEscape } from "./useEscape";
