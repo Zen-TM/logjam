@@ -1563,8 +1563,8 @@ export function getUnreadCount(): Promise<{ count: number }> {
   return apiFetch<{ count: number }>("/notifications/unread-count");
 }
 
-export function markNotificationRead(id: string): Promise<void> {
-  return apiFetch<void>(`/notifications/${id}/read`, { method: "PATCH" });
+export function markNotificationRead(id: string, read = true): Promise<void> {
+  return apiFetch<void>(`/notifications/${id}/read`, { method: "PATCH", body: { read } });
 }
 
 export function markAllNotificationsRead(): Promise<void> {

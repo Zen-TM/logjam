@@ -317,10 +317,10 @@ function SidebarPanel({
   const title =
     activePanel === "place-detail" && place ? place.name : PANEL_TITLES[activePanel];
 
-  // Places opens with its own hero, which names the page; every other page
-  // keeps a plain header until it is redesigned.
+  // Places and Inbox open with their own hero, which answers the page's question;
+  // every other page keeps a plain header until it is redesigned.
   const header =
-    activePanel === "places" ? null : (
+    activePanel === "places" || activePanel === "inbox" ? null : (
       <header className={classes.panelHeader}>
         <h2 className={classes.panelTitle}>{title}</h2>
         <IconButton icon={X} label="Close panel" onClick={onClose} />

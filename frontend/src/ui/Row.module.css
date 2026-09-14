@@ -1,14 +1,22 @@
 .row {
   position: relative;
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
   min-height: 48px;
-  padding: 7px 4px 7px 8px;
   box-sizing: border-box;
   border-radius: var(--radius-lg);
   border: var(--hairline);
   background: var(--theme-secondary);
+}
+
+.body {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  padding: 7px 4px 7px 8px;
+  box-sizing: border-box;
 }
 
 .row:hover,
@@ -21,8 +29,36 @@
   box-shadow: inset 0 0 0 1px var(--theme-accent);
 }
 
+.row[data-unread="true"] {
+  border-left: 3px solid var(--theme-accent);
+}
+
+.row[data-unread="true"] .body {
+  padding-left: 6px;
+}
+
 .row[data-disabled="true"] {
   opacity: 0.45;
+}
+
+.footer {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px 8px 50px;
+  box-sizing: border-box;
+}
+
+.row[data-unread="true"] .footer {
+  padding-left: 48px;
+}
+
+/* Inside a row (which sits on secondary), outline buttons use text-primary so
+   they meet WCAG AA text contrast (accent text on secondary is only 3.63:1). */
+.footer button[class*="outline"] {
+  color: var(--theme-text-primary);
 }
 
 /* The focus ring belongs to the card the stretched button covers. */

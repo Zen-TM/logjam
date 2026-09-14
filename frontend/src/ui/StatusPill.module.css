@@ -1,0 +1,50 @@
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: var(--radius-pill);
+  padding: 2px 7px;
+  font-size: var(--font-xs);
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+.icon {
+  flex: none;
+}
+
+.label {
+  display: inline;
+}
+
+.accent {
+  background: var(--theme-accent);
+  color: var(--ink);
+  border: none;
+}
+
+.outline {
+  background: transparent;
+  color: var(--theme-text-muted);
+  border: var(--hairline);
+}
+
+.warning {
+  background: color-mix(in srgb, var(--theme-warning) 15%, transparent);
+  color: var(--theme-warning);
+  border: 1px solid var(--theme-warning);
+}
+
+.muted {
+  background: var(--theme-secondary);
+  color: var(--theme-text-muted);
+  border: var(--hairline);
+}
+
+.pill[data-has-hue="true"] {
+  background: transparent;
+  color: var(--pill-hue);
+  border: 1px solid color-mix(in srgb, var(--pill-hue) 60%, transparent);
+}

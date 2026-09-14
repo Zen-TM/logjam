@@ -41,6 +41,8 @@ export function Row({
   subtitle,
   description,
   trailing,
+  footer,
+  unread = false,
   onOpen,
   selected = false,
   highlighted = false,
@@ -55,6 +57,8 @@ export function Row({
    *  glyph says to a sighted reader (a status). */
   description?: string;
   trailing?: ReactNode;
+  footer?: ReactNode;
+  unread?: boolean;
   onOpen?: () => void;
   selected?: boolean;
   /** Lit from outside — its pin is hovered on the map. */
@@ -70,35 +74,39 @@ export function Row({
       data-selected={selected}
       data-highlighted={highlighted}
       data-disabled={disabled}
+      data-unread={unread}
       {...rest}
     >
-      {leading != null && <div className={classes.leading}>{leading}</div>}
-      <div className={classes.main}>
-        {onOpen ? (
-          <button
-            type="button"
-            className={classes.open}
-            onClick={onOpen}
-            disabled={disabled}
-            aria-describedby={describedBy}
-          >
+      <div className={classes.body}>
+        {leading != null && <div className={classes.leading}>{leading}</div>}
+        <div className={classes.main}>
+          {onOpen ? (
+            <button
+              type="button"
+              className={classes.open}
+              onClick={onOpen}
+              disabled={disabled}
+              aria-describedby={describedBy}
+            >
+              <span className={classes.title}>{title}</span>
+            </button>
+          ) : (
             <span className={classes.title}>{title}</span>
-          </button>
-        ) : (
-          <span className={classes.title}>{title}</span>
-        )}
-        {description && (
-          <span id={descriptionId} className="visually-hidden">
-            {description}
-          </span>
-        )}
-        {subtitle && (
-          <span id={subtitleId} className={classes.subtitle}>
-            {subtitle}
-          </span>
-        )}
+          )}
+          {description && (
+            <span id={descriptionId} className="visually-hidden">
+              {description}
+            </span>
+          )}
+          {subtitle && (
+            <span id={subtitleId} className={classes.subtitle}>
+              {subtitle}
+            </span>
+          )}
+        </div>
+        {trailing != null && <div className={classes.trailing}>{trailing}</div>}
       </div>
-      {trailing != null && <div className={classes.trailing}>{trailing}</div>}
+      {footer != null && <div className={classes.footer}>{footer}</div>}
     </div>
   );
 }
