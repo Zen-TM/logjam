@@ -2,6 +2,31 @@
 // Logjam Web so the two sheets offer the same sorts, the same RopeWiki choices
 // and the same logistics shortcuts under the same names.
 import type { PlaceFilters, PlaceSortKey, PlaceThresholdFilter } from "./placeFilter.js";
+import type { TripLogCustomFieldDef } from "./tripLogFields.js";
+
+/** The widest span still drawn as pills; a wider axis gets two number boxes. */
+export const MAX_FILTER_PILL_SPAN = 12;
+
+/**
+ * The numbered pills a place filter draws for a field, or null when the field
+ * is not pill-shaped. Decided by the definition's SHAPE — bounded, whole-number
+ * bounds, a small span — never by its key, so a canyon's V grade, a campsite's
+ * quality and a user's own "Difficulty, 1-5" get the same control and nothing
+ * needs to know which type a field came from.
+ *
+ * A float qualifies, unlike the phone's form rail (`railStops`): a form must be
+ * able to WRITE 4.5, while a filter asks for a range, and 4-5 holds a 4.5.
+ */
+export function filterPillStops(def: Pick<TripLogCustomFieldDef, "type" | "min" | "max">): number[] | null {
+  if (def.type !== "integer" && def.type !== "float") return null;
+  if (def.min == null || def.max == null) return null;
+  if (!Number.isInteger(def.min) || !Number.isInteger(def.max)) return null;
+  const span = def.max - def.min;
+  if (span < 1 || span > MAX_FILTER_PILL_SPAN) return null;
+  const stops: number[] = [];
+  for (let stop = def.min; stop <= def.max; stop += 1) stops.push(stop);
+  return stops;
+}
 
 export const PLACE_SORT_OPTIONS: { key: PlaceSortKey; label: string }[] = [
   { key: "name", label: "Name" },

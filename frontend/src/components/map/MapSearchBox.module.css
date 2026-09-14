@@ -6,7 +6,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 44px;
+  min-height: 42px;
   box-sizing: border-box;
   padding: 0 10px 0 16px;
   border-radius: var(--radius-pill);
@@ -31,7 +31,9 @@
   background: transparent;
   color: var(--theme-text-primary);
   font: inherit;
-  font-size: var(--font-base);
+  /* Map chrome's own step (MapControl.module.css), between the panel's base
+     and the old 16px. */
+  font-size: 0.9375rem;
 }
 
 .input::placeholder {

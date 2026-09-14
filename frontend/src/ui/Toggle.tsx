@@ -9,7 +9,6 @@ export function Toggle({
   label,
   labelledBy,
   describedBy,
-  small = false,
   disabled = false,
 }: {
   checked: boolean;
@@ -18,7 +17,6 @@ export function Toggle({
   label?: string;
   labelledBy?: string;
   describedBy?: string;
-  small?: boolean;
   disabled?: boolean;
 }) {
   if (!label && !labelledBy) throw new Error("Toggle needs a label or labelledBy");
@@ -31,7 +29,7 @@ export function Toggle({
       aria-labelledby={labelledBy}
       aria-describedby={describedBy}
       disabled={disabled}
-      className={[classes.toggle, small && classes.small].filter(Boolean).join(" ")}
+      className={classes.toggle}
       onClick={() => onChange(!checked)}
     >
       <span className={classes.thumb} />

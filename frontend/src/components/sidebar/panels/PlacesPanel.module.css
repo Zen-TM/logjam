@@ -9,19 +9,12 @@
   flex-direction: column;
 }
 
-.slot {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 44px;
-}
-
 .rails {
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 14px 20px 12px;
+  gap: 8px;
+  padding: 10px var(--gutter) 8px;
 }
 
 /* Selection keeps the type rail mounted but out of reach, so the list below
@@ -35,9 +28,11 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 36px;
-  margin: 0 20px 10px;
-  padding: 0 2px 0 14px;
+  min-height: var(--control-md);
+  box-sizing: border-box;
+  margin: 0 var(--gutter) 8px;
+  /* The end pad centres the round clear button in the pill's end cap. */
+  padding: 0 calc((var(--control-md) - var(--control-sm)) / 2) 0 12px;
   border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--theme-accent) 12%, var(--theme-primary));
   font-size: var(--font-sm);
@@ -54,14 +49,14 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 0 20px 8px;
+  padding: 0 var(--gutter) 6px;
   font-size: var(--font-xs);
   color: var(--theme-text-muted);
 }
 
 .note {
   flex-shrink: 0;
-  margin: 0 20px 8px;
+  margin: 0 var(--gutter) 8px;
   font-size: var(--font-xs);
   color: var(--theme-text-muted);
 }
@@ -72,9 +67,9 @@
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   /* Room for each card's focus ring inside the scroller. */
-  padding: 4px 20px 20px;
+  padding: 4px var(--gutter) var(--gutter);
 }
 
 .emptyArea {
@@ -83,7 +78,7 @@
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: 0 20px 15%;
+  padding: 0 var(--gutter) 15%;
 }
 
 .row {
@@ -117,9 +112,10 @@
   cursor: pointer;
 }
 
+/* The tile's own size, so ticking swaps the glyph without moving the row. */
 .pickMark {
-  width: 40px;
-  height: 40px;
+  width: 32px;
+  height: 32px;
   display: none;
   align-items: center;
   justify-content: center;

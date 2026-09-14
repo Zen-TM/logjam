@@ -2,32 +2,32 @@ import type { CSSProperties, ReactNode } from "react";
 import classes from "./Hero.module.css";
 
 /**
- * A page's opening: an eyebrow naming the page, a title that ANSWERS the page's
- * one question ("298 places"), its actions on the same line, and a slot below
- * (a meter, a search row).
+ * A page's opening line: a title that ANSWERS the page's one question
+ * ("298 places") with the page's actions beside it. No eyebrow naming the page:
+ * the rail's lit pill already says where you are, and a title that answers the
+ * question names the page as well.
+ *
+ * `children`, when given, takes the title's place on the same line (a search
+ * box), so opening it moves nothing. The title stays in the document as the
+ * page's heading for assistive tech.
  *
  * No fill, unlike Logjam GPS's hero: that fill (`bonus2`) fails AA under two
  * schemes, so the web hero separates with an accent hairline instead.
  */
 export function Hero({
-  eyebrow,
   title,
   actions,
   children,
 }: {
-  eyebrow: string;
   title: string;
   actions?: ReactNode;
   children?: ReactNode;
 }) {
   return (
     <header className={classes.hero}>
-      <div className={classes.eyebrow}>{eyebrow}</div>
-      <div className={classes.titleRow}>
-        <h2 className={classes.title}>{title}</h2>
-        {actions}
-      </div>
+      <h2 className={children ? "visually-hidden" : classes.title}>{title}</h2>
       {children}
+      {actions}
     </header>
   );
 }

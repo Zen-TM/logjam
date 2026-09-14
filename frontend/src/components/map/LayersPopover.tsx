@@ -469,7 +469,6 @@ function ToposView({
                         </span>
                       </span>
                       <Toggle
-                        small
                         checked={lidarJobToggles[job.jobId] ?? true}
                         onChange={(next) => setLidarJobToggles((prev) => ({ ...prev, [job.jobId]: next }))}
                         label={`Show ${name}`}
@@ -585,7 +584,6 @@ function LayerOrder({
                 )}
               </span>
               <Toggle
-                small
                 checked={toggles[name] ?? true}
                 onChange={(next) => setToggles((prev) => ({ ...prev, [name]: next }))}
                 label={`Show ${label}`}

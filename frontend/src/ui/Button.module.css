@@ -3,8 +3,8 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  min-height: 44px;
-  padding: 0 16px;
+  min-height: var(--control-lg);
+  padding: 0 14px;
   border-radius: var(--radius-pill);
   border: 1px solid transparent;
   background: transparent;
@@ -18,7 +18,7 @@
 }
 
 .compact {
-  min-height: 36px;
+  min-height: var(--control-md);
   padding: 0 12px;
   font-size: var(--font-sm);
 }
@@ -56,8 +56,8 @@
 }
 
 .iconButton {
-  width: 40px;
-  height: 40px;
+  width: var(--control-md);
+  height: var(--control-md);
   flex: none;
   display: inline-flex;
   align-items: center;
@@ -100,4 +100,20 @@
 .iconButton.onFill:hover:not(:disabled) {
   background: color-mix(in srgb, var(--ink) 10%, transparent);
   color: var(--ink);
+}
+
+/* The global ring is the text colour, which IS a light fill: invisible here. */
+.iconButton.onFill:focus-visible {
+  outline-color: var(--ink);
+}
+
+.iconButton.round {
+  width: var(--control-sm);
+  height: var(--control-sm);
+  border-radius: var(--radius-pill);
+}
+
+/* Ring flush with the circle, so it stays inside the pill's end cap. */
+.iconButton.round:focus-visible {
+  outline-offset: 0;
 }

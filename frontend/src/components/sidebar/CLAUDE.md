@@ -20,6 +20,6 @@ Clicking a different icon **switches** to that panel.
 
 ## Conventions log (additive)
 
-- **Superseded sizes (2026-09-13):** the rail is 84px with labelled pills and the panel 440px (`--nav-rail-width`, `--panel-width`); narrow web is a 68px tab bar (Map · Places · Logs · Ways · More). The 56px/280px figures and "bottom strip" above are stale; flagged for the operator to remove. Page ids and titles live in `panels.ts`; a page with two views swaps them under a chip rail in `SidebarPanel`. See `frontend/DESIGN.md` §2.
+- **Superseded sizes (2026-09-13):** the rail is 84px with labelled pills and the panel 380px, the same as the filter sheet beside it (`--nav-rail-width`, `--panel-width`); narrow web is a 68px tab bar (Map · Places · Logs · Ways · More). The 56px/280px figures and "bottom strip" above are stale; flagged for the operator to remove. Page ids and titles live in `panels.ts`; a page with two views swaps them under a chip rail in `SidebarPanel`. See `frontend/DESIGN.md` §2.
 
 _(none yet)_

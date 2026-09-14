@@ -56,7 +56,7 @@ export function SideSheet({
   );
 }
 
-/** A titled group inside a sheet or popover: eyebrow, then its controls. */
+/** A titled group inside a sheet or popover: section title, then its controls. */
 export function SheetSection({ title, children }: { title: string; children: ReactNode }) {
   const titleId = useId();
   return (

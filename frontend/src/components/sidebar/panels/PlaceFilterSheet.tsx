@@ -1,14 +1,14 @@
 import { useState } from "react";
 import { Check, Scan, SquareDashed } from "lucide-react";
 import {
-  CANYON_FORM_FIELD_KEYS,
   defsForType,
+  filterPillStops,
+  formatRange,
   formatThreshold,
+  isFullRange,
   PLACE_ROPEWIKI_OPTIONS,
   PLACE_SORT_OPTIONS,
-  PLACE_THRESHOLDS,
   regionEdgesKm,
-  SYSTEM_FIELD_DEFS,
   THRESHOLD_OPERATOR_LABELS,
   THRESHOLD_OPERATORS,
   type NumberRange,
@@ -17,23 +17,11 @@ import {
   type PlaceThresholdFilter,
   type ScopedCustomFieldDef,
 } from "@logjam/shared";
-import { Button, Chip, RangePills, SheetSection, SideSheet, SwitchRow, TextField } from "../../../ui";
+import { Button, Chip, FilterField, RangePills, SheetSection, SideSheet, SwitchRow, TextField } from "../../../ui";
 import classes from "./PlaceFilterSheet.module.css";
 
 type CustomFilter = PlaceFilters["custom"][string];
-
-/** The widest integer span still drawn as pills; wider spans get min/max boxes. */
-const MAX_PILL_SPAN = 12;
-
-function rangeOf(filters: PlaceFilters, key: string): NumberRange | null {
-  const filter = filters.custom[key];
-  return filter?.kind === "numberRange" ? (filter.range as NumberRange) : null;
-}
-
-function thresholdOf(filters: PlaceFilters, key: string): PlaceThresholdFilter | null {
-  const filter = filters.custom[key];
-  return filter?.kind === "number" ? [filter.op, filter.value] : null;
-}
+type DateRange = readonly [string | null, string | null];
 
 /** An inactive custom filter is ABSENT, never present at its default, so "is it
  *  active" stays `key in custom` for every kind. */
@@ -44,20 +32,21 @@ function withCustom(filters: PlaceFilters, key: string, value: CustomFilter | nu
   return { ...filters, custom };
 }
 
-function boundsOf(key: string): [number, number] {
-  const def = SYSTEM_FIELD_DEFS.find((candidate) => candidate.key === key);
-  return [def?.min ?? 1, def?.max ?? 7];
+function dateSummary(range: DateRange | null): string {
+  if (range == null || (range[0] == null && range[1] == null)) return "Any";
+  if (range[0] != null && range[1] != null) return `${range[0]} – ${range[1]}`;
+  return range[0] != null ? `From ${range[0]}` : `To ${range[1]}`;
 }
 
 /**
  * Sort and filter for Places — everything that isn't a rail. It opens BESIDE
  * the list, so the list it narrows stays in view and updates as you go.
  *
- * The same sheet as Logjam GPS's, section for section (`@logjam/shared`
- * `placeFilterOptions` holds the shared words and presets). Visited, not visited
- * and shared are NOT here: they are the status rail, and a second copy could
- * disagree with it. Which field axes appear follows the type rail — a campsite
- * is never offered a V grade.
+ * Visited, not visited and shared are NOT here: they are the status rail, and a
+ * second copy could disagree with it. Which attributes appear follows the type
+ * rail, and every one of them is drawn from its definition's SHAPE, never its
+ * key: a canyon's grades are ordinary attributes, so they get no section of
+ * their own and a user's own "Difficulty, 1-5" is drawn exactly like them.
  */
 export default function PlaceFilterSheet({
   filters,
@@ -89,19 +78,8 @@ export default function PlaceFilterSheet({
   resultCount: number;
   className?: string;
 }) {
-  const typeDefs =
+  const fieldDefs =
     filters.placeTypeId == null ? placeCustomFieldDefs : defsForType(placeCustomFieldDefs, filters.placeTypeId);
-  const hasField = (key: string) => typeDefs.some((def) => def.key === key);
-  // WHAT IS ALREADY DRAWN, not what is reserved: the canyon axes get their own
-  // controls below and are cut from the generic list only when they are shown,
-  // or a campsite's own system fields would vanish (root CLAUDE.md).
-  const canyonAxesShown = hasField("v_grade");
-  const thresholds = PLACE_THRESHOLDS.filter((spec) => hasField(spec.key));
-  const drawnByHand = new Set([
-    ...(canyonAxesShown ? CANYON_FORM_FIELD_KEYS : []),
-    ...thresholds.map((spec) => spec.key),
-  ]);
-  const ownFieldDefs = typeDefs.filter((def) => !drawnByHand.has(def.key));
 
   const patch = (next: Partial<PlaceFilters>) => onChangeFilters({ ...filters, ...next });
 
@@ -141,8 +119,6 @@ export default function PlaceFilterSheet({
         </>
       }
     >
-      <p className={classes.hint}>Visited, not visited and shared are the chips above the list.</p>
-
       <SheetSection title="Sort">
         <div className={classes.chips}>
           {PLACE_SORT_OPTIONS.map((option) => (
@@ -157,62 +133,12 @@ export default function PlaceFilterSheet({
         </div>
       </SheetSection>
 
-      {canyonAxesShown && (
-        <SheetSection title="Grade">
-          <RangePills
-            label="Vertical"
-            prefix="V"
-            bounds={boundsOf("v_grade")}
-            value={rangeOf(filters, "v_grade")}
-            onChange={(next) => onChangeFilters(withCustom(filters, "v_grade", next && { kind: "numberRange", range: next }))}
-          />
-          <RangePills
-            label="Aquatic"
-            prefix="A"
-            bounds={boundsOf("a_grade")}
-            value={rangeOf(filters, "a_grade")}
-            onChange={(next) => onChangeFilters(withCustom(filters, "a_grade", next && { kind: "numberRange", range: next }))}
-          />
-          <RangePills
-            label="Commitment"
-            bounds={boundsOf("commitment")}
-            value={rangeOf(filters, "commitment")}
-            onChange={(next) =>
-              onChangeFilters(withCustom(filters, "commitment", next && { kind: "numberRange", range: next }))
-            }
-          />
-          <RangePills
-            label="Quality"
-            bounds={boundsOf("quality")}
-            value={rangeOf(filters, "quality")}
-            onChange={(next) => onChangeFilters(withCustom(filters, "quality", next && { kind: "numberRange", range: next }))}
-          />
-        </SheetSection>
-      )}
-
-      {thresholds.length > 0 && (
-        <SheetSection title="Logistics">
-          {thresholds.map((spec) => (
-            <ThresholdFilter
-              key={spec.key}
-              label={spec.label}
-              unit={spec.unit}
-              presets={spec.presets}
-              value={thresholdOf(filters, spec.key)}
-              onChange={(next) =>
-                onChangeFilters(
-                  withCustom(filters, spec.key, next && next[0] !== "Any" ? { kind: "number", op: next[0], value: next[1] } : null),
-                )
-              }
-            />
-          ))}
-        </SheetSection>
-      )}
-
-      {ownFieldDefs.length > 0 && (
-        <SheetSection title="Fields">
-          {ownFieldDefs.map((def) => (
-            <CustomFieldFilter
+      {fieldDefs.length > 0 && (
+        // "Attributes", not "Fields": a field is the box, not the thing it
+        // records (mobile ATTRIBUTE_NOUN).
+        <SheetSection title="Attributes">
+          {fieldDefs.map((def) => (
+            <AttributeFilter
               key={def.key}
               def={def}
               value={filters.custom[def.key] ?? null}
@@ -266,27 +192,34 @@ export default function PlaceFilterSheet({
 
       <SheetSection title="Dates">
         {(["created_at", "updated_at"] as const).map((field) => (
-          <div key={field} className={classes.dateRow}>
-            <TextField
-              type="date"
-              label={field === "created_at" ? "Added from" : "Updated from"}
-              value={filters[field]?.[0] ?? ""}
-              onChange={(event) => setDateBound(field, 0, event.target.value)}
-            />
-            <TextField
-              type="date"
-              label="to"
-              value={filters[field]?.[1] ?? ""}
-              onChange={(event) => setDateBound(field, 1, event.target.value)}
-            />
-          </div>
+          <FilterField
+            key={field}
+            label={field === "created_at" ? "Added" : "Updated"}
+            summary={dateSummary(filters[field])}
+            active={filters[field] != null}
+            onClear={() => patch({ [field]: null })}
+          >
+            <div className={classes.pair}>
+              <TextField
+                type="date"
+                label="From"
+                value={filters[field]?.[0] ?? ""}
+                onChange={(event) => setDateBound(field, 0, event.target.value)}
+              />
+              <TextField
+                type="date"
+                label="To"
+                value={filters[field]?.[1] ?? ""}
+                onChange={(event) => setDateBound(field, 1, event.target.value)}
+              />
+            </div>
+          </FilterField>
         ))}
       </SheetSection>
 
       <SheetSection title="Missing info">
         <SwitchRow
           title="Include places missing this info"
-          description="Imported places often lack it, so filters would hide them."
           checked={filters.include_unknowns}
           onChange={(next) => patch({ include_unknowns: next })}
         />
@@ -296,12 +229,13 @@ export default function PlaceFilterSheet({
 }
 
 /**
- * One user-defined field with the control its type deserves: a small bounded
- * whole number is pills; any other number is min–max (bounded) or operator and
- * value (unbounded); yes/no is two chips, where neither is "don't care"; text is
- * a contains-match; a date is a from–to pair.
+ * One attribute with the control its definition's shape deserves: a small
+ * bounded whole-number axis is pills (`filterPillStops`); any other bounded
+ * number is from–to; an unbounded one is operator and value; yes/no is two
+ * chips, where neither is "don't care"; text is a contains-match; a date is a
+ * from–to pair.
  */
-function CustomFieldFilter({
+function AttributeFilter({
   def,
   value,
   onChange,
@@ -310,26 +244,27 @@ function CustomFieldFilter({
   value: CustomFilter | null;
   onChange: (next: CustomFilter | null) => void;
 }) {
+  const clear = () => onChange(null);
+
   if (def.type === "integer" || def.type === "float") {
+    const range = value?.kind === "numberRange" ? (value.range as NumberRange) : null;
+    const stops = filterPillStops(def);
+    if (stops) {
+      return (
+        <RangePills
+          label={def.label}
+          stops={stops}
+          value={range}
+          onChange={(next) => onChange(next && { kind: "numberRange", range: next })}
+        />
+      );
+    }
     if (def.min != null && def.max != null) {
-      const range = value?.kind === "numberRange" ? (value.range as NumberRange) : null;
-      if (def.type === "integer" && def.max - def.min <= MAX_PILL_SPAN) {
-        return (
-          <RangePills
-            label={def.label}
-            bounds={[def.min, def.max]}
-            value={range}
-            onChange={(next) => onChange(next && { kind: "numberRange", range: next })}
-          />
-        );
-      }
       return <MinMaxFilter label={def.label} bounds={[def.min, def.max]} value={range} onChange={onChange} />;
     }
     return (
       <ThresholdFilter
         label={def.label}
-        unit=""
-        presets={[]}
         value={value?.kind === "number" ? [value.op, value.value] : null}
         onChange={(next) => onChange(next && next[0] !== "Any" ? { kind: "number", op: next[0], value: next[1] } : null)}
       />
@@ -339,8 +274,12 @@ function CustomFieldFilter({
   if (def.type === "boolean") {
     const current = value?.kind === "boolean" ? value.value : null;
     return (
-      <div className={classes.block}>
-        <span className={classes.blockLabel}>{def.label}</span>
+      <FilterField
+        label={def.label}
+        summary={current == null ? "Any" : current ? "Yes" : "No"}
+        active={current != null}
+        onClear={clear}
+      >
         <div className={classes.chips}>
           {[true, false].map((option) => (
             <Chip
@@ -354,32 +293,38 @@ function CustomFieldFilter({
             />
           ))}
         </div>
-      </div>
+      </FilterField>
     );
   }
 
   if (def.type === "string") {
+    const text = value?.kind === "text" ? value.value : "";
     return (
-      <TextField
-        label={`${def.label} contains`}
-        value={value?.kind === "text" ? value.value : ""}
-        onChange={(event) =>
-          onChange(event.target.value.trim() === "" ? null : { kind: "text", value: event.target.value })
-        }
-      />
+      <FilterField label={def.label} summary={text ? `Contains “${text}”` : "Any"} active={text !== ""} onClear={clear}>
+        <TextField
+          label="Contains"
+          value={text}
+          onChange={(event) =>
+            onChange(event.target.value.trim() === "" ? null : { kind: "text", value: event.target.value })
+          }
+        />
+      </FilterField>
     );
   }
 
   const dates = value?.kind === "date" ? value.range : null;
   const setBound = (bound: 0 | 1, next: string) => {
-    const range: [string | null, string | null] = bound === 0 ? [next || null, dates?.[1] ?? null] : [dates?.[0] ?? null, next || null];
+    const range: [string | null, string | null] =
+      bound === 0 ? [next || null, dates?.[1] ?? null] : [dates?.[0] ?? null, next || null];
     onChange(range[0] == null && range[1] == null ? null : { kind: "date", range });
   };
   return (
-    <div className={classes.dateRow}>
-      <TextField type="date" label={`${def.label} from`} value={dates?.[0] ?? ""} onChange={(event) => setBound(0, event.target.value)} />
-      <TextField type="date" label="to" value={dates?.[1] ?? ""} onChange={(event) => setBound(1, event.target.value)} />
-    </div>
+    <FilterField label={def.label} summary={dateSummary(dates)} active={dates != null} onClear={clear}>
+      <div className={classes.pair}>
+        <TextField type="date" label="From" value={dates?.[0] ?? ""} onChange={(event) => setBound(0, event.target.value)} />
+        <TextField type="date" label="To" value={dates?.[1] ?? ""} onChange={(event) => setBound(1, event.target.value)} />
+      </div>
+    </FilterField>
   );
 }
 
@@ -398,6 +343,17 @@ function MinMaxFilter({
 }) {
   const [low, setLow] = useState(value ? String(value[0]) : "");
   const [high, setHigh] = useState(value ? String(value[1]) : "");
+  // Reset and the clear button empty the filter from outside; empty the boxes
+  // with it, or they go on showing a filter that is no longer applied.
+  const [shownValue, setShownValue] = useState(value);
+  if (value !== shownValue) {
+    setShownValue(value);
+    if (value == null) {
+      setLow("");
+      setHigh("");
+    }
+  }
+
   const commit = (nextLow: string, nextHigh: string) => {
     if (nextLow.trim() === "" && nextHigh.trim() === "") return onChange(null);
     const from = nextLow.trim() === "" ? bounds[0] : Number(nextLow);
@@ -406,125 +362,98 @@ function MinMaxFilter({
     onChange({ kind: "numberRange", range: [Math.max(bounds[0], from), Math.min(bounds[1], to)] });
   };
   return (
-    <div className={classes.dateRow}>
-      <TextField
-        type="number"
-        label={`${label} from`}
-        placeholder={String(bounds[0])}
-        value={low}
-        onChange={(event) => {
-          setLow(event.target.value);
-          commit(event.target.value, high);
-        }}
-      />
-      <TextField
-        type="number"
-        label="to"
-        placeholder={String(bounds[1])}
-        value={high}
-        onChange={(event) => {
-          setHigh(event.target.value);
-          commit(low, event.target.value);
-        }}
-      />
-    </div>
+    <FilterField
+      label={label}
+      summary={formatRange(value, bounds)}
+      active={!isFullRange(value, bounds)}
+      onClear={() => onChange(null)}
+    >
+      <div className={classes.pair}>
+        <TextField
+          type="number"
+          label="From"
+          placeholder={String(bounds[0])}
+          value={low}
+          onChange={(event) => {
+            setLow(event.target.value);
+            commit(event.target.value, high);
+          }}
+        />
+        <TextField
+          type="number"
+          label="To"
+          placeholder={String(bounds[1])}
+          value={high}
+          onChange={(event) => {
+            setHigh(event.target.value);
+            commit(low, event.target.value);
+          }}
+        />
+      </div>
+    </FilterField>
   );
 }
 
 /**
- * A "how many / how long / how far" axis: the presets people actually pick, and
- * Custom for the rest. The operator and number are a DRAFT until there is a
- * number — committing on opening Custom would apply "under 0" and empty the list.
+ * An unbounded "how many / how long / how far": an operator and a number. The
+ * operator is a DRAFT until there is a number — committing it alone would apply
+ * "under 0" and empty the list.
  */
 function ThresholdFilter({
   label,
-  unit,
-  presets,
   value,
   onChange,
 }: {
   label: string;
-  unit: string;
-  presets: PlaceThresholdFilter[];
   value: PlaceThresholdFilter | null;
   onChange: (next: PlaceThresholdFilter | null) => void;
 }) {
-  const matchedPreset = presets.find((preset) => value != null && preset[0] === value[0] && preset[1] === value[1]);
-  const [customOpen, setCustomOpen] = useState(false);
-  const [draftOperator, setDraftOperator] = useState<PlaceThresholdFilter[0]>(value?.[0] ?? "Less than");
-  const [draftText, setDraftText] = useState(value && !matchedPreset ? String(value[1]) : "");
-  const custom = customOpen || (value != null && !matchedPreset);
+  const [operator, setOperator] = useState<PlaceThresholdFilter[0]>(value?.[0] ?? "Less than");
+  const [text, setText] = useState(value ? String(value[1]) : "");
+  const [shownValue, setShownValue] = useState(value);
+  if (value !== shownValue) {
+    setShownValue(value);
+    if (value == null) setText("");
+  }
 
-  const commit = (operator: PlaceThresholdFilter[0], text: string) => {
-    const parsed = Number(text.trim());
-    onChange(text.trim() === "" || !Number.isFinite(parsed) ? null : [operator, parsed]);
+  const commit = (nextOperator: PlaceThresholdFilter[0], nextText: string) => {
+    const parsed = Number(nextText.trim());
+    onChange(nextText.trim() === "" || !Number.isFinite(parsed) ? null : [nextOperator, parsed]);
   };
 
   return (
-    <div className={classes.block}>
-      <div className={classes.blockHeader}>
-        <span className={classes.blockLabel}>{label}</span>
-        <span className={classes.blockValue} data-active={value != null}>
-          {value == null ? "Any" : formatThreshold(value, unit)}
-        </span>
-      </div>
-      <div className={classes.chips}>
-        {presets.map((preset) => (
-          <Chip
-            key={`${preset[0]}-${preset[1]}`}
-            label={formatThreshold(preset, unit)}
-            active={!custom && matchedPreset === preset}
-            aria-pressed={!custom && matchedPreset === preset}
-            onClick={() => {
-              setCustomOpen(false);
-              onChange(matchedPreset === preset ? null : preset);
-            }}
-          />
-        ))}
-        <Chip
-          label={presets.length === 0 ? "Set a value" : "Custom"}
-          active={custom}
-          aria-expanded={custom}
-          onClick={() => {
-            if (custom) {
-              setCustomOpen(false);
-              setDraftText("");
-              onChange(null);
-            } else {
-              setDraftOperator(value?.[0] ?? "Less than");
-              setDraftText(value == null ? "" : String(value[1]));
-              setCustomOpen(true);
-            }
+    <FilterField
+      label={label}
+      summary={value == null ? "Any" : formatThreshold(value, "")}
+      active={value != null}
+      onClear={() => onChange(null)}
+    >
+      <div className={classes.stack}>
+        <div className={classes.chips}>
+          {THRESHOLD_OPERATORS.map((candidate) => (
+            <Chip
+              key={candidate}
+              label={THRESHOLD_OPERATOR_LABELS[candidate]}
+              active={operator === candidate}
+              aria-pressed={operator === candidate}
+              onClick={() => {
+                setOperator(candidate);
+                commit(candidate, text);
+              }}
+            />
+          ))}
+        </div>
+        <TextField
+          type="number"
+          label={label}
+          hideLabel
+          value={text}
+          onChange={(event) => {
+            setText(event.target.value);
+            commit(operator, event.target.value);
           }}
         />
       </div>
-      {custom && (
-        <div className={classes.customRow}>
-          <div className={classes.chips}>
-            {THRESHOLD_OPERATORS.map((operator) => (
-              <Chip
-                key={operator}
-                label={THRESHOLD_OPERATOR_LABELS[operator]}
-                active={draftOperator === operator}
-                aria-pressed={draftOperator === operator}
-                onClick={() => {
-                  setDraftOperator(operator);
-                  commit(operator, draftText);
-                }}
-              />
-            ))}
-          </div>
-          <TextField
-            type="number"
-            label={unit ? `${label} (${unit})` : label}
-            value={draftText}
-            onChange={(event) => {
-              setDraftText(event.target.value);
-              commit(draftOperator, event.target.value);
-            }}
-          />
-        </div>
-      )}
-    </div>
+    </FilterField>
   );
 }

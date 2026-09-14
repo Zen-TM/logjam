@@ -66,7 +66,8 @@ function SidebarPanel({
   onChangeFilters,
   onDrawFilterArea,
   onFilterToMapView,
-  filtersOpenSignal,
+  openFiltersRequested,
+  onOpenFiltersConsumed,
   onFiltersOpenChange,
   onHoverPlace,
   revealPlaceId,
@@ -171,7 +172,9 @@ function SidebarPanel({
   onDrawFilterArea: () => void;
   /** Set the area filter to whatever the map is currently showing. */
   onFilterToMapView: () => void;
-  filtersOpenSignal: number;
+  /** Places should open its filter sheet on arrival (back from drawing an area). */
+  openFiltersRequested: boolean;
+  onOpenFiltersConsumed: () => void;
   onFiltersOpenChange: (open: boolean) => void;
   onHoverPlace: (id: string | null) => void;
   revealPlaceId: string | null;
@@ -356,7 +359,8 @@ function SidebarPanel({
             onQuotaChanged={onQuotaChanged}
             onDrawFilterArea={onDrawFilterArea}
             onFilterToMapView={onFilterToMapView}
-            filtersOpenSignal={filtersOpenSignal}
+            openFiltersRequested={openFiltersRequested}
+            onOpenFiltersConsumed={onOpenFiltersConsumed}
             onFiltersOpenChange={onFiltersOpenChange}
             onFlyToPlace={onFlyToPlace}
             setSelectedPlaceID={setSelectedPlaceID}

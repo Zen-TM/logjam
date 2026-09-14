@@ -2,14 +2,13 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: 12px;
-  min-height: 60px;
-  padding: 9px 4px 9px 10px;
+  gap: 10px;
+  min-height: 48px;
+  padding: 7px 4px 7px 8px;
   box-sizing: border-box;
   border-radius: var(--radius-lg);
   border: var(--hairline);
   background: var(--theme-secondary);
-  transition: border-color var(--transition-fast);
 }
 
 .row:hover,
@@ -45,6 +44,13 @@
   gap: 4px;
   color: var(--theme-text-muted);
   font-size: var(--font-xs);
+}
+
+/* The row's 4px end padding is sized for a trailing ⋯, whose icon-button box
+   carries its own whitespace. A switch has none, so it stands off the edge
+   itself. */
+.trailing > [role="switch"]:last-child {
+  margin-right: 8px;
 }
 
 .main {
@@ -95,8 +101,8 @@
 }
 
 .tile {
-  width: 40px;
-  height: 40px;
+  width: 32px;
+  height: 32px;
   flex: none;
   display: flex;
   align-items: center;
@@ -107,14 +113,4 @@
      wash, and misses it for most hues under Sandstone (scripts/wcag-contrast.mjs). */
   background: var(--tile-hue);
   color: var(--ink);
-}
-
-.hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
 }

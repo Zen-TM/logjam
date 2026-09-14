@@ -22,8 +22,10 @@
 
   /* Layout */
   --nav-rail-width: 84px;
-  --panel-width: 440px;
-  --filter-sheet-width: 380px;
+  --panel-width: 380px;
+  /* The same width as the panel it opens beside, by decision rather than
+     coincidence. */
+  --filter-sheet-width: var(--panel-width);
   --bottom-nav-height: 68px;
 
   /* Border radius — the same scale as Logjam GPS (RADIUS in @logjam/shared). */
@@ -38,12 +40,23 @@
      set from @logjam/shared at startup (themePreferences.tsx), not restated
      here. */
 
-  /* Type — rem, so a browser text-size setting reaches every label. */
+  /* Type — rem, so a browser text-size setting reaches every label. A desktop
+     density: a mouse and a big screen want more on it than a phone does.
+     12px is the floor; nothing is drawn smaller. */
   --font-xs: 0.75rem;
-  --font-sm: 0.875rem;
-  --font-base: 1rem;
-  --font-lg: 1.25rem;
-  --font-xl: 1.5rem;
+  --font-sm: 0.8125rem;
+  --font-base: 0.875rem;
+  --font-lg: 1.125rem;
+  --font-xl: 1.25rem;
+
+  /* Control sizes. Every height and hit target in the kit reads one of these,
+     so density is decided here and nowhere else. A mouse gets the compact set
+     (still clear of WCAG 2.5.8's 24px); a touch screen gets Logjam GPS's. */
+  --control-lg: 36px; /* buttons, text fields */
+  --control-md: 32px; /* compact buttons, chips, icon buttons, menu items */
+  --control-sm: 24px; /* the round icon button at a pill's end */
+  /* The side margin every panel, sheet and list keeps. */
+  --gutter: 16px;
 
   /* Kit surfaces. A text field sits a step darker than the page it is on. */
   --surface-field: color-mix(in srgb, black 12%, var(--theme-primary));
@@ -93,6 +106,27 @@ body {
   .icon {
     filter: invert(1);
   }
+}
+
+/* A coarse pointer (a finger) gets the phone's targets back. Keyed to the
+   POINTER, not the width: a narrow desktop window still has a mouse. */
+@media (pointer: coarse) {
+  :root {
+    --control-lg: 44px;
+    --control-md: 40px;
+    --control-sm: 32px;
+  }
+}
+
+/* Visually hidden, still read by assistive tech. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 /* Mobile (≤768px): map goes full-bleed (no left nav rail); navigation moves to

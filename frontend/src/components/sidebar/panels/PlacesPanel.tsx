@@ -61,11 +61,9 @@ import {
   IconButton,
   IconTile,
   Menu,
-  Meter,
   Row,
   SearchField,
   SelectionBar,
-  Tooltip,
   type MenuEntry,
 } from "../../../ui";
 import { placeTypeLucideIcon } from "./placeTypeIcon";
@@ -129,7 +127,8 @@ function PlacesPanel({
   onQuotaChanged,
   onDrawFilterArea,
   onFilterToMapView,
-  filtersOpenSignal,
+  openFiltersRequested,
+  onOpenFiltersConsumed,
   onFiltersOpenChange,
   onFlyToPlace,
   setSelectedPlaceID,
@@ -159,8 +158,11 @@ function PlacesPanel({
   onQuotaChanged: () => void;
   onDrawFilterArea: () => void;
   onFilterToMapView: () => void;
-  /** Bumped when the sheet should open (returning from drawing an area). */
-  filtersOpenSignal: number;
+  /** Open the sheet on arrival (returning from drawing an area). A request that
+   *  is CONSUMED, not a counter: a counter above zero reopened the sheet on
+   *  every later visit to Places. */
+  openFiltersRequested: boolean;
+  onOpenFiltersConsumed: () => void;
   onFiltersOpenChange: (open: boolean) => void;
   onFlyToPlace: (lat: number, lng: number) => void;
   setSelectedPlaceID: (id: string | null) => void;
@@ -207,8 +209,10 @@ function PlacesPanel({
     [onFiltersOpenChange, onExpandSheet],
   );
   useEffect(() => {
-    if (filtersOpenSignal > 0) openSheet(true);
-  }, [filtersOpenSignal, openSheet]);
+    if (!openFiltersRequested) return;
+    openSheet(true);
+    onOpenFiltersConsumed();
+  }, [openFiltersRequested, onOpenFiltersConsumed, openSheet]);
   useEffect(() => () => onFiltersOpenChange(false), [onFiltersOpenChange]);
   useEffect(() => () => onHoverPlace(null), [onHoverPlace]);
 
@@ -253,14 +257,6 @@ function PlacesPanel({
     for (const { place } of withoutType) counts.set(place.placeTypeId, (counts.get(place.placeTypeId) ?? 0) + 1);
     return { any: withoutType.length, byType: counts };
   }, [matching, filters]);
-
-  // The hero's answer, over the WHOLE collection: "how far through my list am
-  // I" is a fact about the list, not about the filter I am holding.
-  const totals = useMemo(() => {
-    const counts: Record<PlaceStatus, number> = { done: 0, todo: 0, shared: 0 };
-    for (const { status } of collection) counts[status] += 1;
-    return counts;
-  }, [collection]);
 
   // Membership over the whole collection: a type with no places is not offered,
   // but a chip does not come and go as the user types.
@@ -442,19 +438,32 @@ function PlacesPanel({
     />
   );
 
+  const closeSearch = () => {
+    setQuery("");
+    setSearchOpen(false);
+  };
+
+  // No meter: the status rail's counts already say how many are visited, not
+  // visited and shared, and the bar beside them was the same numbers again.
   const hero = (
     <Hero
-      eyebrow="Places"
       title={!placesLoaded ? "Places" : collection.length === 0 ? "No places yet" : plural(collection.length, "place")}
       actions={
+        searchOpen ? (
+          <>
+            {filterButton}
+            <IconButton icon={X} label="Close search" onClick={closeSearch} />
+          </>
+        ) : (
         <>
           <IconButton
             icon={Search}
             label="Search places"
             tone={query ? "filled" : "default"}
-            aria-expanded={searchOpen}
+            aria-expanded={false}
             onClick={() => setSearchOpen(true)}
           />
+          {filterButton}
           <Menu
             label="Add places"
             placement="bottom-end"
@@ -476,44 +485,22 @@ function PlacesPanel({
             )}
           />
         </>
+        )
       }
     >
-      {/* The search row takes the meter's slot, same height, so opening it moves nothing. */}
-      {searchOpen ? (
-        <div className={classes.slot}>
-          <SearchField
-            label="Search by name or alternative name"
-            value={query}
-            autoFocus
-            onChange={(event) => setQuery(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key !== "Escape") return;
-              event.stopPropagation();
-              setQuery("");
-              setSearchOpen(false);
-            }}
-          />
-          {filterButton}
-          <IconButton
-            icon={X}
-            label="Close search"
-            onClick={() => {
-              setQuery("");
-              setSearchOpen(false);
-            }}
-          />
-        </div>
-      ) : (
-        <div className={classes.slot}>
-          <Meter
-            segments={[
-              { label: PLACE_STATUS_LABELS.done, value: totals.done, hue: STATUS_HUE.done },
-              { label: PLACE_STATUS_LABELS.todo, value: totals.todo, hue: STATUS_HUE.todo },
-              { label: PLACE_STATUS_LABELS.shared, value: totals.shared, hue: STATUS_HUE.shared },
-            ]}
-          />
-          {filterButton}
-        </div>
+      {/* The search box takes the title's place on the same line, so opening it moves nothing. */}
+      {searchOpen && (
+        <SearchField
+          label="Search by name or alternative name"
+          value={query}
+          autoFocus
+          onChange={(event) => setQuery(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key !== "Escape") return;
+            event.stopPropagation();
+            closeSearch();
+          }}
+        />
       )}
     </Hero>
   );
@@ -545,19 +532,13 @@ function PlacesPanel({
       </div>
       {selecting ? (
         <SelectionBar countLabel={`${selected.length} selected`} onClear={clearSelection}>
-          <Tooltip content={`Make a LiDAR topo or GeoPDF covering these ${plural(selected.length, "place")}. You choose which next.`}>
-            {(describedBy) => (
-              <Menu
-                label="Make a map"
-                entries={makeMapEntries(selected)}
-                trigger={(props) => (
-                  <Button {...props} compact variant="filled" icon={MapIcon} aria-describedby={describedBy}>
-                    Make a map
-                  </Button>
-                )}
-              />
-            )}
-          </Tooltip>
+          {/* An icon like its siblings: as a labelled filled button the bar ran
+              past one line at 380px. The menu it opens says LiDAR topo or GeoPDF. */}
+          <Menu
+            label="Make a map"
+            entries={makeMapEntries(selected)}
+            trigger={(props) => <IconButton {...props} icon={MapIcon} label="Make a map" />}
+          />
           <IconButton icon={Share2} label="Share or export" onClick={() => onSharePlaces(selected.map((place) => place.id))} />
           <Menu
             label="Export as"
@@ -663,7 +644,7 @@ function PlacesPanel({
                   >
                     <span className={classes.pickTile}>{tile}</span>
                     <span className={classes.pickMark} aria-hidden>
-                      {isSelected ? <CircleCheck size={24} /> : <Circle size={24} />}
+                      {isSelected ? <CircleCheck size={20} /> : <Circle size={20} />}
                     </span>
                   </button>
                 ) : (
@@ -733,7 +714,8 @@ function PlacesPanel({
               </span>
               <IconButton
                 icon={X}
-                size={16}
+                size={14}
+                round
                 label="Clear filters"
                 onClick={() => onChangeFilters(clearSheetFilters(filters))}
               />

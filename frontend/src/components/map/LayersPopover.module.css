@@ -1,5 +1,5 @@
 .popover {
-  width: 372px;
+  width: 356px;
 }
 
 .head {
@@ -47,7 +47,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  min-height: 44px;
+  min-height: 40px;
 }
 
 .emptyLine {
@@ -76,7 +76,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 44px;
+  min-height: 40px;
   border-radius: var(--radius-md);
 }
 
@@ -152,7 +152,9 @@
 .thumb {
   display: block;
   width: 100%;
-  aspect-ratio: 1;
+  /* Landscape, not square: six basemaps are two rows of three, and a map
+     preview reads fine at 3:2. */
+  aspect-ratio: 3 / 2;
   border-radius: var(--radius-md);
   object-fit: cover;
 }

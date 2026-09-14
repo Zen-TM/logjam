@@ -21,7 +21,7 @@ export function EmptyState({
 }) {
   return (
     <div className={classes.empty}>
-      <Icon size={28} aria-hidden className={classes.emptyGlyph} />
+      <Icon size={24} aria-hidden className={classes.emptyGlyph} />
       <p className={classes.emptyTitle}>{title}</p>
       {body && <p className={classes.emptyBody}>{body}</p>}
       {actions && <div className={classes.emptyActions}>{actions}</div>}
@@ -69,9 +69,9 @@ export function Toast({
   const Icon = severity === "error" ? CircleAlert : CircleCheck;
   return (
     <div className={classes.toast} role={severity === "error" ? "alert" : "status"}>
-      <Icon size={18} aria-hidden className={classes.toastGlyph} />
+      <Icon size={16} aria-hidden className={classes.toastGlyph} />
       <span className={classes.toastText}>{message}</span>
-      <IconButton icon={X} label="Dismiss" tone="onFill" size={16} onClick={onDismiss} />
+      <IconButton icon={X} label="Dismiss" tone="onFill" size={14} round onClick={onDismiss} />
     </div>
   );
 }

@@ -28,8 +28,8 @@
 
 /* The scale bar sits on the instrument edge, beside MapChrome's compass. */
 :global(#map .maplibregl-ctrl-bottom-left) {
-  left: calc(var(--map-inset-left) + 16px + 44px + 10px);
-  bottom: 27px;
+  left: calc(var(--map-inset-left) + 16px + 42px + 10px);
+  bottom: 26px;
   transition: left var(--transition-med) ease-out;
 }
 
@@ -98,8 +98,8 @@
   }
 
   :global(#map .maplibregl-ctrl-bottom-left) {
-    left: calc(12px + 44px + 10px);
-    bottom: calc(var(--bottom-nav-height) + 23px);
+    left: calc(12px + 42px + 10px);
+    bottom: calc(var(--bottom-nav-height) + 22px);
   }
 
   :global(#map .maplibregl-ctrl-bottom-right) {

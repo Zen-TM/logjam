@@ -5,9 +5,12 @@ import classes from "./TextField.module.css";
 
 /** A labelled input with its validation message under it. The label is
  *  visible (a placeholder is not a label), and the error is tied to the input
- *  so it is read when the field is focused. */
+ *  so it is read when the field is focused. `hideLabel` is only for a field
+ *  whose meaning the control right above it already shows (the number after
+ *  Under / Over / Exactly); the label is still its accessible name. */
 export function TextField({
   label,
+  hideLabel = false,
   error,
   id,
   className,
@@ -15,6 +18,7 @@ export function TextField({
   ...inputProps
 }: InputHTMLAttributes<HTMLInputElement> & {
   label: string;
+  hideLabel?: boolean;
   error?: string | null;
   ref?: Ref<HTMLInputElement>;
 }) {
@@ -23,7 +27,7 @@ export function TextField({
   const errorId = `${inputId}-error`;
   return (
     <div className={[classes.field, className].filter(Boolean).join(" ")}>
-      <label htmlFor={inputId} className={classes.label}>
+      <label htmlFor={inputId} className={hideLabel ? "visually-hidden" : classes.label}>
         {label}
       </label>
       <input
@@ -53,7 +57,7 @@ export function SearchField({
 }) {
   return (
     <div className={[classes.search, className].filter(Boolean).join(" ")}>
-      <Search size={16} aria-hidden className={classes.searchGlyph} />
+      <Search size={14} aria-hidden className={classes.searchGlyph} />
       <input
         ref={ref}
         type="search"

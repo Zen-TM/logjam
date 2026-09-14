@@ -2,9 +2,9 @@
   flex: none;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  min-height: 36px;
-  padding: 0 12px;
+  gap: 5px;
+  min-height: var(--control-md);
+  padding: 0 10px;
   border-radius: var(--radius-pill);
   border: var(--hairline);
   background: var(--theme-secondary);
@@ -27,9 +27,9 @@
 }
 
 .count {
-  min-width: 22px;
-  height: 20px;
-  padding: 0 6px;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 5px;
   box-sizing: border-box;
   border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--theme-text-primary) 12%, transparent);

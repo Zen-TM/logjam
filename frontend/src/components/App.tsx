@@ -19,6 +19,7 @@ import OnboardingChoiceDialog from "./dialogs/OnboardingChoiceDialog";
 import SelectedPlacesDialog from "./dialogs/SelectedPlacesDialog";
 import classes from "./App.module.css";
 import type { TBbox } from "./map/Map";
+import { createPlaceHighlight } from "./map/placeHighlight";
 import type { TFilters, TPlace, TPlaceType, GeoPdfJobView } from "../placeUtils";
 import type { ScopedCustomFieldDef, StandaloneFile } from "@logjam/shared";
 import { PANEL_TITLES, type LogsView, type MapsView, type PanelId } from "./sidebar/panels";
@@ -137,7 +138,8 @@ function App() {
       ),
     [storedFilters, placeCustomFieldDefs],
   );
-  const [filtersAccordionSignal, setFiltersAccordionSignal] = useState(0);
+  const [openFiltersRequested, setOpenFiltersRequested] = useState(false);
+  const consumeOpenFilters = useCallback(() => setOpenFiltersRequested(false), []);
   const [selectedPlaceID, setSelectedPlaceID] = useState<string | null>(null);
   const [activePanel, setActivePanel] = useState<PanelId | null>(null);
   // Which view the two-view pages open on — remembered for the session, so a
@@ -150,10 +152,15 @@ function App() {
   // Vector by default: same OSM cartography as the old raster default, drawn
   // locally rather than fetched as pictures, and it carries the labels at every
   // zoom instead of stopping where the raster cache does.
-  const [activeLayerId, setActiveLayerId] = useStoredState(
+  const [storedLayerId, setActiveLayerId] = useStoredState(
     "logjam.activeLayerId",
     "protomaps",
   );
+  // A basemap the picker no longer offers (the raster "Default", dropped for
+  // the vector one) would otherwise hide every basemap layer and show nothing.
+  const activeLayerId = BASE_LAYERS.some((layer) => layer.id === storedLayerId)
+    ? storedLayerId
+    : "protomaps";
 
   const [showAdd, setShowAdd] = useState(false);
   const [showUnifiedImport, setShowUnifiedImport] = useState(false);
@@ -209,7 +216,7 @@ function App() {
   // row under the pointer lights its pin, and a pin pressed while the list is
   // open scrolls to its row instead of leaving the list.
   const [placesSheetOpen, setPlacesSheetOpen] = useState(false);
-  const [hoveredPlaceId, setHoveredPlaceId] = useState<string | null>(null);
+  const [placeHighlight] = useState(createPlaceHighlight);
   const [revealPlaceId, setRevealPlaceId] = useState<string | null>(null);
   const consumeReveal = useCallback(() => setRevealPlaceId(null), []);
 
@@ -1126,7 +1133,7 @@ function App() {
     filtersActive && !dimUI ? (
       <Notice
         icon={Filter}
-        action={<IconButton icon={X} label="Clear filters" size={16} onClick={clearFilters} />}
+        action={<IconButton icon={X} label="Clear filters" size={14} round onClick={clearFilters} />}
       >
         Showing {filteredPlaces.length} of {allPlaces.length} places
       </Notice>
@@ -1301,7 +1308,7 @@ function App() {
           onOpenUnifiedImport={() => setShowUnifiedImport(true)}
           onSharePlaces={setSelectedAreaPlaceIds}
           onMakeMap={makeMap}
-          onHoverPlace={setHoveredPlaceId}
+          onHoverPlace={placeHighlight.set}
           revealPlaceId={revealPlaceId}
           onRevealConsumed={consumeReveal}
           onFiltersOpenChange={setPlacesSheetOpen}
@@ -1313,7 +1320,8 @@ function App() {
             const bounds = mapBoundsRef.current;
             if (bounds) setFilters({ ...filters, area: bounds });
           }}
-          filtersOpenSignal={filtersAccordionSignal}
+          openFiltersRequested={openFiltersRequested}
+          onOpenFiltersConsumed={consumeOpenFilters}
           onFlyToPlace={(lat, lng) => setFlyToPlace({ lat, lng })}
           onOpenGeoPdf={() => {
             setEditingGeoPdfTemplate(undefined);
@@ -1437,7 +1445,7 @@ function App() {
           // Straight back to where the button was, with the filters open — the
           // panel was closed to uncover the map, not dismissed.
           setActivePanel("places");
-          setFiltersAccordionSignal((n) => n + 1);
+          setOpenFiltersRequested(true);
         }}
         onMapBoundsChange={(bounds) => {
           mapBoundsRef.current = bounds;
@@ -1475,7 +1483,7 @@ function App() {
         onFlyToPlaceConsumed={() => setFlyToPlace(null)}
         panelOpen={activePanel !== null}
         sheetOpen={placesSheetOpen && activePanel === "places"}
-        highlightedPlaceId={activePanel === "places" ? hoveredPlaceId : null}
+        placeHighlight={placeHighlight}
         placeTypes={placeTypes}
         layersButton={
           <MapButton

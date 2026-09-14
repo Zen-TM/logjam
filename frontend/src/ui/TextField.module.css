@@ -4,18 +4,17 @@
   gap: 4px;
 }
 
+/* Sentence case, like every other control's label. Uppercase belongs to section
+   titles, which a field label sitting under one must not mimic. */
 .label {
-  font-size: var(--font-xs);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
+  font-size: var(--font-sm);
   color: var(--theme-text-muted);
 }
 
 .input {
-  min-height: 44px;
+  min-height: var(--control-lg);
   box-sizing: border-box;
-  padding: 0 12px;
+  padding: 0 10px;
   border-radius: var(--radius-md);
   border: 1px solid var(--theme-text-muted);
   background: var(--surface-field);
@@ -43,10 +42,10 @@
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-height: 40px;
+  gap: 6px;
+  min-height: var(--control-md);
   box-sizing: border-box;
-  padding: 0 8px 0 14px;
+  padding: 0 6px 0 12px;
   border-radius: var(--radius-pill);
   border: 1px solid color-mix(in srgb, var(--theme-accent) 45%, transparent);
   background: var(--surface-field);

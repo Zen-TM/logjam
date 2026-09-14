@@ -13,9 +13,9 @@
 }
 
 .menu {
-  width: 280px;
+  width: 256px;
   max-width: calc(100vw - 16px);
-  padding: 6px;
+  padding: 4px;
   border-radius: var(--radius-lg);
   flex-direction: column;
 }
@@ -29,7 +29,7 @@
 }
 
 .title {
-  padding: 8px 10px 6px;
+  padding: 6px 8px 4px;
   font-size: var(--font-xs);
   font-weight: 600;
   letter-spacing: 1px;
@@ -43,9 +43,9 @@
 .item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  min-height: 40px;
-  padding: 0 10px;
+  gap: 10px;
+  min-height: var(--control-md);
+  padding: 0 8px;
   border: none;
   border-radius: var(--radius-md);
   background: transparent;
@@ -109,7 +109,7 @@
 
 .separator {
   height: 1px;
-  margin: 6px 4px;
+  margin: 4px;
   background: var(--theme-bonus-2);
 }
 

@@ -1,6 +1,8 @@
+/* Map chrome keeps a size of its own, a step above the panel's: it sits on a
+   busy picture, not a calm page. */
 .mapButton {
-  width: 44px;
-  height: 44px;
+  width: 42px;
+  height: 42px;
   flex: none;
   display: flex;
   align-items: center;
@@ -67,12 +69,14 @@
   background: var(--theme-primary);
   color: var(--theme-text-primary);
   font-size: var(--font-sm);
-  white-space: nowrap;
+  max-width: 100%;
   box-shadow: var(--shadow-float);
 }
 
+/* The end pad centres the round action in the pill's end cap. */
 .withAction {
-  padding-right: 2px;
+  min-height: 40px;
+  padding-right: calc((40px - var(--control-sm)) / 2);
 }
 
 .noticeGlyph {

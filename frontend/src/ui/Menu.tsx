@@ -189,7 +189,7 @@ export function Menu({
                 entry.onSelect();
               }}
             >
-              {Icon && <Icon size={18} aria-hidden className={classes.glyph} />}
+              {Icon && <Icon size={16} aria-hidden className={classes.glyph} />}
               <span className={classes.label}>{entry.label}</span>
               {entry.hint && <kbd className={classes.hint}>{entry.hint}</kbd>}
               {entry.badge != null && entry.badge > 0 && (

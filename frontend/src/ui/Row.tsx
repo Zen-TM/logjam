@@ -17,7 +17,7 @@ export function IconTile({ icon: Icon, hue, label }: { icon: LucideIcon; hue: st
       aria-label={label}
       title={label}
     >
-      <Icon size={20} aria-hidden />
+      <Icon size={16} aria-hidden />
     </span>
   );
 }
@@ -88,7 +88,7 @@ export function Row({
           <span className={classes.title}>{title}</span>
         )}
         {description && (
-          <span id={descriptionId} className={classes.hidden}>
+          <span id={descriptionId} className="visually-hidden">
             {description}
           </span>
         )}

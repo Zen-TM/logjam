@@ -35,7 +35,7 @@ export function MapButton({
       className={[classes.mapButton, className].filter(Boolean).join(" ")}
       {...rest}
     >
-      <Icon size={22} aria-hidden />
+      <Icon size={20} aria-hidden />
     </button>
   );
 }

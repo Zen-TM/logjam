@@ -65,6 +65,11 @@ export function Chip({
   );
 }
 
+/** A wheel notch moves a rail this fraction of what it would scroll a page: a
+ *  rail is a few hundred pixels wide, and a full notch skipped most of it. */
+// ponytail: one fixed factor; tune here if a mouse or trackpad feels wrong.
+const WHEEL_SPEED = 0.5;
+
 export type ChipOption<T extends string> = {
   value: T;
   label: string;
@@ -135,7 +140,9 @@ export function ChipRail<T extends string>({
     const onWheel = (event: WheelEvent) => {
       if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
       const max = scroller.scrollWidth - scroller.clientWidth;
-      const next = Math.min(max, Math.max(0, scroller.scrollLeft + event.deltaY));
+      // Firefox can report whole lines rather than pixels.
+      const pixels = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? event.deltaY * 16 : event.deltaY;
+      const next = Math.min(max, Math.max(0, scroller.scrollLeft + pixels * WHEEL_SPEED));
       if (max <= 0 || next === scroller.scrollLeft) return;
       event.preventDefault();
       scroller.scrollLeft = next;

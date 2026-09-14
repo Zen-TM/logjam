@@ -16,9 +16,13 @@
   top: 72px;
   left: var(--map-inset-left, 0px);
   right: 76px;
+  box-sizing: border-box;
+  padding-inline: 16px;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  /* `safe`: a notice wider than the visible map overflows to the right, under
+     the map controls, never leftwards over the panel or its sheet. */
+  align-items: safe center;
   gap: 8px;
   pointer-events: none;
 }
@@ -64,7 +68,7 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  min-height: 44px;
+  min-height: 42px;
   padding: 0 16px 0 14px;
   border: none;
   border-radius: var(--radius-pill);
@@ -86,18 +90,28 @@
   color: var(--theme-accent);
 }
 
+/* Beneath MapLibre's control corners (z-index 2), like the scale bar beside it:
+   on a narrow map the credits run leftwards over both, and the compass must
+   not be the one thing drawn over the credit text. */
 .instruments {
   position: absolute;
-  z-index: 3;
+  z-index: 1;
   left: calc(var(--map-inset-left, 0px) + 16px);
   bottom: 16px;
   transition: left var(--transition-med) ease-out;
 }
 
-/* Lucide's needle points north-east; turn it to north, then counter-rotate by
-   the map's bearing so it keeps pointing at true north. */
+/* The needle is drawn pointing up; counter-rotate by the map's bearing so it
+   keeps pointing at north. */
 .compass svg {
-  transform: rotate(calc(-45deg - var(--bearing, 0deg)));
+  transform: rotate(calc(-1 * var(--bearing, 0deg)));
+}
+
+/* The north half, filled. Warning is the scheme's red, measured on the map
+   button's `primary` as text (scripts/wcag-contrast.mjs). */
+.needleNorth {
+  fill: var(--theme-warning);
+  stroke: var(--theme-warning);
 }
 
 @media (prefers-reduced-motion: reduce) {

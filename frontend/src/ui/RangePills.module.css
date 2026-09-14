@@ -1,40 +1,20 @@
-.wrap {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.header {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-height: 40px;
-}
-
-.label {
-  flex: 1;
-  font-size: var(--font-sm);
-  color: var(--theme-text-primary);
-}
-
-.value {
-  font-size: var(--font-sm);
-  color: var(--theme-text-muted);
-}
-
-/* Accent as text sits on the page colour only (4.5:1 there, not on a card). */
-.value[data-active="true"] {
-  color: var(--theme-accent);
-  font-weight: 600;
-}
-
+/* A drag across the pills selects a span, so a horizontal touch drag must reach
+   them rather than pan anything; vertical still scrolls the sheet. */
 .pills {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 4px;
+  touch-action: pan-y;
+  user-select: none;
 }
 
+/* Circles: a stop is a point on an axis, not a word. A minimum, so they grow
+   with the text rather than clipping it. */
 .pills > button {
-  min-width: 40px;
+  box-sizing: border-box;
+  min-width: var(--control-md);
+  min-height: var(--control-md);
+  aspect-ratio: 1;
+  padding: 0;
   justify-content: center;
 }

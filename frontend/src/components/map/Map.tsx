@@ -10,6 +10,7 @@ setWorkerUrl(maplibreWorkerUrl);
 import { Protocol } from "pmtiles";
 import type { RegionBbox } from "@logjam/shared";
 import { useBoxDraw } from "./useBoxDraw";
+import type { PlaceHighlight } from "./placeHighlight";
 import { layers as protomapsLayers, namedFlavor } from "@protomaps/basemaps";
 import {
   draftAnchorIndices,
@@ -142,10 +143,15 @@ function applyPlaceThemePaint(map: maplibregl.Map) {
     map.setPaintProperty("place-circles", "circle-stroke-color", ink);
     map.setPaintProperty("place-circles", "circle-stroke-width", 1.5);
   }
+  // A shared pin is the SAME pin as your own, with a thin ring set apart from
+  // it — a mark on a pin rather than a louder pin — as on Logjam GPS.
   if (map.getLayer("shared-place-circles")) {
     map.setPaintProperty("shared-place-circles", "circle-color", ["coalesce", ["get", "color"], fallback]);
-    map.setPaintProperty("shared-place-circles", "circle-stroke-color", shared);
-    map.setPaintProperty("shared-place-circles", "circle-stroke-width", 3);
+    map.setPaintProperty("shared-place-circles", "circle-stroke-color", ink);
+    map.setPaintProperty("shared-place-circles", "circle-stroke-width", 1.5);
+  }
+  if (map.getLayer("shared-place-halos")) {
+    map.setPaintProperty("shared-place-halos", "circle-stroke-color", shared);
   }
   for (const id of ["place-highlight", "shared-place-highlight"]) {
     if (!map.getLayer(id)) continue;
@@ -185,7 +191,11 @@ const PROTOMAPS_SOURCE_ID = "protomaps";
 // `kind` rides along because the two entry kinds are not interchangeable
 // downstream: raster entries are XYZ templates the GeoPDF renderer can fetch,
 // the vector entry is a PMTiles archive it cannot.
-export const BASE_LAYERS = BASEMAP_CATALOG.map((entry) => ({
+//
+// The raster "osm" entry ("Default") is left out: the vector basemap draws the
+// same OpenStreetMap cartography and is the default, so offering both put two
+// renderings of one map side by side. Logjam GPS dropped it the same way.
+export const BASE_LAYERS = BASEMAP_CATALOG.filter((entry) => entry.id !== "osm").map((entry) => ({
   id: entry.id,
   name: entry.name,
   kind: entry.kind,
@@ -536,7 +546,7 @@ function Map({
   onFlyToPlaceConsumed,
   panelOpen,
   sheetOpen = false,
-  highlightedPlaceId = null,
+  placeHighlight,
   placeTypes,
   layersButton,
   mapTools,
@@ -647,8 +657,9 @@ function Map({
   panelOpen: boolean;
   /** A sheet is open beside that page (the Places filters). */
   sheetOpen?: boolean;
-  /** The Places row under the pointer; its pin is lit. */
-  highlightedPlaceId?: string | null;
+  /** The Places row under the pointer; its pin is lit. A channel, not a prop
+   *  value, so a hover does not re-render the map (placeHighlight.ts). */
+  placeHighlight: PlaceHighlight;
   /** A pin's FILL is its type's colour. */
   placeTypes: TPlaceType[];
   /** The Layers control, owned by App because App owns what it toggles. */
@@ -1229,6 +1240,22 @@ function Map({
         },
       });
 
+      // The ring around a shared place, 2px clear of its pin. Also what keeps a
+      // shared place reachable: your own copy of it sits on the SAME coordinate
+      // and draws on top, so without the ring nothing of it shows or takes a
+      // click. Transparent fill, so it adds no mass of its own.
+      map.addLayer({
+        id: "shared-place-halos",
+        type: "circle",
+        source: "shared-places",
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 7, 7.5, 14, 13.5],
+          "circle-opacity": 0,
+          "circle-stroke-color": readCssVar("--shared-place-color", "#b79ec0"),
+          "circle-stroke-width": 1.5,
+        },
+      });
+
       // Shared place circle markers
       map.addLayer({
         id: "shared-place-circles",
@@ -1302,7 +1329,9 @@ function Map({
         }
       });
 
-      map.on("click", "shared-place-circles", (e) => {
+      // One registration over both layers, so a press on the pin (which is
+      // inside the ring) selects once rather than once per layer.
+      map.on("click", ["shared-place-halos", "shared-place-circles"], (e) => {
         if (pickModeRef.current) return;
         if (!e.features?.length) return;
         const feature = e.features[0];
@@ -1325,11 +1354,11 @@ function Map({
       map.on("mouseleave", "place-circles", () => {
         map.getCanvas().style.cursor = "";
       });
-      map.on("mouseenter", "shared-place-circles", () => {
+      map.on("mouseenter", ["shared-place-halos", "shared-place-circles"], () => {
         if (pickModeRef.current) return;
         map.getCanvas().style.cursor = "pointer";
       });
-      map.on("mouseleave", "shared-place-circles", () => {
+      map.on("mouseleave", ["shared-place-halos", "shared-place-circles"], () => {
         map.getCanvas().style.cursor = "";
       });
 
@@ -1446,10 +1475,12 @@ function Map({
   useEffect(() => {
     const map = mapRef.current;
     if (!mapLoaded || !map) return;
-    for (const id of ["place-highlight", "shared-place-highlight"]) {
-      map.setFilter(id, ["==", ["get", "id"], highlightedPlaceId ?? ""]);
-    }
-  }, [highlightedPlaceId, mapLoaded]);
+    return placeHighlight.subscribe((id) => {
+      for (const layerId of ["place-highlight", "shared-place-highlight"]) {
+        map.setFilter(layerId, ["==", ["get", "id"], id ?? ""]);
+      }
+    });
+  }, [placeHighlight, mapLoaded]);
 
   // Fetch + parse place track files into the line layer when enabled. Parsing
   // is client-side (the API never echoes track contents — privacy rule); parsed
@@ -1617,6 +1648,11 @@ function Map({
       "place-labels",
       "visibility",
       vis(showOwnedPlaces),
+    );
+    mapRef.current.setLayoutProperty(
+      "shared-place-halos",
+      "visibility",
+      vis(showSharedPlaces),
     );
     mapRef.current.setLayoutProperty(
       "shared-place-circles",
@@ -2472,6 +2508,7 @@ function Map({
     // Move place marker layers above all topo layers so they remain visible
     const placeLayers = [
       "place-circles",
+      "shared-place-halos",
       "shared-place-circles",
       "place-labels",
       "shared-place-labels",

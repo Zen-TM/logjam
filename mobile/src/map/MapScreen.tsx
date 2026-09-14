@@ -1255,7 +1255,7 @@ export function MapScreen({
    * What is actually DRAWN, as against what the user has picked.
    *
    * Mounting the vector basemap is ~70 MLRN layer components in one commit,
-   * and React cannot split a commit — so tapping "OSM Default (vector)" in the
+   * and React cannot split a commit — so tapping "OSM Vector" in the
    * layers sheet froze everything for about a second before the row even
    * showed a tick, which reads as the tap having missed. Deferring the value
    * the MAP renders from lets the urgent half (the sheet's selection, its

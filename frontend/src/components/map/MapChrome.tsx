@@ -1,9 +1,17 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type maplibregl from "maplibre-gl";
-import { Compass, LocateFixed, Minus, Mountain, PencilRuler, Plus, type LucideIcon } from "lucide-react";
+import { createLucideIcon, LocateFixed, Minus, Mountain, PencilRuler, Plus, type LucideIcon } from "lucide-react";
 import { MapButton, MapButtonGroup, Menu, useEscape, type MenuEntry } from "../../ui";
 import { useToast } from "../feedback/ToastProvider";
 import classes from "./MapChrome.module.css";
+
+/** A compass NEEDLE, not lucide's Compass: that glyph is a symbol for
+ *  "navigation" whose needle points nowhere in particular, while this one
+ *  rotates with the map, so its shape is the reading. North is the filled half. */
+const NorthNeedle = createLucideIcon("north-needle", [
+  ["path", { d: "M12 2.5 16.5 12h-9z", className: classes.needleNorth, key: "north" }],
+  ["path", { d: "M7.5 12h9L12 21.5z", key: "south" }],
+]);
 
 export type MapTool =
   | { id: string; label: string; icon: LucideIcon; onSelect: () => void }
@@ -171,7 +179,7 @@ export default function MapChrome({
 
       <div className={classes.instruments}>
         <MapButton
-          icon={Compass}
+          icon={NorthNeedle}
           label="Reset north"
           disabled={!map}
           className={classes.compass}
