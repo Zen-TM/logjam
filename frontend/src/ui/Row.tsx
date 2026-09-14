@@ -1,6 +1,45 @@
 import { useId, type CSSProperties, type HTMLAttributes, type ReactNode } from "react";
-import type { LucideIcon } from "lucide-react";
+import { Circle, CircleCheck, type LucideIcon } from "lucide-react";
 import classes from "./Row.module.css";
+
+/**
+ * A row's tile that is also its checkbox (DESIGN.md §7): the tile at rest, a
+ * circle to tick under the pointer, on focus and throughout a selection. The
+ * circle takes the tile's own box, so ticking moves nothing. `onToggle` is told
+ * whether Shift was held, for a range.
+ */
+export function TileCheckbox({
+  tile,
+  label,
+  checked,
+  selecting,
+  onToggle,
+}: {
+  tile: ReactNode;
+  label: string;
+  checked: boolean;
+  /** A selection is running somewhere in the list: every tile shows its circle. */
+  selecting: boolean;
+  onToggle: (extendRange: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={checked}
+      aria-label={label}
+      title="Select (shift-click for a range)"
+      className={classes.pick}
+      data-selecting={selecting}
+      onClick={(event) => onToggle(event.shiftKey)}
+    >
+      <span className={classes.pickTile}>{tile}</span>
+      <span className={classes.pickMark} aria-hidden>
+        {checked ? <CircleCheck size={20} /> : <Circle size={20} />}
+      </span>
+    </button>
+  );
+}
 
 /**
  * The identity tile: a square filled with the hue, the glyph in ink. Colour and glyph
@@ -32,8 +71,8 @@ export function IconTile({ icon: Icon, hue, label }: { icon: LucideIcon; hue: st
  * HTML and unreachable by keyboard, which is what a clickable card with a menu
  * in it otherwise becomes.
  *
- * `selected` is a STATE of the row (accent edge), never a fill: a tinted fill
- * dropped the subtitle below 4.5:1.
+ * `selected` is a STATE of the row (accent outline), never a fill: a tinted
+ * fill dropped the subtitle below 4.5:1.
  */
 export function Row({
   leading,
@@ -41,9 +80,11 @@ export function Row({
   subtitle,
   description,
   trailing,
+  footer,
   onOpen,
   selected = false,
   highlighted = false,
+  accentEdge = false,
   disabled = false,
   className,
   ...rest
@@ -55,10 +96,19 @@ export function Row({
    *  glyph says to a sighted reader (a status). */
   description?: string;
   trailing?: ReactNode;
+  /** Controls that answer the row (Accept, Decline), on a line of their own
+   *  INSIDE the card, under the text. Below the card they read as a caption
+   *  for the next row down (Logjam GPS learned that from a mis-pressed
+   *  "Download again"). */
+  footer?: ReactNode;
   onOpen?: () => void;
   selected?: boolean;
   /** Lit from outside — its pin is hovered on the map. */
   highlighted?: boolean;
+  /** An accent edge down the left side: a property of the row, such as unread,
+   *  that must still show while the row is also selected. Drawn as an inset
+   *  shadow, so the row's box does not change size when it comes and goes. */
+  accentEdge?: boolean;
   disabled?: boolean;
 }) {
   const subtitleId = useId();
@@ -69,6 +119,7 @@ export function Row({
       className={[classes.row, className].filter(Boolean).join(" ")}
       data-selected={selected}
       data-highlighted={highlighted}
+      data-accent-edge={accentEdge}
       data-disabled={disabled}
       {...rest}
     >
@@ -99,6 +150,7 @@ export function Row({
         )}
       </div>
       {trailing != null && <div className={classes.trailing}>{trailing}</div>}
+      {footer != null && <div className={classes.footer}>{footer}</div>}
     </div>
   );
 }

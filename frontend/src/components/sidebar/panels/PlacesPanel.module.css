@@ -99,48 +99,6 @@
   padding: 0 2px;
 }
 
-/* A row's tile is also its checkbox: the status glyph at rest, a circle to tick
-   under the pointer, on focus and throughout a selection. */
-.pick {
-  position: relative;
-  display: flex;
-  padding: 0;
-  border: none;
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--theme-text-muted);
-  cursor: pointer;
-}
-
-/* The tile's own size, so ticking swaps the glyph without moving the row. */
-.pickMark {
-  width: 32px;
-  height: 32px;
-  display: none;
-  align-items: center;
-  justify-content: center;
-}
-
-.pick[aria-checked="true"] .pickMark {
-  color: var(--theme-accent);
-}
-
-.row:hover .pickTile,
-.pick:focus-visible .pickTile,
-.pick[data-selecting="true"] .pickTile {
-  display: none;
-}
-
-.row:hover .pickMark,
-.pick:focus-visible .pickMark,
-.pick[data-selecting="true"] .pickMark {
-  display: flex;
-}
-
-.pickTile {
-  display: flex;
-}
-
 .sheet {
   position: absolute;
   top: 0;

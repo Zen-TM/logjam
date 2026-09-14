@@ -1,14 +1,18 @@
 .row {
+  --edge: 0 0 transparent;
+  --outline: 0 0 transparent;
   position: relative;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: 6px 10px;
   min-height: 48px;
   padding: 7px 4px 7px 8px;
   box-sizing: border-box;
   border-radius: var(--radius-lg);
   border: var(--hairline);
   background: var(--theme-secondary);
+  box-shadow: var(--edge), var(--outline);
 }
 
 .row:hover,
@@ -17,8 +21,29 @@
 }
 
 .row[data-selected="true"] {
+  --outline: inset 0 0 0 1px var(--theme-accent);
   border-color: var(--theme-accent);
-  box-shadow: inset 0 0 0 1px var(--theme-accent);
+}
+
+.row[data-accent-edge="true"] {
+  --edge: inset 3px 0 0 var(--theme-accent);
+}
+
+/* Its own line under the text, lined up with the title rather than the tile
+   (the tile's 32px and the row's 10px gap), and above the stretched button so
+   its controls stay their own. */
+.footer {
+  position: relative;
+  z-index: 1;
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-bottom: 1px;
+}
+
+.leading ~ .footer {
+  padding-left: calc(32px + 10px);
 }
 
 .row[data-disabled="true"] {
@@ -113,4 +138,46 @@
      wash, and misses it for most hues under Sandstone (scripts/wcag-contrast.mjs). */
   background: var(--tile-hue);
   color: var(--ink);
+}
+
+/* TileCheckbox: the tile at rest, a circle under the pointer, on focus and
+   throughout a selection. */
+.pick {
+  position: relative;
+  display: flex;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--theme-text-muted);
+  cursor: pointer;
+}
+
+.pickTile {
+  display: flex;
+}
+
+/* The tile's own size, so ticking swaps the glyph without moving the row. */
+.pickMark {
+  width: 32px;
+  height: 32px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+
+.pick[aria-checked="true"] .pickMark {
+  color: var(--theme-accent);
+}
+
+.row:hover .pickTile,
+.pick:focus-visible .pickTile,
+.pick[data-selecting="true"] .pickTile {
+  display: none;
+}
+
+.row:hover .pickMark,
+.pick:focus-visible .pickMark,
+.pick[data-selecting="true"] .pickMark {
+  display: flex;
 }

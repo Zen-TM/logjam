@@ -3,7 +3,7 @@
 // Native elements and CSS modules only — no MUI (frontend/DESIGN.md).
 export { Button, IconButton } from "./Button";
 export { Chip, ChipRail, type ChipOption } from "./Chip";
-export { IconTile, Row } from "./Row";
+export { IconTile, Row, TileCheckbox } from "./Row";
 export { Hero, Meter, type MeterSegment } from "./Hero";
 export { SwitchRow, Toggle } from "./Toggle";
 export { SearchField, TextField } from "./TextField";

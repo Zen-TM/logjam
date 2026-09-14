@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
   ChevronDown,
-  Circle,
   CircleCheck,
   CloudDownload,
   Download,
@@ -64,6 +63,7 @@ import {
   Row,
   SearchField,
   SelectionBar,
+  TileCheckbox,
   type MenuEntry,
 } from "../../../ui";
 import { placeTypeLucideIcon } from "./placeTypeIcon";
@@ -632,21 +632,13 @@ function PlacesPanel({
               onPointerLeave={() => onHoverPlace(null)}
               leading={
                 owned ? (
-                  <button
-                    type="button"
-                    role="checkbox"
-                    aria-checked={isSelected}
-                    aria-label={`Select ${place.name}`}
-                    title="Select (shift-click for a range)"
-                    className={classes.pick}
-                    data-selecting={selecting}
-                    onClick={(event) => toggleSelected(place.id, event.shiftKey)}
-                  >
-                    <span className={classes.pickTile}>{tile}</span>
-                    <span className={classes.pickMark} aria-hidden>
-                      {isSelected ? <CircleCheck size={20} /> : <Circle size={20} />}
-                    </span>
-                  </button>
+                  <TileCheckbox
+                    tile={tile}
+                    label={`Select ${place.name}`}
+                    checked={isSelected}
+                    selecting={selecting}
+                    onToggle={(extendRange) => toggleSelected(place.id, extendRange)}
+                  />
                 ) : (
                   <IconTile icon={STATUS_ICON[status]} hue={STATUS_HUE[status]} label={PLACE_STATUS_LABELS[status]} />
                 )
