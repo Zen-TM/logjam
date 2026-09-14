@@ -57,8 +57,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 8px 10px var(--gutter);
-  border-bottom: var(--hairline);
+  padding: 10px 8px 2px var(--gutter);
 }
 
 .title {
@@ -91,6 +90,5 @@
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
-  padding: 10px var(--gutter);
-  border-top: var(--hairline);
+  padding: 4px var(--gutter) 14px;
 }
