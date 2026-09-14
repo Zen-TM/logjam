@@ -6,12 +6,21 @@ export { Chip, ChipRail, type ChipOption } from "./Chip";
 export { IconTile, Row, TileCheckbox } from "./Row";
 export { Hero, Meter, type MeterSegment } from "./Hero";
 export { SwitchRow, Toggle } from "./Toggle";
-export { SearchField, TextField } from "./TextField";
+export { Checkbox, SwatchPicker } from "./Choice";
+export { NumberField, SearchField, Select, TextField } from "./TextField";
 export { Menu, Popover, type MenuEntry, type MenuItem } from "./Menu";
 export { FilterField } from "./FilterField";
 export { RangePills } from "./RangePills";
 export { Tooltip } from "./Tooltip";
-export { SheetSection, SideSheet } from "./SideSheet";
-export { EmptyState, SelectionBar, Toast, type ToastSeverity } from "./Feedback";
+export { SectionHeader, SheetSection, SideSheet } from "./SideSheet";
+export { Dialog } from "./Dialog";
+export {
+  EmptyState,
+  ProgressBar,
+  SelectionBar,
+  StatusPill,
+  Toast,
+  type ToastSeverity,
+} from "./Feedback";
 export { MapButton, MapButtonGroup, Notice } from "./MapControl";
 export { useEscape } from "./useEscape";

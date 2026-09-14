@@ -234,6 +234,13 @@ function pairsFor(t) {
       bg: tint(t.accent, 0.16, t.primary),
       min: 3,
     },
+    // StatusPill: `accent` is ink on accent, `outline` and `muted` are textMuted,
+    // and a `warning` label is textPrimary, all measured above. Warning as TEXT
+    // on a card failed (3.8:1, Basalt), so it is the pill's edge and glyph.
+    { name: "warning edge and glyph on secondary (warning StatusPill on a card)", fg: t.warning, bg: t.secondary, min: 3 },
+    // ProgressBar: the fill against its track, a wash of the text colour.
+    { name: "accent fill on its track (ProgressBar)", fg: t.accent, bg: tint(t.textPrimary, 0.12, t.primary), min: 3 },
+    { name: "warning fill on its track (failed ProgressBar)", fg: t.warning, bg: tint(t.textPrimary, 0.12, t.primary), min: 3 },
     // A web row's identity tile is a solid hue with an ink glyph — covered by
     // the ink-on-fill pairs above. Logjam GPS's tile is the hue glyph on a 16%
     // wash of itself on a card; measured at its worst hue, because it fails for

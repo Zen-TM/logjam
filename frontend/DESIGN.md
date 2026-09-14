@@ -123,7 +123,7 @@ Mobile §3 holds in full: a kind has one hue and one glyph, used everywhere it a
 - **A coarse pointer gets Logjam GPS's targets back** (`@media (pointer: coarse)`: 44 / 40 / 32). Keyed to the pointer, not the width: a narrow desktop window still has a mouse, and a touch laptop at full width still has a finger. The mouse sizes still clear WCAG 2.5.8's 24px minimum.
 - **Map chrome stays a step larger** than the panel (map buttons and the search box 42, its text 15px): it sits on a busy picture rather than a calm page. The rail's icons are untouched.
 
-**Radius** (`RADIUS`, same as the phone): `sm` 4 for decorative swatches only; `md` 8 for tiles, icon buttons, menu items and fields; `lg` 12 for rows, cards and map buttons; `xl` 16 for popovers and sheets; `pill` for everything text-shaped that isn't a card (buttons, chips, notices, meters, the search box).
+**Radius** (`RADIUS`, same as the phone): `sm` 4 for decorative swatches and a checkbox's box; `md` 8 for tiles, icon buttons, menu items and fields; `lg` 12 for rows, cards and map buttons; `xl` 16 for popovers and sheets; `pill` for everything text-shaped that isn't a card (buttons, chips, notices, meters, the search box).
 
 **Depth**, from scheme tokens only:
 
@@ -160,7 +160,14 @@ surface-field       text fields         a step darker than the page
 - **Menu** (`Menu`): verbs behind a trigger. A WAI-ARIA menu button in the top layer, so a list's overflow never clips it. Arrows move, Home and End jump, Escape closes and returns focus, Tab leaves, and pressing outside closes it. Title it with the thing it acts on.
 - **Popover** (`Popover`): a non-modal panel beside a control (Layers). It stays open while the user pans the map; Escape or its own close button dismisses it, and focus returns to the control. **An item with more inside it than a switch opens a sub-view in place** (a back arrow; LiDAR topos gets Topos | Layers, "In this view" first), never a second popover and never an inline accordion that grows to 20 rows.
 - **Side sheet** (`SideSheet`): §2.
-- **Dialogs** are still MUI and are the largest migration left. The target is one kit `Dialog`: the modal counterpart of `SideSheet`, focus-trapped, with a title, a close button, a scrolling body and a pinned footer holding the one primary action. Mobile §6's sub-mode rule holds: a picker inside a dialog backs out to the form, not out of the dialog.
+- **Dialog** (`Dialog`): the modal counterpart of `SideSheet`, for a task that is finished or abandoned before the page is used again. A native `<dialog>` opened with `showModal()`, so the browser supplies the top layer, the inert page and the focus trap. Anatomy: a title and a close button, a body that scrolls, and a pinned footer holding Cancel and then the ONE primary action on the right. `ConfirmDialog` and `RouteNameDialog` are the reference.
+  - **Focus** moves to the element marked `data-autofocus` (a form's first field), else to the title, and returns to the opener on close. React's `autoFocus` fires before the dialog is shown, when nothing in it can take focus.
+  - **Escape, the close button and a press on the backdrop dismiss it**, and none of them does while a request is in flight (`dismissible={false}`). A press that starts inside and ends on the backdrop (a text selection dragged too far) is not a dismissal.
+  - **It renders into `document.body` and stops its own Escape**, so closing it never also closes the MUI dialog it was raised from, or clears the selection of the list behind it.
+  - **Two sizes.** `small` (400) is a confirm or a short form and stays centred at every width. `large` (640) is a long form and fills the screen on narrow web, the web's stand-in for Logjam GPS's sheet.
+  - **A form's Save is `type="submit"`** tied to the form in the body (`form={formId}`), so Enter in a field saves, and it wears `busy` while the request runs.
+  - **One dialog at a time.** A confirm may stand over the form it guards (discard unsaved changes); nothing else opens a dialog from a dialog. Mobile §6's sub-mode rule holds: a picker inside a dialog swaps the body and backs out to the form, not out of the dialog.
+- **Confirm** (`ConfirmDialog`): an alert dialog, its body read as the description. It says what goes and what stays (§7). Cancel, then the verb: `destructive` (a warning fill with the ink label) when something is lost, `filled` when nothing is (Rename, Fetch from RopeWiki). A destructive TRIGGER (a menu's Delete) stays `danger`, so the fill only ever marks the last step.
 - **Toasts** report the outcome of an action. They sit bottom-centre (the map owns both bottom corners) on the inverted light surface, with a round dismiss at the right edge (§4). **They still dismiss themselves after 6 seconds**; × only lets the user go sooner. They pause while hovered or focused (WCAG 2.2.1), and errors are `role="alert"`. A form still open when its action fails reports inside the form instead (`ErrorBanner` above the actions, `FieldError` under the field).
 
 ## 7. Actions
@@ -184,6 +191,16 @@ surface-field       text fields         a step darker than the page
 ## 9. Kit rules
 
 - **Compose `src/ui`.** A screen that needs something the kit lacks adds it to the kit, generically, with the smallest API that covers the case. Screen CSS modules do layout; the kit does look.
+- **Form controls are native elements in one field's clothes.** `TextField`, `NumberField` and `Select` share an anatomy: a sentence-case label, the control, an optional `hint` (visible and read with the control, where a tooltip is neither) and `FieldError`.
+  - `NumberField` types as text and sanitises each keystroke (`numberInput.ts`); the caller blocks Save with the same `numericFieldError`.
+  - A date is `TextField type="date"`. The native picker already follows the page's dark `color-scheme`, so a `DateField` would have added a name and nothing else.
+  - `Checkbox` is an item in a set (which types, which layers). A setting that applies at once is a `SwitchRow`.
+  - `SwatchPicker` is a closed list of colours as native radios: one tab stop, arrows move the choice, and the chosen swatch wears an accent ring.
+- **One single-choice control: `ChipRail`**, a radio group, wherever the choice sits, including inside a dialog. The kit has no `SegmentedControl`; it would have been a second look for the same decision.
+- **A state as a word is a `StatusPill`**, never a `Chip`, which is a control. Logjam GPS's four tones: `accent` done or ready, `outline` neutral, `warning` needs the user (the edge and glyph in warning, the label in the text colour, because warning as text on a card measured 3.8:1), `muted` quiet and not a problem.
+- **Progress is a `ProgressBar`**, with a `value` when the number is known and a sweep while it is not (a slow fade under reduced motion, since a still bar reads as a number).
+- **A section title is `SectionHeader`**: an `h3` with an optional count, in sheets, dialogs and plain lists alike. Only a count: an action inside a heading becomes part of its name.
+- **`Button busy`** swaps the leading glyph for a spinner and disables the button without fading it, because it is working, not unavailable.
 - **No MUI, no Emotion.** ESLint errors outside `MUI_LEGACY_FILES`. When a file is rebuilt, delete its line; when the list is empty, remove the dependencies and `src/theme.ts`.
 - **Native elements first**: `<button>`, `<input type="date">`, the Popover API, `matchMedia`. A library is justified only by a behaviour the platform lacks.
 - **Every colour is a token** (`var(--theme-*)`, `--ink`, `--hue-*`, `--surface-field`, `--hairline`). A hue is set per element through a custom property (`--chip-hue`, `--tile-hue`), never an inline colour.
@@ -199,6 +216,8 @@ surface-field       text fields         a step darker than the page
 - **Patterns, and where they live:**
   - Chip rail: a radio group with roving focus; the wheel scrolls it sideways, at half a page's speed per notch; `scroll-padding` keeps a focused chip clear of the edge fade (2.4.11); the selected chip is nudged into view, never recentred. (`Chip.tsx`)
   - Menu button, popover, side sheet: §6. (`Menu.tsx`, `SideSheet.tsx`)
+  - Dialog: a native modal `<dialog>`; a confirm is `role="alertdialog"` described by its body. (`Dialog.tsx`)
+  - Checkbox, swatches, select: native inputs, so their keyboard and announcements are the platform's. (`Choice.tsx`, `TextField.tsx`)
   - Search: a combobox with `aria-activedescendant`. (`MapSearchBox.tsx`)
   - Switch: `role="switch"`, named by its visible title. (`Toggle.tsx`)
   - Row checkbox: `role="checkbox"` on the tile. (`PlacesPanel.tsx`)
@@ -232,7 +251,9 @@ Mobile §13 holds. For the web in particular:
 
 ## Open items
 
-- Dialogs (§6) and every file in `MUI_LEGACY_FILES` are still to be rebuilt.
+- Every dialog but `ConfirmDialog` and `RouteNameDialog`, and every file in `MUI_LEGACY_FILES`, is still to be rebuilt. `ValidatedNumberField` goes when its last caller moves to `NumberField`.
+- **A route colour is named by its hex** ("#e6194b") on both clients, which is a name but not a helpful one. A spoken name ("Red") belongs beside `TRACK_COLORS` in `shared/src/media.ts`, so both clients read it.
+- `RouteDetailPanel` still draws its own route swatches; it moves to `SwatchPicker` when Ways is rebuilt.
 - Logjam GPS's hero fill and row tile fail contrast (`KNOWN_FAILURES`); fixing them changes the phone, so the operator decides when.
 - Logs, Ways, Maps, Friends and Account still render their pre-redesign content inside the new shell (`LEGACY_PAGES`).
 - **A batch of sent files is answered one file at a time on Logjam Web.** Logjam GPS's batch row carries Save all · Turn all down; a browser allows one download per press, so "Save all 8" would deliver one file and block the rest. The batch opens in place and each file keeps its own buttons.

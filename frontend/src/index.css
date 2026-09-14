@@ -61,6 +61,8 @@
   /* Kit surfaces. A text field sits a step darker than the page it is on. */
   --surface-field: color-mix(in srgb, black 12%, var(--theme-primary));
   --hairline: 1px solid var(--theme-bonus-2);
+  /* Behind a modal: the page dims rather than disappears. */
+  --scrim: color-mix(in srgb, black 40%, transparent);
 
   /* Shadows. Only things floating OVER THE MAP cast one; panels and sheets
      separate with a hairline. */

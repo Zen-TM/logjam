@@ -37,6 +37,41 @@
   border-color: var(--theme-warning);
 }
 
+.input:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.hint {
+  margin: 0;
+  font-size: var(--font-xs);
+  color: var(--theme-text-muted);
+}
+
+.selectBox {
+  position: relative;
+  display: flex;
+}
+
+/* The platform arrow is replaced so it matches the kit's glyphs; the list the
+   select opens stays the platform's. */
+.select {
+  flex: 1;
+  min-width: 0;
+  appearance: none;
+  padding-right: 32px;
+  cursor: pointer;
+}
+
+.selectGlyph {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  translate: 0 -50%;
+  color: var(--theme-text-muted);
+  pointer-events: none;
+}
+
 .search {
   flex: 1;
   min-width: 0;

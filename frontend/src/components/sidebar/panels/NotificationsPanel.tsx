@@ -77,6 +77,7 @@ import {
   Menu,
   Row,
   SearchField,
+  SectionHeader,
   SelectionBar,
   TileCheckbox,
   type MenuEntry,
@@ -758,12 +759,14 @@ function NotificationsPanel({
         const headingId = `${dayIdPrefix}-${section.key}`;
         return (
           <section key={section.key} className={classes.day} aria-labelledby={headingId}>
-            <h3 id={headingId} className={classes.dayHead}>
-              <span>{section.title}</span>
-              {/* A batch counts as the one thing that happened, so opening a
-                  group does not make the day's count jump. */}
-              <span>{countBatchRows(section.data, batches)}</span>
-            </h3>
+            {/* A batch counts as the one thing that happened, so opening a
+                group does not make the day's count jump. */}
+            <SectionHeader
+              id={headingId}
+              title={section.title}
+              count={countBatchRows(section.data, batches)}
+              className={classes.dayHead}
+            />
             {section.data.map(renderRow)}
           </section>
         );

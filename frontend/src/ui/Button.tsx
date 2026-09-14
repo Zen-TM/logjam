@@ -1,18 +1,22 @@
 import type { ButtonHTMLAttributes, ReactNode, Ref } from "react";
-import type { LucideIcon } from "lucide-react";
+import { LoaderCircle, type LucideIcon } from "lucide-react";
 import classes from "./Button.module.css";
 
-type ButtonVariant = "filled" | "outline" | "danger" | "plain";
+type ButtonVariant = "filled" | "outline" | "danger" | "destructive" | "plain";
 
 /**
  * A text button. Pill-shaped, as on Logjam GPS. `filled` is the ONE primary
  * action in its surface; `outline` a secondary; `danger` a destructive verb;
- * `plain` a cancel. `compact` is the `--control-md` size for headers, bars and
- * sheets.
+ * `destructive` the primary of a destructive confirm; `plain` a cancel.
+ * `compact` is the `--control-md` size for headers, bars and sheets. `busy`
+ * swaps the leading glyph for a spinner and disables the button while its
+ * request runs.
  */
 export function Button({
   variant = "plain",
   compact = false,
+  busy = false,
+  disabled,
   icon: Icon,
   trailingIcon: TrailingIcon,
   children,
@@ -23,6 +27,7 @@ export function Button({
 }: ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: ButtonVariant;
   compact?: boolean;
+  busy?: boolean;
   icon?: LucideIcon;
   trailingIcon?: LucideIcon;
   children: ReactNode;
@@ -36,9 +41,15 @@ export function Button({
       className={[classes.button, classes[variant], compact && classes.compact, className]
         .filter(Boolean)
         .join(" ")}
+      disabled={busy || disabled}
+      aria-busy={busy || undefined}
       {...rest}
     >
-      {Icon && <Icon size={glyph} aria-hidden />}
+      {busy ? (
+        <LoaderCircle size={glyph} aria-hidden className={classes.spinner} />
+      ) : (
+        Icon && <Icon size={glyph} aria-hidden />
+      )}
       {children}
       {TrailingIcon && <TrailingIcon size={glyph} aria-hidden />}
     </button>

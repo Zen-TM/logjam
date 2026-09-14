@@ -51,6 +51,10 @@
 }
 
 .sectionTitle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   margin: 0;
   font-size: var(--font-xs);
   font-weight: 600;

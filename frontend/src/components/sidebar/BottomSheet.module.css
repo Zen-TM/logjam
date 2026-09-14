@@ -5,7 +5,7 @@
   right: 0;
   /* Leave the bottom nav strip uncovered so it stays tappable. */
   bottom: var(--bottom-nav-height);
-  background: color-mix(in srgb, black 40%, transparent);
+  background: var(--scrim);
   z-index: 3;
   border: none;
   padding: 0;

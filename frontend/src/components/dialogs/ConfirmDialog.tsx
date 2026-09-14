@@ -1,19 +1,13 @@
 import type { ReactNode } from "react";
-import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogContentText,
-  DialogActions,
-  Button,
-  CircularProgress,
-} from "@mui/material";
+import { Button, Dialog } from "../../ui";
 
 /**
- * Small, centered confirmation dialog for destructive actions. Extracted from
- * the custom-field-delete confirm in PlaceDialog so every delete surface
- * (LiDAR/GeoPDF panels, custom fields) shares one shape. Deliberately not
- * fullScreen on mobile — small confirms stay centered.
+ * The confirm every destructive or irreversible verb raises, on the kit
+ * `Dialog`. `message` says what goes and what stays (DESIGN.md §7). Cancel
+ * first, then the verb on the right: a warning fill for the default `error`,
+ * the accent fill for a confirm that loses nothing (Rename, Fetch from
+ * RopeWiki). While `busy`, both buttons wait and nothing dismisses it.
+ * Small and centred at every width.
  */
 function ConfirmDialog({
   open,
@@ -37,42 +31,26 @@ function ConfirmDialog({
   return (
     <Dialog
       open={open}
-      onClose={busy ? undefined : onClose}
-      maxWidth="xs"
-      fullWidth
-      PaperProps={{
-        sx: {
-          backgroundColor: "var(--theme-primary)",
-          color: "var(--theme-text-primary)",
-        },
-      }}
+      title={title}
+      onClose={onClose}
+      dismissible={!busy}
+      alert
+      footer={
+        <>
+          <Button onClick={onClose} disabled={busy}>
+            Cancel
+          </Button>
+          <Button
+            variant={confirmColor === "error" ? "destructive" : "filled"}
+            busy={busy}
+            onClick={onConfirm}
+          >
+            {confirmLabel}
+          </Button>
+        </>
+      }
     >
-      <DialogTitle>{title}</DialogTitle>
-      <DialogContent dividers sx={{ borderColor: "rgba(255,255,255,0.1)" }}>
-        {/* component="div": `message` is a ReactNode and may contain block
-            elements (e.g. an ErrorBanner) — the default <p> would nest them
-            invalidly. */}
-        <DialogContentText component="div" sx={{ color: "var(--theme-text-primary)" }}>
-          {message}
-        </DialogContentText>
-      </DialogContent>
-      <DialogActions>
-        <Button
-          onClick={onClose}
-          disabled={busy}
-          sx={{ color: "var(--theme-text-primary)" }}
-        >
-          Cancel
-        </Button>
-        <Button
-          onClick={onConfirm}
-          color={confirmColor}
-          variant="contained"
-          disabled={busy}
-        >
-          {busy ? <CircularProgress size={20} /> : confirmLabel}
-        </Button>
-      </DialogActions>
+      {message}
     </Dialog>
   );
 }

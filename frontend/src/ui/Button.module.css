@@ -47,6 +47,18 @@
   color: var(--theme-warning);
 }
 
+/* The verb of a destructive confirm: a warning fill with the ink label. A
+   destructive TRIGGER (a row's Delete) stays `danger`, so the fill is only ever
+   the last step. */
+.destructive {
+  background: var(--theme-warning);
+  color: var(--ink);
+}
+
+.destructive:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--theme-warning) 85%, var(--theme-text-primary));
+}
+
 .plain:hover:not(:disabled),
 .outline:hover:not(:disabled),
 .danger:hover:not(:disabled) {
@@ -56,6 +68,28 @@
 .button:disabled {
   opacity: 0.45;
   cursor: default;
+}
+
+/* A busy button is working, not unavailable: it keeps its colour. */
+.button[aria-busy="true"]:disabled {
+  opacity: 1;
+  cursor: progress;
+}
+
+.spinner {
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
 }
 
 .iconButton {

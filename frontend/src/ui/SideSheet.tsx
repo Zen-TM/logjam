@@ -56,15 +56,37 @@ export function SideSheet({
   );
 }
 
-/** A titled group inside a sheet or popover: section title, then its controls. */
+/** A titled group inside a sheet, popover or dialog: section title, then its
+ *  controls. */
 export function SheetSection({ title, children }: { title: string; children: ReactNode }) {
   const titleId = useId();
   return (
     <section aria-labelledby={titleId} className={classes.section}>
-      <h3 id={titleId} className={classes.sectionTitle}>
-        {title}
-      </h3>
+      <SectionHeader id={titleId} title={title} />
       {children}
     </section>
+  );
+}
+
+/** A section's title — small capitals, muted — with an optional count at the
+ *  end of the line (a day in the Inbox). An `h3`: the page, sheet or dialog
+ *  title is the `h2`. A count only: an action inside a heading would become
+ *  part of its name. */
+export function SectionHeader({
+  title,
+  count,
+  id,
+  className,
+}: {
+  title: string;
+  count?: number;
+  id?: string;
+  className?: string;
+}) {
+  return (
+    <h3 id={id} className={[classes.sectionTitle, className].filter(Boolean).join(" ")}>
+      <span>{title}</span>
+      {count != null && <span>{count}</span>}
+    </h3>
   );
 }

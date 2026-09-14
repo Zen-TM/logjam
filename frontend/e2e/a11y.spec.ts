@@ -77,6 +77,50 @@ test.describe("desktop", () => {
     await expect(inbox.getByRole("radiogroup", { name: "Show" })).toBeVisible();
   });
 
+  test("a confirm dialog", async ({ page }) => {
+    await openApp(page);
+    await page.getByRole("button", { name: /^Inbox/ }).click();
+    const rowMenu = page.locator("aside").getByRole("button", { name: /^Actions for / }).first();
+    await expect(rowMenu).toBeVisible({ timeout: 15_000 });
+    await rowMenu.click();
+    await page.getByRole("menuitem", { name: "Delete" }).click();
+
+    const confirm = page.getByRole("alertdialog");
+    await expect(confirm).toBeVisible();
+    await expect(confirm.getByRole("heading", { level: 2 })).toBeFocused();
+    await expectNoViolations(page, "dialog");
+
+    // Escape cancels, deletes nothing, and returns focus to the row's ⋯.
+    await page.keyboard.press("Escape");
+    await expect(confirm).toBeHidden();
+    await expect(rowMenu).toBeFocused();
+  });
+
+  test("a discard confirm over a form dialog", async ({ page }) => {
+    await openApp(page);
+    await page.getByRole("button", { name: "Places", exact: true }).click();
+    await page.getByRole("button", { name: /^Add/ }).first().click();
+    await page.getByRole("menuitem", { name: "Add a place" }).click();
+    const form = page.locator(".MuiDialog-root [role='dialog']");
+    await expect(form).toBeVisible();
+    await form.getByLabel(/^Name/).first().fill("Unsaved name");
+
+    // The Escape that asks the form to close raises the confirm, and must not
+    // also be the close request that dismisses it.
+    await page.keyboard.press("Escape");
+    const confirm = page.getByRole("alertdialog", { name: "Discard unsaved changes?" });
+    await expect(confirm).toBeVisible();
+    await page.waitForTimeout(300);
+    await expect(confirm).toBeVisible();
+    await expect(confirm.getByRole("heading", { level: 2 })).toBeFocused();
+
+    // Its own Escape closes only the confirm, and the typing survives.
+    await page.keyboard.press("Escape");
+    await expect(confirm).toBeHidden();
+    await expect(form).toBeVisible();
+    await expect(form.getByLabel(/^Name/).first()).toHaveValue("Unsaved name");
+  });
+
   test("the Layers popover", async ({ page }) => {
     await openApp(page);
     await page.getByRole("button", { name: "Layers", exact: true }).click();
