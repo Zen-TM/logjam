@@ -4,12 +4,13 @@ import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
 import { getParam } from "../lib/getParam";
 import { resolveUser } from "../lib/resolveUser";
+import { NOTIFICATIONS_LIST_CAP } from "@logjam/shared";
 
 const router = Router();
 
-// Server-side cap on the notifications list. The true total (see X-Total-Count
-// below) lets the client show a truncation caption when this cap bites (UX-002).
-const NOTIFICATIONS_LIST_CAP = 500;
+// The list cap is shared: the true total (see X-Total-Count below) lets a
+// client show a truncation caption when the cap bites (UX-002), and
+// `notificationsTruncated` is how both clients decide that it did.
 
 // Notification payloads store ONLY reference IDs — no denormalised plaintext
 // place names or usernames (PRIV-005). Display strings are resolved from the

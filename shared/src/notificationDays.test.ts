@@ -1,7 +1,22 @@
 import { describe, expect, it } from "vitest";
 
 import type { TNotification } from "./apiTypes.js";
-import { groupNotificationsByDay, newestNotificationsFirst } from "./notificationLabel.js";
+import {
+  groupNotificationsByDay,
+  newestNotificationsFirst,
+  NOTIFICATIONS_LIST_CAP,
+  notificationsTruncated,
+} from "./notificationLabel.js";
+
+describe("notificationsTruncated", () => {
+  it("is true only past the server's cap", () => {
+    expect(notificationsTruncated(null)).toBe(false);
+    // 13 stored, 7 resolvable: nothing was cut, the other 6 were dropped.
+    expect(notificationsTruncated(13)).toBe(false);
+    expect(notificationsTruncated(NOTIFICATIONS_LIST_CAP)).toBe(false);
+    expect(notificationsTruncated(NOTIFICATIONS_LIST_CAP + 1)).toBe(true);
+  });
+});
 
 /** Local-midnight-relative helper: builds an instant N hours before `now`. */
 function at(iso: string): TNotification {

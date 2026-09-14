@@ -199,7 +199,24 @@ export function notificationPlaceId(n: TNotification): string | null {
   return typeof placeId === "string" && placeId.length > 0 ? placeId : null;
 }
 
-// ── Order and day grouping ───────────────────────────────────────────────────
+// ── The list: its cap, order and day grouping ────────────────────────────────
+
+/** `GET /notifications` returns at most this many rows, and the true total in
+ *  `X-Total-Count` beside them. */
+export const NOTIFICATIONS_LIST_CAP = 500;
+
+/**
+ * Whether the server's cap cut the inbox short, from the total it reported.
+ *
+ * NOT `total > notifications.length`, which both clients used to test: the
+ * total counts every stored row, and the endpoint then drops the rows it can no
+ * longer resolve (a revoked share, a removed friendship — PRIV-001/003). So an
+ * inbox of 13 rows showing 7 said "Showing 7 of 13. Older ones aren't loaded"
+ * with nothing older at all. Only a total past the cap means a row was left out.
+ */
+export function notificationsTruncated(total: number | null): boolean {
+  return total !== null && total > NOTIFICATIONS_LIST_CAP;
+}
 
 /**
  * NEWEST FIRST, and never re-sorted by read state. The server returns

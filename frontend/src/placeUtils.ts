@@ -1,7 +1,7 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { fetchAuthSession } from "aws-amplify/auth";
 import type { ScopedCustomFieldDef, StandaloneFile, ThemeSchemeId, TripLogCustomFieldDef, NotificationPreferences, MediaItem, MediaLinkedType, PlaceMergePolicy, ElevationProfile, SharableEntityType, FileSendStatus, FileSendSourceKind } from "@logjam/shared";
-import { formatTripPlaceNames } from "@logjam/shared";
+import { formatTripPlaceNames, tallyNotifications } from "@logjam/shared";
 import type { BulkShareItem, FriendShareRow, FriendShares } from "@logjam/shared";
 import { ApiError } from "./errors/ApiError";
 import { messageFromError } from "./errors/messageFromError";
@@ -1559,10 +1559,6 @@ export function copyRoute(routeId: string): Promise<TRoute> {
 
 // ── Notifications ─────────────────────────────────────────────
 
-export function getUnreadCount(): Promise<{ count: number }> {
-  return apiFetch<{ count: number }>("/notifications/unread-count");
-}
-
 export function markNotificationRead(id: string): Promise<void> {
   return apiFetch<void>(`/notifications/${id}/read`, { method: "PATCH" });
 }
@@ -1583,7 +1579,6 @@ export function useNotifications(enabled: boolean) {
   const [notifications, setNotifications] = useState<TNotification[]>([]);
   // True total (pre server-side list cap); null until known.
   const [total, setTotal] = useState<number | null>(null);
-  const [unreadCount, setUnreadCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [fetchCount, setFetchCount] = useState(0);
 
@@ -1594,13 +1589,16 @@ export function useNotifications(enabled: boolean) {
     apiFetchWithTotal<TNotification[]>("/notifications")
       .then(({ data, total }) => { if (!cancelled) { setNotifications(data); setTotal(total); } })
       .catch((err) => { console.error(err); if (!cancelled) setError(messageFromError(err, "Couldn't load notifications.")); });
-    getUnreadCount()
-      .then((r) => { if (!cancelled) setUnreadCount(r.count); })
-      .catch((err) => { console.error(err); if (!cancelled) setError(messageFromError(err, "Couldn't load notifications.")); });
     return () => { cancelled = true; };
   }, [enabled, fetchCount]);
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
+
+  // The badge counts the list the Inbox shows, the way Logjam GPS's tab badge
+  // does. `/notifications/unread-count` counts every stored row, including the
+  // ones the list drops because their share or friendship is gone, so the rail
+  // said 11 over an inbox that said "5 unread". A batch counts once, as its row.
+  const unreadCount = useMemo(() => tallyNotifications(notifications).unread, [notifications]);
 
   return { notifications, total, unreadCount, error, refetch };
 }

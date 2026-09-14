@@ -48,6 +48,7 @@ import {
   notificationHaystack,
   notificationLabel,
   notificationPlaceId,
+  notificationsTruncated,
   selectionCountLabel,
   tallyNotifications,
   type NotificationActionKind,
@@ -370,11 +371,10 @@ export function NotificationsScreen({
    * The server caps its list (500 rows) and reports the true total beside it,
    * so an inbox past the cap is showing a WINDOW. Say so at the bottom of the
    * list rather than letting the count in the hero quietly disagree with the
-   * rows — and compare against the fetched list, not the filtered one, or every
-   * search would claim to be truncated.
+   * rows. `notificationsTruncated` reads the total alone: comparing it with the
+   * rows claimed a window whenever the server dropped a revoked share.
    */
-  const truncated =
-    query.total !== null && query.total > query.notifications.length;
+  const truncated = notificationsTruncated(query.total);
 
   /** Which way the bar's single read/unread button goes for this selection. */
   const readAction = useMemo(
