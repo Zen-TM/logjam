@@ -2,12 +2,13 @@
 // something the kit does not have adds it HERE rather than styling its own.
 // Native elements and CSS modules only — no MUI (frontend/DESIGN.md).
 export { Button, IconButton } from "./Button";
-export { Chip, ChipRail, type ChipOption } from "./Chip";
+export { Chip, ChipPicker, ChipRail, type ChipOption } from "./Chip";
+export { ActivitySpark, StatGrid, type SparkBucket, type Stat } from "./Stats";
 export { IconTile, Row, TileCheckbox } from "./Row";
 export { Hero, Meter, type MeterSegment } from "./Hero";
 export { SwitchRow, Toggle } from "./Toggle";
 export { Checkbox, SwatchPicker } from "./Choice";
-export { NumberField, SearchField, Select, TextField } from "./TextField";
+export { NumberField, SearchField, Select, TextArea, TextField } from "./TextField";
 export { Menu, Popover, type MenuEntry, type MenuItem } from "./Menu";
 export { FilterField } from "./FilterField";
 export { RangePills } from "./RangePills";

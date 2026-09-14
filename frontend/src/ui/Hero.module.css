@@ -7,6 +7,12 @@
   border-bottom: 1px solid color-mix(in srgb, var(--theme-accent) 25%, transparent);
 }
 
+/* The back arrow's button box carries its own whitespace, so it sits on the
+   gutter's inner half rather than indenting the title by a whole gutter. */
+.hero[data-back] {
+  padding-left: calc(var(--gutter) / 2);
+}
+
 .title {
   flex: 1;
   min-width: 0;

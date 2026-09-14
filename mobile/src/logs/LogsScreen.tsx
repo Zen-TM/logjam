@@ -26,9 +26,17 @@ import {
 import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import {
+  countTripsInLastMonths,
+  dateRangeLabel,
+  datePresets,
+  distinctPlaceCount,
   distinctTripTypes,
   filterTrips,
+  formatDateKey,
+  formatTripDate,
+  groupTripsByYear,
   hasActiveTripFilter,
+  monthlyTripCounts,
   NO_TYPE_FILTER_VALUE,
 } from "@logjam/shared";
 
@@ -64,15 +72,6 @@ import {
   type SegmentOption,
   type ToastMessage,
 } from "../ui";
-import {
-  countTripsInLastMonths,
-  datePresets,
-  distinctPlaceCount,
-  formatDateKey,
-  formatTripDate,
-  groupTripsByYear,
-  monthlyTripCounts,
-} from "./logbook";
 import { primaryTripType, tripTypeLabel, tripTypeMeta } from "./tripTypeMeta";
 import { TripEditSheet } from "./TripEditSheet";
 
@@ -441,7 +440,7 @@ export function LogsScreen({
       {rangeSet ? (
         <View style={styles.rangeNote}>
           <Text style={styles.rangeText} numberOfLines={1}>
-            {rangeLabel(dateFrom, dateTo)}
+            {dateRangeLabel(dateFrom, dateTo)}
           </Text>
           <IconButton
             icon="x"
@@ -734,12 +733,6 @@ function EmptyPanel({
       )}
     </View>
   );
-}
-
-function rangeLabel(from: string | null, to: string | null): string {
-  const start = from ? formatDateKey(`${from}T00:00:00.000Z`) : "Any time";
-  const end = to ? formatDateKey(`${to}T00:00:00.000Z`) : "Today";
-  return `${start} → ${end}`;
 }
 
 const styles = StyleSheet.create({

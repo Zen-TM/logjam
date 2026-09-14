@@ -380,7 +380,6 @@ function UnifiedImportDialog({
   currentUser,
   onRefetchPlaces,
   onRefetchTripLogs,
-  onRefetchAnalytics,
   onPickCoords,
 }: {
   open: boolean;
@@ -399,7 +398,6 @@ function UnifiedImportDialog({
   currentUser: TUser | null;
   onRefetchPlaces: () => void;
   onRefetchTripLogs: () => void;
-  onRefetchAnalytics: () => void;
   onPickCoords: (onPicked: (lat: number, lng: number) => void) => void;
 }) {
   const isMobile = useIsMobile();
@@ -1305,7 +1303,6 @@ function UnifiedImportDialog({
       const result = await bulkCreateTripLogs({ importBatchId: batchId, trips });
       onRefetchPlaces();
       onRefetchTripLogs();
-      onRefetchAnalytics();
 
       const linked = trips.filter((t) => t.placeId != null).length;
       const noPlace = trips.filter((t) => t.placeId == null).length;
@@ -1342,7 +1339,6 @@ function UnifiedImportDialog({
       const result = await undoImport(outcome.batchId);
       onRefetchPlaces();
       onRefetchTripLogs();
-      onRefetchAnalytics();
       const parts = [
         result.deletedPlaces > 0
           ? `${result.deletedPlaces} place${result.deletedPlaces === 1 ? "" : "s"}`

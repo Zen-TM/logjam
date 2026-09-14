@@ -11,7 +11,6 @@ import type {
   TFriendRequest,
   TNotification,
   TTripLog,
-  TAnalytics,
   TUser,
   TRoute,
   PlaceTrack,
@@ -57,7 +56,6 @@ const MAPS_VIEWS = [
  * shrink.
  */
 const LEGACY_PAGES: ReadonlySet<PanelId> = new Set<PanelId>([
-  "logs",
   "ways",
   "maps",
   "friends",
@@ -156,18 +154,14 @@ function SidebarPanel({
   // Trip logs
   tripLogs,
   tripLogsTotal,
-  tripLogsLoading,
+  tripLogsLoaded,
   onRefetchTripLogs,
-  onRefetchAnalytics,
   customFieldDefs,
   onCustomFieldDefsChange,
   placeCustomFieldDefs,
   onPlaceCustomFieldDefsChange,
   placeTypes,
   onPlaceTypesChange,
-  // Analytics
-  analytics,
-  analyticsLoading,
   // Vector styles
   vectorStyle,
   onVectorStyleChange,
@@ -269,18 +263,15 @@ function SidebarPanel({
   // Trip logs
   tripLogs: TTripLog[];
   tripLogsTotal: number | null;
-  tripLogsLoading: boolean;
+  /** False until the first trip fetch settles. */
+  tripLogsLoaded: boolean;
   onRefetchTripLogs: () => void;
-  onRefetchAnalytics: () => void;
   customFieldDefs: ScopedCustomFieldDef[];
   onCustomFieldDefsChange: (defs: ScopedCustomFieldDef[]) => void;
   placeCustomFieldDefs: ScopedCustomFieldDef[];
   placeTypes: TPlaceType[];
   onPlaceTypesChange: (types: TPlaceType[]) => void;
   onPlaceCustomFieldDefsChange: (defs: ScopedCustomFieldDef[]) => void;
-  // Analytics
-  analytics: TAnalytics | null;
-  analyticsLoading: boolean;
   // Vector styles
   vectorStyle: VectorStyleSettings | null;
   onVectorStyleChange: (next: VectorStyleSettings) => void;
@@ -358,12 +349,13 @@ function SidebarPanel({
       </header>
     );
 
+  // Logs draws its view switch under its own hero, so the hero stays the page's
+  // first line; Maps is not rebuilt yet and keeps it under the plain header.
+  const logsViewRail = (
+    <ChipRail label="Logs view" options={LOGS_VIEWS} value={logsView} onChange={onLogsViewChange} />
+  );
   const views =
-    activePanel === "logs" ? (
-      <div className={classes.views}>
-        <ChipRail label="Logs view" options={LOGS_VIEWS} value={logsView} onChange={onLogsViewChange} />
-      </div>
-    ) : activePanel === "maps" ? (
+    activePanel === "maps" ? (
       <div className={classes.views}>
         <ChipRail label="Maps view" options={MAPS_VIEWS} value={mapsView} onChange={onMapsViewChange} />
       </div>
@@ -462,22 +454,26 @@ function SidebarPanel({
         )}
         {activePanel === "logs" && logsView === "stats" && (
           <AnalyticsPanel
-            analytics={analytics}
-            loading={analyticsLoading}
+            views={logsViewRail}
             tripLogs={tripLogs}
+            tripLogsTotal={tripLogsTotal}
+            loaded={tripLogsLoaded}
+            places={places}
             customFieldDefs={customFieldDefs}
-            onRefetchTripLogs={onRefetchTripLogs}
-            onRefetchAnalytics={onRefetchAnalytics}
-            onQuotaChanged={onQuotaChanged}
+            placeCustomFieldDefs={placeCustomFieldDefs}
+            placeTypes={placeTypes}
           />
         )}
         {activePanel === "logs" && logsView === "logs" && (
           <TripLogsPanel
+            views={logsViewRail}
             tripLogs={tripLogs}
             tripLogsTotal={tripLogsTotal}
-            loading={tripLogsLoading}
+            loaded={tripLogsLoaded}
             onRefetchTripLogs={onRefetchTripLogs}
-            onRefetchAnalytics={onRefetchAnalytics}
+            onOpenPlace={openPlaceDetail}
+            onFiltersOpenChange={onFiltersOpenChange}
+            onExpandSheet={expandSheetToFull}
             customFieldDefs={customFieldDefs}
             onCustomFieldDefsChange={onCustomFieldDefsChange}
             places={places}

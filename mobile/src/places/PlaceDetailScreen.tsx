@@ -29,6 +29,7 @@ import {
   distinctTripTypes,
   formatCanyonGrade,
   formatDistanceM,
+  formatTripDate,
   mediaCategory,
   messageFromError,
   removeShareConfirm,
@@ -94,7 +95,6 @@ import {
   type Stat,
   type ToastMessage,
 } from "../ui";
-import { formatTripDate } from "../logs/logbook";
 import { TripEditSheet } from "../logs/TripEditSheet";
 import { PlaceEditSheet } from "./PlaceEditSheet";
 import { placeDeleteConfirm } from "./placeDeleteConfirm";

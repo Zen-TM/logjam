@@ -1,48 +1,40 @@
-import { useState, useEffect } from "react";
-import { useIsMobile } from "../../useIsMobile";
+import { useEffect, useState } from "react";
+import { MapPin, Pencil, Trash2 } from "lucide-react";
 import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Button,
-  Chip,
-  IconButton,
-  Typography,
-  Box,
-  Divider,
-} from "@mui/material";
-import CloseIcon from "@mui/icons-material/Close";
-import type { TripLogCustomFieldDef, MediaItem } from "@logjam/shared";
+  formatDateKey,
+  formatTripDate,
+  mediaCategory,
+  tripAttributeEntries,
+  tripTypeLabel,
+  type MediaItem,
+  type TripAttributeEntry,
+  type TripLogCustomFieldDef,
+} from "@logjam/shared";
 import type { TTripLog } from "../../placeUtils";
+import { deleteTripLog, getTripLog, tripTitle } from "../../placeUtils";
 import { useToast } from "../feedback/ToastProvider";
 import { messageFromError } from "../../errors/messageFromError";
-import { deleteTripLog, getTripLog, tripTitle } from "../../placeUtils";
 import MediaGallery from "../media/MediaGallery";
-import { typeChipSx } from "../../csvImport/dialogStyles";
+import { tripTypeLook } from "../sidebar/panels/tripTypeIcon";
+import { Button, Dialog, IconTile, Row, SectionHeader, StatusPill } from "../../ui";
+import ConfirmDialog from "./ConfirmDialog";
 import classes from "./TripLogViewDialog.module.css";
 
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  // Trip dates (and date-typed custom fields) are stored as UTC-midnight
-  // (date-only); format in UTC so AEST (UTC+10/+11) doesn't render the prior day.
-  return d.toLocaleDateString("en-AU", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    timeZone: "UTC",
-  });
-}
-
-function formatFieldValue(value: unknown, type: TripLogCustomFieldDef["type"]): string {
+function formatAttribute(entry: TripAttributeEntry): string {
+  const { value, type } = entry;
   if (value == null || value === "") return "—";
-  if (type === "boolean") return value ? "Yes" : "No";
-  if (type === "date" && typeof value === "string") {
-    return formatDate(value);
-  }
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  // A date attribute is stored date-only; formatDateKey reads it in UTC.
+  if (type === "date" && typeof value === "string") return formatDateKey(value);
   return String(value);
 }
 
+/**
+ * One trip: "what did I do that day?" (Logjam GPS's `TripDetailScreen`). The
+ * date and activities up top, then the places, the photos, the tracks, the
+ * notes and the attributes it carries. Edit is the one primary action; Delete
+ * is the destructive verb beside it and confirms first.
+ */
 function TripLogViewDialog({
   open,
   onClose,
@@ -50,6 +42,7 @@ function TripLogViewDialog({
   customFieldDefs,
   onEdit,
   onDeleted,
+  onOpenPlace,
   canManageMedia = true,
   onMediaChanged,
 }: {
@@ -59,11 +52,12 @@ function TripLogViewDialog({
   customFieldDefs: TripLogCustomFieldDef[];
   onEdit: () => void;
   onDeleted: () => void;
+  /** Where a linked place opens. Absent, the places are listed and not openable. */
+  onOpenPlace?: (placeId: string) => void;
   canManageMedia?: boolean;
   onMediaChanged?: () => void;
 }) {
-  const isMobile = useIsMobile();
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [mediaLoading, setMediaLoading] = useState(false);
@@ -94,13 +88,13 @@ function TripLogViewDialog({
     setDeleting(true);
     try {
       await deleteTripLog(tripLog.id);
-      setShowDeleteConfirm(false);
+      setConfirmingDelete(false);
       onDeleted();
-      toast.success("Trip log deleted.");
+      toast.success("Trip deleted.");
       onClose();
     } catch (err) {
       console.error(err);
-      toast.error(messageFromError(err, "Couldn't delete trip log. Please try again."));
+      toast.error(messageFromError(err, "Couldn't delete this trip. Please try again."));
     } finally {
       setDeleting(false);
     }
@@ -108,194 +102,122 @@ function TripLogViewDialog({
 
   if (!tripLog) return null;
 
+  const photoCount = media.filter((item) => mediaCategory(item.mediaType) !== "track").length;
+  const trackCount = media.length - photoCount;
+  const attributes = tripAttributeEntries(customFieldDefs, tripLog.customFields);
+
   return (
     <>
       <Dialog
-        fullScreen={isMobile}
-        open={open && !showDeleteConfirm}
+        open={open}
+        title={tripTitle(tripLog)}
         onClose={onClose}
-        maxWidth="sm"
-        fullWidth
-        PaperProps={{
-          sx: {
-            backgroundColor: "var(--theme-primary)",
-            color: "var(--theme-text-primary)",
-            maxHeight: isMobile ? "100%" : "85vh",
-          },
-        }}
+        size="large"
+        dismissible={!deleting}
+        footer={
+          <>
+            <Button variant="danger" icon={Trash2} className={classes.delete} onClick={() => setConfirmingDelete(true)}>
+              Delete
+            </Button>
+            <Button variant="filled" icon={Pencil} onClick={onEdit}>
+              Edit trip
+            </Button>
+          </>
+        }
       >
-        <DialogTitle
-          sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", pb: 1 }}
-        >
-          <Box>
-            <Typography variant="h6" component="div">
-              {tripTitle(tripLog)}
-            </Typography>
-            <Typography variant="body2" sx={{ color: "var(--theme-text-muted)" }}>
-              {formatDate(tripLog.date)}
-            </Typography>
-          </Box>
-          <IconButton
-            aria-label="Close dialog"
-            size="small"
-            onClick={onClose}
-            sx={{ color: "var(--theme-text-primary)", mt: 0.25 }}
-          >
-            <CloseIcon fontSize="small" />
-          </IconButton>
-        </DialogTitle>
-
-        <DialogContent dividers sx={{ borderColor: "rgba(255,255,255,0.1)" }}>
-          {/* Linked places + types. Type chips use the shared accent-fill
-              styling (typeChipSx) — filled and readable in every theme, and
-              visually distinct from the default-grey place chips (the old
-              outlined-secondary chip was too dim). */}
-          {(tripLog.places.length > 0 || tripLog.types.length > 0) && (
-            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75, alignItems: "center" }}>
-              {tripLog.places.map((c) => (
-                <Chip key={c.id} label={c.name} size="small" />
-              ))}
-              {tripLog.types.map((t) => (
-                <Chip key={t} label={t} size="small" sx={typeChipSx} />
-              ))}
-            </Box>
-          )}
-
-          {/* Custom field values */}
-          {customFieldDefs.length > 0 && (
-            <>
-              <Divider sx={{ borderColor: "rgba(255,255,255,0.1)", my: 1.5 }} />
-              <Box className={classes.section}>
-                {customFieldDefs.map((def) => {
-                  const val = tripLog.customFields[def.key];
-                  return (
-                    <Box key={def.key} className={classes.fieldRow}>
-                      <Typography variant="body2" className={classes.fieldLabel}>
-                        {def.label}
-                      </Typography>
-                      <Typography variant="body2">
-                        {formatFieldValue(val, def.type)}
-                      </Typography>
-                    </Box>
-                  );
-                })}
-              </Box>
-            </>
-          )}
-
-          {/* Notes */}
-          {tripLog.notes && (
-            <>
-              <Divider sx={{ borderColor: "rgba(255,255,255,0.1)", my: 1.5 }} />
-              <Box className={classes.section}>
-                <Typography variant="caption" className={classes.sectionLabel}>
-                  Notes
-                </Typography>
-                <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
-                  {tripLog.notes}
-                </Typography>
-              </Box>
-            </>
-          )}
-
-          {/* Media — photos & videos. Adding happens in the edit dialog. */}
-          <Divider sx={{ borderColor: "rgba(255,255,255,0.1)", my: 1.5 }} />
-          <Box className={classes.section}>
-            <Typography variant="caption" className={classes.sectionLabel}>
-              Photos &amp; Videos
-            </Typography>
-            <div className={classes.mediaScroll}>
-              {mediaLoading ? (
-                <Typography variant="body2" sx={{ color: "var(--theme-text-muted)", fontStyle: "italic" }}>
-                  Loading files…
-                </Typography>
+        <div className={classes.content}>
+          <div className={classes.summary}>
+            <p className={classes.date}>{formatTripDate(tripLog.date)}</p>
+            <div className={classes.pills}>
+              {tripLog.types.length > 0 ? (
+                tripLog.types.map((type) => (
+                  <StatusPill key={type} label={tripTypeLabel(type)} icon={tripTypeLook(type).icon} />
+                ))
               ) : (
-                <MediaGallery
-                  media={media}
-                  variant="visual"
-                  canDelete={canManageMedia}
-                  onDeleted={handleMediaDeleted}
-                  emptyText="No photos or videos yet."
-                />
+                <StatusPill label="No type set" tone="muted" icon={tripTypeLook(null).icon} />
               )}
             </div>
-          </Box>
+          </div>
 
-          {/* Tracks (GPX/KML) */}
-          <Divider sx={{ borderColor: "rgba(255,255,255,0.1)", my: 1.5 }} />
-          <Box className={classes.section}>
-            <Typography variant="caption" className={classes.sectionLabel}>
-              Tracks
-            </Typography>
-            <div className={classes.mediaScroll}>
-              {!mediaLoading && (
-                <MediaGallery
-                  media={media}
-                  variant="tracks"
-                  canDelete={canManageMedia}
-                  onDeleted={handleMediaDeleted}
-                  emptyText="No tracks yet."
+          <section className={classes.section}>
+            <SectionHeader title="Places" count={tripLog.places.length || undefined} />
+            {tripLog.places.length === 0 ? (
+              <p className={classes.muted}>No places linked. Edit the trip to add one.</p>
+            ) : (
+              tripLog.places.map((place) => (
+                <Row
+                  key={place.id}
+                  title={place.name}
+                  leading={<IconTile icon={MapPin} hue="var(--theme-accent)" />}
+                  onOpen={onOpenPlace ? () => onOpenPlace(place.id) : undefined}
                 />
-              )}
-            </div>
-          </Box>
-        </DialogContent>
+              ))
+            )}
+          </section>
 
-        <DialogActions>
-          <Button
-            color="error"
-            onClick={() => setShowDeleteConfirm(true)}
-            sx={{ mr: "auto" }}
-          >
-            Delete
-          </Button>
-          <Button
-            onClick={onClose}
-            sx={{ color: "var(--theme-text-primary)" }}
-          >
-            Close
-          </Button>
-          <Button variant="contained" color="secondary" onClick={onEdit}>
-            Edit
-          </Button>
-        </DialogActions>
+          <section className={classes.section}>
+            <SectionHeader title="Photos & videos" count={photoCount || undefined} />
+            {mediaLoading ? (
+              <p className={classes.muted} role="status">
+                Loading files…
+              </p>
+            ) : (
+              <MediaGallery
+                media={media}
+                variant="visual"
+                canDelete={canManageMedia}
+                onDeleted={handleMediaDeleted}
+                emptyText="No photos or videos yet."
+              />
+            )}
+          </section>
+
+          <section className={classes.section}>
+            <SectionHeader title="Tracks" count={trackCount || undefined} />
+            {!mediaLoading && (
+              <MediaGallery
+                media={media}
+                variant="tracks"
+                canDelete={canManageMedia}
+                onDeleted={handleMediaDeleted}
+                emptyText="No tracks yet."
+              />
+            )}
+          </section>
+
+          <section className={classes.section}>
+            <SectionHeader title="Notes" />
+            {tripLog.notes ? (
+              <p className={classes.notes}>{tripLog.notes}</p>
+            ) : (
+              <p className={classes.muted}>No notes</p>
+            )}
+          </section>
+
+          {attributes.length > 0 && (
+            <section className={classes.section}>
+              <SectionHeader title="Attributes" />
+              <dl className={classes.attributes}>
+                {attributes.map((entry) => (
+                  <div key={entry.key} className={classes.attribute}>
+                    <dt>{entry.label}</dt>
+                    <dd>{formatAttribute(entry)}</dd>
+                  </div>
+                ))}
+              </dl>
+            </section>
+          )}
+        </div>
       </Dialog>
 
-      {/* Delete confirmation */}
-      <Dialog
-        open={showDeleteConfirm}
-        onClose={deleting ? undefined : () => setShowDeleteConfirm(false)}
-        PaperProps={{
-          sx: {
-            backgroundColor: "var(--theme-primary)",
-            color: "var(--theme-text-primary)",
-          },
-        }}
-      >
-        <DialogTitle>Delete Trip Log?</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2">
-            This will permanently delete this trip log. This cannot be undone.
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button
-            onClick={() => setShowDeleteConfirm(false)}
-            disabled={deleting}
-            sx={{ color: "var(--theme-text-primary)" }}
-          >
-            Cancel
-          </Button>
-          <Button
-            onClick={handleDelete}
-            color="error"
-            variant="contained"
-            disabled={deleting}
-          >
-            {deleting ? "Deleting..." : "Delete"}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <ConfirmDialog
+        open={confirmingDelete}
+        title="Delete this trip?"
+        message="Its photos, videos and tracks go too. The places it links to stay. This can't be undone."
+        busy={deleting}
+        onConfirm={() => void handleDelete()}
+        onClose={() => setConfirmingDelete(false)}
+      />
     </>
   );
 }

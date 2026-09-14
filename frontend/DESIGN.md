@@ -32,6 +32,8 @@ Drift between the clients happened because each kept its own copy of the same de
 | Collapsing a bulk share, and counting it as one | `shared/src/notificationBatches.ts` |
 | What a notification's row lets you answer, and the confirm copy | `shared/src/notificationActions.ts` |
 | Which way the one read/unread button goes | `shared/src/bulkReadAction.ts` |
+| A logbook's dates, year sections, date presets, stats ranges, spark axis, and every sentence a stats screen says | `shared/src/logbook.ts` |
+| A trip type's glyph and hue | `shared/src/tripTypeIdentity.ts` |
 | Theme schemes | `shared/src/themeSchemes.ts` |
 | Every colour pair either client renders | `scripts/wcag-contrast.mjs` (CI) |
 
@@ -42,7 +44,7 @@ What stays per client is the medium: glyph family (lucide here, Feather there), 
 Every page leads with the question its user opened it to answer, and answers it before any list.
 
 - Places → "how far through my list am I, and what's left?" (a count; the status rail right under it breaks it down)
-- Logs → "what have I done?"; its Stats view → "how much, and of what?"
+- Logs → "what have I done?" (the trip count); its Stats view → "how much, and of what?" (days out, the number the list cannot give)
 - Ways → "what lines have I got?" (routes I drew, tracks I recorded, files I imported)
 - Maps → "what maps have I made, and what is still being made?" (GeoPDFs, LiDAR topos)
 - Friends → "who can I share with, and who is waiting on me?"
@@ -69,7 +71,8 @@ rail 84px │ panel 380px             │ sheet 380px (optional) │ map
 - **The panel and the sheet beside it are both 380px.** `--filter-sheet-width` is defined AS `--panel-width`, so they cannot drift apart. 440 was tried first and read as too wide; at 380 a row title wraps to its second line more often, which `Row` allows for.
 - **The rail is fixed at 84px** and labels every page: Places, Logs, Ways, Maps and Friends, then a spacer, then Inbox, Account and Settings. The active page's icon sits in an accent pill with an ink glyph. It is the only filled thing on the rail. Pressing the open page closes it.
 - **Narrow web (≤768px) is Logjam GPS's tab bar**: Map · Places · Logs · Ways · More. The panel becomes the bottom sheet, and Map closes the panel. More is a menu, with Inbox first because it is the badged one. Keep `useIsMobile()` and every `max-width: 768px` query in step.
-- **A page with two views swaps them under one chip rail** (Logs | Stats, GeoPDFs | LiDAR topos), never two pages and never tabs that change the URL.
+- **A page with two views swaps them under one chip rail** (Logs | Stats, GeoPDFs | LiDAR topos), never two pages and never tabs that change the URL. **The switch is the first rail under the hero**, never above it: the hero stays the page's first line, and each view's hero answers its own question ("130 trips", "130 days out"). While a selection runs, the switch stays mounted and inert, like Places' type rail.
+- **A step inside a view opens in place, with a back arrow in the hero** (`Hero onBack`): one activity's stats. Focus goes to the arrow on the way in and back to the row that was opened on the way out.
 - **Pin the hero and the rails; only the list scrolls.** The shell does this for every page by default: the panel body neither scrolls nor adds a gutter, and the page's own list does both. `LEGACY_PAGES` in `SidebarPanel.tsx` names the pages not yet rebuilt, which still scroll inside the body; rebuilding a page takes it off that list. It lists the old pages rather than the new ones because the first page rebuilt against an opt-in list never opted in.
 - **One pinned filter axis per page; Places is the exception with two** (type, then status), for the reason mobile §2 gives. Only one rail may say "All" (the type rail's is "Any type").
 - **Precise filters live in a sheet that opens BESIDE the list**, not over it. The list it narrows stays visible and updates live. It is non-modal: focus moves to its heading on open and back to its button on close, and Escape closes it. On narrow web it swaps the panel's content instead. **It never opens by itself** when the page is visited; the one exception is returning from drawing an area, which it asks for as a consumed request (§9).
@@ -101,6 +104,7 @@ Mobile §3 holds in full: a kind has one hue and one glyph, used everywhere it a
 
 - **Places split their two vocabularies by surface** (mobile §3). On the map the fill is the type's colour and the ring is sharing. A shared place is the SAME pin as your own, with a thin ring set 2px clear of it (`shared-place-halos`): a mark on a pin, not a louder pin. The ring takes clicks too, because your own copy of a shared place sits on the same coordinate and draws over it. On a list row the tile is the STATUS (visited: accent; not visited: `--hue-todo`; shared: `--hue-shared`), and the type is a word in the subtitle, only while the type rail isn't already filtering by it.
 - **Web tiles are a SOLID hue with an ink glyph; Logjam GPS's are a hue glyph on a 16% wash.** Measured: a hue glyph on its wash over a card cannot reach 3:1 for the clay and waratah hues at any wash, and misses for most hues under Sandstone. The phone's version is a known failure in the contrast guard.
+- **A trip wears its FIRST type's glyph and hue** (`tripTypeIdentity`): canyoning takes the accent, the other seeded activities borrow asset hues, a type the user typed hashes its label into `TRIP_TYPE_OPEN_HUES`, and a trip with no type is `--theme-bonus-1` with a book. The first type is the user's own ordering, so the form stars it rather than reordering the chips.
 - **A notification borrows the hue of the thing it is about.** A hub menu is not a vocabulary. Open vocabularies hash their hue from the label (mobile §3).
 - **Tallies answer "what would I get".** A chip's count applies every axis but its own. An emptied chip stays in place, disabled.
 
@@ -166,7 +170,9 @@ surface-field       text fields         a step darker than the page
   - **It renders into `document.body` and stops its own Escape**, so closing it never also closes the MUI dialog it was raised from, or clears the selection of the list behind it.
   - **Two sizes.** `small` (400) is a confirm or a short form and stays centred at every width. `large` (640) is a long form and fills the screen on narrow web, the web's stand-in for Logjam GPS's sheet.
   - **A form's Save is `type="submit"`** tied to the form in the body (`form={formId}`), so Enter in a field saves, and it wears `busy` while the request runs.
-  - **One dialog at a time.** A confirm may stand over the form it guards (discard unsaved changes); nothing else opens a dialog from a dialog. Mobile §6's sub-mode rule holds: a picker inside a dialog swaps the body and backs out to the form, not out of the dialog.
+  - **One dialog at a time.** A confirm may stand over the dialog it acts for (discard unsaved changes over a form, Delete over the trip it deletes, Delete file over the gallery); nothing else opens a dialog from a dialog. A form that is a second view of the same thing REPLACES the first (a trip's Edit closes its view). Mobile §6's sub-mode rule holds: a picker inside a dialog swaps the body and backs out to the form, not out of the dialog — the title names the step, and Escape, the close button and Done all go back to the form (`TripLogDialog`'s places). The form stays mounted, `hidden`, so an upload in flight survives the trip there and back.
+  - **A view dialog's footer** is the destructive verb at the far left (`danger`, confirms) and the ONE primary on the right (Edit trip); the title's close button is its Cancel.
+  - **Anything layered inside a dialog handles its own Escape on its own element** (the lightbox, the chip picker's add field, a menu): the dialog hears a document-bound Escape first and would close under it.
 - **Confirm** (`ConfirmDialog`): an alert dialog, its body read as the description. It says what goes and what stays (§7). Cancel, then the verb: `destructive` (a warning fill with the ink label) when something is lost, `filled` when nothing is (Rename, Fetch from RopeWiki). A destructive TRIGGER (a menu's Delete) stays `danger`, so the fill only ever marks the last step.
 - **Toasts** report the outcome of an action. They sit bottom-centre (the map owns both bottom corners) on the inverted light surface, with a round dismiss at the right edge (§4). **They still dismiss themselves after 6 seconds**; × only lets the user go sooner. They pause while hovered or focused (WCAG 2.2.1), and errors are `role="alert"`. A form still open when its action fails reports inside the form instead (`ErrorBanner` above the actions, `FieldError` under the field).
 
@@ -185,7 +191,8 @@ surface-field       text fields         a step darker than the page
 
 - **Loading is not empty.** A list whose first fetch hasn't landed says "Loading your places…", never the first-run screen. Flashing "No places yet" at every user is the bug this rule came from.
 - **Empty states sit on the page, not in a card**, centred in the space the list would fill and nudged about 15% above centre. First-run says what would be here and offers the way in. Filtered-empty says nothing matches and offers Clear filters.
-- **A list the server truncated says so** ("Showing your 500 most recent places of 812…").
+- **A list the server truncated says so** ("Showing your 500 most recent places of 812…"), and so does anything computed from it: Stats counts the loaded trips and says "Counted over your 500 most recent trips of 812" when they are not all of them.
+- **A chronological list runs newest first in sticky year or day sections** with a count each (Logs by year, the Inbox by day).
 - **Errors**: three surfaces, one rule each (frontend/CLAUDE.md, "Error display"). Every caught error goes through `messageFromError`.
 
 ## 9. Kit rules
@@ -196,10 +203,13 @@ surface-field       text fields         a step darker than the page
   - A date is `TextField type="date"`. The native picker already follows the page's dark `color-scheme`, so a `DateField` would have added a name and nothing else.
   - `Checkbox` is an item in a set (which types, which layers). A setting that applies at once is a `SwitchRow`.
   - `SwatchPicker` is a closed list of colours as native radios: one tab stop, arrows move the choice, and the chosen swatch wears an accent ring.
+  - `TextArea` is several lines (notes): it rests at `minRows`, grows with the text (`field-sizing`) and stops at `maxRows`, where it scrolls.
+- **Several choices from a vocabulary the user extends: `ChipPicker`** (a trip's types). Toggle chips that keep vocabulary order whatever is picked; an "Add" chip becomes a small field (Enter adds, Escape backs out of the field only); a value that cannot change here is `lockedValues` with the reason in `hint`; a pick whose POSITION means something is `primaryValue`, starred.
 - **One single-choice control: `ChipRail`**, a radio group, wherever the choice sits, including inside a dialog. The kit has no `SegmentedControl`; it would have been a second look for the same decision.
 - **A state as a word is a `StatusPill`**, never a `Chip`, which is a control. Logjam GPS's four tones: `accent` done or ready, `outline` neutral, `warning` needs the user (the edge and glyph in warning, the label in the text colour, because warning as text on a card measured 3.8:1), `muted` quiet and not a problem.
 - **Progress is a `ProgressBar`**, with a `value` when the number is known and a sweep while it is not (a slow fade under reduced motion, since a still bar reads as a number).
 - **A section title is `SectionHeader`**: an `h3` with an optional count, in sheets, dialogs and plain lists alike. Only a count: an action inside a heading becomes part of its name.
+- **Numbers read at a glance: `StatGrid`** (a label over its value, a definition list) **and `ActivitySpark`** (bars sized to the busiest bucket, an empty one only its track, not pressable). A spark's bars are for the eye; assistive tech reads the same numbers as a list, each bucket `name`d in full ("March 2026", never "M").
 - **`Button busy`** swaps the leading glyph for a spinner and disables the button without fading it, because it is working, not unavailable.
 - **No MUI, no Emotion.** ESLint errors outside `MUI_LEGACY_FILES`. When a file is rebuilt, delete its line; when the list is empty, remove the dependencies and `src/theme.ts`.
 - **Native elements first**: `<button>`, `<input type="date">`, the Popover API, `matchMedia`. A library is justified only by a behaviour the platform lacks.
@@ -255,7 +265,11 @@ Mobile §13 holds. For the web in particular:
 - **A route colour is named by its hex** ("#e6194b") on both clients, which is a name but not a helpful one. A spoken name ("Red") belongs beside `TRACK_COLORS` in `shared/src/media.ts`, so both clients read it.
 - `RouteDetailPanel` still draws its own route swatches; it moves to `SwatchPicker` when Ways is rebuilt.
 - Logjam GPS's hero fill and row tile fail contrast (`KNOWN_FAILURES`); fixing them changes the phone, so the operator decides when.
-- Logs, Ways, Maps, Friends and Account still render their pre-redesign content inside the new shell (`LEGACY_PAGES`).
+- Ways, Maps, Friends and Account still render their pre-redesign content inside the new shell (`LEGACY_PAGES`).
+- **Stats is Logjam GPS's stats, and the old canyoning Analytics is gone** (Phase B, 2026-09-14): its "Place trips / Unique places / Days canyoning / Total abseils" tiles, the completion ring and the year → month → day calendar. The phone's screen was built on `computeLogbookStats` so the two clients could not disagree; "Total abseils" summed a place attribute over trips, which root CLAUDE.md ("A TOTAL needs a declaration") rules out; the ring is "Places visited" per type; a day's trips are the Logs list with a date range. `GET /analytics` has no Logjam Web caller left — whether the API keeps it is the operator's call.
+- Logjam GPS's Stats has "On foot", from recordings on that phone. Logjam Web has no recordings, so the section is absent.
+- `PlaceDialog` (MUI, Phase B package 6) now hosts the kit's attribute inputs and add form, so its attribute section already looks like the trip form's while the rest of it does not.
+- The GeoPDF hue was lifted a second time (#CE885C → #D99B72) on both clients, for the bikepacking trip chip's glyph on a card.
 - **A batch of sent files is answered one file at a time on Logjam Web.** Logjam GPS's batch row carries Save all · Turn all down; a browser allows one download per press, so "Save all 8" would deliver one file and block the rest. The batch opens in place and each file keeps its own buttons.
 - **Logjam GPS's filter sheet still draws the canyon axes with bespoke controls** and `PLACE_THRESHOLDS` presets; Logjam Web draws every attribute by shape (§2). Moving the phone onto `filterPillStops` would let `PLACE_THRESHOLDS` and `CANYON_FORM_FIELD_KEYS` go. On the web, `PlaceDialog.tsx` is the last user of `CANYON_FORM_FIELD_KEYS`.
 - Logjam GPS's `TextField` label is uppercase; Logjam Web's field labels are sentence case (§4).

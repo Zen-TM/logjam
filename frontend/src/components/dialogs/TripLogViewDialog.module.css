@@ -1,33 +1,68 @@
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.summary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.date {
+  margin: 0;
+  color: var(--theme-text-muted);
+}
+
+.pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .section {
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
+  gap: 6px;
 }
 
-.sectionLabel {
+.muted {
+  margin: 0;
   color: var(--theme-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  font-size: 0.7rem;
-  margin-bottom: 0.15rem;
 }
 
-.fieldRow {
-  display: flex;
-  gap: 0.5rem;
-  align-items: baseline;
+.notes {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: var(--font-base);
 }
 
-.fieldLabel {
-  color: var(--theme-text-muted);
-  min-width: 7rem;
-  flex-shrink: 0;
-}
-
-.mediaScroll {
+.attributes {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  max-height: 40vh;
-  overflow-y: auto;
+  gap: 4px;
+  margin: 0;
+}
+
+.attribute {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--gutter);
+}
+
+.attribute dt {
+  color: var(--theme-text-muted);
+}
+
+.attribute dd {
+  margin: 0;
+  font-weight: 600;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+/* The destructive verb stands apart from Edit, at the footer's far end. */
+.delete {
+  margin-right: auto;
 }

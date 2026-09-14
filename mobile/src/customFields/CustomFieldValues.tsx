@@ -18,7 +18,7 @@ import {
 } from "@logjam/shared";
 
 import { railStops } from "./fieldValueCoercion";
-import { formatDateKey } from "../logs/logbook";
+import { formatDateKey } from "@logjam/shared";
 import { fontSize, spacing, theme } from "../theme";
 import { Row, SegmentedControl, TextField, Toggle, type SegmentOption } from "../ui";
 

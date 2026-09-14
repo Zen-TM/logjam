@@ -43,7 +43,12 @@ function parseDesignTokens() {
     if (entries.length === 0) throw new Error(`${name} parsed empty`);
     return entries;
   };
-  return { ink: ink[1], assetHues: hues("ASSET_HUES"), statusHues: hues("PLACE_STATUS_HUES") };
+  return {
+    ink: ink[1],
+    assetHues: hues("ASSET_HUES"),
+    statusHues: hues("PLACE_STATUS_HUES"),
+    tripTypeHues: hues("TRIP_TYPE_OPEN_HUES"),
+  };
 }
 
 // ─── WCAG relative luminance + contrast ratio ───────────────────────────────
@@ -112,13 +117,15 @@ const OWNED_MARKER = PLACE_TYPE_COLORS[0];
 // Read from the declaration, not restated: it is reserved precisely so it is
 // never a type colour, and a copy here is the half that would drift.
 const SHARED_MARKER = parseSharedPlaceColor();
-const { ink: INK, assetHues: ASSET_HUES, statusHues: STATUS_HUES } = parseDesignTokens();
+const { ink: INK, assetHues: ASSET_HUES, statusHues: STATUS_HUES, tripTypeHues: TRIP_TYPE_HUES } = parseDesignTokens();
 // Every hue that fills a chip, tile or badge with a label on it.
 const LABELLED_FILLS = [
   ...PLACE_TYPE_COLORS.map((color) => [`place-type ${color}`, color]),
   ["shared heath", SHARED_MARKER],
   ...ASSET_HUES.map(([name, color]) => [`asset hue ${name}`, color]),
   ...STATUS_HUES.map(([name, color]) => [`status hue ${name}`, color]),
+  // A user-typed trip type's tile and its active chip (tripTypeIdentity).
+  ...TRIP_TYPE_HUES.map(([name, color]) => [`trip type hue ${name}`, color]),
 ];
 
 /** Logjam GPS `Row` tile: hue glyph on `withAlpha(hue, 0.16)` over the card. */
@@ -246,8 +253,17 @@ function pairsFor(t) {
     // wash of itself on a card; measured at its worst hue, because it fails for
     // several and one line per hue would bury the rest of the report.
     worstTilePair(t),
+    // A trip with no type, and a place not yet on a trip in the trip form's
+    // picker: the scheme's bonus1 as a tile fill under the ink glyph.
+    { name: "ink on bonus1 (untyped trip tile, trip form place picker)", fg: INK, bg: t.bonus1, min: 3 },
+    { name: "bonus1 chip glyph on secondary (No type chip)", fg: t.bonus1, bg: t.secondary, min: 3 },
     // A chip's leading glyph, inactive: the hue on the chip's card colour.
-    ...[...PLACE_TYPE_COLORS.map((color) => [`place-type ${color}`, color]), ...STATUS_HUES].map(
+    ...[
+      ...PLACE_TYPE_COLORS.map((color) => [`place-type ${color}`, color]),
+      ...STATUS_HUES,
+      ...TRIP_TYPE_HUES,
+      ...ASSET_HUES.filter(([name]) => ["overlay", "geoPdf", "import"].includes(name)),
+    ].map(
       ([name, color]) => ({ name: `${name} chip glyph on secondary (UI)`, fg: color, bg: t.secondary, min: 3 }),
     ),
     { name: "textPrimary on bonus2 (Logjam GPS hero fill)", fg: t.textPrimary, bg: t.bonus2, min: 4.5 },

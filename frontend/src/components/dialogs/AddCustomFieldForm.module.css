@@ -1,20 +1,43 @@
 .addFieldForm {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  padding: 0.75rem;
-  border: 1px solid color-mix(in srgb, var(--theme-text-primary) 10%, transparent);
-  border-radius: var(--radius-sm);
+  gap: 12px;
+  padding: 12px;
+  border: var(--hairline);
+  border-radius: var(--radius-md);
 }
 
+.note {
+  margin: 0;
+  font-size: var(--font-xs);
+  color: var(--theme-text-muted);
+}
+
+.scope {
+  display: flex;
+  flex-direction: column;
+}
+
+.groupLabel {
+  font-size: var(--font-sm);
+  color: var(--theme-text-muted);
+}
+
+.labelRow,
 .boundsRow {
   display: flex;
-  gap: 0.5rem;
-  align-items: center;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.grow {
+  flex: 1;
+  min-width: 96px;
 }
 
 .actionsRow {
   display: flex;
-  gap: 0.5rem;
+  gap: 8px;
   justify-content: flex-end;
 }

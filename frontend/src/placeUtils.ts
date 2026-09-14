@@ -961,6 +961,20 @@ export function deleteTripLog(id: string): Promise<void> {
   return apiFetch<void>(`/trips/${id}`, { method: "DELETE" });
 }
 
+/** Owner-only, one request for a selection. The server refuses more than its
+ *  `BULK_DELETE_LIMIT` at once (413), so a longer selection is sent in chunks. */
+export async function bulkDeleteTripLogs(ids: string[], chunkSize = 500): Promise<string[]> {
+  const deleted: string[] = [];
+  for (let start = 0; start < ids.length; start += chunkSize) {
+    const { deletedIds } = await apiFetch<{ deletedIds: string[] }>("/trips/bulk/delete", {
+      method: "POST",
+      body: { ids: ids.slice(start, start + chunkSize) },
+    });
+    deleted.push(...deletedIds);
+  }
+  return deleted;
+}
+
 // ── Unified file import (idempotent, batch-tagged) ────────────
 
 export type BulkPlaceInput = {
@@ -1064,6 +1078,9 @@ export function useTripLogs(enabled: boolean) {
   // True owner-filtered total before the server's list cap; null until known.
   const [total, setTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+  // False until the first fetch settles: an empty list before then is not "no
+  // trips yet", and saying so flashes a first-run screen at every user.
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fetchCount, setFetchCount] = useState(0);
 
@@ -1079,13 +1096,17 @@ export function useTripLogs(enabled: boolean) {
         setTotal(total);
       })
       .catch((err) => { console.error(err); if (!cancelled) setError(messageFromError(err, "Couldn't load trip logs.")); })
-      .finally(() => { if (!cancelled) setLoading(false); });
+      .finally(() => {
+        if (cancelled) return;
+        setLoading(false);
+        setLoaded(true);
+      });
     return () => { cancelled = true; };
   }, [enabled, fetchCount]);
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
 
-  return { tripLogs, total, loading, error, refetch };
+  return { tripLogs, total, loading, loaded, error, refetch };
 }
 
 // ── Media (object storage) ────────────────────────────────────
@@ -1273,53 +1294,6 @@ export function useStandaloneTracks(files: StandaloneFile[], shownIds: string[])
   }, [files, shownIds]);
 
   return { tracks, error };
-}
-
-// ── Analytics ─────────────────────────────────────────────────
-
-// /analytics is the canyoning surface: the server scopes every trip-derived
-// stat to trips that are place-linked OR tagged canyoning (a place link means
-// "I completed that place on that trip"). There is no type filter — it took no
-// argument but "canyoning" from its only caller, and there is no dropdown.
-export type TAnalytics = {
-  heroStats: {
-    totalTrips: number;
-    uniquePlaces: number;
-    daysCanyoning: number;
-    totalAbseils: number | null;
-  };
-  completion: {
-    totalPlaces: number;
-    placesWithTrips: number;
-  };
-  // Per-day trip counts across ALL trip types — drives the Activity calendar.
-  tripDates: Record<string, number>;
-  // Distinct types across ALL the user's trips, canyoning or not.
-  types: string[];
-};
-
-export function getAnalytics(): Promise<TAnalytics> {
-  return apiFetch<TAnalytics>("/analytics");
-}
-
-export function useAnalytics(enabled: boolean) {
-  const [analytics, setAnalytics] = useState<TAnalytics | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [fetchCount, setFetchCount] = useState(0);
-
-  useEffect(() => {
-    if (!enabled) return;
-    setLoading(true);
-    getAnalytics()
-      .then(setAnalytics)
-      .catch((err) => { console.error(err); setError(messageFromError(err, "Couldn't load analytics.")); })
-      .finally(() => setLoading(false));
-  }, [enabled, fetchCount]);
-
-  const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
-
-  return { analytics, loading, error, refetch };
 }
 
 // ── Friends ───────────────────────────────────────────────────

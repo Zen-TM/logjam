@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useLayoutEffect,
   useRef,
   useState,
@@ -10,7 +11,8 @@ import {
   type ReactNode,
   type Ref,
 } from "react";
-import type { LucideIcon } from "lucide-react";
+import { Plus, Star, type LucideIcon } from "lucide-react";
+import { FieldError } from "../components/feedback/FieldError";
 import { nextEnabledIndex } from "./rovingFocus";
 import classes from "./Chip.module.css";
 
@@ -27,6 +29,7 @@ export function Chip({
   hue,
   active = false,
   dashed = false,
+  starred = false,
   className,
   style,
   ref,
@@ -39,6 +42,8 @@ export function Chip({
   hue?: string;
   active?: boolean;
   dashed?: boolean;
+  /** A trailing star: this one's place in a selection means something. */
+  starred?: boolean;
   ref?: Ref<HTMLButtonElement>;
 }) {
   return (
@@ -56,12 +61,130 @@ export function Chip({
     >
       {Icon && <Icon size={14} aria-hidden className={classes.glyph} />}
       <span>{label}</span>
+      {starred && <Star size={12} aria-hidden fill="currentColor" className={classes.glyph} />}
       {count != null && (
         <span className={classes.count} aria-hidden>
           {count}
         </span>
       )}
     </button>
+  );
+}
+
+/**
+ * Several choices from a vocabulary the user can extend — a trip's types
+ * (Logjam GPS's `ChipPicker`). Each chip is a toggle button, and chips keep
+ * VOCABULARY order whatever is picked: moving a picked chip to the front made
+ * every press a re-read of the whole block. Where the order of the picks means
+ * something, the chip it decides is `primaryValue`, starred rather than moved.
+ *
+ * `onAdd` puts an "Add" chip at the end that becomes a small field: Enter adds,
+ * Escape backs out of the field alone (never the dialog around it), and leaving
+ * it adds what was typed.
+ */
+export function ChipPicker({
+  label,
+  options,
+  selected,
+  onToggle,
+  onAdd,
+  addLabel = "Add",
+  lockedValues,
+  primaryValue,
+  hint,
+  error,
+}: {
+  label: string;
+  options: readonly Omit<ChipOption<string>, "count">[];
+  selected: readonly string[];
+  onToggle: (value: string) => void;
+  onAdd?: (label: string) => void;
+  addLabel?: string;
+  /** Picked and not changeable here. Say why in `hint`. */
+  lockedValues?: ReadonlySet<string>;
+  primaryValue?: string;
+  hint?: string;
+  error?: string | null;
+}) {
+  const legendId = useId();
+  const hintId = useId();
+  const errorId = useId();
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+  const addChipRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (adding) inputRef.current?.focus();
+  }, [adding]);
+
+  const finish = (commit: boolean) => {
+    const trimmed = draft.trim();
+    if (commit && trimmed && onAdd) onAdd(trimmed);
+    setDraft("");
+    setAdding(false);
+  };
+
+  const picked = new Set(selected);
+  return (
+    <div
+      role="group"
+      aria-labelledby={legendId}
+      aria-describedby={[hint && hintId, error && errorId].filter(Boolean).join(" ") || undefined}
+      className={classes.picker}
+    >
+      <span id={legendId} className={classes.pickerLabel}>
+        {label}
+      </span>
+      <div className={classes.pickerChips}>
+        {options.map((option) => (
+          <Chip
+            key={option.value}
+            label={option.label}
+            icon={option.icon}
+            hue={option.hue}
+            active={picked.has(option.value)}
+            aria-pressed={picked.has(option.value)}
+            disabled={option.disabled || lockedValues?.has(option.value)}
+            starred={option.value === primaryValue}
+            aria-label={option.value === primaryValue ? `${option.label}, starred` : undefined}
+            onClick={() => onToggle(option.value)}
+          />
+        ))}
+        {onAdd &&
+          (adding ? (
+            <input
+              ref={inputRef}
+              className={classes.pickerInput}
+              value={draft}
+              aria-label={addLabel}
+              placeholder={addLabel}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  // Inside a form, Enter would otherwise submit it.
+                  event.preventDefault();
+                  finish(true);
+                  addChipRef.current?.focus();
+                } else if (event.key === "Escape") {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  finish(false);
+                }
+              }}
+              onBlur={() => finish(true)}
+            />
+          ) : (
+            <Chip ref={addChipRef} label={addLabel} icon={Plus} dashed onClick={() => setAdding(true)} />
+          ))}
+      </div>
+      {hint && (
+        <p id={hintId} className={classes.pickerHint}>
+          {hint}
+        </p>
+      )}
+      <FieldError id={errorId} message={error ?? null} />
+    </div>
   );
 }
 

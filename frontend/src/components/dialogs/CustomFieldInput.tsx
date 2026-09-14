@@ -1,9 +1,7 @@
-import { Checkbox, FormControlLabel, TextField } from "@mui/material";
 import type { TripLogCustomFieldDef } from "@logjam/shared";
 import { customFieldDisplayLabel } from "@logjam/shared";
-import { fieldSx, touchTargetSx } from "../../csvImport/dialogStyles";
 import { numericFieldError, type NumericFieldConstraints } from "../../numberInput";
-import ValidatedNumberField from "./ValidatedNumberField";
+import { Checkbox, NumberField, TextField } from "../../ui";
 
 /**
  * Numeric constraints for a custom field. Integer-ness comes from the field
@@ -31,9 +29,9 @@ export function customFieldValueError(
 }
 
 /**
- * A single custom-field input, shared between PlaceDialog and TripLogDialog
- * (UX-002/UX-003: shared TextField styling so both dialogs' custom-field
- * inputs are pixel-identical).
+ * A single attribute's input, shared between PlaceDialog and TripLogDialog so
+ * the two cannot drift (UX-002/UX-003). The control is chosen by the
+ * definition's TYPE, never by its key.
  *
  * `value` is expected to come from `customFieldValues.getFieldValue`, which
  * defaults unset boolean fields to "false" (UX-004) so the checkbox below
@@ -51,51 +49,33 @@ function CustomFieldInput({
   // Force the inline error to show even before blur (Save attempt).
   showError?: boolean;
 }) {
+  const label = customFieldDisplayLabel(def);
+
   if (def.type === "boolean") {
-    return (
-      <FormControlLabel
-        key={def.key}
-        control={
-          <Checkbox
-            checked={value === "true"}
-            onChange={(e) => onChange(String(e.target.checked))}
-            sx={{ ...touchTargetSx, color: "var(--theme-text-muted)" }}
-          />
-        }
-        label={customFieldDisplayLabel(def)}
-        sx={{ color: "var(--theme-text-primary)" }}
-      />
-    );
+    return <Checkbox label={label} checked={value === "true"} onChange={(next) => onChange(String(next))} />;
   }
 
   if (def.type === "integer" || def.type === "float") {
-    // Validated numeric field: a decimal typed into an integer field shows an
-    // inline "Whole numbers only" error instead of being silently truncated
-    // (TRIP-1), and out-of-range values on bounded fields are flagged instead
-    // of silently clamped (TRIP-2).
+    // A decimal typed into an integer field shows "Whole numbers only" instead
+    // of being silently truncated (TRIP-1), and an out-of-range value on a
+    // bounded field is flagged instead of silently clamped (TRIP-2).
     return (
-      <ValidatedNumberField
-        label={customFieldDisplayLabel(def)}
+      <NumberField
+        label={label}
         value={value}
         onChange={onChange}
         constraints={customFieldConstraints(def)}
         showError={showError}
-        sx={fieldSx}
       />
     );
   }
 
   return (
     <TextField
-      key={def.key}
-      label={customFieldDisplayLabel(def)}
+      label={label}
       value={value}
-      onChange={(e) => onChange(e.target.value)}
+      onChange={(event) => onChange(event.target.value)}
       type={def.type === "date" ? "date" : "text"}
-      size="small"
-      fullWidth
-      InputLabelProps={def.type === "date" ? { shrink: true } : undefined}
-      sx={fieldSx}
     />
   );
 }

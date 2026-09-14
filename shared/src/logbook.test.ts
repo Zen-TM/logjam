@@ -1,19 +1,31 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  activityTalliesOverlap,
   countTripsInLastMonths,
+  dateRangeLabel,
   datePresets,
   distinctPlaceCount,
+  fieldStatDisplay,
   formatTripDate,
   groupTripsByYear,
+  logbookActivityLabel,
   logbookRanges,
   monthBucketsForYear,
   monthlyTripCounts,
+  statsCadence,
+  statsHeadline,
+  statsSpark,
+  todayDateKey,
+  tripAttributeEntries,
   tripYear,
   yearBuckets,
-} from "./logbook";
+} from "./logbook.js";
+import { computeLogbookStats, UNTAGGED_ACTIVITY } from "./logbookStats.js";
+import type { TripLogCustomFieldDef } from "./tripLogFields.js";
 
-import { fromDateKey, todayDateKey } from "../ui/monthGrid";
+/** UTC midnight of a "YYYY-MM-DD" key — the instant the API stores. */
+const fromDateKey = (key: string) => new Date(`${key}T00:00:00.000Z`);
 
 describe("date handling", () => {
   it("reads a UTC-midnight date as its own calendar day", () => {
@@ -21,6 +33,13 @@ describe("date handling", () => {
     expect(tripYear("2026-01-01T00:00:00.000Z")).toBe(2026);
     expect(formatTripDate("2026-03-15T00:00:00.000Z")).toContain("15");
     expect(formatTripDate("2026-03-15T00:00:00.000Z")).toContain("2026");
+  });
+});
+
+describe("dateRangeLabel", () => {
+  it("says an open bound in words", () => {
+    expect(dateRangeLabel(null, null)).toBe("Any time → Today");
+    expect(dateRangeLabel("2026-01-01", null)).toMatch(/2026 → Today$/);
   });
 });
 
@@ -141,6 +160,15 @@ function inTimeZone<T>(timeZone: string, run: () => T): T {
   }
 }
 
+describe("todayDateKey", () => {
+  it("is the LOCAL calendar day, not the UTC one", () => {
+    // 07:00 on 15 March in Sydney is still 14 March in UTC.
+    inTimeZone("Australia/Sydney", () => {
+      expect(todayDateKey(new Date("2026-03-14T20:00:00.000Z"))).toBe("2026-03-15");
+    });
+  });
+});
+
 describe("the current-month bucket in a non-UTC timezone", () => {
   // 00:30 on 1 August in Sydney (UTC+10) — still 31 July in UTC. The whole of
   // the local 1st sits in the previous UTC month, and around 40% of every other
@@ -149,7 +177,7 @@ describe("the current-month bucket in a non-UTC timezone", () => {
 
   it("buckets a trip logged 'today' into the month the user is in", () => {
     inTimeZone("Australia/Sydney", () => {
-      // Exactly what the trip editor stores for "today" (ui/monthGrid.ts).
+      // Exactly what both trip forms store for "today".
       const storedToday = fromDateKey(todayDateKey(earlyOnTheFirst));
       expect(storedToday.toISOString()).toBe("2026-08-01T00:00:00.000Z");
 
@@ -221,7 +249,7 @@ describe("logbookRanges", () => {
     });
   });
 
-  it("shares its relative presets with the Logs filter sheet", () => {
+  it("shares its relative presets with the Logs date filter", () => {
     const ranges = logbookRanges([], "2026-09-13");
     for (const preset of datePresets("2026-09-13")) {
       expect(ranges).toContainEqual(preset);
@@ -272,5 +300,102 @@ describe("stats spark buckets", () => {
 
   it("has no year axis with no trips", () => {
     expect(yearBuckets([])).toEqual([]);
+  });
+});
+
+describe("stats presentation", () => {
+  const base = computeLogbookStats({
+    trips: [
+      { id: "1", date: "2024-03-02T00:00:00.000Z", types: ["canyoning"], places: [{ id: "p", name: "Claustral" }], customFields: {} },
+      { id: "2", date: "2026-03-07T00:00:00.000Z", types: ["canyoning", "abseil course"], places: [{ id: "p", name: "Claustral" }], customFields: {} },
+      { id: "3", date: "2026-03-08T00:00:00.000Z", types: [], places: [], customFields: {} },
+    ],
+    places: [{ id: "p", name: "Claustral", placeTypeId: "t", fieldValues: {} }],
+    tripDefs: [],
+    placeDefs: [],
+    placeTypes: [{ id: "t", name: "Canyon", color: "#000000" }],
+  });
+  const allTime = { label: "All time", from: null, to: null };
+
+  it("draws years for a multi-year all-time range, and a year pill's months", () => {
+    expect(statsSpark(base, allTime).axis).toBe("year");
+    const pill = statsSpark(base, { label: "2024", from: "2024-01-01", to: "2024-12-31" });
+    expect(pill).toMatchObject({ axis: "month", year: 2024 });
+    expect(pill.buckets).toHaveLength(12);
+  });
+
+  it("names the busiest month and states the cadence in words", () => {
+    const { busiest, lines } = statsCadence(base, null);
+    expect(busiest).toMatch(/^busiest .*2026 · 2 trips$/);
+    expect(lines[0]).toMatch(/^first trip /);
+    // 2 Mar 2024, 7 Mar 2026 and 8 Mar 2026: a Saturday, a Saturday, a Sunday.
+    expect(lines).toContain("3 of 3 trips fell on a weekend");
+    expect(lines).toContain("longest run 2 days back to back");
+  });
+
+  it("swaps New places for Revisited on an unbounded range", () => {
+    expect(statsHeadline(base, null, false).map((tile) => tile.label)).toEqual([
+      "Trips",
+      "Places visited",
+      "Activity types",
+      "Revisited",
+    ]);
+    expect(statsHeadline(base, "canyoning", true).at(-1)).toEqual({ label: "New places", value: "1" });
+  });
+
+  it("files a tag-less trip under Untagged, and flags double-counted tags", () => {
+    expect(logbookActivityLabel(UNTAGGED_ACTIVITY)).toBe("Untagged");
+    expect(logbookActivityLabel("canyoning")).toBe("Canyoning");
+    expect(activityTalliesOverlap(base)).toBe(true);
+  });
+
+  it("gives a quantity an average and a highest, never a total", () => {
+    const display = fieldStatDisplay({
+      kind: "quantity",
+      key: "pitches",
+      label: "Pitches",
+      total: 30,
+      average: 7.5,
+      best: { value: 12, label: "Claustral" },
+    });
+    expect(display).toEqual({ metric: { value: "7.5", suffix: "avg" }, subtitle: "highest 12, Claustral" });
+  });
+
+  it("counts a vocabulary with ×, so a spaced value stays one value", () => {
+    expect(
+      fieldStatDisplay({ kind: "vocabulary", key: "k", label: "Permit", values: [{ value: "NPWS 114", count: 4 }] }),
+    ).toEqual({ subtitle: "NPWS 114 ×4" });
+  });
+});
+
+describe("tripAttributeEntries", () => {
+  const defs: TripLogCustomFieldDef[] = [
+    { key: "party_size", label: "Party size", type: "integer" },
+    { key: "wetsuit", label: "Wetsuit", type: "boolean" },
+    { key: "permit", label: "Permit", type: "string" },
+  ];
+
+  it("lists defined values in definition order, skipping ones the trip never answered", () => {
+    expect(tripAttributeEntries(defs, { wetsuit: false, party_size: 4 })).toEqual([
+      { key: "party_size", label: "Party size", value: 4, type: "integer" },
+      { key: "wetsuit", label: "Wetsuit", value: false, type: "boolean" },
+    ]);
+  });
+
+  it("keeps a stored null, which is an answer the form wrote", () => {
+    expect(tripAttributeEntries(defs, { permit: null })).toHaveLength(1);
+  });
+
+  it("puts a value whose definition is gone last, under an un-slugged label", () => {
+    expect(tripAttributeEntries(defs, { water_level: "low", wetsuit: true }).at(-1)).toEqual({
+      key: "water_level",
+      label: "Water level",
+      value: "low",
+      type: null,
+    });
+  });
+
+  it("is empty for a trip with nothing stored", () => {
+    expect(tripAttributeEntries(defs, null)).toEqual([]);
   });
 });

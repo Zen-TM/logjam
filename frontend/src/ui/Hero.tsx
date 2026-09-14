@@ -1,4 +1,6 @@
 import type { CSSProperties, ReactNode } from "react";
+import { ArrowLeft } from "lucide-react";
+import { IconButton } from "./Button";
 import classes from "./Hero.module.css";
 
 /**
@@ -17,14 +19,21 @@ import classes from "./Hero.module.css";
 export function Hero({
   title,
   actions,
+  onBack,
+  backLabel = "Back",
   children,
 }: {
   title: string;
   actions?: ReactNode;
+  /** A view one step inside the page (one activity's stats): an arrow before
+   *  the title goes back out. */
+  onBack?: () => void;
+  backLabel?: string;
   children?: ReactNode;
 }) {
   return (
-    <header className={classes.hero}>
+    <header className={classes.hero} data-back={onBack ? true : undefined}>
+      {onBack && <IconButton icon={ArrowLeft} label={backLabel} onClick={onBack} />}
       <h2 className={children ? "visually-hidden" : classes.title}>{title}</h2>
       {children}
       {actions}

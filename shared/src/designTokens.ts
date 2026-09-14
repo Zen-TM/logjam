@@ -26,8 +26,10 @@ export const ASSET_HUES = {
   /** Topo overlays (contours, slope, vegetation) — eucalypt leaf. */
   overlay: "#9DBE8B",
   /** GeoPDF maps — fired clay, a lifted cousin of the sandstone rust. Lifted
-   *  again from #C97B4A (2026-09-13): 2.72:1 as a glyph on Sandstone. */
-  geoPdf: "#CE885C",
+   *  from #C97B4A (2026-09-13): 2.72:1 as a glyph on Sandstone; and again from
+   *  #CE885C (2026-09-14): 2.54:1 as a chip glyph on a Sandstone card, where
+   *  the bikepacking trip type borrows it. */
+  geoPdf: "#D99B72",
   /** Routes you drew — she-oak green, distinct from the imported-file blue
    *  because a route is authored rather than brought in. */
   route: "#8FBFA6",
@@ -39,6 +41,19 @@ export const ASSET_HUES = {
    *  waypoint is a thing you are trying to FIND again. Lifted from #D4715E
    *  (2026-09-13): 2.68:1 as a glyph on Sandstone. */
   waypoint: "#D98170",
+} as const;
+
+/**
+ * Hues for trip types the USER typed, picked by a hash of the label
+ * (`tripTypeIdentity`). The seeded activities borrow asset hues and canyoning
+ * takes the accent; these are the rest. Same palette rule as `ASSET_HUES`.
+ */
+export const TRIP_TYPE_OPEN_HUES = {
+  heath: "#B79EC0",
+  dryGrass: "#C9B37B",
+  lichen: "#8FBFAE",
+  waratah: "#D3A0A0",
+  ridge: "#A9B4CE",
 } as const;
 
 /**

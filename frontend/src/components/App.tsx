@@ -40,7 +40,6 @@ import {
   useFriends,
   useNotifications,
   useTripLogs,
-  useAnalytics,
   useCurrentUser,
   useLiveVectorStyle,
   useTopoExports,
@@ -563,7 +562,7 @@ function App() {
   const {
     tripLogs,
     total: tripLogsTotal,
-    loading: tripLogsLoading,
+    loaded: tripLogsLoaded,
     error: tripLogsError,
     refetch: refetchTripLogs,
   } = useTripLogs(loadsUserData);
@@ -580,7 +579,6 @@ function App() {
     refetchTripLogs();
     refetch();
   }, [refetchTripLogs, refetch]);
-  const { analytics, loading: analyticsLoading, error: analyticsError, refetch: refetchAnalytics } = useAnalytics(loadsUserData);
   const {
     vectorStyle,
     setVectorStyle: setLiveVectorStyle,
@@ -599,18 +597,12 @@ function App() {
   // dialog must offer every one or a user could never make their first canyon.
   const [placeTypes, setPlaceTypes] = useState<TPlaceType[]>([]);
 
-  // Refresh analytics whenever Logs opens on its Stats view
-  useEffect(() => {
-    if (activePanel === "logs" && logsView === "stats" && loadsUserData) refetchAnalytics();
-  }, [activePanel, logsView, loadsUserData]); // eslint-disable-line react-hooks/exhaustive-deps
-
   // Surface background data-load errors as toasts
   useEffect(() => { if (placesError) toast.error(placesError); }, [placesError, toast]);
   useEffect(() => { if (sharedError) toast.error(sharedError); }, [sharedError, toast]);
   useEffect(() => { if (friendsError) toast.error(friendsError); }, [friendsError, toast]);
   useEffect(() => { if (notificationsError) toast.error(notificationsError); }, [notificationsError, toast]);
   useEffect(() => { if (tripLogsError) toast.error(tripLogsError); }, [tripLogsError, toast]);
-  useEffect(() => { if (analyticsError) toast.error(analyticsError); }, [analyticsError, toast]);
   useEffect(() => { if (vectorStyleSaveError) toast.error(vectorStyleSaveError); }, [vectorStyleSaveError, toast]);
 
   useEffect(() => {
@@ -1377,17 +1369,14 @@ function App() {
           onCancelPickCoords={cancelPickingCoords}
           tripLogs={tripLogs}
           tripLogsTotal={tripLogsTotal}
-          tripLogsLoading={tripLogsLoading}
+          tripLogsLoaded={tripLogsLoaded}
           onRefetchTripLogs={refetchAfterTripWrite}
-          onRefetchAnalytics={refetchAnalytics}
           customFieldDefs={customFieldDefs}
           onCustomFieldDefsChange={setCustomFieldDefs}
           placeCustomFieldDefs={placeCustomFieldDefs}
           onPlaceCustomFieldDefsChange={setPlaceCustomFieldDefs}
           placeTypes={placeTypes}
           onPlaceTypesChange={setPlaceTypes}
-          analytics={analytics}
-          analyticsLoading={analyticsLoading}
           vectorStyle={vectorStyle}
           onVectorStyleChange={setLiveVectorStyle}
           collapseToPeek={mapInteractionActive}
@@ -1624,7 +1613,6 @@ function App() {
         currentUser={currentUser}
         onRefetchPlaces={refetch}
         onRefetchTripLogs={refetchTripLogs}
-        onRefetchAnalytics={refetchAnalytics}
         onPickCoords={startPickingCoords}
       />
 

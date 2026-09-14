@@ -121,6 +121,36 @@ test.describe("desktop", () => {
     await expect(form.getByLabel(/^Name/).first()).toHaveValue("Unsaved name");
   });
 
+  test("Logs, a trip, its form, and Stats", async ({ page }) => {
+    await openApp(page);
+    await page.getByRole("button", { name: "Logs", exact: true }).click();
+    const aside = page.locator("aside");
+    await expect(aside.getByRole("heading", { level: 2, name: /trips?$/ })).toBeVisible({ timeout: 15_000 });
+    await expectNoViolations(page, "aside");
+
+    const rowMenu = aside.getByRole("button", { name: /^Actions for / }).first();
+    await rowMenu.click();
+    await page.getByRole("menuitem", { name: "Open trip" }).click();
+    const view = page.locator("dialog[open]");
+    await expect(view.getByRole("button", { name: "Edit trip" })).toBeVisible();
+    await expectNoViolations(page, "dialog");
+
+    // Edit swaps the view for the form, focus on its first field.
+    await view.getByRole("button", { name: "Edit trip" }).click();
+    const form = page.getByRole("dialog", { name: "Edit trip" });
+    await expect(form).toBeVisible();
+    await expect(form.getByLabel("Date")).toBeFocused();
+    await expectNoViolations(page, "dialog");
+
+    // An untouched form closes on Escape without asking.
+    await page.keyboard.press("Escape");
+    await expect(form).toBeHidden();
+
+    await aside.getByRole("radio", { name: "Stats" }).click();
+    await expect(aside.getByRole("heading", { level: 2, name: /out$/ })).toBeVisible();
+    await expectNoViolations(page, "aside");
+  });
+
   test("the Layers popover", async ({ page }) => {
     await openApp(page);
     await page.getByRole("button", { name: "Layers", exact: true }).click();

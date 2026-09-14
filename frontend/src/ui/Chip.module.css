@@ -69,6 +69,50 @@
   color: var(--theme-text-muted);
 }
 
+/* ── Picker ────────────────────────────────────────────────────────────── */
+
+.picker {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* A field's label, not a section title: sentence case, like TextField's. */
+.pickerLabel {
+  font-size: var(--font-sm);
+  color: var(--theme-text-muted);
+}
+
+.pickerChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pickerInput {
+  width: 140px;
+  min-height: var(--control-md);
+  box-sizing: border-box;
+  padding: 0 12px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--theme-accent);
+  background: var(--surface-field);
+  color: var(--theme-text-primary);
+  font: inherit;
+  font-size: var(--font-sm);
+}
+
+.pickerInput:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1px var(--theme-accent);
+}
+
+.pickerHint {
+  margin: 0;
+  font-size: var(--font-xs);
+  color: var(--theme-text-muted);
+}
+
 /* ── Rail ──────────────────────────────────────────────────────────────── */
 
 .rail {

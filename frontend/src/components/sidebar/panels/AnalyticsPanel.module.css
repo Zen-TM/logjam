@@ -1,374 +1,82 @@
-/* No height lock and no inner overflow: the panel grows with its content and
-   the whole thing scrolls in the SidebarPanel body (one scrollbar, per the
-   sidebar convention). The bottom buffer is the SidebarPanel body's own
-   padding — no extra here, so it matches the other panels (e.g. Layers). */
-.panel {
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
-  padding-right: 2px;
-}
-
-/* ── Section labels ─────────────────────────────── */
-
-.sectionLabel {
-  display: block;
-  font-size: var(--text-xs);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--theme-text-muted);
-  margin-bottom: 0.5rem;
-}
-
-/* ── Stat tiles ─────────────────────────────────── */
-
-.statGrid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.5rem;
-}
-
-.statTile {
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-  padding: 0.75rem;
-  background: color-mix(in srgb, var(--theme-text-primary) 4%, transparent);
-  border: 1px solid color-mix(in srgb, var(--theme-text-primary) 8%, transparent);
-  border-radius: var(--radius-md);
-}
-
-.statValue {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--theme-text-primary);
-  line-height: 1;
-}
-
-.statLabel {
-  font-size: var(--text-xs);
-  color: var(--theme-text-muted);
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
-}
-
-/* ── Tooltip ────────────────────────────────────── */
-
-.tooltipAnchor {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  cursor: default;
-  color: var(--theme-text-muted);
-  flex-shrink: 0;
-}
-
-.tooltip {
-  display: none;
-  position: absolute;
-  bottom: calc(100% + 6px);
-  right: 0;
-  background: color-mix(in srgb, black 85%, transparent);
-  color: var(--theme-text-primary);
-  font-size: 0.7rem;
-  padding: 0.4rem 0.55rem;
-  border-radius: var(--radius-sm);
-  white-space: normal;
-  width: 180px;
-  line-height: 1.4;
-  pointer-events: none;
-  z-index: 100;
-  text-transform: none;
-  letter-spacing: normal;
-  font-weight: normal;
-}
-
-.tooltipAnchor:hover .tooltip {
-  display: block;
-}
-
-/* ── Completion ring ────────────────────────────── */
-
-.completionSection {
-  display: flex;
-  flex-direction: column;
-}
-
-.ringWrapper {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.ringSvg {
-  flex-shrink: 0;
-}
-
-.ringStrokeDash {
-  transition: stroke-dashoffset 0.6s ease;
-}
-
-.ringCenter {
-  position: absolute;
-  width: 135px;
-  height: 135px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-}
-
-.ringPct {
-  font-size: 1.65rem;
-  font-weight: 700;
-  color: var(--theme-text-primary);
-  line-height: 1;
-}
-
-.ringCaption {
-  font-size: 0.95rem;
-  color: var(--theme-text-muted);
-  margin-top: 0.2rem;
-}
-
-/* ── Heatmap section ────────────────────────────── */
-
-.heatmapSection {
-  display: flex;
-  flex-direction: column;
-}
-
-/* Navigation header */
-
-.heatmapNav {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 0.6rem;
-  gap: 0.25rem;
-}
-
-.navLabel {
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--theme-text-primary);
+/* Hero and rails pinned; the numbers scroll. */
+.root {
   flex: 1;
-  text-align: center;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
-.navArrows {
+.rails {
+  flex-shrink: 0;
   display: flex;
-  align-items: center;
-  gap: 0.1rem;
-  min-width: 2.5rem;
-  justify-content: flex-end;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px var(--gutter) 8px;
 }
 
-.navIconBtn {
+.list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  gap: 16px;
+  /* Room for each card's focus ring inside the scroller. */
+  padding: 4px var(--gutter) var(--gutter);
+}
+
+.block,
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.row {
+  flex-shrink: 0;
+}
+
+.caption {
+  margin: 0;
+  font-size: var(--font-xs);
+  color: var(--theme-text-muted);
+}
+
+/* The number in the text colour, the word that names it muted beside it. */
+.metric {
+  padding-right: 10px;
+  white-space: nowrap;
+}
+
+.metric b {
+  font-size: var(--font-base);
+  font-weight: 600;
+  color: var(--theme-text-primary);
+}
+
+.chevron {
+  margin-right: 6px;
+}
+
+/* A footer child sized to the footer's width. */
+.bar {
+  flex: 1;
+  min-width: 0;
+  padding-right: 8px;
+}
+
+.emptyArea {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   justify-content: center;
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--theme-text-muted);
-  padding: 0.25rem;
-  border-radius: var(--radius-sm);
-  transition: color var(--transition-fast), background var(--transition-fast);
+  padding: 0 var(--gutter) 15%;
 }
 
-.navIconBtn:hover:not(:disabled) {
-  color: var(--theme-text-primary);
-  background: color-mix(in srgb, var(--theme-text-primary) 7%, transparent);
-}
-
-.navIconBtn:disabled {
-  opacity: 0.25;
-  cursor: default;
-}
-
-/* ── Heat scale classes ─────────────────────────── */
-
-/* Heat ramp is capped so the lighter steps stay dark enough for light cell text
-   to keep AA contrast (1.4.3); only the solid-accent peak (heat4) flips to dark
-   text. A continuous accent→primary ramp can't hold 4.5:1 small text through its
-   mid-tones, so heat1–3 stay in the dark band and heat4 jumps to solid accent. */
-.heat0 { background: color-mix(in srgb, var(--theme-text-primary) 4%, transparent); }
-.heat1 { background: color-mix(in srgb, var(--theme-accent) 12%, transparent); }
-.heat2 { background: color-mix(in srgb, var(--theme-accent) 20%, transparent); }
-.heat3 { background: color-mix(in srgb, var(--theme-accent) 28%, transparent); }
-.heat4 { background: var(--theme-accent); }
-
-/* Solid-accent peak: dark text reads on the light fill (heat1–3 keep light text). */
-.yearCell.heat4,
-.monthCell.heat4,
-.dayCell.heat4 {
-  color: var(--theme-primary);
-}
-
-.yearCell.heat4 .yearCount,
-.monthCell.heat4 .monthCount {
-  color: color-mix(in srgb, var(--theme-primary) 72%, transparent);
-}
-
-/* ── Years grid ─────────────────────────────────── */
-
-.yearsGrid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 0.35rem;
-}
-
-.yearCell {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.1rem;
-  padding: 0.5rem 0.25rem;
-  border: 1px solid color-mix(in srgb, var(--theme-text-primary) 8%, transparent);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  color: var(--theme-text-primary);
-  transition: filter var(--transition-fast), border-color var(--transition-fast);
-}
-
-.yearCell:hover {
-  filter: brightness(1.2);
-  border-color: color-mix(in srgb, var(--theme-text-primary) 18%, transparent);
-}
-
-.yearLabel {
-  font-size: var(--text-sm);
-  font-weight: 600;
-}
-
-.yearCount {
-  font-size: 0.65rem;
-  color: var(--theme-text-muted);
-}
-
-/* ── Months grid ────────────────────────────────── */
-
-.monthsGrid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  grid-template-rows: repeat(3, 1fr);
-  gap: 0.35rem;
-}
-
-.monthCell {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.1rem;
-  padding: 0.55rem 0.25rem;
-  border: 1px solid color-mix(in srgb, var(--theme-text-primary) 8%, transparent);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  color: var(--theme-text-primary);
-  transition: filter var(--transition-fast), border-color var(--transition-fast);
-}
-
-.monthCell:hover {
-  filter: brightness(1.2);
-  border-color: color-mix(in srgb, var(--theme-text-primary) 18%, transparent);
-}
-
-.monthLabel {
-  font-size: var(--text-sm);
-  font-weight: 600;
-}
-
-.monthCount {
-  font-size: 0.65rem;
-  color: var(--theme-text-muted);
-}
-
-/* ── Calendar grid ──────────────────────────────── */
-
-.calendarGrid {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 0.2rem;
-}
-
-.calDowHeader {
-  font-size: 0.6rem;
-  color: var(--theme-text-muted);
+.loading {
+  margin: 0;
   text-align: center;
-  padding-bottom: 0.15rem;
-  font-weight: 600;
-}
-
-.dayCell {
-  aspect-ratio: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.65rem;
-  color: var(--theme-text-primary);
-  border: 1px solid color-mix(in srgb, var(--theme-text-primary) 6%, transparent);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: filter var(--transition-fast), border-color var(--transition-fast);
-}
-
-.dayCell:not(:disabled):hover {
-  filter: brightness(1.25);
-  border-color: color-mix(in srgb, var(--theme-text-primary) 18%, transparent);
-}
-
-.dayCell:disabled {
-  cursor: default;
+  font-size: var(--font-sm);
   color: var(--theme-text-muted);
-}
-
-.yearCell:focus-visible,
-.monthCell:focus-visible,
-.dayCell:focus-visible {
-  outline: 2px solid var(--theme-accent);
-  outline-offset: 1px;
-}
-
-/* ── Day trips list ─────────────────────────────── */
-
-/* No own scroll container: the day-trip list flows into the panel and scrolls
-   with it, so the user scrolls the whole analytics panel to read the list
-   rather than a nested scrollbar under the calendar. */
-.dayTripsList {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-}
-
-.tripCard {
-  composes: tripCard from '@styles/shared.module.css';
-}
-
-.tripCard:hover {
-  background: color-mix(in srgb, var(--theme-text-primary) 9%, transparent);
-}
-
-.tripPlaceName {
-  font-size: var(--text-sm);
-  font-weight: 600;
-}
-
-.tripNotes {
-  font-size: var(--text-xs);
-  opacity: 0.6;
-  line-height: 1.35;
-  margin-top: 0.1rem;
-}
-
-/* ── Empty / loading state ──────────────────────── */
-
-.emptyText {
-  font-size: var(--text-xs);
-  color: var(--theme-text-muted);
-  padding: 0.25rem 0;
 }

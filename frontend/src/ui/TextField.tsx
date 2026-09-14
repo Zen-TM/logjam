@@ -2,10 +2,12 @@ import {
   useId,
   useState,
   type ComponentProps,
+  type CSSProperties,
   type InputHTMLAttributes,
   type ReactNode,
   type Ref,
   type SelectHTMLAttributes,
+  type TextareaHTMLAttributes,
 } from "react";
 import { ChevronDown, Search } from "lucide-react";
 import { FieldError } from "../components/feedback/FieldError";
@@ -121,6 +123,41 @@ export function NumberField({
       }}
       error={touched || showError ? error : null}
     />
+  );
+}
+
+/** Several lines of text (notes). It rests at `minRows`, grows with what is
+ *  typed and stops at `maxRows`, where it scrolls: a fixed height would nest a
+ *  scrollbar inside the dialog's own. */
+export function TextArea({
+  label,
+  hideLabel,
+  hint,
+  error,
+  id,
+  className,
+  minRows = 4,
+  maxRows = 12,
+  style,
+  ref,
+  ...textareaProps
+}: TextareaHTMLAttributes<HTMLTextAreaElement> &
+  FieldLabelling & { minRows?: number; maxRows?: number; ref?: Ref<HTMLTextAreaElement> }) {
+  const autoId = useId();
+  const inputId = id ?? autoId;
+  return (
+    <Field inputId={inputId} label={label} hideLabel={hideLabel} hint={hint} error={error} className={className}>
+      <textarea
+        ref={ref}
+        id={inputId}
+        rows={minRows}
+        className={`${classes.input} ${classes.textarea}`}
+        style={{ ...style, "--min-rows": minRows, "--max-rows": maxRows } as CSSProperties}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={describedBy(inputId, hint, error)}
+        {...textareaProps}
+      />
+    </Field>
   );
 }
 

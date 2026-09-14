@@ -30,7 +30,7 @@ import {
   Toggle,
   type NumberRange,
 } from "../ui";
-import { formatDateKey } from "../logs/logbook";
+import { formatDateKey } from "@logjam/shared";
 import { useFieldDefs } from "../customFields/useFieldDefs";
 import { useMirrorPlaceTypes } from "../sync/useSyncQueries";
 

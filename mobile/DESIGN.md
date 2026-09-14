@@ -598,7 +598,8 @@ and only while something is actually parked). Don't invent a palette for a menu.
 
 Some "kinds" aren't a fixed set — trip types are a seed list the user extends
 with free text. Those can't have an exhaustive map, so (see
-`src/logs/tripTypeMeta.ts`):
+`tripTypeIdentity` in `@logjam/shared`, which Logjam Web reads too;
+`src/logs/tripTypeMeta.ts` resolves it against this app's theme and Feather):
 
 - The **seeded** entries get a fixed identity, and the canonical one
   (`canyoning`) takes the scheme accent, exactly as `assetHue.region` does.

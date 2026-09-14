@@ -44,7 +44,7 @@ import {
   withoutClearedFields,
 } from "../customFields/fieldValueCoercion";
 import { useFieldDefs } from "../customFields/useFieldDefs";
-import { formatDateKey } from "./logbook";
+import { formatDateKey } from "@logjam/shared";
 import { primaryTripType, tripTypeLabel, tripTypeMeta } from "./tripTypeMeta";
 
 /**

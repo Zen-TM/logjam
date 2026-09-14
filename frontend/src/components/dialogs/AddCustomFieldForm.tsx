@@ -1,29 +1,16 @@
-import {
-  Box,
-  Button,
-  Checkbox,
-  CircularProgress,
-  FormControlLabel,
-  MenuItem,
-  Select,
-  TextField,
-  Typography,
-} from "@mui/material";
 import type { TripLogCustomFieldType } from "@logjam/shared";
 import { CUSTOM_FIELD_TYPES } from "@logjam/shared";
-import { fieldSx, selectSx, menuPaperProps, touchTargetSx } from "../../csvImport/dialogStyles";
 import { sanitizeNumericInput } from "../../numberInput";
 import { ErrorBanner } from "../feedback/ErrorBanner";
+import { Button, Checkbox, SectionHeader, Select, TextField } from "../../ui";
 import classes from "./AddCustomFieldForm.module.css";
 
 /**
- * "New Custom Field" sub-form, shared between PlaceDialog and TripLogDialog
- * (UX-002: bordered box treatment for both; UX-003: shared field/select
- * styling so the type-select dropdown icon matches between dialogs).
+ * The "new attribute" sub-form, shared between PlaceDialog, TripLogDialog and
+ * the Settings add dialog, so they cannot drift (UX-002/UX-003).
  *
- * Bounds (min/max) are opt-in via the `bounds` prop group. Both PlaceDialog
- * and TripLogDialog pass it. The bounds row only renders for integer/float
- * types.
+ * Bounds (min/max) are opt-in via the `bounds` prop group. The bounds row only
+ * renders for integer/float types.
  */
 function AddCustomFieldForm({
   entityNoun,
@@ -81,9 +68,8 @@ function AddCustomFieldForm({
   // primary action instead, guarded by the same condition as the Add button so
   // Enter can't add a field the button wouldn't.
   //
-  // Bound to the text inputs rather than the wrapper: the type Select does its
-  // own Enter handling (open menu / choose item), and a container-level handler
-  // would fire on top of it and add the field while the user was picking a type.
+  // Bound to the text inputs rather than the wrapper: the type select does its
+  // own Enter handling, and a container-level handler would fire on top of it.
   function handleFieldKeyDown(event: React.KeyboardEvent) {
     if (event.key !== "Enter") return;
     event.preventDefault();
@@ -92,149 +78,90 @@ function AddCustomFieldForm({
   }
 
   return (
-    <Box className={classes.addFieldForm}>
-      <Typography variant="caption" sx={{ color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-        New Custom Field
-      </Typography>
-      <Typography variant="caption" sx={{ color: "var(--theme-text-muted)", fontStyle: "italic" }}>
-        This field will be created for all {entityNoun}.
-      </Typography>
-      {scope ? (
-        <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
-          <Typography
-            variant="caption"
-            sx={{ color: "var(--theme-text-muted)" }}
-          >
-            Where it appears
-          </Typography>
-          <FormControlLabel
-            control={
-              <Checkbox
-                size="small"
-                checked={scope.appliesToAllTypes}
-                onChange={(e) => scope.onAppliesToAllTypesChange(e.target.checked)}
-                sx={{ color: "var(--theme-text-muted)" }}
-              />
-            }
+    <div className={classes.addFieldForm}>
+      <div>
+        <SectionHeader title="New attribute" />
+        <p className={classes.note}>It is added to all your {entityNoun}.</p>
+      </div>
+      {scope && (
+        <div role="group" aria-label="Where it appears" className={classes.scope}>
+          <span className={classes.groupLabel}>Where it appears</span>
+          <Checkbox
             label="All types, including ones I add later"
-            slotProps={{ typography: { fontSize: "0.875rem" } }}
+            checked={scope.appliesToAllTypes}
+            onChange={scope.onAppliesToAllTypesChange}
           />
           {!scope.appliesToAllTypes &&
-            scope.types.map((type) => (
-              <FormControlLabel
-                key={type.id}
-                control={
-                  <Checkbox
-                    size="small"
-                    checked={scope.selectedTypeIds.includes(type.id)}
-                    onChange={(e) =>
-                      scope.onSelectedTypeIdsChange(
-                        e.target.checked
-                          ? [...scope.selectedTypeIds, type.id]
-                          : scope.selectedTypeIds.filter((id) => id !== type.id),
-                      )
-                    }
-                    sx={{ color: "var(--theme-text-muted)" }}
-                  />
+            scope.types.map((placeType) => (
+              <Checkbox
+                key={placeType.id}
+                label={placeType.name}
+                checked={scope.selectedTypeIds.includes(placeType.id)}
+                onChange={(checked) =>
+                  scope.onSelectedTypeIdsChange(
+                    checked
+                      ? [...scope.selectedTypeIds, placeType.id]
+                      : scope.selectedTypeIds.filter((id) => id !== placeType.id),
+                  )
                 }
-                label={type.name}
-                slotProps={{ typography: { fontSize: "0.875rem" } }}
               />
             ))}
-        </Box>
-      ) : null}
-      <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+        </div>
+      )}
+      <div className={classes.labelRow}>
         <TextField
-          label="Field Label"
+          label="Label"
+          className={classes.grow}
           value={label}
-          onChange={(e) => onLabelChange(e.target.value)}
+          onChange={(event) => onLabelChange(event.target.value)}
           onKeyDown={handleFieldKeyDown}
-          size="small"
-          fullWidth
-          placeholder="e.g. Group Size"
-          sx={fieldSx}
+          placeholder="e.g. Group size"
         />
         <Select
+          label="Type"
           value={type}
-          onChange={(e) => onTypeChange(e.target.value as TripLogCustomFieldType)}
-          size="small"
-          MenuProps={menuPaperProps}
-          sx={{ ...selectSx, flexShrink: 0 }}
+          onChange={(event) => onTypeChange(event.target.value as TripLogCustomFieldType)}
         >
-          {CUSTOM_FIELD_TYPES.map((t) => (
-            <MenuItem key={t.value} value={t.value}>
-              {t.label}
-            </MenuItem>
+          {CUSTOM_FIELD_TYPES.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
           ))}
         </Select>
-      </Box>
+      </div>
       {showBounds && (
-        <Box className={classes.boundsRow}>
-          <FormControlLabel
-            control={
-              <Checkbox
-                checked={bounds.bounded}
-                onChange={(e) => bounds.onBoundedChange(e.target.checked)}
-                sx={{ color: "var(--theme-text-muted)" }}
-              />
-            }
-            label="Bounded?"
-            sx={{ color: "var(--theme-text-primary)", mr: 0, flexShrink: 0 }}
-          />
+        <div className={classes.boundsRow}>
+          <Checkbox label="Bounded" checked={bounds.bounded} onChange={bounds.onBoundedChange} />
           <TextField
             label="Min"
+            className={classes.grow}
             value={bounds.min}
-            onChange={(e) =>
-              bounds.onMinChange(
-                sanitizeNumericInput(e.target.value, type as "integer" | "float"),
-              )
-            }
+            onChange={(event) => bounds.onMinChange(sanitizeNumericInput(event.target.value, type as "integer" | "float"))}
             onKeyDown={handleFieldKeyDown}
             disabled={!bounds.bounded}
-            size="small"
-            fullWidth
             inputMode={type === "integer" ? "numeric" : "decimal"}
-            sx={fieldSx}
           />
           <TextField
             label="Max"
+            className={classes.grow}
             value={bounds.max}
-            onChange={(e) =>
-              bounds.onMaxChange(
-                sanitizeNumericInput(e.target.value, type as "integer" | "float"),
-              )
-            }
+            onChange={(event) => bounds.onMaxChange(sanitizeNumericInput(event.target.value, type as "integer" | "float"))}
             onKeyDown={handleFieldKeyDown}
             disabled={!bounds.bounded}
-            size="small"
-            fullWidth
             inputMode={type === "integer" ? "numeric" : "decimal"}
-            sx={fieldSx}
           />
-        </Box>
+        </div>
       )}
       {error && <ErrorBanner message={error} />}
-      <Box className={classes.actionsRow}>
-        <Button
-          size="small"
-          onClick={onCancel}
-          disabled={adding}
-          sx={{ ...touchTargetSx, color: "var(--theme-text-primary)" }}
-        >
+      <div className={classes.actionsRow}>
+        <Button compact onClick={onCancel} disabled={adding}>
           Cancel
         </Button>
-        <Button
-          variant="contained"
-          color="secondary"
-          size="small"
-          onClick={onAdd}
-          disabled={adding || !label.trim()}
-          sx={touchTargetSx}
-        >
-          {adding ? <CircularProgress size={16} /> : "Add Field"}
+        <Button compact variant="filled" busy={adding} disabled={!label.trim()} onClick={onAdd}>
+          Add attribute
         </Button>
-      </Box>
-    </Box>
+      </div>
+    </div>
   );
 }
 

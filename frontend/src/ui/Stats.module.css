@@ -1,0 +1,82 @@
+.spark {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+}
+
+.bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.column {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* A wash of the text colour, as the ProgressBar track: the accent fill is
+   measured against it (scripts/wcag-contrast.mjs). */
+.track {
+  height: 28px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--theme-text-primary) 12%, transparent);
+}
+
+.fill {
+  border-radius: var(--radius-sm);
+  background: var(--theme-accent);
+}
+
+.axis {
+  text-align: center;
+  font-size: var(--font-xs);
+  color: var(--theme-text-muted);
+}
+
+.axis[data-current] {
+  font-weight: 700;
+  color: var(--theme-text-primary);
+}
+
+.caption {
+  font-size: var(--font-xs);
+  color: var(--theme-text-muted);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+}
+
+.cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 12px;
+  border: var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--theme-secondary);
+}
+
+.statLabel {
+  font-size: var(--font-xs);
+  color: var(--theme-text-muted);
+}
+
+.statValue {
+  margin: 0;
+  font-size: var(--font-lg);
+  font-weight: 600;
+  color: var(--theme-text-primary);
+}

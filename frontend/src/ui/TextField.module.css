@@ -42,6 +42,18 @@
   cursor: default;
 }
 
+/* Grows with its text between two row counts. `field-sizing` does the growing;
+   without it the box stays at `rows` and the user drags it. */
+.textarea {
+  --line: 1.4em;
+  padding: 8px 10px;
+  line-height: 1.4;
+  resize: vertical;
+  field-sizing: content;
+  min-height: calc(var(--min-rows) * var(--line) + 18px);
+  max-height: calc(var(--max-rows) * var(--line) + 18px);
+}
+
 .hint {
   margin: 0;
   font-size: var(--font-xs);
