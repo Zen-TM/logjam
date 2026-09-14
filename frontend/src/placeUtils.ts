@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { fetchAuthSession } from "aws-amplify/auth";
 import type { ScopedCustomFieldDef, StandaloneFile, ThemeSchemeId, TripLogCustomFieldDef, NotificationPreferences, MediaItem, MediaLinkedType, PlaceMergePolicy, ElevationProfile, SharableEntityType, FileSendStatus, FileSendSourceKind } from "@logjam/shared";
 import { formatTripPlaceNames, tallyNotifications } from "@logjam/shared";
+import { settleReadOverrides, withReadOverrides, type ReadOverrides } from "./notificationReadOverrides";
 import type { BulkShareItem, FriendShareRow, FriendShares } from "@logjam/shared";
 import { ApiError } from "./errors/ApiError";
 import { messageFromError } from "./errors/messageFromError";
@@ -1585,13 +1586,20 @@ export function useNotifications(enabled: boolean) {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fetchCount, setFetchCount] = useState(0);
+  const [readOverrides, setReadOverrides] = useState<ReadOverrides>(() => new Map());
 
   useEffect(() => {
     if (!enabled) return;
     // Guards a stale in-flight response landing after a newer one (FECO-001).
     let cancelled = false;
     apiFetchWithTotal<TNotification[]>("/notifications")
-      .then(({ data, total }) => { if (!cancelled) { setNotifications(data); setTotal(total); setError(null); } })
+      .then(({ data, total }) => {
+        if (cancelled) return;
+        setNotifications(data);
+        setTotal(total);
+        setError(null);
+        setReadOverrides((prev) => settleReadOverrides(prev, data));
+      })
       .catch((err) => { console.error(err); if (!cancelled) setError(messageFromError(err, "Couldn't load notifications.")); })
       .finally(() => { if (!cancelled) setLoaded(true); });
     return () => { cancelled = true; };
@@ -1603,9 +1611,25 @@ export function useNotifications(enabled: boolean) {
   // does. `/notifications/unread-count` counts every stored row, including the
   // ones the list drops because their share or friendship is gone, so the rail
   // said 11 over an inbox that said "5 unread". A batch counts once, as its row.
-  const unreadCount = useMemo(() => tallyNotifications(notifications).unread, [notifications]);
+  const shown = useMemo(() => withReadOverrides(notifications, readOverrides), [notifications, readOverrides]);
+  const unreadCount = useMemo(() => tallyNotifications(shown).unread, [shown]);
 
-  return { notifications, total, loaded, unreadCount, error, refetch };
+  /** Show `read` for these rows now, ahead of the write; `null` takes it back
+   *  (the write failed). */
+  const overrideRead = useCallback(
+    (ids: string[], read: boolean | null) =>
+      setReadOverrides((prev) => {
+        const next = new Map(prev);
+        for (const id of ids) {
+          if (read === null) next.delete(id);
+          else next.set(id, read);
+        }
+        return next;
+      }),
+    [],
+  );
+
+  return { notifications: shown, total, loaded, unreadCount, error, refetch, overrideRead };
 }
 
 // ── Filters ───────────────────────────────────────────────────

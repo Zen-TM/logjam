@@ -141,6 +141,7 @@ function NotificationsPanel({
   notificationsError,
   notificationsTotal,
   onRefetchNotifications,
+  onOverrideRead,
   onRefetchFriends,
   setSelectedPlaceID,
   setActivePanel,
@@ -153,6 +154,8 @@ function NotificationsPanel({
   /** The server's count before its list cap; null until known. */
   notificationsTotal: number | null;
   onRefetchNotifications: () => void;
+  /** Show a read state now, ahead of its write (`null` takes it back). */
+  onOverrideRead: (ids: string[], read: boolean | null) => void;
   onRefetchFriends: () => void;
   setSelectedPlaceID: (id: string | null) => void;
   setActivePanel: (panel: PanelId | null) => void;
@@ -282,10 +285,12 @@ function NotificationsPanel({
   );
 
   // ONE read-state writer, for a row, a batch and a selection, in both
-  // directions. The refetch settles what actually changed.
+  // directions. The rows change at once; the refetch confirms, and a failed
+  // write takes the change back.
   const setRead = useCallback(
     async (ids: string[], read: boolean): Promise<boolean> => {
       if (ids.length === 0) return true;
+      onOverrideRead(ids, read);
       try {
         // ponytail: one PATCH per notification — a selection is a screenful. A
         // bulk endpoint when marking hundreds at once is normal.
@@ -294,12 +299,13 @@ function NotificationsPanel({
       } catch (err) {
         console.error(err);
         toast.error(messageFromError(err, read ? "Couldn't mark that as read." : "Couldn't mark that as unread."));
+        onOverrideRead(ids, null);
         return false;
       } finally {
         onRefetchNotifications();
       }
     },
-    [onRefetchNotifications, toast],
+    [onOverrideRead, onRefetchNotifications, toast],
   );
 
   // Reading it is what marks it read; a place it is about opens on top.
@@ -377,11 +383,14 @@ function NotificationsPanel({
   };
 
   const markAllRead = async () => {
+    const unreadIds = live.filter((n) => !n.read).map((n) => n.id);
+    onOverrideRead(unreadIds, true);
     try {
       await markAllNotificationsRead();
     } catch (err) {
       console.error(err);
       toast.error(messageFromError(err, "Couldn't mark notifications read."));
+      onOverrideRead(unreadIds, null);
     } finally {
       onRefetchNotifications();
     }
@@ -427,9 +436,8 @@ function NotificationsPanel({
           await declineFileSend(target.targetId);
         }
         if (survives) {
-          // Best-effort: answering it is reading it, but the download has
-          // started, and a failed mark leaves the row unread until the refetch.
-          if (!n.read) markNotificationRead(n.id, true).catch((err) => console.error(err));
+          // Answering it is reading it.
+          if (!n.read) void setRead([n.id], true);
         } else {
           hide([n.id]);
           toast.success(action.success);
@@ -803,10 +811,6 @@ function NotificationsPanel({
                 onChange={changeBucket}
               />
             )}
-          </div>
-          <div className={classes.listHead}>
-            <span>{selecting ? "Shift-click to select a range · Ctrl+A selects all" : "Newest first"}</span>
-            <span>{countBatchRows(rows, batches)}</span>
           </div>
         </>
       )}

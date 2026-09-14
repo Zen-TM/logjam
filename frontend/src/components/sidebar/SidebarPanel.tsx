@@ -129,6 +129,7 @@ function SidebarPanel({
   notificationsError,
   notificationsTotal,
   onRefetchNotifications,
+  onOverrideNotificationRead,
   setSelectedPlaceID,
   setActivePanel,
   // Place detail
@@ -240,6 +241,7 @@ function SidebarPanel({
   notificationsError: string | null;
   notificationsTotal: number | null;
   onRefetchNotifications: () => void;
+  onOverrideNotificationRead: (ids: string[], read: boolean | null) => void;
   setSelectedPlaceID: (id: string | null) => void;
   setActivePanel: (panel: PanelId | null) => void;
   // Place detail
@@ -450,6 +452,7 @@ function SidebarPanel({
             notificationsError={notificationsError}
             notificationsTotal={notificationsTotal}
             onRefetchNotifications={onRefetchNotifications}
+            onOverrideRead={onOverrideNotificationRead}
             onRefetchFriends={onRefetchFriends}
             setSelectedPlaceID={setSelectedPlaceID}
             setActivePanel={setActivePanel}

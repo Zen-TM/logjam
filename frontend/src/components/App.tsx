@@ -558,6 +558,7 @@ function App() {
     unreadCount,
     error: notificationsError,
     refetch: refetchNotifications,
+    overrideRead: overrideNotificationRead,
   } = useNotifications(loadsUserData);
   const {
     tripLogs,
@@ -1366,6 +1367,7 @@ function App() {
           notificationsError={notificationsError}
           notificationsTotal={notificationsTotal}
           onRefetchNotifications={refetchNotifications}
+          onOverrideNotificationRead={overrideNotificationRead}
           setSelectedPlaceID={setSelectedPlaceID}
           setActivePanel={setActivePanel}
           place={place}
