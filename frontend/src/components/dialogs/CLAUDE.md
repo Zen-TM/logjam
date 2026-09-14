@@ -1,6 +1,6 @@
 # Dialogs — Logjam
 
-MUI dialogs. Unlike sidebar panels, MUI `<Button>` and `<Typography>` are correct here — dialogs are MUI-native surfaces.
+**Scope: the MUI dialogs still on `MUI_LEGACY_FILES`.** Dialogs are being rebuilt onto one kit `Dialog` (`frontend/DESIGN.md` §6); a rebuilt dialog follows DESIGN.md and the kit, and the Shell / DialogTitle / DialogContent / Buttons / Form inputs sections below stop applying to it. Until then, MUI `<Button>` and `<Typography>` are correct in the legacy dialogs. The Touch targets reasoning, the notes-field rule and the conventions log are not MUI-specific and carry over.
 
 ## Shell
 
