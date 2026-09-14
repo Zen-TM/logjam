@@ -176,7 +176,7 @@ router.get(
     // The invariant that matters is not "the two queries agree" but "a
     // notification never offers a button the endpoint would refuse", and it is
     // held below instead: an expired row is labelled `expired`, and the client
-    // renders no actions for that (`notifications/notificationActions.ts`).
+    // renders no actions for that (`shared/src/notificationActions.ts`).
     // Declined is still excluded here — that notification is deleted outright
     // at decline time, and a user who said no is not owed a reminder.
     const liveFileSends =

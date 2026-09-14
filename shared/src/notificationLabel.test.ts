@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { notificationHaystack, notificationLabel } from "./notificationLabel";
-import type { TNotification } from "../api/types";
+import { notificationHaystack, notificationLabel } from "./notificationLabel.js";
+import type { TNotification } from "./apiTypes.js";
 
 function notification(type: string, payload: Record<string, unknown> = {}): TNotification {
   return { id: "n1", type, payload, read: false, createdAt: "2026-07-23T00:00:00.000Z" };

@@ -21,18 +21,17 @@
 // cost is this file. The server's only part is stamping the same opaque
 // `batchId` on every notification one action creates.
 //
-// SPLIT BATCHES ARE NORMAL. The inbox sorts unread-first, so reading three of a
-// batch's rows moves them away from the other twenty; a filter or a search
-// narrows it further. So a batch is gathered over the WHOLE list rather than
-// from a run of adjacent rows, and it is the FIRST member in list order that
-// stands for it — which keeps an unread batch where the unread rows are.
+// SPLIT BATCHES ARE NORMAL. The Unread and Read buckets split a half-read batch
+// in two, and a search narrows it further (the list itself was once sorted
+// unread-first, which scattered members too). So a batch is gathered over the
+// WHOLE list rather than from a run of adjacent rows, and it is the FIRST
+// member in list order that stands for it.
 //
-// Its own RN-free module, like `notificationActions.ts` and `tapTarget.ts`:
-// mobile's vitest cannot parse React Native's Flow sources.
+// Shared by both inboxes, so a batch is the same thing in each.
 //
 // PRIVACY: reads the same resolved payload the rows render. Usernames are
 // server-resolved and username-only; no id reaches a label.
-import type { TNotification } from "../api/types";
+import type { TNotification } from "./apiTypes.js";
 
 /**
  * Which verb's notifications these are — and the reason a batch is keyed on it
@@ -289,4 +288,29 @@ export function tallyNotifications(
     if (batch.unreadCount > 0) unread += 1;
   }
   return { total, unread };
+}
+
+/**
+ * Replace every picked BATCH HEADER with the rows it stands for.
+ *
+ * The header is not a row of its own — it is one member of the batch wearing
+ * the batch's words — so a group verb that acted only on it would mark one of
+ * twelve read, or delete one of twelve and strand the rest. Deduped by id
+ * because an EXPANDED batch can have its header and its members picked
+ * separately.
+ */
+export function expandBatchSelection(
+  selected: TNotification[],
+  batches: Map<string, NotificationBatch>,
+): TNotification[] {
+  const byId = new Map<string, TNotification>();
+  for (const notification of selected) {
+    const batch = batches.get(batchKeyFromRowId(notification.id) ?? "");
+    if (batch) {
+      for (const member of batch.items) byId.set(member.id, member);
+    } else {
+      byId.set(notification.id, notification);
+    }
+  }
+  return [...byId.values()];
 }

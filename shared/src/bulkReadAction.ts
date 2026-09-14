@@ -12,17 +12,16 @@
 // reader label and the toast that follows must all describe the SAME outcome —
 // three places to get out of step if the branch is inlined in the screen.
 //
-// Its own RN-free module, like `notificationActions.ts` and `tapTarget.ts`:
-// mobile's vitest setup cannot parse React Native's Flow sources, so anything
-// worth testing lives away from the screen.
-import type { Feather } from "@expo/vector-icons";
+// Shared by both inboxes, so the two clients' bars cannot disagree about which
+// way the button goes.
 
 export type BulkReadAction = {
   /** The read flag to write on the affected rows. */
   read: boolean;
   /** The rows that actually change — the ones not already in that state. */
   ids: string[];
-  icon: React.ComponentProps<typeof Feather>["name"];
+  /** Named by the glyph both icon sets draw it with (Feather and lucide). */
+  icon: "eye" | "eye-off";
   /** Screen-reader label for the bar's button. */
   label: string;
   /** The toast when it lands. */

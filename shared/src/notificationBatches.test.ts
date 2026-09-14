@@ -5,7 +5,7 @@
 // be neighbours.
 import { describe, expect, it } from "vitest";
 
-import type { TNotification } from "../api/types";
+import type { TNotification } from "./apiTypes.js";
 import {
   batchKeyFromRowId,
   batchKeyOf,
@@ -13,9 +13,10 @@ import {
   batchPendingFileSends,
   collapseBatches,
   countBatchRows,
+  expandBatchSelection,
   findNotificationBatches,
   tallyNotifications,
-} from "./notificationBatches";
+} from "./notificationBatches.js";
 
 const BATCH = "11111111-1111-4111-8111-111111111111";
 
@@ -273,5 +274,16 @@ describe("tallyNotifications", () => {
     const batches = findNotificationBatches(list);
     const rows = collapseBatches(list, batches, new Set([`${BATCH}:shares`]));
     expect(countBatchRows(rows, batches)).toBe(tallyNotifications(list).total);
+  });
+});
+
+describe("expandBatchSelection", () => {
+  it("acts on every member a picked header stands for, and on each row once", () => {
+    const list = [shared("a", { batchId: BATCH }), shared("b", { batchId: BATCH }), shared("loner")];
+    const batches = findNotificationBatches(list);
+    const [header] = collapseBatches(list, batches, new Set());
+    // An expanded batch lets its header AND a member be picked together.
+    const picked = expandBatchSelection([header, list[1], list[2]], batches);
+    expect(picked.map((n) => n.id).sort()).toEqual(["a", "b", "loner"]);
   });
 });

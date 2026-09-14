@@ -30,7 +30,31 @@
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, RefreshControl, SectionList, StyleSheet, Text, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
-import { messageFromError } from "@logjam/shared";
+import {
+  batchKeyFromRowId,
+  batchKeyOf,
+  batchLabel,
+  batchPendingFileSends,
+  bulkReadAction,
+  collapseBatches,
+  countBatchRows,
+  expandBatchSelection,
+  findNotificationBatches,
+  groupNotificationsByDay,
+  isResolvedElsewhereError,
+  messageFromError,
+  newestNotificationsFirst,
+  notificationActions,
+  notificationHaystack,
+  notificationLabel,
+  notificationPlaceId,
+  selectionCountLabel,
+  tallyNotifications,
+  type NotificationActionKind,
+  type NotificationActions,
+  type NotificationBatch,
+  type NotificationInlineAction,
+} from "@logjam/shared";
 
 import { acceptFriendRequest, declineFriendRequest } from "../api/friends";
 import { declineFileSend } from "../api/fileSends";
@@ -40,30 +64,11 @@ import { capabilityScreenBlock } from "../auth/capabilities";
 import { acceptReceivedFile } from "../imports/acceptReceivedFile";
 import { useConnectivity } from "../map/connectivity";
 import {
-  isResolvedElsewhereError,
-  notificationActions,
-  type NotificationActionKind,
-  type NotificationActions,
-  type NotificationInlineAction,
-} from "../notifications/notificationActions";
-import { bulkReadAction, selectionCountLabel } from "../notifications/bulkReadAction";
-import {
   batchFileActionMessage,
   runBatchFileAction,
   type BatchFileActionKind,
   type BatchFileActionProgress,
 } from "../notifications/batchFileAction";
-import {
-  batchKeyFromRowId,
-  batchKeyOf,
-  batchLabel,
-  batchPendingFileSends,
-  collapseBatches,
-  countBatchRows,
-  findNotificationBatches,
-  tallyNotifications,
-  type NotificationBatch,
-} from "../notifications/notificationBatches";
 import type { NotificationDestination } from "../notifications/notificationDestination";
 import { NotificationOptionsSheet } from "../notifications/NotificationOptionsSheet";
 import type { SavedCategory } from "../saved/savedKeys";
@@ -95,13 +100,7 @@ import {
   type SegmentOption,
   type ToastMessage,
 } from "../ui";
-import {
-  groupNotificationsByDay,
-  notificationPlaceId,
-  notificationHaystack,
-  notificationLabel,
-  notificationMeta,
-} from "./notificationLabel";
+import { notificationMeta } from "./notificationMeta";
 
 type NotificationsState = {
   notifications: TNotification[];
@@ -203,31 +202,6 @@ const alwaysSelectable = (): boolean => true;
 
 const EMPTY_BATCH_KEYS: ReadonlySet<string> = new Set<string>();
 
-/**
- * Replace every picked BATCH HEADER with the rows it stands for.
- *
- * The header is not a row of its own — it is one member of the batch wearing
- * the batch's words — so a group verb that acted only on it would mark one of
- * twelve read, or delete one of twelve and strand the rest. Deduped by id
- * because an EXPANDED batch can have its header and its members picked
- * separately.
- */
-function expandBatchSelection(
-  selected: TNotification[],
-  batches: Map<string, NotificationBatch>,
-): TNotification[] {
-  const byId = new Map<string, TNotification>();
-  for (const notification of selected) {
-    const batch = batches.get(batchKeyFromRowId(notification.id) ?? "");
-    if (batch) {
-      for (const member of batch.items) byId.set(member.id, member);
-    } else {
-      byId.set(notification.id, notification);
-    }
-  }
-  return [...byId.values()];
-}
-
 export function NotificationsScreen({
   onBack,
   onUnreadChanged,
@@ -278,17 +252,10 @@ export function NotificationsScreen({
   // action here except a file ACCEPT deletes the notification server-side, so
   // without this the row sits with live buttons until the fetch returns.
   const [actionedIds, setActionedIds] = useState<Set<string>>(new Set());
-  // NEWEST FIRST, and never re-sorted by read state. The server returns
-  // `read: asc` then `createdAt: desc`, which made acting on a row teleport it
-  // to the bottom of the list mid-gesture — and, because the day grouping runs
-  // over whatever order it is handed, it could also emit "Today" twice with a
-  // week in between. A list ordered by time stays put while you work down it.
+  // Newest first and never re-sorted by read state — `newestNotificationsFirst`
+  // (@logjam/shared) says why, and the web inbox reads the same rule.
   const notifications = useMemo(
-    () =>
-      query.notifications
-        .filter((n) => !actionedIds.has(n.id))
-        .slice()
-        .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)),
+    () => newestNotificationsFirst(query.notifications.filter((n) => !actionedIds.has(n.id))),
     [actionedIds, query.notifications],
   );
 

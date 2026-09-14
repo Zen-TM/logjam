@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { bulkReadAction, selectionCountLabel } from "./bulkReadAction";
+import { bulkReadAction, selectionCountLabel } from "./bulkReadAction.js";
 
 const read = (id: string) => ({ id, read: true });
 const unread = (id: string) => ({ id, read: false });

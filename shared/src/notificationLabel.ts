@@ -1,12 +1,9 @@
-// Pure label derivation for the notifications inbox — mirrors the JSX branches
-// in web NotificationsPanel.tsx (frontend). Kept as data (text + optional
-// warning subline) so it's vitest-testable and reusable by Stage 3 push
-// handling. If web adds a notification type, add it here too; unknown types
-// fall back to a generic label rather than rendering nothing.
-import type { Feather } from "@expo/vector-icons";
-
-import type { TNotification } from "../api/types";
-import { notificationHue } from "../theme";
+// Pure label derivation for the notifications inbox, read by Logjam GPS and
+// Logjam Web alike so the two inboxes cannot word the same event differently.
+// Kept as data (text + optional warning subline) so it is testable and
+// reusable by push handling. A new notification type is a branch here; unknown
+// types fall back to a generic label rather than rendering nothing.
+import type { TNotification } from "./apiTypes.js";
 
 export type NotificationLabel = {
   text: string;
@@ -135,14 +132,12 @@ export function notificationHaystack(n: TNotification): string {
   return `${label.text} ${label.warning ?? ""}`.toLowerCase();
 }
 
-// ── Identity: glyph + hue ────────────────────────────────────────────────────
+// ── Identity: the kind ───────────────────────────────────────────────────────
 //
-// Notifications are a genuine open-ended vocabulary of KINDS, so they get the
-// §3 treatment. The hues are borrowed, not invented: a notification about a
-// topo overlay wears the same eucalypt the overlay wears in Saved, and a
-// place-share wears the same heath a shared place wears on the Places
-// screen. The inbox is where you first hear about a thing — recognising it
-// again where it lives is the point.
+// Notifications are a genuine open-ended vocabulary of KINDS, so they get a
+// glyph and a hue each (both DESIGN.md files, §3). Which kind a notification is
+// is decided here; each client draws the kind in its own icon family and in
+// the hue of the thing the notification is about.
 
 export type NotificationKind =
   | "share"
@@ -153,28 +148,12 @@ export type NotificationKind =
   | "geoPdf"
   | "problem";
 
-export type NotificationMeta = {
-  kind: NotificationKind;
-  icon: React.ComponentProps<typeof Feather>["name"];
-  hue: string;
-};
-
-const KIND_META: Record<NotificationKind, { icon: NotificationMeta["icon"]; hue: string }> = {
-  share: { icon: "share-2", hue: notificationHue.share },
-  file: { icon: "file-plus", hue: notificationHue.file },
-  people: { icon: "users", hue: notificationHue.people },
-  topo: { icon: "layers", hue: notificationHue.topo },
-  export: { icon: "download", hue: notificationHue.export },
-  geoPdf: { icon: "file-text", hue: notificationHue.geoPdf },
-  problem: { icon: "alert-triangle", hue: notificationHue.problem },
-};
-
 /**
  * A failed job is a PROBLEM first and a topo job second — the reason you scan an
  * inbox is to find the thing that went wrong, and giving failures their own
  * glyph and the warning hue is what makes that a glance instead of a read.
  */
-function notificationKind(n: TNotification): NotificationKind {
+export function notificationKind(n: TNotification): NotificationKind {
   const failed = n.payload.status === "failed";
   switch (n.type) {
     case "place_shared":
@@ -207,11 +186,6 @@ function notificationKind(n: TNotification): NotificationKind {
   }
 }
 
-export function notificationMeta(n: TNotification): NotificationMeta {
-  const kind = notificationKind(n);
-  return { kind, ...KIND_META[kind] };
-}
-
 /**
  * The place this notification is ABOUT, if any — so tapping a share opens the
  * place instead of only marking the row read. Mirrors the push-tap routing in
@@ -225,7 +199,27 @@ export function notificationPlaceId(n: TNotification): string | null {
   return typeof placeId === "string" && placeId.length > 0 ? placeId : null;
 }
 
-// ── Day grouping ─────────────────────────────────────────────────────────────
+// ── Order and day grouping ───────────────────────────────────────────────────
+
+/**
+ * NEWEST FIRST, and never re-sorted by read state. The server returns
+ * `read: asc` then `createdAt: desc`, which made acting on a row teleport it
+ * to the bottom of the list mid-gesture — and, because the day grouping runs
+ * over whatever order it is handed, it could also emit "Today" twice with a
+ * week in between. A list ordered by time stays put while you work down it.
+ *
+ * Both inboxes read this. Logjam GPS learned it first; Logjam Web kept the
+ * server's order until 2026-09-14, and marking a row read there moved it below
+ * every unread one. An unparseable timestamp sorts last rather than poisoning
+ * the comparison.
+ */
+export function newestNotificationsFirst(notifications: readonly TNotification[]): TNotification[] {
+  const time = (n: TNotification) => {
+    const parsed = Date.parse(n.createdAt);
+    return Number.isNaN(parsed) ? -Infinity : parsed;
+  };
+  return [...notifications].sort((a, b) => time(b) - time(a) || 0);
+}
 
 export type NotificationDay = {
   /** Local calendar day, `YYYY-MM-DD` — the section key. */

@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { ApiError } from "@logjam/shared";
+import { ApiError } from "./apiErrors.js";
 
-import type { TNotification } from "../api/types";
-import { isResolvedElsewhereError, notificationActions } from "./notificationActions";
+import type { TNotification } from "./apiTypes.js";
+import { isResolvedElsewhereError, notificationActions } from "./notificationActions.js";
 
 function notification(type: string, payload: Record<string, unknown>): TNotification {
   return { id: "n1", type, payload, read: false, createdAt: "2026-08-30T01:00:00Z" };

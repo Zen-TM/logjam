@@ -8,7 +8,7 @@
 // app lock, never logged.
 import type { TNotification } from "../api/types";
 import { getNotifications } from "../api/queries";
-import { tallyNotifications } from "../notifications/notificationBatches";
+import { tallyNotifications } from "@logjam/shared";
 import { getSyncDb, notifyMirrorChanged } from "./syncDb";
 
 export type NotificationsCache = {

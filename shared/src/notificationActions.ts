@@ -7,9 +7,9 @@
 // 2026-08-30). Both are one accept/decline pair, so both are the same widget,
 // and this module is the one place that says which pair a notification carries.
 //
-// Its own RN-free module for the same reason `tapTarget.ts` is one: mobile's
-// test setup is plain vitest, which cannot parse React Native's Flow sources,
-// so the branching is only testable away from the screen.
+// Shared by both inboxes, so Logjam GPS and Logjam Web offer the same answers
+// in the same words. Where a word names one client's surface ("find it in
+// Saved"), the other client says its own and notes why at the call site.
 //
 // The COPY lives here, not in the screen (DESIGN.md §7 — an entity's confirm
 // sentence is written once, next to the thing that knows the entity). It is
@@ -20,9 +20,8 @@
 // label and the confirm body because the recipient cannot answer "keep this?"
 // without knowing what it is. It is never logged, exactly as the sending side
 // treats it.
-import { ApiError } from "@logjam/shared";
-
-import type { TNotification } from "../api/types";
+import { ApiError } from "./apiErrors.js";
+import type { TNotification } from "./apiTypes.js";
 
 /** The two answers. `decline` is always the destructive one. */
 export type NotificationActionKind = "accept" | "decline";
@@ -128,7 +127,7 @@ export function notificationActions(n: TNotification): NotificationActions | nul
     const sender = str(payload, "sentByUsername");
     // A lapsed send offers NOTHING. The bytes are gone or going, so every
     // button would fail; the row explains itself through the label's warning
-    // line instead (`screens/notificationLabel.ts`). Returning null here is
+    // line instead (`notificationLabel.ts`). Returning null here is
     // what holds the "never offer a button the endpoint would refuse"
     // invariant now that the notification query deliberately keeps expired
     // sends the inbox endpoint drops.

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import type { TNotification } from "../api/types";
-import { groupNotificationsByDay } from "./notificationLabel";
+import type { TNotification } from "./apiTypes.js";
+import { groupNotificationsByDay, newestNotificationsFirst } from "./notificationLabel.js";
 
 /** Local-midnight-relative helper: builds an instant N hours before `now`. */
 function at(iso: string): TNotification {
@@ -75,5 +75,27 @@ describe("groupNotificationsByDay", () => {
 
   it("returns nothing for nothing", () => {
     expect(groupNotificationsByDay([], NOW)).toEqual([]);
+  });
+});
+
+describe("newestNotificationsFirst", () => {
+  it("orders by time alone, however the server ordered by read state", () => {
+    // The API sends unread first. Marking a row read must not move it.
+    const older = { ...at(localIso(2026, 6, 29, 9)), id: "older-unread" };
+    const newer = { ...at(localIso(2026, 6, 30, 9)), id: "newer-read", read: true };
+    const middle = { ...at(localIso(2026, 6, 30, 1)), id: "middle-unread" };
+    const serverOrder = [older, middle, newer];
+    expect(newestNotificationsFirst(serverOrder).map((n) => n.id)).toEqual([
+      "newer-read",
+      "middle-unread",
+      "older-unread",
+    ]);
+    expect(serverOrder.map((n) => n.id)).toEqual(["older-unread", "middle-unread", "newer-read"]);
+  });
+
+  it("puts an unparseable timestamp last", () => {
+    const broken = at("not a date");
+    const dated = at(localIso(2026, 6, 30, 9));
+    expect(newestNotificationsFirst([broken, dated])).toEqual([dated, broken]);
   });
 });
