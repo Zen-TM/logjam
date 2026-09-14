@@ -14,26 +14,14 @@ React 19 + TypeScript + Vite SPA. MapLibre GL JS = core UI surface; most feature
 
 > **Self-updating:** when user establishes new design conventions, ask before appending here.
 
-- **`frontend/DESIGN.md` and the `src/ui` kit govern new and rebuilt UI** (2026-09-13 redesign). MUI is an ESLint error outside `MUI_LEGACY_FILES` (`eslint.config.js`), a list that may only shrink. The MUI, `sx`, `shared.module.css` and `@mui/icons-material` rules below describe the files still on that list, and are flagged for removal once it is empty.
+- **`frontend/DESIGN.md` and the `src/ui` kit govern all UI.** Compose the kit; a screen needing something it lacks adds it to the kit. MUI is an ESLint error outside `MUI_LEGACY_FILES` (`eslint.config.js`), a list that may only shrink. `PlacesPanel.tsx` is the reference page.
 
 - **A control's size is a token, never px** (2026-09-14). Heights and hit targets read `--control-lg` / `--control-md` / `--control-sm` (36/32/24 under a mouse), margins `--gutter`, type `--font-*` with 12px as the floor; `@media (pointer: coarse)` in `index.css` gives a touch screen Logjam GPS's 44/40/32. The phone's sizes made the 380px panel feel cramped because the content was too big, and a hard-coded height silently opts out of both the density and the touch step. Map chrome keeps its own larger step (42). Guard: `src/ui/controlSizes.test.ts`, scoped to the kit (screens compose it); see `DESIGN.md` §4.
 
-- **CSS Modules** (`.module.css` co-located) for layout + color.
-- **All colors via CSS custom properties** (`var(--theme-*)`) — never hardcode hex in CSS.
-- **MUI `sx` prop** only for one-off layout tweaks on MUI components.
-- **`composes`** from `src/styles/shared.module.css` for reusable button/input patterns.
-- No styled-components. Emotion only present as MUI internal engine.
-
-### Buttons and tokens
-
-All colors, radii, transitions and text sizes are CSS custom properties defined in `src/index.css` — never hardcode a hex or a px literal for these. Reusable button/label/divider classes live in `src/styles/shared.module.css`; compose base `.btn` + one color variant + one size modifier.
-
-**Never use MUI `<Button>` in sidebar panels** — compose the CSS module classes instead.
-
-### Icons
-
-- **lucide-react** — all sidebar/panel icons.
-- **@mui/icons-material** — only inside MUI dialogs (e.g. `CloseIcon`).
+- **CSS Modules** (`.module.css` co-located): screen modules do layout, the kit does look.
+- **Every colour, radius, transition and text size is a custom property in `src/index.css`** (`var(--theme-*)`, `--ink`, `--hue-*`, `--font-*`, `--radius-*`) — never hardcode a hex or a px literal for these. No styled-components, no Emotion.
+- **Icons are lucide-react**, everywhere.
+- **Files still on `MUI_LEGACY_FILES`** use MUI, `sx`, `@mui/icons-material` and the `.btn` compositions in `src/styles/shared.module.css`. Those are the patterns being removed: don't extend them or copy them into new code; rebuild the file onto the kit when you touch it.
 
 ## Error display
 
@@ -64,11 +52,11 @@ Three surfaces. One rule each. **Never render raw `err.message` from `apiFetch` 
 
 ### Dialog inputs/selects use shared sx — never inline
 
-Every MUI `TextField`/`Select` in a dialog applies `fieldSx`/`selectSx`/`menuPaperProps` from `csvImport/dialogStyles.ts` — never inline an `sx` that re-implements input/select colors, border, or menu paper. Spread extras on top (`sx={{ ...fieldSx, mb: 0.5 }}`). For a `<TextField select>`, the menu props nest one level deeper: `SelectProps={{ MenuProps: menuPaperProps }}` (a bare `<Select>` takes `MenuProps={menuPaperProps}`). Inline variants drifted (focused-label color, icon color, font size) across dialogs — UX-002/003 (2026-06-22), continuation of the 2026-06-10 UX-003.
+_Applies to MUI dialogs still on `MUI_LEGACY_FILES`; a rebuilt dialog uses the kit's `TextField` instead._ Every MUI `TextField`/`Select` in a dialog applies `fieldSx`/`selectSx`/`menuPaperProps` from `csvImport/dialogStyles.ts` — never inline an `sx` that re-implements input/select colors, border, or menu paper. Spread extras on top (`sx={{ ...fieldSx, mb: 0.5 }}`). For a `<TextField select>`, the menu props nest one level deeper: `SelectProps={{ MenuProps: menuPaperProps }}` (a bare `<Select>` takes `MenuProps={menuPaperProps}`). Inline variants drifted (focused-label color, icon color, font size) across dialogs — UX-002/003 (2026-06-22), continuation of the 2026-06-10 UX-003.
 
 ### Custom-field forms in dialogs
 
-Never re-implement the add-custom-field sub-form or per-field inputs inline — use `dialogs/AddCustomFieldForm.tsx` + `dialogs/CustomFieldInput.tsx`, which source `fieldSx`/`selectSx`/`menuPaperProps` from `csvImport/dialogStyles.ts`. The two dialogs drifted visually when this was duplicated (UX-002/003). Unset boolean custom fields default to `false` via `dialogs/customFieldValues.ts` so the unchecked checkbox and the persisted value agree — don't reintroduce a `null` state in edit forms.
+Never re-implement the add-custom-field sub-form or per-field inputs inline — use `dialogs/AddCustomFieldForm.tsx` + `dialogs/CustomFieldInput.tsx` (rebuild those two onto the kit rather than forking them when their dialogs move off MUI). Today they source `fieldSx`/`selectSx`/`menuPaperProps` from `csvImport/dialogStyles.ts`. The two dialogs drifted visually when this was duplicated (UX-002/003). Unset boolean custom fields default to `false` via `dialogs/customFieldValues.ts` so the unchecked checkbox and the persisted value agree — don't reintroduce a `null` state in edit forms.
 
 ### Consent versioning
 
@@ -84,14 +72,14 @@ The block is one decision, `consentGate()` in `src/consent.ts` (tested in `conse
 
 Add when a label alone doesn't convey units, scale, or consequence. Content: what it means + a real-world example if helpful. Skip if self-explanatory.
 
-Patterns: topo settings use `SettingsRow tooltip="..."`. MUI dialog text fields use `InputProps.endAdornment` with an `InfoOutlinedIcon`. Select fields (dropdown arrow conflicts) wrap the whole `TextField` in `<Tooltip><Box sx={{ flex: 1, minWidth: 0 }}>`. Sidebar panels use native HTML `title` attribute. Links in tooltips: pass `ReactNode` to `title` (MUI Tooltip is interactive by default). Disabled buttons need a `<span>` wrapper.
+Patterns: kit surfaces use `src/ui` `Tooltip` (hover AND focus, Escape-dismissable, DESIGN.md §10), and an `IconButton`'s required `label` is already its tooltip. In files still on `MUI_LEGACY_FILES`: topo settings use `SettingsRow tooltip="..."`; MUI dialog text fields use `InputProps.endAdornment` with an `InfoOutlinedIcon`; select fields (dropdown arrow conflicts) wrap the whole `TextField` in `<Tooltip><Box sx={{ flex: 1, minWidth: 0 }}>`; links in tooltips pass `ReactNode` to `title` (MUI Tooltip is interactive by default); disabled buttons need a `<span>` wrapper.
 
 ### Mobile / responsive
 
 Single breakpoint: **`max-width: 768px`**, the canonical source being `useIsMobile()` (`src/useIsMobile.ts`, `MOBILE_MAX_WIDTH_PX`). Every mobile CSS `@media (max-width: 768px)` block and the hook must agree on this value.
 
 - **Two mechanisms, kept in sync:** CSS media queries in the co-located `.module.css` for layout; `useIsMobile()` in JS for behaviour CSS can't express (rendering `BottomSheet` vs the desktop flyout, `fullScreen` dialogs, collapsing the sheet during map-pick).
-- **Layout model on mobile:** map is full-bleed (`--nav-rail-width` overridden to `0` in `index.css`); NavRail becomes a fixed horizontal-scroll **bottom strip**; the active panel renders in a draggable **bottom sheet** (`sidebar/BottomSheet.tsx`, snap points peek/half/full).
+- **Layout model on mobile:** map is full-bleed (`--nav-rail-width` overridden to `0` in `index.css`); NavRail becomes Logjam GPS's 68px **tab bar** (Map · Places · Logs · Ways · More; Map closes the panel); the active panel renders in a draggable **bottom sheet** (`sidebar/BottomSheet.tsx`, snap points peek/half/full).
 - **z-index contract (don't break):** bottom sheet `z-index: 4`, backdrop `3`, and the mobile NavRail **must be above the sheet (`z-index: 5`)**. The sheet is bottom-anchored above the nav (`bottom: var(--bottom-nav-height)`); its drag translate sweeps its bottom edge *over* the nav region, so the nav only stays visible/tappable because it paints on top. Lowering the nav's z-index silently traps the user in whatever panel is open.
 - **New dialogs:** add `fullScreen={isMobile}` on the `<Dialog>`. Collapse any multi-column `sx` flex/grid rows to one column on mobile (`flexDirection: isMobile ? "column" : "row"`, or a CSS media query). Small confirm sub-dialogs stay centered (don't fullScreen them).
 - **Map-pick flows** (coord pick, area/bbox/extent select): App passes `collapseToPeek` to SidebarPanel so the sheet drops to peek and the map is reachable; dialog-initiated picks already hide their own dialog.
