@@ -7,6 +7,28 @@
   border-right: var(--hairline);
 }
 
+/* Docked against the right edge of the page it belongs to. Decided HERE rather
+   than by each page, so every sheet is the same width and in the same place,
+   and the map's chrome (which reads --filter-sheet-width off `data-sheet-open`)
+   cannot know about one page's sheet and not another's. The panel is the
+   positioned ancestor; nothing between here and there may be positioned. */
+.docked {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 100%;
+  z-index: 2;
+  width: var(--filter-sheet-width);
+  box-shadow: var(--shadow-float);
+}
+
+/* Narrow web: it takes the page's place instead of standing beside it. */
+.narrow {
+  flex: 1;
+  min-height: 0;
+  border-right: none;
+}
+
 .head {
   display: flex;
   align-items: center;

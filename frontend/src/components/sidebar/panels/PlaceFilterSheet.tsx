@@ -60,7 +60,6 @@ export default function PlaceFilterSheet({
   onClose,
   activeCount,
   resultCount,
-  className,
 }: {
   filters: PlaceFilters;
   onChangeFilters: (next: PlaceFilters) => void;
@@ -76,7 +75,6 @@ export default function PlaceFilterSheet({
   /** Filters this sheet owns that are set. */
   activeCount: number;
   resultCount: number;
-  className?: string;
 }) {
   const fieldDefs =
     filters.placeTypeId == null ? placeCustomFieldDefs : defsForType(placeCustomFieldDefs, filters.placeTypeId);
@@ -102,7 +100,6 @@ export default function PlaceFilterSheet({
     <SideSheet
       title="Sort and filter"
       onClose={onClose}
-      className={className}
       footer={
         <>
           <span className={classes.count}>

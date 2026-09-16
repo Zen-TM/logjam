@@ -101,22 +101,6 @@
   color: var(--theme-text-muted);
 }
 
-.sheet {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 100%;
-  z-index: 2;
-  width: var(--filter-sheet-width);
-  box-shadow: var(--shadow-float);
-}
-
-.sheetNarrow {
-  flex: 1;
-  min-height: 0;
-  border-right: none;
-}
-
 .sheetCount {
   flex: 1;
   font-size: var(--font-sm);

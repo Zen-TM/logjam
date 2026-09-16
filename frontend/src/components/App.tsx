@@ -202,10 +202,13 @@ function App() {
   const [selectedAreaPlaceIds, setSelectedAreaPlaceIds] = useState<string[]>(
     [],
   );
-  // Places ↔ map: the sheet beside the list pushes the map's chrome over, the
-  // row under the pointer lights its pin, and a pin pressed while the list is
-  // open scrolls to its row instead of leaving the list.
-  const [placesSheetOpen, setPlacesSheetOpen] = useState(false);
+  // Page ↔ map: a sheet beside the list pushes the map's chrome over, the row
+  // under the pointer lights its pin, and a pin pressed while the list is open
+  // scrolls to its row instead of leaving the list. Any page's sheet, not just
+  // Places': a page is unmounted when it closes and `usePanelSheet` clears this
+  // on the way out, so the panel it belongs to never needs naming here — naming
+  // it is what left Logs' date sheet out (operator, 2026-09-16).
+  const [sidebarSheetOpen, setSidebarSheetOpen] = useState(false);
   const [placeHighlight] = useState(createPlaceHighlight);
   const [revealPlaceId, setRevealPlaceId] = useState<string | null>(null);
   const consumeReveal = useCallback(() => setRevealPlaceId(null), []);
@@ -1296,7 +1299,7 @@ function App() {
           onHoverPlace={placeHighlight.set}
           revealPlaceId={revealPlaceId}
           onRevealConsumed={consumeReveal}
-          onFiltersOpenChange={setPlacesSheetOpen}
+          onFiltersOpenChange={setSidebarSheetOpen}
           onRefetch={refetch}
           filters={filters}
           onChangeFilters={setFilters}
@@ -1467,7 +1470,7 @@ function App() {
         flyToPlace={flyToPlace}
         onFlyToPlaceConsumed={() => setFlyToPlace(null)}
         panelOpen={activePanel !== null}
-        sheetOpen={placesSheetOpen && activePanel === "places"}
+        sheetOpen={sidebarSheetOpen}
         placeHighlight={placeHighlight}
         placeTypes={placeTypes}
         layersButton={

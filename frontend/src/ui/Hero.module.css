@@ -2,7 +2,13 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  min-height: var(--control-md);
+  /* ONE height on every page and every view of a page, so swapping Logs | Stats
+     moves neither the rail under it nor the list under that. A hero carrying
+     actions is as tall as a --control-md button; a title-only one is its text,
+     which is shorter — measured 57 vs 55 (operator, 2026-09-16). Stated on the
+     border box: the two addends are this rule's own padding and its border. */
+  min-height: calc(var(--control-md) + 2 * 12px + 1px);
+  box-sizing: border-box;
   padding: 12px var(--gutter);
   border-bottom: 1px solid color-mix(in srgb, var(--theme-accent) 25%, transparent);
 }

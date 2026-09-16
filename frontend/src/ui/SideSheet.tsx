@@ -1,13 +1,18 @@
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import { X } from "lucide-react";
+import { useIsMobile } from "../useIsMobile";
 import { IconButton } from "./Button";
 import { useEscape } from "./useEscape";
 import classes from "./SideSheet.module.css";
 
 /**
- * A non-modal sheet that opens BESIDE the panel it belongs to — the Places
- * filters. The list it acts on stays visible and live next to it, which a modal
- * over the list could not do.
+ * A non-modal sheet that opens BESIDE the page it belongs to — Places' filters,
+ * Logs' date range. The list it acts on stays visible and live next to it,
+ * which a modal over the list could not do.
+ *
+ * It places ITSELF (docked beside the page, or taking its place on narrow web):
+ * each page used to say where its own sheet went, in identical CSS, and one of
+ * the two drifted (operator, 2026-09-16).
  *
  * Focus moves to its heading on open and back to whatever opened it on close;
  * Escape closes it.
@@ -28,6 +33,7 @@ export function SideSheet({
   const titleId = useId();
   const headingRef = useRef<HTMLHeadingElement>(null);
   const sheetRef = useRef<HTMLElement>(null);
+  const isNarrow = useIsMobile();
   useEscape(sheetRef, onClose);
 
   useEffect(() => {
@@ -42,7 +48,7 @@ export function SideSheet({
     <section
       ref={sheetRef}
       aria-labelledby={titleId}
-      className={[classes.sheet, className].filter(Boolean).join(" ")}
+      className={[classes.sheet, isNarrow ? classes.narrow : classes.docked, className].filter(Boolean).join(" ")}
     >
       <header className={classes.head}>
         <h2 id={titleId} ref={headingRef} tabIndex={-1} className={classes.title}>

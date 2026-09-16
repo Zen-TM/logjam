@@ -98,19 +98,3 @@
   gap: 3px;
   padding: 0 2px;
 }
-
-.sheet {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 100%;
-  z-index: 2;
-  width: var(--filter-sheet-width);
-  box-shadow: var(--shadow-float);
-}
-
-.sheetNarrow {
-  flex: 1;
-  min-height: 0;
-  border-right: none;
-}

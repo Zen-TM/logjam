@@ -54,6 +54,7 @@ import {
   TileCheckbox,
   type MenuEntry,
 } from "../../../ui";
+import { usePanelSheet } from "./usePanelSheet";
 import { idRange } from "./placesModel";
 import { tripTypeLook } from "./tripTypeIcon";
 import classes from "./TripLogsPanel.module.css";
@@ -123,7 +124,7 @@ function TripLogsPanel({
   const [dateTo, setDateTo] = useStoredState("logjam.tripDateTo", "", sessionStorage);
   const [typeFilter, setTypeFilter] = useStoredState("logjam.tripTypeFilter", ALL_TYPES, sessionStorage);
   const [searchOpen, setSearchOpen] = useState(search !== "");
-  const [sheetOpen, setSheetOpen] = useState(false);
+  const { sheetOpen, openSheet } = usePanelSheet({ onOpenChange: onFiltersOpenChange, onExpandSheet });
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const selectionAnchor = useRef<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<string[] | null>(null);
@@ -133,15 +134,6 @@ function TripLogsPanel({
   const [creatingTrip, setCreatingTrip] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
-  const openSheet = useCallback(
-    (open: boolean) => {
-      setSheetOpen(open);
-      onFiltersOpenChange(open);
-      if (open) onExpandSheet?.();
-    },
-    [onFiltersOpenChange, onExpandSheet],
-  );
-  useEffect(() => () => onFiltersOpenChange(false), [onFiltersOpenChange]);
 
   // ── The list ─────────────────────────────────────────────────────────
   const criteria = useMemo(
@@ -482,7 +474,6 @@ function TripLogsPanel({
   const sheet = sheetOpen && (
     <SideSheet
       title="Date range"
-      className={isNarrow ? classes.sheetNarrow : classes.sheet}
       onClose={() => openSheet(false)}
       footer={
         <>

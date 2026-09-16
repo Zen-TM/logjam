@@ -68,6 +68,7 @@ import {
 } from "../../../ui";
 import { placeTypeLucideIcon } from "./placeTypeIcon";
 import PlaceFilterSheet from "./PlaceFilterSheet";
+import { usePanelSheet } from "./usePanelSheet";
 import {
   bucketOf,
   clearSheetFilters,
@@ -184,7 +185,7 @@ function PlacesPanel({
   const [query, setQuery] = useStoredState("logjam.placeSearch", "", sessionStorage);
   const [sort, setSort] = useStoredState<PlaceSortKey>("logjam.placeSort", "name");
   const [searchOpen, setSearchOpen] = useState(query !== "");
-  const [sheetOpen, setSheetOpen] = useState(false);
+  const { sheetOpen, openSheet } = usePanelSheet({ onOpenChange: onFiltersOpenChange, onExpandSheet });
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const selectionAnchor = useRef<string | null>(null);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
@@ -200,20 +201,11 @@ function PlacesPanel({
     if (normalised !== filters) onChangeFilters(normalised);
   }, [filters, onChangeFilters]);
 
-  const openSheet = useCallback(
-    (open: boolean) => {
-      setSheetOpen(open);
-      onFiltersOpenChange(open);
-      if (open) onExpandSheet?.();
-    },
-    [onFiltersOpenChange, onExpandSheet],
-  );
   useEffect(() => {
     if (!openFiltersRequested) return;
     openSheet(true);
     onOpenFiltersConsumed();
   }, [openFiltersRequested, onOpenFiltersConsumed, openSheet]);
-  useEffect(() => () => onFiltersOpenChange(false), [onFiltersOpenChange]);
   useEffect(() => () => onHoverPlace(null), [onHoverPlace]);
 
   const typeById = useMemo(() => new Map(placeTypes.map((type) => [type.id, type])), [placeTypes]);
@@ -676,7 +668,6 @@ function PlacesPanel({
 
   const sheet = sheetOpen && (
     <PlaceFilterSheet
-      className={isNarrow ? classes.sheetNarrow : classes.sheet}
       filters={filters}
       onChangeFilters={onChangeFilters}
       sort={sort}

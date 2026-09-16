@@ -15,7 +15,13 @@
   box-shadow: var(--edge), var(--outline);
 }
 
-.row:hover,
+/* Only a row that DOES something answers the pointer: one that opens (`onOpen`
+   lays the stretched button over the card) or one that can be picked. A Stats
+   row is a read-out, and lighting its edge on hover promised a press that does
+   nothing (operator, 2026-09-16). `highlighted` is lit from outside, so it
+   stands whatever the row can do. */
+.row:has(.open):hover,
+.row:has(.pick):hover,
 .row[data-highlighted="true"] {
   border-color: color-mix(in srgb, var(--theme-accent) 70%, var(--theme-bonus-2));
 }
