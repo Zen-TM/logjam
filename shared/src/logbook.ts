@@ -73,6 +73,23 @@ export function dateRangeLabel(from: string | null, to: string | null): string {
   return `${start} → ${end}`;
 }
 
+/**
+ * "Any", "2026-01-01 – 2026-03-31", "From 2026-01-01" — a date filter summarised
+ * for the COLLAPSED field that holds it, in the raw bounds the user typed.
+ *
+ * Distinct from `dateRangeLabel`, which always names both ends in prose
+ * ("1 Jan 2026 → Today") for a strip the user reads at a glance. This one says
+ * "Any" when nothing is set, because a collapsed filter field has to state that
+ * it is not filtering.
+ */
+export function dateSummary(
+  range: readonly [string | null, string | null] | null,
+): string {
+  if (range == null || (range[0] == null && range[1] == null)) return "Any";
+  if (range[0] != null && range[1] != null) return `${range[0]} – ${range[1]}`;
+  return range[0] != null ? `From ${range[0]}` : `To ${range[1]}`;
+}
+
 export function tripYear(isoDate: string): number {
   return new Date(isoDate).getUTCFullYear();
 }
@@ -87,6 +104,10 @@ export function tripYear(isoDate: string): number {
  */
 export function groupTripsByYear<T extends { date: string }>(
   trips: T[],
+  // The year headings run the same way the trips inside them do. Fixed at
+  // newest-first, "Oldest first" put 2019 at the bottom of the panel and
+  // January at the top of it (2026-09-17).
+  order: "newest" | "oldest" = "newest",
 ): { year: number; trips: T[] }[] {
   const byYear = new Map<number, T[]>();
   for (const trip of trips) {
@@ -96,7 +117,7 @@ export function groupTripsByYear<T extends { date: string }>(
     else byYear.set(year, [trip]);
   }
   return [...byYear.entries()]
-    .sort((a, b) => b[0] - a[0])
+    .sort((a, b) => (order === "oldest" ? a[0] - b[0] : b[0] - a[0]))
     .map(([year, yearTrips]) => ({ year, trips: yearTrips }));
 }
 

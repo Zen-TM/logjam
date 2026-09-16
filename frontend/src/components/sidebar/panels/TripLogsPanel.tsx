@@ -3,18 +3,19 @@ import {
   AlignLeft,
   ArrowRight,
   BookOpen,
-  CalendarRange,
   ChevronDown,
   EllipsisVertical,
   Filter,
   Pencil,
   Plus,
   Search,
+  SlidersHorizontal,
   Trash2,
   Upload,
   X,
 } from "lucide-react";
 import {
+  activeTripFilterCount,
   dateRangeLabel,
   datePresets,
   distinctTripTypes,
@@ -24,8 +25,14 @@ import {
   hasActiveTripFilter,
   NO_TYPE_FILTER_VALUE,
   primaryTripType,
+  reconcileCustomFieldFilters,
+  sortTrips,
+  TRIP_SORT_OPTIONS,
+  tripFieldDefs,
   tripTypeLabel,
+  type CustomFieldFilter,
   type ScopedCustomFieldDef,
+  type TripSortKey,
 } from "@logjam/shared";
 import type { TPlace, TTripLog } from "../../../placeUtils";
 import { bulkDeleteTripLogs, deleteTripLog, tripTitle } from "../../../placeUtils";
@@ -37,7 +44,9 @@ import ConfirmDialog from "../../dialogs/ConfirmDialog";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
 import {
+  AttributeFilter,
   Button,
+  Chip,
   ChipRail,
   EmptyState,
   Hero,
@@ -50,6 +59,7 @@ import {
   SelectionBar,
   SheetSection,
   SideSheet,
+  SwitchRow,
   TextField,
   TileCheckbox,
   type MenuEntry,
@@ -123,6 +133,15 @@ function TripLogsPanel({
   const [dateFrom, setDateFrom] = useStoredState("logjam.tripDateFrom", "", sessionStorage);
   const [dateTo, setDateTo] = useStoredState("logjam.tripDateTo", "", sessionStorage);
   const [typeFilter, setTypeFilter] = useStoredState("logjam.tripTypeFilter", ALL_TYPES, sessionStorage);
+  // Attribute filters are ephemeral like the rest of them; the SORT is a
+  // preference and outlives the session, exactly as Places' does.
+  const [customFilters, setCustomFilters] = useStoredState<Record<string, CustomFieldFilter>>(
+    "logjam.tripAttributeFilters",
+    {},
+    sessionStorage,
+  );
+  const [includeUnknowns, setIncludeUnknowns] = useStoredState("logjam.tripIncludeUnknowns", false, sessionStorage);
+  const [sort, setSort] = useStoredState<TripSortKey>("logjam.tripSort", "newest");
   const [searchOpen, setSearchOpen] = useState(search !== "");
   const { sheetOpen, openSheet } = usePanelSheet({ onOpenChange: onFiltersOpenChange, onExpandSheet });
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -137,15 +156,48 @@ function TripLogsPanel({
 
   // ── The list ─────────────────────────────────────────────────────────
   const criteria = useMemo(
-    () => ({ search, dateFrom, dateTo, type: typeFilter }),
-    [search, dateFrom, dateTo, typeFilter],
+    () => ({ search, dateFrom, dateTo, type: typeFilter, custom: customFilters, includeUnknowns }),
+    [search, dateFrom, dateTo, typeFilter, customFilters, includeUnknowns],
   );
-  const visible = useMemo(() => filterTrips(tripLogs, criteria), [tripLogs, criteria]);
-  const years = useMemo(() => groupTripsByYear(visible), [visible]);
+  const visible = useMemo(() => sortTrips(filterTrips(tripLogs, criteria), sort), [tripLogs, criteria, sort]);
+  // The year headings run the way the trips inside them do, or "Oldest first"
+  // reads bottom-to-top.
+  const years = useMemo(() => groupTripsByYear(visible, sort), [visible, sort]);
   // Trip types flattened across the loaded trips, for the form's type chips.
   const existingTripTypes = useMemo(() => tripLogs.flatMap((trip) => trip.types), [tripLogs]);
   const distinctTypes = useMemo(() => distinctTripTypes(tripLogs), [tripLogs]);
   const anyUntyped = useMemo(() => tripLogs.some((trip) => trip.types.length === 0), [tripLogs]);
+
+  // The attributes worth OFFERING as filters: the definitions applicable to the
+  // types of the places these trips link, union every key a loaded trip has
+  // actually answered. That second half is `tripFieldDefs`' union clause doing
+  // the same job it does on a form — a trip whose place was retyped or unlinked
+  // still has its answer, and a filter list that dropped the field would hide
+  // those trips behind an axis the user cannot see.
+  const placeTypeById = useMemo(
+    () => new Map(places.map((place) => [place.id, place.placeTypeId])),
+    [places],
+  );
+  const filterableDefs = useMemo(() => {
+    const linkedTypeIds = new Set<string>();
+    const answered: Record<string, unknown> = {};
+    for (const trip of tripLogs) {
+      for (const place of trip.places) {
+        const placeTypeId = placeTypeById.get(place.id);
+        if (placeTypeId) linkedTypeIds.add(placeTypeId);
+      }
+      for (const [key, value] of Object.entries(trip.customFields ?? {})) {
+        if (value != null) answered[key] = value;
+      }
+    }
+    return tripFieldDefs(customFieldDefs, [...linkedTypeIds], answered);
+  }, [tripLogs, customFieldDefs, placeTypeById]);
+
+  // A filter whose definition was deleted, or retyped under it, would narrow
+  // the list with no control left in the sheet to say so or undo it.
+  useEffect(() => {
+    setCustomFilters((current) => reconcileCustomFieldFilters(current, filterableDefs));
+  }, [filterableDefs, setCustomFilters]);
 
   // A remembered type the logbook no longer has would narrow the list with no
   // chip lit to say so.
@@ -195,6 +247,10 @@ function TripLogsPanel({
 
   const rangeSet = dateFrom !== "" || dateTo !== "";
   const filtering = hasActiveTripFilter(criteria);
+  const activeCount = activeTripFilterCount(criteria);
+  // What the SHEET owns — the strip and its Reset speak for these, not for the
+  // rail or the search box, which say their own state where they stand.
+  const sheetFilterCount = activeCount - (search.trim() ? 1 : 0) - (typeFilter ? 1 : 0);
 
   // ── Selection ────────────────────────────────────────────────────────
   // Every trip is the user's own, so every row is selectable.
@@ -279,10 +335,19 @@ function TripLogsPanel({
     setDateTo("");
   };
 
+  /** Everything the sheet owns. The sort is a preference, not a filter, so it
+   *  survives a Reset — clearing it would move the list for someone who only
+   *  asked to see all their trips again. */
+  const clearSheetFilters = () => {
+    clearRange();
+    setCustomFilters({});
+    setIncludeUnknowns(false);
+  };
+
   const clearEverything = () => {
     setSearch("");
-    clearRange();
     setTypeFilter(ALL_TYPES);
+    clearSheetFilters();
   };
 
   const closeSearch = () => {
@@ -294,9 +359,9 @@ function TripLogsPanel({
   const rangeText = dateRangeLabel(dateFrom || null, dateTo || null);
   const dateButton = (
     <IconButton
-      icon={CalendarRange}
-      label={rangeSet ? `Date range, ${rangeText}` : "Date range"}
-      tone={rangeSet || sheetOpen ? "filled" : "default"}
+      icon={SlidersHorizontal}
+      label={sheetFilterCount > 0 ? `Sort and filter, ${plural(sheetFilterCount, "filter")} active` : "Sort and filter"}
+      tone={sheetFilterCount > 0 || sheetOpen ? "filled" : "default"}
       aria-expanded={sheetOpen}
       onClick={() => openSheet(!sheetOpen)}
     />
@@ -473,14 +538,14 @@ function TripLogsPanel({
   const activePreset = presets.find((preset) => preset.from === dateFrom && preset.to === dateTo)?.label ?? "";
   const sheet = sheetOpen && (
     <SideSheet
-      title="Date range"
+      title="Sort and filter"
       onClose={() => openSheet(false)}
       footer={
         <>
           <span className={classes.sheetCount}>{plural(visible.length, "trip")}</span>
-          {rangeSet && (
-            <Button compact onClick={clearRange}>
-              Clear
+          {sheetFilterCount > 0 && (
+            <Button compact variant="outline" onClick={clearSheetFilters}>
+              Reset
             </Button>
           )}
           <Button compact variant="filled" onClick={() => openSheet(false)}>
@@ -489,6 +554,56 @@ function TripLogsPanel({
         </>
       }
     >
+      <SheetSection title="Sort">
+        <div className={classes.chips}>
+          {TRIP_SORT_OPTIONS.map((option) => (
+            <Chip
+              key={option.key}
+              label={option.label}
+              active={sort === option.key}
+              aria-pressed={sort === option.key}
+              onClick={() => setSort(option.key)}
+            />
+          ))}
+        </div>
+      </SheetSection>
+
+      {filterableDefs.length > 0 && (
+        // "Attributes", not "Fields": a field is the box, not the thing it
+        // records. Drawn by SHAPE from the same control the Places sheet uses,
+        // so a trip's "Rope length, 0-120" and a canyon's grade are the same
+        // question asked the same way.
+        <SheetSection title="Attributes">
+          {filterableDefs.map((def) => (
+            <AttributeFilter
+              key={def.key}
+              def={def}
+              value={customFilters[def.key] ?? null}
+              onChange={(next) =>
+                setCustomFilters((current) => {
+                  const custom = { ...current };
+                  // Absent rather than present-at-its-default, so "is this axis
+                  // filtering" stays `key in custom` for every kind.
+                  if (next == null) delete custom[def.key];
+                  else custom[def.key] = next;
+                  return custom;
+                })
+              }
+            />
+          ))}
+          {/* It sits WITH the attributes because it only affects them: most
+              trips answer most fields not at all, so without the choice one
+              attribute filter empties the logbook and nothing on screen says
+              why. Widens rather than narrows, so it is not one of the filters
+              the strip counts. */}
+          <SwitchRow
+            title="Include trips missing this info"
+            checked={includeUnknowns}
+            onChange={setIncludeUnknowns}
+          />
+        </SheetSection>
+      )}
+
       <SheetSection title="Presets">
         <ChipRail
           label="Date presets"
@@ -542,10 +657,16 @@ function TripLogsPanel({
         <>
           {hero}
           {rails}
-          {rangeSet && !sheetOpen && !selecting && (
+          {sheetFilterCount > 0 && !sheetOpen && !selecting && (
             <div className={classes.strip}>
-              <span className={classes.stripText}>{rangeText}</span>
-              <IconButton icon={X} size={14} round label="Clear the date range" onClick={clearRange} />
+              {/* The hidden filters, said out loud: the rail and the search box
+                  show their own state where they stand, so this speaks only for
+                  what the closed sheet is doing (DESIGN.md §2). */}
+              <span className={classes.stripText}>
+                {rangeSet ? rangeText : plural(sheetFilterCount, "filter")}
+                {rangeSet && sheetFilterCount > 1 && ` · ${plural(sheetFilterCount - 1, "more filter")}`}
+              </span>
+              <IconButton icon={X} size={14} round label="Clear filters" onClick={clearSheetFilters} />
             </div>
           )}
           {/* The server caps the trip list; say when this is a truncated view so

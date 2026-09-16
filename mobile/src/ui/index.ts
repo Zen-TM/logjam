@@ -7,6 +7,7 @@ export { Card } from "./Card";
 export { Chip } from "./Chip";
 export { ChipPicker, type ChipOption } from "./ChipPicker";
 export { DatePicker } from "./DatePicker";
+export { AttributeFilter, ThresholdFilter } from "./AttributeFilter";
 export { RangePills } from "./RangePills";
 export { formatRange, isFullRange, nextRange, type NumberRange } from "@logjam/shared";
 export { HeroHeader } from "./HeroHeader";

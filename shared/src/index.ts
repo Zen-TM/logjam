@@ -33,6 +33,7 @@ export * from "./stats.js";
 export * from "./topoRuntimeEstimate.js";
 export * from "./apiErrors.js";
 export * from "./canyonGrade.js";
+export * from "./customFieldFilter.js";
 export * from "./placeFilter.js";
 export * from "./placeFilterOptions.js";
 export * from "./rangeSelect.js";

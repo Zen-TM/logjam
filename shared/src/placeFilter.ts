@@ -12,27 +12,24 @@
 // it is a box the user drew on their own map, compared against place
 // positions the caller already has in memory. It is never logged and never
 // sent anywhere; the clients decide what they persist (see the `area` field).
-import { fieldValue, numericFieldValue } from "./fieldValues.js";
+import {
+  passesCustomFieldFilters,
+  passesDateRangeFilter,
+  reconcileCustomFieldFilters,
+  type CustomFieldFilter,
+  type FieldDateRange,
+} from "./customFieldFilter.js";
+import { numericFieldValue } from "./fieldValues.js";
 import type { RegionBbox } from "./mapRegionEstimate.js";
 import type { TripLogCustomFieldDef } from "./tripLogFields.js";
 
 /** [start, end] inclusive ISO-date bounds (yyyy-mm-dd); either bound nullable. */
-export type PlaceDateRange = [string | null, string | null];
+export type PlaceDateRange = FieldDateRange;
 
-/**
- * A single active custom-field filter. Self-describing (carries its own kind)
- * so the predicate can apply it without consulting the field definitions. The
- * kind maps from the field's TripLogCustomFieldType: string→text,
- * integer/float→number, date→date, boolean→boolean.
- */
-export type PlaceCustomFieldFilter =
-  | { kind: "text"; value: string }
-  | { kind: "number"; op: "Less than" | "More than" | "Exactly"; value: number }
-  // Inclusive [min, max] range for bounded integer/float fields; rendered as a
-  // double-ended slider. Full span commits as null (the inactive state).
-  | { kind: "numberRange"; range: [number, number] }
-  | { kind: "date"; range: PlaceDateRange }
-  | { kind: "boolean"; value: boolean };
+/** A place's custom-field filter is an ordinary one — the name is kept because
+ *  every place-side call site says it, and a trip's filters are the same type
+ *  (`customFieldFilter.ts`). */
+export type PlaceCustomFieldFilter = CustomFieldFilter;
 
 export type PlaceThresholdFilter = [
   "Any" | "Less than" | "More than" | "Exactly",
@@ -193,23 +190,6 @@ export const UNCOUNTED_FILTER_KEYS: (keyof PlaceFilters)[] = [
   "custom",
 ];
 
-/**
- * Midnight of a `yyyy-mm-dd` bound in the VIEWER's timezone, or null if it
- * isn't a usable date.
- *
- * `created_at`/`updated_at` are real instants, and the bounds were parsed as
- * UTC midnight — so in Sydney (UTC+10/+11) everything added between local
- * midnight and 11:00 filed under the previous day. A place added
- * 15 January 09:00 AEDT is 14 January 22:00 UTC: filtering "from 15 January"
- * excluded it, and "up to 14 January" included it. `Date.parse` on a date-only
- * string is UTC by spec; the explicit `T00:00:00` form is local by spec.
- */
-function dayStartMs(day: string | null | undefined): number | null {
-  if (day == null) return null;
-  const parsed = new Date(`${day}T00:00:00`).getTime();
-  return Number.isNaN(parsed) ? null : parsed;
-}
-
 export function activePlaceFilterCount(filters: PlaceFilters): number {
   const builtIn = COUNTED_FILTER_KEYS.reduce(
     (count, key) => count + (isFilterActive(filters, key) ? 1 : 0),
@@ -281,30 +261,6 @@ export function passesPlaceFilters(
 ): boolean {
   const includeUnknowns = filters.include_unknowns;
 
-  function passesDateRangeFilter(
-    value: string | null | undefined,
-    filter: PlaceDateRange | null,
-  ): boolean {
-    if (!filter) return true;
-    const [start, end] = filter;
-    if (start == null && end == null) return true;
-    if (value == null) return includeUnknowns;
-    const time = Date.parse(value);
-    // A value the viewer can't place on a calendar can't be range-filtered.
-    // Returning true here (which is what every NaN comparison did) meant a
-    // custom date field holding "15/01/2026" matched EVERY range, in or out.
-    if (Number.isNaN(time)) return includeUnknowns;
-    const from = dayStartMs(start);
-    if (from != null && time < from) return false;
-    if (end != null) {
-      const endOfDay = dayStartMs(end);
-      if (endOfDay != null && time > endOfDay + 24 * 60 * 60 * 1000 - 1) {
-        return false;
-      }
-    }
-    return true;
-  }
-
   if (filters.ownership === "owned" && !isOwned) return false;
   if (filters.ownership === "shared" && isOwned) return false;
 
@@ -338,68 +294,18 @@ export function passesPlaceFilters(
     return false;
   }
 
-  if (!passesDateRangeFilter(place.createdAt, filters.created_at)) return false;
-  if (!passesDateRangeFilter(place.updatedAt, filters.updated_at)) return false;
-
-  for (const [key, filter] of Object.entries(filters.custom ?? {})) {
-    const value = fieldValue(place.fieldValues, key);
-    if (value == null) {
-      if (!includeUnknowns) return false;
-      continue;
-    }
-    switch (filter.kind) {
-      case "text":
-        if (!String(value).toLowerCase().includes(filter.value.toLowerCase()))
-          return false;
-        break;
-      case "number": {
-        const num = typeof value === "number" ? value : Number(value);
-        if (filter.op === "Less than" && !(num < filter.value)) return false;
-        if (filter.op === "More than" && !(num > filter.value)) return false;
-        if (filter.op === "Exactly" && num !== filter.value) return false;
-        break;
-      }
-      case "numberRange": {
-        const num = typeof value === "number" ? value : Number(value);
-        if (Number.isNaN(num)) {
-          if (!includeUnknowns) return false;
-          break;
-        }
-        if (num < filter.range[0] || num > filter.range[1]) return false;
-        break;
-      }
-      case "boolean":
-        if (Boolean(value) !== filter.value) return false;
-        break;
-      case "date":
-        if (!passesDateRangeFilter(String(value), filter.range)) return false;
-        break;
-    }
+  if (!passesDateRangeFilter(place.createdAt, filters.created_at, includeUnknowns)) {
+    return false;
+  }
+  if (!passesDateRangeFilter(place.updatedAt, filters.updated_at, includeUnknowns)) {
+    return false;
   }
 
-  return true;
-}
-
-/**
- * Maps a custom-field definition to the filter kind it produces, so a stored
- * filter can be validated against the current definition. Bounded
- * integer/float fields render a range slider (numberRange); unbounded ones use
- * op+value.
- */
-export function customFilterKind(
-  def: TripLogCustomFieldDef,
-): PlaceCustomFieldFilter["kind"] {
-  switch (def.type) {
-    case "string":
-      return "text";
-    case "integer":
-    case "float":
-      return def.min != null && def.max != null ? "numberRange" : "number";
-    case "date":
-      return "date";
-    case "boolean":
-      return "boolean";
-  }
+  return passesCustomFieldFilters(
+    place.fieldValues,
+    filters.custom,
+    includeUnknowns,
+  );
 }
 
 /**
@@ -412,16 +318,8 @@ export function reconcileCustomFilters(
   filters: PlaceFilters,
   defs: TripLogCustomFieldDef[],
 ): PlaceFilters {
-  const current = filters.custom ?? {};
-  const next: Record<string, PlaceCustomFieldFilter> = {};
-  for (const [key, filter] of Object.entries(current)) {
-    const def = defs.find((d) => d.key === key);
-    if (def && customFilterKind(def) === filter.kind) {
-      next[key] = filter;
-    }
-  }
-  if (Object.keys(next).length === Object.keys(current).length) return filters;
-  return { ...filters, custom: next };
+  const next = reconcileCustomFieldFilters(filters.custom, defs);
+  return next === filters.custom ? filters : { ...filters, custom: next };
 }
 
 /**

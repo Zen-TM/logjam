@@ -107,6 +107,12 @@
   color: var(--theme-text-muted);
 }
 
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .dates {
   display: flex;
   flex-wrap: wrap;

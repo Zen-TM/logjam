@@ -1,6 +1,13 @@
+/* Layout only — the controls inside carry their own look (DESIGN.md §9). */
 .chips {
   display: flex;
   flex-wrap: wrap;
+  gap: 8px;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
   gap: 8px;
 }
 
@@ -8,10 +15,4 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
-}
-
-.count {
-  flex: 1;
-  font-size: var(--font-sm);
-  color: var(--theme-text-muted);
 }

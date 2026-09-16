@@ -10,6 +10,7 @@ export { SwitchRow, Toggle } from "./Toggle";
 export { Checkbox, SwatchPicker } from "./Choice";
 export { NumberField, SearchField, Select, TextArea, TextField } from "./TextField";
 export { Menu, Popover, type MenuEntry, type MenuItem } from "./Menu";
+export { AttributeFilter } from "./AttributeFilter";
 export { FilterField } from "./FilterField";
 export { RangePills } from "./RangePills";
 export { Tooltip } from "./Tooltip";

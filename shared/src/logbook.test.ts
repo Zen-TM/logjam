@@ -5,6 +5,7 @@ import {
   countTripsInLastMonths,
   dateRangeLabel,
   datePresets,
+  dateSummary,
   distinctPlaceCount,
   fieldStatDisplay,
   formatTripDate,
@@ -397,5 +398,23 @@ describe("tripAttributeEntries", () => {
 
   it("is empty for a trip with nothing stored", () => {
     expect(tripAttributeEntries(defs, null)).toEqual([]);
+  });
+});
+
+describe("dateSummary", () => {
+  // A collapsed filter field has to state that it is NOT filtering, which is
+  // what separates this from dateRangeLabel's "Any time → Today".
+  it("says Any when nothing is set", () => {
+    expect(dateSummary(null)).toBe("Any");
+    expect(dateSummary([null, null])).toBe("Any");
+  });
+
+  it("names both bounds when both are set", () => {
+    expect(dateSummary(["2026-01-01", "2026-03-31"])).toBe("2026-01-01 – 2026-03-31");
+  });
+
+  it("names the open end when only one is set", () => {
+    expect(dateSummary(["2026-01-01", null])).toBe("From 2026-01-01");
+    expect(dateSummary([null, "2026-03-31"])).toBe("To 2026-03-31");
   });
 });
