@@ -126,3 +126,34 @@
 .searchInput:focus-visible {
   outline: none;
 }
+
+/* The slider and its reading on one line, the reading at the right like a
+   switch sits at the right of its row. */
+.range {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: var(--control-md);
+}
+
+.rangeInput {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  accent-color: var(--theme-accent);
+  cursor: pointer;
+}
+
+.rangeInput:focus-visible {
+  outline: 2px solid var(--theme-text-primary);
+  outline-offset: 2px;
+}
+
+.rangeValue {
+  flex: none;
+  min-width: 3ch;
+  text-align: right;
+  font-size: var(--font-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--theme-text-primary);
+}

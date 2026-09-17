@@ -30,6 +30,7 @@ import {
 import {
   removeShareConfirm,
   densifyLine,
+  formatBytes,
   formatDistanceM,
   routeLengthM,
   exportFilename,
@@ -95,14 +96,6 @@ const VERB_ICON: Partial<Record<WayVerbId, LucideIcon>> = {
   removeShare: X,
   delete: Trash2,
 };
-
-/** A file size for a person. Only ever an approximation — the exact byte count
- *  answers no question anyone opens this page with. */
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
 
 /** Export never touches the server — a route's geometry is already here. */
 function downloadText(filename: string, text: string, mimeType: string): void {

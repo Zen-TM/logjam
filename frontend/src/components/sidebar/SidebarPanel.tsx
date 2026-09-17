@@ -57,7 +57,6 @@ const MAPS_VIEWS = [
  * shrink.
  */
 const LEGACY_PAGES: ReadonlySet<PanelId> = new Set<PanelId>([
-  "maps",
   "friends",
   "account",
   "settings",
@@ -105,10 +104,10 @@ function SidebarPanel({
   // LiDAR
   activeTopoJobs,
   completedTopoJobs,
+  topoJobsLoaded,
   topoExports,
   topoExportsTotal,
   onRefetchTopoExports,
-  lidarJobToggles,
   setLidarJobToggles,
   onOpenTopo,
   onRefetchCompletedTopoJobs,
@@ -206,10 +205,11 @@ function SidebarPanel({
   // LiDAR
   activeTopoJobs: TopoJob[];
   completedTopoJobs: CompletedTopoJob[];
+  /** False until the first fetch of completed topos settles. */
+  topoJobsLoaded: boolean;
   topoExports: TopoExportJobView[];
   topoExportsTotal: number | null;
   onRefetchTopoExports: () => void;
-  lidarJobToggles: Record<string, boolean>;
   setLidarJobToggles: (v: Record<string, boolean> | ((prev: Record<string, boolean>) => Record<string, boolean>)) => void;
   onOpenTopo: () => void;
   onRefetchCompletedTopoJobs: () => void;
@@ -344,22 +344,18 @@ function SidebarPanel({
       </header>
     );
 
-  // Logs draws its view switch under its own hero, so the hero stays the page's
-  // first line; Maps is not rebuilt yet and keeps it under the plain header.
+  // A page with two views draws its switch under its own hero, so the hero
+  // stays the page's first line (DESIGN.md §2).
   const logsViewRail = (
     <ChipRail label="Logs view" options={LOGS_VIEWS} value={logsView} onChange={onLogsViewChange} />
   );
-  const views =
-    activePanel === "maps" ? (
-      <div className={classes.views}>
-        <ChipRail label="Maps view" options={MAPS_VIEWS} value={mapsView} onChange={onMapsViewChange} />
-      </div>
-    ) : null;
+  const mapsViewRail = (
+    <ChipRail label="Maps view" options={MAPS_VIEWS} value={mapsView} onChange={onMapsViewChange} />
+  );
 
   const panelContent = (
     <>
       {header}
-      {views}
       <div className={classes.panelBody} data-active-panel={activePanel} data-legacy={legacy}>
         {activePanel === "places" && (
           <PlacesPanel
@@ -393,6 +389,7 @@ function SidebarPanel({
         )}
         {activePanel === "maps" && mapsView === "geopdfs" && (
           <GeoPdfsPanel
+            views={mapsViewRail}
             friends={friends}
             onOpenGeoPdf={onOpenGeoPdf}
             onOpenGeoPdfWithTemplate={onOpenGeoPdfWithTemplate}
@@ -404,13 +401,16 @@ function SidebarPanel({
         )}
         {activePanel === "maps" && mapsView === "lidar" && (
           <LidarPanel
+            views={mapsViewRail}
+            topoJobsLoaded={topoJobsLoaded}
+            onSheetOpenChange={onFiltersOpenChange}
+            onExpandSheet={expandSheetToFull}
             friends={friends}
             activeTopoJobs={activeTopoJobs}
             completedTopoJobs={completedTopoJobs}
             topoExports={topoExports}
             topoExportsTotal={topoExportsTotal}
             onRefetchTopoExports={onRefetchTopoExports}
-            lidarJobToggles={lidarJobToggles}
             setLidarJobToggles={setLidarJobToggles}
             onOpenTopo={onOpenTopo}
             onTopoFlyTarget={onTopoFlyTarget}

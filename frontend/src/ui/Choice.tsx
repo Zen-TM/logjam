@@ -51,17 +51,15 @@ export function Checkbox({
 /**
  * A colour from a closed list (a route's colour).
  *
- * THE FIELD IS NOT THE BUTTON. It reads as a row — its label at the left, what
- * it is set to beside it, and the colour itself as a square filling the row's
- * full height at the right. Only that square is the control: a card where the
+ * THE FIELD IS NOT THE BUTTON. It reads as a line — its label at the left and
+ * the colour itself as a square filling the line's full height at the right. Only that square is the control: a card where the
  * whole surface was clickable gave a 380px panel a large target whose job was
  * to show one small colour, and the colour is the part anyone aims at
  * (operator, 2026-09-17).
  *
- * The NAME stays visible next to the swatch rather than being folded into the
- * accessible name. It is the only part of this control that survives being
- * unable to tell the colours apart, which is exactly the user this field is
- * hardest for.
+ * The colour's NAME is the trigger's accessible name ("Colour: Teal") and not
+ * text beside the swatch: the swatch already shows the colour, and a reader who
+ * cannot see it hears the name (DESIGN.md §9).
  *
  * The palette keeps its native radios, so the group is one tab stop and the
  * arrow keys move the choice; the popover only changes where they are. It is

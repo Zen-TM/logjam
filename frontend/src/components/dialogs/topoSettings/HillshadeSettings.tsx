@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Switch } from "@mui/material";
 import { HILLSHADE_LIMITS } from "@logjam/shared";
 import type { HillshadeSettings as HillshadeSettingsValue } from "@logjam/shared";
-import ColourPicker from "../../common/ColourPicker";
+import { ColourField } from "../../../ui";
 import SettingsRow from "./SettingsRow";
 import ValidatedNumberField from "../ValidatedNumberField";
 import { numericFieldError, type NumericFieldConstraints } from "../../../numberInput";
@@ -88,7 +88,7 @@ export default function HillshadeSettings({ value, onChange }: Props) {
       </p>
 
       <SettingsRow label="Tint colour" tooltip="Greyscale luminance is multiplied by this colour. The alpha channel sets the layer opacity.">
-        <ColourPicker value={value.colour} onChange={(c) => patch({ colour: c })} ariaLabel="Hillshade tint colour" />
+        <ColourField label="Hillshade tint colour" hideLabel value={value.colour} onChange={(c) => patch({ colour: c })} />
       </SettingsRow>
 
       <SettingsRow

@@ -7,7 +7,7 @@ import {
   type SlopeSettings as SlopeSettingsValue,
   type SlopeBand,
 } from "@logjam/shared";
-import ColourPicker from "../../common/ColourPicker";
+import { ColourField } from "../../../ui";
 import { Tooltip } from "@mui/material";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import styles from "./topoSettings.module.css";
@@ -196,19 +196,21 @@ export default function SlopeSettings({ value, onChange }: Props) {
       <div className={styles.scaleRow}>
         <span className={styles.scaleEndpoint}>
           <span className={styles.scaleLabel}>Scale start</span>
-          <ColourPicker
+          <ColourField
+            label="Scale start colour (lowest band)"
+            hideLabel
             value={scaleStart}
             onChange={(c) => setScale(c, scaleEnd)}
-            ariaLabel="Scale start colour (lowest band)"
           />
         </span>
         <span className={styles.scaleArrow} aria-hidden="true">→</span>
         <span className={styles.scaleEndpoint}>
           <span className={styles.scaleLabel}>Scale end</span>
-          <ColourPicker
+          <ColourField
+            label="Scale end colour (highest band)"
+            hideLabel
             value={scaleEnd}
             onChange={(c) => setScale(scaleStart, c)}
-            ariaLabel="Scale end colour (highest band)"
           />
         </span>
         <Tooltip title="Reset the scale to the default yellow → dark-red ramp" placement="top" arrow>

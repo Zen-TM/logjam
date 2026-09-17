@@ -202,24 +202,25 @@ export const OSM_FEATURE_LABELS: Record<OsmFeatureKey, string> = {
   hut: "Huts / shelters",
 };
 
-// Plain-language description of the underlying OSM query for tooltip copy.
+// Plain-language description of the underlying OSM query, shown under each
+// feature's switch. Plain text: it is rendered as written, so no markdown.
 export const OSM_FEATURE_TAG_HINTS: Record<OsmFeatureKey, string> = {
-  waterway: "OSM `waterway` ways (rivers, streams, creeks, canals, drains)",
-  track: "OSM `highway=track|path|footway|bridleway|steps`",
-  road: "OSM `highway=primary|secondary|tertiary|unclassified|residential|service`",
-  building: "OSM `building=*`",
-  power: "OSM `power=line|minor_line|cable`",
-  campsite: "OSM `tourism=camp_site|caravan_site|wilderness_hut|alpine_hut`",
-  peak: "OSM `natural=peak`",
-  spring: "OSM `natural=spring`",
-  gate: "OSM `barrier=gate|lift_gate|cycle_barrier`",
-  cave: "OSM `natural=cave_entrance`",
-  bridge: "OSM `bridge=yes` ways",
-  ford: "OSM `ford=*` (water crossings)",
-  waterfall: "OSM `waterway=waterfall`",
-  trailhead: "OSM `information=guidepost` and `highway=trailhead`",
-  viewpoint: "OSM `tourism=viewpoint`",
-  hut: "OSM `tourism=alpine_hut|wilderness_hut` and `amenity=shelter`",
+  waterway: "OSM waterway ways (rivers, streams, creeks, canals, drains)",
+  track: "OSM highway=track|path|footway|bridleway|steps",
+  road: "OSM highway=primary|secondary|tertiary|unclassified|residential|service",
+  building: "OSM building=*",
+  power: "OSM power=line|minor_line|cable",
+  campsite: "OSM tourism=camp_site|caravan_site|wilderness_hut|alpine_hut",
+  peak: "OSM natural=peak",
+  spring: "OSM natural=spring",
+  gate: "OSM barrier=gate|lift_gate|cycle_barrier",
+  cave: "OSM natural=cave_entrance",
+  bridge: "OSM bridge=yes ways",
+  ford: "OSM ford=* (water crossings)",
+  waterfall: "OSM waterway=waterfall",
+  trailhead: "OSM information=guidepost and highway=trailhead",
+  viewpoint: "OSM tourism=viewpoint",
+  hut: "OSM tourism=alpine_hut|wilderness_hut and amenity=shelter",
 };
 
 // Formation list must match topo/build_svtm_formation.py SVTM_FORMATION_MU

@@ -1,0 +1,117 @@
+/* Maps gives the panel body its full height: the hero and the view switch are
+   pinned, and only the list scrolls (DESIGN.md §2). Shared by both views and
+   the topo style sheet, which are one page. */
+.root {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.rails {
+  flex-shrink: 0;
+  padding: 10px var(--gutter) 8px;
+}
+
+.list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  /* Room for each card's focus ring inside the scroller. */
+  padding: 4px var(--gutter) var(--gutter);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.row {
+  flex-shrink: 0;
+}
+
+/* A sentence about a section, in the hint's voice. */
+.note {
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--theme-text-muted);
+}
+
+.emptyArea {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 var(--gutter) 15%;
+}
+
+.loading {
+  margin: 0;
+  text-align: center;
+  font-size: var(--font-sm);
+  color: var(--theme-text-muted);
+}
+
+/* Topo style: a line feature is its switch, then its colour and width. */
+.feature {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Indented under the switch they belong to, one line each. */
+.featureControls {
+  display: flex;
+  flex-direction: column;
+  padding-left: var(--gutter);
+}
+
+/* A width is a LINE, like the colour: label left, a box for a few digits
+   right. The field's label/control column is turned on its side. */
+.width {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 10px;
+  min-height: var(--control-lg);
+}
+
+.width > label {
+  flex: 1;
+  min-width: 0;
+}
+
+.width > input {
+  flex: none;
+  width: 8ch;
+  text-align: right;
+}
+
+/* An error still gets a line of its own beneath. */
+.width > :last-child:not(input) {
+  flex-basis: 100%;
+}
+
+.pointFeature {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pointFeature > :last-child {
+  flex: 1;
+  min-width: 0;
+}
+
+/* The map's own symbol, at the size a row's text reads beside. */
+.pointIcon {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+}

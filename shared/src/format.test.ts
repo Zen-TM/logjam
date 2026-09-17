@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatBytes } from "./format";
+import { formatBytes, formatMinutes } from "./format";
 
 describe("formatBytes", () => {
   it("drops precision as the number grows", () => {
@@ -18,5 +18,17 @@ describe("formatBytes", () => {
 
   it("reports genuinely nothing as zero", () => {
     expect(formatBytes(0)).toBe("0 KB");
+  });
+});
+
+describe("formatMinutes", () => {
+  it("says a short wait without a number", () => {
+    expect(formatMinutes(30)).toBe("under a minute");
+    expect(formatMinutes(89)).toBe("under a minute");
+  });
+
+  it("rounds to whole minutes, then hours and minutes", () => {
+    expect(formatMinutes(1260)).toBe("about 21 min");
+    expect(formatMinutes(3600 + 25 * 60)).toBe("about 1 h 25 min");
   });
 });

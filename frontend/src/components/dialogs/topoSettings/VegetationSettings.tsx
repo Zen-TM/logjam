@@ -1,6 +1,6 @@
 import { Switch } from "@mui/material";
 import { SVTM_FORMATIONS, type VegetationSettings as VegetationSettingsValue } from "@logjam/shared";
-import ColourPicker from "../../common/ColourPicker";
+import { ColourField } from "../../../ui";
 import SettingsRow from "./SettingsRow";
 import styles from "./topoSettings.module.css";
 
@@ -56,11 +56,11 @@ export default function VegetationSettings({ value, onChange }: Props) {
       </SettingsRow>
 
       <SettingsRow label="Sparse colour" tooltip="Colour at low density. Alpha here is ignored — use alpha min/max below.">
-        <ColourPicker value={value.sparseColour} onChange={(c) => patch({ sparseColour: c })} />
+        <ColourField label="Sparse colour" hideLabel value={value.sparseColour} onChange={(c) => patch({ sparseColour: c })} />
       </SettingsRow>
 
       <SettingsRow label="Dense colour" tooltip="Colour at high density. Alpha here is ignored — use alpha min/max below.">
-        <ColourPicker value={value.denseColour} onChange={(c) => patch({ denseColour: c })} />
+        <ColourField label="Dense colour" hideLabel value={value.denseColour} onChange={(c) => patch({ denseColour: c })} />
       </SettingsRow>
 
       <SettingsRow label="Alpha at min ratio" tooltip="Layer opacity at the min-ratio cutoff (0..255).">

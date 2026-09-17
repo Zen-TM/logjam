@@ -244,6 +244,9 @@ function App() {
   const [completedTopoJobs, setCompletedTopoJobs] = useState<
     CompletedTopoJob[]
   >([]);
+  // True once the first fetch settles, either way: an empty list before then is
+  // not "no topos yet" (DESIGN.md §8).
+  const [completedTopoJobsLoaded, setCompletedTopoJobsLoaded] = useState(false);
   // Topo overlay entries (`${jobId}-${layerName}`) whose PMTiles source failed
   // to load this session (e.g. output files gone from S3). Drives the
   // "unavailable" badge in the Layers panel (LAYERS-1).
@@ -731,7 +734,8 @@ function App() {
       })
       // Best-effort: called again on the next poll tick / job completion,
       // so a transient failure here is non-critical.
-      .catch((err) => { console.error(err); });
+      .catch((err) => { console.error(err); })
+      .finally(() => setCompletedTopoJobsLoaded(true));
   }, []);
 
   useEffect(() => {
@@ -1473,10 +1477,10 @@ function App() {
           geoPdfJobsRefetch={geoPdfJobsRefetch}
           activeTopoJobs={activeTopoJobs}
           completedTopoJobs={completedTopoJobs}
+          topoJobsLoaded={completedTopoJobsLoaded}
           topoExports={topoExports}
           topoExportsTotal={topoExportsTotal}
           onRefetchTopoExports={refetchTopoExports}
-          lidarJobToggles={lidarJobToggles}
           setLidarJobToggles={setLidarJobToggles}
           onOpenTopo={() => {
             setInitialTopoTemplateId(null);

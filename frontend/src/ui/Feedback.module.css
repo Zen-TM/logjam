@@ -121,6 +121,9 @@
 /* The track is a wash of the text colour; the fill is measured against it. */
 .progress {
   position: relative;
+  /* Fills its line in a flex row too (a row's footer), where a block's
+     automatic width would otherwise collapse to nothing. */
+  width: 100%;
   height: 6px;
   overflow: hidden;
   border-radius: var(--radius-pill);

@@ -222,3 +222,50 @@ export function SearchField({
     </div>
   );
 }
+
+/**
+ * A number chosen by feel rather than typed: a native range input, with what it
+ * is set to beside its label. Native, so arrows, Home/End and Page keys and the
+ * announcement are the platform's. For a value someone judges by watching its
+ * effect (a label size on the live map), where a box to type into would ask
+ * for a precision nobody has.
+ */
+export function RangeField({
+  label,
+  hint,
+  id,
+  className,
+  value,
+  format,
+  onChange,
+  ...inputProps
+}: Omit<InputHTMLAttributes<HTMLInputElement>, "type" | "value" | "onChange"> & {
+  label: string;
+  hint?: string;
+  value: number;
+  /** What the value reads as, beside the label and to assistive tech ("1.2×"). */
+  format: (value: number) => string;
+  onChange: (next: number) => void;
+}) {
+  const autoId = useId();
+  const inputId = id ?? autoId;
+  return (
+    <Field inputId={inputId} label={label} hint={hint} className={className}>
+      <div className={classes.range}>
+        <input
+          id={inputId}
+          type="range"
+          className={classes.rangeInput}
+          value={value}
+          aria-valuetext={format(value)}
+          aria-describedby={describedBy(inputId, hint)}
+          onChange={(event) => onChange(Number(event.target.value))}
+          {...inputProps}
+        />
+        <output htmlFor={inputId} className={classes.rangeValue}>
+          {format(value)}
+        </output>
+      </div>
+    </Field>
+  );
+}

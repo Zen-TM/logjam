@@ -14,7 +14,6 @@ import tseslint from 'typescript-eslint'
  * the @mui dependencies.
  */
 const MUI_LEGACY_FILES = [
-  'src/components/common/ColourPicker.tsx',
   'src/components/ConsentGate.tsx',
   'src/components/dialogs/AddCustomFieldDialog.tsx',
   'src/components/dialogs/ChangeEmailDialog.tsx',
@@ -39,11 +38,7 @@ const MUI_LEGACY_FILES = [
   'src/components/dialogs/TopoTemplateEditDialog.tsx',
   'src/components/dialogs/UnifiedImportDialog.tsx',
   'src/components/dialogs/ValidatedNumberField.tsx',
-  'src/components/feedback/JobRibbon.tsx',
   'src/components/sidebar/panels/FriendSharingSection.tsx',
-  'src/components/sidebar/panels/LidarPanel.tsx',
-  'src/components/sidebar/panels/vectorStyles/VectorFeaturesForm.tsx',
-  'src/components/sidebar/panels/vectorStyles/VectorLabelSizeForm.tsx',
   'src/components/SignIn.tsx',
   'src/csvImport/SectionLabel.tsx',
   'src/main.tsx',

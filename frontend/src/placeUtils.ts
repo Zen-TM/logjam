@@ -1737,6 +1737,9 @@ export function useGeoPdfJobs(enabled: boolean, pollMs: number = 5000) {
   // True total (pre server-side list cap); null until known.
   const [total, setTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+  // True once the first fetch has settled, either way. `loading` alone starts
+  // false, so a list reading it would flash "nothing yet" before any request.
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fetchCount, setFetchCount] = useState(0);
 
@@ -1747,7 +1750,7 @@ export function useGeoPdfJobs(enabled: boolean, pollMs: number = 5000) {
     apiFetchWithTotal<{ jobs: GeoPdfJobView[] }>("/geo-pdf")
       .then(({ data, total }) => { if (!cancelled) { setJobs(data.jobs); setTotal(total); setError(null); } })
       .catch((err) => { console.error(err); if (!cancelled) setError(messageFromError(err, "Couldn't load GeoPDF jobs.")); })
-      .finally(() => { if (!cancelled) setLoading(false); });
+      .finally(() => { if (!cancelled) { setLoading(false); setLoaded(true); } });
     return () => { cancelled = true; };
   }, [enabled, fetchCount]);
 
@@ -1761,7 +1764,7 @@ export function useGeoPdfJobs(enabled: boolean, pollMs: number = 5000) {
   }, [enabled, pollMs, hasInProgress]);
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
-  return { jobs, total, loading, error, refetch };
+  return { jobs, total, loading, loaded, error, refetch };
 }
 
 export function getGeoPdfJob(id: string): Promise<GeoPdfJobView> {

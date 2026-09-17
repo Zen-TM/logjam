@@ -193,6 +193,40 @@ test.describe("desktop", () => {
     await aside.getByRole("button", { name: "Cancel", exact: true }).click();
   });
 
+  test("Maps: both views, a row menu, the topo style sheet and its colour", async ({ page }) => {
+    await openApp(page);
+    await page.getByRole("button", { name: "Maps", exact: true }).click();
+    const aside = page.locator("aside");
+    await aside.getByRole("radio", { name: "GeoPDFs" }).click();
+    // Loaded, not the placeholder title ("GeoPDFs" while the list is loading).
+    await expect(aside.getByRole("heading", { level: 2, name: /^(No GeoPDFs yet|\d+ GeoPDFs?)$/ })).toBeVisible({ timeout: 15_000 });
+    await expectNoViolations(page, "aside");
+
+    await aside.getByRole("radio", { name: "LiDAR topos" }).click();
+    await expect(aside.getByRole("heading", { level: 2, name: /^(No LiDAR topos yet|\d+ LiDAR topos?)$/ })).toBeVisible({ timeout: 15_000 });
+    await expectNoViolations(page, "aside");
+
+    // The built-in Default template is always there, so there is always a menu.
+    await aside.getByRole("button", { name: "Actions for Default" }).click();
+    await expect(page.getByRole("menu")).toBeVisible();
+    await expectNoViolations(page, "[role='menu']");
+    await page.keyboard.press("Escape");
+
+    // How topos draw opens BESIDE the page, and its colours are free pickers.
+    await aside.getByRole("button", { name: "Topo style" }).click();
+    const sheet = page.getByRole("region", { name: "Topo style" });
+    await expect(sheet.getByRole("slider", { name: "Label size" })).toBeVisible({ timeout: 15_000 });
+    await expectNoViolations(page, "aside");
+    const major = sheet.getByRole("button", { name: /^Major colour:/ });
+    await major.click();
+    await expect(page.getByRole("slider", { name: "Hue" })).toBeVisible();
+    await expectNoViolations(page, "[role='dialog'][aria-label='Major colour']");
+    await page.keyboard.press("Escape");
+    await expect(major).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(aside.getByRole("button", { name: "Topo style" })).toBeFocused();
+  });
+
   test("the Layers popover", async ({ page }) => {
     await openApp(page);
     await page.getByRole("button", { name: "Layers", exact: true }).click();

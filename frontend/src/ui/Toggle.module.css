@@ -59,4 +59,6 @@
 .description {
   font-size: var(--font-xs);
   color: var(--theme-text-muted);
+  /* A description may hold an unbroken token (an OSM query) wider than the row. */
+  overflow-wrap: anywhere;
 }

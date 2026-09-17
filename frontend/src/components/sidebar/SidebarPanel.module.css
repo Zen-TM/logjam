@@ -50,13 +50,6 @@
   white-space: nowrap;
 }
 
-/* A page with two views: the chip rail that swaps them, under the header. */
-.views {
-  flex-shrink: 0;
-  padding: 10px var(--gutter);
-  border-bottom: var(--hairline);
-}
-
 /* A page owns its layout: pinned hero and rails over a list that scrolls on
  * its own (DESIGN.md §2). The body itself never scrolls and adds no gutter. */
 .panelBody {
