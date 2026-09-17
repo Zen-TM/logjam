@@ -161,6 +161,9 @@ test.describe("desktop", () => {
     const rowMenu = aside.getByRole("button", { name: /^Actions for / }).first();
     await rowMenu.click();
     await expect(page.getByRole("menu")).toBeVisible();
+    // Reverse is a button in the draw tool now, never a menu item: it changes
+    // the geometry on screen, so it belongs beside the other edits to it.
+    await expect(page.getByRole("menuitem", { name: "Reverse direction" })).toHaveCount(0);
     await expectNoViolations(page, "[role='menu']");
     await page.keyboard.press("Escape");
 
@@ -169,8 +172,18 @@ test.describe("desktop", () => {
     // after the row's title, which is a route name we cannot know here.
     await aside.locator("[data-way-kind='route']").first().getByRole("button", { name: /^Actions for/ }).click();
     await page.getByRole("menuitem", { name: "Open", exact: true }).click();
-    await expect(aside.getByRole("group", { name: "Colour on the map" })).toBeVisible({ timeout: 15_000 });
+
+    // The colour is a FIELD showing its value, not ten swatches laid out flat;
+    // the palette is a popover behind it, so both states are checked.
+    const colour = aside.getByRole("button", { name: /^Colour on the map:/ });
+    await expect(colour).toBeVisible({ timeout: 15_000 });
     await expectNoViolations(page, "aside");
+
+    await colour.click();
+    await expect(page.getByRole("group", { name: "Colour on the map" })).toBeVisible();
+    await expectNoViolations(page, "[role='dialog'][aria-label='Colour on the map']");
+    await page.keyboard.press("Escape");
+    await expect(colour).toBeFocused();
 
     // The draw tool is a PAGE in the panel, not a card over the map.
     await page.getByRole("button", { name: "Tools", exact: true }).click();

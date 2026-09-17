@@ -59,6 +59,11 @@
   margin: 0;
 }
 
+/* The headline figure among its neighbours, on its own line. */
+.cell[data-span] {
+  grid-column: 1 / -1;
+}
+
 .cell {
   display: flex;
   flex-direction: column;

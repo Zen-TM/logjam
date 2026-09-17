@@ -13,6 +13,7 @@ import { useBoxDraw } from "./useBoxDraw";
 import type { PlaceHighlight } from "./placeHighlight";
 import { layers as protomapsLayers, namedFlavor } from "@protomaps/basemaps";
 import {
+  arrowSegmentFeatures,
   draftAnchorIndices,
   draftPoints,
   fetchSnapLines,
@@ -20,6 +21,11 @@ import {
   moveAnchor,
   nearestSegment,
   snapSegment,
+  ARROW_FEATURE_KIND,
+  ROUTE_ARROW_ICON_SIZE,
+  ROUTE_ARROW_IMAGE,
+  ROUTE_ARROW_MIN_ZOOM,
+  ROUTE_ARROW_SDF_URI,
   type RouteDraft,
   type RoutePoint,
   type SnapMode,
@@ -457,6 +463,10 @@ function draftFeatureCollection(
       geometry: { type: "LineString", coordinates: points.map((p) => [...p]) },
       properties: {},
     });
+    // One line per segment for the arrows to ride, so an arrow never lands on
+    // an anchor handle. The line above stays whole for the line layer, which
+    // filters these back out — see `arrowSegmentFeatures` in @logjam/shared.
+    features.push(...(arrowSegmentFeatures(points, {}) as GeoJSON.Feature[]));
   }
   anchorIndices.forEach((pointIndex, anchorIndex) => {
     const point = points[pointIndex];
@@ -511,6 +521,7 @@ function Map({
   routes,
   selectRoute,
   routeHoverPosition,
+  routeHoverColor,
   drawingRoute,
   drawColor,
   drawPoints,
@@ -579,6 +590,8 @@ function Map({
   /** Position along a route under the elevation-profile cursor, marked on the
    * map so the chart and the ground read as the same place. */
   routeHoverPosition: [number, number] | null;
+  /** The colour of the line that cursor is sliding along. */
+  routeHoverColor: string | null;
   // Draw/edit mode. The vertex list lives in App so the HUD can render the
   // running distance and drive undo; the map only reports gestures.
   drawingRoute: boolean;
@@ -1056,8 +1069,16 @@ function Map({
 
       // User-authored routes. Same treatment as place-tracks (below the
       // markers so pins stay clickable), but the geometry is already in hand —
-      // no per-feature fetch. Hidden until the "Routes" layer is toggled on.
+      // no per-feature fetch. Hidden until the "Ways" layer is toggled on.
       map.addSource("routes", {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+      });
+      // The direction arrows ride their own source: one line per segment, which
+      // is what keeps an arrow off the join between two of them. A separate
+      // source rather than a filter on this one, because `routes` is also the
+      // click target and nothing there should have to know about arrows.
+      map.addSource("routes-arrows", {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
       });
@@ -1098,32 +1119,41 @@ function Map({
           "line-opacity": 0.9,
         },
       });
-      // Direction of travel, as chevrons riding the line itself. Symbol
+      // Direction of travel, as arrowheads riding the line itself. Symbol
       // placement does the spacing and rotation natively — hand-placed markers
-      // would have to be recomputed on every pan. Held back to zoom 11+ and
-      // spaced generously so a screenful of routes doesn't turn into a hedge.
+      // would have to be recomputed on every pan. Spaced generously so a
+      // screenful of routes doesn't turn into a hedge.
+      //
+      // An SDF IMAGE, not a glyph. This drew `›` until 2026-09-17, and that
+      // glyph's ink sits low in its own advance box: MapLibre centres a
+      // line-placed symbol on the BOX, so the arrow rode below the line, and
+      // with keep-upright off the error swapped sides wherever a route doubled
+      // back — which reads as arrows wobbling rather than as an offset
+      // (operator). Logjam GPS hit this first and fixed it the same way; the
+      // arrowhead and its centring test now live in @logjam/shared so one
+      // client cannot quietly keep the broken one.
       map.addLayer({
         id: "routes-direction",
         type: "symbol",
-        source: "routes",
-        minzoom: 11,
+        source: "routes-arrows",
+        minzoom: ROUTE_ARROW_MIN_ZOOM,
         layout: {
           visibility: "none",
           "symbol-placement": "line",
           "symbol-spacing": 90,
-          "text-field": "›",
-          "text-font": ["Noto Sans Medium"],
-          "text-size": 16,
-          "text-rotation-alignment": "map",
-          "text-keep-upright": false,
-          "text-allow-overlap": true,
-          "text-ignore-placement": true,
+          "icon-image": ROUTE_ARROW_IMAGE,
+          "icon-size": ROUTE_ARROW_ICON_SIZE,
+          "icon-rotation-alignment": "map",
+          "icon-pitch-alignment": "map",
+          "icon-keep-upright": false,
+          "icon-allow-overlap": true,
+          "icon-ignore-placement": true,
         },
         paint: {
-          "text-color": ["get", "color"],
-          "text-halo-color": "#ffffff",
-          "text-halo-width": 1,
-          "text-opacity": 0.75,
+          "icon-color": ["get", "color"],
+          "icon-halo-color": "#ffffff",
+          "icon-halo-width": 1,
+          "icon-opacity": 0.9,
         },
       });
 
@@ -1141,6 +1171,10 @@ function Map({
         id: "route-draft-line",
         type: "line",
         source: "route-draft",
+        // The per-segment arrow features share this source; drawing them here
+        // too would paint the line twice, joining each segment with two round
+        // caps instead of one line-join — a notch on every tight corner.
+        filter: ["!=", ["get", "kind"], ARROW_FEATURE_KIND],
         layout: { "line-cap": "round", "line-join": "round" },
         paint: {
           "line-color": initialDraftColor,
@@ -1151,22 +1185,22 @@ function Map({
         id: "route-draft-direction",
         type: "symbol",
         source: "route-draft",
-        filter: ["==", ["geometry-type"], "LineString"],
+        filter: ["==", ["get", "kind"], ARROW_FEATURE_KIND],
         layout: {
           "symbol-placement": "line",
           "symbol-spacing": 90,
-          "text-field": "›",
-          "text-font": ["Noto Sans Medium"],
-          "text-size": 16,
-          "text-rotation-alignment": "map",
-          "text-keep-upright": false,
-          "text-allow-overlap": true,
-          "text-ignore-placement": true,
+          "icon-image": ROUTE_ARROW_IMAGE,
+          "icon-size": ROUTE_ARROW_ICON_SIZE,
+          "icon-rotation-alignment": "map",
+          "icon-pitch-alignment": "map",
+          "icon-keep-upright": false,
+          "icon-allow-overlap": true,
+          "icon-ignore-placement": true,
         },
         paint: {
-          "text-color": initialDraftColor,
-          "text-halo-color": "#ffffff",
-          "text-halo-width": 1,
+          "icon-color": initialDraftColor,
+          "icon-halo-color": "#ffffff",
+          "icon-halo-width": 1,
         },
       });
       // Ends read differently from the middle: START is filled, END is hollow
@@ -1203,8 +1237,15 @@ function Map({
         type: "circle",
         source: "route-hover",
         paint: {
+          // The line's OWN colour, inside the white ring. Colour is what says
+          // which line you are looking at on this map, so a dot in the accent
+          // was the one colour carrying no identity at all.
+          "circle-color": [
+            "coalesce",
+            ["get", "color"],
+            readCssVar("--theme-accent", "#3b82f6"),
+          ],
           "circle-radius": 6,
-          "circle-color": readCssVar("--theme-accent", "#3b82f6"),
           "circle-stroke-width": 2,
           "circle-stroke-color": "#ffffff",
         },
@@ -1678,9 +1719,20 @@ function Map({
       "visibility",
       vis(showPlaceTracks),
     );
-    // The route being drawn stays visible even with the Routes layer off —
+    // The route being drawn stays visible even with the Ways layer off —
     // hiding your own in-progress work would read as the tool being broken.
-    for (const id of ["routes-hit", "routes-lines", "routes-direction"]) {
+    //
+    // "Ways" draws every line of the user's OWN: the routes they drew and the
+    // files they imported or recorded. Those files used to have no toggle at
+    // all — the list of them WAS their visibility, set one at a time by a
+    // switch on each file's own detail page, which is a control you had to open
+    // a page to find (operator, 2026-09-17).
+    for (const id of [
+      "routes-hit",
+      "routes-lines",
+      "routes-direction",
+      "standalone-tracks-lines",
+    ]) {
       mapRef.current.setLayoutProperty(
         id,
         "visibility",
@@ -1703,17 +1755,29 @@ function Map({
       | maplibregl.GeoJSONSource
       | undefined;
     if (!source) return;
+    // The route being edited is drawn by the draft layer instead, so it isn't
+    // painted twice (and stale) underneath the handles.
+    const drawn = routes.filter((route) => route.id !== editingRouteId);
     source.setData({
       type: "FeatureCollection",
-      features: routes
-        // The route being edited is drawn by the draft layer instead, so it
-        // isn't painted twice (and stale) underneath the handles.
-        .filter((route) => route.id !== editingRouteId)
-        .map((route) => ({
-          type: "Feature" as const,
-          geometry: { type: "LineString" as const, coordinates: route.points },
-          properties: { id: route.id, name: route.name, color: route.color },
-        })),
+      features: drawn.map((route) => ({
+        type: "Feature" as const,
+        geometry: { type: "LineString" as const, coordinates: route.points },
+        properties: { id: route.id, name: route.name, color: route.color },
+      })),
+    });
+
+    const arrows = mapRef.current.getSource("routes-arrows") as
+      | maplibregl.GeoJSONSource
+      | undefined;
+    arrows?.setData({
+      type: "FeatureCollection",
+      features: drawn.flatMap(
+        (route) =>
+          arrowSegmentFeatures(route.points, {
+            color: route.color,
+          }) as GeoJSON.Feature[],
+      ),
     });
   }, [routes, mapLoaded, editingRouteId]);
 
@@ -1778,7 +1842,7 @@ function Map({
       map.setPaintProperty("route-draft-line", "line-color", effectiveColor);
     }
     if (map.getLayer("route-draft-direction")) {
-      map.setPaintProperty("route-draft-direction", "text-color", effectiveColor);
+      map.setPaintProperty("route-draft-direction", "icon-color", effectiveColor);
     }
     if (map.getLayer("route-draft-vertices")) {
       map.setPaintProperty("route-draft-vertices", "circle-stroke-color", effectiveColor);
@@ -2037,12 +2101,12 @@ function Map({
             {
               type: "Feature",
               geometry: { type: "Point", coordinates: routeHoverPosition },
-              properties: {},
+              properties: { color: routeHoverColor },
             },
           ]
         : [],
     });
-  }, [routeHoverPosition, mapLoaded]);
+  }, [routeHoverPosition, routeHoverColor, mapLoaded]);
 
   // Toggle base layer visibility
   useEffect(() => {
@@ -2106,6 +2170,32 @@ function Map({
     const PREFIX = "topo-icon-";
     const onMissing = (e: { id: string }) => {
       const id = e.id;
+      // The route arrowhead. Registered as an SDF, which is what lets ONE image
+      // take each route's own colour through `icon-color` — a plain bitmap
+      // ignores the tint and every route would share one arrow colour.
+      if (id === ROUTE_ARROW_IMAGE) {
+        if (map.hasImage(id)) return;
+        const arrow = new Image();
+        arrow.onload = () => {
+          if (map.hasImage(id)) return;
+          // Decode to raw RGBA here rather than handing MapLibre the element.
+          // An SDF carries its distance field in the ALPHA channel and the
+          // shader thresholds it; passing an HTMLImageElement leaves that
+          // decode to the browser's image pipeline, and the arrows rendered as
+          // plain white triangles with the route line showing through their
+          // soft edge — i.e. the tint was never applied (seen 2026-09-17).
+          const canvas = document.createElement("canvas");
+          canvas.width = arrow.naturalWidth;
+          canvas.height = arrow.naturalHeight;
+          const ctx = canvas.getContext("2d", { willReadFrequently: true });
+          if (!ctx) return;
+          ctx.drawImage(arrow, 0, 0);
+          const { width, height, data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          map.addImage(id, { width, height, data: new Uint8Array(data) }, { sdf: true });
+        };
+        arrow.src = ROUTE_ARROW_SDF_URI;
+        return;
+      }
       if (!id || !id.startsWith(PREFIX) || map.hasImage(id)) return;
       const key = id.slice(PREFIX.length) as OsmPointFeatureKey;
       const meta = OSM_POINT_ICON[key];

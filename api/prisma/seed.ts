@@ -2,9 +2,13 @@ import { PrismaClient, Prisma } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { databaseUrlFromEnv } from "../src/lib/databaseUrl";
 import { CURRENT_CONSENT_VERSION } from "../src/constants/consent";
+import { PutObjectCommand } from "@aws-sdk/client-s3";
 import {
   enforceCanyoningTag,
   setFieldValues,
+  routeLengthM,
+  routeToGpx,
+  routeToKml,
   SOURCES_FIELD_KEY,
   SYSTEM_FIELD_DEFS,
   PLACE_TYPE_COLORS,
@@ -13,7 +17,88 @@ import {
   SYSTEM_PLACE_TYPES,
   TRACK_COLORS,
 } from "@logjam/shared";
+import { s3 } from "../src/services/awsClients";
 import { seedId, cid } from "./seedIds";
+
+// ── Seeded vector files ─────────────────────────────────────────────────────
+//
+// These rows used to be metadata with NO object behind them ("the rows exist to
+// populate media-list code paths"). That was defensible while a file was only
+// ever a row in a list. It stopped being defensible when Ways gave every file a
+// page of its own and the map began drawing them: a row promising 27 KB of
+// "Coin Slot descent" with nothing in S3 behind it is data no client could have
+// produced, and it reads as a broken app (operator, 2026-09-17).
+//
+// Every figure a row states is DERIVED from the bytes actually uploaded —
+// extent, point count, length, size — so a row cannot contradict its own file.
+// The hand-written ones had already drifted apart: the Du Faur bbox excluded
+// the last point of its own line, and the Wollangambe recording's bbox did not
+// contain its line at all.
+
+type SeededFile = {
+  key: string;
+  body: string;
+  contentType: string;
+  fileSizeBytes: number;
+  bbox: [number, number, number, number];
+  positionCount: number;
+  distanceM: number;
+};
+
+function seededFile(
+  key: string,
+  name: string,
+  line: [number, number][],
+  format: "gpx" | "kml",
+): SeededFile {
+  const body = format === "gpx" ? routeToGpx(name, line) : routeToKml(name, line);
+  const lons = line.map(([lon]) => lon);
+  const lats = line.map(([, lat]) => lat);
+  return {
+    key,
+    body,
+    contentType:
+      format === "gpx" ? "application/gpx+xml" : "application/vnd.google-earth.kml+xml",
+    fileSizeBytes: Buffer.byteLength(body, "utf8"),
+    bbox: [Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)],
+    positionCount: line.length,
+    distanceM: Math.round(routeLengthM(line)),
+  };
+}
+
+/**
+ * Puts the seeded files where their rows say they are.
+ *
+ * BEST EFFORT on purpose: a box brought up with `docker compose up postgres
+ * ministack` skips `make _ministack-tf`, so no bucket exists (CLAUDE.local.md).
+ * Failing the seed over that would block every other fixture for the sake of
+ * five small files, so this warns and leaves the rows — which then behave
+ * exactly as they did before this change.
+ */
+async function uploadSeededFiles(files: SeededFile[]): Promise<void> {
+  const bucket = process.env.S3_BUCKET_MEDIA;
+  if (!bucket) {
+    console.warn("S3_BUCKET_MEDIA is unset — seeded track files were not uploaded.");
+    return;
+  }
+  try {
+    for (const file of files) {
+      await s3.send(
+        new PutObjectCommand({
+          Bucket: bucket,
+          Key: file.key,
+          Body: file.body,
+          ContentType: file.contentType,
+        }),
+      );
+    }
+    console.log(`Uploaded ${files.length} seeded track files to s3://${bucket}/media/seed/`);
+  } catch (err) {
+    console.warn(
+      `Could not upload seeded track files (${(err as Error).message}). The rows still exist; their pages will report a file that isn't there.`,
+    );
+  }
+}
 
 const adapter = new PrismaPg({ connectionString: databaseUrlFromEnv() });
 const prisma = new PrismaClient({ adapter });
@@ -110,6 +195,37 @@ const COIN_SLOT_LINE: [number, number][] = [
   [150.3297, -33.1224],
   [150.3303, -33.1233],
   [150.3308, -33.1243],
+];
+
+// Bob's descent takes over exactly where his approach stops, rather than being
+// the same polyline twice: the place holds the descent FILE and the approach
+// route is unlinked, so a reader who opens both must see two different lines.
+const COIN_SLOT_DESCENT_LINE: [number, number][] = [
+  [150.3308, -33.1243],
+  [150.3312, -33.1252],
+  [150.3313, -33.1262],
+  [150.3310, -33.1271],
+  [150.3304, -33.1279],
+  [150.3296, -33.1285],
+];
+
+const EMPRESS_FALLS_LINE: [number, number][] = [
+  [150.3625, -33.7200],
+  [150.3631, -33.7209],
+  [150.3634, -33.7219],
+  [150.3633, -33.7229],
+  [150.3628, -33.7238],
+  [150.3620, -33.7245],
+];
+
+const BELL_CREEK_LINE: [number, number][] = [
+  [150.3345, -33.4972],
+  [150.3358, -33.4983],
+  [150.3371, -33.4995],
+  [150.3384, -33.5008],
+  [150.3396, -33.5021],
+  [150.3407, -33.5034],
+  [150.3415, -33.5048],
 ];
 
 const BUTTERBOX_LINE: [number, number][] = [
@@ -687,8 +803,32 @@ async function main() {
     });
   }
 
-  // Media (metadata only — no S3 objects exist locally, so thumbnails won't
-  // load; the rows exist to populate media-list code paths).
+  // The five vector files the rows below describe. Generated from the lines
+  // above and uploaded now, so every figure a row states — extent, point count,
+  // length, size — is read back off the bytes rather than typed by hand.
+  const empressFile = seededFile(
+    "media/seed/empress-falls.gpx", "Empress Falls abseils", EMPRESS_FALLS_LINE, "gpx",
+  );
+  const duFaurFile = seededFile(
+    "media/seed/du-faur.kml", "Du Faur approach", DU_FAUR_LINE, "kml",
+  );
+  const coinSlotFile = seededFile(
+    "media/seed/coin-slot.gpx", "Coin Slot descent", COIN_SLOT_DESCENT_LINE, "gpx",
+  );
+  const wollangambeFile = seededFile(
+    "media/seed/recording-2026-08-02.gpx", "Wollangambe, 2 Aug", WOLLANGAMBE_LINE, "gpx",
+  );
+  const bellCreekFile = seededFile(
+    "media/seed/recording-2026-05-17.gpx", "Bell Creek, 17 May", BELL_CREEK_LINE, "gpx",
+  );
+  await uploadSeededFiles([
+    empressFile, duFaurFile, coinSlotFile, wollangambeFile, bellCreekFile,
+  ]);
+
+  // Media. Every VECTOR row has a real object behind it (above); the photo is
+  // still metadata only, so its thumbnail will not load — generating a
+  // believable JPEG is a different job from generating a believable track, and
+  // a photo is not what a way's page draws.
   //
   // Covers all three parent states, because they behave differently and only
   // the first one used to exist: a photo ATTACHED to a place (dies with it), a
@@ -700,20 +840,21 @@ async function main() {
     data: [
       { id: seedId("4", 1), ownerId: ALICE_ID, linkedType: "place", linkedId: PLACE_IDS[0], s3KeyDisplay: "media/seed/grand-1.jpg", s3KeyThumbnail: "media/seed/grand-1-thumb.jpg", mediaType: "image/jpeg", filename: "grand-canyon.jpg", fileSizeBytes: BigInt(2_048_000) },
       // Empress Falls carries a FILE as its way (no route is linked to it), and
-      // its extent sits on Empress Falls. Every bbox below brackets the place
-      // it belongs to: a file whose extent is nowhere near its own name is what
-      // made the old fixtures read as broken data.
-      { id: seedId("4", 2), ownerId: ALICE_ID, linkedType: "place", linkedId: PLACE_IDS[2], s3KeyDisplay: "media/seed/empress-falls.gpx", mediaType: "application/gpx+xml", filename: "empress-falls.gpx", displayName: "Empress Falls abseils", fileSizeBytes: BigInt(31_000), color: TRACK_COLORS[0], origin: "import", metadata: { bbox: [150.3598, -33.7229, 150.3651, -33.7176], featureCount: 1, positionCount: 214 } },
-      { id: seedId("4", 3), ownerId: ALICE_ID, linkedType: "none", linkedId: null, s3KeyDisplay: "media/seed/du-faur.kml", mediaType: "application/vnd.google-earth.kml+xml", filename: "du-faur-approach.kml", displayName: "Du Faur approach", fileSizeBytes: BigInt(21_000), color: TRACK_COLORS[1], origin: "import", metadata: { bbox: [150.3290, -33.5161, 150.3351, -33.5113], featureCount: 3, positionCount: 240 } },
-      { id: seedId("4", 4), ownerId: ALICE_ID, linkedType: "none", linkedId: null, s3KeyDisplay: "media/seed/recording-2026-08-02.gpx", mediaType: "application/gpx+xml", filename: "Wollangambe, 2 Aug.gpx", displayName: "Wollangambe, 2 Aug", fileSizeBytes: BigInt(184_000), color: TRACK_COLORS[2], origin: "track", metadata: { bbox: [150.3521, -33.4941, 150.3662, -33.4836], distanceM: 7420, durationMs: 19_800_000, elevationGainM: 265, elevationLossM: 310, pointCount: 6_140, startedAt: "2026-08-02T22:05:00.000Z", endedAt: "2026-08-03T03:35:00.000Z" } },
+      // its extent sits on Empress Falls. Every extent below is the file's own,
+      // so it brackets the place it belongs to by construction: a file whose
+      // extent is nowhere near its own name is what made the old fixtures read
+      // as broken data.
+      { id: seedId("4", 2), ownerId: ALICE_ID, linkedType: "place", linkedId: PLACE_IDS[2], s3KeyDisplay: empressFile.key, mediaType: empressFile.contentType, filename: "empress-falls.gpx", displayName: "Empress Falls abseils", fileSizeBytes: BigInt(empressFile.fileSizeBytes), color: TRACK_COLORS[0], origin: "import", metadata: { bbox: empressFile.bbox, featureCount: 1, positionCount: empressFile.positionCount } },
+      { id: seedId("4", 3), ownerId: ALICE_ID, linkedType: "none", linkedId: null, s3KeyDisplay: duFaurFile.key, mediaType: duFaurFile.contentType, filename: "du-faur-approach.kml", displayName: "Du Faur approach", fileSizeBytes: BigInt(duFaurFile.fileSizeBytes), color: TRACK_COLORS[1], origin: "import", metadata: { bbox: duFaurFile.bbox, featureCount: 1, positionCount: duFaurFile.positionCount } },
+      { id: seedId("4", 4), ownerId: ALICE_ID, linkedType: "none", linkedId: null, s3KeyDisplay: wollangambeFile.key, mediaType: wollangambeFile.contentType, filename: "Wollangambe, 2 Aug.gpx", displayName: "Wollangambe, 2 Aug", fileSizeBytes: BigInt(wollangambeFile.fileSizeBytes), color: TRACK_COLORS[2], origin: "track", metadata: { bbox: wollangambeFile.bbox, distanceM: wollangambeFile.distanceM, durationMs: 5_400_000, elevationGainM: 95, elevationLossM: 130, pointCount: wollangambeFile.positionCount, startedAt: "2026-08-02T22:05:00.000Z", endedAt: "2026-08-02T23:35:00.000Z" } },
       // BOB's file on the place he shares with alice. This is the only way a
       // track on someone ELSE's place is reachable in dev, and it is what the
       // Ways page lists beside alice's own files — the case that had no fixture
       // at all, so its column read as permanently empty.
-      { id: seedId("4", 5), ownerId: BOB_ID, linkedType: "place", linkedId: BOB_SHARED_PLACE_ID, s3KeyDisplay: "media/seed/coin-slot.gpx", mediaType: "application/gpx+xml", filename: "coin-slot.gpx", displayName: "Coin Slot descent", fileSizeBytes: BigInt(27_000), color: TRACK_COLORS[3], origin: "import", metadata: { bbox: [150.3258, -33.1265, 150.3312, -33.1191], featureCount: 1, positionCount: 180 } },
+      { id: seedId("4", 5), ownerId: BOB_ID, linkedType: "place", linkedId: BOB_SHARED_PLACE_ID, s3KeyDisplay: coinSlotFile.key, mediaType: coinSlotFile.contentType, filename: "coin-slot.gpx", displayName: "Coin Slot descent", fileSizeBytes: BigInt(coinSlotFile.fileSizeBytes), color: TRACK_COLORS[3], origin: "import", metadata: { bbox: coinSlotFile.bbox, featureCount: 1, positionCount: coinSlotFile.positionCount } },
       // A second recording of alice's, so Tracks is not a single row and the
       // kind rail has something to narrow.
-      { id: seedId("4", 6), ownerId: ALICE_ID, linkedType: "none", linkedId: null, s3KeyDisplay: "media/seed/recording-2026-05-17.gpx", mediaType: "application/gpx+xml", filename: "Bell Creek, 17 May.gpx", displayName: "Bell Creek, 17 May", fileSizeBytes: BigInt(96_000), color: TRACK_COLORS[4], origin: "track", metadata: { bbox: [150.3339, -33.5042, 150.3418, -33.4967], distanceM: 4180, durationMs: 12_600_000, elevationGainM: 180, elevationLossM: 240, pointCount: 3_090, startedAt: "2026-05-16T23:40:00.000Z", endedAt: "2026-05-17T03:10:00.000Z" } },
+      { id: seedId("4", 6), ownerId: ALICE_ID, linkedType: "none", linkedId: null, s3KeyDisplay: bellCreekFile.key, mediaType: bellCreekFile.contentType, filename: "Bell Creek, 17 May.gpx", displayName: "Bell Creek, 17 May", fileSizeBytes: BigInt(bellCreekFile.fileSizeBytes), color: TRACK_COLORS[4], origin: "track", metadata: { bbox: bellCreekFile.bbox, distanceM: bellCreekFile.distanceM, durationMs: 3_600_000, elevationGainM: 70, elevationLossM: 95, pointCount: bellCreekFile.positionCount, startedAt: "2026-05-16T23:40:00.000Z", endedAt: "2026-05-17T00:40:00.000Z" } },
     ],
   });
 

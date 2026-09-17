@@ -196,19 +196,26 @@ export default function LayersPopover({
                 checked={showSharedPlaces}
                 onToggle={setShowSharedPlaces}
               />
+              {/* "Ways" rather than "Routes": it draws every line of your own —
+                  routes you drew AND the files you imported or recorded. Those
+                  files used to be drawn by a per-item switch buried on each
+                  one's detail page, which is a control you had to open a page to
+                  find (operator, 2026-09-17). Split by OWNERSHIP, like the two
+                  place rows above it, so a friend's lines can be hidden without
+                  hiding your own. */}
               <OverlayRow
                 icon={Route}
                 hue="var(--hue-route)"
-                title="Routes"
-                subtitle={routeCount == null ? "Routes you drew" : countOf(routeCount, "route")}
+                title="Ways"
+                subtitle={routeCount == null ? "Lines you made" : countOf(routeCount, "way")}
                 checked={showRoutes}
                 onToggle={setShowRoutes}
               />
               <OverlayRow
                 icon={Spline}
-                hue="var(--hue-import)"
-                title="Place tracks"
-                subtitle="Track files attached to places"
+                hue="var(--hue-shared)"
+                title="Shared ways"
+                subtitle="Lines on places shared with you"
                 checked={showPlaceTracks}
                 onToggle={setShowPlaceTracks}
               />

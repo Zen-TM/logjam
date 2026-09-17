@@ -60,7 +60,18 @@ export function ActivitySpark({
   );
 }
 
-export type Stat = { label: string; value: string };
+export type Stat = {
+  label: string;
+  value: string;
+  /**
+   * Take the whole row rather than one column. For the figure that is the
+   * headline among its neighbours — a route's distance, with climb and descent
+   * paired beneath it, because those two are one fact about the line and
+   * reading them side by side is what makes them comparable (operator,
+   * 2026-09-17).
+   */
+  span?: boolean;
+};
 
 /** Headline numbers in a two-column grid, each a label over its value. A
  *  definition list, so each value is read with the words that name it. */
@@ -68,7 +79,7 @@ export function StatGrid({ stats }: { stats: readonly Stat[] }) {
   return (
     <dl className={classes.grid}>
       {stats.map((stat) => (
-        <div key={stat.label} className={classes.cell}>
+        <div key={stat.label} className={classes.cell} data-span={stat.span || undefined}>
           <dt className={classes.statLabel}>{stat.label}</dt>
           <dd className={classes.statValue}>{stat.value}</dd>
         </div>

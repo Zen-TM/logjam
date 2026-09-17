@@ -13,11 +13,15 @@
 // panel is the bottom sheet, so this is also the bottom bar the operator
 // floated, with no second placement to maintain.
 //
-// It is the same shape as a way's detail page on purpose: the stats, then the
-// profile, then the properties. One before the route exists and one after.
-import { useEffect, useState } from "react";
-import { Redo2, Trash2, Undo2, X } from "lucide-react";
+// It is the same shape as a way's detail page on purpose: the controls, then
+// the stats, then the profile. One before the route exists and one after.
+// CONTROLS COME FIRST because they change what the next click does, while the
+// stats describe what the last one produced — a control below the readout it
+// governs reads as a footnote to it (operator, 2026-09-17).
+import { useEffect, useMemo, useState } from "react";
+import { ArrowLeftRight, Redo2, Trash2, Undo2, X } from "lucide-react";
 import {
+  densifyLine,
   formatDistanceM,
   routeLengthM,
   trackColorName,
@@ -57,11 +61,19 @@ type RouteDrawPanelProps = {
   onColorChange: (color: string) => void;
   onUndo: () => void;
   onClear: () => void;
+  /** Flip which way the line runs. A BUTTON, not a menu item: it changes the
+   *  geometry on screen, so it belongs beside the other edits to it rather than
+   *  behind a menu on a page you have left (operator, 2026-09-17). */
+  onReverse: () => void;
   onSave: () => void;
   onCancel: () => void;
   saving: boolean;
   snapMode: SnapMode;
   onSnapModeChange: (mode: SnapMode) => void;
+  /** Where along the draft the elevation cursor sits, so the map marks it —
+   *  the same gesture a saved route's page offers, which stopped working the
+   *  moment the tool became a page of its own (operator, 2026-09-17). */
+  onHoverPosition: (position: [number, number] | null) => void;
 };
 
 export function RouteDrawPanel({
@@ -74,13 +86,16 @@ export function RouteDrawPanel({
   onColorChange,
   onUndo,
   onClear,
+  onReverse,
   onSave,
   onCancel,
   saving,
   snapMode,
   onSnapModeChange,
+  onHoverPosition,
 }: RouteDrawPanelProps): React.JSX.Element {
   const canSave = points.length >= 2 && !saving;
+  const hasLine = points.length >= 2;
 
   // The line as it was when the user last paused. Profiling the live draft
   // would fire a request per click and re-render the chart mid-gesture.
@@ -95,10 +110,35 @@ export function RouteDrawPanel({
   }, [points]);
   const { profile, loading: profileLoading } = useElevationProfile(settled);
 
+  // Ctrl+Z / Cmd+Z, because this is a drawing tool and that is what the gesture
+  // means everywhere else (operator, 2026-09-17). Bound while the tool is
+  // mounted, which is exactly while a draft exists; it defers to a focused
+  // field so it can never eat an undo meant for typing.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "z" && event.key !== "Z") return;
+      if (!event.ctrlKey && !event.metaKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input, textarea, select, [contenteditable]")) return;
+      event.preventDefault();
+      onUndo();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onUndo]);
+
+  // The SAME densification the server profiled, so a sample index maps straight
+  // back to a coordinate on the line.
+  const samplePositions = useMemo(() => (settled ? densifyLine(settled) : []), [settled]);
+  // Leaving mid-hover would otherwise strand the marker on the map.
+  useEffect(() => () => onHoverPosition(null), [onHoverPosition]);
+
   const stats: Stat[] = [
     {
       label: "Distance",
-      value: points.length >= 2 ? formatDistanceM(routeLengthM(points)) : "—",
+      value: hasLine ? formatDistanceM(routeLengthM(points)) : "—",
+      // The headline figure while drawing, with the pair beneath it.
+      span: true,
     },
     { label: "Climb", value: profile ? `↑ ${Math.round(profile.gainM)} m` : "—" },
     { label: "Descent", value: profile ? `↓ ${Math.round(profile.lossM)} m` : "—" },
@@ -120,43 +160,7 @@ export function RouteDrawPanel({
               : `${anchorCount} point${anchorCount === 1 ? "" : "s"} · drag to move, click to remove, drag the line to add`}
         </p>
 
-        <StatGrid stats={stats} />
-
-        {atCap && (
-          <p className={classes.warning} role="status">
-            Maximum of {MAX_ROUTE_POINTS} points reached.
-          </p>
-        )}
-
-        {/* The terrain under the line, while it is still being decided — the
-            reason a canyoner re-routes a leg before saving it rather than
-            after. Absent until there is a line to read. */}
-        {points.length >= 2 && (
-          <section className={classes.section}>
-            {profile ? (
-              <>
-                {profile.minM != null && profile.maxM != null && (
-                  <p className={classes.band}>
-                    {Math.round(profile.minM)}–{Math.round(profile.maxM)} m above sea level
-                  </p>
-                )}
-                <SectionHeader title="Elevation vs distance" />
-                <ElevationProfile
-                  samples={profile.samples}
-                  minM={profile.minM}
-                  maxM={profile.maxM}
-                  color={color ?? "currentColor"}
-                />
-                <p className={classes.attribution}>{profile.attribution}</p>
-              </>
-            ) : (
-              <p className={classes.note}>
-                {profileLoading ? "Reading the terrain…" : "Pause to read the terrain under this line."}
-              </p>
-            )}
-          </section>
-        )}
-
+        {/* ── Controls: what the NEXT click does ───────────────────────── */}
         <section className={classes.section}>
           {/* A tool's own settings belong with the tool, not in Layers: this one
               changes what the NEXT click does (mobile §2). */}
@@ -186,10 +190,58 @@ export function RouteDrawPanel({
             onChange={onColorChange}
           />
         </section>
+
+        {/* ── Figures: what the last click produced ────────────────────── */}
+        <StatGrid stats={stats} />
+
+        {atCap && (
+          <p className={classes.warning} role="status">
+            Maximum of {MAX_ROUTE_POINTS} points reached.
+          </p>
+        )}
+
+        {/* The terrain under the line, while it is still being decided — the
+            reason a canyoner re-routes a leg before saving it rather than
+            after. Absent until there is a line to read. */}
+        {hasLine && (
+          <section className={classes.section}>
+            {profile ? (
+              <>
+                {profile.minM != null && profile.maxM != null && (
+                  <p className={classes.band}>
+                    {Math.round(profile.minM)}–{Math.round(profile.maxM)} m above sea level
+                  </p>
+                )}
+                <SectionHeader title="Elevation vs distance" />
+                <ElevationProfile
+                  samples={profile.samples}
+                  minM={profile.minM}
+                  maxM={profile.maxM}
+                  color={color ?? "currentColor"}
+                  onHoverSampleChange={(index) => {
+                    const position = index == null ? null : samplePositions[index];
+                    onHoverPosition(position ? [position.lon, position.lat] : null);
+                  }}
+                />
+                <p className={classes.attribution}>{profile.attribution}</p>
+              </>
+            ) : (
+              <p className={classes.note}>
+                {profileLoading ? "Reading the terrain…" : "Pause to read the terrain under this line."}
+              </p>
+            )}
+          </section>
+        )}
       </div>
 
       <footer className={classes.actions}>
         <IconButton icon={Undo2} label="Undo" onClick={onUndo} disabled={!canUndo || saving} />
+        <IconButton
+          icon={ArrowLeftRight}
+          label="Reverse direction"
+          onClick={onReverse}
+          disabled={!hasLine || saving}
+        />
         <IconButton
           icon={Trash2}
           label="Clear all points"

@@ -33,7 +33,6 @@ describe("wayVerbs", () => {
   it("withholds every write verb on a way shared with you", () => {
     const shared = ids(route({ shared: true }));
     expect(shared).not.toContain("edit");
-    expect(shared).not.toContain("reverse");
     expect(shared).not.toContain("share");
     expect(shared).not.toContain("delete");
     expect(shared).not.toContain("rename");
@@ -44,8 +43,30 @@ describe("wayVerbs", () => {
     expect(ids(route({ shared: true }))).toEqual(expect.arrayContaining(["exportGpx", "exportKml"]));
   });
 
-  it("offers no direction to reverse on a file", () => {
-    expect(ids(importFile())).not.toContain("reverse");
+  // The endpoint has existed since sharing shipped; nothing on the web offered
+  // it, so a sharee's only way to keep a route was export-and-reimport.
+  it("lets a sharee take their own copy of a route", () => {
+    expect(ids(route({ shared: true }))).toContain("copy");
+  });
+
+  it("offers no copy of something already yours", () => {
+    expect(ids(route())).not.toContain("copy");
+  });
+
+  // A file on a shared place is media, and no copy endpoint takes one — so the
+  // verb would 404 rather than do nothing.
+  it("offers no copy of a shared file, which no endpoint can copy", () => {
+    expect(ids(importFile({ shared: true }))).not.toContain("copy");
+  });
+
+  // It is a button in the draw tool now: it changes the geometry you are
+  // looking at, so it belongs beside the other edits to that geometry.
+  it("keeps Reverse out of every menu", () => {
+    expect(ids(route())).not.toContain("reverse");
+    expect(ids(route(), "detail")).not.toContain("reverse");
+  });
+
+  it("offers no editing of a file", () => {
     expect(ids(importFile())).not.toContain("edit");
   });
 
@@ -88,17 +109,14 @@ describe("wayProperties", () => {
     expect(wayProperties(importFile()).colour).toBe(false);
   });
 
-  // A switch that would do nothing is worse than no switch: both of these are
-  // already drawn by a layer of their own.
-  it("offers a visibility switch only to a file that has no layer of its own", () => {
-    expect(wayProperties(importFile()).visibility).toBe(true);
-    expect(wayProperties(route()).visibility).toBe(false);
-    expect(wayProperties(importFile({ placeId: "p1" })).visibility).toBe(false);
-    expect(wayProperties(importFile({ shared: true })).visibility).toBe(false);
-  });
-
   it("always says where a way lives", () => {
     expect(wayProperties(route()).place).toBe(true);
     expect(wayProperties(importFile({ shared: true })).place).toBe(true);
+  });
+
+  // The Layers overlays draw these files now, so a per-item switch buried on a
+  // detail page has nothing left to do (operator, 2026-09-17).
+  it("has no per-item visibility switch left to offer", () => {
+    expect(wayProperties(importFile())).not.toHaveProperty("visibility");
   });
 });

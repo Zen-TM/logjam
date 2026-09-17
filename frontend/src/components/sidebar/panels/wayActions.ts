@@ -7,8 +7,7 @@
 // belonged where (operator, 2026-09-17). The rule now:
 //
 //   * A PROPERTY you change in place is inline in the detail body: the colour,
-//     whether it is drawn on the map, which place it belongs to. Not a verb,
-//     never in a menu.
+//     which place it belongs to. Not a verb, never in a menu.
 //   * A VERB is in ⋯, and nowhere else.
 //   * BOTH ⋯ surfaces render THIS list. They may differ by exactly one verb:
 //     "Open", which the detail page omits because you are already looking at
@@ -17,13 +16,22 @@
 // A verb is ABSENT when it cannot exist for this way (a file has no direction
 // to reverse), never present-and-refused — the API answers 403 or 404 for the
 // ones the user may not have, so offering them would be a lie (DESIGN.md §7).
+//
+// Two things left this list on 2026-09-17, both because a menu was the wrong
+// home for them:
+//   * REVERSE is a button in the draw tool while a route is open for editing.
+//     It changes the geometry you are looking at, so it belongs beside the
+//     other edits to that geometry rather than behind a menu that closes.
+//   * VISIBILITY was a per-file switch on a detail page, which is a control the
+//     user had to open a page to find. The Layers overlays draw these files
+//     now, so the switch has nowhere left to be and nothing left to do.
 import type { WayItem, WayKind } from "./waysModel";
 
 export type WayVerbId =
   | "open"
   | "openPlace"
   | "edit"
-  | "reverse"
+  | "copy"
   | "share"
   | "exportGpx"
   | "exportKml"
@@ -44,7 +52,10 @@ const LABELS: Record<WayVerbId, string> = {
   open: "Open",
   openPlace: "Open its place",
   edit: "Edit points",
-  reverse: "Reverse direction",
+  // Not "Copy": the promise is that it becomes YOURS — editable, permanent, and
+  // unaffected by the owner later unsharing it. Logjam GPS draws the same
+  // distinction between a live share and a copy you keep.
+  copy: "Save to my Ways",
   share: "Share…",
   exportGpx: "Export as GPX",
   exportKml: "Export as KML",
@@ -60,7 +71,8 @@ const EXPORTABLE_KINDS: readonly WayKind[] = ["route"];
  * The verbs for one way, in menu order.
  *
  * `owned` is the whole permission model here: every write verb belongs to the
- * owner, and a way shared with you offers only what reading allows.
+ * owner, and a way shared with you offers only what reading allows — plus the
+ * one verb that makes a copy of its own.
  */
 export function wayVerbs(
   way: Pick<WayItem, "kind" | "shared" | "placeId">,
@@ -79,9 +91,13 @@ export function wayVerbs(
   if (surface === "row") verbs.push(verb("open"));
   if (way.placeId) verbs.push(verb("openPlace"));
 
-  if (owned && way.kind === "route") {
-    verbs.push(verb("edit"), verb("reverse"));
-  }
+  if (owned && way.kind === "route") verbs.push(verb("edit"));
+  // Taking your own copy of someone else's route. `POST /routes/:id/copy` has
+  // existed since sharing shipped and nothing on the web ever offered it
+  // (operator, 2026-09-17), so a sharee's only way to keep a route was to
+  // export it and import it back. Routes only: a file on a shared place is
+  // media, and no copy endpoint takes one.
+  if (!owned && way.kind === "route") verbs.push(verb("copy"));
   if (owned) verbs.push(verb("share"));
   if (EXPORTABLE_KINDS.includes(way.kind)) {
     verbs.push(verb("exportGpx"), verb("exportKml"));
@@ -100,7 +116,7 @@ export function wayVerbs(
  */
 export function wayProperties(
   way: Pick<WayItem, "kind" | "shared" | "placeId">,
-): { colour: boolean; visibility: boolean; place: boolean } {
+): { colour: boolean; place: boolean } {
   const owned = !way.shared;
   return {
     // The colour IS the way's identity on the map — but only a ROUTE's can be
@@ -109,10 +125,6 @@ export function wayProperties(
     // the file. Offering a picker that silently did nothing would be worse
     // than not offering one.
     colour: owned && way.kind === "route",
-    // Map visibility belongs to a file that has no Layers row of its own. A
-    // route has one (the Routes layer), and a file on a place is drawn by the
-    // place-tracks layer, so neither gets a switch that would do nothing.
-    visibility: owned && way.kind !== "route" && way.placeId === null,
     // Which place it belongs to: shown always, changeable by the owner.
     place: true,
   };

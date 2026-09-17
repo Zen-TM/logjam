@@ -1,5 +1,6 @@
-import { useId, type CSSProperties } from "react";
-import { Check } from "lucide-react";
+import { useId, useRef, useState, type CSSProperties } from "react";
+import { Check, ChevronDown } from "lucide-react";
+import { Popover } from "./Menu";
 import classes from "./Choice.module.css";
 
 /**
@@ -74,25 +75,70 @@ export function SwatchPicker({
   disabled?: boolean;
 }) {
   const name = useId();
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const chosen = value ? (nameOf?.(value) ?? value) : "No colour";
+
   return (
-    <fieldset className={classes.swatches} disabled={disabled}>
-      <legend className={classes.legend}>{label}</legend>
-      <div className={classes.swatchRow}>
-        {colors.map((color) => (
-          <input
-            key={color}
-            type="radio"
-            name={name}
-            value={color}
-            checked={color === value}
-            onChange={() => onChange(color)}
-            aria-label={nameOf?.(color) ?? color}
-            title={nameOf?.(color) ?? color}
-            className={classes.swatch}
-            style={{ "--swatch": color } as CSSProperties}
-          />
-        ))}
-      </div>
-    </fieldset>
+    <div className={classes.swatchField}>
+      {/* The CHOICE, not the palette. Ten swatches laid out flat spent a whole
+          block of a 380px panel showing nine colours nobody picked; the field
+          now reads like every other one — its label, then what it is set to
+          (operator, 2026-09-17). */}
+      <button
+        ref={triggerRef}
+        type="button"
+        className={classes.swatchTrigger}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-label={`${label}: ${chosen}`}
+        disabled={disabled}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <span className={classes.swatchDot} style={{ "--swatch": value } as CSSProperties} />
+        <span className={classes.swatchText}>
+          <span className={classes.legend}>{label}</span>
+          <span className={classes.swatchValue}>{chosen}</span>
+        </span>
+        <ChevronDown size={16} aria-hidden />
+      </button>
+
+      {/* The palette keeps its fieldset and its native radios, so it is still
+          one tab stop with the arrow keys moving the choice — the popover only
+          changes WHERE they are, never how they work. */}
+      <Popover
+        open={open}
+        onClose={() => setOpen(false)}
+        anchorRef={triggerRef}
+        label={label}
+        placement="bottom-start"
+        className={classes.swatchPopover}
+      >
+        <fieldset className={classes.swatches}>
+          <legend className={classes.legend}>{label}</legend>
+          <div className={classes.swatchRow}>
+            {colors.map((color) => (
+              <input
+                key={color}
+                type="radio"
+                name={name}
+                value={color}
+                checked={color === value}
+                onChange={() => {
+                  onChange(color);
+                  // Picking IS the answer to the question the popover asked.
+                  setOpen(false);
+                  triggerRef.current?.focus();
+                }}
+                aria-label={nameOf?.(color) ?? color}
+                title={nameOf?.(color) ?? color}
+                className={classes.swatch}
+                style={{ "--swatch": color } as CSSProperties}
+              />
+            ))}
+          </div>
+        </fieldset>
+      </Popover>
+    </div>
   );
 }

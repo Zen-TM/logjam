@@ -13,8 +13,8 @@
 import { useMemo, useState } from "react";
 import {
   Activity,
-  ArrowLeftRight,
   ChevronDown,
+  CopyPlus,
   Download,
   EllipsisVertical,
   FilePlus,
@@ -83,7 +83,7 @@ const VERB_ICON: Partial<Record<WayVerbId, LucideIcon>> = {
   open: RouteGlyph,
   openPlace: MapPin,
   edit: Pencil,
-  reverse: ArrowLeftRight,
+  copy: CopyPlus,
   share: Share2,
   exportGpx: Download,
   exportKml: Download,

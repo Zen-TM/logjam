@@ -16,7 +16,7 @@
 // `wayActions.ts` — not this file's judgement.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowLeftRight,
+  CopyPlus,
   Download,
   EllipsisVertical,
   Link2Off,
@@ -32,8 +32,6 @@ import {
   densifyLine,
   formatDistanceM,
   routeLengthM,
-  reverseRoute,
-  reverseRouteAnchors,
   exportFilename,
   mediaDisplayName,
   routeToGpx,
@@ -72,7 +70,6 @@ import {
   Select,
   StatGrid,
   SwatchPicker,
-  SwitchRow,
   TextField,
   Dialog,
   type MenuEntry,
@@ -85,7 +82,7 @@ import classes from "./WayDetailPanel.module.css";
 const VERB_ICON: Partial<Record<WayVerbId, LucideIcon>> = {
   openPlace: MapPin,
   edit: Pencil,
-  reverse: ArrowLeftRight,
+  copy: CopyPlus,
   share: Share2,
   exportGpx: Download,
   exportKml: Download,
@@ -121,11 +118,10 @@ export default function WayDetailPanel({
   ownedPlaces,
   sharedPlaces,
   allRoutes,
-  shownOnMap,
-  onToggleShown,
   onBack,
   onClose,
   onEdit,
+  onCopy,
   onChanged,
   onOpenPlace,
   onDeleteFile,
@@ -152,12 +148,12 @@ export default function WayDetailPanel({
   sharedPlaces: TPlace[];
   /** To warn before displacing a place's existing route. */
   allRoutes: TRoute[];
-  shownOnMap: boolean;
-  onToggleShown: () => void;
   /** Back to Ways — the list this page is one step inside of. */
   onBack: () => void;
   onClose: () => void;
   onEdit: (route: TRoute) => void;
+  /** Take your own copy of a route someone shared with you. */
+  onCopy: (route: TRoute) => void;
   onChanged: () => void;
   onOpenPlace: (placeId: string) => void;
   onDeleteFile: (file: StandaloneFile) => Promise<void>;
@@ -226,13 +222,16 @@ export default function WayDetailPanel({
   // own row carries. "—" where the terrain read has not landed, never a zero.
   const stats: Stat[] = route
     ? [
-        { label: "Distance", value: formatDistanceM(routeLengthM(route.points)) },
+        // Distance takes the row and climb/descent pair beneath it: those two
+        // are one fact about the line, and side by side is what makes them
+        // comparable (operator, 2026-09-17).
+        { label: "Distance", value: formatDistanceM(routeLengthM(route.points)), span: true },
         { label: "Climb", value: profile ? `↑ ${Math.round(profile.gainM)} m` : "—" },
         { label: "Descent", value: profile ? `↓ ${Math.round(profile.lossM)} m` : "—" },
       ]
     : [
         ...(way.distanceM != null
-          ? [{ label: "Distance", value: formatDistanceM(way.distanceM) }]
+          ? [{ label: "Distance", value: formatDistanceM(way.distanceM), span: true }]
           : []),
         ...(file?.metadata.elevationGainM != null
           ? [{ label: "Climb", value: `↑ ${Math.round(file.metadata.elevationGainM)} m` }]
@@ -256,22 +255,6 @@ export default function WayDetailPanel({
     );
   };
 
-  const handleReverse = () => {
-    if (!route) return;
-    void run(
-      () =>
-        updateRoute(route.id, {
-          points: reverseRoute(route.points),
-          // Anchors index INTO points, so flipping the geometry without
-          // remapping them silently reassigns which vertices the user placed.
-          ...(route.anchors
-            ? { anchors: reverseRouteAnchors(route.anchors, route.points.length) }
-            : {}),
-        }),
-      "Couldn't reverse the route.",
-    );
-  };
-
   const runVerb = (id: WayVerbId) => {
     switch (id) {
       case "openPlace":
@@ -280,8 +263,8 @@ export default function WayDetailPanel({
       case "edit":
         if (route) onEdit(route);
         return;
-      case "reverse":
-        handleReverse();
+      case "copy":
+        if (route) onCopy(route);
         return;
       case "share":
         setShowShare(true);
@@ -450,17 +433,6 @@ export default function WayDetailPanel({
               onChange={(next) =>
                 void run(() => updateRoute(route.id, { color: next }), "Couldn't change the colour.")
               }
-            />
-          </section>
-        )}
-
-        {properties.visibility && (
-          <section className={classes.section}>
-            <SwitchRow
-              title="Visible on the map"
-              description="This file has no layer of its own, so this switch is what draws it."
-              checked={shownOnMap}
-              onChange={onToggleShown}
             />
           </section>
         )}

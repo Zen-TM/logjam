@@ -33,6 +33,7 @@ import {
   deleteMedia,
   useRoutes,
   type TRoute,
+  copyRoute,
   createRoute,
   updateRoute,
   useSharedPlaces,
@@ -506,20 +507,28 @@ function App() {
     loaded: placeTracksLoaded,
     refetch: refetchPlaceTracks,
   } = usePlaceTracks(
-    loadsUserData && (showPlaceTracks || activePanel === "ways"),
+    // Their own place's tracks are drawn by "Ways" and a friend's by "Shared
+    // ways", so either overlay needs this list.
+    loadsUserData && (showPlaceTracks || showRoutes || activePanel === "ways"),
   );
   // Standalone files: the user's own imports and Logjam GPS recordings. They
-  // hang off no place, so the Routes panel is the only place they surface.
-  // Presigned URLs are minted only for the ones toggled onto the map (the
-  // egress gate lives on POST /media/download-urls).
-  const [shownStandaloneIds, setShownStandaloneIds] = useState<string[]>([]);
+  // hang off no place, so Ways is the only page they surface on.
+  //
+  // The "Ways" OVERLAY draws them now. It used to be a switch on each file's
+  // own detail page — a per-item control you had to open a page to find, and
+  // one that could never answer "show me my lines" (operator, 2026-09-17).
+  // Presigned URLs are still minted only for what is actually drawn, so the
+  // egress gate on POST /media/download-urls is unchanged; it is the overlay
+  // that opens it now rather than a switch per row.
   const {
     files: standaloneFiles,
     loaded: standaloneFilesLoaded,
     error: standaloneFilesError,
     refetch: refetchStandaloneFiles,
-  } = useStandaloneFiles(
-    loadsUserData && (activePanel === "ways" || shownStandaloneIds.length > 0),
+  } = useStandaloneFiles(loadsUserData && (activePanel === "ways" || showRoutes));
+  const shownStandaloneIds = useMemo(
+    () => (showRoutes ? standaloneFiles.map((file) => file.id) : []),
+    [showRoutes, standaloneFiles],
   );
   const { tracks: standaloneTracks } = useStandaloneTracks(
     standaloneFiles,
@@ -530,7 +539,8 @@ function App() {
     async (file: StandaloneFile) => {
       try {
         await deleteMedia(file.id);
-        setShownStandaloneIds((ids) => ids.filter((id) => id !== file.id));
+        // Nothing to prune: what is drawn is DERIVED from the file list now, so
+        // the refetch below is what takes a deleted file off the map.
         refetchStandaloneFiles();
       } catch (err) {
         console.error(err);
@@ -1016,6 +1026,15 @@ function App() {
     routeDraft.reset();
     setEditingRouteId(null);
     setDrawColor(null);
+    setRouteHoverPosition(null);
+    // The tool is a PAGE, so leaving it has to go somewhere. Clearing the draft
+    // while the panel still showed "way-draw" rendered nothing at all, which is
+    // the blank panel left behind after a discard (operator, 2026-09-17). Back
+    // to the way being edited, or to the list a new route came from. A save
+    // calls this too and then opens the saved way, which wins.
+    setActivePanel(
+      editingRouteId && selectedWay?.id === editingRouteId ? "way-detail" : "ways",
+    );
   };
 
   // FEUI-010: Cancel/Clear used to wipe an in-progress route (dozens of
@@ -1026,8 +1045,19 @@ function App() {
   // These two sit ABOVE the loading/unauthenticated early returns below: a
   // hook after an early return runs on some renders and not others, so the
   // sign-in -> map transition would shift every later hook's slot.
+  // "Dirty" for a NEW route is any point placed; for an EDIT it is the geometry
+  // differing from what was opened. Closing an edit you made no change to used
+  // to raise a discard confirm over work that did not exist, which teaches
+  // people to dismiss the confirm that matters (operator, 2026-09-17).
+  const editingOriginal = editingRouteId
+    ? (routes.find((route) => route.id === editingRouteId) ?? null)
+    : null;
+  const draftChanged = editingOriginal
+    ? JSON.stringify(routeDraft.points) !== JSON.stringify(editingOriginal.points)
+    : routeDraft.points.length > 0;
+
   const cancelRouteGuard = useUnsavedChangesGuard(
-    routeDraft.points.length > 0,
+    draftChanged,
     cancelDrawingRoute,
   );
   const clearRouteGuard = useUnsavedChangesGuard(
@@ -1066,6 +1096,14 @@ function App() {
   const selectedRoute =
     selectedWay?.kind === "route" ? (routes.find((r) => r.id === selectedWay.id) ?? null) : null;
 
+  // The elevation cursor's dot wears the colour of the line it is sliding
+  // along, because on this map colour IS which line you are looking at. It was
+  // the accent, which is the one colour that says nothing about identity
+  // (operator, 2026-09-17).
+  const routeHoverColor = drawingRoute
+    ? drawColor
+    : (selectedRoute?.color ?? selectedWay?.color ?? null);
+
   /**
    * Open a way's own page, and centre the map on it.
    *
@@ -1077,6 +1115,29 @@ function App() {
     setPendingWayVerb(verb ?? null);
     if (way.bounds) setFlyToBounds(way.bounds);
     setActivePanel("way-detail");
+  };
+
+  /**
+   * Take your own copy of a route a friend shared.
+   *
+   * `POST /routes/:id/copy` has existed since sharing shipped and nothing on
+   * the web ever called it (operator, 2026-09-17), so a sharee's only way to
+   * keep a route was to export it and import it back. The copy is THEIRS —
+   * editable, permanent, and unaffected by the owner later unsharing — which is
+   * why the verb says "Save to my Ways" rather than "Copy".
+   */
+  const copySharedRoute = (route: TRoute) => {
+    void (async () => {
+      try {
+        const copy = await copyRoute(route.id);
+        refetchRoutes();
+        toast.success(`"${copy.name}" is yours now.`);
+        openWay(wayFromRoute(copy, currentUser?.id ?? null));
+      } catch (err) {
+        console.error(err);
+        toast.error(messageFromError(err, "Couldn't save that route to your Ways."));
+      }
+    })();
   };
 
   const startDrawingRoute = () => {
@@ -1307,20 +1368,13 @@ function App() {
                 ownedPlaces={places}
                 sharedPlaces={sharedPlaces}
                 allRoutes={routes}
-                shownOnMap={shownStandaloneIds.includes(selectedWay.id)}
-                onToggleShown={() =>
-                  setShownStandaloneIds((ids) =>
-                    ids.includes(selectedWay.id)
-                      ? ids.filter((current) => current !== selectedWay.id)
-                      : [...ids, selectedWay.id],
-                  )
-                }
                 onBack={() => {
                   setSelectedWay(null);
                   setActivePanel("ways");
                 }}
                 onClose={() => setActivePanel(null)}
                 onEdit={startEditingRoute}
+                onCopy={copySharedRoute}
                 onChanged={() => {
                   refetchRoutes();
                   refetchStandaloneFiles();
@@ -1346,7 +1400,17 @@ function App() {
                 onColorChange={setDrawColor}
                 onUndo={routeDraft.undo}
                 onClear={clearRouteGuard.requestClose}
-                onSave={() => setNamingRoute(true)}
+                onReverse={routeDraft.reverse}
+                onHoverPosition={setRouteHoverPosition}
+                // Editing keeps the name it already has. Asking again on every
+                // save made a rename the price of moving one point, and the
+                // dialog's only honest default was the answer it already had
+                // (operator, 2026-09-17). Naming belongs to CREATING a route.
+                onSave={() => {
+                  const existing = routes.find((r) => r.id === editingRouteId);
+                  if (existing) void saveDrawnRoute(existing.name);
+                  else setNamingRoute(true);
+                }}
                 onCancel={cancelRouteGuard.requestClose}
                 saving={savingRoute}
                 snapMode={snapMode}
@@ -1460,11 +1524,24 @@ function App() {
         showOwnedPlaces={showOwnedPlaces}
         showSharedPlaces={showSharedPlaces}
         showPlaceTracks={showPlaceTracks}
-        placeTracks={placeTracks}
-        standaloneTracks={standaloneTracks}
+        // "Shared ways" carries only a FRIEND's lines. The user's own tracks on
+        // their own places are their own lines, so they ride with Ways —
+        // ownership is the split, the same one the two place overlays make.
+        placeTracks={placeTracks.filter((track) => !ownedPlaceIds.has(track.placeId))}
+        standaloneTracks={[
+          ...standaloneTracks,
+          ...placeTracks
+            .filter((track) => ownedPlaceIds.has(track.placeId))
+            .map((track) => ({
+              mediaId: track.mediaId,
+              color: track.color,
+              displayUrl: track.displayUrl,
+            })),
+        ]}
         showRoutes={showRoutes}
         routes={routes}
         routeHoverPosition={routeHoverPosition}
+        routeHoverColor={routeHoverColor}
         selectRoute={(id) => {
           const route = routes.find((r) => r.id === id);
           if (route) openWay(wayFromRoute(route, currentUser?.id ?? null));
@@ -1590,8 +1667,14 @@ function App() {
 
       <ConfirmDialog
         open={cancelRouteGuard.guardOpen}
-        title="Discard this route?"
-        message="Your placed points will be lost. This cannot be undone."
+        // Editing and drawing lose different things, so they cannot share one
+        // sentence: abandoning an edit costs the changes, not the route.
+        title={editingRouteId ? "Discard your edits?" : "Discard this route?"}
+        message={
+          editingRouteId
+            ? "Your changes to this route will be lost. The route itself is not deleted."
+            : "Your placed points will be lost. This cannot be undone."
+        }
         confirmLabel="Discard"
         confirmColor="error"
         onConfirm={cancelRouteGuard.confirmDiscard}
