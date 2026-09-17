@@ -136,6 +136,13 @@ describe("place tracks (fake auth)", () => {
       expect(ownerHit.placeId).toBe(SHARED_PLACE_ID);
       expect(ownerHit.color).toMatch(/^#[0-9a-f]{6}$/);
       expect(ownerHit.displayUrl).toContain("http");
+      // Enough to say WHAT the file is: a client lists a place's track beside
+      // the user's own files rather than as an unidentifiable kind of its own.
+      expect(ownerHit.filename).toBe("route.gpx");
+      expect(ownerHit).toHaveProperty("displayName");
+      expect(ownerHit).toHaveProperty("origin");
+      expect(ownerHit).toHaveProperty("metadata");
+      expect(typeof ownerHit.fileSizeBytes).toBe("number");
 
       // Sharee (bob) sees place-level media → the track.
       const shareeRes = await request(API_URL).get("/places/tracks").set(as(BOB_SUB));

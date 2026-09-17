@@ -232,6 +232,22 @@ router.get(
         mediaId: item.id,
         color: item.color,
         displayUrl: item.displayUrl,
+        // What the file IS, so a client can list it beside the user's own files
+        // rather than as an unidentifiable fourth kind. Without these a caller
+        // has a place id, a media id and a colour, and cannot tell a recording
+        // from an import or name either one — Logjam Web listed them under a
+        // category of their own purely for want of this.
+        //
+        // Inside the existing share boundary: a PlaceShare recipient already
+        // sees place-level media (root CLAUDE.md, hybrid model), and these are
+        // the same fields `GET /media/standalone` returns for one's own files.
+        // Still no coordinates — `metadata.bbox` is the file's own extent, which
+        // rides the same delta page as the place's position already does.
+        filename: item.filename,
+        displayName: item.displayName,
+        origin: item.origin,
+        fileSizeBytes: item.fileSizeBytes,
+        metadata: item.metadata,
       })),
     );
   },

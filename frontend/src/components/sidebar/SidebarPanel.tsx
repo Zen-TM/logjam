@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { useIsMobile } from "../../useIsMobile";
 import BottomSheet from "./BottomSheet";
@@ -28,8 +28,9 @@ import LidarPanel from "./panels/LidarPanel";
 import FriendsPanel from "./panels/FriendsPanel";
 import NotificationsPanel from "./panels/NotificationsPanel";
 import PlaceDetailPanel from "./panels/PlaceDetailPanel";
-import RouteDetailPanel from "./panels/RouteDetailPanel";
 import RoutesPanel from "./panels/RoutesPanel";
+import type { WayItem } from "./panels/waysModel";
+import type { WayVerbId } from "./panels/wayActions";
 import AccountPanel from "./panels/AccountPanel";
 import TripLogsPanel from "./panels/TripLogsPanel";
 import AnalyticsPanel from "./panels/AnalyticsPanel";
@@ -132,21 +133,14 @@ function SidebarPanel({
   // Place detail
   place,
   isOwnedPlace,
-  selectedRoute,
   allRoutes,
   placeTracks,
   standaloneFiles,
   standaloneFilesError,
-  shownStandaloneIds,
-  onToggleStandaloneFile,
-  onRenameStandaloneFile,
-  onDeleteStandaloneFile,
-  onFlyToStandaloneFile,
-  onSelectRoute,
-  onRouteHoverPosition,
+  onOpenWay,
+  wayDetail,
+  drawPanel,
   currentUserId,
-  onEditRoute,
-  onRoutesChanged,
   onPickCoords,
   pickingCoords,
   onCancelPickCoords,
@@ -243,21 +237,21 @@ function SidebarPanel({
   place: TPlace | undefined;
   isOwnedPlace: boolean;
   // Ways
-  selectedRoute: TRoute | null;
   allRoutes: TRoute[];
   placeTracks: PlaceTrack[];
   standaloneFiles: StandaloneFile[];
   standaloneFilesError: string | null;
-  shownStandaloneIds: string[];
-  onToggleStandaloneFile: (id: string) => void;
-  onRenameStandaloneFile: (id: string, displayName: string) => void;
-  onDeleteStandaloneFile: (file: StandaloneFile) => Promise<void>;
-  onFlyToStandaloneFile: (file: StandaloneFile) => void;
-  onSelectRoute: (id: string) => void;
-  onRouteHoverPosition: (position: [number, number] | null) => void;
+  /** Open a way's page, centring the map on it; `verb` arms one of its actions. */
+  onOpenWay: (way: WayItem, verb?: WayVerbId) => void;
+  /**
+   * The open way's page and the route tool, built by App because App owns the
+   * draft and the selection. Passed as nodes rather than as the fourteen props
+   * each would otherwise thread through this shell — the same shape
+   * `layersButton` and `notices` already take.
+   */
+  wayDetail: ReactNode;
+  drawPanel: ReactNode;
   currentUserId: string | null;
-  onEditRoute: (route: TRoute) => void;
-  onRoutesChanged: () => void;
   onPickCoords: (onPicked: (lat: number, lng: number) => void) => void;
   pickingCoords: boolean;
   onCancelPickCoords: () => void;
@@ -519,21 +513,8 @@ function SidebarPanel({
             onAfterDelete={() => setActivePanel("places")}
           />
         )}
-        {activePanel === "route-detail" && (
-          <RouteDetailPanel
-            route={selectedRoute}
-            currentUserId={currentUserId}
-            ownedPlaces={places}
-            sharedPlaces={sharedPlaces}
-            friends={friends}
-            allRoutes={allRoutes}
-            onEdit={onEditRoute}
-            onChanged={onRoutesChanged}
-            onClose={() => setActivePanel(null)}
-            onOpenPlace={openPlaceDetail}
-            onHoverPosition={onRouteHoverPosition}
-          />
-        )}
+        {activePanel === "way-detail" && wayDetail}
+        {activePanel === "way-draw" && drawPanel}
         {activePanel === "ways" && (
           <RoutesPanel
             routes={allRoutes}
@@ -543,15 +524,10 @@ function SidebarPanel({
             placeTracks={placeTracks}
             standaloneFiles={standaloneFiles}
             standaloneFilesError={standaloneFilesError}
-            shownStandaloneIds={shownStandaloneIds}
-            onToggleStandaloneFile={onToggleStandaloneFile}
-            onRenameStandaloneFile={onRenameStandaloneFile}
-            onDeleteStandaloneFile={onDeleteStandaloneFile}
-            onFlyToStandaloneFile={onFlyToStandaloneFile}
             places={[...places, ...sharedPlaces]}
             onStartDrawingRoute={onStartDrawingRoute}
             onOpenUnifiedImport={onOpenUnifiedImport}
-            onSelectRoute={onSelectRoute}
+            onOpenWay={onOpenWay}
             onOpenPlace={openPlaceDetail}
           />
         )}

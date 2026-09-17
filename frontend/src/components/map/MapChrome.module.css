@@ -10,24 +10,6 @@
   transition: left var(--transition-med) ease-out;
 }
 
-/* The armed tool's HUD, in the notices' own column and directly under the
-   search box, so a tool's controls sit where the map's other statements do —
-   but outside the live region beside it (see MapChrome's `hud` prop). It is
-   interactive, so unlike a notice it always takes pointer events. */
-.hud {
-  position: absolute;
-  z-index: 3;
-  top: 72px;
-  left: var(--map-inset-left, 0px);
-  right: 76px;
-  box-sizing: border-box;
-  padding-inline: 16px;
-  display: flex;
-  /* `safe`: a HUD wider than the visible map overflows to the right, under the
-     map controls, never leftwards over the panel or its sheet. */
-  justify-content: safe center;
-}
-
 .notices {
   position: absolute;
   z-index: 2;
@@ -152,8 +134,7 @@
     right: 12px;
   }
 
-  .notices,
-  .hud {
+  .notices {
     top: 64px;
     right: 0;
   }

@@ -544,6 +544,8 @@ function Map({
   onTopoFlyConsumed,
   flyToPlace,
   onFlyToPlaceConsumed,
+  flyToBounds,
+  onFlyToBoundsConsumed,
   panelOpen,
   sheetOpen = false,
   placeHighlight,
@@ -551,7 +553,6 @@ function Map({
   layersButton,
   mapTools,
   notices,
-  hud,
   onTopoSourceUnavailable,
 }: {
   filters: TFilters;
@@ -654,6 +655,13 @@ function Map({
   onTopoFlyConsumed?: () => void;
   flyToPlace?: { lat: number; lng: number } | null;
   onFlyToPlaceConsumed?: () => void;
+  /**
+   * Fit the map to a way's extent: opening one centres it, and so does arming
+   * the draw tool on it. A CONSUMED request, not a counter — a counter above
+   * zero fires again on every remount (DESIGN.md §9).
+   */
+  flyToBounds?: [number, number, number, number] | null;
+  onFlyToBoundsConsumed?: () => void;
   /** A page is open over the map's left edge; the chrome moves clear of it. */
   panelOpen: boolean;
   /** A sheet is open beside that page (the Places filters). */
@@ -668,8 +676,6 @@ function Map({
   mapTools: readonly MapTool[];
   /** Pinned notices about what the map shows right now. */
   notices?: ReactNode;
-  /** The armed tool's HUD (the route draw tool), floated over the map. */
-  hud?: ReactNode;
   // Fired once per topo overlay entry (jobId-layerName) whose PMTiles source
   // failed to load (e.g. the S3 object is gone). The entry's layers/source are
   // removed so MapLibre stops retrying; App surfaces the failure (LAYERS-1).
@@ -2568,6 +2574,26 @@ function Map({
     onTopoFlyConsumedRef.current?.();
   }, [topoFlyTarget, mapLoaded]);
 
+  const onFlyToBoundsConsumedRef = useRef(onFlyToBoundsConsumed);
+  useEffect(() => {
+    onFlyToBoundsConsumedRef.current = onFlyToBoundsConsumed;
+  }, [onFlyToBoundsConsumed]);
+
+  // A way's extent, fitted rather than centred: a line has a length, and
+  // dropping the camera on its midpoint at a fixed zoom shows either a fraction
+  // of it or a great deal of nothing. Same padding as the topo footprint fly.
+  useEffect(() => {
+    if (!flyToBounds || !mapLoaded || !mapRef.current) return;
+    const [west, south, east, north] = flyToBounds;
+    if ([west, south, east, north].every((value) => Number.isFinite(value))) {
+      mapRef.current.fitBounds([west, south, east, north], { padding: 80, duration: 1200, maxZoom: 16 });
+    } else {
+      // Never the coordinates themselves (privacy rule) — just that it was skipped.
+      console.warn("Skipping fit-to-way: bounds out of range");
+    }
+    onFlyToBoundsConsumedRef.current?.();
+  }, [flyToBounds, mapLoaded]);
+
   const onFlyToPlaceConsumedRef = useRef(onFlyToPlaceConsumed);
   useEffect(() => {
     onFlyToPlaceConsumedRef.current = onFlyToPlaceConsumed;
@@ -2848,7 +2874,6 @@ function Map({
         layersButton={layersButton}
         tools={mapTools}
         notices={notices}
-        hud={hud}
         search={
           // Always available, including during pick modes for a quick fly-to.
           <MapSearchBox

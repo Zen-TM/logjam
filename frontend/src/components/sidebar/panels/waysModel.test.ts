@@ -50,6 +50,11 @@ const placeTrack = (over: Partial<PlaceTrack> = {}): PlaceTrack => ({
   mediaId: "m1",
   color: "#ffe119",
   displayUrl: "https://example.invalid/track.gpx",
+  filename: "their-file.gpx",
+  displayName: null,
+  origin: "import",
+  fileSizeBytes: 2000,
+  metadata: {},
   ...over,
 });
 
@@ -64,7 +69,6 @@ const build = (args: {
     standaloneFiles: args.standaloneFiles ?? [],
     placeTracks: args.placeTracks ?? [],
     currentUserId: args.currentUserId === undefined ? ME : args.currentUserId,
-    placeName: (id) => `Place ${id}`,
   });
 
 describe("WAY_KINDS", () => {
@@ -72,6 +76,12 @@ describe("WAY_KINDS", () => {
   // chip rather than fail.
   it("labels every kind", () => {
     expect(Object.keys(WAY_KIND_LABELS).sort()).toEqual([...WAY_KINDS].sort());
+  });
+
+  // Where a way lives is a property of the row. It was briefly a fourth chip,
+  // which put "what a thing is" and "where it lives" on one axis.
+  it("names only what a way IS", () => {
+    expect([...WAY_KINDS]).toEqual(["route", "track", "import"]);
   });
 });
 
@@ -90,6 +100,23 @@ describe("buildWays", () => {
     const [way] = build({ routes: [route()] });
     expect(way.kind).toBe("route");
     expect(way.distanceM).toBeGreaterThan(0);
+  });
+
+  // Opening a way fits the map to it, so every kind has to know its own extent
+  // — a route from the geometry in hand, a file from the bbox its row carries.
+  it("bounds a route from its points and a file from its bbox", () => {
+    const [drawn] = build({ routes: [route()] });
+    expect(drawn.bounds).toEqual([150, -33, 150.1, -33]);
+
+    const [imported] = build({
+      standaloneFiles: [file({ metadata: { bbox: [150.2, -33.6, 150.3, -33.5] } })],
+    });
+    expect(imported.bounds).toEqual([150.2, -33.6, 150.3, -33.5]);
+  });
+
+  it("leaves bounds null when nothing says where a file is", () => {
+    const [imported] = build({ standaloneFiles: [file()] });
+    expect(imported.bounds).toBeNull();
   });
 
   it("carries a recorded file's distance and leaves an import's null", () => {
@@ -116,21 +143,32 @@ describe("buildWays", () => {
     expect(ways[0].shared).toBe(false);
   });
 
-  it("names a place's track after its place", () => {
-    const [way] = build({ placeTracks: [placeTrack()] });
-    expect(way).toMatchObject({ kind: "place", title: "Place p1", placeId: "p1", shared: true });
+  // A track on a friend's place is an ordinary file, sorted by its own origin
+  // and titled by its own name — not a kind named for where it lives.
+  it("sorts a place's track by its origin and titles it by its name", () => {
+    const ways = build({
+      placeTracks: [
+        placeTrack({ mediaId: "a", origin: "track", displayName: "Their recording" }),
+        placeTrack({ mediaId: "b", origin: "import", filename: "their-import.kml" }),
+      ],
+    });
+    expect(ways.map((way) => [way.kind, way.title])).toEqual([
+      ["track", "Their recording"],
+      ["import", "their-import.kml"],
+    ]);
+    expect(ways.every((way) => way.shared && way.placeId === "p1")).toBe(true);
   });
 
   // The two endpoints overlap: a file of the user's own linked to their own
   // place comes back from both, and the row that survives must be the one that
-  // knows the file's name.
-  it("lists a file on the user's own place once, by name", () => {
+  // knows the file is theirs.
+  it("lists a file on the user's own place once, as their own", () => {
     const ways = build({
       standaloneFiles: [file({ id: "m1", displayName: "Du Faur approach", linkedPlaceId: "p1" })],
       placeTracks: [placeTrack({ mediaId: "m1", placeId: "p1" })],
     });
     expect(ways).toHaveLength(1);
-    expect(ways[0]).toMatchObject({ kind: "import", title: "Du Faur approach" });
+    expect(ways[0]).toMatchObject({ kind: "import", title: "Du Faur approach", shared: false });
   });
 
   // A friend's place's track is not among the user's own files, so it must
@@ -140,7 +178,7 @@ describe("buildWays", () => {
       standaloneFiles: [file({ id: "mine" })],
       placeTracks: [placeTrack({ mediaId: "theirs" })],
     });
-    expect(ways.map((way) => way.kind)).toEqual(["import", "place"]);
+    expect(ways.map((way) => way.shared)).toEqual([false, true]);
   });
 
   it("gives every row a key unique across the kinds", () => {
@@ -177,9 +215,9 @@ describe("wayKindCounts", () => {
       build({
         routes: [route({ id: "a" }), route({ id: "b" })],
         standaloneFiles: [file({ id: "c", origin: "track" })],
-        placeTracks: [placeTrack()],
+        placeTracks: [placeTrack({ origin: "import" })],
       }),
     );
-    expect(counts).toEqual({ all: 4, route: 2, track: 1, import: 0, place: 1 });
+    expect(counts).toEqual({ all: 4, route: 2, track: 1, import: 1 });
   });
 });

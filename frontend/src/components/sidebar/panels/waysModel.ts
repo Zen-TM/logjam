@@ -6,15 +6,14 @@
 // Saved tab, and its vocabulary is the one used here: `CATEGORY_META` in
 // `mobile/src/saved/savedKeys.ts` names them Routes, Tracks and Imports.
 //
-// A fourth kind exists here and NOT on the phone, for a reason worth stating: a
-// track file attached to a place is that place's way, so on a handset it lives
-// on the place. In a browser the page still has to list it, because
-// `GET /places/tracks` is the only surface that shows tracks on places a FRIEND
-// shared — those are not the user's own files and appear nowhere else. That
-// endpoint also returns nothing but a place id, a media id and a colour, so a
-// row built from it cannot be sorted into the three kinds above (it has neither
-// a filename nor an `origin`); it is named for its place instead, which is what
-// the old panel did for the same reason.
+// A track on a place a FRIEND shared reaches this page through
+// `GET /places/tracks`, which is the only surface that carries it — it is not
+// one of the user's own files and appears nowhere else. It is an ordinary
+// Track or Import here, not a kind of its own: the endpoint now returns the
+// file's name and `origin` alongside its colour, so there is nothing left that
+// makes it a different sort of thing. It used to return a place id, a media id
+// and a colour, which is why Ways briefly had a fourth chip named for where a
+// file lived rather than for what it was (operator, 2026-09-17).
 import {
   mediaDisplayName,
   routeLengthM,
@@ -26,22 +25,17 @@ import type { PlaceTrack, TRoute } from "../../../placeUtils";
  * The kinds of line, in the order the rail offers them. Routes first: they are
  * the only kind authored here, and the only one this page can create.
  */
-export const WAY_KINDS = ["route", "track", "import", "place"] as const;
+export const WAY_KINDS = ["route", "track", "import"] as const;
 
 export type WayKind = (typeof WAY_KINDS)[number];
 
-/**
- * The rail's words. Plural, because a chip labels a group.
- *
- * "On a place" rather than a noun: the other three name what a thing IS, and
- * this one names where it lives — the distinguishing fact about a file that
- * belongs to a place is the place, not the file.
- */
+/** The rail's words — Logjam GPS's own (`CATEGORY_META`). Plural, because a
+ *  chip labels a group. Each names what a thing IS; where it lives is a
+ *  property of the row, never a category beside these. */
 export const WAY_KIND_LABELS: Record<WayKind, string> = {
   route: "Routes",
   track: "Tracks",
   import: "Imports",
-  place: "On a place",
 };
 
 /** One row on the page, whatever it was built from. */
@@ -61,7 +55,23 @@ export type WayItem = {
   shared: boolean;
   /** The place this way belongs to, where it belongs to one. */
   placeId: string | null;
+  /**
+   * The way's extent, `[west, south, east, north]` — what opening it fits the
+   * map to. A route's comes from the geometry in hand; a file's is the bbox its
+   * row already carries, so centring one costs no download.
+   */
+  bounds: [number, number, number, number] | null;
 };
+
+/** The box around a line. Null for a line with no points to bound. */
+function boundsOfPoints(
+  points: readonly [number, number][],
+): [number, number, number, number] | null {
+  if (points.length === 0) return null;
+  const lngs = points.map(([lng]) => lng);
+  const lats = points.map(([, lat]) => lat);
+  return [Math.min(...lngs), Math.min(...lats), Math.max(...lngs), Math.max(...lats)];
+}
 
 /**
  * Every way the user can see, as one list.
@@ -72,34 +82,42 @@ export type WayItem = {
  * endpoints' overlap would otherwise produce. The richer row wins, so the one
  * that survives is the one that knows what the file is called.
  */
+/**
+ * One drawn route as a way.
+ *
+ * Its own function because a route reaches a page from two directions — a row
+ * on this list, and its line tapped on the map — and both must produce the same
+ * thing. Built twice, they drifted on the two fields a page actually uses: what
+ * it is CALLED and what the map should fit to.
+ */
+export function wayFromRoute(route: TRoute, currentUserId: string | null): WayItem {
+  return {
+    key: `route-${route.id}`,
+    kind: "route",
+    id: route.id,
+    title: route.name,
+    distanceM: routeLengthM(route.points),
+    color: route.color,
+    shared: currentUserId !== null && route.ownerId !== currentUserId,
+    placeId: route.placeId,
+    bounds: boundsOfPoints(route.points),
+  };
+}
+
 export function buildWays({
   routes,
   standaloneFiles,
   placeTracks,
   currentUserId,
-  placeName,
 }: {
   routes: readonly TRoute[];
   standaloneFiles: readonly StandaloneFile[];
   placeTracks: readonly PlaceTrack[];
   currentUserId: string | null;
-  /** A place's name, for the rows that are named after their place. */
-  placeName: (placeId: string) => string;
 }): WayItem[] {
   const fileIds = new Set(standaloneFiles.map((file) => file.id));
   return [
-    ...routes.map(
-      (route): WayItem => ({
-        key: `route-${route.id}`,
-        kind: "route",
-        id: route.id,
-        title: route.name,
-        distanceM: routeLengthM(route.points),
-        color: route.color,
-        shared: currentUserId !== null && route.ownerId !== currentUserId,
-        placeId: route.placeId,
-      }),
-    ),
+    ...routes.map((route) => wayFromRoute(route, currentUserId)),
     ...standaloneFiles.map(
       (file): WayItem => ({
         key: `file-${file.id}`,
@@ -115,6 +133,7 @@ export function buildWays({
         // scoped to the caller, and a friend's file arrives as a copy.
         shared: false,
         placeId: file.linkedPlaceId,
+        bounds: file.metadata.bbox ?? null,
       }),
     ),
     ...placeTracks
@@ -122,17 +141,19 @@ export function buildWays({
       .map(
         (track): WayItem => ({
           key: `place-track-${track.mediaId}`,
-          kind: "place",
-          // The MEDIA id is the thing's identity; the row is titled by its
-          // place because that is all this endpoint knows about it.
+          // The file's own account of itself, exactly as a standalone file's
+          // is. Where it lives shows as its place, on the row.
+          kind: track.origin === "track" ? "track" : "import",
           id: track.mediaId,
-          title: placeName(track.placeId),
-          distanceM: null,
+          title: mediaDisplayName(track),
+          distanceM: track.metadata.distanceM ?? null,
           color: track.color,
           // Everything left after the de-duplication above is a track on a
-          // place the user does not own — their own are standalone files.
+          // place the user does not own — their own come back from
+          // `/media/standalone` as well, and that row wins.
           shared: true,
           placeId: track.placeId,
+          bounds: track.metadata.bbox ?? null,
         }),
       ),
   ];
@@ -153,7 +174,7 @@ export function wayMatchesSearch(way: WayItem, query: string): boolean {
 export function wayKindCounts(
   ways: readonly WayItem[],
 ): { all: number } & Record<WayKind, number> {
-  const counts = { all: ways.length, route: 0, track: 0, import: 0, place: 0 };
+  const counts = { all: ways.length, route: 0, track: 0, import: 0 };
   for (const way of ways) counts[way.kind] += 1;
   return counts;
 }

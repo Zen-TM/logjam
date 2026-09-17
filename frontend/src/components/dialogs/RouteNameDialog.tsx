@@ -1,14 +1,13 @@
 import { useId, useState } from "react";
-import { ROUTE_NAME_MAX_LENGTH, TRACK_COLORS, trackColorName } from "@logjam/shared";
-import { Button, Dialog, SwatchPicker, TextField } from "../../ui";
+import { ROUTE_NAME_MAX_LENGTH } from "@logjam/shared";
+import { Button, Dialog, TextField } from "../../ui";
 import classes from "./RouteNameDialog.module.css";
 
 type RouteNameDialogProps = {
   open: boolean;
   initialName: string;
-  initialColor?: string;
   busy?: boolean;
-  onSave: (name: string, color?: string) => void;
+  onSave: (name: string) => void;
   onClose: () => void;
 };
 
@@ -26,14 +25,12 @@ export default function RouteNameDialog({ open, ...form }: RouteNameDialogProps)
 
 function RouteNameForm({
   initialName,
-  initialColor,
   busy = false,
   onSave,
   onClose,
 }: Omit<RouteNameDialogProps, "open">) {
   const formId = useId();
   const [name, setName] = useState(initialName);
-  const [color, setColor] = useState<string | undefined>(initialColor);
 
   const trimmed = name.trim();
   const tooLong = trimmed.length > ROUTE_NAME_MAX_LENGTH;
@@ -62,7 +59,7 @@ function RouteNameForm({
         className={classes.form}
         onSubmit={(event) => {
           event.preventDefault();
-          if (canSave && !busy) onSave(trimmed, color);
+          if (canSave && !busy) onSave(trimmed);
         }}
       >
         <TextField
@@ -72,14 +69,10 @@ function RouteNameForm({
           error={tooLong ? `Must be at most ${ROUTE_NAME_MAX_LENGTH} characters` : null}
           data-autofocus
         />
-        <SwatchPicker
-          label="Route colour"
-          colors={TRACK_COLORS}
-          value={color}
-          onChange={setColor}
-          nameOf={trackColorName}
-          disabled={busy}
-        />
+        {/* No colour here: it is a property of the DRAFT, chosen in the draw
+            tool where the line is on the map in that colour as it is built.
+            Asking again at save time was two controls for one property
+            (operator, 2026-09-17). */}
       </form>
     </Dialog>
   );

@@ -15,7 +15,10 @@ export type PanelId =
   | "settings"
   // Opened programmatically (a pin, a row, a route line) — never a nav item.
   | "place-detail"
-  | "route-detail";
+  | "way-detail"
+  // The route tool, as a page rather than a card over the map: the map is the
+  // canvas and nothing should float on it while a line is being drawn.
+  | "way-draw";
 
 /** Each page's name — its header, and the document title while it is open. */
 export const PANEL_TITLES: Record<PanelId, string> = {
@@ -28,7 +31,8 @@ export const PANEL_TITLES: Record<PanelId, string> = {
   account: "Account",
   settings: "Settings",
   "place-detail": "Place",
-  "route-detail": "Route",
+  "way-detail": "Way",
+  "way-draw": "Draw a route",
 };
 
 /** A page with two views swaps its content in place under one rail of chips,

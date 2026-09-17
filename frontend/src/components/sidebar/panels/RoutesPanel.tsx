@@ -2,18 +2,19 @@
 // they imported, and the tracks on places friends shared with them.
 //
 // The page answers "what lines have I got?" (DESIGN.md §1). One pinned rail
-// narrows it by kind, using Logjam GPS's own vocabulary for the first three
-// (`CATEGORY_META` in mobile/src/saved/savedKeys.ts); what each kind IS, and why
-// there is a fourth here, is `waysModel.ts`.
+// narrows it by kind, using Logjam GPS's own vocabulary (`CATEGORY_META` in
+// mobile/src/saved/savedKeys.ts); what each kind IS is `waysModel.ts`.
 //
-// Visibility toggles live in the Layers panel, with ONE deliberate exception
-// kept from the panel this replaces: a standalone file has no Layers row of its
-// own, so its switch here IS its map visibility.
+// A row OPENS — whatever kind it is — and its ⋯ acts. Which verbs it offers is
+// `wayActions.ts`, the same list the way's own page offers: a row shows the
+// full list and hands the ones needing a form (share, rename, delete) to the
+// page with that verb armed, so the two surfaces can never offer different
+// things. Nothing here renames or deletes in place any more.
 import { useMemo, useState } from "react";
 import {
   Activity,
+  ArrowLeftRight,
   ChevronDown,
-  Crosshair,
   Download,
   EllipsisVertical,
   FilePlus,
@@ -24,6 +25,7 @@ import {
   Plus,
   Route as RouteGlyph,
   Search,
+  Share2,
   Trash2,
   Upload,
   X,
@@ -34,7 +36,6 @@ import {
   formatDistanceM,
   GPX_MIME_TYPE,
   KML_MIME_TYPE,
-  mediaDisplayName,
   routeToGpx,
   routeToKml,
   type StandaloneFile,
@@ -42,12 +43,10 @@ import {
 import type { TFriend, TPlace, TRoute, PlaceTrack } from "../../../placeUtils";
 import { ownerUsername } from "../../../placeUtils";
 import { useStoredState } from "../../../useStoredState";
-import ConfirmDialog from "../../dialogs/ConfirmDialog";
 import { ErrorBanner } from "../../feedback/ErrorBanner";
 import {
   Button,
   ChipRail,
-  Dialog,
   EmptyState,
   Hero,
   IconButton,
@@ -56,10 +55,9 @@ import {
   Row,
   SearchField,
   StatusPill,
-  TextField,
-  Toggle,
   type MenuEntry,
 } from "../../../ui";
+import { wayVerbs, type WayVerbId } from "./wayActions";
 import {
   buildWays,
   WAY_KIND_LABELS,
@@ -74,13 +72,23 @@ import classes from "./RoutesPanel.module.css";
 const ANY_KIND = "any";
 
 /** A kind's glyph and hue, from `ASSET_HUES` — the same identity Logjam GPS
- *  gives it on its Saved tab (DESIGN.md §3). The fourth kind is every track on
- *  a place the user does not own, so it wears the reserved shared hue. */
+ *  gives it on its Saved tab (DESIGN.md §3). */
 const KIND_IDENTITY: Record<WayKind, { icon: LucideIcon; hue: string }> = {
   route: { icon: PenLine, hue: "var(--hue-route)" },
   track: { icon: Activity, hue: "var(--hue-track)" },
   import: { icon: FilePlus, hue: "var(--hue-import)" },
-  place: { icon: MapPin, hue: "var(--hue-shared)" },
+};
+
+const VERB_ICON: Partial<Record<WayVerbId, LucideIcon>> = {
+  open: RouteGlyph,
+  openPlace: MapPin,
+  edit: Pencil,
+  reverse: ArrowLeftRight,
+  share: Share2,
+  exportGpx: Download,
+  exportKml: Download,
+  rename: Pencil,
+  delete: Trash2,
 };
 
 const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
@@ -103,42 +111,32 @@ export default function RoutesPanel({
   placeTracks,
   standaloneFiles,
   standaloneFilesError,
-  shownStandaloneIds,
-  onToggleStandaloneFile,
-  onRenameStandaloneFile,
-  onDeleteStandaloneFile,
-  onFlyToStandaloneFile,
   places,
   onStartDrawingRoute,
   onOpenUnifiedImport,
-  onSelectRoute,
+  onOpenWay,
   onOpenPlace,
 }: {
   routes: TRoute[];
   /** False until the first fetches settle — an empty list before then is not
    *  "nothing yet", and saying so flashes a first-run screen at every user. */
   waysLoaded: boolean;
-  /** Owner vs sharee: a route reached through a place share is listed, but it
-   *  is not the user's own work. */
   currentUserId: string | null;
   /** To name the owner of something shared with the user. */
   friends: TFriend[];
   placeTracks: PlaceTrack[];
-  /** The user's own imports and Logjam GPS recordings (metadata only). */
   standaloneFiles: StandaloneFile[];
   standaloneFilesError: string | null;
-  /** Which of those are currently drawn on the map. */
-  shownStandaloneIds: string[];
-  onToggleStandaloneFile: (id: string) => void;
-  onRenameStandaloneFile: (id: string, displayName: string) => void;
-  onDeleteStandaloneFile: (file: StandaloneFile) => Promise<void>;
-  /** Centre the map on a file's recorded extent. */
-  onFlyToStandaloneFile: (file: StandaloneFile) => void;
-  /** Owned + shared, for naming a track's place. */
+  /** Owned + shared, for naming the place a way belongs to. */
   places: TPlace[];
   onStartDrawingRoute: () => void;
   onOpenUnifiedImport: () => void;
-  onSelectRoute: (id: string) => void;
+  /**
+   * Open a way's own page, which also centres the map on it. `verb` arms one
+   * of that page's actions — how a row offers Share, Rename and Delete without
+   * hosting a second copy of each form.
+   */
+  onOpenWay: (way: WayItem, verb?: WayVerbId) => void;
   onOpenPlace: (placeId: string) => void;
 }): React.JSX.Element {
   // Session-scoped, like every other page's search: a query remembered for a
@@ -150,26 +148,13 @@ export default function RoutesPanel({
     ANY_KIND,
     sessionStorage,
   );
-  const [pendingDelete, setPendingDelete] = useState<StandaloneFile | null>(null);
-  const [deleteBusy, setDeleteBusy] = useState(false);
-  const [renaming, setRenaming] = useState<StandaloneFile | null>(null);
 
-  const fileById = useMemo(
-    () => new Map(standaloneFiles.map((file) => [file.id, file])),
-    [standaloneFiles],
-  );
   const placeById = useMemo(() => new Map(places.map((place) => [place.id, place])), [places]);
+  const routeById = useMemo(() => new Map(routes.map((route) => [route.id, route])), [routes]);
 
   const ways = useMemo(
-    () =>
-      buildWays({
-        routes,
-        standaloneFiles,
-        placeTracks,
-        currentUserId,
-        placeName: (id) => placeById.get(id)?.name ?? "Unnamed place",
-      }),
-    [routes, standaloneFiles, placeTracks, currentUserId, placeById],
+    () => buildWays({ routes, standaloneFiles, placeTracks, currentUserId }),
+    [routes, standaloneFiles, placeTracks, currentUserId],
   );
 
   const searched = useMemo(
@@ -189,79 +174,66 @@ export default function RoutesPanel({
     setSearchOpen(false);
   };
 
-  const routeById = useMemo(() => new Map(routes.map((route) => [route.id, route])), [routes]);
-
   /** What a row says under its title: how long it is, then where it lives. */
   const subtitleOf = (way: WayItem): string | undefined => {
     const place = way.placeId ? placeById.get(way.placeId)?.name : null;
     return (
-      [
-        way.distanceM != null ? formatDistanceM(way.distanceM) : null,
-        // The place is named on rows that are not already titled by it.
-        way.kind !== "place" && place ? place : null,
-      ]
+      [way.distanceM != null ? formatDistanceM(way.distanceM) : null, place ?? null]
         .filter(Boolean)
         .join(" · ") || undefined
     );
   };
 
-  const exportEntries = (route: TRoute): MenuEntry[] => [
-    {
-      id: "gpx",
-      label: "Export as GPX",
-      icon: Download,
-      onSelect: () =>
-        downloadText(exportFilename(route.name, "gpx"), routeToGpx(route.name, route.points), GPX_MIME_TYPE),
-    },
-    {
-      id: "kml",
-      label: "Export as KML",
-      icon: Download,
-      onSelect: () =>
-        downloadText(exportFilename(route.name, "kml"), routeToKml(route.name, route.points), KML_MIME_TYPE),
-    },
-  ];
-
-  /** A row's verbs — the same list the thing offers wherever it is reached. */
-  const entriesFor = (way: WayItem): MenuEntry[] => {
-    if (way.kind === "route") {
-      const route = routeById.get(way.id);
-      if (!route) return [];
-      return [
-        { id: "open", label: "Open route", icon: RouteGlyph, onSelect: () => onSelectRoute(route.id) },
-        ...(way.placeId
-          ? [{ id: "place", label: "Open its place", icon: MapPin, onSelect: () => onOpenPlace(way.placeId!) }]
-          : []),
-        { id: "sep", separator: true },
-        ...exportEntries(route),
-      ];
-    }
-    // A place's track is titled by its place and identified by its media id,
-    // so the verb goes to the place, which is the only thing there is to open.
-    if (way.kind === "place" && way.placeId) {
-      const placeId = way.placeId;
-      return [{ id: "open", label: "Open place", icon: MapPin, onSelect: () => onOpenPlace(placeId) }];
-    }
-    const file = fileById.get(way.id);
-    if (!file) return [];
-    return [
-      {
-        id: "centre",
-        label: "Centre the map here",
-        icon: Crosshair,
-        // Disabled rather than absent: the verb exists for this kind, it just
-        // cannot run on a file whose extent was never recorded (DESIGN.md §7).
-        disabled: file.metadata.bbox == null,
-        onSelect: () => onFlyToStandaloneFile(file),
-      },
-      ...(file.linkedPlaceId
-        ? [{ id: "place", label: "Open its place", icon: MapPin, onSelect: () => onOpenPlace(file.linkedPlaceId!) }]
-        : []),
-      { id: "rename", label: "Rename…", icon: Pencil, onSelect: () => setRenaming(file) },
-      { id: "sep", separator: true },
-      { id: "delete", label: "Delete", icon: Trash2, danger: true, onSelect: () => setPendingDelete(file) },
-    ];
+  const exportRoute = (way: WayItem, format: "gpx" | "kml") => {
+    const route = routeById.get(way.id);
+    if (!route) return;
+    downloadText(
+      exportFilename(route.name, format),
+      format === "gpx" ? routeToGpx(route.name, route.points) : routeToKml(route.name, route.points),
+      format === "gpx" ? GPX_MIME_TYPE : KML_MIME_TYPE,
+    );
   };
+
+  /**
+   * A row's ⋯ — the SAME list the way's page offers (wayActions.ts).
+   *
+   * Verbs that act on the spot run here; the ones that need a form go to the
+   * page with the verb armed. Which is which is invisible to the user, and it
+   * is what lets one list serve both surfaces.
+   */
+  const entriesFor = (way: WayItem): MenuEntry[] =>
+    wayVerbs(way, "row").flatMap((verb, index, all) => {
+      const onSelect = () => {
+        switch (verb.id) {
+          case "open":
+            onOpenWay(way);
+            return;
+          case "openPlace":
+            if (way.placeId) onOpenPlace(way.placeId);
+            return;
+          case "exportGpx":
+            exportRoute(way, "gpx");
+            return;
+          case "exportKml":
+            exportRoute(way, "kml");
+            return;
+          default:
+            onOpenWay(way, verb.id);
+        }
+      };
+      const item: MenuEntry = {
+        id: verb.id,
+        label: verb.label,
+        ...(VERB_ICON[verb.id] ? { icon: VERB_ICON[verb.id] } : {}),
+        ...(verb.danger ? { danger: true } : {}),
+        onSelect,
+      };
+      // A rule above the destructive verb, so the last step of losing something
+      // is never adjacent to an ordinary one.
+      return verb.danger && index > 0 && !all[index - 1].danger
+        ? [{ id: `${verb.id}-sep`, separator: true } as MenuEntry, item]
+        : [item];
+    });
 
   const hero = (
     <Hero
@@ -378,16 +350,11 @@ export default function RoutesPanel({
     <div className={classes.list}>
       {visible.map((way) => {
         const identity = KIND_IDENTITY[way.kind];
-        const file = way.kind === "track" || way.kind === "import" ? fileById.get(way.id) : null;
-        // Only a route carries an owner id; a track on someone else's place is
-        // shared without this page ever learning whose it is.
         const ownerId = way.kind === "route" ? routeById.get(way.id)?.ownerId : undefined;
         const owner = way.shared && ownerId ? ownerUsername(friends, ownerId) : null;
         return (
           <Row
             key={way.key}
-            // Addressable from outside, as Places' rows are by `data-place-id`:
-            // the kind is what a check on this page is usually about.
             data-way-key={way.key}
             data-way-kind={way.kind}
             className={classes.row}
@@ -395,27 +362,11 @@ export default function RoutesPanel({
             subtitle={subtitleOf(way)}
             description={WAY_KIND_LABELS[way.kind]}
             leading={<IconTile icon={identity.icon} hue={identity.hue} label={WAY_KIND_LABELS[way.kind]} />}
-            onOpen={
-              way.kind === "route"
-                ? () => onSelectRoute(way.id)
-                : way.placeId
-                  ? () => onOpenPlace(way.placeId!)
-                  : undefined
-            }
+            // Every kind opens, and opening centres the map on it.
+            onOpen={() => onOpenWay(way)}
             trailing={
               <>
                 {way.shared && <StatusPill label={owner ? `From ${owner}` : "Shared"} tone="outline" />}
-                {/* A standalone file has no Layers row of its own, so this
-                    switch IS its map visibility. A file linked to a place is
-                    already drawn by the place-tracks layer, so it has no
-                    switch rather than one that appears to do nothing. */}
-                {file && file.linkedPlaceId === null && (
-                  <Toggle
-                    label={`Show ${mediaDisplayName(file)} on the map`}
-                    checked={shownStandaloneIds.includes(file.id)}
-                    onChange={() => onToggleStandaloneFile(file.id)}
-                  />
-                )}
                 <Menu
                   label={`Actions for ${way.title}`}
                   title={way.title}
@@ -443,98 +394,6 @@ export default function RoutesPanel({
         </div>
       )}
       {list}
-
-      <RenameWayDialog
-        file={renaming}
-        onSave={(name) => {
-          if (renaming) onRenameStandaloneFile(renaming.id, name);
-          setRenaming(null);
-        }}
-        onClose={() => setRenaming(null)}
-      />
-
-      <ConfirmDialog
-        open={pendingDelete != null}
-        title="Delete this file?"
-        message="The file and its track are removed from your account, so they go from Logjam GPS and your other devices too. This can't be undone."
-        confirmLabel="Delete"
-        busy={deleteBusy}
-        onConfirm={() => {
-          if (!pendingDelete) return;
-          setDeleteBusy(true);
-          void onDeleteStandaloneFile(pendingDelete).finally(() => {
-            setDeleteBusy(false);
-            setPendingDelete(null);
-          });
-        }}
-        onClose={() => setPendingDelete(null)}
-      />
     </div>
-  );
-}
-
-/**
- * Renaming a file, as a dialog rather than the inline field this page used to
- * carry: the body opens and ⋯ acts (DESIGN.md §5), and an always-live input on
- * every row committed a rename on blur — including the blur of clicking
- * somewhere else entirely. Logjam GPS asks in a form for the same reason.
- */
-function RenameWayDialog({
-  file,
-  onSave,
-  onClose,
-}: {
-  file: StandaloneFile | null;
-  onSave: (name: string) => void;
-  onClose: () => void;
-}): React.JSX.Element | null {
-  // Mounted on open, so a reopened dialog starts from the file it is naming now
-  // and never from the last one's typing.
-  return file ? <RenameWayForm key={file.id} file={file} onSave={onSave} onClose={onClose} /> : null;
-}
-
-function RenameWayForm({
-  file,
-  onSave,
-  onClose,
-}: {
-  file: StandaloneFile;
-  onSave: (name: string) => void;
-  onClose: () => void;
-}) {
-  const current = mediaDisplayName(file);
-  const [name, setName] = useState(current);
-  const trimmed = name.trim();
-
-  return (
-    <Dialog
-      open
-      title="Rename this file"
-      onClose={onClose}
-      footer={
-        <>
-          <Button onClick={onClose}>Cancel</Button>
-          <Button
-            variant="filled"
-            disabled={trimmed.length === 0 || trimmed === current}
-            onClick={() => onSave(trimmed)}
-          >
-            Save
-          </Button>
-        </>
-      }
-    >
-      <TextField
-        label="File name"
-        value={name}
-        onChange={(event) => setName(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key !== "Enter" || trimmed.length === 0 || trimmed === current) return;
-          event.preventDefault();
-          onSave(trimmed);
-        }}
-        data-autofocus
-      />
-    </Dialog>
   );
 }

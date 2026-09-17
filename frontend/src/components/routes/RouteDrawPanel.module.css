@@ -1,67 +1,72 @@
-/* The tool's HUD. Placement is the chrome's (MapChrome's `hud` slot keeps it
-   clear of the panel and the sheet); this file is only its look.
+/* The route tool as a page: hero pinned, body scrolls, actions pinned at the
+   foot so Save and Cancel are reachable however long the body gets. Nothing
+   here floats — the map is the canvas and takes every click (DESIGN.md §2). */
+.root {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
 
-   It floats over the map, so it is one of the few things in the app that casts
-   a shadow (DESIGN.md §4). */
-.panel {
-  width: min(100%, var(--panel-width));
-  box-sizing: border-box;
-  padding: 12px var(--gutter);
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gutter);
+  padding: 12px var(--gutter) var(--gutter);
+}
+
+.section {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  border-radius: var(--radius-xl);
-  background: var(--theme-primary);
-  color: var(--theme-text-primary);
-  font-size: var(--font-sm);
-  box-shadow: var(--shadow-float);
-}
-
-.header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--gutter);
-}
-
-.title {
-  font-size: var(--font-lg);
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.distance {
-  flex: none;
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
-  color: var(--theme-accent);
 }
 
 .hint {
   margin: 0;
   color: var(--theme-text-muted);
-  font-size: var(--font-xs);
+  font-size: var(--font-sm);
 }
 
-/* The label sits beside its control rather than above it: the HUD is over the
-   map, and every line it takes is map the user cannot see. */
-.snap {
-  flex-direction: row;
-  align-items: center;
-  gap: 8px;
+.note {
+  margin: 0;
+  color: var(--theme-text-muted);
+  font-size: var(--font-sm);
+}
+
+.band {
+  margin: 0;
+  font-size: var(--font-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--theme-text-primary);
+}
+
+.attribution {
+  margin: 0;
+  color: var(--theme-text-muted);
+  font-size: var(--font-xs);
+  font-style: italic;
+  line-height: 1.3;
 }
 
 .warning {
   margin: 0;
   color: var(--theme-warning);
-  font-size: var(--font-xs);
+  font-size: var(--font-sm);
 }
 
+/* Pinned: ending the mode must not require scrolling to find the button. */
 .actions {
+  flex-shrink: 0;
   display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+  align-items: center;
   gap: 8px;
+  padding: 10px var(--gutter);
+  border-top: var(--hairline);
+}
+
+.spacer {
+  flex: 1;
 }

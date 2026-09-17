@@ -30,7 +30,6 @@ import {
   usePlaceTracks,
   useStandaloneFiles,
   useStandaloneTracks,
-  renameMedia,
   deleteMedia,
   useRoutes,
   type TRoute,
@@ -78,6 +77,9 @@ import {
 import ConsentGate from "./ConsentGate";
 import { RouteDrawPanel } from "./routes/RouteDrawPanel";
 import RouteNameDialog from "./dialogs/RouteNameDialog";
+import WayDetailPanel from "./sidebar/panels/WayDetailPanel";
+import { wayFromRoute, type WayItem } from "./sidebar/panels/waysModel";
+import type { WayVerbId } from "./sidebar/panels/wayActions";
 import ConfirmDialog from "./dialogs/ConfirmDialog";
 import { useUnsavedChangesGuard } from "../useUnsavedChangesGuard";
 import {
@@ -180,7 +182,16 @@ function App() {
     "logjam.snapMode",
     "off",
   );
-  const [selectedRouteID, setSelectedRouteID] = useState<string | null>(null);
+  // The way whose page is open. The WAY rather than a route id: every kind has
+  // a page now, and a recorded track or an imported file is not a route.
+  const [selectedWay, setSelectedWay] = useState<WayItem | null>(null);
+  // A verb a ROW asked for, run once the way's page mounts — how a row offers
+  // Share, Rename and Delete without hosting a second copy of each form.
+  const [pendingWayVerb, setPendingWayVerb] = useState<WayVerbId | null>(null);
+  // A way's extent, for the map to fit. Consumed, not counted (DESIGN.md §9).
+  // A tuple, as `WayItem.bounds` and MapLibre's `fitBounds` both are — not the
+  // `RegionBbox` object the topo flows pass around.
+  const [flyToBounds, setFlyToBounds] = useState<[number, number, number, number] | null>(null);
   // Position along the selected route under the elevation-profile cursor, so
   // the chart and the map point at the same place.
   const [routeHoverPosition, setRouteHoverPosition] = useState<
@@ -513,18 +524,6 @@ function App() {
   const { tracks: standaloneTracks } = useStandaloneTracks(
     standaloneFiles,
     shownStandaloneIds,
-  );
-
-  const handleRenameStandaloneFile = useCallback(
-    (id: string, displayName: string) => {
-      renameMedia(id, displayName)
-        .then(refetchStandaloneFiles)
-        .catch((err: unknown) => {
-          console.error(err);
-          toast.error(messageFromError(err, "Couldn't rename that file."));
-        });
-    },
-    [refetchStandaloneFiles, toast],
   );
 
   const handleDeleteStandaloneFile = useCallback(
@@ -1064,7 +1063,21 @@ function App() {
     );
   }
 
-  const selectedRoute = routes.find((r) => r.id === selectedRouteID) ?? null;
+  const selectedRoute =
+    selectedWay?.kind === "route" ? (routes.find((r) => r.id === selectedWay.id) ?? null) : null;
+
+  /**
+   * Open a way's own page, and centre the map on it.
+   *
+   * Opening and centring are ONE action: a page describing a line while the map
+   * shows somewhere else is two halves of an answer (operator, 2026-09-17).
+   */
+  const openWay = (way: WayItem, verb?: WayVerbId) => {
+    setSelectedWay(way);
+    setPendingWayVerb(verb ?? null);
+    if (way.bounds) setFlyToBounds(way.bounds);
+    setActivePanel("way-detail");
+  };
 
   const startDrawingRoute = () => {
     setEditingRouteId(null);
@@ -1072,7 +1085,9 @@ function App() {
     const nextColor = pickNextTrackColor(routes.map((r) => r.color));
     setDrawColor(nextColor);
     setDrawingRoute(true);
-    setActivePanel(null);
+    // The tool is a PAGE now, not a card over the map: the panel is where a
+    // route's figures already live, and the canvas stays clear for drawing.
+    setActivePanel("way-draw");
   };
 
   const startEditingRoute = (route: TRoute) => {
@@ -1082,13 +1097,16 @@ function App() {
     routeDraft.reset({ points: route.points, anchors: route.anchors });
     setDrawColor(route.color ?? pickNextTrackColor(routes.map((r) => r.color)));
     setDrawingRoute(true);
-    setActivePanel(null);
+    // Editing centres it too: the points being edited must be on screen.
+    const bounds = wayFromRoute(route, currentUser?.id ?? null).bounds;
+    if (bounds) setFlyToBounds(bounds);
+    setActivePanel("way-draw");
   };
 
-  const saveDrawnRoute = async (name: string, color?: string) => {
+  const saveDrawnRoute = async (name: string) => {
     setSavingRoute(true);
     try {
-      const chosenColor = color ?? drawColor ?? undefined;
+      const chosenColor = drawColor ?? undefined;
       const payload = {
         name,
         points: routeDraft.points,
@@ -1101,8 +1119,7 @@ function App() {
       setNamingRoute(false);
       cancelDrawingRoute();
       refetchRoutes();
-      setSelectedRouteID(result.id);
-      setActivePanel("route-detail");
+      openWay(wayFromRoute(result, currentUser?.id ?? null));
     } catch (err) {
       console.error(err);
       toast.error(messageFromError(err, "Couldn't save the route."));
@@ -1272,33 +1289,71 @@ function App() {
           onMapsViewChange={setMapsView}
           onStartDrawingRoute={startDrawingRoute}
           waysLoaded={waysLoaded}
-          selectedRoute={selectedRoute}
           allRoutes={routes}
           placeTracks={placeTracks}
           standaloneFiles={standaloneFiles}
           standaloneFilesError={standaloneFilesError}
-          shownStandaloneIds={shownStandaloneIds}
-          onToggleStandaloneFile={(id) =>
-            setShownStandaloneIds((ids) =>
-              ids.includes(id) ? ids.filter((current) => current !== id) : [...ids, id],
-            )
-          }
-          onRenameStandaloneFile={handleRenameStandaloneFile}
-          onDeleteStandaloneFile={handleDeleteStandaloneFile}
-          onFlyToStandaloneFile={(file) => {
-            const bbox = file.metadata.bbox;
-            if (!bbox) return;
-            const [west, south, east, north] = bbox;
-            setFlyToPlace({ lat: (south + north) / 2, lng: (west + east) / 2 });
-          }}
-          onSelectRoute={(id) => {
-            setSelectedRouteID(id);
-            setActivePanel("route-detail");
-          }}
-          onRouteHoverPosition={setRouteHoverPosition}
+          onOpenWay={openWay}
           currentUserId={currentUser?.id ?? null}
-          onEditRoute={startEditingRoute}
-          onRoutesChanged={refetchRoutes}
+          wayDetail={
+            selectedWay ? (
+              <WayDetailPanel
+                way={selectedWay}
+                route={selectedRoute}
+                file={standaloneFiles.find((each) => each.id === selectedWay.id) ?? null}
+                initialVerb={pendingWayVerb}
+                onVerbConsumed={() => setPendingWayVerb(null)}
+                friends={friends}
+                ownedPlaces={places}
+                sharedPlaces={sharedPlaces}
+                allRoutes={routes}
+                shownOnMap={shownStandaloneIds.includes(selectedWay.id)}
+                onToggleShown={() =>
+                  setShownStandaloneIds((ids) =>
+                    ids.includes(selectedWay.id)
+                      ? ids.filter((current) => current !== selectedWay.id)
+                      : [...ids, selectedWay.id],
+                  )
+                }
+                onBack={() => {
+                  setSelectedWay(null);
+                  setActivePanel("ways");
+                }}
+                onClose={() => setActivePanel(null)}
+                onEdit={startEditingRoute}
+                onChanged={() => {
+                  refetchRoutes();
+                  refetchStandaloneFiles();
+                }}
+                onOpenPlace={(placeId) => {
+                  setSelectedPlaceID(placeId);
+                  setActivePanel("place-detail");
+                }}
+                onDeleteFile={handleDeleteStandaloneFile}
+                onHoverPosition={setRouteHoverPosition}
+              />
+            ) : null
+          }
+          drawPanel={
+            drawingRoute ? (
+              <RouteDrawPanel
+                points={routeDraft.points}
+                anchorCount={routeDraft.draft.anchors.length}
+                canUndo={routeDraft.canUndo}
+                atCap={routeDraft.atCap}
+                editingName={routes.find((r) => r.id === editingRouteId)?.name ?? null}
+                color={drawColor}
+                onColorChange={setDrawColor}
+                onUndo={routeDraft.undo}
+                onClear={clearRouteGuard.requestClose}
+                onSave={() => setNamingRoute(true)}
+                onCancel={cancelRouteGuard.requestClose}
+                saving={savingRoute}
+                snapMode={snapMode}
+                onSnapModeChange={setSnapMode}
+              />
+            ) : null
+          }
           places={places}
           placesLoaded={placesLoaded}
           placesTotal={placesTotal}
@@ -1411,8 +1466,8 @@ function App() {
         routes={routes}
         routeHoverPosition={routeHoverPosition}
         selectRoute={(id) => {
-          setSelectedRouteID(id);
-          setActivePanel("route-detail");
+          const route = routes.find((r) => r.id === id);
+          if (route) openWay(wayFromRoute(route, currentUser?.id ?? null));
         }}
         drawingRoute={drawingRoute}
         drawColor={drawColor ?? undefined}
@@ -1495,24 +1550,8 @@ function App() {
         }
         mapTools={mapTools}
         notices={notices}
-        hud={
-          drawingRoute ? (
-            <RouteDrawPanel
-              points={routeDraft.points}
-              anchorCount={routeDraft.draft.anchors.length}
-              canUndo={routeDraft.canUndo}
-              atCap={routeDraft.atCap}
-              editingName={routes.find((r) => r.id === editingRouteId)?.name ?? null}
-              onUndo={routeDraft.undo}
-              onClear={clearRouteGuard.requestClose}
-              onSave={() => setNamingRoute(true)}
-              onCancel={cancelRouteGuard.requestClose}
-              saving={savingRoute}
-              snapMode={snapMode}
-              onSnapModeChange={setSnapMode}
-            />
-          ) : null
-        }
+        flyToBounds={flyToBounds}
+        onFlyToBoundsConsumed={() => setFlyToBounds(null)}
         onTopoSourceUnavailable={handleTopoSourceUnavailable}
       />
       </main>
@@ -1574,13 +1613,8 @@ function App() {
         initialName={
           routes.find((r) => r.id === editingRouteId)?.name ?? "New route"
         }
-        initialColor={
-          drawColor ??
-          routes.find((r) => r.id === editingRouteId)?.color ??
-          undefined
-        }
         busy={savingRoute}
-        onSave={(name, color) => void saveDrawnRoute(name, color)}
+        onSave={(name) => void saveDrawnRoute(name)}
         onClose={() => setNamingRoute(false)}
       />
 

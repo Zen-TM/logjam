@@ -36,23 +36,10 @@
   color: var(--theme-text-primary);
 }
 
-.chartLabel {
-  margin: 0;
-  font-size: var(--font-xs);
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--theme-text-muted);
-}
-
 /* Required credit, so it stays — but it is provenance, not a figure the user
-   reads, and it sat at the same weight as the stats above it.
- *
- * Recessive by SIZE and style only, never by opacity: the old rule faded
- * `--theme-text-muted` to 0.7 and fell under 4.5:1, which axe caught the moment
- * Ways joined `e2e/a11y.spec.ts`. Muted text is already the quiet end of the
- * scheme — fading it further is how a token that was measured stops being the
- * colour that renders (DESIGN.md §10). */
+   reads. Recessive by SIZE and style only, never by opacity: fading
+   `--theme-text-muted` put it under 4.5:1, which axe caught the moment Ways
+   joined e2e/a11y.spec.ts (DESIGN.md §10). */
 .attribution {
   margin: 0;
   color: var(--theme-text-muted);

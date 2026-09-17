@@ -47,7 +47,6 @@ export default function MapChrome({
   onToggle3D,
   search,
   notices,
-  hud,
   layersButton,
   tools,
 }: {
@@ -58,13 +57,6 @@ export default function MapChrome({
   onToggle3D: () => void;
   search: ReactNode;
   notices?: ReactNode;
-  /**
-   * The armed tool's HUD — the mode the map is in and the controls that end it
-   * (mobile §2). Its own slot rather than the notice stack below, which is
-   * `aria-live`: a panel of controls in a live region announces every keystroke
-   * and every placed point.
-   */
-  hud?: ReactNode;
   layersButton?: ReactNode;
   tools: readonly MapTool[];
 }) {
@@ -120,7 +112,6 @@ export default function MapChrome({
   return (
     <>
       <div className={classes.topLeft}>{search}</div>
-      {hud && <div className={classes.hud}>{hud}</div>}
       {notices && (
         <div className={classes.notices} aria-live="polite">
           {notices}

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { fetchAuthSession } from "aws-amplify/auth";
-import type { ScopedCustomFieldDef, StandaloneFile, ThemeSchemeId, TripLogCustomFieldDef, NotificationPreferences, MediaItem, MediaLinkedType, PlaceMergePolicy, ElevationProfile, SharableEntityType, FileSendStatus, FileSendSourceKind } from "@logjam/shared";
+import type { ScopedCustomFieldDef, StandaloneFile, ThemeSchemeId, TripLogCustomFieldDef, NotificationPreferences, MediaItem, MediaLinkedType, MediaMetadata, MediaOrigin, PlaceMergePolicy, ElevationProfile, SharableEntityType, FileSendStatus, FileSendSourceKind } from "@logjam/shared";
 import { formatTripPlaceNames, tallyNotifications } from "@logjam/shared";
 import { settleReadOverrides, withReadOverrides, type ReadOverrides } from "./notificationReadOverrides";
 import type { BulkShareItem, FriendShareRow, FriendShares } from "@logjam/shared";
@@ -363,6 +363,16 @@ export type PlaceTrack = {
   mediaId: string;
   color: string | null;
   displayUrl: string;
+  /**
+   * What the file IS. Without these a place's track could only be listed as a
+   * kind of its own, named for its place, because nothing here said whether it
+   * was a recording or an import or what it was called (Ways, 2026-09-17).
+   */
+  filename: string;
+  displayName: string | null;
+  origin: MediaOrigin | null;
+  fileSizeBytes: number;
+  metadata: MediaMetadata;
 };
 
 export function getPlaceTracks(): Promise<PlaceTrack[]> {
