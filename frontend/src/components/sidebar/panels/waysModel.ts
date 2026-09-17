@@ -53,6 +53,17 @@ export type WayItem = {
   /** Someone else owns this: a route shared with the user, or a track on a
    *  place a friend shared. Every write verb is absent on one. */
   shared: boolean;
+  /**
+   * This way reaches the user THROUGH a shared place rather than on its own.
+   *
+   * The difference is what can be done about it: a directly-shared way has a
+   * share row of its own and the user can drop it ("Remove"), while one seen
+   * through a place has none — the only way to stop seeing it is to remove the
+   * PLACE, and offering Remove here would be a button that cannot work. Both
+   * surfaces used to re-derive this from `sharedPlaces`, and only the detail
+   * page got it right (operator, 2026-09-17).
+   */
+  viaPlace: boolean;
   /** The place this way belongs to, where it belongs to one. */
   placeId: string | null;
   /**
@@ -90,7 +101,16 @@ function boundsOfPoints(
  * thing. Built twice, they drifted on the two fields a page actually uses: what
  * it is CALLED and what the map should fit to.
  */
-export function wayFromRoute(route: TRoute, currentUserId: string | null): WayItem {
+export function wayFromRoute(
+  route: TRoute,
+  currentUserId: string | null,
+  /** The places shared WITH the user. A shared route sitting on one of them
+   *  arrived through that place, not through a share of its own. Required
+   *  rather than defaulted: an empty set is a real answer ("none are shared"),
+   *  and defaulting would let a caller forget and silently get it wrong. */
+  sharedPlaceIds: ReadonlySet<string>,
+): WayItem {
+  const shared = currentUserId !== null && route.ownerId !== currentUserId;
   return {
     key: `route-${route.id}`,
     kind: "route",
@@ -98,7 +118,8 @@ export function wayFromRoute(route: TRoute, currentUserId: string | null): WayIt
     title: route.name,
     distanceM: routeLengthM(route.points),
     color: route.color,
-    shared: currentUserId !== null && route.ownerId !== currentUserId,
+    shared,
+    viaPlace: shared && route.placeId !== null && sharedPlaceIds.has(route.placeId),
     placeId: route.placeId,
     bounds: boundsOfPoints(route.points),
   };
@@ -109,15 +130,19 @@ export function buildWays({
   standaloneFiles,
   placeTracks,
   currentUserId,
+  sharedPlaceIds,
 }: {
   routes: readonly TRoute[];
   standaloneFiles: readonly StandaloneFile[];
   placeTracks: readonly PlaceTrack[];
   currentUserId: string | null;
+  /** Ids of the places shared WITH the user — what tells a route shared on its
+   *  own from one seen through somebody's place (`WayItem.viaPlace`). */
+  sharedPlaceIds: ReadonlySet<string>;
 }): WayItem[] {
   const fileIds = new Set(standaloneFiles.map((file) => file.id));
   return [
-    ...routes.map((route) => wayFromRoute(route, currentUserId)),
+    ...routes.map((route) => wayFromRoute(route, currentUserId, sharedPlaceIds)),
     ...standaloneFiles.map(
       (file): WayItem => ({
         key: `file-${file.id}`,
@@ -132,6 +157,7 @@ export function buildWays({
         // Standalone files are the user's own by definition: the endpoint is
         // scoped to the caller, and a friend's file arrives as a copy.
         shared: false,
+        viaPlace: false,
         placeId: file.linkedPlaceId,
         bounds: file.metadata.bbox ?? null,
       }),
@@ -152,6 +178,9 @@ export function buildWays({
           // place the user does not own — their own come back from
           // `/media/standalone` as well, and that row wins.
           shared: true,
+          // `/places/tracks` is the place's endpoint: a file here has no share
+          // row of its own, and the place's share is the only thing holding it.
+          viaPlace: true,
           placeId: track.placeId,
           bounds: track.metadata.bbox ?? null,
         }),

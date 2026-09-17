@@ -63,12 +63,14 @@ const build = (args: {
   standaloneFiles?: StandaloneFile[];
   placeTracks?: PlaceTrack[];
   currentUserId?: string | null;
+  sharedPlaceIds?: string[];
 }): WayItem[] =>
   buildWays({
     routes: args.routes ?? [],
     standaloneFiles: args.standaloneFiles ?? [],
     placeTracks: args.placeTracks ?? [],
     currentUserId: args.currentUserId === undefined ? ME : args.currentUserId,
+    sharedPlaceIds: new Set(args.sharedPlaceIds ?? []),
   });
 
 describe("WAY_KINDS", () => {
@@ -179,6 +181,44 @@ describe("buildWays", () => {
       placeTracks: [placeTrack({ mediaId: "theirs" })],
     });
     expect(ways.map((way) => way.shared)).toEqual([false, true]);
+  });
+
+  // What separates a way you can drop from one you cannot: a directly-shared
+  // route has a share row of its own, and a route sitting on a place someone
+  // shared has none — the place's share is the only thing holding it.
+  it("marks a shared route on a shared place as reached through that place", () => {
+    const [way] = build({
+      routes: [route({ ownerId: THEM, placeId: "theirs" })],
+      sharedPlaceIds: ["theirs"],
+    });
+    expect(way).toMatchObject({ shared: true, viaPlace: true });
+  });
+
+  it("treats a route shared on its own as direct, place or no place", () => {
+    const [bare] = build({ routes: [route({ ownerId: THEM })] });
+    expect(bare).toMatchObject({ shared: true, viaPlace: false });
+
+    // Its place is not one of theirs, so the share reaching the user is the
+    // route's own.
+    const [elsewhere] = build({
+      routes: [route({ ownerId: THEM, placeId: "somewhere-else" })],
+      sharedPlaceIds: ["theirs"],
+    });
+    expect(elsewhere.viaPlace).toBe(false);
+  });
+
+  // The user's own route on their own place is not shared at all, so it can
+  // never be "reached through" anything.
+  it("never calls the user's own route reached through a place", () => {
+    const [way] = build({ routes: [route({ placeId: "mine" })], sharedPlaceIds: ["mine"] });
+    expect(way).toMatchObject({ shared: false, viaPlace: false });
+  });
+
+  // `/places/tracks` IS the place's endpoint: nothing it returns has a share
+  // row of its own.
+  it("reaches every one of a place's tracks through that place", () => {
+    const [way] = build({ placeTracks: [placeTrack()] });
+    expect(way).toMatchObject({ shared: true, viaPlace: true });
   });
 
   it("gives every row a key unique across the kinds", () => {

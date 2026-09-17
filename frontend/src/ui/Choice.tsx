@@ -1,5 +1,5 @@
 import { useId, useRef, useState, type CSSProperties } from "react";
-import { Check, ChevronDown } from "lucide-react";
+import { Check } from "lucide-react";
 import { Popover } from "./Menu";
 import classes from "./Choice.module.css";
 
@@ -49,11 +49,24 @@ export function Checkbox({
 }
 
 /**
- * A colour from a closed list (a route's colour). Native radios, so the group
- * is one tab stop and the arrow keys move the choice. The colour IS the data,
- * so it rides in as `--swatch` rather than a token. The chosen swatch wears an
- * accent ring, which is measured against the page; the swatches themselves
- * cannot be, for every colour the list offers.
+ * A colour from a closed list (a route's colour).
+ *
+ * THE FIELD IS NOT THE BUTTON. It reads as a row — its label at the left, what
+ * it is set to beside it, and the colour itself as a square filling the row's
+ * full height at the right. Only that square is the control: a card where the
+ * whole surface was clickable gave a 380px panel a large target whose job was
+ * to show one small colour, and the colour is the part anyone aims at
+ * (operator, 2026-09-17).
+ *
+ * The NAME stays visible next to the swatch rather than being folded into the
+ * accessible name. It is the only part of this control that survives being
+ * unable to tell the colours apart, which is exactly the user this field is
+ * hardest for.
+ *
+ * The palette keeps its native radios, so the group is one tab stop and the
+ * arrow keys move the choice; the popover only changes where they are. It is
+ * laid out three to a row — taller than it is wide — because a single flat row
+ * of ten spent the width of the panel showing nine colours nobody picked.
  */
 export function SwatchPicker({
   label,
@@ -81,10 +94,11 @@ export function SwatchPicker({
 
   return (
     <div className={classes.swatchField}>
-      {/* The CHOICE, not the palette. Ten swatches laid out flat spent a whole
-          block of a 380px panel showing nine colours nobody picked; the field
-          now reads like every other one — its label, then what it is set to
-          (operator, 2026-09-17). */}
+      <span className={classes.swatchLabel}>{label}</span>
+      <span className={classes.swatchValue}>{chosen}</span>
+      {/* The swatch IS the control. No caret: a colour square that opens a
+          palette needs no second sign that it is pressable, and the caret was
+          the widest thing in a row whose subject is 24px across. */}
       <button
         ref={triggerRef}
         type="button"
@@ -92,31 +106,23 @@ export function SwatchPicker({
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-label={`${label}: ${chosen}`}
+        title={chosen}
         disabled={disabled}
+        style={{ "--swatch": value } as CSSProperties}
         onClick={() => setOpen((current) => !current)}
-      >
-        <span className={classes.swatchDot} style={{ "--swatch": value } as CSSProperties} />
-        <span className={classes.swatchText}>
-          <span className={classes.legend}>{label}</span>
-          <span className={classes.swatchValue}>{chosen}</span>
-        </span>
-        <ChevronDown size={16} aria-hidden />
-      </button>
+      />
 
-      {/* The palette keeps its fieldset and its native radios, so it is still
-          one tab stop with the arrow keys moving the choice — the popover only
-          changes WHERE they are, never how they work. */}
       <Popover
         open={open}
         onClose={() => setOpen(false)}
         anchorRef={triggerRef}
         label={label}
-        placement="bottom-start"
+        placement="bottom-end"
         className={classes.swatchPopover}
       >
         <fieldset className={classes.swatches}>
           <legend className={classes.legend}>{label}</legend>
-          <div className={classes.swatchRow}>
+          <div className={classes.swatchGrid}>
             {colors.map((color) => (
               <input
                 key={color}

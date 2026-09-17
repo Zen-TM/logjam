@@ -17,7 +17,16 @@
 // to reverse), never present-and-refused — the API answers 403 or 404 for the
 // ones the user may not have, so offering them would be a lie (DESIGN.md §7).
 //
-// Two things left this list on 2026-09-17, both because a menu was the wrong
+// A verb that ENDS the user's relationship with the way sits below a rule
+// (`separated`), whether or not it destroys anything. There are three, and only
+// one of them is a delete: Remove drops the caller's own share and the owner
+// keeps their row; "Save to my Ways and remove" is the same thing with a copy
+// kept first, offered as ONE verb because it is one decision — as two steps it
+// asks the user to guess whether the copy survives the removal. Remove arrived
+// here on 2026-09-17 from a button in the detail body, which is the one place a
+// verb may not be, and where it read as a leftover from another app.
+//
+// Two things left this list the same day, both because a menu was the wrong
 // home for them:
 //   * REVERSE is a button in the draw tool while a route is open for editing.
 //     It changes the geometry you are looking at, so it belongs beside the
@@ -32,10 +41,12 @@ export type WayVerbId =
   | "openPlace"
   | "edit"
   | "copy"
+  | "copyAndRemove"
   | "share"
   | "exportGpx"
   | "exportKml"
   | "rename"
+  | "removeShare"
   | "delete";
 
 export type WayVerb = {
@@ -43,6 +54,16 @@ export type WayVerb = {
   label: string;
   /** The last step of losing something: rendered in the warning tone. */
   danger?: boolean;
+  /**
+   * A rule goes above this verb — it ends the user's relationship with the way
+   * (it leaves the account, one way or another), so it never sits flush against
+   * an ordinary one.
+   *
+   * SEPARATE FROM `danger`, because the two are not the same claim: Remove
+   * destroys nothing (the owner keeps their copy) and must never be styled or
+   * worded as a delete, but it still belongs below the rule.
+   */
+  separated?: boolean;
 };
 
 /** Which surface is asking. The two differ by one verb, and only one. */
@@ -56,10 +77,18 @@ const LABELS: Record<WayVerbId, string> = {
   // unaffected by the owner later unsharing it. Logjam GPS draws the same
   // distinction between a live share and a copy you keep.
   copy: "Save to my Ways",
+  // The two halves said in the order they happen. Someone who has decided they
+  // want to keep a friend's route and stop carrying the share should not have
+  // to do it as two steps and guess whether the first survives the second.
+  copyAndRemove: "Save to my Ways and remove",
   share: "Share…",
   exportGpx: "Export as GPX",
   exportKml: "Export as KML",
   rename: "Rename…",
+  // "Remove", not "Remove share" or "Delete": it drops the caller's own share
+  // (`DELETE .../me`) and the owner keeps their row. The wording is the one
+  // `removeShareConfirm` in shared/src/sharing.ts promises.
+  removeShare: "Remove",
   delete: "Delete",
 };
 
@@ -75,14 +104,19 @@ const EXPORTABLE_KINDS: readonly WayKind[] = ["route"];
  * one verb that makes a copy of its own.
  */
 export function wayVerbs(
-  way: Pick<WayItem, "kind" | "shared" | "placeId">,
+  way: Pick<WayItem, "kind" | "shared" | "placeId" | "viaPlace">,
   surface: WaySurface,
 ): WayVerb[] {
   const owned = !way.shared;
-  const verb = (id: WayVerbId, danger?: boolean): WayVerb => ({
+  // Shared WITH a share row of its own, so the user can drop it. A way reached
+  // through someone's place has none: the place's share is the only thing
+  // holding it, and every verb that acts on "my share of this" is absent
+  // rather than present-and-refused.
+  const direct = !owned && !way.viaPlace;
+  const verb = (id: WayVerbId, extra?: Partial<WayVerb>): WayVerb => ({
     id,
     label: LABELS[id],
-    ...(danger ? { danger: true } : {}),
+    ...extra,
   });
 
   const verbs: WayVerb[] = [];
@@ -97,14 +131,22 @@ export function wayVerbs(
   // (operator, 2026-09-17), so a sharee's only way to keep a route was to
   // export it and import it back. Routes only: a file on a shared place is
   // media, and no copy endpoint takes one.
-  if (!owned && way.kind === "route") verbs.push(verb("copy"));
+  if (direct && way.kind === "route") verbs.push(verb("copy"));
   if (owned) verbs.push(verb("share"));
   if (EXPORTABLE_KINDS.includes(way.kind)) {
     verbs.push(verb("exportGpx"), verb("exportKml"));
   }
   // A route is renamed by the form that named it; a file is renamed in place.
   if (owned && way.kind !== "route") verbs.push(verb("rename"));
-  if (owned) verbs.push(verb("delete", true));
+
+  // Below the rule: the ways this stops being something the user carries.
+  // "Save to my Ways and remove" sits with Remove rather than with Copy because
+  // what it ENDS is the share — the copy is how it ends well.
+  if (direct && way.kind === "route") {
+    verbs.push(verb("copyAndRemove", { separated: true }));
+  }
+  if (direct) verbs.push(verb("removeShare", { separated: true }));
+  if (owned) verbs.push(verb("delete", { danger: true, separated: true }));
   return verbs;
 }
 

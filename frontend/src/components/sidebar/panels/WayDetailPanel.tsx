@@ -28,7 +28,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import {
-  sharedRowVisibility,
+  removeShareConfirm,
   densifyLine,
   formatDistanceM,
   routeLengthM,
@@ -43,6 +43,7 @@ import {
   type StandaloneFile,
 } from "@logjam/shared";
 import {
+  copyRoute,
   deleteRoute,
   updateRoute,
   useElevationProfile,
@@ -59,7 +60,7 @@ import { messageFromError } from "../../../errors/messageFromError";
 import { useToast } from "../../feedback/ToastProvider";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
 import ShareDialog from "../../dialogs/ShareDialog";
-import RemoveSharedButton from "../../common/RemoveSharedButton";
+import PlacePicker from "../../common/PlacePicker";
 import ElevationProfile from "../../routes/ElevationProfile";
 import {
   Button,
@@ -67,7 +68,6 @@ import {
   IconButton,
   Menu,
   SectionHeader,
-  Select,
   StatGrid,
   SwatchPicker,
   TextField,
@@ -83,10 +83,13 @@ const VERB_ICON: Partial<Record<WayVerbId, LucideIcon>> = {
   openPlace: MapPin,
   edit: Pencil,
   copy: CopyPlus,
+  copyAndRemove: CopyPlus,
   share: Share2,
   exportGpx: Download,
   exportKml: Download,
   rename: Pencil,
+  // Not a bin: this drops the caller's own share and the owner keeps their row.
+  removeShare: X,
   delete: Trash2,
 };
 
@@ -121,7 +124,7 @@ export default function WayDetailPanel({
   onBack,
   onClose,
   onEdit,
-  onCopy,
+  onCopied,
   onChanged,
   onOpenPlace,
   onDeleteFile,
@@ -152,8 +155,11 @@ export default function WayDetailPanel({
   onBack: () => void;
   onClose: () => void;
   onEdit: (route: TRoute) => void;
-  /** Take your own copy of a route someone shared with you. */
-  onCopy: (route: TRoute) => void;
+  /** A copy of a shared route has just been made and is the user's own now —
+   *  go and show it to them. The copying itself happens here, because it is
+   *  half of "save it and remove the share" and the two halves must not be
+   *  able to drift apart. */
+  onCopied: (copy: TRoute) => void;
   onChanged: () => void;
   onOpenPlace: (placeId: string) => void;
   onDeleteFile: (file: StandaloneFile) => Promise<void>;
@@ -165,6 +171,8 @@ export default function WayDetailPanel({
   const [showShare, setShowShare] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [renaming, setRenaming] = useState(false);
+  /** Which share-ending verb is waiting on its confirmation, if any. */
+  const [ending, setEnding] = useState<"remove" | "copyAndRemove" | null>(null);
   const [pendingLink, setPendingLink] = useState<{
     placeId: string;
     placeName: string;
@@ -197,11 +205,11 @@ export default function WayDetailPanel({
   const owned = !way.shared;
   const properties = wayProperties(way);
   const linkedPlace = ownedPlaces.find((place) => place.id === way.placeId) ?? null;
-  const viaPlace = sharedPlaces.find((place) => place.id === way.placeId) ?? null;
-  const visibility = sharedRowVisibility({
-    syncRole: owned ? "owner" : "shared",
-    visibleLinkedPlaceIds: viaPlace ? [viaPlace.id] : [],
-  });
+  /** The shared place this way arrived through, where it arrived through one.
+   *  Whether it DID is `way.viaPlace`, decided once in `waysModel` — this is
+   *  only how to name it. */
+  const sharingPlace = sharedPlaces.find((place) => place.id === way.placeId) ?? null;
+  const ownerName = route ? ownerUsername(friends, route.ownerId) : null;
   const colour = route?.color ?? file?.color ?? way.color;
 
   const run = async (action: () => Promise<unknown>, failure: string) => {
@@ -255,6 +263,39 @@ export default function WayDetailPanel({
     );
   };
 
+  /**
+   * Take your own copy, optionally dropping the share in the same breath.
+   *
+   * THE ORDER IS THE GUARANTEE: copy first, unshare second. Reversed, a failure
+   * between the two steps leaves the user with neither the share nor a copy —
+   * this way the worst case is that they still have both, which they can see
+   * and act on.
+   */
+  const handleCopy = (alsoRemove: boolean) => {
+    if (!route) return;
+    setEnding(null);
+    void run(async () => {
+      const copy = await copyRoute(route.id);
+      if (alsoRemove) await unshareEntityWith("route", route.id, "me");
+      toast.success(
+        alsoRemove
+          ? `"${copy.name}" is yours now, and ${ownerName ?? "their"} share is removed.`
+          : `"${copy.name}" is yours now.`,
+      );
+      onCopied(copy);
+    }, "Couldn't save that route to your Ways.");
+  };
+
+  const handleRemoveShare = () => {
+    if (!route) return;
+    setEnding(null);
+    void run(async () => {
+      await unshareEntityWith("route", route.id, "me");
+      toast.success(`${way.title} removed.`);
+      onBack();
+    }, "Couldn't remove that route.");
+  };
+
   const runVerb = (id: WayVerbId) => {
     switch (id) {
       case "openPlace":
@@ -264,7 +305,14 @@ export default function WayDetailPanel({
         if (route) onEdit(route);
         return;
       case "copy":
-        if (route) onCopy(route);
+        handleCopy(false);
+        return;
+      // Both of these end the share, so both ask first.
+      case "copyAndRemove":
+        setEnding("copyAndRemove");
+        return;
+      case "removeShare":
+        setEnding("remove");
         return;
       case "share":
         setShowShare(true);
@@ -305,9 +353,11 @@ export default function WayDetailPanel({
       disabled: busy,
       onSelect: () => runVerb(verb.id),
     };
-    // A rule sits above the destructive verb, so the last step of losing
-    // something is never adjacent to an ordinary one.
-    return verb.danger && index > 0 && !all[index - 1].danger
+    // A rule sits above the verbs that end the user's relationship with the
+    // way, so the last step of parting with something is never adjacent to an
+    // ordinary one. Not keyed on `danger`: Remove belongs below the rule and
+    // destroys nothing (wayActions.ts).
+    return verb.separated && index > 0 && !all[index - 1].separated
       ? [{ id: `${verb.id}-sep`, separator: true } as MenuEntry, item]
       : [item];
   });
@@ -449,25 +499,22 @@ export default function WayDetailPanel({
               )}
             </div>
           ) : owned && route ? (
-            <Select
+            // Typed, not scrolled. A dropdown of every place the user has is
+            // hundreds of options deep, and the platform's own type-to-find
+            // matches the START of the primary name only — so a place known by
+            // an alternative name was unreachable (operator, 2026-09-17).
+            <PlacePicker
               label="Link to a place"
-              value=""
+              places={ownedPlaces}
               disabled={busy}
-              onChange={(event) => event.target.value && handleLinkSelected(event.target.value)}
-            >
-              <option value="">Not linked to a place</option>
-              {ownedPlaces.map((place) => (
-                <option key={place.id} value={place.id}>
-                  {place.name}
-                </option>
-              ))}
-            </Select>
-          ) : viaPlace ? (
+              onSelect={(place) => handleLinkSelected(place.id)}
+            />
+          ) : sharingPlace ? (
             // The place whose share brought this way. Removing THAT is the only
             // way to stop seeing it — it carries no share row of its own.
             <div className={classes.linkRow}>
-              <span className={classes.linkName}>{viaPlace.name}</span>
-              <Button compact icon={MapPin} onClick={() => onOpenPlace(viaPlace.id)}>
+              <span className={classes.linkName}>{sharingPlace.name}</span>
+              <Button compact icon={MapPin} onClick={() => onOpenPlace(sharingPlace.id)}>
                 Open
               </Button>
             </div>
@@ -476,26 +523,17 @@ export default function WayDetailPanel({
           )}
         </section>
 
+        {/* What this way IS to the reader, and nothing to press. Removing it
+            is a verb and lives in the ⋯ with the others — as a button here it
+            was the one action on the page outside the menu, and it read as a
+            leftover from another app (operator, 2026-09-17). */}
         {!owned && (
           <section className={classes.section}>
             <p className={classes.note}>
-              {visibility === "via-place"
-                ? `Shared with you as part of ${viaPlace?.name} — you can see it, but not change it.`
+              {way.viaPlace
+                ? `Shared with you as part of ${sharingPlace?.name ?? "a place"} — you can see it, but not change it. Removing that place is what stops it showing here.`
                 : "Shared with you — you can see it, but not change it."}
             </p>
-            {visibility === "direct" && route && (
-              <RemoveSharedButton
-                kindLabel="route"
-                itemName={way.title}
-                ownerName={ownerUsername(friends, route.ownerId)}
-                disabled={busy}
-                remove={() => unshareEntityWith("route", route.id, "me")}
-                onRemoved={() => {
-                  onChanged();
-                  onBack();
-                }}
-              />
-            )}
           </section>
         )}
       </div>
@@ -547,6 +585,33 @@ export default function WayDetailPanel({
           if (target) linkNow(target.placeId);
         }}
         onClose={() => setPendingLink(null)}
+      />
+
+      {/* Removing a share destroys nothing — the owner keeps their row — so the
+          wording comes from `removeShareConfirm` (the promise every surface
+          makes) and the button is not the red one a delete uses. */}
+      <ConfirmDialog
+        open={ending === "remove"}
+        title={removeShareConfirm({ kindLabel: "route", itemName: way.title, ownerName }).title}
+        message={removeShareConfirm({ kindLabel: "route", itemName: way.title, ownerName }).body}
+        confirmLabel="Remove"
+        confirmColor="primary"
+        busy={busy}
+        onConfirm={handleRemoveShare}
+        onClose={() => setEnding(null)}
+      />
+
+      <ConfirmDialog
+        open={ending === "copyAndRemove"}
+        title="Save to your Ways and remove?"
+        message={`A copy of "${way.title}" is saved to your Ways first, then ${
+          ownerName ? `${ownerName}'s` : "the owner's"
+        } share is removed from your account. The copy is yours to keep and edit — nothing of theirs is deleted.`}
+        confirmLabel="Save and remove"
+        confirmColor="primary"
+        busy={busy}
+        onConfirm={() => handleCopy(true)}
+        onClose={() => setEnding(null)}
       />
 
       <ConfirmDialog

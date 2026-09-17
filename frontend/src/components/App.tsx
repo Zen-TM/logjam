@@ -33,7 +33,6 @@ import {
   deleteMedia,
   useRoutes,
   type TRoute,
-  copyRoute,
   createRoute,
   updateRoute,
   useSharedPlaces,
@@ -79,7 +78,7 @@ import ConsentGate from "./ConsentGate";
 import { RouteDrawPanel } from "./routes/RouteDrawPanel";
 import RouteNameDialog from "./dialogs/RouteNameDialog";
 import WayDetailPanel from "./sidebar/panels/WayDetailPanel";
-import { wayFromRoute, type WayItem } from "./sidebar/panels/waysModel";
+import { buildWays, wayFromRoute, type WayItem } from "./sidebar/panels/waysModel";
 import type { WayVerbId } from "./sidebar/panels/wayActions";
 import ConfirmDialog from "./dialogs/ConfirmDialog";
 import { useUnsavedChangesGuard } from "../useUnsavedChangesGuard";
@@ -163,11 +162,15 @@ function App() {
   const [importedFromOnboarding, setImportedFromOnboarding] = useState(false);
   const importChecked = useRef(false);
 
-  // Layer visibility toggles
-  const [showOwnedPlaces, setShowOwnedPlaces] = useStoredState("logjam.showOwnedPlaces", true);
-  const [showSharedPlaces, setShowSharedPlaces] = useStoredState("logjam.showSharedPlaces", true);
-  const [showPlaceTracks, setShowPlaceTracks] = useStoredState("logjam.showPlaceTracks", false);
-  const [showRoutes, setShowRoutes] = useStoredState("logjam.showRoutes", true);
+  // What is drawn on the map. TWO overlays over the user's own data, divided by
+  // what a thing IS — a pin is a place, a line is a way — so nothing belongs to
+  // both and no toggle overlaps another (LayersPopover carries the reasoning).
+  //
+  // NEW KEYS, not the old four reused: those answered different questions, and
+  // a stored `false` for "shared ways" arriving as "hide every line I have"
+  // would silently empty the map of someone who had only ever hidden a friend's.
+  const [showPlaces, setShowPlaces] = useStoredState("logjam.showPlaces", true);
+  const [showWays, setShowWays] = useStoredState("logjam.showWays", true);
 
   // Route draw/edit mode. The vertex list lives here (not in Map) so the HUD
   // can show the running distance and drive undo. `editingRouteId` is null
@@ -507,9 +510,9 @@ function App() {
     loaded: placeTracksLoaded,
     refetch: refetchPlaceTracks,
   } = usePlaceTracks(
-    // Their own place's tracks are drawn by "Ways" and a friend's by "Shared
-    // ways", so either overlay needs this list.
-    loadsUserData && (showPlaceTracks || showRoutes || activePanel === "ways"),
+    // Every line is drawn by "Ways", wherever it came from — a friend's place's
+    // tracks included.
+    loadsUserData && (showWays || activePanel === "ways"),
   );
   // Standalone files: the user's own imports and Logjam GPS recordings. They
   // hang off no place, so Ways is the only page they surface on.
@@ -525,10 +528,10 @@ function App() {
     loaded: standaloneFilesLoaded,
     error: standaloneFilesError,
     refetch: refetchStandaloneFiles,
-  } = useStandaloneFiles(loadsUserData && (activePanel === "ways" || showRoutes));
+  } = useStandaloneFiles(loadsUserData && (activePanel === "ways" || showWays));
   const shownStandaloneIds = useMemo(
-    () => (showRoutes ? standaloneFiles.map((file) => file.id) : []),
-    [showRoutes, standaloneFiles],
+    () => (showWays ? standaloneFiles.map((file) => file.id) : []),
+    [showWays, standaloneFiles],
   );
   const { tracks: standaloneTracks } = useStandaloneTracks(
     standaloneFiles,
@@ -553,7 +556,7 @@ function App() {
   // Routes load whenever the layer is on OR a draw/edit session is live (the
   // editor needs the row it is editing even with the layer toggled off).
   const { routes, loaded: routesLoaded, refetch: refetchRoutes } = useRoutes(
-    loadsUserData && (showRoutes || drawingRoute || activePanel === "ways"),
+    loadsUserData && (showWays || drawingRoute || activePanel === "ways"),
   );
 
   // Ways is built from three fetches, so it has nothing to say until all three
@@ -561,11 +564,32 @@ function App() {
   // the whole list (DESIGN.md §8).
   const waysLoaded = routesLoaded && standaloneFilesLoaded && placeTracksLoaded;
 
+  /** The places shared WITH the user. What tells a route shared on its own from
+   *  one seen through somebody's place, which decides the verbs it offers. */
+  const sharedPlaceIds = useMemo(
+    () => new Set(sharedPlaces.map((place) => place.id)),
+    [sharedPlaces],
+  );
+
+  // The overlay's count is the SAME list the Ways page builds — including its
+  // de-duplication of a file that both endpoints return — so the number on the
+  // layer row and the number in the page's heading cannot drift.
+  const wayCount = useMemo(
+    () =>
+      buildWays({
+        routes,
+        standaloneFiles,
+        placeTracks,
+        currentUserId: currentUser?.id ?? null,
+        sharedPlaceIds,
+      }).length,
+    [routes, standaloneFiles, placeTracks, currentUser?.id, sharedPlaceIds],
+  );
 
   // A place list change (e.g. after a track upload) should refresh the layer.
   useEffect(() => {
-    if (showPlaceTracks) refetchPlaceTracks();
-  }, [places, sharedPlaces, showPlaceTracks, refetchPlaceTracks]);
+    if (showWays) refetchPlaceTracks();
+  }, [places, sharedPlaces, showWays, refetchPlaceTracks]);
   const {
     friends,
     requests: friendRequests,
@@ -1118,26 +1142,16 @@ function App() {
   };
 
   /**
-   * Take your own copy of a route a friend shared.
+   * A friend's route has just been copied into the user's own Ways — show them
+   * the copy.
    *
-   * `POST /routes/:id/copy` has existed since sharing shipped and nothing on
-   * the web ever called it (operator, 2026-09-17), so a sharee's only way to
-   * keep a route was to export it and import it back. The copy is THEIRS —
-   * editable, permanent, and unaffected by the owner later unsharing — which is
-   * why the verb says "Save to my Ways" rather than "Copy".
+   * The copying itself is the way page's, because it is half of "save it and
+   * remove the share" and those two halves must not be able to drift apart.
+   * What is left here is navigation, which only App can do.
    */
-  const copySharedRoute = (route: TRoute) => {
-    void (async () => {
-      try {
-        const copy = await copyRoute(route.id);
-        refetchRoutes();
-        toast.success(`"${copy.name}" is yours now.`);
-        openWay(wayFromRoute(copy, currentUser?.id ?? null));
-      } catch (err) {
-        console.error(err);
-        toast.error(messageFromError(err, "Couldn't save that route to your Ways."));
-      }
-    })();
+  const showCopiedRoute = (copy: TRoute) => {
+    refetchRoutes();
+    openWay(wayFromRoute(copy, currentUser?.id ?? null, sharedPlaceIds));
   };
 
   const startDrawingRoute = () => {
@@ -1159,7 +1173,7 @@ function App() {
     setDrawColor(route.color ?? pickNextTrackColor(routes.map((r) => r.color)));
     setDrawingRoute(true);
     // Editing centres it too: the points being edited must be on screen.
-    const bounds = wayFromRoute(route, currentUser?.id ?? null).bounds;
+    const bounds = wayFromRoute(route, currentUser?.id ?? null, sharedPlaceIds).bounds;
     if (bounds) setFlyToBounds(bounds);
     setActivePanel("way-draw");
   };
@@ -1180,7 +1194,7 @@ function App() {
       setNamingRoute(false);
       cancelDrawingRoute();
       refetchRoutes();
-      openWay(wayFromRoute(result, currentUser?.id ?? null));
+      openWay(wayFromRoute(result, currentUser?.id ?? null, sharedPlaceIds));
     } catch (err) {
       console.error(err);
       toast.error(messageFromError(err, "Couldn't save the route."));
@@ -1374,7 +1388,7 @@ function App() {
                 }}
                 onClose={() => setActivePanel(null)}
                 onEdit={startEditingRoute}
-                onCopy={copySharedRoute}
+                onCopied={showCopiedRoute}
                 onChanged={() => {
                   refetchRoutes();
                   refetchStandaloneFiles();
@@ -1521,30 +1535,18 @@ function App() {
         filters={filters}
         places={places}
         sharedPlaces={sharedPlaces}
-        showOwnedPlaces={showOwnedPlaces}
-        showSharedPlaces={showSharedPlaces}
-        showPlaceTracks={showPlaceTracks}
-        // "Shared ways" carries only a FRIEND's lines. The user's own tracks on
-        // their own places are their own lines, so they ride with Ways —
-        // ownership is the split, the same one the two place overlays make.
-        placeTracks={placeTracks.filter((track) => !ownedPlaceIds.has(track.placeId))}
-        standaloneTracks={[
-          ...standaloneTracks,
-          ...placeTracks
-            .filter((track) => ownedPlaceIds.has(track.placeId))
-            .map((track) => ({
-              mediaId: track.mediaId,
-              color: track.color,
-              displayUrl: track.displayUrl,
-            })),
-        ]}
-        showRoutes={showRoutes}
+        showPlaces={showPlaces}
+        // One overlay for every line, so nothing has to be partitioned by
+        // ownership on the way to the map any more.
+        showWays={showWays}
+        placeTracks={placeTracks}
+        standaloneTracks={standaloneTracks}
         routes={routes}
         routeHoverPosition={routeHoverPosition}
         routeHoverColor={routeHoverColor}
         selectRoute={(id) => {
           const route = routes.find((r) => r.id === id);
-          if (route) openWay(wayFromRoute(route, currentUser?.id ?? null));
+          if (route) openWay(wayFromRoute(route, currentUser?.id ?? null, sharedPlaceIds));
         }}
         drawingRoute={drawingRoute}
         drawColor={drawColor ?? undefined}
@@ -1637,17 +1639,12 @@ function App() {
         open={layersOpen}
         onClose={() => setLayersOpen(false)}
         anchorRef={layersButtonRef}
-        showOwnedPlaces={showOwnedPlaces}
-        setShowOwnedPlaces={setShowOwnedPlaces}
-        showSharedPlaces={showSharedPlaces}
-        setShowSharedPlaces={setShowSharedPlaces}
-        showPlaceTracks={showPlaceTracks}
-        setShowPlaceTracks={setShowPlaceTracks}
-        showRoutes={showRoutes}
-        setShowRoutes={setShowRoutes}
-        ownedPlaceCount={places.length}
-        sharedPlaceCount={sharedPlaces.length}
-        routeCount={showRoutes ? routes.length : null}
+        showPlaces={showPlaces}
+        setShowPlaces={setShowPlaces}
+        showWays={showWays}
+        setShowWays={setShowWays}
+        placeCount={places.length + sharedPlaces.length}
+        wayCount={showWays ? wayCount : null}
         lidarEnabled={lidarEnabled}
         setLidarEnabled={setLidarEnabled}
         lidarLayerToggles={lidarLayerToggles}

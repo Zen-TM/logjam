@@ -10,8 +10,6 @@ import {
   Route,
   Scan,
   Search,
-  Spline,
-  Users,
   X,
 } from "lucide-react";
 import type { RegionBbox } from "@logjam/shared";
@@ -64,17 +62,12 @@ export default function LayersPopover({
   open,
   onClose,
   anchorRef,
-  showOwnedPlaces,
-  setShowOwnedPlaces,
-  showSharedPlaces,
-  setShowSharedPlaces,
-  showPlaceTracks,
-  setShowPlaceTracks,
-  showRoutes,
-  setShowRoutes,
-  ownedPlaceCount,
-  sharedPlaceCount,
-  routeCount,
+  showPlaces,
+  setShowPlaces,
+  showWays,
+  setShowWays,
+  placeCount,
+  wayCount,
   lidarEnabled,
   setLidarEnabled,
   lidarLayerToggles,
@@ -94,18 +87,14 @@ export default function LayersPopover({
   open: boolean;
   onClose: () => void;
   anchorRef: RefObject<HTMLElement | null>;
-  showOwnedPlaces: boolean;
-  setShowOwnedPlaces: (v: boolean) => void;
-  showSharedPlaces: boolean;
-  setShowSharedPlaces: (v: boolean) => void;
-  showPlaceTracks: boolean;
-  setShowPlaceTracks: (v: boolean) => void;
-  showRoutes: boolean;
-  setShowRoutes: (v: boolean) => void;
-  ownedPlaceCount: number;
-  sharedPlaceCount: number;
-  /** Null while routes are not loaded (they load with their layer). */
-  routeCount: number | null;
+  showPlaces: boolean;
+  setShowPlaces: (v: boolean) => void;
+  showWays: boolean;
+  setShowWays: (v: boolean) => void;
+  /** Every place drawn: the user's own and the ones shared with them. */
+  placeCount: number;
+  /** Null while the lines are not loaded (they load with their layer). */
+  wayCount: number | null;
   lidarEnabled: boolean;
   setLidarEnabled: (v: boolean) => void;
   lidarLayerToggles: Record<string, boolean>;
@@ -129,9 +118,7 @@ export default function LayersPopover({
   const shownLayerLabels = lidarLayerOrder
     .filter((name) => lidarLayerToggles[name])
     .map((name) => TOPO_LAYERS.find((layer) => layer.name === name)?.label.toLowerCase() ?? name);
-  const overlaysOn = [showOwnedPlaces, showSharedPlaces, showPlaceTracks, showRoutes, lidarEnabled].filter(
-    Boolean,
-  ).length;
+  const overlaysOn = [showPlaces, showWays, lidarEnabled].filter(Boolean).length;
 
   const close = () => {
     setView("overlays");
@@ -180,44 +167,41 @@ export default function LayersPopover({
           </div>
           {view === "overlays" ? (
             <div className={classes.body}>
+              {/* TWO overlays for the user's own data, and they divide it by
+                  WHAT A THING IS: a pin is a place, a line is a way. Nothing
+                  belongs to both, so no toggle overlaps another and there is
+                  nothing to explain.
+
+                  Ownership deliberately does NOT split them. It was tried
+                  (Your places / Shared with you, then Ways / Shared ways) and
+                  it splits the wrong axis: "mine" and "shared with me" are the
+                  same KIND of thing drawn the same way, so two rows say one
+                  thing twice — while any three-row arrangement that keeps a
+                  "Shared with you" row makes a shared place answer to two
+                  toggles at once. Whose a thing is is already on the thing
+                  itself: on the map FILL is the type and the RING is sharing
+                  (root CLAUDE.md), and every list marks a shared row. A legend
+                  says what kind; the pin says whose (operator, 2026-09-17). */}
               <OverlayRow
                 icon={MapPin}
                 hue="var(--owned-place-color)"
-                title="Your places"
-                subtitle={countOf(ownedPlaceCount, "place")}
-                checked={showOwnedPlaces}
-                onToggle={setShowOwnedPlaces}
+                title="Places"
+                subtitle={countOf(placeCount, "place")}
+                checked={showPlaces}
+                onToggle={setShowPlaces}
               />
-              <OverlayRow
-                icon={Users}
-                hue="var(--hue-shared)"
-                title="Shared with you"
-                subtitle={countOf(sharedPlaceCount, "place")}
-                checked={showSharedPlaces}
-                onToggle={setShowSharedPlaces}
-              />
-              {/* "Ways" rather than "Routes": it draws every line of your own —
-                  routes you drew AND the files you imported or recorded. Those
-                  files used to be drawn by a per-item switch buried on each
-                  one's detail page, which is a control you had to open a page to
-                  find (operator, 2026-09-17). Split by OWNERSHIP, like the two
-                  place rows above it, so a friend's lines can be hidden without
-                  hiding your own. */}
+              {/* "Ways" rather than "Routes": it draws every line there is —
+                  routes drawn here, files imported or recorded, and the tracks
+                  on places friends shared. Those files used to be drawn by a
+                  per-item switch buried on each one's detail page, which is a
+                  control you had to open a page to find. */}
               <OverlayRow
                 icon={Route}
                 hue="var(--hue-route)"
                 title="Ways"
-                subtitle={routeCount == null ? "Lines you made" : countOf(routeCount, "way")}
-                checked={showRoutes}
-                onToggle={setShowRoutes}
-              />
-              <OverlayRow
-                icon={Spline}
-                hue="var(--hue-shared)"
-                title="Shared ways"
-                subtitle="Lines on places shared with you"
-                checked={showPlaceTracks}
-                onToggle={setShowPlaceTracks}
+                subtitle={wayCount == null ? "Every line you have" : countOf(wayCount, "way")}
+                checked={showWays}
+                onToggle={setShowWays}
               />
               {completedTopoJobs.length === 0 ? (
                 <Row

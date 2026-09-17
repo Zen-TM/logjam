@@ -525,6 +525,7 @@ function SidebarPanel({
             standaloneFiles={standaloneFiles}
             standaloneFilesError={standaloneFilesError}
             places={[...places, ...sharedPlaces]}
+            sharedPlaces={sharedPlaces}
             onStartDrawingRoute={onStartDrawingRoute}
             onOpenUnifiedImport={onOpenUnifiedImport}
             onOpenWay={onOpenWay}

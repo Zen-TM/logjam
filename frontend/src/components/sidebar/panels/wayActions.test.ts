@@ -2,17 +2,19 @@ import { describe, expect, it } from "vitest";
 import { wayProperties, wayVerbs, type WaySurface } from "./wayActions";
 import type { WayItem } from "./waysModel";
 
-type Subject = Pick<WayItem, "kind" | "shared" | "placeId">;
+type Subject = Pick<WayItem, "kind" | "shared" | "placeId" | "viaPlace">;
 
 const route = (over: Partial<Subject> = {}): Subject => ({
   kind: "route",
   shared: false,
+  viaPlace: false,
   placeId: null,
   ...over,
 });
 const importFile = (over: Partial<Subject> = {}): Subject => ({
   kind: "import",
   shared: false,
+  viaPlace: false,
   placeId: null,
   ...over,
 });
@@ -51,6 +53,46 @@ describe("wayVerbs", () => {
 
   it("offers no copy of something already yours", () => {
     expect(ids(route())).not.toContain("copy");
+  });
+
+  // It was a button in the detail body, which is the one place a verb may not
+  // be (operator, 2026-09-17) — and it read as a leftover from another app.
+  it("offers Remove on a way shared directly with you", () => {
+    expect(ids(route({ shared: true }))).toContain("removeShare");
+  });
+
+  // The place's share is the only thing holding it: a Remove here would be a
+  // control that cannot do what it says.
+  it("offers no Remove on a way reached through someone's place", () => {
+    const viaPlace = ids(route({ shared: true, viaPlace: true, placeId: "p1" }));
+    expect(viaPlace).not.toContain("removeShare");
+    expect(viaPlace).not.toContain("copy");
+    expect(viaPlace).not.toContain("copyAndRemove");
+  });
+
+  it("offers no Remove on something of your own", () => {
+    expect(ids(route())).not.toContain("removeShare");
+  });
+
+  // Keeping it and dropping the share is one decision, so it is one verb —
+  // otherwise it is two steps with a guess in the middle about whether the
+  // copy survives the removal.
+  it("offers saving a shared route and removing it in one verb", () => {
+    expect(ids(route({ shared: true }))).toContain("copyAndRemove");
+  });
+
+  // Removing a share destroys nothing — the owner keeps their row — so it must
+  // never wear the tone that says otherwise.
+  it("puts Remove below the rule without marking it destructive", () => {
+    const verbs = wayVerbs(route({ shared: true }), "row");
+    const remove = verbs.find((verb) => verb.id === "removeShare");
+    expect(remove?.separated).toBe(true);
+    expect(remove?.danger).toBeUndefined();
+  });
+
+  it("puts the share-ending verbs last, in the order they escalate", () => {
+    const list = ids(route({ shared: true }));
+    expect(list.slice(-2)).toEqual(["copyAndRemove", "removeShare"]);
   });
 
   // A file on a shared place is media, and no copy endpoint takes one — so the

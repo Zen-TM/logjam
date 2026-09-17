@@ -84,10 +84,13 @@ const VERB_ICON: Partial<Record<WayVerbId, LucideIcon>> = {
   openPlace: MapPin,
   edit: Pencil,
   copy: CopyPlus,
+  copyAndRemove: CopyPlus,
   share: Share2,
   exportGpx: Download,
   exportKml: Download,
   rename: Pencil,
+  // Not a bin: this drops the caller's own share and the owner keeps their row.
+  removeShare: X,
   delete: Trash2,
 };
 
@@ -112,6 +115,7 @@ export default function RoutesPanel({
   standaloneFiles,
   standaloneFilesError,
   places,
+  sharedPlaces,
   onStartDrawingRoute,
   onOpenUnifiedImport,
   onOpenWay,
@@ -129,6 +133,10 @@ export default function RoutesPanel({
   standaloneFilesError: string | null;
   /** Owned + shared, for naming the place a way belongs to. */
   places: TPlace[];
+  /** The places shared WITH the user — what tells a route shared on its own
+   *  from one seen through somebody's place, and so which verbs it offers
+   *  (`WayItem.viaPlace`). */
+  sharedPlaces: TPlace[];
   onStartDrawingRoute: () => void;
   onOpenUnifiedImport: () => void;
   /**
@@ -152,9 +160,14 @@ export default function RoutesPanel({
   const placeById = useMemo(() => new Map(places.map((place) => [place.id, place])), [places]);
   const routeById = useMemo(() => new Map(routes.map((route) => [route.id, route])), [routes]);
 
+  const sharedPlaceIds = useMemo(
+    () => new Set(sharedPlaces.map((place) => place.id)),
+    [sharedPlaces],
+  );
+
   const ways = useMemo(
-    () => buildWays({ routes, standaloneFiles, placeTracks, currentUserId }),
-    [routes, standaloneFiles, placeTracks, currentUserId],
+    () => buildWays({ routes, standaloneFiles, placeTracks, currentUserId, sharedPlaceIds }),
+    [routes, standaloneFiles, placeTracks, currentUserId, sharedPlaceIds],
   );
 
   const searched = useMemo(
@@ -228,9 +241,11 @@ export default function RoutesPanel({
         ...(verb.danger ? { danger: true } : {}),
         onSelect,
       };
-      // A rule above the destructive verb, so the last step of losing something
-      // is never adjacent to an ordinary one.
-      return verb.danger && index > 0 && !all[index - 1].danger
+      // A rule above the verbs that END the user's relationship with the way,
+      // so the last step of parting with something is never adjacent to an
+      // ordinary one. Not keyed on `danger`: Remove belongs below the rule and
+      // destroys nothing (wayActions.ts).
+      return verb.separated && index > 0 && !all[index - 1].separated
         ? [{ id: `${verb.id}-sep`, separator: true } as MenuEntry, item]
         : [item];
     });

@@ -512,12 +512,10 @@ function Map({
   pickingCoords,
   onCoordsPicked,
   onCancelPickCoords,
-  showOwnedPlaces,
-  showSharedPlaces,
-  showPlaceTracks,
+  showPlaces,
+  showWays,
   placeTracks,
   standaloneTracks,
-  showRoutes,
   routes,
   selectRoute,
   routeHoverPosition,
@@ -573,18 +571,20 @@ function Map({
   pickingCoords: boolean;
   onCoordsPicked: (lat: number, lng: number) => void;
   onCancelPickCoords: () => void;
-  showOwnedPlaces: boolean;
-  showSharedPlaces: boolean;
-  showPlaceTracks: boolean;
+  // TWO overlays over the user's own data, divided by what a thing IS: a pin is
+  // a place, a line is a way. Ownership does not split either of them — it is
+  // already on the thing itself (fill is the type, ring is sharing), and
+  // splitting by it made a shared place answer to two toggles (LayersPopover).
+  showPlaces: boolean;
+  /** Every line: routes, imported and recorded files, and the tracks on places
+   *  friends shared. */
+  showWays: boolean;
   placeTracks: PlaceTrack[];
-  // Standalone files (the user's own imports and recorded tracks) currently
-  // toggled onto the map, already resolved to a presigned URL. Same
-  // fetch-and-parse treatment as placeTracks; the list IS the visibility, so
-  // there is no separate layer toggle.
+  // Standalone files (the user's own imports and recorded tracks), already
+  // resolved to a presigned URL. Same fetch-and-parse treatment as placeTracks.
   standaloneTracks: StandaloneTrack[];
   // User-authored routes. Geometry arrives inline, so unlike placeTracks
   // there is nothing to fetch and parse per feature.
-  showRoutes: boolean;
   routes: TRoute[];
   selectRoute: (id: string) => void;
   /** Position along a route under the elevation-profile cursor, marked on the
@@ -1611,7 +1611,7 @@ function Map({
   );
 
   useEffect(() => {
-    if (!mapLoaded || !mapRef.current || !showPlaceTracks) return;
+    if (!mapLoaded || !mapRef.current || !showWays) return;
     let cancelled = false;
     void (async () => {
       const features = await loadTrackSource(
@@ -1632,7 +1632,7 @@ function Map({
     return () => {
       cancelled = true;
     };
-  }, [showPlaceTracks, placeTracks, mapLoaded, loadTrackSource]);
+  }, [showWays, placeTracks, mapLoaded, loadTrackSource]);
 
   // Standalone files. The list is the visibility: whatever the user has toggled
   // on is what gets fetched and drawn.
@@ -1692,42 +1692,40 @@ function Map({
     mapRef.current.setLayoutProperty(
       "place-circles",
       "visibility",
-      vis(showOwnedPlaces),
+      vis(showPlaces),
     );
     mapRef.current.setLayoutProperty(
       "place-labels",
       "visibility",
-      vis(showOwnedPlaces),
+      vis(showPlaces),
     );
     mapRef.current.setLayoutProperty(
       "shared-place-halos",
       "visibility",
-      vis(showSharedPlaces),
+      vis(showPlaces),
     );
     mapRef.current.setLayoutProperty(
       "shared-place-circles",
       "visibility",
-      vis(showSharedPlaces),
+      vis(showPlaces),
     );
     mapRef.current.setLayoutProperty(
       "shared-place-labels",
       "visibility",
-      vis(showSharedPlaces),
+      vis(showPlaces),
     );
-    mapRef.current.setLayoutProperty(
-      "place-tracks-lines",
-      "visibility",
-      vis(showPlaceTracks),
-    );
-    // The route being drawn stays visible even with the Ways layer off —
-    // hiding your own in-progress work would read as the tool being broken.
+    // "Ways" draws EVERY line, wherever it came from: routes drawn here, files
+    // imported or recorded, and the tracks on places friends shared. Those
+    // files used to have no toggle at all — the list of them WAS their
+    // visibility, set one at a time by a switch on each file's own detail page,
+    // which is a control you had to open a page to find (operator,
+    // 2026-09-17). One toggle for all of them, because they are one kind of
+    // thing; whose each one is shows on the line, not in the legend.
     //
-    // "Ways" draws every line of the user's OWN: the routes they drew and the
-    // files they imported or recorded. Those files used to have no toggle at
-    // all — the list of them WAS their visibility, set one at a time by a
-    // switch on each file's own detail page, which is a control you had to open
-    // a page to find (operator, 2026-09-17).
+    // The route being drawn stays visible even with the layer off — hiding your
+    // own in-progress work would read as the tool being broken.
     for (const id of [
+      "place-tracks-lines",
       "routes-hit",
       "routes-lines",
       "routes-direction",
@@ -1736,17 +1734,10 @@ function Map({
       mapRef.current.setLayoutProperty(
         id,
         "visibility",
-        vis(showRoutes || drawingRoute),
+        vis(showWays || drawingRoute),
       );
     }
-  }, [
-    showOwnedPlaces,
-    showSharedPlaces,
-    showPlaceTracks,
-    showRoutes,
-    drawingRoute,
-    mapLoaded,
-  ]);
+  }, [showPlaces, showWays, drawingRoute, mapLoaded]);
 
   // Push saved routes to the map. No fetch/parse step: geometry is inline.
   useEffect(() => {

@@ -65,25 +65,50 @@
   composes: description from "./Toggle.module.css";
 }
 
+/* A row, not a button: label, value, then the colour itself as the control.
+   Same height as a Select, so a column of controls stays on one rhythm.
+   `overflow: hidden` is what lets the square trigger sit flush in the corner
+   and still take the card's radius. */
 .swatchField {
   min-width: 0;
-}
-
-/* Reads as a field: its label over its value, with the chosen colour leading.
-   Same height as a Select, so a column of controls stays on one rhythm. */
-.swatchTrigger {
-  width: 100%;
-  min-height: var(--control-lg);
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 4px 10px;
+  min-height: var(--control-lg);
+  padding-left: 10px;
   border: var(--hairline);
   border-radius: var(--radius-md);
   background: var(--theme-secondary);
+  overflow: hidden;
+}
+
+.swatchLabel {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-sm);
+  color: var(--theme-text-muted);
+}
+
+/* The colour's NAME, and the only part of this field that works for a reader
+   who cannot tell the swatches apart. */
+.swatchValue {
+  flex: none;
+  font-size: var(--font-sm);
   color: var(--theme-text-primary);
+}
+
+/* Square, flush right, the full height of the row. */
+.swatchTrigger {
+  flex: none;
+  align-self: stretch;
+  width: var(--control-lg);
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: var(--swatch, transparent);
   cursor: pointer;
-  text-align: left;
+  /* An unset colour is an empty well, not a black one. */
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--theme-text-muted) 60%, transparent);
 }
 
 .swatchTrigger:disabled {
@@ -91,30 +116,19 @@
   cursor: default;
 }
 
-.swatchDot {
-  flex: none;
-  width: var(--control-sm);
-  height: var(--control-sm);
-  border-radius: var(--radius-sm);
-  background: var(--swatch, transparent);
-  /* An unset colour is an empty well, not a black one. */
-  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--theme-text-muted) 60%, transparent);
+/* Inset, because the trigger is flush with the clipped edge of the field and
+   an outline drawn outside it would be cut off. */
+.swatchTrigger:focus-visible {
+  outline: 2px solid var(--theme-text-primary);
+  outline-offset: -3px;
 }
 
-.swatchText {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.swatchValue {
-  font-size: var(--font-sm);
-  color: var(--theme-text-primary);
-}
-
+/* Sized to the palette, not to the panel. The kit's Popover is 372px wide
+   because its usual tenant is the Layers list; that made a block of ten
+   swatches a strip as wide as the panel again, which is the shape this was
+   meant to stop. `max-content` lets the 3-wide grid decide. */
 .swatchPopover {
+  width: max-content;
   padding: 12px;
 }
 
@@ -125,8 +139,7 @@
   border: none;
 }
 
-/* The field label's style: sentence case, muted. Inside the trigger it is the
-   top line of the field, so it carries no bottom margin there. */
+/* The field label's style: sentence case, muted. */
 .legend {
   margin-bottom: 6px;
   padding: 0;
@@ -134,14 +147,12 @@
   color: var(--theme-text-muted);
 }
 
-.swatchText .legend {
-  margin-bottom: 0;
-  font-size: var(--font-xs);
-}
-
-.swatchRow {
-  display: flex;
-  flex-wrap: wrap;
+/* Three across, so ten colours make a block taller than it is wide rather than
+   a strip as wide as the panel. Fixed columns, not auto-fill: the palette is a
+   closed list and its shape should not change with the popover's. */
+.swatchGrid {
+  display: grid;
+  grid-template-columns: repeat(3, var(--control-md));
   gap: 10px;
 }
 
