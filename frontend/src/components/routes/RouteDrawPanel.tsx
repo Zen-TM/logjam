@@ -102,7 +102,14 @@ export function RouteDrawPanel({
 
   // The line as it was when the user last paused. Profiling the live draft
   // would fire a request per click and re-render the chart mid-gesture.
-  const [settled, setSettled] = useState<[number, number][] | null>(null);
+  //
+  // SEEDED with the line as it arrives, when there is one: opening the editor
+  // on an existing route is not a pause to wait out — the geometry is the one
+  // just being looked at, and its profile is already cached, so the chart
+  // should be there rather than appear 700ms later (operator, 2026-09-17).
+  const [settled, setSettled] = useState<[number, number][] | null>(() =>
+    points.length >= 2 ? points : null,
+  );
   useEffect(() => {
     if (points.length < 2) {
       setSettled(null);

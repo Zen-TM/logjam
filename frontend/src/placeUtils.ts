@@ -6,6 +6,9 @@ import { settleReadOverrides, withReadOverrides, type ReadOverrides } from "./no
 import type { BulkShareItem, FriendShareRow, FriendShares } from "@logjam/shared";
 import { ApiError } from "./errors/ApiError";
 import { messageFromError } from "./errors/messageFromError";
+// Profiles already sampled this session, so reopening or editing a line does
+// not re-ask the DEM a question it has answered (see the module's header).
+import { cacheProfile, cachedProfile } from "./elevationCache";
 
 // The server's REST response shapes are declared ONCE in shared/ and
 // re-exported here, so the mobile client (mobile/src/api/types.ts) and this
@@ -499,20 +502,34 @@ export function getElevationProfile(
 }
 
 /**
- * Loads a profile for the given points. Keyed on the geometry itself so a
- * vertex edit re-samples, and so reopening the same route does not.
+ * Loads a profile for the given points, keyed on the geometry itself: move a
+ * vertex and it re-samples, reopen the same line and it does not.
+ *
+ * The second half of that is `elevationCache.ts`, and it was a promise this
+ * docstring made without keeping until 2026-09-17 — opening a way, editing it
+ * and leaving the editor were three requests for a line nobody had touched.
+ * A cache hit is seeded SYNCHRONOUSLY, before the first paint, so a line that
+ * has already been sampled draws its chart immediately rather than flashing
+ * "Reading the terrain…" at someone who was just looking at it.
  */
 export function useElevationProfile(points: [number, number][] | null) {
+  const geometryKey = points ? JSON.stringify(points) : null;
   const [profile, setProfile] = useState<
     (ElevationProfile & { attribution: string }) | null
-  >(null);
+  >(() => (geometryKey ? cachedProfile(geometryKey) : null));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const geometryKey = points ? JSON.stringify(points) : null;
 
   useEffect(() => {
     if (!geometryKey) {
       setProfile(null);
+      return;
+    }
+    const known = cachedProfile(geometryKey);
+    if (known) {
+      setProfile(known);
+      setLoading(false);
+      setError(null);
       return;
     }
     // A late response from a previous line must not overwrite this one's.
@@ -521,6 +538,9 @@ export function useElevationProfile(points: [number, number][] | null) {
     setError(null);
     getElevationProfile(JSON.parse(geometryKey) as [number, number][])
       .then((result) => {
+        // Cached even if this hook has moved on: the answer is about the
+        // geometry, not about who asked.
+        cacheProfile(geometryKey, result);
         if (current) setProfile(result);
       })
       .catch((err) => {
