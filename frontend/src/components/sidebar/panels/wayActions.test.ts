@@ -118,6 +118,22 @@ describe("wayVerbs", () => {
     expect(ids(route())).toContain("exportGpx");
   });
 
+  // Export writes a new file out of geometry the page holds; a file's bytes are
+  // in S3, so getting them back is a download — and nothing offered it, so an
+  // imported GPX could never be taken out again.
+  it("offers a download of a file and an export of a route, never both", () => {
+    expect(ids(importFile())).toContain("download");
+    expect(ids(importFile())).not.toContain("exportGpx");
+    expect(ids(route())).not.toContain("download");
+    expect(ids(route())).toContain("exportGpx");
+  });
+
+  // The presigned URL is the caller's egress, and a file on someone else's
+  // place is not theirs to pull.
+  it("offers no download of a file it does not own", () => {
+    expect(ids(importFile({ shared: true, viaPlace: true, placeId: "p1" }))).not.toContain("download");
+  });
+
   it("renames a file in place, and leaves a route to its own form", () => {
     expect(ids(importFile())).toContain("rename");
     expect(ids(route())).not.toContain("rename");

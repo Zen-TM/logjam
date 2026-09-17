@@ -45,6 +45,7 @@ export type WayVerbId =
   | "share"
   | "exportGpx"
   | "exportKml"
+  | "download"
   | "rename"
   | "removeShare"
   | "delete";
@@ -84,6 +85,9 @@ const LABELS: Record<WayVerbId, string> = {
   share: "Share…",
   exportGpx: "Export as GPX",
   exportKml: "Export as KML",
+  // Not "Export": this hands back the FILE the user brought or recorded, byte
+  // for byte, where Export writes a new one out of geometry held in the page.
+  download: "Download",
   rename: "Rename…",
   // "Remove", not "Remove share" or "Delete": it drops the caller's own share
   // (`DELETE .../me`) and the owner keeps their row. The wording is the one
@@ -136,6 +140,12 @@ export function wayVerbs(
   if (EXPORTABLE_KINDS.includes(way.kind)) {
     verbs.push(verb("exportGpx"), verb("exportKml"));
   }
+  // A file's bytes are in S3, so getting them back is a download rather than an
+  // export — and it was offered nowhere at all, so a GPX brought in here could
+  // never be taken out again (operator, 2026-09-17). Owner only: the presigned
+  // URL is minted by `POST /media/download-urls`, which is where the egress
+  // gate lives, and a file on someone else's place is not the caller's to pull.
+  if (owned && way.kind !== "route") verbs.push(verb("download"));
   // A route is renamed by the form that named it; a file is renamed in place.
   if (owned && way.kind !== "route") verbs.push(verb("rename"));
 

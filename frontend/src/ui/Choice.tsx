@@ -95,10 +95,11 @@ export function SwatchPicker({
   return (
     <div className={classes.swatchField}>
       <span className={classes.swatchLabel}>{label}</span>
-      <span className={classes.swatchValue}>{chosen}</span>
-      {/* The swatch IS the control. No caret: a colour square that opens a
-          palette needs no second sign that it is pressable, and the caret was
-          the widest thing in a row whose subject is 24px across. */}
+      {/* The swatch IS the control, and it is the whole of it. No caret, no
+          card behind the row, and no colour NAME: the swatch shows the colour,
+          so spelling it out beside it says the same thing twice (operator,
+          2026-09-17). The name is still the control's accessible name, where it
+          is the only thing a reader who cannot see the swatch has. */}
       <button
         ref={triggerRef}
         type="button"

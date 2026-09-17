@@ -11,6 +11,7 @@ import { Protocol } from "pmtiles";
 import type { RegionBbox } from "@logjam/shared";
 import { useBoxDraw } from "./useBoxDraw";
 import type { PlaceHighlight } from "./placeHighlight";
+import type { RouteHoverChannel } from "./routeHover";
 import { layers as protomapsLayers, namedFlavor } from "@protomaps/basemaps";
 import {
   arrowSegmentFeatures,
@@ -518,8 +519,7 @@ function Map({
   standaloneTracks,
   routes,
   selectRoute,
-  routeHoverPosition,
-  routeHoverColor,
+  routeHover,
   drawingRoute,
   drawColor,
   drawPoints,
@@ -587,11 +587,10 @@ function Map({
   // there is nothing to fetch and parse per feature.
   routes: TRoute[];
   selectRoute: (id: string) => void;
-  /** Position along a route under the elevation-profile cursor, marked on the
-   * map so the chart and the ground read as the same place. */
-  routeHoverPosition: [number, number] | null;
-  /** The colour of the line that cursor is sliding along. */
-  routeHoverColor: string | null;
+  /** Where along a line the elevation-profile cursor sits, marked on the map so
+   *  the chart and the ground read as the same place. A CHANNEL, not a value:
+   *  it changes many times a second (see the subscribing effect). */
+  routeHover: RouteHoverChannel;
   // Draw/edit mode. The vertex list lives in App so the HUD can render the
   // running distance and drive undo; the map only reports gestures.
   drawingRoute: boolean;
@@ -1223,31 +1222,6 @@ function Map({
           ],
           "circle-stroke-width": ["match", ["get", "role"], "middle", 2, 2.5],
           "circle-stroke-color": initialDraftColor,
-        },
-      });
-
-      // Where the elevation-profile cursor sits along a route. Its own source
-      // so moving it never re-uploads route geometry.
-      map.addSource("route-hover", {
-        type: "geojson",
-        data: { type: "FeatureCollection", features: [] },
-      });
-      map.addLayer({
-        id: "route-hover-point",
-        type: "circle",
-        source: "route-hover",
-        paint: {
-          // The line's OWN colour, inside the white ring. Colour is what says
-          // which line you are looking at on this map, so a dot in the accent
-          // was the one colour carrying no identity at all.
-          "circle-color": [
-            "coalesce",
-            ["get", "color"],
-            readCssVar("--theme-accent", "#3b82f6"),
-          ],
-          "circle-radius": 6,
-          "circle-stroke-width": 2,
-          "circle-stroke-color": "#ffffff",
         },
       });
 
@@ -2078,26 +2052,48 @@ function Map({
     };
   }, [mapLoaded]);
 
-  // Where the elevation profile's cursor sits along the selected route.
+  // Where the elevation profile's cursor sits along the line being read.
+  //
+  // TWO rules meet here, and only both together make the drag smooth. It is
+  // SUBSCRIBED rather than a prop, so a pointer moving many times a second does
+  // not re-render App, this component and the panel before the dot can move.
+  // And it is a MARKER rather than a GeoJSON source, because `setData`
+  // invalidates the source and MapLibre repaints the entire canvas for one dot:
+  // measured at 72ms per pointer move, against 16ms for the same drag with the
+  // write removed — the same cost as dragging over dead panel. A Marker is a
+  // DOM node the library moves with a CSS transform; the canvas is untouched.
+  // (DESIGN.md §9, which also records the three wrong guesses that preceded
+  // this one.)
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
-    const source = mapRef.current.getSource("route-hover") as
-      | maplibregl.GeoJSONSource
-      | undefined;
-    if (!source) return;
-    source.setData({
-      type: "FeatureCollection",
-      features: routeHoverPosition
-        ? [
-            {
-              type: "Feature",
-              geometry: { type: "Point", coordinates: routeHoverPosition },
-              properties: { color: routeHoverColor },
-            },
-          ]
-        : [],
+    const map = mapRef.current;
+    const element = document.createElement("div");
+    element.className = classes.hoverDot;
+    const marker = new maplibregl.Marker({ element });
+    let attached = false;
+    const unsubscribe = routeHover.subscribe((hover) => {
+      if (!hover) {
+        if (attached) {
+          marker.remove();
+          attached = false;
+        }
+        return;
+      }
+      element.style.setProperty(
+        "--dot",
+        hover.color ?? readCssVar("--theme-accent", "#3b82f6"),
+      );
+      marker.setLngLat(hover.position);
+      if (!attached) {
+        marker.addTo(map);
+        attached = true;
+      }
     });
-  }, [routeHoverPosition, routeHoverColor, mapLoaded]);
+    return () => {
+      unsubscribe();
+      marker.remove();
+    };
+  }, [routeHover, mapLoaded]);
 
   // Toggle base layer visibility
   useEffect(() => {

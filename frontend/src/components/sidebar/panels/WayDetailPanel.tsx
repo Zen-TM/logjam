@@ -45,6 +45,7 @@ import {
 import {
   copyRoute,
   deleteRoute,
+  getMediaDownloadUrls,
   updateRoute,
   useElevationProfile,
   getEntityShares,
@@ -62,6 +63,7 @@ import ConfirmDialog from "../../dialogs/ConfirmDialog";
 import ShareDialog from "../../dialogs/ShareDialog";
 import PlacePicker from "../../common/PlacePicker";
 import ElevationProfile from "../../routes/ElevationProfile";
+import type { RouteHoverChannel } from "../../map/routeHover";
 import {
   Button,
   Hero,
@@ -87,6 +89,7 @@ const VERB_ICON: Partial<Record<WayVerbId, LucideIcon>> = {
   share: Share2,
   exportGpx: Download,
   exportKml: Download,
+  download: Download,
   rename: Pencil,
   // Not a bin: this drops the caller's own share and the owner keeps their row.
   removeShare: X,
@@ -128,7 +131,7 @@ export default function WayDetailPanel({
   onChanged,
   onOpenPlace,
   onDeleteFile,
-  onHoverPosition,
+  routeHover,
 }: {
   /** The row this page was opened from — the one description every kind has. */
   way: WayItem;
@@ -163,8 +166,10 @@ export default function WayDetailPanel({
   onChanged: () => void;
   onOpenPlace: (placeId: string) => void;
   onDeleteFile: (file: StandaloneFile) => Promise<void>;
-  /** Where along a route the elevation cursor sits, so the map marks it. */
-  onHoverPosition: (position: [number, number] | null) => void;
+  /** Where along a route the elevation cursor sits, so the map marks it. A
+   *  channel rather than a callback into App state: it changes many times a
+   *  second (`map/routeHover.ts`). */
+  routeHover: RouteHoverChannel;
 }): React.JSX.Element {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
@@ -186,6 +191,17 @@ export default function WayDetailPanel({
     error: profileError,
   } = useElevationProfile(route?.points ?? null);
 
+  // The colour as the user last PICKED it, not as the server has confirmed it.
+  // A pick is a round trip plus a refetch, and showing the old swatch until
+  // both land made the palette feel slow at exactly the moment it should feel
+  // instant (operator, 2026-09-17). Cleared once the refetched route agrees.
+  const [pendingColour, setPendingColour] = useState<string | null>(null);
+  const colour = route?.color ?? file?.color ?? way.color;
+  const shownColour = pendingColour ?? colour;
+  useEffect(() => {
+    if (pendingColour !== null && colour === pendingColour) setPendingColour(null);
+  }, [colour, pendingColour]);
+
   // The SAME densification the server profiled, so a sample index maps straight
   // back to a coordinate on the line — no second interpolation to drift.
   const samplePositions = useMemo(
@@ -195,22 +211,33 @@ export default function WayDetailPanel({
   const handleHoverSample = useCallback(
     (index: number | null) => {
       const position = index == null ? null : samplePositions[index];
-      onHoverPosition(position ? [position.lon, position.lat] : null);
+      routeHover.set(
+        position ? { position: [position.lon, position.lat], color: shownColour } : null,
+      );
     },
-    [samplePositions, onHoverPosition],
+    [samplePositions, routeHover, shownColour],
   );
   // Closing the panel mid-hover would otherwise strand the map marker.
-  useEffect(() => () => onHoverPosition(null), [onHoverPosition]);
+  useEffect(() => () => routeHover.set(null), [routeHover]);
 
   const owned = !way.shared;
-  const properties = wayProperties(way);
-  const linkedPlace = ownedPlaces.find((place) => place.id === way.placeId) ?? null;
+  // WHICH PLACE, from the live row rather than from `way`.
+  //
+  // `way` is the snapshot taken when the page was opened and App never replaces
+  // it, so linking a route updated the server, refetched the route, and changed
+  // nothing on screen: the picker stayed and the place never appeared
+  // (operator, 2026-09-17). The route and the file ARE refetched, so they are
+  // the authority on where this way lives; `way` is the fallback for a kind
+  // that has neither in hand (a friend's place's track).
+  const placeId = route?.placeId ?? file?.linkedPlaceId ?? way.placeId;
+  const live = { ...way, placeId };
+  const properties = wayProperties(live);
+  const linkedPlace = ownedPlaces.find((place) => place.id === placeId) ?? null;
   /** The shared place this way arrived through, where it arrived through one.
    *  Whether it DID is `way.viaPlace`, decided once in `waysModel` — this is
    *  only how to name it. */
-  const sharingPlace = sharedPlaces.find((place) => place.id === way.placeId) ?? null;
+  const sharingPlace = sharedPlaces.find((place) => place.id === placeId) ?? null;
   const ownerName = route ? ownerUsername(friends, route.ownerId) : null;
-  const colour = route?.color ?? file?.color ?? way.color;
 
   const run = async (action: () => Promise<unknown>, failure: string) => {
     setBusy(true);
@@ -286,6 +313,37 @@ export default function WayDetailPanel({
     }, "Couldn't save that route to your Ways.");
   };
 
+  /**
+   * Hand back the file the user brought or recorded, byte for byte.
+   *
+   * An anchor rather than `window.open`: the URL is minted asynchronously, so
+   * by the time it arrives the click is no longer a user gesture and a popup
+   * would be blocked. A cross-origin `download` attribute is ignored by the
+   * browser, but a GPX or KML is not something it can render, so following the
+   * link saves it — which is the whole of what this verb promises.
+   */
+  const handleDownload = () => {
+    if (!file) return;
+    setBusy(true);
+    void (async () => {
+      try {
+        const { items } = await getMediaDownloadUrls([file.id]);
+        const url = items[0]?.displayUrl;
+        if (!url) throw new Error("The file could not be fetched.");
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = mediaDisplayName(file);
+        anchor.rel = "noopener";
+        anchor.click();
+      } catch (err) {
+        console.error(err);
+        toast.error(messageFromError(err, "Couldn't download that file."));
+      } finally {
+        setBusy(false);
+      }
+    })();
+  };
+
   const handleRemoveShare = () => {
     if (!route) return;
     setEnding(null);
@@ -323,6 +381,9 @@ export default function WayDetailPanel({
       case "exportKml":
         exportRoute("kml");
         return;
+      case "download":
+        handleDownload();
+        return;
       case "rename":
         setRenaming(true);
         return;
@@ -344,7 +405,7 @@ export default function WayDetailPanel({
     onVerbConsumed();
   }, [initialVerb, onVerbConsumed]);
 
-  const entries: MenuEntry[] = wayVerbs(way, "detail").flatMap((verb, index, all) => {
+  const entries: MenuEntry[] = wayVerbs(live, "detail").flatMap((verb, index, all) => {
     const item: MenuEntry = {
       id: verb.id,
       label: verb.label,
@@ -364,13 +425,22 @@ export default function WayDetailPanel({
 
   const handleUnlink = () => {
     if (!route) return;
-    void run(() => updateRoute(route.id, { placeId: null }), "Couldn't unlink the route.");
+    const from = linkedPlace?.name;
+    void run(async () => {
+      await updateRoute(route.id, { placeId: null });
+      toast.success(from ? `Unlinked from ${from}.` : "Unlinked.");
+    }, "Couldn't unlink the route.");
   };
 
-  const linkNow = (placeId: string) => {
+  const linkNow = (targetPlaceId: string) => {
     if (!route) return;
+    const name = ownedPlaces.find((place) => place.id === targetPlaceId)?.name;
     void run(async () => {
-      const result = await updateRoute(route.id, { placeId });
+      const result = await updateRoute(route.id, { placeId: targetPlaceId });
+      // Say it worked. The panel showing the place afterwards is the real
+      // confirmation, but it was silent even once that started working, and a
+      // write with no acknowledgement reads as a write that did not happen.
+      toast.success(name ? `Linked to ${name}.` : "Linked to a place.");
       if (result.displacedRoute) {
         toast.info(
           `"${result.displacedRoute.name}" was unlinked and kept as a standalone route.`,
@@ -382,16 +452,18 @@ export default function WayDetailPanel({
   // A place holds at most one way. Linking to an occupied one displaces the
   // incumbent — it survives standalone, so this is not destructive, but it
   // still changes what a sharee of that place sees. Ask first.
-  const handleLinkSelected = (placeId: string) => {
+  const handleLinkSelected = (targetPlaceId: string) => {
     if (!route) return;
-    const incumbent = allRoutes.find((other) => other.placeId === placeId && other.id !== route.id);
+    const incumbent = allRoutes.find(
+      (other) => other.placeId === targetPlaceId && other.id !== route.id,
+    );
     if (!incumbent) {
-      linkNow(placeId);
+      linkNow(targetPlaceId);
       return;
     }
     setPendingLink({
-      placeId,
-      placeName: ownedPlaces.find((place) => place.id === placeId)?.name ?? "That place",
+      placeId: targetPlaceId,
+      placeName: ownedPlaces.find((place) => place.id === targetPlaceId)?.name ?? "That place",
       incumbentName: incumbent.name,
     });
   };
@@ -460,7 +532,7 @@ export default function WayDetailPanel({
                   samples={profile.samples}
                   minM={profile.minM}
                   maxM={profile.maxM}
-                  color={colour ?? "currentColor"}
+                  color={shownColour ?? "currentColor"}
                   onHoverSampleChange={handleHoverSample}
                 />
                 <p className={classes.attribution}>{profile.attribution}</p>
@@ -475,14 +547,20 @@ export default function WayDetailPanel({
         {properties.colour && route && (
           <section className={classes.section}>
             <SwatchPicker
-              label="Colour on the map"
+              label="Colour"
               colors={TRACK_COLORS}
-              value={colour ?? undefined}
+              value={shownColour ?? undefined}
               nameOf={trackColorName}
-              disabled={busy}
-              onChange={(next) =>
-                void run(() => updateRoute(route.id, { color: next }), "Couldn't change the colour.")
-              }
+              // NOT disabled while the write is in flight: the swatch already
+              // shows the new colour, so greying the control out would be the
+              // one visible sign that anything is pending.
+              onChange={(next) => {
+                setPendingColour(next);
+                void run(
+                  () => updateRoute(route.id, { color: next }),
+                  "Couldn't change the colour.",
+                );
+              }}
             />
           </section>
         )}

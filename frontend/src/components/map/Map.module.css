@@ -1,3 +1,25 @@
+/* The elevation cursor's dot. A DOM marker rather than a circle layer, because
+   a thing that moves every frame must not touch the canvas: `setData` on a
+   GeoJSON source invalidates it and MapLibre repaints the whole map, measured
+   at 72ms per pointer move against 16ms for the same drag without it — the
+   cost of dragging over dead panel (DESIGN.md §9).
+
+   The line's OWN colour inside a white ring: on this map colour is what says
+   which line you are looking at, so a dot in the accent would be the one colour
+   carrying no identity. `--dot` is set per move, with the accent as the
+   fallback for a line that has no colour of its own. */
+.hoverDot {
+  width: 12px;
+  height: 12px;
+  box-sizing: border-box;
+  border: 2px solid #ffffff;
+  border-radius: var(--radius-pill);
+  background: var(--dot, var(--theme-accent));
+  /* It marks a place; it is not something to press, and it must never take a
+     click meant for the route underneath it. */
+  pointer-events: none;
+}
+
 .map {
   --map-inset-left: 0px;
   position: absolute;

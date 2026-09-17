@@ -221,6 +221,28 @@ describe("buildWays", () => {
     expect(way).toMatchObject({ shared: true, viaPlace: true });
   });
 
+  // The list used to be routes, then files, then a friend's tracks — the order
+  // the three fetches happened to be written in, which means nothing to the
+  // reader: a track recorded this morning sat below a route drawn last year.
+  it("orders every kind together, newest first", () => {
+    const ways = build({
+      routes: [route({ id: "old-route", createdAt: "2026-01-01T00:00:00.000Z" })],
+      standaloneFiles: [file({ id: "new-file", createdAt: "2026-06-01T00:00:00.000Z" })],
+    });
+    expect(ways.map((way) => way.id)).toEqual(["new-file", "old-route"]);
+  });
+
+  // `/places/tracks` is the place's endpoint and carries no date, so those rows
+  // cannot be ordered against the rest. Last is a position; an invented date
+  // would be a lie that sorts them somewhere meaningless.
+  it("puts the undated last, keeping the order they arrived in", () => {
+    const ways = build({
+      routes: [route({ id: "dated", createdAt: "2026-01-01T00:00:00.000Z" })],
+      placeTracks: [placeTrack({ mediaId: "first" }), placeTrack({ mediaId: "second" })],
+    });
+    expect(ways.map((way) => way.id)).toEqual(["dated", "first", "second"]);
+  });
+
   it("gives every row a key unique across the kinds", () => {
     const ways = build({
       routes: [route({ id: "shared-id" })],

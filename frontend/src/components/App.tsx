@@ -79,6 +79,7 @@ import { RouteDrawPanel } from "./routes/RouteDrawPanel";
 import RouteNameDialog from "./dialogs/RouteNameDialog";
 import WayDetailPanel from "./sidebar/panels/WayDetailPanel";
 import { buildWays, wayFromRoute, type WayItem } from "./sidebar/panels/waysModel";
+import { createRouteHoverChannel } from "./map/routeHover";
 import type { WayVerbId } from "./sidebar/panels/wayActions";
 import ConfirmDialog from "./dialogs/ConfirmDialog";
 import { useUnsavedChangesGuard } from "../useUnsavedChangesGuard";
@@ -196,11 +197,11 @@ function App() {
   // A tuple, as `WayItem.bounds` and MapLibre's `fitBounds` both are — not the
   // `RegionBbox` object the topo flows pass around.
   const [flyToBounds, setFlyToBounds] = useState<[number, number, number, number] | null>(null);
-  // Position along the selected route under the elevation-profile cursor, so
-  // the chart and the map point at the same place.
-  const [routeHoverPosition, setRouteHoverPosition] = useState<
-    [number, number] | null
-  >(null);
+  // Where along a line the elevation-profile cursor sits, so the chart and the
+  // map point at the same place. NOT state: it changes many times a second, and
+  // as state every move re-rendered App, the map and the panel before the dot
+  // could move (DESIGN.md §9 — `map/routeHover.ts` carries the full reasoning).
+  const routeHover = useMemo(createRouteHoverChannel, []);
 
   // Coordinate picking mode for PlaceDialog
   const [pickingCoords, setPickingCoords] = useState(false);
@@ -1050,7 +1051,7 @@ function App() {
     routeDraft.reset();
     setEditingRouteId(null);
     setDrawColor(null);
-    setRouteHoverPosition(null);
+    routeHover.set(null);
     // The tool is a PAGE, so leaving it has to go somewhere. Clearing the draft
     // while the panel still showed "way-draw" rendered nothing at all, which is
     // the blank panel left behind after a discard (operator, 2026-09-17). Back
@@ -1119,14 +1120,6 @@ function App() {
 
   const selectedRoute =
     selectedWay?.kind === "route" ? (routes.find((r) => r.id === selectedWay.id) ?? null) : null;
-
-  // The elevation cursor's dot wears the colour of the line it is sliding
-  // along, because on this map colour IS which line you are looking at. It was
-  // the accent, which is the one colour that says nothing about identity
-  // (operator, 2026-09-17).
-  const routeHoverColor = drawingRoute
-    ? drawColor
-    : (selectedRoute?.color ?? selectedWay?.color ?? null);
 
   /**
    * Open a way's own page, and centre the map on it.
@@ -1398,7 +1391,7 @@ function App() {
                   setActivePanel("place-detail");
                 }}
                 onDeleteFile={handleDeleteStandaloneFile}
-                onHoverPosition={setRouteHoverPosition}
+                routeHover={routeHover}
               />
             ) : null
           }
@@ -1415,7 +1408,7 @@ function App() {
                 onUndo={routeDraft.undo}
                 onClear={clearRouteGuard.requestClose}
                 onReverse={routeDraft.reverse}
-                onHoverPosition={setRouteHoverPosition}
+                routeHover={routeHover}
                 // Editing keeps the name it already has. Asking again on every
                 // save made a rename the price of moving one point, and the
                 // dialog's only honest default was the answer it already had
@@ -1542,8 +1535,7 @@ function App() {
         placeTracks={placeTracks}
         standaloneTracks={standaloneTracks}
         routes={routes}
-        routeHoverPosition={routeHoverPosition}
-        routeHoverColor={routeHoverColor}
+        routeHover={routeHover}
         selectRoute={(id) => {
           const route = routes.find((r) => r.id === id);
           if (route) openWay(wayFromRoute(route, currentUser?.id ?? null, sharedPlaceIds));

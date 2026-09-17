@@ -65,21 +65,15 @@
   composes: description from "./Toggle.module.css";
 }
 
-/* A row, not a button: label, value, then the colour itself as the control.
-   Same height as a Select, so a column of controls stays on one rhythm.
-   `overflow: hidden` is what lets the square trigger sit flush in the corner
-   and still take the card's radius. */
+/* A line on the panel, not a card: the label, then the colour. No background
+   and no border — the row is a label and a swatch, and a card around them was
+   chrome drawn for two elements (operator, 2026-09-17). */
 .swatchField {
   min-width: 0;
   display: flex;
   align-items: center;
   gap: 10px;
   min-height: var(--control-lg);
-  padding-left: 10px;
-  border: var(--hairline);
-  border-radius: var(--radius-md);
-  background: var(--theme-secondary);
-  overflow: hidden;
 }
 
 .swatchLabel {
@@ -89,15 +83,7 @@
   color: var(--theme-text-muted);
 }
 
-/* The colour's NAME, and the only part of this field that works for a reader
-   who cannot tell the swatches apart. */
-.swatchValue {
-  flex: none;
-  font-size: var(--font-sm);
-  color: var(--theme-text-primary);
-}
-
-/* Square, flush right, the full height of the row. */
+/* The control: a square of the colour, right-aligned, the row's full height. */
 .swatchTrigger {
   flex: none;
   align-self: stretch;
@@ -105,6 +91,7 @@
   margin: 0;
   padding: 0;
   border: none;
+  border-radius: var(--radius-md);
   background: var(--swatch, transparent);
   cursor: pointer;
   /* An unset colour is an empty well, not a black one. */
@@ -114,13 +101,6 @@
 .swatchTrigger:disabled {
   opacity: 0.45;
   cursor: default;
-}
-
-/* Inset, because the trigger is flush with the clipped edge of the field and
-   an outline drawn outside it would be cut off. */
-.swatchTrigger:focus-visible {
-  outline: 2px solid var(--theme-text-primary);
-  outline-offset: -3px;
 }
 
 /* Sized to the palette, not to the panel. The kit's Popover is 372px wide

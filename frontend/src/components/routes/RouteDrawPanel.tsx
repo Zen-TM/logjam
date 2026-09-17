@@ -41,6 +41,7 @@ import {
   type Stat,
 } from "../../ui";
 import ElevationProfile from "./ElevationProfile";
+import type { RouteHoverChannel } from "../map/routeHover";
 import classes from "./RouteDrawPanel.module.css";
 
 /** How long the line must sit still before its terrain is read. A profile per
@@ -72,8 +73,10 @@ type RouteDrawPanelProps = {
   onSnapModeChange: (mode: SnapMode) => void;
   /** Where along the draft the elevation cursor sits, so the map marks it —
    *  the same gesture a saved route's page offers, which stopped working the
-   *  moment the tool became a page of its own (operator, 2026-09-17). */
-  onHoverPosition: (position: [number, number] | null) => void;
+   *  moment the tool became a page of its own (operator, 2026-09-17). A
+   *  channel rather than a callback into App state, because it changes many
+   *  times a second (`map/routeHover.ts`). */
+  routeHover: RouteHoverChannel;
 };
 
 export function RouteDrawPanel({
@@ -92,7 +95,7 @@ export function RouteDrawPanel({
   saving,
   snapMode,
   onSnapModeChange,
-  onHoverPosition,
+  routeHover,
 }: RouteDrawPanelProps): React.JSX.Element {
   const canSave = points.length >= 2 && !saving;
   const hasLine = points.length >= 2;
@@ -131,7 +134,7 @@ export function RouteDrawPanel({
   // back to a coordinate on the line.
   const samplePositions = useMemo(() => (settled ? densifyLine(settled) : []), [settled]);
   // Leaving mid-hover would otherwise strand the marker on the map.
-  useEffect(() => () => onHoverPosition(null), [onHoverPosition]);
+  useEffect(() => () => routeHover.set(null), [routeHover]);
 
   const stats: Stat[] = [
     {
@@ -182,7 +185,7 @@ export function RouteDrawPanel({
               the map in this colour as it is built, so it is a property of the
               draft, not a question asked at the end. */}
           <SwatchPicker
-            label="Colour on the map"
+            label="Colour"
             colors={TRACK_COLORS}
             value={color ?? undefined}
             nameOf={trackColorName}
@@ -220,7 +223,9 @@ export function RouteDrawPanel({
                   color={color ?? "currentColor"}
                   onHoverSampleChange={(index) => {
                     const position = index == null ? null : samplePositions[index];
-                    onHoverPosition(position ? [position.lon, position.lat] : null);
+                    routeHover.set(
+                      position ? { position: [position.lon, position.lat], color } : null,
+                    );
                   }}
                 />
                 <p className={classes.attribution}>{profile.attribution}</p>

@@ -88,6 +88,7 @@ const VERB_ICON: Partial<Record<WayVerbId, LucideIcon>> = {
   share: Share2,
   exportGpx: Download,
   exportKml: Download,
+  download: Download,
   rename: Pencil,
   // Not a bin: this drops the caller's own share and the owner keeps their row.
   removeShare: X,

@@ -67,6 +67,14 @@ export type WayItem = {
   /** The place this way belongs to, where it belongs to one. */
   placeId: string | null;
   /**
+   * When it came into the account, which is what the list is ordered by.
+   *
+   * Null for a track on someone else's place: `/places/tracks` returns no date
+   * (it is the place's endpoint, not the file's), and inventing one would sort
+   * those rows somewhere that means nothing. They fall to the bottom instead.
+   */
+  createdAt: string | null;
+  /**
    * The way's extent, `[west, south, east, north]` — what opening it fits the
    * map to. A route's comes from the geometry in hand; a file's is the bbox its
    * row already carries, so centring one costs no download.
@@ -121,6 +129,7 @@ export function wayFromRoute(
     shared,
     viaPlace: shared && route.placeId !== null && sharedPlaceIds.has(route.placeId),
     placeId: route.placeId,
+    createdAt: route.createdAt,
     bounds: boundsOfPoints(route.points),
   };
 }
@@ -141,7 +150,12 @@ export function buildWays({
   sharedPlaceIds: ReadonlySet<string>;
 }): WayItem[] {
   const fileIds = new Set(standaloneFiles.map((file) => file.id));
-  return [
+  // NEWEST FIRST, across every source — the list was routes, then files, then
+  // a friend's tracks, which is the order they were fetched in and means
+  // nothing to the reader (operator, 2026-09-17). A recording made this morning
+  // belongs at the top whatever produced it. Undated rows keep their relative
+  // order at the bottom, which `Array.prototype.sort`'s stability guarantees.
+  return sortNewestFirst([
     ...routes.map((route) => wayFromRoute(route, currentUserId, sharedPlaceIds)),
     ...standaloneFiles.map(
       (file): WayItem => ({
@@ -159,6 +173,7 @@ export function buildWays({
         shared: false,
         viaPlace: false,
         placeId: file.linkedPlaceId,
+        createdAt: file.createdAt,
         bounds: file.metadata.bbox ?? null,
       }),
     ),
@@ -182,10 +197,23 @@ export function buildWays({
           // row of its own, and the place's share is the only thing holding it.
           viaPlace: true,
           placeId: track.placeId,
+          // `/places/tracks` carries no date; these sort last (see WayItem).
+          createdAt: null,
           bounds: track.metadata.bbox ?? null,
         }),
       ),
-  ];
+  ]);
+}
+
+/** Newest first, with the undated last. Stable, so rows that cannot be ordered
+ *  against each other keep the order they arrived in. */
+function sortNewestFirst(ways: WayItem[]): WayItem[] {
+  return ways.sort((a, b) => {
+    if (a.createdAt === b.createdAt) return 0;
+    if (a.createdAt === null) return 1;
+    if (b.createdAt === null) return -1;
+    return b.createdAt.localeCompare(a.createdAt);
+  });
 }
 
 /** Whether a way matches what was typed. Name only: a way has no other text. */

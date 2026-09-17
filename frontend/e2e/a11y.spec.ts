@@ -175,13 +175,13 @@ test.describe("desktop", () => {
 
     // The colour is a FIELD showing its value, not ten swatches laid out flat;
     // the palette is a popover behind it, so both states are checked.
-    const colour = aside.getByRole("button", { name: /^Colour on the map:/ });
+    const colour = aside.getByRole("button", { name: /^Colour:/ });
     await expect(colour).toBeVisible({ timeout: 15_000 });
     await expectNoViolations(page, "aside");
 
     await colour.click();
-    await expect(page.getByRole("group", { name: "Colour on the map" })).toBeVisible();
-    await expectNoViolations(page, "[role='dialog'][aria-label='Colour on the map']");
+    await expect(page.getByRole("group", { name: "Colour" })).toBeVisible();
+    await expectNoViolations(page, "[role='dialog'][aria-label='Colour']");
     await page.keyboard.press("Escape");
     await expect(colour).toBeFocused();
 
