@@ -155,46 +155,24 @@ export function RouteDrawPanel({
       />
 
       <div className={classes.body}>
-        <p className={classes.hint} role="status">
-          {anchorCount === 0
-            ? "Click the map to place the first point."
-            : anchorCount === 1
-              ? "Click again to extend the line."
-              : `${anchorCount} point${anchorCount === 1 ? "" : "s"} · drag to move, click to remove, drag the line to add`}
-        </p>
+        {/* The one instruction worth a line, and only while there is nothing
+            else to say. At zero points every figure is an em-dash anyway, and
+            this is exactly when someone needs telling what the map is for; it
+            goes the moment the first point lands, so nothing below it ever
+            moves again (operator, 2026-09-17). */}
+        {anchorCount === 0 && (
+          <p className={classes.hint} role="status">
+            Click the map to place the first point.
+          </p>
+        )}
 
-        {/* ── Controls: what the NEXT click does ───────────────────────── */}
-        <section className={classes.section}>
-          {/* A tool's own settings belong with the tool, not in Layers: this one
-              changes what the NEXT click does (mobile §2). */}
-          <Select
-            label="Snap to"
-            value={snapMode}
-            disabled={saving}
-            onChange={(event) => onSnapModeChange(event.target.value as SnapMode)}
-          >
-            <option value="off">Nothing (straight lines)</option>
-            <option value="trails">Trails</option>
-            <option value="waterways">Creeks &amp; rivers</option>
-            <option value="both">Trails, creeks &amp; rivers</option>
-          </Select>
-        </section>
-
-        <section className={classes.section}>
-          {/* Chosen while drawing rather than in the save dialog: the line is on
-              the map in this colour as it is built, so it is a property of the
-              draft, not a question asked at the end. */}
-          <SwatchPicker
-            label="Colour"
-            colors={TRACK_COLORS}
-            value={color ?? undefined}
-            nameOf={trackColorName}
-            disabled={saving}
-            onChange={onColorChange}
-          />
-        </section>
-
-        {/* ── Figures: what the last click produced ────────────────────── */}
+        {/* FROM HERE DOWN THIS IS THE SAME PAGE A SAVED WAY SHOWS: figures,
+            then the terrain, then the colour. Editing PUSHES that content down
+            rather than rearranging it, so entering and leaving the tool does
+            not reshuffle the panel under the reader. The controls that change
+            what the next click does are in the footer, with Undo and Clear —
+            which is also why they no longer need to sit above the figures they
+            do not describe. */}
         <StatGrid stats={stats} />
 
         {atCap && (
@@ -237,10 +215,44 @@ export function RouteDrawPanel({
             )}
           </section>
         )}
+
+        <section className={classes.section}>
+          {/* Last, exactly where a saved way's page puts it. Chosen while
+              drawing rather than in the save dialog: the line is on the map in
+              this colour as it is built, so it is a property of the draft, not
+              a question asked at the end. */}
+          <SwatchPicker
+            label="Colour"
+            colors={TRACK_COLORS}
+            value={color ?? undefined}
+            nameOf={trackColorName}
+            disabled={saving}
+            onChange={onColorChange}
+          />
+        </section>
       </div>
 
       <footer className={classes.actions}>
-        <IconButton icon={Undo2} label="Undo" onClick={onUndo} disabled={!canUndo || saving} />
+        {/* A tool's own settings belong with the tool rather than in Layers,
+            because this one changes what the NEXT click does (mobile §2) — and
+            in the FOOTER, with the other controls that change the next click,
+            rather than above figures it says nothing about. The footer is one
+            row taller for it, and the body above is then the same page a saved
+            way shows (operator, 2026-09-17). */}
+        <Select
+          label="Snap to"
+          value={snapMode}
+          disabled={saving}
+          onChange={(event) => onSnapModeChange(event.target.value as SnapMode)}
+        >
+          <option value="off">Nothing (straight lines)</option>
+          <option value="trails">Trails</option>
+          <option value="waterways">Creeks &amp; rivers</option>
+          <option value="both">Trails, creeks &amp; rivers</option>
+        </Select>
+
+        <div className={classes.buttons}>
+          <IconButton icon={Undo2} label="Undo" onClick={onUndo} disabled={!canUndo || saving} />
         <IconButton
           icon={ArrowLeftRight}
           label="Reverse direction"
@@ -260,6 +272,7 @@ export function RouteDrawPanel({
         <Button compact variant="filled" icon={Redo2} onClick={onSave} disabled={!canSave} busy={saving}>
           Save
         </Button>
+        </div>
       </footer>
     </div>
   );

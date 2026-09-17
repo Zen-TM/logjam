@@ -206,9 +206,15 @@ export function Menu({
 }
 
 /**
- * A non-modal panel floating beside a control — the map's Layers. It stays open
- * while the user pans the map behind it (no outside-press dismissal); Escape or
- * its own close button dismisses it and focus returns to the control.
+ * A non-modal panel floating beside a control — the map's Layers. Escape or its
+ * own close button dismisses it and focus returns to the control.
+ *
+ * Whether a press OUTSIDE it dismisses depends on what it is for, so the caller
+ * says. Layers must NOT: the whole point of it is to stay open while the user
+ * pans the map behind it and watches overlays come and go. A popover that is a
+ * FIELD's value — the colour palette — must, because every other way of
+ * choosing a value in this app closes when you look away, and one that hangs
+ * around reads as stuck (operator, 2026-09-17).
  */
 export function Popover({
   open,
@@ -217,6 +223,7 @@ export function Popover({
   label,
   placement = "bottom-end",
   className,
+  dismissOnOutsidePress = false,
   children,
 }: {
   open: boolean;
@@ -225,11 +232,16 @@ export function Popover({
   label: string;
   placement?: Placement;
   className?: string;
+  /** Close when something outside it (and outside its anchor) is pressed. */
+  dismissOnOutsidePress?: boolean;
   children: ReactNode;
 }) {
   const ref = useRef<HTMLElement>(null);
   useTopLayer(open, ref);
   useAnchoredPosition(open, anchorRef, ref, placement);
+  // The anchor is excluded inside the hook, so pressing the trigger toggles
+  // rather than closing and reopening in one gesture.
+  useOutsidePress(open && dismissOnOutsidePress, [ref, anchorRef], onClose);
   useEscape(open ? ref : null, () => {
     onClose();
     anchorRef.current?.focus();

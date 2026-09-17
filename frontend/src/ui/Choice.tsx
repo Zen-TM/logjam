@@ -120,6 +120,9 @@ export function SwatchPicker({
         label={label}
         placement="bottom-end"
         className={classes.swatchPopover}
+        // This popover IS the field's value being chosen, so looking away
+        // settles it — like every other control that picks a value.
+        dismissOnOutsidePress
       >
         <fieldset className={classes.swatches}>
           <legend className={classes.legend}>{label}</legend>
