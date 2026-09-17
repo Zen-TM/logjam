@@ -374,6 +374,10 @@ export function getPlaceTracks(): Promise<PlaceTrack[]> {
 export function usePlaceTracks(enabled: boolean) {
   const [tracks, setTracks] = useState<PlaceTrack[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // True once the first fetch settles. An empty list before then is not "no
+  // tracks" (DESIGN.md §8), and Ways says so rather than flashing its
+  // first-run screen at every user.
+  const [loaded, setLoaded] = useState(false);
   const [fetchCount, setFetchCount] = useState(0);
 
   useEffect(() => {
@@ -387,13 +391,14 @@ export function usePlaceTracks(enabled: boolean) {
       .catch((err) => {
         console.error(err);
         if (!cancelled) setError(messageFromError(err, "Couldn't load place tracks."));
-      });
+      })
+      .finally(() => { if (!cancelled) setLoaded(true); });
     return () => { cancelled = true; };
   }, [enabled, fetchCount]);
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
 
-  return { tracks, error, refetch };
+  return { tracks, loaded, error, refetch };
 }
 
 
@@ -528,6 +533,8 @@ export function useElevationProfile(points: [number, number][] | null) {
 export function useRoutes(enabled: boolean) {
   const [routes, setRoutes] = useState<TRoute[]>([]);
   const [error, setError] = useState<string | null>(null);
+  /** True once the first fetch settles — see `usePlaceTracks`. */
+  const [loaded, setLoaded] = useState(false);
   const [fetchCount, setFetchCount] = useState(0);
 
   useEffect(() => {
@@ -539,13 +546,14 @@ export function useRoutes(enabled: boolean) {
       .catch((err) => {
         console.error(err);
         if (!cancelled) setError(messageFromError(err, "Couldn't load routes."));
-      });
+      })
+      .finally(() => { if (!cancelled) setLoaded(true); });
     return () => { cancelled = true; };
   }, [enabled, fetchCount]);
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
 
-  return { routes, error, refetch };
+  return { routes, loaded, error, refetch };
 }
 
 export function usePlaces(enabled: boolean) {
@@ -1209,6 +1217,8 @@ export function getStandaloneFiles(): Promise<StandaloneFile[]> {
 export function useStandaloneFiles(enabled: boolean) {
   const [files, setFiles] = useState<StandaloneFile[]>([]);
   const [error, setError] = useState<string | null>(null);
+  /** True once the first fetch settles — see `usePlaceTracks`. */
+  const [loaded, setLoaded] = useState(false);
   const [fetchCount, setFetchCount] = useState(0);
 
   useEffect(() => {
@@ -1219,13 +1229,14 @@ export function useStandaloneFiles(enabled: boolean) {
       .catch((err) => {
         console.error(err);
         if (!cancelled) setError(messageFromError(err, "Couldn't load your files."));
-      });
+      })
+      .finally(() => { if (!cancelled) setLoaded(true); });
     return () => { cancelled = true; };
   }, [enabled, fetchCount]);
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
 
-  return { files, error, refetch };
+  return { files, loaded, error, refetch };
 }
 
 export function renameMedia(id: string, displayName: string): Promise<MediaItem> {

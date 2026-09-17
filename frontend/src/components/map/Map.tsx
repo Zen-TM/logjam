@@ -551,6 +551,7 @@ function Map({
   layersButton,
   mapTools,
   notices,
+  hud,
   onTopoSourceUnavailable,
 }: {
   filters: TFilters;
@@ -667,6 +668,8 @@ function Map({
   mapTools: readonly MapTool[];
   /** Pinned notices about what the map shows right now. */
   notices?: ReactNode;
+  /** The armed tool's HUD (the route draw tool), floated over the map. */
+  hud?: ReactNode;
   // Fired once per topo overlay entry (jobId-layerName) whose PMTiles source
   // failed to load (e.g. the S3 object is gone). The entry's layers/source are
   // removed so MapLibre stops retrying; App surfaces the failure (LAYERS-1).
@@ -2845,6 +2848,7 @@ function Map({
         layersButton={layersButton}
         tools={mapTools}
         notices={notices}
+        hud={hud}
         search={
           // Always available, including during pick modes for a quick fly-to.
           <MapSearchBox

@@ -59,12 +59,18 @@ export function SwatchPicker({
   colors,
   value,
   onChange,
+  nameOf,
   disabled = false,
 }: {
   label: string;
   colors: readonly string[];
   value: string | undefined;
   onChange: (next: string) => void;
+  /** What to CALL each colour, as its accessible name and its tooltip. Without
+   *  one a swatch answers to its hex, which is a name but not a helpful one —
+   *  unreadable aloud, and ten of them in a row. `trackColorName` is the one
+   *  for the route palette. */
+  nameOf?: (color: string) => string;
   disabled?: boolean;
 }) {
   const name = useId();
@@ -80,8 +86,8 @@ export function SwatchPicker({
             value={color}
             checked={color === value}
             onChange={() => onChange(color)}
-            aria-label={color}
-            title={color}
+            aria-label={nameOf?.(color) ?? color}
+            title={nameOf?.(color) ?? color}
             className={classes.swatch}
             style={{ "--swatch": color } as CSSProperties}
           />

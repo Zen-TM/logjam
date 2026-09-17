@@ -151,6 +151,36 @@ test.describe("desktop", () => {
     await expectNoViolations(page, "aside");
   });
 
+  test("Ways, a row menu, a route and the draw tool", async ({ page }) => {
+    await openApp(page);
+    await page.getByRole("button", { name: "Ways", exact: true }).click();
+    const aside = page.locator("aside");
+    await expect(aside.getByRole("heading", { level: 2, name: /lines?$/ })).toBeVisible({ timeout: 15_000 });
+    await expectNoViolations(page, "aside");
+
+    const rowMenu = aside.getByRole("button", { name: /^Actions for / }).first();
+    await rowMenu.click();
+    await expect(page.getByRole("menu")).toBeVisible();
+    await expectNoViolations(page, "[role='menu']");
+    await page.keyboard.press("Escape");
+
+    // A route's own page: its stats, its colour picker and its place link.
+    // Opened through the row's own menu: `Row`'s stretched open button is named
+    // after the row's title, which is a route name we cannot know here.
+    await aside.locator("[data-way-kind='route']").first().getByRole("button", { name: /^Actions for/ }).click();
+    await page.getByRole("menuitem", { name: "Open route" }).click();
+    await expect(aside.getByRole("group", { name: "Route colour" })).toBeVisible({ timeout: 15_000 });
+    await expectNoViolations(page, "aside");
+
+    // The draw tool's HUD floats over the map, outside the live region.
+    await page.getByRole("button", { name: "Tools", exact: true }).click();
+    await page.getByRole("button", { name: "Draw a route" }).click();
+    const hud = page.getByRole("region", { name: "Route drawing" });
+    await expect(hud).toBeVisible();
+    await expectNoViolations(page, "[aria-label='Route drawing']");
+    await hud.getByRole("button", { name: "Cancel" }).click();
+  });
+
   test("the Layers popover", async ({ page }) => {
     await openApp(page);
     await page.getByRole("button", { name: "Layers", exact: true }).click();

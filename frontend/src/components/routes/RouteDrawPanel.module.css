@@ -1,30 +1,31 @@
-/* Floating HUD for the route draw/edit tool. Mirrors .pickBanner's position
-   and depth so map-mode chrome reads as one family, but this one is
-   interactive, so it takes pointer events. */
+/* The tool's HUD. Placement is the chrome's (MapChrome's `hud` slot keeps it
+   clear of the panel and the sheet); this file is only its look.
+
+   It floats over the map, so it is one of the few things in the app that casts
+   a shadow (DESIGN.md §4). */
 .panel {
-  position: absolute;
-  top: 50px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 2;
-  min-width: 260px;
-  max-width: min(92vw, 380px);
+  width: min(100%, var(--panel-width));
+  box-sizing: border-box;
+  padding: 12px var(--gutter);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-radius: var(--radius-xl);
   background: var(--theme-primary);
   color: var(--theme-text-primary);
-  padding: 0.75em 1em;
-  border-radius: var(--radius-sm);
+  font-size: var(--font-sm);
   box-shadow: var(--shadow-float);
-  font-size: var(--text-sm);
 }
 
 .header {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 1em;
+  gap: var(--gutter);
 }
 
 .title {
+  font-size: var(--font-lg);
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -32,53 +33,35 @@
 }
 
 .distance {
+  flex: none;
   font-variant-numeric: tabular-nums;
-  color: var(--theme-accent);
   font-weight: 600;
+  color: var(--theme-accent);
 }
 
 .hint {
-  margin: 0.4em 0 0;
-  color: var(--theme-text-secondary);
-  font-size: var(--text-xs);
+  margin: 0;
+  color: var(--theme-text-muted);
+  font-size: var(--font-xs);
+}
+
+/* The label sits beside its control rather than above it: the HUD is over the
+   map, and every line it takes is map the user cannot see. */
+.snap {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
 }
 
 .warning {
-  margin: 0.4em 0 0;
-  color: var(--theme-warning, #f59e0b);
-  font-size: var(--text-xs);
+  margin: 0;
+  color: var(--theme-warning);
+  font-size: var(--font-xs);
 }
 
 .actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4em;
-  margin-top: 0.7em;
-}
-
-@media (max-width: 768px) {
-  .panel {
-    max-width: 92vw;
-  }
-}
-
-/* Snap picker. Sits between the hint and the actions: it changes what the next
-   click does, so it reads before the buttons that end the session. */
-.snapRow {
-  display: flex;
-  align-items: center;
-  gap: 0.5em;
-  font-size: var(--text-xs);
-  color: var(--theme-text-secondary);
-}
-
-.snapSelect {
-  flex: 1;
-  min-width: 0;
-  font-size: var(--text-xs);
-  color: var(--theme-text-primary);
-  background: var(--theme-secondary);
-  border: 1px solid var(--theme-border);
-  border-radius: var(--radius-xs);
-  padding: 0.25em 0.4em;
+  justify-content: flex-end;
+  gap: 8px;
 }

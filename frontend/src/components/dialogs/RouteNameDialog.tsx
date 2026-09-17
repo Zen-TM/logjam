@@ -1,5 +1,5 @@
 import { useId, useState } from "react";
-import { ROUTE_NAME_MAX_LENGTH, TRACK_COLORS } from "@logjam/shared";
+import { ROUTE_NAME_MAX_LENGTH, TRACK_COLORS, trackColorName } from "@logjam/shared";
 import { Button, Dialog, SwatchPicker, TextField } from "../../ui";
 import classes from "./RouteNameDialog.module.css";
 
@@ -72,7 +72,14 @@ function RouteNameForm({
           error={tooLong ? `Must be at most ${ROUTE_NAME_MAX_LENGTH} characters` : null}
           data-autofocus
         />
-        <SwatchPicker label="Route colour" colors={TRACK_COLORS} value={color} onChange={setColor} disabled={busy} />
+        <SwatchPicker
+          label="Route colour"
+          colors={TRACK_COLORS}
+          value={color}
+          onChange={setColor}
+          nameOf={trackColorName}
+          disabled={busy}
+        />
       </form>
     </Dialog>
   );

@@ -39,6 +39,7 @@ import {
   routeLengthM,
   MAX_ROUTE_POINTS,
   TRACK_COLORS,
+  trackColorName,
   type SnapMode,
 } from "@logjam/shared";
 
@@ -216,7 +217,7 @@ export function DraftToolPanel({
             <Pressable
               key={swatch}
               accessibilityRole="button"
-              accessibilityLabel={`Colour ${swatch}`}
+              accessibilityLabel={trackColorName(swatch)}
               accessibilityState={{ selected: swatch === color }}
               disabled={saving}
               onPress={() => {

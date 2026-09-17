@@ -56,12 +56,10 @@ const MAPS_VIEWS = [
  * shrink.
  */
 const LEGACY_PAGES: ReadonlySet<PanelId> = new Set<PanelId>([
-  "ways",
   "maps",
   "friends",
   "account",
   "settings",
-  "route-detail",
 ]);
 
 function SidebarPanel({
@@ -73,6 +71,7 @@ function SidebarPanel({
   mapsView,
   onMapsViewChange,
   onStartDrawingRoute,
+  waysLoaded,
   // Places
   places,
   placesLoaded,
@@ -176,6 +175,8 @@ function SidebarPanel({
   mapsView: MapsView;
   onMapsViewChange: (view: MapsView) => void;
   onStartDrawingRoute: () => void;
+  /** False until all three of Ways' fetches settle. */
+  waysLoaded: boolean;
   // Places
   places: TPlace[];
   placesLoaded: boolean;
@@ -536,7 +537,9 @@ function SidebarPanel({
         {activePanel === "ways" && (
           <RoutesPanel
             routes={allRoutes}
+            waysLoaded={waysLoaded}
             currentUserId={currentUserId}
+            friends={friends}
             placeTracks={placeTracks}
             standaloneFiles={standaloneFiles}
             standaloneFilesError={standaloneFilesError}
@@ -547,9 +550,9 @@ function SidebarPanel({
             onFlyToStandaloneFile={onFlyToStandaloneFile}
             places={[...places, ...sharedPlaces]}
             onStartDrawingRoute={onStartDrawingRoute}
+            onOpenUnifiedImport={onOpenUnifiedImport}
             onSelectRoute={onSelectRoute}
-            setSelectedPlaceID={setSelectedPlaceID}
-            setActivePanel={setActivePanel}
+            onOpenPlace={openPlaceDetail}
           />
         )}
       </div>

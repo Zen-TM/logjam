@@ -1,20 +1,43 @@
-// Detail view for a route selected on the map. Opened programmatically from a
-// map click (never a NavRail item), mirroring PlaceDetailPanel.
+// One route: what it is as numbers, and what can be done with it.
+//
+// Opened programmatically from a row on Ways or a line on the map, never a rail
+// item. The figures are the ones Logjam GPS's `routes/RouteStatsBody.tsx` shows
+// — distance, climb, descent, the height band, the profile — so the same route
+// reads the same on both clients.
 //
 // A route reached through a place share is READ-ONLY here: the sharee can see
 // it and export it, but edit/delete/link belong to the owner. The API enforces
 // this with a 403; the UI just doesn't offer the controls.
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pencil, Trash2, Download, ArrowLeftRight, Link2Off, Share2 } from "lucide-react";
+import {
+  ArrowLeftRight,
+  Download,
+  EllipsisVertical,
+  Link2Off,
+  MapPin,
+  Pencil,
+  Share2,
+  Trash2,
+  X,
+} from "lucide-react";
 import classes from "./RouteDetailPanel.module.css";
-import shared from "../../../styles/shared.module.css";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
 import ShareDialog from "../../dialogs/ShareDialog";
 import RemoveSharedButton from "../../common/RemoveSharedButton";
-import TrackIcon from "../../media/TrackIcon";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
 import ElevationProfile from "../../routes/ElevationProfile";
+import {
+  Button,
+  Hero,
+  IconButton,
+  Menu,
+  SectionHeader,
+  Select,
+  StatGrid,
+  SwatchPicker,
+  type MenuEntry,
+} from "../../../ui";
 import {
   deleteRoute,
   updateRoute,
@@ -37,6 +60,7 @@ import {
   exportFilename,
   routeToGpx,
   routeToKml,
+  trackColorName,
   GPX_MIME_TYPE,
   KML_MIME_TYPE,
   TRACK_COLORS,
@@ -104,7 +128,6 @@ export default function RouteDetailPanel({
     incumbentName: string;
   } | null>(null);
   const [busy, setBusy] = useState(false);
-  const [colorOpen, setColorOpen] = useState(false);
   // Above the early return — hooks cannot be conditional. Null points mean no
   // request is made at all.
   const {
@@ -130,7 +153,12 @@ export default function RouteDetailPanel({
   useEffect(() => () => onHoverPosition(null), [onHoverPosition]);
 
   if (!route) {
-    return <span className={classes.caption}>No route selected.</span>;
+    return (
+      <div className={classes.root}>
+        <Hero title="Route" actions={<IconButton icon={X} label="Close panel" onClick={onClose} />} />
+        <p className={classes.note}>No route selected.</p>
+      </div>
+    );
   }
 
   const isOwner = currentUserId !== null && route.ownerId === currentUserId;
@@ -172,13 +200,11 @@ export default function RouteDetailPanel({
       "Couldn't reverse the route.",
     );
 
-  const handlePickColor = (color: string) => {
-    setColorOpen(false);
+  const handlePickColor = (color: string) =>
     void run(
       () => updateRoute(route.id, { color }),
       "Couldn't change the route colour.",
     );
-  };
 
   const handleUnlink = () =>
     run(
@@ -222,217 +248,184 @@ export default function RouteDetailPanel({
       onClose();
     }, "Couldn't delete the route.");
 
+  const exportRoute = (format: "gpx" | "kml") =>
+    downloadText(
+      exportFilename(route.name, format),
+      format === "gpx" ? routeToGpx(route.name, route.points) : routeToKml(route.name, route.points),
+      format === "gpx" ? GPX_MIME_TYPE : KML_MIME_TYPE,
+    );
+
+  // The page's verbs, behind the hero's ⋯ (DESIGN.md §7) rather than a footer
+  // of ghost buttons. Export is offered to a sharee too: the geometry is
+  // already on their machine, and reading it out is what a share allows.
+  const entries: MenuEntry[] = [
+    ...(isOwner
+      ? ([
+          { id: "edit", label: "Edit points", icon: Pencil, disabled: busy, onSelect: () => onEdit(route) },
+          {
+            id: "reverse",
+            label: "Reverse direction",
+            icon: ArrowLeftRight,
+            disabled: busy,
+            onSelect: () => void handleReverse(),
+          },
+          { id: "share", label: "Share…", icon: Share2, disabled: busy, onSelect: () => setShowShare(true) },
+          { id: "sep", separator: true },
+        ] satisfies MenuEntry[])
+      : []),
+    { id: "gpx", label: "Export as GPX", icon: Download, onSelect: () => exportRoute("gpx") },
+    { id: "kml", label: "Export as KML", icon: Download, onSelect: () => exportRoute("kml") },
+    ...(isOwner
+      ? ([
+          { id: "sep2", separator: true },
+          {
+            id: "delete",
+            label: "Delete route",
+            icon: Trash2,
+            danger: true,
+            disabled: busy,
+            onSelect: () => setConfirmDelete(true),
+          },
+        ] satisfies MenuEntry[])
+      : []),
+  ];
+
   return (
     <div className={classes.root}>
-      <div className={classes.summary}>
-        {isOwner ? (
-          <button
-            type="button"
-            className={classes.colorButton}
-            onClick={() => setColorOpen((open) => !open)}
-            disabled={busy}
-            aria-expanded={colorOpen}
-            title="Change the route colour"
-          >
-            <TrackIcon color={route.color} size={20} />
-          </button>
-        ) : (
-          <span className={classes.colorIndicator}>
-            <TrackIcon color={route.color} size={20} />
-          </span>
-        )}
-        <div>
-          <div className={classes.distance}>
-            {formatDistanceM(routeLengthM(route.points))}
-          </div>
-        </div>
-      </div>
-
-      {colorOpen && isOwner && (
-        <div className={classes.palette} role="group" aria-label="Route colour">
-          {TRACK_COLORS.map((color) => (
-            <button
-              key={color}
-              type="button"
-              className={classes.swatch}
-              // The colour IS the data here — it can't come from a token.
-              style={{ backgroundColor: color }}
-              onClick={() => handlePickColor(color)}
-              disabled={busy}
-              aria-pressed={color === route.color}
-              aria-label={color}
-              title={color}
+      <Hero
+        title={route.name}
+        actions={
+          <>
+            <Menu
+              label={`Actions for ${route.name}`}
+              title={route.name}
+              placement="bottom-end"
+              entries={entries}
+              trigger={(props) => (
+                <IconButton {...props} icon={EllipsisVertical} label={`Actions for ${route.name}`} />
+              )}
             />
-          ))}
-        </div>
-      )}
+            <IconButton icon={X} label="Close panel" onClick={onClose} />
+          </>
+        }
+      />
 
-      {!isOwner && (
-        <p className={classes.caption}>
-          {visibility === "via-place"
-            ? `Shared with you as part of ${viaPlace?.name} — you can view and export this route, but not change it.`
-            : "Shared with you — you can view and export this route, but not change it."}
-        </p>
-      )}
+      <div className={classes.body}>
+        {/* The three figures Logjam GPS leads with. Distance is always right;
+            climb and descent wait on the terrain read, so they say "—" rather
+            than a zero that would read as flat ground. */}
+        <StatGrid
+          stats={[
+            { label: "Distance", value: formatDistanceM(routeLengthM(route.points)) },
+            { label: "Climb", value: profile ? `↑ ${Math.round(profile.gainM)} m` : "—" },
+            { label: "Descent", value: profile ? `↓ ${Math.round(profile.lossM)} m` : "—" },
+          ]}
+        />
 
-      <div className={shared.sectionLabel}>Elevation</div>
-      {profileLoading && <span className={classes.caption}>Reading the terrain…</span>}
-      {profileError && <span className={classes.caption}>{profileError}</span>}
-      {profile && (
-        <>
-          <div className={classes.elevationStats}>
-            <span title="Total climb">↑ {Math.round(profile.gainM)} m</span>
-            <span title="Total descent">↓ {Math.round(profile.lossM)} m</span>
-            {profile.minM != null && profile.maxM != null && (
-              <span title="Lowest and highest point">
-                {Math.round(profile.minM)}–{Math.round(profile.maxM)} m
-              </span>
-            )}
-          </div>
-          <ElevationProfile
-            samples={profile.samples}
-            minM={profile.minM}
-            maxM={profile.maxM}
-            color={route.color}
-            onHoverSampleChange={handleHoverSample}
-          />
-          <span className={classes.attribution}>{profile.attribution}</span>
-        </>
-      )}
-
-      <div className={shared.divider} />
-
-      <div className={shared.sectionLabel}>Place</div>
-      {linkedPlace ? (
-        <div className={classes.linkRow}>
-          <span className={classes.linkName}>{linkedPlace.name}</span>
-          {isOwner && (
-            <button
-              type="button"
-              className={`${shared.btn} ${shared.btnGhost} ${shared.btnXs}`}
-              onClick={handleUnlink}
-              disabled={busy}
-              title="Unlink from this place (the route is kept)"
-            >
-              <Link2Off size={14} /> Unlink
-            </button>
+        <section className={classes.section}>
+          <SectionHeader title="Elevation" />
+          {profileLoading && <p className={classes.note}>Reading the terrain…</p>}
+          {profileError && <p className={classes.note}>{profileError}</p>}
+          {profile && (
+            <>
+              {profile.minM != null && profile.maxM != null && (
+                <p className={classes.band}>
+                  {Math.round(profile.minM)}–{Math.round(profile.maxM)} m above sea level
+                </p>
+              )}
+              {/* The chart's axes named: an unlabelled height profile is read as
+                  height over TIME by anyone who has not been told otherwise
+                  (mobile §7). */}
+              <p className={classes.chartLabel}>Elevation vs distance</p>
+              <ElevationProfile
+                samples={profile.samples}
+                minM={profile.minM}
+                maxM={profile.maxM}
+                color={route.color}
+                onHoverSampleChange={handleHoverSample}
+              />
+              <p className={classes.attribution}>{profile.attribution}</p>
+            </>
           )}
-        </div>
-      ) : isOwner ? (
-        <select
-          className={shared.input}
-          value=""
-          disabled={busy}
-          onChange={(e) => e.target.value && handleLinkSelected(e.target.value)}
-        >
-          <option value="">Link to a place…</option>
-          {ownedPlaces.map((place) => (
-            <option key={place.id} value={place.id}>
-              {place.name}
-            </option>
-          ))}
-        </select>
-      ) : viaPlace ? (
-        // A sharee's place row. It is not decoration: this is the place whose
-        // share brought the route, and removing THAT is the only way to stop
-        // seeing this (the route carries no share row of its own).
-        <div className={classes.linkRow}>
-          <span className={classes.linkName}>{viaPlace.name}</span>
-          <button
-            type="button"
-            className={`${shared.btn} ${shared.btnGhost} ${shared.btnXs}`}
-            onClick={() => onOpenPlace(viaPlace.id)}
-            title="Open the shared place this route came with"
-          >
-            Open
-          </button>
-        </div>
-      ) : (
-        <span className={classes.caption}>Not linked to a place.</span>
-      )}
-
-      <div className={shared.divider} />
-
-      <div className={classes.actions}>
-        <button
-          type="button"
-          className={`${shared.btn} ${shared.btnGhost} ${shared.btnSm}`}
-          onClick={() =>
-            downloadText(
-              exportFilename(route.name, "gpx"),
-              routeToGpx(route.name, route.points),
-              GPX_MIME_TYPE,
-            )
-          }
-        >
-          <Download size={14} /> GPX
-        </button>
-        <button
-          type="button"
-          className={`${shared.btn} ${shared.btnGhost} ${shared.btnSm}`}
-          onClick={() =>
-            downloadText(
-              exportFilename(route.name, "kml"),
-              routeToKml(route.name, route.points),
-              KML_MIME_TYPE,
-            )
-          }
-        >
-          <Download size={14} /> KML
-        </button>
+        </section>
 
         {isOwner && (
-          <>
-            <button
-              type="button"
-              className={`${shared.btn} ${shared.btnGhost} ${shared.btnSm}`}
-              onClick={() => onEdit(route)}
+          <section className={classes.section}>
+            <SwatchPicker
+              label="Route colour"
+              colors={TRACK_COLORS}
+              value={route.color}
+              onChange={handlePickColor}
+              nameOf={trackColorName}
               disabled={busy}
-            >
-              <Pencil size={14} /> Edit
-            </button>
-            <button
-              type="button"
-              className={`${shared.btn} ${shared.btnGhost} ${shared.btnSm}`}
-              onClick={handleReverse}
-              disabled={busy}
-              title="Reverse the direction of travel"
-            >
-              <ArrowLeftRight size={14} /> Reverse
-            </button>
-            <button
-              type="button"
-              className={`${shared.btn} ${shared.btnGhost} ${shared.btnSm}`}
-              onClick={() => setShowShare(true)}
-              disabled={busy}
-            >
-              <Share2 size={14} /> Share
-            </button>
-            <button
-              type="button"
-              className={`${shared.btn} ${shared.btnOutlineWarning} ${shared.btnSm}`}
-              onClick={() => setConfirmDelete(true)}
-              disabled={busy}
-            >
-              <Trash2 size={14} /> Delete
-            </button>
-          </>
+            />
+          </section>
         )}
 
-        {/* Only on a route shared DIRECTLY: one shared through a place has no
-            share row of its own, and the place row above is where that ends. */}
-        {visibility === "direct" && (
-          <RemoveSharedButton
-            kindLabel="route"
-            itemName={route.name}
-            ownerName={ownerUsername(friends, route.ownerId)}
-            disabled={busy}
-            remove={() => unshareEntityWith("route", route.id, "me")}
-            onRemoved={() => {
-              onChanged();
-              onClose();
-            }}
-          />
+        <section className={classes.section}>
+          <SectionHeader title="Place" />
+          {linkedPlace ? (
+            <div className={classes.linkRow}>
+              <span className={classes.linkName}>{linkedPlace.name}</span>
+              {isOwner && (
+                <Button compact icon={Link2Off} disabled={busy} onClick={() => void handleUnlink()}>
+                  Unlink
+                </Button>
+              )}
+            </div>
+          ) : isOwner ? (
+            <Select
+              label="Link to a place"
+              value=""
+              disabled={busy}
+              onChange={(event) => event.target.value && handleLinkSelected(event.target.value)}
+            >
+              <option value="">Not linked to a place</option>
+              {ownedPlaces.map((place) => (
+                <option key={place.id} value={place.id}>
+                  {place.name}
+                </option>
+              ))}
+            </Select>
+          ) : viaPlace ? (
+            // A sharee's place row. It is not decoration: this is the place
+            // whose share brought the route, and removing THAT is the only way
+            // to stop seeing this (the route carries no share row of its own).
+            <div className={classes.linkRow}>
+              <span className={classes.linkName}>{viaPlace.name}</span>
+              <Button compact icon={MapPin} onClick={() => onOpenPlace(viaPlace.id)}>
+                Open
+              </Button>
+            </div>
+          ) : (
+            <p className={classes.note}>Not linked to a place.</p>
+          )}
+        </section>
+
+        {!isOwner && (
+          <section className={classes.section}>
+            <p className={classes.note}>
+              {visibility === "via-place"
+                ? `Shared with you as part of ${viaPlace?.name} — you can view and export this route, but not change it.`
+                : "Shared with you — you can view and export this route, but not change it."}
+            </p>
+            {/* Only on a route shared DIRECTLY: one shared through a place has
+                no share row of its own, and the place row above is where that
+                ends. */}
+            {visibility === "direct" && (
+              <RemoveSharedButton
+                kindLabel="route"
+                itemName={route.name}
+                ownerName={ownerUsername(friends, route.ownerId)}
+                disabled={busy}
+                remove={() => unshareEntityWith("route", route.id, "me")}
+                onRemoved={() => {
+                  onChanged();
+                  onClose();
+                }}
+              />
+            )}
+          </section>
         )}
       </div>
 
@@ -476,8 +469,9 @@ export default function RouteDetailPanel({
       <ConfirmDialog
         open={confirmDelete}
         title="Delete route?"
-        message={`"${route.name}" will be permanently deleted.`}
+        message={`"${route.name}" is removed from your account, so it goes from Logjam GPS and your other devices too. This can't be undone.`}
         confirmLabel="Delete"
+        busy={busy}
         onConfirm={() => {
           setConfirmDelete(false);
           void handleDelete();

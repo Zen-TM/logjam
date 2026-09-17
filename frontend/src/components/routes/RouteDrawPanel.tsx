@@ -1,13 +1,23 @@
-// HUD for the route draw/edit tool. Floats over the map (the map owns
-// placement) and reports the running distance so the user can judge the line
-// as they place it.
+// The route tool's HUD: the mode the map is in, what it has collected, and the
+// controls that end it.
 //
-// Snapping is a per-session choice, offered here rather than in Layers because
-// it changes what the NEXT click does — it belongs with the tool it modifies.
+// A map TOOL is a mode with a HUD (mobile §2), so this floats over the map in
+// the chrome's own slot rather than being a panel of its own — it is armed from
+// the Tools tray, it reports the running distance so the user can judge the
+// line as they place it, and leaving it discards the draft.
+//
+// It sits in `MapChrome`'s `hud` slot and NOT in the notice stack beside it:
+// that stack is `aria-live="polite"`, which is right for "Showing 42 of 298
+// places" and wrong for a panel holding a select and four buttons — every
+// keystroke and every placed point would be announced.
+//
+// Snapping is a per-session choice offered here rather than in Layers because
+// it changes what the NEXT click does: it belongs to the tool it modifies, not
+// to the map (mobile §2, "a tool's own settings belong in its HUD").
 import { formatDistanceM, routeLengthM, MAX_ROUTE_POINTS } from "@logjam/shared";
 import type { SnapMode } from "../map/Map";
+import { Button, Select } from "../../ui";
 import classes from "./RouteDrawPanel.module.css";
-import shared from "../../styles/shared.module.css";
 
 type RouteDrawPanelProps = {
   points: [number, number][];
@@ -48,7 +58,9 @@ export function RouteDrawPanel({
         <span className={classes.title}>
           {editingName ? `Editing "${editingName}"` : "New route"}
         </span>
-        <span className={classes.distance}>
+        {/* The running total, announced as it changes: it is the one figure
+            the user is watching while they click. */}
+        <span className={classes.distance} aria-live="polite">
           {points.length >= 2 ? formatDistanceM(routeLengthM(points)) : "—"}
         </span>
       </div>
@@ -61,60 +73,38 @@ export function RouteDrawPanel({
             : `${anchorCount} point${anchorCount === 1 ? "" : "s"} · drag to move, click to remove, drag the line to add`}
       </p>
 
-      <label className={classes.snapRow}>
-        <span>Snap to</span>
-        <select
-          className={classes.snapSelect}
-          value={snapMode}
-          onChange={(e) => onSnapModeChange(e.target.value as SnapMode)}
-          disabled={saving}
-        >
-          <option value="off">Nothing (straight lines)</option>
-          <option value="trails">Trails</option>
-          <option value="waterways">Creeks &amp; rivers</option>
-          <option value="both">Trails, creeks &amp; rivers</option>
-        </select>
-      </label>
+      <Select
+        label="Snap to"
+        className={classes.snap}
+        value={snapMode}
+        disabled={saving}
+        onChange={(event) => onSnapModeChange(event.target.value as SnapMode)}
+      >
+        <option value="off">Nothing (straight lines)</option>
+        <option value="trails">Trails</option>
+        <option value="waterways">Creeks &amp; rivers</option>
+        <option value="both">Trails, creeks &amp; rivers</option>
+      </Select>
 
       {atCap && (
-        <p className={classes.warning}>
+        <p className={classes.warning} role="status">
           Maximum of {MAX_ROUTE_POINTS} points reached.
         </p>
       )}
 
       <div className={classes.actions}>
-        <button
-          type="button"
-          className={`${shared.btn} ${shared.btnGhost} ${shared.btnSm}`}
-          onClick={onUndo}
-          disabled={!canUndo || saving}
-        >
+        <Button compact onClick={onUndo} disabled={!canUndo || saving}>
           Undo
-        </button>
-        <button
-          type="button"
-          className={`${shared.btn} ${shared.btnGhost} ${shared.btnSm}`}
-          onClick={onClear}
-          disabled={points.length === 0 || saving}
-        >
+        </Button>
+        <Button compact onClick={onClear} disabled={points.length === 0 || saving}>
           Clear
-        </button>
-        <button
-          type="button"
-          className={`${shared.btn} ${shared.btnGhost} ${shared.btnSm}`}
-          onClick={onCancel}
-          disabled={saving}
-        >
+        </Button>
+        <Button compact onClick={onCancel} disabled={saving}>
           Cancel
-        </button>
-        <button
-          type="button"
-          className={`${shared.btn} ${shared.btnFilledAccent} ${shared.btnSm}`}
-          onClick={onSave}
-          disabled={!canSave}
-        >
-          {saving ? "Saving…" : "Save"}
-        </button>
+        </Button>
+        <Button compact variant="filled" onClick={onSave} disabled={!canSave} busy={saving}>
+          Save
+        </Button>
       </div>
     </div>
   );

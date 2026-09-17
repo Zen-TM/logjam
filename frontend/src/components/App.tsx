@@ -490,7 +490,11 @@ function App() {
   const { places: sharedPlaces, error: sharedError, refetch: refetchShared } =
     useSharedPlaces(loadsUserData);
   // Also fetched for the Routes panel, which lists the same track files.
-  const { tracks: placeTracks, refetch: refetchPlaceTracks } = usePlaceTracks(
+  const {
+    tracks: placeTracks,
+    loaded: placeTracksLoaded,
+    refetch: refetchPlaceTracks,
+  } = usePlaceTracks(
     loadsUserData && (showPlaceTracks || activePanel === "ways"),
   );
   // Standalone files: the user's own imports and Logjam GPS recordings. They
@@ -500,6 +504,7 @@ function App() {
   const [shownStandaloneIds, setShownStandaloneIds] = useState<string[]>([]);
   const {
     files: standaloneFiles,
+    loaded: standaloneFilesLoaded,
     error: standaloneFilesError,
     refetch: refetchStandaloneFiles,
   } = useStandaloneFiles(
@@ -538,9 +543,14 @@ function App() {
 
   // Routes load whenever the layer is on OR a draw/edit session is live (the
   // editor needs the row it is editing even with the layer toggled off).
-  const { routes, refetch: refetchRoutes } = useRoutes(
+  const { routes, loaded: routesLoaded, refetch: refetchRoutes } = useRoutes(
     loadsUserData && (showRoutes || drawingRoute || activePanel === "ways"),
   );
+
+  // Ways is built from three fetches, so it has nothing to say until all three
+  // have settled — one still in flight would show a short list as if it were
+  // the whole list (DESIGN.md §8).
+  const waysLoaded = routesLoaded && standaloneFilesLoaded && placeTracksLoaded;
 
 
   // A place list change (e.g. after a track upload) should refresh the layer.
@@ -1261,6 +1271,7 @@ function App() {
           mapsView={mapsView}
           onMapsViewChange={setMapsView}
           onStartDrawingRoute={startDrawingRoute}
+          waysLoaded={waysLoaded}
           selectedRoute={selectedRoute}
           allRoutes={routes}
           placeTracks={placeTracks}
@@ -1484,6 +1495,24 @@ function App() {
         }
         mapTools={mapTools}
         notices={notices}
+        hud={
+          drawingRoute ? (
+            <RouteDrawPanel
+              points={routeDraft.points}
+              anchorCount={routeDraft.draft.anchors.length}
+              canUndo={routeDraft.canUndo}
+              atCap={routeDraft.atCap}
+              editingName={routes.find((r) => r.id === editingRouteId)?.name ?? null}
+              onUndo={routeDraft.undo}
+              onClear={clearRouteGuard.requestClose}
+              onSave={() => setNamingRoute(true)}
+              onCancel={cancelRouteGuard.requestClose}
+              saving={savingRoute}
+              snapMode={snapMode}
+              onSnapModeChange={setSnapMode}
+            />
+          ) : null
+        }
         onTopoSourceUnavailable={handleTopoSourceUnavailable}
       />
       </main>
@@ -1519,23 +1548,6 @@ function App() {
         onActiveLayerChange={setActiveLayerId}
         mapView={mapCenter}
       />
-
-      {drawingRoute && (
-        <RouteDrawPanel
-          points={routeDraft.points}
-          anchorCount={routeDraft.draft.anchors.length}
-          canUndo={routeDraft.canUndo}
-          atCap={routeDraft.atCap}
-          editingName={routes.find((r) => r.id === editingRouteId)?.name ?? null}
-          onUndo={routeDraft.undo}
-          onClear={clearRouteGuard.requestClose}
-          onSave={() => setNamingRoute(true)}
-          onCancel={cancelRouteGuard.requestClose}
-          saving={savingRoute}
-          snapMode={snapMode}
-          onSnapModeChange={setSnapMode}
-        />
-      )}
 
       <ConfirmDialog
         open={cancelRouteGuard.guardOpen}
