@@ -2,11 +2,12 @@
 // made, and the templates they are made from.
 //
 // The page answers "what maps have I made, and what is still being made?"
-// (DESIGN.md §1). Its hero counts the finished GeoPDFs; "Being made" leads the
-// list, because a wait is the thing someone comes back to check; then the
-// GeoPDFs newest first; then the templates. It was two buttons, a stack of job
-// ribbons and two accordions that opened closed — so the page's own answer was
-// behind a click.
+// (DESIGN.md §1). Its hero counts the finished GeoPDFs; a TAB each for the maps
+// and the templates they are made from; and what is still being made pinned
+// under both. It was two buttons, a stack of job ribbons and two accordions
+// that opened closed — so the page's own answer was behind a click — and then
+// one scrolling list, which buried the templates under a year of GeoPDFs
+// (operator, 2026-09-18).
 //
 // A GeoPDF's body DOWNLOADS it. A PDF has nowhere in this app to open to — the
 // list view carries no extent to centre the map on — and in a browser opening a
@@ -27,11 +28,14 @@ import { messageFromError } from "../../../errors/messageFromError";
 import { useToast } from "../../feedback/ToastProvider";
 import ShareDialog from "../../dialogs/ShareDialog";
 import type { GeoPdfTemplate } from "../../dialogs/GeoPdfDialog";
-import { Button, EmptyState, Hero, IconButton, IconTile, Menu, Row, SectionHeader, StatusPill, type MenuEntry } from "../../../ui";
+import { Button, ChipRail, EmptyState, Hero, IconButton, IconTile, Menu, Row, StatusPill, type MenuEntry } from "../../../ui";
 import { MAP_IDENTITY, downloadFile, fileSubtitle, geoPdfLabel, geoPdfsBeingMade, plural } from "./mapsModel";
-import { MakingSection } from "./MapsParts";
+import { MakingFooter } from "./MapsParts";
 import { useConfirm } from "./useConfirm";
 import classes from "./MapsPanel.module.css";
+
+/** The two lists this view holds, one tab each. */
+type GeoPdfTab = "maps" | "templates";
 
 export default function GeoPdfsPanel({
   views,
@@ -56,6 +60,9 @@ export default function GeoPdfsPanel({
 }): React.JSX.Element {
   const toast = useToast();
   const { ask, dialog } = useConfirm();
+  // Which tab of the view is showing. Panel-local: which list you were reading
+  // is not worth remembering past a page change.
+  const [tab, setTab] = useState<GeoPdfTab>("maps");
   const [templates, setTemplates] = useState<GeoPdfTemplate[]>([]);
   const [templatesLoaded, setTemplatesLoaded] = useState(false);
   // Non-null = the GeoPDF whose share dialog is open, with the row's own words
@@ -234,15 +241,13 @@ export default function GeoPdfsPanel({
     </div>
   ) : (
     <div className={classes.list}>
-      <MakingSection
-        items={beingMade}
-        // A failed job holds no file, so dismissing it is a delete with nothing
-        // to warn about.
-        onDismiss={(item) => void deleteJob(item.id)}
-      />
-
+      {tab === "maps" && (
       <section className={classes.section} aria-labelledby="maps-geopdfs">
-        <SectionHeader id="maps-geopdfs" title="GeoPDFs" count={made.length} />
+        {/* The tab is the heading: a chip that says "Maps 12" over a heading
+            that says "GEOPDFS 12" is the same line drawn twice. */}
+        <h3 id="maps-geopdfs" className="visually-hidden">
+          GeoPDFs
+        </h3>
         {/* The reaper's `expireCompletedGeoPdfJobs`, on the same TTL as topo
             exports. The page never said so, and a GeoPDF quietly vanishing a
             week later reads as data loss. */}
@@ -284,9 +289,13 @@ export default function GeoPdfsPanel({
           </p>
         )}
       </section>
+      )}
 
+      {tab === "templates" && (
       <section className={classes.section} aria-labelledby="maps-geopdf-templates">
-        <SectionHeader id="maps-geopdf-templates" title="Templates" count={templates.length} />
+        <h3 id="maps-geopdf-templates" className="visually-hidden">
+          Templates
+        </h3>
         {templatesLoaded && templates.length === 0 && (
           <p className={classes.note}>A template keeps paper, scale and layers to make the next GeoPDF with.</p>
         )}
@@ -319,14 +328,34 @@ export default function GeoPdfsPanel({
           />
         ))}
       </section>
+      )}
     </div>
   );
 
   return (
     <div className={classes.root}>
       {hero}
-      <div className={classes.rails}>{views}</div>
+      <div className={classes.rails}>
+        {views}
+        {!nothingYet && jobsLoaded && (
+          <ChipRail
+            label="GeoPDFs view"
+            options={[
+              { value: "maps", label: "Maps", count: made.length },
+              { value: "templates", label: "Templates", count: templatesLoaded ? templates.length : undefined },
+            ]}
+            value={tab}
+            onChange={setTab}
+          />
+        )}
+      </div>
       {list}
+      <MakingFooter
+        items={beingMade}
+        // A failed job holds no file, so dismissing it is a delete with nothing
+        // to warn about.
+        onDismiss={(item) => void deleteJob(item.id)}
+      />
 
       {shareJob && (
         <ShareDialog

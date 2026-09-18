@@ -206,7 +206,9 @@ test.describe("desktop", () => {
     await expect(aside.getByRole("heading", { level: 2, name: /^(No LiDAR topos yet|\d+ LiDAR topos?)$/ })).toBeVisible({ timeout: 15_000 });
     await expectNoViolations(page, "aside");
 
-    // The built-in Default template is always there, so there is always a menu.
+    // The built-in Default template is always there, so there is always a menu —
+    // on the Templates tab, which is where a template lives now.
+    await aside.getByRole("radio", { name: /^Templates/ }).click();
     await aside.getByRole("button", { name: "Actions for Default" }).click();
     await expect(page.getByRole("menu")).toBeVisible();
     await expectNoViolations(page, "[role='menu']");
@@ -215,7 +217,7 @@ test.describe("desktop", () => {
     // How topos draw opens BESIDE the page, and its colours are free pickers.
     await aside.getByRole("button", { name: "Topo style" }).click();
     const sheet = page.getByRole("region", { name: "Topo style" });
-    await expect(sheet.getByRole("slider", { name: "Label size" })).toBeVisible({ timeout: 15_000 });
+    await expect(sheet.getByRole("textbox", { name: "Label size" })).toBeVisible({ timeout: 15_000 });
     await expectNoViolations(page, "aside");
     const major = sheet.getByRole("button", { name: /^Major colour:/ });
     await major.click();

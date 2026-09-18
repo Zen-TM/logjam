@@ -3,9 +3,11 @@
 // templates topos are made with.
 //
 // The page answers "what maps have I made, and what is still being made?"
-// (DESIGN.md §1): the hero counts the topos, "Being made" leads the list, then
-// the topos newest first, their exports, and the templates. It used to be two
-// buttons, a ribbon stack and four accordions that opened closed.
+// (DESIGN.md §1): the hero counts the topos, a TAB each for the topos, the
+// files exported from them and the templates, and what is still being made
+// pinned under all three. It used to be two buttons, a ribbon stack and four
+// accordions that opened closed, and then one scrolling list that buried the
+// templates under a year of topos (operator, 2026-09-18).
 //
 // A topo's body CENTRES the map on it (DESIGN.md §7, "Opening a thing centres
 // the map on it"), and turns LiDAR topos on so there is something there to see.
@@ -47,7 +49,7 @@ import type { CompletedTopoJob } from "../../../topoLayerTypes";
 import TopoTemplateEditDialog from "../../dialogs/TopoTemplateEditDialog";
 import TopoExportDialog from "../../dialogs/TopoExportDialog";
 import ShareDialog from "../../dialogs/ShareDialog";
-import { Button, EmptyState, Hero, IconButton, IconTile, Menu, Row, SectionHeader, StatusPill, type MenuEntry } from "../../../ui";
+import { Button, ChipRail, EmptyState, Hero, IconButton, IconTile, Menu, Row, StatusPill, type MenuEntry } from "../../../ui";
 import {
   MAP_IDENTITY,
   downloadFile,
@@ -61,12 +63,15 @@ import {
   topoWorkBeingMade,
   type MakingItem,
 } from "./mapsModel";
-import { MakingSection } from "./MapsParts";
+import { MakingFooter } from "./MapsParts";
 import { useConfirm } from "./useConfirm";
 import TopoStyleSheet from "./TopoStyleSheet";
 import { usePanelSheet } from "./usePanelSheet";
 import { useIsMobile } from "../../../useIsMobile";
 import classes from "./MapsPanel.module.css";
+
+/** The three lists this view holds, one tab each. */
+type LidarTab = "topos" | "exports" | "templates";
 
 export default function LidarPanel({
   views,
@@ -122,6 +127,9 @@ export default function LidarPanel({
   const { ask, dialog } = useConfirm();
   const { sheetOpen, openSheet } = usePanelSheet({ onOpenChange: onSheetOpenChange, onExpandSheet });
   const isNarrow = useIsMobile();
+  // Which tab of the view is showing. Panel-local: which list you were reading
+  // is not worth remembering past a page change.
+  const [tab, setTab] = useState<LidarTab>("topos");
 
   const [templates, setTemplates] = useState<TopoTemplate[]>([]);
   // undefined = closed; null = a new template; a template = editing it.
@@ -356,10 +364,13 @@ export default function LidarPanel({
     </div>
   ) : (
     <div className={classes.list}>
-      <MakingSection items={beingMade} onDismiss={dismiss} />
-
+      {tab === "topos" && (
       <section className={classes.section} aria-labelledby="maps-topos">
-        <SectionHeader id="maps-topos" title="LiDAR topos" count={completedTopoJobs.length} />
+        {/* The tab is the heading: a chip that says "Topos 6" over a heading
+            that says "LIDAR TOPOS 6" is the same line drawn twice. */}
+        <h3 id="maps-topos" className="visually-hidden">
+          LiDAR topos
+        </h3>
         {completedTopoJobs.length === 0 && <p className={classes.note}>None finished yet.</p>}
         {completedTopoJobs.map((job) => {
           const label = topoLabel(job);
@@ -390,9 +401,13 @@ export default function LidarPanel({
           );
         })}
       </section>
+      )}
 
+      {tab === "exports" && (
       <section className={classes.section} aria-labelledby="maps-exports">
-        <SectionHeader id="maps-exports" title="Exports" count={finishedExports.length} />
+        <h3 id="maps-exports" className="visually-hidden">
+          Exports
+        </h3>
         {/* The server's TOPO_EXPORT_TTL_MS sweep. */}
         <p className={classes.note}>
           {finishedExports.length === 0
@@ -433,11 +448,13 @@ export default function LidarPanel({
           </p>
         )}
       </section>
+      )}
 
+      {tab === "templates" && (
       <section className={classes.section} aria-labelledby="maps-topo-templates">
-        {/* Counts every row it lists, the built-in Default included, so the
-            heading can't say 0 above a list with something in it (TOPO-5). */}
-        <SectionHeader id="maps-topo-templates" title="Templates" count={templates.length} />
+        <h3 id="maps-topo-templates" className="visually-hidden">
+          Templates
+        </h3>
         {templates.map((template) => (
           <Row
             key={template.id}
@@ -467,6 +484,7 @@ export default function LidarPanel({
           />
         ))}
       </section>
+      )}
     </div>
   );
 
@@ -482,8 +500,25 @@ export default function LidarPanel({
       ) : (
         <>
           {hero}
-          <div className={classes.rails}>{views}</div>
+          <div className={classes.rails}>
+            {views}
+            {!nothingYet && topoJobsLoaded && (
+              <ChipRail
+                label="LiDAR topos view"
+                options={[
+                  // The Templates chip counts the built-in Default too, so it
+                  // can't say 0 over a list with something in it (TOPO-5).
+                  { value: "topos", label: "Topos", count: completedTopoJobs.length },
+                  { value: "exports", label: "Exports", count: finishedExports.length },
+                  { value: "templates", label: "Templates", count: templates.length },
+                ]}
+                value={tab}
+                onChange={setTab}
+              />
+            )}
+          </div>
           {list}
+          <MakingFooter items={beingMade} onDismiss={dismiss} />
           {sheet}
         </>
       )}

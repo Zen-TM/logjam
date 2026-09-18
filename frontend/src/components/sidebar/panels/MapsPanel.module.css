@@ -8,9 +8,42 @@
   flex-direction: column;
 }
 
+/* Two rails: which map the page is about, then which of its lists. */
 .rails {
   flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   padding: 10px var(--gutter) 8px;
+}
+
+/* What is still being made, pinned under the list and above the page's edge,
+   so it is in view from every tab and does not scroll away mid-wait. Separated
+   by the same hairline the panel uses, never a shadow — nothing here floats
+   over the map (index.css). */
+.footer {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px var(--gutter);
+  border-top: var(--hairline);
+}
+
+.footerList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Opened, it scrolls rather than eating the list it is pinned under. */
+.footer[data-expanded] .footerList {
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+.footerMore {
+  align-self: flex-start;
 }
 
 .list {
@@ -64,16 +97,37 @@
   gap: 4px;
 }
 
-/* Indented under the switch they belong to, one line each. */
+/* The colour and the width of one feature, under the switch that names them:
+   ONE line, not one each, and pushed to the right so every swatch and every
+   width box on the sheet sits in the same two columns as the contours' — a
+   table only reads as one if its columns line up. */
 .featureControls {
   display: flex;
-  flex-direction: column;
-  padding-left: var(--gutter);
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
 }
 
-/* A width is a LINE, like the colour: label left, a box for a few digits
-   right. The field's label/control column is turned on its side. */
-.width {
+/* A named line of the style: the name at the left, then its colour and its
+   width — a colour column and a width column down the section. */
+.styleLine {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--control-lg);
+}
+
+.styleName {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-sm);
+  color: var(--theme-text-muted);
+}
+
+/* A number with its label visible at the left: the field's label/control
+   column turned on its side. */
+.numberLine {
   flex-direction: row;
   flex-wrap: wrap;
   align-items: center;
@@ -81,20 +135,31 @@
   min-height: var(--control-lg);
 }
 
-.width > label {
+.numberLine > label {
   flex: 1;
   min-width: 0;
 }
 
-.width > input {
+.numberLine > input {
   flex: none;
   width: 8ch;
   text-align: right;
 }
 
 /* An error still gets a line of its own beneath. */
-.width > :last-child:not(input) {
+.numberLine > :last-child:not(input) {
   flex-basis: 100%;
+}
+
+/* A width inside a line that already names it: the box alone. */
+.widthBox {
+  flex: none;
+}
+
+/* Wide enough for the widest value either kind takes ("2.25", "100"). */
+.widthBox > input {
+  width: 7ch;
+  text-align: right;
 }
 
 .pointFeature {
