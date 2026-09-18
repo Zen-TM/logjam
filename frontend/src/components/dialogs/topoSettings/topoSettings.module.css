@@ -30,10 +30,16 @@
   color: var(--theme-text-primary);
 }
 
-/* The tooltip's trigger: a glyph on the label's line, quiet until wanted. */
+/* The tooltip's trigger: a glyph on the label's line, quiet until wanted. The
+   glyph is 14px but the TARGET is a full --control-sm square (WCAG 2.5.8), which
+   still fits inside the row's own height. */
 .info {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  flex: none;
+  width: var(--control-sm);
+  height: var(--control-sm);
   padding: 0;
   border: none;
   background: none;
@@ -69,13 +75,16 @@
   pointer-events: none;
 }
 
-/* The slope bands: a row per band, columns headed once (DESIGN.md §9). */
+/* The slope bands: a row per band, columns headed once (DESIGN.md §9). Tight
+   rows, because the table is mostly two-digit numbers and a swatch — the
+   full-height control rows it started with spent a screen on eight bands
+   (operator, 2026-09-18). */
 .bandTable {
   display: grid;
   grid-template-columns: 6ch 8ch 1fr auto;
   align-items: center;
   column-gap: 12px;
-  row-gap: 6px;
+  row-gap: 2px;
 }
 
 .head {
@@ -93,10 +102,12 @@
 }
 
 /* A band's colour is read from the scale, so it is shown, not pressed: a
-   checkerboard under it is the only way a translucent colour reads as one. */
+   checkerboard under it is the only way a translucent colour reads as one. It
+   fills its column, so the stack of them reads as the ramp it is rather than
+   leaving half the table empty (operator, 2026-09-18). */
 .bandSwatch {
   position: relative;
-  width: var(--control-lg);
+  width: 100%;
   height: var(--control-sm);
   border-radius: var(--radius-sm);
   border: var(--hairline);
@@ -117,11 +128,34 @@
   background: var(--band-colour);
 }
 
-/* "Insert a band here", between the rows it would come between. */
+/* "Insert a band here": the gap between two rows, made pressable. A round
+   button on a row of its own was six rows of empty table. */
 .insertRow {
   grid-column: 1 / -1;
   display: flex;
+  align-items: center;
   justify-content: center;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--theme-text-muted);
+  opacity: 0.4;
+  cursor: pointer;
+  transition: opacity var(--transition-fast), background-color var(--transition-fast);
+}
+
+.insertRow:hover:not(:disabled),
+.insertRow:focus-visible {
+  opacity: 1;
+  color: var(--theme-accent);
+  background: color-mix(in srgb, var(--theme-accent) 10%, transparent);
+}
+
+.insertRow:disabled {
+  opacity: 0.15;
+  cursor: default;
 }
 
 /* The two ends of the colour scale every band is painted from. */

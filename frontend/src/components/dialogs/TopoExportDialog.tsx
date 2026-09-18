@@ -92,14 +92,14 @@ export default function TopoExportDialog({ open, onClose, job, onExportQueued }:
       <TopoExportControls value={selection} onChange={setSelection} availableLayers={jobLayerNames} />
 
       <p className={classes.exportNote}>
-        It appears under Exports and downloads itself when it is ready. Your topo
-        style is frozen into it as it is now — restyling later leaves an export
-        already made as it was.
+        It turns up under Exports and downloads itself when it's ready. Your topo
+        style is baked in as it stands now, so restyling later won't change an
+        export you've already made.
       </p>
       <p className={classes.exportNote}>
-        What comes out is your own data over someone else's survey, and it may be
-        wrong or out of date. It is not a substitute for your own navigation,
-        judgement or rescue planning.
+        What comes out is your own data drawn over someone else's survey, and it
+        may be wrong or out of date. Don't rely on it in place of your own
+        navigation, judgement or rescue planning.
       </p>
     </Dialog>
   );

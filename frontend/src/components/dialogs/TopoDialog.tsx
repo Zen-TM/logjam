@@ -38,6 +38,7 @@ import {
 } from "@logjam/shared";
 import {
   Button,
+  ChipRail,
   Dialog,
   ProgressBar,
   SectionHeader,
@@ -46,6 +47,7 @@ import {
   TextField,
 } from "../../ui";
 import AdvancedSettings from "./topoSettings/AdvancedSettings";
+import { SETTINGS_TABS, type SettingsTab } from "./topoSettings/settingsTabs";
 import { nextTopoName } from "./jobName";
 import { fetchTopoTemplates } from "./topoTemplatesFetch";
 import { formatAreaKm2 } from "./formatArea";
@@ -186,6 +188,7 @@ export default function TopoDialog({
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>(DEFAULT_TEMPLATE_ID);
   const [saveAsName, setSaveAsName] = useState("");
   const [showSaveAs, setShowSaveAs] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>("hillshade");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -217,6 +220,7 @@ export default function TopoDialog({
     setSelectedTemplateId(DEFAULT_TEMPLATE_ID);
     setSaveAsName("");
     setShowSaveAs(false);
+    setSettingsTab("hillshade");
     if (fileInputRef.current) fileInputRef.current.value = "";
   }, [open, awaitingBbox]);
 
@@ -477,9 +481,9 @@ export default function TopoDialog({
 
   const title =
     phase === "uploading"
-      ? "Uploading your LiDAR"
+      ? "Uploading"
       : phase === "finalizing"
-        ? "Starting your topo"
+        ? "Almost there"
         : phase === "done"
           ? "On its way"
           : mode === "instructions"
@@ -498,6 +502,48 @@ export default function TopoDialog({
         // Inside a sub-view every way out means "back to the form", never
         // "throw away the ZIP I just chose".
         onClose={mode === "form" ? guard.requestClose : backToForm}
+        toolbar={
+          mode === "settings" && !uploading && phase !== "done" ? (
+            <>
+              <div className={classes.saveAsLine}>
+                {showSaveAs ? (
+                  <>
+                    <TextField
+                      label="Template name"
+                      hideLabel
+                      className={classes.saveAsField}
+                      placeholder="Name this template"
+                      value={saveAsName}
+                      autoFocus
+                      onChange={(event) => setSaveAsName(event.target.value)}
+                    />
+                    <Button
+                      variant="filled"
+                      compact
+                      disabled={!saveAsName.trim() || settingsInvalid}
+                      onClick={handleSaveAsTemplate}
+                    >
+                      Save
+                    </Button>
+                    <Button compact onClick={() => { setShowSaveAs(false); setSaveAsName(""); }}>
+                      Cancel
+                    </Button>
+                  </>
+                ) : (
+                  <Button compact variant="outline" onClick={() => setShowSaveAs(true)}>
+                    Save as a template
+                  </Button>
+                )}
+              </div>
+              <ChipRail
+                label="Settings group"
+                options={SETTINGS_TABS}
+                value={settingsTab}
+                onChange={setSettingsTab}
+              />
+            </>
+          ) : undefined
+        }
         footer={
           uploading ? undefined : phase === "done" ? (
             <Button variant="filled" onClick={onClose}>
@@ -535,8 +581,8 @@ export default function TopoDialog({
           <div className={classes.working}>
             <p className={classes.workingLine}>
               {phase === "uploading"
-                ? "Sending your LiDAR up. Keep this open until it lands."
-                : "Sent. Checking it over and starting the job…"}
+                ? "Uploading your LiDAR. Keep this window open until it finishes."
+                : "Uploaded. Checking it over and starting your topo…"}
             </p>
             <ProgressBar
               label={phase === "uploading" ? "Upload progress" : "Starting your topo"}
@@ -557,7 +603,7 @@ export default function TopoDialog({
               {stats?.tileCount
                 ? `${stats.tileCount} tile${stats.tileCount > 1 ? "s" : ""} queued. `
                 : ""}
-              You'll hear from us when it's ready — it's safe to close this.
+              We'll let you know when it's ready. You can close this.
             </p>
           </div>
         ) : mode === "instructions" ? (
@@ -568,47 +614,16 @@ export default function TopoDialog({
             warnCredits={jobWouldExceed && stats === null}
           />
         ) : mode === "settings" ? (
-          <>
-            <div className={classes.saveAsLine}>
-              {showSaveAs ? (
-                <>
-                  <TextField
-                    label="Template name"
-                    hideLabel
-                    className={classes.saveAsField}
-                    placeholder="Name this template"
-                    value={saveAsName}
-                    autoFocus
-                    onChange={(event) => setSaveAsName(event.target.value)}
-                  />
-                  <Button
-                    variant="filled"
-                    compact
-                    disabled={!saveAsName.trim() || settingsInvalid}
-                    onClick={handleSaveAsTemplate}
-                  >
-                    Save
-                  </Button>
-                  <Button compact onClick={() => { setShowSaveAs(false); setSaveAsName(""); }}>
-                    Cancel
-                  </Button>
-                </>
-              ) : (
-                <Button compact variant="outline" onClick={() => setShowSaveAs(true)}>
-                  Save these as a template
-                </Button>
-              )}
-            </div>
-            <AdvancedSettings
-              value={settings}
-              onChange={setSettings}
-              autoExport={autoExport}
-              onAutoExportChange={setAutoExport}
-            />
-          </>
+          <AdvancedSettings
+            tab={settingsTab}
+            value={settings}
+            onChange={setSettings}
+            autoExport={autoExport}
+            onAutoExportChange={setAutoExport}
+          />
         ) : (
           <>
-            <p className={classes.wideHint}>This one goes easier on a bigger screen.</p>
+            <p className={classes.wideHint}>This is easier on a bigger screen.</p>
 
             {(validationError || error) && <ErrorBanner message={validationError ?? error!} />}
 
@@ -647,7 +662,7 @@ export default function TopoDialog({
                 {file ? file.name : "Drop your ELVIS ZIP here, or choose a file"}
               </span>
               <span className={classes.dropHint}>
-                {file ? "Choose a different one" : "The .zip exactly as ELVIS sent it"}
+                {file ? "Choose a different file" : "Just as it arrived from ELVIS — no need to unzip it"}
               </span>
               <input
                 ref={fileInputRef}
@@ -670,12 +685,14 @@ export default function TopoDialog({
 
             {validating && (
               <p className={classes.workingDetail} role="status">
-                Reading the ZIP…
+                Reading your ZIP…
               </p>
             )}
 
             {stats && !validating && <ZipSummary stats={stats} creditsUsed={creditsUsed} creditsQuota={creditsQuota} jobCredits={jobCredits} />}
 
+            {/* Two short answers about the same topo: one line holds both. */}
+            <div className={classes.nameRow}>
             <TextField
               label="Name"
               placeholder="Name this topo"
@@ -688,7 +705,6 @@ export default function TopoDialog({
 
             <Select
               label="Template"
-              hint="The settings a topo starts from. Change them, and this one is made your way without touching the template."
               value={selectedTemplateId}
               onChange={(e) => selectTemplate(e.target.value)}
             >
@@ -706,6 +722,7 @@ export default function TopoDialog({
                 ))
               )}
             </Select>
+            </div>
 
             <div className={classes.errandLine}>
               <Button icon={Settings2} compact variant="outline" onClick={() => setMode("settings")}>
@@ -769,8 +786,8 @@ function ZipSummary({
       ? [
           "Credits",
           jobCredits !== null
-            ? `${formatCredits(creditsUsed)} of ${formatCredits(creditsQuota)} used · about ${formatCredits(jobCredits)} for this one`
-            : `${formatCredits(creditsUsed)} of ${formatCredits(creditsQuota)} used · this one's cost isn't known yet`,
+            ? `${formatCredits(creditsUsed)} of ${formatCredits(creditsQuota)} used this month · about ${formatCredits(jobCredits)} for this one`
+            : `${formatCredits(creditsUsed)} of ${formatCredits(creditsQuota)} used this month · we can't tell yet what this one will cost`,
         ]
       : null,
   ];
@@ -789,14 +806,15 @@ function ZipSummary({
       </dl>
       {stats.derivativeTifCount > 0 && (
         <p className={classes.summaryNote}>
-          {stats.derivativeTifCount} derivative raster
-          {stats.derivativeTifCount > 1 ? "s" : ""} (hillshade and the like) will be ignored.
+          {stats.derivativeTifCount} ready-made raster
+          {stats.derivativeTifCount > 1 ? "s" : ""} in here (hillshade and the like) will be
+          ignored — yours are drawn from the survey itself.
         </p>
       )}
       {stats.overlappingSurveys && (
         <p className={classes.summaryNote}>
-          Surveys overlap here. The best one is picked per layer — densest for terrain, most
-          recent for vegetation — and it costs no extra tiles.
+          More than one survey covers this ground. The best of them is used for each layer —
+          the densest for terrain, the most recent for vegetation — at no extra cost.
         </p>
       )}
     </div>
@@ -836,8 +854,8 @@ function ElvisInstructions({
         </div>
         {warnCredits && (
           <p className={classes.stepWarning}>
-            An area this size may cost more credits than you have left this month. A smaller one
-            is safer.
+            An area this size may cost more credits than you have left this month. Try a smaller
+            one.
           </p>
         )}
         </div>
@@ -848,7 +866,7 @@ function ElvisInstructions({
         <SectionHeader title="Order the tiles from ELVIS" />
         <p className={classes.stepLine}>
           In ELVIS, choose <strong>Order Data</strong>, then <strong>Load File</strong> and give
-          it the shapefile — or draw the same area again — and press <strong>Search</strong>.
+          it the shapefile. Then press <strong>Search</strong>.
         </p>
         <div className={classes.stepControls}>
           <Button
@@ -868,13 +886,12 @@ function ElvisInstructions({
         <SectionHeader title="Take the point clouds" />
         <p className={classes.stepLine}>
           Under <strong>NSW Government — Spatial Services</strong> → <strong>Point Clouds</strong>,
-          beside <strong>AHD</strong>, press <strong>Select all</strong>. A point cloud is what
-          makes every layer: terrain, vegetation and contours. Any DEM bundled beside it is
-          ignored, so there is no need to add one.
+          beside <strong>AHD</strong>, press <strong>Select all</strong>, or select the specific
+          tiles you want.
         </p>
         <p className={classes.stepLine}>
-          Where there is no point cloud, take <em>only</em> the DEM files. Terrain and contours
-          still come out; the vegetation layer does not.
+          Alternatively, select only DEM files for a faster but less precise topo with no
+          vegetation layer.
         </p>
         </div>
       </li>
@@ -884,8 +901,8 @@ function ElvisInstructions({
         <SectionHeader title="Have it sent to you" />
         <p className={classes.stepLine}>
           Under <strong>Industry</strong>, choose <strong>Recreation</strong>. Enter your email
-          and press <strong>Order datasets</strong>. ELVIS emails you a link to the ZIP, which is
-          what this dialog wants.
+          and press <strong>Order datasets</strong>. ELVIS emails you a link to the ZIP — that
+          ZIP is what you bring back here.
         </p>
         </div>
       </li>

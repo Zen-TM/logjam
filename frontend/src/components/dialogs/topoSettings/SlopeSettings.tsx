@@ -30,8 +30,8 @@ const DEFAULT_SCALE_START = DEFAULT_BANDS[0].colour;
 const DEFAULT_SCALE_END = DEFAULT_BANDS[DEFAULT_BANDS.length - 1].colour;
 
 const ANGLE_TOOLTIP =
-  "Degrees from horizontal: flat ground is about 0–5°, a steep trail 20–30°, a cliff 45° and up. " +
-  "The band above starts where this one ends, so it follows whatever you set.";
+  "Degrees from flat. An easy walk is under 10°, a steep scramble around 30°, and a cliff 45° or " +
+  "more. Each band starts where the one below it ends, so its neighbour follows what you set here.";
 
 /**
  * Insert a band at `position` (0..bands.length), keeping the band set a
@@ -168,15 +168,16 @@ export default function SlopeSettings({ value, onChange }: Props) {
   const insertControl = (position: number) => {
     const room = computeInsert(bands, position) !== null;
     return (
-      <div className={styles.insertRow}>
-        <IconButton
-          icon={Plus}
-          round
-          label={room ? "Insert a band here" : "Eight bands is the most a topo can have"}
-          disabled={!room}
-          onClick={() => insertAt(position)}
-        />
-      </div>
+      <button
+        type="button"
+        className={styles.insertRow}
+        title={room ? "Add a band here" : "Eight bands is the most a topo can have"}
+        aria-label={room ? "Add a band here" : "Eight bands is the most a topo can have"}
+        disabled={!room}
+        onClick={() => insertAt(position)}
+      >
+        <Plus size={14} aria-hidden />
+      </button>
     );
   };
 
@@ -189,8 +190,8 @@ export default function SlopeSettings({ value, onChange }: Props) {
   return (
     <div className={styles.tabPanel}>
       <p className={styles.helpText}>
-        Ground flatter than the first angle is left transparent. Every band above
-        it is painted along the scale, from its start colour to its end.
+        Steeper ground gets a stronger colour. Anything flatter than the first
+        angle is left clear, and each band takes its colour off the scale.
       </p>
 
       <div className={styles.scaleRow}>

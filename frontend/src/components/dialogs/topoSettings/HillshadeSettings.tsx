@@ -31,7 +31,7 @@ export default function HillshadeSettings({ value, onChange }: Props) {
     <div className={styles.tabPanel}>
       <SettingsRow
         label="Multidirectional"
-        tooltip="Blends hillshades from several sun angles for softer, less harsh shadows. It takes over from the azimuth and altitude below."
+        tooltip="Lights the terrain from several directions at once, for softer shading with fewer hard shadows. It replaces the sun position below."
       >
         <Toggle
           label="Multidirectional"
@@ -42,7 +42,7 @@ export default function HillshadeSettings({ value, onChange }: Props) {
 
       <SettingsRow
         label="Tint colour"
-        tooltip="The greyscale relief is multiplied by this colour, and its alpha channel sets the layer's opacity."
+        tooltip="The shading is grey underneath; this colour tints it. How transparent you make the colour is how strong the whole layer is."
       >
         <ColourField
           label="Hillshade tint colour"
@@ -54,7 +54,7 @@ export default function HillshadeSettings({ value, onChange }: Props) {
 
       <SettingsRow
         label="Azimuth (°)"
-        tooltip="Sun direction in degrees clockwise from north, 0–360. 315° is north-west, the standard cartographic light."
+        tooltip="Where the sun sits, in degrees clockwise from north. 315° — the north-west — is what most maps use, because it looks right to the eye."
         disabled={value.multidirectional}
       >
         <LiveNumberField
@@ -70,7 +70,7 @@ export default function HillshadeSettings({ value, onChange }: Props) {
 
       <SettingsRow
         label="Altitude (°)"
-        tooltip="Sun elevation above the horizon, 0–90. Lower values cast longer shadows."
+        tooltip="How high the sun sits above the horizon. Low sun, long shadows and more drama; high sun, flatter shading."
         disabled={value.multidirectional}
       >
         <LiveNumberField
@@ -86,7 +86,7 @@ export default function HillshadeSettings({ value, onChange }: Props) {
 
       <SettingsRow
         label="Vertical exaggeration"
-        tooltip="Multiplies the terrain's heights before the relief is computed, 0.1–10. Above 1 amplifies the relief; below 1 flattens it."
+        tooltip="Stretches the terrain's heights before it is shaded. Above 1 makes the country look steeper than it is, below 1 flattens it out."
       >
         <LiveNumberField
           label="Vertical exaggeration"

@@ -28,13 +28,13 @@ export default function VegetationSettings({ value, onChange }: Props) {
   return (
     <div className={styles.tabPanel}>
       <p className={styles.helpText}>
-        Scrub density is the share of LiDAR returns caught between 0.25 m and 2 m
-        above the ground — the height a body pushes through.
+        An estimate of bushbashing difficulty, derived from the proportion of
+        LiDAR returns between 0.25 m and 2 m above the ground.
       </p>
 
       <SettingsRow
         label="Min ratio"
-        tooltip="The density at which the layer starts to show. Anything below this is left transparent."
+        tooltip="Below this, nothing is drawn and the ground shows through."
       >
         <LiveNumberField
           label="Min ratio"
@@ -48,7 +48,7 @@ export default function VegetationSettings({ value, onChange }: Props) {
 
       <SettingsRow
         label="Max ratio"
-        tooltip="The density that draws in the dense colour at full opacity. Must be above the min ratio."
+        tooltip="At this and above, the scrub is drawn at full strength in the dense colour. Has to be higher than the min ratio."
       >
         <LiveNumberField
           label="Max ratio"
@@ -62,7 +62,7 @@ export default function VegetationSettings({ value, onChange }: Props) {
 
       <SettingsRow
         label="Sparse colour"
-        tooltip="The colour at the min ratio. Its alpha is ignored — the two opacities below set that."
+        tooltip="The colour used where the scrub is thinnest. Its own transparency is ignored — the two opacity settings below decide that."
       >
         <ColourField
           label="Sparse colour"
@@ -74,7 +74,7 @@ export default function VegetationSettings({ value, onChange }: Props) {
 
       <SettingsRow
         label="Dense colour"
-        tooltip="The colour at the max ratio. Its alpha is ignored — the two opacities below set that."
+        tooltip="The colour used where the scrub is thickest. Its own transparency is ignored — the two opacity settings below decide that."
       >
         <ColourField
           label="Dense colour"
@@ -84,7 +84,7 @@ export default function VegetationSettings({ value, onChange }: Props) {
         />
       </SettingsRow>
 
-      <SettingsRow label="Opacity at min ratio" tooltip="How opaque the layer is where it starts to show, 0–255.">
+      <SettingsRow label="Opacity at min ratio" tooltip="How solid the layer looks where the scrub only just starts to show. 0 is invisible, 255 is fully solid.">
         <LiveNumberField
           label="Opacity at min ratio"
           hideLabel
@@ -95,7 +95,7 @@ export default function VegetationSettings({ value, onChange }: Props) {
         />
       </SettingsRow>
 
-      <SettingsRow label="Opacity at max ratio" tooltip="How opaque the layer is at its densest, 0–255.">
+      <SettingsRow label="Opacity at max ratio" tooltip="How solid the layer looks where the scrub is thickest. 0 is invisible, 255 is fully solid.">
         <LiveNumberField
           label="Opacity at max ratio"
           hideLabel
@@ -108,7 +108,7 @@ export default function VegetationSettings({ value, onChange }: Props) {
 
       <SettingsRow
         label="Weight by vegetation type"
-        tooltip="Scales the density by how hard each SVTM formation is to push through — heath resists, rainforest does not. Off, every formation counts the same."
+        tooltip="Some vegetation is harder to get through than others. With this on, each SVTM formation scales the estimate by its own resistance — heath fights back, rainforest floor does not. Off, they all count the same."
       >
         <Toggle
           label="Weight by vegetation type"
@@ -119,6 +119,10 @@ export default function VegetationSettings({ value, onChange }: Props) {
 
       <div className={styles.dependent} data-disabled={value.weightsEnabled ? undefined : true}>
         <SectionHeader title="Resistance per formation" />
+        <p className={styles.helpText}>
+          1 leaves a formation as measured. Above 1 counts it as harder to push
+          through than the returns suggest, below 1 as easier.
+        </p>
         {/* A table: one heading over the numbers, not the range repeated on
             twelve rows (DESIGN.md §9). */}
         <div className={styles.formationTable}>

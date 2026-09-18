@@ -72,6 +72,17 @@
   outline: none;
 }
 
+/* Between the title and the scrolling body, and part of neither: a rail here
+   names what the body is showing, so it cannot scroll away from it. */
+.toolbar {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 8px var(--gutter) 10px;
+  border-bottom: var(--hairline);
+}
+
 .body {
   flex: 1;
   min-height: 0;

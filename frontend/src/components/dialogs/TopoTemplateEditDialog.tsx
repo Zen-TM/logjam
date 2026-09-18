@@ -11,8 +11,9 @@ import {
   type RasterTemplateSettings,
   type AutoExportSettings,
 } from "@logjam/shared";
-import { Button, Dialog, TextField } from "../../ui";
+import { Button, ChipRail, Dialog, TextField } from "../../ui";
 import AdvancedSettings from "./topoSettings/AdvancedSettings";
+import { SETTINGS_TABS, type SettingsTab } from "./topoSettings/settingsTabs";
 import type { TopoTemplate } from "./TopoDialog";
 
 type Props = {
@@ -43,6 +44,7 @@ function TemplateForm({ onClose, editingTemplate, onSaved }: Omit<Props, "open">
       ? { ...editingTemplate.autoExport, layers: [...editingTemplate.autoExport.layers] }
       : { ...AUTO_EXPORT_DEFAULTS },
   );
+  const [tab, setTab] = useState<SettingsTab>("hillshade");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -80,6 +82,8 @@ function TemplateForm({ onClose, editingTemplate, onSaved }: Omit<Props, "open">
       size="large"
       dismissible={!saving}
       onClose={onClose}
+      // Pinned, so which group is open never scrolls away from it.
+      toolbar={<ChipRail label="Settings group" options={SETTINGS_TABS} value={tab} onChange={setTab} />}
       footer={
         <>
           <Button onClick={onClose} disabled={saving}>
@@ -110,6 +114,7 @@ function TemplateForm({ onClose, editingTemplate, onSaved }: Omit<Props, "open">
       </form>
 
       <AdvancedSettings
+        tab={tab}
         value={settings}
         onChange={setSettings}
         autoExport={autoExport}

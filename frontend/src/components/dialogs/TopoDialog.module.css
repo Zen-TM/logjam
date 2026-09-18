@@ -65,12 +65,31 @@
   color: var(--theme-text-muted);
 }
 
-/* A line holding the one button that leads somewhere else. */
+/* A line holding the one button that leads somewhere else. Centred and given
+   room on both sides: against the left edge it read as a stray control rather
+   than a way out of the form (operator, 2026-09-18). */
 .errandLine {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
   flex-wrap: wrap;
+  padding: 6px 0;
+}
+
+/* The two short answers about this topo: what it is called, and what it is
+   drawn from. Side by side while there is room for two. */
+.nameRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: start;
+  gap: 12px;
+}
+
+@media (max-width: 480px) {
+  .nameRow {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* What the ZIP holds: a definition list, label and value per line. */
@@ -195,7 +214,7 @@
   flex-wrap: wrap;
 }
 
-/* Naming a template from inside the settings view. */
+/* Naming a template, in the pinned toolbar above the settings it saves. */
 .saveAsLine {
   display: flex;
   align-items: center;

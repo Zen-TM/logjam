@@ -69,9 +69,9 @@ export default function TopoExportControls({ value, onChange, availableLayers }:
     { value: "composite", label: "One file", disabled: !rule.allowComposite },
   ];
   const bundlingNote = !rule.allowPerLayer
-    ? `${rule.label} is one file by nature.`
+    ? `${rule.label} is always one file.`
     : !rule.allowComposite
-      ? `${rule.label} cannot hold several layers at once.`
+      ? `${rule.label} can't hold more than one layer in a file.`
       : null;
 
   const toggleLayer = (name: TopoLayerKey) => {
@@ -106,7 +106,7 @@ export default function TopoExportControls({ value, onChange, availableLayers }:
       <SectionHeader title="Layers" count={layers.length} />
       <div className={classes.checkList}>
         {layers.length === 0 && (
-          <p className={classes.exportNote}>This topo produced no layers to export.</p>
+          <p className={classes.exportNote}>This topo didn't produce any layers to export.</p>
         )}
         {layers.map((l) => {
           // Single legality source (TOPOEXP-1) — never re-derive
@@ -116,7 +116,7 @@ export default function TopoExportControls({ value, onChange, availableLayers }:
             <Checkbox
               key={l.name}
               label={l.label}
-              description={eligible ? undefined : `${rule.label} cannot carry this layer`}
+              description={eligible ? undefined : `${rule.label} can't carry this one`}
               checked={selected.has(l.name)}
               disabled={!eligible}
               onChange={() => toggleLayer(l.name)}

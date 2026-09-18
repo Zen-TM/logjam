@@ -10,6 +10,10 @@ type DialogProps = {
   onClose: () => void;
   /** Pinned below the scrolling body: Cancel, then the ONE primary action. */
   footer?: ReactNode;
+  /** Pinned under the title, above the scrolling body: the rail that says which
+   *  part of a long form the body is showing. It stays put, so "which group am
+   *  I in" is never scrolled off the thing it names. */
+  toolbar?: ReactNode;
   /** `small` stays centred at every width (confirms, short forms); `large` is
    *  a long form and fills the screen on narrow web. */
   size?: "small" | "large";
@@ -47,6 +51,7 @@ function OpenDialog({
   title,
   onClose,
   footer,
+  toolbar,
   size = "small",
   dismissible = true,
   alert = false,
@@ -141,6 +146,7 @@ function OpenDialog({
         </h2>
         <IconButton icon={X} label="Close" onClick={onClose} disabled={!dismissible} />
       </header>
+      {toolbar && <div className={classes.toolbar}>{toolbar}</div>}
       <div id={bodyId} className={classes.body}>
         {children}
       </div>

@@ -257,7 +257,7 @@ test.describe("desktop", () => {
     await expect(dialog.getByRole("textbox", { name: /upper angle/ }).first()).toBeVisible();
     await expectNoViolations(page, "dialog");
 
-    await dialog.getByRole("radio", { name: "When it's done" }).click();
+    await dialog.getByRole("radio", { name: "Auto-export" }).click();
     await expect(dialog.getByRole("radiogroup", { name: "Format" })).toBeVisible();
     await expectNoViolations(page, "dialog");
 
