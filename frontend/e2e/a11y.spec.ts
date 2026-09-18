@@ -267,6 +267,41 @@ test.describe("desktop", () => {
     await expect(dialog).toHaveCount(0);
   });
 
+  test("Make a GeoPDF, its template mode and its dense extent grid", async ({ page }) => {
+    await openApp(page);
+    await page.getByRole("button", { name: "Maps", exact: true }).click();
+    const aside = page.locator("aside");
+    await aside.getByRole("radio", { name: "GeoPDFs" }).click();
+    await aside.getByRole("button", { name: /^Make/ }).first().click();
+    await page.getByRole("menuitem", { name: "Make a GeoPDF" }).click();
+
+    const dialog = page.locator("dialog[open]");
+    await expect(dialog.getByRole("heading", { name: "Make a GeoPDF" })).toBeVisible();
+    // The four edges, the pivot radiogroup and six rails in one scrolling body.
+    await expect(dialog.getByRole("radiogroup", { name: "Pivot" })).toBeVisible();
+    await expectNoViolations(page, "dialog");
+
+    // Custom paper reveals the ratio and takes orientation away from the user.
+    await dialog.getByRole("radio", { name: "Custom" }).click();
+    await expect(dialog.getByRole("textbox", { name: "Ratio width" })).toBeVisible();
+    await expectNoViolations(page, "dialog");
+
+    // Naming a template swaps the pinned line for a field, Save and Cancel.
+    await dialog.getByRole("radio", { name: "A4" }).click();
+    await dialog.getByRole("button", { name: "Save as a template" }).click();
+    await expect(dialog.getByRole("textbox", { name: "Template name" })).toBeFocused();
+    await expectNoViolations(page, "dialog");
+    await dialog.getByRole("button", { name: "Cancel" }).first().click();
+
+    // Picking a paper size is real work, so leaving asks before it goes.
+    await page.keyboard.press("Escape");
+    const confirm = page.getByRole("alertdialog", { name: "Discard unsaved changes?" });
+    await expect(confirm).toBeVisible();
+    await expectNoViolations(page, "[role='alertdialog']");
+    await confirm.getByRole("button", { name: "Discard" }).click();
+    await expect(dialog).toHaveCount(0);
+  });
+
   test("the Layers popover", async ({ page }) => {
     await openApp(page);
     await page.getByRole("button", { name: "Layers", exact: true }).click();

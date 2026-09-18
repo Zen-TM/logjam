@@ -123,6 +123,20 @@ const BASE_LAYER_OPTIONS: ChipOption<string>[] = BASE_LAYERS.filter(
   (layer) => layer.kind === "raster" && !layer.id.startsWith("osm") && layer.id !== "six-base",
 ).map((layer) => ({ value: layer.id, label: layer.name }));
 
+const FALLBACK_BASE_LAYER = "six-topo";
+
+/**
+ * The base layer to open with, given whatever the map is showing. The map's own
+ * layer is kept when this form can honour it, and otherwise the fallback is —
+ * asking the LIST rather than testing the id's prefix, which is what makes this
+ * hold for a basemap added later.
+ */
+function seedBaseLayer(activeLayerId: string): string {
+  return BASE_LAYER_OPTIONS.some((option) => option.value === activeLayerId)
+    ? activeLayerId
+    : FALLBACK_BASE_LAYER;
+}
+
 const LOCK_TOOLTIP =
   "Scale keeps the map scale constant when you move the box — the box resizes instead of stretching. Position keeps the centre fixed when you change the scale, so the box grows or shrinks around it.";
 const COORD_TOOLTIP =
@@ -200,9 +214,7 @@ function GeoPdfDialog({
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
 
   // Layers
-  const [selectedBaseLayer, setSelectedBaseLayer] = useState(
-    activeLayerId.startsWith("osm") ? "six-topo" : activeLayerId,
-  );
+  const [selectedBaseLayer, setSelectedBaseLayer] = useState(() => seedBaseLayer(activeLayerId));
   const [selectedOverlays, setSelectedOverlays] = useState<Set<string>>(() => {
     return new Set(TOPO_LAYERS.map((l) => l.name));
   });
@@ -308,10 +320,7 @@ function GeoPdfDialog({
     if (seededViewRef.current) return;
     seededViewRef.current = true;
 
-    const activeLayer = activeLayerIdRef.current;
-    setSelectedBaseLayer(
-      activeLayer.startsWith("osm") ? "six-topo" : activeLayer,
-    );
+    setSelectedBaseLayer(seedBaseLayer(activeLayerIdRef.current));
     setSelectedOverlays(new Set(TOPO_LAYERS.map((l) => l.name)));
 
     const center = mapCenterRef.current;
