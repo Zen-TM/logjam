@@ -666,6 +666,14 @@ function GeoPdfDialog({
     scaleBarEnabled,
     gridLinesEnabled,
     gridLinesMode,
+    // The place-marker inputs are dependencies like any other. Left out, a
+    // session that only touched these four kept the callback it was built
+    // with — so turning Shared places OFF and pressing Generate still drew
+    // them, which is the one direction of this bug that matters (PRIV-006).
+    places,
+    sharedPlaces,
+    showOwnedPlacesOnPdf,
+    showSharedPlacesOnPdf,
     onJobQueued,
     toast,
     onClose,
