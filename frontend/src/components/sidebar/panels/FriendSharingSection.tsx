@@ -25,18 +25,9 @@
 // PRIVACY: usernames and item names only — the payload carries no coordinates
 // and no notes. Nothing here is logged.
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  FileText,
-  MapPin,
-  Mountain,
-  PenLine,
-  Users,
-  X,
-  type LucideIcon,
-} from "lucide-react";
+import { FileText, MapPin, Mountain, PenLine, Users, type LucideIcon } from "lucide-react";
 import {
   buildShareCards,
-  removeShareConfirm,
   SHARE_KIND_LABEL,
   shareCardItem,
   unshareAllConfirm,
@@ -46,6 +37,7 @@ import {
 } from "@logjam/shared";
 import classes from "./FriendSharingSection.module.css";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
+import RemoveSharedButton from "../../common/RemoveSharedButton";
 import { ErrorBanner } from "../../feedback/ErrorBanner";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
@@ -54,7 +46,6 @@ import {
   ChipRail,
   EmptyState,
   Hero,
-  IconButton,
   IconTile,
   Row,
   type ChipOption,
@@ -77,15 +68,14 @@ const KIND_IDENTITY: Record<FriendShareRow["entityType"], { icon: LucideIcon; hu
   geoPdfJob: { icon: FileText, hue: "var(--hue-geoPdf)" },
 };
 
-/** Which confirmation is open. Confirmation scales with blast radius × cost of
- *  recovery, which is why only two of the three verbs have one:
- *   - per-row unshare  → none. It is one press to share it again.
- *   - unshare all      → confirm. Bulk, and re-sharing N items by hand hurts.
- *   - remove my access → confirm. Small, but only the OWNER can undo it. */
-type PendingConfirm =
-  | { kind: "unshare-all" }
-  | { kind: "remove-mine"; card: FriendShareCard }
-  | null;
+/* CONFIRMATION SCALES WITH BLAST RADIUS × COST OF RECOVERY, which is why only
+   two of the three verbs have one:
+     per-row unshare  → none. It is one press to share it again.
+     unshare all      → confirm, below. Bulk, and re-sharing N items by hand hurts.
+     remove my access → confirm, and `RemoveSharedButton` owns it: small, but
+                        only the OWNER can undo it, and every web surface that
+                        lists shared things asks that question with the same
+                        words. This page used to word it itself. */
 
 function FriendSharingSection({
   friend,
@@ -103,7 +93,7 @@ function FriendSharingSection({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [direction, setDirection] = useState<FriendShareDirection>("theySee");
-  const [pending, setPending] = useState<PendingConfirm>(null);
+  const [confirmingUnshareAll, setConfirmingUnshareAll] = useState(false);
 
   const load = useCallback(() => {
     setError(null);
@@ -148,7 +138,7 @@ function FriendSharingSection({
     try {
       await action();
       toast.success(success);
-      setPending(null);
+      setConfirmingUnshareAll(false);
       load();
       onSharesChanged();
     } catch (err) {
@@ -237,13 +227,16 @@ function FriendSharingSection({
                       Unshare
                     </Button>
                   ) : card.removable ? (
-                    // Not a bin: the owner keeps their row, and this drops only
-                    // my own access.
-                    <IconButton
-                      icon={X}
-                      label={`Remove my access to ${card.title}`}
+                    <RemoveSharedButton
+                      kindLabel={SHARE_KIND_LABEL[card.row.entityType]}
+                      itemName={card.title}
+                      ownerName={friend.username}
                       disabled={busy}
-                      onClick={() => setPending({ kind: "remove-mine", card })}
+                      remove={() => revoke(card, "me")}
+                      onRemoved={() => {
+                        load();
+                        onSharesChanged();
+                      }}
                     />
                   ) : undefined
                 }
@@ -256,7 +249,7 @@ function FriendSharingSection({
               variant="outline"
               disabled={busy}
               className={classes.unshareAll}
-              onClick={() => setPending({ kind: "unshare-all" })}
+              onClick={() => setConfirmingUnshareAll(true)}
             >
               Unshare all ({theirs.length})
             </Button>
@@ -266,7 +259,7 @@ function FriendSharingSection({
 
       {/* Impact-aware confirmation, from the one place that words it. */}
       <ConfirmDialog
-        open={pending?.kind === "unshare-all"}
+        open={confirmingUnshareAll}
         title={
           unshareAllConfirm({
             count: theirs.length,
@@ -291,40 +284,10 @@ function FriendSharingSection({
             `${friend.username} can no longer see any of it.`,
           )
         }
-        onClose={() => setPending(null)}
-      />
-
-      {/* The SAME question the place page, the way page and both phone sheets
-          ask, from the one source that words it. */}
-      <ConfirmDialog
-        open={pending?.kind === "remove-mine"}
-        title={pending?.kind === "remove-mine" ? removeConfirmFor(pending.card, friend.username).title : ""}
-        message={pending?.kind === "remove-mine" ? removeConfirmFor(pending.card, friend.username).body : null}
-        confirmLabel="Remove"
-        // Not `error`: removing a share destroys nothing, and a red button here
-        // would say otherwise.
-        confirmColor="primary"
-        busy={busy}
-        onConfirm={() =>
-          pending?.kind === "remove-mine" &&
-          void run(
-            () => revoke(pending.card, "me"),
-            "Couldn't remove your access. Please try again.",
-            `${pending.card.title} removed.`,
-          )
-        }
-        onClose={() => setPending(null)}
+        onClose={() => setConfirmingUnshareAll(false)}
       />
     </div>
   );
-}
-
-function removeConfirmFor(card: FriendShareCard, ownerName: string) {
-  return removeShareConfirm({
-    kindLabel: SHARE_KIND_LABEL[card.row.entityType],
-    itemName: card.title,
-    ownerName,
-  });
 }
 
 export default FriendSharingSection;
