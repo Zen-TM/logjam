@@ -137,14 +137,12 @@ function seedBaseLayer(activeLayerId: string): string {
     : FALLBACK_BASE_LAYER;
 }
 
-const LOCK_TOOLTIP =
-  "Scale keeps the map scale constant when you move the box — the box resizes instead of stretching. Position keeps the centre fixed when you change the scale, so the box grows or shrinks around it.";
+const LOCK_TOOLTIP = "Whichever one you lock stays as it is while you change the other.";
 const COORD_TOOLTIP =
-  "Lat/Lon is decimal degrees, the global GPS format (-33.8912, 150.1234). E/N is easting and northing in MGA2020 (GDA2020), what NSW topo maps and grid references use.";
-const PIVOT_TOOLTIP =
-  "The point that stays put when you resize the extent or change the scale. Top left keeps the north-west corner anchored.";
+  "Lat/Lon is what a GPS shows you. E/N is the MGA2020 grid, the one printed on NSW topo maps.";
+const PIVOT_TOOLTIP = "The part of the box that stays put while the rest of it moves.";
 const SCALE_TOOLTIP =
-  "1:25 000 means 1 cm on the paper is 250 m on the ground. Standard topo maps are 1:25 000 or 1:50 000.";
+  "1:25 000 means 1 cm on the paper is 250 m on the ground. Most topo maps are 1:25 000 or 1:50 000.";
 
 const DEFAULT_EXTENT_STATE: ExtentState = {
   paperSize: "A4",
@@ -898,12 +896,6 @@ function GeoPdfDialog({
         <div className={classes.form}>
           <p className={classes.wideHint}>This is easier on a bigger screen.</p>
 
-          <p className={classes.safetyWarning} role="note">
-            Generated maps use user-generated and third-party data that may be
-            inaccurate or outdated. Not a substitute for your own navigation,
-            judgement, or rescue planning.
-          </p>
-
           {error && <ErrorBanner message={error} />}
 
           <section className={classes.group}>
@@ -933,7 +925,7 @@ function GeoPdfDialog({
               />
             </SettingsRow>
             {extentState.paperSize === "custom" && (
-              <SettingsRow label="Ratio" tooltip="The sheet's width against its height, in any units you like — 210 by 297 is A4.">
+              <SettingsRow label="Ratio" tooltip="Width against height, in whatever units. A4 is 210 by 297.">
                 <div className={classes.ratioRow}>
                   <TextField
                     label="Ratio width"

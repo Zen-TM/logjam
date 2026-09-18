@@ -31,12 +31,6 @@
   }
 }
 
-.safetyWarning {
-  margin: 0;
-  font-size: var(--font-xs);
-  line-height: 1.4;
-  color: var(--theme-text-muted);
-}
 
 /* Which template this came from, and the button that turns the form into one:
    pinned above the body, because both act on all four sections. */
