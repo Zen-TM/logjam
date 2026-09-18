@@ -244,16 +244,24 @@ function FriendSharingSection({
             );
           })}
 
-          {direction === "theySee" && (
-            <Button
-              variant="outline"
-              disabled={busy}
-              className={classes.unshareAll}
-              onClick={() => setConfirmingUnshareAll(true)}
-            >
-              Unshare all ({theirs.length})
-            </Button>
-          )}
+        </div>
+      )}
+
+      {/* PINNED, not the last row of the list: a bulk revoke that scrolls is
+          both hard to reach and easy to meet by accident on the way past. The
+          same reason a dialog pins its primary action under the body (§6). It
+          also gives the list a real bottom edge, so a card at the boundary
+          reads as scrolling under the bar rather than as a card cut in half. */}
+      {direction === "theySee" && theirs.length > 0 && (
+        <div className={classes.footer}>
+          <Button
+            variant="outline"
+            disabled={busy}
+            className={classes.unshareAll}
+            onClick={() => setConfirmingUnshareAll(true)}
+          >
+            Unshare all ({theirs.length})
+          </Button>
         </div>
       )}
 

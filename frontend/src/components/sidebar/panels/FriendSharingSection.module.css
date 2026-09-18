@@ -38,11 +38,18 @@
   padding: 4px var(--gutter) var(--gutter);
 }
 
-/* After the rows it acts on, not before: a bulk revoke above the list is a
-   button you meet before you know what it would take. */
+/* The one bulk verb, pinned under the list it acts on — never above it, where
+   it would be a button you meet before you know what it would take. */
+.footer {
+  flex-shrink: 0;
+  display: flex;
+  padding: 10px var(--gutter);
+  border-top: var(--hairline);
+  background: var(--theme-primary);
+}
+
 .unshareAll {
-  align-self: stretch;
-  margin-top: 4px;
+  flex: 1;
 }
 
 .emptyArea {
