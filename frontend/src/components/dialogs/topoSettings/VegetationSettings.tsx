@@ -4,8 +4,14 @@ import {
   SVTM_FORMATIONS,
   type VegetationSettings as VegetationSettingsValue,
 } from "@logjam/shared";
-import { Button, ColourField, LiveNumberField, SectionHeader, Toggle } from "../../../ui";
-import SettingsRow from "./SettingsRow";
+import {
+  Button,
+  ColourField,
+  LiveNumberField,
+  SectionHeader,
+  SettingsRow,
+  Toggle,
+} from "../../../ui";
 import type { NumericFieldConstraints } from "../../../numberInput";
 import styles from "./topoSettings.module.css";
 

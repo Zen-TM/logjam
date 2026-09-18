@@ -6,8 +6,7 @@ import {
   type ExportSelection,
   type TopoLayerKey,
 } from "@logjam/shared";
-import { Toggle } from "../../../ui";
-import SettingsRow from "./SettingsRow";
+import { SettingsRow, Toggle } from "../../../ui";
 import styles from "./topoSettings.module.css";
 import TopoExportControls from "../TopoExportControls";
 

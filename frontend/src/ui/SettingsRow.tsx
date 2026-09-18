@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Info } from "lucide-react";
-import { Tooltip } from "../../../ui";
-import classes from "./topoSettings.module.css";
+import { Tooltip } from "./Tooltip";
+import classes from "./SettingsRow.module.css";
 
 /**
  * One setting as a LINE: what it is at the left, the control that sets it at
@@ -15,7 +15,7 @@ import classes from "./topoSettings.module.css";
  * reachable from the keyboard and dismissable with Escape (WCAG 1.4.13), and
  * the settings stay a list of lines instead of a wall of paragraphs.
  */
-export default function SettingsRow({
+export function SettingsRow({
   label,
   tooltip,
   disabled,
@@ -23,7 +23,7 @@ export default function SettingsRow({
 }: {
   label: string;
   tooltip?: string;
-  /** Dimmed and inert: another setting on this tab has taken this one over. */
+  /** Dimmed and inert: another setting here has taken this one over. */
   disabled?: boolean;
   children: ReactNode;
 }) {

@@ -24,6 +24,7 @@ export { FilterField } from "./FilterField";
 export { RangePills } from "./RangePills";
 export { Tooltip } from "./Tooltip";
 export { SectionHeader, SheetSection, SideSheet } from "./SideSheet";
+export { InfoTip, SettingsRow } from "./SettingsRow";
 export { Dialog } from "./Dialog";
 export {
   EmptyState,

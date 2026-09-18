@@ -8,9 +8,8 @@ import {
   type SlopeSettings as SlopeSettingsValue,
   type SlopeBand,
 } from "@logjam/shared";
-import { Button, ColourField, IconButton, LiveNumberField } from "../../../ui";
+import { Button, ColourField, IconButton, InfoTip, LiveNumberField } from "../../../ui";
 import { FieldError } from "../../feedback/FieldError";
-import { InfoTip } from "./SettingsRow";
 import type { NumericFieldConstraints } from "../../../numberInput";
 import styles from "./topoSettings.module.css";
 

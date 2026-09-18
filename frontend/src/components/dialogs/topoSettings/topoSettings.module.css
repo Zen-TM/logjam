@@ -8,49 +8,6 @@
   padding-top: 12px;
 }
 
-/* One setting: what it is, then the control that sets it. */
-.row {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: center;
-  column-gap: 12px;
-}
-
-.row[data-disabled] {
-  opacity: 0.5;
-  pointer-events: none;
-}
-
-.rowLabel {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-  font-size: var(--font-sm);
-  color: var(--theme-text-primary);
-}
-
-/* The tooltip's trigger: a glyph on the label's line, quiet until wanted. The
-   glyph is 14px but the TARGET is a full --control-sm square (WCAG 2.5.8), which
-   still fits inside the row's own height. */
-.info {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  width: var(--control-sm);
-  height: var(--control-sm);
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--theme-text-muted);
-  cursor: help;
-}
-
-.info:hover {
-  color: var(--theme-text-primary);
-}
-
 /* A number in a row: a few digits, right-aligned under the eye. */
 .numberCell {
   width: 8ch;

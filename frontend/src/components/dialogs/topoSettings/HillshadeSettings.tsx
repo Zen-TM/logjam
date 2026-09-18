@@ -1,7 +1,6 @@
 import { HILLSHADE_LIMITS } from "@logjam/shared";
 import type { HillshadeSettings as HillshadeSettingsValue } from "@logjam/shared";
-import { ColourField, LiveNumberField, Toggle } from "../../../ui";
-import SettingsRow from "./SettingsRow";
+import { ColourField, LiveNumberField, SettingsRow, Toggle } from "../../../ui";
 import type { NumericFieldConstraints } from "../../../numberInput";
 import styles from "./topoSettings.module.css";
 
