@@ -27,7 +27,7 @@ import {
 import { getEnv } from "../lib/env";
 import { getParam } from "../lib/getParam";
 import { createAndLaunchTopoExport } from "../lib/topoExportLauncher";
-import { assertHasStorageQuota } from "../lib/storageQuota";
+import { assertHasStorageQuota, decrementStorageUsed } from "../lib/storageQuota";
 import { assertHasEgressQuota } from "../lib/egressQuota";
 import { resolveUser as getUser } from "../lib/resolveUser";
 import { directlySharedIds } from "../lib/shareAccess";
@@ -259,10 +259,7 @@ router.delete(
     }
     await prisma.$transaction(async (tx) => {
       if (row.status === "completed" && row.resultBytes) {
-        await tx.user.update({
-          where: { id: user.id },
-          data: { storageUsedBytes: { decrement: row.resultBytes } },
-        });
+        await decrementStorageUsed(user.id, row.resultBytes, tx);
       }
       await tx.topoExportJob.delete({ where: { id: row.id } });
     });

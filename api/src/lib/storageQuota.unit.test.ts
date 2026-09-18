@@ -1,117 +1,50 @@
-import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
+import { describe, it, expect } from "vitest";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 
-vi.mock("../services/prisma", () => ({
-  default: {
-    user: { findUnique: vi.fn() },
-    $executeRaw: vi.fn(),
-  },
-}));
-
-import prisma from "../services/prisma";
-import { AppError } from "../middleware/errorHandler";
-import {
-  getStorageUsage,
-  assertHasStorageQuota,
-  incrementStorageUsed,
-  decrementStorageUsed,
-} from "./storageQuota";
-
-const findUnique = (prisma as unknown as { user: { findUnique: Mock } }).user.findUnique;
-const executeRaw = (prisma as unknown as { $executeRaw: Mock }).$executeRaw;
-
-beforeEach(() => {
-  findUnique.mockReset();
-  executeRaw.mockReset();
-});
-
-describe("getStorageUsage", () => {
-  it("returns used and quota for a known user", async () => {
-    findUnique.mockResolvedValue({ storageUsedBytes: 100n, storageQuotaBytes: 500n });
-    await expect(getStorageUsage("u1")).resolves.toEqual({ used: 100n, quota: 500n });
-  });
-
-  it("throws 404 when the user is missing", async () => {
-    findUnique.mockResolvedValue(null);
-    await expect(getStorageUsage("u1")).rejects.toMatchObject({ statusCode: 404 });
-  });
-});
-
-describe("assertHasStorageQuota", () => {
-  it("passes when usage is under quota", async () => {
-    findUnique.mockResolvedValue({ storageUsedBytes: 100n, storageQuotaBytes: 500n });
-    await expect(assertHasStorageQuota("u1")).resolves.toBeUndefined();
-  });
-
-  it("throws 507 with string details when at or over quota", async () => {
-    findUnique.mockResolvedValue({ storageUsedBytes: 500n, storageQuotaBytes: 500n });
-    const err = await assertHasStorageQuota("u1").catch((e) => e);
-    expect(err).toBeInstanceOf(AppError);
-    expect(err.statusCode).toBe(507);
-    expect(err.details).toEqual({ used: "500", quota: "500" });
-  });
-
-  // SEC-003 headroom variant: the presign pre-check must account for the
-  // declared pending upload, not just current usage.
-  it("throws 507 when used + pendingBytes exceeds quota", async () => {
-    findUnique.mockResolvedValue({ storageUsedBytes: 400n, storageQuotaBytes: 500n });
-    const err = await assertHasStorageQuota("u1", 101n).catch((e) => e);
-    expect(err).toBeInstanceOf(AppError);
-    expect(err.statusCode).toBe(507);
-  });
-
-  it("passes when used + pendingBytes lands exactly at quota", async () => {
-    findUnique.mockResolvedValue({ storageUsedBytes: 400n, storageQuotaBytes: 500n });
-    await expect(assertHasStorageQuota("u1", 100n)).resolves.toBeUndefined();
-  });
-
-  it("default pendingBytes keeps the legacy at-quota rejection", async () => {
-    findUnique.mockResolvedValue({ storageUsedBytes: 500n, storageQuotaBytes: 500n });
-    await expect(assertHasStorageQuota("u1")).rejects.toMatchObject({
-      statusCode: 507,
+/**
+ * The storage counter has ONE pair of writers, and the reason is the clamp.
+ *
+ * `decrementStorageUsed` subtracts with `GREATEST(0, …)`, because the byte count
+ * it is handed is whatever the row recorded and the counter is whatever survives
+ * a re-seed, a partial delete or a job whose bytes were counted twice. Two
+ * delete paths — `DELETE /topo-exports/:id` and `DELETE /geo-pdf/:id` — wrote
+ * `{ storageUsedBytes: { decrement } }` through Prisma instead, with no clamp,
+ * so one of them drove the dev account to **-118 MB** and the Account page
+ * reported "-118476.6 KB of 5.00 GB". A signed counter never recovers on its
+ * own: every later clamped decrement clamps against a negative, and the user's
+ * quota reads as free space they do not have.
+ *
+ * `topoJobs.ts` had already written the rule down in a comment
+ * ("decrementStorageUsed clamps at 0 — keep it for that"). This is the same rule
+ * with a test behind it, per the root CLAUDE.md: an invariant in a comment is a
+ * comment.
+ */
+describe("the storage counter has one pair of writers", () => {
+  function sourceFiles(dir: string): string[] {
+    return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) return sourceFiles(full);
+      if (!entry.name.endsWith(".ts") || entry.name.includes(".test.")) return [];
+      return [full];
     });
-  });
-});
+  }
 
-describe("increment/decrement storage", () => {
-  it("no-ops on non-positive byte counts", async () => {
-    await incrementStorageUsed("u1", 0n);
-    await decrementStorageUsed("u1", -5n);
-    expect(executeRaw).not.toHaveBeenCalled();
-  });
-
-  it("issues an UPDATE for a positive increment", async () => {
-    await incrementStorageUsed("u1", 10n);
-    expect(executeRaw).toHaveBeenCalledTimes(1);
-  });
-
-  it("issues an UPDATE for a positive decrement", async () => {
-    await decrementStorageUsed("u1", 10n);
-    expect(executeRaw).toHaveBeenCalledTimes(1);
+  it("nothing outside storageQuota.ts increments or decrements it directly", () => {
+    // `storageUsedBytes: { increment … }` / `{ decrement … }` in a Prisma write.
+    const rawWrite = /storageUsedBytes:\s*\{\s*(increment|decrement)\b/g;
+    const offenders = sourceFiles(join(__dirname, "..")).flatMap((file) =>
+      file.endsWith("lib/storageQuota.ts")
+        ? []
+        : (readFileSync(file, "utf8").match(rawWrite) ?? []).map(
+            (hit) => `${file}: ${hit.replace(/\s+/g, " ")}`,
+          ),
+    );
+    expect(offenders).toEqual([]);
   });
 
-  // Design Q: callers inside prisma.$transaction pass `tx` so the quota
-  // mutation commits (or rolls back) with the row write it accounts for.
-  it("runs against the provided transaction client, not the singleton", async () => {
-    const tx = { $executeRaw: vi.fn() };
-    await incrementStorageUsed("u1", 10n, tx as never);
-    await decrementStorageUsed("u1", 10n, tx as never);
-    expect(tx.$executeRaw).toHaveBeenCalledTimes(2);
-    expect(executeRaw).not.toHaveBeenCalled();
-  });
-
-  it("getStorageUsage reads through the provided client", async () => {
-    const tx = {
-      user: {
-        findUnique: vi.fn().mockResolvedValue({
-          storageUsedBytes: 1n,
-          storageQuotaBytes: 2n,
-        }),
-      },
-    };
-    await expect(getStorageUsage("u1", tx as never)).resolves.toEqual({
-      used: 1n,
-      quota: 2n,
-    });
-    expect(findUnique).not.toHaveBeenCalled();
+  it("the decrement is the clamped one", () => {
+    const source = readFileSync(join(__dirname, "storageQuota.ts"), "utf8");
+    expect(source).toMatch(/GREATEST\(0,\s*storage_used_bytes\s*-/);
   });
 });

@@ -18,6 +18,7 @@
 import { PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { s3 } from "../services/awsClients";
 import prisma from "../services/prisma";
+import { incrementStorageUsed } from "../lib/storageQuota";
 import { getEnv } from "../lib/env";
 import { logger, safeErrorForLog } from "../lib/logger";
 import { sendPushToUser } from "../services/push";
@@ -159,10 +160,7 @@ export async function processGeoPdfJob(jobId: string): Promise<number> {
         },
       });
       if (result.count > 0) {
-        await tx.user.update({
-          where: { id: job.userId },
-          data: { storageUsedBytes: { increment: BigInt(resultBytes!) } },
-        });
+        await incrementStorageUsed(job.userId, BigInt(resultBytes!), tx);
       }
       return result.count;
     });
