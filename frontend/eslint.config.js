@@ -18,7 +18,6 @@ const MUI_LEGACY_FILES = [
   'src/components/dialogs/AddCustomFieldDialog.tsx',
   'src/components/dialogs/ChangeEmailDialog.tsx',
   'src/components/dialogs/DeleteAccountDialog.tsx',
-  'src/components/dialogs/GeoPdfDialog.tsx',
   'src/components/dialogs/ImportResultSummary.tsx',
   'src/components/dialogs/MatchReview.tsx',
   'src/components/dialogs/OnboardingChoiceDialog.tsx',
