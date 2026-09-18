@@ -260,7 +260,6 @@ export default function GeoPdfsPanel({
             <Row
               key={job.id}
               data-geopdf-id={job.id}
-              className={classes.row}
               title={label}
               subtitle={fileSubtitle({ bytes: job.resultBytes, createdAt: job.createdAt })}
               description={MAP_IDENTITY.geoPdf.label}
@@ -302,7 +301,6 @@ export default function GeoPdfsPanel({
         {templates.map((template) => (
           <Row
             key={template.id}
-            className={classes.row}
             title={template.name}
             description={MAP_IDENTITY.geoPdfTemplate.label}
             leading={

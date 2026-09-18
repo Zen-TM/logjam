@@ -227,7 +227,6 @@ function Activities({ stats, onOpen }: { stats: LogbookStats; onOpen: (type: str
           <Row
             key={tally.type}
             data-activity-index={index}
-            className={classes.row}
             title={logbookActivityLabel(tally.type)}
             subtitle={activityTallySubtitle(tally)}
             leading={<IconTile icon={look.icon} hue={look.hue} />}
@@ -255,7 +254,6 @@ function PlacesVisited({ stats, placeTypes }: { stats: LogbookStats; placeTypes:
         return (
           <Row
             key={entry.typeId}
-            className={classes.row}
             title={entry.name}
             leading={type ? <IconTile icon={placeTypeLucideIcon(type.iconKey)} hue={entry.color} /> : undefined}
             trailing={
@@ -317,7 +315,6 @@ function AttributeStat({ stat }: { stat: FieldStat }) {
   const display = fieldStatDisplay(stat);
   return (
     <Row
-      className={classes.row}
       title={stat.label}
       subtitle={display.subtitle}
       trailing={

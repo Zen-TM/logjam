@@ -73,7 +73,6 @@ function MakingRow({ item, onDismiss }: { item: MakingItem; onDismiss: (item: Ma
   return (
     <Row
       data-making-key={item.key}
-      className={classes.row}
       title={item.title}
       subtitle={item.detail}
       description={identity.label}

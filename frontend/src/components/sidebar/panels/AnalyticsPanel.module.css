@@ -32,10 +32,6 @@
   gap: 6px;
 }
 
-.row {
-  flex-shrink: 0;
-}
-
 .caption {
   margin: 0;
   font-size: var(--font-xs);

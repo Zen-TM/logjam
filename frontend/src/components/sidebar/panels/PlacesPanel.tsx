@@ -612,7 +612,6 @@ function PlacesPanel({
             <Row
               key={`${owned ? "o" : "s"}-${place.id}`}
               data-place-id={place.id}
-              className={classes.row}
               title={place.name}
               subtitle={subtitle || undefined}
               description={PLACE_STATUS_LABELS[status]}

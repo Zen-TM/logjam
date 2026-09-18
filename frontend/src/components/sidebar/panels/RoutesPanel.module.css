@@ -40,10 +40,6 @@
   padding: 0 var(--gutter) 15%;
 }
 
-.row {
-  flex-shrink: 0;
-}
-
 .loading {
   margin: 0;
   text-align: center;

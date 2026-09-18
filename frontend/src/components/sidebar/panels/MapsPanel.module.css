@@ -63,10 +63,6 @@
   gap: 6px;
 }
 
-.row {
-  flex-shrink: 0;
-}
-
 /* A sentence about a section, in the hint's voice. */
 .note {
   margin: 0;

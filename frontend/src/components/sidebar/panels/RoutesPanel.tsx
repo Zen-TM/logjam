@@ -373,7 +373,6 @@ export default function RoutesPanel({
             key={way.key}
             data-way-key={way.key}
             data-way-kind={way.kind}
-            className={classes.row}
             title={way.title}
             subtitle={subtitleOf(way)}
             description={WAY_KIND_LABELS[way.kind]}

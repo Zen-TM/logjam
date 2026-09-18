@@ -443,7 +443,6 @@ function TripLogsPanel({
     return (
       <Row
         key={trip.id}
-        className={classes.row}
         title={title}
         subtitle={[formatTripDate(trip.date), trip.places.length > 1 ? plural(trip.places.length, "place") : null]
           .filter(Boolean)

@@ -378,7 +378,6 @@ export default function LidarPanel({
             <Row
               key={job.jobId}
               data-topo-id={job.jobId}
-              className={classes.row}
               title={label}
               // A named topo keeps its date beneath; an unnamed one IS its date.
               subtitle={job.name ? formatDay(job.createdAt) : undefined}
@@ -420,7 +419,6 @@ export default function LidarPanel({
             <Row
               key={exportJob.id}
               data-export-id={exportJob.id}
-              className={classes.row}
               title={label}
               subtitle={fileSubtitle({
                 format: exportFormatLabel(exportJob.format),
@@ -458,7 +456,6 @@ export default function LidarPanel({
         {templates.map((template) => (
           <Row
             key={template.id}
-            className={classes.row}
             title={template.name}
             subtitle={template.isSystem ? "Built in" : undefined}
             description={MAP_IDENTITY.topoTemplate.label}

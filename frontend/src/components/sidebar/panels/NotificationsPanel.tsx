@@ -602,7 +602,7 @@ function NotificationsPanel({
     return (
       <Row
         key={row.id}
-        className={member ? `${classes.row} ${classes.member}` : classes.row}
+        className={member ? classes.member : undefined}
         title={title}
         subtitle={subtitle || undefined}
         description={unread ? "Unread" : undefined}

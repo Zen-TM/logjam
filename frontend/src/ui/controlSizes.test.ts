@@ -41,3 +41,30 @@ describe("kit control sizes", () => {
     expect(Object.keys(EXEMPT).filter((name) => !present.has(name))).toEqual([]);
   });
 });
+
+/**
+ * A card is a flex item in the column its list scrolls, and a flex item shrinks
+ * by default: without `flex: none` every row is squeezed from its natural
+ * height toward `min-height` the moment the list overflows, which crushes the
+ * padding until the subtitle hangs out of the card. It shows only on a list
+ * long enough to scroll, so six panels each wrote `flex-shrink: 0` beside their
+ * own rows and the seventh inherited the bug by not knowing to (2026-09-18).
+ * The kit owns it now; this is the test that fails if it is taken back out.
+ */
+describe("a row keeps its own height", () => {
+  const rowCss = () => readFileSync(join(KIT_DIR, "Row.module.css"), "utf8");
+
+  it("declares flex: none on the card itself", () => {
+    const rule = /\.row \{([\s\S]*?)\n\}/.exec(rowCss());
+    expect(rule, ".row rule not found in Row.module.css").not.toBeNull();
+    expect(rule![1]).toMatch(/\n\s*flex:\s*none;/);
+  });
+
+  it("leaves no panel restating it", () => {
+    const panels = join(KIT_DIR, "..", "components", "sidebar", "panels");
+    const offenders = readdirSync(panels)
+      .filter((name) => name.endsWith(".module.css"))
+      .filter((name) => /\.row \{\s*\n\s*flex-shrink:\s*0;\s*\n\}/.test(readFileSync(join(panels, name), "utf8")));
+    expect(offenders).toEqual([]);
+  });
+});

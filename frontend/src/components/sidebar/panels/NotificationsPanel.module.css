@@ -45,10 +45,6 @@
   background: var(--theme-primary);
 }
 
-.row {
-  flex-shrink: 0;
-}
-
 /* One step in, so an open batch's rows read as belonging to the header above. */
 .member {
   margin-left: var(--gutter);

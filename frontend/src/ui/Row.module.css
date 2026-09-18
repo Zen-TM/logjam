@@ -3,6 +3,15 @@
   --outline: 0 0 transparent;
   position: relative;
   display: flex;
+  /* NEVER SHRINK. A row is a flex item in the column its list scrolls, and a
+     flex item shrinks by default: once the list overflowed, every card was
+     squeezed from its natural height toward `min-height`, which crushed the
+     bottom padding until the subtitle hung 2.5px out of the card. It only ever
+     showed on a list long enough to scroll, which is why it survived six
+     panels — each of which had written `flex-shrink: 0` beside its own rows,
+     so the seventh (Friends) inherited the bug by not knowing to (2026-09-18).
+     The card owns its own height; the list gets to scroll. */
+  flex: none;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px 10px;
