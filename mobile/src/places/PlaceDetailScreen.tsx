@@ -24,6 +24,7 @@ import {
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import {
+  ATTRIBUTE_NOUN,
   isReservedFieldKey,
   userFieldValues,
   distinctTripTypes,
@@ -46,7 +47,6 @@ import {
 import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
 import { removeSharedPlace } from "../sharing/removeShare";
 import { useFieldDefs } from "../customFields/useFieldDefs";
-import { ATTRIBUTE_NOUN } from "../customFields/CustomFieldsEditor";
 import { useConnectivity } from "../map/connectivity";
 import { MediaStrip } from "../media/MediaStrip";
 import { resolveRouteAttachmentBbox } from "../media/routeAttachmentBbox";

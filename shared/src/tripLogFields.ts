@@ -23,6 +23,27 @@ export function isCustomFieldEntity(value: unknown): value is CustomFieldEntity 
   return CUSTOM_FIELD_ENTITIES.includes(value as CustomFieldEntity);
 }
 
+/**
+ * What a user's own field is CALLED, everywhere a user can read it, on BOTH
+ * clients.
+ *
+ * "Field" is form jargon — it names the box, not the thing the box records — so
+ * the UI says "attribute" and the code keeps saying field (the column, the
+ * table, the sync entity and every function in this file). One constant rather
+ * than forty string literals, so the next rename is one line and cannot leave
+ * half of one client behind — which is what happened the first time: the phone
+ * was renamed during the places rework and Logjam Web kept saying "Custom trip
+ * fields" and "Add field" for another three months.
+ */
+export const ATTRIBUTE_NOUN = {
+  one: "attribute",
+  many: "attributes",
+  /** Carried rather than composed: "a"/"an" does not follow from the noun, and
+   *  a rename that leaves "a attribute" behind is the classic way this kind of
+   *  constant half-works. */
+  add: "Add an attribute",
+} as const;
+
 export type TripLogCustomFieldType =
   | "string"
   | "integer"

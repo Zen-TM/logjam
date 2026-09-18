@@ -27,14 +27,13 @@
 import { useCallback, useState } from "react";
 import { StyleSheet, Text } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import { type ScopedCustomFieldDef } from "@logjam/shared";
+import { ATTRIBUTE_NOUN, type ScopedCustomFieldDef } from "@logjam/shared";
 
 import { type CustomFieldEntity } from "../api/queries";
 import { useAccountState } from "../auth/AccountStateContext";
 import { capabilityRowProps } from "../auth/capabilities";
 import { CLIENT_VERSION } from "../config";
 import {
-  ATTRIBUTE_NOUN,
   CustomFieldList,
   useCustomFieldForm,
 } from "../customFields/CustomFieldsEditor";

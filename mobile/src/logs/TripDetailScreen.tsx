@@ -13,6 +13,7 @@ import { useCallback, useRef, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import {
+  ATTRIBUTE_NOUN,
   distinctTripTypes,
   formatTripDate,
   mediaCategory,
@@ -23,7 +24,6 @@ import {
 import { useConnectivity } from "../map/connectivity";
 import { tripTitle } from "../api/tripTitle";
 import { useFieldDefs } from "../customFields/useFieldDefs";
-import { ATTRIBUTE_NOUN } from "../customFields/CustomFieldsEditor";
 import { MediaStrip } from "../media/MediaStrip";
 import { resolveRouteAttachmentBbox } from "../media/routeAttachmentBbox";
 import { fontSize, fontWeight, lineHeight, radius, spacing, surface, theme } from "../theme";
