@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useId,
   useState,
   type ComponentProps,
@@ -122,6 +123,53 @@ export function NumberField({
         onBlur?.(event);
       }}
       error={touched || showError ? error : null}
+    />
+  );
+}
+
+/**
+ * A number that is ALREADY IN FORCE while it is being typed: a topo's contour
+ * width, a hillshade angle, a slope band's boundary. The value in the model is
+ * a number rather than a string, and this holds the typing.
+ *
+ * Every valid keystroke commits, so the map (or the band below) follows the
+ * digit as it lands; a half-typed "1.", an empty box or an out-of-range number
+ * stays here and is reported under the field rather than reaching a live
+ * renderer or the server's range check. Leaving the field puts back the value
+ * in force. A value changed elsewhere — a template applied, a neighbouring
+ * boundary pushed — replaces the draft, unless the draft already MEANS that
+ * number, so "45." is not rewritten under the cursor.
+ *
+ * It was written three times over (the style sheet's widths, the hillshade
+ * angles, the slope boundaries) before it came here.
+ */
+export function LiveNumberField({
+  value,
+  onCommit,
+  constraints,
+  ...fieldProps
+}: Omit<ComponentProps<typeof NumberField>, "value" | "onChange"> & {
+  value: number;
+  onCommit: (next: number) => void;
+  constraints: NumericFieldConstraints;
+}) {
+  const [draft, setDraft] = useState(() => String(value));
+  useEffect(() => {
+    setDraft((current) => (current.trim() !== "" && Number(current) === value ? current : String(value)));
+  }, [value]);
+
+  return (
+    <NumberField
+      {...fieldProps}
+      value={draft}
+      constraints={constraints}
+      onChange={(next) => {
+        setDraft(next);
+        if (next.trim() !== "" && numericFieldError(next, constraints) === null) onCommit(Number(next));
+      }}
+      // Whatever is left that never committed (empty, "-", out of range) is
+      // not a value: the field goes back to what is drawn.
+      onBlur={() => setDraft(String(value))}
     />
   );
 }

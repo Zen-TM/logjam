@@ -8,7 +8,15 @@ export { IconTile, Row, TileCheckbox } from "./Row";
 export { Hero, Meter, type MeterSegment } from "./Hero";
 export { SwitchRow, Toggle } from "./Toggle";
 export { Checkbox, SwatchPicker } from "./Choice";
-export { NumberField, RangeField, SearchField, Select, TextArea, TextField } from "./TextField";
+export {
+  LiveNumberField,
+  NumberField,
+  RangeField,
+  SearchField,
+  Select,
+  TextArea,
+  TextField,
+} from "./TextField";
 export { ColourField } from "./ColourField";
 export { Menu, Popover, type MenuEntry, type MenuItem } from "./Menu";
 export { AttributeFilter } from "./AttributeFilter";

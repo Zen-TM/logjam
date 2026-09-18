@@ -1,0 +1,209 @@
+/* Making a LiDAR topo: the drop zone, what the ZIP turned out to be, and the
+   two errands the form sends you on. Layout only — the controls are the kit's
+   and every size and colour is a token (DESIGN.md §4). */
+
+/* Ordering LiDAR and tuning rasters is desktop work; the dialog still fits a
+   phone, but it says so rather than pretending otherwise (frontend/CLAUDE.md,
+   "Heavy authoring tools"). */
+.wideHint {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .wideHint {
+    display: block;
+    margin: 0;
+    font-size: var(--font-xs);
+    color: var(--theme-text-muted);
+  }
+}
+
+/* Where the ZIP lands. The one place in the dialog with a dashed edge, because
+   it is the one place that takes something from outside the app. */
+.drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 20px var(--gutter);
+  border: 1px dashed var(--theme-bonus-2);
+  border-radius: var(--radius-md);
+  background: var(--surface-field);
+  cursor: pointer;
+  text-align: center;
+  transition:
+    border-color var(--transition-fast),
+    background-color var(--transition-fast);
+}
+
+.drop:hover,
+.drop[data-dragging] {
+  border-color: var(--theme-accent);
+  background: color-mix(in srgb, var(--theme-accent) 8%, transparent);
+}
+
+.dropGlyph {
+  color: var(--theme-text-muted);
+}
+
+.drop[data-loaded] .dropGlyph {
+  color: var(--theme-accent);
+}
+
+.dropLine {
+  font-size: var(--font-sm);
+  color: var(--theme-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.drop[data-loaded] .dropLine {
+  color: var(--theme-text-primary);
+}
+
+.dropHint {
+  font-size: var(--font-xs);
+  color: var(--theme-text-muted);
+}
+
+/* A line holding the one button that leads somewhere else. */
+.errandLine {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* What the ZIP holds: a definition list, label and value per line. */
+.summary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: var(--hairline);
+  border-radius: var(--radius-sm);
+  background: var(--surface-field);
+}
+
+.summaryGrid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 16px;
+  row-gap: 4px;
+  margin: 0;
+}
+
+.summaryLabel {
+  font-size: var(--font-xs);
+  color: var(--theme-text-muted);
+}
+
+.summaryValue {
+  margin: 0;
+  font-size: var(--font-xs);
+  color: var(--theme-text-primary);
+  overflow-wrap: anywhere;
+}
+
+.summaryNote {
+  margin: 0;
+  font-size: var(--font-xs);
+  color: var(--theme-text-muted);
+}
+
+/* Uploading and starting: one line, the bar, and the megabytes under it. */
+.working {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 0;
+}
+
+.workingLine {
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--theme-text-primary);
+}
+
+.workingDetail {
+  margin: 0;
+  font-size: var(--font-xs);
+  color: var(--theme-text-muted);
+}
+
+/* Submitted. */
+.done {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 20px 0;
+  text-align: center;
+}
+
+.doneGlyph {
+  color: var(--theme-accent);
+}
+
+.doneName {
+  margin: 0;
+  font-size: var(--font-base);
+  color: var(--theme-text-primary);
+}
+
+/* The ELVIS errand, numbered because it is done in order. */
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin: 0;
+  padding-left: 20px;
+}
+
+.step {
+  /* A flex li has no marker, and the numbers are the point of an ordered list:
+     the item stays a list item and its contents do the stacking. */
+  display: list-item;
+}
+
+.step::marker {
+  color: var(--theme-text-muted);
+  font-size: var(--font-sm);
+}
+
+.stepBody {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.stepLine {
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--theme-text-muted);
+}
+
+.stepWarning {
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--theme-warning);
+}
+
+.stepControls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Naming a template from inside the settings view. */
+.saveAsLine {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.saveAsField {
+  flex: 1;
+  min-width: 0;
+}

@@ -1,11 +1,8 @@
-import { useEffect, useState } from "react";
-import { Switch } from "@mui/material";
 import { HILLSHADE_LIMITS } from "@logjam/shared";
 import type { HillshadeSettings as HillshadeSettingsValue } from "@logjam/shared";
-import { ColourField } from "../../../ui";
+import { ColourField, LiveNumberField, Toggle } from "../../../ui";
 import SettingsRow from "./SettingsRow";
-import ValidatedNumberField from "../ValidatedNumberField";
-import { numericFieldError, type NumericFieldConstraints } from "../../../numberInput";
+import type { NumericFieldConstraints } from "../../../numberInput";
 import styles from "./topoSettings.module.css";
 
 interface Props {
@@ -19,88 +16,55 @@ const ALTITUDE_CONSTRAINTS: NumericFieldConstraints = { ...HILLSHADE_LIMITS.alti
 const Z_FACTOR_CONSTRAINTS: NumericFieldConstraints = { ...HILLSHADE_LIMITS.zFactor };
 
 /**
- * One numeric hillshade field (TOPO-2). Keeps a raw string so partial input
- * ("", "-", "45.") isn't mangled mid-keystroke; commits every parseable number
- * (even out of range) into settings so the inline error and the disabled
- * Save/Generate buttons (gated on the shared hillshadeSettingsError) both
- * point at the same value — no silent clamping or divergence. An unparseable
- * leftover snaps back to the last committed value on blur.
+ * The shaded relief: where the sun is, and how hard the terrain is pushed at
+ * it. Multidirectional comes FIRST because it takes the two angles over — a
+ * switch that greys out the rows above it made the dependency read backwards.
+ *
+ * Every number applies as it is typed and is checked against the same limits
+ * the Save button is gated on (`hillshadeSettingsError`), so an out-of-range
+ * value is reported here and refused there rather than silently clamped.
  */
-function HillshadeNumberField({
-  committed,
-  onCommit,
-  constraints,
-  disabled,
-}: {
-  committed: number;
-  onCommit: (v: number) => void;
-  constraints: NumericFieldConstraints;
-  disabled?: boolean;
-}) {
-  const [raw, setRaw] = useState(String(committed));
-
-  // External changes (template switch, reset) resync the raw string. A raw
-  // value that already means the committed number is left alone so typing
-  // "45." isn't rewritten to "45" under the cursor.
-  useEffect(() => {
-    setRaw((prev) => (Number(prev) === committed && prev.trim() !== "" ? prev : String(committed)));
-  }, [committed]);
-
-  const isParseable = (s: string): boolean =>
-    s.trim() !== "" && s.trim() !== "-" && Number.isFinite(Number(s));
-
-  return (
-    <div
-      onBlur={() => {
-        // Leftover unparseable input ("", "-") reverts to the committed
-        // value; anything parseable was already committed on change.
-        setRaw((prev) => (isParseable(prev) ? prev : String(committed)));
-      }}
-    >
-      <ValidatedNumberField
-        label=""
-        value={raw}
-        onChange={(next) => {
-          setRaw(next);
-          if (isParseable(next) && numericFieldError(next, { integer: constraints.integer }) === null) {
-            onCommit(Number(next));
-          }
-        }}
-        constraints={constraints}
-        disabled={disabled}
-        fullWidth={false}
-        sx={{ width: 110 }}
-      />
-    </div>
-  );
-}
-
 export default function HillshadeSettings({ value, onChange }: Props) {
-  const patch = (delta: Partial<HillshadeSettingsValue>) =>
-    onChange({ ...value, ...delta });
+  const patch = (delta: Partial<HillshadeSettingsValue>) => onChange({ ...value, ...delta });
 
   return (
     <div className={styles.tabPanel}>
-      <p className={styles.helpText}>
-        Hillshade renders the shaded relief of the terrain. The tint colour is
-        multiplied with the greyscale luminance and its alpha sets the overall
-        opacity.
-      </p>
+      <SettingsRow
+        label="Multidirectional"
+        tooltip="Blends hillshades from several sun angles for softer, less harsh shadows. It takes over from the azimuth and altitude below."
+      >
+        <Toggle
+          label="Multidirectional"
+          checked={value.multidirectional}
+          onChange={(multidirectional) => patch({ multidirectional })}
+        />
+      </SettingsRow>
 
-      <SettingsRow label="Tint colour" tooltip="Greyscale luminance is multiplied by this colour. The alpha channel sets the layer opacity.">
-        <ColourField label="Hillshade tint colour" hideLabel value={value.colour} onChange={(c) => patch({ colour: c })} />
+      <SettingsRow
+        label="Tint colour"
+        tooltip="The greyscale relief is multiplied by this colour, and its alpha channel sets the layer's opacity."
+      >
+        <ColourField
+          label="Hillshade tint colour"
+          hideLabel
+          value={value.colour}
+          onChange={(colour) => patch({ colour })}
+        />
       </SettingsRow>
 
       <SettingsRow
         label="Azimuth (°)"
-        tooltip="Sun direction in degrees clockwise from north, 0–360. 315° = NW, the standard cartographic light."
+        tooltip="Sun direction in degrees clockwise from north, 0–360. 315° is north-west, the standard cartographic light."
         disabled={value.multidirectional}
       >
-        <HillshadeNumberField
-          committed={value.azimuth}
-          onCommit={(v) => patch({ azimuth: v })}
+        <LiveNumberField
+          label="Azimuth (°)"
+          hideLabel
+          className={styles.numberCell}
+          value={value.azimuth}
           constraints={AZIMUTH_CONSTRAINTS}
           disabled={value.multidirectional}
+          onCommit={(azimuth) => patch({ azimuth })}
         />
       </SettingsRow>
 
@@ -109,33 +73,28 @@ export default function HillshadeSettings({ value, onChange }: Props) {
         tooltip="Sun elevation above the horizon, 0–90. Lower values cast longer shadows."
         disabled={value.multidirectional}
       >
-        <HillshadeNumberField
-          committed={value.altitude}
-          onCommit={(v) => patch({ altitude: v })}
+        <LiveNumberField
+          label="Altitude (°)"
+          hideLabel
+          className={styles.numberCell}
+          value={value.altitude}
           constraints={ALTITUDE_CONSTRAINTS}
           disabled={value.multidirectional}
+          onCommit={(altitude) => patch({ altitude })}
         />
       </SettingsRow>
 
       <SettingsRow
         label="Vertical exaggeration"
-        tooltip="Multiplies the terrain z-values before computing the hillshade, 0.1–10. >1 amplifies relief; <1 flattens it."
+        tooltip="Multiplies the terrain's heights before the relief is computed, 0.1–10. Above 1 amplifies the relief; below 1 flattens it."
       >
-        <HillshadeNumberField
-          committed={value.zFactor}
-          onCommit={(v) => patch({ zFactor: v })}
+        <LiveNumberField
+          label="Vertical exaggeration"
+          hideLabel
+          className={styles.numberCell}
+          value={value.zFactor}
           constraints={Z_FACTOR_CONSTRAINTS}
-        />
-      </SettingsRow>
-
-      <SettingsRow
-        label="Multidirectional"
-        tooltip="Blend hillshades from multiple sun angles for softer, less harsh shadows. Overrides azimuth/altitude when on."
-      >
-        <Switch
-          size="small"
-          checked={value.multidirectional}
-          onChange={(_, checked) => patch({ multidirectional: checked })}
+          onCommit={(zFactor) => patch({ zFactor })}
         />
       </SettingsRow>
     </div>

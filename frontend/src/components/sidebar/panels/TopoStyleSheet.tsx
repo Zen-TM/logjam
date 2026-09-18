@@ -12,7 +12,7 @@
 // debounces the save (PUT /vector-style). Nothing here saves, and the sheet says
 // neither — a sheet of controls that change the map while you watch does not
 // need a paragraph explaining that it does (operator, 2026-09-18).
-import { useEffect, useId, useState } from "react";
+import { useId } from "react";
 import {
   CONTOUR_WIDTH_UNITS_PER_PX,
   LABEL_SCALE_MAX,
@@ -26,7 +26,7 @@ import {
   type OsmPointFeatureKey,
   type VectorStyleSettings,
 } from "@logjam/shared";
-import { ColourField, NumberField, RangeField, SheetSection, SideSheet, Toggle } from "../../../ui";
+import { ColourField, LiveNumberField, RangeField, SheetSection, SideSheet, Toggle } from "../../../ui";
 import classes from "./MapsPanel.module.css";
 
 /** The fixed topographic icon each point feature is drawn with. */
@@ -270,11 +270,9 @@ function StyleRow({
 
 /**
  * A width: a box in the table's width column, named by the heading over it and
- * by the row beside it, so it carries no label of its own.
- *
- * Typed as text and applied the moment it is a valid number. The draft is held
- * here so a half-typed "1." or an empty box does not reach the map (or the
- * server's 0–max check), and is replaced if the value changes elsewhere.
+ * by the row beside it, so it carries no label of its own. The kit's
+ * `LiveNumberField` holds the typing, so the map follows each valid digit and
+ * never sees a half-typed one.
  */
 function WidthBox({
   label,
@@ -289,25 +287,15 @@ function WidthBox({
   disabled?: boolean;
   onChange: (next: number) => void;
 }) {
-  const [draft, setDraft] = useState(String(value));
-  useEffect(() => {
-    setDraft((current) => (Number(current) === value ? current : String(value)));
-  }, [value]);
-
   return (
-    <NumberField
+    <LiveNumberField
       label={label}
       hideLabel
       className={classes.widthBox}
-      value={draft}
+      value={value}
       constraints={{ min: 0, max }}
       disabled={disabled}
-      onChange={(next) => {
-        setDraft(next);
-        const number = Number(next);
-        if (next.trim() !== "" && Number.isFinite(number) && number >= 0 && number <= max) onChange(number);
-      }}
-      onBlur={() => setDraft(String(value))}
+      onCommit={onChange}
     />
   );
 }

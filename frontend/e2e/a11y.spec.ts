@@ -229,6 +229,44 @@ test.describe("desktop", () => {
     await expect(aside.getByRole("button", { name: "Topo style" })).toBeFocused();
   });
 
+  test("Make a LiDAR topo, its ELVIS steps and its settings", async ({ page }) => {
+    await openApp(page);
+    await page.getByRole("button", { name: "Maps", exact: true }).click();
+    const aside = page.locator("aside");
+    await aside.getByRole("radio", { name: "LiDAR topos" }).click();
+    await aside.getByRole("button", { name: /^Make/ }).first().click();
+    await page.getByRole("menuitem", { name: /LiDAR topo/ }).click();
+
+    const dialog = page.locator("dialog[open]");
+    await expect(dialog.getByRole("heading", { name: "Make a LiDAR topo" })).toBeVisible();
+    await expectNoViolations(page, "dialog");
+
+    // The errand and the settings are SUB-VIEWS: each swaps the body, and each
+    // backs out to the form rather than out of the dialog.
+    await dialog.getByRole("button", { name: /^Haven.t got one/ }).click();
+    await expect(dialog.getByRole("heading", { name: "Getting LiDAR from ELVIS" })).toBeVisible();
+    await expectNoViolations(page, "dialog");
+    await dialog.getByRole("button", { name: "Back to the form" }).click();
+
+    await dialog.getByRole("button", { name: "How this topo is drawn" }).click();
+    await expect(dialog.getByRole("radio", { name: "Hillshade" })).toBeVisible();
+    await expectNoViolations(page, "dialog");
+
+    // The band table and the layer checkboxes are the dense ones.
+    await dialog.getByRole("radio", { name: "Slope" }).click();
+    await expect(dialog.getByRole("textbox", { name: /upper angle/ }).first()).toBeVisible();
+    await expectNoViolations(page, "dialog");
+
+    await dialog.getByRole("radio", { name: "When it's done" }).click();
+    await expect(dialog.getByRole("radiogroup", { name: "Format" })).toBeVisible();
+    await expectNoViolations(page, "dialog");
+
+    await dialog.getByRole("button", { name: "Back to the form" }).click();
+    await expect(dialog.getByRole("heading", { name: "Make a LiDAR topo" })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+  });
+
   test("the Layers popover", async ({ page }) => {
     await openApp(page);
     await page.getByRole("button", { name: "Layers", exact: true }).click();

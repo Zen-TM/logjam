@@ -1,4 +1,5 @@
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, type CSSProperties } from "react";
+import { Plus, Trash2 } from "lucide-react";
 import {
   applySlopeGradient,
   rgbaCssFromHex,
@@ -7,9 +8,10 @@ import {
   type SlopeSettings as SlopeSettingsValue,
   type SlopeBand,
 } from "@logjam/shared";
-import { ColourField } from "../../../ui";
-import { Tooltip } from "@mui/material";
-import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
+import { Button, ColourField, IconButton, LiveNumberField } from "../../../ui";
+import { FieldError } from "../../feedback/FieldError";
+import { InfoTip } from "./SettingsRow";
+import type { NumericFieldConstraints } from "../../../numberInput";
 import styles from "./topoSettings.module.css";
 
 interface Props {
@@ -26,6 +28,10 @@ const NEW_BAND_COLOUR = "#ff000080";
 const DEFAULT_BANDS = RASTER_TEMPLATE_DEFAULTS.slope.bands;
 const DEFAULT_SCALE_START = DEFAULT_BANDS[0].colour;
 const DEFAULT_SCALE_END = DEFAULT_BANDS[DEFAULT_BANDS.length - 1].colour;
+
+const ANGLE_TOOLTIP =
+  "Degrees from horizontal: flat ground is about 0–5°, a steep trail 20–30°, a cliff 45° and up. " +
+  "The band above starts where this one ends, so it follows whatever you set.";
 
 /**
  * Insert a band at `position` (0..bands.length), keeping the band set a
@@ -99,10 +105,20 @@ function computeInsert(bands: SlopeBand[], position: number): SlopeBand[] | null
   return next;
 }
 
+/**
+ * Terrain coloured by steepness: a table of bands, its columns headed once
+ * (DESIGN.md §9). Every editable number is a unique BOUNDARY owned by exactly
+ * one box — the transparency threshold and each band's upper angle — so gaps
+ * and overlaps are structurally impossible and a band's lower angle is simply
+ * the one below it, shown rather than asked for.
+ *
+ * The colours are not picked per band: two ends of a scale are, and every band
+ * is painted along it, so a band added or removed cannot leave a ramp with a
+ * hole in it.
+ */
 export default function SlopeSettings({ value, onChange }: Props) {
   const bands = value.bands;
 
-  // Band colours are driven by a two-stop scale rather than picked per band.
   // `applySlopeGradient` always paints the first band exactly the start colour
   // and the last band exactly the end colour, so the endpoints round-trip
   // losslessly through `bands` — derive them here instead of holding parallel
@@ -120,12 +136,7 @@ export default function SlopeSettings({ value, onChange }: Props) {
   const setScale = (start: string, end: string) => {
     onChange({ ...value, bands: applySlopeGradient(bands, start, end) });
   };
-  const resetScale = () => setScale(DEFAULT_SCALE_START, DEFAULT_SCALE_END);
 
-  // Editing model: every editable number is a unique boundary, owned by exactly
-  // one input — the transparency threshold (band[0].fromDeg) and each band's
-  // upper angle (band[i].toDeg). A band's lower angle is read-only (it mirrors
-  // the band below's upper). This makes gaps/overlaps structurally impossible.
   const setThreshold = (deg: number) => {
     commitBands(bands.map((b, i) => (i === 0 ? { ...b, fromDeg: deg } : b)));
   };
@@ -151,128 +162,119 @@ export default function SlopeSettings({ value, onChange }: Props) {
     const nextBands = computeInsert(bands, position);
     if (nextBands) commitBands(nextBands);
   };
-  const canInsertAt = (position: number) => computeInsert(bands, position) !== null;
 
   const error = slopeBandsError(bands);
 
-  const insertControl = (position: number) => (
-    <div className={styles.insertRow}>
-      <Tooltip
-        title={
-          bands.length >= MAX_BANDS
-            ? `Maximum ${MAX_BANDS} bands reached`
-            : "Insert a new band here"
-        }
-        placement="top"
-        arrow
-      >
-        <span style={{ display: "inline-block" }}>
-          <button
-            type="button"
-            className={styles.insertButton}
-            onClick={() => insertAt(position)}
-            disabled={!canInsertAt(position)}
-            aria-label="Insert a new slope band here"
-          >
-            +
-          </button>
-        </span>
-      </Tooltip>
-    </div>
-  );
+  const insertControl = (position: number) => {
+    const room = computeInsert(bands, position) !== null;
+    return (
+      <div className={styles.insertRow}>
+        <IconButton
+          icon={Plus}
+          round
+          label={room ? "Insert a band here" : "Eight bands is the most a topo can have"}
+          disabled={!room}
+          onClick={() => insertAt(position)}
+        />
+      </div>
+    );
+  };
+
+  const boundaryConstraints = (min: number, max: number): NumericFieldConstraints => ({
+    min,
+    max,
+    integer: true,
+  });
 
   return (
     <div className={styles.tabPanel}>
       <p className={styles.helpText}>
-        Slope bands colour terrain by steepness. Pixels below the transparency
-        threshold are transparent. Each band&rsquo;s lower angle is fixed to the
-        band below it — edit a band&rsquo;s upper angle (or the threshold) and
-        the neighbour follows. Use the <strong>+</strong> between rows to insert
-        a band ({bands.length}/{MAX_BANDS}). Band colours are computed along the
-        scale below — pick a start and end colour and each band fades between
-        them by its steepness.
+        Ground flatter than the first angle is left transparent. Every band above
+        it is painted along the scale, from its start colour to its end.
       </p>
 
       <div className={styles.scaleRow}>
-        <span className={styles.scaleEndpoint}>
-          <span className={styles.scaleLabel}>Scale start</span>
+        <span className={styles.scaleEnd}>
+          Start
           <ColourField
-            label="Scale start colour (lowest band)"
+            label="Scale start colour (the shallowest band)"
             hideLabel
             value={scaleStart}
-            onChange={(c) => setScale(c, scaleEnd)}
+            onChange={(colour) => setScale(colour, scaleEnd)}
           />
         </span>
-        <span className={styles.scaleArrow} aria-hidden="true">→</span>
-        <span className={styles.scaleEndpoint}>
-          <span className={styles.scaleLabel}>Scale end</span>
+        <span className={styles.scaleArrow} aria-hidden>
+          →
+        </span>
+        <span className={styles.scaleEnd}>
+          End
           <ColourField
-            label="Scale end colour (highest band)"
+            label="Scale end colour (the steepest band)"
             hideLabel
             value={scaleEnd}
-            onChange={(c) => setScale(scaleStart, c)}
+            onChange={(colour) => setScale(scaleStart, colour)}
           />
         </span>
-        <Tooltip title="Reset the scale to the default yellow → dark-red ramp" placement="top" arrow>
-          <button type="button" className={styles.scaleReset} onClick={resetScale}>
-            Reset
-          </button>
-        </Tooltip>
+        <Button
+          compact
+          className={styles.scaleReset}
+          onClick={() => setScale(DEFAULT_SCALE_START, DEFAULT_SCALE_END)}
+        >
+          Reset colours
+        </Button>
       </div>
 
       <div className={styles.bandTable}>
-        <span className={styles.bandHeaderCell}>
-          <span className={styles.bandHeader}>From °</span>
-          <Tooltip title="Slope angle in degrees from horizontal. Flat ground ≈ 0–5°; steep trail ≈ 20–30°; cliff / technical terrain ≈ 45°+." placement="top" arrow>
-            <InfoOutlinedIcon className={styles.infoIcon} />
-          </Tooltip>
+        {/* One glyph, on the angle that is actually edited: the lower one is
+            the band below's upper, shown rather than asked for. */}
+        <span className={styles.head}>From °</span>
+        <span className={styles.head}>
+          To °<InfoTip label="an angle" content={ANGLE_TOOLTIP} />
         </span>
-        <span className={styles.bandHeaderCell}>
-          <span className={styles.bandHeader}>To °</span>
-          <Tooltip title="Upper bound of this band in degrees. The next band starts here automatically." placement="top" arrow>
-            <InfoOutlinedIcon className={styles.infoIcon} />
-          </Tooltip>
-        </span>
-        <span className={styles.bandHeader}>Colour</span>
+        <span className={styles.head}>Colour</span>
         <span />
 
-        {/* Transparency threshold = band[0].fromDeg, editable. */}
-        <span className={styles.lockedCell}>0</span>
-        <BoundaryInput
+        {/* The transparency threshold is band[0].fromDeg: the only boundary
+            whose band is not drawn at all. */}
+        <span className={styles.fixedCell}>0</span>
+        <LiveNumberField
+          label="Transparency threshold in degrees"
+          hideLabel
+          className={styles.numberCell}
           value={bands[0].fromDeg}
-          min={0}
-          max={bands[0].toDeg - 1}
+          constraints={boundaryConstraints(0, bands[0].toDeg - 1)}
           onCommit={setThreshold}
-          label="Transparency threshold (degrees)"
         />
-        <span className={styles.lockedCell}>Transparent</span>
+        <span className={styles.fixedCell}>Transparent</span>
         <span />
 
         {insertControl(0)}
         {bands.map((band, idx) => (
           <Fragment key={idx}>
-            <span className={styles.lockedCell}>{band.fromDeg}</span>
-            <BoundaryInput
+            <span className={styles.fixedCell}>{band.fromDeg}</span>
+            <LiveNumberField
+              label={`Band ${idx + 1} upper angle in degrees`}
+              hideLabel
+              className={styles.numberCell}
               value={band.toDeg}
-              min={band.fromDeg + 1}
-              max={idx < bands.length - 1 ? bands[idx + 1].toDeg - 1 : 90}
+              constraints={boundaryConstraints(
+                band.fromDeg + 1,
+                idx < bands.length - 1 ? bands[idx + 1].toDeg - 1 : 90,
+              )}
               onCommit={(deg) => setUpper(idx, deg)}
-              label={`Band ${idx + 1} upper angle (degrees)`}
             />
             <span
-              className={styles.readonlySwatch}
+              className={styles.bandSwatch}
               role="img"
-              aria-label={`Band ${idx + 1} colour (from the scale)`}
+              aria-label={`Band ${idx + 1} colour, taken from the scale`}
             >
               <span
-                className={styles.readonlySwatchFill}
-                style={{ background: rgbaCssFromHex(band.colour) }}
+                className={styles.bandSwatchFill}
+                style={{ "--band-colour": rgbaCssFromHex(band.colour) } as CSSProperties}
               />
             </span>
             {bands.length > 1 ? (
-              <button type="button" className={styles.removeButton} onClick={() => removeBand(idx)}>
-                Remove
-              </button>
+              <IconButton icon={Trash2} label={`Remove band ${idx + 1}`} onClick={() => removeBand(idx)} />
             ) : (
               <span />
             )}
@@ -281,77 +283,7 @@ export default function SlopeSettings({ value, onChange }: Props) {
         ))}
       </div>
 
-      {error && (
-        <p className={styles.bandError} role="alert">
-          {error}
-        </p>
-      )}
+      <FieldError message={error} />
     </div>
-  );
-}
-
-interface BoundaryInputProps {
-  value: number;
-  min: number;
-  max: number;
-  onCommit: (deg: number) => void;
-  label: string;
-}
-
-/**
- * A single integer-degree boundary input. Holds draft text so the user can
- * clear and retype freely while focused, but commits live whenever the current
- * text is a valid in-range integer — so the native spinner buttons and keyboard
- * arrows (both fire `onChange`, never blur/keydown) immediately update the model
- * and the linked neighbour. The draft is only resynced from `value` while NOT
- * focused, so a live commit never clamps the text mid-keystroke. Blur does the
- * final clamp/revert. Each boundary is owned by one input, so commits never
- * fight an adjacent field.
- */
-function BoundaryInput({ value, min, max, onCommit, label }: BoundaryInputProps) {
-  const [draft, setDraft] = useState(String(value));
-  const [focused, setFocused] = useState(false);
-
-  useEffect(() => {
-    if (!focused) setDraft(String(value));
-  }, [value, focused]);
-
-  const clamp = (n: number) => Math.max(min, Math.min(max, Math.round(n)));
-  const isValid = (n: number) => Number.isInteger(n) && n >= min && n <= max;
-
-  return (
-    <input
-      type="number"
-      className={styles.numberInput}
-      min={min}
-      max={max}
-      step={1}
-      value={draft}
-      aria-label={label}
-      onFocus={() => setFocused(true)}
-      onChange={(e) => {
-        const raw = e.target.value;
-        setDraft(raw);
-        // Commit live for any valid in-range value — covers spinner clicks and
-        // arrow keys. Partial/empty/out-of-range text stays in the draft and is
-        // resolved on blur.
-        const n = Number(raw);
-        if (raw.trim() !== "" && isValid(n) && n !== value) onCommit(n);
-      }}
-      onBlur={(e) => {
-        setFocused(false);
-        const raw = e.target.value;
-        if (raw.trim() === "" || !Number.isFinite(Number(raw))) {
-          setDraft(String(value)); // revert invalid/empty entry
-          return;
-        }
-        const clamped = clamp(Number(raw));
-        setDraft(String(clamped));
-        if (clamped !== value) onCommit(clamped);
-      }}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") e.currentTarget.blur();
-      }}
-    />
   );
 }
