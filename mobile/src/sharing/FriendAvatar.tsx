@@ -12,7 +12,7 @@
 import { StyleSheet, Text, View } from "react-native";
 
 import { fontSize, fontWeight, radius, theme, withAlpha } from "../theme";
-import { avatarHueIndex, avatarInitials } from "./friendSearch";
+import { avatarHueIndex, avatarInitials } from "@logjam/shared";
 
 /** Same palette rule as `assetHue`: mid-light, muted, NSW-derived. */
 const AVATAR_HUES = [
