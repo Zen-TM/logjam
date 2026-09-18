@@ -1296,6 +1296,10 @@ function App() {
           setShowTopo(false);
           setSelectingTopoBbox(false);
           setInitialTopoTemplateId(null);
+          // The dialog empties itself on a real close; the drawn area is held
+          // out here (going off to draw closes the dialog), so it has to be
+          // emptied with it or the next topo starts with the last one's box.
+          setPendingTopoBbox(null);
         }}
         onSelectBbox={() => {
           setShowTopo(false);
