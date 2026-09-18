@@ -542,8 +542,9 @@ export default function LidarPanel({
           title={`Share ${shareJob.label}`}
           blurb={
             <>
-              Recipients can view and download this LiDAR topo. They cannot delete or re-export it as their own, and
-              you can unshare at any time.
+              Recipients see this topo on their map, and can download or export
+              it themselves. Only you can delete it, and you can unshare at any
+              time.
             </>
           }
           friends={friends}
