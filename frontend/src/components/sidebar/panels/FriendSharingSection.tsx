@@ -12,25 +12,46 @@
 // a route, a LiDAR topo and a GeoPDF of yours. Which rows get which verb is
 // `buildShareCards` in @logjam/shared, the same call Logjam GPS makes.
 //
+// SELECTION, LIKE EVERY OTHER LIST THAT ACTS IN BULK. The tile is the checkbox
+// and the bar takes the rail's place at the same height (DESIGN.md §7), as on
+// Places, Logs and the Inbox — and as on Logjam GPS's own FriendSharesScreen,
+// which is the screen this one mirrors. It shipped instead with a per-row verb
+// and one "Unshare all", which is the shape to notice: an all-or-nothing bulk
+// verb in an app that lets you pick everywhere else, when the real sentence is
+// "these five, not those eight" (operator, 2026-09-18).
+//
 // THE TWO DIRECTIONS GET DIFFERENT VERBS, and that is the design, not an
 // omission:
-//   You share with them — yours. Per-row Unshare, and Unshare all, because
+//   You share with them — yours. Unshare, per row or over a selection, because
 //     re-sharing is a couple of presses.
-//   They share with you — theirs. Per-row Remove my access only, no bulk: only
-//     the owner can grant it back, so a bulk version would be an unrecoverable
-//     mis-press. Remove friend already revokes both directions at once.
+//   They share with you — theirs. Remove my access, and only from rows where
+//     dropping it would change anything. Only the owner can grant it back.
 // There is NO delete anywhere on this page: every verb here ends a GRANT, and a
 // bin would promise to end the record.
 //
 // PRIVACY: usernames and item names only — the payload carries no coordinates
 // and no notes. Nothing here is logged.
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { FileText, MapPin, Mountain, PenLine, Users, type LucideIcon } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  EyeOff,
+  FileText,
+  ListChecks,
+  MapPin,
+  Mountain,
+  PenLine,
+  UserMinus,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
 import {
   buildShareCards,
+  removeAllConfirm,
+  removeOutcomeMessage,
   SHARE_KIND_LABEL,
   shareCardItem,
+  shareSelectionCountLabel,
   unshareAllConfirm,
+  unshareOutcomeMessage,
   type FriendShareCard,
   type FriendShareDirection,
   type FriendShareRow,
@@ -46,10 +67,14 @@ import {
   ChipRail,
   EmptyState,
   Hero,
+  IconButton,
   IconTile,
   Row,
+  SelectionBar,
+  TileCheckbox,
   type ChipOption,
 } from "../../../ui";
+import { idRange } from "./placesModel";
 import type { TFriend, TFriendShares } from "../../../placeUtils";
 import {
   getFriendShares,
@@ -68,14 +93,19 @@ const KIND_IDENTITY: Record<FriendShareRow["entityType"], { icon: LucideIcon; hu
   geoPdfJob: { icon: FileText, hue: "var(--hue-geoPdf)" },
 };
 
-/* CONFIRMATION SCALES WITH BLAST RADIUS × COST OF RECOVERY, which is why only
-   two of the three verbs have one:
+/* CONFIRMATION SCALES WITH BLAST RADIUS × COST OF RECOVERY, which is why the
+   three verbs do not get the same treatment:
      per-row unshare  → none. It is one press to share it again.
-     unshare all      → confirm, below. Bulk, and re-sharing N items by hand hurts.
+     either verb in BULK → confirm, naming the count and what a place takes with
+                        it. Re-sharing N by hand is punishing, and a selection
+                        is the easiest thing on this page to get wrong.
      remove my access → confirm, and `RemoveSharedButton` owns it: small, but
                         only the OWNER can undo it, and every web surface that
                         lists shared things asks that question with the same
                         words. This page used to word it itself. */
+
+/** Which bulk verb is waiting on an answer. */
+type PendingBulk = "unshare" | "remove" | null;
 
 function FriendSharingSection({
   friend,
@@ -89,11 +119,14 @@ function FriendSharingSection({
   onSharesChanged: () => void;
 }) {
   const toast = useToast();
+  const rootRef = useRef<HTMLDivElement>(null);
   const [shares, setShares] = useState<TFriendShares | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [direction, setDirection] = useState<FriendShareDirection>("theySee");
-  const [confirmingUnshareAll, setConfirmingUnshareAll] = useState(false);
+  const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
+  const selectionAnchor = useRef<string | null>(null);
+  const [pendingBulk, setPendingBulk] = useState<PendingBulk>(null);
 
   const load = useCallback(() => {
     setError(null);
@@ -124,6 +157,63 @@ function FriendSharingSection({
     [shares, friend.username],
   );
 
+  const cards = direction === "theySee" ? theirs : mine;
+  // A row a group verb cannot act on is not selectable: forward rows all
+  // unshare, received rows only where Remove would change anything (one that
+  // also rides a shared place would come straight back).
+  const selectableKeys = useMemo(
+    () => cards.filter((card) => direction === "theySee" || card.removable).map((card) => card.key),
+    [cards, direction],
+  );
+  const selected = useMemo(() => {
+    const picked = new Set(selectedKeys);
+    return cards.filter((card) => picked.has(card.key));
+  }, [cards, selectedKeys]);
+  const selecting = selected.length > 0;
+
+  const clearSelection = useCallback(() => {
+    setSelectedKeys([]);
+    selectionAnchor.current = null;
+  }, []);
+
+  // Changing direction is changing which list you are looking at, so a
+  // selection made in the other one cannot survive it.
+  const changeDirection = (next: FriendShareDirection) => {
+    clearSelection();
+    setDirection(next);
+  };
+
+  const toggleSelected = (key: string, extendRange: boolean) => {
+    if (extendRange && selectionAnchor.current) {
+      const range = idRange(selectableKeys, selectionAnchor.current, key);
+      setSelectedKeys((current) => [...new Set([...current, ...range])]);
+    } else {
+      setSelectedKeys((current) =>
+        current.includes(key) ? current.filter((other) => other !== key) : [...current, key],
+      );
+    }
+    selectionAnchor.current = key;
+  };
+
+  // The same two keys the other lists answer to (PlacesPanel, the Inbox).
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root || !selecting) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement;
+      if (target.closest("input, textarea, [role='menu'], dialog")) return;
+      if (event.key === "Escape") {
+        event.preventDefault();
+        clearSelection();
+      } else if (event.key.toLowerCase() === "a" && (event.ctrlKey || event.metaKey)) {
+        event.preventDefault();
+        setSelectedKeys(selectableKeys);
+      }
+    };
+    root.addEventListener("keydown", onKeyDown);
+    return () => root.removeEventListener("keydown", onKeyDown);
+  }, [selecting, selectableKeys, clearSelection]);
+
   /** One revoke, whichever kind and whichever side. `userId` is the friend for
    *  a forward unshare and "me" for dropping my own access — the alias both
    *  share endpoints have always accepted. */
@@ -133,12 +223,13 @@ function FriendSharingSection({
       : unshareEntityWith(card.row.entityType, card.row.entityId, userId);
   }
 
-  async function run(action: () => Promise<unknown>, failure: string, success: string) {
+  async function run(action: () => Promise<unknown>, failure: string, success?: string) {
     setBusy(true);
     try {
       await action();
-      toast.success(success);
-      setConfirmingUnshareAll(false);
+      if (success) toast.success(success);
+      setPendingBulk(null);
+      clearSelection();
       load();
       onSharesChanged();
     } catch (err) {
@@ -149,29 +240,107 @@ function FriendSharingSection({
     }
   }
 
-  const cards = direction === "theySee" ? theirs : mine;
+  /** The forward bulk: ONE call, naming exactly the rows that were ticked. The
+   *  endpoint's no-body form means "everything, both tables", which is not what
+   *  a selection asked for. */
+  async function unshareSelected() {
+    const picked = selected;
+    await run(
+      async () => {
+        const { revokedCount } = await unshareAllWithFriend(
+          friend.friendshipId,
+          picked.map(shareCardItem),
+        );
+        toast.success(unshareOutcomeMessage({ revokedCount, friendName: friend.username }));
+      },
+      "Couldn't unshare those. Please try again.",
+    );
+  }
+
+  /** The received bulk: no endpoint takes a list, so these go one at a time and
+   *  the result reports what actually happened. A partial failure is normal
+   *  (a row the owner revoked a moment ago) and must not read as total. */
+  async function removeSelected() {
+    const picked = selected.filter((card) => card.removable);
+    setBusy(true);
+    const failed: string[] = [];
+    let removed = 0;
+    for (const card of picked) {
+      try {
+        await revoke(card, "me");
+        removed += 1;
+      } catch (err) {
+        console.error(err);
+        failed.push(card.title);
+      }
+    }
+    const outcome = removeOutcomeMessage({ removed, failed });
+    if (outcome.tone === "error") toast.error(outcome.text);
+    else toast.success(outcome.text);
+    setPendingBulk(null);
+    clearSelection();
+    load();
+    onSharesChanged();
+    setBusy(false);
+  }
+
   const directions: ChipOption<FriendShareDirection>[] = [
     { value: "theySee", label: "You share", count: theirs.length },
     { value: "youSee", label: "They share", count: mine.length, hue: "var(--hue-shared)" },
   ];
 
   return (
-    <div className={classes.root}>
+    <div className={classes.root} ref={rootRef}>
       <Hero title={friend.username} onBack={onBack} backLabel="Back to friends" />
 
       <div className={classes.rails}>
-        <ChipRail
-          label="Which direction"
-          options={directions}
-          value={direction}
-          onChange={setDirection}
-        />
+        {selecting ? (
+          <SelectionBar
+            countLabel={shareSelectionCountLabel(selected, direction)}
+            onClear={clearSelection}
+          >
+            {selected.length < selectableKeys.length && (
+              <IconButton
+                icon={ListChecks}
+                label={`Select all ${selectableKeys.length}`}
+                onClick={() => setSelectedKeys(selectableKeys)}
+              />
+            )}
+            {/* Neither verb is a bin: both end a grant, and the record outlives
+                them. `user-minus` for "they stop seeing it", `eye-off` for "I
+                stop seeing it" — the same two glyphs Logjam GPS uses here. */}
+            {direction === "theySee" ? (
+              <IconButton
+                icon={UserMinus}
+                label={`Unshare ${selected.length} from ${friend.username}`}
+                disabled={busy}
+                onClick={() => setPendingBulk("unshare")}
+              />
+            ) : (
+              <IconButton
+                icon={EyeOff}
+                label={`Remove ${selected.filter((card) => card.removable).length} from your account`}
+                disabled={busy}
+                onClick={() => setPendingBulk("remove")}
+              />
+            )}
+          </SelectionBar>
+        ) : (
+          <ChipRail
+            label="Which direction"
+            options={directions}
+            value={direction}
+            onChange={changeDirection}
+          />
+        )}
         {/* The two lists look alike at a glance, and the chips alone read as a
             filter rather than as a direction. */}
         <p className={classes.note}>
-          {direction === "theySee"
-            ? `Things you have shared with ${friend.username}.`
-            : `Things ${friend.username} has shared with you.`}
+          {selecting
+            ? "Shift-click to select a range · Ctrl+A selects all"
+            : direction === "theySee"
+              ? `Things you have shared with ${friend.username}.`
+              : `Things ${friend.username} has shared with you.`}
         </p>
       </div>
 
@@ -203,15 +372,33 @@ function FriendSharingSection({
         <div className={classes.list}>
           {cards.map((card) => {
             const identity = KIND_IDENTITY[card.row.entityType];
+            const tile = <IconTile icon={identity.icon} hue={identity.hue} />;
+            const isSelected = selectedKeys.includes(card.key);
+            const selectable = selectableKeys.includes(card.key);
             return (
               <Row
                 key={card.key}
-                leading={<IconTile icon={identity.icon} hue={identity.hue} />}
+                leading={
+                  selectable ? (
+                    <TileCheckbox
+                      tile={tile}
+                      label={`Select ${card.title}`}
+                      checked={isSelected}
+                      selecting={selecting}
+                      onToggle={(extendRange) => toggleSelected(card.key, extendRange)}
+                    />
+                  ) : (
+                    tile
+                  )
+                }
                 title={card.title}
                 subtitle={card.blockedReason ?? card.subtitle}
-                disabled={busy}
+                selected={isSelected}
+                // A row no group verb can act on is inert for the duration,
+                // rather than a checkbox that refuses.
+                disabled={busy || (selecting && !selectable)}
                 trailing={
-                  direction === "theySee" ? (
+                  selecting ? undefined : direction === "theySee" ? (
                     <Button
                       compact
                       variant="outline"
@@ -243,56 +430,59 @@ function FriendSharingSection({
               />
             );
           })}
-
         </div>
       )}
 
-      {/* PINNED, not the last row of the list: a bulk revoke that scrolls is
-          both hard to reach and easy to meet by accident on the way past. The
-          same reason a dialog pins its primary action under the body (§6). It
-          also gives the list a real bottom edge, so a card at the boundary
-          reads as scrolling under the bar rather than as a card cut in half. */}
-      {direction === "theySee" && theirs.length > 0 && (
-        <div className={classes.footer}>
-          <Button
-            variant="outline"
-            disabled={busy}
-            className={classes.unshareAll}
-            onClick={() => setConfirmingUnshareAll(true)}
-          >
-            Unshare all ({theirs.length})
-          </Button>
-        </div>
-      )}
-
-      {/* Impact-aware confirmation, from the one place that words it. */}
+      {/* Impact-aware confirmations, from the one place that words them. */}
       <ConfirmDialog
-        open={confirmingUnshareAll}
+        open={pendingBulk === "unshare"}
         title={
           unshareAllConfirm({
-            count: theirs.length,
+            count: selected.length,
             friendName: friend.username,
-            includesPlace: theirs.some((card) => card.row.entityType === "place"),
+            includesPlace: selected.some((card) => card.row.entityType === "place"),
           }).title
         }
         message={
           unshareAllConfirm({
-            count: theirs.length,
+            count: selected.length,
             friendName: friend.username,
-            includesPlace: theirs.some((card) => card.row.entityType === "place"),
+            includesPlace: selected.some((card) => card.row.entityType === "place"),
           }).body
         }
-        confirmLabel={`Unshare all (${theirs.length})`}
+        confirmLabel={`Unshare ${selected.length}`}
         busy={busy}
-        onConfirm={() =>
-          void run(
-            () =>
-              unshareAllWithFriend(friend.friendshipId, theirs.map(shareCardItem)),
-            "Couldn't unshare all. Please try again.",
-            `${friend.username} can no longer see any of it.`,
-          )
+        onConfirm={() => void unshareSelected()}
+        onClose={() => setPendingBulk(null)}
+      />
+
+      <ConfirmDialog
+        open={pendingBulk === "remove"}
+        title={
+          removeAllConfirm({
+            count: selected.filter((card) => card.removable).length,
+            friendName: friend.username,
+            // ZERO on purpose: the sentence it unlocks offers to save a copy
+            // first, and this screen has no copy verb to offer. Saying so
+            // mid-confirm would send someone looking for a control that is on
+            // the place's own page (Phase B package 6) and nowhere near here.
+            copyableCount: 0,
+          }).title
         }
-        onClose={() => setConfirmingUnshareAll(false)}
+        message={
+          removeAllConfirm({
+            count: selected.filter((card) => card.removable).length,
+            friendName: friend.username,
+            copyableCount: 0,
+          }).body
+        }
+        confirmLabel="Remove"
+        // Not `error`: removing a share destroys nothing, and a red button here
+        // would say otherwise.
+        confirmColor="primary"
+        busy={busy}
+        onConfirm={() => void removeSelected()}
+        onClose={() => setPendingBulk(null)}
       />
     </div>
   );

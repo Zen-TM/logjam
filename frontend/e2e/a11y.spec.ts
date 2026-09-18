@@ -69,12 +69,20 @@ test.describe("desktop", () => {
     await aside.getByRole("radio", { name: /^They share/ }).click();
     await expectNoViolations(page, "aside");
 
-    // Unshare all names the blast radius rather than asking "sure?".
+    // Selecting swaps the rail for the bar at the same height, and the bulk
+    // confirm names the blast radius rather than asking "sure?".
     await aside.getByRole("radio", { name: /^You share/ }).click();
-    await aside.getByRole("button", { name: /^Unshare all/ }).click();
+    await aside.getByRole("checkbox").first().click();
+    await expect(aside.getByRole("group", { name: "Selection" })).toBeVisible();
+    await expectNoViolations(page, "aside");
+
+    await aside.getByRole("button", { name: /^Unshare 1 from/ }).click();
     await expect(page.getByRole("alertdialog")).toBeVisible();
     await expectNoViolations(page, "[role='alertdialog']");
     await page.getByRole("alertdialog").getByRole("button", { name: "Cancel" }).click();
+    // Escape clears the selection, as it does on every other list.
+    await page.keyboard.press("Escape");
+    await expect(aside.getByRole("group", { name: "Selection" })).toHaveCount(0);
   });
 
   test("Places, its filter sheet and a row menu", async ({ page }) => {
