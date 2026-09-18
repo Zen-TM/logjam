@@ -1301,6 +1301,7 @@ function App() {
           setShowTopo(false);
           setSelectingTopoBbox(true);
         }}
+        awaitingBbox={selectingTopoBbox}
         pendingBbox={pendingTopoBbox}
         onJobCreated={handleTopoJobCreated}
         onTemplateSaved={() => setTopoTemplateRefetch((n) => n + 1)}

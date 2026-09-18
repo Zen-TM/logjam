@@ -127,6 +127,7 @@ export default function TopoDialog({
   open,
   onClose,
   onSelectBbox,
+  awaitingBbox,
   pendingBbox,
   onJobCreated,
   initialTemplateId,
@@ -136,6 +137,9 @@ export default function TopoDialog({
   open: boolean;
   onClose: () => void;
   onSelectBbox: () => void;
+  /** True while the map is waiting for the box to be drawn — this dialog is
+   *  closed for the duration, and what is typed in it must survive that. */
+  awaitingBbox: boolean;
   pendingBbox: TBbox | null;
   onJobCreated: (job: TopoJob) => void;
   initialTemplateId?: string | null;
@@ -185,8 +189,16 @@ export default function TopoDialog({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Closing empties the form — but going off to draw the area CLOSES this
+  // dialog too, and comes back to it (App reopens on `onBboxSelected`). Emptying
+  // it then threw away the ZIP the user had already chosen, their name and their
+  // settings, silently and without the unsaved-changes confirm, because App's
+  // own close never goes through the guard. `awaitingBbox` is the difference
+  // between the two, and it is App's to tell us: it is false again whether the
+  // box was drawn or the pick was abandoned, so a genuinely abandoned dialog
+  // still empties.
   useEffect(() => {
-    if (open) return;
+    if (open || awaitingBbox) return;
     setFile(null);
     setPhase("form");
     setMode("form");
@@ -206,7 +218,7 @@ export default function TopoDialog({
     setSaveAsName("");
     setShowSaveAs(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
-  }, [open]);
+  }, [open, awaitingBbox]);
 
   const refreshTemplates = useCallback(async () => {
     try {
