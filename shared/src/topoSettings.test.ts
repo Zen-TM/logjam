@@ -8,6 +8,7 @@ import {
   rgbaToHex,
   applySlopeGradient,
   rgbaCssFromHex,
+  CONTOUR_WIDTH_UNITS_PER_PX,
   contourWidthStops,
   featureLineWidthStops,
   lerpZoom,
@@ -274,9 +275,16 @@ describe("vector paint helpers", () => {
     expect(contourWidthStops(0.1).z12).toBe(0.3); // tiny width still floored
   });
 
-  it("featureLineWidthStops floors z12 at 0.25", () => {
-    expect(featureLineWidthStops(4)).toEqual({ z12: 1, z18: 4 });
-    expect(featureLineWidthStops(0.4).z12).toBe(0.25);
+  it("featureLineWidthStops floors z12 at 0.3", () => {
+    expect(featureLineWidthStops(4)).toEqual({ z12: 1.6, z18: 4 });
+    expect(featureLineWidthStops(0.4).z12).toBe(0.3);
+  });
+
+  // The whole point of the shared taper: a contour and an OSM line asked for
+  // the same width are the same line, at z18 and at every zoom under it.
+  it("draws a contour and a feature of the same width identically", () => {
+    const pixels = 2.25;
+    expect(contourWidthStops(pixels * CONTOUR_WIDTH_UNITS_PER_PX)).toEqual(featureLineWidthStops(pixels));
   });
 
   it("lerpZoom interpolates and clamps to [12,18]", () => {
