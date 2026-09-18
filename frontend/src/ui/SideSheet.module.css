@@ -51,6 +51,9 @@
 .body {
   flex: 1;
   min-height: 0;
+  /* Same reason as the dialog's body: an absolutely positioned descendant is
+     only clipped by a scroller that is also its containing block. */
+  position: relative;
   overflow-y: auto;
   padding: 12px var(--gutter);
   display: flex;
