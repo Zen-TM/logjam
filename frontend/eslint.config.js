@@ -26,7 +26,6 @@ const MUI_LEGACY_FILES = [
   'src/components/dialogs/SelectedPlacesDialog.tsx',
   'src/components/dialogs/UnifiedImportDialog.tsx',
   'src/components/dialogs/ValidatedNumberField.tsx',
-  'src/components/sidebar/panels/FriendSharingSection.tsx',
   'src/components/SignIn.tsx',
   'src/csvImport/SectionLabel.tsx',
   'src/main.tsx',

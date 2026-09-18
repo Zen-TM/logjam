@@ -41,6 +41,42 @@ test.describe("desktop", () => {
     await expectNoViolations(page, "#map");
   });
 
+  test("Friends, a request, the sharing audit and the share dialog", async ({ page }) => {
+    await openApp(page);
+    await page.getByRole("button", { name: "Friends", exact: true }).click();
+    const aside = page.locator("aside");
+    // A request carries its verbs on the card's own footer; a friend carries a ⋯.
+    await expect(aside.getByRole("button", { name: "Accept" })).toBeVisible({ timeout: 15_000 });
+    await expectNoViolations(page, "aside");
+
+    // Adding someone is a dialog, not a box above the list.
+    await aside.getByRole("button", { name: "Add", exact: true }).click();
+    const addDialog = page.locator("dialog[open]");
+    await expect(addDialog.getByRole("searchbox", { name: "Search by username" })).toBeFocused();
+    await addDialog.getByRole("searchbox").fill("car");
+    await expect(addDialog.getByRole("button", { name: "Add", exact: true })).toBeVisible();
+    await expectNoViolations(page, "dialog");
+    await page.keyboard.press("Escape");
+    await expect(addDialog).toHaveCount(0);
+
+    // The audit replaces the list: a hero with a way back, a direction rail and
+    // one row per shared thing, of every kind.
+    await aside.getByRole("button", { name: "bob", exact: true }).click();
+    await expect(aside.getByRole("radio", { name: /^You share/ })).toBeVisible();
+    await expect(aside.getByRole("button", { name: "Unshare" }).first()).toBeVisible();
+    await expectNoViolations(page, "aside");
+
+    await aside.getByRole("radio", { name: /^They share/ }).click();
+    await expectNoViolations(page, "aside");
+
+    // Unshare all names the blast radius rather than asking "sure?".
+    await aside.getByRole("radio", { name: /^You share/ }).click();
+    await aside.getByRole("button", { name: /^Unshare all/ }).click();
+    await expect(page.getByRole("alertdialog")).toBeVisible();
+    await expectNoViolations(page, "[role='alertdialog']");
+    await page.getByRole("alertdialog").getByRole("button", { name: "Cancel" }).click();
+  });
+
   test("Places, its filter sheet and a row menu", async ({ page }) => {
     await openApp(page);
     await page.getByRole("button", { name: "Places", exact: true }).click();

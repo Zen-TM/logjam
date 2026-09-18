@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { fetchAuthSession } from "aws-amplify/auth";
-import type { ScopedCustomFieldDef, StandaloneFile, ThemeSchemeId, TripLogCustomFieldDef, NotificationPreferences, MediaItem, MediaLinkedType, MediaMetadata, MediaOrigin, PlaceMergePolicy, ElevationProfile, SharableEntityType, FileSendStatus, FileSendSourceKind } from "@logjam/shared";
+import type { ScopedCustomFieldDef, StandaloneFile, ThemeSchemeId, TripLogCustomFieldDef, NotificationPreferences, MediaItem, MediaLinkedType, MediaMetadata, MediaOrigin, PlaceMergePolicy, ElevationProfile, SharableEntityType } from "@logjam/shared";
 import { formatTripPlaceNames, tallyNotifications } from "@logjam/shared";
 import { settleReadOverrides, withReadOverrides, type ReadOverrides } from "./notificationReadOverrides";
 import type { BulkShareItem, FriendShareRow, FriendShares } from "@logjam/shared";
@@ -1484,20 +1484,10 @@ export function ownerUsername(
 // an import. There is no sender side on web: nothing here holds a local file to
 // send.
 
-export type TFileSendInboxRow = {
-  fileSendId: string;
-  status: FileSendStatus;
-  sourceKind: FileSendSourceKind;
-  filename: string;
-  sizeBytes: number;
-  createdAt: string;
-  expiresAt: string;
-  sentBy: { id: string; username: string };
-};
-
-export function getFileSendInbox(): Promise<TFileSendInboxRow[]> {
-  return apiFetch<TFileSendInboxRow[]>("/file-sends/inbox");
-}
+// NO `GET /file-sends/inbox` HELPER. The Inbox draws every send from the
+// notification each one writes, and answers it there; the Friends page held a
+// second, separately-fetched copy of that list until 2026-09-18, which could
+// disagree with the Inbox about what was still pending.
 
 /** Returns a short-lived presigned URL. Accepted rows stay downloadable until
  *  the send expires, which is what makes a re-download possible after a failed

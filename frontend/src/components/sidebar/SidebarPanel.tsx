@@ -57,7 +57,6 @@ const MAPS_VIEWS = [
  * shrink.
  */
 const LEGACY_PAGES: ReadonlySet<PanelId> = new Set<PanelId>([
-  "friends",
   "account",
   "settings",
 ]);
