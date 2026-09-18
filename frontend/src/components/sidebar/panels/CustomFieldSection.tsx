@@ -1,134 +1,118 @@
 import { useState } from "react";
+import { EllipsisVertical, Lock, Plus, Tag, Trash2 } from "lucide-react";
 import {
+  ATTRIBUTE_NOUN,
+  buildCustomFieldDef,
   CUSTOM_FIELD_TYPES,
   customFieldDisplayLabel,
   isSystemFieldDef,
   renameCustomFieldLabel,
-  type TripLogCustomFieldDef,
   type ScopedCustomFieldDef,
+  type TripLogCustomFieldDef,
+  type TripLogCustomFieldType,
 } from "@logjam/shared";
 import {
+  createCustomField,
   updateCustomField,
   type CustomFieldEntityKind,
 } from "../../../placeUtils";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
 import DeleteCustomFieldDialog from "../../dialogs/DeleteCustomFieldDialog";
-import AddCustomFieldDialog from "../../dialogs/AddCustomFieldDialog";
+import AddCustomFieldForm from "../../dialogs/AddCustomFieldForm";
 import { useCustomFieldImpact } from "../../dialogs/useCustomFieldImpact";
 import type { TPlaceType } from "../../../placeUtils";
 import { messageFromError } from "../../../errors/messageFromError";
-import { ErrorBanner } from "../../feedback/ErrorBanner";
-import classes from "./AccountPanel.module.css";
-
-// Entity → the User.uiPreferences key its defs persist under, and copy nouns.
-const ENTITY_META: Record<
-  CustomFieldEntityKind,
-  { prefsKey: "tripLogCustomFields" | "placeCustomFields"; rowNoun: string }
-> = {
-  "trip-log": { prefsKey: "tripLogCustomFields", rowNoun: "trip" },
-  place: { prefsKey: "placeCustomFields", rowNoun: "place" },
-};
+import {
+  Button,
+  Hero,
+  IconButton,
+  IconTile,
+  Menu,
+  Row,
+  SectionHeader,
+  TextField,
+} from "../../../ui";
+import classes from "./ListPage.module.css";
 
 function customFieldTypeName(type: TripLogCustomFieldDef["type"]): string {
-  return CUSTOM_FIELD_TYPES.find((t) => t.value === type)?.label ?? type;
+  return CUSTOM_FIELD_TYPES.find((option) => option.value === type)?.label ?? type;
 }
 
 /**
- * Account-panel section for managing one family of custom fields (trip-log or
- * place). Lists the definitions, renames them inline (keeping the field `key`
- * stable, with an impact-count confirm), deletes them via the shared
- * DeleteCustomFieldDialog (server strips values from every row), and creates new
- * ones via AddCustomFieldDialog. Rename/delete/create all persist through the
- * shared machinery, then propagate the updated defs up via `onDefsChange` so
- * open dialogs stay in sync.
+ * One family of the user's own attributes — trip or place — as a page inside
+ * Settings.
+ *
+ * BUILT-INS LAST, and with no verbs. A system definition belongs to no account:
+ * the server looks a key up under the CALLER's id, so `PATCH` and `DELETE` are
+ * both 404 on one, and offering Rename beside it produced "Custom field not
+ * found" every time (fixed 2026-09-18). A row with no action reads as a fact;
+ * a row whose action fails reads as a bug.
+ *
+ * A rename keeps the definition's `key`, so the values stay attached to it —
+ * which is why the confirm is informational rather than a warning, and why it
+ * still states how many rows are affected.
  */
 function CustomFieldSection({
   entity,
-  sectionLabel,
-  tooltip,
-  emptyText,
+  title,
+  rowNoun,
   loading,
   defs,
   onDefsChange,
   placeTypes,
+  onBack,
 }: {
   entity: CustomFieldEntityKind;
-  sectionLabel: string;
-  tooltip: string;
-  emptyText: string;
+  title: string;
+  /** What one ROW of this entity is called, for the impact sentence. */
+  rowNoun: string;
   // Owning user not yet loaded — show a loading state instead of the list.
   loading: boolean;
-  // Scoped for places, plain for trip logs — the section only reads the label
-  // and key, so it takes whichever the caller holds and hands back what the
-  // server returned rather than a locally-edited copy.
+  // Scoped for places, plain for trip logs — the page only reads the label and
+  // key, so it takes whichever the caller holds and hands back what the server
+  // returned rather than a locally-edited copy.
   defs: ScopedCustomFieldDef[];
   onDefsChange: (defs: ScopedCustomFieldDef[]) => void;
-  /** Passed through to the add dialog's scoping choice. Absent for trip-log
-   *  fields, which are scoped by the places a trip links rather than chosen. */
+  /** Offered as the scoping choice when a PLACE attribute is created. Absent
+   *  for trip attributes, which are scoped by the places a trip links rather
+   *  than chosen. */
   placeTypes?: TPlaceType[];
+  onBack: () => void;
 }) {
-  const meta = ENTITY_META[entity];
-
-  const [renamingFieldKey, setRenamingFieldKey] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [renaming, setRenaming] = useState<ScopedCustomFieldDef | null>(null);
   const [renameInput, setRenameInput] = useState("");
-  const [renameFieldError, setRenameFieldError] = useState<string | null>(null);
-  // Set when the rename passes validation; holds the already-renamed defs
-  // awaiting the user's confirm.
+  const [renameError, setRenameError] = useState<string | null>(null);
+  // Set when the rename passes validation; holds the confirm's copy while the
+  // user decides.
   const [pendingRename, setPendingRename] = useState<{
     key: string;
     oldLabel: string;
     newLabel: string;
   } | null>(null);
   const [renameSaving, setRenameSaving] = useState(false);
-  const [deletingFieldDef, setDeletingFieldDef] = useState<TripLogCustomFieldDef | null>(null);
-  const [addOpen, setAddOpen] = useState(false);
+  const [deletingDef, setDeletingDef] = useState<TripLogCustomFieldDef | null>(null);
 
-  const { count: renameImpactCount, error: renameImpactError } = useCustomFieldImpact(
+  const { count: impactCount, error: impactError } = useCustomFieldImpact(
     entity,
     pendingRename?.key ?? null,
   );
 
-  // BUILT-INS LAST, and with no verbs — the same two rules the phone's list
-  // follows, for the same reason. A system definition belongs to no account:
-  // `PATCH`/`DELETE /custom-fields/:entity/:key` look the key up under the
-  // caller's id, miss, and answer 404, so Rename and Delete on the ten built-in
-  // place attributes failed with "Custom field not found" every time. A row
-  // with no action reads as a fact; a row whose action fails reads as a bug.
-  // The order the server sent still decides within each half, so this is a
-  // stable partition rather than a sort.
-  const ordered = [...defs.filter((def) => !isSystemFieldDef(def)), ...defs.filter(isSystemFieldDef)];
-
-  function startRenameField(def: TripLogCustomFieldDef) {
-    setRenamingFieldKey(def.key);
-    setRenameInput(def.label);
-    setRenameFieldError(null);
-  }
-
-  function cancelRenameField() {
-    setRenamingFieldKey(null);
-    setRenameInput("");
-    setRenameFieldError(null);
-  }
-
-  function handleRenameFieldSubmit(def: TripLogCustomFieldDef) {
+  function submitRename(def: ScopedCustomFieldDef) {
     const result = renameCustomFieldLabel(defs, def.key, renameInput);
     if ("error" in result) {
-      setRenameFieldError(result.error);
+      setRenameError(result.error);
       return;
     }
     if (result.defs === defs || renameInput.trim() === def.label) {
       // Unchanged — nothing to save.
-      cancelRenameField();
+      setRenaming(null);
       return;
     }
-    setPendingRename({
-      key: def.key,
-      oldLabel: def.label,
-      newLabel: renameInput.trim(),
-    });
+    setPendingRename({ key: def.key, oldLabel: def.label, newLabel: renameInput.trim() });
   }
 
-  async function handleConfirmRename() {
+  async function confirmRename() {
     if (!pendingRename) return;
     setRenameSaving(true);
     try {
@@ -141,127 +125,169 @@ function CustomFieldSection({
       });
       onDefsChange(updated);
       setPendingRename(null);
-      cancelRenameField();
+      setRenaming(null);
     } catch (err) {
       console.error(err);
       setPendingRename(null);
-      setRenameFieldError(
-        messageFromError(err, "Couldn't rename the custom field. Please try again."),
-      );
+      setRenameError(messageFromError(err, `Couldn't rename that ${ATTRIBUTE_NOUN.one}.`));
     } finally {
       setRenameSaving(false);
     }
   }
 
-  const impactSuffix = renameImpactError
-    ? `Couldn't check how many ${meta.rowNoun}s use this field, but renaming is safe — `
-    : renameImpactCount === null
-      ? `Checking how many ${meta.rowNoun}s use it… `
-      : renameImpactCount === 0
-        ? `No ${meta.rowNoun}s currently have a value for this field. `
-        : `${renameImpactCount} ${meta.rowNoun}${renameImpactCount === 1 ? "" : "s"} ${
-            renameImpactCount === 1 ? "has" : "have"
-          } a value for this field — `;
+  if (adding) {
+    return (
+      <AddAttributePage
+        entity={entity}
+        rowNoun={rowNoun}
+        existingDefs={defs}
+        placeTypes={placeTypes}
+        onAdded={(updated) => {
+          onDefsChange(updated);
+          setAdding(false);
+        }}
+        onBack={() => setAdding(false)}
+      />
+    );
+  }
+
+  const own = defs.filter((def) => !isSystemFieldDef(def));
+  const system = defs.filter(isSystemFieldDef);
 
   return (
-    <>
-      <span className={classes.sectionLabel} title={tooltip}>
-        {sectionLabel}
-      </span>
-      <div className={classes.divider} />
-      {loading ? (
-        <p className={classes.state}>Loading...</p>
-      ) : (
-        <>
-          {defs.length === 0 ? (
-            <p className={classes.state}>{emptyText}</p>
-          ) : (
-            ordered.map((def) =>
-              renamingFieldKey === def.key ? (
-                <div key={def.key} className={classes.fieldEdit}>
-                  <input
-                    className={classes.usernameInput}
-                    aria-label={`Rename field ${def.label}`}
+    <div className={classes.root}>
+      <Hero
+        title={title}
+        onBack={onBack}
+        backLabel="Back to Settings"
+        actions={
+          <Button compact variant="outline" icon={Plus} onClick={() => setAdding(true)}>
+            Add
+          </Button>
+        }
+      />
+
+      <div className={classes.list}>
+        {loading ? (
+          <p className={classes.state}>Loading…</p>
+        ) : (
+          <>
+            {own.length === 0 ? (
+              <p className={classes.note}>
+                Add your own {ATTRIBUTE_NOUN.one} to record on every {rowNoun} — water level,
+                say, or party size.
+              </p>
+            ) : (
+              <SectionHeader title="Yours" count={own.length} />
+            )}
+
+            {own.map((def) =>
+              renaming?.key === def.key ? (
+                <div key={def.key} className={classes.inlineEdit}>
+                  <TextField
+                    label={`Rename ${def.label}`}
                     value={renameInput}
-                    onChange={(e) => setRenameInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") handleRenameFieldSubmit(def);
-                      if (e.key === "Escape") cancelRenameField();
+                    onChange={(event) => {
+                      setRenameInput(event.target.value);
+                      if (renameError) setRenameError(null);
                     }}
-                    autoFocus
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") submitRename(def);
+                      if (event.key === "Escape") setRenaming(null);
+                    }}
+                    error={renameError}
                     maxLength={64}
                     disabled={renameSaving}
+                    autoFocus
                   />
-                  <div className={classes.usernameActions}>
-                    <button
-                      className={classes.saveUsernameBtn}
-                      onClick={() => handleRenameFieldSubmit(def)}
-                      disabled={renameSaving}
-                    >
-                      {renameSaving ? "Saving…" : "Save"}
-                    </button>
-                    <button
-                      className={classes.cancelUsernameBtn}
-                      onClick={cancelRenameField}
-                      disabled={renameSaving}
-                    >
+                  <div className={classes.inlineActions}>
+                    <Button compact onClick={() => setRenaming(null)} disabled={renameSaving}>
                       Cancel
-                    </button>
+                    </Button>
+                    <Button
+                      compact
+                      variant="filled"
+                      busy={renameSaving}
+                      onClick={() => submitRename(def)}
+                    >
+                      Save
+                    </Button>
                   </div>
-                  {renameFieldError && <ErrorBanner message={renameFieldError} />}
                 </div>
               ) : (
-                <div key={def.key} className={classes.fieldRow}>
-                  <div className={classes.fieldInfo}>
-                    <span className={classes.fieldName}>{customFieldDisplayLabel(def)}</span>
-                    <span className={classes.fieldType}>
-                      {isSystemFieldDef(def) ? "Built-in · " : ""}
-                      {customFieldTypeName(def.type)}
-                    </span>
-                  </div>
-                  {!isSystemFieldDef(def) && (
-                    <>
-                      <button
-                        className={classes.renameFieldBtn}
-                        onClick={() => startRenameField(def)}
-                      >
-                        Rename
-                      </button>
-                      <button
-                        className={classes.deleteFieldBtn}
-                        onClick={() => setDeletingFieldDef(def)}
-                      >
-                        Delete
-                      </button>
-                    </>
-                  )}
-                </div>
+                <Row
+                  key={def.key}
+                  leading={<IconTile icon={Tag} hue="var(--theme-accent)" />}
+                  title={customFieldDisplayLabel(def)}
+                  subtitle={customFieldTypeName(def.type)}
+                  description="Opens the name for editing"
+                  onOpen={() => {
+                    setRenaming(def);
+                    setRenameInput(def.label);
+                    setRenameError(null);
+                  }}
+                  trailing={
+                    /* The destructive verb lives in the ⋯: warning as TEXT on a
+                       card measures 3.8:1 (Basalt), and the menu's surface is
+                       where it clears 4.5 (`scripts/wcag-contrast.mjs`). */
+                    <Menu
+                      label={`Actions for ${def.label}`}
+                      title={def.label}
+                      placement="bottom-end"
+                      entries={[
+                        {
+                          id: "delete",
+                          label: `Delete ${ATTRIBUTE_NOUN.one}`,
+                          icon: Trash2,
+                          danger: true,
+                          onSelect: () => setDeletingDef(def),
+                        },
+                      ]}
+                      trigger={(props) => (
+                        <IconButton
+                          {...props}
+                          icon={EllipsisVertical}
+                          label={`Actions for ${def.label}`}
+                        />
+                      )}
+                    />
+                  }
+                />
               ),
-            )
-          )}
-          <button className={classes.addFieldBtn} onClick={() => setAddOpen(true)}>
-            Add field
-          </button>
-        </>
-      )}
+            )}
 
-      {/* Rename impact confirm — values stay linked (the field's key is stable),
-          so this is informational, not destructive. */}
+            {system.length > 0 && (
+              <>
+                <SectionHeader title="Built in" count={system.length} />
+                {system.map((def) => (
+                  <Row
+                    key={def.key}
+                    leading={<IconTile icon={Lock} hue="var(--theme-bonus-2)" />}
+                    title={customFieldDisplayLabel(def)}
+                    subtitle={customFieldTypeName(def.type)}
+                  />
+                ))}
+              </>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Rename impact confirm — values stay linked (the key is stable), so
+          this states a number rather than warning about a loss. */}
       <ConfirmDialog
         open={pendingRename !== null}
         title={`Rename "${pendingRename?.oldLabel ?? ""}"?`}
         message={
           <>
-            The field will be renamed to "{pendingRename?.newLabel ?? ""}".{" "}
-            {impactSuffix}
-            {(renameImpactError || (renameImpactCount !== null && renameImpactCount > 0)) &&
-              "existing values are kept and will appear under the new name."}
+            It becomes "{pendingRename?.newLabel ?? ""}".{" "}
+            {impactSentence(impactCount, impactError, rowNoun)}
           </>
         }
         confirmLabel="Rename"
         confirmColor="secondary"
         busy={renameSaving}
-        onConfirm={handleConfirmRename}
+        onConfirm={confirmRename}
         onClose={() => {
           if (!renameSaving) setPendingRename(null);
         }}
@@ -269,20 +295,123 @@ function CustomFieldSection({
 
       <DeleteCustomFieldDialog
         entity={entity}
-        def={deletingFieldDef}
-        onClose={() => setDeletingFieldDef(null)}
+        def={deletingDef}
+        onClose={() => setDeletingDef(null)}
         onDeleted={(remaining) => onDefsChange(remaining)}
       />
+    </div>
+  );
+}
 
-      <AddCustomFieldDialog
-        open={addOpen}
-        entity={entity}
-        existingDefs={defs}
-        placeTypes={placeTypes}
-        onClose={() => setAddOpen(false)}
-        onAdded={(updated) => onDefsChange(updated)}
+/** What renaming does to the rows that already answered it. Never a warning:
+ *  the values keep their key and appear under the new name. */
+function impactSentence(count: number | null, error: string | null, rowNoun: string): string {
+  if (error) return "Existing values are kept and appear under the new name.";
+  if (count === null) return `Checking how many ${rowNoun}s use it…`;
+  if (count === 0) return `No ${rowNoun} has a value for it yet.`;
+  return `${count} ${count === 1 ? rowNoun : `${rowNoun}s`} ${
+    count === 1 ? "has" : "have"
+  } a value for it — kept, and shown under the new name.`;
+}
+
+/**
+ * Adding one, as a page rather than a dialog: the form is the same
+ * `AddCustomFieldForm` a place's and a trip's own form open inline, so the
+ * three cannot drift (UX-002/003), and it carries its own Cancel and Add.
+ */
+function AddAttributePage({
+  entity,
+  rowNoun,
+  existingDefs,
+  placeTypes,
+  onAdded,
+  onBack,
+}: {
+  entity: CustomFieldEntityKind;
+  rowNoun: string;
+  existingDefs: ScopedCustomFieldDef[];
+  placeTypes?: TPlaceType[];
+  onAdded: (defs: ScopedCustomFieldDef[]) => void;
+  onBack: () => void;
+}) {
+  const [label, setLabel] = useState("");
+  const [type, setType] = useState<TripLogCustomFieldType>("string");
+  const [bounded, setBounded] = useState(false);
+  const [min, setMin] = useState("");
+  const [max, setMax] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedTypeIds, setSelectedTypeIds] = useState<string[]>([]);
+  // Defaults to "all types" for an attribute created here: the user is defining
+  // one with no place in front of them, so the honest default is the one that
+  // shows it everywhere rather than nowhere.
+  const [appliesToAllTypes, setAppliesToAllTypes] = useState(true);
+
+  async function handleAdd() {
+    const result = buildCustomFieldDef({ label, type, bounded, min, max }, existingDefs);
+    if ("error" in result) {
+      setError(result.error);
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      // ROW-GRAIN. The whole-list PATCH is gone (see placeUtils.ts): it could
+      // not express the scoping, so every save through it wiped the scoping
+      // off every definition.
+      const updated = await createCustomField(entity, result.def, {
+        appliesToAllTypes,
+        ...(appliesToAllTypes ? {} : { placeTypeIds: selectedTypeIds }),
+      });
+      onAdded(updated);
+    } catch (err) {
+      console.error(err);
+      setError(messageFromError(err, `Couldn't save that ${ATTRIBUTE_NOUN.one}.`));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className={classes.root}>
+      <Hero
+        title={`New ${rowNoun} ${ATTRIBUTE_NOUN.one}`}
+        onBack={onBack}
+        backLabel="Back to the list"
       />
-    </>
+      <div className={classes.list}>
+        <AddCustomFieldForm
+          entityNoun={`${rowNoun}s`}
+          label={label}
+          onLabelChange={setLabel}
+          type={type}
+          onTypeChange={setType}
+          onAdd={handleAdd}
+          onCancel={onBack}
+          adding={saving}
+          error={error}
+          bounds={{
+            bounded,
+            onBoundedChange: setBounded,
+            min,
+            onMinChange: setMin,
+            max,
+            onMaxChange: setMax,
+          }}
+          scope={
+            placeTypes && entity === "place"
+              ? {
+                  types: placeTypes,
+                  selectedTypeIds,
+                  onSelectedTypeIdsChange: setSelectedTypeIds,
+                  appliesToAllTypes,
+                  onAppliesToAllTypesChange: setAppliesToAllTypes,
+                }
+              : undefined
+          }
+        />
+      </div>
+    </div>
   );
 }
 

@@ -1,0 +1,18 @@
+/* Settings has no hero (DESIGN.md §1), so the page IS the scroller: the list of
+   preferences and the three lists the user keeps. */
+.root {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  /* Room for the first section header's own spacing and each row's focus ring. */
+  padding: 8px var(--gutter) var(--gutter);
+}
+
+.state {
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--theme-text-muted);
+}

@@ -1,0 +1,85 @@
+/* The shape every list PAGE inside Settings takes: hero pinned, only the list
+   scrolls (DESIGN.md §2). Shared by the place types and the two attribute
+   lists, which are the same page with different rows. */
+.root {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  /* Room for each card's focus ring inside the scroller. */
+  padding: 4px var(--gutter) var(--gutter);
+}
+
+/* A line of explanation under a control, or in place of an empty list. */
+.note {
+  margin: 0;
+  font-size: var(--font-xs);
+  color: var(--theme-text-muted);
+}
+
+.state {
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--theme-text-muted);
+}
+
+/* One row swapped for its rename field, with the two verbs under it. */
+.inlineEdit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border: var(--hairline);
+  border-color: var(--theme-accent);
+  border-radius: var(--radius-lg);
+  background: var(--theme-secondary);
+}
+
+.inlineActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* The curated icons, as a grid of equal cells — the same shape as the phone's,
+   which is what makes "pick one of these" read at a glance. */
+.iconGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--control-lg), 1fr));
+  gap: 6px;
+}
+
+.iconCell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  border: var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--theme-secondary);
+  color: var(--theme-text-primary);
+  cursor: pointer;
+}
+
+.iconCell:hover {
+  border-color: var(--theme-text-muted);
+}
+
+.iconCell:has(:focus-visible) {
+  outline: 2px solid var(--theme-accent);
+  outline-offset: 2px;
+}
+
+.iconCell[data-selected] {
+  border-color: var(--theme-accent);
+  color: var(--theme-accent);
+}

@@ -85,6 +85,56 @@ test.describe("desktop", () => {
     await expect(aside.getByRole("group", { name: "Selection" })).toHaveCount(0);
   });
 
+  test("Account, Settings and the three lists it keeps", async ({ page }) => {
+    await openApp(page);
+    const aside = page.locator("aside");
+
+    // Account leads with who you are and the two quota meters.
+    await page.getByRole("button", { name: "Account", exact: true }).click();
+    await expect(aside.getByRole("button", { name: "Change username" })).toBeVisible({
+      timeout: 15_000,
+    });
+    await expectNoViolations(page, "aside");
+
+    // The one dialog here that a typed phrase guards.
+    await aside.getByRole("button", { name: "Delete account" }).click();
+    const deleteDialog = page.locator("dialog[open]");
+    await expect(
+      deleteDialog.getByRole("button", { name: "Delete account" }),
+    ).toBeDisabled();
+    await expectNoViolations(page, "dialog");
+    await page.keyboard.press("Escape");
+    await expect(deleteDialog).toHaveCount(0);
+
+    // Settings is a plain list — no hero — of switches and the lists you keep.
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await expect(aside.getByRole("radiogroup", { name: "Theme" })).toBeVisible();
+    await expectNoViolations(page, "aside");
+
+    // A list opens in place, with the arrow back out (DESIGN.md §2).
+    await aside.getByRole("button", { name: /^Place types/ }).click();
+    await expect(aside.getByRole("heading", { name: "Place types" })).toBeVisible();
+    await expectNoViolations(page, "aside");
+
+    // Its form is the icon grid and the swatch line, both radio groups.
+    await aside.getByRole("button", { name: "Add", exact: true }).click();
+    await expect(aside.getByRole("radiogroup", { name: "Icon" })).toBeVisible();
+    await expectNoViolations(page, "aside");
+    // The palette names its colours; a hex is a name but not a helpful one.
+    await aside.getByRole("button", { name: /^Colour:/ }).click();
+    await expect(page.getByRole("radio", { name: "Pool teal" })).toBeVisible();
+    await expectNoViolations(page, "[role='dialog']");
+    await page.keyboard.press("Escape");
+
+    await aside.getByRole("button", { name: "Back to place types" }).click();
+    await aside.getByRole("button", { name: "Back to Settings" }).click();
+
+    // The attributes list: yours with verbs, the built-ins without.
+    await aside.getByRole("button", { name: /^Place attributes/ }).click();
+    await expect(aside.getByRole("heading", { name: /Built in/ })).toBeVisible();
+    await expectNoViolations(page, "aside");
+  });
+
   test("Places, its filter sheet and a row menu", async ({ page }) => {
     await openApp(page);
     await page.getByRole("button", { name: "Places", exact: true }).click();

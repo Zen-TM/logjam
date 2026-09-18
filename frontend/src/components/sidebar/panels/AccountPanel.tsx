@@ -1,29 +1,27 @@
-import { useState, useEffect } from "react";
-import {
-  updateUsername,
-  updateNotificationPreferences,
-  updateUserPreferences,
-  exportUserData,
-  type TUser,
-} from "../../../placeUtils";
-import type { TPlaceType } from "../../../placeUtils";
-import {
-  DEFAULT_NOTIFICATION_PREFERENCES,
-  formatCredits,
-  type NotificationPreferences,
-    type ScopedCustomFieldDef,
-} from "@logjam/shared";
+import { useEffect, useId, useState } from "react";
+import { Download, LogOut, Mail, Pencil, Trash2 } from "lucide-react";
+import { formatCredits } from "@logjam/shared";
+
+import { updateUsername, exportUserData, type TUser } from "../../../placeUtils";
 import { useAuth } from "../../../useAuth";
-import { useThemePreferences } from "../../../themePreferences";
 import DeleteAccountDialog from "../../dialogs/DeleteAccountDialog";
 import ChangeEmailDialog from "../../dialogs/ChangeEmailDialog";
-import CustomFieldSection from "./CustomFieldSection";
-import PlaceTypeSection from "./PlaceTypeSection";
-import classes from "./AccountPanel.module.css";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
 import { ErrorBanner } from "../../feedback/ErrorBanner";
+import {
+  Button,
+  Dialog,
+  Hero,
+  IconButton,
+  IconTile,
+  ProgressBar,
+  Row,
+  SectionHeader,
+  TextField,
+} from "../../../ui";
 import Footer from "../../Footer";
+import classes from "./AccountPanel.module.css";
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -31,108 +29,51 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
-function AccountPanel({
-  view,
-  currentUser,
-  customFieldDefs,
-  onCustomFieldDefsChange,
-  placeCustomFieldDefs,
-  onPlaceCustomFieldDefsChange,
-  placeTypes,
-  onPlaceTypesChange,
-}: {
-  /** Account is who you are and what you hold; Settings is how the app behaves.
-   *  One component for now because both read the same user record. */
-  view: "account" | "settings";
-  currentUser: TUser | null;
-  // Custom trip-log field definitions (App-level state, shared with the trip
-  // dialogs so a create/rename/delete here is immediately visible there).
-  customFieldDefs: ScopedCustomFieldDef[];
-  onCustomFieldDefsChange: (defs: ScopedCustomFieldDef[]) => void;
-  // Custom place field definitions (App-level state, shared with PlaceDialog).
-  placeCustomFieldDefs: ScopedCustomFieldDef[];
-  /** Offered as the scoping choice when a PLACE field is created here, and
-   *  managed by the section above. */
-  placeTypes: TPlaceType[];
-  onPlaceTypesChange: (types: TPlaceType[]) => void;
-  onPlaceCustomFieldDefsChange: (defs: ScopedCustomFieldDef[]) => void;
-}) {
+/** Percent used, clamped: a quota can be exceeded, and a bar past its end reads
+ *  as a broken bar rather than as an over-quota account. */
+function percentUsed(used: number, quota: number): number {
+  if (quota <= 0) return 0;
+  return Math.min(100, (used / quota) * 100);
+}
+
+/**
+ * Account — "who am I here, and what am I using of it?" (DESIGN.md §1).
+ *
+ * The two quota meters ARE the question, so they lead. Everything else is the
+ * sign-in identity and the two irreversible things: signing out and deleting
+ * the account. The same shape as Logjam GPS's Account screen, which is where
+ * the section order comes from.
+ *
+ * PRIVACY: username, email and byte counts. The email appears here and nowhere
+ * else — friend search and lists are username-only (root CLAUDE.md).
+ */
+function AccountPanel({ currentUser }: { currentUser: TUser | null }) {
   const { signOut } = useAuth();
   const toast = useToast();
-  const { schemeId, schemes, isHydrating, isSaving, error: themeError, setThemeScheme } =
-    useThemePreferences();
-  const [currentUsername, setCurrentUsername] = useState<string | null>(null);
-  const [editingUsername, setEditingUsername] = useState(false);
-  const [usernameInput, setUsernameInput] = useState("");
-  const [usernameSaving, setUsernameSaving] = useState(false);
-  const [usernameError, setUsernameError] = useState<string | null>(null);
-  const [usernameSaved, setUsernameSaved] = useState(false);
+  const [username, setUsername] = useState<string | null>(null);
   const [email, setEmail] = useState<string | null>(null);
+  const [renameOpen, setRenameOpen] = useState(false);
   const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
   const [changeEmailOpen, setChangeEmailOpen] = useState(false);
-  const [notifPrefs, setNotifPrefs] = useState<NotificationPreferences | null>(null);
-  const [notifSaving, setNotifSaving] = useState(false);
-  const [autoDownloadGeoPdfs, setAutoDownloadGeoPdfs] = useState<boolean | null>(null);
-  const [autoDownloadSaving, setAutoDownloadSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     if (!currentUser) return;
-    setCurrentUsername(currentUser.username);
-    setUsernameInput(currentUser.username);
+    setUsername(currentUser.username);
     setEmail(currentUser.email);
-    setNotifPrefs({
-      ...DEFAULT_NOTIFICATION_PREFERENCES,
-      ...(currentUser.uiPreferences?.notifications ?? {}),
-    });
-    setAutoDownloadGeoPdfs(currentUser.uiPreferences?.autoDownloadGeoPdfs ?? true);
   }, [currentUser?.id]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  async function handleToggleNotif(key: keyof NotificationPreferences) {
-    if (!notifPrefs) return;
-    const previous = notifPrefs;
-    const next = { ...notifPrefs, [key]: !notifPrefs[key] };
-    setNotifPrefs(next);
-    setNotifSaving(true);
-    try {
-      await updateNotificationPreferences({ [key]: next[key] });
-    } catch (err) {
-      console.error(err);
-      setNotifPrefs(previous);
-      toast.error(messageFromError(err, "Couldn't save notification setting."));
-    } finally {
-      setNotifSaving(false);
-    }
-  }
-
-  async function handleToggleAutoDownload() {
-    if (autoDownloadGeoPdfs === null) return;
-    const previous = autoDownloadGeoPdfs;
-    const next = !autoDownloadGeoPdfs;
-    setAutoDownloadGeoPdfs(next);
-    setAutoDownloadSaving(true);
-    try {
-      await updateUserPreferences({ autoDownloadGeoPdfs: next });
-    } catch (err) {
-      console.error(err);
-      setAutoDownloadGeoPdfs(previous);
-      toast.error(messageFromError(err, "Couldn't save download setting."));
-    } finally {
-      setAutoDownloadSaving(false);
-    }
-  }
 
   async function handleExport() {
     setExporting(true);
     try {
       const blob = await exportUserData();
       const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `logjam-export-${new Date().toISOString().slice(0, 10)}.json`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `logjam-export-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
       URL.revokeObjectURL(url);
     } catch (err) {
       console.error(err);
@@ -142,169 +83,111 @@ function AccountPanel({
     }
   }
 
-  async function handleSaveUsername() {
-    const trimmed = usernameInput.trim();
-    if (!trimmed) return;
-    setUsernameSaving(true);
-    setUsernameError(null);
-    try {
-      const updated = await updateUsername(trimmed);
-      setCurrentUsername(updated.username);
-      setUsernameInput(updated.username);
-      setEditingUsername(false);
-      setUsernameSaved(true);
-      setTimeout(() => setUsernameSaved(false), 2500);
-    } catch (err) {
-      console.error(err);
-      setUsernameError(messageFromError(err, "Couldn't save username. Please try again."));
-    } finally {
-      setUsernameSaving(false);
-    }
-  }
+  const creditsResetLabel = currentUser?.monthlyComputeResetAt
+    ? new Date(currentUser.monthlyComputeResetAt).toLocaleDateString("en-AU", {
+        month: "short",
+        day: "numeric",
+      })
+    : null;
 
   return (
     <div className={classes.root}>
-      {view === "account" && (
+      {/* The title is who you are — the page's own answer (DESIGN.md §1) —
+          and it waits for the record rather than announcing a name the account
+          may not have. */}
+      <Hero
+        title={username ?? "Account"}
+        actions={
+          username !== null && (
+            <IconButton icon={Pencil} label="Change username" onClick={() => setRenameOpen(true)} />
+          )
+        }
+      />
+
+      <div className={classes.body}>
+        {!currentUser ? (
+          <p className={classes.state}>Loading…</p>
+        ) : (
+          <>
+            <SectionHeader title="Storage" />
+            <ProgressBar
+              label="Storage used"
+              value={percentUsed(currentUser.storageUsedBytes, currentUser.storageQuotaBytes)}
+            />
+            <p className={classes.meterLabel}>
+              {formatBytes(currentUser.storageUsedBytes)} of{" "}
+              {formatBytes(currentUser.storageQuotaBytes)}
+              <span className={classes.meterHint}> · photos, videos and topo outputs</span>
+            </p>
+
+            <SectionHeader title="Processing credits this month" />
+            <ProgressBar
+              label="Processing credits used"
+              value={percentUsed(
+                currentUser.monthlyComputeUsage,
+                currentUser.monthlyComputeCredits,
+              )}
+            />
+            <p className={classes.meterLabel}>
+              {formatCredits(currentUser.monthlyComputeUsage)} of{" "}
+              {formatCredits(currentUser.monthlyComputeCredits)}
+              {creditsResetLabel && (
+                <span className={classes.meterHint}> · resets {creditsResetLabel}</span>
+              )}
+              <span className={classes.meterHint}> · topo, exports and GeoPDFs</span>
+            </p>
+
+            <SectionHeader title="Sign-in" />
+            <Row
+              leading={<IconTile icon={Mail} hue="var(--theme-accent)" />}
+              title="Email"
+              subtitle={email ?? undefined}
+              onOpen={() => setChangeEmailOpen(true)}
+            />
+
+            <SectionHeader title="Your data" />
+            <Button
+              variant="outline"
+              icon={Download}
+              busy={exporting}
+              onClick={handleExport}
+            >
+              Download my data
+            </Button>
+
+            <SectionHeader title="Leaving" />
+            <Button variant="outline" icon={LogOut} onClick={signOut}>
+              Sign out
+            </Button>
+            <Row
+              leading={<IconTile icon={Trash2} hue="var(--theme-warning)" />}
+              title="Delete account"
+              onOpen={() => setDeleteAccountOpen(true)}
+            />
+          </>
+        )}
+
+        <Footer />
+      </div>
+
+      {username !== null && (
         <>
-      <span className={classes.sectionLabel}>Username</span>
-      <div className={classes.divider} />
-      {currentUsername === null ? (
-        <p className={classes.state}>Loading...</p>
-      ) : editingUsername ? (
-        <div className={classes.usernameEdit}>
-          <input
-            className={classes.usernameInput}
-            aria-label="Edit username"
-            value={usernameInput}
-            onChange={(e) => setUsernameInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") handleSaveUsername();
-              if (e.key === "Escape") {
-                setEditingUsername(false);
-                setUsernameInput(currentUsername);
-                setUsernameError(null);
-              }
+          <UsernameDialog
+            open={renameOpen}
+            current={username}
+            onClose={() => setRenameOpen(false)}
+            onSaved={(next) => {
+              setUsername(next);
+              setRenameOpen(false);
             }}
-            autoFocus
-            maxLength={32}
-            disabled={usernameSaving}
           />
-          <div className={classes.usernameActions}>
-            <button
-              className={classes.saveUsernameBtn}
-              onClick={handleSaveUsername}
-              disabled={usernameSaving}
-            >
-              {usernameSaving ? "Saving…" : "Save"}
-            </button>
-            <button
-              className={classes.cancelUsernameBtn}
-              onClick={() => {
-                setEditingUsername(false);
-                setUsernameInput(currentUsername);
-                setUsernameError(null);
-              }}
-              disabled={usernameSaving}
-            >
-              Cancel
-            </button>
-          </div>
-          {usernameError && <ErrorBanner message={usernameError} />}
-        </div>
-      ) : (
-        <div className={classes.usernameRow}>
-          <span className={classes.usernameDisplay}>{currentUsername}</span>
-          <button
-            className={classes.editUsernameBtn}
-            onClick={() => setEditingUsername(true)}
-          >
-            Edit
-          </button>
-          {usernameSaved && <span className={classes.savedHint}>Saved</span>}
-        </div>
-      )}
-
-      <span className={classes.sectionLabel}>Email</span>
-      <div className={classes.divider} />
-      {email === null ? (
-        <p className={classes.state}>Loading...</p>
-      ) : (
-        <div className={classes.emailRow}>
-          <span className={classes.infoValue}>{email}</span>
-          <button
-            className={classes.changeEmailBtn}
-            onClick={() => setChangeEmailOpen(true)}
-          >
-            Change
-          </button>
-        </div>
-      )}
-
-      <span className={classes.sectionLabel} title="Counts media files and topo job outputs (MBTiles/PMTiles and LiDAR ZIPs). Does not count cached map tiles.">Storage</span>
-      <div className={classes.divider} />
-      {!currentUser ? (
-        <p className={classes.state}>Loading...</p>
-      ) : (
-        <>
-          <progress
-            className={classes.storageBar}
-            value={currentUser.storageUsedBytes}
-            max={currentUser.storageQuotaBytes}
+          <DeleteAccountDialog
+            open={deleteAccountOpen}
+            onClose={() => setDeleteAccountOpen(false)}
+            username={username}
+            onDeleted={signOut}
           />
-          <span className={classes.storageLabel}>
-            {formatBytes(currentUser.storageUsedBytes)} of {formatBytes(currentUser.storageQuotaBytes)} used
-          </span>
         </>
-      )}
-
-      <span
-        className={classes.sectionLabel}
-        title="Monthly allowance for processing jobs — LiDAR topo generation, topo exports and GeoPDFs all draw on it. One credit is a minute of one processor core, so a bigger job costs more. Resets on the date shown."
-      >
-        Processing Credits
-      </span>
-      <div className={classes.divider} />
-      {!currentUser ? (
-        <p className={classes.state}>Loading...</p>
-      ) : (
-        <>
-          <progress
-            className={classes.storageBar}
-            value={currentUser.monthlyComputeUsage}
-            max={currentUser.monthlyComputeCredits}
-          />
-          <span className={classes.storageLabel}>
-            {formatCredits(currentUser.monthlyComputeUsage)} of{" "}
-            {formatCredits(currentUser.monthlyComputeCredits)} used this month
-            {currentUser.monthlyComputeResetAt ? ` · resets ${new Date(currentUser.monthlyComputeResetAt).toLocaleDateString("en-AU", { month: "short", day: "numeric" })}` : ""}
-          </span>
-        </>
-      )}
-
-      <span className={classes.sectionLabel}>Your data</span>
-      <div className={classes.divider} />
-      <button
-        className={classes.exportBtn}
-        onClick={handleExport}
-        disabled={exporting}
-      >
-        {exporting ? "Preparing..." : "Download my data"}
-      </button>
-
-      <button className={classes.signOutBtn} onClick={signOut}>
-        Sign out
-      </button>
-      <button className={classes.deleteAccountBtn} onClick={() => setDeleteAccountOpen(true)}>
-        Delete account
-      </button>
-
-      {currentUsername !== null && (
-        <DeleteAccountDialog
-          open={deleteAccountOpen}
-          onClose={() => setDeleteAccountOpen(false)}
-          username={currentUsername}
-          onDeleted={signOut}
-        />
       )}
       <ChangeEmailDialog
         open={changeEmailOpen}
@@ -312,155 +195,110 @@ function AccountPanel({
         onSuccess={(newEmail) => setEmail(newEmail)}
         currentEmail={email ?? ""}
       />
-
-        </>
-      )}
-      {view === "settings" && (
-        <>
-      <span className={classes.sectionLabel}>Theme</span>
-      <div className={classes.divider} />
-
-      {themeError && <ErrorBanner message={themeError} />}
-      {isHydrating && <p className={classes.state}>Loading your saved theme...</p>}
-      {isSaving && <p className={classes.state}>Saving theme...</p>}
-
-      {schemes.map((scheme) => {
-        const isSelected = scheme.id === schemeId;
-        const cardClass = `${classes.card} ${isSelected ? classes.cardSelected : ""}`;
-        return (
-          <button
-            key={scheme.id}
-            type="button"
-            className={cardClass}
-            onClick={() => setThemeScheme(scheme.id)}
-            disabled={isSaving}
-            aria-pressed={isSelected}
-          >
-            <div className={classes.cardHeader}>
-              <h3 className={classes.cardName}>{scheme.name}</h3>
-              <div className={classes.swatches}>
-                {[scheme.tokens.primary, scheme.tokens.secondary, scheme.tokens.accent].map((color) => (
-                  <span
-                    key={color}
-                    className={classes.swatch}
-                    style={{ backgroundColor: color }}
-                    aria-hidden="true"
-                  />
-                ))}
-              </div>
-            </div>
-          </button>
-        );
-      })}
-
-      <span className={classes.sectionLabel}>Notifications</span>
-      <div className={classes.divider} />
-      {notifPrefs === null ? (
-        <p className={classes.state}>Loading...</p>
-      ) : (
-        <div className={classes.notifGroup}>
-          <label className={classes.notifRow}>
-            <input
-              type="checkbox"
-              checked={notifPrefs.topoEmail}
-              onChange={() => handleToggleNotif("topoEmail")}
-              disabled={notifSaving}
-            />
-            <span className={classes.notifLabel}>Email me when a topo job finishes or fails</span>
-          </label>
-          <label className={classes.notifRow}>
-            <input
-              type="checkbox"
-              checked={notifPrefs.exportEmail}
-              onChange={() => handleToggleNotif("exportEmail")}
-              disabled={notifSaving}
-            />
-            <span className={classes.notifLabel}>Email me when a topo export finishes or fails</span>
-          </label>
-          <label className={classes.notifRow}>
-            <input
-              type="checkbox"
-              checked={notifPrefs.geoPdfEmail}
-              onChange={() => handleToggleNotif("geoPdfEmail")}
-              disabled={notifSaving}
-            />
-            <span className={classes.notifLabel}>Email me when a GeoPDF finishes or fails</span>
-          </label>
-          <label className={classes.notifRow}>
-            <input
-              type="checkbox"
-              checked={notifPrefs.friendRequestInApp}
-              onChange={() => handleToggleNotif("friendRequestInApp")}
-              disabled={notifSaving}
-            />
-            <span className={classes.notifLabel}>In-app notification for friend requests</span>
-          </label>
-          <label className={classes.notifRow}>
-            <input
-              type="checkbox"
-              checked={notifPrefs.shareInApp}
-              onChange={() => handleToggleNotif("shareInApp")}
-              disabled={notifSaving}
-            />
-            <span className={classes.notifLabel}>In-app notification when a place is shared with me</span>
-          </label>
-        </div>
-      )}
-
-      <span className={classes.sectionLabel}>Downloads</span>
-      <div className={classes.divider} />
-      {autoDownloadGeoPdfs === null ? (
-        <p className={classes.state}>Loading...</p>
-      ) : (
-        <div className={classes.notifGroup}>
-          <label className={classes.notifRow}>
-            <input
-              type="checkbox"
-              checked={autoDownloadGeoPdfs}
-              onChange={handleToggleAutoDownload}
-              disabled={autoDownloadSaving}
-            />
-            <span className={classes.notifLabel}>
-              Auto-download a GeoPDF when it finishes generating (this browser only)
-            </span>
-          </label>
-        </div>
-      )}
-
-      {/* Types come BEFORE the fields that are scoped to them: a user
-          reading downwards meets the categories, then what each one holds. */}
-      <PlaceTypeSection
-        types={placeTypes}
-        loading={!currentUser}
-        onTypesChange={onPlaceTypesChange}
-      />
-
-      <CustomFieldSection
-        entity="trip-log"
-        sectionLabel="Custom trip fields"
-        tooltip="Extra fields you've added to trip logs (e.g. Water Level). Renaming keeps existing values; deleting removes the field and its values from all trips."
-        emptyText="No custom trip fields yet. Add one below or from a trip log."
-        loading={!currentUser}
-        defs={customFieldDefs}
-        onDefsChange={onCustomFieldDefsChange}
-      />
-
-      <CustomFieldSection
-        entity="place"
-        sectionLabel="Custom place fields"
-        tooltip="Extra fields you've added to places (e.g. Water Level). Renaming keeps existing values; deleting removes the field and its values from all places."
-        emptyText="No custom place fields yet. Add one below or from a place."
-        loading={!currentUser}
-        defs={placeCustomFieldDefs}
-        onDefsChange={onPlaceCustomFieldDefsChange}
-        placeTypes={placeTypes}
-      />
-
-        </>
-      )}
-
-      {view === "account" && <Footer />}
     </div>
+  );
+}
+
+/** Renaming yourself. A dialog rather than an inline field: the one line under
+ *  it — that this is the name friends search — is what makes the choice, and it
+ *  has nowhere to live on a hero. */
+function UsernameDialog({
+  open,
+  current,
+  onClose,
+  onSaved,
+}: {
+  open: boolean;
+  current: string;
+  onClose: () => void;
+  onSaved: (username: string) => void;
+}) {
+  return open ? (
+    <UsernameForm current={current} onClose={onClose} onSaved={onSaved} />
+  ) : null;
+}
+
+function UsernameForm({
+  current,
+  onClose,
+  onSaved,
+}: {
+  current: string;
+  onClose: () => void;
+  onSaved: (username: string) => void;
+}) {
+  const formId = useId();
+  const [value, setValue] = useState(current);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save() {
+    const trimmed = value.trim();
+    // Empty is a requirement, reported on submit (DESIGN.md §8); unchanged is
+    // not an error at all, just nothing to do.
+    if (!trimmed) {
+      setError("Enter a username.");
+      return;
+    }
+    if (trimmed === current) {
+      onClose();
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await updateUsername(trimmed);
+      onSaved(updated.username);
+    } catch (err) {
+      console.error(err);
+      // The server's own 409 text ("Username already taken") is worth showing,
+      // which is what messageFromError prefers when the API supplies one.
+      setError(messageFromError(err, "Couldn't save that username."));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog
+      open
+      title="Change username"
+      onClose={onClose}
+      dismissible={!saving}
+      footer={
+        <>
+          <Button onClick={onClose} disabled={saving}>
+            Cancel
+          </Button>
+          <Button type="submit" form={formId} variant="filled" busy={saving}>
+            Save
+          </Button>
+        </>
+      }
+    >
+      <form
+        id={formId}
+        className={classes.form}
+        onSubmit={(event) => {
+          event.preventDefault();
+          save();
+        }}
+      >
+        <TextField
+          label="Username"
+          value={value}
+          onChange={(event) => {
+            setValue(event.target.value);
+            if (error) setError(null);
+          }}
+          hint="Friends search this name when they share a place with you."
+          maxLength={32}
+          disabled={saving}
+          data-autofocus
+        />
+        {error && <ErrorBanner message={error} />}
+      </form>
+    </Dialog>
   );
 }
 

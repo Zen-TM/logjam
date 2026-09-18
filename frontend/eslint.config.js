@@ -15,9 +15,6 @@ import tseslint from 'typescript-eslint'
  */
 const MUI_LEGACY_FILES = [
   'src/components/ConsentGate.tsx',
-  'src/components/dialogs/AddCustomFieldDialog.tsx',
-  'src/components/dialogs/ChangeEmailDialog.tsx',
-  'src/components/dialogs/DeleteAccountDialog.tsx',
   'src/components/dialogs/ImportResultSummary.tsx',
   'src/components/dialogs/MatchReview.tsx',
   'src/components/dialogs/OnboardingChoiceDialog.tsx',

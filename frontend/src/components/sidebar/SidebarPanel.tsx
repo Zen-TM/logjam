@@ -32,6 +32,7 @@ import RoutesPanel from "./panels/RoutesPanel";
 import type { WayItem } from "./panels/waysModel";
 import type { WayVerbId } from "./panels/wayActions";
 import AccountPanel from "./panels/AccountPanel";
+import SettingsPanel from "./panels/SettingsPanel";
 import TripLogsPanel from "./panels/TripLogsPanel";
 import AnalyticsPanel from "./panels/AnalyticsPanel";
 
@@ -56,10 +57,7 @@ const MAPS_VIEWS = [
  * gutter and a hero that scrolled away. Like `MUI_LEGACY_FILES`, it may only
  * shrink.
  */
-const LEGACY_PAGES: ReadonlySet<PanelId> = new Set<PanelId>([
-  "account",
-  "settings",
-]);
+const LEGACY_PAGES: ReadonlySet<PanelId> = new Set<PanelId>([]);
 
 function SidebarPanel({
   activePanel,
@@ -478,9 +476,9 @@ function SidebarPanel({
             onOpenUnifiedImport={onOpenUnifiedImport}
           />
         )}
-        {(activePanel === "account" || activePanel === "settings") && (
-          <AccountPanel
-            view={activePanel}
+        {activePanel === "account" && <AccountPanel currentUser={currentUser} />}
+        {activePanel === "settings" && (
+          <SettingsPanel
             currentUser={currentUser}
             customFieldDefs={customFieldDefs}
             onCustomFieldDefsChange={onCustomFieldDefsChange}

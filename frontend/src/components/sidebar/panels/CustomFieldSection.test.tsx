@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ScopedCustomFieldDef } from "@logjam/shared";
 
@@ -7,11 +7,12 @@ import CustomFieldSection from "./CustomFieldSection";
 // The section only reaches the network through a rename/delete/create, none of
 // which this suite performs — the dialogs are stubbed so nothing mounts MUI.
 vi.mock("../../../placeUtils", () => ({
+  createCustomField: vi.fn(),
   updateCustomField: vi.fn(),
 }));
 vi.mock("../../dialogs/ConfirmDialog", () => ({ default: () => null }));
 vi.mock("../../dialogs/DeleteCustomFieldDialog", () => ({ default: () => null }));
-vi.mock("../../dialogs/AddCustomFieldDialog", () => ({ default: () => null }));
+vi.mock("../../dialogs/AddCustomFieldForm", () => ({ default: () => null }));
 vi.mock("../../dialogs/useCustomFieldImpact", () => ({
   useCustomFieldImpact: () => ({ count: null, error: null }),
 }));
@@ -41,12 +42,12 @@ function renderSection(defs: ScopedCustomFieldDef[]) {
   return render(
     <CustomFieldSection
       entity="place"
-      sectionLabel="Place attributes"
-      tooltip="Extra things you record on a place."
-      emptyText="None yet."
+      title="Place attributes"
+      rowNoun="place"
       loading={false}
       defs={defs}
       onDefsChange={() => {}}
+      onBack={() => {}}
     />,
   );
 }
@@ -61,26 +62,30 @@ afterEach(cleanup);
  * absent, so the guard is that the built-in row carries no verbs at all.
  */
 describe("a built-in attribute gets no verbs", () => {
-  it("offers Rename and Delete only on the user's own definitions", () => {
+  it("opens the user's own definitions to rename, and never a built-in", () => {
     renderSection([SYSTEM_DEF, OWN_DEF]);
-    expect(screen.getAllByRole("button", { name: "Rename" })).toHaveLength(1);
-    expect(screen.getAllByRole("button", { name: "Delete" })).toHaveLength(1);
-
-    const own = screen.getByText("Access beta").closest("div")!.parentElement!;
-    expect(within(own).getByRole("button", { name: "Rename" })).toBeTruthy();
+    // A `Row` with `onOpen` lays a button named for its title over the card.
+    expect(screen.getByRole("button", { name: /^Access beta/ })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^Quality/ })).toBeNull();
   });
 
-  it("says a built-in is built in, rather than leaving it looking editable", () => {
+  it("offers the actions menu only on the user's own definitions", () => {
+    renderSection([SYSTEM_DEF, OWN_DEF]);
+    expect(screen.getAllByRole("button", { name: /^Actions for/ })).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Actions for Access beta" })).toBeTruthy();
+  });
+
+  it("files a built-in under Built in, rather than leaving it looking editable", () => {
     renderSection([SYSTEM_DEF]);
-    expect(screen.getAllByText(/Built-in/).length).toBeGreaterThan(0);
-    expect(screen.queryByRole("button", { name: "Rename" })).toBeNull();
+    expect(screen.getByRole("heading", { name: /Built in/ })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^Actions for/ })).toBeNull();
   });
 
   it("lists the user's own definitions before the built-ins", () => {
     renderSection([SYSTEM_DEF, OWN_DEF]);
-    const labels = screen
-      .getAllByText(/Quality|Access beta/)
-      .map((node) => node.textContent);
-    expect(labels[0]).toContain("Access beta");
+    const headings = screen.getAllByRole("heading").map((node) => node.textContent ?? "");
+    expect(headings.findIndex((text) => text.includes("Yours"))).toBeLessThan(
+      headings.findIndex((text) => text.includes("Built in")),
+    );
   });
 });
