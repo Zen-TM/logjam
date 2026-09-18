@@ -192,6 +192,41 @@ export const SHARED_PLACE_COLOR = "#B79EC0";
 
 export type PlaceTypeColor = (typeof PLACE_TYPE_COLORS)[number];
 
+/**
+ * What each palette colour is CALLED — the accessible name of a swatch, and its
+ * tooltip.
+ *
+ * The names were written the day the palette was (they are the comments beside
+ * it), and then lived only in those comments, so both clients offered twelve
+ * swatches named "#E4C5AA" — a name, but not a helpful one, and twelve of them
+ * in a row is what a screen-reader user had to choose from. `placeTypes.test.ts`
+ * pins one name per colour, so a colour cannot join the palette unnamed.
+ */
+export const PLACE_TYPE_COLOR_NAMES: Record<PlaceTypeColor, string> = {
+  "#E4C5AA": "Banksia orange",
+  "#E3D0AB": "Ochre",
+  "#E2D9AC": "Wattle",
+  "#D5DCB2": "Lichen",
+  "#BED9B5": "Scrub green",
+  "#B5D9C4": "Fern",
+  "#B5D9D6": "Pool teal",
+  "#B7D0E1": "Water blue",
+  "#B9C2DF": "Dusk blue",
+  "#E1B7C5": "Heath pink",
+  "#E1BCB7": "Clay rose",
+  "#CDC8C1": "Stone",
+};
+
+/** The spoken name of a type's colour. A colour outside the palette comes back
+ *  AS ITS HEX rather than as "Custom", the same way `trackColorName` does:
+ *  unhelpful is better than wrong. */
+export function placeTypeColorName(color: string | null | undefined): string {
+  if (!color) return "No colour";
+  return (
+    PLACE_TYPE_COLOR_NAMES[color.toUpperCase() as PlaceTypeColor] ?? color
+  );
+}
+
 export function isPlaceTypeColor(value: unknown): value is PlaceTypeColor {
   return (
     typeof value === "string" &&
