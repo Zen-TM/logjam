@@ -2,6 +2,7 @@ import { useState } from "react";
 import {
   CUSTOM_FIELD_TYPES,
   customFieldDisplayLabel,
+  isSystemFieldDef,
   renameCustomFieldLabel,
   type TripLogCustomFieldDef,
   type ScopedCustomFieldDef,
@@ -87,6 +88,16 @@ function CustomFieldSection({
     pendingRename?.key ?? null,
   );
 
+  // BUILT-INS LAST, and with no verbs — the same two rules the phone's list
+  // follows, for the same reason. A system definition belongs to no account:
+  // `PATCH`/`DELETE /custom-fields/:entity/:key` look the key up under the
+  // caller's id, miss, and answer 404, so Rename and Delete on the ten built-in
+  // place attributes failed with "Custom field not found" every time. A row
+  // with no action reads as a fact; a row whose action fails reads as a bug.
+  // The order the server sent still decides within each half, so this is a
+  // stable partition rather than a sort.
+  const ordered = [...defs.filter((def) => !isSystemFieldDef(def)), ...defs.filter(isSystemFieldDef)];
+
   function startRenameField(def: TripLogCustomFieldDef) {
     setRenamingFieldKey(def.key);
     setRenameInput(def.label);
@@ -165,7 +176,7 @@ function CustomFieldSection({
           {defs.length === 0 ? (
             <p className={classes.state}>{emptyText}</p>
           ) : (
-            defs.map((def) =>
+            ordered.map((def) =>
               renamingFieldKey === def.key ? (
                 <div key={def.key} className={classes.fieldEdit}>
                   <input
@@ -203,20 +214,27 @@ function CustomFieldSection({
                 <div key={def.key} className={classes.fieldRow}>
                   <div className={classes.fieldInfo}>
                     <span className={classes.fieldName}>{customFieldDisplayLabel(def)}</span>
-                    <span className={classes.fieldType}>{customFieldTypeName(def.type)}</span>
+                    <span className={classes.fieldType}>
+                      {isSystemFieldDef(def) ? "Built-in · " : ""}
+                      {customFieldTypeName(def.type)}
+                    </span>
                   </div>
-                  <button
-                    className={classes.renameFieldBtn}
-                    onClick={() => startRenameField(def)}
-                  >
-                    Rename
-                  </button>
-                  <button
-                    className={classes.deleteFieldBtn}
-                    onClick={() => setDeletingFieldDef(def)}
-                  >
-                    Delete
-                  </button>
+                  {!isSystemFieldDef(def) && (
+                    <>
+                      <button
+                        className={classes.renameFieldBtn}
+                        onClick={() => startRenameField(def)}
+                      >
+                        Rename
+                      </button>
+                      <button
+                        className={classes.deleteFieldBtn}
+                        onClick={() => setDeletingFieldDef(def)}
+                      >
+                        Delete
+                      </button>
+                    </>
+                  )}
                 </div>
               ),
             )
