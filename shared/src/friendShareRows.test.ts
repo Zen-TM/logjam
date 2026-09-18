@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { FriendShareRow } from "@logjam/shared";
+import type { FriendShareRow } from "./sharing.js";
 
 import {
   buildShareCards,
@@ -43,7 +43,6 @@ describe("buildShareCards", () => {
     });
     expect(card.title).toBe("Claustral");
     expect(card.subtitle).toMatch(/^Place · shared /);
-    expect(card.icon).toBe("map-pin");
   });
 
   // An untitled job still needs something to tap. The wording comes from

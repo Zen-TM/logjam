@@ -22,7 +22,10 @@
 // acting on the draft (DraftToolPanel.tsx).
 import { useEffect, useMemo, useState } from "react";
 import { Alert, StyleSheet, View } from "react-native";
-import { messageFromError } from "@logjam/shared";
+import { messageFromError ,
+  copyAndRemoveOutcomeMessage,
+  copyOutcomeMessage,
+} from "@logjam/shared";
 
 import { assetHue, placeHue, theme } from "../theme";
 import { BottomSheet, RenameForm, Row } from "../ui";
@@ -34,10 +37,6 @@ import {
   runCopyAndRemove,
   type CopyAndRemoveTarget,
 } from "../sharing/copyAndRemove";
-import {
-  copyAndRemoveOutcomeMessage,
-  copyOutcomeMessage,
-} from "../sharing/friendShareRows";
 import { useConnectivity } from "../map/connectivity";
 import { routeActions } from "../saved/assetActions";
 import { usePlacePicker } from "../places/usePlacePicker";

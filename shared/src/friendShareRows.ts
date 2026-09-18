@@ -1,10 +1,12 @@
 // WHAT THE PER-FRIEND SHARING SCREEN SAYS, and which verb each of its rows
 // gets.
 //
-// Its own React-Native-free module, like `bulkShareTargets.ts` and
-// `shareRowSubtitle.ts` and for the same reason: mobile's vitest cannot parse
-// React Native's Flow sources, so the branching and the copy are only testable
-// away from the screen.
+// Shared, because both clients draw this screen and the asymmetry below is the
+// part that must not be re-derived: Logjam Web's audit listed PLACES only and
+// answered "what does Bob see?" with a subset, while the payload had carried
+// his routes, topos and GeoPDFs all along. It lived in mobile/src/sharing until
+// Logjam Web's friends work (2026-09-18), already free of React Native imports
+// — which is what made it testable there and movable here.
 //
 // THE TWO DIRECTIONS ARE NOT MIRROR IMAGES, and the asymmetry is the whole
 // design:
@@ -32,24 +34,10 @@ import {
   isCopyableSharedRow,
   type BulkShareItem,
   type FriendShareRow,
-} from "@logjam/shared";
+} from "./sharing.js";
 
 /** Which direction the screen is showing. */
 export type FriendShareDirection = "theySee" | "youSee";
-
-/**
- * The glyph per kind. Feather names, spelled as literals rather than imported
- * from `@expo/vector-icons`, so this module stays free of the RN runtime — and
- * the same four glyphs the rest of the app already uses for these kinds
- * (`map-pin` a place, `edit-3` a route, `layers` a LiDAR topo, `file-text` a
- * GeoPDF).
- */
-export const SHARE_KIND_ICON = {
-  place: "map-pin",
-  route: "edit-3",
-  topoJob: "layers",
-  geoPdfJob: "file-text",
-} as const satisfies Record<FriendShareRow["entityType"], string>;
 
 /**
  * One row of the list, with every decision about it already made.
@@ -66,7 +54,6 @@ export type FriendShareCard = {
   title: string;
   /** "Place · shared 12 Aug" — kind first, because kind is what a mixed list needs. */
   subtitle: string;
-  icon: (typeof SHARE_KIND_ICON)[keyof typeof SHARE_KIND_ICON];
   /** Copying it into my own account is possible (places only, today). */
   copyable: boolean;
   /** Dropping my access would actually change what I can see. */
@@ -132,7 +119,6 @@ export function buildShareCards(
       row,
       title: shareRowTitle(row),
       subtitle: `${capitalise(SHARE_KIND_LABEL[row.entityType])} · shared ${formatShareDay(row.sharedAt)}`,
-      icon: SHARE_KIND_ICON[row.entityType],
       copyable: options.direction === "youSee" && isCopyableSharedRow(row),
       removable: options.direction === "youSee" && !viaPlace,
       ...(viaPlace
