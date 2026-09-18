@@ -1126,7 +1126,7 @@ function GeoPdfDialog({
                 }}
               />
             </SettingsRow>
-            <p className={classes.groupLabel}>Over the top</p>
+            <p className={classes.groupLabel}>Overlays</p>
             <div className={classes.checkList}>
               {lidarOverlap &&
                 TOPO_LAYERS.map((layer) => (
@@ -1152,7 +1152,7 @@ function GeoPdfDialog({
           </section>
 
           <section className={classes.group}>
-            <SectionHeader title="On the paper" />
+            <SectionHeader title="Map elements" />
             <div className={classes.checkList}>
               <div className={classes.elementRow}>
                 <Checkbox
