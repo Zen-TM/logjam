@@ -18,6 +18,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const schemesPath = join(here, "..", "shared", "src", "themeSchemes.ts");
 const placeTypesPath = join(here, "..", "shared", "src", "placeTypes.ts");
 const designTokensPath = join(here, "..", "shared", "src", "designTokens.ts");
+const friendSearchPath = join(here, "..", "shared", "src", "friendSearch.ts");
 
 // Parsed out of the TypeScript source rather than imported: this script runs on
 // bare node with no build step, exactly as the scheme parsing below does.
@@ -27,6 +28,18 @@ function parsePaletteColors() {
   if (!block) throw new Error("PLACE_TYPE_COLORS not found in placeTypes.ts");
   const colors = [...block[1].matchAll(/"(#[0-9A-Fa-f]{6})"/g)].map((m) => m[1]);
   if (colors.length === 0) throw new Error("PLACE_TYPE_COLORS parsed empty");
+  return colors;
+}
+
+// The six hues a friend's avatar is drawn in. Shared, so one client cannot
+// retune them alone — and measured here because the web avatar is a solid fill
+// with the ink initials on it, the same tile every other web row wears.
+function parseFriendAvatarHues() {
+  const src = readFileSync(friendSearchPath, "utf8");
+  const block = /export const FRIEND_AVATAR_HUES = \[([\s\S]*?)\] as const;/.exec(src);
+  if (!block) throw new Error("FRIEND_AVATAR_HUES not found in friendSearch.ts");
+  const colors = [...block[1].matchAll(/"(#[0-9A-Fa-f]{6})"/g)].map((m) => m[1]);
+  if (colors.length === 0) throw new Error("FRIEND_AVATAR_HUES parsed empty");
   return colors;
 }
 
@@ -117,6 +130,7 @@ const OWNED_MARKER = PLACE_TYPE_COLORS[0];
 // Read from the declaration, not restated: it is reserved precisely so it is
 // never a type colour, and a copy here is the half that would drift.
 const SHARED_MARKER = parseSharedPlaceColor();
+const FRIEND_AVATAR_HUES = parseFriendAvatarHues();
 const { ink: INK, assetHues: ASSET_HUES, statusHues: STATUS_HUES, tripTypeHues: TRIP_TYPE_HUES } = parseDesignTokens();
 // Every hue that fills a chip, tile or badge with a label on it.
 const LABELLED_FILLS = [
@@ -126,6 +140,7 @@ const LABELLED_FILLS = [
   ...STATUS_HUES.map(([name, color]) => [`status hue ${name}`, color]),
   // A user-typed trip type's tile and its active chip (tripTypeIdentity).
   ...TRIP_TYPE_HUES.map(([name, color]) => [`trip type hue ${name}`, color]),
+  ...FRIEND_AVATAR_HUES.map((color) => [`friend avatar ${color}`, color]),
 ];
 
 /** Logjam GPS `Row` tile: hue glyph on `withAlpha(hue, 0.16)` over the card. */

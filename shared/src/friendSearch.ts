@@ -48,3 +48,23 @@ export function avatarHueIndex(username: string, paletteSize: number): number {
   }
   return Math.abs(hash) % paletteSize;
 }
+
+/**
+ * The six hues an avatar is drawn in — mid-light, muted, NSW-derived, the same
+ * family as `assetHue`'s. Here rather than in either client because the hash
+ * above only keeps a person one colour if both clients count the same slots in
+ * the same order: a palette of five on one side would repaint everyone.
+ */
+export const FRIEND_AVATAR_HUES = [
+  "#B79EC0", // heath flower
+  "#C9B37B", // dry grass
+  "#8FBFAE", // lichen
+  "#D3A0A0", // waratah, muted
+  "#A9B4CE", // distant ridge
+  "#9DBE8B", // eucalypt leaf
+] as const;
+
+/** The hue this username wears, on every screen of both clients. */
+export function friendAvatarHue(username: string): string {
+  return FRIEND_AVATAR_HUES[avatarHueIndex(username, FRIEND_AVATAR_HUES.length)];
+}

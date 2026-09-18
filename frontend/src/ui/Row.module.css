@@ -146,6 +146,13 @@
   color: var(--ink);
 }
 
+/* A person's tile: the same fill and box, initials instead of a glyph. */
+.avatar {
+  composes: tile;
+  font-size: var(--font-xs);
+  font-weight: 600;
+}
+
 /* TileCheckbox: the tile at rest, a circle under the pointer, on focus and
    throughout a selection. */
 .pick {

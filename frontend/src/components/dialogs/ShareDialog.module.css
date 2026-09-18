@@ -1,81 +1,47 @@
-.caption {
-  font-size: var(--text-xs);
+/* Who can see this, and how to take it back. Layout only — every control is
+   the kit's (DESIGN.md §6, §9). */
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* One section and its rows. */
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* What pressing a name will do, said before anything is pressed. Tinted with
+   the accent rather than the warning: this grant comes back off. */
+.promise {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--theme-accent) 50%, transparent);
+  border-left-width: 3px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--theme-accent) 12%, transparent);
+  font-size: var(--font-sm);
+  line-height: 1.45;
+}
+
+/* A dead end inside a section: nobody left to share with, or nobody matching. */
+.note {
+  margin: 2px 0;
+  font-size: var(--font-sm);
   color: var(--theme-text-muted);
-  opacity: 0.6;
 }
 
-.content {
+/* The + at the end of a grantable row. Decoration, not a control — the whole
+   card is the button (DESIGN.md §7), and a second target here would put two
+   ways to do one thing on one line. */
+.grantMark {
   display: flex;
-  flex-direction: column;
-  gap: 0.5em;
-  padding-bottom: 0.25em;
-}
-
-.searchResults {
-  composes: searchResults from '@styles/shared.module.css';
-}
-
-.searchResultItem {
-  composes: searchResultItem from '@styles/shared.module.css';
-}
-
-.addToShareButton {
-  composes: btn btnSm btnOutlineBonus1 from '@styles/shared.module.css';
-}
-
-.selectedFriends {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.3em;
-}
-
-.friendChip {
-  display: inline-flex;
   align-items: center;
-  gap: 0.3em;
-  background-color: var(--theme-secondary);
-  color: var(--theme-text-primary);
-  border-radius: var(--radius-lg);
-  padding: 0.2em 0.5em;
-  font-size: var(--text-xs);
-}
-
-.chipRemove {
-  background: none;
-  border: none;
-  color: var(--theme-text-primary);
-  font-size: 1em;
-  line-height: 1;
-  padding: 0;
-  cursor: pointer;
-  opacity: 0.7;
-}
-
-.chipRemove:hover {
-  opacity: 1;
-}
-
-.sharedWithList {
-  margin-top: 1em;
-  display: flex;
-  flex-direction: column;
-  gap: 0.25em;
-}
-
-.sharedWithHeader {
-  font-size: var(--text-sm);
-  font-weight: 600;
-}
-
-.sharedWithRow {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0.3em 0;
-  font-size: var(--text-sm);
-}
-
-.unshareButton {
-  composes: btn btnSm btnOutlineWarning from '@styles/shared.module.css';
-  flex-shrink: 0;
+  justify-content: center;
+  width: var(--control-sm);
+  height: var(--control-sm);
+  color: var(--theme-accent);
 }

@@ -1,5 +1,6 @@
 import { useId, type CSSProperties, type HTMLAttributes, type ReactNode } from "react";
 import { Circle, CircleCheck, type LucideIcon } from "lucide-react";
+import { avatarInitials, friendAvatarHue } from "@logjam/shared";
 import classes from "./Row.module.css";
 
 /**
@@ -57,6 +58,28 @@ export function IconTile({ icon: Icon, hue, label }: { icon: LucideIcon; hue: st
       title={label}
     >
       <Icon size={16} aria-hidden />
+    </span>
+  );
+}
+
+/**
+ * A PERSON's tile: the same box as `IconTile`, filled with the hue their name
+ * hashes to and marked with their initials. Both come from `@logjam/shared`, so
+ * a friend is the same two letters in the same colour here and on Logjam GPS
+ * (DESIGN.md §3). There is no avatar image anywhere in Logjam and this is not
+ * the place to introduce one.
+ *
+ * Hidden from assistive tech: every row that carries one has the username as
+ * its title, and "BM" read aloud before it says nothing.
+ */
+export function Avatar({ username }: { username: string }) {
+  return (
+    <span
+      className={classes.avatar}
+      style={{ "--tile-hue": friendAvatarHue(username) } as CSSProperties}
+      aria-hidden
+    >
+      {avatarInitials(username)}
     </span>
   );
 }

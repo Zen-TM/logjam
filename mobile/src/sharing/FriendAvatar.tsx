@@ -12,21 +12,7 @@
 import { StyleSheet, Text, View } from "react-native";
 
 import { fontSize, fontWeight, radius, theme, withAlpha } from "../theme";
-import { avatarHueIndex, avatarInitials } from "@logjam/shared";
-
-/** Same palette rule as `assetHue`: mid-light, muted, NSW-derived. */
-const AVATAR_HUES = [
-  "#B79EC0", // heath flower
-  "#C9B37B", // dry grass
-  "#8FBFAE", // lichen
-  "#D3A0A0", // waratah, muted
-  "#A9B4CE", // distant ridge
-  "#9DBE8B", // eucalypt leaf
-] as const;
-
-export function friendHue(username: string): string {
-  return AVATAR_HUES[avatarHueIndex(username, AVATAR_HUES.length)];
-}
+import { avatarInitials, friendAvatarHue } from "@logjam/shared";
 
 export function FriendAvatar({
   username,
@@ -36,7 +22,7 @@ export function FriendAvatar({
   /** Ticked in a multi-select: the disc becomes the checkbox. */
   selected?: boolean;
 }) {
-  const hue = selected ? theme.accent : friendHue(username);
+  const hue = selected ? theme.accent : friendAvatarHue(username);
   return (
     <View
       style={[

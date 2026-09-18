@@ -24,7 +24,6 @@ const MUI_LEGACY_FILES = [
   'src/components/dialogs/PlaceDialog.tsx',
   'src/components/dialogs/RopeWikiReviewDialog.tsx',
   'src/components/dialogs/SelectedPlacesDialog.tsx',
-  'src/components/dialogs/ShareDialog.tsx',
   'src/components/dialogs/UnifiedImportDialog.tsx',
   'src/components/dialogs/ValidatedNumberField.tsx',
   'src/components/sidebar/panels/FriendSharingSection.tsx',
