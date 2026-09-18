@@ -82,8 +82,28 @@ function TemplateForm({ onClose, editingTemplate, onSaved }: Omit<Props, "open">
       size="large"
       dismissible={!saving}
       onClose={onClose}
-      // Pinned, so which group is open never scrolls away from it.
-      toolbar={<ChipRail label="Settings group" options={SETTINGS_TABS} value={tab} onChange={setTab} />}
+      // Pinned: the name is what the whole dialog is about and the rail says
+      // which group the body is showing, so neither scrolls away from it.
+      // A real form, so Enter in the name field saves.
+      toolbar={
+        <>
+          <form
+            id={formId}
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (canSave) void handleSave();
+            }}
+          >
+            <TextField
+              label="Template name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              data-autofocus
+            />
+          </form>
+          <ChipRail label="Settings group" options={SETTINGS_TABS} value={tab} onChange={setTab} />
+        </>
+      }
       footer={
         <>
           <Button onClick={onClose} disabled={saving}>
@@ -96,22 +116,6 @@ function TemplateForm({ onClose, editingTemplate, onSaved }: Omit<Props, "open">
       }
     >
       {error && <ErrorBanner message={error} />}
-
-      {/* A real form, so Enter in the name field saves. */}
-      <form
-        id={formId}
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (canSave) void handleSave();
-        }}
-      >
-        <TextField
-          label="Template name"
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          data-autofocus
-        />
-      </form>
 
       <AdvancedSettings
         tab={tab}
