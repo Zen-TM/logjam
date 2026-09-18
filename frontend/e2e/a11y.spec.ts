@@ -217,7 +217,7 @@ test.describe("desktop", () => {
     // How topos draw opens BESIDE the page, and its colours are free pickers.
     await aside.getByRole("button", { name: "Topo style" }).click();
     const sheet = page.getByRole("region", { name: "Topo style" });
-    await expect(sheet.getByRole("textbox", { name: "Label size" })).toBeVisible({ timeout: 15_000 });
+    await expect(sheet.getByRole("slider", { name: "Label size" })).toBeVisible({ timeout: 15_000 });
     await expectNoViolations(page, "aside");
     const major = sheet.getByRole("button", { name: /^Major colour:/ });
     await major.click();

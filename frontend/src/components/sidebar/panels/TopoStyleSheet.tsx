@@ -12,7 +12,7 @@
 // debounces the save (PUT /vector-style). Nothing here saves, and the sheet says
 // neither — a sheet of controls that change the map while you watch does not
 // need a paragraph explaining that it does (operator, 2026-09-18).
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import {
   CONTOUR_WIDTH_UNITS_PER_PX,
   LABEL_SCALE_MAX,
@@ -26,7 +26,7 @@ import {
   type OsmPointFeatureKey,
   type VectorStyleSettings,
 } from "@logjam/shared";
-import { ColourField, NumberField, SheetSection, SideSheet, SwitchRow } from "../../../ui";
+import { ColourField, NumberField, RangeField, SheetSection, SideSheet, Toggle } from "../../../ui";
 import classes from "./MapsPanel.module.css";
 
 /** The fixed topographic icon each point feature is drawn with. */
@@ -55,6 +55,16 @@ const toStored = (pixels: number) => pixels * CONTOUR_WIDTH_UNITS_PER_PX;
  *  for a contour, 0..100 pixels for a feature). */
 const CONTOUR_WIDTH_MAX = toPixels(200);
 const FEATURE_WIDTH_MAX = 100;
+
+/** What the cells under each heading hold. */
+const DRAWN_COLUMNS = ["Colour", "Width"] as const;
+const SYMBOL_COLUMNS = ["Symbol"] as const;
+
+/** The two contour weights, so the table is a list rather than two copies. */
+const CONTOUR_LINES = [
+  { name: "Major", colourKey: "majorColour", widthKey: "majorWidthM" },
+  { name: "Minor", colourKey: "minorColour", widthKey: "minorWidthM" },
+] as const;
 
 export default function TopoStyleSheet({
   value,
@@ -89,125 +99,178 @@ function StyleForm({ value, onChange }: { value: VectorStyleSettings; onChange: 
   return (
     <>
       <SheetSection title="Labels">
-        <NumberLine
+        <RangeField
           label="Label size"
-          value={value.labelScale ?? 1}
           min={LABEL_SCALE_MIN}
           max={LABEL_SCALE_MAX}
+          step={0.1}
+          value={value.labelScale ?? 1}
+          format={(scale) => `${scale.toFixed(1)}×`}
           onChange={(labelScale) => onChange({ ...value, labelScale })}
         />
       </SheetSection>
 
-      {/* Colour and width on ONE line per contour, a colour column and a width
-          column down the section: two lines each, with "Major"/"Minor" said
-          twice, spent four lines saying what a two-column table says in two
-          (operator, 2026-09-18). */}
+      {/* A TABLE: a colour column and a width column, headed once. The boxes
+          were bare numbers with nothing saying what they set, and a label
+          beside each said "Major"/"Minor" twice over (operator, 2026-09-18). */}
       <SheetSection title="Contours">
-        <StyleLine
-          name="Major"
-          colour={contours.majorColour}
-          onColour={(majorColour) => setContours({ majorColour })}
-          width={toPixels(contours.majorWidthM)}
-          widthMax={CONTOUR_WIDTH_MAX}
-          onWidth={(pixels) => setContours({ majorWidthM: toStored(pixels) })}
-        />
-        <StyleLine
-          name="Minor"
-          colour={contours.minorColour}
-          onColour={(minorColour) => setContours({ minorColour })}
-          width={toPixels(contours.minorWidthM)}
-          widthMax={CONTOUR_WIDTH_MAX}
-          onWidth={(pixels) => setContours({ minorWidthM: toStored(pixels) })}
-        />
+        <div className={classes.styleTable}>
+          <ColumnHeads columns={DRAWN_COLUMNS} />
+          {CONTOUR_LINES.map(({ name, colourKey, widthKey }) => (
+            <StyleRow key={name} name={name}>
+              <ColourField
+                label={`${name} colour`}
+                hideLabel
+                value={contours[colourKey]}
+                onChange={(colour) => setContours({ [colourKey]: colour })}
+              />
+              <WidthBox
+                label={`${name} width`}
+                value={toPixels(contours[widthKey])}
+                max={CONTOUR_WIDTH_MAX}
+                onChange={(pixels) => setContours({ [widthKey]: toStored(pixels) })}
+              />
+            </StyleRow>
+          ))}
+        </div>
       </SheetSection>
 
       {/* "OSM" in the heading, not a sentence under it saying where the lines
           come from: the heading has room for the one word that carries it. */}
       <SheetSection title="OSM lines">
-        {OSM_LINE_FEATURE_KEYS.map((key) => {
-          const style = value.features[key];
-          const label = OSM_FEATURE_LABELS[key];
-          return (
-            <div key={key} className={classes.feature} data-feature={key}>
-              <SwitchRow
-                title={label}
-                description={OSM_FEATURE_TAG_HINTS[key]}
-                checked={style.enabled}
-                onChange={(enabled) => setFeature(key, { enabled })}
-              />
-              {/* Present while off, not removed: the style is kept for when the
-                  feature is turned back on (DESIGN.md §7, absent vs disabled).
-                  The switch above names them, so the colour and the width are
-                  the line — one line, as the contours are. */}
-              <div className={classes.featureControls}>
+        <div className={`${classes.styleTable} ${classes.switchTable}`}>
+          <ColumnHeads columns={DRAWN_COLUMNS} switched />
+          {OSM_LINE_FEATURE_KEYS.map((key) => {
+            const style = value.features[key];
+            const label = OSM_FEATURE_LABELS[key];
+            return (
+              <StyleRow
+                key={key}
+                feature={key}
+                name={label}
+                hint={OSM_FEATURE_TAG_HINTS[key]}
+                // Present while off, not removed: the style is kept for when
+                // the feature comes back on (DESIGN.md §7).
+                enabled={style.enabled}
+                onEnabledChange={(enabled) => setFeature(key, { enabled })}
+              >
                 <ColourField
-                  label={`Colour of ${label.toLowerCase()}`}
+                  label={`${label} colour`}
                   hideLabel
                   value={style.colour}
                   disabled={!style.enabled}
                   onChange={(colour) => setFeature(key, { colour })}
                 />
                 <WidthBox
-                  label={`Width of ${label.toLowerCase()}`}
+                  label={`${label} width`}
                   value={style.widthZ18}
                   max={FEATURE_WIDTH_MAX}
                   disabled={!style.enabled}
                   onChange={(widthZ18) => setFeature(key, { widthZ18 })}
                 />
-              </div>
-            </div>
-          );
-        })}
+              </StyleRow>
+            );
+          })}
+        </div>
       </SheetSection>
 
+      {/* The same table: a point has no colour or width to set, so the one
+          thing that says how it is drawn is its fixed symbol. */}
       <SheetSection title="OSM points">
-        {OSM_POINT_FEATURE_KEYS.map((key) => (
-          <div key={key} className={classes.pointFeature} data-feature={key}>
-            {/* Decorative: the switch beside it is named by the feature. */}
-            <img src={`/topo-icons/${POINT_ICON[key]}`} alt="" className={classes.pointIcon} />
-            <SwitchRow
-              title={OSM_FEATURE_LABELS[key]}
-              description={OSM_FEATURE_TAG_HINTS[key]}
-              checked={value.features[key].enabled}
-              onChange={(enabled) => setFeature(key, { enabled })}
-            />
-          </div>
-        ))}
+        <div className={`${classes.styleTable} ${classes.symbolTable}`}>
+          <ColumnHeads columns={SYMBOL_COLUMNS} switched />
+          {OSM_POINT_FEATURE_KEYS.map((key) => (
+            <StyleRow
+              key={key}
+              feature={key}
+              name={OSM_FEATURE_LABELS[key]}
+              hint={OSM_FEATURE_TAG_HINTS[key]}
+              enabled={value.features[key].enabled}
+              onEnabledChange={(enabled) => setFeature(key, { enabled })}
+            >
+              {/* Decorative: the row's own name says which feature this is. */}
+              <img src={`/topo-icons/${POINT_ICON[key]}`} alt="" className={classes.pointIcon} />
+            </StyleRow>
+          ))}
+        </div>
       </SheetSection>
     </>
   );
 }
 
-/** A named line of the style: what it is at the left, its colour and its width
- *  at the right. The name is text, not a label — each control carries its own
- *  accessible name, which CONTAINS the visible word (WCAG 2.5.3). */
-function StyleLine({
-  name,
-  colour,
-  onColour,
-  width,
-  widthMax,
-  onWidth,
-}: {
-  name: string;
-  colour: string;
-  onColour: (next: string) => void;
-  width: number;
-  widthMax: number;
-  onWidth: (next: number) => void;
-}) {
+/** The one line that says what the columns under it are. A width box with
+ *  nothing over it is a number with no noun (operator, 2026-09-18). */
+function ColumnHeads({ columns, switched = false }: { columns: readonly string[]; switched?: boolean }) {
   return (
-    <div className={classes.styleLine} data-style-line={name.toLowerCase()}>
-      <span className={classes.styleName}>{name}</span>
-      <ColourField label={`${name} colour`} hideLabel value={colour} onChange={onColour} />
-      <WidthBox label={`${name} width`} value={width} max={widthMax} onChange={onWidth} />
-    </div>
+    <>
+      <span />
+      {columns.map((column) => (
+        <span key={column} className={classes.head}>
+          {column}
+        </span>
+      ))}
+      {switched && <span />}
+    </>
   );
 }
 
 /**
- * A width: a box sized for a few digits, with no visible label — the name at
- * the left of its line, or the switch above it, already says what it is.
+ * One line of the table: what it is at the left, then the cells that say how it
+ * is drawn, then — for an OSM feature — its switch. The cells are the grid's
+ * own, not a box of their own: a feature's colour and width sat on a row below
+ * its switch, right-aligned, two small controls adrift in an empty line
+ * (operator, 2026-09-18).
+ *
+ * The name is text, not a label: each control carries its own accessible name,
+ * which CONTAINS the visible word (WCAG 2.5.3). The switch takes the name and
+ * the hint as its own, the way `SwitchRow` wires them.
+ */
+function StyleRow({
+  feature,
+  name,
+  hint,
+  enabled,
+  onEnabledChange,
+  children,
+}: {
+  feature?: string;
+  name: string;
+  hint?: string;
+  /** Omitted for a contour, which is drawn whenever contours are. */
+  enabled?: boolean;
+  onEnabledChange?: (next: boolean) => void;
+  children: React.ReactNode;
+}) {
+  const nameId = useId();
+  const hintId = useId();
+  return (
+    <>
+      <div className={classes.rowText} data-feature={feature}>
+        <span id={nameId} className={classes.rowName}>
+          {name}
+        </span>
+        {hint && (
+          <span id={hintId} className={classes.rowHint}>
+            {hint}
+          </span>
+        )}
+      </div>
+      {children}
+      {onEnabledChange && (
+        <Toggle
+          checked={enabled ?? true}
+          onChange={onEnabledChange}
+          labelledBy={nameId}
+          describedBy={hint ? hintId : undefined}
+        />
+      )}
+    </>
+  );
+}
+
+/**
+ * A width: a box in the table's width column, named by the heading over it and
+ * by the row beside it, so it carries no label of its own.
  *
  * Typed as text and applied the moment it is a valid number. The draft is held
  * here so a half-typed "1." or an empty box does not reach the map (or the
@@ -226,44 +289,6 @@ function WidthBox({
   disabled?: boolean;
   onChange: (next: number) => void;
 }) {
-  return (
-    <LiveNumber
-      label={label}
-      hideLabel
-      className={classes.widthBox}
-      value={value}
-      min={0}
-      max={max}
-      disabled={disabled}
-      onChange={onChange}
-    />
-  );
-}
-
-/** The same number, with its label visible at the left of the line. */
-function NumberLine(props: { label: string; value: number; min: number; max: number; onChange: (next: number) => void }) {
-  return <LiveNumber {...props} className={classes.numberLine} />;
-}
-
-function LiveNumber({
-  label,
-  hideLabel,
-  className,
-  value,
-  min,
-  max,
-  disabled,
-  onChange,
-}: {
-  label: string;
-  hideLabel?: boolean;
-  className: string;
-  value: number;
-  min: number;
-  max: number;
-  disabled?: boolean;
-  onChange: (next: number) => void;
-}) {
   const [draft, setDraft] = useState(String(value));
   useEffect(() => {
     setDraft((current) => (Number(current) === value ? current : String(value)));
@@ -272,15 +297,15 @@ function LiveNumber({
   return (
     <NumberField
       label={label}
-      hideLabel={hideLabel}
-      className={className}
+      hideLabel
+      className={classes.widthBox}
       value={draft}
-      constraints={{ min, max }}
+      constraints={{ min: 0, max }}
       disabled={disabled}
       onChange={(next) => {
         setDraft(next);
         const number = Number(next);
-        if (next.trim() !== "" && Number.isFinite(number) && number >= min && number <= max) onChange(number);
+        if (next.trim() !== "" && Number.isFinite(number) && number >= 0 && number <= max) onChange(number);
       }}
       onBlur={() => setDraft(String(value))}
     />

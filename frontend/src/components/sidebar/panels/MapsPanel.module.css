@@ -90,92 +90,70 @@
   color: var(--theme-text-muted);
 }
 
-/* Topo style: a line feature is its switch, then its colour and width. */
-.feature {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-/* The colour and the width of one feature, under the switch that names them:
-   ONE line, not one each, and pushed to the right so every swatch and every
-   width box on the sheet sits in the same two columns as the contours' — a
-   table only reads as one if its columns line up. */
-.featureControls {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
-/* A named line of the style: the name at the left, then its colour and its
-   width — a colour column and a width column down the section. */
-.styleLine {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: var(--control-lg);
-}
-
-.styleName {
-  flex: 1;
-  min-width: 0;
-  font-size: var(--font-sm);
-  color: var(--theme-text-muted);
-}
-
-/* A number with its label visible at the left: the field's label/control
-   column turned on its side. */
-.numberLine {
-  flex-direction: row;
-  flex-wrap: wrap;
+/* Topo style is a TABLE: what the line is, its colour, its width, and — for an
+   OSM feature — its switch. A grid, so every column lines up under the one
+   heading that names it, whatever the row's text does. */
+.styleTable {
+  display: grid;
+  grid-template-columns: 1fr var(--control-lg) 7ch;
   align-items: center;
   column-gap: 10px;
-  min-height: var(--control-lg);
+  row-gap: 6px;
 }
 
-.numberLine > label {
-  flex: 1;
+.switchTable {
+  grid-template-columns: 1fr var(--control-lg) 7ch var(--switch-width);
+}
+
+/* A point has no width: its symbol is fixed, and the switch is the only thing
+   to set. */
+.symbolTable {
+  grid-template-columns: 1fr var(--control-lg) var(--switch-width);
+}
+
+.head {
+  font-size: var(--font-xs);
+  color: var(--theme-text-muted);
+  text-align: center;
+  white-space: nowrap;
+}
+
+.rowText {
   min-width: 0;
-}
-
-.numberLine > input {
-  flex: none;
-  width: 8ch;
-  text-align: right;
-}
-
-/* An error still gets a line of its own beneath. */
-.numberLine > :last-child:not(input) {
-  flex-basis: 100%;
-}
-
-/* A width inside a line that already names it: the box alone. */
-.widthBox {
-  flex: none;
-}
-
-/* Wide enough for the widest value either kind takes ("2.25", "100"). */
-.widthBox > input {
-  width: 7ch;
-  text-align: right;
-}
-
-.pointFeature {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  gap: 2px;
 }
 
-.pointFeature > :last-child {
-  flex: 1;
-  min-width: 0;
+.rowName {
+  font-size: var(--font-sm);
+  color: var(--theme-text-primary);
 }
 
-/* The map's own symbol, at the size a row's text reads beside. */
+/* An OSM tag query is as long as it is (roads name six values) and it is a
+   reference, not a sentence: two lines of it in a column narrowed by three
+   controls, then an ellipsis. The FULL string is still the switch's accessible
+   description, so nothing is lost to a reader. */
+.rowHint {
+  font-size: var(--font-xs);
+  color: var(--theme-text-muted);
+  overflow-wrap: anywhere;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+/* A width box fills its column; its label is the heading above it. */
+.widthBox > input {
+  width: 100%;
+  text-align: right;
+}
+
+/* The map's own symbol, centred in the column the colours are in. */
 .pointIcon {
-  flex: none;
+  justify-self: center;
   width: 20px;
   height: 20px;
   object-fit: contain;

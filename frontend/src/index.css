@@ -55,6 +55,8 @@
   --control-lg: 36px; /* buttons, text fields */
   --control-md: 32px; /* compact buttons, chips, icon buttons, menu items */
   --control-sm: 24px; /* the round icon button at a pill's end */
+  /* A switch is its own size, and a column of them lines up with one. */
+  --switch-width: 36px;
   /* The side margin every panel, sheet and list keeps. */
   --gutter: 16px;
 

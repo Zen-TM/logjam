@@ -1,7 +1,7 @@
 .toggle {
   position: relative;
   flex: none;
-  width: 36px;
+  width: var(--switch-width);
   height: 22px;
   padding: 0;
   border-radius: var(--radius-pill);

@@ -127,3 +127,94 @@
   outline: none;
 }
 
+
+/* The slider: its label and reading on one line, the track and its two ends on
+   the next, so the bounds are readable and not merely implied by the geometry. */
+.rangeField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rangeHead {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.rangeHead > .label {
+  flex: 1;
+  min-width: 0;
+}
+
+.rangeValue {
+  flex: none;
+  font-size: var(--font-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--theme-text-primary);
+}
+
+.range {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--control-md);
+}
+
+.rangeEnd {
+  flex: none;
+  font-size: var(--font-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--theme-text-muted);
+}
+
+/* The track and thumb are drawn here rather than left to `accent-color`, which
+   painted a grey knob whatever the scheme said (operator, 2026-09-18). */
+.rangeInput {
+  flex: 1;
+  min-width: 0;
+  height: var(--control-sm);
+  margin: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.rangeInput::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(to right, var(--theme-accent) var(--fill), var(--surface-field) var(--fill));
+}
+
+.rangeInput::-moz-range-track {
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(to right, var(--theme-accent) var(--fill), var(--surface-field) var(--fill));
+}
+
+.rangeInput::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: var(--control-sm);
+  height: var(--control-sm);
+  /* Centred on a 4px track. */
+  margin-top: calc((4px - var(--control-sm)) / 2);
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--theme-accent);
+}
+
+.rangeInput::-moz-range-thumb {
+  width: var(--control-sm);
+  height: var(--control-sm);
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--theme-accent);
+}
+
+.rangeInput:focus-visible {
+  outline: 2px solid var(--theme-text-primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-pill);
+}

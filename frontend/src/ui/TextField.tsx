@@ -223,3 +223,72 @@ export function SearchField({
   );
 }
 
+
+/**
+ * A bounded number chosen by feel: a native range input with its ENDS and its
+ * reading written out — "0.5×" and "2×" flanking the track, the value itself at
+ * the end of the label line.
+ *
+ * It is the kit's only slider, and it earns that by being the only value of its
+ * kind: bounded on both sides, continuous, with no unit of its own and nothing
+ * to compare it against except the map it is redrawing. A box to type in was
+ * tried and put back (operator, 2026-09-18) — it asked for a precision nobody
+ * has, and it showed neither the bounds nor that the number is a multiplier.
+ * Native, so the arrows, Home/End and the announcement are the platform's.
+ */
+export function RangeField({
+  label,
+  min,
+  max,
+  id,
+  className,
+  value,
+  format,
+  onChange,
+  ...inputProps
+}: Omit<InputHTMLAttributes<HTMLInputElement>, "type" | "value" | "onChange" | "min" | "max"> & {
+  label: string;
+  min: number;
+  max: number;
+  value: number;
+  /** What the value reads as, at the ends and to assistive tech ("1.2×"). */
+  format: (value: number) => string;
+  onChange: (next: number) => void;
+}) {
+  const autoId = useId();
+  const inputId = id ?? autoId;
+  // The filled part of the track, as the fraction the thumb sits at.
+  const fill = `${((value - min) / (max - min)) * 100}%`;
+  return (
+    <div className={[classes.rangeField, className].filter(Boolean).join(" ")}>
+      <div className={classes.rangeHead}>
+        <label htmlFor={inputId} className={classes.label}>
+          {label}
+        </label>
+        <output htmlFor={inputId} className={classes.rangeValue}>
+          {format(value)}
+        </output>
+      </div>
+      <div className={classes.range}>
+        <span className={classes.rangeEnd} aria-hidden>
+          {format(min)}
+        </span>
+        <input
+          id={inputId}
+          type="range"
+          className={classes.rangeInput}
+          min={min}
+          max={max}
+          value={value}
+          style={{ "--fill": fill } as CSSProperties}
+          aria-valuetext={format(value)}
+          onChange={(event) => onChange(Number(event.target.value))}
+          {...inputProps}
+        />
+        <span className={classes.rangeEnd} aria-hidden>
+          {format(max)}
+        </span>
+      </div>
+    </div>
+  );
+}
