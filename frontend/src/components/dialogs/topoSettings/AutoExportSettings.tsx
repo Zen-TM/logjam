@@ -41,7 +41,7 @@ export default function AutoExportSettings({ value, onChange, rasterSettings }: 
     <div className={styles.tabPanel}>
       <SettingsRow
         label="Export when it finishes"
-        tooltip="Starts the export by itself once the topo is finished, so you don't have to come back for it. It turns up under Exports and downloads when it's ready."
+        tooltip="Starts exporting the topo automatically once it finishes generating."
       >
         <Toggle
           label="Export when it finishes"

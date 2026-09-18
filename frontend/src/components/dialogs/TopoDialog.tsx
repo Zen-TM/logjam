@@ -659,10 +659,10 @@ export default function TopoDialog({
             >
               <Upload size={28} aria-hidden className={classes.dropGlyph} />
               <span className={classes.dropLine}>
-                {file ? file.name : "Drop your ELVIS ZIP here, or choose a file"}
+                {file ? file.name : "Drop your ELVIS ZIP here, or select it in your file system."}
               </span>
               <span className={classes.dropHint}>
-                {file ? "Choose a different file" : "Just as it arrived from ELVIS — no need to unzip it"}
+                {file ? "Choose a different file" : "No need to unzip it."}
               </span>
               <input
                 ref={fileInputRef}

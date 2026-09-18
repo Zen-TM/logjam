@@ -1,6 +1,10 @@
 import { Fragment } from "react";
-import { SVTM_FORMATIONS, type VegetationSettings as VegetationSettingsValue } from "@logjam/shared";
-import { ColourField, LiveNumberField, SectionHeader, Toggle } from "../../../ui";
+import {
+  RASTER_TEMPLATE_DEFAULTS,
+  SVTM_FORMATIONS,
+  type VegetationSettings as VegetationSettingsValue,
+} from "@logjam/shared";
+import { Button, ColourField, LiveNumberField, SectionHeader, Toggle } from "../../../ui";
 import SettingsRow from "./SettingsRow";
 import type { NumericFieldConstraints } from "../../../numberInput";
 import styles from "./topoSettings.module.css";
@@ -11,8 +15,22 @@ interface Props {
 }
 
 const RATIO_CONSTRAINTS: NumericFieldConstraints = { min: 0, max: 1 };
-const ALPHA_CONSTRAINTS: NumericFieldConstraints = { min: 0, max: 255, integer: true };
 const WEIGHT_CONSTRAINTS: NumericFieldConstraints = { min: 0, max: 5 };
+
+const DEFAULT_WEIGHTS = RASTER_TEMPLATE_DEFAULTS.vegetation.formationWeights;
+
+// On the wire the layer's opacity is its own 0–255 number (`alphaMin` /
+// `alphaMax`) and the colour's alpha byte is ignored — that is what the
+// renderer reads, and it is not worth a settings migration to move. In the UI
+// they are ONE control: the picker already has an opacity strip and a
+// checkerboard behind the swatch, so a colour that says it is half transparent
+// beside a number that says otherwise was two answers to one question.
+const withAlpha = (colour: string, alpha: number) =>
+  `${colour.slice(0, 7)}${Math.round(alpha).toString(16).padStart(2, "0")}`;
+const alphaOf = (colour: string) => {
+  const alpha = parseInt(colour.slice(7, 9), 16);
+  return Number.isNaN(alpha) ? 255 : alpha;
+};
 
 /**
  * How thick the scrub is, drawn from the LiDAR returns that hit it rather than
@@ -34,7 +52,7 @@ export default function VegetationSettings({ value, onChange }: Props) {
 
       <SettingsRow
         label="Min ratio"
-        tooltip="Below this, nothing is drawn and the ground shows through."
+        tooltip="Below this ratio, the vegetation layer is transparent."
       >
         <LiveNumberField
           label="Min ratio"
@@ -48,7 +66,7 @@ export default function VegetationSettings({ value, onChange }: Props) {
 
       <SettingsRow
         label="Max ratio"
-        tooltip="At this and above, the scrub is drawn at full strength in the dense colour. Has to be higher than the min ratio."
+        tooltip="Above this ratio, the vegetation layer uses the full-strength dense colour below."
       >
         <LiveNumberField
           label="Max ratio"
@@ -60,55 +78,27 @@ export default function VegetationSettings({ value, onChange }: Props) {
         />
       </SettingsRow>
 
-      <SettingsRow
-        label="Sparse colour"
-        tooltip="The colour used where the scrub is thinnest. Its own transparency is ignored — the two opacity settings below decide that."
-      >
+      <SettingsRow label="Sparse colour" tooltip="The colour used where the scrub is thinnest.">
         <ColourField
           label="Sparse colour"
           hideLabel
-          value={value.sparseColour}
-          onChange={(sparseColour) => patch({ sparseColour })}
+          value={withAlpha(value.sparseColour, value.alphaMin)}
+          onChange={(sparseColour) => patch({ sparseColour, alphaMin: alphaOf(sparseColour) })}
         />
       </SettingsRow>
 
-      <SettingsRow
-        label="Dense colour"
-        tooltip="The colour used where the scrub is thickest. Its own transparency is ignored — the two opacity settings below decide that."
-      >
+      <SettingsRow label="Dense colour" tooltip="The colour used where the scrub is thickest.">
         <ColourField
           label="Dense colour"
           hideLabel
-          value={value.denseColour}
-          onChange={(denseColour) => patch({ denseColour })}
-        />
-      </SettingsRow>
-
-      <SettingsRow label="Opacity at min ratio" tooltip="How solid the layer looks where the scrub only just starts to show. 0 is invisible, 255 is fully solid.">
-        <LiveNumberField
-          label="Opacity at min ratio"
-          hideLabel
-          className={styles.numberCell}
-          value={value.alphaMin}
-          constraints={ALPHA_CONSTRAINTS}
-          onCommit={(alphaMin) => patch({ alphaMin })}
-        />
-      </SettingsRow>
-
-      <SettingsRow label="Opacity at max ratio" tooltip="How solid the layer looks where the scrub is thickest. 0 is invisible, 255 is fully solid.">
-        <LiveNumberField
-          label="Opacity at max ratio"
-          hideLabel
-          className={styles.numberCell}
-          value={value.alphaMax}
-          constraints={ALPHA_CONSTRAINTS}
-          onCommit={(alphaMax) => patch({ alphaMax })}
+          value={withAlpha(value.denseColour, value.alphaMax)}
+          onChange={(denseColour) => patch({ denseColour, alphaMax: alphaOf(denseColour) })}
         />
       </SettingsRow>
 
       <SettingsRow
         label="Weight by vegetation type"
-        tooltip="Some vegetation is harder to get through than others. With this on, each SVTM formation scales the estimate by its own resistance — heath fights back, rainforest floor does not. Off, they all count the same."
+        tooltip="Some vegetation is harder to push through than others. With this setting on, you can scale estimated density by vegetation formation."
       >
         <Toggle
           label="Weight by vegetation type"
@@ -118,11 +108,24 @@ export default function VegetationSettings({ value, onChange }: Props) {
       </SettingsRow>
 
       <div className={styles.dependent} data-disabled={value.weightsEnabled ? undefined : true}>
-        <SectionHeader title="Resistance per formation" />
-        <p className={styles.helpText}>
-          1 leaves a formation as measured. Above 1 counts it as harder to push
-          through than the returns suggest, below 1 as easier.
-        </p>
+        <div className={styles.resetLine}>
+          <div>
+            <SectionHeader title="Resistance per formation" />
+            <p className={styles.helpText}>
+              Use values above 1 for vegetation formations that are harder to
+              push through, and values below 1 for formations that are easier.
+            </p>
+          </div>
+          <Button
+            compact
+            variant="outline"
+            className={styles.resetButton}
+            disabled={!value.weightsEnabled}
+            onClick={() => patch({ formationWeights: { ...DEFAULT_WEIGHTS } })}
+          >
+            Reset to defaults
+          </Button>
+        </div>
         {/* A table: one heading over the numbers, not the range repeated on
             twelve rows (DESIGN.md §9). */}
         <div className={styles.formationTable}>

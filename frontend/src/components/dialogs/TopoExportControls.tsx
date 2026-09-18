@@ -116,7 +116,7 @@ export default function TopoExportControls({ value, onChange, availableLayers }:
             <Checkbox
               key={l.name}
               label={l.label}
-              description={eligible ? undefined : `${rule.label} can't carry this one`}
+              description={eligible ? undefined : `Can't be exported as a ${rule.label}`}
               checked={selected.has(l.name)}
               disabled={!eligible}
               onChange={() => toggleLayer(l.name)}

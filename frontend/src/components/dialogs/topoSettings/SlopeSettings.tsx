@@ -190,8 +190,7 @@ export default function SlopeSettings({ value, onChange }: Props) {
   return (
     <div className={styles.tabPanel}>
       <p className={styles.helpText}>
-        Steeper ground gets a stronger colour. Anything flatter than the first
-        angle is left clear, and each band takes its colour off the scale.
+        Colour terrain based on how steep it is.
       </p>
 
       <div className={styles.scaleRow}>
@@ -218,6 +217,7 @@ export default function SlopeSettings({ value, onChange }: Props) {
         </span>
         <Button
           compact
+          variant="outline"
           className={styles.scaleReset}
           onClick={() => setScale(DEFAULT_SCALE_START, DEFAULT_SCALE_END)}
         >

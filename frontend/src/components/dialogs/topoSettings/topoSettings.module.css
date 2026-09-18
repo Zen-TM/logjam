@@ -210,3 +210,15 @@
   font-size: var(--font-xs);
   color: var(--theme-text-muted);
 }
+
+/* A group's header and its sentence, with the control that resets the group
+   beside them rather than under. */
+.resetLine {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.resetButton {
+  flex: none;
+}

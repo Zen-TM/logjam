@@ -31,7 +31,7 @@ export default function HillshadeSettings({ value, onChange }: Props) {
     <div className={styles.tabPanel}>
       <SettingsRow
         label="Multidirectional"
-        tooltip="Lights the terrain from several directions at once, for softer shading with fewer hard shadows. It replaces the sun position below."
+        tooltip="This setting replaces the sun position (azimuth and altitude) below."
       >
         <Toggle
           label="Multidirectional"
@@ -40,10 +40,7 @@ export default function HillshadeSettings({ value, onChange }: Props) {
         />
       </SettingsRow>
 
-      <SettingsRow
-        label="Tint colour"
-        tooltip="The shading is grey underneath; this colour tints it. How transparent you make the colour is how strong the whole layer is."
-      >
+      <SettingsRow label="Tint colour">
         <ColourField
           label="Hillshade tint colour"
           hideLabel
@@ -54,7 +51,7 @@ export default function HillshadeSettings({ value, onChange }: Props) {
 
       <SettingsRow
         label="Azimuth (°)"
-        tooltip="Where the sun sits, in degrees clockwise from north. 315° — the north-west — is what most maps use, because it looks right to the eye."
+        tooltip="Where the sun sits, in degrees, clockwise from north. 315° is what most maps use."
         disabled={value.multidirectional}
       >
         <LiveNumberField
@@ -70,7 +67,7 @@ export default function HillshadeSettings({ value, onChange }: Props) {
 
       <SettingsRow
         label="Altitude (°)"
-        tooltip="How high the sun sits above the horizon. Low sun, long shadows and more drama; high sun, flatter shading."
+        tooltip="How high the sun sits above the horizontal."
         disabled={value.multidirectional}
       >
         <LiveNumberField
