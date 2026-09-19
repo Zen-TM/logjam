@@ -184,7 +184,10 @@ test.describe("desktop", () => {
     await expect(page.getByRole("heading", { name: "Sort and filter" })).toBeFocused();
     await expectNoViolations(page, "aside");
 
-    await page.getByRole("button", { name: "Close" }).click();
+    // `exact`, because an accessible name matches as a SUBSTRING by default and
+    // this list is the user's own data: a place called "Closet" is three of the
+    // "Close" buttons on this page (its own row, its ⋯, and the sheet's).
+    await page.getByRole("button", { name: "Close", exact: true }).click();
     await page.getByRole("button", { name: /^Actions for / }).first().click();
     await expect(page.getByRole("menu")).toBeVisible();
     await expectNoViolations(page, "[role='menu']");
