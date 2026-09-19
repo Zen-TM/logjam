@@ -19,7 +19,6 @@ import {
   type ThemeSchemeId,
   type ThemeTokens,
 } from "@logjam/shared";
-import { createThemeFromTokens } from "./theme";
 import { fetchCurrentUser, updateCurrentUserThemeScheme } from "./placeUtils";
 import { messageFromError } from "./errors/messageFromError";
 
@@ -66,7 +65,6 @@ type ThemePreferencesContextValue = {
   isHydrating: boolean;
   isSaving: boolean;
   error: string | null;
-  muiTheme: ReturnType<typeof createThemeFromTokens>;
   setThemeScheme: (id: ThemeSchemeId) => Promise<void>;
   hydrateFromUser: () => Promise<void>;
 };
@@ -87,10 +85,6 @@ export function ThemePreferencesProvider({
   const [error, setError] = useState<string | null>(null);
 
   const scheme = THEME_SCHEMES[schemeId];
-  const muiTheme = useMemo(
-    () => createThemeFromTokens(scheme.tokens),
-    [scheme],
-  );
 
   useEffect(() => {
     applyTokensToCss(scheme.tokens);
@@ -145,7 +139,6 @@ export function ThemePreferencesProvider({
       isHydrating,
       isSaving,
       error,
-      muiTheme,
       setThemeScheme,
       hydrateFromUser,
     }),
@@ -154,7 +147,6 @@ export function ThemePreferencesProvider({
       isHydrating,
       isSaving,
       error,
-      muiTheme,
       setThemeScheme,
       hydrateFromUser,
     ],

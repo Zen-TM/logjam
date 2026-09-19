@@ -90,13 +90,36 @@
   --opacity-disabled: 0.5;
 }
 
+/* The reset. Every width in this app is written as though padding and border
+   are inside it, so `border-box` is not a preference — it is the unit the
+   layout is measured in. It is set on `html` and inherited rather than forced
+   on `*`, so a third-party subtree (MapLibre's canvas furniture) can opt back
+   out on itself without fighting a universal selector. */
+html {
+  box-sizing: border-box;
+  /* iOS enlarges text in landscape without this, which silently breaks every
+     size the token scale decides. */
+  -webkit-text-size-adjust: 100%;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: inherit;
+}
+
 body {
   margin: 0;
   padding: 0;
   background-color: var(--theme-primary);
   color: var(--theme-text-primary);
+  /* The reader's own OS font, which is what Logjam GPS shows too: neither app
+     ships a typeface, so both look like the system they are running on. */
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 1rem;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* One focus ring for everything keyboard-reachable (WCAG 2.4.7): a 2px ring in
@@ -143,8 +166,7 @@ body {
   }
 }
 
-/* fullScreen MUI dialogs must fully cover the viewport (MOBILE-12). Dialogs
-   that cap their paper with a desktop-oriented `sx: { maxHeight: "85vh" }`
-   now condition that cap on `useIsMobile()` (`maxHeight: isMobile ? "100%" : "85vh"`)
-   instead of relying on a global override here — see the dialogs still on
-   MUI_LEGACY_FILES. */
+/* A dialog fills the phone's viewport rather than floating in it (MOBILE-12),
+   and the rule that decides this lives with the dialog itself — `Dialog.module.css`
+   keys it off the same 768px breakpoint as the rest of this file. Nothing
+   overrides a dialog from here. */

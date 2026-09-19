@@ -6,23 +6,15 @@ import jsxA11y from 'eslint-plugin-jsx-a11y'
 import tseslint from 'typescript-eslint'
 
 
-/**
- * Files that still import MUI. Logjam Web is moving to its own kit
- * (src/ui, frontend/DESIGN.md), so MUI is an ERROR everywhere else — a new file
- * cannot reach for it. This list may only SHRINK: when a file is rebuilt on the
- * kit, delete its line. When it is empty, delete it, the rule's exception and
- * the @mui dependencies.
- */
-const MUI_LEGACY_FILES = [
-  'src/main.tsx',
-  'src/theme.ts',
-]
-
 export default tseslint.config(
   { ignores: ['dist'] },
   {
+    // MUI is gone from Logjam Web (Phase C, 2026-09-19) and the packages are
+    // uninstalled, so this rule now guards a decision rather than a migration:
+    // it turns "we removed that" into an error at the import rather than a
+    // module-not-found three minutes later, and it names what to reach for
+    // instead. There is no exception list any more.
     files: ['src/**/*.{ts,tsx}'],
-    ignores: MUI_LEGACY_FILES,
     rules: {
       'no-restricted-imports': [
         'error',
