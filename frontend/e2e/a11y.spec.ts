@@ -520,4 +520,37 @@ test.describe("narrow web", () => {
     await expect(page.getByRole("menu", { name: "More pages" })).toBeVisible();
     await expectNoViolations(page, "[role='menu']");
   });
+
+  test("the bottom sheet is a named landmark whose height the keyboard sets", async ({ page }) => {
+    await openApp(page);
+    await page.getByRole("button", { name: "Places", exact: true }).click();
+
+    // The same complementary landmark the desktop panel is, named by its page:
+    // a reader jumping by landmark should not lose the panel on a phone.
+    const sheet = page.getByRole("complementary", { name: "Places" });
+    await expect(sheet).toBeVisible({ timeout: 15_000 });
+    await expect(sheet.locator("[data-place-id]").first()).toBeVisible({ timeout: 15_000 });
+    await expectNoViolations(page, "aside");
+
+    // The grab bar answers the arrows, or "full" is a height only a pointer can
+    // ask for. Asserted through the sheet's own geometry, because a slider that
+    // relabels itself without moving anything is the failure worth catching.
+    const height = page.getByRole("slider", { name: "Panel height" });
+    await height.focus();
+    await expect(height).toHaveAttribute("aria-valuetext", "Half height");
+    const topAt = async () => (await sheet.boundingBox())!.y;
+    const half = await topAt();
+
+    await page.keyboard.press("ArrowUp");
+    await expect(height).toHaveAttribute("aria-valuetext", "Full height");
+    await expect.poll(topAt).toBeLessThan(half);
+
+    // It clamps rather than wrapping: the tallest is the end of the road.
+    await page.keyboard.press("ArrowUp");
+    await expect(height).toHaveAttribute("aria-valuetext", "Full height");
+
+    await page.keyboard.press("Home");
+    await expect(height).toHaveAttribute("aria-valuetext", "Peek");
+    await expect.poll(topAt).toBeGreaterThan(half);
+  });
 });

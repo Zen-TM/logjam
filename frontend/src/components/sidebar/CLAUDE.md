@@ -21,4 +21,5 @@ On narrow web, the Map tab closes the panel.
 
 ## Conventions log (additive)
 
-_(none yet)_
+- **The bottom sheet and the desktop panel are the same landmark, with the same name.** `BottomSheet` takes the page `title` and renders `<aside aria-label={title}>`, exactly as `SidebarPanel` does on desktop. It was a bare `<div>`, so a screen-reader user lost the entire panel as a navigable landmark by being on a phone. A branch on `useIsMobile()` may change the furniture; it may not change what the thing IS. (2026-09-19)
+- **The sheet's grab bar is `role="slider"`, not a drag-only `<div>`.** Arrow keys step through peek/half/full (shortest first, so taller is a higher value), Home and End jump to the ends, and it clamps. Before this, "full" was a height only a pointer could ask for (WCAG 2.1.1). The pointer drag is unchanged — the keyboard was added beside it, not instead of it. Guard: `e2e/a11y.spec.ts`, "the bottom sheet is a named landmark whose height the keyboard sets", which asserts the sheet's own geometry moves rather than only that the label changed. (2026-09-19)

@@ -32,7 +32,10 @@
   touch-action: none;
 }
 
-/* Drag handle bar — the only grab area, so panel-body scroll stays usable. */
+/* Drag handle bar — the only grab area, so panel-body scroll stays usable, and
+   a `slider` the arrow keys move between the three snaps. The whole bar is the
+   target: it is 36px of grip on a full-width row, and a keyboard reaching a
+   4px-tall pill would be a worse promise than reaching none. */
 .handle {
   flex-shrink: 0;
   display: flex;
@@ -41,6 +44,17 @@
   padding: 8px 0 4px;
   cursor: grab;
   touch-action: none;
+}
+
+/* The ring hugs the grip rather than the full-width bar it sits in, so focus
+   points at the thing that moves. */
+.handle:focus-visible {
+  outline: none;
+}
+
+.handle:focus-visible .grip {
+  outline: 2px solid var(--theme-text-primary);
+  outline-offset: 4px;
 }
 
 .handle:active {

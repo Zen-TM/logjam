@@ -569,7 +569,7 @@ function SidebarPanel({
 
   if (isMobile) {
     return (
-      <BottomSheet snap={sheetSnap} onSnapChange={setSheetSnap}>
+      <BottomSheet snap={sheetSnap} onSnapChange={setSheetSnap} title={title}>
         {panelContent}
       </BottomSheet>
     );
