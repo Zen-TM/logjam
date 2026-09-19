@@ -18,8 +18,6 @@ const MUI_LEGACY_FILES = [
   'src/components/dialogs/ImportResultSummary.tsx',
   'src/components/dialogs/MatchReview.tsx',
   'src/components/dialogs/OnboardingChoiceDialog.tsx',
-  'src/components/dialogs/RopeWikiReviewDialog.tsx',
-  'src/components/dialogs/SelectedPlacesDialog.tsx',
   'src/components/dialogs/UnifiedImportDialog.tsx',
   'src/components/SignIn.tsx',
   'src/csvImport/SectionLabel.tsx',
