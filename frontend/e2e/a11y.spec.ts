@@ -12,6 +12,9 @@ import AxeBuilder from "@axe-core/playwright";
 const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:5173";
 test.skip(!baseURL.startsWith("http://localhost"), "needs the local fake-auth stack");
 
+/** The second local server (playwright.config.ts), with NO fake auth. */
+const SIGN_IN_URL = process.env.E2E_SIGN_IN_URL ?? "http://localhost:5199";
+
 const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 
 /**
@@ -634,5 +637,116 @@ test.describe("narrow web", () => {
     await page.keyboard.press("Home");
     await expect(height).toHaveAttribute("aria-valuetext", "Peek");
     await expect.poll(topAt).toBeGreaterThan(half);
+  });
+
+  test("the sign-in card", async ({ page }) => {
+    // The other width for a screen that is ONLY ever seen before any app shell
+    // exists — no rail, no sheet, no map behind it, and the card is the whole
+    // page rather than a thing centred in one.
+    await page.goto(SIGN_IN_URL);
+    await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeVisible({
+      timeout: 15_000,
+    });
+    await expectNoViolations(page);
+  });
+});
+
+// Three surfaces fake auth boots STRAIGHT PAST, and each for its own reason:
+// `useAuth` sets "authenticated" on mount (so SignIn never renders), the seeded
+// account's recorded consent is current (so the gate never shows), and it holds
+// 311 places (so the first-login offer never fires). None of them is a viewport
+// variant of something above — they are screens the dev stack cannot reach by
+// navigation, which is why they went unchecked through seven packages of this
+// rework.
+//
+// Two are reachable here anyway: the gate and the offer are ordinary responses
+// away, and SignIn is one env var away on the second local server. The third of
+// each — confirmSignUp, confirmForgotPassword — needs a mailbox and a real pool,
+// which is `auth-lifecycle.spec.ts`'s ground, not this file's.
+test.describe("surfaces fake auth never shows", () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  test("the sign-in page, its sign-up form and the reset form", async ({ page }) => {
+    // The same bundle with `VITE_AUTH_MODE` not fake: no stored session, so
+    // `fetchAuthSession()` resolves empty and useAuth lands on "signIn".
+    await page.goto(SIGN_IN_URL);
+    const signIn = page.getByRole("button", { name: "Sign in", exact: true });
+    await expect(signIn).toBeVisible({ timeout: 15_000 });
+    await expectNoViolations(page);
+
+    // Sign-up is where the two ticks live, and where the Terms and Privacy
+    // links sit BESIDE them rather than inside their labels — a link in a label
+    // toggles the control it labels, so reading the terms would answer the
+    // question about them (SignIn.tsx).
+    await page.getByRole("button", { name: "Sign up", exact: true }).click();
+    await expect(page.getByLabel("Confirm password")).toBeVisible();
+    await expectNoViolations(page);
+    // A disabled submit is the agreement's own gate, not decoration.
+    const create = page.getByRole("button", { name: "Sign up", exact: true });
+    await expect(create).toBeDisabled();
+    await page.getByRole("checkbox", { name: /agree to the Terms/ }).check();
+    await page.getByRole("checkbox", { name: /18 years of age/ }).check();
+    await expect(create).toBeEnabled();
+
+    // And back out to the reset form, which is the third reachable state.
+    await page.getByRole("button", { name: "Sign in", exact: true }).click();
+    await page.getByRole("button", { name: "Forgot password?" }).click();
+    await expect(page.getByRole("button", { name: "Send reset code" })).toBeVisible();
+    await expectNoViolations(page);
+  });
+
+  test("the consent gate, on an account whose consent is stale", async ({ page }) => {
+    // The gate renders INSTEAD of the app when the recorded version is stale
+    // (App.tsx), so re-writing the one field the decision reads is the whole
+    // cost of reaching it. GET only: this path is also PATCHed on the way out
+    // of the gate, and that must stay a real request.
+    await page.route("**/users/me", async (route) => {
+      if (route.request().method() !== "GET") return route.continue();
+      const response = await route.fetch();
+      const user = await response.json();
+      await route.fulfill({ response, json: { ...user, consentVersion: "2000-01-01" } });
+    });
+    await page.goto("/");
+
+    const gate = page.getByRole("heading", { name: "Updated terms" });
+    await expect(gate).toBeVisible({ timeout: 15_000 });
+    // Nothing behind the gate: no map, no rail, no panel.
+    await expect(page.locator("nav[aria-label='Pages']")).toHaveCount(0);
+    await expectNoViolations(page);
+
+    // The tick is what arms the button, and the button is the only way on —
+    // but this case stops here: agreeing writes consent to the account.
+    const agree = page.getByRole("button", { name: "Agree and continue" });
+    await expect(agree).toBeDisabled();
+    await page.getByRole("checkbox", { name: /agree to the updated Terms/ }).check();
+    await expect(agree).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Sign out" })).toBeEnabled();
+  });
+
+  test("the first-login offer, on an account that loaded empty", async ({ page }) => {
+    // It opens only on a load that SUCCEEDED and came back empty (App.tsx), so
+    // the stub is a real 200 with a real total — a failed fetch must NOT open
+    // it, which is the bug that put this dialog in a case's way in the first
+    // place. Nothing is written: the case presses neither row.
+    await page.route("**/places", async (route) => {
+      if (route.request().method() !== "GET") return route.continue();
+      await route.fulfill({
+        status: 200,
+        headers: { "Content-Type": "application/json", "X-Total-Count": "0" },
+        body: "[]",
+      });
+    });
+    await page.goto("/");
+
+    const offer = page.getByRole("dialog", { name: "Welcome to Logjam" });
+    await expect(offer).toBeVisible({ timeout: 15_000 });
+    await expect(offer.getByText("Load the NSW place database (RopeWiki)")).toBeVisible();
+    await expectNoViolations(page, "dialog");
+
+    // Closing it is starting empty — the hub is not a question that has to be
+    // answered (OnboardingChoiceDialog.tsx).
+    await page.keyboard.press("Escape");
+    await expect(offer).toHaveCount(0);
+    await expect(page.locator("nav[aria-label='Pages']")).toBeVisible();
   });
 });

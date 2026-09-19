@@ -7,6 +7,16 @@ import { defineConfig, devices } from "@playwright/test";
 const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:5173";
 const isLocal = baseURL.startsWith("http://localhost");
 
+/**
+ * A second local dev server, WITHOUT fake auth — the only way to render SignIn.
+ * Fake auth (`useAuth`) sets "authenticated" on mount, so the sign-in screen is
+ * unreachable on every other target this suite runs against; here it is the
+ * default state, one env var away. `VITE_AUTH_MODE` is set explicitly rather
+ * than left unset so the branch is this file's decision, not the shell's.
+ * No API: every sign-in state is client-side until submit.
+ */
+const SIGN_IN_URL = process.env.E2E_SIGN_IN_URL ?? "http://localhost:5199";
+
 export default defineConfig({
   testDir: "./e2e",
   // An axe walk is not a user interaction, and 30s (Playwright's default) is a
@@ -44,12 +54,21 @@ export default defineConfig({
   // Only auto-boot the frontend when targeting local; for prod we hit the
   // deployed site directly.
   webServer: isLocal
-    ? {
-        command: "npm run dev",
-        url: "http://localhost:5173",
-        reuseExistingServer: true,
-        env: { VITE_AUTH_MODE: "fake" },
-        timeout: 60_000,
-      }
+    ? [
+        {
+          command: "npm run dev",
+          url: "http://localhost:5173",
+          reuseExistingServer: true,
+          env: { VITE_AUTH_MODE: "fake" },
+          timeout: 60_000,
+        },
+        {
+          command: "npm run dev -- --port 5199 --strictPort",
+          url: SIGN_IN_URL,
+          reuseExistingServer: true,
+          env: { VITE_AUTH_MODE: "cognito" },
+          timeout: 60_000,
+        },
+      ]
     : undefined,
 });
