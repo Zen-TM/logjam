@@ -28,6 +28,7 @@ import LidarPanel from "./panels/LidarPanel";
 import FriendsPanel from "./panels/FriendsPanel";
 import NotificationsPanel from "./panels/NotificationsPanel";
 import PlaceDetailPanel from "./panels/PlaceDetailPanel";
+import { placesBounds } from "./panels/placesModel";
 import RoutesPanel from "./panels/RoutesPanel";
 import type { WayItem } from "./panels/waysModel";
 import type { WayVerbId } from "./panels/wayActions";
@@ -330,11 +331,11 @@ function SidebarPanel({
     activePanel === "place-detail" && place ? place.name : PANEL_TITLES[activePanel];
 
   // A rebuilt page opens with its own hero and owns its scrolling; a legacy one
-  // keeps the plain header and scrolls inside the body. place-detail already
-  // owns its scrolling but keeps the header (its name) until it is rebuilt.
+  // keeps the plain header and scrolls inside the body. `title` is still the
+  // panel's accessible name either way, which is why place-detail keeps
+  // computing it after losing its header.
   const legacy = LEGACY_PAGES.has(activePanel);
-  const header =
-    !legacy && activePanel !== "place-detail" ? null : (
+  const header = !legacy ? null : (
       <header className={classes.panelHeader}>
         <h2 className={classes.panelTitle}>{title}</h2>
         <IconButton icon={X} label="Close panel" onClick={onClose} />
@@ -507,6 +508,14 @@ function SidebarPanel({
             placeTypes={placeTypes}
             onQuotaChanged={onQuotaChanged}
             onRefetchTripLogs={onRefetchTripLogs}
+            onBack={() => setActivePanel("places")}
+            onClose={onClose}
+            onFlyToPlace={onFlyToPlace}
+            onMakeMap={(target, kind) => {
+              const bounds = placesBounds([target]);
+              if (bounds) onMakeMap(bounds, kind);
+            }}
+            onSharePlace={(id) => onSharePlaces([id])}
             onAfterDelete={() => setActivePanel("places")}
           />
         )}

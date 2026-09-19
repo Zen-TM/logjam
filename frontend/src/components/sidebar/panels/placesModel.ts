@@ -120,3 +120,67 @@ export function idRange(ids: readonly string[], from: string | null, to: string)
   if (start < 0) return [to];
   return ids.slice(Math.min(start, end), Math.max(start, end) + 1);
 }
+
+/**
+ * A PLACE'S VERBS, declared once for every ⋯ that acts on one.
+ *
+ * DESIGN.md §7: every ⋯ for the same thing renders the same list, and the row
+ * and the detail page differ by exactly one verb — Open, which the page omits
+ * because you are already looking at the thing. `wayActions.ts` is the same
+ * rule for ways, and it exists because three surfaces had drifted into
+ * disagreeing about which verbs a way had.
+ *
+ * A surface WITHHOLDS a verb it cannot honour rather than offering one that
+ * fails: `edit` and `logTrip` open a form, and a menu cannot hold one, so they
+ * belong to the page that owns those dialogs. A row hands them over by opening
+ * the place. Ownership decides the rest — a place shared with you is somebody
+ * else's ground, so it is copied and let go of rather than edited and deleted.
+ */
+export type PlaceVerbId =
+  | "open"
+  | "edit"
+  | "logTrip"
+  | "show"
+  | "makeMap"
+  | "share"
+  | "copy"
+  | "copyAndRemove"
+  | "remove"
+  | "delete";
+
+export type PlaceVerb = {
+  id: PlaceVerbId;
+  label: string;
+  /** Destructive: the fill only ever marks the confirm's last step. */
+  danger?: boolean;
+  /** Below a rule, with the verbs that end the user's relationship with the
+   *  place. Not the same as `danger` — Remove destroys nothing. */
+  separated?: boolean;
+};
+
+export function placeVerbs(
+  surface: "row" | "detail",
+  owned: boolean,
+): PlaceVerb[] {
+  const verbs: PlaceVerb[] = [];
+  if (surface === "row") verbs.push({ id: "open", label: "Open place" });
+  if (owned && surface === "detail") {
+    verbs.push({ id: "edit", label: "Edit place" });
+    verbs.push({ id: "logTrip", label: "Log a trip here" });
+  }
+  verbs.push({ id: "show", label: "Show on map" });
+  verbs.push({ id: "makeMap", label: "Make a map here" });
+  if (owned) {
+    verbs.push({ id: "share", label: "Share or export…", separated: true });
+    verbs.push({ id: "delete", label: "Delete", danger: true, separated: true });
+    return verbs;
+  }
+  // A shared place. Copy is ordinary; the two that end the share sit below the
+  // rule. "Copy and remove" is offered because keeping a copy and dropping the
+  // share is ONE decision — and the order is the guarantee: copy first, so a
+  // failure leaves the user with both rather than neither.
+  verbs.push({ id: "copy", label: "Copy to my places" });
+  verbs.push({ id: "copyAndRemove", label: "Copy and remove", separated: true });
+  verbs.push({ id: "remove", label: "Remove", separated: true });
+  return verbs;
+}

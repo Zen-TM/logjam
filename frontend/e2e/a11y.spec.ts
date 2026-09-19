@@ -169,6 +169,35 @@ test.describe("desktop", () => {
     await expectNoViolations(page, "[role='menu']");
   });
 
+  test("a place's own page, its verbs and its form", async ({ page }) => {
+    await openApp(page);
+    await page.getByRole("button", { name: "Places", exact: true }).click();
+    const list = page.locator("aside");
+    await expect(list.locator("[data-place-id]").first()).toBeVisible({ timeout: 15_000 });
+    await list.getByRole("button", { name: "Claustral Canyon", exact: true }).click();
+
+    // The page leads with the place's name, and every attribute is stated once
+    // — the four canyon scalars used to be printed by name AND again by the
+    // loop over the type's definitions.
+    await expect(list.getByRole("heading", { level: 2, name: "Claustral Canyon" })).toBeVisible();
+    await expect(list.getByText("Longest pitch", { exact: true })).toHaveCount(1);
+    await expectNoViolations(page, "aside");
+
+    // The verbs are `placeVerbs`: a menu, not a footer of buttons.
+    await list.getByRole("button", { name: /^Actions for / }).click();
+    const menu = page.getByRole("menu");
+    await expect(menu.getByRole("menuitem", { name: "Edit place" })).toBeVisible();
+    await expectNoViolations(page, "[role='menu']");
+
+    // The grades are rails now, drawn from their definitions' bounds.
+    await menu.getByRole("menuitem", { name: "Edit place" }).click();
+    const form = page.getByRole("dialog", { name: "Edit place" });
+    await expect(form.getByRole("radiogroup", { name: "V grade" })).toBeVisible();
+    await expect(form.getByRole("radiogroup", { name: "Type" })).toBeVisible();
+    await expectNoViolations(page, "dialog");
+    await page.keyboard.press("Escape");
+  });
+
   test("the Inbox, a row menu and a selection", async ({ page }) => {
     await openApp(page);
     await page.getByRole("button", { name: /^Inbox/ }).click();
@@ -213,7 +242,9 @@ test.describe("desktop", () => {
     await page.getByRole("button", { name: "Places", exact: true }).click();
     await page.getByRole("button", { name: /^Add/ }).first().click();
     await page.getByRole("menuitem", { name: "Add a place" }).click();
-    const form = page.locator(".MuiDialog-root [role='dialog']");
+    // The kit dialog, not MUI's: the place form was rebuilt onto `Dialog`
+    // (a native <dialog>), so the confirm now stands over one of our own.
+    const form = page.getByRole("dialog", { name: "Add a place" });
     await expect(form).toBeVisible();
     await form.getByLabel(/^Name/).first().fill("Unsaved name");
 
