@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Button } from "@mui/material";
 import {
   CURRENT_CONSENT_VERSION,
   PENDING_CONSENT_STORAGE_KEY,
@@ -8,6 +7,7 @@ import { recordConsent, type TUser } from "../placeUtils";
 import { messageFromError } from "../errors/messageFromError";
 import { ErrorBanner } from "./feedback/ErrorBanner";
 import BrandMark from "./brand/BrandMark";
+import { Button, Checkbox } from "../ui";
 import classes from "./ConsentGate.module.css";
 
 /**
@@ -16,6 +16,10 @@ import classes from "./ConsentGate.module.css";
  * absent — fulfils the privacy.html / tos.html promise that users are asked
  * to re-consent on next sign-in after a material change. Deliberately not a
  * dismissible dialog: the only ways out are agreeing or signing out.
+ *
+ * As on the sign-up form, the links to read sit BESIDE the tick rather than
+ * inside its label: a link inside a `<label>` toggles the control it labels,
+ * so opening the terms would answer the question about them.
  */
 function ConsentGate({
   onAccepted,
@@ -52,42 +56,35 @@ function ConsentGate({
         <BrandMark className={classes.brandMark} />
         <h1 className={classes.title}>Updated terms</h1>
         <p className={classes.body}>
-          The Logjam{" "}
-          <a href="/tos.html" target="_blank" rel="noopener noreferrer">
-            Terms of Use
-          </a>{" "}
-          and{" "}
-          <a href="/privacy.html" target="_blank" rel="noopener noreferrer">
-            Privacy Policy
-          </a>{" "}
-          have changed (last updated {CURRENT_CONSENT_VERSION}). Please review
-          them and confirm your agreement to keep using Logjam.
+          Logjam&apos;s Terms of Use and Privacy Policy have changed (last updated{" "}
+          {CURRENT_CONSENT_VERSION}). Please review them and confirm your agreement
+          to keep using Logjam.
         </p>
-        <label className={classes.consentRow}>
-          <input
-            type="checkbox"
-            checked={agreed}
-            onChange={(e) => setAgreed(e.target.checked)}
-          />
-          <span>
-            I agree to the updated Terms and acknowledge the Privacy Policy.
-          </span>
-        </label>
+        <p className={classes.legal}>
+          <a href="/tos.html" target="_blank" rel="noopener noreferrer">
+            Read the Terms of Use
+          </a>
+          {" · "}
+          <a href="/privacy.html" target="_blank" rel="noopener noreferrer">
+            Read the Privacy Policy
+          </a>
+        </p>
+        <Checkbox
+          label="I agree to the updated Terms and acknowledge the Privacy Policy."
+          checked={agreed}
+          onChange={setAgreed}
+        />
         {error && <ErrorBanner message={error} onRetry={handleAgree} />}
         <Button
-          variant="contained"
-          fullWidth
+          variant="filled"
+          className={classes.action}
           onClick={handleAgree}
-          disabled={!agreed || submitting}
+          disabled={!agreed}
+          busy={submitting}
         >
-          {submitting ? "Saving..." : "Agree & continue"}
+          Agree and continue
         </Button>
-        <Button
-          fullWidth
-          onClick={onSignOut}
-          disabled={submitting}
-          sx={{ color: "var(--theme-text-primary)" }}
-        >
+        <Button className={classes.action} onClick={onSignOut} disabled={submitting}>
           Sign out
         </Button>
       </div>

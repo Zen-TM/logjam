@@ -1,6 +1,18 @@
 # Dialogs — Logjam
 
-**Scope: the MUI dialogs still on `MUI_LEGACY_FILES`.** Dialogs are being rebuilt onto one kit `Dialog` (`frontend/DESIGN.md` §6); a rebuilt dialog follows DESIGN.md and the kit, and the Shell / DialogTitle / DialogContent / Buttons / Form inputs sections below stop applying to it. Until then, MUI `<Button>` and `<Typography>` are correct in the legacy dialogs. The Touch targets reasoning, the notes-field rule and the conventions log are not MUI-specific and carry over.
+**NO DIALOG IS ON `MUI_LEGACY_FILES` ANY MORE (Phase B package 7, 2026-09-19).**
+Every dialog in this directory is built on the kit `Dialog`, so the Shell /
+DialogTitle / DialogContent / Buttons / Form inputs sections below describe a
+shape that no longer exists here. They are kept, unedited, until Phase C
+removes MUI outright (`main.tsx`, `theme.ts` are the last two files) — at which
+point this file should lose them. Flagged for operator review rather than
+deleted, per the additive-only rule in the root CLAUDE.md. `csvImport/dialogStyles.ts`
+and `csvImport/SectionLabel.tsx`, which the Form inputs section names, are
+DELETED; so is `styles/shared.module.css`, whose `.btn` compositions the
+Touch-targets section refers to. The Touch targets reasoning, the notes-field
+rule and the conventions log are not MUI-specific and carry over.
+
+**Scope of what follows: the MUI dialogs still on `MUI_LEGACY_FILES`.** Dialogs are being rebuilt onto one kit `Dialog` (`frontend/DESIGN.md` §6); a rebuilt dialog follows DESIGN.md and the kit, and the Shell / DialogTitle / DialogContent / Buttons / Form inputs sections below stop applying to it. Until then, MUI `<Button>` and `<Typography>` are correct in the legacy dialogs. The Touch targets reasoning, the notes-field rule and the conventions log are not MUI-specific and carry over.
 
 ## Shell
 

@@ -14,13 +14,6 @@ import tseslint from 'typescript-eslint'
  * the @mui dependencies.
  */
 const MUI_LEGACY_FILES = [
-  'src/components/ConsentGate.tsx',
-  'src/components/dialogs/ImportResultSummary.tsx',
-  'src/components/dialogs/MatchReview.tsx',
-  'src/components/dialogs/OnboardingChoiceDialog.tsx',
-  'src/components/dialogs/UnifiedImportDialog.tsx',
-  'src/components/SignIn.tsx',
-  'src/csvImport/SectionLabel.tsx',
   'src/main.tsx',
   'src/theme.ts',
 ]

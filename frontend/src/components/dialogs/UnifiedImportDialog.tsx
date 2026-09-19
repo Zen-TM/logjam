@@ -1,32 +1,17 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useIsMobile } from "../../useIsMobile";
+import { Check, ChevronRight, MapPin, Upload } from "lucide-react";
 import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
   Button,
-  IconButton,
-  TextField,
-  Typography,
-  Box,
-  CircularProgress,
+  ChipRail,
+  Dialog,
+  ProgressBar,
+  Row,
+  SectionHeader,
   Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
-  Divider,
-  ToggleButton,
-  ToggleButtonGroup,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
-  Switch,
-  FormControlLabel,
-} from "@mui/material";
-import CloseIcon from "@mui/icons-material/Close";
-import UploadFileIcon from "@mui/icons-material/UploadFile";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+  SwitchRow,
+  TextField,
+} from "../../ui";
 import {
   matchPlace,
   haversineMeters,
@@ -82,12 +67,6 @@ import {
   parseByRole,
   type MismatchKind,
 } from "../../csvImport/placeValueParsers";
-import {
-  fieldSx,
-  selectSx,
-  menuPaperProps,
-} from "../../csvImport/dialogStyles";
-import { SectionLabel } from "../../csvImport/SectionLabel";
 import { describeDroppedPlaceRow, describeDroppedTripRow } from "../../csvImport/rowSkip";
 import { messageFromError } from "../../errors/messageFromError";
 import { ErrorBanner } from "../feedback/ErrorBanner";
@@ -404,6 +383,13 @@ function UnifiedImportDialog({
   const toast = useToast();
 
   const [step, setStep] = useState<Step>("map");
+  // Merge settings are a SUB-VIEW of the confirm step, not a block that grows
+  // inside it (§6): they are a long errand done once, and the accordion they
+  // replace opened closed, which is how the confirm step came to talk about
+  // settings before it said what it was about to import.
+  const [showingMergeSettings, setShowingMergeSettings] = useState(false);
+  // Undo destroys what the import just made, and nothing brings it back (§7).
+  const [confirmingUndo, setConfirmingUndo] = useState(false);
   const [importing, setImporting] = useState(false);
   const [outcome, setOutcome] = useState<ImportOutcome | null>(null);
   const [undoing, setUndoing] = useState(false);
@@ -526,6 +512,8 @@ function UnifiedImportDialog({
     }
     batchIdRef.current = null;
     setStep("map");
+    setShowingMergeSettings(false);
+    setConfirmingUndo(false);
     setImporting(false);
     setOutcome(null);
     setUndoing(false);
@@ -578,15 +566,15 @@ function UnifiedImportDialog({
     URL.revokeObjectURL(url);
   }
 
-  function handleDragOver(e: React.DragEvent<HTMLDivElement>) {
+  function handleDragOver(e: React.DragEvent<HTMLElement>) {
     e.preventDefault();
     setDragging(true);
   }
-  function handleDragLeave(e: React.DragEvent<HTMLDivElement>) {
+  function handleDragLeave(e: React.DragEvent<HTMLElement>) {
     e.preventDefault();
     setDragging(false);
   }
-  function handleDrop(e: React.DragEvent<HTMLDivElement>) {
+  function handleDrop(e: React.DragEvent<HTMLElement>) {
     e.preventDefault();
     setDragging(false);
     for (const file of Array.from(e.dataTransfer.files)) {
@@ -1334,6 +1322,7 @@ function UnifiedImportDialog({
 
   async function handleUndo() {
     if (!outcome) return;
+    setConfirmingUndo(false);
     setUndoing(true);
     try {
       const result = await undoImport(outcome.batchId);
@@ -1371,6 +1360,7 @@ function UnifiedImportDialog({
     updateUserPreferences({ importMergePolicy: next }).catch(console.error);
   }
 
+
   // ── Render ───────────────────────────────────────────────────────────────────
 
   // When both a place list and a logbook are queued, label which stage we're in.
@@ -1382,80 +1372,80 @@ function UnifiedImportDialog({
         : " — places (1 of 2)"
       : "";
 
-  const title = outcome
-    ? "Import complete"
-    : importing
-      ? "Importing…"
-      : (step === "map"
-          ? "Import data"
-          : step === "review"
-            ? "Review matches"
-            : "Confirm import") + stageSuffix;
+  const title = showingMergeSettings
+    ? "Merge settings"
+    : outcome
+      ? "Import complete"
+      : importing
+        ? "Importing…"
+        : (step === "map"
+            ? "Import data"
+            : step === "review"
+              ? "Review matches"
+              : "Confirm import") + stageSuffix;
 
+  /** The file, and which kind the importer is treating it as. The kind is a
+   *  two-option rail rather than a pair of toggle buttons: it is one value
+   *  chosen from a closed set, which is what a chip rail is for (§4). */
   function renderFileChip(loaded: LoadedFile, which: "place" | "triplog") {
     return (
-      <Box className={classes.fileChip}>
+      <div className={classes.fileChip}>
         <span className={classes.fileName}>{loaded.fileName}</span>
-        <ToggleButtonGroup
-          size="small"
-          exclusive
+        <ChipRail
+          label={`What ${loaded.fileName} is`}
           value={loaded.kind}
-          onChange={(_e, v) => {
-            if (v) overrideKind(loaded, which, v as FileKind);
-          }}
-        >
-          <ToggleButton value="place" sx={{ textTransform: "none", color: "var(--theme-text-primary)" }}>
-            Places
-          </ToggleButton>
-          <ToggleButton value="triplog" sx={{ textTransform: "none", color: "var(--theme-text-primary)" }}>
-            Logbook
-          </ToggleButton>
-        </ToggleButtonGroup>
-      </Box>
+          options={[
+            { value: "place", label: "Places" },
+            { value: "triplog", label: "Logbook" },
+          ]}
+          onChange={(next) => overrideKind(loaded, which, next as FileKind)}
+        />
+      </div>
     );
   }
 
   // Header row clarifying the left column = your CSV, right column = Logjam field.
   function renderColumnMapHeader() {
     return (
-      <Box sx={{ display: "flex", gap: 1.5, alignItems: "center", px: 0 }}>
-        <Typography variant="caption" sx={{ flex: 1, color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>
-          Your file
-        </Typography>
-        <Typography variant="caption" sx={{ flex: 2, minWidth: 160, color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>
-          Logjam field
-        </Typography>
-      </Box>
+      <div className={classes.mapHeader} aria-hidden>
+        <span className={classes.mapHeaderCell}>Your file</span>
+        <span className={`${classes.mapHeaderCell} ${classes.mapHeaderRole}`}>Logjam field</span>
+      </div>
     );
   }
 
   function renderMapStep() {
     return (
-      <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+      <div className={classes.step}>
         {isMobile && (
-          <Typography variant="caption" sx={{ display: "block", color: "var(--theme-text-muted)" }}>
-            This tool is best used on a larger screen.
-          </Typography>
+          <p className={classes.note}>This tool is best used on a larger screen.</p>
         )}
         {noPlacesYet && (
           <ErrorBanner message="You have no places yet. Importing a logbook works best after you load the RopeWiki place database — your trips can then match against it. You can still import now and link trips later." />
         )}
-        <Box
+        {/* A real button, so the drop zone is reachable from the keyboard —
+            it was a div with an onClick, which no key could ever press. The
+            drag handlers ride on the same element; a drop is a pointer
+            gesture and needs no keyboard equivalent of its own. */}
+        <button
+          type="button"
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
           onClick={() => fileInputRef.current?.click()}
-          className={`${classes.dropZone} ${dragging ? classes.dropZoneActive : ""}`}
+          className={classes.dropZone}
+          data-dragging={dragging || undefined}
         >
-          <UploadFileIcon sx={{ fontSize: 36, color: "var(--theme-text-muted)", mb: 0.5 }} />
-          <Typography variant="body2" sx={{ color: "var(--theme-text-muted)" }}>
-            Drop a CSV here, or click to browse. You can add a place list and a logbook together.
-          </Typography>
-          <input ref={fileInputRef} type="file" accept=".csv" hidden multiple onChange={handleFileChange} />
-        </Box>
+          <Upload size={28} aria-hidden className={classes.dropGlyph} />
+          <span>
+            Drop a CSV here, or click to browse. You can add a place list and a logbook
+            together.
+          </span>
+        </button>
+        <input ref={fileInputRef} type="file" accept=".csv" hidden multiple onChange={handleFileChange} />
 
         {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
-        <Typography variant="caption" sx={{ color: "var(--theme-text-muted)" }}>
+        <p className={classes.note}>
           A place list needs a name, latitude and longitude (grades and notes are
           optional). A logbook needs a place name and a date (notes optional).
           Need a starting point?{" "}
@@ -1469,50 +1459,34 @@ function UnifiedImportDialog({
               anchor with `href="#"` is a link that lies to a screen reader and
               to a middle-click. Styled as a link because it sits inline in a
               sentence beside a real one. */}
-          <Box
-            component="button"
-            type="button"
-            onClick={downloadPlaceTemplate}
-            sx={{
-              background: "none",
-              border: "none",
-              padding: 0,
-              font: "inherit",
-              color: "var(--theme-accent)",
-              textDecoration: "underline",
-              cursor: "pointer",
-            }}
-          >
+          <button type="button" onClick={downloadPlaceTemplate} className={classes.inlineLink}>
             {importTypeName} template
-          </Box>{" "}
+          </button>{" "}
           ·{" "}
-          <a href="/templates/logbook-import-template.csv" download style={{ color: "var(--theme-accent)" }}>
+          <a href="/templates/logbook-import-template.csv" download className={classes.inlineLink}>
             Logbook template
           </a>
-        </Typography>
+        </p>
 
         {placeFile && (
-          <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+          <div className={classes.fileSection}>
             {renderFileChip(placeFile, "place")}
             {/* TYPE FIRST, then the columns — the mapping below is built from
                 this type's fields, so choosing it afterwards would re-map
                 everything the user had just set. */}
-            <SectionLabel text="Place type" />
-            <FormControl size="small" sx={{ minWidth: 200 }}>
-              <Select
-                value={importPlaceTypeId}
-                onChange={(e) => setImportPlaceTypeId(e.target.value)}
-                sx={selectSx}
-                MenuProps={menuPaperProps}
-              >
-                {placeTypes.map((type) => (
-                  <MenuItem key={type.id} value={type.id}>
-                    {type.name}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            <SectionLabel text="Place columns" />
+            <Select
+              label="Place type"
+              hint="Every place in this file lands in this type, and the columns below map onto its fields."
+              value={importPlaceTypeId}
+              onChange={(event) => setImportPlaceTypeId(event.target.value)}
+            >
+              {placeTypes.map((type) => (
+                <option key={type.id} value={type.id}>
+                  {type.name}
+                </option>
+              ))}
+            </Select>
+            <SectionHeader title="Place columns" count={placeFile.headers.length} />
             {renderColumnMapHeader()}
             {placeFile.headers.map((header) => {
               const role = placeAssignments[header] ?? "discard";
@@ -1521,148 +1495,145 @@ function UnifiedImportDialog({
               // option for it — otherwise the Select value is out of range.
               const isCustomAttr = typeof role === "string" && role.startsWith("attr:");
               return (
-                <Box key={header} sx={{ display: "flex", gap: 1.5, alignItems: "center" }}>
-                  <Typography variant="body2" sx={{ flex: 1, color: "var(--theme-text-primary)", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <div key={header} className={classes.mapRow}>
+                  <span className={classes.sourceHeader} title={header}>
                     {header}
-                  </Typography>
-                  <FormControl size="small" sx={{ flex: 2, minWidth: 160 }}>
-                    <Select
-                      value={role}
-                      onChange={(e) =>
-                        setPlaceAssignments((prev) => ({ ...prev, [header]: e.target.value as PlaceFieldRole }))
-                      }
-                      sx={selectSx}
-                      MenuProps={menuPaperProps}
-                    >
-                      {isCustomAttr && (
-                        <MenuItem value={role}>Custom field: {role.slice(5)}</MenuItem>
-                      )}
-                      {placeRoleOptions.map((r) => (
-                        <MenuItem key={r} value={r}>
-                          {ROLE_LABELS[r] ??
-                            (r.startsWith("attr:")
-                              ? (placeDefsForImportType.find(
-                                  (d) => `attr:${d.key}` === r,
-                                )?.label ?? r.slice(5))
-                              : r)}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                </Box>
+                  </span>
+                  <Select
+                    label={`What "${header}" is`}
+                    hideLabel
+                    className={classes.roleSelect}
+                    value={role}
+                    onChange={(event) =>
+                      setPlaceAssignments((prev) => ({
+                        ...prev,
+                        [header]: event.target.value as PlaceFieldRole,
+                      }))
+                    }
+                  >
+                    {isCustomAttr && <option value={role}>Custom field: {role.slice(5)}</option>}
+                    {placeRoleOptions.map((r) => (
+                      <option key={r} value={r}>
+                        {ROLE_LABELS[r] ??
+                          (r.startsWith("attr:")
+                            ? (placeDefsForImportType.find((d) => `attr:${d.key}` === r)?.label ??
+                              r.slice(5))
+                            : r)}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
               );
             })}
-            <Typography className={classes.mappingFeedback}>
+            <p className={classes.note} role="status">
               {placeMapValid
                 ? "Name, latitude and longitude found — places will be matched by name and coordinates."
                 : "Name, latitude and longitude are required for a place list."}
-            </Typography>
+            </p>
             {ignoredPlaceCols.length > 0 && (
-              <Typography className={classes.ignoredNotice}>
-                Ignored columns: {ignoredPlaceCols.join(", ")}
-              </Typography>
+              <p className={classes.note}>Ignored columns: {ignoredPlaceCols.join(", ")}</p>
             )}
-          </Box>
+          </div>
         )}
 
         {tripFile && (
-          <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+          <div className={classes.fileSection}>
             {renderFileChip(tripFile, "triplog")}
-            <SectionLabel text="Logbook columns" />
+            <SectionHeader title="Logbook columns" count={tripFile.headers.length} />
             {renderColumnMapHeader()}
             {tripFile.headers.map((header) => {
               const role = tripAssignments[header] ?? "discard";
               const form = tripNewCfForms[header] ?? { label: header, type: "string" as TripLogCustomFieldType };
               return (
-                <Box key={header} sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
-                  <Box sx={{ display: "flex", gap: 1.5, alignItems: "center" }}>
-                    <Typography variant="body2" sx={{ flex: 1, color: "var(--theme-text-primary)", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <div key={header} className={classes.mapGroup}>
+                  <div className={classes.mapRow}>
+                    <span className={classes.sourceHeader} title={header}>
                       {header}
-                    </Typography>
-                    <FormControl size="small" sx={{ flex: 2, minWidth: 160 }}>
-                      <Select
-                        value={role}
-                        onChange={(e) =>
-                          setTripAssignments((prev) => ({ ...prev, [header]: e.target.value as ColumnRole }))
-                        }
-                        sx={selectSx}
-                        MenuProps={menuPaperProps}
-                      >
-                        <MenuItem value="name">Place Name</MenuItem>
-                        <MenuItem value="date">Date</MenuItem>
-                        <MenuItem value="notes">Notes</MenuItem>
-                        <MenuItem value="type">Type</MenuItem>
-                        {customFieldDefs.map((d) => (
-                          <MenuItem key={d.key} value={`cf:${d.key}`}>Field: {d.label}</MenuItem>
-                        ))}
-                        <MenuItem value="new-cf">Import as new custom field…</MenuItem>
-                        <MenuItem value="discard">Ignore</MenuItem>
-                      </Select>
-                    </FormControl>
-                  </Box>
+                    </span>
+                    <Select
+                      label={`What "${header}" is`}
+                      hideLabel
+                      className={classes.roleSelect}
+                      value={role}
+                      onChange={(event) =>
+                        setTripAssignments((prev) => ({
+                          ...prev,
+                          [header]: event.target.value as ColumnRole,
+                        }))
+                      }
+                    >
+                      <option value="name">Place Name</option>
+                      <option value="date">Date</option>
+                      <option value="notes">Notes</option>
+                      <option value="type">Type</option>
+                      {customFieldDefs.map((d) => (
+                        <option key={d.key} value={`cf:${d.key}`}>
+                          Field: {d.label}
+                        </option>
+                      ))}
+                      <option value="new-cf">Import as new custom field…</option>
+                      <option value="discard">Ignore</option>
+                    </Select>
+                  </div>
                   {role === "new-cf" && (
-                    <Box sx={{ ml: 2, display: "flex", gap: 1.5, alignItems: "center", pl: 1, borderLeft: "2px solid var(--theme-accent)" }}>
+                    <div className={classes.subForm}>
                       <TextField
-                        label="Field label"
+                        label="Attribute name"
                         value={form.label}
-                        onChange={(e) =>
-                          setTripNewCfForms((prev) => ({ ...prev, [header]: { ...form, label: e.target.value } }))
+                        error={form.label.trim() ? null : "Name this attribute, or ignore the column."}
+                        onChange={(event) =>
+                          setTripNewCfForms((prev) => ({
+                            ...prev,
+                            [header]: { ...form, label: event.target.value },
+                          }))
                         }
-                        size="small"
-                        sx={fieldSx}
                       />
-                      <FormControl size="small" sx={{ minWidth: 120 }}>
-                        <InputLabel sx={{ color: "var(--theme-text-muted)", fontSize: "0.85em" }}>Type</InputLabel>
-                        <Select
-                          label="Type"
-                          value={form.type}
-                          onChange={(e) =>
-                            setTripNewCfForms((prev) => ({ ...prev, [header]: { ...form, type: e.target.value as TripLogCustomFieldType } }))
-                          }
-                          sx={selectSx}
-                          MenuProps={menuPaperProps}
-                        >
-                          {CUSTOM_FIELD_TYPES.map((t) => (
-                            <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>
-                          ))}
-                        </Select>
-                      </FormControl>
-                    </Box>
+                      <Select
+                        label="Type"
+                        value={form.type}
+                        onChange={(event) =>
+                          setTripNewCfForms((prev) => ({
+                            ...prev,
+                            [header]: { ...form, type: event.target.value as TripLogCustomFieldType },
+                          }))
+                        }
+                      >
+                        {CUSTOM_FIELD_TYPES.map((t) => (
+                          <option key={t.value} value={t.value}>
+                            {t.label}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
                   )}
-                </Box>
+                </div>
               );
             })}
-            <Typography className={classes.mappingFeedback}>
+            <p className={classes.note} role="status">
               {tripMapValid
                 ? "Place name and date found — trips will match places by name."
                 : "A place name column and a date column are required for a logbook."}
-            </Typography>
+            </p>
             {ignoredTripCols.length > 0 && (
-              <Typography className={classes.ignoredNotice}>
-                Ignored columns: {ignoredTripCols.join(", ")}
-              </Typography>
+              <p className={classes.note}>Ignored columns: {ignoredTripCols.join(", ")}</p>
             )}
             {tripMapValid && (
-              <>
-                <Divider sx={{ borderColor: "rgba(255,255,255,0.1)", my: 0.5 }} />
-                <SectionLabel text="Date format" />
-                <FormControl size="small" sx={{ minWidth: 240 }}>
-                  <Select
-                    value={dateFormat}
-                    onChange={(e) => setDateFormat(e.target.value as DateFormat)}
-                    sx={selectSx}
-                    MenuProps={menuPaperProps}
-                  >
-                    {(Object.keys(DATE_FORMAT_LABELS) as DateFormat[]).map((f) => (
-                      <MenuItem key={f} value={f}>{DATE_FORMAT_LABELS[f]}</MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </>
+              <Select
+                label="Date format"
+                hint="How the dates in your file are written. Check this against a row you know."
+                value={dateFormat}
+                onChange={(event) => setDateFormat(event.target.value as DateFormat)}
+              >
+                {(Object.keys(DATE_FORMAT_LABELS) as DateFormat[]).map((f) => (
+                  <option key={f} value={f}>
+                    {DATE_FORMAT_LABELS[f]}
+                  </option>
+                ))}
+              </Select>
             )}
-          </Box>
+          </div>
         )}
-      </Box>
+      </div>
     );
   }
 
@@ -1671,59 +1642,60 @@ function UnifiedImportDialog({
   function renderCreateForm(key: string) {
     const f = reviewState.createForms[key] ?? { name: key, latitude: "", longitude: "" };
     return (
-      <Box className={classes.createForm}>
+      <div className={classes.createForm}>
         <TextField
           label="Place name"
           value={f.name}
-          onChange={(e) => updateCreateForm(key, { name: e.target.value })}
-          size="small"
-          fullWidth
-          sx={fieldSx}
+          error={f.name.trim() ? null : "A new place needs a name."}
+          onChange={(event) => updateCreateForm(key, { name: event.target.value })}
         />
-        <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+        <div className={classes.coordRow}>
           <TextField
             label="Latitude"
+            className={classes.coordField}
             value={f.latitude}
-            onChange={(e) => updateCreateForm(key, { latitude: e.target.value })}
-            size="small"
-            sx={{ ...fieldSx, flex: 1 }}
             placeholder="-33.123456"
+            inputMode="decimal"
+            error={f.latitude.trim() === "" || !isNaN(parseFloat(f.latitude)) ? null : "Decimal degrees."}
+            onChange={(event) => updateCreateForm(key, { latitude: event.target.value })}
           />
           <TextField
             label="Longitude"
+            className={classes.coordField}
             value={f.longitude}
-            onChange={(e) => updateCreateForm(key, { longitude: e.target.value })}
-            size="small"
-            sx={{ ...fieldSx, flex: 1 }}
             placeholder="150.123456"
+            inputMode="decimal"
+            error={f.longitude.trim() === "" || !isNaN(parseFloat(f.longitude)) ? null : "Decimal degrees."}
+            onChange={(event) => updateCreateForm(key, { longitude: event.target.value })}
           />
           <Button
-            size="small"
-            variant="outlined"
+            variant="outline"
+            compact
+            icon={MapPin}
+            className={classes.pickButton}
             onClick={() => handlePickCoordsFor(key)}
-            sx={{ borderColor: "var(--theme-accent)", color: "var(--theme-accent)", flexShrink: 0, textTransform: "none" }}
           >
             Pick on map
           </Button>
-        </Box>
-      </Box>
+        </div>
+      </div>
     );
   }
 
   function renderReviewStep() {
     return (
-      <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-        <Typography variant="body2" sx={{ color: "var(--theme-text-muted)" }}>
+      <div className={classes.step}>
+        <p className={classes.lede}>
           {activeKind === "place"
             ? "These place names matched more than one option, or matched something far away. Choose what to do with each."
             : "These place names couldn't be matched confidently. Link them, create a new place, import the trip without a place, or discard it."}
-        </Typography>
+        </p>
         {autoResolvedCount > 0 && (
-          <Typography variant="caption" sx={{ color: "var(--theme-text-muted)" }}>
+          <p className={classes.note}>
             {activeKind === "place"
               ? `Plus ${autoResolvedCount} more ${autoResolvedCount === 1 ? "place" : "places"} matched confidently (new or existing) and will be imported automatically when you apply — only the ${surfacedKeys.length} above need a decision.`
               : `Plus ${autoResolvedCount} more ${autoResolvedCount === 1 ? "trip" : "trips"} matched a place confidently (or have no place) and will be imported automatically when you apply — only the ${surfacedKeys.length} above need a decision.`}
-          </Typography>
+          </p>
         )}
         <MatchReview
           items={reviewItems}
@@ -1735,7 +1707,33 @@ function UnifiedImportDialog({
             return renderCreateForm(key);
           }}
         />
-      </Box>
+      </div>
+    );
+  }
+
+  /** Merge settings, as a sub-view of the confirm step. */
+  function renderMergeSettings() {
+    return (
+      <div className={classes.step}>
+        <p className={classes.lede}>
+          When a row matches an existing place, keep the existing value or use the value
+          from your file.
+        </p>
+        <p className={classes.note}>
+          These only apply where BOTH sides have a value: an empty field always fills in
+          from your file, and an empty cell in your file never clears what's already
+          there. Names and coordinates never change.
+        </p>
+        {mergeableFields.map((field) => (
+          <SwitchRow
+            key={field}
+            title={mergeFieldLabel(field, placeDefsForImportType)}
+            description={mergePolicy[field] === "useIncoming" ? "Use the value from your file" : "Keep what's already there"}
+            checked={mergePolicy[field] === "useIncoming"}
+            onChange={(next) => updateMergeField(field, next)}
+          />
+        ))}
+      </div>
     );
   }
 
@@ -1762,8 +1760,7 @@ function UnifiedImportDialog({
             ];
       // A merge folds an imported row into a place that already existed, which
       // is the one outcome the headline count alone can't be checked against
-      // ("26 merged" — into what?). List them, but stay out of the way: no
-      // accordion at all when nothing merged, collapsed when something did.
+      // ("26 merged" — into what?). List them under their own heading.
       const details: DetailSection[] = [];
       let detailsLabel: string | undefined;
       if (outcome.kind === "place" && outcome.merges.length > 0) {
@@ -1791,7 +1788,7 @@ function UnifiedImportDialog({
           detailsLabel={detailsLabel}
           warnings={warnings}
           errors={outcome.errors.length > 0 ? outcome.errors : undefined}
-          onUndo={hasUndoableChange ? handleUndo : undefined}
+          onUndo={hasUndoableChange ? () => setConfirmingUndo(true) : undefined}
           undoing={undoing}
         />
       );
@@ -1803,53 +1800,29 @@ function UnifiedImportDialog({
         ? `${preparedPlaceRows.length} place row${preparedPlaceRows.length !== 1 ? "s" : ""} ready to import.`
         : `${preparedTripRows.length} trip${preparedTripRows.length !== 1 ? "s" : ""} ready to import.`;
 
+    // How many fields take the file's value rather than keeping the existing
+    // one — the answer the settings row is asked for, on the row itself.
+    const usingIncoming = mergeableFields.filter((f) => mergePolicy[f] === "useIncoming").length;
+
     return (
-      <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-        <Typography variant="body2" sx={{ color: "var(--theme-text-primary)" }}>{preview}</Typography>
+      <div className={classes.step}>
+        <p className={classes.lede}>{preview}</p>
 
         {activeKind === "place" && (
-          <Accordion
-            sx={{
-              backgroundColor: "rgba(255,255,255,0.04)",
-              color: "var(--theme-text-primary)",
-              "& .MuiAccordionSummary-root": { minHeight: 40 },
-            }}
-          >
-            <AccordionSummary expandIcon={<ExpandMoreIcon sx={{ color: "var(--theme-text-primary)" }} />}>
-              <Typography variant="body2">Merge settings</Typography>
-            </AccordionSummary>
-            <AccordionDetails sx={{ pt: 0 }}>
-              <Typography variant="caption" sx={{ color: "var(--theme-text-muted)", display: "block", mb: 1 }}>
-                When a row matches an existing place, keep the existing value or use the value from your file.
-                These settings only apply where both sides have a value: an empty field always fills in from your
-                file, and an empty cell in your file never clears what's already there. Names and coordinates
-                never change.
-              </Typography>
-              {mergeableFields.map((field) => (
-                <FormControlLabel
-                  key={field}
-                  control={
-                    <Switch
-                      size="small"
-                      checked={mergePolicy[field] === "useIncoming"}
-                      onChange={(e) => updateMergeField(field, e.target.checked)}
-                      color="secondary"
-                    />
-                  }
-                  label={
-                    <Typography variant="body2" sx={{ color: "var(--theme-text-primary)" }}>
-                      {mergeFieldLabel(field, placeDefsForImportType)}: {mergePolicy[field] === "useIncoming" ? "use file" : "keep existing"}
-                    </Typography>
-                  }
-                  sx={{ display: "flex" }}
-                />
-              ))}
-            </AccordionDetails>
-          </Accordion>
+          <Row
+            title="Merge settings"
+            subtitle={
+              usingIncoming === 0
+                ? "A row that matches an existing place keeps every value it already has"
+                : `Uses the value from your file for ${usingIncoming} of ${mergeableFields.length} fields`
+            }
+            onOpen={() => setShowingMergeSettings(true)}
+            trailing={<ChevronRight size={18} aria-hidden className={classes.chevron} />}
+          />
         )}
 
         {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
-      </Box>
+      </div>
     );
   }
 
@@ -1866,12 +1839,16 @@ function UnifiedImportDialog({
   const guard = useUnsavedChangesGuard(isDirty, handleDismiss);
 
   function renderContent() {
+    if (showingMergeSettings) return renderMergeSettings();
     if (importing) {
       return (
-        <Box sx={{ display: "flex", alignItems: "center", gap: 2, py: 1 }}>
-          <CircularProgress size={24} />
-          <Typography>Importing…</Typography>
-        </Box>
+        <div className={classes.step}>
+          <p className={classes.lede} role="status">
+            Importing…
+          </p>
+          {/* No total to count against — a sweep, not a value (§4). */}
+          <ProgressBar label="Importing" />
+        </div>
       );
     }
     if (outcome) return renderConfirmStep();
@@ -1881,10 +1858,18 @@ function UnifiedImportDialog({
   }
 
   function renderActions() {
+    // Inside the sub-view every way out means "back to the confirm step".
+    if (showingMergeSettings) {
+      return (
+        <Button variant="filled" icon={Check} onClick={() => setShowingMergeSettings(false)}>
+          Done
+        </Button>
+      );
+    }
     if (importing) return null;
     if (outcome) {
       return (
-        <Button variant="contained" color="secondary" onClick={onClose}>
+        <Button variant="filled" onClick={onClose}>
           Done
         </Button>
       );
@@ -1892,10 +1877,8 @@ function UnifiedImportDialog({
     if (step === "map") {
       return (
         <>
-          <Button onClick={guard.requestClose} sx={{ color: "var(--theme-text-primary)" }}>
-            {onBack ? "Back" : "Cancel"}
-          </Button>
-          <Button variant="contained" color="secondary" onClick={handleMapNext} disabled={!canProceedFromMap}>
+          <Button onClick={guard.requestClose}>{onBack ? "Back" : "Cancel"}</Button>
+          <Button variant="filled" onClick={handleMapNext} disabled={!canProceedFromMap}>
             Next
           </Button>
         </>
@@ -1904,8 +1887,8 @@ function UnifiedImportDialog({
     if (step === "review") {
       return (
         <>
-          <Button onClick={() => setStep("map")} sx={{ color: "var(--theme-text-primary)" }}>Back</Button>
-          <Button variant="contained" color="secondary" onClick={() => setStep("confirm")} disabled={!reviewValid}>
+          <Button onClick={() => setStep("map")}>Back</Button>
+          <Button variant="filled" onClick={() => setStep("confirm")} disabled={!reviewValid}>
             Next
           </Button>
         </>
@@ -1914,12 +1897,9 @@ function UnifiedImportDialog({
     // confirm
     return (
       <>
-        <Button onClick={() => setStep(surfacedKeys.length > 0 ? "review" : "map")} sx={{ color: "var(--theme-text-primary)" }}>
-          Back
-        </Button>
+        <Button onClick={() => setStep(surfacedKeys.length > 0 ? "review" : "map")}>Back</Button>
         <Button
-          variant="contained"
-          color="secondary"
+          variant="filled"
           onClick={activeKind === "place" ? handleImportPlaces : handleImportTrips}
         >
           Import
@@ -1930,52 +1910,39 @@ function UnifiedImportDialog({
 
   return (
     <>
-    <Dialog
-      fullScreen={isMobile}
-      open={open}
-      // Ignore backdrop clicks so a stray click can't discard an in-progress
-      // merge/review. The title-bar ✕ and the Back button are the explicit exits.
-      onClose={(_e, reason) => {
-        if (importing || reason === "backdropClick") return;
-        guard.requestClose();
-      }}
-      maxWidth="sm"
-      fullWidth
-      PaperProps={{
-        sx: {
-          backgroundColor: "var(--theme-primary)",
-          color: "var(--theme-text-primary)",
-          maxHeight: isMobile ? "100%" : "85vh",
-        },
-      }}
-    >
-      <DialogTitle sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", pb: 1 }}>
-        {title}
-        <IconButton
-          aria-label="Close dialog"
-          size="small"
-          onClick={guard.requestClose}
-          disabled={importing}
-          sx={{ color: "var(--theme-text-primary)" }}
-        >
-          <CloseIcon fontSize="small" />
-        </IconButton>
-      </DialogTitle>
-      <DialogContent ref={contentRef} dividers sx={{ borderColor: "rgba(255,255,255,0.1)" }}>
+      <Dialog
+        open={open}
+        title={title}
+        size="large"
+        // A stray press must not discard an in-progress mapping or review, and
+        // nothing dismisses while the import is in flight.
+        dismissible={!importing}
+        onClose={showingMergeSettings ? () => setShowingMergeSettings(false) : guard.requestClose}
+        footer={renderActions()}
+      >
         {renderContent()}
-      </DialogContent>
-      <DialogActions>{renderActions()}</DialogActions>
-    </Dialog>
+      </Dialog>
 
-    <ConfirmDialog
-      open={guard.guardOpen}
-      title="Discard unsaved changes?"
-      message="Your loaded file and any mapping changes will be lost."
-      confirmLabel="Discard"
-      confirmColor="error"
-      onConfirm={guard.confirmDiscard}
-      onClose={guard.cancelDiscard}
-    />
+      <ConfirmDialog
+        open={guard.guardOpen}
+        title="Discard unsaved changes?"
+        message="Your loaded file and any mapping changes will be lost."
+        confirmLabel="Discard"
+        confirmColor="error"
+        onConfirm={guard.confirmDiscard}
+        onClose={guard.cancelDiscard}
+      />
+
+      <ConfirmDialog
+        open={confirmingUndo}
+        title="Undo this import?"
+        message="Everything this import created is deleted, and places it merged into go back to the values they had. Anything you had before the import stays. This can't be undone."
+        confirmLabel="Undo the import"
+        confirmColor="error"
+        busy={undoing}
+        onConfirm={() => void handleUndo()}
+        onClose={() => setConfirmingUndo(false)}
+      />
     </>
   );
 }

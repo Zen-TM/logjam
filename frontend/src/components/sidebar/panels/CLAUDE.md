@@ -2,7 +2,7 @@
 
 ## Rules (all mandatory)
 
-- **Build on `frontend/DESIGN.md` and the `src/ui` kit** (Hero, ChipRail, Row, Menu, SideSheet, FilterField…). `PlacesPanel.tsx` and `PlaceFilterSheet.tsx` are the reference. MUI is an ESLint error outside `MUI_LEGACY_FILES`; the panels still on that list use `shared.module.css` `.btn` compositions, which are not to be extended or copied.
+- **Build on `frontend/DESIGN.md` and the `src/ui` kit** (Hero, ChipRail, Row, Menu, SideSheet, FilterField…). `PlacesPanel.tsx` and `PlaceFilterSheet.tsx` are the reference. MUI is an ESLint error outside `MUI_LEGACY_FILES`; no panel is on that list any more, and `shared.module.css` — whose `.btn` compositions this entry warned against — was deleted with its last consumer (2026-09-19).
 - **No inline `style` props**, except to set a custom property the kit reads (`--tile-hue`, `--chip-hue`). All other styling in the co-located `.module.css`.
 - **No import from `Map.tsx`** — panels receive callbacks as props from `App.tsx`.
 - **Scrolling:** a rebuilt page pins its hero and rails and scrolls only its list; a panel not yet rebuilt relies on the `SidebarPanel` body's scroll. Never nest a second scroll container (see `../CLAUDE.md`).
