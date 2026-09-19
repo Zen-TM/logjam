@@ -81,9 +81,19 @@
   justify-content: space-between;
   gap: 8px;
   margin: 0;
+  /* A section header belongs to what FOLLOWS it, so the break before it has to
+     be bigger than the gap between the rows it groups — otherwise the heading
+     floats midway and the eye reads it as belonging to the row above. Set on
+     the kit rather than per page: every list that stacks sections wants it. */
+  padding-top: 10px;
   font-size: var(--font-xs);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 1px;
   color: var(--theme-text-muted);
+}
+
+/* The first one opens its container — nothing above to separate from. */
+.sectionTitle:first-child {
+  padding-top: 0;
 }

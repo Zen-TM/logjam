@@ -1046,7 +1046,6 @@ function PlaceDialog({
           {/* Add custom field */}
           {showAddField ? (
             <AddCustomFieldForm
-              entityNoun="places"
               label={newFieldLabel}
               onLabelChange={setNewFieldLabel}
               type={newFieldType}

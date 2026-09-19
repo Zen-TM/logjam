@@ -73,7 +73,12 @@ function SettingsPanel({
   const toast = useToast();
   const [page, setPage] = useState<ListPage | null>(null);
   const [notifPrefs, setNotifPrefs] = useState<NotificationPreferences | null>(null);
-  const [notifSaving, setNotifSaving] = useState(false);
+  // WHICH switch is in flight, not THAT one is: a single boolean disabled all
+  // five for the length of the request, and five switches greying and
+  // un-greying together reads as the whole list flickering.
+  const [notifSavingKey, setNotifSavingKey] = useState<keyof NotificationPreferences | null>(
+    null,
+  );
   const [autoDownloadGeoPdfs, setAutoDownloadGeoPdfs] = useState<boolean | null>(null);
   const [autoDownloadSaving, setAutoDownloadSaving] = useState(false);
 
@@ -93,15 +98,17 @@ function SettingsPanel({
     const previous = notifPrefs;
     const next = { ...notifPrefs, [key]: !notifPrefs[key] };
     setNotifPrefs(next);
-    setNotifSaving(true);
+    setNotifSavingKey(key);
     try {
       await updateNotificationPreferences({ [key]: next[key] });
     } catch (err) {
       console.error(err);
-      setNotifPrefs(previous);
+      // Put back only the key that failed: another switch may have been
+      // answered while this request was out, and `previous` is stale for it.
+      setNotifPrefs((current) => ({ ...(current ?? previous), [key]: previous[key] }));
       toast.error(messageFromError(err, "Couldn't save that notification setting."));
     } finally {
-      setNotifSaving(false);
+      setNotifSavingKey((current) => (current === key ? null : current));
     }
   }
 
@@ -162,7 +169,7 @@ function SettingsPanel({
             key={key}
             title={title}
             checked={notifPrefs[key]}
-            disabled={notifSaving}
+            disabled={notifSavingKey === key}
             onChange={() => handleToggleNotif(key)}
           />
         ))

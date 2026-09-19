@@ -117,7 +117,7 @@ function AccountPanel({ currentUser }: { currentUser: TUser | null }) {
             <p className={classes.meterLabel}>
               {formatBytes(currentUser.storageUsedBytes)} of{" "}
               {formatBytes(currentUser.storageQuotaBytes)}
-              <span className={classes.meterHint}> · photos, videos and topo outputs</span>
+              <span className={classes.meterHint}> · photos, videos and topos</span>
             </p>
 
             <SectionHeader title="Processing credits this month" />
@@ -134,15 +134,25 @@ function AccountPanel({ currentUser }: { currentUser: TUser | null }) {
               {creditsResetLabel && (
                 <span className={classes.meterHint}> · resets {creditsResetLabel}</span>
               )}
-              <span className={classes.meterHint}> · topo, exports and GeoPDFs</span>
+              <span className={classes.meterHint}> · topos, exports and GeoPDFs</span>
             </p>
 
             <SectionHeader title="Sign-in" />
+            {/* The pencil, not the card: a whole row that opens something is
+                how this page moves BETWEEN places, and this one edits a value
+                in place. The same verb, the same glyph and the same position
+                as the username's, two rows above it. */}
             <Row
               leading={<IconTile icon={Mail} hue="var(--theme-accent)" />}
               title="Email"
               subtitle={email ?? undefined}
-              onOpen={() => setChangeEmailOpen(true)}
+              trailing={
+                <IconButton
+                  icon={Pencil}
+                  label="Change email address"
+                  onClick={() => setChangeEmailOpen(true)}
+                />
+              }
             />
 
             <SectionHeader title="Your data" />

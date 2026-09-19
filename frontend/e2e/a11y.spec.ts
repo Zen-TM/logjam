@@ -116,23 +116,38 @@ test.describe("desktop", () => {
     await expect(aside.getByRole("heading", { name: "Place types" })).toBeVisible();
     await expectNoViolations(page, "aside");
 
-    // Its form is the icon grid and the swatch line, both radio groups.
+    // Its editor is a DIALOG, like every other create in the app, and its form
+    // is the icon grid and the swatch line, both radio groups.
     await aside.getByRole("button", { name: "Add", exact: true }).click();
-    await expect(aside.getByRole("radiogroup", { name: "Icon" })).toBeVisible();
-    await expectNoViolations(page, "aside");
+    const typeDialog = page.locator("dialog[open]");
+    await expect(typeDialog.getByRole("radiogroup", { name: "Icon" })).toBeVisible();
+    await expectNoViolations(page, "dialog");
     // The palette names its colours; a hex is a name but not a helpful one.
-    await aside.getByRole("button", { name: /^Colour:/ }).click();
+    await typeDialog.getByRole("button", { name: /^Colour:/ }).click();
     await expect(page.getByRole("radio", { name: "Pool teal" })).toBeVisible();
     await expectNoViolations(page, "[role='dialog']");
+    // The palette's Escape is its own: the dialog under it stays open.
     await page.keyboard.press("Escape");
+    await expect(typeDialog).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(typeDialog).toHaveCount(0);
 
-    await aside.getByRole("button", { name: "Back to place types" }).click();
     await aside.getByRole("button", { name: "Back to Settings" }).click();
 
     // The attributes list: yours with verbs, the built-ins without.
     await aside.getByRole("button", { name: /^Place attributes/ }).click();
     await expect(aside.getByRole("heading", { name: /Built in/ })).toBeVisible();
     await expectNoViolations(page, "aside");
+
+    // A row opens the same dialog on an existing one, with the type fixed.
+    await aside
+      .getByRole("button", { name: /^Access beta/ })
+      .first()
+      .click();
+    const attrDialog = page.locator("dialog[open]");
+    await expect(attrDialog.getByLabel("Type", { exact: true })).toBeDisabled();
+    await expectNoViolations(page, "dialog");
+    await page.keyboard.press("Escape");
   });
 
   test("Places, its filter sheet and a row menu", async ({ page }) => {

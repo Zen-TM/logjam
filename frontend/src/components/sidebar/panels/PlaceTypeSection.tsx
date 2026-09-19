@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { ArrowRightLeft, EllipsisVertical, Plus, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { EllipsisVertical, Merge, Plus, Trash2 } from "lucide-react";
 import {
   PLACE_TYPE_COLORS,
   PLACE_TYPE_ICON_KEYS,
@@ -18,6 +18,7 @@ import { messageFromError } from "../../../errors/messageFromError";
 import { ErrorBanner } from "../../feedback/ErrorBanner";
 import {
   Button,
+  Dialog,
   Hero,
   IconButton,
   IconTile,
@@ -32,7 +33,8 @@ import classes from "./ListPage.module.css";
 import { placeTypeLucideIcon } from "./placeTypeIcon";
 
 /**
- * The place types a user keeps — Settings' first list page.
+ * The place types a user keeps — Settings' first list page. The list is the
+ * page; making or changing one is a dialog, like every other create in the app.
  *
  * THREE RULES THE UI HAS TO STATE, because the server enforces them and a
  * button that fails is worse than one that is absent:
@@ -41,9 +43,11 @@ import { placeTypeLucideIcon } from "./placeTypeIcon";
  *    listed — the picker offers it, places live in it — but it cannot be
  *    renamed or deleted, so it gets no verbs. The server answers 404 rather
  *    than 403 for either, the same way every id-addressed surface does.
- *  - A type with places IN it cannot be deleted. Deleting a category must
- *    never delete what is in it, so the row offers "Move places" first and the
- *    delete only becomes available once the type is empty.
+ *  - A type with places IN it cannot be deleted, so the verb on one is MERGE:
+ *    its places move to a type you pick and the empty category goes. "Move
+ *    places", which is what the two API calls are called, describes the
+ *    plumbing — nobody sets out to move their places, they set out to stop
+ *    having two categories for one thing.
  *  - Icon and colour come from CURATED lists, not free text: the icon because
  *    a free key resolves in one client's icon set and not the other's, the
  *    colour because it is a map marker colour and the WCAG 3:1 guarantee can
@@ -71,15 +75,24 @@ function PlaceTypeSection({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<TPlaceType | null>(null);
-  const [movingFrom, setMovingFrom] = useState<TPlaceType | null>(null);
-  const [moveTargetId, setMoveTargetId] = useState<string>("");
+  const [mergingFrom, setMergingFrom] = useState<TPlaceType | null>(null);
+  const [mergeTargetId, setMergeTargetId] = useState<string>("");
 
   /** Re-read rather than patch a local copy: `placeCount` moves when places
-   *  are reassigned, and a stale count is what decides whether Delete appears. */
+   *  are reassigned, and a stale count is what decides which verb a row gets. */
   async function refresh() {
     const { getPlaceTypes } = await import("../../../placeUtils");
     onTypesChange(await getPlaceTypes());
   }
+
+  // `placeCount` moves whenever a place is made, retyped or deleted ANYWHERE in
+  // the app, and the list App holds was fetched at boot. The counts are what
+  // decide which verb each row offers, so a type that has since taken a place
+  // offered Delete and got a 409 — read them once on the way in.
+  // Best-effort: the list already on screen is the fallback.
+  useEffect(() => {
+    refresh().catch(console.error);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function run(action: () => Promise<unknown>, fallback: string) {
     setSaving(true);
@@ -97,33 +110,9 @@ function PlaceTypeSection({
     }
   }
 
-  if (editing) {
-    return (
-      <PlaceTypeForm
-        editing={editing === "new" ? null : editing}
-        saving={saving}
-        error={error}
-        onDismissError={() => setError(null)}
-        onBack={() => {
-          setEditing(null);
-          setError(null);
-        }}
-        onSave={async (draft) => {
-          const ok =
-            editing === "new"
-              ? await run(() => createPlaceType(draft), "Couldn't create that type.")
-              : await run(
-                  () => updatePlaceType(editing.id, draft),
-                  "Couldn't save that type.",
-                );
-          if (ok) setEditing(null);
-        }}
-      />
-    );
-  }
-
   const own = types.filter((type) => !type.isSystem);
   const system = types.filter((type) => type.isSystem);
+  const mergeTarget = types.find((type) => type.id === mergeTargetId) ?? null;
 
   return (
     <div className={classes.root}>
@@ -152,6 +141,7 @@ function PlaceTypeSection({
                 leading={<IconTile icon={placeTypeLucideIcon(type.iconKey)} hue={type.color} />}
                 title={type.name}
                 subtitle={placeCountLabel(type.placeCount)}
+                description="Opens this type for editing"
                 onOpen={() => setEditing(type)}
                 trailing={
                   /* The destructive verb lives in the ⋯, like every other
@@ -166,12 +156,13 @@ function PlaceTypeSection({
                       type.placeCount > 0
                         ? [
                             {
-                              id: "move",
-                              label: "Move places",
-                              icon: ArrowRightLeft,
+                              id: "merge",
+                              label: "Merge into another type",
+                              icon: Merge,
+                              danger: true,
                               onSelect: () => {
-                                setMovingFrom(type);
-                                setMoveTargetId(
+                                setMergingFrom(type);
+                                setMergeTargetId(
                                   types.find((other) => other.id !== type.id)?.id ?? "",
                                 );
                               },
@@ -215,6 +206,29 @@ function PlaceTypeSection({
         )}
       </div>
 
+      {editing !== null && (
+        <PlaceTypeDialog
+          editing={editing === "new" ? null : editing}
+          saving={saving}
+          error={error}
+          onDismissError={() => setError(null)}
+          onClose={() => {
+            setEditing(null);
+            setError(null);
+          }}
+          onSave={async (draft) => {
+            const ok =
+              editing === "new"
+                ? await run(() => createPlaceType(draft), "Couldn't create that type.")
+                : await run(
+                    () => updatePlaceType(editing.id, draft),
+                    "Couldn't save that type.",
+                  );
+            if (ok) setEditing(null);
+          }}
+        />
+      )}
+
       <ConfirmDialog
         open={deleting !== null}
         title={`Delete "${deleting?.name ?? ""}"?`}
@@ -233,18 +247,22 @@ function PlaceTypeSection({
         }}
       />
 
+      {/* MERGE = move, then delete. Two calls, because that is what the API
+          offers, but ONE decision for the user: a type they no longer want and
+          the one its places belong in instead. If the delete half fails the
+          places have still moved, which is the half that carries the data. */}
       <ConfirmDialog
-        open={movingFrom !== null}
-        title={`Move places out of "${movingFrom?.name ?? ""}"?`}
+        open={mergingFrom !== null}
+        title={`Merge "${mergingFrom?.name ?? ""}" into another type?`}
         message={
           <>
             <Select
-              label={`${placeCountLabel(movingFrom?.placeCount ?? 0)} will move to`}
-              value={moveTargetId}
-              onChange={(event) => setMoveTargetId(event.target.value)}
+              label={`Move its ${placeCountLabel(mergingFrom?.placeCount ?? 0)} to`}
+              value={mergeTargetId}
+              onChange={(event) => setMergeTargetId(event.target.value)}
             >
               {types
-                .filter((type) => type.id !== movingFrom?.id)
+                .filter((type) => type.id !== mergingFrom?.id)
                 .map((type) => (
                   <option key={type.id} value={type.id}>
                     {type.name}
@@ -252,39 +270,41 @@ function PlaceTypeSection({
                 ))}
             </Select>
             <p className={classes.note}>
-              Values the new type has no attribute for are kept on each place, and can be
-              added to it later.
+              "{mergingFrom?.name ?? ""}" is then deleted. Values{" "}
+              {mergeTarget ? `"${mergeTarget.name}"` : "the new type"} has no attribute for are
+              kept on each place, and can be added to it later.
             </p>
           </>
         }
-        confirmLabel="Move"
-        confirmColor="secondary"
+        confirmLabel="Merge"
+        confirmColor="error"
         busy={saving}
         onConfirm={async () => {
-          const type = movingFrom;
-          if (!type || !moveTargetId) return;
-          const ok = await run(
-            () => reassignPlaceType(type.id, moveTargetId),
-            "Couldn't move those places.",
-          );
-          if (ok) setMovingFrom(null);
+          const type = mergingFrom;
+          if (!type || !mergeTargetId) return;
+          const ok = await run(async () => {
+            await reassignPlaceType(type.id, mergeTargetId);
+            await deletePlaceType(type.id);
+          }, "Couldn't merge those types.");
+          if (ok) setMergingFrom(null);
         }}
         onClose={() => {
-          if (!saving) setMovingFrom(null);
+          if (!saving) setMergingFrom(null);
         }}
       />
     </div>
   );
 }
 
-/** Add or change one type. A page of its own, like the phone's form: the icon
- *  grid is tall enough that a row-sized inline editor could not hold it. */
-function PlaceTypeForm({
+/** Add or change one type, in a dialog: the icon grid and the palette are the
+ *  definition of the type, and they belong together on one surface the user
+ *  finishes or abandons. */
+function PlaceTypeDialog({
   editing,
   saving,
   error,
   onDismissError,
-  onBack,
+  onClose,
   onSave,
 }: {
   /** null = adding. */
@@ -292,7 +312,7 @@ function PlaceTypeForm({
   saving: boolean;
   error: string | null;
   onDismissError: () => void;
-  onBack: () => void;
+  onClose: () => void;
   onSave: (draft: { name: string; iconKey: string; color: string }) => void;
 }) {
   const [name, setName] = useState(editing?.name ?? "");
@@ -300,14 +320,17 @@ function PlaceTypeForm({
   const [color, setColor] = useState(editing?.color ?? PLACE_TYPE_COLORS[0]);
 
   return (
-    <div className={classes.root}>
-      <Hero
-        title={editing ? editing.name : "New place type"}
-        onBack={onBack}
-        backLabel="Back to place types"
-        actions={
+    <Dialog
+      open
+      title={editing ? `Edit "${editing.name}"` : "New place type"}
+      onClose={onClose}
+      dismissible={!saving}
+      footer={
+        <>
+          <Button onClick={onClose} disabled={saving}>
+            Cancel
+          </Button>
           <Button
-            compact
             variant="filled"
             busy={saving}
             disabled={!name.trim()}
@@ -315,12 +338,10 @@ function PlaceTypeForm({
           >
             Save
           </Button>
-        }
-      />
-
-      {error && <ErrorBanner message={error} onDismiss={onDismissError} />}
-
-      <div className={classes.list}>
+        </>
+      }
+    >
+      <div className={classes.dialogForm}>
         <TextField
           label="Name"
           value={name}
@@ -367,12 +388,9 @@ function PlaceTypeForm({
           disabled={saving}
         />
 
-        <p className={classes.note}>
-          On the map this colour is the pin's fill. A ring around a pin means the place was
-          shared with you by a friend.
-        </p>
+        {error && <ErrorBanner message={error} onDismiss={onDismissError} />}
       </div>
-    </div>
+    </Dialog>
   );
 }
 

@@ -6,14 +6,19 @@ import { Button, Checkbox, SectionHeader, Select, TextField } from "../../ui";
 import classes from "./AddCustomFieldForm.module.css";
 
 /**
- * The "new attribute" sub-form, shared between PlaceDialog, TripLogDialog and
- * the Settings add dialog, so they cannot drift (UX-002/UX-003).
+ * The attribute form, shared between PlaceDialog, TripLogDialog and Settings'
+ * add/edit dialogs, so the four cannot drift (UX-002/UX-003).
+ *
+ * TWO SHAPES, one form. Inside a place's or a trip's own dialog it is a card
+ * with its own heading and buttons, opened beneath the fields it will join.
+ * From Settings it IS the dialog (`asDialogBody`) — a form in a card inside a
+ * panel had no precedent anywhere else in the app, and every other "make one of
+ * these" in Logjam Web is a dialog.
  *
  * Bounds (min/max) are opt-in via the `bounds` prop group. The bounds row only
  * renders for integer/float types.
  */
 function AddCustomFieldForm({
-  entityNoun,
   label,
   onLabelChange,
   type,
@@ -24,8 +29,9 @@ function AddCustomFieldForm({
   error,
   bounds,
   scope,
+  asDialogBody = false,
+  typeLocked = false,
 }: {
-  entityNoun: string;
   label: string;
   onLabelChange: (value: string) => void;
   type: TripLogCustomFieldType;
@@ -57,6 +63,13 @@ function AddCustomFieldForm({
     appliesToAllTypes: boolean;
     onAppliesToAllTypesChange: (value: boolean) => void;
   };
+  /** This form IS a dialog's body: the host supplies the surface, the title
+   *  and the buttons, so the card, the heading and the action row come off. */
+  asDialogBody?: boolean;
+  /** Editing an existing attribute. The type is what its stored values are
+   *  shaped like, so it is shown and not offered — a string that becomes a
+   *  number leaves every answer already recorded unreadable. */
+  typeLocked?: boolean;
 }) {
   const isNumeric = type === "integer" || type === "float";
   const showBounds = bounds != null && isNumeric;
@@ -78,36 +91,11 @@ function AddCustomFieldForm({
   }
 
   return (
-    <div className={classes.addFieldForm}>
-      <div>
-        <SectionHeader title="New attribute" />
-        <p className={classes.note}>It is added to all your {entityNoun}.</p>
-      </div>
-      {scope && (
-        <div role="group" aria-label="Where it appears" className={classes.scope}>
-          <span className={classes.groupLabel}>Where it appears</span>
-          <Checkbox
-            label="All types, including ones I add later"
-            checked={scope.appliesToAllTypes}
-            onChange={scope.onAppliesToAllTypesChange}
-          />
-          {!scope.appliesToAllTypes &&
-            scope.types.map((placeType) => (
-              <Checkbox
-                key={placeType.id}
-                label={placeType.name}
-                checked={scope.selectedTypeIds.includes(placeType.id)}
-                onChange={(checked) =>
-                  scope.onSelectedTypeIdsChange(
-                    checked
-                      ? [...scope.selectedTypeIds, placeType.id]
-                      : scope.selectedTypeIds.filter((id) => id !== placeType.id),
-                  )
-                }
-              />
-            ))}
-        </div>
-      )}
+    <div className={asDialogBody ? classes.dialogBody : classes.addFieldForm}>
+      {!asDialogBody && <SectionHeader title="New attribute" />}
+      {/* WHAT it is, then WHERE it appears: the name is the decision being
+          made, and a list of types above an empty label field asks the second
+          question first. */}
       <div className={classes.labelRow}>
         <TextField
           label="Label"
@@ -116,10 +104,13 @@ function AddCustomFieldForm({
           onChange={(event) => onLabelChange(event.target.value)}
           onKeyDown={handleFieldKeyDown}
           placeholder="e.g. Group size"
+          data-autofocus={asDialogBody || undefined}
         />
         <Select
           label="Type"
           value={type}
+          disabled={typeLocked}
+          hint={typeLocked ? "Fixed — answers are already stored this way." : undefined}
           onChange={(event) => onTypeChange(event.target.value as TripLogCustomFieldType)}
         >
           {CUSTOM_FIELD_TYPES.map((option) => (
@@ -152,15 +143,42 @@ function AddCustomFieldForm({
           />
         </div>
       )}
+      {scope && (
+        <div role="group" aria-label="Where it appears" className={classes.scope}>
+          <span className={classes.groupLabel}>Where it appears</span>
+          <Checkbox
+            label="All types, including ones I add later"
+            checked={scope.appliesToAllTypes}
+            onChange={scope.onAppliesToAllTypesChange}
+          />
+          {!scope.appliesToAllTypes &&
+            scope.types.map((placeType) => (
+              <Checkbox
+                key={placeType.id}
+                label={placeType.name}
+                checked={scope.selectedTypeIds.includes(placeType.id)}
+                onChange={(checked) =>
+                  scope.onSelectedTypeIdsChange(
+                    checked
+                      ? [...scope.selectedTypeIds, placeType.id]
+                      : scope.selectedTypeIds.filter((id) => id !== placeType.id),
+                  )
+                }
+              />
+            ))}
+        </div>
+      )}
       {error && <ErrorBanner message={error} />}
-      <div className={classes.actionsRow}>
-        <Button compact onClick={onCancel} disabled={adding}>
-          Cancel
-        </Button>
-        <Button compact variant="filled" busy={adding} disabled={!label.trim()} onClick={onAdd}>
-          Add attribute
-        </Button>
-      </div>
+      {!asDialogBody && (
+        <div className={classes.actionsRow}>
+          <Button compact onClick={onCancel} disabled={adding}>
+            Cancel
+          </Button>
+          <Button compact variant="filled" busy={adding} disabled={!label.trim()} onClick={onAdd}>
+            Add attribute
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

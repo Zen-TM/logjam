@@ -32,22 +32,12 @@
   color: var(--theme-text-muted);
 }
 
-/* One row swapped for its rename field, with the two verbs under it. */
-.inlineEdit {
+/* The editor these pages raise: the dialog supplies the surface, this stacks
+   the fields inside it. */
+.dialogForm {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 8px;
-  border: var(--hairline);
-  border-color: var(--theme-accent);
-  border-radius: var(--radius-lg);
-  background: var(--theme-secondary);
-}
-
-.inlineActions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
+  gap: 12px;
 }
 
 /* The curated icons, as a grid of equal cells — the same shape as the phone's,

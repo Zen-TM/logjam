@@ -1100,7 +1100,6 @@ function TripLogDialog({
             ))}
             {showAddField ? (
               <AddCustomFieldForm
-                entityNoun="trip logs"
                 label={newFieldLabel}
                 onLabelChange={setNewFieldLabel}
                 type={newFieldType}
