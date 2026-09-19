@@ -53,7 +53,6 @@ import { messageFromError } from "../../../errors/messageFromError";
 import PlaceDialog from "../../dialogs/PlaceDialog";
 import ShareDialog from "../../dialogs/ShareDialog";
 import TripLogDialog from "../../dialogs/TripLogDialog";
-import TripLogViewDialog from "../../dialogs/TripLogViewDialog";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
 import type { TPlace, TFriend, TTripLog, TPlaceShare, TPlaceType } from "../../../placeUtils";
 import {
@@ -168,6 +167,7 @@ function PlaceDetailPanel({
   onBack,
   onClose,
   onFlyToPlace,
+  onOpenTrip,
   onMakeMap,
   onSharePlace,
   customFieldDefs,
@@ -194,6 +194,8 @@ function PlaceDetailPanel({
   onClose: () => void;
   /** Centre the map on this place — the same verb its row and its pin offer. */
   onFlyToPlace: (latitude: number, longitude: number) => void;
+  /** A trip is READ on its own page (DESIGN.md §6), not in a dialog over this one. */
+  onOpenTrip: (tripLogId: string) => void;
   /** Start a map over this place; the menu names the two kinds. */
   onMakeMap: (place: TPlace, kind: "topo" | "geopdf") => void;
   /** Open the share-or-export dialog on this place, the one the list uses. */
@@ -231,8 +233,6 @@ function PlaceDetailPanel({
   const [placeMedia, setPlaceMedia] = useState<MediaItem[]>([]);
   const [loadingTrips, setLoadingTrips] = useState(false);
   const [showTripLogDialog, setShowTripLogDialog] = useState(false);
-  const [showTripLogView, setShowTripLogView] = useState(false);
-  const [viewingTripLog, setViewingTripLog] = useState<TTripLog | null>(null);
   const [editingTripLog, setEditingTripLog] = useState<TTripLog | undefined>(undefined);
 
   const [copying, setCopying] = useState(false);
@@ -757,7 +757,7 @@ function PlaceDetailPanel({
               <Row
                 leading={<IconTile icon={Activity} hue="var(--hue-track)" />}
                 title={track.filename}
-                subtitle="Download"
+                subtitle="Click to download"
                 href={track.displayUrl}
                 download={track.filename}
                 trailing={
@@ -876,10 +876,7 @@ function PlaceDetailPanel({
                   }
                   title={formatDateKey(trip.date)}
                   subtitle={trip.notes ?? undefined}
-                  onOpen={() => {
-                    setViewingTripLog(trip);
-                    setShowTripLogView(true);
-                  }}
+                  onOpen={() => onOpenTrip(trip.id)}
                 />
               ))
             )}
@@ -992,27 +989,6 @@ function PlaceDetailPanel({
         existingTripTypes={existingTripTypes}
       />
 
-      <TripLogViewDialog
-        open={showTripLogView}
-        onClose={() => {
-          setShowTripLogView(false);
-          setViewingTripLog(null);
-        }}
-        tripLog={viewingTripLog}
-        customFieldDefs={customFieldDefs}
-        canManageMedia={isOwnedPlace}
-        onMediaChanged={onQuotaChanged}
-        onEdit={() => {
-          setShowTripLogView(false);
-          setEditingTripLog(viewingTripLog ?? undefined);
-          setViewingTripLog(null);
-          setShowTripLogDialog(true);
-        }}
-        onDeleted={() => {
-          refreshTripLogs();
-          onQuotaChanged();
-        }}
-      />
     </>
   );
 }

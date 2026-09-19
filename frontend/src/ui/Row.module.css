@@ -94,6 +94,18 @@
   margin-right: 8px;
 }
 
+/* A MARK IS DECORATION, SO IT IS NOT A TARGET — and neither is the group
+   holding it. `.trailing` sits above the stretched button on purpose, so a
+   real trailing control (a ⋯, a bin, a switch) keeps its own hit area; the
+   cost is that a group containing ONLY a mark swallowed the press meant for
+   the card under it, so pressing the one thing that looks like "add" did
+   nothing (operator, 2026-09-19). Marking the span alone was not enough —
+   the press then landed on the group instead — so a trailing group with no
+   real control in it stands aside entirely. */
+.trailing:not(:has(button, a, input, select, textarea, [role="switch"])) {
+  pointer-events: none;
+}
+
 .main {
   flex: 1;
   min-width: 0;

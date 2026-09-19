@@ -14,7 +14,28 @@ test.skip(!baseURL.startsWith("http://localhost"), "needs the local fake-auth st
 
 const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 
+/**
+ * A surface is measured once it has finished ARRIVING.
+ *
+ * `Dialog` fades itself in (`@starting-style`, DESIGN.md §6), and axe computes
+ * contrast from what is PAINTED — so a check running while the dialog is
+ * half-way there measures its colours composited against the page behind it
+ * and reports both a shade light. That is not hypothetical: it failed
+ * `textMuted` on `secondary` at 4.23:1, a pair that measures a passing 4.60:1
+ * once the dialog has landed. It only shows up at all because that pair ships
+ * with 0.10 of margin (`scripts/wcag-contrast.mjs`), which is worth knowing
+ * on its own — anything translucent over a card's caption is under AA.
+ */
+async function settled(page: Page) {
+  await page.waitForFunction(() =>
+    [...document.querySelectorAll("dialog[open]")].every(
+      (dialog) => Number(getComputedStyle(dialog).opacity) === 1,
+    ),
+  );
+}
+
 async function expectNoViolations(page: Page, include?: string) {
+  await settled(page);
   let builder = new AxeBuilder({ page }).withTags(WCAG_TAGS);
   if (include) builder = builder.include(include);
   const { violations } = await builder.analyze();
@@ -296,24 +317,28 @@ test.describe("desktop", () => {
     await expect(aside.getByRole("heading", { level: 2, name: /trips?$/ })).toBeVisible({ timeout: 15_000 });
     await expectNoViolations(page, "aside");
 
+    // A trip is READ on its own PAGE, not in a dialog (DESIGN.md §6).
     const rowMenu = aside.getByRole("button", { name: /^Actions for / }).first();
     await rowMenu.click();
     await page.getByRole("menuitem", { name: "Open trip" }).click();
-    const view = page.locator("dialog[open]");
-    await expect(view.getByRole("button", { name: "Edit trip" })).toBeVisible();
-    await expectNoViolations(page, "dialog");
+    await expect(aside.getByRole("heading", { name: "Places" })).toBeVisible();
+    await expectNoViolations(page, "aside");
 
-    // Edit swaps the view for the form, focus on its first field.
-    await view.getByRole("button", { name: "Edit trip" }).click();
+    // ...and the form that edits it is the dialog that page raises.
+    await aside.getByRole("button", { name: /^Actions for / }).click();
+    await page.getByRole("menuitem", { name: "Edit trip" }).click();
     const form = page.getByRole("dialog", { name: "Edit trip" });
     await expect(form).toBeVisible();
     await expect(form.getByLabel("Date")).toBeFocused();
     await expectNoViolations(page, "dialog");
 
-    // An untouched form closes on Escape without asking.
+    // An untouched form closes on Escape without asking, leaving the page.
     await page.keyboard.press("Escape");
     await expect(form).toBeHidden();
+    await expect(aside.getByRole("heading", { name: "Notes" })).toBeVisible();
 
+    // Back to the logbook, where Stats is the other view.
+    await aside.getByRole("button", { name: "Back to Logs" }).click();
     await aside.getByRole("radio", { name: "Stats" }).click();
     await expect(aside.getByRole("heading", { level: 2, name: /out$/ })).toBeVisible();
     await expectNoViolations(page, "aside");

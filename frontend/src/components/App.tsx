@@ -134,6 +134,9 @@ function App() {
   const [openFiltersRequested, setOpenFiltersRequested] = useState(false);
   const consumeOpenFilters = useCallback(() => setOpenFiltersRequested(false), []);
   const [selectedPlaceID, setSelectedPlaceID] = useState<string | null>(null);
+  // The trip whose page is open. A trip is READ on a page like a place and a
+  // way (DESIGN.md §6), so it needs the same one piece of state.
+  const [selectedTripLogId, setSelectedTripLogId] = useState<string | null>(null);
   const [activePanel, setActivePanel] = useState<PanelId | null>(null);
   // Which view the two-view pages open on — remembered for the session, so a
   // return to Logs lands where the user left it.
@@ -466,10 +469,13 @@ function App() {
     document.title = activePanel ? `${PANEL_TITLES[activePanel]} — Logjam Web` : "Logjam Web";
   }, [activePanel]);
 
-  // When switching away from place-detail via NavRail, clear selectedPlaceID
+  // Leaving a detail page via the NavRail drops what it was showing.
   const handlePanelChange = useCallback((panel: PanelId | null) => {
     if (panel !== "place-detail") {
       setSelectedPlaceID(null);
+    }
+    if (panel !== "trip-detail") {
+      setSelectedTripLogId(null);
     }
     setActivePanel(panel);
   }, []);
@@ -478,6 +484,9 @@ function App() {
   const handlePanelClose = useCallback(() => {
     if (activePanel === "place-detail") {
       setSelectedPlaceID(null);
+    }
+    if (activePanel === "trip-detail") {
+      setSelectedTripLogId(null);
     }
     setActivePanel(null);
   }, [activePanel]);
@@ -1522,6 +1531,8 @@ function App() {
           pickingCoords={pickingCoords}
           onCancelPickCoords={cancelPickingCoords}
           tripLogs={tripLogs}
+          selectedTripLogId={selectedTripLogId}
+          setSelectedTripLogId={setSelectedTripLogId}
           tripLogsTotal={tripLogsTotal}
           tripLogsLoaded={tripLogsLoaded}
           onRefetchTripLogs={refetchAfterTripWrite}

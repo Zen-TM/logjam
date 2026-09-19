@@ -15,6 +15,7 @@ export type PanelId =
   | "settings"
   // Opened programmatically (a pin, a row, a route line) — never a nav item.
   | "place-detail"
+  | "trip-detail"
   | "way-detail"
   // The route tool, as a page rather than a card over the map: the map is the
   // canvas and nothing should float on it while a line is being drawn.
@@ -31,6 +32,7 @@ export const PANEL_TITLES: Record<PanelId, string> = {
   account: "Account",
   settings: "Settings",
   "place-detail": "Place",
+  "trip-detail": "Trip",
   "way-detail": "Way",
   "way-draw": "Draw a route",
 };

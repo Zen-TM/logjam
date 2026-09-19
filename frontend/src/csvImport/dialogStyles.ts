@@ -72,7 +72,7 @@ export const NOTES_MAX_ROWS = 12;
 // system as .btnFilledAccent in styles/shared.module.css (accent is tuned
 // light enough that the dark primary is the AA-readable label on it, in every
 // theme scheme). Visually distinct from default-grey place chips. Used by
-// TripLogDialog (selected-type chips) and TripLogViewDialog; the trip cards
+// TripLogDialog (selected-type chips) and the trip page; the trip cards
 // in TripLogsPanel mirror it in CSS (.typeChip).
 export const typeChipSx = {
   backgroundColor: "var(--theme-accent)",

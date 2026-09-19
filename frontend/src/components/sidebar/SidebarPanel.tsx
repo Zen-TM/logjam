@@ -28,6 +28,7 @@ import LidarPanel from "./panels/LidarPanel";
 import FriendsPanel from "./panels/FriendsPanel";
 import NotificationsPanel from "./panels/NotificationsPanel";
 import PlaceDetailPanel from "./panels/PlaceDetailPanel";
+import TripDetailPanel from "./panels/TripDetailPanel";
 import { placesBounds } from "./panels/placesModel";
 import RoutesPanel from "./panels/RoutesPanel";
 import type { WayItem } from "./panels/waysModel";
@@ -141,6 +142,8 @@ function SidebarPanel({
   onCancelPickCoords,
   // Trip logs
   tripLogs,
+  selectedTripLogId,
+  setSelectedTripLogId,
   tripLogsTotal,
   tripLogsLoaded,
   onRefetchTripLogs,
@@ -251,6 +254,8 @@ function SidebarPanel({
   onCancelPickCoords: () => void;
   // Trip logs
   tripLogs: TTripLog[];
+  selectedTripLogId: string | null;
+  setSelectedTripLogId: (id: string | null) => void;
   tripLogsTotal: number | null;
   /** False until the first trip fetch settles. */
   tripLogsLoaded: boolean;
@@ -320,6 +325,13 @@ function SidebarPanel({
     },
     [setSelectedPlaceID, setActivePanel],
   );
+
+  // The same pair for a trip: its page is where a trip is READ, and every
+  // surface that lists one opens it the same way.
+  const openTripDetail = (tripLogId: string) => {
+    setSelectedTripLogId(tripLogId);
+    setActivePanel("trip-detail");
+  };
 
   if (!activePanel) return null;
 
@@ -458,7 +470,7 @@ function SidebarPanel({
             tripLogsTotal={tripLogsTotal}
             loaded={tripLogsLoaded}
             onRefetchTripLogs={onRefetchTripLogs}
-            onOpenPlace={openPlaceDetail}
+            onOpenTrip={openTripDetail}
             onFiltersOpenChange={onFiltersOpenChange}
             onExpandSheet={expandSheetToFull}
             customFieldDefs={customFieldDefs}
@@ -505,12 +517,31 @@ function SidebarPanel({
             onBack={() => setActivePanel("places")}
             onClose={onClose}
             onFlyToPlace={onFlyToPlace}
+            onOpenTrip={openTripDetail}
             onMakeMap={(target, kind) => {
               const bounds = placesBounds([target]);
               if (bounds) onMakeMap(bounds, kind);
             }}
             onSharePlace={(id) => onSharePlaces([id])}
             onAfterDelete={() => setActivePanel("places")}
+          />
+        )}
+        {activePanel === "trip-detail" && (
+          <TripDetailPanel
+            tripLog={tripLogs.find((trip) => trip.id === selectedTripLogId)}
+            places={places}
+            customFieldDefs={customFieldDefs}
+            onCustomFieldDefsChange={onCustomFieldDefsChange}
+            existingTripTypes={tripLogs.flatMap((trip) => trip.types)}
+            onBack={() => setActivePanel("logs")}
+            onClose={onClose}
+            onOpenPlace={openPlaceDetail}
+            onRefetchTripLogs={onRefetchTripLogs}
+            onRefetchPlaces={onRefetch}
+            onQuotaChanged={onQuotaChanged}
+            onPickCoords={onPickCoords}
+            pickingCoords={pickingCoords}
+            onAfterDelete={() => setActivePanel("logs")}
           />
         )}
         {activePanel === "way-detail" && wayDetail}

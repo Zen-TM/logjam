@@ -38,7 +38,6 @@ import type { TPlace, TTripLog } from "../../../placeUtils";
 import { bulkDeleteTripLogs, deleteTripLog, tripTitle } from "../../../placeUtils";
 import { useStoredState } from "../../../useStoredState";
 import { useIsMobile } from "../../../useIsMobile";
-import TripLogViewDialog from "../../dialogs/TripLogViewDialog";
 import TripLogDialog from "../../dialogs/TripLogDialog";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
 import { useToast } from "../../feedback/ToastProvider";
@@ -95,7 +94,7 @@ function TripLogsPanel({
   onQuotaChanged,
   onRefetchPlaces,
   onOpenUnifiedImport,
-  onOpenPlace,
+  onOpenTrip,
   onFiltersOpenChange,
   onExpandSheet,
 }: {
@@ -116,7 +115,8 @@ function TripLogsPanel({
   onQuotaChanged: () => void;
   onRefetchPlaces: () => void;
   onOpenUnifiedImport: () => void;
-  onOpenPlace: (placeId: string) => void;
+  /** A trip is READ on its own page (DESIGN.md §6), not in a dialog. */
+  onOpenTrip: (tripLogId: string) => void;
   /** The date sheet is open beside the panel, so the map's chrome slides clear. */
   onFiltersOpenChange: (open: boolean) => void;
   /** Narrow web: grow the bottom sheet to full. */
@@ -148,7 +148,6 @@ function TripLogsPanel({
   const selectionAnchor = useRef<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<string[] | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [viewingTripLog, setViewingTripLog] = useState<TTripLog | null>(null);
   const [editingTripLog, setEditingTripLog] = useState<TTripLog | null>(null);
   const [creatingTrip, setCreatingTrip] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -303,7 +302,7 @@ function TripLogsPanel({
 
   // ── Verbs ────────────────────────────────────────────────────────────
   const rowEntries = (trip: TTripLog): MenuEntry[] => [
-    { id: "open", label: "Open trip", icon: ArrowRight, onSelect: () => setViewingTripLog(trip) },
+    { id: "open", label: "Open trip", icon: ArrowRight, onSelect: () => onOpenTrip(trip.id) },
     { id: "edit", label: "Edit trip", icon: Pencil, onSelect: () => setEditingTripLog(trip) },
     { id: "sep", separator: true },
     { id: "delete", label: "Delete", icon: Trash2, danger: true, onSelect: () => setPendingDelete([trip.id]) },
@@ -450,7 +449,7 @@ function TripLogsPanel({
         // The tile's glyph and hue say the activity to a sighted reader.
         description={trip.types.length > 0 ? trip.types.map(tripTypeLabel).join(", ") : "No type"}
         selected={isSelected}
-        onOpen={() => setViewingTripLog(trip)}
+        onOpen={() => onOpenTrip(trip.id)}
         leading={
           <TileCheckbox
             tile={<IconTile icon={look.icon} hue={look.hue} />}
@@ -679,26 +678,6 @@ function TripLogsPanel({
           {!isNarrow && sheet}
         </>
       )}
-
-      <TripLogViewDialog
-        open={viewingTripLog != null}
-        onClose={() => setViewingTripLog(null)}
-        tripLog={viewingTripLog}
-        customFieldDefs={customFieldDefs}
-        onMediaChanged={onQuotaChanged}
-        onOpenPlace={(placeId) => {
-          setViewingTripLog(null);
-          onOpenPlace(placeId);
-        }}
-        onEdit={() => {
-          setEditingTripLog(viewingTripLog);
-          setViewingTripLog(null);
-        }}
-        onDeleted={() => {
-          onRefetchTripLogs();
-          onQuotaChanged();
-        }}
-      />
 
       {/* Mounted while editing and hidden (not unmounted) while a coordinate is
           picked on the map, so the form survives the trip there and back. */}
