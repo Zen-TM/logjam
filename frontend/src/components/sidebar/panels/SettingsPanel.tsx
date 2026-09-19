@@ -180,8 +180,7 @@ function SettingsPanel({
         <p className={classes.state}>Loading…</p>
       ) : (
         <SwitchRow
-          title="Save a GeoPDF as soon as it is made"
-          description="This browser only."
+          title="Download GeoPDFs automatically when they finish generating"
           checked={autoDownloadGeoPdfs}
           disabled={autoDownloadSaving}
           onChange={handleToggleAutoDownload}

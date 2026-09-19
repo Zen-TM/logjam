@@ -117,8 +117,7 @@ function AddCustomFieldForm({
           <span className={classes.groupLabel}>Type</span>
           <span>{customFieldTypeName(type)}</span>
           <p className={classes.note}>
-            An attribute's type can't change once it exists — its answers are already
-            stored in that shape.
+            You can't change an attribute's type after it's been created.
           </p>
         </div>
       ) : (

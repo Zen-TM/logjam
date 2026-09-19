@@ -377,15 +377,15 @@ function AttributeDialog({
   );
 }
 
-/** What changing this does to the rows that already answered it. Never a
- *  warning: the values are keyed by something a rename does not move, so they
- *  survive every edit this dialog can make. */
+/** How much of the user's own data already answers this. A statement, not a
+ *  warning: the values are keyed by something no edit here moves, so nothing
+ *  this dialog can do will lose them. */
 function impactSentence(count: number | null, rowNoun: string): string {
   if (count === null) return `Checking how many ${rowNoun}s use it…`;
-  if (count === 0) return `No ${rowNoun} has a value for it yet.`;
+  if (count === 0) return `No ${rowNoun} has a value for this ${ATTRIBUTE_NOUN.one} yet.`;
   return `${count} ${count === 1 ? rowNoun : `${rowNoun}s`} ${
     count === 1 ? "has" : "have"
-  } a value for it. Every change here keeps them.`;
+  } a value for this ${ATTRIBUTE_NOUN.one}.`;
 }
 
 export default CustomFieldSection;
