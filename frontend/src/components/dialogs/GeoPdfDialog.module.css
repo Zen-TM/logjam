@@ -133,6 +133,43 @@
   grid-row: 3;
 }
 
+/* On a phone the compass rose stops being a rose: three columns leave the east
+   and west fields 56px wide for a 95px longitude, so "150.371376" reads as
+   "150.3" and the user cannot see the boundary they are about to export. The
+   shape is worth less than the number, so it becomes one column, still walked
+   round the compass — north, west, east, south — with the pivot beneath the
+   edges it moves them about. */
+@media (max-width: 768px) {
+  .extentGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .extentNorth,
+  .extentWest,
+  .extentEast,
+  .extentSouth,
+  .extentCenter {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  /* The four edges stay together and keep their compass order; the pivot, which
+     is about all four, follows them rather than splitting west from east. */
+  .extentNorth { order: 1; }
+  .extentWest  { order: 2; }
+  .extentEast  { order: 3; }
+  .extentSouth { order: 4; }
+
+  .extentCenter {
+    order: 5;
+    align-items: start;
+  }
+
+  .extentField > input {
+    text-align: left;
+  }
+}
+
 .pivotLabel {
   display: inline-flex;
   align-items: center;

@@ -78,7 +78,7 @@ Single breakpoint: **`max-width: 768px`**, the canonical source being `useIsMobi
 - **z-index contract (don't break):** bottom sheet `z-index: 4`, backdrop `3`, and the mobile NavRail **must be above the sheet (`z-index: 5`)**. The sheet is bottom-anchored above the nav (`bottom: var(--bottom-nav-height)`); its drag translate sweeps its bottom edge *over* the nav region, so the nav only stays visible/tappable because it paints on top. Lowering the nav's z-index silently traps the user in whatever panel is open.
 - **Dialogs** use the kit `Dialog` (`DESIGN.md` §6): `size="large"` fills a narrow screen from its own CSS and `size="small"` stays centred, so no `isMobile` is passed. A multi-column grid inside one collapses to a single column in that dialog's own `@media (max-width: 768px)` block.
 - **Map-pick flows** (coord pick, area/bbox/extent select): App passes `collapseToPeek` to SidebarPanel so the sheet drops to peek and the map is reachable; dialog-initiated picks already hide their own dialog.
-- **Heavy authoring tools** (GeoPDF, topo settings, CSV import) are desktop-first: `fullScreen` + `overflow-x` on dense grids + a "best on a larger screen" note, **not** full reflow.
+- **Heavy authoring tools** (GeoPDF, topo settings, CSV import) are desktop-first: dense grids and a "best on a larger screen" note, **not** full reflow — but desktop-first buys a cramped layout, never an unreadable value. A field whose `scrollWidth` exceeds its `clientWidth` is hiding the user's own data and gets a narrow-width rule of its own (DESIGN.md §5; `GeoPdfDialog.module.css` is the worked example).
 - Use `100dvh` (not `100vh`) for full-height containers — mobile address-bar resize.
 
 ### Date-only values format with `timeZone: "UTC"`
