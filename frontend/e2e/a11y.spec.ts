@@ -198,6 +198,31 @@ test.describe("desktop", () => {
     await page.keyboard.press("Escape");
   });
 
+  test("a selection of places, and what can be done with it", async ({ page }) => {
+    await openApp(page);
+    await page.getByRole("button", { name: "Places", exact: true }).click();
+    const list = page.locator("aside");
+    await expect(list.locator("[data-place-id]").first()).toBeVisible({ timeout: 15_000 });
+
+    // The tile IS the checkbox (DESIGN.md §7), and the bar replaces the rail.
+    await list.getByRole("checkbox").first().click();
+    await list.getByRole("button", { name: "Share or export" }).click();
+
+    const dialog = page.getByRole("dialog", { name: /place/ });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole("heading", { name: "Export" })).toBeVisible();
+    await expectNoViolations(page, "dialog");
+
+    // The destructive verb confirms, and says what goes and what stays.
+    await dialog.getByRole("button", { name: /^Delete / }).click();
+    const confirm = page.getByRole("alertdialog");
+    await expect(confirm).toBeVisible();
+    await expect(confirm).toContainText("stay in your logbook");
+    await expectNoViolations(page, "[role='alertdialog']");
+    await page.keyboard.press("Escape");
+    await expect(confirm).toBeHidden();
+  });
+
   test("the Inbox, a row menu and a selection", async ({ page }) => {
     await openApp(page);
     await page.getByRole("button", { name: /^Inbox/ }).click();
