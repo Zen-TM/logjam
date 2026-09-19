@@ -11,12 +11,18 @@ export default defineConfig({
   testDir: "./e2e",
   // An axe walk is not a user interaction, and 30s (Playwright's default) is a
   // UI-latency bound, not an analysis one. The a11y spec runs several full
-  // `analyze()` passes per test over the heaviest pages in the app — Places
-  // with 37 places, Logs with hundreds of trips — and with four workers sharing
-  // one machine those two crossed 30s while every other test finished inside
-  // 27s (2026-09-17). They pass in isolation at ~20s, so the cap was measuring
-  // the machine's spare capacity rather than the app. Raised rather than
-  // retried: a retry would hide a real failure to make a loaded box look green.
+  // `analyze()` passes per test over the heaviest pages in the app, and with
+  // four workers sharing one machine those crossed 30s while every other test
+  // finished inside 27s (2026-09-17). Raised rather than retried: a retry would
+  // hide a real failure to make a loaded box look green.
+  //
+  // What that raise papered over, found 2026-09-19: the cost is the LIST, not
+  // the machine. axe is per-element, so walking Places charged 7.4s for 311
+  // rows of one repeated component against 0.17s for two, with the same result
+  // — and the dev account had grown from the 37 places the spec was written
+  // against. The cases narrow their list before walking it now (e2e/CLAUDE.md),
+  // which took Places from 51.7s to 13.5s. The 60s cap stays as headroom, not
+  // as the fix.
   timeout: 60_000,
   fullyParallel: true,
   forbidOnly: !!process.env.CI,

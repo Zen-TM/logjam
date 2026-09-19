@@ -177,7 +177,21 @@ test.describe("desktop", () => {
   test("Places, its filter sheet and a row menu", async ({ page }) => {
     await openApp(page);
     await page.getByRole("button", { name: "Places", exact: true }).click();
-    await expect(page.locator("[data-place-id]").first()).toBeVisible({ timeout: 15_000 });
+    const aside = page.locator("aside");
+    await expect(aside.locator("[data-place-id]").first()).toBeVisible({ timeout: 15_000 });
+
+    // NARROW THE LIST BEFORE WALKING IT. axe is per-element, and this account
+    // holds 311 places whose rows are one component repeated — so the walk
+    // answers the same question 311 times and charges 7.4s for it against 0.17s
+    // for two rows, with an identical result. Three walks of that put the case
+    // at 51.7s alone and over the 60s cap under any parallel load; it is the
+    // seed growing from 37 places, not the app, that was failing it. Everything
+    // the case is about survives the search: the hero, both chip rails, the
+    // sort-and-filter button, a row and its menu.
+    await aside.getByRole("button", { name: /^Search/ }).click();
+    await aside.getByRole("searchbox").first().fill("claustral");
+    await expect(aside.getByRole("radio", { name: /^Any type/ })).toBeVisible();
+    await expect.poll(() => aside.locator("[data-place-id]").count()).toBeLessThan(10);
     await expectNoViolations(page, "aside");
 
     await page.getByRole("button", { name: /^Sort and filter/ }).click();
@@ -498,6 +512,49 @@ test.describe("desktop", () => {
     await expect(dialog).toHaveCount(0);
   });
 
+  test("the importer: the drop zone, the column map and the confirm", async ({ page }) => {
+    await openApp(page);
+    await page.getByRole("button", { name: "Places", exact: true }).click();
+    await page.getByRole("button", { name: /^Add/ }).first().click();
+    await page.getByRole("menuitem", { name: "Import from file" }).click();
+
+    const dialog = page.locator("dialog[open]");
+    await expect(dialog.getByRole("heading", { name: "Import data" })).toBeVisible();
+    // Nothing dropped yet: the zone is a real <button>, not a div with a click.
+    await expect(dialog.getByRole("button", { name: /^Drop a CSV here/ })).toBeVisible();
+    await expectNoViolations(page, "dialog");
+
+    // The file goes through the hidden input the zone drives, which is the same
+    // path a click-to-browse takes. The fixture is synthetic (`__fixtures__`).
+    await dialog
+      .locator("input[type=file]")
+      .setInputFiles(new URL("./__fixtures__/places-sample.csv", import.meta.url).pathname);
+    await expect(dialog.getByRole("heading", { name: /^Place columns/ })).toBeVisible({
+      timeout: 15_000,
+    });
+    await expectNoViolations(page, "dialog");
+
+    // Every row here is new, so the REVIEW step is skipped rather than shown
+    // empty: a page with no decisions on it is a click asking the user to agree
+    // that there was nothing to do (DESIGN.md §1).
+    await dialog.getByRole("button", { name: "Next", exact: true }).click();
+    await expect(dialog.getByRole("heading", { name: "Confirm import" })).toBeVisible();
+    await expect(dialog).toContainText("3 place rows ready to import");
+    await expectNoViolations(page, "dialog");
+
+    // The merge policy is a row that opens a SUB-VIEW, never an accordion
+    // (DESIGN.md §6); its eight switches are named by the field each decides.
+    await dialog.getByRole("button", { name: /^Merge settings/ }).click();
+    await expect(dialog.getByRole("heading", { name: "Merge settings" })).toBeVisible();
+    await expect(dialog.getByRole("switch", { name: "V grade" })).toBeVisible();
+    await expectNoViolations(page, "dialog");
+
+    // Escape backs out of the sub-view, not out of the dialog — and nothing is
+    // imported: this case never presses Import, so it writes no places.
+    await page.keyboard.press("Escape");
+    await expect(dialog.getByRole("heading", { name: "Confirm import" })).toBeVisible();
+  });
+
   test("the Layers popover", async ({ page }) => {
     await openApp(page);
     await page.getByRole("button", { name: "Layers", exact: true }).click();
@@ -519,6 +576,31 @@ test.describe("narrow web", () => {
     await page.getByRole("button", { name: /^More/ }).click();
     await expect(page.getByRole("menu", { name: "More pages" })).toBeVisible();
     await expectNoViolations(page, "[role='menu']");
+  });
+
+  test("a form dialog filling the phone's screen", async ({ page }) => {
+    await openApp(page);
+    await page.getByRole("button", { name: "Places", exact: true }).click();
+    const sheet = page.getByRole("complementary", { name: "Places" });
+    await expect(sheet.locator("[data-place-id]").first()).toBeVisible({ timeout: 15_000 });
+
+    // `size="large"` fills a narrow screen from the kit's own CSS — a different
+    // rule from the centred desktop dialog, and one axe had never walked.
+    await sheet.getByRole("button", { name: "Claustral Canyon", exact: true }).click();
+    // The sheet is named after the page it holds, so opening a place RENAMES the
+    // landmark — hold it by role from here, not by the name it used to have.
+    const page_ = page.locator("aside");
+    await expect(page.getByRole("complementary", { name: "Claustral Canyon" })).toBeVisible();
+    await page_.getByRole("button", { name: /^Actions for / }).click();
+    await page.getByRole("menuitem", { name: "Edit place" }).click();
+    const form = page.getByRole("dialog", { name: "Edit place" });
+    await expect(form).toBeVisible();
+    await expectNoViolations(page, "dialog");
+
+    // It really is full-bleed here, rather than a desktop dialog squeezed.
+    const box = (await form.boundingBox())!;
+    expect(box.width).toBe(390);
+    await page.keyboard.press("Escape");
   });
 
   test("the bottom sheet is a named landmark whose height the keyboard sets", async ({ page }) => {
