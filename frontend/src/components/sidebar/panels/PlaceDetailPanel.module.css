@@ -22,6 +22,27 @@
   gap: 8px;
 }
 
+/* The type, as a fact in its own glyph and colour. */
+.identity {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--theme-text-primary);
+}
+
+.typeGlyph {
+  color: var(--tile-hue, var(--theme-accent));
+  flex-shrink: 0;
+}
+
+.meta {
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--theme-text-muted);
+}
+
 /* A list of FACTS: label left, answer right, a hairline between. Transparent
    and flat on purpose — Logjam GPS's rule is that a recorded attribute is a
    table row while a decision is a card, and giving these a surface made them
@@ -116,54 +137,4 @@
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-}
-
-/* A caveat, not a failure: the warning hue at the edge, the words in the text
-   colour (warning as text on this fill measures 3.8:1 — DESIGN.md §9). */
-.safety {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 8px 10px;
-  border: 1px solid color-mix(in srgb, var(--theme-warning) 45%, transparent);
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--theme-warning) 12%, var(--theme-primary));
-}
-
-.safetyIcon {
-  flex-shrink: 0;
-  margin-top: 2px;
-  color: var(--theme-warning);
-}
-
-.safetyText {
-  flex: 1;
-  font-size: var(--font-xs);
-  line-height: 1.4;
-}
-
-/* The track is a FILE, so its name is an anchor: a real link keeps
-   middle-click and "save as", which a button that fabricates a download does
-   not (the same call `WayDetailPanel` makes for a way's file). */
-.trackRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-height: var(--control-lg);
-}
-
-.trackLink {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  font-size: var(--font-sm);
-}
-
-.trackName {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }

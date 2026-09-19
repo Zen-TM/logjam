@@ -105,8 +105,10 @@ export function Row({
   trailing,
   footer,
   onOpen,
+  href,
+  download,
+  external = false,
   selected = false,
-  highlighted = false,
   accentEdge = false,
   disabled = false,
   className,
@@ -125,9 +127,17 @@ export function Row({
    *  "Download again"). */
   footer?: ReactNode;
   onOpen?: () => void;
+  /**
+   * The row IS a link: a file to download, a page to open. Same anatomy and
+   * the same stretched hit area as `onOpen`, but an anchor — so middle-click,
+   * "save as" and "open in a new tab" all work, which a button that
+   * fabricates a navigation throws away. Mutually exclusive with `onOpen`;
+   * `download` names the saved file, and `external` opens a new tab safely.
+   */
+  href?: string;
+  download?: string;
+  external?: boolean;
   selected?: boolean;
-  /** Lit from outside — its pin is hovered on the map. */
-  highlighted?: boolean;
   /** An accent edge down the left side: a property of the row, such as unread,
    *  that must still show while the row is also selected. Drawn as an inset
    *  shadow, so the row's box does not change size when it comes and goes. */
@@ -141,14 +151,23 @@ export function Row({
     <div
       className={[classes.row, className].filter(Boolean).join(" ")}
       data-selected={selected}
-      data-highlighted={highlighted}
       data-accent-edge={accentEdge}
       data-disabled={disabled}
       {...rest}
     >
       {leading != null && <div className={classes.leading}>{leading}</div>}
       <div className={classes.main}>
-        {onOpen ? (
+        {href ? (
+          <a
+            className={classes.open}
+            href={href}
+            download={download}
+            {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+            aria-describedby={describedBy}
+          >
+            <span className={classes.title}>{title}</span>
+          </a>
+        ) : onOpen ? (
           <button
             type="button"
             className={classes.open}

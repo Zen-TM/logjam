@@ -12,18 +12,23 @@
 // Which verbs it offers is `placeVerbs` (placesModel.ts), not this file's
 // judgement — the same rule `wayActions.ts` holds for ways, so a place's row
 // and its page cannot drift into disagreeing about what can be done with it.
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, type CSSProperties } from "react";
 import {
+  Activity,
+  Check,
+  Copy,
   CopyPlus,
   EllipsisVertical,
+  ExternalLink,
+  Link as LinkIcon,
   Link2Off,
   LocateFixed,
   MapIcon,
+  MapPin,
   MapPinned,
   Pencil,
   Share2,
   Trash2,
-  TriangleAlert,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -66,7 +71,6 @@ import {
   ownerUsername,
 } from "../../../placeUtils";
 import PlaceSlideshow from "../../media/PlaceSlideshow";
-import TrackIcon from "../../media/TrackIcon";
 import { placeTypeLucideIcon } from "./placeTypeIcon";
 import { tripTypeLook } from "./tripTypeIcon";
 import { placeVerbs, type PlaceVerbId } from "./placesModel";
@@ -123,6 +127,16 @@ function displayValue(def: TripLogCustomFieldDef, raw: unknown): string | null {
   if (text == null) return null;
   const unit = systemFieldDef(def.key)?.unit;
   return unit ? `${text} ${unit}` : text;
+}
+
+/** The site a source points at, for the row's second line. A URL the parser
+ *  refuses is not shown rather than guessed at. */
+function hostOf(url: string): string | undefined {
+  try {
+    return new URL(url).host;
+  } catch {
+    return undefined;
+  }
 }
 
 // Grammatical list: "a", "a and b", "a, b, and c".
@@ -200,9 +214,6 @@ function PlaceDetailPanel({
 }) {
   const toast = useToast();
   const [showEdit, setShowEdit] = useState(false);
-  const [safetyDismissed, setSafetyDismissed] = useState(
-    () => localStorage.getItem("logjam.safetyDismissed") === "1",
-  );
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   // Copy and Remove shipped with NO confirm while plain Remove had one — the
   // more consequential button asking less. `copyAndRemoveConfirm` is the same
@@ -214,6 +225,7 @@ function PlaceDetailPanel({
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [trackToDelete, setTrackToDelete] = useState<MediaItem | null>(null);
   const [deletingTrack, setDeletingTrack] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const [tripLogs, setTripLogs] = useState<TTripLog[]>([]);
   const [placeMedia, setPlaceMedia] = useState<MediaItem[]>([]);
@@ -244,6 +256,7 @@ function PlaceDetailPanel({
     [place?.foreignFields],
   );
   const placeType = placeTypes.find((type) => type.id === place?.placeTypeId);
+  const TypeGlyph = placeTypeLucideIcon(placeType?.iconKey ?? "map-pin");
   const placeTypeName = placeType?.name ?? "this type";
 
   /** What this KIND of place records, and what this one answered. Only the
@@ -376,6 +389,24 @@ function PlaceDetailPanel({
   // The place is definitely there from here down; keep a narrowed binding so
   // the callbacks below don't each have to re-check it.
   const current = place;
+
+  const coordinates = `${current.latitude.toFixed(4)}, ${current.longitude.toFixed(4)}`;
+
+  /** The one thing a coordinate is FOR: getting it into whatever the user is
+   *  navigating with. The glyph answers for two seconds — a toast for a copy
+   *  is a notification about something the user is watching happen. */
+  async function handleCopyCoordinates() {
+    try {
+      await navigator.clipboard.writeText(coordinates);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      // A browser that refuses the clipboard (no permission, no secure
+      // context) must say so rather than looking like it worked.
+      console.error(err);
+      toast.error("Couldn't copy the coordinates.");
+    }
+  }
 
   // NO `mediaLeftBehind`: whether photos come is the account's remembered
   // preference and this app has no switch for it, so the confirm promises
@@ -636,59 +667,42 @@ function PlaceDetailPanel({
         <div className={classes.body}>
           {visualMedia.length > 0 && <PlaceSlideshow media={visualMedia} />}
 
-          {/* A caveat true of the whole app, kept here until the operator says
-              otherwise (DESIGN.md §13). Dismissed once, for good. */}
-          {!safetyDismissed && (
-            <div className={classes.safety} role="note">
-              <TriangleAlert size={16} className={classes.safetyIcon} aria-hidden />
-              <span className={classes.safetyText}>
-                Data is user-generated and may be inaccurate or outdated. Not a substitute
-                for your own navigation, judgement, or rescue planning.
-              </span>
-              <IconButton
-                icon={X}
-                label="Dismiss this warning"
-                size={14}
-                onClick={() => {
-                  localStorage.setItem("logjam.safetyDismissed", "1");
-                  setSafetyDismissed(true);
-                }}
-              />
-            </div>
+          {/* WHAT IT IS, in the type's own glyph and colour — a fact, not a
+              field, so it is a line of text rather than a row in a table with
+              the word "Type" beside it (operator, 2026-09-19). The alternative
+              names and who it is shared with read the same way. */}
+          {/* The hue goes in as a custom property the stylesheet reads, never
+              as an inline colour (DESIGN.md §9). */}
+          <p
+            className={classes.identity}
+            style={{ "--tile-hue": placeType?.color } as CSSProperties}
+          >
+            <TypeGlyph size={16} aria-hidden className={classes.typeGlyph} />
+            {placeType?.name ?? "Unknown type"}
+          </p>
+          {current.altNames.length > 0 && (
+            <p className={classes.meta}>Also known as {current.altNames.join(", ")}</p>
           )}
+          {sharedWithNode != null && <p className={classes.meta}>Shared with {sharedWithNode}</p>}
 
-          {/* WHAT IT IS, and WHERE. The two facts every place has, whatever
-              its type records (Logjam GPS's overview makes the same call —
-              promoting a type's own numbers up here made "Rating" a second
-              name for a field labelled Quality). */}
-          <dl className={classes.table}>
-            <div className={classes.tableRow}>
-              <dt>Type</dt>
-              <dd>{placeType?.name ?? "Unknown"}</dd>
-            </div>
-            <div className={classes.tableRow}>
-              <dt>Position</dt>
-              <dd className={classes.figure}>
-                {current.latitude.toFixed(4)}, {current.longitude.toFixed(4)}
-              </dd>
-            </div>
-            {current.altNames.length > 0 && (
-              <div className={classes.tableRow}>
-                <dt>Also known as</dt>
-                <dd>{current.altNames.join(", ")}</dd>
-              </div>
-            )}
-            {sharedWithNode != null && (
-              <div className={classes.tableRow}>
-                <dt>Shared with</dt>
-                <dd>{sharedWithNode}</dd>
-              </div>
-            )}
-          </dl>
+          {/* WHERE IT IS, as the thing people actually do with it: copy the
+              coordinates into whatever they are navigating with. */}
+          <Row
+            leading={<IconTile icon={MapPin} hue="var(--theme-accent)" />}
+            title={coordinates}
+            subtitle="Latitude, longitude"
+            trailing={
+              <IconButton
+                icon={copied ? Check : Copy}
+                label={`Copy the coordinates of ${current.name}`}
+                onClick={() => void handleCopyCoordinates()}
+              />
+            }
+          />
 
           {attributes.length > 0 && (
             <section className={classes.section}>
-              <SectionHeader title={`What this ${placeTypeName.toLowerCase()} records`} />
+              <SectionHeader title={`This ${placeTypeName.toLowerCase()}\u2019s attributes`} />
               <dl className={classes.table}>
                 {attributes.map(({ def, text }) => (
                   <div key={def.key} className={classes.tableRow}>
@@ -709,47 +723,54 @@ function PlaceDetailPanel({
 
           {placeSources(current).length > 0 && (
             <section className={classes.section}>
-              <SectionHeader title="Sources" />
-              <ul className={classes.list}>
-                {placeSources(current).map(([label, url], i) => (
-                  <li key={i}>
-                    {/* FEUI-012: only render http(s) as a link — a non-http
-                        scheme (e.g. from data saved before the save-time check
-                        existed) falls back to plain text. */}
-                    {url && isHttpUrl(url) ? (
-                      <a href={url} target="_blank" rel="noopener noreferrer">
-                        {label}
-                      </a>
-                    ) : (
-                      label
-                    )}
-                  </li>
-                ))}
-              </ul>
+              <SectionHeader title="Sources" count={placeSources(current).length} />
+              {placeSources(current).map(([label, url], index) => {
+                // FEUI-012: only http(s) becomes a link — a non-http scheme
+                // (from data saved before the save-time check existed) is a
+                // row that says what it says and goes nowhere.
+                const linkable = Boolean(url) && isHttpUrl(url);
+                return (
+                  <Row
+                    key={index}
+                    leading={
+                      <IconTile
+                        icon={linkable ? ExternalLink : LinkIcon}
+                        hue="var(--theme-bonus-1)"
+                      />
+                    }
+                    title={label}
+                    subtitle={linkable ? hostOf(url) : undefined}
+                    description={linkable ? "Opens in a new tab" : undefined}
+                    href={linkable ? url : undefined}
+                    external={linkable}
+                  />
+                );
+              })}
             </section>
           )}
 
           {track && (
             <section className={classes.section}>
               <SectionHeader title="Track" />
-              <div className={classes.trackRow}>
-                <a
-                  className={classes.trackLink}
-                  href={track.displayUrl}
-                  download={track.filename}
-                >
-                  <TrackIcon color={track.color} size={18} />
-                  <span className={classes.trackName}>{track.filename}</span>
-                </a>
-                {isOwnedPlace && (
-                  <IconButton
-                    icon={Trash2}
-                    label={`Delete the track ${track.filename}`}
-                    tone="danger"
-                    onClick={() => setTrackToDelete(track)}
-                  />
-                )}
-              </div>
+              {/* A FILE, so the row is a real link (middle-click, save as) —
+                  wearing the same glyph and hue a track wears on Ways. */}
+              <Row
+                leading={<IconTile icon={Activity} hue="var(--hue-track)" />}
+                title={track.filename}
+                subtitle="Download"
+                href={track.displayUrl}
+                download={track.filename}
+                trailing={
+                  isOwnedPlace ? (
+                    <IconButton
+                      icon={Trash2}
+                      label={`Delete the track ${track.filename}`}
+                      tone="danger"
+                      onClick={() => setTrackToDelete(track)}
+                    />
+                  ) : undefined
+                }
+              />
             </section>
           )}
 

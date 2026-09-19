@@ -50,7 +50,8 @@
 .grip {
   width: 36px;
   height: 4px;
-  border-radius: var(--radius-full);
+  /* A pill, not an ellipse: `--radius-full` is 50% and this box is 9:1. */
+  border-radius: var(--radius-pill);
   background-color: color-mix(in srgb, var(--theme-text-primary) 30%, transparent);
 }
 

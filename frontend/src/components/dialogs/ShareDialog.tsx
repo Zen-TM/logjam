@@ -210,7 +210,7 @@ function ShareDialog({
                   onOpen={() => void handleShare(friend)}
                   disabled={busyId !== null}
                   trailing={
-                    <span className={classes.grantMark} aria-hidden>
+                    <span className={classes.grantMark} data-mark aria-hidden>
                       {busyId === friend.id ? <Check size={16} /> : <Plus size={16} />}
                     </span>
                   }

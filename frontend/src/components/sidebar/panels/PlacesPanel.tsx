@@ -91,7 +91,6 @@ const STATUS_HUE: Record<PlaceStatus, string> = {
 };
 
 const ANY_TYPE = "any";
-const REVEAL_MS = 2000;
 
 type Listed = { place: TPlace; owned: boolean; status: PlaceStatus };
 
@@ -135,8 +134,6 @@ function PlacesPanel({
   setSelectedPlaceID,
   setActivePanel,
   onHoverPlace,
-  revealPlaceId,
-  onRevealConsumed,
   onMakeMap,
   onSharePlaces,
   onExpandSheet,
@@ -171,8 +168,6 @@ function PlacesPanel({
   /** The row under the pointer, so its pin lights on the map. */
   onHoverPlace: (id: string | null) => void;
   /** A pin was pressed while this list is open: scroll to its row. */
-  revealPlaceId: string | null;
-  onRevealConsumed: () => void;
   onMakeMap: (bounds: RegionBbox, kind: MapKind) => void;
   onSharePlaces: (ids: string[]) => void;
   /** Narrow web: grow the bottom sheet to full. */
@@ -188,11 +183,9 @@ function PlacesPanel({
   const { sheetOpen, openSheet } = usePanelSheet({ onOpenChange: onFiltersOpenChange, onExpandSheet });
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const selectionAnchor = useRef<string | null>(null);
-  const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<string[] | null>(null);
   const [deleting, setDeleting] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
-  const listRef = useRef<HTMLDivElement>(null);
 
   // Status axes set by an older build that the rail cannot show are rewritten
   // to the chip they are nearest, so nothing narrows the list with no chip lit.
@@ -301,17 +294,6 @@ function PlacesPanel({
     root.addEventListener("keydown", onKeyDown);
     return () => root.removeEventListener("keydown", onKeyDown);
   }, [selecting, selectableIds, clearSelection]);
-
-  // ── A pin pressed on the map scrolls to its row ──────────────────────
-  useEffect(() => {
-    if (!revealPlaceId) return;
-    const row = listRef.current?.querySelector<HTMLElement>(`[data-place-id="${revealPlaceId}"]`);
-    row?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-    setHighlightedId(revealPlaceId);
-    onRevealConsumed();
-    const timer = window.setTimeout(() => setHighlightedId(null), REVEAL_MS);
-    return () => window.clearTimeout(timer);
-  }, [revealPlaceId, onRevealConsumed]);
 
   // ── Verbs ─────────────────────────────────────────────────────────────
   const openPlace = (place: TPlace) => {
@@ -597,7 +579,7 @@ function PlacesPanel({
         />
       </div>
     ) : (
-      <div ref={listRef} className={classes.list}>
+      <div className={classes.list}>
         {visible.map((row) => {
           const { place, owned, status } = row;
           const isSelected = selectedIds.includes(place.id);
@@ -616,7 +598,6 @@ function PlacesPanel({
               subtitle={subtitle || undefined}
               description={PLACE_STATUS_LABELS[status]}
               selected={isSelected}
-              highlighted={highlightedId === place.id}
               disabled={selecting && !owned}
               onOpen={() => openPlace(place)}
               onPointerEnter={() => onHoverPlace(place.id)}

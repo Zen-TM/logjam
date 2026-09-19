@@ -27,11 +27,9 @@
 /* Only a row that DOES something answers the pointer: one that opens (`onOpen`
    lays the stretched button over the card) or one that can be picked. A Stats
    row is a read-out, and lighting its edge on hover promised a press that does
-   nothing (operator, 2026-09-16). `highlighted` is lit from outside, so it
-   stands whatever the row can do. */
+   nothing (operator, 2026-09-16). */
 .row:has(.open):hover,
-.row:has(.pick):hover,
-.row[data-highlighted="true"] {
+.row:has(.pick):hover {
   border-color: color-mix(in srgb, var(--theme-accent) 70%, var(--theme-bonus-2));
 }
 
@@ -88,8 +86,11 @@
 
 /* The row's 4px end padding is sized for a trailing ⋯, whose icon-button box
    carries its own whitespace. A switch has none, so it stands off the edge
-   itself. */
-.trailing > [role="switch"]:last-child {
+   itself — and neither does a plain MARK (the + at the end of a row whose
+   whole card is the button), which sat hard against the card's edge on both
+   share surfaces until this covered it too (operator, 2026-09-19). */
+.trailing > [role="switch"]:last-child,
+.trailing > [data-mark]:last-child {
   margin-right: 8px;
 }
 

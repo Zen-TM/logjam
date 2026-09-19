@@ -86,8 +86,6 @@ function SidebarPanel({
   onOpenFiltersConsumed,
   onFiltersOpenChange,
   onHoverPlace,
-  revealPlaceId,
-  onRevealConsumed,
   onMakeMap,
   onSharePlaces,
   onFlyToPlace,
@@ -187,8 +185,6 @@ function SidebarPanel({
   onOpenFiltersConsumed: () => void;
   onFiltersOpenChange: (open: boolean) => void;
   onHoverPlace: (id: string | null) => void;
-  revealPlaceId: string | null;
-  onRevealConsumed: () => void;
   onMakeMap: (bounds: RegionBbox, kind: MapKind) => void;
   onSharePlaces: (ids: string[]) => void;
   onFlyToPlace: (lat: number, lng: number) => void;
@@ -378,8 +374,6 @@ function SidebarPanel({
             setSelectedPlaceID={setSelectedPlaceID}
             setActivePanel={setActivePanel}
             onHoverPlace={onHoverPlace}
-            revealPlaceId={revealPlaceId}
-            onRevealConsumed={onRevealConsumed}
             onMakeMap={onMakeMap}
             onSharePlaces={onSharePlaces}
             onExpandSheet={expandSheetToFull}

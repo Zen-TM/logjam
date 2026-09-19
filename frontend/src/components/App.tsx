@@ -218,16 +218,13 @@ function App() {
   const [selectedAreaPlaceIds, setSelectedAreaPlaceIds] = useState<string[]>(
     [],
   );
-  // Page ↔ map: a sheet beside the list pushes the map's chrome over, the row
-  // under the pointer lights its pin, and a pin pressed while the list is open
-  // scrolls to its row instead of leaving the list. Any page's sheet, not just
+  // Page ↔ map: a sheet beside the list pushes the map's chrome over and the
+  // row under the pointer lights its pin. Any page's sheet, not just
   // Places': a page is unmounted when it closes and `usePanelSheet` clears this
   // on the way out, so the panel it belongs to never needs naming here — naming
   // it is what left Logs' date sheet out (operator, 2026-09-16).
   const [sidebarSheetOpen, setSidebarSheetOpen] = useState(false);
   const [placeHighlight] = useState(createPlaceHighlight);
-  const [revealPlaceId, setRevealPlaceId] = useState<string | null>(null);
-  const consumeReveal = useCallback(() => setRevealPlaceId(null), []);
 
   // Topo dialog
   const [showTopo, setShowTopo] = useState(false);
@@ -1453,8 +1450,6 @@ function App() {
           onSharePlaces={setSelectedAreaPlaceIds}
           onMakeMap={makeMap}
           onHoverPlace={placeHighlight.set}
-          revealPlaceId={revealPlaceId}
-          onRevealConsumed={consumeReveal}
           onFiltersOpenChange={setSidebarSheetOpen}
           onRefetch={refetch}
           filters={filters}
@@ -1572,10 +1567,10 @@ function App() {
         onDrawPointDelete={routeDraft.deleteAnchorAt}
         onDrawPointInsert={routeDraft.insertAnchorAt}
         selectPlace={(id) => {
-          if (activePanel === "places") {
-            setRevealPlaceId(id);
-            return;
-          }
+          // A pin opens the place, wherever you pressed it from. It used to
+          // scroll to the row instead while the Places list was open, which
+          // made one gesture mean two things depending on a panel the user
+          // may not have been looking at (operator, 2026-09-19).
           setSelectedPlaceID(id);
           setActivePanel("place-detail");
         }}

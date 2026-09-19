@@ -352,7 +352,7 @@ function SelectedPlacesDialog({
                         setShareSearch("");
                       }}
                       trailing={
-                        <span className={classes.addMark} aria-hidden>
+                        <span className={classes.addMark} data-mark aria-hidden>
                           <Plus size={16} />
                         </span>
                       }

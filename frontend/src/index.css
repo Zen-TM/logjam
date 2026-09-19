@@ -34,6 +34,8 @@
   --radius-lg: 12px;
   --radius-xl: 16px;
   --radius-pill: 999px;
+  /* A PERCENTAGE, so it is a circle only on a square box — a wider one gets
+     an ellipse. Anything pill-shaped wants `--radius-pill`. */
   --radius-full: 50%;
 
   /* `--ink` and the `--hue-*` identity colours are scheme-independent and are
