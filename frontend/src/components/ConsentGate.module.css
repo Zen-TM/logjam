@@ -49,8 +49,11 @@
   color: var(--theme-text-muted);
 }
 
+/* `textPrimary` and underlined, not accent: accent fails 4.5:1 on a card in
+ * every scheme. Same rule and same numbers as SignIn's legal line. */
 .legal a {
-  color: var(--theme-accent);
+  color: var(--theme-text-primary);
+  text-decoration: underline;
 }
 
 .action {

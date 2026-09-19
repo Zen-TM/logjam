@@ -249,6 +249,17 @@ function pairsFor(t) {
       bg: tint(t.accent, 0.12, t.primary),
       min: 4.5,
     },
+    // The sign-in success banner: the same idea over a CARD rather than the
+    // page, at 15%. Accent as its text under it was 2.96:1 — a wash does not
+    // carry the ratio the flat page colour does, which is the whole reason this
+    // pair exists separately. Found 2026-09-19 by the a11y spec's new sign-in
+    // case, the only thing that renders the surface at all.
+    {
+      name: "textPrimary on the sign-in success banner's accent wash over a card",
+      fg: t.textPrimary,
+      bg: tint(t.accent, 0.15, t.secondary),
+      min: 4.5,
+    },
     { name: "accent edge on secondary (selected row, toggle on a card)", fg: t.accent, bg: t.secondary, min: 3 },
     {
       name: "accent glyph on its own tint (filled icon button)",

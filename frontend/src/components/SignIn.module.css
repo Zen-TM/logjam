@@ -70,8 +70,14 @@
   color: var(--theme-text-muted);
 }
 
+/* A link IN PROSE ON A CARD is `textPrimary` and underlined, never accent.
+ * Accent clears 4.5:1 on the page (4.55) and fails it on a card in all four
+ * schemes (3.63–4.05), and it sits at 1.2:1 against the muted sentence it lives
+ * in — so colour alone would not identify it either (1.4.1), which is what the
+ * underline is for. Measured: scripts/wcag-contrast.mjs, DESIGN.md §10. */
 .legal a {
-  color: var(--theme-accent);
+  color: var(--theme-text-primary);
+  text-decoration: underline;
 }
 
 /* A form's one button per line fills it: there is nothing to sit beside. */
@@ -92,7 +98,10 @@
   padding: 8px 12px;
   border-radius: var(--radius-sm);
   background-color: color-mix(in srgb, var(--theme-accent) 15%, transparent);
-  color: var(--theme-accent);
+  /* Accent as TEXT on its own 15% wash is 2.96–3.19:1 — a wash does not carry
+   * the ratio the flat page colour does. `textPrimary` on the same wash is
+   * 5.24–6.72:1, and the pair is in the contrast script under it. */
+  color: var(--theme-text-primary);
   font-size: var(--font-sm);
   text-align: center;
 }
