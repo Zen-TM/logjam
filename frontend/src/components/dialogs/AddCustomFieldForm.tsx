@@ -2,8 +2,13 @@ import type { TripLogCustomFieldType } from "@logjam/shared";
 import { CUSTOM_FIELD_TYPES } from "@logjam/shared";
 import { sanitizeNumericInput } from "../../numberInput";
 import { ErrorBanner } from "../feedback/ErrorBanner";
-import { Button, Checkbox, SectionHeader, Select, TextField } from "../../ui";
+import { Button, Checkbox, ChipRail, SectionHeader, TextField } from "../../ui";
 import classes from "./AddCustomFieldForm.module.css";
+
+/** What the user calls this shape — "Text", "Yes / No". */
+function customFieldTypeName(type: TripLogCustomFieldType): string {
+  return CUSTOM_FIELD_TYPES.find((option) => option.value === type)?.label ?? type;
+}
 
 /**
  * The attribute form, shared between PlaceDialog, TripLogDialog and Settings'
@@ -96,30 +101,40 @@ function AddCustomFieldForm({
       {/* WHAT it is, then WHERE it appears: the name is the decision being
           made, and a list of types above an empty label field asks the second
           question first. */}
-      <div className={classes.labelRow}>
-        <TextField
-          label="Label"
-          className={classes.grow}
-          value={label}
-          onChange={(event) => onLabelChange(event.target.value)}
-          onKeyDown={handleFieldKeyDown}
-          placeholder="e.g. Group size"
-          data-autofocus={asDialogBody || undefined}
-        />
-        <Select
-          label="Type"
-          value={type}
-          disabled={typeLocked}
-          hint={typeLocked ? "Fixed — answers are already stored this way." : undefined}
-          onChange={(event) => onTypeChange(event.target.value as TripLogCustomFieldType)}
-        >
-          {CUSTOM_FIELD_TYPES.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </Select>
-      </div>
+      <TextField
+        label="Label"
+        value={label}
+        onChange={(event) => onLabelChange(event.target.value)}
+        onKeyDown={handleFieldKeyDown}
+        placeholder="e.g. Group size"
+        data-autofocus={asDialogBody || undefined}
+      />
+      {typeLocked ? (
+        /* A control that cannot be operated is not a control. The type is a
+           FACT about an attribute that already has answers stored in its
+           shape, so it reads as one — the same call the built-in rows make. */
+        <div className={classes.staticField}>
+          <span className={classes.groupLabel}>Type</span>
+          <span>{customFieldTypeName(type)}</span>
+          <p className={classes.note}>
+            An attribute's type can't change once it exists — its answers are already
+            stored in that shape.
+          </p>
+        </div>
+      ) : (
+        <div className={classes.typeField}>
+          <span className={classes.groupLabel}>Type</span>
+          <ChipRail
+            label="Type"
+            options={CUSTOM_FIELD_TYPES.map((option) => ({
+              value: option.value,
+              label: option.label,
+            }))}
+            value={type}
+            onChange={onTypeChange}
+          />
+        </div>
+      )}
       {showBounds && (
         <div className={classes.boundsRow}>
           <Checkbox label="Bounded" checked={bounds.bounded} onChange={bounds.onBoundedChange} />

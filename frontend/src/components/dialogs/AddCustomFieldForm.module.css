@@ -30,7 +30,15 @@
   color: var(--theme-text-muted);
 }
 
-.labelRow,
+/* The type, as the picker it is on a new attribute and as a fact on an
+   existing one. */
+.typeField,
+.staticField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .boundsRow {
   display: flex;
   flex-wrap: wrap;

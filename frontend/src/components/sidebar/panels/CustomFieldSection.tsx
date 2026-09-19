@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { EllipsisVertical, Lock, Plus, Tag, Trash2 } from "lucide-react";
+import { EllipsisVertical, Lock, Pencil, Plus, Tag, Trash2 } from "lucide-react";
 import {
   ATTRIBUTE_NOUN,
   buildCustomFieldDef,
@@ -103,12 +103,17 @@ function CustomFieldSection({
           <p className={classes.state}>Loading…</p>
         ) : (
           <>
-            {own.length === 0 ? (
+            {own.length === 0 && (
               <p className={classes.note}>
                 Add your own {ATTRIBUTE_NOUN.one} to record on every {rowNoun} — water level,
                 say, or party size.
               </p>
-            ) : (
+            )}
+            {/* "Yours" only earns a line when there is a "Built in" opposite
+                it. Every system definition is place-scoped, so a trip's list
+                is nothing but the user's own, and a heading dividing a list
+                from nothing states a contrast that is not there. */}
+            {own.length > 0 && system.length > 0 && (
               <SectionHeader title="Yours" count={own.length} />
             )}
 
@@ -129,6 +134,15 @@ function CustomFieldSection({
                     title={def.label}
                     placement="bottom-end"
                     entries={[
+                      /* The row opens it too. The menu still names the verb:
+                         a ⋯ that holds only the destructive one is a menu
+                         you learn to avoid. */
+                      {
+                        id: "edit",
+                        label: `Edit ${ATTRIBUTE_NOUN.one}`,
+                        icon: Pencil,
+                        onSelect: () => setEditing(def),
+                      },
                       {
                         id: "delete",
                         label: `Delete ${ATTRIBUTE_NOUN.one}`,
@@ -277,10 +291,11 @@ function AttributeDialog({
       const updated = def
         ? await updateCustomField(entity, def.key, {
             label: result.def.label,
-            // The key stays put, so the bounds are the only other thing an
-            // edit may move; null clears a bound the user unticked.
-            min: result.def.min ?? null,
-            max: result.def.max ?? null,
+            // NO `min`/`max`. The edit form does not offer bounds, so it must
+            // not carry an answer about them: the server merges what it is
+            // sent (`patch.min !== undefined ? … : existing.min`), and sending
+            // the unbounded form's empty pair would have quietly stripped the
+            // range off every bounded attribute the moment its name changed.
             ...scoping,
           })
         : await createCustomField(entity, result.def, scoping);
@@ -329,14 +344,22 @@ function AttributeDialog({
         onCancel={onClose}
         adding={saving}
         error={error}
-        bounds={{
-          bounded,
-          onBoundedChange: setBounded,
-          min,
-          onMinChange: setMin,
-          max,
-          onMaxChange: setMax,
-        }}
+        /* Bounds are set when the attribute is made and not after: a range is
+           part of the shape its stored answers were accepted under, and
+           tightening one retroactively would mark values invalid that nothing
+           will ever re-ask. Editing offers the name and the scope. */
+        bounds={
+          def
+            ? undefined
+            : {
+                bounded,
+                onBoundedChange: setBounded,
+                min,
+                onMinChange: setMin,
+                max,
+                onMaxChange: setMax,
+              }
+        }
         scope={
           placeTypes && entity === "place"
             ? {
@@ -349,7 +372,7 @@ function AttributeDialog({
             : undefined
         }
       />
-      {def && <p className={classes.note}>{impactSentence(impactCount, rowNoun)}</p>}
+      {def && <p className={classes.dialogNote}>{impactSentence(impactCount, rowNoun)}</p>}
     </Dialog>
   );
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { EllipsisVertical, Merge, Plus, Trash2 } from "lucide-react";
+import { EllipsisVertical, Merge, Pencil, Plus, Trash2 } from "lucide-react";
 import {
   PLACE_TYPE_COLORS,
   PLACE_TYPE_ICON_KEYS,
@@ -152,32 +152,38 @@ function PlaceTypeSection({
                     label={`Actions for ${type.name}`}
                     title={type.name}
                     placement="bottom-end"
-                    entries={
+                    /* The row opens the editor too; the menu names the verb
+                       rather than holding only the one that destroys. A type
+                       with places in it cannot be deleted, so that half of the
+                       list is Merge or Delete, never both. */
+                    entries={[
+                      {
+                        id: "edit",
+                        label: "Edit type",
+                        icon: Pencil,
+                        onSelect: () => setEditing(type),
+                      },
                       type.placeCount > 0
-                        ? [
-                            {
-                              id: "merge",
-                              label: "Merge into another type",
-                              icon: Merge,
-                              danger: true,
-                              onSelect: () => {
-                                setMergingFrom(type);
-                                setMergeTargetId(
-                                  types.find((other) => other.id !== type.id)?.id ?? "",
-                                );
-                              },
+                        ? {
+                            id: "merge",
+                            label: "Merge into another type",
+                            icon: Merge,
+                            danger: true,
+                            onSelect: () => {
+                              setMergingFrom(type);
+                              setMergeTargetId(
+                                types.find((other) => other.id !== type.id)?.id ?? "",
+                              );
                             },
-                          ]
-                        : [
-                            {
-                              id: "delete",
-                              label: "Delete type",
-                              icon: Trash2,
-                              danger: true,
-                              onSelect: () => setDeleting(type),
-                            },
-                          ]
-                    }
+                          }
+                        : {
+                            id: "delete",
+                            label: "Delete type",
+                            icon: Trash2,
+                            danger: true,
+                            onSelect: () => setDeleting(type),
+                          },
+                    ]}
                     trigger={(props) => (
                       <IconButton
                         {...props}

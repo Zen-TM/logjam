@@ -145,7 +145,10 @@ test.describe("desktop", () => {
       .first()
       .click();
     const attrDialog = page.locator("dialog[open]");
-    await expect(attrDialog.getByLabel("Type", { exact: true })).toBeDisabled();
+    // The type is a FACT on an existing attribute, not a control that cannot
+    // be operated: no picker, and the shape it already stores in words.
+    await expect(attrDialog.getByRole("radiogroup", { name: "Type" })).toHaveCount(0);
+    await expect(attrDialog.getByText("Text", { exact: true })).toBeVisible();
     await expectNoViolations(page, "dialog");
     await page.keyboard.press("Escape");
   });

@@ -39,12 +39,21 @@
   flex-shrink: 0;
 }
 
-/* Overlapped, so three colours read as one palette rather than three settings. */
+/* Overlapped, so three colours read as one palette rather than three settings.
+   TWO rings, and neither is black or white: the inner one is the card's own
+   colour, which is what separates the three discs from each other, and the
+   outer is `--theme-text-muted`, which separates the group from the card. A
+   fixed ink cannot do this job — these are four OTHER schemes' colours drawn
+   on the scheme in force, so any one ink is invisible against some of them —
+   while the current theme's muted ink is already guaranteed against the
+   current card (`scripts/wcag-contrast.mjs`, "textMuted on secondary"), and
+   the inner ring keeps it off the fill it is outlining. */
 .swatch {
   width: 16px;
   height: 16px;
   border-radius: 50%;
   border: 1px solid var(--theme-secondary);
+  box-shadow: 0 0 0 1px var(--theme-text-muted);
 }
 
 .swatch + .swatch {
