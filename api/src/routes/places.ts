@@ -8,7 +8,11 @@ import {
   linkedPlaceIdsFor,
   resolveLinkedPlaceIds,
 } from "../lib/placeLinks";
-import { reconcileCopiedPlace, resolveCopyPlaceType } from "../lib/placeCopy";
+import {
+  reconcileCopiedPlace,
+  resolveCopyPlaceType,
+  strandValuesOnTypeChange,
+} from "../lib/placeCopy";
 import { serializeSharedPlace } from "../lib/placeVisibility";
 import { Prisma } from "@prisma/client";
 import { getParam } from "../lib/getParam";
@@ -606,16 +610,43 @@ router.patch(
       elevation,
       linkedPlaceIds,
       fieldValues,
+      placeTypeId,
     } = req.body;
+
+    // A TYPE CHANGE IS A LEGAL EDIT, here as well as on the phone's push path
+    // (routes/sync.ts). This route silently dropped `placeTypeId`, so the one
+    // client that only speaks REST — Logjam Web — offered a type picker on an
+    // existing place, answered 200, and changed nothing.
+    const typeId =
+      placeTypeId !== undefined
+        ? await resolvePlaceTypeId(user.id, placeTypeId)
+        : place.placeTypeId;
 
     // Validate any supplied coordinate or field value (PLACE-1/PLACE-2).
     // requireCoords:false — PATCH may omit fields; only validate what's present.
+    // Against the definitions of the type it is BECOMING, or a retype that also
+    // writes a value is judged by the questions it is leaving behind.
     const validationError =
       validatePlacePayload(req.body, {
         requireCoords: false,
-        defs: await defsForPlaceType(user.id, place.placeTypeId),
+        defs: await defsForPlaceType(user.id, typeId),
       }) ?? validatePlaceTextFields(req.body);
     if (validationError) throw new AppError(400, validationError);
+
+    // Values the NEW type has no definition for are PARKED in `foreignFields`
+    // rather than destroyed or left where nothing renders them (§2.6). The
+    // same call the push path makes, over the values as they will be AFTER
+    // this write, and a no-op on a same-type edit with nothing parked.
+    const stranded = await strandValuesOnTypeChange({
+      ownerId: user.id,
+      fromTypeId: place.placeTypeId,
+      toTypeId: typeId,
+      fieldValues:
+        fieldValues !== undefined
+          ? asFieldValues(fieldValues)
+          : asFieldValues(place.fieldValues),
+      foreignFields: place.foreignFields,
+    });
 
     const patchLinkIds = await resolveLinkedPlaceIds(
       user.id,
@@ -632,9 +663,13 @@ router.patch(
         ...(longitude !== undefined && { longitude }),
         ...(notes !== undefined && { notes }),
         ...(elevation !== undefined && { elevation }),
-        ...(fieldValues !== undefined && {
-          fieldValues: asFieldValues(fieldValues) as Prisma.InputJsonValue,
-        }),
+        ...(placeTypeId !== undefined && { placeTypeId: typeId }),
+        // The reconciliation overrides both, because it is derived FROM them.
+        fieldValues: stranded.fieldValues as Prisma.InputJsonValue,
+        foreignFields:
+          stranded.foreignFields.length > 0
+            ? (stranded.foreignFields as unknown as Prisma.InputJsonValue)
+            : Prisma.DbNull,
       },
     });
 
