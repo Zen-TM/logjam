@@ -598,7 +598,8 @@ and only while something is actually parked). Don't invent a palette for a menu.
 
 Some "kinds" aren't a fixed set — trip types are a seed list the user extends
 with free text. Those can't have an exhaustive map, so (see
-`src/logs/tripTypeMeta.ts`):
+`tripTypeIdentity` in `@logjam/shared`, which Logjam Web reads too;
+`src/logs/tripTypeMeta.ts` resolves it against this app's theme and Feather):
 
 - The **seeded** entries get a fixed identity, and the canonical one
   (`canyoning`) takes the scheme accent, exactly as `assetHue.region` does.
@@ -682,7 +683,7 @@ a glyph only some rows have does not shift it.
   and that is not hypothetical — it is how a "Download again" got pressed for a
   file the user had just turned down. The inbox is the only surface with these
   today (`screens/NotificationsScreen.tsx`, from
-  `notifications/notificationActions.ts`).
+  `notificationActions.ts` in `@logjam/shared`).
 - **A list a user acts on is ordered by TIME, never re-sorted by the state the
   action changes.** The notifications endpoint returns unread-first, so
   answering a row sent it to the bottom of the list mid-gesture and slid the
@@ -1106,7 +1107,7 @@ which subsystem is talking.
     - The Inbox has one, and it is a SINGLE button whose direction follows the
       selection — every row read marks them unread, anything unread marks the
       unread ones read — because the pair would be two buttons of which one is
-      always a no-op. `notifications/bulkReadAction.ts` decides it (glyph `eye` /
+      always a no-op. `bulkReadAction.ts` (`@logjam/shared`) decides it (glyph `eye` /
       `eye-off`, screen-reader label and toast from one place).
     - Account sync issues has two, because after the tabs came out its ONE list
       holds two kinds: a stuck change (Try again re-queues it) and a lost value

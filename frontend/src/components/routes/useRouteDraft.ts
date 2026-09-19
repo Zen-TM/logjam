@@ -20,6 +20,7 @@ import {
   emptyDraft,
   insertAnchor,
   moveAnchor,
+  reverseDraft,
   setFiller,
   type RouteDraft,
   type RoutePoint,
@@ -44,6 +45,9 @@ export type RouteDraftHandle = {
   moveAnchorAt: (index: number, point: RoutePoint) => void;
   deleteAnchorAt: (index: number) => void;
   insertAnchorAt: (segmentIndex: number, point: RoutePoint) => void;
+  /** Flip which way the line runs. Undoable like any other edit, which is why
+   *  it belongs here rather than being applied to the saved route. */
+  reverse: () => void;
   undo: () => void;
   reset: (
     route?: { points: RoutePoint[]; anchors?: number[] | null } | null,
@@ -134,6 +138,10 @@ export function useRouteDraft(): RouteDraftHandle {
         commit((current) => insertAnchor(current, segmentIndex, point)),
       [commit],
     ),
+    // Through `commit`, so Ctrl+Z takes it back like every other edit. The
+    // shared model flips the anchors with the geometry, which is what stops a
+    // reversed line reassigning which vertices the user placed.
+    reverse: useCallback(() => commit((current) => reverseDraft(current)), [commit]),
     undo,
     reset,
   };

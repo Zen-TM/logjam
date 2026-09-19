@@ -14,11 +14,10 @@ import { Feather } from "@expo/vector-icons";
 import { StyleSheet, Text, View } from "react-native";
 import {
   customFieldDisplayLabel,
+  railStops,
   type TripLogCustomFieldDef,
 } from "@logjam/shared";
-
-import { railStops } from "./fieldValueCoercion";
-import { formatDateKey } from "../logs/logbook";
+import { formatDateKey } from "@logjam/shared";
 import { fontSize, spacing, theme } from "../theme";
 import { Row, SegmentedControl, TextField, Toggle, type SegmentOption } from "../ui";
 

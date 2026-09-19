@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import {
+  ATTRIBUTE_NOUN,
   CANYONING_TRIP_TYPE,
   enforceCanyoningTag,
   formatTripPlaceNames,
@@ -33,7 +34,6 @@ import {
   type ChipOption,
 } from "../ui";
 import {
-  ATTRIBUTE_NOUN,
   CustomFieldList,
   useCustomFieldForm,
 } from "../customFields/CustomFieldsEditor";
@@ -44,7 +44,7 @@ import {
   withoutClearedFields,
 } from "../customFields/fieldValueCoercion";
 import { useFieldDefs } from "../customFields/useFieldDefs";
-import { formatDateKey } from "./logbook";
+import { formatDateKey } from "@logjam/shared";
 import { primaryTripType, tripTypeLabel, tripTypeMeta } from "./tripTypeMeta";
 
 /**

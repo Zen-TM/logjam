@@ -202,24 +202,25 @@ export const OSM_FEATURE_LABELS: Record<OsmFeatureKey, string> = {
   hut: "Huts / shelters",
 };
 
-// Plain-language description of the underlying OSM query for tooltip copy.
+// Plain-language description of the underlying OSM query, shown under each
+// feature's switch. Plain text: it is rendered as written, so no markdown.
 export const OSM_FEATURE_TAG_HINTS: Record<OsmFeatureKey, string> = {
-  waterway: "OSM `waterway` ways (rivers, streams, creeks, canals, drains)",
-  track: "OSM `highway=track|path|footway|bridleway|steps`",
-  road: "OSM `highway=primary|secondary|tertiary|unclassified|residential|service`",
-  building: "OSM `building=*`",
-  power: "OSM `power=line|minor_line|cable`",
-  campsite: "OSM `tourism=camp_site|caravan_site|wilderness_hut|alpine_hut`",
-  peak: "OSM `natural=peak`",
-  spring: "OSM `natural=spring`",
-  gate: "OSM `barrier=gate|lift_gate|cycle_barrier`",
-  cave: "OSM `natural=cave_entrance`",
-  bridge: "OSM `bridge=yes` ways",
-  ford: "OSM `ford=*` (water crossings)",
-  waterfall: "OSM `waterway=waterfall`",
-  trailhead: "OSM `information=guidepost` and `highway=trailhead`",
-  viewpoint: "OSM `tourism=viewpoint`",
-  hut: "OSM `tourism=alpine_hut|wilderness_hut` and `amenity=shelter`",
+  waterway: "OSM waterway ways (rivers, streams, creeks, canals, drains)",
+  track: "OSM highway=track|path|footway|bridleway|steps",
+  road: "OSM highway=primary|secondary|tertiary|unclassified|residential|service",
+  building: "OSM building=*",
+  power: "OSM power=line|minor_line|cable",
+  campsite: "OSM tourism=camp_site|caravan_site|wilderness_hut|alpine_hut",
+  peak: "OSM natural=peak",
+  spring: "OSM natural=spring",
+  gate: "OSM barrier=gate|lift_gate|cycle_barrier",
+  cave: "OSM natural=cave_entrance",
+  bridge: "OSM bridge=yes ways",
+  ford: "OSM ford=* (water crossings)",
+  waterfall: "OSM waterway=waterfall",
+  trailhead: "OSM information=guidepost and highway=trailhead",
+  viewpoint: "OSM tourism=viewpoint",
+  hut: "OSM tourism=alpine_hut|wilderness_hut and amenity=shelter",
 };
 
 // Formation list must match topo/build_svtm_formation.py SVTM_FORMATION_MU
@@ -639,15 +640,36 @@ export function rgbaCssFromHex(hex: RgbaHex): string {
   return `rgba(${r},${g},${b},${(a / 255).toFixed(3)})`;
 }
 
-/** Zoom stops {z12, z18} for a contour width given in ground metres. */
-export function contourWidthStops(widthM: number): { z12: number; z18: number } {
-  const w18 = widthM / 8;
-  return { z12: Math.max(0.3, w18 * 0.4), z18: w18 };
+/**
+ * How many stored contour-width units make one pixel at z18. `majorWidthM` and
+ * `minorWidthM` are named for ground metres and have never been measured on the
+ * ground: they are this many times a pixel width. The factor is kept rather than
+ * migrated away because it is baked into every stored style, every template
+ * snapshot and the Python worker; the UI divides by it so that a contour and an
+ * OSM line asked for the same number get the same line (operator, 2026-09-18).
+ */
+export const CONTOUR_WIDTH_UNITS_PER_PX = 8;
+
+/**
+ * Zoom stops {z12, z18} for a line width in pixels at z18 — ONE taper for every
+ * vector line, contours and OSM features alike. They had one each (0.4 from a
+ * floor of 0.3, and 0.25 from a floor of 0.25), so two lines of the same width
+ * at z18 were different widths at every other zoom — and tuning happens at z13
+ * to z16, not z18. The gentler of the two is the one kept: a road at the old
+ * feature taper was a 0.75px hairline across the whole mid range.
+ */
+export function lineWidthStops(widthPxZ18: number): { z12: number; z18: number } {
+  return { z12: Math.max(0.3, widthPxZ18 * 0.4), z18: widthPxZ18 };
 }
 
-/** Zoom stops {z12, z18} for a line feature width given in pixels at z18. */
+/** Zoom stops for a contour, whose stored width is in the units above. */
+export function contourWidthStops(widthM: number): { z12: number; z18: number } {
+  return lineWidthStops(widthM / CONTOUR_WIDTH_UNITS_PER_PX);
+}
+
+/** Zoom stops for a line feature, whose stored width is already pixels at z18. */
 export function featureLineWidthStops(widthZ18: number): { z12: number; z18: number } {
-  return { z12: Math.max(0.25, widthZ18 * 0.25), z18: widthZ18 };
+  return lineWidthStops(widthZ18);
 }
 
 /**

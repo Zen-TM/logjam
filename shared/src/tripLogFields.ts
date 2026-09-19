@@ -23,6 +23,27 @@ export function isCustomFieldEntity(value: unknown): value is CustomFieldEntity 
   return CUSTOM_FIELD_ENTITIES.includes(value as CustomFieldEntity);
 }
 
+/**
+ * What a user's own field is CALLED, everywhere a user can read it, on BOTH
+ * clients.
+ *
+ * "Field" is form jargon — it names the box, not the thing the box records — so
+ * the UI says "attribute" and the code keeps saying field (the column, the
+ * table, the sync entity and every function in this file). One constant rather
+ * than forty string literals, so the next rename is one line and cannot leave
+ * half of one client behind — which is what happened the first time: the phone
+ * was renamed during the places rework and Logjam Web kept saying "Custom trip
+ * fields" and "Add field" for another three months.
+ */
+export const ATTRIBUTE_NOUN = {
+  one: "attribute",
+  many: "attributes",
+  /** Carried rather than composed: "a"/"an" does not follow from the noun, and
+   *  a rename that leaves "a attribute" behind is the classic way this kind of
+   *  constant half-works. */
+  add: "Add an attribute",
+} as const;
+
 export type TripLogCustomFieldType =
   | "string"
   | "integer"
@@ -144,6 +165,43 @@ export function tripFieldDefs(
       def.placeTypeIds.some((typeId) => linked.has(typeId)) ||
       (values != null && values[def.key] !== undefined && values[def.key] !== null),
   );
+}
+
+/**
+ * The widest span that still reads as a rail rather than a ruler.
+ *
+ * A bounded integer is drawn as a row of stops instead of a number box, which
+ * is how the canyon grades have always been drawn — they just used to be seven
+ * hand-written controls (`PlaceEditSheet` on the phone, `PlaceDialog` on the
+ * web) with their keys spelled out. They are ordinary bounded integers, so the
+ * rail is a property of the TYPE and every field that shares that shape gets
+ * it: a user's own "Difficulty, 1-5" is drawn exactly like the V grade,
+ * without knowing anything about canyons.
+ *
+ * Above this the stops stop being tappable and a keyboard is faster. `hours`
+ * and `num_abseils` are unbounded and were never rail candidates.
+ */
+const MAX_RAIL_STOPS = 12;
+
+/**
+ * The stops a bounded integer draws, or null when it is not rail-shaped.
+ *
+ * Derived from the definition's own bounds, which is the only place they are
+ * declared — a rail that restated 1-7 would drift from the field it draws.
+ * Shared rather than per-client: the phone had this first (as
+ * `mobile/src/customFields/fieldValueCoercion.ts`) and a second copy for the
+ * browser is the "two lists that must agree" failure in miniature — the web
+ * would keep drawing a V grade as a number box the day the phone widened the
+ * cap.
+ */
+export function railStops(def: TripLogCustomFieldDef): number[] | null {
+  if (def.type !== "integer") return null;
+  if (def.min == null || def.max == null) return null;
+  const span = def.max - def.min;
+  if (span < 1 || span + 1 > MAX_RAIL_STOPS) return null;
+  const stops: number[] = [];
+  for (let stop = def.min; stop <= def.max; stop += 1) stops.push(stop);
+  return stops;
 }
 
 export const CUSTOM_FIELD_TYPES: {

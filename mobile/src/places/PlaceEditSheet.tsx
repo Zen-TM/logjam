@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import {
+  ATTRIBUTE_NOUN,
   defsForType,
   setFieldValues as withFieldValues,
   SYSTEM_FIELD_DEFS,
@@ -15,7 +16,6 @@ import { fontSize, spacing, theme } from "../theme";
 import type { MirrorPlace } from "../sync/mirrorStore";
 import { createPlaceLocal, updatePlaceLocal } from "../sync/outbox";
 import {
-  ATTRIBUTE_NOUN,
   CustomFieldList,
   useCustomFieldForm,
 } from "../customFields/CustomFieldsEditor";

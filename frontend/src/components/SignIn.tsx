@@ -1,14 +1,29 @@
+// The way in: sign in, sign up, verify an email, and reset a forgotten
+// password. One component, five states, because they hand values to each other
+// — the password typed on the sign-up form is what verifies the account a
+// moment later without the user ever seeing the sign-in screen again.
+//
+// Built on the kit like every other surface (frontend/DESIGN.md). Two notes
+// that are design decisions rather than mechanics:
+//
+//  - **The Terms and Privacy links sit BESIDE the consent tick, not inside its
+//    label.** A link inside a `<label>` toggles the control it labels, so
+//    reading the terms used to tick (or untick) the box that says you agree
+//    with them.
+//  - **The error goes directly above the button it belongs to** (§8), never at
+//    the top of the form, and a field's own complaint goes under the field.
 import { useState, useEffect } from "react";
-import { TextField, Button } from "@mui/material";
 import classes from "./SignIn.module.css";
 import type { AuthState } from "../useAuth";
 import { ErrorBanner } from "./feedback/ErrorBanner";
-import { FieldError } from "./feedback/FieldError";
 import { isValidEmailFormat } from "../emailValidation";
 import Footer from "./Footer";
 import BrandMark from "./brand/BrandMark";
 import BrandWordmark from "./brand/BrandWordmark";
 import { CURRENT_CONSENT_VERSION, PENDING_CONSENT_STORAGE_KEY } from "../consent";
+import { Button, Checkbox, TextField } from "../ui";
+
+const PASSWORD_HINT = "At least 8 characters, with an upper and a lower case letter, a number and a symbol.";
 
 function Brand() {
   return (
@@ -188,29 +203,25 @@ function SignIn({
             label="Verification code"
             value={code}
             onChange={(e) => setCode(e.target.value)}
-            size="small"
-            fullWidth
             required
             autoFocus
+            autoComplete="one-time-code"
+            inputMode="numeric"
           />
           {displayError && <ErrorBanner message={displayError} />}
           {resendSuccess && (
-            <p className={classes.successBanner}>New code sent — check your email (check spam).</p>
+            <p className={classes.successBanner} role="status">
+              New code sent — check your email (check spam).
+            </p>
           )}
-          <Button
-            type="submit"
-            variant="contained"
-            fullWidth
-            disabled={submitting}
-          >
-            {submitting ? "Verifying..." : "Verify"}
+          <Button type="submit" variant="filled" busy={submitting} className={classes.submit}>
+            {submitting ? "Verifying…" : "Verify"}
           </Button>
           <Button
             type="button"
-            variant="text"
-            fullWidth
             disabled={resendCooldown > 0}
             onClick={handleResendCode}
+            className={classes.submit}
           >
             {resendCooldown > 0 ? `Resend code (${resendCooldown}s)` : "Resend code"}
           </Button>
@@ -233,20 +244,14 @@ function SignIn({
             type="email"
             value={email}
             onChange={(e) => { setEmail(e.target.value); setEmailError(null); }}
-            size="small"
-            fullWidth
+            error={emailError}
             required
             autoFocus
+            autoComplete="email"
           />
-          <FieldError message={emailError} />
           {displayError && <ErrorBanner message={displayError} />}
-          <Button
-            type="submit"
-            variant="contained"
-            fullWidth
-            disabled={submitting}
-          >
-            {submitting ? "Sending..." : "Send reset code"}
+          <Button type="submit" variant="filled" busy={submitting} className={classes.submit}>
+            {submitting ? "Sending…" : "Send reset code"}
           </Button>
           <p className={classes.switchText}>
             <button type="button" className={classes.link} onClick={goToSignIn}>
@@ -271,38 +276,31 @@ function SignIn({
             label="Reset code"
             value={code}
             onChange={(e) => setCode(e.target.value)}
-            size="small"
-            fullWidth
             required
             autoFocus
+            autoComplete="one-time-code"
+            inputMode="numeric"
           />
           <TextField
             label="New password"
             type="password"
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
-            size="small"
-            fullWidth
             required
-            helperText="Min 8 characters — must include uppercase, lowercase, number, and symbol"
+            hint={PASSWORD_HINT}
+            autoComplete="new-password"
           />
           <TextField
             label="Confirm new password"
             type="password"
             value={confirmNewPassword}
             onChange={(e) => setConfirmNewPassword(e.target.value)}
-            size="small"
-            fullWidth
             required
+            autoComplete="new-password"
           />
           {displayError && <ErrorBanner message={displayError} />}
-          <Button
-            type="submit"
-            variant="contained"
-            fullWidth
-            disabled={submitting}
-          >
-            {submitting ? "Resetting..." : "Reset password"}
+          <Button type="submit" variant="filled" busy={submitting} className={classes.submit}>
+            {submitting ? "Resetting…" : "Reset password"}
           </Button>
           <p className={classes.switchText}>
             <button type="button" className={classes.link} onClick={goToSignIn}>
@@ -324,79 +322,73 @@ function SignIn({
             label="Name"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            size="small"
-            fullWidth
             required
             autoFocus
+            autoComplete="name"
           />
           <TextField
             label="Email"
             type="email"
             value={email}
             onChange={(e) => { setEmail(e.target.value); setEmailError(null); }}
-            size="small"
-            fullWidth
+            error={emailError}
             required
+            autoComplete="email"
           />
-          <FieldError message={emailError} />
           <TextField
             label="Username"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            size="small"
-            fullWidth
             required
+            hint="What friends see when you share a place with them."
+            autoComplete="username"
           />
           <TextField
             label="Password"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            size="small"
-            fullWidth
             required
-            helperText="Min 8 characters — must include uppercase, lowercase, number, and symbol"
+            hint={PASSWORD_HINT}
+            autoComplete="new-password"
           />
           <TextField
             label="Confirm password"
             type="password"
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
-            size="small"
-            fullWidth
             required
+            autoComplete="new-password"
           />
-          <label className={classes.consentRow}>
-            <input
-              type="checkbox"
+          <div className={classes.consent}>
+            <Checkbox
+              label="I agree to the Terms of Use and acknowledge the Privacy Policy."
               checked={consented}
-              onChange={(e) => setConsented(e.target.checked)}
-              required
+              onChange={setConsented}
             />
-            <span>
-              I agree to the{" "}
-              <a href="/tos.html" target="_blank" rel="noopener noreferrer">Terms</a>{" "}
-              and acknowledge the{" "}
-              <a href="/privacy.html" target="_blank" rel="noopener noreferrer">Privacy Policy</a>.
-            </span>
-          </label>
-          <label className={classes.consentRow}>
-            <input
-              type="checkbox"
+            {/* Beside the tick, never inside its label: a link in a label
+                toggles the control it labels, so reading the terms would
+                change the answer to the question about them. */}
+            <p className={classes.legal}>
+              <a href="/tos.html" target="_blank" rel="noopener noreferrer">Read the Terms of Use</a>
+              {" · "}
+              <a href="/privacy.html" target="_blank" rel="noopener noreferrer">Read the Privacy Policy</a>
+            </p>
+            <Checkbox
+              label="I confirm I am 18 years of age or older."
               checked={ageConfirmed}
-              onChange={(e) => setAgeConfirmed(e.target.checked)}
-              required
+              onChange={setAgeConfirmed}
             />
-            <span>I confirm I am 18 years of age or older.</span>
-          </label>
+          </div>
           {displayError && <ErrorBanner message={displayError} />}
           <Button
             type="submit"
-            variant="contained"
-            fullWidth
-            disabled={submitting || !consented || !ageConfirmed}
+            variant="filled"
+            busy={submitting}
+            disabled={!consented || !ageConfirmed}
+            className={classes.submit}
           >
-            {submitting ? "Creating account..." : "Sign up"}
+            {submitting ? "Creating account…" : "Sign up"}
           </Button>
           <p className={classes.switchText}>
             Already have an account?{" "}
@@ -416,36 +408,31 @@ function SignIn({
       <form className={classes.form} noValidate onSubmit={handleSignIn}>
         <Brand />
         {resetSuccess && (
-          <p className={classes.successBanner}>Password reset — please sign in.</p>
+          <p className={classes.successBanner} role="status">
+            Password reset — please sign in.
+          </p>
         )}
         <TextField
           label="Email"
           type="email"
           value={email}
           onChange={(e) => { setEmail(e.target.value); setResetSuccess(false); setEmailError(null); }}
-          size="small"
-          fullWidth
+          error={emailError}
           required
           autoFocus
+          autoComplete="email"
         />
-        <FieldError message={emailError} />
         <TextField
           label="Password"
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          size="small"
-          fullWidth
           required
+          autoComplete="current-password"
         />
         {displayError && <ErrorBanner message={displayError} />}
-        <Button
-          type="submit"
-          variant="contained"
-          fullWidth
-          disabled={submitting}
-        >
-          {submitting ? "Signing in..." : "Sign in"}
+        <Button type="submit" variant="filled" busy={submitting} className={classes.submit}>
+          {submitting ? "Signing in…" : "Sign in"}
         </Button>
         <p className={classes.switchText}>
           <button type="button" className={classes.link} onClick={goToForgotPassword}>

@@ -454,6 +454,13 @@ CONTOUR_DEFAULTS = {
     "minorWidthM": 8,
 }
 
+# How many stored contour-width units make one pixel at z18. Mirrors
+# CONTOUR_WIDTH_UNITS_PER_PX in shared/src/topoSettings.ts: a contour and an OSM
+# feature line asked for the same width must be the same line, in the composite
+# bake as on the live map. This bake had its own divisor (zoom / 16 / 6), which
+# made a baked contour half again as thick as the one the user tuned on screen.
+CONTOUR_WIDTH_UNITS_PER_PX = 8
+
 # Contour smoothing. Raw gdal_contour output on a LiDAR DTM is extremely knobbly
 # — every cell-level wiggle becomes a vertex. That noise has two costs: the lines
 # render jagged, and MapLibre can't place line-following elevation labels until
@@ -3320,8 +3327,8 @@ def render_contours_tile(
                 is_major = abs(m - round(m)) < 1e-3
 
             colour = major_colour if is_major else minor_colour
-            line_width = max(1, int((major_width_m if is_major else minor_width_m)
-                                    * zoom / 16 / 6))
+            width_px_z18 = (major_width_m if is_major else minor_width_m) / CONTOUR_WIDTH_UNITS_PER_PX
+            line_width = max(1, int(width_px_z18 * zoom / 18))
             draw.line(pts, fill=colour, width=line_width)
 
             if zoom >= LABEL_MIN_ZOOM and label_interval and is_major and len(pts) >= 4:

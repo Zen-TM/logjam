@@ -1,0 +1,17 @@
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.note {
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--theme-text-muted);
+}
+
+/* The address the code went to, in the page's own text colour: it is the one
+   thing on the step the user has to check against their inbox. */
+.address {
+  color: var(--theme-text-primary);
+}

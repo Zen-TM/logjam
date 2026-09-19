@@ -24,15 +24,18 @@ import {
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import {
+  ATTRIBUTE_NOUN,
   isReservedFieldKey,
   userFieldValues,
   distinctTripTypes,
   formatCanyonGrade,
   formatDistanceM,
+  formatTripDate,
   mediaCategory,
   messageFromError,
   removeShareConfirm,
   routeLengthM,
+  placeStatus,
 } from "@logjam/shared";
 
 import { tripTitle } from "../api/tripTitle";
@@ -44,7 +47,6 @@ import {
 import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
 import { removeSharedPlace } from "../sharing/removeShare";
 import { useFieldDefs } from "../customFields/useFieldDefs";
-import { ATTRIBUTE_NOUN } from "../customFields/CustomFieldsEditor";
 import { useConnectivity } from "../map/connectivity";
 import { MediaStrip } from "../media/MediaStrip";
 import { resolveRouteAttachmentBbox } from "../media/routeAttachmentBbox";
@@ -93,11 +95,10 @@ import {
   type Stat,
   type ToastMessage,
 } from "../ui";
-import { formatTripDate } from "../logs/logbook";
 import { TripEditSheet } from "../logs/TripEditSheet";
 import { PlaceEditSheet } from "./PlaceEditSheet";
 import { placeDeleteConfirm } from "./placeDeleteConfirm";
-import { PLACE_STATUS_META, placeStatus } from "./placeMeta";
+import { PLACE_STATUS_META } from "./placeMeta";
 
 /** A parked value as one line. Objects are stringified rather than dropped:
  *  the point of the section is that the user can SEE what arrived before

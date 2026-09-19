@@ -1,0 +1,180 @@
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 20px var(--gutter);
+  text-align: center;
+}
+
+.emptyGlyph {
+  color: var(--theme-accent);
+}
+
+.emptyTitle {
+  margin: 0;
+  font-size: var(--font-base);
+  font-weight: 600;
+}
+
+.emptyBody {
+  margin: 0;
+  max-width: 300px;
+  font-size: var(--font-sm);
+  color: var(--theme-text-muted);
+}
+
+.emptyActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* The same height as the chip rail whose slot it takes: chips and icon buttons
+   are both `--control-md`, so the list below does not move. */
+.selectionBar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: var(--control-md);
+}
+
+.selectionCount {
+  flex: 1;
+  min-width: 0;
+  padding-left: 4px;
+  font-size: var(--font-sm);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Light fill, ink text — the inverted surface, like the tooltip. It floats over
+   the map, so it keeps the map's larger size. */
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 360px;
+  max-width: 100%;
+  min-height: 42px;
+  box-sizing: border-box;
+  padding: 0 calc((42px - var(--control-sm)) / 2) 0 14px;
+  border-radius: var(--radius-pill);
+  background: var(--theme-text-primary);
+  color: var(--ink);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  box-shadow: var(--shadow-float);
+}
+
+.toastGlyph {
+  flex: none;
+}
+
+.toastText {
+  flex: 1;
+  min-width: 0;
+  padding-block: 8px;
+}
+
+/* Text-shaped, so a pill. Its label is the muted text colour on whatever card
+   or page it sits on; each tone's pair is in scripts/wcag-contrast.mjs. */
+.pill {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  border: 1px solid var(--theme-text-muted);
+  border-radius: var(--radius-pill);
+  font-size: var(--font-xs);
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--theme-text-muted);
+  white-space: nowrap;
+}
+
+.pill[data-tone="accent"] {
+  border-color: var(--theme-accent);
+  background: var(--theme-accent);
+  color: var(--ink);
+}
+
+/* Warning is the EDGE and the glyph, the label in the text colour: warning as
+   text on a card measured 3.8:1 under Basalt and Ironbark. */
+.pill[data-tone="warning"] {
+  border-color: var(--theme-warning);
+  color: var(--theme-text-primary);
+}
+
+.pill[data-tone="warning"] svg {
+  color: var(--theme-warning);
+}
+
+/* Quiet is the absence of the outline. A wash behind the muted label took it
+   under 4.5:1 in three schemes. */
+.pill[data-tone="muted"] {
+  border-color: transparent;
+}
+
+/* The track is a wash of the text colour; the fill is measured against it. */
+.progress {
+  position: relative;
+  /* Fills its line in a flex row too (a row's footer), where a block's
+     automatic width would otherwise collapse to nothing. */
+  width: 100%;
+  height: 6px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--theme-text-primary) 12%, transparent);
+}
+
+.progressFill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: var(--progress, 0%);
+  border-radius: inherit;
+  background: var(--theme-accent);
+  transition: width var(--transition-med);
+}
+
+.progress[data-tone="warning"] .progressFill {
+  background: var(--theme-warning);
+}
+
+.progress[data-indeterminate="true"] .progressFill {
+  width: 35%;
+  animation: progress-sweep 1.4s ease-in-out infinite;
+}
+
+@keyframes progress-sweep {
+  from {
+    left: -35%;
+  }
+  to {
+    left: 100%;
+  }
+}
+
+/* Without the sweep, a still bar would read as a number. A slow fade across the
+   whole track says "working" without anything travelling. */
+@media (prefers-reduced-motion: reduce) {
+  .progressFill {
+    transition: none;
+  }
+
+  .progress[data-indeterminate="true"] .progressFill {
+    left: 0;
+    width: 100%;
+    animation: progress-breathe 2s ease-in-out infinite alternate;
+  }
+}
+
+@keyframes progress-breathe {
+  to {
+    opacity: 0.4;
+  }
+}

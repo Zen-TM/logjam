@@ -1,0 +1,165 @@
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--control-md);
+  cursor: pointer;
+}
+
+.checkbox[data-disabled] {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.box {
+  position: relative;
+  flex: none;
+  width: 18px;
+  height: 18px;
+}
+
+.checkboxInput {
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  border: 1.5px solid var(--theme-text-muted);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: inherit;
+}
+
+/* Checked is the accent fill with the ink tick, like an active chip. */
+.checkboxInput:checked {
+  border-color: var(--theme-accent);
+  background: var(--theme-accent);
+}
+
+.tick {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  color: var(--ink);
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.checkboxInput:checked + .tick {
+  visibility: visible;
+}
+
+.text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.title {
+  composes: title from "./Toggle.module.css";
+}
+
+.description {
+  composes: description from "./Toggle.module.css";
+}
+
+/* A line on the panel, not a card: the label, then the colour. No background
+   and no border — the row is a label and a swatch, and a card around them was
+   chrome drawn for two elements (operator, 2026-09-17). */
+.swatchField {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--control-lg);
+}
+
+.swatchLabel {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-sm);
+  color: var(--theme-text-muted);
+}
+
+/* The control: a square of the colour, right-aligned, the row's full height. */
+.swatchTrigger {
+  flex: none;
+  align-self: stretch;
+  width: var(--control-lg);
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--swatch, transparent);
+  cursor: pointer;
+  /* An unset colour is an empty well, not a black one. */
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--theme-text-muted) 60%, transparent);
+}
+
+.swatchTrigger:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* Sized to the palette, not to the panel. The kit's Popover is 372px wide
+   because its usual tenant is the Layers list; that made a block of ten
+   swatches a strip as wide as the panel again, which is the shape this was
+   meant to stop. `max-content` lets the 3-wide grid decide. */
+.swatchPopover {
+  width: max-content;
+  padding: 12px;
+}
+
+.swatches {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+/* The field label's style: sentence case, muted. */
+.legend {
+  margin-bottom: 6px;
+  padding: 0;
+  font-size: var(--font-sm);
+  color: var(--theme-text-muted);
+}
+
+/* Three across, so ten colours make a block taller than it is wide rather than
+   a strip as wide as the panel. Fixed columns, not auto-fill: the palette is a
+   closed list and its shape should not change with the popover's. */
+.swatchGrid {
+  display: grid;
+  grid-template-columns: repeat(3, var(--control-md));
+  gap: 10px;
+}
+
+.swatch {
+  appearance: none;
+  display: block;
+  width: var(--control-md);
+  height: var(--control-md);
+  margin: 0;
+  border-radius: var(--radius-md);
+  background: var(--swatch);
+  cursor: pointer;
+}
+
+/* A gap of the page colour, then the accent ring (accent on the page: 3:1). */
+.swatch:checked {
+  box-shadow:
+    0 0 0 2px var(--theme-primary),
+    0 0 0 4px var(--theme-accent);
+}
+
+/* Outside the ring, so focus and choice never draw over each other. */
+.swatch:focus-visible {
+  outline-offset: 6px;
+}
+
+.swatches:disabled .swatch {
+  opacity: 0.45;
+  cursor: default;
+}

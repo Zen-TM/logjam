@@ -42,7 +42,7 @@ import {
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 
-import { messageFromError, type SharableEntityType } from "@logjam/shared";
+import { friendMatches, messageFromError, type SharableEntityType } from "@logjam/shared";
 
 import { useAccountState } from "../auth/AccountStateContext";
 import {
@@ -60,7 +60,7 @@ import { Button, ErrorBanner, SectionHeader, Row } from "../ui";
 import { fontSize, lineHeight, radius, spacing, surface, theme, withAlpha } from "../theme";
 import { FriendAvatar } from "./FriendAvatar";
 import { friendListLoadKey } from "./friendListLoad";
-import { friendMatches } from "./friendSearch";
+
 import {
   bulkShareButtonLabel,
   bulkShareConfirm,

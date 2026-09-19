@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useIsMobile } from "../../useIsMobile";
 import BottomSheet from "./BottomSheet";
 import type { SheetSnap } from "./BottomSheet";
-import type { PanelId } from "./panels";
+import { PANEL_TITLES, type LogsView, type MapsView, type PanelId } from "./panels";
 import type {
   TPlace,
   TFilters,
@@ -11,91 +10,71 @@ import type {
   TFriendRequest,
   TNotification,
   TTripLog,
-  TAnalytics,
   TUser,
   TRoute,
   PlaceTrack,
   TPlaceType,
 } from "../../placeUtils";
-import type { StandaloneFile, VectorStyleSettings, TopoExportJobView, ScopedCustomFieldDef } from "@logjam/shared";
+import type { RegionBbox, StandaloneFile, VectorStyleSettings, TopoExportJobView, ScopedCustomFieldDef } from "@logjam/shared";
 import type { TopoJob, GeoJsonPolygonal } from "../dialogs/TopoDialog";
 import type { CompletedTopoJob } from "../../topoLayerTypes";
 import type { GeoPdfTemplate } from "../dialogs/GeoPdfDialog";
+import { ChipRail } from "../../ui";
 import classes from "./SidebarPanel.module.css";
-import LayersPanel from "./panels/LayersPanel";
-import PlacesPanel from "./panels/PlacesPanel";
+import PlacesPanel, { type MapKind } from "./panels/PlacesPanel";
 import GeoPdfsPanel from "./panels/GeoPdfsPanel";
 import LidarPanel from "./panels/LidarPanel";
 import FriendsPanel from "./panels/FriendsPanel";
 import NotificationsPanel from "./panels/NotificationsPanel";
 import PlaceDetailPanel from "./panels/PlaceDetailPanel";
-import RouteDetailPanel from "./panels/RouteDetailPanel";
+import TripDetailPanel from "./panels/TripDetailPanel";
+import { placesBounds } from "./panels/placesModel";
 import RoutesPanel from "./panels/RoutesPanel";
+import type { WayItem } from "./panels/waysModel";
+import type { WayVerbId } from "./panels/wayActions";
 import AccountPanel from "./panels/AccountPanel";
+import SettingsPanel from "./panels/SettingsPanel";
 import TripLogsPanel from "./panels/TripLogsPanel";
 import AnalyticsPanel from "./panels/AnalyticsPanel";
 
-const PANEL_TITLES: Record<PanelId, string> = {
-  layers: "Layers",
-  places: "Places",
-  geopdfs: "GeoPDFs",
-  lidar: "LiDAR Topos",
-  routes: "Routes",
-  "trip-logs": "Trip Logs",
-  analytics: "Analytics",
-  friends: "Friends",
-  // Matches the NavRail label "Alerts" (MOBILE-11) — the nav item can't take
-  // the longer "Notifications" without overflowing its fixed-width slot in
-  // the already-crowded bottom nav strip (see MOBILE-7), so this header
-  // aligns to the nav instead. NotificationsPanel.tsx's own internal copy is
-  // a separate surface, out of scope here.
-  notifications: "Alerts",
-  account: "Account",
-  "place-detail": "Place Detail",
-  "route-detail": "Route",
-};
+const LOGS_VIEWS = [
+  { value: "logs", label: "Logs" },
+  { value: "stats", label: "Stats" },
+] as const;
+
+const MAPS_VIEWS = [
+  { value: "geopdfs", label: "GeoPDFs" },
+  { value: "lidar", label: "LiDAR topos" },
+] as const;
 
 function SidebarPanel({
   activePanel,
   onClose,
   onTopoFlyTarget,
-  // Layers (merged overlays+basemap)
-  showOwnedPlaces,
-  setShowOwnedPlaces,
-  showSharedPlaces,
-  setShowSharedPlaces,
-  showPlaceTracks,
-  setShowPlaceTracks,
-  showRoutes,
-  setShowRoutes,
+  logsView,
+  onLogsViewChange,
+  mapsView,
+  onMapsViewChange,
   onStartDrawingRoute,
-  lidarEnabled,
-  setLidarEnabled,
-  lidarLayerToggles,
-  setLidarLayerToggles,
-  lidarLayerOrder,
-  setLidarLayerOrder,
-  unavailableTopoLayerNames,
-  baseLayers,
-  activeLayerId,
-  onActiveLayerChange,
-  mapView,
+  waysLoaded,
   // Places
   places,
+  placesLoaded,
   placesTotal,
   sharedPlaces,
   onAddPlace,
   onOpenUnifiedImport,
-  onExportPlaces,
-  onStartAreaSelection,
-  selectingArea,
-  onCancelAreaSelection,
   onRefetch,
   filters,
   onChangeFilters,
   onDrawFilterArea,
   onFilterToMapView,
-  filtersAccordionSignal,
+  openFiltersRequested,
+  onOpenFiltersConsumed,
+  onFiltersOpenChange,
+  onHoverPlace,
+  onMakeMap,
+  onSharePlaces,
   onFlyToPlace,
   // GeoPDFs
   onOpenGeoPdf,
@@ -108,16 +87,18 @@ function SidebarPanel({
   // LiDAR
   activeTopoJobs,
   completedTopoJobs,
+  topoJobsLoaded,
   topoExports,
   topoExportsTotal,
   onRefetchTopoExports,
-  lidarJobToggles,
   setLidarJobToggles,
   onOpenTopo,
   onRefetchCompletedTopoJobs,
   onDismissActiveJob,
   onQuotaChanged,
   currentUser,
+  currentUserError,
+  onRetryCurrentUser,
   onOpenTopoWithTemplate,
   // Friends
   friends,
@@ -126,46 +107,40 @@ function SidebarPanel({
   onRefetchShared,
   // Notifications
   notifications,
+  notificationsLoaded,
+  notificationsError,
   notificationsTotal,
   onRefetchNotifications,
+  onOverrideNotificationRead,
   setSelectedPlaceID,
   setActivePanel,
   // Place detail
   place,
   isOwnedPlace,
-  selectedRoute,
   allRoutes,
   placeTracks,
   standaloneFiles,
   standaloneFilesError,
-  shownStandaloneIds,
-  onToggleStandaloneFile,
-  onRenameStandaloneFile,
-  onDeleteStandaloneFile,
-  onFlyToStandaloneFile,
-  onSelectRoute,
-  onRouteHoverPosition,
+  onOpenWay,
+  wayDetail,
+  drawPanel,
   currentUserId,
-  onEditRoute,
-  onRoutesChanged,
   onPickCoords,
   pickingCoords,
   onCancelPickCoords,
   // Trip logs
   tripLogs,
+  selectedTripLogId,
+  setSelectedTripLogId,
   tripLogsTotal,
-  tripLogsLoading,
+  tripLogsLoaded,
   onRefetchTripLogs,
-  onRefetchAnalytics,
   customFieldDefs,
   onCustomFieldDefsChange,
   placeCustomFieldDefs,
   onPlaceCustomFieldDefsChange,
   placeTypes,
   onPlaceTypesChange,
-  // Analytics
-  analytics,
-  analyticsLoading,
   // Vector styles
   vectorStyle,
   onVectorStyleChange,
@@ -175,35 +150,20 @@ function SidebarPanel({
   activePanel: PanelId | null;
   onClose: () => void;
   onTopoFlyTarget: (footprint: GeoJsonPolygonal) => void;
-  // Layers
-  showOwnedPlaces: boolean;
-  setShowOwnedPlaces: (v: boolean) => void;
-  showSharedPlaces: boolean;
-  setShowSharedPlaces: (v: boolean) => void;
-  showPlaceTracks: boolean;
-  setShowPlaceTracks: (v: boolean) => void;
-  lidarEnabled: boolean;
-  setLidarEnabled: (v: boolean) => void;
-  lidarLayerToggles: Record<string, boolean>;
-  setLidarLayerToggles: (v: Record<string, boolean> | ((prev: Record<string, boolean>) => Record<string, boolean>)) => void;
-  lidarLayerOrder: string[];
-  setLidarLayerOrder: (v: string[] | ((prev: string[]) => string[])) => void;
-  // Layer names whose PMTiles source failed to load (LAYERS-1 badge).
-  unavailableTopoLayerNames: Set<string>;
-  baseLayers: readonly { id: string; name: string; tiles: string[]; maxzoom: number }[];
-  activeLayerId: string;
-  onActiveLayerChange: (id: string) => void;
-  mapView: { lng: number; lat: number; zoom: number } | null;
+  logsView: LogsView;
+  onLogsViewChange: (view: LogsView) => void;
+  mapsView: MapsView;
+  onMapsViewChange: (view: MapsView) => void;
+  onStartDrawingRoute: () => void;
+  /** False until all three of Ways' fetches settle. */
+  waysLoaded: boolean;
   // Places
   places: TPlace[];
+  placesLoaded: boolean;
   placesTotal: number | null;
   sharedPlaces: TPlace[];
   onAddPlace: () => void;
   onOpenUnifiedImport: () => void;
-  onExportPlaces: (placeIds: string[]) => void;
-  onStartAreaSelection: () => void;
-  selectingArea: boolean;
-  onCancelAreaSelection: () => void;
   onRefetch: () => void;
   filters: TFilters;
   onChangeFilters: (f: TFilters) => void;
@@ -211,7 +171,13 @@ function SidebarPanel({
   onDrawFilterArea: () => void;
   /** Set the area filter to whatever the map is currently showing. */
   onFilterToMapView: () => void;
-  filtersAccordionSignal: number;
+  /** Places should open its filter sheet on arrival (back from drawing an area). */
+  openFiltersRequested: boolean;
+  onOpenFiltersConsumed: () => void;
+  onFiltersOpenChange: (open: boolean) => void;
+  onHoverPlace: (id: string | null) => void;
+  onMakeMap: (bounds: RegionBbox, kind: MapKind) => void;
+  onSharePlaces: (ids: string[]) => void;
   onFlyToPlace: (lat: number, lng: number) => void;
   // GeoPDFs
   onOpenGeoPdf: () => void;
@@ -224,16 +190,21 @@ function SidebarPanel({
   // LiDAR
   activeTopoJobs: TopoJob[];
   completedTopoJobs: CompletedTopoJob[];
+  /** False until the first fetch of completed topos settles. */
+  topoJobsLoaded: boolean;
   topoExports: TopoExportJobView[];
   topoExportsTotal: number | null;
   onRefetchTopoExports: () => void;
-  lidarJobToggles: Record<string, boolean>;
   setLidarJobToggles: (v: Record<string, boolean> | ((prev: Record<string, boolean>) => Record<string, boolean>)) => void;
   onOpenTopo: () => void;
   onRefetchCompletedTopoJobs: () => void;
   onDismissActiveJob: (jobId: string) => void;
   onQuotaChanged: () => void;
   currentUser: TUser | null;
+  /** Set when the signed-in user's own record failed to load — the one fetch
+   *  the Account page has no fallback for. */
+  currentUserError: string | null;
+  onRetryCurrentUser: () => void;
   onOpenTopoWithTemplate: (templateId: string) => void;
   // Friends
   friends: TFriend[];
@@ -242,50 +213,51 @@ function SidebarPanel({
   onRefetchShared: () => void;
   // Notifications
   notifications: TNotification[];
+  /** False until the first fetch settles — an empty inbox before then is not
+   *  "Nothing yet". */
+  notificationsLoaded: boolean;
+  notificationsError: string | null;
   notificationsTotal: number | null;
   onRefetchNotifications: () => void;
+  onOverrideNotificationRead: (ids: string[], read: boolean | null) => void;
   setSelectedPlaceID: (id: string | null) => void;
   setActivePanel: (panel: PanelId | null) => void;
   // Place detail
   place: TPlace | undefined;
   isOwnedPlace: boolean;
-  // Routes
-  showRoutes: boolean;
-  setShowRoutes: (v: boolean) => void;
-  onStartDrawingRoute: () => void;
-  selectedRoute: TRoute | null;
+  // Ways
   allRoutes: TRoute[];
   placeTracks: PlaceTrack[];
   standaloneFiles: StandaloneFile[];
   standaloneFilesError: string | null;
-  shownStandaloneIds: string[];
-  onToggleStandaloneFile: (id: string) => void;
-  onRenameStandaloneFile: (id: string, displayName: string) => void;
-  onDeleteStandaloneFile: (file: StandaloneFile) => Promise<void>;
-  onFlyToStandaloneFile: (file: StandaloneFile) => void;
-  onSelectRoute: (id: string) => void;
-  onRouteHoverPosition: (position: [number, number] | null) => void;
+  /** Open a way's page, centring the map on it; `verb` arms one of its actions. */
+  onOpenWay: (way: WayItem, verb?: WayVerbId) => void;
+  /**
+   * The open way's page and the route tool, built by App because App owns the
+   * draft and the selection. Passed as nodes rather than as the fourteen props
+   * each would otherwise thread through this shell — the same shape
+   * `layersButton` and `notices` already take.
+   */
+  wayDetail: ReactNode;
+  drawPanel: ReactNode;
   currentUserId: string | null;
-  onEditRoute: (route: TRoute) => void;
-  onRoutesChanged: () => void;
   onPickCoords: (onPicked: (lat: number, lng: number) => void) => void;
   pickingCoords: boolean;
   onCancelPickCoords: () => void;
   // Trip logs
   tripLogs: TTripLog[];
+  selectedTripLogId: string | null;
+  setSelectedTripLogId: (id: string | null) => void;
   tripLogsTotal: number | null;
-  tripLogsLoading: boolean;
+  /** False until the first trip fetch settles. */
+  tripLogsLoaded: boolean;
   onRefetchTripLogs: () => void;
-  onRefetchAnalytics: () => void;
   customFieldDefs: ScopedCustomFieldDef[];
   onCustomFieldDefsChange: (defs: ScopedCustomFieldDef[]) => void;
   placeCustomFieldDefs: ScopedCustomFieldDef[];
   placeTypes: TPlaceType[];
   onPlaceTypesChange: (types: TPlaceType[]) => void;
   onPlaceCustomFieldDefsChange: (defs: ScopedCustomFieldDef[]) => void;
-  // Analytics
-  analytics: TAnalytics | null;
-  analyticsLoading: boolean;
   // Vector styles
   vectorStyle: VectorStyleSettings | null;
   onVectorStyleChange: (next: VectorStyleSettings) => void;
@@ -309,10 +281,9 @@ function SidebarPanel({
       setSheetSnap(snapBeforePeek.current);
     }
     // Intentionally only reacts to collapseToPeek; snap is read via ref.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [collapseToPeek]);
 
-  // Switching panels (NavRail tap) while the sheet is at peek would otherwise
+  // Switching panels (a tab tap) while the sheet is at peek would otherwise
   // swap the panel content behind an almost-fully-collapsed sheet — the new
   // panel is effectively invisible (MOBILE-9). Raise to "half" on any panel
   // change, unless a map-pick flow is the one driving the sheet to peek (that
@@ -328,8 +299,8 @@ function SidebarPanel({
   }, [activePanel]);
 
   // Let a panel request the sheet expand to full (e.g. PlacesPanel when its
-  // filters accordion opens). Stable so the panel's effect only fires on the
-  // actual open, not every render. No-op on desktop where there's no sheet.
+  // filters open). Stable so the panel's effect only fires on the actual open,
+  // not every render. No-op on desktop where there's no sheet.
   const expandSheetToFull = useCallback(() => {
     if (isMobile) setSheetSnap("full");
   }, [isMobile]);
@@ -346,72 +317,64 @@ function SidebarPanel({
     [setSelectedPlaceID, setActivePanel],
   );
 
+  // The same pair for a trip: its page is where a trip is READ, and every
+  // surface that lists one opens it the same way.
+  const openTripDetail = (tripLogId: string) => {
+    setSelectedTripLogId(tripLogId);
+    setActivePanel("trip-detail");
+  };
+
   if (!activePanel) return null;
 
+  // The panel's accessible name. Every page draws its own hero now, so this
+  // titles the landmark and nothing else — place-detail computes it for the
+  // same reason, after losing its header.
   const title =
-    activePanel === "place-detail" && place
-      ? place.name
-      : PANEL_TITLES[activePanel];
+    activePanel === "place-detail" && place ? place.name : PANEL_TITLES[activePanel];
+
+  // A page with two views draws its switch under its own hero, so the hero
+  // stays the page's first line (DESIGN.md §2).
+  const logsViewRail = (
+    <ChipRail label="Logs view" options={LOGS_VIEWS} value={logsView} onChange={onLogsViewChange} />
+  );
+  const mapsViewRail = (
+    <ChipRail label="Maps view" options={MAPS_VIEWS} value={mapsView} onChange={onMapsViewChange} />
+  );
 
   const panelContent = (
     <>
-      <div className={classes.panelHeader}>
-        <h2 className={classes.panelTitle}>{title}</h2>
-        <button className={classes.closeButton} onClick={onClose} aria-label="Close panel">
-          <X size={18} />
-        </button>
-      </div>
-      <div className={classes.panelBody} data-active-panel={activePanel}>
-        {activePanel === "layers" && (
-          <LayersPanel
-            showOwnedPlaces={showOwnedPlaces}
-            setShowOwnedPlaces={setShowOwnedPlaces}
-            showSharedPlaces={showSharedPlaces}
-            setShowSharedPlaces={setShowSharedPlaces}
-            showPlaceTracks={showPlaceTracks}
-            setShowPlaceTracks={setShowPlaceTracks}
-            showRoutes={showRoutes}
-            setShowRoutes={setShowRoutes}
-            lidarEnabled={lidarEnabled}
-            setLidarEnabled={setLidarEnabled}
-            lidarLayerToggles={lidarLayerToggles}
-            setLidarLayerToggles={setLidarLayerToggles}
-            lidarLayerOrder={lidarLayerOrder}
-            setLidarLayerOrder={setLidarLayerOrder}
-            unavailableTopoLayerNames={unavailableTopoLayerNames}
-            layers={baseLayers}
-            activeLayerId={activeLayerId}
-            onActiveLayerChange={onActiveLayerChange}
-            mapView={mapView}
-          />
-        )}
+      <div className={classes.panelBody}>
         {activePanel === "places" && (
           <PlacesPanel
             places={places}
+            placesLoaded={placesLoaded}
             placesTotal={placesTotal}
             sharedPlaces={sharedPlaces}
-            onAddPlace={onAddPlace}
-            onOpenUnifiedImport={onOpenUnifiedImport}
-            onExportPlaces={onExportPlaces}
-            onStartAreaSelection={onStartAreaSelection}
-            onCancelAreaSelection={onCancelAreaSelection}
-            selectingArea={selectingArea}
-            onRefetch={onRefetch}
+            placeTypes={placeTypes}
+            placeCustomFieldDefs={placeCustomFieldDefs}
             filters={filters}
             onChangeFilters={onChangeFilters}
+            onAddPlace={onAddPlace}
+            onOpenUnifiedImport={onOpenUnifiedImport}
+            onRefetch={onRefetch}
+            onQuotaChanged={onQuotaChanged}
             onDrawFilterArea={onDrawFilterArea}
             onFilterToMapView={onFilterToMapView}
-            filtersAccordionSignal={filtersAccordionSignal}
+            openFiltersRequested={openFiltersRequested}
+            onOpenFiltersConsumed={onOpenFiltersConsumed}
+            onFiltersOpenChange={onFiltersOpenChange}
             onFlyToPlace={onFlyToPlace}
             setSelectedPlaceID={setSelectedPlaceID}
             setActivePanel={setActivePanel}
-            placeCustomFieldDefs={placeCustomFieldDefs}
-            placeTypes={placeTypes}
+            onHoverPlace={onHoverPlace}
+            onMakeMap={onMakeMap}
+            onSharePlaces={onSharePlaces}
             onExpandSheet={expandSheetToFull}
           />
         )}
-        {activePanel === "geopdfs" && (
+        {activePanel === "maps" && mapsView === "geopdfs" && (
           <GeoPdfsPanel
+            views={mapsViewRail}
             friends={friends}
             onOpenGeoPdf={onOpenGeoPdf}
             onOpenGeoPdfWithTemplate={onOpenGeoPdfWithTemplate}
@@ -421,15 +384,18 @@ function SidebarPanel({
             geoPdfJobsRefetch={geoPdfJobsRefetch}
           />
         )}
-        {activePanel === "lidar" && (
+        {activePanel === "maps" && mapsView === "lidar" && (
           <LidarPanel
+            views={mapsViewRail}
+            topoJobsLoaded={topoJobsLoaded}
+            onSheetOpenChange={onFiltersOpenChange}
+            onExpandSheet={expandSheetToFull}
             friends={friends}
             activeTopoJobs={activeTopoJobs}
             completedTopoJobs={completedTopoJobs}
             topoExports={topoExports}
             topoExportsTotal={topoExportsTotal}
             onRefetchTopoExports={onRefetchTopoExports}
-            lidarJobToggles={lidarJobToggles}
             setLidarJobToggles={setLidarJobToggles}
             onOpenTopo={onOpenTopo}
             onTopoFlyTarget={onTopoFlyTarget}
@@ -451,35 +417,43 @@ function SidebarPanel({
             onRefetchNotifications={onRefetchNotifications}
           />
         )}
-        {activePanel === "notifications" && (
+        {activePanel === "inbox" && (
           <NotificationsPanel
             notifications={notifications}
+            notificationsLoaded={notificationsLoaded}
+            notificationsError={notificationsError}
             notificationsTotal={notificationsTotal}
             onRefetchNotifications={onRefetchNotifications}
+            onOverrideRead={onOverrideNotificationRead}
             onRefetchFriends={onRefetchFriends}
             setSelectedPlaceID={setSelectedPlaceID}
             setActivePanel={setActivePanel}
+            onMapsViewChange={onMapsViewChange}
             onTopoFlyTarget={onTopoFlyTarget}
           />
         )}
-        {activePanel === "analytics" && (
+        {activePanel === "logs" && logsView === "stats" && (
           <AnalyticsPanel
-            analytics={analytics}
-            loading={analyticsLoading}
-            tripLogs={tripLogs}
-            customFieldDefs={customFieldDefs}
-            onRefetchTripLogs={onRefetchTripLogs}
-            onRefetchAnalytics={onRefetchAnalytics}
-            onQuotaChanged={onQuotaChanged}
-          />
-        )}
-        {activePanel === "trip-logs" && (
-          <TripLogsPanel
+            views={logsViewRail}
             tripLogs={tripLogs}
             tripLogsTotal={tripLogsTotal}
-            loading={tripLogsLoading}
+            loaded={tripLogsLoaded}
+            places={places}
+            customFieldDefs={customFieldDefs}
+            placeCustomFieldDefs={placeCustomFieldDefs}
+            placeTypes={placeTypes}
+          />
+        )}
+        {activePanel === "logs" && logsView === "logs" && (
+          <TripLogsPanel
+            views={logsViewRail}
+            tripLogs={tripLogs}
+            tripLogsTotal={tripLogsTotal}
+            loaded={tripLogsLoaded}
             onRefetchTripLogs={onRefetchTripLogs}
-            onRefetchAnalytics={onRefetchAnalytics}
+            onOpenTrip={openTripDetail}
+            onFiltersOpenChange={onFiltersOpenChange}
+            onExpandSheet={expandSheetToFull}
             customFieldDefs={customFieldDefs}
             onCustomFieldDefsChange={onCustomFieldDefsChange}
             places={places}
@@ -492,6 +466,13 @@ function SidebarPanel({
         )}
         {activePanel === "account" && (
           <AccountPanel
+            currentUser={currentUser}
+            error={currentUserError}
+            onRetry={onRetryCurrentUser}
+          />
+        )}
+        {activePanel === "settings" && (
+          <SettingsPanel
             currentUser={currentUser}
             customFieldDefs={customFieldDefs}
             onCustomFieldDefsChange={onCustomFieldDefsChange}
@@ -520,41 +501,53 @@ function SidebarPanel({
             placeTypes={placeTypes}
             onQuotaChanged={onQuotaChanged}
             onRefetchTripLogs={onRefetchTripLogs}
+            onBack={() => setActivePanel("places")}
+            onClose={onClose}
+            onFlyToPlace={onFlyToPlace}
+            onOpenTrip={openTripDetail}
+            onMakeMap={(target, kind) => {
+              const bounds = placesBounds([target]);
+              if (bounds) onMakeMap(bounds, kind);
+            }}
+            onSharePlace={(id) => onSharePlaces([id])}
             onAfterDelete={() => setActivePanel("places")}
           />
         )}
-        {activePanel === "route-detail" && (
-          <RouteDetailPanel
-            route={selectedRoute}
-            currentUserId={currentUserId}
-            ownedPlaces={places}
-            sharedPlaces={sharedPlaces}
-            friends={friends}
-            allRoutes={allRoutes}
-            onEdit={onEditRoute}
-            onChanged={onRoutesChanged}
-            onClose={() => setActivePanel(null)}
+        {activePanel === "trip-detail" && (
+          <TripDetailPanel
+            tripLog={tripLogs.find((trip) => trip.id === selectedTripLogId)}
+            places={places}
+            customFieldDefs={customFieldDefs}
+            onCustomFieldDefsChange={onCustomFieldDefsChange}
+            existingTripTypes={tripLogs.flatMap((trip) => trip.types)}
+            onBack={() => setActivePanel("logs")}
+            onClose={onClose}
             onOpenPlace={openPlaceDetail}
-            onHoverPosition={onRouteHoverPosition}
+            onRefetchTripLogs={onRefetchTripLogs}
+            onRefetchPlaces={onRefetch}
+            onQuotaChanged={onQuotaChanged}
+            onPickCoords={onPickCoords}
+            pickingCoords={pickingCoords}
+            onAfterDelete={() => setActivePanel("logs")}
           />
         )}
-        {activePanel === "routes" && (
+        {activePanel === "way-detail" && wayDetail}
+        {activePanel === "way-draw" && drawPanel}
+        {activePanel === "ways" && (
           <RoutesPanel
             routes={allRoutes}
+            waysLoaded={waysLoaded}
             currentUserId={currentUserId}
+            friends={friends}
             placeTracks={placeTracks}
             standaloneFiles={standaloneFiles}
             standaloneFilesError={standaloneFilesError}
-            shownStandaloneIds={shownStandaloneIds}
-            onToggleStandaloneFile={onToggleStandaloneFile}
-            onRenameStandaloneFile={onRenameStandaloneFile}
-            onDeleteStandaloneFile={onDeleteStandaloneFile}
-            onFlyToStandaloneFile={onFlyToStandaloneFile}
             places={[...places, ...sharedPlaces]}
+            sharedPlaces={sharedPlaces}
             onStartDrawingRoute={onStartDrawingRoute}
-            onSelectRoute={onSelectRoute}
-            setSelectedPlaceID={setSelectedPlaceID}
-            setActivePanel={setActivePanel}
+            onOpenUnifiedImport={onOpenUnifiedImport}
+            onOpenWay={onOpenWay}
+            onOpenPlace={openPlaceDetail}
           />
         )}
       </div>
@@ -563,13 +556,17 @@ function SidebarPanel({
 
   if (isMobile) {
     return (
-      <BottomSheet snap={sheetSnap} onSnapChange={setSheetSnap}>
+      <BottomSheet snap={sheetSnap} onSnapChange={setSheetSnap} title={title}>
         {panelContent}
       </BottomSheet>
     );
   }
 
-  return <div className={classes.panel}>{panelContent}</div>;
+  return (
+    <aside className={classes.panel} aria-label={title}>
+      {panelContent}
+    </aside>
+  );
 }
 
 export default SidebarPanel;

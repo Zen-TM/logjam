@@ -23,7 +23,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { copyAndRemoveConfirm, messageFromError } from "@logjam/shared";
+import { copyAndRemoveConfirm, messageFromError , copyConfirm } from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
 import { fetchCurrentUser, useApiQuery } from "../api/queries";
@@ -34,7 +34,6 @@ import { listMediaForLinked } from "../sync/mirrorStore";
 import { fontSize, lineHeight, spacing, theme } from "../theme";
 import { BottomSheet, Button, Row, Toggle } from "../ui";
 import type { CopyAndRemoveTarget } from "./copyAndRemove";
-import { copyConfirm } from "./friendShareRows";
 
 /** What the sheet found attached to the places being copied. */
 type PlaceMediaTally = { count: number; bytes: number };

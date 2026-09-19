@@ -1,0 +1,71 @@
+.root {
+  position: relative;
+}
+
+/* Floats over what follows rather than pushing it down: the field often sits
+   mid-panel, and a list that reflowed the page would move the thing the user
+   is reading while they type. */
+.results {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 1;
+  padding: 6px;
+  border: var(--hairline);
+  border-radius: var(--radius-lg);
+  background: var(--theme-primary);
+  box-shadow: var(--shadow-float);
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--control-lg);
+  padding: 0 10px;
+  border-radius: var(--radius-md);
+  color: var(--theme-text-primary);
+  font-size: var(--font-sm);
+  cursor: pointer;
+}
+
+.option:hover,
+.option[aria-selected="true"] {
+  background: color-mix(in srgb, var(--theme-text-primary) 10%, transparent);
+}
+
+/* The highlighted option is marked by more than the wash behind it, so the
+   keyboard position survives a colour it cannot be told apart from. */
+.option[aria-selected="true"] {
+  outline: 2px solid var(--theme-text-primary);
+  outline-offset: -2px;
+}
+
+.glyph {
+  flex: none;
+  color: var(--theme-text-muted);
+}
+
+.name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status {
+  margin: 0;
+  padding: 8px 10px;
+  font-size: var(--font-sm);
+  color: var(--theme-text-muted);
+}

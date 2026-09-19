@@ -1,5 +1,4 @@
 import { useMemo } from "react";
-import { Switch } from "@mui/material";
 import {
   producedLayers,
   type AutoExportSettings as AutoExportSettingsValue,
@@ -7,7 +6,7 @@ import {
   type ExportSelection,
   type TopoLayerKey,
 } from "@logjam/shared";
-import SettingsRow from "./SettingsRow";
+import { SettingsRow, Toggle } from "../../../ui";
 import styles from "./topoSettings.module.css";
 import TopoExportControls from "../TopoExportControls";
 
@@ -19,6 +18,12 @@ interface Props {
   rasterSettings: RasterTemplateSettings;
 }
 
+/**
+ * An export queued the moment the topo finishes, instead of the user coming
+ * back to start one. Off by default; the controls under the switch are the same
+ * ones the export dialog uses, offering only the layers these settings will
+ * actually produce.
+ */
 export default function AutoExportSettings({ value, onChange, rasterSettings }: Props) {
   // Memoised so TopoExportControls' reconcile effect only re-runs when the
   // produced-layer set or the selection actually changes, not every render.
@@ -33,26 +38,18 @@ export default function AutoExportSettings({ value, onChange, rasterSettings }: 
 
   return (
     <div className={styles.tabPanel}>
-      <p className={styles.helpText}>
-        When enabled, an export is queued automatically as soon as this topo
-        finishes generating — no need to come back and start it by hand. It
-        appears in the Exports section of the LiDAR panel and downloads when
-        ready, exactly like a manual export. Only layers this job will produce
-        can be chosen.
-      </p>
-
       <SettingsRow
-        label="Auto-export on completion"
-        tooltip="Off by default. When on, the export settings below are applied automatically the moment the topo finishes — within a few minutes of completion."
+        label="Export when it finishes"
+        tooltip="Starts exporting the topo automatically once it finishes generating."
       >
-        <Switch
-          size="small"
+        <Toggle
+          label="Export when it finishes"
           checked={value.enabled}
-          onChange={(_, checked) => onChange({ ...value, enabled: checked })}
+          onChange={(enabled) => onChange({ ...value, enabled })}
         />
       </SettingsRow>
 
-      <div className={value.enabled ? "" : styles.disabled}>
+      <div className={styles.dependent} data-disabled={value.enabled ? undefined : true}>
         <TopoExportControls
           value={selection}
           onChange={(next) => onChange({ ...value, ...next })}

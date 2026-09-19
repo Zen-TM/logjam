@@ -41,7 +41,7 @@
   width: 100%;
   height: 100%;
   padding: 1rem;
-  font-size: var(--text-sm);
+  font-size: var(--font-sm);
   color: #fff;
   text-align: center;
   word-break: break-word;

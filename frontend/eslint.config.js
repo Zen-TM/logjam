@@ -5,8 +5,30 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import jsxA11y from 'eslint-plugin-jsx-a11y'
 import tseslint from 'typescript-eslint'
 
+
 export default tseslint.config(
   { ignores: ['dist'] },
+  {
+    // MUI is gone from Logjam Web (Phase C, 2026-09-19) and the packages are
+    // uninstalled, so this rule now guards a decision rather than a migration:
+    // it turns "we removed that" into an error at the import rather than a
+    // module-not-found three minutes later, and it names what to reach for
+    // instead. There is no exception list any more.
+    files: ['src/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['@mui/*', '@emotion/*'],
+              message: 'Logjam Web builds on its own kit — import from src/ui (frontend/DESIGN.md).',
+            },
+          ],
+        },
+      ],
+    },
+  },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ['**/*.{ts,tsx}'],

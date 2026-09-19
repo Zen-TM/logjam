@@ -1,15 +1,5 @@
 import { useEffect, useMemo } from "react";
 import {
-  Box,
-  Typography,
-  FormGroup,
-  FormControlLabel,
-  Checkbox,
-  RadioGroup,
-  Radio,
-  Tooltip,
-} from "@mui/material";
-import {
   EXPORT_FORMAT_RULES,
   isLayerEligibleForFormat,
   reconcileExportSelection,
@@ -19,9 +9,17 @@ import {
   type ExportSelection,
   type TopoLayerKey,
 } from "@logjam/shared";
+import { Checkbox, ChipRail, SectionHeader, type ChipOption } from "../../ui";
+import { FieldError } from "../feedback/FieldError";
 import { TOPO_LAYERS } from "../../topoLayerTypes";
+import classes from "./topoSettings/topoSettings.module.css";
 
 const FORMAT_ORDER: ExportFormat[] = ["mbtiles", "geotiff", "gpkg", "geojson", "gpx"];
+
+const FORMAT_OPTIONS: ChipOption<ExportFormat>[] = FORMAT_ORDER.map((format) => ({
+  value: format,
+  label: EXPORT_FORMAT_RULES[format].label,
+}));
 
 interface Props {
   value: ExportSelection;
@@ -32,10 +30,16 @@ interface Props {
 }
 
 /**
- * Format / bundling / layer picker shared by TopoExportDialog (manual export of
- * a completed job) and the Auto-export settings tab (pre-configured export). All
- * legality logic lives in the shared `reconcileExportSelection` /
- * `validateExportRequest` so the two surfaces can't drift.
+ * What comes out of a topo: the file format, whether the layers arrive as one
+ * file or several, and which of them. Shared by the export dialog (a finished
+ * job) and the auto-export tab (a job not yet started), so the two cannot
+ * disagree about what is legal — all of that lives in the shared
+ * `reconcileExportSelection` / `validateExportRequest`.
+ *
+ * Each rail says what the chosen option MEANS underneath it (a `hint`, visible
+ * and read with the control), where the old radio lists hid a format's
+ * description in a tooltip nobody hovered and left the disabled bundling
+ * choices unexplained.
  */
 export default function TopoExportControls({ value, onChange, availableLayers }: Props) {
   const rule = EXPORT_FORMAT_RULES[value.format];
@@ -60,6 +64,16 @@ export default function TopoExportControls({ value, onChange, availableLayers }:
     [value.format, value.bundling, value.layers],
   );
 
+  const bundlingOptions: ChipOption<ExportBundling>[] = [
+    { value: "per-layer", label: "A file per layer", disabled: !rule.allowPerLayer },
+    { value: "composite", label: "One file", disabled: !rule.allowComposite },
+  ];
+  const bundlingNote = !rule.allowPerLayer
+    ? `${rule.label} is always one file.`
+    : !rule.allowComposite
+      ? `${rule.label} can't hold more than one layer in a file.`
+      : null;
+
   const toggleLayer = (name: TopoLayerKey) => {
     const next = new Set(selected);
     if (next.has(name)) next.delete(name);
@@ -67,95 +81,51 @@ export default function TopoExportControls({ value, onChange, availableLayers }:
     onChange({ ...value, layers: [...next] });
   };
 
+  const layers = TOPO_LAYERS.filter((l) => availableLayers.has(l.name));
+
   return (
-    <Box>
-      <Box sx={{ display: "flex", gap: 3, flexDirection: { xs: "column", sm: "row" }, mb: 2 }}>
-        {/* Left column: Format + Bundling (bundling legality depends on format). */}
-        <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography variant="caption" sx={{ color: "var(--theme-text-muted)" }}>Format</Typography>
-          <RadioGroup
-            value={value.format}
-            onChange={(e) => onChange({ ...value, format: e.target.value as ExportFormat })}
-          >
-            {FORMAT_ORDER.map((f) => (
-              <Tooltip key={f} title={EXPORT_FORMAT_RULES[f].description} placement="right" arrow>
-                <FormControlLabel
-                  value={f}
-                  control={<Radio size="small" />}
-                  label={EXPORT_FORMAT_RULES[f].label}
-                />
-              </Tooltip>
-            ))}
-          </RadioGroup>
+    <div className={classes.tabPanel}>
+      <SectionHeader title="Format" />
+      <ChipRail
+        label="Format"
+        options={FORMAT_OPTIONS}
+        value={value.format}
+        onChange={(format) => onChange({ ...value, format })}
+      />
+      <p className={classes.exportNote}>{rule.description}</p>
 
-          <Typography variant="caption" sx={{ color: "var(--theme-text-muted)", display: "block", mt: 1 }}>Bundling</Typography>
-          <RadioGroup
-            value={value.bundling}
-            onChange={(e) => onChange({ ...value, bundling: e.target.value as ExportBundling })}
-          >
-            <Tooltip
-              title={rule.allowPerLayer ? "" : `${rule.label} is inherently bundled.`}
-              placement="right"
-              arrow
-            >
-              <span>
-                <FormControlLabel
-                  value="per-layer"
-                  control={<Radio size="small" />}
-                  label="One file per layer (ZIP)"
-                  disabled={!rule.allowPerLayer}
-                />
-              </span>
-            </Tooltip>
-            <Tooltip
-              title={rule.allowComposite ? "" : `${rule.label} cannot be composited.`}
-              placement="right"
-              arrow
-            >
-              <span>
-                <FormControlLabel
-                  value="composite"
-                  control={<Radio size="small" />}
-                  label="Single composite file"
-                  disabled={!rule.allowComposite}
-                />
-              </span>
-            </Tooltip>
-          </RadioGroup>
-        </Box>
+      <SectionHeader title="Bundling" />
+      <ChipRail
+        label="Bundling"
+        options={bundlingOptions}
+        value={value.bundling}
+        onChange={(bundling) => onChange({ ...value, bundling })}
+      />
+      {bundlingNote && <p className={classes.exportNote}>{bundlingNote}</p>}
 
-        {/* Right column: Layers. */}
-        <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography variant="caption" sx={{ color: "var(--theme-text-muted)" }}>Layers</Typography>
-          <FormGroup>
-            {TOPO_LAYERS.filter((l) => availableLayers.has(l.name)).map((l) => {
-              // Single legality source (TOPOEXP-1) — never re-derive
-              // format/layer rules inline.
-              const eligible = isLayerEligibleForFormat(value.format, l.name);
-              return (
-                <FormControlLabel
-                  key={l.name}
-                  control={
-                    <Checkbox
-                      size="small"
-                      checked={selected.has(l.name)}
-                      disabled={!eligible}
-                      onChange={() => toggleLayer(l.name)}
-                    />
-                  }
-                  label={`${l.label}${!eligible ? ` (n/a for ${rule.label})` : ""}`}
-                />
-              );
-            })}
-          </FormGroup>
-        </Box>
-      </Box>
+      <SectionHeader title="Layers" count={layers.length} />
+      <div className={classes.checkList}>
+        {layers.length === 0 && (
+          <p className={classes.exportNote}>This topo didn't produce any layers to export.</p>
+        )}
+        {layers.map((l) => {
+          // Single legality source (TOPOEXP-1) — never re-derive
+          // format/layer rules inline.
+          const eligible = isLayerEligibleForFormat(value.format, l.name);
+          return (
+            <Checkbox
+              key={l.name}
+              label={l.label}
+              description={eligible ? undefined : `Can't be exported as a ${rule.label}`}
+              checked={selected.has(l.name)}
+              disabled={!eligible}
+              onChange={() => toggleLayer(l.name)}
+            />
+          );
+        })}
+      </div>
 
-      {!validation.ok && (
-        <Typography variant="caption" sx={{ color: "var(--theme-warning)", display: "block" }}>
-          {validation.error}
-        </Typography>
-      )}
-    </Box>
+      <FieldError message={validation.ok ? null : validation.error} />
+    </div>
   );
 }

@@ -1,0 +1,21 @@
+/* A rail wearing a field's clothes. `TextField`'s anatomy is label, control,
+   hint (DESIGN.md §9), and a bounded integer sits in the same list as the
+   number boxes beside it — so it repeats that anatomy exactly rather than
+   inventing a second one. The values come from `TextField.module.css`; they
+   are tokens either way. */
+.rail {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.railLabel {
+  font-size: var(--font-sm);
+  color: var(--theme-text-muted);
+}
+
+.railHint {
+  margin: 0;
+  font-size: var(--font-xs);
+  color: var(--theme-text-muted);
+}

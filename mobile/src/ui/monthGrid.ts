@@ -12,19 +12,11 @@ export function toDateKey(date: Date): string {
 }
 
 /**
- * The user's own calendar day, as a date key.
- *
- * NOT `toDateKey(new Date())`: that reads the clock in UTC, so east of
- * Greenwich it still says yesterday for the first hours of every local day —
- * someone logging a trip at 00:30 AEST would find today's date greyed out as
- * "the future". A trip date is a calendar day the user was out on, so "today"
- * is their local one; only the STORED instant is UTC midnight of that day.
+ * The user's own calendar day, as a date key — NOT `toDateKey(new Date())`,
+ * which reads the clock in UTC. Declared in `@logjam/shared` beside the
+ * logbook maths, which both clients' trip forms and filters read.
  */
-export function todayDateKey(now: Date = new Date()): string {
-  const month = `${now.getMonth() + 1}`.padStart(2, "0");
-  const day = `${now.getDate()}`.padStart(2, "0");
-  return `${now.getFullYear()}-${month}-${day}`;
-}
+export { todayDateKey } from "@logjam/shared";
 
 /** UTC midnight of a "YYYY-MM-DD" key — the instant the API stores. */
 export function fromDateKey(key: string): Date {

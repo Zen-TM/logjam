@@ -203,7 +203,7 @@ import { FocusPulse } from "./FocusPulse";
 import { MapToolGroup, type MapTool } from "./MapToolGroup";
 import { RouteDraftLayer } from "./RouteDraftLayer";
 import { RoutesLayer } from "./RoutesLayer";
-import { ROUTE_ARROW_SDF_URI } from "./routeArrowSdf";
+import { ROUTE_ARROW_SDF_URI } from "@logjam/shared";
 import { ROUTE_ARROW_IMAGE } from "./routeArrowStyle";
 import type { MirrorPlace, MirrorRoute } from "../sync/mirrorStore";
 import { RouteOptionsSheet } from "../routes/RouteOptionsSheet";
@@ -1255,7 +1255,7 @@ export function MapScreen({
    * What is actually DRAWN, as against what the user has picked.
    *
    * Mounting the vector basemap is ~70 MLRN layer components in one commit,
-   * and React cannot split a commit — so tapping "OSM Default (vector)" in the
+   * and React cannot split a commit — so tapping "OSM Vector" in the
    * layers sheet froze everything for about a second before the row even
    * showed a tick, which reads as the tap having missed. Deferring the value
    * the MAP renders from lets the urgent half (the sheet's selection, its

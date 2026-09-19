@@ -1,0 +1,151 @@
+/* Every edge is measured from --map-inset-left: the x where the visible map
+   starts once the panel (and any sheet beside it) is open. Set on #map. */
+
+.topLeft {
+  position: absolute;
+  z-index: 3;
+  top: 16px;
+  left: calc(var(--map-inset-left, 0px) + 16px);
+  width: min(380px, calc(100% - var(--map-inset-left, 0px) - 92px));
+  transition: left var(--transition-med) ease-out;
+}
+
+.notices {
+  position: absolute;
+  z-index: 2;
+  top: 72px;
+  left: var(--map-inset-left, 0px);
+  right: 76px;
+  box-sizing: border-box;
+  padding-inline: 16px;
+  display: flex;
+  flex-direction: column;
+  /* `safe`: a notice wider than the visible map overflows to the right, under
+     the map controls, never leftwards over the panel or its sheet. */
+  align-items: safe center;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.notices > * {
+  pointer-events: auto;
+}
+
+.topRight {
+  position: absolute;
+  z-index: 3;
+  top: 16px;
+  right: 16px;
+}
+
+/* Clears MapLibre's attribution, which sits in the bottom-right corner. */
+.actions {
+  position: absolute;
+  z-index: 3;
+  right: 16px;
+  bottom: 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.toolsLine {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tray {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  max-width: calc(100vw - var(--map-inset-left, 0px) - 100px);
+}
+
+.trayItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 16px 0 14px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--theme-primary);
+  color: var(--theme-text-primary);
+  font: inherit;
+  font-size: var(--font-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: var(--shadow-float);
+  cursor: pointer;
+}
+
+.trayItem:hover {
+  background: color-mix(in srgb, var(--theme-text-primary) 14%, var(--theme-primary));
+}
+
+.trayGlyph {
+  color: var(--theme-accent);
+}
+
+/* Beneath MapLibre's control corners (z-index 2), like the scale bar beside it:
+   on a narrow map the credits run leftwards over both, and the compass must
+   not be the one thing drawn over the credit text. */
+.instruments {
+  position: absolute;
+  z-index: 1;
+  left: calc(var(--map-inset-left, 0px) + 16px);
+  bottom: 16px;
+  transition: left var(--transition-med) ease-out;
+}
+
+/* The needle is drawn pointing up; counter-rotate by the map's bearing so it
+   keeps pointing at north. */
+.compass svg {
+  transform: rotate(calc(-1 * var(--bearing, 0deg)));
+}
+
+/* The north half, filled. Warning is the scheme's red, measured on the map
+   button's `primary` as text (scripts/wcag-contrast.mjs). */
+.needleNorth {
+  fill: var(--theme-warning);
+  stroke: var(--theme-warning);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .topLeft,
+  .instruments {
+    transition: none;
+  }
+}
+
+/* Narrow web: the tab bar owns the bottom 68px. */
+@media (max-width: 768px) {
+  .topLeft {
+    top: 12px;
+    left: 12px;
+    width: calc(100% - 80px);
+  }
+
+  .topRight {
+    top: 12px;
+    right: 12px;
+  }
+
+  .notices {
+    top: 64px;
+    right: 0;
+  }
+
+  .actions {
+    right: 12px;
+    bottom: calc(var(--bottom-nav-height) + 40px);
+  }
+
+  .instruments {
+    left: 12px;
+    bottom: calc(var(--bottom-nav-height) + 12px);
+  }
+}

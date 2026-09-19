@@ -12,7 +12,7 @@
 // already holds on this device. None of it is logged, and the failure paths
 // here print our own copy rather than an error string that might embed a
 // place name.
-import { memo, useCallback, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Keyboard,
@@ -26,10 +26,25 @@ import {
 import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import {
+  activeTripFilterCount,
+  countTripsInLastMonths,
+  dateRangeLabel,
+  datePresets,
+  distinctPlaceCount,
   distinctTripTypes,
   filterTrips,
+  formatDateKey,
+  formatTripDate,
+  groupTripsByYear,
   hasActiveTripFilter,
+  monthlyTripCounts,
   NO_TYPE_FILTER_VALUE,
+  reconcileCustomFieldFilters,
+  sortTrips,
+  TRIP_SORT_OPTIONS,
+  tripFieldDefs,
+  type CustomFieldFilter,
+  type TripSortKey,
 } from "@logjam/shared";
 
 import { tripTitle } from "../api/tripTitle";
@@ -46,6 +61,7 @@ import {
 } from "../sync/useSyncQueries";
 import {
   ActivitySpark,
+  AttributeFilter,
   BottomSheet,
   Button,
   Chip,
@@ -60,19 +76,12 @@ import {
   SelectionBar,
   SyncStatusPills,
   Toast,
+  Toggle,
   useBulkSelection,
   type SegmentOption,
   type ToastMessage,
 } from "../ui";
-import {
-  countTripsInLastMonths,
-  datePresets,
-  distinctPlaceCount,
-  formatDateKey,
-  formatTripDate,
-  groupTripsByYear,
-  monthlyTripCounts,
-} from "./logbook";
+import { useFieldDefs } from "../customFields/useFieldDefs";
 import { primaryTripType, tripTypeLabel, tripTypeMeta } from "./tripTypeMeta";
 import { TripEditSheet } from "./TripEditSheet";
 
@@ -101,6 +110,13 @@ export function LogsScreen({
   const [dateFrom, setDateFrom] = useState<string | null>(null);
   const [dateTo, setDateTo] = useState<string | null>(null);
   const [dateMode, setDateMode] = useState<"presets" | "from" | "to" | null>(null);
+  // Attribute filters and the sort live and die with the screen, like every
+  // other filter here: the state never leaves the device and is never
+  // persisted, so a month-old filter can't greet the user as missing trips.
+  const [customFilters, setCustomFilters] = useState<Record<string, CustomFieldFilter>>({});
+  const [includeUnknowns, setIncludeUnknowns] = useState(false);
+  const [sort, setSort] = useState<TripSortKey>("newest");
+  const { defs: tripDefs } = useFieldDefs("tripLog");
   const [menuTripId, setMenuTripId] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ trip: MirrorTrip | null } | null>(null);
   // One toast channel for every async outcome on the screen (DESIGN.md §6).
@@ -130,19 +146,56 @@ export function LogsScreen({
       dateFrom: dateFrom ?? undefined,
       dateTo: dateTo ?? undefined,
       type: typeFilter,
+      custom: customFilters,
+      includeUnknowns,
     }),
-    [dateFrom, dateTo, search, typeFilter],
+    [dateFrom, dateTo, search, typeFilter, customFilters, includeUnknowns],
   );
-  const visible = useMemo(() => filterTrips(trips, criteria), [criteria, trips]);
+  const visible = useMemo(
+    () => sortTrips(filterTrips(trips, criteria), sort),
+    [criteria, trips, sort],
+  );
   const sections = useMemo(
     () =>
-      groupTripsByYear(visible).map((group) => ({
+      // The year headings run the way the trips inside them do, or "Oldest
+      // first" reads bottom-to-top.
+      groupTripsByYear(visible, sort).map((group) => ({
         title: `${group.year}`,
         count: group.trips.length,
         data: group.trips,
       })),
-    [visible],
+    [visible, sort],
   );
+
+  // The attributes worth OFFERING as filters: the definitions applicable to the
+  // types of the places these trips link, union every key a trip has actually
+  // answered. The union clause is `tripFieldDefs` doing the same job it does on
+  // a form — a trip whose place was retyped or unlinked still holds its answer,
+  // and dropping the field would hide those trips behind an invisible axis.
+  const placeTypeById = useMemo(
+    () => new Map((placesQuery.data ?? []).map((place) => [place.id, place.placeTypeId])),
+    [placesQuery.data],
+  );
+  const filterableDefs = useMemo(() => {
+    const linkedTypeIds = new Set<string>();
+    const answered: Record<string, unknown> = {};
+    for (const trip of trips) {
+      for (const place of trip.places) {
+        const placeTypeId = placeTypeById.get(place.id);
+        if (placeTypeId) linkedTypeIds.add(placeTypeId);
+      }
+      for (const [key, value] of Object.entries(trip.customFields ?? {})) {
+        if (value != null) answered[key] = value;
+      }
+    }
+    return tripFieldDefs(tripDefs, [...linkedTypeIds], answered);
+  }, [trips, tripDefs, placeTypeById]);
+
+  // A filter whose definition was deleted, or retyped under it, would narrow
+  // the list with no control left in the sheet to say so or undo it.
+  useEffect(() => {
+    setCustomFilters((current) => reconcileCustomFieldFilters(current, filterableDefs));
+  }, [filterableDefs]);
 
   // --- Multi-select ---------------------------------------------------------
   // Press and hold a row to start; the rail's type chips become the
@@ -258,6 +311,10 @@ export function LogsScreen({
   const menuTrip = trips.find((trip) => trip.id === menuTripId) ?? null;
   const filtering = hasActiveTripFilter(criteria);
   const rangeSet = dateFrom != null || dateTo != null;
+  // What the SHEET owns — the search box and the type rail show their own state
+  // where they stand, so the sheet's button speaks only for the rest.
+  const sheetFilterCount =
+    activeTripFilterCount(criteria) - (search.trim() ? 1 : 0) - (typeFilter ? 1 : 0);
 
   // Stable identities so the memoised rows below never re-render on a state
   // change that has nothing to do with them.
@@ -295,7 +352,19 @@ export function LogsScreen({
     setSearch("");
     setDateFrom(null);
     setDateTo(null);
+    setCustomFilters({});
+    setIncludeUnknowns(false);
     setFindOpen(false);
+  }, []);
+
+  /** Everything the sheet owns. The sort is a preference, not a filter, so it
+   *  survives a Reset — clearing it would move the list for someone who only
+   *  asked to see all their trips again. */
+  const clearSheetFilters = useCallback(() => {
+    setDateFrom(null);
+    setDateTo(null);
+    setCustomFilters({});
+    setIncludeUnknowns(false);
   }, []);
 
   const confirmDelete = useCallback(
@@ -383,10 +452,10 @@ export function LogsScreen({
               />
             </View>
             <IconButton
-              icon="calendar"
-              accessibilityLabel="Filter by date range"
-              color={rangeSet ? theme.accent : theme.textMuted}
-              filled={rangeSet}
+              icon="sliders"
+              accessibilityLabel="Sort and filter trips"
+              color={sheetFilterCount > 0 ? theme.accent : theme.textMuted}
+              filled={sheetFilterCount > 0}
               onPress={() => {
                 // Drop the keyboard BEFORE the sheet mounts: a sheet that opens
                 // over a live IME inherits KeyboardAvoidingView's shrunk frame
@@ -441,7 +510,7 @@ export function LogsScreen({
       {rangeSet ? (
         <View style={styles.rangeNote}>
           <Text style={styles.rangeText} numberOfLines={1}>
-            {rangeLabel(dateFrom, dateTo)}
+            {dateRangeLabel(dateFrom, dateTo)}
           </Text>
           <IconButton
             icon="x"
@@ -540,7 +609,7 @@ export function LogsScreen({
         // A calendar mode backs out to the presets, not out of the sheet.
         onClose={() => setDateMode(dateMode === "presets" ? null : "presets")}
         title={
-          dateMode === "from" ? "From" : dateMode === "to" ? "To" : "Date range"
+          dateMode === "from" ? "From" : dateMode === "to" ? "To" : "Sort and filter"
         }
         footer={
           dateMode === "presets" ? (
@@ -560,6 +629,62 @@ export function LogsScreen({
       >
         {dateMode === "presets" ? (
           <View style={styles.sheetBody}>
+            <SectionHeader label="Sort" />
+            <View style={styles.presets}>
+              {TRIP_SORT_OPTIONS.map((option) => (
+                <Chip
+                  key={option.key}
+                  label={option.label}
+                  active={sort === option.key}
+                  onPress={() => setSort(option.key)}
+                />
+              ))}
+            </View>
+
+            {filterableDefs.length > 0 ? (
+              <>
+                {/* "Attributes", not "Fields": a field is the box, not the
+                    thing it records. Same control Places uses, drawn by the
+                    definition's SHAPE — a trip's "Rope length, 0-120" and a
+                    canyon's grade are the same question asked the same way. */}
+                <SectionHeader label="Attributes" />
+                {filterableDefs.map((def) => (
+                  <AttributeFilter
+                    key={def.key}
+                    def={def}
+                    value={customFilters[def.key] ?? null}
+                    onChange={(next) =>
+                      setCustomFilters((current) => {
+                        const custom = { ...current };
+                        // Absent rather than present-at-its-default, so "is this
+                        // axis filtering" stays `key in custom` for every kind.
+                        if (next == null) delete custom[def.key];
+                        else custom[def.key] = next;
+                        return custom;
+                      })
+                    }
+                  />
+                ))}
+                <Row
+                  title="Include trips missing this info"
+                  // It sits WITH the attributes because it only affects them:
+                  // most trips answer most fields not at all, so without the
+                  // choice one attribute filter empties the logbook and nothing
+                  // on screen says why.
+                  subtitle="Most trips don't record every attribute, so filters would hide them."
+                  subtitleNumberOfLines={2}
+                  right={
+                    <Toggle
+                      value={includeUnknowns}
+                      accessibilityLabel="Include trips missing the filtered data"
+                      onValueChange={setIncludeUnknowns}
+                    />
+                  }
+                />
+              </>
+            ) : null}
+
+            <SectionHeader label="Date range" />
             <View style={styles.presets}>
               {datePresets().map((preset) => (
                 <Chip
@@ -586,6 +711,14 @@ export function LogsScreen({
               subtitle="To"
               onPress={() => setDateMode("to")}
             />
+
+            {sheetFilterCount > 0 ? (
+              <Button
+                label="Reset filters"
+                variant="outlineAccent"
+                onPress={clearSheetFilters}
+              />
+            ) : null}
           </View>
         ) : null}
         {dateMode === "from" || dateMode === "to" ? (
@@ -734,12 +867,6 @@ function EmptyPanel({
       )}
     </View>
   );
-}
-
-function rangeLabel(from: string | null, to: string | null): string {
-  const start = from ? formatDateKey(`${from}T00:00:00.000Z`) : "Any time";
-  const end = to ? formatDateKey(`${to}T00:00:00.000Z`) : "Today";
-  return `${start} → ${end}`;
 }
 
 const styles = StyleSheet.create({

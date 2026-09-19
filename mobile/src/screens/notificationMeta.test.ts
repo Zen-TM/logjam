@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import type { TNotification } from "../api/types";
-import { notificationPlaceId, notificationMeta } from "./notificationLabel";
+import { notificationPlaceId } from "@logjam/shared";
+import { notificationMeta } from "./notificationMeta";
 import { notificationHue } from "../theme";
 
 function notification(

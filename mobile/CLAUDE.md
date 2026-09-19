@@ -561,7 +561,7 @@ cannot work.
 send is one accept/decline pair and an accepted file becomes an ordinary Saved
 import, so it never needed a screen. Two rules hold the replacement together.
 - **Which actions a notification carries, and every word of their copy, is
-  `notifications/notificationActions.ts`** — a pure, RN-free module with its
+  `notificationActions.ts` in `@logjam/shared`** — a pure module with its
   own test, exactly like `notifications/tapTarget.ts`. It covers BOTH actionable
   kinds (`friend_request` and `file_sent`); `NotificationsScreen` renders what
   it returns and knows nothing about friendships or sends. A third actionable

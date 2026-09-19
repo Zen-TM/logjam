@@ -1,4 +1,5 @@
 import { Feather } from "@expo/vector-icons";
+import { INK } from "@logjam/shared";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { fontSize, fontWeight, hitSlop, radius, spacing, surface, theme, withAlpha } from "../theme";
@@ -53,13 +54,13 @@ export function Chip({
       ]}
     >
       {icon ? (
-        <Feather name={icon} size={14} color={active ? theme.primary : tint} />
+        <Feather name={icon} size={14} color={active ? INK : tint} />
       ) : null}
       <Text style={[styles.label, active && styles.labelActive, disabled && styles.labelDisabled]}>
         {label}
       </Text>
       {starred ? (
-        <Feather name="star" size={12} color={active ? theme.primary : tint} />
+        <Feather name="star" size={12} color={active ? INK : tint} />
       ) : null}
       {count != null ? (
         <View style={[styles.badge, active && styles.badgeActive]}>
@@ -86,7 +87,9 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.75 },
   disabled: { opacity: 0.4 },
   label: { color: theme.textPrimary, fontSize: fontSize.sm, fontWeight: fontWeight.medium },
-  labelActive: { color: theme.primary },
+  // INK, not `primary`: on the shared heath fill `primary` is 3.7:1 (root
+  // CLAUDE.md, "Text or a glyph ON a colour fill uses a dark ink").
+  labelActive: { color: INK },
   labelDisabled: { color: theme.textMuted },
   badge: {
     minWidth: 20,
@@ -95,7 +98,7 @@ const styles = StyleSheet.create({
     backgroundColor: withAlpha(theme.textPrimary, 0.12),
     alignItems: "center",
   },
-  badgeActive: { backgroundColor: withAlpha(theme.primary, 0.2) },
+  badgeActive: { backgroundColor: withAlpha(INK, 0.15) },
   badgeText: { color: theme.textMuted, fontSize: fontSize.xs, fontWeight: fontWeight.medium },
-  badgeTextActive: { color: theme.primary },
+  badgeTextActive: { color: INK },
 });

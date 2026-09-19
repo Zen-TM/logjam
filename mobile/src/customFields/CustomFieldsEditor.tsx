@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { useCallback, useState } from "react";
 import { Alert, StyleSheet, Text, View } from "react-native";
 import {
+  ATTRIBUTE_NOUN,
   buildCustomFieldDef,
   CUSTOM_FIELD_TYPES,
   isSystemFieldDef,
@@ -57,23 +58,6 @@ const ENTITY_NOUN: Record<CustomFieldEntity, { one: string; many: string; has: s
   place: { one: "place", many: "places", has: "place has", have: "places have" },
 };
 
-/**
- * What a user's own field is CALLED, everywhere the user can read it.
- *
- * "Field" is form jargon — it names the box, not the thing the box records — so
- * the UI says "attribute" and the code keeps saying field (the column, the
- * table, the sync entity and every function in this file). One constant rather
- * than forty string literals, so the next rename is one line and cannot leave
- * half the app behind.
- */
-export const ATTRIBUTE_NOUN = {
-  one: "attribute",
-  many: "attributes",
-  /** Carried rather than composed: "a"/"an" does not follow from the noun, and
-   *  a rename that leaves "a attribute" behind is the classic way this kind of
-   *  constant half-works. */
-  add: "Add an attribute",
-} as const;
 
 export function CustomFieldList({
   entity,

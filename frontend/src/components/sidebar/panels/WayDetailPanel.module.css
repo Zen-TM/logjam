@@ -1,0 +1,65 @@
+/* The hero is pinned; everything under it scrolls, like every other page. */
+.root {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gutter);
+  padding: 12px var(--gutter) var(--gutter);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.note {
+  margin: 0;
+  color: var(--theme-text-muted);
+  font-size: var(--font-sm);
+}
+
+/* The height band: a figure, so it reads with the stats above it. */
+.band {
+  margin: 0;
+  font-size: var(--font-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--theme-text-primary);
+}
+
+/* Required credit, so it stays — but it is provenance, not a figure the user
+   reads. Recessive by SIZE and style only, never by opacity: fading
+   `--theme-text-muted` put it under 4.5:1, which axe caught the moment Ways
+   joined e2e/a11y.spec.ts (DESIGN.md §10). */
+.attribution {
+  margin: 0;
+  color: var(--theme-text-muted);
+  font-size: var(--font-xs);
+  font-style: italic;
+  line-height: 1.3;
+}
+
+.linkRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: var(--control-lg);
+}
+
+.linkName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-base);
+}

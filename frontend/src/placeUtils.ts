@@ -1,10 +1,14 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { fetchAuthSession } from "aws-amplify/auth";
-import type { ScopedCustomFieldDef, StandaloneFile, ThemeSchemeId, TripLogCustomFieldDef, NotificationPreferences, MediaItem, MediaLinkedType, PlaceMergePolicy, ElevationProfile, SharableEntityType, FileSendStatus, FileSendSourceKind } from "@logjam/shared";
-import { formatTripPlaceNames } from "@logjam/shared";
+import type { ScopedCustomFieldDef, StandaloneFile, ThemeSchemeId, TripLogCustomFieldDef, NotificationPreferences, MediaItem, MediaLinkedType, MediaMetadata, MediaOrigin, PlaceMergePolicy, ElevationProfile, SharableEntityType } from "@logjam/shared";
+import { formatTripPlaceNames, tallyNotifications } from "@logjam/shared";
+import { settleReadOverrides, withReadOverrides, type ReadOverrides } from "./notificationReadOverrides";
 import type { BulkShareItem, FriendShareRow, FriendShares } from "@logjam/shared";
 import { ApiError } from "./errors/ApiError";
 import { messageFromError } from "./errors/messageFromError";
+// Profiles already sampled this session, so reopening or editing a line does
+// not re-ask the DEM a question it has answered (see the module's header).
+import { cacheProfile, cachedProfile } from "./elevationCache";
 
 // The server's REST response shapes are declared ONCE in shared/ and
 // re-exported here, so the mobile client (mobile/src/api/types.ts) and this
@@ -362,6 +366,16 @@ export type PlaceTrack = {
   mediaId: string;
   color: string | null;
   displayUrl: string;
+  /**
+   * What the file IS. Without these a place's track could only be listed as a
+   * kind of its own, named for its place, because nothing here said whether it
+   * was a recording or an import or what it was called (Ways, 2026-09-17).
+   */
+  filename: string;
+  displayName: string | null;
+  origin: MediaOrigin | null;
+  fileSizeBytes: number;
+  metadata: MediaMetadata;
 };
 
 export function getPlaceTracks(): Promise<PlaceTrack[]> {
@@ -373,6 +387,10 @@ export function getPlaceTracks(): Promise<PlaceTrack[]> {
 export function usePlaceTracks(enabled: boolean) {
   const [tracks, setTracks] = useState<PlaceTrack[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // True once the first fetch settles. An empty list before then is not "no
+  // tracks" (DESIGN.md §8), and Ways says so rather than flashing its
+  // first-run screen at every user.
+  const [loaded, setLoaded] = useState(false);
   const [fetchCount, setFetchCount] = useState(0);
 
   useEffect(() => {
@@ -386,13 +404,14 @@ export function usePlaceTracks(enabled: boolean) {
       .catch((err) => {
         console.error(err);
         if (!cancelled) setError(messageFromError(err, "Couldn't load place tracks."));
-      });
+      })
+      .finally(() => { if (!cancelled) setLoaded(true); });
     return () => { cancelled = true; };
   }, [enabled, fetchCount]);
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
 
-  return { tracks, error, refetch };
+  return { tracks, loaded, error, refetch };
 }
 
 
@@ -483,20 +502,34 @@ export function getElevationProfile(
 }
 
 /**
- * Loads a profile for the given points. Keyed on the geometry itself so a
- * vertex edit re-samples, and so reopening the same route does not.
+ * Loads a profile for the given points, keyed on the geometry itself: move a
+ * vertex and it re-samples, reopen the same line and it does not.
+ *
+ * The second half of that is `elevationCache.ts`, and it was a promise this
+ * docstring made without keeping until 2026-09-17 — opening a way, editing it
+ * and leaving the editor were three requests for a line nobody had touched.
+ * A cache hit is seeded SYNCHRONOUSLY, before the first paint, so a line that
+ * has already been sampled draws its chart immediately rather than flashing
+ * "Reading the terrain…" at someone who was just looking at it.
  */
 export function useElevationProfile(points: [number, number][] | null) {
+  const geometryKey = points ? JSON.stringify(points) : null;
   const [profile, setProfile] = useState<
     (ElevationProfile & { attribution: string }) | null
-  >(null);
+  >(() => (geometryKey ? cachedProfile(geometryKey) : null));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const geometryKey = points ? JSON.stringify(points) : null;
 
   useEffect(() => {
     if (!geometryKey) {
       setProfile(null);
+      return;
+    }
+    const known = cachedProfile(geometryKey);
+    if (known) {
+      setProfile(known);
+      setLoading(false);
+      setError(null);
       return;
     }
     // A late response from a previous line must not overwrite this one's.
@@ -505,6 +538,9 @@ export function useElevationProfile(points: [number, number][] | null) {
     setError(null);
     getElevationProfile(JSON.parse(geometryKey) as [number, number][])
       .then((result) => {
+        // Cached even if this hook has moved on: the answer is about the
+        // geometry, not about who asked.
+        cacheProfile(geometryKey, result);
         if (current) setProfile(result);
       })
       .catch((err) => {
@@ -527,6 +563,8 @@ export function useElevationProfile(points: [number, number][] | null) {
 export function useRoutes(enabled: boolean) {
   const [routes, setRoutes] = useState<TRoute[]>([]);
   const [error, setError] = useState<string | null>(null);
+  /** True once the first fetch settles — see `usePlaceTracks`. */
+  const [loaded, setLoaded] = useState(false);
   const [fetchCount, setFetchCount] = useState(0);
 
   useEffect(() => {
@@ -538,13 +576,14 @@ export function useRoutes(enabled: boolean) {
       .catch((err) => {
         console.error(err);
         if (!cancelled) setError(messageFromError(err, "Couldn't load routes."));
-      });
+      })
+      .finally(() => { if (!cancelled) setLoaded(true); });
     return () => { cancelled = true; };
   }, [enabled, fetchCount]);
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
 
-  return { routes, error, refetch };
+  return { routes, loaded, error, refetch };
 }
 
 export function usePlaces(enabled: boolean) {
@@ -635,28 +674,46 @@ export function fetchComputeEstimate(
 ): Promise<ComputeEstimate> {
   return apiFetch<ComputeEstimate>("/compute-estimate", {
     method: "POST",
-    body: JSON.stringify(request),
+    body: request,
   });
 }
 
 export function useCurrentUser(enabled: boolean) {
   const [currentUser, setCurrentUser] = useState<TUser | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [fetchCount, setFetchCount] = useState(0);
 
   useEffect(() => {
     if (!enabled) return;
+    let cancelled = false;
     fetchCurrentUser()
-      .then(setCurrentUser)
-      // Best-effort: background refresh of the cached current user; callers
-      // that need a fresh value already surface their own load errors.
-      .catch(console.error);
+      .then((user) => {
+        if (cancelled) return;
+        setCurrentUser(user);
+        setError(null);
+      })
+      // NOT best-effort, despite reading like it. This is the app's only source
+      // for the signed-in user, and `null` is load-bearing downstream:
+      // Account renders "Loading…" for as long as it stays null, and
+      // `currentUserId` feeds way ownership, where "no user" reads as "not
+      // mine" and hands a friend's shared route the OWNER's verbs. Swallowing
+      // the one failure meant a single 429 or 500 made both permanent, with
+      // nothing to retry. Every other data hook in this file returns `error`
+      // (frontend/CLAUDE.md, "Hook contract"); this one now does too.
+      .catch((err) => {
+        console.error(err);
+        if (!cancelled) setError(messageFromError(err, "Couldn't load your account."));
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [enabled, fetchCount]);
 
   const refetchCurrentUser = useCallback(() => setFetchCount((n) => n + 1), []);
 
   // Synchronously replace the cached user (e.g. with the row returned by a
   // consent PATCH) so gates keyed on user fields update without a refetch gap.
-  return { currentUser, refetchCurrentUser, applyCurrentUser: setCurrentUser };
+  return { currentUser, error, refetchCurrentUser, applyCurrentUser: setCurrentUser };
 }
 
 export function updateCurrentUserThemeScheme(
@@ -754,7 +811,11 @@ export function reassignPlaceType(
 ): Promise<{ movedCount: number }> {
   return apiFetch<{ movedCount: number }>(`/place-types/${id}/reassign`, {
     method: "POST",
-    body: { toPlaceTypeId },
+    // The server reads `placeTypeId` (routes/placeTypes.ts, pinned by
+    // `__tests__/placeTypes.test.ts`). Sent as `toPlaceTypeId`, every move
+    // came back 400 "A different placeTypeId is required" — the destination
+    // simply was not in the payload the route read.
+    body: { placeTypeId: toPlaceTypeId },
   });
 }
 
@@ -813,10 +874,14 @@ export function createCustomField(
   field: TripLogCustomFieldDef,
   scope?: { placeTypeIds?: string[]; appliesToAllTypes?: boolean },
 ): Promise<ScopedCustomFieldDef[]> {
-  return apiFetch<{ fields: ScopedCustomFieldDef[] }>(`/custom-fields/${entity}`, {
+  // The server answers with the ONE definition it made ({ field }), and every
+  // caller wants the list that definition now belongs to, in the server's
+  // order — so read the list back. Taking `res.fields` off that answer handed
+  // callers `undefined`, and the trip form crashed on its next render.
+  return apiFetch<{ field: ScopedCustomFieldDef }>(`/custom-fields/${entity}`, {
     method: "POST",
     body: { field, ...scope },
-  }).then((res) => res.fields);
+  }).then(() => getCustomFields(entity));
 }
 
 /**
@@ -956,6 +1021,20 @@ export function deleteTripLog(id: string): Promise<void> {
   return apiFetch<void>(`/trips/${id}`, { method: "DELETE" });
 }
 
+/** Owner-only, one request for a selection. The server refuses more than its
+ *  `BULK_DELETE_LIMIT` at once (413), so a longer selection is sent in chunks. */
+export async function bulkDeleteTripLogs(ids: string[], chunkSize = 500): Promise<string[]> {
+  const deleted: string[] = [];
+  for (let start = 0; start < ids.length; start += chunkSize) {
+    const { deletedIds } = await apiFetch<{ deletedIds: string[] }>("/trips/bulk/delete", {
+      method: "POST",
+      body: { ids: ids.slice(start, start + chunkSize) },
+    });
+    deleted.push(...deletedIds);
+  }
+  return deleted;
+}
+
 // ── Unified file import (idempotent, batch-tagged) ────────────
 
 export type BulkPlaceInput = {
@@ -1059,6 +1138,9 @@ export function useTripLogs(enabled: boolean) {
   // True owner-filtered total before the server's list cap; null until known.
   const [total, setTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+  // False until the first fetch settles: an empty list before then is not "no
+  // trips yet", and saying so flashes a first-run screen at every user.
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fetchCount, setFetchCount] = useState(0);
 
@@ -1074,13 +1156,17 @@ export function useTripLogs(enabled: boolean) {
         setTotal(total);
       })
       .catch((err) => { console.error(err); if (!cancelled) setError(messageFromError(err, "Couldn't load trip logs.")); })
-      .finally(() => { if (!cancelled) setLoading(false); });
+      .finally(() => {
+        if (cancelled) return;
+        setLoading(false);
+        setLoaded(true);
+      });
     return () => { cancelled = true; };
   }, [enabled, fetchCount]);
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
 
-  return { tripLogs, total, loading, error, refetch };
+  return { tripLogs, total, loading, loaded, error, refetch };
 }
 
 // ── Media (object storage) ────────────────────────────────────
@@ -1183,6 +1269,8 @@ export function getStandaloneFiles(): Promise<StandaloneFile[]> {
 export function useStandaloneFiles(enabled: boolean) {
   const [files, setFiles] = useState<StandaloneFile[]>([]);
   const [error, setError] = useState<string | null>(null);
+  /** True once the first fetch settles — see `usePlaceTracks`. */
+  const [loaded, setLoaded] = useState(false);
   const [fetchCount, setFetchCount] = useState(0);
 
   useEffect(() => {
@@ -1193,13 +1281,14 @@ export function useStandaloneFiles(enabled: boolean) {
       .catch((err) => {
         console.error(err);
         if (!cancelled) setError(messageFromError(err, "Couldn't load your files."));
-      });
+      })
+      .finally(() => { if (!cancelled) setLoaded(true); });
     return () => { cancelled = true; };
   }, [enabled, fetchCount]);
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
 
-  return { files, error, refetch };
+  return { files, loaded, error, refetch };
 }
 
 export function renameMedia(id: string, displayName: string): Promise<MediaItem> {
@@ -1268,53 +1357,6 @@ export function useStandaloneTracks(files: StandaloneFile[], shownIds: string[])
   }, [files, shownIds]);
 
   return { tracks, error };
-}
-
-// ── Analytics ─────────────────────────────────────────────────
-
-// /analytics is the canyoning surface: the server scopes every trip-derived
-// stat to trips that are place-linked OR tagged canyoning (a place link means
-// "I completed that place on that trip"). There is no type filter — it took no
-// argument but "canyoning" from its only caller, and there is no dropdown.
-export type TAnalytics = {
-  heroStats: {
-    totalTrips: number;
-    uniquePlaces: number;
-    daysCanyoning: number;
-    totalAbseils: number | null;
-  };
-  completion: {
-    totalPlaces: number;
-    placesWithTrips: number;
-  };
-  // Per-day trip counts across ALL trip types — drives the Activity calendar.
-  tripDates: Record<string, number>;
-  // Distinct types across ALL the user's trips, canyoning or not.
-  types: string[];
-};
-
-export function getAnalytics(): Promise<TAnalytics> {
-  return apiFetch<TAnalytics>("/analytics");
-}
-
-export function useAnalytics(enabled: boolean) {
-  const [analytics, setAnalytics] = useState<TAnalytics | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [fetchCount, setFetchCount] = useState(0);
-
-  useEffect(() => {
-    if (!enabled) return;
-    setLoading(true);
-    getAnalytics()
-      .then(setAnalytics)
-      .catch((err) => { console.error(err); setError(messageFromError(err, "Couldn't load analytics.")); })
-      .finally(() => setLoading(false));
-  }, [enabled, fetchCount]);
-
-  const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
-
-  return { analytics, loading, error, refetch };
 }
 
 // ── Friends ───────────────────────────────────────────────────
@@ -1464,20 +1506,10 @@ export function ownerUsername(
 // an import. There is no sender side on web: nothing here holds a local file to
 // send.
 
-export type TFileSendInboxRow = {
-  fileSendId: string;
-  status: FileSendStatus;
-  sourceKind: FileSendSourceKind;
-  filename: string;
-  sizeBytes: number;
-  createdAt: string;
-  expiresAt: string;
-  sentBy: { id: string; username: string };
-};
-
-export function getFileSendInbox(): Promise<TFileSendInboxRow[]> {
-  return apiFetch<TFileSendInboxRow[]>("/file-sends/inbox");
-}
+// NO `GET /file-sends/inbox` HELPER. The Inbox draws every send from the
+// notification each one writes, and answers it there; the Friends page held a
+// second, separately-fetched copy of that list until 2026-09-18, which could
+// disagree with the Inbox about what was still pending.
 
 /** Returns a short-lived presigned URL. Accepted rows stay downloadable until
  *  the send expires, which is what makes a re-download possible after a failed
@@ -1559,12 +1591,9 @@ export function copyRoute(routeId: string): Promise<TRoute> {
 
 // ── Notifications ─────────────────────────────────────────────
 
-export function getUnreadCount(): Promise<{ count: number }> {
-  return apiFetch<{ count: number }>("/notifications/unread-count");
-}
-
-export function markNotificationRead(id: string): Promise<void> {
-  return apiFetch<void>(`/notifications/${id}/read`, { method: "PATCH" });
+/** `read: false` marks it unread again (the Inbox's ⋯ and its selection bar). */
+export function markNotificationRead(id: string, read = true): Promise<void> {
+  return apiFetch<void>(`/notifications/${id}/read`, { method: "PATCH", body: { read } });
 }
 
 export function markAllNotificationsRead(): Promise<void> {
@@ -1583,26 +1612,55 @@ export function useNotifications(enabled: boolean) {
   const [notifications, setNotifications] = useState<TNotification[]>([]);
   // True total (pre server-side list cap); null until known.
   const [total, setTotal] = useState<number | null>(null);
-  const [unreadCount, setUnreadCount] = useState(0);
+  // True once the first fetch has SETTLED, either way: an empty list before
+  // then is not "Nothing yet".
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fetchCount, setFetchCount] = useState(0);
+  const [readOverrides, setReadOverrides] = useState<ReadOverrides>(() => new Map());
 
   useEffect(() => {
     if (!enabled) return;
     // Guards a stale in-flight response landing after a newer one (FECO-001).
     let cancelled = false;
     apiFetchWithTotal<TNotification[]>("/notifications")
-      .then(({ data, total }) => { if (!cancelled) { setNotifications(data); setTotal(total); } })
-      .catch((err) => { console.error(err); if (!cancelled) setError(messageFromError(err, "Couldn't load notifications.")); });
-    getUnreadCount()
-      .then((r) => { if (!cancelled) setUnreadCount(r.count); })
-      .catch((err) => { console.error(err); if (!cancelled) setError(messageFromError(err, "Couldn't load notifications.")); });
+      .then(({ data, total }) => {
+        if (cancelled) return;
+        setNotifications(data);
+        setTotal(total);
+        setError(null);
+        setReadOverrides((prev) => settleReadOverrides(prev, data));
+      })
+      .catch((err) => { console.error(err); if (!cancelled) setError(messageFromError(err, "Couldn't load notifications.")); })
+      .finally(() => { if (!cancelled) setLoaded(true); });
     return () => { cancelled = true; };
   }, [enabled, fetchCount]);
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
 
-  return { notifications, total, unreadCount, error, refetch };
+  // The badge counts the list the Inbox shows, the way Logjam GPS's tab badge
+  // does. `/notifications/unread-count` counts every stored row, including the
+  // ones the list drops because their share or friendship is gone, so the rail
+  // said 11 over an inbox that said "5 unread". A batch counts once, as its row.
+  const shown = useMemo(() => withReadOverrides(notifications, readOverrides), [notifications, readOverrides]);
+  const unreadCount = useMemo(() => tallyNotifications(shown).unread, [shown]);
+
+  /** Show `read` for these rows now, ahead of the write; `null` takes it back
+   *  (the write failed). */
+  const overrideRead = useCallback(
+    (ids: string[], read: boolean | null) =>
+      setReadOverrides((prev) => {
+        const next = new Map(prev);
+        for (const id of ids) {
+          if (read === null) next.delete(id);
+          else next.set(id, read);
+        }
+        return next;
+      }),
+    [],
+  );
+
+  return { notifications: shown, total, loaded, unreadCount, error, refetch, overrideRead };
 }
 
 // ── Filters ───────────────────────────────────────────────────
@@ -1691,6 +1749,9 @@ export function useGeoPdfJobs(enabled: boolean, pollMs: number = 5000) {
   // True total (pre server-side list cap); null until known.
   const [total, setTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+  // True once the first fetch has settled, either way. `loading` alone starts
+  // false, so a list reading it would flash "nothing yet" before any request.
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fetchCount, setFetchCount] = useState(0);
 
@@ -1701,7 +1762,7 @@ export function useGeoPdfJobs(enabled: boolean, pollMs: number = 5000) {
     apiFetchWithTotal<{ jobs: GeoPdfJobView[] }>("/geo-pdf")
       .then(({ data, total }) => { if (!cancelled) { setJobs(data.jobs); setTotal(total); setError(null); } })
       .catch((err) => { console.error(err); if (!cancelled) setError(messageFromError(err, "Couldn't load GeoPDF jobs.")); })
-      .finally(() => { if (!cancelled) setLoading(false); });
+      .finally(() => { if (!cancelled) { setLoading(false); setLoaded(true); } });
     return () => { cancelled = true; };
   }, [enabled, fetchCount]);
 
@@ -1715,7 +1776,7 @@ export function useGeoPdfJobs(enabled: boolean, pollMs: number = 5000) {
   }, [enabled, pollMs, hasInProgress]);
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
-  return { jobs, total, loading, error, refetch };
+  return { jobs, total, loading, loaded, error, refetch };
 }
 
 export function getGeoPdfJob(id: string): Promise<GeoPdfJobView> {

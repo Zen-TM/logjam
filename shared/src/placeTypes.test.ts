@@ -6,6 +6,8 @@ import {
   SYSTEM_FIELD_DEFS,
   CANYON_FORM_FIELD_KEYS,
   PLACE_TYPE_COLORS,
+  PLACE_TYPE_COLOR_NAMES,
+  placeTypeColorName,
   RESERVED_FIELD_KEYS,
   SHARED_PLACE_COLOR,
   isReservedFieldKey,
@@ -217,5 +219,23 @@ describe("SHARED_PLACE_COLOR", () => {
         (PLACE_TYPE_COLORS as readonly string[]).map((c) => c.toUpperCase()),
       ).toContain(type.color.toUpperCase());
     }
+  });
+});
+
+describe("PLACE_TYPE_COLOR_NAMES", () => {
+  it("names every colour in the palette, and nothing else", () => {
+    expect(Object.keys(PLACE_TYPE_COLOR_NAMES).sort()).toEqual(
+      [...PLACE_TYPE_COLORS].sort(),
+    );
+  });
+
+  it("gives each colour its own name", () => {
+    const names = Object.values(PLACE_TYPE_COLOR_NAMES);
+    expect(new Set(names).size).toBe(names.length);
+  });
+
+  it("answers with the hex for a colour outside the palette", () => {
+    expect(placeTypeColorName("#123456")).toBe("#123456");
+    expect(placeTypeColorName(null)).toBe("No colour");
   });
 });

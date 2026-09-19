@@ -2,6 +2,7 @@ import { Component, type ErrorInfo, type ReactNode } from "react";
 import { signOut } from "aws-amplify/auth";
 import { clearTripDraft } from "../../tripDraft";
 import BrandMark from "../brand/BrandMark";
+import { Button } from "../../ui";
 import classes from "./RootErrorBoundary.module.css";
 
 interface Props {
@@ -63,20 +64,13 @@ export class RootErrorBoundary extends Component<Props, State> {
             keeps happening, sign out and back in.
           </p>
           <div className={classes.actions}>
-            <button
-              type="button"
-              className={classes.reloadButton}
-              onClick={this.handleReload}
-            >
+            {/* The kit's own Button: CSS modules and static tokens, so it
+                renders correctly above the theme provider that may be the
+                thing that failed. */}
+            <Button variant="filled" onClick={this.handleReload}>
               Reload
-            </button>
-            <button
-              type="button"
-              className={classes.signOutButton}
-              onClick={this.handleSignOut}
-            >
-              Sign out
-            </button>
+            </Button>
+            <Button onClick={this.handleSignOut}>Sign out</Button>
           </div>
         </div>
       </div>

@@ -41,6 +41,11 @@ import {
   type PlaceFilters,
   type PlaceSortKey,
   type RegionBbox,
+  placeSortLabel,
+  placeStatus,
+  placeSummary,
+  qualityLabel,
+  type PlaceStatus,
 } from "@logjam/shared";
 
 import { useAccountState } from "../auth/AccountStateContext";
@@ -81,13 +86,13 @@ import { setAreaPickerStart, takePickedArea } from "../map/pickedArea";
 import { PlaceOptionsSheet } from "./PlaceOptionsSheet";
 import { usePlaceTypeForm } from "./PlaceTypesEditor";
 import { BulkShareButton, BulkShareSheet } from "../sharing/BulkShareSheet";
-import { PlaceFilterSheet, sortLabel } from "./PlaceFilterSheet";
+import { PlaceFilterSheet } from "./PlaceFilterSheet";
 import {
   publishVisiblePlaces,
   setPlaceMapFilterEnabled,
   usePlaceMapFilter,
 } from "./placeMapFilter";
-import { PLACE_STATUS_META, placeStatus, placeSummary, qualityLabel, type PlaceStatus } from "./placeMeta";
+import { PLACE_STATUS_META } from "./placeMeta";
 import { placeTypeFeatherIcon } from "./placeTypeIcon";
 
 type Bucket = "all" | PlaceStatus;
@@ -764,11 +769,11 @@ export function PlacesScreen({
         <View style={styles.filterNote}>
           <Text style={styles.filterText} numberOfLines={1}>
             {hiddenFilterCount === 0
-              ? sortLabel(sort)
+              ? placeSortLabel(sort)
               : hiddenFilterCount === 1
                 ? "1 filter active"
                 : `${hiddenFilterCount} filters active`}
-            {hiddenFilterCount === 0 || sort === "name" ? "" : ` · ${sortLabel(sort)}`}
+            {hiddenFilterCount === 0 || sort === "name" ? "" : ` · ${placeSortLabel(sort)}`}
           </Text>
           <IconButton
             icon="x"
