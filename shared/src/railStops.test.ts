@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { TripLogCustomFieldDef } from "@logjam/shared";
-
-import { railStops } from "./fieldValueCoercion";
+import { railStops, type TripLogCustomFieldDef } from "./tripLogFields.js";
 
 const def = (over: Partial<TripLogCustomFieldDef>): TripLogCustomFieldDef => ({
   key: "k",

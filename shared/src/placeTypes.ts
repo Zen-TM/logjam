@@ -243,6 +243,22 @@ export type SystemFieldDef = {
   max: number | null;
   /** The system types this def is scoped to. */
   placeTypes: SystemPlaceTypeKey[];
+  /**
+   * What the label cannot say: the scale a number is on, what it is measured
+   * between. Shown under the input on a form and nowhere else.
+   *
+   * It lives HERE because a form draws these fields from their definitions
+   * now: the sentences used to be tooltips hand-written beside seven bespoke
+   * canyon controls in `PlaceDialog`, which is the only reason a user field
+   * shaped exactly like `v_grade` never got one. A user's own definition has
+   * no hint and does not need one — they wrote the label.
+   */
+  hint?: string;
+  /**
+   * The unit a VALUE is in, appended where one is displayed ("30 m"). Only
+   * where the label does not already carry it: "Hours" says hours.
+   */
+  unit?: string;
 };
 
 /**
@@ -263,17 +279,23 @@ export type SystemFieldDef = {
  * names it differently.
  */
 export const SYSTEM_FIELD_DEFS: SystemFieldDef[] = [
-  { id: "a0000000-0000-4000-8000-000000000001", key: "v_grade", label: "V grade", type: "integer", min: 1, max: 7, placeTypes: ["canyon"] },
-  { id: "a0000000-0000-4000-8000-000000000002", key: "a_grade", label: "A grade", type: "integer", min: 1, max: 7, placeTypes: ["canyon"] },
-  { id: "a0000000-0000-4000-8000-000000000003", key: "commitment", label: "Commitment", type: "integer", min: 1, max: 6, placeTypes: ["canyon"] },
-  { id: "a0000000-0000-4000-8000-000000000004", key: "quality", label: "Quality", type: "float", min: 1, max: 5, placeTypes: ["canyon", "campsite"] },
-  { id: "a0000000-0000-4000-8000-000000000005", key: "hours", label: "Hours", type: "float", min: 0, max: null, placeTypes: ["canyon"] },
-  { id: "a0000000-0000-4000-8000-000000000006", key: "num_abseils", label: "Pitches", type: "integer", min: 0, max: null, placeTypes: ["canyon"] },
-  { id: "a0000000-0000-4000-8000-000000000007", key: "longest_abseil", label: "Longest pitch", type: "float", min: 0, max: null, placeTypes: ["canyon"] },
+  { id: "a0000000-0000-4000-8000-000000000001", key: "v_grade", label: "V grade", type: "integer", min: 1, max: 7, hint: "Vertical technical difficulty, on the French rating system.", placeTypes: ["canyon"] },
+  { id: "a0000000-0000-4000-8000-000000000002", key: "a_grade", label: "A grade", type: "integer", min: 1, max: 7, hint: "Aquatic difficulty of the water sections, on the French rating system.", placeTypes: ["canyon"] },
+  { id: "a0000000-0000-4000-8000-000000000003", key: "commitment", label: "Commitment", type: "integer", min: 1, max: 6, hint: "How hard the canyon is to escape or retreat from once committed, on the French rating system.", placeTypes: ["canyon"] },
+  { id: "a0000000-0000-4000-8000-000000000004", key: "quality", label: "Quality", type: "float", min: 1, max: 5, hint: "Your own verdict. 1 is unremarkable, 5 is exceptional.", placeTypes: ["canyon", "campsite"] },
+  { id: "a0000000-0000-4000-8000-000000000005", key: "hours", label: "Hours", type: "float", min: 0, max: null, hint: "How long it takes an average group, car to car.", placeTypes: ["canyon"] },
+  { id: "a0000000-0000-4000-8000-000000000006", key: "num_abseils", label: "Pitches", type: "integer", min: 0, max: null, hint: "How many abseils.", placeTypes: ["canyon"] },
+  { id: "a0000000-0000-4000-8000-000000000007", key: "longest_abseil", label: "Longest pitch", type: "float", min: 0, max: null, hint: "The longest single abseil, measured along the rope.", unit: "m", placeTypes: ["canyon"] },
   { id: "a0000000-0000-4000-8000-000000000008", key: "capacity", label: "Capacity", type: "integer", min: 0, max: null, placeTypes: ["campsite"] },
   { id: "a0000000-0000-4000-8000-000000000009", key: "is_cave", label: "Is a cave?", type: "boolean", min: null, max: null, placeTypes: ["campsite"] },
   { id: "a0000000-0000-4000-8000-000000000010", key: "has_water", label: "Has a water source?", type: "boolean", min: null, max: null, placeTypes: ["campsite"] },
 ];
+
+/** The system definition for a key, or undefined for a user's own field. The
+ *  one lookup for the bounds, the hint and the unit a built-in carries. */
+export function systemFieldDef(key: string): SystemFieldDef | undefined {
+  return SYSTEM_FIELD_DEFS.find((def) => def.key === key);
+}
 
 /**
  * Keys a user may not take, DERIVED from the system defs rather than restated.
