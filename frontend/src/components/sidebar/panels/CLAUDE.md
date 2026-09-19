@@ -2,10 +2,10 @@
 
 ## Rules (all mandatory)
 
-- **Build on `frontend/DESIGN.md` and the `src/ui` kit** (Hero, ChipRail, Row, Menu, SideSheet, FilterField…). `PlacesPanel.tsx` and `PlaceFilterSheet.tsx` are the reference. MUI is an ESLint error outside `MUI_LEGACY_FILES`; no panel is on that list any more, and `shared.module.css` — whose `.btn` compositions this entry warned against — was deleted with its last consumer (2026-09-19).
+- **Build on `frontend/DESIGN.md` and the `src/ui` kit** (Hero, ChipRail, Row, Menu, SideSheet, FilterField…). `PlacesPanel.tsx` and `PlaceFilterSheet.tsx` are the reference. MUI and Emotion are an ESLint error anywhere in `src` (`eslint.config.js`) — the `MUI_LEGACY_FILES` escape list is gone and there is nothing left to add to it, and `shared.module.css`, whose `.btn` compositions this entry warned against, was deleted with its last consumer (2026-09-19).
 - **No inline `style` props**, except to set a custom property the kit reads (`--tile-hue`, `--chip-hue`). All other styling in the co-located `.module.css`.
 - **No import from `Map.tsx`** — panels receive callbacks as props from `App.tsx`.
-- **Scrolling:** a rebuilt page pins its hero and rails and scrolls only its list; a panel not yet rebuilt relies on the `SidebarPanel` body's scroll. Never nest a second scroll container (see `../CLAUDE.md`).
+- **Scrolling:** a panel pins its own hero and rails and scrolls only its list. The `SidebarPanel` body neither scrolls nor adds a gutter, and the plain-header fallback that did both went with the last page that used it (2026-09-19) — so a new panel builds its hero rather than inheriting one. Never nest a second scroll container (see `../CLAUDE.md`).
 
 ## Conventions log (additive)
 
