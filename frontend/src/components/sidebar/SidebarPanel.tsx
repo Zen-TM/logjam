@@ -97,6 +97,8 @@ function SidebarPanel({
   onDismissActiveJob,
   onQuotaChanged,
   currentUser,
+  currentUserError,
+  onRetryCurrentUser,
   onOpenTopoWithTemplate,
   // Friends
   friends,
@@ -199,6 +201,10 @@ function SidebarPanel({
   onDismissActiveJob: (jobId: string) => void;
   onQuotaChanged: () => void;
   currentUser: TUser | null;
+  /** Set when the signed-in user's own record failed to load — the one fetch
+   *  the Account page has no fallback for. */
+  currentUserError: string | null;
+  onRetryCurrentUser: () => void;
   onOpenTopoWithTemplate: (templateId: string) => void;
   // Friends
   friends: TFriend[];
@@ -458,7 +464,13 @@ function SidebarPanel({
             onOpenUnifiedImport={onOpenUnifiedImport}
           />
         )}
-        {activePanel === "account" && <AccountPanel currentUser={currentUser} />}
+        {activePanel === "account" && (
+          <AccountPanel
+            currentUser={currentUser}
+            error={currentUserError}
+            onRetry={onRetryCurrentUser}
+          />
+        )}
         {activePanel === "settings" && (
           <SettingsPanel
             currentUser={currentUser}

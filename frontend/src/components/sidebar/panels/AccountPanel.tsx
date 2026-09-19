@@ -47,7 +47,18 @@ function percentUsed(used: number, quota: number): number {
  * PRIVACY: username, email and byte counts. The email appears here and nowhere
  * else — friend search and lists are username-only (root CLAUDE.md).
  */
-function AccountPanel({ currentUser }: { currentUser: TUser | null }) {
+function AccountPanel({
+  currentUser,
+  error,
+  onRetry,
+}: {
+  currentUser: TUser | null;
+  /** The user record's own fetch failed. The page cannot answer its question
+   *  without that row, so this replaces the loading state rather than sitting
+   *  beside it — otherwise "Loading…" is what a user sees for good. */
+  error: string | null;
+  onRetry: () => void;
+}) {
   const { signOut } = useAuth();
   const toast = useToast();
   const [username, setUsername] = useState<string | null>(null);
@@ -106,7 +117,11 @@ function AccountPanel({ currentUser }: { currentUser: TUser | null }) {
 
       <div className={classes.body}>
         {!currentUser ? (
-          <p className={classes.state}>Loading…</p>
+          error ? (
+            <ErrorBanner message={error} onRetry={onRetry} />
+          ) : (
+            <p className={classes.state}>Loading…</p>
+          )
         ) : (
           <>
             <SectionHeader title="Storage" />

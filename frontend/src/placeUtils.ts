@@ -680,22 +680,40 @@ export function fetchComputeEstimate(
 
 export function useCurrentUser(enabled: boolean) {
   const [currentUser, setCurrentUser] = useState<TUser | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [fetchCount, setFetchCount] = useState(0);
 
   useEffect(() => {
     if (!enabled) return;
+    let cancelled = false;
     fetchCurrentUser()
-      .then(setCurrentUser)
-      // Best-effort: background refresh of the cached current user; callers
-      // that need a fresh value already surface their own load errors.
-      .catch(console.error);
+      .then((user) => {
+        if (cancelled) return;
+        setCurrentUser(user);
+        setError(null);
+      })
+      // NOT best-effort, despite reading like it. This is the app's only source
+      // for the signed-in user, and `null` is load-bearing downstream:
+      // Account renders "Loading…" for as long as it stays null, and
+      // `currentUserId` feeds way ownership, where "no user" reads as "not
+      // mine" and hands a friend's shared route the OWNER's verbs. Swallowing
+      // the one failure meant a single 429 or 500 made both permanent, with
+      // nothing to retry. Every other data hook in this file returns `error`
+      // (frontend/CLAUDE.md, "Hook contract"); this one now does too.
+      .catch((err) => {
+        console.error(err);
+        if (!cancelled) setError(messageFromError(err, "Couldn't load your account."));
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [enabled, fetchCount]);
 
   const refetchCurrentUser = useCallback(() => setFetchCount((n) => n + 1), []);
 
   // Synchronously replace the cached user (e.g. with the row returned by a
   // consent PATCH) so gates keyed on user fields update without a refetch gap.
-  return { currentUser, refetchCurrentUser, applyCurrentUser: setCurrentUser };
+  return { currentUser, error, refetchCurrentUser, applyCurrentUser: setCurrentUser };
 }
 
 export function updateCurrentUserThemeScheme(

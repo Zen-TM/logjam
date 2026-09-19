@@ -494,7 +494,7 @@ function App() {
   const auth = useAuth();
   const authenticated = auth.state === "authenticated";
   const { hydrateFromUser } = useThemePreferences();
-  const { currentUser, refetchCurrentUser, applyCurrentUser } = useCurrentUser(authenticated);
+  const { currentUser, error: currentUserError, refetchCurrentUser, applyCurrentUser } = useCurrentUser(authenticated);
   // FECO-005. `authenticated` is NOT enough to start fetching the user's data:
   // a user whose recorded consent is stale gets ConsentGate rendered instead of
   // the app, but rendering is all that used to stop — every hook and boot
@@ -655,6 +655,7 @@ function App() {
 
   // Surface background data-load errors as toasts
   useEffect(() => { if (placesError) toast.error(placesError); }, [placesError, toast]);
+  useEffect(() => { if (currentUserError) toast.error(currentUserError); }, [currentUserError, toast]);
   useEffect(() => { if (sharedError) toast.error(sharedError); }, [sharedError, toast]);
   useEffect(() => { if (friendsError) toast.error(friendsError); }, [friendsError, toast]);
   useEffect(() => { if (notificationsError) toast.error(notificationsError); }, [notificationsError, toast]);
@@ -1509,6 +1510,8 @@ function App() {
           onDismissActiveJob={handleDismissActiveTopoJob}
           onQuotaChanged={refetchCurrentUser}
           currentUser={currentUser}
+          currentUserError={currentUserError}
+          onRetryCurrentUser={refetchCurrentUser}
           onOpenTopoWithTemplate={(templateId) => {
             setInitialTopoTemplateId(templateId);
             setShowTopo(true);
