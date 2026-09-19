@@ -793,7 +793,11 @@ export function reassignPlaceType(
 ): Promise<{ movedCount: number }> {
   return apiFetch<{ movedCount: number }>(`/place-types/${id}/reassign`, {
     method: "POST",
-    body: { toPlaceTypeId },
+    // The server reads `placeTypeId` (routes/placeTypes.ts, pinned by
+    // `__tests__/placeTypes.test.ts`). Sent as `toPlaceTypeId`, every move
+    // came back 400 "A different placeTypeId is required" — the destination
+    // simply was not in the payload the route read.
+    body: { placeTypeId: toPlaceTypeId },
   });
 }
 
