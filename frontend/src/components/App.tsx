@@ -1021,14 +1021,24 @@ function App() {
   // First login (empty account): offer a non-forced onboarding choice once,
   // after the first place fetch completes. The user picks RopeWiki, file
   // import, or starting empty — nothing auto-runs.
+  //
+  // A FAILED fetch is not an empty account. `places` is `[]` before the first
+  // response and stays `[]` when one never arrives, so gating on the count
+  // alone greets a user whose load 429'd, timed out or dropped offline with
+  // "Welcome to Logjam — load the NSW place database?" over the places they
+  // already have. Worse than alarming: the offer they are most likely to take
+  // is the one that writes a second copy of a dataset they cannot see. It
+  // needs a load that SUCCEEDED and came back empty. (Found 2026-09-19 as the
+  // a11y suite's fourteenth case failing behind an onboarding dialog it never
+  // asked for; the suite is what pushes the dev limiter hard enough to see it.)
   useEffect(() => {
     if (placesLoaded && !importChecked.current) {
       importChecked.current = true;
-      if (places.length === 0) {
+      if (!placesError && places.length === 0) {
         setShowOnboarding(true);
       }
     }
-  }, [placesLoaded, places.length]);
+  }, [placesLoaded, placesError, places.length]);
 
   // Derived values
   const allPlaces = [...places, ...sharedPlaces];
