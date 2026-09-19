@@ -10,7 +10,7 @@ Exact sizing, spacing and animation values live in `NavRail.module.css`, `Sideba
 
 - Icons are lucide-react. The rail's groups: Places, Logs, Ways, Maps and Friends, a spacer, then Inbox, Account and Settings.
 - The panel's close button is the kit `IconButton` ("Close panel").
-- A page owns its layout by default: hero and rails pinned, only its list scrolls, and the panel body adds no gutter. The pages not yet rebuilt are listed in `LEGACY_PAGES` (`SidebarPanel.tsx`); they keep the plain header and scroll inside the body, which gives them their gutter. Rebuilding a page means taking it off that list — the list names the OLD pages so a new one cannot forget to opt in, which is how the Gemini Inbox pilot shipped with a doubled gutter and a hero that scrolled away. Never nest a second scroll container inside either.
+- Every page owns its layout: hero and rails pinned, only its list scrolls, and the panel body adds no gutter. The `LEGACY_PAGES` opt-out list is gone — the last page came off it on 2026-09-19 — so there is no plain-header fallback left to join or leave; a new page builds its own hero. Never nest a second scroll container inside.
 
 ## Toggle behaviour
 

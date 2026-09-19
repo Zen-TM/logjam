@@ -30,26 +30,6 @@
   }
 }
 
-.panelHeader {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 8px 10px var(--gutter);
-  border-bottom: var(--hairline);
-}
-
-.panelTitle {
-  flex: 1;
-  min-width: 0;
-  margin: 0;
-  font-size: var(--font-lg);
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 /* A page owns its layout: pinned hero and rails over a list that scrolls on
  * its own (DESIGN.md §2). The body itself never scrolls and adds no gutter. */
 .panelBody {
@@ -58,12 +38,4 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
-}
-
-/* A page not yet rebuilt (LEGACY_PAGES in SidebarPanel.tsx) scrolls inside
- * the body and takes its gutter from it. */
-.panelBody[data-legacy="true"] {
-  display: block;
-  overflow-y: auto;
-  padding: 12px var(--gutter);
 }

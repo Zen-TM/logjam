@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { X } from "lucide-react";
 import { useIsMobile } from "../../useIsMobile";
 import BottomSheet from "./BottomSheet";
 import type { SheetSnap } from "./BottomSheet";
@@ -20,7 +19,7 @@ import type { RegionBbox, StandaloneFile, VectorStyleSettings, TopoExportJobView
 import type { TopoJob, GeoJsonPolygonal } from "../dialogs/TopoDialog";
 import type { CompletedTopoJob } from "../../topoLayerTypes";
 import type { GeoPdfTemplate } from "../dialogs/GeoPdfDialog";
-import { ChipRail, IconButton } from "../../ui";
+import { ChipRail } from "../../ui";
 import classes from "./SidebarPanel.module.css";
 import PlacesPanel, { type MapKind } from "./panels/PlacesPanel";
 import GeoPdfsPanel from "./panels/GeoPdfsPanel";
@@ -47,19 +46,6 @@ const MAPS_VIEWS = [
   { value: "geopdfs", label: "GeoPDFs" },
   { value: "lidar", label: "LiDAR topos" },
 ] as const;
-
-/**
- * Pages not yet rebuilt onto DESIGN.md: they keep the plain header and scroll
- * inside the panel body, which gives them their gutter. Every other page owns
- * both — a hero, and pinned chrome over a list that scrolls by itself.
- *
- * A list of the OLD pages rather than of the new ones, so a rebuilt page gets
- * the right layout by being taken off it. The Inbox pilot was built against an
- * opt-in list of rebuilt pages, never joined it, and shipped with a doubled
- * gutter and a hero that scrolled away. Like `MUI_LEGACY_FILES`, it may only
- * shrink.
- */
-const LEGACY_PAGES: ReadonlySet<PanelId> = new Set<PanelId>([]);
 
 function SidebarPanel({
   activePanel,
@@ -289,7 +275,6 @@ function SidebarPanel({
       setSheetSnap(snapBeforePeek.current);
     }
     // Intentionally only reacts to collapseToPeek; snap is read via ref.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [collapseToPeek]);
 
   // Switching panels (a tab tap) while the sheet is at peek would otherwise
@@ -335,20 +320,11 @@ function SidebarPanel({
 
   if (!activePanel) return null;
 
+  // The panel's accessible name. Every page draws its own hero now, so this
+  // titles the landmark and nothing else — place-detail computes it for the
+  // same reason, after losing its header.
   const title =
     activePanel === "place-detail" && place ? place.name : PANEL_TITLES[activePanel];
-
-  // A rebuilt page opens with its own hero and owns its scrolling; a legacy one
-  // keeps the plain header and scrolls inside the body. `title` is still the
-  // panel's accessible name either way, which is why place-detail keeps
-  // computing it after losing its header.
-  const legacy = LEGACY_PAGES.has(activePanel);
-  const header = !legacy ? null : (
-      <header className={classes.panelHeader}>
-        <h2 className={classes.panelTitle}>{title}</h2>
-        <IconButton icon={X} label="Close panel" onClick={onClose} />
-      </header>
-    );
 
   // A page with two views draws its switch under its own hero, so the hero
   // stays the page's first line (DESIGN.md §2).
@@ -361,8 +337,7 @@ function SidebarPanel({
 
   const panelContent = (
     <>
-      {header}
-      <div className={classes.panelBody} data-active-panel={activePanel} data-legacy={legacy}>
+      <div className={classes.panelBody}>
         {activePanel === "places" && (
           <PlacesPanel
             places={places}
