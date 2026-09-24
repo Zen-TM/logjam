@@ -28,7 +28,7 @@ import {
 } from "./notificationDestination";
 import { theme, spacing } from "../theme";
 import { BottomSheet, Row } from "../ui";
-import { notificationPlaceId, notificationLabel } from "../screens/notificationLabel";
+import { notificationPlaceId, notificationLabel } from "@logjam/shared";
 
 export function NotificationOptionsSheet({
   notification,

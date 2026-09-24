@@ -1,0 +1,69 @@
+/* Layout only; the kit does the look (DESIGN.md §9). The values here match
+   TripLogDialog's — the two forms are the same shape and were drifting apart
+   is what the shared sub-components exist to prevent. */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Matches a TextField's label; the rail below it carries the same words as
+   its own accessible name. */
+.fieldLabel {
+  font-size: var(--font-sm);
+  color: var(--theme-text-muted);
+}
+
+.hint {
+  margin: 0;
+  font-size: var(--font-xs);
+  color: var(--theme-text-muted);
+}
+
+.coordinates,
+.attribute,
+.source {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+/* An attribute and its delete stay on one line: the control is the row and
+   the bin belongs to it. */
+.attribute {
+  flex-wrap: nowrap;
+}
+
+.grow {
+  flex: 1;
+  min-width: 120px;
+}
+
+/* Sits on the baseline of the two coordinate boxes, whose own hint line makes
+   them taller than the button. */
+.pickButton {
+  margin-bottom: calc(var(--font-xs) + 8px);
+}
+
+.addAttribute {
+  align-self: flex-start;
+}
+
+.muted {
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--theme-text-muted);
+}

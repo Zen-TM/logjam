@@ -13,7 +13,7 @@
 // looking at the line you tapped.
 import { useEffect, useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
-import { messageFromError, TRACK_COLORS } from "@logjam/shared";
+import { messageFromError, TRACK_COLORS, trackColorName } from "@logjam/shared";
 
 import { assetHue, radius, spacing, theme, withAlpha } from "../theme";
 import { BottomSheet, RenameForm, Row } from "../ui";
@@ -286,7 +286,7 @@ export function TrackOptionsSheet({
                 <Pressable
                   key={swatch}
                   accessibilityRole="button"
-                  accessibilityLabel={`Colour ${swatch}`}
+                  accessibilityLabel={trackColorName(swatch)}
                   accessibilityState={{ selected: swatch === track.color }}
                   onPress={() => {
                     setPickingColor(false);

@@ -66,7 +66,31 @@ export type BasemapCatalogEntry = {
   requiresExtractionDate?: boolean;
 };
 
+// Order is the pickers' order: the OSM family, then the SIX sheets.
 export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
+  {
+    // Self-hosted Protomaps vector basemap (mobile Stage 2+; the Stage 4
+    // offline-region source). urlTemplate is the CDN-relative archive path —
+    // the mobile resolver builds pmtiles://<cdnBaseUrl>/<urlTemplate>.
+    // ODbL requires the OSM credit; Protomaps credits the sponsor-funded
+    // planet builds the extract comes from.
+    id: "protomaps",
+    // Named for what it IS, not for what it can do: every downloadable source
+    // is "offline-ready", and "Topo Vector" read as a topographic map, which
+    // this is not — it is the OSM road/track network drawn on the device.
+    // It is also the only OSM default either picker offers (the "osm" raster
+    // entry below is offered by neither): same cartography, drawn rather than
+    // fetched and downloadable, so the name says which rendering it is.
+    name: "OSM Vector",
+    kind: "vector",
+    urlTemplate: "master/basemap/protomaps-nsw.pmtiles",
+    maxNativeZoom: 15,
+    displayMaxZoom: 15,
+    attribution: "Base map © OpenStreetMap contributors (Protomaps build)",
+    attributionHtml:
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors | <a href="https://protomaps.com">Protomaps</a>',
+    offlineCapable: true,
+  },
   {
     id: "osm",
     name: "Default",
@@ -142,29 +166,6 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
     attributionHtml: SIX_ATTRIBUTION_HTML,
     offlineCapable: true,
     requiresExtractionDate: true,
-  },
-  {
-    // Self-hosted Protomaps vector basemap (mobile Stage 2+; the Stage 4
-    // offline-region source). urlTemplate is the CDN-relative archive path —
-    // the mobile resolver builds pmtiles://<cdnBaseUrl>/<urlTemplate>.
-    // ODbL requires the OSM credit; Protomaps credits the sponsor-funded
-    // planet builds the extract comes from.
-    id: "protomaps",
-    // Named for what it IS, not for what it can do: every downloadable source
-    // is "offline-ready", and "Topo Vector" read as a topographic map, which
-    // this is not — it is the OSM road/track network drawn on the device.
-    // It is also the ONLY OSM default the mobile picker offers (the "osm"
-    // raster entry above is web-only): same cartography, drawn on the phone
-    // and downloadable, so the name says which rendering it is.
-    name: "OSM Default (vector)",
-    kind: "vector",
-    urlTemplate: "master/basemap/protomaps-nsw.pmtiles",
-    maxNativeZoom: 15,
-    displayMaxZoom: 15,
-    attribution: "Base map © OpenStreetMap contributors (Protomaps build)",
-    attributionHtml:
-      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors | <a href="https://protomaps.com">Protomaps</a>',
-    offlineCapable: true,
   },
 ];
 

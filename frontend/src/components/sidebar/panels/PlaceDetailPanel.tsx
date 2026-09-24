@@ -1,31 +1,61 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+// One place: what it is, what this kind of place records, and what can be done
+// with it.
+//
+// EVERY ATTRIBUTE IS READ FROM ITS DEFINITION. Four canyon scalars used to be
+// printed by name — quality, pitches, longest pitch, hours — above a generic
+// loop over the type's definitions that had since come to include those very
+// fields, so a canyon listed each of them TWICE, once with a unit and once
+// without ("Longest Pitch: 15m" and "Longest pitch: 15"). The fix is the one
+// PlaceDialog got: the definitions are the list, and `SYSTEM_FIELD_DEFS` is
+// where a built-in's unit lives.
+//
+// Which verbs it offers is `placeVerbs` (placesModel.ts), not this file's
+// judgement — the same rule `wayActions.ts` holds for ways, so a place's row
+// and its page cannot drift into disagreeing about what can be done with it.
+import { useState, useEffect, useMemo, useRef, type CSSProperties } from "react";
 import {
+  Activity,
+  Check,
+  Copy,
+  CopyPlus,
+  EllipsisVertical,
+  ExternalLink,
+  Link as LinkIcon,
+  Link2Off,
+  LocateFixed,
+  MapIcon,
+  MapPin,
+  MapPinned,
+  Pencil,
+  Share2,
+  Trash2,
+  X,
+  type LucideIcon,
+} from "lucide-react";
+import {
+  asForeignFields,
   copyAndRemoveConfirm,
+  defsForType,
   fieldValue,
-  numericFieldValue,
+  formatDateKey,
+  mediaCategory,
+  primaryTripType,
+  removeShareConfirm,
   SOURCES_FIELD_KEY,
+  systemFieldDef,
+  type MediaItem,
+  type ScopedCustomFieldDef,
+  type TripLogCustomFieldDef,
 } from "@logjam/shared";
-import { Pencil, TriangleAlert, X, Trash2 } from "lucide-react";
 import classes from "./PlaceDetailPanel.module.css";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
 import PlaceDialog from "../../dialogs/PlaceDialog";
 import ShareDialog from "../../dialogs/ShareDialog";
 import TripLogDialog from "../../dialogs/TripLogDialog";
-import TripLogViewDialog from "../../dialogs/TripLogViewDialog";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
-import RemoveSharedButton from "../../common/RemoveSharedButton";
 import type { TPlace, TFriend, TTripLog, TPlaceShare, TPlaceType } from "../../../placeUtils";
 import {
-  asForeignFields,
-  defsForType,
-  mediaCategory,
-  type ScopedCustomFieldDef,
-  type TripLogCustomFieldDef,
-  type MediaItem,
-} from "@logjam/shared";
-import {
-  formatCanyonGrade,
   deletePlace,
   getCustomFields,
   resolveForeignField,
@@ -40,10 +70,35 @@ import {
   ownerUsername,
 } from "../../../placeUtils";
 import PlaceSlideshow from "../../media/PlaceSlideshow";
-import TrackIcon from "../../media/TrackIcon";
+import { placeTypeLucideIcon } from "./placeTypeIcon";
+import { tripTypeLook } from "./tripTypeIcon";
+import { placeVerbs, type PlaceVerbId } from "./placesModel";
+import {
+  Button,
+  EmptyState,
+  Hero,
+  IconButton,
+  IconTile,
+  Menu,
+  Row,
+  SectionHeader,
+  type MenuEntry,
+} from "../../../ui";
 
-// Format a stored custom-field value for display. Returns null when the value
-// is empty so the caller can skip rendering the row entirely.
+const VERB_ICON: Partial<Record<PlaceVerbId, LucideIcon>> = {
+  edit: Pencil,
+  logTrip: Pencil,
+  show: LocateFixed,
+  makeMap: MapIcon,
+  share: Share2,
+  copy: CopyPlus,
+  copyAndRemove: CopyPlus,
+  remove: Link2Off,
+  delete: Trash2,
+};
+
+// Format a stored attribute value for display. Returns null when the value is
+// empty so the caller can skip the row entirely.
 function formatCustomFieldValue(
   value: unknown,
   type: TripLogCustomFieldDef["type"],
@@ -51,7 +106,7 @@ function formatCustomFieldValue(
   if (value == null || value === "") return null;
   if (type === "boolean") return value ? "Yes" : "No";
   if (type === "date" && typeof value === "string") {
-    // Date-typed custom fields are stored as UTC-midnight (date-only); format in
+    // Date-typed attributes are stored as UTC-midnight (date-only); format in
     // UTC so AEST (UTC+10/+11) doesn't render the prior day.
     return new Date(value).toLocaleDateString("en-AU", {
       year: "numeric",
@@ -61,6 +116,26 @@ function formatCustomFieldValue(
     });
   }
   return String(value);
+}
+
+/** The value as it is READ: the stored answer plus the unit its definition
+ *  declares ("15 m"). Only a built-in carries one, and only where the label
+ *  does not already say it — "Hours" says hours. */
+function displayValue(def: TripLogCustomFieldDef, raw: unknown): string | null {
+  const text = formatCustomFieldValue(raw, def.type);
+  if (text == null) return null;
+  const unit = systemFieldDef(def.key)?.unit;
+  return unit ? `${text} ${unit}` : text;
+}
+
+/** The site a source points at, for the row's second line. A URL the parser
+ *  refuses is not shown rather than guessed at. */
+function hostOf(url: string): string | undefined {
+  try {
+    return new URL(url).host;
+  } catch {
+    return undefined;
+  }
 }
 
 // Grammatical list: "a", "a and b", "a, b, and c".
@@ -89,6 +164,12 @@ function PlaceDetailPanel({
   onPickCoords,
   pickingCoords,
   onCancelPickCoords,
+  onBack,
+  onClose,
+  onFlyToPlace,
+  onOpenTrip,
+  onMakeMap,
+  onSharePlace,
   customFieldDefs,
   placeTypes,
   onCustomFieldDefsChange,
@@ -108,8 +189,19 @@ function PlaceDetailPanel({
   onPickCoords: (onPicked: (lat: number, lng: number) => void) => void;
   pickingCoords: boolean;
   onCancelPickCoords: () => void;
+  /** Back to the list this place was opened from. */
+  onBack: () => void;
+  onClose: () => void;
+  /** Centre the map on this place — the same verb its row and its pin offer. */
+  onFlyToPlace: (latitude: number, longitude: number) => void;
+  /** A trip is READ on its own page (DESIGN.md §6), not in a dialog over this one. */
+  onOpenTrip: (tripLogId: string) => void;
+  /** Start a map over this place; the menu names the two kinds. */
+  onMakeMap: (place: TPlace, kind: "topo" | "geopdf") => void;
+  /** Open the share-or-export dialog on this place, the one the list uses. */
+  onSharePlace: (placeId: string) => void;
   customFieldDefs: ScopedCustomFieldDef[];
-  /** Passed straight to the edit dialog's type picker. */
+  /** The types a place may be filed under, passed to the edit dialog. */
   placeTypes: TPlaceType[];
   onCustomFieldDefsChange: (defs: ScopedCustomFieldDef[]) => void;
   placeCustomFieldDefs: ScopedCustomFieldDef[];
@@ -124,31 +216,29 @@ function PlaceDetailPanel({
 }) {
   const toast = useToast();
   const [showEdit, setShowEdit] = useState(false);
-  const [safetyDismissed, setSafetyDismissed] = useState(
-    () => localStorage.getItem('logjam.safetyDismissed') === '1'
-  );
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   // Copy and Remove shipped with NO confirm while plain Remove had one — the
   // more consequential button asking less. `copyAndRemoveConfirm` is the same
   // wording Logjam GPS shows.
   const [confirmCopyAndRemove, setConfirmCopyAndRemove] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  const [removing, setRemoving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [trackToDelete, setTrackToDelete] = useState<MediaItem | null>(null);
   const [deletingTrack, setDeletingTrack] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const [tripLogs, setTripLogs] = useState<TTripLog[]>([]);
   const [placeMedia, setPlaceMedia] = useState<MediaItem[]>([]);
   const [loadingTrips, setLoadingTrips] = useState(false);
   const [showTripLogDialog, setShowTripLogDialog] = useState(false);
-  const [showTripLogView, setShowTripLogView] = useState(false);
-  const [viewingTripLog, setViewingTripLog] = useState<TTripLog | null>(null);
   const [editingTripLog, setEditingTripLog] = useState<TTripLog | undefined>(undefined);
 
   const [copying, setCopying] = useState(false);
   const [placeShares, setPlaceShares] = useState<TPlaceShare[]>([]);
-  /** Which parked field is being acted on — the buttons disable together, so
-   *  two taps cannot race one row into two states. */
+  /** Which parked attribute is being acted on — the buttons disable together,
+   *  so two presses cannot race one row into two states. */
   const [foreignFieldBusy, setForeignFieldBusy] = useState<string | null>(null);
 
   // The other end of every link touching this place. The list arrives on the
@@ -165,8 +255,18 @@ function PlaceDetailPanel({
     () => asForeignFields(place?.foreignFields),
     [place?.foreignFields],
   );
-  const placeTypeName =
-    placeTypes.find((type) => type.id === place?.placeTypeId)?.name ?? "this type";
+  const placeType = placeTypes.find((type) => type.id === place?.placeTypeId);
+  const TypeGlyph = placeTypeLucideIcon(placeType?.iconKey ?? "map-pin");
+  const placeTypeName = placeType?.name ?? "this type";
+
+  /** What this KIND of place records, and what this one answered. Only the
+   *  answered ones: a form asks every question, a page reports the answers. */
+  const attributes = useMemo(() => {
+    if (!place) return [];
+    return defsForType(placeCustomFieldDefs, place.placeTypeId)
+      .map((def) => ({ def, text: displayValue(def, fieldValue(place.fieldValues, def.key)) }))
+      .filter((row): row is { def: ScopedCustomFieldDef; text: string } => row.text != null);
+  }, [place, placeCustomFieldDefs]);
 
   /**
    * Adopt / discard / append one parked value.
@@ -192,7 +292,7 @@ function PlaceDetailPanel({
       onRefetch();
     } catch (err) {
       console.error(err);
-      toast.error(messageFromError(err, "Couldn't update that field."));
+      toast.error(messageFromError(err, "Couldn't update that attribute."));
     } finally {
       setForeignFieldBusy(null);
     }
@@ -270,7 +370,42 @@ function PlaceDetailPanel({
   }, [place?.id, toast]);
 
   if (!place) {
-    return <span className={classes.caption}>No place selected.</span>;
+    return (
+      <div className={classes.root}>
+        <Hero title="Place" onBack={onBack} backLabel="Back to Places" actions={
+          <IconButton icon={X} label="Close panel" onClick={onClose} />
+        } />
+        <div className={classes.body}>
+          <EmptyState
+            icon={MapPinned}
+            title="No place selected"
+            body="Pick one from Places, or press a pin on the map."
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // The place is definitely there from here down; keep a narrowed binding so
+  // the callbacks below don't each have to re-check it.
+  const current = place;
+
+  const coordinates = `${current.latitude.toFixed(4)}, ${current.longitude.toFixed(4)}`;
+
+  /** The one thing a coordinate is FOR: getting it into whatever the user is
+   *  navigating with. The glyph answers for two seconds — a toast for a copy
+   *  is a notification about something the user is watching happen. */
+  async function handleCopyCoordinates() {
+    try {
+      await navigator.clipboard.writeText(coordinates);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      // A browser that refuses the clipboard (no permission, no secure
+      // context) must say so rather than looking like it worked.
+      console.error(err);
+      toast.error("Couldn't copy the coordinates.");
+    }
   }
 
   // NO `mediaLeftBehind`: whether photos come is the account's remembered
@@ -278,8 +413,13 @@ function PlaceDetailPanel({
   // nothing about them and `handleCopyPlace` reports what actually happened.
   const copyAndRemoveCopy = copyAndRemoveConfirm({
     kindLabel: "place",
-    itemName: place.name,
-    ownerName: ownerUsername(friends, place.ownerId),
+    itemName: current.name,
+    ownerName: ownerUsername(friends, current.ownerId),
+  });
+  const removeCopy = removeShareConfirm({
+    kindLabel: "place",
+    itemName: current.name,
+    ownerName: ownerUsername(friends, current.ownerId),
   });
 
   // Owner-only "shared with" line: list up to 3 names, else 2 + "N more" link.
@@ -303,10 +443,9 @@ function PlaceDetailPanel({
     ) : null;
 
   async function handleDelete() {
-    if (!place) return;
     setDeleting(true);
     try {
-      await deletePlace(place.id);
+      await deletePlace(current.id);
       setShowDeleteConfirm(false);
       setDeleting(false);
       setSelectedPlaceID(null);
@@ -319,6 +458,23 @@ function PlaceDetailPanel({
       console.error(err);
       toast.error(messageFromError(err, "Couldn't delete place. Please try again."));
       setDeleting(false);
+    }
+  }
+
+  async function handleRemoveShare() {
+    setRemoving(true);
+    try {
+      await unsharePlaceWith(current.id, "me");
+      setConfirmRemove(false);
+      onRefetchShared();
+      setSelectedPlaceID(null);
+      onAfterDelete();
+      toast.success("Removed.");
+    } catch (err) {
+      console.error(err);
+      toast.error(messageFromError(err, "Couldn't remove that place. Please try again."));
+    } finally {
+      setRemoving(false);
     }
   }
 
@@ -335,13 +491,12 @@ function PlaceDetailPanel({
    * is to promise nothing beforehand and say what happened after.
    */
   async function handleCopyPlace(andRemove: boolean) {
-    if (!place) return;
     setCopying(true);
     try {
-      const copied = await copyPlace(place.id);
+      const copied = await copyPlace(current.id);
       const skipped = copied.mediaSkipped ?? 0;
       if (andRemove) {
-        await unsharePlaceWith(place.id, "me");
+        await unsharePlaceWith(current.id, "me");
         onRefetchShared();
         setSelectedPlaceID(null);
       }
@@ -364,16 +519,10 @@ function PlaceDetailPanel({
     }
   }
 
-  // Plain "remove my access" is RemoveSharedButton below — it owns the confirm
-  // the whole app shares. This is only the copy-then-remove pairing, where the
-  // user keeps a copy of their own and the confirm would be asking about a loss
-  // that isn't happening.
-
   // Re-pull place-level media after the edit dialog uploads/deletes, so the
-  // slideshow + track card reflect changes without waiting for a Save.
+  // slideshow + track row reflect changes without waiting for a Save.
   function reloadPlaceMedia() {
-    if (!place) return;
-    const requestedId = place.id;
+    const requestedId = current.id;
     getPlaceDetail(requestedId)
       .then((detail) => {
         // FEUI-006: same stale-response guard as the detail-fetch effect —
@@ -386,6 +535,17 @@ function PlaceDetailPanel({
         toast.error(messageFromError(err, "Couldn't refresh media."));
       });
     onQuotaChanged();
+  }
+
+  function refreshTripLogs() {
+    getTripLogs(current.id)
+      .then(setTripLogs)
+      .catch((err) => {
+        console.error(err);
+        toast.error(messageFromError(err, "Couldn't refresh trip logs."));
+      });
+    // Also refresh the global Trip Logs list/search (separate query).
+    onRefetchTripLogs();
   }
 
   async function handleDeleteTrack() {
@@ -404,397 +564,328 @@ function PlaceDetailPanel({
     }
   }
 
-  const canyonGrade = formatCanyonGrade(place);
-  const visualMedia = placeMedia.filter(
-    (m) => mediaCategory(m.mediaType) !== "track",
+  const busy = copying || deleting || removing;
+
+  function runVerb(id: PlaceVerbId) {
+    switch (id) {
+      case "open":
+        return; // A row's verb; this page is what it opens.
+      case "edit":
+        return setShowEdit(true);
+      case "logTrip":
+        setEditingTripLog(undefined);
+        return setShowTripLogDialog(true);
+      case "show":
+        return onFlyToPlace(current.latitude, current.longitude);
+      case "makeMap":
+        return; // Replaced by its two named entries below.
+      case "share":
+        return onSharePlace(current.id);
+      case "copy":
+        return void handleCopyPlace(false);
+      case "copyAndRemove":
+        return setConfirmCopyAndRemove(true);
+      case "remove":
+        return setConfirmRemove(true);
+      case "delete":
+        return setShowDeleteConfirm(true);
+    }
+  }
+
+  const entries: MenuEntry[] = placeVerbs("detail", isOwnedPlace).flatMap(
+    (verb, index, all) => {
+      // "Make a map here" is two maps, so it is two entries — the same pair the
+      // list's menu offers, named the same way.
+      const items: MenuEntry[] =
+        verb.id === "makeMap"
+          ? [
+              {
+                id: "topo",
+                label: "Make a LiDAR topo here",
+                icon: MapIcon,
+                disabled: busy,
+                onSelect: () => onMakeMap(current, "topo"),
+              },
+              {
+                id: "geopdf",
+                label: "Make a GeoPDF here",
+                icon: MapIcon,
+                disabled: busy,
+                onSelect: () => onMakeMap(current, "geopdf"),
+              },
+            ]
+          : [
+              {
+                id: verb.id,
+                label: verb.label,
+                ...(VERB_ICON[verb.id] ? { icon: VERB_ICON[verb.id]! } : {}),
+                ...(verb.danger ? { danger: true } : {}),
+                disabled: busy,
+                onSelect: () => runVerb(verb.id),
+              },
+            ];
+      // A rule sits above the verbs that end the user's relationship with the
+      // place, so parting with something is never adjacent to an ordinary
+      // verb. Not keyed on `danger`: Remove belongs below the rule and
+      // destroys nothing.
+      return verb.separated && index > 0 && !all[index - 1].separated
+        ? [{ id: `${verb.id}-sep`, separator: true } as MenuEntry, ...items]
+        : items;
+    },
   );
+
+  const visualMedia = placeMedia.filter((m) => mediaCategory(m.mediaType) !== "track");
   const track = placeMedia.find((m) => mediaCategory(m.mediaType) === "track") ?? null;
-  const showMediaTop = visualMedia.length > 0 || track != null || isOwnedPlace;
 
   return (
     <>
       <div className={classes.root}>
-        <div className={classes.scrollArea}>
+        <Hero
+          title={current.name}
+          onBack={onBack}
+          backLabel="Back to Places"
+          actions={
+            <>
+              <Menu
+                label={`Actions for ${current.name}`}
+                title={current.name}
+                placement="bottom-end"
+                entries={entries}
+                trigger={(props) => (
+                  <IconButton
+                    {...props}
+                    icon={EllipsisVertical}
+                    label={`Actions for ${current.name}`}
+                  />
+                )}
+              />
+              <IconButton icon={X} label="Close panel" onClick={onClose} />
+            </>
+          }
+        />
+
+        <div className={classes.body}>
           {visualMedia.length > 0 && <PlaceSlideshow media={visualMedia} />}
 
-          {track && (
-            <div className={classes.trackSection}>
-              <div className={classes.sectionLabel}>Track</div>
-              <div className={classes.trackCard}>
-                <a
-                  className={classes.trackCardLink}
-                  href={track.displayUrl}
-                  download={track.filename}
-                >
-                  <TrackIcon color={track.color} size={18} />
-                  <span className={classes.trackCardName}>{track.filename}</span>
-                </a>
-                {isOwnedPlace && (
-                  <button
-                    className={classes.trackDeleteBtn}
-                    onClick={() => setTrackToDelete(track)}
-                    aria-label={`Delete track ${track.filename}`}
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-
-          {isOwnedPlace && (
-            <button className={classes.uploadBtn} onClick={() => setShowEdit(true)}>
-              Upload media
-            </button>
-          )}
-
-          {showMediaTop && <div className={classes.divider} />}
-
-          {!safetyDismissed && (
-            <div className={classes.safetyWarning} role="note">
-              <TriangleAlert size={16} className={classes.safetyIcon} />
-              <span className={classes.safetyText}>
-                Data is user-generated and may be inaccurate or outdated. Not a
-                substitute for your own navigation, judgement, or rescue planning.
-              </span>
-              <button
-                type="button"
-                className={classes.safetyDismiss}
-                aria-label="Dismiss safety warning"
-                onClick={() => {
-                  localStorage.setItem('logjam.safetyDismissed', '1');
-                  setSafetyDismissed(true);
-                }}
-              >
-                <X size={14} />
-              </button>
-            </div>
-          )}
-          {(place.ropeWikiId != null ||
-            place.altNames.length > 0 ||
-            sharedWithNode != null) && (
-            <div className={classes.headerMeta}>
-              {place.ropeWikiId != null && (
-                <p className={classes.disclaimer}>
-                  Place data imported from RopeWiki (facts only; descriptions not
-                  imported), &copy; RopeWiki contributors, licensed{" "}
-                  <a
-                    href="https://creativecommons.org/licenses/by-nc-sa/4.0/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    CC BY-NC-SA 4.0
-                  </a>
-                  .
-                </p>
-              )}
-              {place.altNames.length > 0 && (
-                <p className={classes.altNames}>Also known as: {place.altNames.join(", ")}</p>
-              )}
-              {sharedWithNode != null && (
-                <p className={classes.altNames}>Shared with: {sharedWithNode}</p>
-              )}
-            </div>
-          )}
-
-          <div
-            className={classes.attributesBox}
-            role="button"
-            onClick={(e) => {
-              if ((e.target as HTMLElement).closest("a")) return;
-              setShowEdit(true);
-            }}
-            tabIndex={0}
-            onKeyDown={(e) => {
-              // FEUI-009: mirrors the onClick guard above — keydown bubbles
-              // from a focused nested source <a> or the edit <button>, so an
-              // unguarded Enter/Space here both activates that element AND
-              // pops the edit dialog over it.
-              if ((e.target as HTMLElement).closest("a, button")) return;
-              if (e.key === "Enter" || e.key === " ") setShowEdit(true);
-            }}
-            aria-label="Place attributes — click to edit"
+          {/* WHAT IT IS, in the type's own glyph and colour — a fact, not a
+              field, so it is a line of text rather than a row in a table with
+              the word "Type" beside it (operator, 2026-09-19). The alternative
+              names and who it is shared with read the same way. */}
+          {/* The hue goes in as a custom property the stylesheet reads, never
+              as an inline colour (DESIGN.md §9). */}
+          <p
+            className={classes.identity}
+            style={{ "--tile-hue": placeType?.color } as CSSProperties}
           >
-            <button
-              className={classes.editIcon}
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowEdit(true);
-              }}
-              aria-label="Edit place"
-            >
-              <Pencil size={14} />
-            </button>
-            {canyonGrade && (
-              <p>
-                <b>Grade:</b> {canyonGrade}
-              </p>
-            )}
-            <p>
-              <b>Location:</b> {place.latitude.toFixed(4)}, {place.longitude.toFixed(4)}
-            </p>
-            {/* The four remaining canyon scalars, read from fieldValues under
-                their reserved keys. Still hardcoded rather than rendered from
-                the type's definitions — see the ponytail note in PlaceDialog:
-                the generic field form is phase 6, with the rest of the web UI.
-                A place of a type that has no grades simply renders none of
-                these, with no special case. */}
-            {numericFieldValue(place.fieldValues, "quality") != null && (
-              <p>
-                <b>Quality:</b> {numericFieldValue(place.fieldValues, "quality")}/5
-              </p>
-            )}
-            {numericFieldValue(place.fieldValues, "num_abseils") != null && (
-              <p>
-                <b>Pitches:</b> {numericFieldValue(place.fieldValues, "num_abseils")}
-              </p>
-            )}
-            {numericFieldValue(place.fieldValues, "longest_abseil") != null && (
-              <p>
-                <b>Longest Pitch:</b>{" "}
-                {numericFieldValue(place.fieldValues, "longest_abseil")}m
-              </p>
-            )}
-            {numericFieldValue(place.fieldValues, "hours") != null && (
-              <p>
-                <b>Hours:</b> {numericFieldValue(place.fieldValues, "hours")}
-              </p>
-            )}
-            {placeSources(place).length > 0 && (
-              <div>
-                <b>Sources:</b>
-                <ul className={classes.sourcesList}>
-                  {placeSources(place).map(([label, url], i) => (
-                    <li key={i}>
-                      {/* FEUI-012: only render http(s) as a link — a non-http
-                          scheme (e.g. from data saved before the save-time
-                          check existed) falls back to plain text. */}
-                      {url && isHttpUrl(url) ? (
-                        <a href={url} target="_blank" rel="noopener noreferrer">
-                          {label}
-                        </a>
-                      ) : (
-                        label
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {/* The fields THIS place's type carries. Filtered by type rather
-                than listing every definition the user has: a campsite showing
-                seven empty canyon grades is the bug the scoping exists to
-                prevent, and a value with no definition still renders below,
-                under Fields from elsewhere. */}
-            {defsForType(placeCustomFieldDefs, place.placeTypeId).map((def) => {
-              const display = formatCustomFieldValue(
-                fieldValue(place.fieldValues, def.key),
-                def.type,
-              );
-              if (display == null) return null;
-              return (
-                <p key={def.key}>
-                  <b>{def.label}:</b> {display}
-                </p>
-              );
-            })}
-            {place.notes && place.notes.trim().length > 0 && (
-              <div className={classes.notesBlock}>
-                <b>Notes:</b>
-                <p className={classes.notesText}>{place.notes}</p>
-              </div>
-            )}
+            <TypeGlyph size={16} aria-hidden className={classes.typeGlyph} />
+            {placeType?.name ?? "Unknown type"}
+          </p>
+          {current.altNames.length > 0 && (
+            <p className={classes.meta}>Also known as {current.altNames.join(", ")}</p>
+          )}
+          {sharedWithNode != null && <p className={classes.meta}>Shared with {sharedWithNode}</p>}
 
-            {/* LINKED PLACES — navigational only. A link grants no visibility
-                (§2.5), so this is the owner's own filing and a recipient is
-                sent no links at all; the list is simply absent for them. */}
-            {isOwnedPlace && linkedPlaces.length > 0 && (
-              <div>
-                <b>Linked places:</b>
-                <ul className={classes.sourcesList}>
-                  {linkedPlaces.map((linked) => (
-                    <li key={linked.id}>
-                      <button
-                        className={classes.linkButton}
-                        onClick={() => setSelectedPlaceID(linked.id)}
-                      >
-                        {linked.name}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+          {/* WHERE IT IS, as the thing people actually do with it: copy the
+              coordinates into whatever they are navigating with. */}
+          <Row
+            leading={<IconTile icon={MapPin} hue="var(--theme-accent)" />}
+            title={coordinates}
+            subtitle="Latitude, longitude"
+            trailing={
+              <IconButton
+                icon={copied ? Check : Copy}
+                label={`Copy the coordinates of ${current.name}`}
+                onClick={() => void handleCopyCoordinates()}
+              />
+            }
+          />
 
-            {/* FIELDS FROM ELSEWHERE (§2.6). Values that arrived on a copy of
-                someone else's place, or were stranded when this place's type
-                changed, described by the definitions that DID cover them.
-                Read-only, in their own section, in no form and on no other
-                place: the schema decision is the user's to make, per item,
-                with the value in front of them.
-
-                Owner-only, and structurally so — the server never sends
-                `foreignFields` on a row a sharee can reach. */}
-            {isOwnedPlace && foreignFields.length > 0 && (
-              <div className={classes.foreignFields}>
-                <b>Fields from elsewhere:</b>
-                {foreignFields.map((item) => (
-                  <div key={item.key} className={classes.foreignFieldRow}>
-                    <span>
-                      <b>{item.label}:</b>{" "}
-                      {formatCustomFieldValue(
-                        item.value,
-                        item.type as TripLogCustomFieldDef["type"],
-                      ) ?? String(item.value)}
-                    </span>
-                    <span className={classes.foreignFieldActions}>
-                      <button
-                        className={classes.linkButton}
-                        disabled={foreignFieldBusy !== null}
-                        onClick={() => runForeignFieldAction(item.key, "adopt")}
-                      >
-                        Add to {placeTypeName}
-                      </button>
-                      <button
-                        className={classes.linkButton}
-                        disabled={foreignFieldBusy !== null}
-                        onClick={() => runForeignFieldAction(item.key, "notes")}
-                      >
-                        Append to notes
-                      </button>
-                      <button
-                        className={classes.linkButton}
-                        disabled={foreignFieldBusy !== null}
-                        onClick={() => runForeignFieldAction(item.key, "discard")}
-                      >
-                        Discard
-                      </button>
-                    </span>
+          {attributes.length > 0 && (
+            <section className={classes.section}>
+              <SectionHeader title={`This ${placeTypeName.toLowerCase()}\u2019s attributes`} />
+              <dl className={classes.table}>
+                {attributes.map(({ def, text }) => (
+                  <div key={def.key} className={classes.tableRow}>
+                    <dt>{def.label}</dt>
+                    <dd className={classes.figure}>{text}</dd>
                   </div>
                 ))}
-              </div>
-            )}
-          </div>
-
-          <div className={classes.tripLogsRegion}>
-            <div className={classes.tripLogsHeader}>
-              Trip Logs {tripLogs.length > 0 && `(${tripLogs.length})`}
-            </div>
-            {loadingTrips ? (
-              <span className={classes.caption}>Loading...</span>
-            ) : tripLogs.length === 0 ? (
-              <span className={classes.caption}>
-                {isOwnedPlace
-                  ? "No trips logged yet."
-                  : "Trip logs are private to the place owner."}
-              </span>
-            ) : (
-              <div className={classes.tripLogList}>
-                {tripLogs.map((trip) => (
-                  <button
-                    key={trip.id}
-                    className={classes.tripLogCard}
-                    onClick={() => {
-                      setViewingTripLog(trip);
-                      setShowTripLogView(true);
-                    }}
-                  >
-                    <span className={classes.tripLogDate}>
-                      {new Date(trip.date).toLocaleDateString("en-AU", {
-                        year: "numeric",
-                        month: "short",
-                        day: "numeric",
-                        // Trip dates are stored as UTC-midnight (date-only); format
-                        // in UTC so AEST (UTC+10/+11) doesn't render the prior day.
-                        timeZone: "UTC",
-                      })}
-                    </span>
-                    {trip.notes && (
-                      <span className={classes.tripLogNotes}>
-                        {trip.notes.length > 60
-                          ? trip.notes.slice(0, 60) + "…"
-                          : trip.notes}
-                      </span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className={classes.footer}>
-          <div className={classes.divider} />
-          {isOwnedPlace ? (
-            <>
-              <div className={classes.footerRow}>
-                <button
-                  className={classes.ghostBtn}
-                  onClick={() => setShowShareDialog(true)}
-                >
-                  Share
-                </button>
-                <button
-                  className={classes.ghostBtn}
-                  onClick={() => {
-                    setEditingTripLog(undefined);
-                    setShowTripLogDialog(true);
-                  }}
-                >
-                  Log Trip
-                </button>
-              </div>
-              <button
-                className={classes.dangerBtn}
-                onClick={() => setShowDeleteConfirm(true)}
-              >
-                Delete
-              </button>
-            </>
-          ) : (
-            <>
-              <div className={classes.footerRow}>
-                <button
-                  className={classes.ghostBtn}
-                  title="Copy to My Places"
-                  onClick={() => handleCopyPlace(false)}
-                  disabled={copying}
-                >
-                  Copy
-                </button>
-                {/* Same control, same confirm, as every other shared thing in
-                    the app — this surface used to revoke on a single click
-                    with no confirmation at all. */}
-                <RemoveSharedButton
-                  kindLabel="place"
-                  itemName={place.name}
-                  ownerName={ownerUsername(friends, place.ownerId)}
-                  className={classes.ghostBtn}
-                  disabled={copying}
-                  remove={() => unsharePlaceWith(place.id, "me")}
-                  onRemoved={() => {
-                    onRefetchShared();
-                    setSelectedPlaceID(null);
-                  }}
-                >
-                  Remove
-                </RemoveSharedButton>
-              </div>
-              <button
-                className={classes.ghostBtnFull}
-                title="Copy to My Places, then remove the share"
-                onClick={() => setConfirmCopyAndRemove(true)}
-                disabled={copying}
-              >
-                Copy and Remove
-              </button>
-            </>
+              </dl>
+            </section>
           )}
+
+          {current.notes && current.notes.trim().length > 0 && (
+            <section className={classes.section}>
+              <SectionHeader title="Notes" />
+              <p className={classes.notes}>{current.notes}</p>
+            </section>
+          )}
+
+          {placeSources(current).length > 0 && (
+            <section className={classes.section}>
+              <SectionHeader title="Sources" count={placeSources(current).length} />
+              {placeSources(current).map(([label, url], index) => {
+                // FEUI-012: only http(s) becomes a link — a non-http scheme
+                // (from data saved before the save-time check existed) is a
+                // row that says what it says and goes nowhere.
+                const linkable = Boolean(url) && isHttpUrl(url);
+                return (
+                  <Row
+                    key={index}
+                    leading={
+                      <IconTile
+                        icon={linkable ? ExternalLink : LinkIcon}
+                        hue="var(--theme-bonus-1)"
+                      />
+                    }
+                    title={label}
+                    subtitle={linkable ? hostOf(url) : undefined}
+                    description={linkable ? "Opens in a new tab" : undefined}
+                    href={linkable ? url : undefined}
+                    external={linkable}
+                  />
+                );
+              })}
+            </section>
+          )}
+
+          {track && (
+            <section className={classes.section}>
+              <SectionHeader title="Track" />
+              {/* A FILE, so the row is a real link (middle-click, save as) —
+                  wearing the same glyph and hue a track wears on Ways. */}
+              <Row
+                leading={<IconTile icon={Activity} hue="var(--hue-track)" />}
+                title={track.filename}
+                subtitle="Click to download"
+                href={track.displayUrl}
+                download={track.filename}
+                trailing={
+                  isOwnedPlace ? (
+                    <IconButton
+                      icon={Trash2}
+                      label={`Delete the track ${track.filename}`}
+                      tone="danger"
+                      onClick={() => setTrackToDelete(track)}
+                    />
+                  ) : undefined
+                }
+              />
+            </section>
+          )}
+
+          {/* LINKED PLACES — navigational only. A link grants no visibility
+              (§2.5), so this is the owner's own filing and a recipient is
+              sent no links at all; the list is simply absent for them. */}
+          {isOwnedPlace && linkedPlaces.length > 0 && (
+            <section className={classes.section}>
+              <SectionHeader title="Linked places" count={linkedPlaces.length} />
+              {linkedPlaces.map((linked) => (
+                <Row
+                  key={linked.id}
+                  leading={
+                    <IconTile
+                      icon={placeTypeLucideIcon(
+                        placeTypes.find((type) => type.id === linked.placeTypeId)?.iconKey ?? "map-pin",
+                      )}
+                      hue={
+                        placeTypes.find((type) => type.id === linked.placeTypeId)?.color ??
+                        "var(--theme-accent)"
+                      }
+                    />
+                  }
+                  title={linked.name}
+                  onOpen={() => setSelectedPlaceID(linked.id)}
+                />
+              ))}
+            </section>
+          )}
+
+          {/* PARKED VALUES (§2.6). Named for the CONDITION, the way Logjam GPS
+              names it: a type change strands what the new type has no field
+              for, and a copy carries values keyed by the sender's fields.
+              Read-only, in their own section, with the decision per item.
+
+              Owner-only, and structurally so — the server never sends
+              `foreignFields` on a row a sharee can reach. */}
+          {isOwnedPlace && foreignFields.length > 0 && (
+            <section className={classes.section}>
+              <SectionHeader title="Doesn't fit this type" count={foreignFields.length} />
+              {foreignFields.map((item) => (
+                <div key={item.key} className={classes.parked}>
+                  <dl className={classes.table}>
+                    <div className={classes.tableRow}>
+                      <dt>{item.label}</dt>
+                      <dd className={classes.figure}>
+                        {formatCustomFieldValue(
+                          item.value,
+                          item.type as TripLogCustomFieldDef["type"],
+                        ) ?? String(item.value)}
+                      </dd>
+                    </div>
+                  </dl>
+                  <div className={classes.parkedActions}>
+                    <Button
+                      compact
+                      disabled={foreignFieldBusy !== null}
+                      onClick={() => runForeignFieldAction(item.key, "adopt")}
+                    >
+                      Add to {placeTypeName}
+                    </Button>
+                    <Button
+                      compact
+                      disabled={foreignFieldBusy !== null}
+                      onClick={() => runForeignFieldAction(item.key, "notes")}
+                    >
+                      Append to notes
+                    </Button>
+                    <Button
+                      compact
+                      disabled={foreignFieldBusy !== null}
+                      onClick={() => runForeignFieldAction(item.key, "discard")}
+                    >
+                      Discard
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </section>
+          )}
+
+          <section className={classes.section}>
+            <SectionHeader title="Trips" count={tripLogs.length} />
+            {loadingTrips ? (
+              <p className={classes.muted} role="status">
+                Loading trips…
+              </p>
+            ) : tripLogs.length === 0 ? (
+              <p className={classes.muted}>
+                {isOwnedPlace
+                  ? "No trips logged here yet."
+                  : "Trip logs are private to the place's owner."}
+              </p>
+            ) : (
+              tripLogs.map((trip) => (
+                <Row
+                  key={trip.id}
+                  leading={
+                    <IconTile
+                      icon={tripTypeLook(primaryTripType(trip.types)).icon}
+                      hue={tripTypeLook(primaryTripType(trip.types)).hue}
+                    />
+                  }
+                  title={formatDateKey(trip.date)}
+                  subtitle={trip.notes ?? undefined}
+                  onOpen={() => onOpenTrip(trip.id)}
+                />
+              ))
+            )}
+          </section>
         </div>
       </div>
 
       <PlaceDialog
-        place={place}
+        place={current}
         open={showEdit && !pickingCoords}
         onClose={() => setShowEdit(false)}
         onSaved={onRefetch}
@@ -822,7 +913,7 @@ function PlaceDetailPanel({
 
       {isOwnedPlace && (
         <ShareDialog
-          title={`Share ${place.name}`}
+          title={`Share ${current.name}`}
           blurb={
             <>
               Recipients see this place&rsquo;s details, place-level notes and
@@ -835,9 +926,9 @@ function PlaceDetailPanel({
           friends={friends}
           open={showShareDialog}
           onClose={() => setShowShareDialog(false)}
-          listShares={() => getPlaceShares(place.id)}
-          share={(userId) => sharePlaceWith(place.id, userId)}
-          unshare={(userId) => unsharePlaceWith(place.id, userId)}
+          listShares={() => getPlaceShares(current.id)}
+          share={(userId) => sharePlaceWith(current.id, userId)}
+          unshare={(userId) => unsharePlaceWith(current.id, userId)}
         />
       )}
 
@@ -850,17 +941,30 @@ function PlaceDetailPanel({
         onClose={() => setConfirmCopyAndRemove(false)}
       />
 
+      {/* The one promise every surface makes about dropping a share —
+          `removeShareConfirm`, not this page's own wording. */}
+      <ConfirmDialog
+        open={confirmRemove}
+        title={removeCopy.title}
+        message={removeCopy.body}
+        confirmLabel="Remove"
+        busy={removing}
+        onConfirm={handleRemoveShare}
+        onClose={() => setConfirmRemove(false)}
+      />
+
       <ConfirmDialog
         open={showDeleteConfirm}
-        title="Delete Place"
+        title="Delete place?"
         message={
           <>
-            Are you sure you want to delete {place.name}? Its photos, tracks, and
-            shares are permanently deleted. Your trip logs are kept — they&rsquo;ll
-            be unlinked from this place but stay in your logbook. This cannot be
-            undone.
+            This permanently deletes {current.name}, along with its photos, tracks and
+            shares. Your trip logs are kept — they&rsquo;ll be unlinked from this place
+            but stay in your logbook. This cannot be undone.
           </>
         }
+        confirmLabel="Delete"
+        confirmColor="error"
         busy={deleting}
         onConfirm={handleDelete}
         onClose={() => setShowDeleteConfirm(false)}
@@ -875,51 +979,16 @@ function PlaceDetailPanel({
         onSaved={() => {
           setShowTripLogDialog(false);
           setEditingTripLog(undefined);
-          getTripLogs(place.id)
-            .then(setTripLogs)
-            .catch((err) => {
-              console.error(err);
-              toast.error(messageFromError(err, "Couldn't refresh trip logs."));
-            });
-          // Also refresh the global Trip Logs list/search (separate query).
-          onRefetchTripLogs();
+          refreshTripLogs();
         }}
         places={places}
-        defaultPlaceId={place.id}
+        defaultPlaceId={current.id}
         tripLog={editingTripLog}
         customFieldDefs={customFieldDefs}
         onCustomFieldDefsChange={onCustomFieldDefsChange}
         existingTripTypes={existingTripTypes}
       />
 
-      <TripLogViewDialog
-        open={showTripLogView}
-        onClose={() => {
-          setShowTripLogView(false);
-          setViewingTripLog(null);
-        }}
-        tripLog={viewingTripLog}
-        customFieldDefs={customFieldDefs}
-        canManageMedia={isOwnedPlace}
-        onMediaChanged={onQuotaChanged}
-        onEdit={() => {
-          setShowTripLogView(false);
-          setEditingTripLog(viewingTripLog ?? undefined);
-          setViewingTripLog(null);
-          setShowTripLogDialog(true);
-        }}
-        onDeleted={() => {
-          getTripLogs(place.id)
-            .then(setTripLogs)
-            .catch((err) => {
-              console.error(err);
-              toast.error(messageFromError(err, "Couldn't refresh trip logs."));
-            });
-          onQuotaChanged();
-          // Also refresh the global Trip Logs list/search (separate query).
-          onRefetchTripLogs();
-        }}
-      />
     </>
   );
 }

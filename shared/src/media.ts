@@ -69,6 +69,44 @@ export const TRACK_COLORS = [
 export type TrackColor = (typeof TRACK_COLORS)[number];
 
 /**
+ * What to CALL a palette colour.
+ *
+ * Both clients used the hex itself as the accessible name of a swatch
+ * ("#e6194b"), which is a name but not a helpful one: it is unreadable aloud,
+ * and a screen-reader user picking a route colour was offered ten of them. The
+ * names live HERE, beside the palette they name, so the phone's picker and the
+ * browser's cannot disagree about which one is "Teal" — the same rule the
+ * status labels and filter words already follow.
+ *
+ * The comments on TRACK_COLORS above were already these words; this promotes
+ * them from a comment to something the UI can read.
+ */
+export const TRACK_COLOR_NAMES: Record<TrackColor, string> = {
+  "#e6194b": "Red",
+  "#3cb44b": "Green",
+  "#ffe119": "Yellow",
+  "#911eb4": "Purple",
+  "#42d4f4": "Cyan",
+  "#f032e6": "Magenta",
+  "#bfef45": "Lime",
+  "#469990": "Teal",
+  "#9a6324": "Brown",
+  "#dcbeff": "Lavender",
+};
+
+/**
+ * The spoken name of a colour, for a label or an accessible name.
+ *
+ * A colour outside the palette comes back AS ITS HEX rather than as "Custom":
+ * routes drawn before the palette existed carry arbitrary values, and a made-up
+ * word would hide which colour it actually is. Unhelpful is better than wrong.
+ */
+export function trackColorName(color: string | null | undefined): string {
+  if (!color) return "No colour";
+  return TRACK_COLOR_NAMES[color.toLowerCase() as TrackColor] ?? color;
+}
+
+/**
  * Picks the next best track/route colour avoiding collisions with existing items.
  * 1. Returns the first unused colour from TRACK_COLORS.
  * 2. If all colours are present, returns the colour with the lowest frequency.

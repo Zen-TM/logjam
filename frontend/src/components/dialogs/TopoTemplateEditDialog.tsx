@@ -1,15 +1,4 @@
-import { useState, useEffect } from "react";
-import { useIsMobile } from "../../useIsMobile";
-import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Button,
-  IconButton,
-  TextField,
-} from "@mui/material";
-import CloseIcon from "@mui/icons-material/Close";
+import { useId, useState } from "react";
 import { apiFetch } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import { ErrorBanner } from "../feedback/ErrorBanner";
@@ -22,67 +11,60 @@ import {
   type RasterTemplateSettings,
   type AutoExportSettings,
 } from "@logjam/shared";
+import { Button, ChipRail, Dialog, TextField } from "../../ui";
 import AdvancedSettings from "./topoSettings/AdvancedSettings";
+import { SETTINGS_TABS, type SettingsTab } from "./topoSettings/settingsTabs";
 import type { TopoTemplate } from "./TopoDialog";
 
-function TopoTemplateEditDialog({
-  open,
-  onClose,
-  editingTemplate,
-  onSaved,
-}: {
+type Props = {
   open: boolean;
   onClose: () => void;
   editingTemplate: TopoTemplate | null;
   onSaved: () => void;
-}) {
-  const isMobile = useIsMobile();
-  const [name, setName] = useState("");
+};
+
+/**
+ * The settings a topo is made with, saved under a name to make the next one the
+ * same way. The form mounts on open, so a reopened dialog starts from the
+ * template it is editing NOW and never from the last one's typing.
+ */
+export default function TopoTemplateEditDialog({ open, ...form }: Props): React.JSX.Element | null {
+  return open ? <TemplateForm {...form} /> : null;
+}
+
+function TemplateForm({ onClose, editingTemplate, onSaved }: Omit<Props, "open">) {
+  const formId = useId();
+  const [name, setName] = useState(editingTemplate?.name ?? "");
   const [settings, setSettings] = useState<RasterTemplateSettings>(() =>
-    cloneRasterTemplateSettings(RASTER_TEMPLATE_DEFAULTS),
+    cloneRasterTemplateSettings(editingTemplate?.config ?? RASTER_TEMPLATE_DEFAULTS),
   );
-  const [autoExport, setAutoExport] = useState<AutoExportSettings>(() => ({
-    ...AUTO_EXPORT_DEFAULTS,
-  }));
+  // Older templates predate auto-export (null) — fall back to defaults.
+  const [autoExport, setAutoExport] = useState<AutoExportSettings>(() =>
+    editingTemplate?.autoExport
+      ? { ...editingTemplate.autoExport, layers: [...editingTemplate.autoExport.layers] }
+      : { ...AUTO_EXPORT_DEFAULTS },
+  );
+  const [tab, setTab] = useState<SettingsTab>("hillshade");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    setError(null);
-    if (editingTemplate) {
-      setName(editingTemplate.name);
-      setSettings(cloneRasterTemplateSettings(editingTemplate.config));
-      // Older templates predate auto-export (null) — fall back to defaults.
-      setAutoExport(
-        editingTemplate.autoExport
-          ? { ...editingTemplate.autoExport, layers: [...editingTemplate.autoExport.layers] }
-          : { ...AUTO_EXPORT_DEFAULTS },
-      );
-    } else {
-      setName("");
-      setSettings(cloneRasterTemplateSettings(RASTER_TEMPLATE_DEFAULTS));
-      setAutoExport({ ...AUTO_EXPORT_DEFAULTS });
-    }
-  }, [open, editingTemplate]);
+  // The same shared checks the settings themselves report against, so Save is
+  // never offered for something the server would refuse.
+  const canSave =
+    name.trim().length > 0 &&
+    slopeBandsError(settings.slope.bands) == null &&
+    hillshadeSettingsError(settings.hillshade) == null;
 
   async function handleSave() {
     const trimmed = name.trim();
-    if (!trimmed) return;
+    if (!trimmed || saving) return;
     setSaving(true);
     setError(null);
     try {
-      if (editingTemplate) {
-        await apiFetch(`/topo-templates/${editingTemplate.id}`, {
-          method: "PATCH",
-          body: { name: trimmed, config: settings, autoExport },
-        });
-      } else {
-        await apiFetch("/topo-templates", {
-          method: "POST",
-          body: { name: trimmed, config: settings, autoExport },
-        });
-      }
+      await apiFetch(editingTemplate ? `/topo-templates/${editingTemplate.id}` : "/topo-templates", {
+        method: editingTemplate ? "PATCH" : "POST",
+        body: { name: trimmed, config: settings, autoExport },
+      });
       onSaved();
       onClose();
     } catch (err) {
@@ -93,90 +75,55 @@ function TopoTemplateEditDialog({
     }
   }
 
-  const inputSx = {
-    "& .MuiInputBase-input": { color: "var(--theme-text-primary)" },
-    "& .MuiInputLabel-root": { color: "var(--theme-text-muted)" },
-    "& .MuiInputLabel-root.Mui-focused": { color: "var(--theme-accent)" },
-    "& .MuiOutlinedInput-notchedOutline": { borderColor: "var(--theme-accent)" },
-  };
-
   return (
     <Dialog
-      fullScreen={isMobile}
-      open={open}
-      onClose={saving ? undefined : onClose}
-      maxWidth="sm"
-      fullWidth
-      PaperProps={{
-        sx: {
-          backgroundColor: "var(--theme-primary)",
-          color: "var(--theme-text-primary)",
-          maxHeight: isMobile ? "100%" : "85vh",
-        },
-      }}
+      open
+      title={editingTemplate ? "Edit template" : "New template"}
+      size="large"
+      dismissible={!saving}
+      onClose={onClose}
+      // Pinned: the name is what the whole dialog is about and the rail says
+      // which group the body is showing, so neither scrolls away from it.
+      // A real form, so Enter in the name field saves.
+      toolbar={
+        <>
+          <form
+            id={formId}
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (canSave) void handleSave();
+            }}
+          >
+            <TextField
+              label="Template name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              data-autofocus
+            />
+          </form>
+          <ChipRail label="Settings group" options={SETTINGS_TABS} value={tab} onChange={setTab} />
+        </>
+      }
+      footer={
+        <>
+          <Button onClick={onClose} disabled={saving}>
+            Cancel
+          </Button>
+          <Button type="submit" form={formId} variant="filled" busy={saving} disabled={!canSave}>
+            Save
+          </Button>
+        </>
+      }
     >
-      <DialogTitle
-        sx={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          pb: 1,
-        }}
-      >
-        {editingTemplate ? "Edit Template" : "New Template"}
-        <IconButton
-          aria-label="Close dialog"
-          size="small"
-          onClick={onClose}
-          disabled={saving}
-          sx={{ color: "var(--theme-text-primary)" }}
-        >
-          <CloseIcon fontSize="small" />
-        </IconButton>
-      </DialogTitle>
+      {error && <ErrorBanner message={error} />}
 
-      <DialogContent dividers sx={{ borderColor: "rgba(255,255,255,0.1)" }}>
-        {error && <ErrorBanner message={error} />}
-        <TextField
-          label="Template name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          size="small"
-          fullWidth
-          sx={{ ...inputSx, mb: 2 }}
-        />
-        <AdvancedSettings
-          value={settings}
-          onChange={setSettings}
-          autoExport={autoExport}
-          onAutoExportChange={setAutoExport}
-        />
-      </DialogContent>
-
-      <DialogActions>
-        <Button
-          onClick={onClose}
-          disabled={saving}
-          sx={{ color: "var(--theme-text-primary)" }}
-        >
-          Cancel
-        </Button>
-        <Button
-          variant="contained"
-          color="secondary"
-          disabled={
-            saving ||
-            !name.trim() ||
-            slopeBandsError(settings.slope.bands) != null ||
-            hillshadeSettingsError(settings.hillshade) != null
-          }
-          onClick={handleSave}
-        >
-          {saving ? "Saving…" : "Save"}
-        </Button>
-      </DialogActions>
+      <AdvancedSettings
+        tab={tab}
+        value={settings}
+        onChange={setSettings}
+        autoExport={autoExport}
+        onAutoExportChange={setAutoExport}
+      />
     </Dialog>
   );
 }
-
-export default TopoTemplateEditDialog;

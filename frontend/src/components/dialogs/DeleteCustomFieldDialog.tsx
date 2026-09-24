@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Typography } from "@mui/material";
 import type { ScopedCustomFieldDef, TripLogCustomFieldDef } from "@logjam/shared";
 import ConfirmDialog from "./ConfirmDialog";
 import { ErrorBanner } from "../feedback/ErrorBanner";
@@ -26,12 +25,12 @@ const ENTITY_COPY: Record<
 };
 
 /**
- * Confirm-and-delete dialog for a custom field, shared across every surface that
- * deletes one: the Account panel's field managers (trip + place) and the
- * TripLogDialog/PlaceDialog per-field delete. Shows an impact warning ("N trip
- * logs / places carry a value…") fetched from the server before the user
- * confirms. Deleting removes the field definition AND permanently strips its
- * stored values from those rows (one transaction, server-side).
+ * Confirm-and-delete for an attribute, shared across every surface that
+ * deletes one: Settings' attribute lists (trip + place) and the
+ * TripLogDialog/PlaceDialog per-field delete. Says how many trip logs or places
+ * carry a value before the user confirms. Deleting removes the definition AND
+ * permanently strips its stored values from those rows (one transaction,
+ * server-side).
  */
 function DeleteCustomFieldDialog({
   entity,
@@ -62,7 +61,7 @@ function DeleteCustomFieldDialog({
       onClose();
     } catch (err) {
       console.error(err);
-      setError(messageFromError(err, "Couldn't delete the custom field. Please try again."));
+      setError(messageFromError(err, "Couldn't delete the attribute. Please try again."));
     } finally {
       setDeleting(false);
     }
@@ -74,36 +73,31 @@ function DeleteCustomFieldDialog({
     onClose();
   }
 
+  const impact =
+    count === null
+      ? impactError
+        ? ""
+        : `Checking how many ${copy.plural} use it…`
+      : count === 0
+        ? `No ${copy.plural} have a value for it.`
+        : `${count} ${count === 1 ? copy.singular : copy.plural} ${count === 1 ? "has" : "have"} a value for it, and ${
+            count === 1 ? "that value goes" : "those values go"
+          } too.`;
+
   return (
     <ConfirmDialog
       open={def !== null}
       title={`Delete "${def?.label ?? ""}"?`}
       message={
         <>
-          <Typography component="span" variant="body2" sx={{ display: "block" }}>
-            This removes the field from {copy.removesFrom}.{" "}
-            {count === null && !impactError && `Checking how many ${copy.plural} use it…`}
-            {count !== null &&
-              (count === 0
-                ? `No ${copy.plural} currently have a value for this field.`
-                : `${count} ${count === 1 ? copy.singular : copy.plural} ${
-                    count === 1 ? "has" : "have"
-                  } a value for this field — ${
-                    count === 1 ? "that value" : "those values"
-                  } will be permanently removed.`)}
-          </Typography>
-          <Typography
-            component="span"
-            variant="body2"
-            sx={{ display: "block", mt: 1, color: "var(--theme-text-muted)" }}
-          >
-            This cannot be undone.
-          </Typography>
+          <p>
+            This removes the attribute from {copy.removesFrom}. {impact} This can&rsquo;t be undone.
+          </p>
           {impactError && <ErrorBanner message={impactError} />}
           {error && <ErrorBanner message={error} />}
         </>
       }
-      confirmLabel="Delete field"
+      confirmLabel="Delete attribute"
       busy={deleting}
       onConfirm={handleConfirm}
       onClose={handleClose}

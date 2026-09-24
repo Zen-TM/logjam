@@ -10,8 +10,11 @@ setWorkerUrl(maplibreWorkerUrl);
 import { Protocol } from "pmtiles";
 import type { RegionBbox } from "@logjam/shared";
 import { useBoxDraw } from "./useBoxDraw";
+import type { PlaceHighlight } from "./placeHighlight";
+import type { RouteHoverChannel } from "./routeHover";
 import { layers as protomapsLayers, namedFlavor } from "@protomaps/basemaps";
 import {
+  arrowSegmentFeatures,
   draftAnchorIndices,
   draftPoints,
   fetchSnapLines,
@@ -19,6 +22,11 @@ import {
   moveAnchor,
   nearestSegment,
   snapSegment,
+  ARROW_FEATURE_KIND,
+  ROUTE_ARROW_ICON_SIZE,
+  ROUTE_ARROW_IMAGE,
+  ROUTE_ARROW_MIN_ZOOM,
+  ROUTE_ARROW_SDF_URI,
   type RouteDraft,
   type RoutePoint,
   type SnapMode,
@@ -58,10 +66,12 @@ function isTerminalTopoSourceError(error: unknown): boolean {
         : "";
   return /bad response code:\s*(403|404)\b/i.test(message);
 }
-import { useMediaQuery } from "@mui/material";
 import classes from "./Map.module.css";
 import MapSearchBox from "./MapSearchBox";
-import { MOBILE_MAX_WIDTH_PX } from "../../useIsMobile";
+import MapChrome, { type MapTool } from "./MapChrome";
+import { collectLngLatPairs } from "./topoFootprint";
+import type { ReactNode } from "react";
+import { MOBILE_MAX_WIDTH_PX, useMediaQuery } from "../../useIsMobile";
 import type {
   TPlace,
   TFilters,
@@ -70,7 +80,7 @@ import type {
   TRoute,
 } from "../../placeUtils";
 import type { GeoJsonPolygonal } from "../../topoLayerTypes";
-import { passesFilters, isPlaceDoneByViewer } from "../../placeUtils";
+import { passesFilters, isPlaceDoneByViewer, type TPlaceType } from "../../placeUtils";
 import { fetchTrackGeoJSON } from "../media/trackGeo";
 import { useToast } from "../feedback/ToastProvider";
 import { messageFromError } from "../../errors/messageFromError";
@@ -124,41 +134,36 @@ function readCssVar(name: string, fallback: string): string {
   return value || fallback;
 }
 
-/**
- * Collect every [lng, lat] position out of a GeoJSON geometry's `coordinates`,
- * regardless of nesting depth. A topo footprint is a Polygon for a contiguous
- * capture but a MultiPolygon for a disconnected one — the extra nesting level
- * meant a plain `.flat()` left rings (not positions), so Math.min(...) of arrays
- * produced NaN and fitBounds threw "Invalid LngLat object: (NaN, NaN)". Walking
- * to the numeric leaf pairs handles Polygon, MultiPolygon, and GeometryCollection
- * coordinate shapes alike.
- */
-function collectLngLatPairs(node: unknown): [number, number][] {
-  if (!Array.isArray(node)) return [];
-  if (typeof node[0] === "number" && typeof node[1] === "number") {
-    return [[node[0], node[1]]];
-  }
-  return node.flatMap(collectLngLatPairs);
-}
 
 function applyPlaceThemePaint(map: maplibregl.Map) {
-  const owned = readCssVar("--owned-place-color", "#e4c5aa");
-  const completed = readCssVar("--completed-place-color", "#22c55e");
+  const fallback = readCssVar("--owned-place-color", "#e4c5aa");
   const shared = readCssVar("--shared-place-color", "#b79ec0");
+  const ink = readCssVar("--ink", "#1e1b18");
+  const accent = readCssVar("--theme-accent", "#deb188");
   const label = readCssVar("--theme-text-primary", "#ffffff");
   const halo = readCssVar("--theme-bonus-2", "#1a1a1a");
 
+  // FILL is the place's type; the RING says someone shared it with you — the
+  // same two axes Logjam GPS draws (mobile/src/map/PlacePinsLayer.tsx).
   if (map.getLayer("place-circles")) {
-    // Completed (owned + logged trip) places render green; the rest stay orange.
-    map.setPaintProperty("place-circles", "circle-color", [
-      "case",
-      ["==", ["get", "done"], true],
-      completed,
-      owned,
-    ]);
+    map.setPaintProperty("place-circles", "circle-color", ["coalesce", ["get", "color"], fallback]);
+    map.setPaintProperty("place-circles", "circle-stroke-color", ink);
+    map.setPaintProperty("place-circles", "circle-stroke-width", 1.5);
   }
+  // A shared pin is the SAME pin as your own, with a thin ring set apart from
+  // it — a mark on a pin rather than a louder pin — as on Logjam GPS.
   if (map.getLayer("shared-place-circles")) {
-    map.setPaintProperty("shared-place-circles", "circle-color", shared);
+    map.setPaintProperty("shared-place-circles", "circle-color", ["coalesce", ["get", "color"], fallback]);
+    map.setPaintProperty("shared-place-circles", "circle-stroke-color", ink);
+    map.setPaintProperty("shared-place-circles", "circle-stroke-width", 1.5);
+  }
+  if (map.getLayer("shared-place-halos")) {
+    map.setPaintProperty("shared-place-halos", "circle-stroke-color", shared);
+  }
+  for (const id of ["place-highlight", "shared-place-highlight"]) {
+    if (!map.getLayer(id)) continue;
+    map.setPaintProperty(id, "circle-color", accent);
+    map.setPaintProperty(id, "circle-stroke-color", accent);
   }
   if (map.getLayer("place-labels")) {
     map.setPaintProperty("place-labels", "text-color", label);
@@ -193,7 +198,11 @@ const PROTOMAPS_SOURCE_ID = "protomaps";
 // `kind` rides along because the two entry kinds are not interchangeable
 // downstream: raster entries are XYZ templates the GeoPDF renderer can fetch,
 // the vector entry is a PMTiles archive it cannot.
-export const BASE_LAYERS = BASEMAP_CATALOG.map((entry) => ({
+//
+// The raster "osm" entry ("Default") is left out: the vector basemap draws the
+// same OpenStreetMap cartography and is the default, so offering both put two
+// renderings of one map side by side. Logjam GPS dropped it the same way.
+export const BASE_LAYERS = BASEMAP_CATALOG.filter((entry) => entry.id !== "osm").map((entry) => ({
   id: entry.id,
   name: entry.name,
   kind: entry.kind,
@@ -455,6 +464,10 @@ function draftFeatureCollection(
       geometry: { type: "LineString", coordinates: points.map((p) => [...p]) },
       properties: {},
     });
+    // One line per segment for the arrows to ride, so an arrow never lands on
+    // an anchor handle. The line above stays whole for the line layer, which
+    // filters these back out — see `arrowSegmentFeatures` in @logjam/shared.
+    features.push(...(arrowSegmentFeatures(points, {}) as GeoJSON.Feature[]));
   }
   anchorIndices.forEach((pointIndex, anchorIndex) => {
     const point = points[pointIndex];
@@ -500,15 +513,13 @@ function Map({
   pickingCoords,
   onCoordsPicked,
   onCancelPickCoords,
-  showOwnedPlaces,
-  showSharedPlaces,
-  showPlaceTracks,
+  showPlaces,
+  showWays,
   placeTracks,
   standaloneTracks,
-  showRoutes,
   routes,
   selectRoute,
-  routeHoverPosition,
+  routeHover,
   drawingRoute,
   drawColor,
   drawPoints,
@@ -521,8 +532,6 @@ function Map({
   onDrawPointDelete,
   onDrawPointInsert,
   onDrawPointMove,
-  selectingArea,
-  onAreaSelected,
   selectingBbox,
   onBboxSelected,
   selectingFilterArea,
@@ -544,7 +553,15 @@ function Map({
   onTopoFlyConsumed,
   flyToPlace,
   onFlyToPlaceConsumed,
-  sidebarOpen,
+  flyToBounds,
+  onFlyToBoundsConsumed,
+  panelOpen,
+  sheetOpen = false,
+  placeHighlight,
+  placeTypes,
+  layersButton,
+  mapTools,
+  notices,
   onTopoSourceUnavailable,
 }: {
   filters: TFilters;
@@ -554,23 +571,26 @@ function Map({
   pickingCoords: boolean;
   onCoordsPicked: (lat: number, lng: number) => void;
   onCancelPickCoords: () => void;
-  showOwnedPlaces: boolean;
-  showSharedPlaces: boolean;
-  showPlaceTracks: boolean;
+  // TWO overlays over the user's own data, divided by what a thing IS: a pin is
+  // a place, a line is a way. Ownership does not split either of them — it is
+  // already on the thing itself (fill is the type, ring is sharing), and
+  // splitting by it made a shared place answer to two toggles (LayersPopover).
+  showPlaces: boolean;
+  /** Every line: routes, imported and recorded files, and the tracks on places
+   *  friends shared. */
+  showWays: boolean;
   placeTracks: PlaceTrack[];
-  // Standalone files (the user's own imports and recorded tracks) currently
-  // toggled onto the map, already resolved to a presigned URL. Same
-  // fetch-and-parse treatment as placeTracks; the list IS the visibility, so
-  // there is no separate layer toggle.
+  // Standalone files (the user's own imports and recorded tracks), already
+  // resolved to a presigned URL. Same fetch-and-parse treatment as placeTracks.
   standaloneTracks: StandaloneTrack[];
   // User-authored routes. Geometry arrives inline, so unlike placeTracks
   // there is nothing to fetch and parse per feature.
-  showRoutes: boolean;
   routes: TRoute[];
   selectRoute: (id: string) => void;
-  /** Position along a route under the elevation-profile cursor, marked on the
-   * map so the chart and the ground read as the same place. */
-  routeHoverPosition: [number, number] | null;
+  /** Where along a line the elevation-profile cursor sits, marked on the map so
+   *  the chart and the ground read as the same place. A CHANNEL, not a value:
+   *  it changes many times a second (see the subscribing effect). */
+  routeHover: RouteHoverChannel;
   // Draw/edit mode. The vertex list lives in App so the HUD can render the
   // running distance and drive undo; the map only reports gestures.
   drawingRoute: boolean;
@@ -599,8 +619,6 @@ function Map({
   onDrawPointDelete: (index: number) => void;
   /** Drag the line between two anchors to introduce one there. */
   onDrawPointInsert: (segmentIndex: number, lngLat: [number, number]) => void;
-  selectingArea: boolean;
-  onAreaSelected: (ids: string[]) => void;
   selectingBbox?: boolean;
   onBboxSelected?: (bbox: TBbox) => void;
   /** The Places filter's "area on map" mode — the third box-draw on this map. */
@@ -649,7 +667,27 @@ function Map({
   onTopoFlyConsumed?: () => void;
   flyToPlace?: { lat: number; lng: number } | null;
   onFlyToPlaceConsumed?: () => void;
-  sidebarOpen?: boolean;
+  /**
+   * Fit the map to a way's extent: opening one centres it, and so does arming
+   * the draw tool on it. A CONSUMED request, not a counter — a counter above
+   * zero fires again on every remount (DESIGN.md §9).
+   */
+  flyToBounds?: [number, number, number, number] | null;
+  onFlyToBoundsConsumed?: () => void;
+  /** A page is open over the map's left edge; the chrome moves clear of it. */
+  panelOpen: boolean;
+  /** A sheet is open beside that page (the Places filters). */
+  sheetOpen?: boolean;
+  /** The Places row under the pointer; its pin is lit. A channel, not a prop
+   *  value, so a hover does not re-render the map (placeHighlight.ts). */
+  placeHighlight: PlaceHighlight;
+  /** A pin's FILL is its type's colour. */
+  placeTypes: TPlaceType[];
+  /** The Layers control, owned by App because App owns what it toggles. */
+  layersButton?: ReactNode;
+  mapTools: readonly MapTool[];
+  /** Pinned notices about what the map shows right now. */
+  notices?: ReactNode;
   // Fired once per topo overlay entry (jobId-layerName) whose PMTiles source
   // failed to load (e.g. the S3 object is gone). The entry's layers/source are
   // removed so MapLibre stops retrying; App surfaces the failure (LAYERS-1).
@@ -657,6 +695,7 @@ function Map({
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  const geolocateRef = useRef<maplibregl.GeolocateControl | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
   /**
    * The map, once it is safe to attach handlers to — null before load, so the
@@ -694,7 +733,6 @@ function Map({
   useEffect(() => {
     pickModeRef.current =
       pickingCoords ||
-      selectingArea ||
       (selectingFilterArea ?? false) ||
       // The topo bbox draw belongs here too and was missing: without it, the
       // click that anchors a corner over a place marker also opened that
@@ -703,7 +741,6 @@ function Map({
       (selectingGeoPdfExtent ?? false);
   }, [
     pickingCoords,
-    selectingArea,
     selectingFilterArea,
     selectingBbox,
     selectingGeoPdfExtent,
@@ -843,46 +880,45 @@ function Map({
       attributionControl: false,
     });
 
-    map.addControl(new maplibregl.NavigationControl(), "top-right");
-    // "Where am I" is a primary question in the field, so the geolocate control
-    // sits with the navigation control rather than in a panel.
+    // Zoom, compass and locate are MapChrome's buttons over the map, driving it
+    // through its public API; MapLibre's NavigationControl is not added.
+    //
+    // "Where am I" is a primary question in the field. MapChrome's locate button
+    // calls this control's `trigger()`; the control's own button is hidden
+    // (Map.module.css) while it still draws the dot, the accuracy circle and
+    // follow mode.
     //
     // Privacy: this is entirely browser-native. MapLibre reads the position via
     // navigator.geolocation and renders it as a map marker in this page — the
     // position is never sent to the API, and no analytics/telemetry observes it.
     // Keep it that way: do not wire the `geolocate` event to anything that
     // persists or transmits the coordinates.
+    const geolocate = new maplibregl.GeolocateControl({
+      // High accuracy: the difference between the right side of a creek and
+      // the wrong one. Costs battery, which is the correct trade for a
+      // control the user taps deliberately rather than a background watch.
+      positionOptions: { enableHighAccuracy: true, timeout: 10_000 },
+      // Follow the user as they walk. Panning away drops the camera lock into
+      // MapLibre's background state — the dot keeps updating but stops
+      // recentring, so the control can't fight the user for the viewport
+      // while they read the map ahead. Pressing it again re-locks.
+      trackUserLocation: true,
+      // Under canopy or in a slot, a confident-looking dot with 40 m of error
+      // is worse than no dot. The accuracy circle makes the error legible.
+      showAccuracyCircle: true,
+      showUserLocation: true,
+    });
+    map.addControl(geolocate, "top-right");
+    geolocateRef.current = geolocate;
+    // Compact: it collapses to an (i) once the map is moved, which OSMF's
+    // attribution guideline allows while the credit stays one press away.
+    map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-right");
     map.addControl(
-      new maplibregl.GeolocateControl({
-        // High accuracy: the difference between the right side of a creek and
-        // the wrong one. Costs battery, which is the correct trade for a
-        // control the user taps deliberately rather than a background watch.
-        positionOptions: { enableHighAccuracy: true, timeout: 10_000 },
-        // Follow the user as they walk. Panning away drops the camera lock into
-        // MapLibre's background state — the dot keeps updating but stops
-        // recentring, so the control can't fight the user for the viewport
-        // while they read the map ahead. Tapping it again re-locks.
-        trackUserLocation: true,
-        // Under canopy or in a slot, a confident-looking dot with 40 m of error
-        // is worse than no dot. The accuracy circle makes the error legible.
-        showAccuracyCircle: true,
-        showUserLocation: true,
-      }),
-      "top-right",
-    );
-    map.addControl(
-      new maplibregl.AttributionControl({ compact: true }),
-      "bottom-left",
-    );
-    map.addControl(
-      // Narrower on phone-sized viewports (MOBILE-10) so the scale bar can't
-      // grow wide enough to collide with the bottom-left attribution control,
-      // which starts in its expanded (non-icon) state until first dragged.
       new maplibregl.ScaleControl({
         unit: "metric",
-        maxWidth: window.innerWidth <= MOBILE_MAX_WIDTH_PX ? 100 : 200,
+        maxWidth: window.innerWidth <= MOBILE_MAX_WIDTH_PX ? 100 : 160,
       }),
-      "bottom-right",
+      "bottom-left",
     );
 
     // A completed topo job whose S3 outputs are gone otherwise 404s on every
@@ -1032,8 +1068,16 @@ function Map({
 
       // User-authored routes. Same treatment as place-tracks (below the
       // markers so pins stay clickable), but the geometry is already in hand —
-      // no per-feature fetch. Hidden until the "Routes" layer is toggled on.
+      // no per-feature fetch. Hidden until the "Ways" layer is toggled on.
       map.addSource("routes", {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+      });
+      // The direction arrows ride their own source: one line per segment, which
+      // is what keeps an arrow off the join between two of them. A separate
+      // source rather than a filter on this one, because `routes` is also the
+      // click target and nothing there should have to know about arrows.
+      map.addSource("routes-arrows", {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
       });
@@ -1074,32 +1118,41 @@ function Map({
           "line-opacity": 0.9,
         },
       });
-      // Direction of travel, as chevrons riding the line itself. Symbol
+      // Direction of travel, as arrowheads riding the line itself. Symbol
       // placement does the spacing and rotation natively — hand-placed markers
-      // would have to be recomputed on every pan. Held back to zoom 11+ and
-      // spaced generously so a screenful of routes doesn't turn into a hedge.
+      // would have to be recomputed on every pan. Spaced generously so a
+      // screenful of routes doesn't turn into a hedge.
+      //
+      // An SDF IMAGE, not a glyph. This drew `›` until 2026-09-17, and that
+      // glyph's ink sits low in its own advance box: MapLibre centres a
+      // line-placed symbol on the BOX, so the arrow rode below the line, and
+      // with keep-upright off the error swapped sides wherever a route doubled
+      // back — which reads as arrows wobbling rather than as an offset
+      // (operator). Logjam GPS hit this first and fixed it the same way; the
+      // arrowhead and its centring test now live in @logjam/shared so one
+      // client cannot quietly keep the broken one.
       map.addLayer({
         id: "routes-direction",
         type: "symbol",
-        source: "routes",
-        minzoom: 11,
+        source: "routes-arrows",
+        minzoom: ROUTE_ARROW_MIN_ZOOM,
         layout: {
           visibility: "none",
           "symbol-placement": "line",
           "symbol-spacing": 90,
-          "text-field": "›",
-          "text-font": ["Noto Sans Medium"],
-          "text-size": 16,
-          "text-rotation-alignment": "map",
-          "text-keep-upright": false,
-          "text-allow-overlap": true,
-          "text-ignore-placement": true,
+          "icon-image": ROUTE_ARROW_IMAGE,
+          "icon-size": ROUTE_ARROW_ICON_SIZE,
+          "icon-rotation-alignment": "map",
+          "icon-pitch-alignment": "map",
+          "icon-keep-upright": false,
+          "icon-allow-overlap": true,
+          "icon-ignore-placement": true,
         },
         paint: {
-          "text-color": ["get", "color"],
-          "text-halo-color": "#ffffff",
-          "text-halo-width": 1,
-          "text-opacity": 0.75,
+          "icon-color": ["get", "color"],
+          "icon-halo-color": "#ffffff",
+          "icon-halo-width": 1,
+          "icon-opacity": 0.9,
         },
       });
 
@@ -1117,6 +1170,10 @@ function Map({
         id: "route-draft-line",
         type: "line",
         source: "route-draft",
+        // The per-segment arrow features share this source; drawing them here
+        // too would paint the line twice, joining each segment with two round
+        // caps instead of one line-join — a notch on every tight corner.
+        filter: ["!=", ["get", "kind"], ARROW_FEATURE_KIND],
         layout: { "line-cap": "round", "line-join": "round" },
         paint: {
           "line-color": initialDraftColor,
@@ -1127,22 +1184,22 @@ function Map({
         id: "route-draft-direction",
         type: "symbol",
         source: "route-draft",
-        filter: ["==", ["geometry-type"], "LineString"],
+        filter: ["==", ["get", "kind"], ARROW_FEATURE_KIND],
         layout: {
           "symbol-placement": "line",
           "symbol-spacing": 90,
-          "text-field": "›",
-          "text-font": ["Noto Sans Medium"],
-          "text-size": 16,
-          "text-rotation-alignment": "map",
-          "text-keep-upright": false,
-          "text-allow-overlap": true,
-          "text-ignore-placement": true,
+          "icon-image": ROUTE_ARROW_IMAGE,
+          "icon-size": ROUTE_ARROW_ICON_SIZE,
+          "icon-rotation-alignment": "map",
+          "icon-pitch-alignment": "map",
+          "icon-keep-upright": false,
+          "icon-allow-overlap": true,
+          "icon-ignore-placement": true,
         },
         paint: {
-          "text-color": initialDraftColor,
-          "text-halo-color": "#ffffff",
-          "text-halo-width": 1,
+          "icon-color": initialDraftColor,
+          "icon-halo-color": "#ffffff",
+          "icon-halo-width": 1,
         },
       });
       // Ends read differently from the middle: START is filled, END is hollow
@@ -1168,31 +1225,33 @@ function Map({
         },
       });
 
-      // Where the elevation-profile cursor sits along a route. Its own source
-      // so moving it never re-uploads route geometry.
-      map.addSource("route-hover", {
-        type: "geojson",
-        data: { type: "FeatureCollection", features: [] },
-      });
-      map.addLayer({
-        id: "route-hover-point",
-        type: "circle",
-        source: "route-hover",
-        paint: {
-          "circle-radius": 6,
-          "circle-color": readCssVar("--theme-accent", "#3b82f6"),
-          "circle-stroke-width": 2,
-          "circle-stroke-color": "#ffffff",
-        },
-      });
-
       // Shared place GeoJSON source (starts empty)
       map.addSource("shared-places", {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
       });
 
-      // Owned place circle markers (orange)
+      // The pin of the Places row under the pointer, lit from underneath.
+      for (const [id, source] of [
+        ["place-highlight", "places"],
+        ["shared-place-highlight", "shared-places"],
+      ] as const) {
+        map.addLayer({
+          id,
+          type: "circle",
+          source,
+          filter: ["==", ["get", "id"], ""],
+          paint: {
+            "circle-radius": ["interpolate", ["linear"], ["zoom"], 7, 12, 14, 18],
+            "circle-color": readCssVar("--theme-accent", "#deb188"),
+            "circle-opacity": 0.35,
+            "circle-stroke-color": readCssVar("--theme-accent", "#deb188"),
+            "circle-stroke-width": 2,
+          },
+        });
+      }
+
+      // Owned place circle markers
       map.addLayer({
         id: "place-circles",
         type: "circle",
@@ -1205,7 +1264,23 @@ function Map({
         },
       });
 
-      // Shared place circle markers (blue)
+      // The ring around a shared place, 2px clear of its pin. Also what keeps a
+      // shared place reachable: your own copy of it sits on the SAME coordinate
+      // and draws on top, so without the ring nothing of it shows or takes a
+      // click. Transparent fill, so it adds no mass of its own.
+      map.addLayer({
+        id: "shared-place-halos",
+        type: "circle",
+        source: "shared-places",
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 7, 7.5, 14, 13.5],
+          "circle-opacity": 0,
+          "circle-stroke-color": readCssVar("--shared-place-color", "#b79ec0"),
+          "circle-stroke-width": 1.5,
+        },
+      });
+
+      // Shared place circle markers
       map.addLayer({
         id: "shared-place-circles",
         type: "circle",
@@ -1278,7 +1353,9 @@ function Map({
         }
       });
 
-      map.on("click", "shared-place-circles", (e) => {
+      // One registration over both layers, so a press on the pin (which is
+      // inside the ring) selects once rather than once per layer.
+      map.on("click", ["shared-place-halos", "shared-place-circles"], (e) => {
         if (pickModeRef.current) return;
         if (!e.features?.length) return;
         const feature = e.features[0];
@@ -1301,11 +1378,11 @@ function Map({
       map.on("mouseleave", "place-circles", () => {
         map.getCanvas().style.cursor = "";
       });
-      map.on("mouseenter", "shared-place-circles", () => {
+      map.on("mouseenter", ["shared-place-halos", "shared-place-circles"], () => {
         if (pickModeRef.current) return;
         map.getCanvas().style.cursor = "pointer";
       });
-      map.on("mouseleave", "shared-place-circles", () => {
+      map.on("mouseleave", ["shared-place-halos", "shared-place-circles"], () => {
         map.getCanvas().style.cursor = "";
       });
 
@@ -1316,6 +1393,7 @@ function Map({
     return () => {
       map.remove();
       mapRef.current = null;
+      geolocateRef.current = null;
       // Reset mapLoaded so the place update effect re-runs when the map
       // reinitialises (required in React Strict Mode, which mounts twice).
       setMapLoaded(false);
@@ -1375,6 +1453,7 @@ function Map({
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
 
+    const typeColor = new globalThis.Map(placeTypes.map((type) => [type.id, type.color]));
     const toFeatureCollection = (list: TPlace[], isOwned: boolean) => ({
       type: "FeatureCollection" as const,
       features: list.map((c) => ({
@@ -1387,6 +1466,7 @@ function Map({
           id: c.id,
           name: c.name,
           done: isPlaceDoneByViewer(c, isOwned),
+          color: typeColor.get(c.placeTypeId) ?? null,
         },
       })),
     });
@@ -1414,7 +1494,17 @@ function Map({
         ),
       );
     }
-  }, [places, sharedPlaces, filters, mapLoaded]);
+  }, [places, sharedPlaces, filters, mapLoaded, placeTypes]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!mapLoaded || !map) return;
+    return placeHighlight.subscribe((id) => {
+      for (const layerId of ["place-highlight", "shared-place-highlight"]) {
+        map.setFilter(layerId, ["==", ["get", "id"], id ?? ""]);
+      }
+    });
+  }, [placeHighlight, mapLoaded]);
 
   // Fetch + parse place track files into the line layer when enabled. Parsing
   // is client-side (the API never echoes track contents — privacy rule); parsed
@@ -1495,7 +1585,7 @@ function Map({
   );
 
   useEffect(() => {
-    if (!mapLoaded || !mapRef.current || !showPlaceTracks) return;
+    if (!mapLoaded || !mapRef.current || !showWays) return;
     let cancelled = false;
     void (async () => {
       const features = await loadTrackSource(
@@ -1516,7 +1606,7 @@ function Map({
     return () => {
       cancelled = true;
     };
-  }, [showPlaceTracks, placeTracks, mapLoaded, loadTrackSource]);
+  }, [showWays, placeTracks, mapLoaded, loadTrackSource]);
 
   // Standalone files. The list is the visibility: whatever the user has toggled
   // on is what gets fetched and drawn.
@@ -1569,48 +1659,6 @@ function Map({
     }
   }, [pickingCoords, mapLoaded]);
 
-  // Area selection: the same drawn box as the topo picker and the filter, ending
-  // in the places it covers rather than in the box itself.
-  const onAreaSelectedRef = useRef(onAreaSelected);
-  useEffect(() => {
-    onAreaSelectedRef.current = onAreaSelected;
-  }, [onAreaSelected]);
-
-  const handleAreaBox = useCallback(
-    (bbox: RegionBbox) => {
-      const map = mapRef.current;
-      if (!map) return;
-      // Back to pixels for the feature query: `queryRenderedFeatures` works in
-      // screen space, and the corners project back exactly because they came
-      // from this same map moments ago.
-      const northWest = map.project([bbox.west, bbox.north]);
-      const southEast = map.project([bbox.east, bbox.south]);
-      const pixels: [maplibregl.PointLike, maplibregl.PointLike] = [
-        [Math.min(northWest.x, southEast.x), Math.min(northWest.y, southEast.y)],
-        [Math.max(northWest.x, southEast.x), Math.max(northWest.y, southEast.y)],
-      ];
-      const features = map.queryRenderedFeatures(pixels, {
-        layers: ["place-circles", "shared-place-circles"],
-      });
-      const ids = [
-        ...new Set(
-          features.map((f) => f.properties?.id as string).filter(Boolean),
-        ),
-      ];
-      onAreaSelectedRef.current(ids);
-    },
-    [],
-  );
-
-  // TODO: this and the filter's area box are two rubber bands on one map, and a
-  // user who draws one expecting the other gets the wrong outcome. The plan is
-  // to fold bulk actions into a selection mode over the FILTERED list (draw a
-  // box -> filter -> select all -> share/export/delete), which subsumes this
-  // mode entirely; `SelectedPlacesDialog` already takes ids and has add/remove
-  // props, so it is an entry-point rewiring rather than a rewrite. Deferred to
-  // the web UI rework rather than done alongside the filter.
-  useBoxDraw({ map: drawableMap, enabled: selectingArea, onBox: handleAreaBox });
-
   // Toggle place layer visibility
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
@@ -1618,45 +1666,52 @@ function Map({
     mapRef.current.setLayoutProperty(
       "place-circles",
       "visibility",
-      vis(showOwnedPlaces),
+      vis(showPlaces),
     );
     mapRef.current.setLayoutProperty(
       "place-labels",
       "visibility",
-      vis(showOwnedPlaces),
+      vis(showPlaces),
+    );
+    mapRef.current.setLayoutProperty(
+      "shared-place-halos",
+      "visibility",
+      vis(showPlaces),
     );
     mapRef.current.setLayoutProperty(
       "shared-place-circles",
       "visibility",
-      vis(showSharedPlaces),
+      vis(showPlaces),
     );
     mapRef.current.setLayoutProperty(
       "shared-place-labels",
       "visibility",
-      vis(showSharedPlaces),
+      vis(showPlaces),
     );
-    mapRef.current.setLayoutProperty(
+    // "Ways" draws EVERY line, wherever it came from: routes drawn here, files
+    // imported or recorded, and the tracks on places friends shared. Those
+    // files used to have no toggle at all — the list of them WAS their
+    // visibility, set one at a time by a switch on each file's own detail page,
+    // which is a control you had to open a page to find (operator,
+    // 2026-09-17). One toggle for all of them, because they are one kind of
+    // thing; whose each one is shows on the line, not in the legend.
+    //
+    // The route being drawn stays visible even with the layer off — hiding your
+    // own in-progress work would read as the tool being broken.
+    for (const id of [
       "place-tracks-lines",
-      "visibility",
-      vis(showPlaceTracks),
-    );
-    // The route being drawn stays visible even with the Routes layer off —
-    // hiding your own in-progress work would read as the tool being broken.
-    for (const id of ["routes-hit", "routes-lines", "routes-direction"]) {
+      "routes-hit",
+      "routes-lines",
+      "routes-direction",
+      "standalone-tracks-lines",
+    ]) {
       mapRef.current.setLayoutProperty(
         id,
         "visibility",
-        vis(showRoutes || drawingRoute),
+        vis(showWays || drawingRoute),
       );
     }
-  }, [
-    showOwnedPlaces,
-    showSharedPlaces,
-    showPlaceTracks,
-    showRoutes,
-    drawingRoute,
-    mapLoaded,
-  ]);
+  }, [showPlaces, showWays, drawingRoute, mapLoaded]);
 
   // Push saved routes to the map. No fetch/parse step: geometry is inline.
   useEffect(() => {
@@ -1665,17 +1720,29 @@ function Map({
       | maplibregl.GeoJSONSource
       | undefined;
     if (!source) return;
+    // The route being edited is drawn by the draft layer instead, so it isn't
+    // painted twice (and stale) underneath the handles.
+    const drawn = routes.filter((route) => route.id !== editingRouteId);
     source.setData({
       type: "FeatureCollection",
-      features: routes
-        // The route being edited is drawn by the draft layer instead, so it
-        // isn't painted twice (and stale) underneath the handles.
-        .filter((route) => route.id !== editingRouteId)
-        .map((route) => ({
-          type: "Feature" as const,
-          geometry: { type: "LineString" as const, coordinates: route.points },
-          properties: { id: route.id, name: route.name, color: route.color },
-        })),
+      features: drawn.map((route) => ({
+        type: "Feature" as const,
+        geometry: { type: "LineString" as const, coordinates: route.points },
+        properties: { id: route.id, name: route.name, color: route.color },
+      })),
+    });
+
+    const arrows = mapRef.current.getSource("routes-arrows") as
+      | maplibregl.GeoJSONSource
+      | undefined;
+    arrows?.setData({
+      type: "FeatureCollection",
+      features: drawn.flatMap(
+        (route) =>
+          arrowSegmentFeatures(route.points, {
+            color: route.color,
+          }) as GeoJSON.Feature[],
+      ),
     });
   }, [routes, mapLoaded, editingRouteId]);
 
@@ -1740,7 +1807,7 @@ function Map({
       map.setPaintProperty("route-draft-line", "line-color", effectiveColor);
     }
     if (map.getLayer("route-draft-direction")) {
-      map.setPaintProperty("route-draft-direction", "text-color", effectiveColor);
+      map.setPaintProperty("route-draft-direction", "icon-color", effectiveColor);
     }
     if (map.getLayer("route-draft-vertices")) {
       map.setPaintProperty("route-draft-vertices", "circle-stroke-color", effectiveColor);
@@ -1985,26 +2052,48 @@ function Map({
     };
   }, [mapLoaded]);
 
-  // Where the elevation profile's cursor sits along the selected route.
+  // Where the elevation profile's cursor sits along the line being read.
+  //
+  // TWO rules meet here, and only both together make the drag smooth. It is
+  // SUBSCRIBED rather than a prop, so a pointer moving many times a second does
+  // not re-render App, this component and the panel before the dot can move.
+  // And it is a MARKER rather than a GeoJSON source, because `setData`
+  // invalidates the source and MapLibre repaints the entire canvas for one dot:
+  // measured at 72ms per pointer move, against 16ms for the same drag with the
+  // write removed — the same cost as dragging over dead panel. A Marker is a
+  // DOM node the library moves with a CSS transform; the canvas is untouched.
+  // (DESIGN.md §9, which also records the three wrong guesses that preceded
+  // this one.)
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
-    const source = mapRef.current.getSource("route-hover") as
-      | maplibregl.GeoJSONSource
-      | undefined;
-    if (!source) return;
-    source.setData({
-      type: "FeatureCollection",
-      features: routeHoverPosition
-        ? [
-            {
-              type: "Feature",
-              geometry: { type: "Point", coordinates: routeHoverPosition },
-              properties: {},
-            },
-          ]
-        : [],
+    const map = mapRef.current;
+    const element = document.createElement("div");
+    element.className = classes.hoverDot;
+    const marker = new maplibregl.Marker({ element });
+    let attached = false;
+    const unsubscribe = routeHover.subscribe((hover) => {
+      if (!hover) {
+        if (attached) {
+          marker.remove();
+          attached = false;
+        }
+        return;
+      }
+      element.style.setProperty(
+        "--dot",
+        hover.color ?? readCssVar("--theme-accent", "#3b82f6"),
+      );
+      marker.setLngLat(hover.position);
+      if (!attached) {
+        marker.addTo(map);
+        attached = true;
+      }
     });
-  }, [routeHoverPosition, mapLoaded]);
+    return () => {
+      unsubscribe();
+      marker.remove();
+    };
+  }, [routeHover, mapLoaded]);
 
   // Toggle base layer visibility
   useEffect(() => {
@@ -2068,6 +2157,32 @@ function Map({
     const PREFIX = "topo-icon-";
     const onMissing = (e: { id: string }) => {
       const id = e.id;
+      // The route arrowhead. Registered as an SDF, which is what lets ONE image
+      // take each route's own colour through `icon-color` — a plain bitmap
+      // ignores the tint and every route would share one arrow colour.
+      if (id === ROUTE_ARROW_IMAGE) {
+        if (map.hasImage(id)) return;
+        const arrow = new Image();
+        arrow.onload = () => {
+          if (map.hasImage(id)) return;
+          // Decode to raw RGBA here rather than handing MapLibre the element.
+          // An SDF carries its distance field in the ALPHA channel and the
+          // shader thresholds it; passing an HTMLImageElement leaves that
+          // decode to the browser's image pipeline, and the arrows rendered as
+          // plain white triangles with the route line showing through their
+          // soft edge — i.e. the tint was never applied (seen 2026-09-17).
+          const canvas = document.createElement("canvas");
+          canvas.width = arrow.naturalWidth;
+          canvas.height = arrow.naturalHeight;
+          const ctx = canvas.getContext("2d", { willReadFrequently: true });
+          if (!ctx) return;
+          ctx.drawImage(arrow, 0, 0);
+          const { width, height, data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          map.addImage(id, { width, height, data: new Uint8Array(data) }, { sdf: true });
+        };
+        arrow.src = ROUTE_ARROW_SDF_URI;
+        return;
+      }
       if (!id || !id.startsWith(PREFIX) || map.hasImage(id)) return;
       const key = id.slice(PREFIX.length) as OsmPointFeatureKey;
       const meta = OSM_POINT_ICON[key];
@@ -2479,6 +2594,7 @@ function Map({
     // Move place marker layers above all topo layers so they remain visible
     const placeLayers = [
       "place-circles",
+      "shared-place-halos",
       "shared-place-circles",
       "place-labels",
       "shared-place-labels",
@@ -2534,6 +2650,26 @@ function Map({
     );
     onTopoFlyConsumedRef.current?.();
   }, [topoFlyTarget, mapLoaded]);
+
+  const onFlyToBoundsConsumedRef = useRef(onFlyToBoundsConsumed);
+  useEffect(() => {
+    onFlyToBoundsConsumedRef.current = onFlyToBoundsConsumed;
+  }, [onFlyToBoundsConsumed]);
+
+  // A way's extent, fitted rather than centred: a line has a length, and
+  // dropping the camera on its midpoint at a fixed zoom shows either a fraction
+  // of it or a great deal of nothing. Same padding as the topo footprint fly.
+  useEffect(() => {
+    if (!flyToBounds || !mapLoaded || !mapRef.current) return;
+    const [west, south, east, north] = flyToBounds;
+    if ([west, south, east, north].every((value) => Number.isFinite(value))) {
+      mapRef.current.fitBounds([west, south, east, north], { padding: 80, duration: 1200, maxZoom: 16 });
+    } else {
+      // Never the coordinates themselves (privacy rule) — just that it was skipped.
+      console.warn("Skipping fit-to-way: bounds out of range");
+    }
+    onFlyToBoundsConsumedRef.current?.();
+  }, [flyToBounds, mapLoaded]);
 
   const onFlyToPlaceConsumedRef = useRef(onFlyToPlaceConsumed);
   useEffect(() => {
@@ -2800,20 +2936,42 @@ function Map({
   };
 
   return (
-    <div id="map" className={classes.map} data-sidebar-open={sidebarOpen ? "true" : "false"}>
+    <div
+      id="map"
+      className={classes.map}
+      data-panel-open={panelOpen}
+      data-sheet-open={sheetOpen}
+    >
       <div ref={containerRef} style={{ height: "100%", width: "100%" }} />
-      {/* Button to toggle 3D terrain on and off. */}
-      <button onClick={toggleTerrain} className={classes.terrainToggle}>
-        3D
-      </button>
-
-      {/* Persistent place search — always available; stays usable during pick
-          modes for a quick fly-to. Slides right with the sidebar like the
-          attribution control. */}
-      <MapSearchBox
-        shifted={!!sidebarOpen}
-        onSelect={(lat, lon) =>
-          mapRef.current?.flyTo({ center: [lon, lat], zoom: 13, duration: 1200 })
+      <MapChrome
+        map={drawableMap}
+        geolocate={mapLoaded ? geolocateRef.current : null}
+        is3D={is3D}
+        onToggle3D={toggleTerrain}
+        layersButton={layersButton}
+        tools={mapTools}
+        notices={notices}
+        search={
+          // Always available, including during pick modes for a quick fly-to.
+          <MapSearchBox
+            places={places}
+            sharedPlaces={sharedPlaces}
+            onSelectPlace={(place) => {
+              selectPlaceRef.current(place.id);
+              if (isValidLatitude(place.latitude) && isValidLongitude(place.longitude)) {
+                setTimeout(() => {
+                  mapRef.current?.flyTo({
+                    center: [place.longitude, place.latitude],
+                    zoom: 15,
+                    duration: 1200,
+                  });
+                }, SIDEBAR_TRANSITION_MS);
+              }
+            }}
+            onSelectLocation={(lat, lon) =>
+              mapRef.current?.flyTo({ center: [lon, lat], zoom: 13, duration: 1200 })
+            }
+          />
         }
       />
       {pickingCoords && (
@@ -2830,11 +2988,6 @@ function Map({
             </button>
           </div>
         </>
-      )}
-      {selectingArea && (
-        <div className={classes.pickBanner}>
-          {pickVerb} to set a corner, then {pickVerb.toLowerCase()} again to select the area
-        </div>
       )}
       {selectingBbox && (
         <div className={classes.pickBanner}>

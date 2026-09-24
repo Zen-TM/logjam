@@ -33,6 +33,9 @@ export function RenameForm({
 }) {
   const [name, setName] = useState(initialName);
   const [notes, setNotes] = useState(initialNotes ?? "");
+  // Requirement shows on SUBMIT, not while typing (DESIGN.md §8); clears the
+  // moment the field is edited.
+  const [showEmptyError, setShowEmptyError] = useState(false);
   const inputRef = useRef<TextInput>(null);
   const showNotes = initialNotes !== undefined;
 
@@ -45,10 +48,15 @@ export function RenameForm({
 
   const commit = useCallback(() => {
     const trimmedName = name.trim();
+    // Every entity here requires a name — an emptied field is the Name
+    // field's own error (DESIGN.md §8), not a silent no-op that closes the
+    // sheet as if nothing had happened.
+    if (!trimmedName) {
+      setShowEmptyError(true);
+      return;
+    }
     const changed: { name?: string; notes?: string | null } = {};
-    // An empty name is a no-op, not a clear: every entity here requires one,
-    // and the server would reject it after the sheet had already closed.
-    if (trimmedName && trimmedName !== initialName) changed.name = trimmedName;
+    if (trimmedName !== initialName) changed.name = trimmedName;
     if (showNotes) {
       const trimmedNotes = notes.trim();
       const before = initialNotes ?? "";
@@ -63,10 +71,14 @@ export function RenameForm({
       <TextField
         label="Name"
         value={name}
-        onChangeText={setName}
+        onChangeText={(text) => {
+          setName(text);
+          setShowEmptyError(false);
+        }}
         inputRef={inputRef}
         returnKeyType={showNotes ? "next" : "done"}
         onSubmitEditing={showNotes ? undefined : commit}
+        error={showEmptyError ? "Enter a name." : undefined}
       />
       {showNotes ? (
         <TextField label="Notes" value={notes} onChangeText={setNotes} multiline />

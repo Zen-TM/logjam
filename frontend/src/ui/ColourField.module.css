@@ -1,0 +1,119 @@
+/* The literal colours in this file (the white-to-black plane, the rainbow, the
+   grey checkerboard) are the colour SPACE being drawn, not the theme: they are
+   what the picker is a picture of, and must not change with the scheme. */
+
+/* With the label hidden the square stands alone, at the row's control size. */
+.bare {
+  display: flex;
+  min-height: var(--control-md);
+}
+
+/* A square of the colour over a checkerboard, so a translucent value looks
+   translucent. The row's full height, like `SwatchPicker`'s. */
+.trigger {
+  flex: none;
+  align-self: stretch;
+  width: var(--control-lg);
+  min-height: var(--control-md);
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  background:
+    linear-gradient(var(--swatch), var(--swatch)),
+    repeating-conic-gradient(#888 0% 25%, #ccc 0% 50%) 0 0 / 8px 8px;
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--theme-text-muted) 60%, transparent);
+}
+
+.trigger:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* Sized to the picker, not to the Layers list the kit's Popover is sized for. */
+.popover {
+  width: max-content;
+  padding: 12px;
+}
+
+.picker {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 200px;
+}
+
+.plane {
+  position: relative;
+  height: 150px;
+  border-radius: var(--radius-sm);
+  background:
+    linear-gradient(to bottom, transparent, #000),
+    linear-gradient(to right, #fff, transparent),
+    hsl(var(--hue) 100% 50%);
+  cursor: crosshair;
+  user-select: none;
+  touch-action: none;
+}
+
+.strip {
+  position: relative;
+  /* A slider is a target: WCAG 2.5.8's 24px, whatever the strip looks like. */
+  height: var(--control-sm);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  user-select: none;
+  touch-action: none;
+}
+
+.hue {
+  background: linear-gradient(
+    to right,
+    hsl(0 100% 50%),
+    hsl(60 100% 50%),
+    hsl(120 100% 50%),
+    hsl(180 100% 50%),
+    hsl(240 100% 50%),
+    hsl(300 100% 50%),
+    hsl(360 100% 50%)
+  );
+}
+
+.alpha {
+  background:
+    linear-gradient(to right, transparent, var(--opaque)),
+    repeating-conic-gradient(#888 0% 25%, #ccc 0% 50%) 0 0 / 8px 8px;
+}
+
+.plane:focus-visible,
+.strip:focus-visible {
+  outline: 2px solid var(--theme-text-primary);
+  outline-offset: 2px;
+}
+
+.thumb {
+  position: absolute;
+  top: 50%;
+  left: var(--at);
+  width: 14px;
+  height: 14px;
+  border: 2px solid #fff;
+  border-radius: var(--radius-pill);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 50%);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.planeThumb {
+  top: var(--v);
+  left: var(--s);
+}
+
+/* The field's own clothes, in a monospace face so the eight digits line up. */
+.hex {
+  composes: input from "./TextField.module.css";
+  min-height: var(--control-md);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--font-sm);
+}

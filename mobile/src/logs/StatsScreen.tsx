@@ -26,11 +26,22 @@ import { useCallback, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import {
+  activityTalliesOverlap,
+  activityTallySubtitle,
   computeLogbookStats,
+  fieldStatDisplay,
   formatDistanceM,
   formatDurationMs,
+  logbookActivityLabel,
+  logbookRanges,
+  pluralCount,
+  statsCadence,
+  statsHeadline,
+  statsSpark,
+  tripYear,
   UNTAGGED_ACTIVITY,
   type FieldStat,
+  type LogbookRange,
   type LogbookStats,
 } from "@logjam/shared";
 
@@ -53,37 +64,10 @@ import {
   ScreenScroll,
   SectionHeader,
   StatGrid,
-  type ActivityBucket,
-  type Stat,
 } from "../ui";
-import {
-  formatDateKey,
-  logbookRanges,
-  monthBucketsForYear,
-  tripYear,
-  yearBuckets,
-  type LogbookRange,
-} from "./logbook";
-import { tripTypeLabel, tripTypeMeta } from "./tripTypeMeta";
-
-/** The label a tag-less trip is filed under, everywhere on this screen. */
-const UNTAGGED_LABEL = "Untagged";
+import { tripTypeMeta } from "./tripTypeMeta";
 
 const RANGE_PREF_KEY = "logbookStatsRange";
-
-function activityLabel(type: string): string {
-  return type === UNTAGGED_ACTIVITY ? UNTAGGED_LABEL : tripTypeLabel(type);
-}
-
-function plural(count: number, one: string, many = `${one}s`): string {
-  return `${count} ${count === 1 ? one : many}`;
-}
-
-/** A rounded number for a stat tile — a mean of 4.333 is noise at two decimals
- *  and a lie at zero, so ratings keep one place and counts keep none. */
-function formatNumber(value: number): string {
-  return Number.isInteger(value) ? `${value}` : value.toFixed(1);
-}
 
 export function StatsScreen({
   activity = null,
@@ -171,7 +155,7 @@ export function StatsScreen({
   // logbook with 123 trips in it, which is what the drill-down did.
   const reading = tripsQuery.data == null || placesQuery.data == null;
 
-  const title = activity ? activityLabel(activity) : `${plural(stats.days, "day")} out`;
+  const title = activity ? logbookActivityLabel(activity) : `${pluralCount(stats.days, "day")} out`;
 
   return (
     <View style={styles.screen}>
@@ -207,7 +191,7 @@ export function StatsScreen({
             reading
               ? undefined
               : activity
-                ? `No ${activityLabel(activity).toLowerCase()} trips in this window. Try a wider one.`
+                ? `No ${logbookActivityLabel(activity).toLowerCase()} trips in this window. Try a wider one.`
                 : "Log a few trips and this fills in — days out, how often you get away, and how far you've got through your places."
           }
         />
@@ -238,12 +222,9 @@ export function StatsScreen({
 // ── Blocks ─────────────────────────────────────────────────────────────
 
 /**
- * Months or years, decided by what the range actually spans.
- *
- * All time over more than one year is a YEAR axis — twelve months of a
- * four-year history is a window onto the wrong thing — while a single year pill
- * gets that year's twelve months rather than "the twelve ending now", which for
- * a past season would be twelve empty bars.
+ * The spark and its cadence lines. Which axis it draws and every sentence under
+ * it are `statsSpark` and `statsCadence` in `@logjam/shared`, which Logjam Web's
+ * Stats reads too.
  */
 function Spark({
   stats,
@@ -254,51 +235,12 @@ function Spark({
   range: LogbookRange;
   activity: string | null;
 }) {
-  const explicitYear =
-    /^\d{4}$/.test(range.label) ? Number(range.label) : null;
-  const buckets: ActivityBucket[] =
-    explicitYear != null
-      ? monthBucketsForYear(stats.monthly, explicitYear)
-      : stats.yearly.length > 1
-        ? yearBuckets(stats.yearly)
-        : monthBucketsForYear(
-            stats.monthly,
-            stats.yearly[0]?.year ?? new Date().getFullYear(),
-          );
-
-  const busiest = stats.monthly.reduce(
-    (top, entry) => (entry.count > (top?.count ?? 0) ? entry : top),
-    null as { year: number; month: number; count: number } | null,
-  );
-  const busiestLabel = busiest
-    ? `busiest ${new Date(Date.UTC(busiest.year, busiest.month, 1)).toLocaleDateString(
-        undefined,
-        { month: "short", year: "numeric", timeZone: "UTC" },
-      )} · ${plural(busiest.count, "trip")}`
-    : undefined;
-
-  // The cadence facts ride in the SAME caption block as the spark's own line:
-  // they are the day-level reading of the shape directly above them, and a card
-  // around them made three muted sentences look like a fourth statistic.
-  const lines: string[] = [];
-  if (!activity && stats.firstDate) {
-    lines.push(`first trip ${formatDateKey(`${stats.firstDate}T00:00:00.000Z`)}`);
-  }
-  if (stats.averageGapDays != null && stats.longestGapDays != null) {
-    lines.push(
-      `every ${plural(stats.averageGapDays, "day")} on average · longest gap ${stats.longestGapDays}`,
-    );
-  }
-  lines.push(
-    `${stats.weekendTrips} of ${plural(stats.trips, "trip")} fell on a weekend`,
-  );
-  if (stats.longestRunDays > 1) {
-    lines.push(`longest run ${plural(stats.longestRunDays, "day")} back to back`);
-  }
+  const { buckets } = statsSpark(stats, range);
+  const { busiest, lines } = statsCadence(stats, activity);
 
   return (
     <View style={styles.block}>
-      <ActivitySpark buckets={buckets} caption={busiestLabel} />
+      <ActivitySpark buckets={buckets} caption={busiest} />
       {lines.map((line) => (
         <Text key={line} style={styles.caption}>
           {line}
@@ -318,33 +260,10 @@ function Headline({
   /** True when a range pill narrower than "All time" is selected. */
   bounded: boolean;
 }) {
-  // EVERY LABEL SAYS WHAT IT COUNTS. "Places" could as easily have meant the
-  // size of the library, and "Activities" read as a synonym for trips — both
-  // were ambiguous on the first device run, and a stat tile has no room to
-  // explain itself, so the label has to do it.
-  //
-  // Over ALL TIME every place was new ground once, so that tile would just
-  // restate "Places visited" beside it. "Revisited" — places gone back to — is
-  // the half of the pair that still says something on an unbounded window.
-  const ground: Stat = bounded
-    ? { label: "New places", value: `${stats.newPlaces}` }
-    : { label: "Revisited", value: `${stats.repeatPlaces}` };
-  const tiles: Stat[] = activity
-    ? [
-        { label: "Trips", value: `${stats.trips}` },
-        { label: "Days out", value: `${stats.days}` },
-        { label: "Places visited", value: `${stats.places}` },
-        ground,
-      ]
-    : [
-        { label: "Trips", value: `${stats.trips}` },
-        { label: "Places visited", value: `${stats.places}` },
-        { label: "Activity types", value: `${stats.activities}` },
-        ground,
-      ];
+  // Every label says what it counts (`statsHeadline` has the reasons).
   return (
     <View style={styles.block}>
-      <StatGrid stats={tiles} />
+      <StatGrid stats={statsHeadline(stats, activity, bounded)} />
     </View>
   );
 }
@@ -357,10 +276,7 @@ function Activities({
   onOpenActivity: (activity: string) => void;
 }) {
   if (stats.activityTallies.length === 0) return null;
-  const multiTagged = stats.activityTallies.reduce(
-    (sum, tally) => sum + tally.trips,
-    0,
-  ) > stats.trips;
+  const multiTagged = activityTalliesOverlap(stats);
   return (
     <View style={styles.section}>
       <SectionHeader label="By activity" />
@@ -373,12 +289,8 @@ function Activities({
             key={tally.type}
             icon={meta.icon}
             hue={meta.hue}
-            title={activityLabel(tally.type)}
-            subtitle={
-              tally.places > 0
-                ? `${plural(tally.trips, "trip")} · ${plural(tally.places, "place")}`
-                : plural(tally.trips, "trip")
-            }
+            title={logbookActivityLabel(tally.type)}
+            subtitle={activityTallySubtitle(tally)}
             right={<Feather name="chevron-right" size={20} color={theme.textMuted} />}
             onPress={() => onOpenActivity(tally.type)}
           />
@@ -494,7 +406,7 @@ function OnFoot({
         ]}
       />
       <Text style={styles.caption}>
-        {`from ${plural(inRange.length, "recording")} on this phone — recordings aren't linked to trips, so these are the same days seen another way`}
+        {`from ${pluralCount(inRange.length, "recording")} on this phone — recordings aren't linked to trips, so these are the same days seen another way`}
       </Text>
     </View>
   );
@@ -570,77 +482,30 @@ function AttributeSections({
  * pinned under the row's own line, inside the same card.
  */
 function AttributeStat({ stat }: { stat: FieldStat }) {
-  if (stat.kind === "rating") {
-    // No per-year progression line. It read as a claim about the user getting
-    // better, which is not what a grade distribution over trips measures, is
-    // not how canyon grades work, and is not a thing every user is doing.
-    const caption = stat.best
-      ? `highest ${formatNumber(stat.best.value)} · ${stat.best.label}`
-      : undefined;
-    return (
-      <Row
-        title={stat.label}
-        titleNumberOfLines={1}
-        right={<RowMetric value={formatNumber(stat.average)} suffix="avg" />}
-        footer={
-          <ActivitySpark
-            buckets={stat.buckets.map((bucket) => ({
-              label: `${bucket.value}`,
-              count: bucket.count,
-            }))}
-            caption={caption}
-          />
-        }
-      />
-    );
-  }
-
-  if (stat.kind === "quantity") {
-    // NO TOTALS, on either side, and that is a decision rather than an
-    // omission. A total is only honest for a quantity a trip SPENDS, and
-    // nothing in a definition says which ones those are — not the bounds, not
-    // `min`, not which list the value came from. Summing a place property gave
-    // "1996 longest pitch" and "48 capacity"; summing a trip property gave
-    // "1530 rope length". An average and a highest are never wrong for either.
-    //
-    // "471 pitches abseiled" is worth having back, and needs the one thing that
-    // could make it correct: an "adds up each trip" flag on the definition,
-    // answered by the person who created the field.
-    return (
-      <Row
-        title={stat.label}
-        titleNumberOfLines={1}
-        subtitle={
-          stat.best
-            ? `highest ${formatNumber(stat.best.value)}, ${stat.best.label}`
-            : undefined
-        }
-        right={<RowMetric value={formatNumber(stat.average)} suffix="avg" />}
-      />
-    );
-  }
-
-  if (stat.kind === "boolean") {
-    return (
-      <Row
-        title={stat.label}
-        titleNumberOfLines={1}
-        subtitle={`of ${plural(stat.of, "trip")} answered`}
-        right={<RowMetric value={`${stat.yes}`} suffix="yes" />}
-      />
-    );
-  }
-
+  // What a stat of each shape says — and why a quantity has no total — is
+  // `fieldStatDisplay` in `@logjam/shared`, which Logjam Web reads too.
+  const display = fieldStatDisplay(stat);
   return (
     <Row
       title={stat.label}
       titleNumberOfLines={1}
-      // "×" rather than a space: a value can contain spaces of its own, and
-      // "NPWS-2026-114 4" read as part of the identifier. The multiplication
-      // sign is what the places section already counts repeats with.
-      subtitle={stat.values
-        .map((entry) => `${entry.value} ×${entry.count}`)
-        .join(" · ")}
+      subtitle={display.subtitle}
+      right={
+        display.metric ? (
+          <RowMetric value={display.metric.value} suffix={display.metric.suffix} />
+        ) : undefined
+      }
+      footer={
+        display.buckets ? (
+          <ActivitySpark
+            buckets={display.buckets.map((bucket) => ({
+              label: `${bucket.value}`,
+              count: bucket.count,
+            }))}
+            caption={display.caption}
+          />
+        ) : undefined
+      }
     />
   );
 }

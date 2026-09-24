@@ -207,6 +207,21 @@ describe("PATCH /notifications/:id/read and DELETE /notifications/:id (fake auth
       expect(patchRes.status).toBe(200);
       expect(patchRes.body.read).toBe(true);
 
+      // Logjam Web's "Mark as unread" is the same route with a body.
+      const unreadRes = await request(API_URL)
+        .patch(`/notifications/${notification.id}/read`)
+        .set(AUTH)
+        .send({ read: false });
+      expect(unreadRes.status).toBe(200);
+      expect(unreadRes.body.read).toBe(false);
+
+      // Anything but a boolean false still marks it read, as the bodyless call always did.
+      const junkRes = await request(API_URL)
+        .patch(`/notifications/${notification.id}/read`)
+        .set(AUTH)
+        .send({ read: "no" });
+      expect(junkRes.body.read).toBe(true);
+
       const deleteRes = await request(API_URL)
         .delete(`/notifications/${notification.id}`)
         .set(AUTH);

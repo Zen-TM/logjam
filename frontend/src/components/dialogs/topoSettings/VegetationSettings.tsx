@@ -1,7 +1,18 @@
-import { Switch } from "@mui/material";
-import { SVTM_FORMATIONS, type VegetationSettings as VegetationSettingsValue } from "@logjam/shared";
-import ColourPicker from "../../common/ColourPicker";
-import SettingsRow from "./SettingsRow";
+import { Fragment } from "react";
+import {
+  RASTER_TEMPLATE_DEFAULTS,
+  SVTM_FORMATIONS,
+  type VegetationSettings as VegetationSettingsValue,
+} from "@logjam/shared";
+import {
+  Button,
+  ColourField,
+  LiveNumberField,
+  SectionHeader,
+  SettingsRow,
+  Toggle,
+} from "../../../ui";
+import type { NumericFieldConstraints } from "../../../numberInput";
 import styles from "./topoSettings.module.css";
 
 interface Props {
@@ -9,131 +20,139 @@ interface Props {
   onChange: (next: VegetationSettingsValue) => void;
 }
 
-export default function VegetationSettings({ value, onChange }: Props) {
-  const patch = (delta: Partial<VegetationSettingsValue>) =>
-    onChange({ ...value, ...delta });
+const RATIO_CONSTRAINTS: NumericFieldConstraints = { min: 0, max: 1 };
+const WEIGHT_CONSTRAINTS: NumericFieldConstraints = { min: 0, max: 5 };
 
-  const setWeight = (formation: string, w: number) =>
-    patch({ formationWeights: { ...value.formationWeights, [formation]: w } });
+const DEFAULT_WEIGHTS = RASTER_TEMPLATE_DEFAULTS.vegetation.formationWeights;
+
+// On the wire the layer's opacity is its own 0–255 number (`alphaMin` /
+// `alphaMax`) and the colour's alpha byte is ignored — that is what the
+// renderer reads, and it is not worth a settings migration to move. In the UI
+// they are ONE control: the picker already has an opacity strip and a
+// checkerboard behind the swatch, so a colour that says it is half transparent
+// beside a number that says otherwise was two answers to one question.
+const withAlpha = (colour: string, alpha: number) =>
+  `${colour.slice(0, 7)}${Math.round(alpha).toString(16).padStart(2, "0")}`;
+const alphaOf = (colour: string) => {
+  const alpha = parseInt(colour.slice(7, 9), 16);
+  return Number.isNaN(alpha) ? 255 : alpha;
+};
+
+/**
+ * How thick the scrub is, drawn from the LiDAR returns that hit it rather than
+ * the ground. The one sentence at the top is what the numbers MEAN — not a
+ * description of the controls, which say what they are themselves.
+ */
+export default function VegetationSettings({ value, onChange }: Props) {
+  const patch = (delta: Partial<VegetationSettingsValue>) => onChange({ ...value, ...delta });
+
+  const setWeight = (formation: string, weight: number) =>
+    patch({ formationWeights: { ...value.formationWeights, [formation]: weight } });
 
   return (
     <div className={styles.tabPanel}>
       <p className={styles.helpText}>
-        Scrub density is a normalised pulse-ratio computed from LiDAR returns
-        in the 0.25–2 m height band. Below <em>min ratio</em> = transparent;
-        at/above <em>max ratio</em> = fully opaque dense colour. The colour
-        ramps from sparse to dense along a sqrt curve.
+        An estimate of bushbashing difficulty, derived from the proportion of
+        LiDAR returns between 0.25 m and 2 m above the ground.
       </p>
 
       <SettingsRow
         label="Min ratio"
-        tooltip="LiDAR vegetation pulse ratio cutoff. Below this value the layer is transparent."
+        tooltip="Below this ratio, the vegetation layer is transparent."
       >
-        <input
-          type="number"
-          className={styles.numberInput}
-          min={0}
-          max={1}
-          step={0.01}
+        <LiveNumberField
+          label="Min ratio"
+          hideLabel
+          className={styles.numberCell}
           value={value.minRatio}
-          onChange={(e) => patch({ minRatio: Number(e.target.value) })}
+          constraints={RATIO_CONSTRAINTS}
+          onCommit={(minRatio) => patch({ minRatio })}
         />
       </SettingsRow>
 
       <SettingsRow
         label="Max ratio"
-        tooltip="At or above this value the layer is fully opaque with the dense colour. Must be > min ratio."
+        tooltip="Above this ratio, the vegetation layer uses the full-strength dense colour below."
       >
-        <input
-          type="number"
-          className={styles.numberInput}
-          min={0}
-          max={1}
-          step={0.01}
+        <LiveNumberField
+          label="Max ratio"
+          hideLabel
+          className={styles.numberCell}
           value={value.maxRatio}
-          onChange={(e) => patch({ maxRatio: Number(e.target.value) })}
+          constraints={RATIO_CONSTRAINTS}
+          onCommit={(maxRatio) => patch({ maxRatio })}
         />
       </SettingsRow>
 
-      <SettingsRow label="Sparse colour" tooltip="Colour at low density. Alpha here is ignored — use alpha min/max below.">
-        <ColourPicker value={value.sparseColour} onChange={(c) => patch({ sparseColour: c })} />
-      </SettingsRow>
-
-      <SettingsRow label="Dense colour" tooltip="Colour at high density. Alpha here is ignored — use alpha min/max below.">
-        <ColourPicker value={value.denseColour} onChange={(c) => patch({ denseColour: c })} />
-      </SettingsRow>
-
-      <SettingsRow label="Alpha at min ratio" tooltip="Layer opacity at the min-ratio cutoff (0..255).">
-        <input
-          type="number"
-          className={styles.numberInput}
-          min={0}
-          max={255}
-          step={1}
-          value={value.alphaMin}
-          onChange={(e) => patch({ alphaMin: Number(e.target.value) })}
+      <SettingsRow label="Sparse colour" tooltip="The colour used where the scrub is thinnest.">
+        <ColourField
+          label="Sparse colour"
+          hideLabel
+          value={withAlpha(value.sparseColour, value.alphaMin)}
+          onChange={(sparseColour) => patch({ sparseColour, alphaMin: alphaOf(sparseColour) })}
         />
       </SettingsRow>
 
-      <SettingsRow label="Alpha at max ratio" tooltip="Layer opacity at the max-ratio cutoff (0..255).">
-        <input
-          type="number"
-          className={styles.numberInput}
-          min={0}
-          max={255}
-          step={1}
-          value={value.alphaMax}
-          onChange={(e) => patch({ alphaMax: Number(e.target.value) })}
+      <SettingsRow label="Dense colour" tooltip="The colour used where the scrub is thickest.">
+        <ColourField
+          label="Dense colour"
+          hideLabel
+          value={withAlpha(value.denseColour, value.alphaMax)}
+          onChange={(denseColour) => patch({ denseColour, alphaMax: alphaOf(denseColour) })}
         />
       </SettingsRow>
 
       <SettingsRow
-        label="SVTM formation weights"
-        tooltip="When on, each SVTM vegetation formation scales the density by its resistance multiplier μ (hard heath vs. soft rainforest). Off ⇒ all μ = 1.0."
+        label="Weight by vegetation type"
+        tooltip="Some vegetation is harder to push through than others. With this setting on, you can scale estimated density by vegetation formation."
       >
-        <Switch
-          size="small"
+        <Toggle
+          label="Weight by vegetation type"
           checked={value.weightsEnabled}
-          onChange={(_, checked) => patch({ weightsEnabled: checked })}
+          onChange={(weightsEnabled) => patch({ weightsEnabled })}
         />
       </SettingsRow>
 
-      <div className={value.weightsEnabled ? "" : styles.disabled}>
-        <h4 className={styles.sectionTitle}>Per-formation μ (0–5)</h4>
-        <div className={styles.formationGrid}>
-          {SVTM_FORMATIONS.map((name) => (
-            <FormationRow
-              key={name}
-              name={name}
-              value={value.formationWeights[name] ?? 1.0}
-              onChange={(w) => setWeight(name, w)}
-            />
+      <div className={styles.dependent} data-disabled={value.weightsEnabled ? undefined : true}>
+        <div className={styles.resetLine}>
+          <div>
+            <SectionHeader title="Resistance per formation" />
+            <p className={styles.helpText}>
+              Use values above 1 for vegetation formations that are harder to
+              push through, and values below 1 for formations that are easier.
+            </p>
+          </div>
+          <Button
+            compact
+            variant="outline"
+            className={styles.resetButton}
+            disabled={!value.weightsEnabled}
+            onClick={() => patch({ formationWeights: { ...DEFAULT_WEIGHTS } })}
+          >
+            Reset to defaults
+          </Button>
+        </div>
+        {/* A table: one heading over the numbers, not the range repeated on
+            twelve rows (DESIGN.md §9). */}
+        <div className={styles.formationTable}>
+          <span />
+          <span className={styles.head}>0–5</span>
+          {SVTM_FORMATIONS.map((formation) => (
+            <Fragment key={formation}>
+              <span className={styles.formationName}>{formation}</span>
+              <LiveNumberField
+                label={`${formation} resistance`}
+                hideLabel
+                className={styles.numberCell}
+                value={value.formationWeights[formation] ?? 1.0}
+                constraints={WEIGHT_CONSTRAINTS}
+                disabled={!value.weightsEnabled}
+                onCommit={(weight) => setWeight(formation, weight)}
+              />
+            </Fragment>
           ))}
         </div>
       </div>
     </div>
-  );
-}
-
-interface FormationRowProps {
-  name: string;
-  value: number;
-  onChange: (n: number) => void;
-}
-
-function FormationRow({ name, value, onChange }: FormationRowProps) {
-  return (
-    <>
-      <span className={styles.formationName}>{name}</span>
-      <input
-        type="number"
-        className={styles.numberInput}
-        min={0}
-        max={5}
-        step={0.1}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-      />
-    </>
   );
 }

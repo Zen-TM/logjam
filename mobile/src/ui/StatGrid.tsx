@@ -1,3 +1,4 @@
+import { Feather } from "@expo/vector-icons";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { fontSize, fontWeight, radius, spacing, surface, theme } from "../theme";
@@ -8,8 +9,10 @@ export type Stat = {
   /** Full-width cell instead of half. For a value that wraps badly at half
    *  width — a coordinate pair is the case this exists for. */
   wide?: boolean;
-  /** Makes the cell a button. Used for copy-to-clipboard on a coordinate. */
-  onPress?: () => void;
+  /** Makes the cell copy its value on tap, and draws a copy glyph beside the
+   *  value so the tap can be found: a tile that only reveals it is a button
+   *  when pressed is one nobody presses. */
+  onCopy?: () => void;
 };
 
 // Two-column grid of labelled stat cards — the Place-detail Overview
@@ -23,15 +26,24 @@ export function StatGrid({ stats }: { stats: Stat[] }) {
         const content = (
           <>
             <Text style={styles.label}>{stat.label}</Text>
-            <Text style={styles.value}>{stat.value}</Text>
+            {/* The glyph shares the value's row rather than being pinned to
+                the corner, so a long value wraps before it instead of running
+                underneath it. */}
+            <View style={styles.valueRow}>
+              <Text style={styles.value}>{stat.value}</Text>
+              {stat.onCopy ? (
+                <Feather name="copy" size={14} color={theme.textMuted} style={styles.copyGlyph} />
+              ) : null}
+            </View>
           </>
         );
-        return stat.onPress ? (
+        return stat.onCopy ? (
           <Pressable
             key={stat.label}
             accessibilityRole="button"
             accessibilityLabel={`${stat.label}: ${stat.value}`}
-            onPress={stat.onPress}
+            accessibilityHint="Copies it to the clipboard"
+            onPress={stat.onCopy}
             style={({ pressed }) => [
               styles.cell,
               stat.wide && styles.wide,
@@ -71,5 +83,14 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.8,
   },
-  value: { color: theme.textPrimary, fontSize: fontSize.lg, fontWeight: fontWeight.bold },
+  valueRow: { flexDirection: "row", alignItems: "flex-end", gap: spacing(1) },
+  value: {
+    flexShrink: 1,
+    color: theme.textPrimary,
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.bold,
+  },
+  // Pushed to the cell's right edge; the bottom nudge sits it on the value's
+  // baseline rather than on the bottom of its line box.
+  copyGlyph: { marginLeft: "auto", marginBottom: spacing(0.5) },
 });

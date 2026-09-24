@@ -598,7 +598,8 @@ and only while something is actually parked). Don't invent a palette for a menu.
 
 Some "kinds" aren't a fixed set — trip types are a seed list the user extends
 with free text. Those can't have an exhaustive map, so (see
-`src/logs/tripTypeMeta.ts`):
+`tripTypeIdentity` in `@logjam/shared`, which Logjam Web reads too;
+`src/logs/tripTypeMeta.ts` resolves it against this app's theme and Feather):
 
 - The **seeded** entries get a fixed identity, and the canonical one
   (`canyoning`) takes the scheme accent, exactly as `assetHue.region` does.
@@ -663,7 +664,10 @@ Never hardcode `rgba(255,255,255,…)`.
 
 `Row` is the only list-row component. Give it `icon` + `hue` (not a bare
 `leading` node) whenever the row has a kind. Trailing order, left to right:
-**size/metric → status pill → inline recovery action → overflow `⋯`**.
+**size/metric → status pill → status glyphs → inline recovery action → overflow
+`⋯`**. Among the glyphs, the one most rows carry goes LAST (Saved: shared-out
+`users`, then backed-up `cloud`), so it holds the same column down the list and
+a glyph only some rows have does not shift it.
 
 - One tap target per row action, `IconButton` (40pt + `hitSlop`) — never a bare
   `Pressable` around a glyph, and never an icon without an
@@ -679,7 +683,7 @@ Never hardcode `rgba(255,255,255,…)`.
   and that is not hypothetical — it is how a "Download again" got pressed for a
   file the user had just turned down. The inbox is the only surface with these
   today (`screens/NotificationsScreen.tsx`, from
-  `notifications/notificationActions.ts`).
+  `notificationActions.ts` in `@logjam/shared`).
 - **A list a user acts on is ordered by TIME, never re-sorted by the state the
   action changes.** The notifications endpoint returns unread-first, so
   answering a row sent it to the bottom of the list mid-gesture and slid the
@@ -860,7 +864,9 @@ inline card reflows the list under the user's thumb and then lingers with no
 owner. One toast channel per screen, `{ text, tone, nonce }`; errors stay up
 longer than confirmations. An error that is *state* rather than an event (a
 failed background fetch whose data the current filter needs) stays inline as a
-row with a retry — it persists because the problem persists.
+row with a retry — it persists because the problem persists. A form still OPEN
+when its action fails is the other exception: it reports in the form, above its
+submit (§8, "Form errors"), because a toast is drawn under the sheet.
 
 **Long work belongs in a card, not a screen — unless leaving would break it.**
 The two long jobs in the app are deliberately opposite, and the difference is
@@ -1101,7 +1107,7 @@ which subsystem is talking.
     - The Inbox has one, and it is a SINGLE button whose direction follows the
       selection — every row read marks them unread, anything unread marks the
       unread ones read — because the pair would be two buttons of which one is
-      always a no-op. `notifications/bulkReadAction.ts` decides it (glyph `eye` /
+      always a no-op. `bulkReadAction.ts` (`@logjam/shared`) decides it (glyph `eye` /
       `eye-off`, screen-reader label and toast from one place).
     - Account sync issues has two, because after the tabs came out its ONE list
       holds two kinds: a stuck change (Try again re-queues it) and a lost value
@@ -1433,6 +1439,51 @@ which subsystem is talking.
 - Connectivity is a `StatusPill` in the hero when offline, and it disables
   network actions — it does not hide them.
 
+### Form errors
+
+One convention for every form, in a sheet or on a screen. The pieces are
+`FieldError`, `TextField`'s and `ChipPicker`'s `error`, and `ErrorBanner`.
+
+- **A problem with ONE control is drawn directly under that control.**
+  `TextField` and `ChipPicker` take `error`; anything else (a rail, a date row,
+  a coordinate pair, an attribute input) puts a bare `FieldError` under itself.
+  An errored text field's border turns `theme.warning` too, so it can be found
+  while scrolling. Never a hand-rolled warning `<Text>` — two styles for one
+  line is the drift (§9).
+- **A problem that belongs to no single control goes in an `ErrorBanner`
+  directly above the submit button** — inside the sheet's pinned `footer` when
+  it has one. A save the server refused, a failure while the form is still
+  open, a rule across two fields. Not at the top of the form: `PlaceEditSheet`
+  put "A place needs a name." there while Save sat pinned at the bottom, out of
+  sight of the thing the user had just tapped.
+- **A requirement shows on SUBMIT; a limit shows LIVE.** Empty, nothing picked,
+  out of range: say so when Save is tapped, never while the user is still
+  typing it the first time. A maximum length being crossed is a fact about what
+  they are typing and shows as it happens. A field's error clears the moment
+  that field is edited.
+- **Submit is never disabled for validation.** Tapping it is how the user finds
+  out what is missing — a greyed Save says something is wrong and not what.
+  Disable it only while saving, or for a capability the user lacks (§10, with
+  the reason). Type-to-confirm on a destructive action (deleting the account) is
+  not validation and stays disabled until the text matches: the field's own
+  label states the one thing it wants, and the disabled button IS the guard.
+  Nor is a verb over a SELECTION ("Send a copy to 3", a selection bar's
+  delete): it dims at zero, because its label counts what it acts on and the
+  list being picked from is right above it.
+- **A sheet scrolls to the first error that appears out of view.** `FieldError`
+  reports itself to its `BottomSheet`, which scrolls only when the topmost new
+  error is off screen — so a live limit under the field being typed in never
+  moves the sheet.
+- **An action that fails while its form is OPEN reports in the form**, in the
+  banner above submit — not in a toast, which is drawn under the sheet. Once
+  the form has closed, §6's toast rule applies. "Try again" only where retrying
+  can help (§13).
+- **A tap a picker refuses** (a trip's place cap) is that picker's
+  `FieldError`, not a toast.
+- **Copy: one sentence naming the field and what it needs, with a full stop** —
+  "A place needs a name.", "Names can be at most 80 characters." Our words,
+  never an error's (`messageFromError` with a fallback).
+
 ## 9. Kit rules
 
 Screens import from the barrel `../ui`, never from a component file. When a
@@ -1456,6 +1507,19 @@ colour when there is content past it (`SegmentedControl`'s `EdgeFade`, an
 driven by scroll offset — a fade on only one end still leaves a hard-sliced chip
 at the other, and a fade shown at rest dims a chip with nothing behind it. Use a
 real gradient for any fade; stacked alpha steps band visibly.
+
+**A rail nudges, it never recentres.** Scrolling each tapped chip to the left
+edge slid its neighbours away, and the next tap is as often the chip before as
+the one after. So a rail moves only when the active chip is not shown WHOLE —
+cut off by the screen edge or under an edge fade, whether the user tapped it
+there or it was selected elsewhere (an import lands, a rename jumps to another
+category) — and then only far enough to clear the fade.
+
+**A multi-select vocabulary never reorders under the thumb.** `ChipPicker` keeps
+vocabulary order whatever is selected; moving picked chips to the front made
+every tap a re-read of the whole block. Where the ORDER of a selection means
+something — a trip's first type picks its glyph and hue — the picker stars that
+chip (`primaryValue`) instead of moving it.
 
 **A list of one KIND of thing is one kind of card.** `Row` is `radius.lg` and
 `Card` is `radius.md`, so a list that draws some entries with one and some with
@@ -1482,6 +1546,14 @@ next. Pass `titleNumberOfLines={1}` where a single line is load-bearing. The
 same rule sent the map's badges to two lines: a warning that reads "Showing 5 of
 2…" is a warning nobody can act on. Drop a trailing pill beside a long subtitle
 — the pill's width is what forced the ellipsis in the first place.
+
+**A tile that does something on tap says so on the tile.** A coordinate tile
+copies its value, and for months the only way to learn that was to tap it.
+`StatGrid`'s `onCopy` draws a muted copy glyph at the value's trailing edge, in
+the value's row rather than pinned to the corner, so a long value wraps before
+the glyph instead of running under it. The prop is named for the one thing it
+does: a generic `onPress` beside a copy glyph would promise a copy on the next
+tile that wires a tap to something else.
 
 **The two map INSTRUMENTS size themselves in text.** The compass tape's label
 slot and height, and the scale bar's height, are computed from `textScale`
@@ -1527,7 +1599,7 @@ slowly becomes the place everything shared goes.
 
 Current kit: `ActivitySpark` · `BottomSheet` · `Button` · `CapacityBar` ·
 `Card` · `Chip` · `ChipPicker` · `DatePicker` ·
-`ErrorBanner` · `HeroHeader` · `IconButton` · `RangePills` · `Row` ·
+`ErrorBanner` · `FieldError` · `HeroHeader` · `IconButton` · `RangePills` · `Row` ·
 `Screen`/`ScreenScroll` · `ScreenStates` · `SectionHeader` ·
 `SegmentedControl` · `StatGrid` · `StatusPill` · `TextField` · `Toast` ·
 `Toggle`.

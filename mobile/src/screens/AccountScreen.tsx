@@ -340,7 +340,13 @@ function UsernameForm({
 
   const save = useCallback(async () => {
     const trimmed = value.trim();
-    if (!trimmed || trimmed === current) return;
+    // Empty is a requirement, shown on submit (DESIGN.md §8); unchanged is not
+    // an error at all, just nothing to do.
+    if (!trimmed) {
+      setError("Enter a username.");
+      return;
+    }
+    if (trimmed === current) return;
     setSaving(true);
     setError(null);
     try {
@@ -349,7 +355,8 @@ function UsernameForm({
     } catch (err) {
       console.error(err);
       // The server's own 409 text ("Username already taken") is worth showing,
-      // which is what messageFromError prefers when the API supplies one.
+      // which is what messageFromError prefers when the API supplies one —
+      // and it's this one field's problem, so it renders under it (§8).
       setError(messageFromError(err, "Couldn't save that username."));
     } finally {
       setSaving(false);
@@ -361,18 +368,20 @@ function UsernameForm({
       <TextField
         label="Username"
         value={value}
-        onChangeText={setValue}
+        onChangeText={(text) => {
+          setValue(text);
+          setError(null);
+        }}
         autoCapitalize="none"
+        error={error}
       />
       <Text style={styles.formHint}>
         Friends search this name when they share a place with you.
       </Text>
-      {error ? <ErrorBanner message={error} /> : null}
       <Button
         label="Save username"
         icon="check"
         loading={saving}
-        disabled={!value.trim() || value.trim() === current}
         onPress={() => void save()}
       />
     </View>
@@ -393,7 +402,10 @@ function EmailForm({ current, onSaved }: { current: string; onSaved: () => void 
 
   const request = useCallback(async () => {
     const trimmed = email.trim();
-    if (!trimmed) return;
+    if (!trimmed) {
+      setError("Enter a new email.");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -411,7 +423,10 @@ function EmailForm({ current, onSaved }: { current: string; onSaved: () => void 
 
   const confirm = useCallback(async () => {
     const trimmed = code.trim();
-    if (!trimmed) return;
+    if (!trimmed) {
+      setError("Enter the code we sent you.");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -434,15 +449,17 @@ function EmailForm({ current, onSaved }: { current: string; onSaved: () => void 
         <TextField
           label="Confirmation code"
           value={code}
-          onChangeText={setCode}
+          onChangeText={(text) => {
+            setCode(text);
+            setError(null);
+          }}
           keyboardType="number-pad"
+          error={error}
         />
-        {error ? <ErrorBanner message={error} /> : null}
         <Button
           label="Confirm email"
           icon="check"
           loading={busy}
-          disabled={!code.trim()}
           onPress={() => void confirm()}
         />
       </View>
@@ -455,16 +472,18 @@ function EmailForm({ current, onSaved }: { current: string; onSaved: () => void 
       <TextField
         label="New email"
         value={email}
-        onChangeText={setEmail}
+        onChangeText={(text) => {
+          setEmail(text);
+          setError(null);
+        }}
         autoCapitalize="none"
         keyboardType="email-address"
+        error={error}
       />
-      {error ? <ErrorBanner message={error} /> : null}
       <Button
         label="Send code"
         icon="mail"
         loading={busy}
-        disabled={!email.trim()}
         onPress={() => void request()}
       />
     </View>

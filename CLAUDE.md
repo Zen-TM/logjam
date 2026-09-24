@@ -102,6 +102,27 @@ Additive only. Never silently delete existing conventions — flag stale entries
   pair — they are never wrong for either kind. The same rule in miniature:
   a tally over ONE distinct value is a constant, not a distribution.
 
+- **A colour pair is measured under all FOUR schemes before it ships, never
+  judged by eye in one.** Every screenshot anyone looks at is Sandstone, and a
+  pair that reads fine there can fail badly elsewhere: the phone's hero puts
+  `textMuted` on `bonus2` (3.94:1 in Sandstone) and `textPrimary` on `bonus2`
+  (2.43:1 in Ironbark, where `bonus2` is a LIGHT green), and it shipped that way
+  (found 2026-09-13 while designing Logjam Web). A new foreground/background
+  pair — a surface, a tint, a label on a fill — joins `scripts/wcag-contrast.mjs`
+  (text 4.5:1, UI 3:1) in the same change. CI runs it (`shared` job). A pair
+  that fails today and ships anyway goes in its `KNOWN_FAILURES` with where it
+  renders — the list can only shrink, because a known failure that starts
+  passing fails the run. The two hero pairs above are on it; the GeoPDF and
+  waypoint hues failed 3:1 as glyphs on Sandstone and were lifted rather than
+  listed.
+- **Text or a glyph ON a colour fill uses a dark ink, not the scheme's
+  `primary`.** `primary` as the label clears 4.5:1 on the accent and on the
+  light place-type palette, which is why it looked like a rule; on the reserved
+  shared heath `#B79EC0` it is 3.7:1 (Sandstone) and on the GeoPDF asset hue
+  2.7:1. The phone's active "Shared" rail chip was that failing pair. The one
+  fixed ink is `INK` in `shared/src/designTokens.ts` (Logjam GPS `Chip`; Logjam
+  Web `--ink`), and `scripts/wcag-contrast.mjs` measures it on every fill.
+
 ## Testing
 
 Integration suites (`api` `npm test`, topo Docker runbooks) are **NOT** in CI — run them locally before committing changes they cover. Everything else (unit suites, lint, typecheck) gates PRs via `.github/workflows/ci.yml`.

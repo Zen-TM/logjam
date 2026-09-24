@@ -13,7 +13,7 @@
 // same height, so the list cannot jump. Rows carry a ⋯ that becomes the
 // checkbox in the same 40pt box.
 //
-// THE TWO DIRECTIONS GET DIFFERENT VERBS, and `friendShareRows.ts` owns which
+// THE TWO DIRECTIONS GET DIFFERENT VERBS, and `friendShareRows.ts` (shared) owns which
 // and why. Forward: share these with someone else (the existing bulk-share
 // sheet, unchanged) and unshare them. Received: save a copy of a place, and
 // remove my own access. There is NO delete anywhere on this screen, in the bar
@@ -32,8 +32,24 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, FlatList, RefreshControl, StyleSheet, Text, View } from "react-native";
 
-import { messageFromError, SHARE_KIND_LABEL } from "@logjam/shared";
-import type { FriendShares } from "@logjam/shared";
+import {
+  buildShareCards,
+  copyAndRemoveOutcomeMessage,
+  copyOutcomeMessage,
+  removeAllConfirm,
+  removeOutcomeMessage,
+  shareCardItem,
+  shareSelectionCountLabel,
+  unshareAllConfirm,
+  unshareOutcomeMessage,
+  messageFromError,
+  removeRowSubtitle,
+  SHARE_KIND_LABEL,
+  type FriendShareCard,
+  type FriendShareDirection,
+  type FriendShareRow,
+  type FriendShares,
+} from "@logjam/shared";
 
 import { getFriendShares, unshareWithFriend } from "../api/friends";
 import { useAccountState } from "../auth/AccountStateContext";
@@ -65,21 +81,22 @@ import {
   runCopyAndRemove,
   type CopyAndRemoveTarget,
 } from "./copyAndRemove";
-import {
-  buildShareCards,
-  copyAndRemoveOutcomeMessage,
-  copyOutcomeMessage,
-  removeRowSubtitle,
-  removeAllConfirm,
-  removeOutcomeMessage,
-  shareCardItem,
-  shareSelectionCountLabel,
-  unshareAllConfirm,
-  unshareOutcomeMessage,
-  type FriendShareCard,
-  type FriendShareDirection,
-} from "./friendShareRows";
 import { removeSharedPlace, removeSharedEntity } from "./removeShare";
+
+/**
+ * The glyph per kind. Feather names, spelled as literals rather than imported
+ * from `@expo/vector-icons` — and per client rather than shared, because an
+ * icon key resolves in one client's set and not the other's (root CLAUDE.md;
+ * Logjam Web draws the same four kinds in lucide). The same four glyphs the
+ * rest of this app already uses: `map-pin` a place, `edit-3` a route, `layers`
+ * a LiDAR topo, `file-text` a GeoPDF.
+ */
+const SHARE_KIND_ICON = {
+  place: "map-pin",
+  route: "edit-3",
+  topoJob: "layers",
+  geoPdfJob: "file-text",
+} as const satisfies Record<FriendShareRow["entityType"], string>;
 
 const cardKey = (card: FriendShareCard) => card.key;
 
@@ -620,7 +637,7 @@ function ShareCardRow({
   const openOrToggle = () => (selecting && selectable ? onToggle(card) : onOpen(card));
   return (
     <Row
-      icon={card.icon}
+      icon={SHARE_KIND_ICON[card.row.entityType]}
       hue={card.row.entityType === "place" ? undefined : placeHue.shared}
       title={card.title}
       subtitle={card.subtitle}

@@ -8,8 +8,10 @@
 // import time. That is also why a change applies at the next launch rather
 // than repainting the running app: see `persistThemeSchemeId` and DESIGN.md §12.
 import {
+  ASSET_HUES,
   DEFAULT_THEME_SCHEME_ID,
   isThemeSchemeId,
+  PLACE_STATUS_HUES,
   THEME_SCHEMES,
   type ThemeSchemeId,
   type ThemeTokens,
@@ -220,21 +222,9 @@ export function withAlpha(hex: string, alpha: number): string {
 export const assetHue = {
   /** Downloaded basemap regions — the scheme's own accent. */
   region: theme.accent,
-  /** Topo overlays (contours, slope, vegetation) — eucalypt leaf. */
-  overlay: "#9DBE8B",
-  /** GeoPDF maps — fired clay, a lifted cousin of the sandstone rust. */
-  geoPdf: "#C97B4A",
-  /** Routes you drew — she-oak green, distinct from the imported-file blue
-   *  because a route is authored rather than brought in. */
-  route: "#8FBFA6",
-  /** Imported files (GPX/KML/GeoJSON) — waterhole blue. */
-  import: "#86B5D4",
-  /** Recorded tracks — heath flower. */
-  track: "#B79EC0",
-  /** Marked points — waratah, the warmest hue here without leaving the muted
-   *  range the rest of the palette keeps. A waypoint is a thing you are trying
-   *  to FIND again, so it takes the most forward colour available. */
-  waypoint: "#D4715E",
+  /** Overlay, GeoPDF, route, import, track and waypoint: shared with Logjam Web
+   *  (`ASSET_HUES` in `@logjam/shared`), with the reason for each hue there. */
+  ...ASSET_HUES,
 } as const;
 
 export type AssetHue = keyof typeof assetHue;
@@ -248,10 +238,8 @@ export type AssetHue = keyof typeof assetHue;
 export const placeHue = {
   /** Run at least once — the scheme's own accent, because this is the win. */
   done: theme.accent,
-  /** On the list, not yet run — dry sandstone, the resting state. */
-  todo: "#C7B39A",
-  /** Shared with you by a friend — heath flower: someone else's line. */
-  shared: "#B79EC0",
+  /** Not yet run, and shared with you — `PLACE_STATUS_HUES` in `@logjam/shared`. */
+  ...PLACE_STATUS_HUES,
 } as const;
 
 /**

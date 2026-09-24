@@ -4,12 +4,13 @@ import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
 import { getParam } from "../lib/getParam";
 import { resolveUser } from "../lib/resolveUser";
+import { NOTIFICATIONS_LIST_CAP } from "@logjam/shared";
 
 const router = Router();
 
-// Server-side cap on the notifications list. The true total (see X-Total-Count
-// below) lets the client show a truncation caption when this cap bites (UX-002).
-const NOTIFICATIONS_LIST_CAP = 500;
+// The list cap is shared: the true total (see X-Total-Count below) lets a
+// client show a truncation caption when the cap bites (UX-002), and
+// `notificationsTruncated` is how both clients decide that it did.
 
 // Notification payloads store ONLY reference IDs — no denormalised plaintext
 // place names or usernames (PRIV-005). Display strings are resolved from the
@@ -176,7 +177,7 @@ router.get(
     // The invariant that matters is not "the two queries agree" but "a
     // notification never offers a button the endpoint would refuse", and it is
     // held below instead: an expired row is labelled `expired`, and the client
-    // renders no actions for that (`notifications/notificationActions.ts`).
+    // renders no actions for that (`shared/src/notificationActions.ts`).
     // Declined is still excluded here — that notification is deleted outright
     // at decline time, and a user who said no is not owed a reminder.
     const liveFileSends =
@@ -348,7 +349,9 @@ router.get(
 );
 
 // ── PATCH /notifications/:id/read ─────────────────────────────
-// Mark a single notification as read
+// Mark a single notification read, or unread again with `{ "read": false }` —
+// the REST twin of the sync push's markRead / markUnread ops, for Logjam Web.
+// Anything but a boolean `read` (including no body) marks it read, as before.
 router.patch(
   "/:id/read",
   requireAuth,
@@ -364,9 +367,10 @@ router.patch(
     });
     if (!notification) throw new AppError(404, "Notification not found");
 
+    const read = req.body?.read === false ? false : true;
     const updated = await prisma.notification.update({
       where: { id },
-      data: { read: true },
+      data: { read },
     });
 
     res.json(updated);

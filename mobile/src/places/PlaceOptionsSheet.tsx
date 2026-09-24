@@ -23,7 +23,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Alert, StyleSheet, View } from "react-native";
 
-import { removeShareConfirm } from "@logjam/shared";
+import { removeShareConfirm , copyAndRemoveOutcomeMessage, copyOutcomeMessage } from "@logjam/shared";
 
 import { spacing, theme } from "../theme";
 import { BottomSheet, Row } from "../ui";
@@ -34,7 +34,6 @@ import {
   runCopyAndRemove,
   type CopyAndRemoveTarget,
 } from "../sharing/copyAndRemove";
-import { copyAndRemoveOutcomeMessage, copyOutcomeMessage } from "../sharing/friendShareRows";
 import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
 import { requestSync } from "../sync/syncEngine";
 import { useConnectivity } from "../map/connectivity";

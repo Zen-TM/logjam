@@ -13,7 +13,9 @@ import { useCallback, useRef, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import {
+  ATTRIBUTE_NOUN,
   distinctTripTypes,
+  formatTripDate,
   mediaCategory,
   messageFromError,
 } from "@logjam/shared";
@@ -21,7 +23,6 @@ import {
 import { useConnectivity } from "../map/connectivity";
 import { tripTitle } from "../api/tripTitle";
 import { useFieldDefs } from "../customFields/useFieldDefs";
-import { ATTRIBUTE_NOUN } from "../customFields/CustomFieldsEditor";
 import { AttributeTable } from "../customFields/CustomFieldValues";
 import { attributeRows } from "../customFields/fieldValueCoercion";
 import { MediaStrip } from "../media/MediaStrip";
@@ -43,7 +44,6 @@ import {
   Toast,
   type ToastMessage,
 } from "../ui";
-import { formatTripDate } from "./logbook";
 import { TripEditSheet } from "./TripEditSheet";
 import { primaryTripType, tripTypeLabel, tripTypeMeta } from "./tripTypeMeta";
 
@@ -214,7 +214,6 @@ export function TripDetailScreen({
         existingTypes={distinctTripTypes(allTrips.data ?? [])}
         onClose={() => setEditing(false)}
         onSaved={(text) => notify(text, "info")}
-        onFailed={(text) => notify(text, "error")}
       />
 
       <Toast message={toast} onDismissed={() => setToast(null)} />

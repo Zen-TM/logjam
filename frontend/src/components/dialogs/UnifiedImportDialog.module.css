@@ -1,21 +1,68 @@
+/* Every step is one column with the dialog's own rhythm. */
+.step {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.fileSection {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lede {
+  margin: 0;
+  font-size: var(--font-base);
+  color: var(--theme-text-primary);
+}
+
+.note {
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--theme-text-muted);
+  line-height: 1.5;
+}
+
+/* A dashed target is the one place in the app that draws its own border: it has
+   to read as somewhere to put a thing, which a card edge does not say. */
 .dropZone {
-  border: 2px dashed rgba(255, 255, 255, 0.18);
-  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
   padding: 24px;
+  border: 2px dashed var(--theme-bonus-2);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, black 8%, var(--theme-primary));
+  color: var(--theme-text-muted);
+  font: inherit;
+  font-size: var(--font-sm);
   text-align: center;
   cursor: pointer;
-  background-color: rgba(255, 255, 255, 0.02);
   transition: border-color var(--transition-fast), background-color var(--transition-fast);
 }
 
-.dropZoneActive {
+.dropZone:hover,
+.dropZone[data-dragging] {
   border-color: var(--theme-accent);
-  background-color: color-mix(in srgb, var(--theme-accent) 8%, transparent);
+  background: color-mix(in srgb, var(--theme-accent) 8%, transparent);
 }
 
-.dropZone:hover {
-  border-color: var(--theme-accent);
-  background-color: color-mix(in srgb, var(--theme-accent) 8%, transparent);
+.dropGlyph {
+  color: var(--theme-text-muted);
+}
+
+/* A link INSIDE a sentence: the one shape an anchor keeps in this app (§5). */
+.inlineLink {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: var(--theme-accent);
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 .fileChip {
@@ -23,36 +70,123 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  flex-wrap: wrap;
   padding: 8px 12px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: var(--radius-sm);
+  background: var(--theme-secondary);
+  border: var(--hairline);
+  border-radius: var(--radius-md);
 }
 
 .fileName {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-sm);
   font-weight: 600;
   color: var(--theme-text-primary);
-  font-size: var(--text-sm);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.mappingFeedback {
-  font-size: var(--text-xs);
+/* The column map: the file's header on the left, what it becomes on the right.
+   The two columns line up with the header row above them. */
+.mapHeader,
+.mapRow {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.mapHeaderCell {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--theme-text-muted);
 }
 
-.ignoredNotice {
-  font-size: var(--text-xs);
-  color: var(--theme-text-muted);
+.mapHeaderRole {
+  flex: 2;
 }
 
+.mapGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* The header as it is written in the file, in a monospace so a trailing space
+   or a case difference is visible. */
+.sourceHeader {
+  flex: 1;
+  min-width: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--font-sm);
+  color: var(--theme-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.roleSelect {
+  flex: 2;
+  min-width: 0;
+}
+
+/* A form that belongs to the row above it, marked by the accent rule rather
+   than by a box: it is part of that decision, not a surface of its own. */
+.subForm,
 .createForm {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding-left: 8px;
+  margin-left: 8px;
+  padding-left: 10px;
   border-left: 2px solid var(--theme-accent);
+}
+
+.createForm {
   margin-top: 8px;
+}
+
+.coordRow {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.coordField {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Sits on the field's line, not on its label's. */
+.pickButton {
+  flex: none;
+  margin-bottom: 4px;
+}
+
+.chevron {
+  color: var(--theme-text-muted);
+}
+
+/* A narrow screen cannot hold two columns of a column map, and this tool says
+   up front that it wants a bigger one — so the pair stacks rather than
+   reflowing into something unusable. */
+@media (max-width: 768px) {
+  .mapHeader {
+    display: none;
+  }
+
+  .mapRow {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+  }
+
+  .coordRow {
+    flex-wrap: wrap;
+  }
 }

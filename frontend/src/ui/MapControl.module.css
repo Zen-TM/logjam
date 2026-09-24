@@ -1,0 +1,85 @@
+/* Map chrome keeps a size of its own, a step above the panel's: it sits on a
+   busy picture, not a calm page. */
+.mapButton {
+  width: 42px;
+  height: 42px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-lg);
+  background: var(--theme-primary);
+  color: var(--theme-text-primary);
+  box-shadow: var(--shadow-float);
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.mapButton:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--theme-text-primary) 14%, var(--theme-primary));
+}
+
+/* Stays filled under the pointer: hover must not read as "off". */
+.mapButton[aria-pressed="true"],
+.mapButton[aria-expanded="true"],
+.mapButton[aria-pressed="true"]:hover:not(:disabled),
+.mapButton[aria-expanded="true"]:hover:not(:disabled) {
+  background: var(--theme-accent);
+  color: var(--ink);
+}
+
+.mapButton:disabled {
+  color: var(--theme-text-muted);
+  cursor: default;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--theme-primary);
+  box-shadow: var(--shadow-float);
+}
+
+.group .mapButton {
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.group .mapButton + .mapButton {
+  border-top: var(--hairline);
+}
+
+/* Inside a clipped group, the ring goes inside the button. */
+.group .mapButton:focus-visible {
+  outline-offset: -3px;
+}
+
+.notice {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  box-sizing: border-box;
+  padding: 0 14px;
+  border-radius: var(--radius-pill);
+  background: var(--theme-primary);
+  color: var(--theme-text-primary);
+  font-size: var(--font-sm);
+  max-width: 100%;
+  box-shadow: var(--shadow-float);
+}
+
+/* The end pad centres the round action in the pill's end cap. */
+.withAction {
+  min-height: 40px;
+  padding-right: calc((40px - var(--control-sm)) / 2);
+}
+
+.noticeGlyph {
+  flex: none;
+  color: var(--theme-accent);
+}

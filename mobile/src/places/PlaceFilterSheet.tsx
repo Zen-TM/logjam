@@ -3,16 +3,20 @@ import { StyleSheet, Text, View } from "react-native";
 import {
   CANYON_FORM_FIELD_KEYS,
   defsForType,
+  PLACE_ROPEWIKI_OPTIONS as ROPEWIKI,
+  PLACE_SORT_OPTIONS as SORTS,
+  PLACE_THRESHOLDS as THRESHOLDS,
   SYSTEM_FIELD_DEFS,
   regionEdgesKm,
+  type CustomFieldFilter,
   type PlaceFilters,
   type PlaceSortKey,
   type PlaceThresholdFilter,
-  type ScopedCustomFieldDef,
 } from "@logjam/shared";
 
 import { fontSize, fontWeight, spacing, theme } from "../theme";
 import {
+  AttributeFilter,
   BottomSheet,
   Button,
   Chip,
@@ -20,11 +24,11 @@ import {
   RangePills,
   Row,
   SectionHeader,
-  TextField,
+  ThresholdFilter,
   Toggle,
   type NumberRange,
 } from "../ui";
-import { formatDateKey } from "../logs/logbook";
+import { formatDateKey } from "@logjam/shared";
 import { useFieldDefs } from "../customFields/useFieldDefs";
 import { useMirrorPlaceTypes } from "../sync/useSyncQueries";
 
@@ -63,25 +67,6 @@ type Mode =
 
 type DateField = "created_at" | "updated_at";
 
-/** Exported so the screen's active-filter strip can name the order without
- * keeping a second copy of these labels. */
-export function sortLabel(sort: PlaceSortKey): string {
-  return SORTS.find((option) => option.key === sort)?.label ?? "Name";
-}
-
-const SORTS: { key: PlaceSortKey; label: string }[] = [
-  { key: "name", label: "Name" },
-  { key: "recent", label: "Recently added" },
-  { key: "grade", label: "Easiest first" },
-  { key: "quality", label: "Best rated" },
-];
-
-const ROPEWIKI: { value: PlaceFilters["ropewiki"]; label: string }[] = [
-  { value: "any", label: "Any" },
-  { value: "linked", label: "From RopeWiki" },
-  { value: "unlinked", label: "Not from RopeWiki" },
-];
-
 /** Presets are the shortcut, not the ceiling — "Custom" reaches everything else. */
 // The seven graded axes live in `filters.custom` now, keyed by their reserved
 // FIELD keys — they are ordinary custom-field filters, and two of them changed
@@ -92,6 +77,20 @@ const ROPEWIKI: { value: PlaceFilters["ropewiki"]; label: string }[] = [
 // ponytail: this sheet still shows exactly the seven canyon axes and no other
 // field. Rendering a filter row per definition of the selected type is phase 5,
 // with the type tabs that decide which definitions are in force.
+/** An inactive custom filter is ABSENT, never present at its default, so "is it
+ *  active" stays `key in custom` for every kind. Lived inside the filter row
+ *  until that row moved to the kit to be shared with Logs (2026-09-17). */
+function withCustom(
+  filters: PlaceFilters,
+  key: string,
+  next: CustomFieldFilter | null,
+): Partial<PlaceFilters> {
+  const custom = { ...(filters.custom ?? {}) };
+  if (next == null) delete custom[key];
+  else custom[key] = next;
+  return { custom };
+}
+
 function rangeOf(filters: PlaceFilters, key: string): NumberRange | null {
   const filter = filters.custom?.[key];
   return filter?.kind === "numberRange" ? (filter.range as NumberRange) : null;
@@ -132,54 +131,6 @@ function boundsOf(key: string): [number, number] {
   const def = SYSTEM_FIELD_DEFS.find((candidate) => candidate.key === key);
   return [def?.min ?? 1, def?.max ?? 7];
 }
-
-const THRESHOLDS: {
-  key: string;
-  label: string;
-  unit: string;
-  presets: PlaceThresholdFilter[];
-}[] = [
-  {
-    key: "num_abseils",
-    label: "Abseils",
-    unit: "",
-    presets: [
-      ["Exactly", 0],
-      ["Less than", 5],
-      ["More than", 10],
-    ],
-  },
-  {
-    key: "longest_abseil",
-    label: "Longest abseil",
-    unit: "m",
-    presets: [
-      ["Less than", 20],
-      ["Less than", 30],
-      ["Less than", 45],
-      ["Less than", 60],
-    ],
-  },
-  {
-    key: "hours",
-    label: "Time out",
-    unit: "h",
-    presets: [
-      ["Less than", 4],
-      ["Less than", 6],
-      ["Less than", 8],
-    ],
-  },
-];
-
-const OPERATORS: PlaceThresholdFilter[0][] = ["Less than", "More than", "Exactly"];
-
-const OPERATOR_LABEL: Record<PlaceThresholdFilter[0], string> = {
-  Any: "Any",
-  "Less than": "Under",
-  "More than": "Over",
-  Exactly: "Exactly",
-};
 
 export function PlaceFilterSheet({
   visible,
@@ -398,11 +349,11 @@ export function PlaceFilterSheet({
           <>
             <SectionHeader label={fieldSectionLabel} />
             {ownFieldDefs.map((def) => (
-              <CustomFieldFilter
+              <AttributeFilter
                 key={def.key}
                 def={def}
-                filters={filters}
-                onPatch={patch}
+                value={filters.custom?.[def.key] ?? null}
+                onChange={(next) => patch(withCustom(filters, def.key, next))}
               />
             ))}
           </>
@@ -498,222 +449,6 @@ export function PlaceFilterSheet({
       </View>
     </BottomSheet>
   );
-}
-
-/**
- * ONE user-defined field as a filter row, with the control its type deserves:
- *
- *  - a bounded number is a pill range, the same control the grades get, because
- *    the bounds make every stop nameable;
- *  - an unbounded number is the operator + value control, since there is no
- *    span to lay out;
- *  - a yes/no is two chips, where the third state (neither) is "don't care";
- *  - text is a contains-match — the search box above matches NAMES, so a field
- *    value is otherwise unreachable from the phone.
- *
- * `ponytail:` a DATE definition renders nothing — see this file's header.
- */
-function CustomFieldFilter({
-  def,
-  filters,
-  onPatch,
-}: {
-  def: ScopedCustomFieldDef;
-  filters: PlaceFilters;
-  onPatch: (next: Partial<PlaceFilters>) => void;
-}) {
-  const current = filters.custom?.[def.key];
-  const patchCustom = (value: PlaceFilters["custom"][string] | null) => {
-    const custom = { ...(filters.custom ?? {}) };
-    // Absent rather than present-at-its-default, so "is it active" stays
-    // `key in custom` for every kind.
-    if (value == null) delete custom[def.key];
-    else custom[def.key] = value;
-    onPatch({ custom });
-  };
-
-  if (def.type === "integer" || def.type === "float") {
-    return def.min != null && def.max != null ? (
-      <RangePills
-        label={def.label}
-        bounds={[def.min, def.max]}
-        value={rangeOf(filters, def.key)}
-        onChange={(next) =>
-          patchCustom(next == null ? null : { kind: "numberRange", range: next })
-        }
-      />
-    ) : (
-      <ThresholdFilter
-        label={def.label}
-        unit=""
-        // NO PRESETS. The three built-in thresholds have them because someone
-        // chose the numbers that matter for abseils and hours; a field the user
-        // invented has no such numbers, and deriving them from the bounds gave
-        // "Under 0 / Over 0 / Exactly 0" on a min-0 field — three taps that all
-        // mean nothing. Custom is the whole control here.
-        presets={[]}
-        value={thresholdOf(filters, def.key)}
-        onChange={(next) =>
-          patchCustom(
-            next == null || next[0] === "Any"
-              ? null
-              : { kind: "number", op: next[0], value: next[1] },
-          )
-        }
-      />
-    );
-  }
-
-  if (def.type === "boolean") {
-    const value = current?.kind === "boolean" ? current.value : null;
-    return (
-      <View style={styles.chipRow}>
-        <Text style={styles.blockLabel}>{def.label}</Text>
-        {[true, false].map((option) => (
-          <Chip
-            key={String(option)}
-            label={option ? "Yes" : "No"}
-            active={value === option}
-            // Tapping the active chip clears it: "either" is the third state
-            // and it needs to be reachable without a Reset.
-            onPress={() =>
-              patchCustom(
-                value === option ? null : { kind: "boolean", value: option },
-              )
-            }
-          />
-        ))}
-      </View>
-    );
-  }
-
-  if (def.type === "string") {
-    return (
-      <TextField
-        label={def.label}
-        value={current?.kind === "text" ? current.value : ""}
-        onChangeText={(next) =>
-          patchCustom(next.trim() === "" ? null : { kind: "text", value: next })
-        }
-        autoCapitalize="none"
-      />
-    );
-  }
-
-  return null;
-}
-
-/**
- * One "how many / how long / how far" axis: preset pills for the common answers,
- * plus a Custom pill that reveals the web's full operator + number control.
- *
- * The presets are what makes this usable one-handed at a trailhead; Custom is
- * what keeps it from being a downgrade from the desktop panel.
- */
-function ThresholdFilter({
-  label,
-  unit,
-  presets,
-  value,
-  onChange,
-}: {
-  label: string;
-  unit: string;
-  presets: PlaceThresholdFilter[];
-  value: PlaceThresholdFilter | null;
-  onChange: (next: PlaceThresholdFilter | null) => void;
-}) {
-  const matchedPreset = presets.find(
-    (preset) => value != null && preset[0] === value[0] && preset[1] === value[1],
-  );
-  const [customOpen, setCustomOpen] = useState(false);
-  // Operator and number are held as a DRAFT while the custom control is open,
-  // and only committed once there is a number. Committing on open would apply
-  // "under 0" the instant the user taps Custom — which empties the list and
-  // reads as the filter being broken.
-  const [draftOperator, setDraftOperator] =
-    useState<PlaceThresholdFilter[0]>("Less than");
-  const [draftText, setDraftText] = useState("");
-  const custom = customOpen || (value != null && !matchedPreset);
-
-  const commit = (operator: PlaceThresholdFilter[0], text: string) => {
-    const parsed = Number(text.trim());
-    onChange(text.trim() === "" || !Number.isFinite(parsed) ? null : [operator, parsed]);
-  };
-
-  const openCustom = () => {
-    setDraftOperator(value?.[0] ?? "Less than");
-    setDraftText(value == null ? "" : String(value[1]));
-    setCustomOpen(true);
-  };
-
-  const closeCustom = () => {
-    setCustomOpen(false);
-    setDraftText("");
-    onChange(null);
-  };
-
-  return (
-    <View style={styles.block}>
-      <View style={styles.blockHeader}>
-        <Text style={styles.blockLabel}>{label}</Text>
-        <Text style={[styles.blockValue, value != null && styles.blockValueActive]}>
-          {value == null ? "Any" : formatThreshold(value, unit)}
-        </Text>
-      </View>
-      <View style={styles.chipRow}>
-        {presets.map((preset) => (
-          <Chip
-            key={`${preset[0]}-${preset[1]}`}
-            label={formatThreshold(preset, unit)}
-            active={!custom && matchedPreset === preset}
-            onPress={() => {
-              setCustomOpen(false);
-              onChange(matchedPreset === preset ? null : preset);
-            }}
-          />
-        ))}
-        <Chip
-          // With no presets beside it, "Custom" is custom relative to nothing.
-          label={presets.length === 0 ? "Set a value" : "Custom"}
-          active={custom}
-          onPress={() => (custom ? closeCustom() : openCustom())}
-        />
-      </View>
-      {custom ? (
-        <View style={styles.customRow}>
-          <View style={styles.chipRow}>
-            {OPERATORS.map((operator) => (
-              <Chip
-                key={operator}
-                label={OPERATOR_LABEL[operator]}
-                active={draftOperator === operator}
-                onPress={() => {
-                  setDraftOperator(operator);
-                  commit(operator, draftText);
-                }}
-              />
-            ))}
-          </View>
-          <View style={styles.customField}>
-            <TextField
-              label={unit ? `Value (${unit})` : "Value"}
-              value={draftText}
-              keyboardType="numeric"
-              onChangeText={(text) => {
-                setDraftText(text);
-                commit(draftOperator, text);
-              }}
-            />
-          </View>
-        </View>
-      ) : null}
-    </View>
-  );
-}
-
-function formatThreshold(filter: PlaceThresholdFilter, unit: string): string {
-  return `${OPERATOR_LABEL[filter[0]]} ${filter[1]}${unit ? ` ${unit}` : ""}`;
 }
 
 /** A date range as two tappable bounds — the same two-level shape the Logs
@@ -823,6 +558,4 @@ const styles = StyleSheet.create({
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing(0.75) },
   dateActions: { flexDirection: "row", gap: spacing(1) },
   dateAction: { flex: 1 },
-  customRow: { gap: spacing(0.75) },
-  customField: { maxWidth: 200 },
 });

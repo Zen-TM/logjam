@@ -17,7 +17,7 @@ import { X } from "lucide-react";
 import ConfirmDialog from "../dialogs/ConfirmDialog";
 import { useToast } from "../feedback/ToastProvider";
 import { messageFromError } from "../../errors/messageFromError";
-import shared from "../../styles/shared.module.css";
+import { Button } from "../../ui";
 import { removeShareConfirm } from "@logjam/shared";
 
 export default function RemoveSharedButton({
@@ -66,21 +66,41 @@ export default function RemoveSharedButton({
     }
   }
 
+  const label = title ?? `Remove this shared ${kindLabel}`;
+
   return (
     <>
-      <button
-        type="button"
-        className={className ?? `${shared.btn} ${shared.btnGhost} ${shared.btnSm}`}
-        title={title ?? `Remove this shared ${kindLabel}`}
-        disabled={disabled || busy}
-        onClick={() => setConfirming(true)}
-      >
-        {children ?? (
-          <>
-            <X size={14} /> Remove
-          </>
-        )}
-      </button>
+      {/* A caller that brings its own class is a panel not yet rebuilt onto the
+          kit, and keeps the icon row or button it already styles. Everything
+          else gets the kit's own button: the bare `.btn btnGhost` default read
+          as a leftover from another app beside rebuilt controls (operator,
+          2026-09-17). */}
+      {className ? (
+        <button
+          type="button"
+          className={className}
+          title={label}
+          disabled={disabled || busy}
+          onClick={() => setConfirming(true)}
+        >
+          {children ?? (
+            <>
+              <X size={14} /> Remove
+            </>
+          )}
+        </button>
+      ) : (
+        <Button
+          compact
+          variant="outline"
+          icon={X}
+          title={label}
+          disabled={disabled || busy}
+          onClick={() => setConfirming(true)}
+        >
+          {children ?? "Remove"}
+        </Button>
+      )}
 
       <ConfirmDialog
         open={confirming}

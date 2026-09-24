@@ -46,6 +46,11 @@ jobs:
       - name: Unit tests
         working-directory: shared
         run: npm test
+      # Every foreground/background pair both clients render, under all four
+      # theme schemes (root CLAUDE.md: "A colour pair is measured under all
+      # FOUR schemes"). Bare node: it parses the token sources, no build.
+      - name: WCAG contrast
+        run: node scripts/wcag-contrast.mjs
 
   api:
     runs-on: ubuntu-latest

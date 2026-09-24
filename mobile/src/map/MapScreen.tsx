@@ -203,7 +203,7 @@ import { FocusPulse } from "./FocusPulse";
 import { MapToolGroup, type MapTool } from "./MapToolGroup";
 import { RouteDraftLayer } from "./RouteDraftLayer";
 import { RoutesLayer } from "./RoutesLayer";
-import { ROUTE_ARROW_SDF_URI } from "./routeArrowSdf";
+import { ROUTE_ARROW_SDF_URI } from "@logjam/shared";
 import { ROUTE_ARROW_IMAGE } from "./routeArrowStyle";
 import type { MirrorPlace, MirrorRoute } from "../sync/mirrorStore";
 import { RouteOptionsSheet } from "../routes/RouteOptionsSheet";
@@ -250,6 +250,7 @@ import {
   reconcileTrackRecording,
   refreshActiveTrackStats,
   continueTrackRecording,
+  setRecordingMapFocusBoost,
   startTrackRecording,
 } from "../tracks/trackRecorder";
 import { TrackMapLayers } from "../tracks/TrackMapLayers";
@@ -1254,7 +1255,7 @@ export function MapScreen({
    * What is actually DRAWN, as against what the user has picked.
    *
    * Mounting the vector basemap is ~70 MLRN layer components in one commit,
-   * and React cannot split a commit — so tapping "OSM Default (vector)" in the
+   * and React cannot split a commit — so tapping "OSM Vector" in the
    * layers sheet froze everything for about a second before the row even
    * showed a tick, which reads as the tap having missed. Deferring the value
    * the MAP renders from lets the urgent half (the sheet's selection, its
@@ -3078,6 +3079,19 @@ export function MapScreen({
   }, []);
   const sensorsActive = mapFocused && appActive;
 
+  // A recording follows the same lifecycle: while someone is looking at the map
+  // it records at the finest rate, and it drops back to their "Track detail"
+  // rate the moment the tab loses focus or the app backgrounds.
+  // `setRecordingMapFocusBoost` says why the dot watcher below cannot do this
+  // on its own. Keyed on `sensorsActive` so the two cannot disagree about
+  // whether anyone is looking.
+  useEffect(() => {
+    setRecordingMapFocusBoost(sensorsActive).catch(console.error);
+    return () => {
+      setRecordingMapFocusBoost(false).catch(console.error);
+    };
+  }, [sensorsActive]);
+
   /**
    * Whether the marker is shown. ALWAYS TRUE once the map exists.
    *
@@ -3270,12 +3284,12 @@ export function MapScreen({
   // foreground, which is the phone out of the pack with the screen on, and the
   // screen dominates the power bill in that state anyway.
   //
-  // What that costs during a recording, stated plainly: Android's fused
-  // provider serves concurrent clients at the fastest interval any of them
-  // asked for, so while the map is open the recording runs at 3 s too,
-  // whatever the fix rate says. The fix-rate setting therefore governs the
-  // recording's battery cost for the (large) majority of a trip when the map
-  // is not on screen, and not while the user is looking at it.
+  // It does NOT speed a recording up, though this comment once said it did.
+  // expo-location pins each request's minimum update interval to its own
+  // interval, so the fused provider kept delivering to the recorder at the
+  // recorder's rate while this watcher moved the dot every 3 s — and a short
+  // sky window under a wall moved the dot without ever reaching the track. The
+  // recorder is sped up explicitly instead, by the boost effect above.
   useEffect(() => {
     if (!sensorsActive || !fixWanted) return;
     let subscription: Location.LocationSubscription | null = null;
@@ -5110,7 +5124,6 @@ export function MapScreen({
           setEditingPlace(null);
         }}
         onSaved={(text) => notify(text, "info")}
-        onFailed={(text) => notify(text, "error")}
       />
 
       {/* One place's verbs, from the pin the user tapped — the same sheet the
@@ -5144,7 +5157,6 @@ export function MapScreen({
         existingTypes={tripTypes}
         onClose={() => setLoggingPlace(null)}
         onSaved={(text) => notify(text, "info")}
-        onFailed={(text) => notify(text, "error")}
       />
 
       {/* Tapping a route line opens its VERBS; the stats are a sub-mode one tap
@@ -5254,6 +5266,9 @@ function RouteNameForm({
   onSubmit: (name: string) => void;
 }) {
   const [draft, setDraft] = useState(initialName);
+  // Empty-name requirement shows on SUBMIT, not while typing (DESIGN.md §8);
+  // clears as soon as the field is edited.
+  const [showEmptyError, setShowEmptyError] = useState(false);
   const inputRef = useRef<TextInput>(null);
 
   useEffect(() => {
@@ -5281,7 +5296,11 @@ function RouteNameForm({
   const trimmed = draft.trim();
   const tooLong = trimmed.length > ROUTE_NAME_MAX_LENGTH;
   const commit = () => {
-    if (!trimmed || tooLong || saving) return;
+    if (saving) return;
+    if (!trimmed || tooLong) {
+      setShowEmptyError(true);
+      return;
+    }
     onSubmit(trimmed);
   };
 
@@ -5290,18 +5309,25 @@ function RouteNameForm({
       <TextField
         label="Name"
         value={draft}
-        onChangeText={setDraft}
+        onChangeText={(text) => {
+          setDraft(text);
+          setShowEmptyError(false);
+        }}
         inputRef={inputRef}
         returnKeyType="done"
         onSubmitEditing={commit}
         error={
-          tooLong ? `Must be at most ${ROUTE_NAME_MAX_LENGTH} characters` : undefined
+          tooLong
+            ? `Names can be at most ${ROUTE_NAME_MAX_LENGTH} characters.`
+            : showEmptyError && !trimmed
+              ? "A route needs a name."
+              : undefined
         }
       />
       <Button
         label={saving ? "Saving…" : "Save"}
         icon="check"
-        disabled={!trimmed || tooLong || saving}
+        disabled={saving}
         onPress={commit}
       />
     </View>

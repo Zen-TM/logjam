@@ -1,12 +1,14 @@
 import { StyleSheet, Text, TextInput, View, type TextInputProps } from "react-native";
 
 import { fontSize, radius, spacing, theme } from "../theme";
+import { FieldError } from "./FieldError";
 
 type TextFieldProps = {
   label: string;
   value: string;
   onChangeText: (text: string) => void;
-  // Per-field validation message (web FieldError equivalent); null renders nothing.
+  /** This field's validation message (DESIGN.md §8, "Form errors"): drawn
+   *  under the input, which takes a warning border. Null renders nothing. */
   error?: string | null;
   /**
    * Handle on the underlying input. `autoFocus` is unreliable for a field that
@@ -54,7 +56,12 @@ export function TextField({
   const input = (
     <TextInput
       ref={inputRef}
-      style={[styles.input, multiline && styles.multiline, accessory != null && styles.grow]}
+      style={[
+        styles.input,
+        multiline && styles.multiline,
+        error ? styles.inputError : null,
+        accessory != null && styles.grow,
+      ]}
       value={value}
       onChangeText={onChangeText}
       placeholderTextColor={theme.textMuted}
@@ -74,14 +81,7 @@ export function TextField({
       ) : (
         input
       )}
-      {/* Announced when it appears: a validation message that only exists on
-          screen is a message a screen-reader user has to go hunting for after
-          the fact. */}
-      {error ? (
-        <Text style={styles.error} accessibilityLiveRegion="polite">
-          {error}
-        </Text>
-      ) : null}
+      <FieldError message={error} />
     </View>
   );
 }
@@ -109,5 +109,6 @@ const styles = StyleSheet.create({
   inputRow: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
   grow: { flex: 1 },
   multiline: { minHeight: 96, textAlignVertical: "top" },
-  error: { fontSize: fontSize.sm, color: theme.warning },
+  // Findable while scrolling a long form, not only once the line under it is read.
+  inputError: { borderColor: theme.warning },
 });

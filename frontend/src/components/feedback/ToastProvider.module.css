@@ -1,0 +1,25 @@
+/* Bottom-centre, above dialogs: the map's controls own both bottom corners. */
+.stack {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  pointer-events: none;
+}
+
+.stack > * {
+  pointer-events: auto;
+}
+
+@media (max-width: 768px) {
+  .stack {
+    bottom: calc(var(--bottom-nav-height) + 16px);
+  }
+}

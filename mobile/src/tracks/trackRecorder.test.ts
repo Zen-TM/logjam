@@ -27,10 +27,12 @@ vi.mock("react-native", () => ({
   },
 }));
 
+const getTaskOptionsAsync = vi.fn(async (): Promise<unknown> => null);
 vi.mock("expo-task-manager", () => ({
   defineTask: (_name: string, handler: TaskHandler) => {
     taskHandler = handler;
   },
+  getTaskOptionsAsync: () => getTaskOptionsAsync(),
 }));
 
 const startLocationUpdatesAsync = vi.fn(async () => {});
@@ -65,7 +67,10 @@ vi.mock("./trackBackup", () => ({
 }));
 
 vi.mock("./recordingPreferences", () => ({
-  FIX_RATE_OPTIONS: { balanced: { timeInterval: 30_000 } },
+  FIX_RATE_OPTIONS: {
+    finest: { timeInterval: 3000, deferredUpdatesInterval: 15_000 },
+    balanced: { timeInterval: 30_000, deferredUpdatesInterval: 60_000 },
+  },
   readFixRate: () => "balanced",
   readAccuracyLimitM: () => 0,
 }));
@@ -97,7 +102,10 @@ vi.mock("./tracksDb", () => ({
 const {
   applyRecordingOptionsToActiveTrack,
   continueTrackRecording,
+  pauseTrackRecording,
+  reconcileTrackRecording,
   resumeTrackRecording,
+  setRecordingMapFocusBoost,
   startTrackRecording,
 } = await import("./trackRecorder");
 const { isRecordingWriteFailing, resetTrackWriteHealth, FAILING_WRITE_THRESHOLD } =
@@ -146,11 +154,15 @@ function recordingTrack() {
   };
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   // One test moves the clock; a failure inside it would otherwise leave every
   // test after it running against a frozen one.
   vi.useRealTimers();
+  // The boost is module state and outlives a test. Cleared BEFORE the mocks,
+  // so whatever re-registration it causes is not counted against the next test.
+  await setRecordingMapFocusBoost(false);
   vi.clearAllMocks();
+  getTaskOptionsAsync.mockResolvedValue(null);
   startLocationUpdatesAsync.mockResolvedValue(undefined);
   appendTrackPoints.mockResolvedValue(undefined);
   activeTrack = null;
@@ -222,6 +234,89 @@ describe("a setting change reaches the recording in progress", () => {
 
   it("does nothing when no recording is running", async () => {
     await expect(applyRecordingOptionsToActiveTrack()).resolves.toBe(false);
+    expect(startLocationUpdatesAsync).not.toHaveBeenCalled();
+  });
+});
+
+describe("the map boost", () => {
+  // The map's 3 s watcher does not speed the recorder up (expo-location pins
+  // each client's minimum update interval to its own interval), so the recorder
+  // is boosted explicitly while the map is looked at.
+  function lastOptions() {
+    const [, options] = startLocationUpdatesAsync.mock.calls.at(-1) as unknown as [
+      string,
+      Record<string, unknown>,
+    ];
+    return options;
+  }
+
+  it("records at the finest rate while boosted, and at the user's rate after", async () => {
+    hasStartedLocationUpdatesAsync.mockResolvedValue(true);
+
+    await expect(setRecordingMapFocusBoost(true)).resolves.toBe(true);
+    expect(lastOptions()).toMatchObject({
+      timeInterval: 3000,
+      deferredUpdatesInterval: 15_000,
+    });
+
+    await expect(setRecordingMapFocusBoost(false)).resolves.toBe(true);
+    expect(lastOptions()).toMatchObject({
+      timeInterval: 30_000,
+      deferredUpdatesInterval: 60_000,
+    });
+    expect(startLocationUpdatesAsync).toHaveBeenCalledTimes(2);
+  });
+
+  it("re-registers once for a repeated boost", async () => {
+    hasStartedLocationUpdatesAsync.mockResolvedValue(true);
+    await setRecordingMapFocusBoost(true);
+    await expect(setRecordingMapFocusBoost(true)).resolves.toBe(false);
+    expect(startLocationUpdatesAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it("does nothing when no recording is running", async () => {
+    await expect(setRecordingMapFocusBoost(true)).resolves.toBe(false);
+    expect(startLocationUpdatesAsync).not.toHaveBeenCalled();
+  });
+
+  it("starts a recording boosted when the map is already being looked at", async () => {
+    await setRecordingMapFocusBoost(true);
+    await startTrackRecording();
+    expect(lastOptions()).toMatchObject({ timeInterval: 3000 });
+  });
+
+  // THE REASON THE FLAG IS NOT CLEARED ON STOP: a pause and resume without
+  // leaving the map changes nothing the map's effect is keyed on, so a flag
+  // reset by the pause would resume at 30 s under a user staring at the map.
+  it("survives a pause and resume on the map", async () => {
+    hasStartedLocationUpdatesAsync.mockResolvedValue(true);
+    await setRecordingMapFocusBoost(true);
+    await pauseTrackRecording("track-1");
+    const track = { ...recordingTrack(), state: "paused", pausedAt: new Date().toISOString() };
+    await resumeTrackRecording(track as never);
+    expect(lastOptions()).toMatchObject({ timeInterval: 3000 });
+  });
+
+  // A process that died boosted leaves the platform delivering at 3 s, and a
+  // relaunch that opens on another tab never runs the map's effect to undo it.
+  it("reconcile turns a boost persisted across a process death back down", async () => {
+    activeTrack = recordingTrack();
+    hasStartedLocationUpdatesAsync.mockResolvedValue(true);
+    getTaskOptionsAsync.mockResolvedValue({ timeInterval: 3000 });
+
+    await reconcileTrackRecording();
+
+    expect(startLocationUpdatesAsync).toHaveBeenCalledTimes(1);
+    expect(lastOptions()).toMatchObject({ timeInterval: 30_000 });
+  });
+
+  it("reconcile leaves a recorder already at the right rate alone", async () => {
+    activeTrack = recordingTrack();
+    hasStartedLocationUpdatesAsync.mockResolvedValue(true);
+    getTaskOptionsAsync.mockResolvedValue({ timeInterval: 30_000 });
+
+    await reconcileTrackRecording();
+
     expect(startLocationUpdatesAsync).not.toHaveBeenCalled();
   });
 });

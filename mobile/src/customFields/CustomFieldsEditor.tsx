@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { useCallback, useState } from "react";
 import { Alert, StyleSheet, Text, View } from "react-native";
 import {
+  ATTRIBUTE_NOUN,
   buildCustomFieldDef,
   CUSTOM_FIELD_TYPES,
   distinctTripTypes,
@@ -19,6 +20,7 @@ import { tripTypeLabel } from "../logs/tripTypeMeta";
 import {
   Button,
   ChipPicker,
+  ErrorBanner,
   Row,
   SectionHeader,
   SegmentedControl,
@@ -59,23 +61,6 @@ const ENTITY_NOUN: Record<CustomFieldEntity, { one: string; many: string; has: s
   place: { one: "place", many: "places", has: "place has", have: "places have" },
 };
 
-/**
- * What a user's own field is CALLED, everywhere the user can read it.
- *
- * "Field" is form jargon — it names the box, not the thing the box records — so
- * the UI says "attribute" and the code keeps saying field (the column, the
- * table, the sync entity and every function in this file). One constant rather
- * than forty string literals, so the next rename is one line and cannot leave
- * half the app behind.
- */
-export const ATTRIBUTE_NOUN = {
-  one: "attribute",
-  many: "attributes",
-  /** Carried rather than composed: "a"/"an" does not follow from the noun, and
-   *  a rename that leaves "a attribute" behind is the classic way this kind of
-   *  constant half-works. */
-  add: "Add an attribute",
-} as const;
 
 export function CustomFieldList({
   entity,
@@ -159,7 +144,6 @@ export function useCustomFieldForm({
   editing,
   initialTypeId,
   onSaved,
-  onFailed,
   onDone,
 }: {
   entity: CustomFieldEntity;
@@ -177,7 +161,6 @@ export function useCustomFieldForm({
    */
   initialTypeId?: string;
   onSaved: (defs: ScopedCustomFieldDef[], message: string) => void;
-  onFailed: (message: string) => void;
   onDone: () => void;
 }): { body: ReactNode; footer: ReactNode } {
   const noun = ENTITY_NOUN[entity];
@@ -225,12 +208,17 @@ export function useCustomFieldForm({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [scopeError, setScopeError] = useState<string | null>(null);
+  // A save the local write refused, or a failed delete — this form stays open
+  // either way, so it reports in its own banner above the footer's buttons
+  // rather than a toast (DESIGN.md §8).
+  const [formError, setFormError] = useState<string | null>(null);
   // Bounds are only meaningful on a number, and the API rejects them elsewhere.
   const numeric = type === "integer" || type === "float";
 
   const save = useCallback(async () => {
     setError(null);
     setScopeError(null);
+    setFormError(null);
     // Same builder the web uses, so the key slug and the validation rules can't
     // drift between clients.
     const built = buildCustomFieldDef(
@@ -285,7 +273,7 @@ export function useCustomFieldForm({
       // A local write, so a failure here is a broken database rather than a
       // missing connection — do not offer the user a network explanation for
       // something reconnecting cannot fix.
-      onFailed(`Couldn't save that ${ATTRIBUTE_NOUN.one} on this phone.`);
+      setFormError(`Couldn't save that ${ATTRIBUTE_NOUN.one} on this phone.`);
     } finally {
       setSaving(false);
     }
@@ -300,7 +288,6 @@ export function useCustomFieldForm({
     min,
     numeric,
     onDone,
-    onFailed,
     onSaved,
     type,
     typeIds,
@@ -309,6 +296,7 @@ export function useCustomFieldForm({
   const confirmDelete = useCallback(() => {
     if (!editing) return;
     const key = editing.key;
+    setFormError(null);
     // Count the rows that carry a value BEFORE confirming: "this also clears it
     // from 12 trips" is the part of the consequence the user can't see.
     countFieldValues(entity, key)
@@ -336,7 +324,7 @@ export function useCustomFieldForm({
                   })
                   .catch((err: unknown) => {
                     console.error(err);
-                    onFailed(`Couldn't delete that ${ATTRIBUTE_NOUN.one}.`);
+                    setFormError(`Couldn't delete that ${ATTRIBUTE_NOUN.one}.`);
                   });
               },
             },
@@ -345,16 +333,19 @@ export function useCustomFieldForm({
       })
       .catch((err: unknown) => {
         console.error(err);
-        onFailed(`Couldn't check which ${noun.many} use this ${ATTRIBUTE_NOUN.one}.`);
+        setFormError(`Couldn't check which ${noun.many} use this ${ATTRIBUTE_NOUN.one}.`);
       });
-  }, [defs, editing, entity, noun, onDone, onFailed, onSaved]);
+  }, [defs, editing, entity, noun, onDone, onSaved]);
 
   const body = (
     <View style={styles.body}>
       <TextField
         label={`${capitalize(ATTRIBUTE_NOUN.one)} name`}
         value={label}
-        onChangeText={(next) => patch({ label: next })}
+        onChangeText={(next) => {
+          patch({ label: next });
+          setError(null);
+        }}
         error={error}
         autoCapitalize="sentences"
       />
@@ -437,7 +428,9 @@ export function useCustomFieldForm({
           options={[{ value: ALL_TYPES_CHIP, label: "All" }, ...scopeOptions]}
           selected={appliesToAll ? [ALL_TYPES_CHIP, ...allScopeValues] : typeIds}
           disabledValues={appliesToAll ? new Set(allScopeValues) : undefined}
+          error={scopeError}
           onToggle={(value) => {
+            setScopeError(null);
             if (value === ALL_TYPES_CHIP) {
               patch({ appliesToAll: !appliesToAll });
               return;
@@ -458,6 +451,7 @@ export function useCustomFieldForm({
                     allScopeValues.find(
                       (existing) => existing.toLowerCase() === added.toLowerCase(),
                     ) ?? added;
+                  setScopeError(null);
                   patch({
                     appliesToAll: false,
                     typeIds: typeIds.includes(value) ? typeIds : [...typeIds, value],
@@ -466,7 +460,6 @@ export function useCustomFieldForm({
           }
           addPlaceholder="Other"
         />
-        {scopeError ? <Text style={styles.scopeError}>{scopeError}</Text> : null}
       </View>
 
       {editing ? (
@@ -481,19 +474,23 @@ export function useCustomFieldForm({
   );
 
   // Cancel LEFT, commit RIGHT, half the width each: the destination of a tap
-  // should not depend on how long the label happens to be.
+  // should not depend on how long the label happens to be. The banner sits
+  // above that row, never at the top of the form (DESIGN.md §8).
   const footer = (
-    <View style={styles.actions}>
-      <View style={styles.action}>
-        <Button label="Cancel" variant="outlineAccent" onPress={onDone} />
-      </View>
-      <View style={styles.action}>
-        <Button
-          label={editing ? "Save" : `Add ${ATTRIBUTE_NOUN.one}`}
-          icon="check"
-          loading={saving}
-          onPress={() => void save()}
-        />
+    <View style={styles.footerStack}>
+      {formError ? <ErrorBanner message={formError} /> : null}
+      <View style={styles.actions}>
+        <View style={styles.action}>
+          <Button label="Cancel" variant="outlineAccent" onPress={onDone} />
+        </View>
+        <View style={styles.action}>
+          <Button
+            label={editing ? "Save" : `Add ${ATTRIBUTE_NOUN.one}`}
+            icon="check"
+            loading={saving}
+            onPress={() => void save()}
+          />
+        </View>
       </View>
     </View>
   );
@@ -591,9 +588,9 @@ function typeLabel(type: TripLogCustomFieldType): string {
 
 const styles = StyleSheet.create({
   body: { gap: spacing(1) },
+  footerStack: { gap: spacing(1) },
   actions: { flexDirection: "row", gap: spacing(1) },
   action: { flex: 1 },
-  scopeError: { color: theme.warning, fontSize: fontSize.sm },
   typeBlock: { gap: spacing(0.5) },
   hint: { color: theme.textMuted, fontSize: fontSize.sm },
   boundsRow: { flexDirection: "row", gap: spacing(1) },

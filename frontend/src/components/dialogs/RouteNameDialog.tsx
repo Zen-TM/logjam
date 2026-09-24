@@ -1,179 +1,79 @@
-import { useEffect, useState } from "react";
-import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Button,
-  TextField,
-  IconButton,
-  CircularProgress,
-  Box,
-  Typography,
-} from "@mui/material";
-import CloseIcon from "@mui/icons-material/Close";
-import { ROUTE_NAME_MAX_LENGTH, TRACK_COLORS } from "@logjam/shared";
-import {
-  fieldSx,
-  dialogActionButtonSx,
-  touchTargetSx,
-} from "../../csvImport/dialogStyles";
+import { useId, useState } from "react";
+import { ROUTE_NAME_MAX_LENGTH } from "@logjam/shared";
+import { Button, Dialog, TextField } from "../../ui";
+import classes from "./RouteNameDialog.module.css";
+
+type RouteNameDialogProps = {
+  open: boolean;
+  initialName: string;
+  busy?: boolean;
+  onSave: (name: string) => void;
+  onClose: () => void;
+};
 
 /**
  * Names a route on save.
  *
- * Deliberately a dialog, not a window.prompt: the rest of the app authors
- * through dialogs, and a native prompt carries neither the theme nor the
- * length validation that the API enforces.
+ * Deliberately a dialog, not a window.prompt: a native prompt carries neither
+ * the theme nor the length validation that the API enforces.
  */
-export default function RouteNameDialog({
-  open,
+export default function RouteNameDialog({ open, ...form }: RouteNameDialogProps): React.JSX.Element | null {
+  // The form mounts on open, so a reopened dialog starts from the route it is
+  // naming now and never from the last one's typing.
+  return open ? <RouteNameForm {...form} /> : null;
+}
+
+function RouteNameForm({
   initialName,
-  initialColor,
   busy = false,
   onSave,
   onClose,
-}: {
-  open: boolean;
-  initialName: string;
-  initialColor?: string;
-  busy?: boolean;
-  onSave: (name: string, color?: string) => void;
-  onClose: () => void;
-}): React.JSX.Element {
+}: Omit<RouteNameDialogProps, "open">) {
+  const formId = useId();
   const [name, setName] = useState(initialName);
-  const [color, setColor] = useState<string | undefined>(initialColor);
-
-  // Reseed whenever the dialog reopens — editing a different route must not
-  // inherit the previous one's name.
-  useEffect(() => {
-    if (open) {
-      setName(initialName);
-      setColor(initialColor);
-    }
-  }, [open, initialName, initialColor]);
 
   const trimmed = name.trim();
   const tooLong = trimmed.length > ROUTE_NAME_MAX_LENGTH;
-  const canSave = trimmed.length > 0 && !tooLong && !busy;
+  const canSave = trimmed.length > 0 && !tooLong;
 
   return (
     <Dialog
-      open={open}
-      onClose={busy ? undefined : onClose}
-      maxWidth="sm"
-      fullWidth
-      PaperProps={{
-        sx: {
-          backgroundColor: "var(--theme-primary)",
-          color: "var(--theme-text-primary)",
-        },
-      }}
+      open
+      title="Name this route"
+      onClose={onClose}
+      dismissible={!busy}
+      footer={
+        <>
+          <Button onClick={onClose} disabled={busy}>
+            Cancel
+          </Button>
+          <Button type="submit" form={formId} variant="filled" busy={busy} disabled={!canSave}>
+            Save
+          </Button>
+        </>
+      }
     >
-      <DialogTitle
-        sx={{ display: "flex", justifyContent: "space-between", pb: 1 }}
+      {/* A real form, so Enter in the name field saves. */}
+      <form
+        id={formId}
+        className={classes.form}
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (canSave && !busy) onSave(trimmed);
+        }}
       >
-        Name this route
-        <IconButton
-          aria-label="Close dialog"
-          onClick={onClose}
-          disabled={busy}
-          sx={touchTargetSx}
-        >
-          <CloseIcon />
-        </IconButton>
-      </DialogTitle>
-      <DialogContent dividers sx={{ borderColor: "rgba(255,255,255,0.1)" }}>
         <TextField
-          autoFocus
-          fullWidth
           label="Route name"
           value={name}
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && canSave) onSave(trimmed, color);
-          }}
-          error={tooLong}
-          helperText={
-            tooLong ? `Must be at most ${ROUTE_NAME_MAX_LENGTH} characters` : " "
-          }
-          sx={fieldSx}
+          onChange={(event) => setName(event.target.value)}
+          error={tooLong ? `Must be at most ${ROUTE_NAME_MAX_LENGTH} characters` : null}
+          data-autofocus
         />
-        <Box sx={{ mt: 2, display: "flex", flexDirection: "column", gap: 1 }}>
-          <Typography
-            variant="caption"
-            sx={{
-              color: "var(--theme-text-muted, rgba(255, 255, 255, 0.7))",
-              fontSize: "0.85em",
-            }}
-          >
-            Route colour
-          </Typography>
-          <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
-            {TRACK_COLORS.map((c) => {
-              const isSelected = color === c;
-              return (
-                <Box
-                  key={c}
-                  component="button"
-                  type="button"
-                  aria-label={`Colour ${c}`}
-                  aria-pressed={isSelected}
-                  onClick={() => setColor(c)}
-                  sx={{
-                    width: 32,
-                    height: 32,
-                    borderRadius: "6px",
-                    backgroundColor: c,
-                    border: isSelected ? "2px solid #ffffff" : "2px solid transparent",
-                    cursor: "pointer",
-                    p: 0,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    outline: "none",
-                    "&:hover": {
-                      opacity: 0.9,
-                    },
-                  }}
-                >
-                  {isSelected && (
-                    <span
-                      style={{
-                        color: "#ffffff",
-                        fontWeight: "bold",
-                        textShadow: "0 0 2px #000",
-                        lineHeight: 1,
-                      }}
-                    >
-                      ✓
-                    </span>
-                  )}
-                </Box>
-              );
-            })}
-          </Box>
-        </Box>
-      </DialogContent>
-      <DialogActions>
-        <Button
-          onClick={onClose}
-          disabled={busy}
-          sx={{ ...dialogActionButtonSx, color: "var(--theme-text-primary)" }}
-        >
-          Cancel
-        </Button>
-        <Button
-          variant="contained"
-          color="secondary"
-          onClick={() => onSave(trimmed, color)}
-          disabled={!canSave}
-          startIcon={busy ? <CircularProgress size={16} /> : undefined}
-          sx={dialogActionButtonSx}
-        >
-          Save
-        </Button>
-      </DialogActions>
+        {/* No colour here: it is a property of the DRAFT, chosen in the draw
+            tool where the line is on the map in that colour as it is built.
+            Asking again at save time was two controls for one property
+            (operator, 2026-09-17). */}
+      </form>
     </Dialog>
   );
 }

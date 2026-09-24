@@ -1,0 +1,99 @@
+.sheet {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--theme-primary);
+  color: var(--theme-text-primary);
+  border-right: var(--hairline);
+}
+
+/* Docked against the right edge of the page it belongs to. Decided HERE rather
+   than by each page, so every sheet is the same width and in the same place,
+   and the map's chrome (which reads --filter-sheet-width off `data-sheet-open`)
+   cannot know about one page's sheet and not another's. The panel is the
+   positioned ancestor; nothing between here and there may be positioned. */
+.docked {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 100%;
+  z-index: 2;
+  width: var(--filter-sheet-width);
+  box-shadow: var(--shadow-float);
+}
+
+/* Narrow web: it takes the page's place instead of standing beside it. */
+.narrow {
+  flex: 1;
+  min-height: 0;
+  border-right: none;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 8px 10px var(--gutter);
+  border-bottom: var(--hairline);
+}
+
+.title {
+  flex: 1;
+  margin: 0;
+  font-size: var(--font-lg);
+  font-weight: 600;
+}
+
+.title:focus-visible {
+  outline: none;
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  /* Same reason as the dialog's body: an absolutely positioned descendant is
+     only clipped by a scroller that is also its containing block. */
+  position: relative;
+  overflow-y: auto;
+  padding: 12px var(--gutter);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px var(--gutter);
+  border-top: var(--hairline);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sectionTitle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0;
+  /* A section header belongs to what FOLLOWS it, so the break before it has to
+     be bigger than the gap between the rows it groups — otherwise the heading
+     floats midway and the eye reads it as belonging to the row above. Set on
+     the kit rather than per page: every list that stacks sections wants it. */
+  padding-top: 10px;
+  font-size: var(--font-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--theme-text-muted);
+}
+
+/* The first one opens its container — nothing above to separate from. */
+.sectionTitle:first-child {
+  padding-top: 0;
+}

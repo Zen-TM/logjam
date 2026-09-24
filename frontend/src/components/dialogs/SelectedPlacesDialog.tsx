@@ -1,31 +1,49 @@
+import { useState, useEffect } from "react";
+import { Check, MapPin, Minus, Plus, Trash2, Users } from "lucide-react";
 import type { TripLogCustomFieldDef } from "@logjam/shared";
-import { useState, useRef, useEffect } from "react";
-import { useIsMobile } from "../../useIsMobile";
-import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  DialogContentText,
-  Button,
-  IconButton,
-  Typography,
-  Box,
-  TextField,
-  Select,
-  MenuItem,
-} from "@mui/material";
-import CloseIcon from "@mui/icons-material/Close";
-import { ChevronRight, Minus, Plus } from "lucide-react";
 import type { TPlace, TFriend } from "../../placeUtils";
 import { bulkDeletePlaces, sharePlaceWith } from "../../placeUtils";
 import { useToast } from "../feedback/ToastProvider";
 import { messageFromError } from "../../errors/messageFromError";
 import type { TExportFormat } from "../../placeExport";
 import { buildPlaceExport } from "../../placeExport";
-import { fieldSx, selectSx, menuPaperProps } from "../../csvImport/dialogStyles";
+import ConfirmDialog from "./ConfirmDialog";
+import {
+  Avatar,
+  Button,
+  Dialog,
+  IconButton,
+  IconTile,
+  Row,
+  SearchField,
+  SectionHeader,
+  Select,
+} from "../../ui";
 import classes from "./SelectedPlacesDialog.module.css";
 
+const EXPORT_FORMATS: { value: TExportFormat; label: string }[] = [
+  { value: "gpx", label: "GPX" },
+  { value: "kml", label: "KML" },
+  { value: "geojson", label: "GeoJSON" },
+  { value: "csv", label: "CSV" },
+];
+
+const plural = (count: number, noun: string) =>
+  `${count} ${noun}${count === 1 ? "" : "s"}`;
+
+/**
+ * What to do with the places just picked: take them out as a file, hand them
+ * to a friend, or delete the ones that are yours.
+ *
+ * THE SELECTION IS EDITABLE HERE, because the list behind it is filtered and a
+ * place remembered mid-task may not be on screen any more — so the dialog
+ * carries its own search for adding one and a minus on every row for dropping
+ * one, rather than making the user close it and start the selection again.
+ *
+ * Sharing and deleting are OWNER-ONLY and say so with a count rather than by
+ * disappearing: a selection of someone else's places is a normal thing to have
+ * made, and a section that vanished would read as the dialog being broken.
+ */
 function SelectedPlacesDialog({
   open,
   selectedPlaces,
@@ -53,8 +71,6 @@ function SelectedPlacesDialog({
   onRemovePlace: (id: string) => void;
   onAddPlace: (id: string) => void;
 }) {
-  const isMobile = useIsMobile();
-  const [listOpen, setListOpen] = useState(false);
   const [shareSearch, setShareSearch] = useState("");
   const [shareFriendIds, setShareFriendIds] = useState<string[]>([]);
   const [sharing, setSharing] = useState(false);
@@ -62,43 +78,48 @@ function SelectedPlacesDialog({
   const [deleting, setDeleting] = useState(false);
   const [exportFormat, setExportFormat] = useState<TExportFormat>("gpx");
   const [placeSearch, setPlaceSearch] = useState("");
-  const placeSearchRef = useRef<HTMLInputElement>(null);
   const toast = useToast();
 
-  // Reset list state when dialog opens/closes
   useEffect(() => {
     if (!open) {
-      setListOpen(false);
       setPlaceSearch("");
+      setShareSearch("");
+      setShareFriendIds([]);
     }
   }, [open]);
 
   const busy = sharing || deleting;
-  const ownedPlaces = selectedPlaces.filter((c) => ownedPlaceIds.has(c.id));
+  const ownedPlaces = selectedPlaces.filter((place) => ownedPlaceIds.has(place.id));
   const sharedCount = selectedPlaces.length - ownedPlaces.length;
 
-  const selectedIds = new Set(selectedPlaces.map((c) => c.id));
+  const selectedIds = new Set(selectedPlaces.map((place) => place.id));
   const placeSearchResults =
-    placeSearch.length >= 3
+    placeSearch.trim().length >= 3
       ? availablePlaces
           .filter(
-            (c) =>
-              !selectedIds.has(c.id) &&
-              ([c.name, ...c.altNames].some((n) =>
-                n.toLowerCase().includes(placeSearch.toLowerCase()),
-              )),
+            (place) =>
+              !selectedIds.has(place.id) &&
+              [place.name, ...place.altNames].some((name) =>
+                name.toLowerCase().includes(placeSearch.trim().toLowerCase()),
+              ),
           )
           .slice(0, 6)
       : [];
+
+  const friendMatches = friends.filter(
+    (friend) =>
+      !shareFriendIds.includes(friend.id) &&
+      friend.username.toLowerCase().includes(shareSearch.trim().toLowerCase()),
+  );
 
   async function handleShare() {
     if (shareFriendIds.length === 0 || ownedPlaces.length === 0) return;
     setSharing(true);
     try {
-      for (const c of ownedPlaces) {
-        for (const fId of shareFriendIds) {
+      for (const place of ownedPlaces) {
+        for (const friendId of shareFriendIds) {
           try {
-            await sharePlaceWith(c.id, fId);
+            await sharePlaceWith(place.id, friendId);
           } catch (err) {
             console.error(err);
             toast.error(messageFromError(err, "Couldn't share one or more places."));
@@ -116,24 +137,28 @@ function SelectedPlacesDialog({
   }
 
   function handleExport() {
-    const { blob, filename } = buildPlaceExport(selectedPlaces, exportFormat, placeCustomFieldDefs);
+    const { blob, filename } = buildPlaceExport(
+      selectedPlaces,
+      exportFormat,
+      placeCustomFieldDefs,
+    );
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    a.click();
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
     URL.revokeObjectURL(url);
   }
 
   async function handleDelete() {
     setDeleting(true);
     try {
-      await bulkDeletePlaces(ownedPlaces.map((c) => c.id));
+      await bulkDeletePlaces(ownedPlaces.map((place) => place.id));
       setShowDeleteConfirm(false);
       onQuotaChanged?.();
       onDeleted();
       onClose();
-      toast.success(`${ownedPlaces.length} place${ownedPlaces.length === 1 ? "" : "s"} deleted`);
+      toast.success(`Deleted ${plural(ownedPlaces.length, "place")}.`);
     } catch (err) {
       console.error(err);
       toast.error(messageFromError(err, "Couldn't delete places. Please try again."));
@@ -142,323 +167,238 @@ function SelectedPlacesDialog({
     }
   }
 
-  function handleAddPlaceResult(id: string) {
-    onAddPlace(id);
-    setPlaceSearch("");
-    placeSearchRef.current?.focus();
-  }
-
-  function handlePlaceSearchKeyDown(e: React.KeyboardEvent) {
-    if (e.key === "Enter" && placeSearchResults.length === 1) {
-      handleAddPlaceResult(placeSearchResults[0].id);
-    }
-  }
-
-  const dialogSx = {
-    backgroundColor: "var(--theme-primary)",
-    color: "var(--theme-text-primary)",
-    display: "flex",
-    flexDirection: "column" as const,
-    maxHeight: isMobile ? "100%" : "85vh",
-  };
-
   return (
     <>
       <Dialog
-        fullScreen={isMobile}
         open={open && !showDeleteConfirm}
-        onClose={busy ? undefined : onClose}
-        maxWidth="sm"
-        fullWidth
-        PaperProps={{ sx: dialogSx }}
-      >
-        <DialogTitle
-          sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", pb: 1 }}
-        >
-          Selected Places ({selectedPlaces.length})
-          <IconButton aria-label="Close dialog" size="small" onClick={onClose} disabled={busy} sx={{ color: "var(--theme-text-primary)" }}>
-            <CloseIcon fontSize="small" />
-          </IconButton>
-        </DialogTitle>
-
-        <DialogContent
-          dividers
-          sx={{
-            borderColor: "rgba(255,255,255,0.1)",
-            display: "flex",
-            flexDirection: "column",
-            minHeight: 0,
-            flex: "1 1 auto",
-            overflow: "hidden",
-            gap: "0.75em",
-          }}
-        >
-          {/* Place list accordion */}
-          <Box>
-            <button
-              className={classes.accordionHeader}
-              onClick={() => setListOpen((v) => !v)}
-              aria-expanded={listOpen}
-            >
-              <ChevronRight
-                size={14}
-                className={`${classes.chevron} ${listOpen ? classes.chevronOpen : ""}`}
-              />
-              <span>
-                View list ({selectedPlaces.length} place{selectedPlaces.length !== 1 ? "s" : ""}
-                {sharedCount > 0 ? `, ${sharedCount} shared` : ""})
-              </span>
-            </button>
-
-            {listOpen && (
-              <Box className={classes.accordionBody}>
-                <Box className={classes.placeList}>
-                  {selectedPlaces.map((c) => (
-                    <div key={c.id} className={classes.placeRow}>
-                      <button
-                        className={classes.minusButton}
-                        onClick={() => onRemovePlace(c.id)}
-                        aria-label={`Remove ${c.name}`}
-                      >
-                        <Minus size={12} />
-                      </button>
-                      <span className={classes.placeName}>
-                        <Typography variant="body2" component="span">
-                          {c.name}
-                        </Typography>
-                        {!ownedPlaceIds.has(c.id) && (
-                          <span className={classes.sharedLabel}>(shared)</span>
-                        )}
-                      </span>
-                    </div>
-                  ))}
-                </Box>
-
-                {/* Add place search — pinned below list */}
-                <Box className={classes.searchAddRow}>
-                  {placeSearchResults.length > 0 && (
-                    <Box className={classes.searchResultsDropdown}>
-                      {placeSearchResults.map((c) => (
-                        <button
-                          key={c.id}
-                          type="button"
-                          className={classes.searchResultItem}
-                          onClick={() => handleAddPlaceResult(c.id)}
-                        >
-                          {c.name}
-                          {c.altNames.length > 0 && (
-                            <span className={classes.searchResultAltNames}>
-                              ({c.altNames.join(", ")})
-                            </span>
-                          )}
-                        </button>
-                      ))}
-                    </Box>
-                  )}
-                  <TextField
-                    inputRef={placeSearchRef}
-                    inputProps={{ "aria-label": "Search places to add" }}
-                    placeholder="Search places to add..."
-                    value={placeSearch}
-                    onChange={(e) => setPlaceSearch(e.target.value)}
-                    onKeyDown={handlePlaceSearchKeyDown}
-                    size="small"
-                    sx={{ ...fieldSx, flex: 1 }}
-                  />
-                  <button
-                    className={classes.addButton}
-                    onClick={() => {
-                      if (placeSearchResults.length === 1) handleAddPlaceResult(placeSearchResults[0].id);
-                    }}
-                    disabled={placeSearchResults.length !== 1}
-                    aria-label="Add place"
-                  >
-                    <Plus size={14} />
-                  </button>
-                </Box>
-              </Box>
-            )}
-          </Box>
-
-          {/* Export card */}
-          <Box className={classes.actionCard}>
-            <span className={classes.cardHeading}>Export</span>
-            <Box className={classes.cardRow}>
-              <Typography variant="body2" sx={{ whiteSpace: "nowrap" }}>
-                Format:
-              </Typography>
-              <Select
-                size="small"
-                value={exportFormat}
-                onChange={(e) => setExportFormat(e.target.value as TExportFormat)}
-                sx={selectSx}
-                MenuProps={menuPaperProps}
+        title={plural(selectedPlaces.length, "place")}
+        size="large"
+        dismissible={!busy}
+        onClose={onClose}
+        footer={
+          <>
+            {ownedPlaces.length > 0 && (
+              <Button
+                variant="danger"
+                icon={Trash2}
+                className={classes.deleteVerb}
+                disabled={busy}
+                onClick={() => setShowDeleteConfirm(true)}
               >
-                <MenuItem value="gpx">GPX</MenuItem>
-                <MenuItem value="kml">KML</MenuItem>
-                <MenuItem value="geojson">GeoJSON</MenuItem>
-                <MenuItem value="csv">CSV</MenuItem>
-              </Select>
-              <Box className={classes.cardRowRight}>
-                <Button
-                  variant="outlined"
-                  size="small"
-                  onClick={handleExport}
-                  disabled={busy}
-                  sx={{
-                    borderColor: "var(--theme-accent)",
-                    color: "var(--theme-accent)",
-                    "&:hover": {
-                      backgroundColor: "color-mix(in srgb, var(--theme-accent) 12%, transparent)",
-                      borderColor: "var(--theme-accent)",
-                    },
-                  }}
-                >
-                  Download
-                </Button>
-              </Box>
-            </Box>
-          </Box>
+                Delete {plural(ownedPlaces.length, "place")}
+              </Button>
+            )}
+            <Button onClick={onClose} disabled={busy}>
+              Close
+            </Button>
+          </>
+        }
+      >
+        <div className={classes.body}>
+          <section className={classes.group}>
+            <SectionHeader
+              title="These places"
+              count={selectedPlaces.length}
+            />
+            {sharedCount > 0 && (
+              <p className={classes.note}>
+                {plural(sharedCount, "place")} shared with you — those can be exported,
+                not shared on or deleted.
+              </p>
+            )}
+            {selectedPlaces.map((place) => (
+              <Row
+                key={place.id}
+                leading={
+                  <IconTile
+                    icon={MapPin}
+                    hue={
+                      ownedPlaceIds.has(place.id)
+                        ? "var(--theme-accent)"
+                        : "var(--hue-shared)"
+                    }
+                  />
+                }
+                title={place.name}
+                subtitle={ownedPlaceIds.has(place.id) ? undefined : "Shared with you"}
+                trailing={
+                  <IconButton
+                    icon={Minus}
+                    label={`Take ${place.name} out of the selection`}
+                    onClick={() => onRemovePlace(place.id)}
+                  />
+                }
+              />
+            ))}
 
-          {/* Share card */}
-          <Box className={classes.actionCard}>
-            <span className={classes.cardHeading}>
-              Share{ownedPlaces.length > 0 ? ` (${ownedPlaces.length} owned)` : ""}
-            </span>
+            <SearchField
+              label="Add another place"
+              placeholder="Search your places"
+              value={placeSearch}
+              onChange={(event) => setPlaceSearch(event.target.value)}
+              onKeyDown={(event) => {
+                // Enter takes the obvious one: the only match.
+                if (event.key !== "Enter") return;
+                event.preventDefault();
+                if (placeSearchResults.length === 1) {
+                  onAddPlace(placeSearchResults[0].id);
+                  setPlaceSearch("");
+                }
+              }}
+            />
+            {placeSearchResults.map((place) => (
+              <Row
+                key={place.id}
+                leading={<IconTile icon={Plus} hue="var(--theme-bonus-1)" />}
+                title={place.name}
+                subtitle={place.altNames.length > 0 ? place.altNames.join(", ") : undefined}
+                description="Press to add it to the selection"
+                onOpen={() => {
+                  onAddPlace(place.id);
+                  setPlaceSearch("");
+                }}
+              />
+            ))}
+          </section>
+
+          <section className={classes.group}>
+            <SectionHeader title="Export" />
+            <div className={classes.exportRow}>
+              <Select
+                label="Format"
+                className={classes.format}
+                value={exportFormat}
+                onChange={(event) => setExportFormat(event.target.value as TExportFormat)}
+              >
+                {EXPORT_FORMATS.map((format) => (
+                  <option key={format.value} value={format.value}>
+                    {format.label}
+                  </option>
+                ))}
+              </Select>
+              <Button variant="outline" onClick={handleExport} disabled={busy}>
+                Download
+              </Button>
+            </div>
+          </section>
+
+          <section className={classes.group}>
+            <SectionHeader title="Share" />
             {ownedPlaces.length === 0 ? (
-              <>
-                <Typography variant="body2" className={classes.disabledText}>
-                  No owned places in selection. Sharing applies to your own places only.
-                </Typography>
-                <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
-                  <Button variant="contained" color="secondary" size="small" disabled>
-                    Share
-                  </Button>
-                </Box>
-              </>
+              <p className={classes.note}>
+                Sharing is for your own places, and none of these are yours.
+              </p>
+            ) : friends.length === 0 ? (
+              <p className={classes.note}>
+                Sharing is between friends. Add one on the Friends page, then come back.
+              </p>
             ) : (
               <>
-                <Typography variant="body2" className={classes.shareCaveat}>
-                  Recipients can copy or export shared places while the share
-                  is active. Unsharing won&rsquo;t remove copies they&rsquo;ve
-                  already made.
-                </Typography>
-                <TextField
-                  inputProps={{ "aria-label": "Search friends to share with" }}
-                  placeholder="Search friends..."
-                  value={shareSearch}
-                  onChange={(e) => setShareSearch(e.target.value)}
-                  size="small"
-                  fullWidth
-                  sx={{ ...fieldSx, mb: 0.5 }}
-                />
-                {shareSearch.length > 0 && (
-                  <Box>
-                    {friends
-                      .filter(
-                        (f) =>
-                          f.username.toLowerCase().includes(shareSearch.toLowerCase()) &&
-                          !shareFriendIds.includes(f.id),
-                      )
-                      .map((friend) => (
-                        <div key={friend.id} className={classes.friendSearchResultItem}>
-                          <span>{friend.username}</span>
-                          <button
-                            className={classes.addFriendButton}
-                            onClick={() => {
-                              setShareFriendIds([...shareFriendIds, friend.id]);
-                              setShareSearch("");
-                            }}
-                          >
-                            Add
-                          </button>
-                        </div>
-                      ))}
-                  </Box>
-                )}
+                {/* What the press will do, before the press. */}
+                <p className={classes.note}>
+                  {sharedCount > 0
+                    ? `Your ${plural(ownedPlaces.length, "place")} of these. `
+                    : ""}
+                  Recipients can copy or export them while the share is active.
+                  Unsharing won&rsquo;t remove copies they&rsquo;ve already made.
+                </p>
                 {shareFriendIds.length > 0 && (
-                  <div className={classes.selectedFriendChips}>
+                  <>
                     {shareFriendIds.map((id) => {
-                      const f = friends.find((fr) => fr.id === id);
-                      if (!f) return null;
+                      const friend = friends.find((row) => row.id === id);
+                      if (!friend) return null;
                       return (
-                        <span key={id} className={classes.friendChip}>
-                          {f.username}
-                          <button
-                            className={classes.chipRemove}
-                            onClick={() => setShareFriendIds(shareFriendIds.filter((fid) => fid !== id))}
-                          >
-                            ✕
-                          </button>
-                        </span>
+                        <Row
+                          key={id}
+                          leading={<Avatar username={friend.username} />}
+                          title={friend.username}
+                          trailing={
+                            <IconButton
+                              icon={Minus}
+                              label={`Don't share with ${friend.username}`}
+                              disabled={busy}
+                              onClick={() =>
+                                setShareFriendIds(shareFriendIds.filter((other) => other !== id))
+                              }
+                            />
+                          }
+                        />
                       );
                     })}
-                  </div>
+                  </>
                 )}
-                <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
-                  <Button
-                    variant="contained"
-                    color="secondary"
-                    size="small"
-                    onClick={handleShare}
-                    disabled={busy || shareFriendIds.length === 0}
-                  >
-                    {sharing
-                      ? "Sharing..."
-                      : `Share with ${shareFriendIds.length > 0 ? shareFriendIds.length : ""}`
-                          .trim()}
-                  </Button>
-                </Box>
+                <SearchField
+                  label="Search friends"
+                  placeholder="Search friends"
+                  value={shareSearch}
+                  onChange={(event) => setShareSearch(event.target.value)}
+                />
+                {friendMatches.length === 0 ? (
+                  <p className={classes.note}>
+                    {shareSearch.trim()
+                      ? `No friends match “${shareSearch.trim()}”.`
+                      : "Everyone you know is already on the list."}
+                  </p>
+                ) : (
+                  friendMatches.map((friend) => (
+                    <Row
+                      key={friend.id}
+                      leading={<Avatar username={friend.username} />}
+                      title={friend.username}
+                      description="Press to add them"
+                      disabled={busy}
+                      onOpen={() => {
+                        setShareFriendIds([...shareFriendIds, friend.id]);
+                        setShareSearch("");
+                      }}
+                      trailing={
+                        <span className={classes.addMark} data-mark aria-hidden>
+                          <Plus size={16} />
+                        </span>
+                      }
+                    />
+                  ))
+                )}
+                <Button
+                  variant="filled"
+                  icon={Check}
+                  className={classes.shareVerb}
+                  busy={sharing}
+                  disabled={busy || shareFriendIds.length === 0}
+                  onClick={handleShare}
+                >
+                  {shareFriendIds.length === 0
+                    ? "Share"
+                    : `Share with ${plural(shareFriendIds.length, "friend")}`}
+                </Button>
               </>
             )}
-          </Box>
-        </DialogContent>
+          </section>
 
-        <DialogActions>
-          {ownedPlaces.length > 0 && (
-            <Button
-              color="error"
-              onClick={() => setShowDeleteConfirm(true)}
-              disabled={busy}
-              sx={{ mr: "auto" }}
-            >
-              Delete {ownedPlaces.length} owned
-            </Button>
+          {friends.length === 0 && ownedPlaces.length > 0 && (
+            <p className={classes.note} role="note">
+              <Users size={14} aria-hidden /> Sharing needs a friend.
+            </p>
           )}
-          <Button onClick={onClose} disabled={busy} sx={{ color: "var(--theme-text-primary)" }}>
-            Close
-          </Button>
-        </DialogActions>
+        </div>
       </Dialog>
 
-      <Dialog
+      <ConfirmDialog
         open={showDeleteConfirm}
-        onClose={deleting ? undefined : () => setShowDeleteConfirm(false)}
-        PaperProps={{
-          sx: { backgroundColor: "var(--theme-primary)", color: "var(--theme-text-primary)" },
-        }}
-      >
-        <DialogTitle>
-          Delete {ownedPlaces.length} Place{ownedPlaces.length !== 1 ? "s" : ""}?
-        </DialogTitle>
-        <DialogContent>
-          <DialogContentText sx={{ color: "var(--theme-text-primary)" }}>
-            This permanently deletes {ownedPlaces.length} place{ownedPlaces.length !== 1 ? "s" : ""}, along with their photos, tracks, and shares. Your trip logs are kept — they&rsquo;ll be unlinked from these places but stay in your logbook. This cannot be undone.
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button
-            onClick={() => setShowDeleteConfirm(false)}
-            disabled={deleting}
-            sx={{ color: "var(--theme-text-primary)" }}
-          >
-            Cancel
-          </Button>
-          <Button onClick={handleDelete} color="error" variant="contained" disabled={deleting}>
-            {deleting ? "Deleting..." : "Delete All"}
-          </Button>
-        </DialogActions>
-      </Dialog>
+        title={`Delete ${plural(ownedPlaces.length, "place")}?`}
+        message={
+          <>
+            This permanently deletes {plural(ownedPlaces.length, "place")}, along with
+            their photos, tracks and shares. Your trip logs are kept — they&rsquo;ll be
+            unlinked from these places but stay in your logbook. This cannot be undone.
+          </>
+        }
+        confirmLabel="Delete"
+        confirmColor="error"
+        busy={deleting}
+        onConfirm={handleDelete}
+        onClose={() => setShowDeleteConfirm(false)}
+      />
     </>
   );
 }

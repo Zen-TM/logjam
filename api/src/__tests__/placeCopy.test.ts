@@ -558,4 +558,63 @@ describe("a place-type change parks what the new type cannot hold", () => {
       { key, label: "Sump length", type: "integer", value: 12 },
     ]);
   });
+
+  // The REST half of the same rule. `PATCH /places/:id` dropped `placeTypeId`
+  // on the floor and answered 200, so Logjam Web — which has no push path —
+  // offered a type picker on an existing place that did nothing at all. Found
+  // by retyping a place in the browser (2026-09-19).
+  it("PATCH /places/:id retypes, and parks what the new type cannot hold", async () => {
+    const stamp = Date.now();
+    const key = `chok_${stamp}`.slice(0, 20);
+    const typeId = await makeType(ALICE_SUB, `Chockstone ${stamp}-t`);
+    await makeField(ALICE_SUB, { key, label: "Chock size", type: "integer" }, [
+      typeId,
+    ]);
+    const place = await makePlace(ALICE_SUB, {
+      placeTypeId: typeId,
+      name: "Retyped over REST",
+      latitude: -33.69,
+      longitude: 150.39,
+      fieldValues: { [key]: 7 },
+    });
+
+    const res = await write(() =>
+      request(API_URL)
+        .patch(`/places/${place.id as string}`)
+        .set(as(ALICE_SUB))
+        .send({ placeTypeId: CANYON_TYPE_ID }),
+    );
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.placeTypeId).toBe(CANYON_TYPE_ID);
+    expect(res.body.fieldValues).toEqual({});
+    expect(res.body.foreignFields).toEqual([
+      { key, label: "Chock size", type: "integer", value: 7 },
+    ]);
+  });
+
+  // An ordinary edit must not strand anything: the reconciliation runs on
+  // every PATCH, and a same-type write only ever brings a parked value home.
+  it("PATCH without a type change leaves the values where they are", async () => {
+    const stamp = Date.now();
+    const key = `flow_${stamp}`.slice(0, 20);
+    const typeId = await makeType(ALICE_SUB, `Creek ${stamp}-t`);
+    await makeField(ALICE_SUB, { key, label: "Flow", type: "integer" }, [typeId]);
+    const place = await makePlace(ALICE_SUB, {
+      placeTypeId: typeId,
+      name: "Edited in place",
+      latitude: -33.7,
+      longitude: 150.4,
+      fieldValues: { [key]: 3 },
+    });
+
+    const res = await write(() =>
+      request(API_URL)
+        .patch(`/places/${place.id as string}`)
+        .set(as(ALICE_SUB))
+        .send({ name: "Edited in place, renamed" }),
+    );
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.placeTypeId).toBe(typeId);
+    expect(res.body.fieldValues).toEqual({ [key]: 3 });
+  });
 });

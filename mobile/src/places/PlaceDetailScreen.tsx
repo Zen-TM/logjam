@@ -24,15 +24,18 @@ import {
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import {
+  ATTRIBUTE_NOUN,
   isReservedFieldKey,
   userFieldValues,
   distinctTripTypes,
   formatCanyonGrade,
   formatDistanceM,
+  formatTripDate,
   mediaCategory,
   messageFromError,
   removeShareConfirm,
   routeLengthM,
+  placeStatus,
 } from "@logjam/shared";
 
 import { tripTitle } from "../api/tripTitle";
@@ -44,7 +47,6 @@ import {
 import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
 import { removeSharedPlace } from "../sharing/removeShare";
 import { useFieldDefs } from "../customFields/useFieldDefs";
-import { ATTRIBUTE_NOUN } from "../customFields/CustomFieldsEditor";
 import { AttributeTable } from "../customFields/CustomFieldValues";
 import { attributeRows } from "../customFields/fieldValueCoercion";
 import { useConnectivity } from "../map/connectivity";
@@ -95,11 +97,10 @@ import {
   type Stat,
   type ToastMessage,
 } from "../ui";
-import { formatTripDate } from "../logs/logbook";
 import { TripEditSheet } from "../logs/TripEditSheet";
 import { PlaceEditSheet } from "./PlaceEditSheet";
 import { placeDeleteConfirm } from "./placeDeleteConfirm";
-import { PLACE_STATUS_META, placeStatus } from "./placeMeta";
+import { PLACE_STATUS_META } from "./placeMeta";
 
 /** A parked value as one line. Objects are stringified rather than dropped:
  *  the point of the section is that the user can SEE what arrived before
@@ -275,7 +276,7 @@ export function PlaceDetailScreen({
     Clipboard.setString(position);
     notify("Coordinates copied.", "info");
   };
-  stats.push({ label: "Position", value: position, wide: true, onPress: copyPosition });
+  stats.push({ label: "Position", value: position, wide: true, onCopy: copyPosition });
 
   /**
    * One of the three actions on a parked value. The place is re-read from the
@@ -697,7 +698,6 @@ export function PlaceDetailScreen({
         place={place}
         onClose={() => setEditing(false)}
         onSaved={(text) => notify(text, "info")}
-        onFailed={(text) => notify(text, "error")}
       />
 
       <TripEditSheet
@@ -708,7 +708,6 @@ export function PlaceDetailScreen({
         existingTypes={distinctTripTypes(trips.data ?? [])}
         onClose={() => setLogging(false)}
         onSaved={(text) => notify(text, "info")}
-        onFailed={(text) => notify(text, "error")}
       />
 
       {/* Changing what fills the route slot, from the place it belongs to —

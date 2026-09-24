@@ -9,7 +9,7 @@
 // The chart is never the only way to read the numbers: gain, loss and the
 // min/max range are stated as text above it, so a reader who cannot resolve
 // the plot still gets every figure.
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import classes from "./ElevationProfile.module.css";
 import { formatDistanceM, type ElevationSample } from "@logjam/shared";
 
@@ -45,6 +45,25 @@ export default function ElevationProfile({
 }: ElevationProfileProps): React.JSX.Element | null {
   const [hovered, setHovered] = useState<PlotPoint | null>(null);
 
+  // A pointer emits moves far faster than the screen redraws, and each one
+  // costs a scan of the samples, a re-render of this panel AND a GeoJSON write
+  // to the map's hover source. Coalescing to one frame makes the cost per
+  // FRAME rather than per EVENT, which is what the drag was lagging on
+  // (operator, 2026-09-17). The pending position is a ref so a superseded move
+  // is dropped rather than queued.
+  //
+  // ABOVE the early return below, with every other hook: a chart with too few
+  // known heights returns null, and a hook after that return runs on some
+  // renders and not others.
+  const frame = useRef<number | null>(null);
+  const pendingX = useRef(0);
+  useEffect(
+    () => () => {
+      if (frame.current !== null) cancelAnimationFrame(frame.current);
+    },
+    [],
+  );
+
   const known: PlotPoint[] = [];
   const totalM = samples[samples.length - 1]?.distanceM ?? 0;
   // A flat route would divide by zero; give it a nominal band so the line
@@ -73,15 +92,29 @@ export default function ElevationProfile({
     onHoverSampleChange?.(point?.index ?? null);
   };
 
-  // Nearest sample to the pointer, in viewBox coordinates.
   const handleMove = (event: React.PointerEvent<SVGSVGElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
-    const x = ((event.clientX - rect.left) / rect.width) * WIDTH;
-    let nearest = known[0]!;
-    for (const point of known) {
-      if (Math.abs(point.x - x) < Math.abs(nearest.x - x)) nearest = point;
+    pendingX.current = ((event.clientX - rect.left) / rect.width) * WIDTH;
+    if (frame.current !== null) return;
+    frame.current = requestAnimationFrame(() => {
+      frame.current = null;
+      const x = pendingX.current;
+      let nearest = known[0]!;
+      for (const point of known) {
+        if (Math.abs(point.x - x) < Math.abs(nearest.x - x)) nearest = point;
+      }
+      hover(nearest);
+    });
+  };
+
+  const handleLeave = () => {
+    // A queued frame would otherwise re-mark the spot just after the pointer
+    // left, stranding the map's dot on a chart with no cursor on it.
+    if (frame.current !== null) {
+      cancelAnimationFrame(frame.current);
+      frame.current = null;
     }
-    hover(nearest);
+    hover(null);
   };
 
   return (
@@ -93,7 +126,7 @@ export default function ElevationProfile({
         role="img"
         aria-label={`Elevation profile: ${Math.round(minM)} to ${Math.round(maxM)} metres over ${formatDistanceM(totalM)}`}
         onPointerMove={handleMove}
-        onPointerLeave={() => hover(null)}
+        onPointerLeave={handleLeave}
       >
         <path d={area} fill={color} className={classes.area} />
         <polyline

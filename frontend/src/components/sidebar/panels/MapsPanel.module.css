@@ -1,0 +1,156 @@
+/* Maps gives the panel body its full height: the hero and the view switch are
+   pinned, and only the list scrolls (DESIGN.md §2). Shared by both views and
+   the topo style sheet, which are one page. */
+.root {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Two rails: which map the page is about, then which of its lists. */
+.rails {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px var(--gutter) 8px;
+}
+
+/* What is still being made, pinned under the list and above the page's edge,
+   so it is in view from every tab and does not scroll away mid-wait. Separated
+   by the same hairline the panel uses, never a shadow — nothing here floats
+   over the map (index.css). */
+.footer {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px var(--gutter);
+  border-top: var(--hairline);
+}
+
+.footerList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Opened, it scrolls rather than eating the list it is pinned under. */
+.footer[data-expanded] .footerList {
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+.footerMore {
+  align-self: flex-start;
+}
+
+.list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  /* Room for each card's focus ring inside the scroller. */
+  padding: 4px var(--gutter) var(--gutter);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* A sentence about a section, in the hint's voice. */
+.note {
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--theme-text-muted);
+}
+
+.emptyArea {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 var(--gutter) 15%;
+}
+
+.loading {
+  margin: 0;
+  text-align: center;
+  font-size: var(--font-sm);
+  color: var(--theme-text-muted);
+}
+
+/* Topo style is a TABLE: what the line is, its colour, its width, and — for an
+   OSM feature — its switch. A grid, so every column lines up under the one
+   heading that names it, whatever the row's text does. */
+.styleTable {
+  display: grid;
+  grid-template-columns: 1fr var(--control-lg) 7ch;
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 6px;
+}
+
+.switchTable {
+  grid-template-columns: 1fr var(--control-lg) 7ch var(--switch-width);
+}
+
+/* A point has no width: its symbol is fixed, and the switch is the only thing
+   to set. */
+.symbolTable {
+  grid-template-columns: 1fr var(--control-lg) var(--switch-width);
+}
+
+.head {
+  font-size: var(--font-xs);
+  color: var(--theme-text-muted);
+  text-align: center;
+  white-space: nowrap;
+}
+
+.rowText {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rowName {
+  font-size: var(--font-sm);
+  color: var(--theme-text-primary);
+}
+
+/* An OSM tag query is as long as it is (roads name six values) and it is a
+   reference, not a sentence: two lines of it in a column narrowed by three
+   controls, then an ellipsis. The FULL string is still the switch's accessible
+   description, so nothing is lost to a reader. */
+.rowHint {
+  font-size: var(--font-xs);
+  color: var(--theme-text-muted);
+  overflow-wrap: anywhere;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+/* A width box fills its column; its label is the heading above it. */
+.widthBox > input {
+  width: 100%;
+  text-align: right;
+}
+
+/* The map's own symbol, centred in the column the colours are in. */
+.pointIcon {
+  justify-self: center;
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+}

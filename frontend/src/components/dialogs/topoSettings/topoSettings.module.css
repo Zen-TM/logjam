@@ -1,76 +1,121 @@
+/* How a LiDAR topo's rasters are drawn, four tabs of settings inside the Make
+   and Template dialogs. Layout only: every control is the kit's, and every size
+   and colour is a token (DESIGN.md §4, §9). */
 .tabPanel {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 12px 4px;
+  gap: 10px;
+  padding-top: 12px;
 }
 
-.sectionTitle {
-  font-size: 0.75em;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  opacity: 0.55;
-  color: var(--theme-text-primary);
-  margin: 4px 0 0;
+/* A number in a row: a few digits, right-aligned under the eye. */
+.numberCell {
+  width: 8ch;
 }
 
-.row {
-  display: grid;
-  grid-template-columns: minmax(140px, 1fr) auto auto;
-  align-items: center;
-  gap: 12px;
+.numberCell > input {
+  width: 100%;
+  text-align: right;
 }
 
-.labelWithTooltip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  color: var(--theme-text-primary);
-  font-size: 0.9em;
+/* A sentence a tab genuinely needs — what the numbers under it MEAN, never a
+   description of the controls themselves (operator, 2026-09-18). */
+.helpText {
+  margin: 0;
+  font-size: var(--font-xs);
+  color: var(--theme-text-muted);
 }
 
-.infoIcon {
-  font-size: 14px !important;
-  opacity: 0.5;
-  cursor: help;
-}
-
-.numberInput,
-.textInput {
-  width: 90px;
-  padding: 4px 8px;
-  background: var(--theme-primary);
-  color: var(--theme-text-primary);
-  border: 1px solid color-mix(in srgb, var(--theme-text-primary) 20%, transparent);
-  border-radius: var(--radius-sm);
-  font-size: 0.9em;
-}
-
-.numberInput:focus,
-.textInput:focus {
-  outline: none;
-  border-color: var(--theme-accent);
-}
-
-.numberInput:focus-visible,
-.textInput:focus-visible {
-  outline: 2px solid var(--theme-accent);
-  outline-offset: 1px;
-}
-
-.numberInput:disabled,
-.textInput:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.disabled {
+/* A group that another setting switches on and off wholesale. */
+.dependent[data-disabled] {
   opacity: 0.5;
   pointer-events: none;
 }
 
-/* Two-stop colour scale: start / end pickers + reset above the band table. */
+/* The slope bands: a row per band, columns headed once (DESIGN.md §9). Tight
+   rows, because the table is mostly two-digit numbers and a swatch — the
+   full-height control rows it started with spent a screen on eight bands
+   (operator, 2026-09-18). */
+.bandTable {
+  display: grid;
+  grid-template-columns: 6ch 8ch 1fr auto;
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 2px;
+}
+
+.head {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--font-xs);
+  color: var(--theme-text-muted);
+  white-space: nowrap;
+}
+
+.fixedCell {
+  font-size: var(--font-sm);
+  color: var(--theme-text-muted);
+}
+
+/* A band's colour is read from the scale, so it is shown, not pressed: a
+   checkerboard under it is the only way a translucent colour reads as one. It
+   fills its column, so the stack of them reads as the ramp it is rather than
+   leaving half the table empty (operator, 2026-09-18). */
+.bandSwatch {
+  position: relative;
+  width: 100%;
+  height: var(--control-sm);
+  border-radius: var(--radius-sm);
+  border: var(--hairline);
+  overflow: hidden;
+  background-image:
+    linear-gradient(45deg, var(--surface-field) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--surface-field) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--surface-field) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--surface-field) 75%);
+  background-size: 8px 8px;
+  background-position: 0 0, 0 4px, 4px -4px, -4px 0;
+  background-color: var(--theme-primary);
+}
+
+.bandSwatchFill {
+  position: absolute;
+  inset: 0;
+  background: var(--band-colour);
+}
+
+/* "Insert a band here": the gap between two rows, made pressable. A round
+   button on a row of its own was six rows of empty table. */
+.insertRow {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--theme-text-muted);
+  opacity: 0.4;
+  cursor: pointer;
+  transition: opacity var(--transition-fast), background-color var(--transition-fast);
+}
+
+.insertRow:hover:not(:disabled),
+.insertRow:focus-visible {
+  opacity: 1;
+  color: var(--theme-accent);
+  background: color-mix(in srgb, var(--theme-accent) 10%, transparent);
+}
+
+.insertRow:disabled {
+  opacity: 0.15;
+  cursor: default;
+}
+
+/* The two ends of the colour scale every band is painted from. */
 .scaleRow {
   display: flex;
   align-items: center;
@@ -78,245 +123,59 @@
   flex-wrap: wrap;
 }
 
-.scaleEndpoint {
+.scaleEnd {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-}
-
-.scaleLabel {
-  font-size: 0.7em;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  opacity: 0.45;
-  color: var(--theme-text-primary);
+  font-size: var(--font-xs);
+  color: var(--theme-text-muted);
 }
 
 .scaleArrow {
   color: var(--theme-text-muted);
-  opacity: 0.6;
 }
 
 .scaleReset {
   margin-left: auto;
-  background: transparent;
-  border: 1px solid color-mix(in srgb, var(--theme-text-primary) 20%, transparent);
-  color: var(--theme-text-primary);
-  border-radius: var(--radius-sm);
-  padding: 2px 10px;
-  cursor: pointer;
-  font-size: 0.85em;
 }
 
-.scaleReset:hover {
-  border-color: var(--theme-accent);
-  color: var(--theme-accent);
-}
-
-/* Non-interactive colour swatch for a gradient-locked band cell. */
-.readonlySwatch {
-  position: relative;
-  width: 36px;
-  height: 24px;
-  border-radius: var(--radius-sm);
-  border: 1px solid color-mix(in srgb, var(--theme-text-primary) 20%, transparent);
-  overflow: hidden;
-  background-image:
-    linear-gradient(45deg, #888 25%, transparent 25%),
-    linear-gradient(-45deg, #888 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, #888 75%),
-    linear-gradient(-45deg, transparent 75%, #888 75%);
-  background-size: 8px 8px;
-  background-position: 0 0, 0 4px, 4px -4px, -4px 0;
-  background-color: #ccc;
-}
-
-.readonlySwatchFill {
-  position: absolute;
-  inset: 0;
-}
-
-.bandTable {
+/* Twelve vegetation formations, each with a multiplier: a table, one column of
+   names and one of numbers, headed by the group's own title. */
+.formationTable {
   display: grid;
-  grid-template-columns: auto auto auto auto;
+  grid-template-columns: 1fr 8ch;
   align-items: center;
-  gap: 8px 12px;
-}
-
-/* Mobile: dense raster grids are an advanced setting — keep them from
-   overflowing the viewport. Scrolls horizontally rather than reflowing. */
-@media (max-width: 768px) {
-  .bandTable {
-    overflow-x: auto;
-    font-size: 0.85em;
-    gap: 6px 8px;
-  }
-
-  .row {
-    gap: 6px 8px;
-  }
-}
-
-.bandHeader {
-  font-size: 0.7em;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  opacity: 0.45;
-  color: var(--theme-text-primary);
-}
-
-.bandHeaderCell {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.lockedCell {
-  font-size: 0.9em;
-  color: var(--theme-text-muted);
-}
-
-.removeButton {
-  background: transparent;
-  border: 1px solid color-mix(in srgb, var(--theme-text-primary) 20%, transparent);
-  color: var(--theme-text-primary);
-  border-radius: var(--radius-sm);
-  padding: 2px 8px;
-  cursor: pointer;
-  font-size: 0.85em;
-}
-
-.removeButton:hover {
-  border-color: var(--theme-warning);
-  color: var(--theme-warning);
-}
-
-.addButton {
-  align-self: flex-start;
-  background: transparent;
-  border: 1px dashed color-mix(in srgb, var(--theme-accent) 50%, transparent);
-  color: var(--theme-accent);
-  border-radius: var(--radius-sm);
-  padding: 4px 10px;
-  cursor: pointer;
-  font-size: 0.85em;
-}
-
-.addButton:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--theme-accent) 10%, transparent);
-}
-
-.addButton:disabled {
-  border-color: color-mix(in srgb, var(--theme-text-muted) 40%, transparent);
-  color: var(--theme-text-muted);
-  cursor: not-allowed;
-}
-
-/* Full-width "insert a band here" control between/around band rows. */
-.insertRow {
-  grid-column: 1 / -1;
-  display: flex;
-  justify-content: center;
-}
-
-.insertButton {
-  background: transparent;
-  border: 1px dashed color-mix(in srgb, var(--theme-accent) 45%, transparent);
-  color: var(--theme-accent);
-  border-radius: var(--radius-sm);
-  padding: 0 10px;
-  line-height: 1.5;
-  cursor: pointer;
-  font-size: 0.8em;
-  opacity: 0.7;
-}
-
-.insertButton:hover:not(:disabled) {
-  opacity: 1;
-}
-
-.insertButton:disabled {
-  opacity: 0.25;
-  cursor: not-allowed;
-}
-
-/* Inline validation message for an invalid From/To entry, spanning the row. */
-.bandError {
-  grid-column: 1 / -1;
-  color: var(--theme-warning);
-  font-size: 0.78em;
-  margin-top: -2px;
-}
-
-.numberInputInvalid {
-  border-color: var(--theme-warning) !important;
-}
-
-.featureRow {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 4px 0;
-}
-
-.featureTopLine {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.featureTopLine .labelWithTooltip {
-  flex: 1;
-  min-width: 0;
-}
-
-.featureWidthLine {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding-left: 38px;
-}
-
-.featureWidthLabel {
-  font-size: 0.7em;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  opacity: 0.45;
-  color: var(--theme-text-primary);
-}
-
-.featureRow.featureRowDisabled .colourCell,
-.featureRow.featureRowDisabled .featureWidthLine {
-  opacity: 0.4;
-}
-
-.helpText {
-  font-size: 0.8em;
-  color: var(--theme-text-muted);
-  margin: 0;
-}
-
-.formationGrid {
-  display: grid;
-  grid-template-columns: minmax(180px, 1fr) auto;
-  gap: 6px 16px;
-  padding-right: 8px;
+  column-gap: 12px;
+  row-gap: 6px;
 }
 
 .formationName {
-  font-size: 0.85em;
+  font-size: var(--font-sm);
   color: var(--theme-text-primary);
 }
 
-.colourCell {
+/* The layers a format can carry. */
+.checkList {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  gap: 4px;
 }
 
-.featureIcon {
-  width: 20px;
-  height: 20px;
-  object-fit: contain;
-  display: block;
-  opacity: 0.9;
+/* Why the format the user just picked refuses what they had chosen. */
+.exportNote {
+  margin: 0;
+  font-size: var(--font-xs);
+  color: var(--theme-text-muted);
+}
+
+/* A group's header and its sentence, with the control that resets the group
+   beside them rather than under. */
+.resetLine {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.resetButton {
+  flex: none;
 }

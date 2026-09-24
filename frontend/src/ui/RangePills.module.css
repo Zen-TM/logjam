@@ -1,0 +1,20 @@
+/* A drag across the pills selects a span, so a horizontal touch drag must reach
+   them rather than pan anything; vertical still scrolls the sheet. */
+.pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  touch-action: pan-y;
+  user-select: none;
+}
+
+/* Circles: a stop is a point on an axis, not a word. A minimum, so they grow
+   with the text rather than clipping it. */
+.pills > button {
+  box-sizing: border-box;
+  min-width: var(--control-md);
+  min-height: var(--control-md);
+  aspect-ratio: 1;
+  padding: 0;
+  justify-content: center;
+}

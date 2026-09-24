@@ -1,12 +1,11 @@
-import { createContext, useCallback, useContext, useMemo, useState } from "react";
-import { Alert, Snackbar, Stack } from "@mui/material";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { Toast, type ToastSeverity } from "../../ui";
+import classes from "./ToastProvider.module.css";
 
-type Severity = "error" | "success" | "info" | "warning";
-
-type Toast = {
+type ToastEntry = {
   id: number;
   message: string;
-  severity: Severity;
+  severity: ToastSeverity;
 };
 
 type ToastContextValue = {
@@ -21,10 +20,39 @@ let nextId = 0;
 const MAX_TOASTS = 3;
 const AUTO_HIDE_MS = 6000;
 
-export function ToastProvider({ children }: { children: React.ReactNode }) {
-  const [toasts, setToasts] = useState<Toast[]>([]);
+/** One toast's timer. Paused while the pointer is over the stack or focus is in
+ *  it, so a message being read (or its Dismiss being reached by keyboard) does
+ *  not vanish mid-way (WCAG 2.2.1). */
+function TimedToast({
+  entry,
+  paused,
+  onDismiss,
+}: {
+  entry: ToastEntry;
+  paused: boolean;
+  onDismiss: (id: number) => void;
+}) {
+  const remaining = useRef(AUTO_HIDE_MS);
+  useEffect(() => {
+    if (paused) return;
+    const startedAt = Date.now();
+    const timer = window.setTimeout(() => onDismiss(entry.id), remaining.current);
+    return () => {
+      window.clearTimeout(timer);
+      remaining.current -= Date.now() - startedAt;
+    };
+  }, [paused, entry.id, onDismiss]);
+  return (
+    <Toast message={entry.message} severity={entry.severity} onDismiss={() => onDismiss(entry.id)} />
+  );
+}
 
-  const push = useCallback((message: string, severity: Severity) => {
+export function ToastProvider({ children }: { children: React.ReactNode }) {
+  const [toasts, setToasts] = useState<ToastEntry[]>([]);
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+
+  const push = useCallback((message: string, severity: ToastSeverity) => {
     setToasts((prev) => {
       const next = [...prev, { id: nextId++, message, severity }];
       return next.length > MAX_TOASTS ? next.slice(next.length - MAX_TOASTS) : next;
@@ -54,30 +82,17 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <Stack
-        spacing={1}
-        sx={{ position: "fixed", bottom: 24, right: 24, zIndex: 2000, pointerEvents: "none" }}
+      <div
+        className={classes.stack}
+        onPointerEnter={() => setHovered(true)}
+        onPointerLeave={() => setHovered(false)}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
       >
         {toasts.map((t) => (
-          <Snackbar
-            key={t.id}
-            open
-            autoHideDuration={AUTO_HIDE_MS}
-            onClose={() => dismiss(t.id)}
-            anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-            sx={{ position: "relative", bottom: "auto", right: "auto", pointerEvents: "all" }}
-          >
-            <Alert
-              severity={t.severity}
-              variant="filled"
-              onClose={() => dismiss(t.id)}
-              sx={{ minWidth: 260, maxWidth: 400 }}
-            >
-              {t.message}
-            </Alert>
-          </Snackbar>
+          <TimedToast key={t.id} entry={t} paused={hovered || focused} onDismiss={dismiss} />
         ))}
-      </Stack>
+      </div>
     </ToastContext.Provider>
   );
 }

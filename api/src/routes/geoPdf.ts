@@ -33,7 +33,7 @@ import { getEnv } from "../lib/env";
 import { getParam } from "../lib/getParam";
 import { geoPdfTitle } from "../lib/geoPdfTitle";
 import { launchFargateTask } from "../lib/ecsRunTask";
-import { assertHasStorageQuota } from "../lib/storageQuota";
+import { assertHasStorageQuota, decrementStorageUsed } from "../lib/storageQuota";
 import { assertHasEgressQuota } from "../lib/egressQuota";
 import { Prisma } from "@prisma/client";
 import { resolveUser as getUser } from "../lib/resolveUser";
@@ -360,10 +360,7 @@ router.delete(
     }
     await prisma.$transaction(async (tx) => {
       if (row.status === "completed" && row.resultBytes) {
-        await tx.user.update({
-          where: { id: user.id },
-          data: { storageUsedBytes: { decrement: row.resultBytes } },
-        });
+        await decrementStorageUsed(user.id, row.resultBytes, tx);
       }
       // Share.entityId is polymorphic, so Postgres cannot cascade. No
       // tombstone: GeoPDF jobs are not delta-synced, so a recipient's next

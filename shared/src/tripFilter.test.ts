@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  activeTripFilterCount,
   distinctTripTypes,
   filterTrips,
   hasActiveTripFilter,
   NO_TYPE_FILTER_VALUE,
+  sortTrips,
   tripMatchesFilter,
   type FilterableTrip,
 } from "./tripFilter.js";
@@ -93,6 +95,81 @@ describe("hasActiveTripFilter", () => {
     expect(hasActiveTripFilter({ dateFrom: "2026-01-01" })).toBe(true);
     expect(hasActiveTripFilter({ dateTo: "2026-01-01" })).toBe(true);
     expect(hasActiveTripFilter({ type: NO_TYPE_FILTER_VALUE })).toBe(true);
+  });
+});
+
+describe("attribute filters", () => {
+  const deep = trip({ customFields: { rope_length: 60, wetsuit: true } });
+
+  it("filters on a trip's own answers", () => {
+    expect(
+      tripMatchesFilter(deep, {
+        custom: { rope_length: { kind: "number", op: "More than", value: 30 } },
+      }),
+    ).toBe(true);
+    expect(
+      tripMatchesFilter(deep, {
+        custom: { rope_length: { kind: "number", op: "Less than", value: 30 } },
+      }),
+    ).toBe(false);
+  });
+
+  // Most trips answer most fields not at all, so the default has to be stated
+  // rather than assumed: an attribute filter narrows to trips that ANSWERED.
+  it("drops a trip that never answered, unless unknowns are included", () => {
+    const bare = trip({ customFields: {} });
+    const criteria = {
+      custom: { rope_length: { kind: "number" as const, op: "More than" as const, value: 30 } },
+    };
+    expect(tripMatchesFilter(bare, criteria)).toBe(false);
+    expect(tripMatchesFilter(bare, { ...criteria, includeUnknowns: true })).toBe(true);
+  });
+
+  it("is ignored by a caller that passes no customFields at all", () => {
+    expect(tripMatchesFilter(trip(), {})).toBe(true);
+  });
+
+  it("counts toward the active-filter tally, while includeUnknowns does not", () => {
+    expect(hasActiveTripFilter({ custom: { wetsuit: { kind: "boolean", value: true } } })).toBe(true);
+    expect(hasActiveTripFilter({ includeUnknowns: true })).toBe(false);
+    expect(
+      activeTripFilterCount({
+        search: "x",
+        dateFrom: "2026-01-01",
+        dateTo: "2026-02-01",
+        custom: { wetsuit: { kind: "boolean", value: true } },
+        includeUnknowns: true,
+      }),
+      // search + ONE date axis + one attribute. A from/to pair is one axis.
+    ).toBe(3);
+  });
+});
+
+describe("sortTrips", () => {
+  const trips = [
+    trip({ date: "2026-03-15T00:00:00.000Z", displayName: "middle" }),
+    trip({ date: "2019-01-02T00:00:00.000Z", displayName: "oldest" }),
+    trip({ date: "2026-09-01T00:00:00.000Z", displayName: "newest" }),
+  ];
+
+  it("runs newest or oldest first", () => {
+    expect(sortTrips(trips, "newest").map((t) => t.displayName)).toEqual(["newest", "middle", "oldest"]);
+    expect(sortTrips(trips, "oldest").map((t) => t.displayName)).toEqual(["oldest", "middle", "newest"]);
+  });
+
+  it("sorts a copy, so the caller's list is untouched", () => {
+    const before = [...trips];
+    sortTrips(trips, "oldest");
+    expect(trips).toEqual(before);
+  });
+
+  it("keeps trips sharing a date in the order they arrived", () => {
+    const sameDay = [
+      trip({ date: "2026-03-15T00:00:00.000Z", displayName: "first" }),
+      trip({ date: "2026-03-15T00:00:00.000Z", displayName: "second" }),
+    ];
+    expect(sortTrips(sameDay, "newest").map((t) => t.displayName)).toEqual(["first", "second"]);
+    expect(sortTrips(sameDay, "oldest").map((t) => t.displayName)).toEqual(["first", "second"]);
   });
 });
 

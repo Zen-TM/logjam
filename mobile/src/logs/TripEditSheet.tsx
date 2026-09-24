@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import {
+  ATTRIBUTE_NOUN,
   CANYONING_TRIP_TYPE,
   enforceCanyoningTag,
   formatTripPlaceNames,
@@ -24,6 +25,8 @@ import {
   Button,
   ChipPicker,
   DatePicker,
+  ErrorBanner,
+  FieldError,
   Row,
   SectionHeader,
   TextField,
@@ -32,7 +35,6 @@ import {
   type ChipOption,
 } from "../ui";
 import {
-  ATTRIBUTE_NOUN,
   CustomFieldList,
   useCustomFieldForm,
 } from "../customFields/CustomFieldsEditor";
@@ -44,8 +46,8 @@ import {
   withoutClearedFields,
 } from "../customFields/fieldValueCoercion";
 import { useFieldDefs } from "../customFields/useFieldDefs";
-import { formatDateKey } from "./logbook";
-import { tripTypeLabel, tripTypeMeta } from "./tripTypeMeta";
+import { formatDateKey } from "@logjam/shared";
+import { primaryTripType, tripTypeLabel, tripTypeMeta } from "./tripTypeMeta";
 
 /**
  * Log or edit a trip — one sheet for both, because the fields are identical and
@@ -79,7 +81,6 @@ export function TripEditSheet({
   initialPlaces,
   existingTypes,
   onSaved,
-  onFailed,
   online,
 }: {
   visible: boolean;
@@ -96,7 +97,6 @@ export function TripEditSheet({
   /** Types across the user's own history, unioned with the seed vocabulary. */
   existingTypes: string[];
   onSaved: (message: string) => void;
-  onFailed: (message: string) => void;
   /**
    * Trip edits queue offline, but field DEFINITIONS are an account-level
    * preference that needs the network — so that one door is closed with a
@@ -115,6 +115,11 @@ export function TripEditSheet({
   const [saving, setSaving] = useState(false);
   const [placeSearch, setPlaceSearch] = useState("");
   const [dateTarget, setDateTarget] = useState<DateTarget>({ kind: "trip" });
+  // Place-cap refusal (rule: a tap a picker refuses is that picker's
+  // FieldError, not a toast) and a failed save (rule: a failure while the form
+  // stays open is the banner above Save, not a toast either).
+  const [placesError, setPlacesError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   // Custom-field VALUES are held as strings while editing (like the web form)
   // and coerced to their declared type on save.
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
@@ -200,6 +205,8 @@ export function TripEditSheet({
           .map(([key]) => key),
       ),
     );
+    setPlacesError(null);
+    setSaveError(null);
     // Deliberately keyed on the sheet OPENING — the trip's ID, not the object.
     // A detail screen hands this a fresh object on every mirror change (a sync
     // pull, an upload tick, an inbox refresh), and re-seeding on that wiped
@@ -225,6 +232,12 @@ export function TripEditSheet({
   useEffect(() => {
     setTypes((prev) => enforceCanyoningTag(prev, linkedCanyon));
   }, [linkedCanyon]);
+
+  // The place-cap error belongs to the picker mode; leaving it clears it, same
+  // as any other field's error clearing when the user moves on.
+  useEffect(() => {
+    if (mode !== "places") setPlacesError(null);
+  }, [mode]);
 
   const typeOptions: ChipOption[] = useMemo(() => {
     const vocabulary = [
@@ -263,18 +276,20 @@ export function TripEditSheet({
 
   const togglePlace = useCallback(
     (place: MirrorPlace) => {
-      setSelected((current) => {
-        if (current.some((link) => link.id === place.id)) {
-          return current.filter((link) => link.id !== place.id);
-        }
-        if (current.length >= MAX_PLACES_PER_TRIP) {
-          onFailed(`A trip can have at most ${MAX_PLACES_PER_TRIP} places.`);
-          return current;
-        }
-        return [...current, { id: place.id, name: place.name }];
-      });
+      if (selected.some((link) => link.id === place.id)) {
+        // Deselecting makes room again — same "clears on edit" rule a field
+        // error follows.
+        setPlacesError(null);
+        setSelected(selected.filter((link) => link.id !== place.id));
+        return;
+      }
+      if (selected.length >= MAX_PLACES_PER_TRIP) {
+        setPlacesError(`A trip can have at most ${MAX_PLACES_PER_TRIP} places.`);
+        return;
+      }
+      setSelected([...selected, { id: place.id, name: place.name }]);
     },
-    [onFailed],
+    [selected],
   );
 
   const setFieldValue = useCallback(
@@ -287,6 +302,7 @@ export function TripEditSheet({
 
   const save = useCallback(async () => {
     setSaving(true);
+    setSaveError(null);
     const trimmedName = displayName.trim();
     const trimmedNotes = notes.trim();
     // The canyoning tag a linked canyon implies — applied here so the chips the
@@ -346,9 +362,11 @@ export function TripEditSheet({
       onClose();
     } catch (err) {
       // The message is ours, not the error's: an error string could carry a
-      // place name into a toast (and from there a screenshot).
+      // place name into a banner (and from there a screenshot). The sheet
+      // stays open on a failed save, so this reports in its own banner above
+      // Save rather than a toast, which is drawn under the sheet.
       console.error(err);
-      onFailed("Couldn't save this trip.");
+      setSaveError("Couldn't save this trip.");
     } finally {
       setSaving(false);
     }
@@ -360,7 +378,6 @@ export function TripEditSheet({
     linkedCanyon,
     notes,
     onClose,
-    onFailed,
     onSaved,
     selected,
     trip,
@@ -375,7 +392,6 @@ export function TripEditSheet({
       setCustomFieldDefs(next);
       onSaved(message);
     },
-    onFailed,
     onDone: () => setMode("fields"),
   });
 
@@ -421,12 +437,17 @@ export function TripEditSheet({
       // that scrolls out of reach leaves the handle as the only exit.
       footer={
         mode === "form" ? (
-          <Button
-            label={editing ? "Save changes" : "Log trip"}
-            icon="check"
-            loading={saving}
-            onPress={() => void save()}
-          />
+          <View style={styles.footerStack}>
+            {/* Server refusal / failure while the sheet is still open — the
+                banner sits directly above Save, never a toast (DESIGN.md §8). */}
+            {saveError ? <ErrorBanner message={saveError} /> : null}
+            <Button
+              label={editing ? "Save changes" : "Log trip"}
+              icon="check"
+              loading={saving}
+              onPress={() => void save()}
+            />
+          </View>
         ) : mode === "fieldForm" ? (
           fieldForm.footer
         ) : mode === "fields" ? (
@@ -493,13 +514,16 @@ export function TripEditSheet({
       {mode === "fieldForm" ? fieldForm.body : null}
 
       {mode === "places" ? (
-        <PlacePicker
-          places={places}
-          selected={selected}
-          search={placeSearch}
-          onSearch={setPlaceSearch}
-          onToggle={togglePlace}
-        />
+        <>
+          <PlacePicker
+            places={places}
+            selected={selected}
+            search={placeSearch}
+            onSearch={setPlaceSearch}
+            onToggle={togglePlace}
+          />
+          <FieldError message={placesError} />
+        </>
       ) : null}
 
       {mode === "form" ? (
@@ -544,7 +568,14 @@ export function TripEditSheet({
             onAdd={addType}
             addPlaceholder="Other"
             disabledValues={linkedCanyon ? CANYONING_LOCKED : undefined}
+            // The chips no longer move to show which type leads, so the one
+            // that picks the trip's glyph and hue is starred — only once there
+            // is a choice between two, when it stops being obvious.
+            primaryValue={types.length > 1 ? (primaryTripType(types) ?? undefined) : undefined}
           />
+          {types.length > 1 ? (
+            <Text style={styles.hint}>The starred type sets the trip’s icon.</Text>
+          ) : null}
 
           <View style={styles.field}>
             <TextField
@@ -693,6 +724,7 @@ function PlacePicker({
 
 const styles = StyleSheet.create({
   form: { gap: spacing(1) },
+  footerStack: { gap: spacing(1) },
   modeBody: { gap: spacing(2) },
   pickerBody: { gap: spacing(1) },
   field: { gap: spacing(0.5) },

@@ -6,6 +6,8 @@ import {
   pickNextTrackColor,
   pickTrackColorByIndex,
   TRACK_COLORS,
+  TRACK_COLOR_NAMES,
+  trackColorName,
   IMAGE_MIME_TYPES,
   VIDEO_MIME_TYPES,
   TRACK_MIME_TYPES,
@@ -106,5 +108,42 @@ describe("pickNextTrackColor", () => {
     // All colours used twice
     const used = [...TRACK_COLORS, ...TRACK_COLORS];
     expect(pickNextTrackColor(used)).toBe(TRACK_COLORS[0]);
+  });
+});
+
+describe("trackColorName", () => {
+  it("names every colour in the palette", () => {
+    for (const color of TRACK_COLORS) {
+      const name = trackColorName(color);
+      expect(name).not.toBe(color);
+      expect(name).toMatch(/^[A-Z][a-z]+$/);
+    }
+  });
+
+  // The names are what a user hears; two swatches answering to one word would
+  // make the picker unusable by voice or screen reader.
+  it("gives each colour a distinct name", () => {
+    const names = TRACK_COLORS.map(trackColorName);
+    expect(new Set(names).size).toBe(TRACK_COLORS.length);
+  });
+
+  // The declaration and the palette are two lists that must agree.
+  it("names the palette and nothing else", () => {
+    expect(Object.keys(TRACK_COLOR_NAMES).sort()).toEqual([...TRACK_COLORS].sort());
+  });
+
+  it("is case-insensitive, since a stored hex may be upper case", () => {
+    expect(trackColorName("#E6194B")).toBe("Red");
+  });
+
+  // Unhelpful beats wrong: a route drawn before the palette existed carries an
+  // arbitrary hex, and inventing a word for it would hide which colour it is.
+  it("hands back an off-palette colour as its hex", () => {
+    expect(trackColorName("#123456")).toBe("#123456");
+  });
+
+  it("says so when there is no colour at all", () => {
+    expect(trackColorName(null)).toBe("No colour");
+    expect(trackColorName(undefined)).toBe("No colour");
   });
 });
