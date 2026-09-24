@@ -187,6 +187,8 @@ const baseSchema = z.object({
   // only by the api-integration job in .github/workflows/ci.yml; no dev value,
   // so it is deliberately absent from the env.local Terraform template.
   RATE_LIMIT_GLOBAL_MAX: z.coerce.number().int().positive().optional(),
+  // Same contract for the per-user write limiter (userPatchLimitMax).
+  RATE_LIMIT_USER_PATCH_MAX: z.coerce.number().int().positive().optional(),
   // Job id for the one-shot GeoPDF worker container (worker/geoPdfWorker.ts
   // CLI entrypoint); unset in the API process.
   GEO_PDF_JOB_ID: z.string().optional(),

@@ -646,8 +646,11 @@ describe("sync push — a definition keeps a one-sided bound", () => {
     expect(def!.min).toBe(1);
     expect(def!.max ?? null).toBeNull();
 
-    await request(API_URL)
+    // Checked, because an unchecked cleanup that 429s leaves this definition in
+    // alice's list and customFields.test's exact-list assertion fails instead.
+    const removed = await request(API_URL)
       .delete(`/custom-fields/trip-log/${key}`)
       .set(as(ALICE_SUB));
+    expect(removed.status, JSON.stringify(removed.body)).toBe(200);
   });
 });

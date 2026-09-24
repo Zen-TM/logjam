@@ -44,12 +44,29 @@ const GLOBAL_MAX_DEFAULT = 300;
 // process.env (not getEnv()) because this module is imported while index.ts is
 // still wiring up; the var is declared in lib/env.ts so it is still validated
 // and listed at boot. Covered by rateLimit.unit.test.ts.
+function ciLimitMax(
+  name: "RATE_LIMIT_GLOBAL_MAX" | "RATE_LIMIT_USER_PATCH_MAX",
+  fallback: number,
+  env: NodeJS.ProcessEnv,
+): number {
+  if (env.NODE_ENV === "production") return fallback;
+  const override = Number(env[name]);
+  return Number.isInteger(override) && override > 0 ? override : fallback;
+}
+
 export function globalLimitMax(env: NodeJS.ProcessEnv = process.env): number {
-  if (env.NODE_ENV === "production") return GLOBAL_MAX_DEFAULT;
-  const override = Number(env.RATE_LIMIT_GLOBAL_MAX);
-  return Number.isInteger(override) && override > 0
-    ? override
-    : GLOBAL_MAX_DEFAULT;
+  return ciLimitMax("RATE_LIMIT_GLOBAL_MAX", GLOBAL_MAX_DEFAULT, env);
+}
+
+const USER_PATCH_MAX_DEFAULT = 30;
+
+// The same CI headroom for userPatchLimiter, which is per USER, so every
+// integration file acting as alice shares one 30-write window: a write-heavy
+// file (customFields, placeTypes) left it empty and the NEXT file's first
+// PATCH /users/me 429'd, failing as an assertion about users. The per-file
+// retry wrappers only protect the file that has them. Same fail-closed rule.
+export function userPatchLimitMax(env: NodeJS.ProcessEnv = process.env): number {
+  return ciLimitMax("RATE_LIMIT_USER_PATCH_MAX", USER_PATCH_MAX_DEFAULT, env);
 }
 
 export const globalLimiter = rateLimit({
@@ -100,7 +117,7 @@ export const elevationLimiter = rateLimit({
 
 export const userPatchLimiter = rateLimit({
   windowMs: 60_000,
-  max: 30,
+  max: userPatchLimitMax(),
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: userOrIpKey,

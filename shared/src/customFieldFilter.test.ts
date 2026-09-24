@@ -134,9 +134,14 @@ describe("passesDateRangeFilter", () => {
   });
 
   it("is inclusive of a bound's whole day", () => {
-    expect(passesDateRangeFilter("2026-01-15T09:00:00+11:00", ["2026-01-15", null], false)).toBe(true);
-    expect(passesDateRangeFilter("2026-01-15T23:59:00+11:00", [null, "2026-01-15"], false)).toBe(true);
-    expect(passesDateRangeFilter("2026-01-14T23:59:00+11:00", ["2026-01-15", null], false)).toBe(false);
+    // A bound is a LOCAL calendar day, so the values are local times too. They
+    // were written as +11:00 literals, which only meant "that day" in Sydney
+    // and failed in CI's UTC.
+    const local = (day: number, hour: number, minute: number) =>
+      new Date(2026, 0, day, hour, minute).toISOString();
+    expect(passesDateRangeFilter(local(15, 9, 0), ["2026-01-15", null], false)).toBe(true);
+    expect(passesDateRangeFilter(local(15, 23, 59), [null, "2026-01-15"], false)).toBe(true);
+    expect(passesDateRangeFilter(local(14, 23, 59), ["2026-01-15", null], false)).toBe(false);
   });
 
   it("defers a missing value to includeUnknowns", () => {

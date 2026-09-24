@@ -157,6 +157,9 @@ jobs:
       # NODE_ENV=production, so prod behaviour is unchanged. Without it the run
       # still passes but burns minutes in _rateLimitGate.ts's window sleeps.
       RATE_LIMIT_GLOBAL_MAX: 1000000
+      # Same for the per-USER write limiter (30/60s): every file acting as alice
+      # shares it, so a write-heavy file left the next one's first PATCH a 429.
+      RATE_LIMIT_USER_PATCH_MAX: 1000000
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -271,7 +274,10 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 20
+          # 22, not 20: outboxPurge.test.ts runs the real mirror schema through
+          # node:sqlite, which Node ships unflagged from 22.13. On 20 the import
+          # fails lint (import/no-unresolved) before the test can fail to load.
+          node-version: 22
           cache: npm
           cache-dependency-path: mobile/package-lock.json
       # mobile depends on shared via file:../shared and imports from shared/dist

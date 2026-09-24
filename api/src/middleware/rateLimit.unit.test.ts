@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { globalLimitMax } from "./rateLimit";
+import { globalLimitMax, userPatchLimitMax } from "./rateLimit";
 
 // The override exists so CI's integration run (one shared per-IP bucket, ~250
 // tests) isn't throttled. The property that matters is that it is inert in
@@ -26,5 +26,17 @@ describe("globalLimitMax", () => {
     for (const RATE_LIMIT_GLOBAL_MAX of ["", "abc", "0", "-5", "1.5", "Infinity"]) {
       expect(globalLimitMax({ RATE_LIMIT_GLOBAL_MAX })).toBe(300);
     }
+  });
+});
+
+describe("userPatchLimitMax", () => {
+  it("defaults to 30, takes the CI override, and ignores it in production", () => {
+    expect(userPatchLimitMax({})).toBe(30);
+    expect(
+      userPatchLimitMax({ NODE_ENV: "development", RATE_LIMIT_USER_PATCH_MAX: "100000" }),
+    ).toBe(100000);
+    expect(
+      userPatchLimitMax({ NODE_ENV: "production", RATE_LIMIT_USER_PATCH_MAX: "100000" }),
+    ).toBe(30);
   });
 });
