@@ -64,7 +64,6 @@ import AddCustomFieldForm from "./AddCustomFieldForm";
 import CustomFieldInput, { customFieldValueError } from "./CustomFieldInput";
 import DeleteCustomFieldDialog from "./DeleteCustomFieldDialog";
 import ConfirmDialog from "./ConfirmDialog";
-import { getFieldValue as getFieldValueFor } from "./customFieldValues";
 import classes from "./TripLogDialog.module.css";
 
 // True when a date-only string (YYYY-MM-DD) is after today. Both sides are
@@ -612,7 +611,7 @@ function TripLogDialog({
   }
 
   function getFieldValue(key: string): string {
-    return getFieldValueFor(fieldValues, customFieldDefs, key);
+    return fieldValues[key] ?? "";
   }
 
   function setFieldValue(key: string, value: string) {

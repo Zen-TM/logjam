@@ -37,7 +37,6 @@ import ConfirmDialog from "./ConfirmDialog";
 import DeleteCustomFieldDialog from "./DeleteCustomFieldDialog";
 import MediaUpload from "../media/MediaUpload";
 import MediaGallery from "../media/MediaGallery";
-import { getFieldValue as getFieldValueFor } from "./customFieldValues";
 import { placeTypeLucideIcon } from "../sidebar/panels/placeTypeIcon";
 import {
   Button,
@@ -477,7 +476,7 @@ function PlaceDialog({
   }
 
   function getFieldValue(key: string): string {
-    return getFieldValueFor(fieldValues, customFieldDefs, key);
+    return fieldValues[key] ?? "";
   }
 
   function setFieldValue(key: string, value: string) {

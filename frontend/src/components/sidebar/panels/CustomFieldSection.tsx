@@ -6,6 +6,7 @@ import {
   CUSTOM_FIELD_TYPES,
   customFieldDisplayLabel,
   isSystemFieldDef,
+  tripTypeLabel,
   type ScopedCustomFieldDef,
   type TripLogCustomFieldDef,
   type TripLogCustomFieldType,
@@ -207,13 +208,17 @@ function CustomFieldSection({
   );
 }
 
-/** What kind of answer it takes, and — for a place attribute — which types ask
- *  it. Scope is the half of a definition a user cannot see from the form it
- *  produces, so the list says it. */
+/** What kind of answer it takes, and which types ask it — place types for a
+ *  place attribute, trip tags for a trip one. Scope is the half of a definition
+ *  a user cannot see from the form it produces, so the list says it. Logjam
+ *  Web cannot SET a trip attribute's tags yet (Logjam GPS can), which is all
+ *  the more reason to say what they are. */
 function rowSubtitle(def: ScopedCustomFieldDef, placeTypes?: TPlaceType[]): string {
   const type = customFieldTypeName(def.type);
-  if (!placeTypes) return type;
   if (def.appliesToAllTypes) return `${type} · all types`;
+  if (!placeTypes) {
+    return def.tripTypes.length > 0 ? `${type} · ${def.tripTypes.map(tripTypeLabel).join(", ")}` : `${type} · no types`;
+  }
   const names = placeTypes
     .filter((placeType) => def.placeTypeIds.includes(placeType.id))
     .map((placeType) => placeType.name);
