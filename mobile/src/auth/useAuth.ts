@@ -52,6 +52,8 @@ import {
 import {
   clearLocalIdentity,
   readLocalIdentity,
+  readPreviousIdentity,
+  signInNeedsWipe,
   writeLocalIdentity,
 } from "./localIdentity";
 
@@ -210,42 +212,49 @@ export function useAuth() {
         const session = await fetchAuthSessionWithTimeout();
         const idToken = session.tokens?.idToken?.toString();
         const sub = idToken ? decodeSubFromIdToken(idToken) : null;
-        if (sub) {
-          const previous = await readLocalIdentity().catch(() => null);
-          if (previous && previous.sub !== sub) {
-            // Someone else's places, tracks, photos and downloaded regions
-            // must not be visible to — or flushed under the token of — the
-            // account now signing in. Everything goes before the new identity
-            // lands. Note a GUEST reaches here with `previous === null` and is
-            // therefore untouched: linking keeps the local data, by design.
-            //
-            // The push binding goes first, while the DEPARTING user's session
-            // is still what apiFetch will send: without this the device stayed
-            // bound to their account, and re-binding depended entirely on the
-            // arriving user granting notifications — decline the prompt, and
-            // user A's notifications keep landing on this phone. (Sign-out has
-            // always unregistered; this branch never did.)
-            await unregisterPushNotifications();
-            const wiped = await wipeAllLocalData();
-            if (wiped.failed.length > 0) {
-              // Fail loudly rather than sign in over a half-cleared device:
-              // the alternative is silently merging two people's data.
-              //
-              // Amplify has ALREADY signed in by this point, so backing out
-              // means revoking that session too. Without this, the next cold
-              // start finds a valid session, no new local identity, and lands
-              // the new user straight in the old user's data — the exact leak
-              // this branch exists to prevent.
-              await amplifySignOut().catch(console.error);
-              setError(
-                `Couldn't clear the previous account's ${wiped.failed.join(" and ")} from this phone, so sign-in was cancelled.`,
-              );
-              return false;
-            }
-            await clearLocalIdentity();
-          }
-          await writeLocalIdentity({ sub, username });
+        if (!sub) {
+          // No sub, no way to tell whose data is on this phone — and no
+          // identity to persist, so the next sign-in would skip this check as
+          // well. This used to fall through and sign in blind.
+          await amplifySignOut().catch(console.error);
+          setError("Sign-in didn't return an account identity, so it was cancelled. Please try again.");
+          return false;
         }
+        const previous = await readPreviousIdentity();
+        if (signInNeedsWipe(previous, sub)) {
+          // Someone else's places, tracks, photos and downloaded regions
+          // must not be visible to — or flushed under the token of — the
+          // account now signing in. Everything goes before the new identity
+          // lands. A GUEST has `previous === null` and is untouched: linking
+          // keeps the local data, by design. An unreadable record is NOT a
+          // guest — see `signInNeedsWipe`.
+          //
+          // The push binding goes first, while the DEPARTING user's session
+          // is still what apiFetch will send: without this the device stayed
+          // bound to their account, and re-binding depended entirely on the
+          // arriving user granting notifications — decline the prompt, and
+          // user A's notifications keep landing on this phone. (Sign-out has
+          // always unregistered; this branch never did.)
+          await unregisterPushNotifications();
+          const wiped = await wipeAllLocalData();
+          if (wiped.failed.length > 0) {
+            // Fail loudly rather than sign in over a half-cleared device:
+            // the alternative is silently merging two people's data.
+            //
+            // Amplify has ALREADY signed in by this point, so backing out
+            // means revoking that session too. Without this, the next cold
+            // start finds a valid session, no new local identity, and lands
+            // the new user straight in the old user's data — the exact leak
+            // this branch exists to prevent.
+            await amplifySignOut().catch(console.error);
+            setError(
+              `Couldn't clear the previous account's ${wiped.failed.join(" and ")} from this phone, so sign-in was cancelled.`,
+            );
+            return false;
+          }
+          await clearLocalIdentity();
+        }
+        await writeLocalIdentity({ sub, username });
         // This install has an account now — never show the entry chooser again.
         writeEntryChoice("account");
         // Await provisioning before flipping to authenticated (GET /users/me

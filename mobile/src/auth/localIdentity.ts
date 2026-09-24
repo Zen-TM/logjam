@@ -39,3 +39,30 @@ export async function writeLocalIdentity(identity: LocalIdentity): Promise<void>
 export async function clearLocalIdentity(): Promise<void> {
   await SecureStore.deleteItemAsync(IDENTITY_KEY);
 }
+
+/** `readLocalIdentity` as a sign-in reads it: a corrupt record is a distinct
+ *  answer, never folded into "nobody". */
+export type PreviousIdentity = LocalIdentity | null | "unreadable";
+
+export async function readPreviousIdentity(): Promise<PreviousIdentity> {
+  try {
+    return await readLocalIdentity();
+  } catch (err) {
+    console.error(err);
+    return "unreadable";
+  }
+}
+
+/**
+ * Must signing in as `sub` wipe the data already on this phone?
+ *
+ * `null` is nobody — a guest linking an account keeps what they made, by
+ * design. An UNREADABLE record cannot prove the data is this account's, so it
+ * is treated as someone else's: the wipe costs at most this user's own unsent
+ * changes, where keeping it hands a stranger's places to whoever signs in. The
+ * sign-in used to `.catch(() => null)` here, which turned a corrupt record into
+ * a guest and skipped the wipe entirely.
+ */
+export function signInNeedsWipe(previous: PreviousIdentity, sub: string): boolean {
+  return previous === "unreadable" || (previous !== null && previous.sub !== sub);
+}

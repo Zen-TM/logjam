@@ -358,6 +358,25 @@ export async function wipeAllSyncData(): Promise<void> {
   notifyMirrorChanged();
 }
 
+/**
+ * Empty the MIRROR (every server-derived table) and its cursor, so the next
+ * pull rebuilds it from zero. The `local` tables are spared: the outbox is
+ * unsent work, not a copy of anything. For a mirror that is wrong rather than
+ * one that belongs to someone else — that case is `wipeAllSyncData`.
+ */
+export async function clearMirror(): Promise<void> {
+  const db = await getSyncDb();
+  await withSyncTransaction(db, async () => {
+    for (const table of MIRROR_TABLES) {
+      await db.runAsync(`DELETE FROM ${table.name}`);
+    }
+    await db.runAsync(
+      "DELETE FROM sync_state WHERE key IN ('cursor', 'lastSyncAt')",
+    );
+  });
+  notifyMirrorChanged();
+}
+
 /** Count of unflushed local changes — drives the sign-out confirmation. */
 export async function countUnsyncedChanges(): Promise<number> {
   const db = await getSyncDb();

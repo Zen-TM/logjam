@@ -1242,7 +1242,12 @@ note is mandatory. Non-negotiables:
   would silently disarm a lock the owner turned on. Guest mode made this the
   privacy boundary between two users of one phone: don't add a wipe anywhere
   else, extend this one. (A guest *linking* keeps their data — they have no
-  local identity, so the different-user comparison never fires.)
+  local identity, so the different-user comparison never fires. An UNREADABLE
+  identity record is not a guest and wipes; a sign-in with no decodable `sub`
+  is refused. `signInNeedsWipe` in `auth/localIdentity.ts` is the decision,
+  `auth/localIdentity.test.ts` the guard.) The sync engine's persisted user id
+  is re-checked against `/users/me` every cycle the server can answer, and a
+  mismatch rebuilds the mirror (`syncEngine.test.ts`, "persisted user id").
 - **A dependency's manifest can add permissions you never declared.**
   `expo-sensors` declares `ACTIVITY_RECOGNITION` for a Pedometer this app never
   uses, and manifest merging put it in every build from the day the compass

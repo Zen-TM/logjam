@@ -17,6 +17,7 @@ import { sweepTrackBackups } from "../tracks/trackBackup";
 import { setMutationSyncHandler } from "./mediaSyncBridge";
 import {
   APPLY_FAILED_KEY,
+  clearMirror,
   clearSyncStateValue,
   getSyncStateValue,
   setSyncStateValue,
@@ -75,14 +76,36 @@ function setStatus(next: Partial<SyncStatus>): void {
 }
 
 // The mirror needs the account's user id to shape share rows (direction /
-// counterpart). Resolved online once and persisted, so offline cycles (and
-// offline app starts) never block on /users/me.
+// counterpart). Persisted, so an offline cycle never blocks on /users/me — but
+// re-checked every cycle the server can answer (apiFetch caches the record for
+// a minute, so this is not a request per cycle). It used to be resolved once
+// and trusted forever, and an id that no longer matched the signed-in account
+// silently inverted every share: outgoing stored as 'in', incoming as 'out',
+// every counterpart the wrong person (found 2026-09-05 on a fake-auth Pixel,
+// where changing identity skips the sign-in wipe).
+//
+// A mismatch rebuilds the MIRROR, which is derived from the id and re-pulls
+// from zero. The outbox stays: it is unsent work, and an account switch that
+// should have taken it goes through wipeAllLocalData at sign-in, not here.
 async function resolveCurrentUserId(): Promise<string> {
   const persisted = await getSyncStateValue("userId");
-  if (persisted) return persisted;
-  const user = await fetchCurrentUser();
-  await setSyncStateValue("userId", user.id);
-  return user.id;
+  let current: string;
+  try {
+    current = (await fetchCurrentUser()).id;
+  } catch (err) {
+    // Offline or unauthorised: the push and pull fail the same way, so the
+    // persisted id only has to carry the cycle as far as that failure.
+    if (persisted) return persisted;
+    throw err;
+  }
+  if (persisted !== current) {
+    if (persisted) {
+      console.warn("sync: persisted user id did not match the account; rebuilding the mirror");
+      await clearMirror();
+    }
+    await setSyncStateValue("userId", current);
+  }
+  return current;
 }
 
 // One cycle at a time; a trigger during a running cycle queues exactly one

@@ -34,8 +34,14 @@ vi.mock("react-native", () => ({
   },
 }));
 vi.mock("../map/connectivity", () => ({ subscribeReconnect: () => () => {} }));
+// Who the server says is signed in. `null` = /users/me fails (offline).
+let serverUserId: string | null = "user-1";
+let mirrorClears = 0;
 vi.mock("../api/queries", () => ({
-  fetchCurrentUser: () => Promise.resolve({ id: "user-1" }),
+  fetchCurrentUser: () =>
+    serverUserId === null
+      ? Promise.reject(new Error("Network request failed"))
+      : Promise.resolve({ id: serverUserId }),
 }));
 vi.mock("../offline/networkPolicy", () => ({ canRunNow: () => Promise.resolve(true) }));
 // The flush reports what it left behind; a pass with nothing retrying is the
@@ -59,6 +65,10 @@ vi.mock("./deltaPull", () => ({
 }));
 vi.mock("./syncDb", () => ({
   APPLY_FAILED_KEY: "applyFailedAt",
+  clearMirror: () => {
+    mirrorClears += 1;
+    return Promise.resolve();
+  },
   getSyncStateValue: (key: string) => Promise.resolve(stateWrites[key] ?? "user-1"),
   setSyncStateValue: (key: string, value: string) => {
     stateWrites[key] = value;
@@ -84,6 +94,9 @@ beforeEach(() => {
   pullError = null;
   pulls = 0;
   delete stateWrites[APPLY_FAILED_KEY];
+  serverUserId = "user-1";
+  mirrorClears = 0;
+  stateWrites.userId = "user-1";
 });
 
 afterEach(() => {
@@ -201,5 +214,37 @@ describe("stopping", () => {
     const before = pulls;
     await vi.advanceTimersByTimeAsync(600_000);
     expect(pulls).toBe(before);
+  });
+});
+
+// The persisted user id shapes every share row's direction and counterpart. It
+// was resolved once and trusted forever, so a stale one (found on a fake-auth
+// Pixel holding bob's id while signed in as alice) inverted every share.
+describe("persisted user id", () => {
+  it("rebuilds the mirror when the account no longer matches it", async () => {
+    serverUserId = "user-2";
+    const stop = registerSyncTriggers();
+    await settle();
+    expect(mirrorClears).toBe(1);
+    expect(stateWrites.userId).toBe("user-2");
+    expect(pulls).toBeGreaterThan(0);
+    stop();
+  });
+
+  it("leaves a matching mirror alone", async () => {
+    const stop = registerSyncTriggers();
+    await settle();
+    expect(mirrorClears).toBe(0);
+    expect(stateWrites.userId).toBe("user-1");
+    stop();
+  });
+
+  it("keeps the persisted id when the server cannot answer", async () => {
+    serverUserId = null;
+    const stop = registerSyncTriggers();
+    await settle();
+    expect(mirrorClears).toBe(0);
+    expect(stateWrites.userId).toBe("user-1");
+    stop();
   });
 });
