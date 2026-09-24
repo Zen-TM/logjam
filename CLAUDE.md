@@ -125,7 +125,9 @@ Additive only. Never silently delete existing conventions — flag stale entries
 
 ## Testing
 
-Integration suites (`api` `npm test`, topo Docker runbooks) are **NOT** in CI — run them locally before committing changes they cover. Everything else (unit suites, lint, typecheck) gates PRs via `.github/workflows/ci.yml`.
+Everything gates PRs via `.github/workflows/ci.yml` — unit suites, lint, typecheck, AND the `api` integration suite (`api-integration`: Postgres + MiniStack + a live fake-auth API; since 2026-08-29) with topo runbook §1 (`test_status_guard_db.py` against that job's seeded DB). Only topo runbook §2 (full worker end-to-end: worker image + a LiDAR fixture) is still manual — run it before committing worker changes it covers.
+
+**Migrations are tested as an UPGRADE, not only from empty.** `migrations` applies them to an empty DB; `migration-upgrade` (`scripts/migration-upgrade-test.sh seed`) migrates + seeds at `origin/main` — what prod runs — adds edge-case fixtures, upgrades to HEAD, then asserts the data came across (`api/prisma/upgrade-check/{baseline,verify}.sql`) and that the result has zero drift from `schema.prisma`. An empty DB cannot fail a backfill or a `SET NOT NULL`; its first run found drift the empty job never could. The data checks are RELEASE-SPECIFIC (they gate themselves off once the base schema moves on): a release whose migrations move data replaces them. Before a prod release, rehearse on a restored snapshot copy with `existing` mode (`UPGRADE_TARGET_IS_A_COPY=yes`).
 
 ### How to run
 
@@ -135,6 +137,7 @@ Integration suites (`api` `npm test`, topo Docker runbooks) are **NOT** in CI �
 | `api` unit | `cd api && npm run test:unit` (vitest, `*.unit.test.ts`, Prisma/AWS mocked) | nothing — no server/DB |
 | `api` integration | `cd api && npm test` (vitest, `src/__tests__/`) | running local API (`make dev` first) |
 | `frontend` unit | `cd frontend && npm test` (vitest, jsdom) | nothing |
+| migration upgrade | `DB_*=… scripts/migration-upgrade-test.sh seed` | an EMPTY Postgres (refuses one with tables); `npm ci` in `api/` |
 | `topo` unit | `cd topo && python -m unittest discover -s tests` | host runs pure logic; GDAL/PDAL paths skip on host, run in worker Docker image |
 
 Two kinds of `api` test, kept separate: `*.unit.test.ts` (colocated with source, no infra) vs `src/__tests__/*.test.ts` (integration, hits live API). `npm run test:unit` must pass with **no** `make dev` running — if it needs a server, it's misfiled.

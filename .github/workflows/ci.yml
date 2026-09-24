@@ -220,6 +220,20 @@ jobs:
       - name: Integration tests
         working-directory: api
         run: npm test
+      # topo/tests/INTEGRATION.md §1: the ARCH-001 status guard against a real
+      # Postgres. Rides on this job because it needs exactly this seeded DB
+      # (it acts as the seeded alice). Only psycopg2 has to be real; the rest
+      # of worker.py's native imports stay stubbed by tests/_native_stub.py.
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - name: Topo status guard against real Postgres
+        working-directory: topo
+        env:
+          RUN_DB_IT: "1"
+        run: |
+          pip install $(grep -iE '^psycopg2-binary' requirements.txt)
+          python -m unittest tests.test_status_guard_db -v
       - name: API log (on failure)
         if: failure()
         run: cat "$RUNNER_TEMP/api.log"
@@ -291,9 +305,9 @@ jobs:
   migrations:
     # Apply every committed migration to a fresh ephemeral Postgres, so a
     # malformed / mis-ordered / non-idempotent migration fails CI at PR time
-    # instead of at prod container boot (`boot.ts` runs `prisma migrate deploy`
-    # in the request-serving process — a bad migration there is an outage, not
-    # a blocked merge). NOTE: runs as the Postgres superuser, so it does NOT
+    # instead of in deploy-api.yml's pre-deploy migrate task (a bad migration
+    # there aborts a prod deploy). An EMPTY database cannot fail a backfill;
+    # `migration-upgrade` below covers existing rows. NOTE: runs as the Postgres superuser, so it does NOT
     # catch failures specific to the least-priv `logjam_app` role (a missing
     # grant) — that half remains a prod-boot risk (see ARCH-001 half B).
     runs-on: ubuntu-latest
@@ -335,6 +349,51 @@ jobs:
           DB_USER: logjam
           DB_PASSWORD: logjam
         run: npx prisma migrate deploy
+
+  migration-upgrade:
+    # The migrations prod will actually run: from origin/main's schema, seeded
+    # plus edge-case fixtures, up to this commit. Then asserts the data came
+    # across (api/prisma/upgrade-check/) and that the upgraded DB matches
+    # schema.prisma exactly. Its first run found real drift the empty-DB job
+    # could not: media.updated_at carried a DB default schema.prisma omitted.
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: logjam
+          POSTGRES_PASSWORD: logjam
+          POSTGRES_DB: logjam
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U logjam"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_NAME: logjam
+      DB_USER: logjam
+      DB_PASSWORD: logjam
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Fetch the base (what prod runs)
+        run: git fetch --no-tags --depth=1 origin main
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: api/package-lock.json
+      - name: Build shared
+        working-directory: shared
+        run: npm ci && npm run build
+      - name: Install
+        working-directory: api
+        run: npm ci
+      - name: Upgrade origin/main -> this commit
+        run: scripts/migration-upgrade-test.sh seed origin/main
 
   topo:
     runs-on: ubuntu-latest

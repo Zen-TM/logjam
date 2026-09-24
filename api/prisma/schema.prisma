@@ -339,7 +339,7 @@ model Media {
   // Delta-sync watermark. Backfilled from created_at by migration. A media row
   // used to be immutable, so the delta keyset ran on created_at; link/unlink
   // makes rows mutable and a created_at keyset would never redeliver one.
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at")
   owner          User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
   @@index([ownerId])
