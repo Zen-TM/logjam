@@ -5,7 +5,9 @@ import {
   ATTRIBUTE_NOUN,
   buildCustomFieldDef,
   CUSTOM_FIELD_TYPES,
+  distinctTripTypes,
   isSystemFieldDef,
+  TRIP_TYPE_SUGGESTIONS,
   type ScopedCustomFieldDef,
   type TripLogCustomFieldType,
 } from "@logjam/shared";
@@ -13,7 +15,8 @@ import {
 import { fontSize, spacing, theme } from "../theme";
 import type { CustomFieldEntity } from "../api/queries";
 import { countFieldValues, removeFieldDef, saveFieldDefs } from "./fieldDefsStore";
-import { useMirrorPlaceTypes } from "../sync/useSyncQueries";
+import { useMirrorPlaceTypes, useMirrorTrips } from "../sync/useSyncQueries";
+import { tripTypeLabel } from "../logs/tripTypeMeta";
 import {
   Button,
   ChipPicker,
@@ -162,9 +165,7 @@ export function useCustomFieldForm({
 }): { body: ReactNode; footer: ReactNode } {
   const noun = ENTITY_NOUN[entity];
   const placeTypes = useMirrorPlaceTypes();
-  // Only a PLACE field has anywhere to choose between — a trip log has no types.
-  const scoping = entity === "place";
-  const allTypeIds = (placeTypes.data ?? []).map((placeType) => placeType.id);
+  const trips = useMirrorTrips();
 
   // ONE draft object, because the whole of it has to be re-seeded when the host
   // switches which definition is being edited. This is a hook, so unlike the
@@ -172,17 +173,37 @@ export function useCustomFieldForm({
   // `useState` initialisers would each keep the PREVIOUS field's value, and the
   // user would open "Water level" and find "Gate code" in the box.
   const formKey = editing?.key ?? "__new__";
-  const [draft, setDraft] = useState<FieldDraft>(() => seedDraft(editing, initialTypeId));
+  const [draft, setDraft] = useState<FieldDraft>(() =>
+    seedDraft(entity, editing, initialTypeId),
+  );
   const [seededFor, setSeededFor] = useState(formKey);
   if (seededFor !== formKey) {
     // React's documented way to adjust state when a prop changes: assign during
     // render, no effect, no flash of the old field's name.
     setSeededFor(formKey);
-    setDraft(seedDraft(editing, initialTypeId));
+    setDraft(seedDraft(entity, editing, initialTypeId));
   }
   const { label, type, bounded, min, max, appliesToAll, typeIds } = draft;
   const patch = (change: Partial<FieldDraft>) =>
     setDraft((current) => ({ ...current, ...change }));
+
+  // WHAT A SCOPE CHIP CAN NAME. A place field picks PLACE TYPES (rows, by id); a
+  // trip field picks TRIP TYPES — the same tags the trip form offers: the seed
+  // suggestions, every tag already on one of the user's trips, and whatever this
+  // field is scoped to already. Tags are compared case-insensitively everywhere,
+  // so the vocabulary is deduped that way, the field's own spelling winning.
+  const scopeOptions =
+    entity === "place"
+      ? (placeTypes.data ?? []).map((placeType) => ({
+          value: placeType.id,
+          label: placeType.name,
+        }))
+      : dedupeCaseInsensitive([
+          ...typeIds,
+          ...TRIP_TYPE_SUGGESTIONS,
+          ...distinctTripTypes(trips.data ?? []),
+        ]).map((tripType) => ({ value: tripType, label: tripTypeLabel(tripType) }));
+  const allScopeValues = scopeOptions.map((option) => option.value);
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -208,20 +229,26 @@ export function useCustomFieldForm({
       setError(built.error);
       return;
     }
-    // A place field that is on no type and not on all of them appears on NO
-    // form — it exists in Settings and nowhere else, which reads as the save
-    // having failed. Refused here rather than saved and puzzled over, and
-    // reported UNDER THE CHIPS: as the name field's error it sat beside the one
-    // control that was not the problem.
-    if (scoping && !appliesToAll && typeIds.length === 0) {
-      setScopeError(`Pick at least one place type, or “All”.`);
+    // A field that is on no type and not on all of them appears on NO form — it
+    // exists in Settings and nowhere else, which reads as the save having
+    // failed. Refused here rather than saved and puzzled over, and reported
+    // UNDER THE CHIPS: as the name field's error it sat beside the one control
+    // that was not the problem.
+    if (!appliesToAll && typeIds.length === 0) {
+      setScopeError(
+        entity === "place"
+          ? `Pick at least one place type, or “All”.`
+          : `Pick at least one trip type, or “All”.`,
+      );
       return;
     }
+    // Each entity fills ONE scoping list and leaves the other empty — the API
+    // refuses a write that fills both.
+    const chosen = appliesToAll ? [] : typeIds;
     const scope =
       entity === "place"
-        ? { appliesToAllTypes: appliesToAll, placeTypeIds: appliesToAll ? [] : typeIds }
-        : // A trip-log field has no types to be scoped to; it is on every trip.
-          { appliesToAllTypes: true, placeTypeIds: [] };
+        ? { appliesToAllTypes: appliesToAll, placeTypeIds: chosen, tripTypes: [] }
+        : { appliesToAllTypes: appliesToAll, placeTypeIds: [], tripTypes: chosen };
     // A rename keeps the original key so the values already stored on trips stay
     // attached to it.
     const next: ScopedCustomFieldDef[] = editing
@@ -262,7 +289,6 @@ export function useCustomFieldForm({
     numeric,
     onDone,
     onSaved,
-    scoping,
     type,
     typeIds,
   ]);
@@ -393,35 +419,48 @@ export function useCustomFieldForm({
           never find out. Which is exactly why the other chips go LOCKED rather
           than merely selected while it is on: they are not a list this field
           carries, they are what "all" currently happens to mean. */}
-      {scoping ? (
-        <View style={styles.typeBlock}>
-          <ChipPicker
-            label="Place types"
-            options={[
-              { value: ALL_TYPES_CHIP, label: "All" },
-              ...(placeTypes.data ?? []).map((placeType) => ({
-                value: placeType.id,
-                label: placeType.name,
-              })),
-            ]}
-            selected={appliesToAll ? [ALL_TYPES_CHIP, ...allTypeIds] : typeIds}
-            disabledValues={appliesToAll ? new Set(allTypeIds) : undefined}
-            error={scopeError}
-            onToggle={(value) => {
-              setScopeError(null);
-              if (value === ALL_TYPES_CHIP) {
-                patch({ appliesToAll: !appliesToAll });
-                return;
-              }
-              patch({
-                typeIds: typeIds.includes(value)
-                  ? typeIds.filter((existing) => existing !== value)
-                  : [...typeIds, value],
-              });
-            }}
-          />
-        </View>
-      ) : null}
+      {/* A TRIP field is asked by the trip's own tags, so its chips are trip
+          types and "Other" adds one — a field can be set up for an activity
+          before its first trip. */}
+      <View style={styles.typeBlock}>
+        <ChipPicker
+          label={entity === "place" ? "Place types" : "Trip types"}
+          options={[{ value: ALL_TYPES_CHIP, label: "All" }, ...scopeOptions]}
+          selected={appliesToAll ? [ALL_TYPES_CHIP, ...allScopeValues] : typeIds}
+          disabledValues={appliesToAll ? new Set(allScopeValues) : undefined}
+          error={scopeError}
+          onToggle={(value) => {
+            setScopeError(null);
+            if (value === ALL_TYPES_CHIP) {
+              patch({ appliesToAll: !appliesToAll });
+              return;
+            }
+            patch({
+              typeIds: typeIds.includes(value)
+                ? typeIds.filter((existing) => existing !== value)
+                : [...typeIds, value],
+            });
+          }}
+          onAdd={
+            entity === "place"
+              ? undefined
+              : (added) => {
+                  // An existing spelling wins, as it does on the trip form: the
+                  // API refuses case-variant duplicates.
+                  const value =
+                    allScopeValues.find(
+                      (existing) => existing.toLowerCase() === added.toLowerCase(),
+                    ) ?? added;
+                  setScopeError(null);
+                  patch({
+                    appliesToAll: false,
+                    typeIds: typeIds.includes(value) ? typeIds : [...typeIds, value],
+                  });
+                }
+          }
+          addPlaceholder="Other"
+        />
+      </View>
 
       {editing ? (
         <Row
@@ -459,8 +498,8 @@ export function useCustomFieldForm({
   return { body, footer };
 }
 
-/** The "all place types" chip's value. Not a type id, and it cannot collide
- *  with one: every real id is a UUID. */
+/** The "all types" chip's value. Not a place type id — every real id is a
+ *  UUID — and not a plausible trip tag. */
 const ALL_TYPES_CHIP = "__all__";
 
 /** Everything the form holds while it is being filled in. */
@@ -471,8 +510,20 @@ type FieldDraft = {
   min: string;
   max: string;
   appliesToAll: boolean;
+  /** Place type ids for a place field, trip types (tags) for a trip field. */
   typeIds: string[];
 };
+
+/** First spelling of each tag wins; later case variants are dropped. */
+function dedupeCaseInsensitive(values: readonly string[]): string[] {
+  const seen = new Set<string>();
+  return values.filter((value) => {
+    const folded = value.toLowerCase();
+    if (seen.has(folded)) return false;
+    seen.add(folded);
+    return true;
+  });
+}
 
 /**
  * A list key that cannot collide.
@@ -494,6 +545,7 @@ function defRowKey(def: ScopedCustomFieldDef): string {
  *  a canyon — and from Settings starts on all of them, where the answer is
  *  genuinely theirs to make. */
 function seedDraft(
+  entity: CustomFieldEntity,
   editing: ScopedCustomFieldDef | null,
   initialTypeId: string | undefined,
 ): FieldDraft {
@@ -505,7 +557,9 @@ function seedDraft(
     max: editing?.max != null ? String(editing.max) : "",
     appliesToAll: editing ? editing.appliesToAllTypes : initialTypeId == null,
     typeIds: editing
-      ? editing.placeTypeIds
+      ? entity === "place"
+        ? editing.placeTypeIds
+        : editing.tripTypes
       : initialTypeId != null
         ? [initialTypeId]
         : [],

@@ -103,6 +103,13 @@ model CustomFieldDef {
   /// parallel-list drift the root CLAUDE.md rule targets. Guard:
   /// `appliesToAllTypes` in customFieldScope.unit.test.ts.
   appliesToAllTypes Boolean @default(false) @map("applies_to_all_types")
+  /// The TRIP TYPES (tags — "canyoning", "packrafting") a `tripLog` definition
+  /// applies to; always empty on a `place` definition, whose scoping is the
+  /// join table below. Plain strings because trip types are not rows: the
+  /// clients compare them case-insensitively (`tripFieldDefs`), and nothing
+  /// renames a tag, so a string cannot drift from what it names. A tag rename,
+  /// if one is ever built, has to rewrite this column in the same transaction.
+  tripTypes         String[] @default([]) @map("trip_types")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

@@ -51,7 +51,7 @@ Three surfaces. One rule each. **Never render raw `err.message` from `apiFetch` 
 
 ### Custom-field forms in dialogs
 
-Never re-implement the add-custom-field sub-form or per-field inputs inline — use `dialogs/AddCustomFieldForm.tsx` + `dialogs/CustomFieldInput.tsx`, both on the kit's `TextField`/`Select`/`Checkbox`. The two dialogs drifted visually when this was duplicated (UX-002/003). Unset boolean custom fields default to `false` via `dialogs/customFieldValues.ts` so the unchecked checkbox and the persisted value agree — don't reintroduce a `null` state in edit forms.
+Never re-implement the add-custom-field sub-form or per-field inputs inline — use `dialogs/AddCustomFieldForm.tsx` + `dialogs/CustomFieldInput.tsx`, both on the kit's `TextField`/`Select`/`ChipRail`. The two dialogs drifted visually when this was duplicated (UX-002/003). A yes/no is a `ChipRail` of — / Yes / No; unset is `""` and saves nothing, exactly as on Logjam GPS (guard `dialogs/CustomFieldInput.render.test.tsx`).
 
 ### Consent versioning
 

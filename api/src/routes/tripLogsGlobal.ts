@@ -5,6 +5,7 @@ import { AppError } from "../middleware/errorHandler";
 import { Prisma } from "@prisma/client";
 import {
   enforceCanyoningTag,
+  linksCanyon,
   MAX_PLACES_PER_TRIP,
   MAX_TRIP_TYPES_PER_TRIP,
   TRIP_NAME_MAX_LENGTH,
@@ -74,6 +75,18 @@ export async function resolveTripPlaceIds(
   return placeIds;
 }
 
+// The place types behind a set of place ids, for the canyoning-tag rule
+// (`linksCanyon`). Call it on ids `resolveTripPlaceIds` has already checked:
+// this does no ownership test of its own.
+export async function placeTypeIdsOf(placeIds: string[]): Promise<string[]> {
+  if (placeIds.length === 0) return [];
+  const rows = await prisma.place.findMany({
+    where: { id: { in: placeIds } },
+    select: { placeTypeId: true },
+  });
+  return rows.map((row) => row.placeTypeId);
+}
+
 // Normalizes an optional free-text trip-type list: an array of strings, each
 // trimmed and nonempty, deduped case-insensitively, order preserved, capped.
 // undefined → undefined (PATCH: leave unchanged); null → [] (clears the list).
@@ -129,16 +142,17 @@ export function parseTripTypes(value: unknown): string[] | undefined {
 export function resolvePatchedTripTypes(args: {
   parsedTypes: string[] | undefined;
   storedTypes: string[];
-  resolvedPlaceIds: string[] | undefined;
-  storedHasLinkedPlace: boolean;
+  /** Types of the INCOMING link set, or undefined when the request omits it. */
+  resolvedPlaceTypeIds: string[] | undefined;
+  /** Types of the places the trip links now. */
+  storedPlaceTypeIds: string[];
 }): { types: string[]; changed: boolean } {
-  const { parsedTypes, storedTypes, resolvedPlaceIds, storedHasLinkedPlace } =
+  const { parsedTypes, storedTypes, resolvedPlaceTypeIds, storedPlaceTypeIds } =
     args;
-  const hasLinkedPlace =
-    resolvedPlaceIds !== undefined
-      ? resolvedPlaceIds.length > 0
-      : storedHasLinkedPlace;
-  const types = enforceCanyoningTag(parsedTypes ?? storedTypes, hasLinkedPlace);
+  const types = enforceCanyoningTag(
+    parsedTypes ?? storedTypes,
+    linksCanyon(resolvedPlaceTypeIds ?? storedPlaceTypeIds),
+  );
   // enforceCanyoningTag only ever appends, so against the stored array a length
   // change is the only way it can differ.
   const changed =
@@ -272,7 +286,7 @@ router.get(
 // (placeIds omitted or [] = unassigned). displayName and types are
 // independent optional fields; a bare trip needs only a date. The default
 // title (joined place names) is derived at render time, never stored.
-// A place-linked trip is force-tagged `canyoning` (enforceCanyoningTag).
+// A canyon-linked trip is force-tagged `canyoning` (enforceCanyoningTag).
 router.post(
   "/",
   requireAuth,
@@ -287,7 +301,7 @@ router.post(
     const trimmedDisplayName = parseDisplayName(displayName) ?? null;
     const parsedTypes = enforceCanyoningTag(
       parseTripTypes(types) ?? [],
-      resolvedPlaceIds.length > 0,
+      linksCanyon(await placeTypeIdsOf(resolvedPlaceIds)),
     );
 
     // Optional client-minted id (Stage 8 §3.5): own-id replay → 200 with the
@@ -369,9 +383,9 @@ router.patch(
       // The place links are fetched, not just the row: `placeIds` and `types`
       // are independently optional, so enforcement needs the trip's CURRENT
       // link state whenever the request omits placeIds. Without this, a PATCH
-      // of `types: []` on a place-linked trip would silently strip the tag.
-      // take: 1 — only existence is needed, never the ids.
-      include: { places: { select: { placeId: true }, take: 1 } },
+      // of `types: []` on a canyon-linked trip would silently strip the tag.
+      // Every link, not just the first: the rule asks whether ANY is a canyon.
+      include: { places: { select: { place: { select: { placeTypeId: true } } } } },
     });
     // Owner-private resource — 404 (not 403) for non-owners (SEC-001).
     if (!trip || trip.userId !== user.id)
@@ -393,8 +407,11 @@ router.patch(
       resolvePatchedTripTypes({
         parsedTypes,
         storedTypes: trip.types,
-        resolvedPlaceIds,
-        storedHasLinkedPlace: trip.places.length > 0,
+        resolvedPlaceTypeIds:
+          resolvedPlaceIds !== undefined
+            ? await placeTypeIdsOf(resolvedPlaceIds)
+            : undefined,
+        storedPlaceTypeIds: trip.places.map((link) => link.place.placeTypeId),
       });
 
     const updated = await prisma.tripLog.update({

@@ -7,9 +7,11 @@ import {
   hasActiveTripFilter,
   NO_TYPE_FILTER_VALUE,
   sortTrips,
+  tripFilterFieldDefs,
   tripMatchesFilter,
   type FilterableTrip,
 } from "./tripFilter.js";
+import type { ScopedCustomFieldDef } from "./tripLogFields.js";
 
 function trip(overrides: Partial<FilterableTrip> = {}): FilterableTrip {
   return {
@@ -181,5 +183,36 @@ describe("distinctTripTypes", () => {
       trip({ types: [] }),
     ]);
     expect(types).toEqual(["canyoning", "packrafting"]);
+  });
+});
+
+describe("tripFilterFieldDefs", () => {
+  const def = (key: string, tripTypes: string[], appliesToAllTypes = false): ScopedCustomFieldDef => ({
+    key,
+    label: key,
+    type: "string",
+    placeTypeIds: [],
+    tripTypes,
+    appliesToAllTypes,
+  });
+  const defs = [def("party", [], true), def("rope", ["canyoning"]), def("paddle", ["packrafting"]), def("depth", ["caving"])];
+  const trips = [
+    { types: ["canyoning"], customFields: { rope: 60 } },
+    { types: ["packrafting"], customFields: { paddle: "yes" } },
+    // Retagged since: still holds a caving answer.
+    { types: [], customFields: { depth: 12 } },
+  ];
+  const keys = (type: string) => tripFilterFieldDefs(defs, trips, type).map((d) => d.key);
+
+  it("offers every loaded trip's attributes with no activity chosen", () => {
+    expect(keys("")).toEqual(["party", "rope", "paddle", "depth"]);
+  });
+
+  it("follows the chosen activity, case-insensitively through tripFieldDefs", () => {
+    expect(keys("canyoning")).toEqual(["party", "rope"]);
+  });
+
+  it("keeps an attribute an untagged trip answered under No type", () => {
+    expect(keys(NO_TYPE_FILTER_VALUE)).toEqual(["party", "depth"]);
   });
 });

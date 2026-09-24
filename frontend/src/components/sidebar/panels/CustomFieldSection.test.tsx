@@ -27,6 +27,7 @@ const SYSTEM_DEF: ScopedCustomFieldDef = {
   ownerId: null,
   appliesToAllTypes: false,
   placeTypeIds: [],
+  tripTypes: [],
 };
 
 const OWN_DEF: ScopedCustomFieldDef = {
@@ -36,6 +37,7 @@ const OWN_DEF: ScopedCustomFieldDef = {
   ownerId: "alice",
   appliesToAllTypes: true,
   placeTypeIds: [],
+  tripTypes: [],
 };
 
 function renderSection(defs: ScopedCustomFieldDef[]) {

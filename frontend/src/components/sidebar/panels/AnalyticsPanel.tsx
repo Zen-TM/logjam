@@ -289,6 +289,7 @@ function PlacesVisited({ stats, placeTypes }: { stats: LogbookStats; placeTypes:
  */
 function AttributeSections({ stats, tripOnly = false }: { stats: LogbookStats; tripOnly?: boolean }) {
   const groups = tripOnly ? [] : stats.placeFieldStats;
+  const underActivities = stats.tripFieldsUnderActivities;
   return (
     <>
       {groups.map((group) => (
@@ -299,12 +300,22 @@ function AttributeSections({ stats, tripOnly = false }: { stats: LogbookStats; t
           ))}
         </section>
       ))}
-      {stats.tripFieldStats.length > 0 && (
+      {(stats.tripFieldStats.length > 0 || underActivities > 0) && (
         <section className={classes.section}>
-          <SectionHeader title="Your trip attributes" />
+          <SectionHeader title="Trip attributes" />
           {stats.tripFieldStats.map((entry) => (
             <AttributeStat key={`trip:${entry.key}`} stat={entry} />
           ))}
+          {/* Load-bearing, as on Logjam GPS: an attribute scoped to one
+              activity is summarised on that activity's view only, so without
+              this it reads as having vanished from the logbook. */}
+          {underActivities > 0 && (
+            <p className={classes.caption}>
+              {underActivities === 1
+                ? "1 more attribute belongs to a single activity — open that activity above to see it"
+                : `${underActivities} more attributes belong to single activities — open an activity above to see them`}
+            </p>
+          )}
         </section>
       )}
     </>

@@ -78,7 +78,8 @@ const ROUTE_KNOWN = [
 // built-in field.
 const CUSTOM_FIELD_DEF_KNOWN = [
   "id", "ownerId", "entity", "key", "label", "type", "min", "max",
-  "position", "placeTypeIds", "appliesToAllTypes", "createdAt", "updatedAt",
+  "position", "placeTypeIds", "tripTypes", "appliesToAllTypes", "createdAt",
+  "updatedAt",
 ] as const;
 
 const MEDIA_KNOWN = [
@@ -288,9 +289,9 @@ export async function upsertCustomFieldDef(
   await db.runAsync(
     `INSERT OR REPLACE INTO custom_field_defs
        (id, owner_id, entity, key, label, type, min, max, position,
-        applies_to_all_types, place_type_ids_json, created_at,
+        applies_to_all_types, place_type_ids_json, trip_types_json, created_at,
         updated_at, extra_json, dirty_fields_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     row.id,
     // NULL for a system definition — stored verbatim rather than coerced, the
     // same way a system place type's owner is.
@@ -307,6 +308,7 @@ export async function upsertCustomFieldDef(
     // every one — the safe direction for a client that cannot tell.
     row.appliesToAllTypes ? 1 : 0,
     JSON.stringify(row.placeTypeIds ?? []),
+    JSON.stringify(row.tripTypes ?? []),
     row.createdAt,
     row.updatedAt,
     splitExtras(row, CUSTOM_FIELD_DEF_KNOWN),
@@ -743,15 +745,18 @@ export type MirrorCustomFieldDef = {
   /** WHERE it appears. Read as a parsed list rather than the stored JSON so no
    *  caller has to know the column is text. */
   placeTypeIds: string[];
+  /** A trip definition's trip types (tags); empty on a place definition. */
+  tripTypes: string[];
   appliesToAllTypes: boolean;
 };
 
 type CustomFieldDefRow = Omit<
   MirrorCustomFieldDef,
-  "placeTypeIds" | "appliesToAllTypes" | "ownerId"
+  "placeTypeIds" | "tripTypes" | "appliesToAllTypes" | "ownerId"
 > & {
   owner_id: string | null;
   place_type_ids_json: string | null;
+  trip_types_json: string | null;
   applies_to_all_types: number | null;
 };
 
@@ -763,15 +768,18 @@ export async function listMirrorCustomFieldDefs(): Promise<
   const db = await getSyncDb();
   const rows = await db.getAllAsync<CustomFieldDefRow>(
     `SELECT id, owner_id, entity, key, label, type, min, max, position,
-            applies_to_all_types, place_type_ids_json
+            applies_to_all_types, place_type_ids_json, trip_types_json
        FROM custom_field_defs ORDER BY position ASC, key ASC`,
   );
-  return rows.map(({ place_type_ids_json, applies_to_all_types, owner_id, ...def }) => ({
-    ...def,
-    ownerId: owner_id,
-    placeTypeIds: parseStringList(place_type_ids_json),
-    appliesToAllTypes: applies_to_all_types === 1,
-  }));
+  return rows.map(
+    ({ place_type_ids_json, trip_types_json, applies_to_all_types, owner_id, ...def }) => ({
+      ...def,
+      ownerId: owner_id,
+      placeTypeIds: parseStringList(place_type_ids_json),
+      tripTypes: parseStringList(trip_types_json),
+      appliesToAllTypes: applies_to_all_types === 1,
+    }),
+  );
 }
 
 /**

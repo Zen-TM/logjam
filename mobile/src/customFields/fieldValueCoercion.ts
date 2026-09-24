@@ -11,7 +11,7 @@
 import { coerceFieldValue, type TripLogCustomFieldDef } from "@logjam/shared";
 
 /** Seed the editing state from stored values: everything as a string, and a
- *  missing value as "" (or "false" for a toggle, which has no empty state). */
+ *  missing value as "" — a yes/no included, which has "—" for unset. */
 export function fieldValueStrings(
   stored: Record<string, unknown> | undefined,
 ): Record<string, string> {
@@ -37,11 +37,13 @@ export function fieldValueStrings(
  * other field. Only definitions the form actually RENDERED may be passed in,
  * or this clears fields nobody was asked about.
  *
- * A BOOLEAN ALWAYS WRITES ITS VALUE, false included. Skipping false left the
- * phone unable to answer "no" at all, and it disagreed with the web, which
- * stores an explicit false (an unchecked box and an explicit No are one state
- * — UX-004). The filter reads a stored value, so "Is a cave? · No" on a detail
- * page was invisible to a filter for No.
+ * A YES/NO IS THREE STATES, and unset is a null like any other field's. No is
+ * an explicit `false`. It used to write `false` for every toggle the form
+ * showed, touched or not (UX-004: "an unchecked box IS an explicit No"), which
+ * on a trip left a No nobody gave behind on every trip the attribute was ever
+ * shown on — counted as answered by the stats, and kept after the tag that
+ * asked for it came off. Logjam Web still draws a checkbox, and still writes
+ * that false, until its rework.
  *
  * A caller that REPLACES rather than merges (the trip form) drops the nulls
  * itself — see `withoutClearedFields`.
@@ -53,14 +55,30 @@ export function coerceCustomFields(
   const result: Record<string, unknown> = {};
   for (const def of defs) {
     const raw = values[def.key];
-    if (def.type === "boolean") {
-      result[def.key] = coerceFieldValue(raw ?? "false", def.type);
-      continue;
-    }
     result[def.key] =
       raw == null || raw.trim() === "" ? null : coerceFieldValue(raw, def.type);
   }
   return result;
+}
+
+/**
+ * Whether two stored value objects say the same thing, key ORDER ignored.
+ *
+ * Comparing `JSON.stringify` output reported a change on nearly every save:
+ * Postgres `jsonb` hands keys back in its own order (shortest first), and a form
+ * builds them in the definitions' order. So every trip edit re-sent every
+ * attribute, and a notes-only edit could overwrite an attribute changed on
+ * another device since the last sync.
+ */
+export function sameFieldValues(
+  a: Record<string, unknown>,
+  b: Record<string, unknown>,
+): boolean {
+  const keys = Object.keys(a);
+  return (
+    keys.length === Object.keys(b).length &&
+    keys.every((key) => key in b && JSON.stringify(a[key]) === JSON.stringify(b[key]))
+  );
 }
 
 /** For a caller that writes the whole object rather than merging: a cleared
@@ -72,3 +90,4 @@ export function withoutClearedFields(
     Object.entries(values).filter(([, value]) => value !== null),
   );
 }
+

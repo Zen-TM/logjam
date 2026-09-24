@@ -14,19 +14,20 @@ import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import {
   ATTRIBUTE_NOUN,
+  attributeRows,
   distinctTripTypes,
   formatTripDate,
   mediaCategory,
   messageFromError,
-  tripAttributeEntries,
 } from "@logjam/shared";
 
 import { useConnectivity } from "../map/connectivity";
 import { tripTitle } from "../api/tripTitle";
 import { useFieldDefs } from "../customFields/useFieldDefs";
+import { AttributeTable } from "../customFields/CustomFieldValues";
 import { MediaStrip } from "../media/MediaStrip";
 import { resolveRouteAttachmentBbox } from "../media/routeAttachmentBbox";
-import { fontSize, fontWeight, lineHeight, radius, spacing, surface, theme } from "../theme";
+import { fontSize, lineHeight, spacing, theme } from "../theme";
 import type { MirrorTrip } from "../sync/mirrorStore";
 import {
   useMirrorPlaces,
@@ -87,7 +88,7 @@ export function TripDetailScreen({
   const routeCount = attachments.filter(
     (item) => mediaCategory(item.mediaType) === "track",
   ).length;
-  const customFields = tripAttributeEntries(fieldDefs, current.customFields);
+  const customFields = attributeRows(fieldDefs, current.customFields);
 
   return (
     <View style={styles.screen}>
@@ -197,15 +198,10 @@ export function TripDetailScreen({
 
         {customFields.length > 0 ? (
           <>
-            <SectionHeader label={`Your ${ATTRIBUTE_NOUN.many}`} />
-            <View style={styles.fieldCard}>
-              {customFields.map((entry) => (
-                <View key={entry.key} style={styles.fieldRow}>
-                  <Text style={styles.fieldKey}>{entry.label}</Text>
-                  <Text style={styles.fieldValue}>{formatFieldValue(entry.value)}</Text>
-                </View>
-              ))}
-            </View>
+            {/* "Trip attributes", the way a place's section is "Canyon
+                attributes" — "Your attributes" did not say whose. */}
+            <SectionHeader label={`Trip ${ATTRIBUTE_NOUN.many}`} />
+            <AttributeTable rows={customFields} />
           </>
         ) : null}
       </ScrollView>
@@ -225,12 +221,6 @@ export function TripDetailScreen({
   );
 }
 
-function formatFieldValue(value: unknown): string {
-  if (value === null || value === undefined || value === "") return "—";
-  if (typeof value === "boolean") return value ? "Yes" : "No";
-  return String(value);
-}
-
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: theme.primary },
   typeRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing(0.75) },
@@ -244,22 +234,5 @@ const styles = StyleSheet.create({
     color: theme.textPrimary,
     fontSize: fontSize.base,
     lineHeight: lineHeight.body,
-  },
-  fieldCard: {
-    backgroundColor: surface.card,
-    borderWidth: 1,
-    borderColor: surface.border,
-    borderRadius: radius.lg,
-    padding: spacing(1.5),
-    gap: spacing(1),
-  },
-  fieldRow: { flexDirection: "row", justifyContent: "space-between", gap: spacing(2) },
-  fieldKey: { color: theme.textMuted, fontSize: fontSize.sm, flexShrink: 1 },
-  fieldValue: {
-    color: theme.textPrimary,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
-    textAlign: "right",
-    flexShrink: 1,
   },
 });

@@ -655,6 +655,21 @@ stores, and a user's own "Difficulty, 1-5" is drawn like a V grade without
 anything knowing about canyons. The web still draws its own canyon controls;
 `CANYON_FORM_FIELD_KEYS` survives for `PlaceDialog.tsx` alone.
 
+**A yes/no is the same row of stops: — / Yes / No.** A switch has no empty
+state, so every form wrote `false` for every toggle it showed, touched or not —
+a No nobody gave, counted as answered, and on a trip kept after the tag that
+asked for it came off. "—" is unset and saves nothing; No is an explicit
+`false`, which is what a filter for No reads. A date gets the same way back to
+blank: "Clear date" in the sheet's date mode.
+
+**Form sheets re-seed on the entity's ID, never on the object.** A detail
+screen passes the live mirror row, which is a new object after every mirror
+change — a sync pull, an upload tick, an inbox refresh — so keying the seed
+effect on it wiped whatever the user was typing. And a save compares stored
+values with `sameFieldValues`, never `JSON.stringify`: Postgres `jsonb` returns
+keys in its own order, so text comparison reported a change on every save and
+re-sent every value over any newer one.
+
 **A place's OVERVIEW holds what every place has, which is its position.** It
 used to promote four canyon scalars into stat tiles by reading their reserved
 keys — not universal, already listed below in the type's own table, and
@@ -696,7 +711,9 @@ Both readers ask "all types, or one of these?" (`defsForType`,
 `tripFieldDefs`), so a row with `appliesToAllTypes` false and an empty scoping
 lists in Settings and appears nowhere else — which reads as the save having
 failed. That is what every caller predating the scoping produced, and what every
-trip-log write produces (a trip field has no type picker to answer with):
+trip-log write produced while a trip field had no type picker to answer with
+(it has one now — trip TYPES, the tags — and the editor refuses an empty
+scoping for both entities):
 `20260906010000` backfilled `entity = 'place'` only, so ALL THREE of alice's
 trip attributes were invisible on the trip form. `createFieldDef` now defaults
 the flag to "on when no types were named", `20260911140000` repairs the existing
@@ -767,6 +784,14 @@ summarised once per type over that type's own samples: the quality of the
 canyons someone does and of the campsites they stay at are two distributions.
 The total-vs-average rule this screen learned the hard way is in root
 `CLAUDE.md`.
+
+**Trip attributes follow the same logic by TRIP TYPE.** The All screen
+summarises only the attributes every trip is asked (`appliesToAllTypes`); one
+scoped to an activity appears on that activity's drill-down, over its own trips,
+through the same `tripFieldDefs` rule the trip form uses — so a value on a trip
+since retagged is still counted somewhere. The All screen says how many it left
+to the drill-downs (`tripFieldsUnderActivities`), because an attribute that
+silently stopped appearing there reads as data loss.
 
 ## Inbox (2026-08-30)
 

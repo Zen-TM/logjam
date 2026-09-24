@@ -251,6 +251,7 @@ export async function loadScopedDefs(
     select: {
       ...DEF_SELECT,
       appliesToAllTypes: true,
+      tripTypes: true,
       placeTypes: { select: { placeTypeId: true } },
     },
     orderBy: [{ position: "asc" }, { key: "asc" }],
@@ -267,9 +268,31 @@ export async function loadScopedDefs(
         ownerId: row.ownerId,
         appliesToAllTypes: row.appliesToAllTypes,
         placeTypeIds: row.placeTypes.map((link) => link.placeTypeId),
+        tripTypes: row.tripTypes,
       },
     ];
   });
+}
+
+/**
+ * Each entity has ONE kind of scoping: a place field names place types, a trip
+ * field names trip types. A write that fills the other list is a client bug,
+ * and a 400 rather than a silent drop — a scoping the server threw away would
+ * leave the field on forms the user never chose, or on none.
+ */
+function assertScopingFitsEntity(
+  entity: string,
+  scoping: { placeTypeIds?: string[]; tripTypes?: string[] },
+): void {
+  if (entity === "place" && scoping.tripTypes?.length) {
+    throw new AppError(400, "tripTypes only applies to trip attributes");
+  }
+  if (entity === "tripLog" && scoping.placeTypeIds?.length) {
+    throw new AppError(
+      400,
+      "placeTypeIds only applies to place attributes; a trip attribute is scoped by tripTypes",
+    );
+  }
 }
 
 /**
@@ -363,13 +386,14 @@ export type CreateDefInput = {
   id?: string;
   def: TripLogCustomFieldDef;
   position?: number;
-  /** Place types this definition applies to. Carried for BOTH entities: a trip
-   *  log field is scoped by the types of the places the trip links, so a trip
-   *  field is scoped to types exactly as a place field is (plan §2.7). */
+  /** Place types a PLACE definition applies to. Refused on a trip definition. */
   placeTypeIds?: string[];
-  /** Applies to every place type, including ones created later. A flag rather
-   *  than join rows for the types that exist today, which would silently fail
-   *  to apply to tomorrow's. */
+  /** Trip types (tags) a TRIP definition applies to, already normalised by
+   *  `parseTripTypes`. Refused on a place definition. */
+  tripTypes?: string[];
+  /** Applies to every type, including ones created later. A flag rather than
+   *  a list of the types that exist today, which would silently fail to apply
+   *  to tomorrow's. */
   appliesToAllTypes?: boolean;
 };
 
@@ -385,7 +409,9 @@ export async function createFieldDef(
 ): Promise<TripLogCustomFieldDef> {
   const { def } = input;
   assertKeyNotReserved(def.key, def.label);
+  assertScopingFitsEntity(entity, input);
   const placeTypeIds = await ownedPlaceTypeIds(userId, input.placeTypeIds);
+  const tripTypes = input.tripTypes ?? [];
   try {
     await prisma.customFieldDef.create({
       data: {
@@ -403,11 +429,14 @@ export async function createFieldDef(
         // `tripFieldDefs` both ask "all types, or one of these?", so a def with
         // the flag off and an empty scoping exists in the settings list and
         // nowhere else. That is what a caller that never heard of the scoping
-        // produces, which is every pre-rework caller and every trip-log write
-        // (a trip field has no type picker at all). Defaulting false made all
-        // three of alice's trip fields invisible on the trip form — found by
-        // reading the phone's mirror, not by a test.
-        appliesToAllTypes: input.appliesToAllTypes ?? placeTypeIds.length === 0,
+        // produces (every pre-rework caller, and Logjam Web, which has no
+        // picker for a trip field). Defaulting false made all three of alice's
+        // trip fields invisible on the trip form — found by reading the
+        // phone's mirror, not by a test.
+        appliesToAllTypes:
+          input.appliesToAllTypes ??
+          (placeTypeIds.length === 0 && tripTypes.length === 0),
+        tripTypes,
         ...(placeTypeIds.length
           ? {
               placeTypes: {
@@ -444,6 +473,8 @@ export async function updateFieldDef(
     max?: number | null;
     position?: number;
     placeTypeIds?: string[];
+    /** Already normalised by `parseTripTypes`. Replaced, not merged. */
+    tripTypes?: string[];
     appliesToAllTypes?: boolean;
   },
 ): Promise<void> {
@@ -454,6 +485,7 @@ export async function updateFieldDef(
   // 404, not 403: an id the caller does not own must not be confirmed to
   // exist. Definitions are per-user, so there is no sharee case here.
   if (!existing) throw new AppError(404, "Custom field not found");
+  assertScopingFitsEntity(existing.entity, patch);
 
   const merged = {
     key: existing.key,
@@ -498,6 +530,7 @@ export async function updateFieldDef(
         ...(patch.appliesToAllTypes !== undefined
           ? { appliesToAllTypes: patch.appliesToAllTypes }
           : {}),
+        ...(patch.tripTypes !== undefined ? { tripTypes: patch.tripTypes } : {}),
       },
     });
     // Scoping is REPLACED rather than merged: the client sends the set it

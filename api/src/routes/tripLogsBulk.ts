@@ -7,7 +7,7 @@ import { resolveUser } from "../lib/resolveUser";
 import { assignTripImportKeys } from "../lib/importKeys";
 import { deleteTripsCascade } from "../lib/bulkDelete";
 import { parseTripTypes, parseDisplayName } from "./tripLogsGlobal";
-import { enforceCanyoningTag } from "@logjam/shared";
+import { enforceCanyoningTag, linksCanyon } from "@logjam/shared";
 
 const BULK_DELETE_LIMIT = 500;
 // Cap import rows per request so a single authenticated call can't force an
@@ -67,10 +67,11 @@ router.post(
     const ownedPlaces = placeIds.length > 0
       ? await prisma.place.findMany({
           where: { id: { in: placeIds } },
-          select: { id: true, ownerId: true },
+          select: { id: true, ownerId: true, placeTypeId: true },
         })
       : [];
     const ownerById = new Map(ownedPlaces.map((c) => [c.id, c.ownerId]));
+    const placeTypeById = new Map(ownedPlaces.map((c) => [c.id, c.placeTypeId]));
 
     type ValidatedTrip = {
       index: number;
@@ -120,14 +121,17 @@ router.post(
       // types is an optional free-text list (trip categories) — reuse the same
       // validator as the single-trip routes rather than re-deriving the rules
       // here. Row-level so a bad `types` value doesn't abort the whole batch.
-      // A place-linked trip always carries the `canyoning` tag — the same
+      // A canyon-linked trip always carries the `canyoning` tag — the same
       // invariant POST/PATCH /trips maintain (tripLogsGlobal.ts). displayName
       // gets the same trim + TRIP_NAME_MAX_LENGTH cap, or an imported row lands
       // over the limit and PATCH /trips/:id can never save it again.
       let types: string[];
       let displayName: string | null;
       try {
-        types = enforceCanyoningTag(parseTripTypes(t.types) ?? [], placeId !== null);
+        types = enforceCanyoningTag(
+          parseTripTypes(t.types) ?? [],
+          linksCanyon(placeId !== null ? [placeTypeById.get(placeId)!] : []),
+        );
         displayName = parseDisplayName(t.displayName) ?? null;
       } catch (e) {
         if (e instanceof AppError) {

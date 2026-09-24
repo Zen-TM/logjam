@@ -17,6 +17,9 @@ type TextFieldProps = {
    * `.focus()` once the animation has settled.
    */
   inputRef?: React.Ref<TextInput>;
+  /** Drawn beside the input box, centred on IT rather than on the label above
+   *  — e.g. a remove button. */
+  accessory?: React.ReactNode;
 } & Pick<
   TextInputProps,
   | "secureTextEntry"
@@ -42,6 +45,7 @@ export function TextField({
   error,
   multiline,
   inputRef,
+  accessory,
   ...inputProps
 }: TextFieldProps) {
   // `editable={false}` is a DISABLED field, not a live one that silently
@@ -49,19 +53,34 @@ export function TextField({
   // (dim, don't hide). Undeclared `editable` (the common case) stays full
   // opacity.
   const disabled = inputProps.editable === false;
+  const input = (
+    <TextInput
+      ref={inputRef}
+      style={[
+        styles.input,
+        multiline && styles.multiline,
+        error ? styles.inputError : null,
+        accessory != null && styles.grow,
+      ]}
+      value={value}
+      onChangeText={onChangeText}
+      placeholderTextColor={theme.textMuted}
+      accessibilityLabel={label}
+      multiline={multiline}
+      {...inputProps}
+    />
+  );
   return (
     <View style={[styles.container, disabled && styles.disabled]}>
       <Text style={styles.label}>{label}</Text>
-      <TextInput
-        ref={inputRef}
-        style={[styles.input, multiline && styles.multiline, error ? styles.inputError : null]}
-        value={value}
-        onChangeText={onChangeText}
-        placeholderTextColor={theme.textMuted}
-        accessibilityLabel={label}
-        multiline={multiline}
-        {...inputProps}
-      />
+      {accessory != null ? (
+        <View style={styles.inputRow}>
+          {input}
+          {accessory}
+        </View>
+      ) : (
+        input
+      )}
       <FieldError message={error} />
     </View>
   );
@@ -87,6 +106,8 @@ const styles = StyleSheet.create({
     fontSize: fontSize.base,
     color: theme.textPrimary,
   },
+  inputRow: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
+  grow: { flex: 1 },
   multiline: { minHeight: 96, textAlignVertical: "top" },
   // Findable while scrolling a long form, not only once the line under it is read.
   inputError: { borderColor: theme.warning },

@@ -1,11 +1,13 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { Check, ChevronRight, MapPin, MapPinPlus, Plus, Trash2 } from "lucide-react";
+import { Check, ChevronRight, CircleHelp, MapPin, MapPinPlus, Plus, Trash2, X } from "lucide-react";
 import { useIsMobile } from "../../useIsMobile";
 import {
   buildCustomFieldDef,
   CANYONING_TRIP_TYPE,
   coerceFieldValue,
+  formatFieldValue,
   enforceCanyoningTag,
+  linksCanyon,
   formatTripPlaceNames,
   isValidLatitude,
   isValidLongitude,
@@ -63,7 +65,6 @@ import AddCustomFieldForm from "./AddCustomFieldForm";
 import CustomFieldInput, { customFieldValueError } from "./CustomFieldInput";
 import DeleteCustomFieldDialog from "./DeleteCustomFieldDialog";
 import ConfirmDialog from "./ConfirmDialog";
-import { getFieldValue as getFieldValueFor } from "./customFieldValues";
 import classes from "./TripLogDialog.module.css";
 
 // True when a date-only string (YYYY-MM-DD) is after today. Both sides are
@@ -169,6 +170,12 @@ function TripLogDialog({
   // At most one pending inline "create new place" at a time.
   const [creating, setCreating] = useState<CreateForm | null>(null);
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
+  // The attribute keys this form keeps whatever the tags say: the ones stored
+  // when it opened and the ones typed into (or restored from a draft) since.
+  // See `visibleFieldDefs`.
+  const [keptFieldKeys, setKeptFieldKeys] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Set on a Save attempt so every invalid custom field shows its inline error
@@ -181,16 +188,27 @@ function TripLogDialog({
   const [placesError, setPlacesError] = useState<string | null>(null);
   const [typesError, setTypesError] = useState<string | null>(null);
 
-  // Linking a place means "I did that place on this trip", so the API
+  // Linking a canyon means "I did that canyon on this trip", so the API
   // force-tags `canyoning` on save. Mirror that in the selection itself (rather
   // than only in the rendered chips) so the tag is visible before the user hits
   // Save instead of appearing afterwards, and so the cap checks below count it
   // exactly as storage does. enforceCanyoningTag returns its input unchanged
   // when there's nothing to add, so this settles immediately.
-  const hasLinkedPlace = selectedPlaceIds.length > 0;
+  //
+  // A CANYON, not any place: a campsite or a marker tags nothing
+  // (`linksCanyon`). An inline pending create is a canyon (see `creating`).
+  function placeTypeIdsFor(ids: string[]): string[] {
+    return ids
+      .map((id) => places.find((place) => place.id === id)?.placeTypeId)
+      .filter((typeId): typeId is string => !!typeId);
+  }
+  const linkedCanyon = linksCanyon([
+    ...placeTypeIdsFor(selectedPlaceIds),
+    ...(creating ? [SYSTEM_PLACE_TYPE_IDS.canyon] : []),
+  ]);
   useEffect(() => {
-    setSelectedTypes((prev) => enforceCanyoningTag(prev, hasLinkedPlace));
-  }, [hasLinkedPlace]);
+    setSelectedTypes((prev) => enforceCanyoningTag(prev, linkedCanyon));
+  }, [linkedCanyon]);
 
   // Media. In edit mode the trip already exists; in create mode we lazily
   // materialise a draft trip on first upload so files have something to link to.
@@ -220,25 +238,25 @@ function TripLogDialog({
   const [fieldToDelete, setFieldToDelete] = useState<TripLogCustomFieldDef | null>(null);
 
   /**
-   * THE FIELDS THIS TRIP IS ASKED FOR: the ones scoped to the types of the
-   * places it links, union any key that already has a value (§2, `tripFieldDefs`).
+   * THE FIELDS THIS TRIP IS ASKED FOR — the ones scoped to the trip's own TYPES
+   * (the selected tags) — and, after them, the ones it only KEEPS: stored when
+   * the dialog opened, or typed into since (`tripFieldDefs`).
    *
-   * The union half is what stops the form eating data — unlinking a place,
-   * deleting one, retyping it or rescoping a definition would each otherwise
-   * hide a value the user typed, and the next save writes the object the form
-   * knows about. A value only ever goes when its definition is deleted, which
-   * has its own impact count.
-   *
-   * An inline pending create is a canyon (see `creating`), so it counts as one
-   * for the purpose of which questions to ask.
+   * The save writes exactly the fields shown, so a kept field must stay on the
+   * form when its tag comes off or the save drops it. Kept-only fields sit in
+   * their own "Leftover attributes" section with a remove button, as on Logjam
+   * GPS: removing drops the key from the kept set, so the save leaves it out;
+   * closing without saving brings it back, which is why there is no confirm.
    */
-  const visibleFieldDefs = useMemo(() => {
-    const linkedTypeIds = selectedPlaceIds
-      .map((id) => places.find((place) => place.id === id)?.placeTypeId)
-      .filter((typeId): typeId is string => !!typeId);
-    if (creating) linkedTypeIds.push(SYSTEM_PLACE_TYPE_IDS.canyon);
-    return tripFieldDefs(customFieldDefs, linkedTypeIds, tripLog?.customFields);
-  }, [creating, customFieldDefs, places, selectedPlaceIds, tripLog]);
+  const visibleFieldDefs = useMemo(
+    () => tripFieldDefs(customFieldDefs, selectedTypes, null, keptFieldKeys),
+    [customFieldDefs, keptFieldKeys, selectedTypes],
+  );
+  const askedFieldDefs = useMemo(
+    () => tripFieldDefs(customFieldDefs, selectedTypes, null),
+    [customFieldDefs, selectedTypes],
+  );
+  const leftoverFieldDefs = visibleFieldDefs.filter((def) => !askedFieldDefs.includes(def));
 
   // Names of the currently selected places (incl. a pending create, for a live
   // preview), in selection order — feeds the derived title.
@@ -305,7 +323,7 @@ function TripLogDialog({
       // opened, and prompt on close without the user touching anything.
       initialSelectedTypes = enforceCanyoningTag(
         tripLog.types,
-        initialSelectedPlaceIds.length > 0,
+        linksCanyon(placeTypeIdsFor(initialSelectedPlaceIds)),
       );
       // Populate existing custom field values as strings
       const vals: Record<string, string> = {};
@@ -321,7 +339,7 @@ function TripLogDialog({
       initialDisplayNameInput = "";
       initialSelectedTypes = enforceCanyoningTag(
         [],
-        initialSelectedPlaceIds.length > 0,
+        linksCanyon(placeTypeIdsFor(initialSelectedPlaceIds)),
       );
       initialFieldValues = {};
     }
@@ -333,6 +351,13 @@ function TripLogDialog({
     setAddedTypes([]);
     setCreating(null);
     setFieldValues(initialFieldValues);
+    setKeptFieldKeys(
+      new Set(
+        Object.entries(tripLog?.customFields ?? {})
+          .filter(([, value]) => value != null)
+          .map(([key]) => key),
+      ),
+    );
     setMode("form");
     setPlaceSearch("");
     setPlacesError(null);
@@ -471,6 +496,15 @@ function TripLogDialog({
     setDisplayNameInput(form.displayNameInput);
     setSelectedTypes(form.selectedTypes);
     setFieldValues(form.fieldValues);
+    // A restored answer is the user's typing too: keep it on the form whatever
+    // the restored tags say, or the save would drop it.
+    setKeptFieldKeys(
+      (prev) =>
+        new Set([
+          ...prev,
+          ...Object.keys(form.fieldValues).filter((key) => form.fieldValues[key] !== ""),
+        ]),
+    );
     setCreating(form.creating);
     // The guard's baseline moves with the restore: the form was just populated
     // from the draft, so "dirty" means changed *since* the restore. Closing
@@ -589,11 +623,21 @@ function TripLogDialog({
   }
 
   function getFieldValue(key: string): string {
-    return getFieldValueFor(fieldValues, customFieldDefs, key);
+    return fieldValues[key] ?? "";
   }
 
   function setFieldValue(key: string, value: string) {
+    setKeptFieldKeys((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
     setFieldValues((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function removeLeftoverField(key: string) {
+    setKeptFieldKeys((prev) => {
+      const next = new Set(prev);
+      next.delete(key);
+      return next;
+    });
+    setFieldValues((prev) => ({ ...prev, [key]: "" }));
   }
 
   function handlePickCoords() {
@@ -680,17 +724,17 @@ function TripLogDialog({
   const lockedTypes = useMemo(
     () =>
       new Set(
-        hasLinkedPlace
+        linkedCanyon
           ? typeOptions.filter((option) => option.value.toLowerCase() === CANYONING_TRIP_TYPE).map((option) => option.value)
           : [],
       ),
-    [hasLinkedPlace, typeOptions],
+    [linkedCanyon, typeOptions],
   );
 
   function toggleType(value: string) {
     setTypesError(null);
     if (selectedTypes.includes(value)) {
-      setSelectedTypes(enforceCanyoningTag(selectedTypes.filter((type) => type !== value), hasLinkedPlace));
+      setSelectedTypes(enforceCanyoningTag(selectedTypes.filter((type) => type !== value), linkedCanyon));
       return;
     }
     if (selectedTypes.length >= MAX_TRIP_TYPES_PER_TRIP) {
@@ -711,7 +755,7 @@ function TripLogDialog({
 
   const typesHint =
     [
-      hasLinkedPlace ? "Trips with a linked place are always tagged canyoning." : null,
+      linkedCanyon ? "Trips with a linked canyon are always tagged canyoning." : null,
       selectedTypes.length > 1 ? "The starred type sets the trip’s icon." : null,
     ]
       .filter(Boolean)
@@ -823,9 +867,9 @@ function TripLogDialog({
       // returns the surviving list, so this uses the server's answer rather
       // than a locally-appended guess.
       //
-      // `appliesToAllTypes` because a TRIP field is scoped by the types of the
-      // places the trip links (plan §2.7) — a trip with no places would
-      // otherwise get a field that appears nowhere.
+      // `appliesToAllTypes` because Logjam Web has no trip-type picker for a
+      // new field yet — a field named for no trip type would otherwise appear
+      // on no trip at all. Logjam GPS offers the picker.
       const updatedDefs = await createCustomField("trip-log", result.def, {
         appliesToAllTypes: true,
       });
@@ -1079,8 +1123,8 @@ function TripLogDialog({
           />
 
           <section className={classes.section}>
-            <SectionHeader title="Attributes" />
-            {visibleFieldDefs.map((def) => (
+            <SectionHeader title="Trip attributes" />
+            {askedFieldDefs.map((def) => (
               <div key={def.key} className={classes.attribute}>
                 <div className={classes.grow}>
                   <CustomFieldInput
@@ -1130,6 +1174,34 @@ function TripLogDialog({
               </Button>
             )}
           </section>
+
+          {/* Not a place's "Doesn't fit this type" and its three actions:
+              these are the user's own definitions, so there is nothing to
+              adopt — only keep or remove. The same card row, though, so the
+              two read as the same kind of thing. */}
+          {leftoverFieldDefs.length > 0 && (
+            <section className={classes.section}>
+              <SectionHeader title="Leftover attributes" count={leftoverFieldDefs.length} />
+              <p className={classes.muted}>
+                These attributes are left over from when this trip was saved as a different type.
+              </p>
+              {leftoverFieldDefs.map((def) => (
+                <Row
+                  key={def.key}
+                  leading={<IconTile icon={CircleHelp} hue="var(--theme-accent)" />}
+                  title={def.label}
+                  subtitle={formatFieldValue(coerceFieldValue(getFieldValue(def.key), def.type), def.type)}
+                  trailing={
+                    <IconButton
+                      icon={X}
+                      label={`Remove ${def.label} from this trip`}
+                      onClick={() => removeLeftoverField(def.key)}
+                    />
+                  }
+                />
+              ))}
+            </section>
+          )}
 
           {/* Media. In create mode the first upload lazily creates a draft trip
               to link files to; discarding deletes it (and its files). */}

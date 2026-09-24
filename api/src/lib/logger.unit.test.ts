@@ -53,6 +53,27 @@ describe("logger redaction", () => {
     expect(headers.cookie).toBe("[redacted]");
   });
 
+  // Trip types are user-authored tags, and a trip attribute's scoping is a list
+  // of them — on the REST body and inside a sync push op alike.
+  it("censors trip types and a trip attribute's scoping", () => {
+    const out = captureLog({
+      req: {
+        body: {
+          types: ["with Dad"],
+          tripTypes: ["Claustral recon"],
+          ops: [{ fields: { types: ["with Dad"], tripTypes: ["Claustral recon"] } }],
+        },
+      },
+    });
+    const body = (out.req as {
+      body: Record<string, unknown> & { ops: { fields: Record<string, unknown> }[] };
+    }).body;
+    expect(body.types).toBe("[redacted]");
+    expect(body.tripTypes).toBe("[redacted]");
+    expect(body.ops[0].fields.types).toBe("[redacted]");
+    expect(body.ops[0].fields.tripTypes).toBe("[redacted]");
+  });
+
   it("leaves non-sensitive fields intact", () => {
     const out = captureLog({ req: { body: { id: "place-1" } } });
     const body = (out.req as { body: Record<string, unknown> }).body;

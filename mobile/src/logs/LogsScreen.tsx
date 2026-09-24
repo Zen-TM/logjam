@@ -42,7 +42,7 @@ import {
   reconcileCustomFieldFilters,
   sortTrips,
   TRIP_SORT_OPTIONS,
-  tripFieldDefs,
+  tripFilterFieldDefs,
   type CustomFieldFilter,
   type TripSortKey,
 } from "@logjam/shared";
@@ -167,29 +167,12 @@ export function LogsScreen({
     [visible, sort],
   );
 
-  // The attributes worth OFFERING as filters: the definitions applicable to the
-  // types of the places these trips link, union every key a trip has actually
-  // answered. The union clause is `tripFieldDefs` doing the same job it does on
-  // a form — a trip whose place was retyped or unlinked still holds its answer,
-  // and dropping the field would hide those trips behind an invisible axis.
-  const placeTypeById = useMemo(
-    () => new Map((placesQuery.data ?? []).map((place) => [place.id, place.placeTypeId])),
-    [placesQuery.data],
+  // The attributes worth OFFERING as filters follow the activity chip, the
+  // way a place's follow its type (`tripFilterFieldDefs`).
+  const filterableDefs = useMemo(
+    () => tripFilterFieldDefs(tripDefs, trips, typeFilter),
+    [trips, tripDefs, typeFilter],
   );
-  const filterableDefs = useMemo(() => {
-    const linkedTypeIds = new Set<string>();
-    const answered: Record<string, unknown> = {};
-    for (const trip of trips) {
-      for (const place of trip.places) {
-        const placeTypeId = placeTypeById.get(place.id);
-        if (placeTypeId) linkedTypeIds.add(placeTypeId);
-      }
-      for (const [key, value] of Object.entries(trip.customFields ?? {})) {
-        if (value != null) answered[key] = value;
-      }
-    }
-    return tripFieldDefs(tripDefs, [...linkedTypeIds], answered);
-  }, [trips, tripDefs, placeTypeById]);
 
   // A filter whose definition was deleted, or retyped under it, would narrow
   // the list with no control left in the sheet to say so or undo it.

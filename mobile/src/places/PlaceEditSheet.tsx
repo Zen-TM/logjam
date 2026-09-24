@@ -23,6 +23,7 @@ import { CustomFieldValueInputs } from "../customFields/CustomFieldValues";
 import {
   coerceCustomFields,
   fieldValueStrings,
+  sameFieldValues,
   withoutClearedFields,
 } from "../customFields/fieldValueCoercion";
 import { useFieldDefs } from "../customFields/useFieldDefs";
@@ -161,7 +162,11 @@ export function PlaceEditSheet({
     setEditingField(null);
     setDateFieldKey(null);
     setFieldValues(fieldValueStrings(userFieldValues(place?.fieldValues)));
-  }, [place, initialCoords, visible]);
+    // Keyed on the place's ID, not the object: a detail screen hands this a
+    // fresh object on every mirror change (a sync pull, an upload tick), and
+    // re-seeding on that wiped whatever the user was halfway through typing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [place?.id, initialCoords, visible]);
 
   // A point back from the picker touches the two coordinate fields and nothing
   // else — everything else on this form is what the user was in the middle of
@@ -290,10 +295,7 @@ export function PlaceEditSheet({
         // the OLD type's values, which the server needs in the payload to park
         // them in `foreignFields` rather than lose them (§2.6).
         const nextValues = withFieldValues(place.fieldValues, effectiveCustomFields);
-        if (
-          JSON.stringify(nextValues) !==
-          JSON.stringify(place.fieldValues ?? {})
-        ) {
+        if (!sameFieldValues(nextValues, place.fieldValues ?? {})) {
           changes.fieldValues = nextValues;
         }
         if (Object.keys(changes).length === 0) {
@@ -422,6 +424,19 @@ export function PlaceEditSheet({
               setFieldValues((current) => ({ ...current, [dateFieldKey]: key }))
             }
           />
+          {/* An attribute date may be unknown; a picker with no way back to
+              blank turns that into a wrong answer. */}
+          {fieldValues[dateFieldKey] ? (
+            <Button
+              label="Clear date"
+              icon="x"
+              variant="ghost"
+              onPress={() => {
+                setFieldValues((current) => ({ ...current, [dateFieldKey]: "" }));
+                setMode("form");
+              }}
+            />
+          ) : null}
         </View>
       ) : null}
 

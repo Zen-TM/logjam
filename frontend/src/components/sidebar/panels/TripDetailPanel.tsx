@@ -15,14 +15,13 @@ import {
   X,
 } from "lucide-react";
 import {
-  formatDateKey,
+  attributeRows,
+  formatFieldValue,
   formatTripDate,
   mediaCategory,
-  tripAttributeEntries,
   tripTypeLabel,
   type MediaItem,
   type ScopedCustomFieldDef,
-  type TripAttributeEntry,
 } from "@logjam/shared";
 import type { TPlace, TTripLog } from "../../../placeUtils";
 import { deleteTripLog, getTripLog, tripTitle } from "../../../placeUtils";
@@ -44,15 +43,6 @@ import {
   type MenuEntry,
 } from "../../../ui";
 import classes from "./TripDetailPanel.module.css";
-
-function formatAttribute(entry: TripAttributeEntry): string {
-  const { value, type } = entry;
-  if (value == null || value === "") return "—";
-  if (typeof value === "boolean") return value ? "Yes" : "No";
-  // A date attribute is stored date-only; formatDateKey reads it in UTC.
-  if (type === "date" && typeof value === "string") return formatDateKey(value);
-  return String(value);
-}
 
 function TripDetailPanel({
   tripLog,
@@ -161,7 +151,7 @@ function TripDetailPanel({
   const trip = tripLog;
   const photoCount = media.filter((item) => mediaCategory(item.mediaType) !== "track").length;
   const trackCount = media.length - photoCount;
-  const attributes = tripAttributeEntries(customFieldDefs, trip.customFields);
+  const attributes = attributeRows(customFieldDefs, trip.customFields);
   const title = tripTitle(trip);
 
   // A VERB is in the ⋯ (DESIGN.md §7). Edit raises the form this page is the
@@ -273,12 +263,12 @@ function TripDetailPanel({
 
           {attributes.length > 0 && (
             <section className={classes.section}>
-              <SectionHeader title="Attributes" />
+              <SectionHeader title="Trip attributes" />
               <dl className={classes.attributes}>
-                {attributes.map((entry) => (
-                  <div key={entry.key} className={classes.attribute}>
-                    <dt>{entry.label}</dt>
-                    <dd>{formatAttribute(entry)}</dd>
+                {attributes.map(([key, label, value, type]) => (
+                  <div key={key} className={classes.attribute}>
+                    <dt>{label}</dt>
+                    <dd>{formatFieldValue(value, type)}</dd>
                   </div>
                 ))}
               </dl>

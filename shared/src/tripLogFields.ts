@@ -65,8 +65,8 @@ export type TripLogCustomFieldDef = {
 };
 
 /**
- * A definition WITH its scoping — which place types it applies to, and whether
- * it applies to every one of them including types created later.
+ * A definition WITH its scoping — which types it applies to, and whether it
+ * applies to every one of them including types created later.
  *
  * Separate from `TripLogCustomFieldDef` rather than folded into it, because the
  * scoping answers a different question from the field itself: dozens of call
@@ -75,12 +75,31 @@ export type TripLogCustomFieldDef = {
  * renderer, a filter and a validator take; this one is what decides which
  * fields a form has at all.
  *
+ * TWO KINDS OF TYPE, ONE PER ENTITY. A place field is scoped to PLACE TYPES
+ * (`placeTypeIds`, rows with ids); a trip field is scoped to TRIP TYPES
+ * (`tripTypes`, the free-text tags a trip carries — "canyoning",
+ * "packrafting"). The other list is always empty, and the API refuses a write
+ * that fills it. A trip is scoped by its tags and not by the places it links
+ * because a trip is often logged with no place at all — a casual walk up a
+ * popular track nobody needs to save — and the tags are what say what the user
+ * was actually doing.
+ *
  * `appliesToAllTypes` is a FLAG rather than join rows for every type that
  * exists today: rows would silently fail to apply to a type created tomorrow,
- * and the user who ticked "All" would never find out.
+ * and the user who ticked "All" would never find out. For a trip field it
+ * means every trip, tagged or not.
  */
 export type ScopedCustomFieldDef = TripLogCustomFieldDef & {
   placeTypeIds: string[];
+  /**
+   * Trip types, compared CASE-INSENSITIVELY and stored in the casing the user
+   * picked. Plain strings because trip types are not rows: nothing renames a
+   * tag, so a string match cannot drift.
+   */
+  // ponytail: string match on free-text tags. If a tag rename is ever added it
+  // must rewrite these in the same transaction, or the attribute silently stops
+  // appearing on the renamed trips.
+  tripTypes: string[];
   appliesToAllTypes: boolean;
   /**
    * WHOSE definition this is. NULL means a SYSTEM one — the seven canyon axes,
@@ -136,34 +155,42 @@ export function defsForType(
 }
 
 /**
- * The definitions a TRIP's form shows: the ones applicable to the types of the
- * places it links, UNION any key that already has a value.
+ * The definitions a TRIP's form shows: the ones scoped to the trip's own TYPES
+ * (its tags), UNION any key that already has a value, UNION any key the caller
+ * says to keep.
  *
- * The first half is the same scoping a place gets — a trip that visited a
- * canyon is asked the canyon questions, one that visited nothing is asked only
- * the `appliesToAllTypes` ones ("walked around the block" is the common case,
- * not an edge case).
+ * A packrafting trip is asked the packrafting questions; an untagged one is
+ * asked only the `appliesToAllTypes` ones. Tags match case-insensitively, the
+ * same way the API dedupes them.
  *
- * THE UNION CLAUSE IS WHAT STOPS IT EATING DATA. Without it, unlinking a
- * place, deleting one, changing its type or rescoping a definition all silently
- * hide a value the user typed — the form stops rendering the field, the next
- * save writes the object the form knows about, and the value is gone with no
- * warning and no undo. One clause covers all four. A value is destroyed only by
- * deleting its definition, which has its own impact count and confirmation.
+ * THE UNION CLAUSES ARE WHAT STOP IT EATING DATA. Both clients save exactly the
+ * fields the form shows, so a field that stops rendering loses its value on the
+ * next save:
+ *  - `values` covers what is STORED — untagging the trip or rescoping a
+ *    definition would otherwise hide a recorded answer.
+ *  - `keep` covers what is being TYPED — the stored values say nothing about an
+ *    unsaved edit, so ticking packrafting, typing a river level and unticking it
+ *    again would drop the answer. The form passes the keys edited since it
+ *    opened. Keyed on EDITED rather than on "has a value right now", or
+ *    backspacing to empty would unmount the field under the cursor.
+ * A value is destroyed only by clearing it, or by deleting its definition,
+ * which has its own impact count and confirmation.
  *
- * Order is the order given, so a field does not jump when a place is linked.
+ * Order is the order given, so a field does not jump when a tag is toggled.
  */
 export function tripFieldDefs(
   defs: readonly ScopedCustomFieldDef[],
-  linkedPlaceTypeIds: readonly string[],
+  tripTypes: readonly string[],
   values: Record<string, unknown> | null | undefined,
+  keep?: ReadonlySet<string>,
 ): ScopedCustomFieldDef[] {
-  const linked = new Set(linkedPlaceTypeIds);
+  const tagged = new Set(tripTypes.map((type) => type.toLowerCase()));
   return defs.filter(
     (def) =>
       def.appliesToAllTypes ||
-      def.placeTypeIds.some((typeId) => linked.has(typeId)) ||
-      (values != null && values[def.key] !== undefined && values[def.key] !== null),
+      def.tripTypes.some((type) => tagged.has(type.toLowerCase())) ||
+      (values != null && values[def.key] !== undefined && values[def.key] !== null) ||
+      (keep?.has(def.key) ?? false),
   );
 }
 

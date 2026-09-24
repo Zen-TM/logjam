@@ -19,11 +19,6 @@ import {
   type FieldStat,
   type LogbookStats,
 } from "./logbookStats.js";
-import {
-  customFieldDisplayLabel,
-  type TripLogCustomFieldDef,
-  type TripLogCustomFieldType,
-} from "./tripLogFields.js";
 import { tripTypeLabel } from "./tripTypeIdentity.js";
 
 export type LogbookTrip = {
@@ -468,45 +463,55 @@ export function fieldStatDisplay(stat: FieldStat): FieldStatDisplay {
 
 // ── One trip's attributes, as a reader sees them ───────────────────────
 
-export type TripAttributeEntry = {
-  key: string;
-  label: string;
-  value: unknown;
-  /** The definition's type, or null for a value whose definition is gone. */
-  type: TripLogCustomFieldType | null;
-};
+/** One stored value as a row of a detail page's attribute table: key, label,
+ *  value, and the definition's type (null when the definition is gone). */
+export type AttributeRow = [key: string, label: string, value: unknown, type: string | null];
 
 /**
- * The attributes a trip carries, for its detail view: every definition with a
- * STORED value, in definition order, then any stored value whose definition is
- * gone (deleted elsewhere, or not loaded yet).
+ * Every stored value as a row of a detail page's attribute table: the defined
+ * ones first, in the definitions' order and under their bare label, then any
+ * value whose definition is gone (deleted elsewhere, or not loaded) under its
+ * un-slugged key.
  *
- * Stored-only, not every definition: listing every trip attribute the user has
- * ever made, "—" for each one this trip never asked, buried the answers that
- * are there. An orphaned key is un-slugged rather than shown raw — keys are
- * slugs of the original label (`makeCustomFieldKey`), so `water_level` reads
- * back as "Water level".
+ * ONE BUILDER FOR TRIPS AND PLACES, ON BOTH CLIENTS, so no two tables can
+ * disagree about what they list. Stored-only, not every definition: listing
+ * every attribute ever made, "—" for each one this trip never asked, buried the
+ * answers that are there. The bare label rather than `customFieldDisplayLabel`:
+ * the "(1-5)" that helps someone typing into a box is noise beside a value
+ * already typed. A key defined twice — a shared place labels with the viewer's
+ * own definitions AND the owner's snapshot — lists once, under the first.
  */
-export function tripAttributeEntries(
-  defs: TripLogCustomFieldDef[],
-  stored: Record<string, unknown> | null | undefined,
-): TripAttributeEntry[] {
-  const values = stored ?? {};
-  const defined = defs
-    .filter((def) => values[def.key] !== undefined)
-    .map((def) => ({
-      key: def.key,
-      label: customFieldDisplayLabel(def),
-      value: values[def.key],
-      type: def.type,
-    }));
-  const orphaned = Object.entries(values)
-    .filter(([key]) => !defs.some((def) => def.key === key))
-    .map(([key, value]) => ({ key, label: humanizeFieldKey(key), value, type: null }));
+export function attributeRows(
+  // Key, label and type only: a shared place's owner snapshot is typed loosely.
+  defs: readonly { key: string; label: string; type?: string }[],
+  values: Record<string, unknown> | null | undefined,
+): AttributeRow[] {
+  const stored = values ?? {};
+  const byKey = new Map<string, { label: string; type: string | null }>();
+  for (const def of defs) {
+    if (!byKey.has(def.key)) byKey.set(def.key, { label: def.label, type: def.type ?? null });
+  }
+  const defined = [...byKey]
+    .filter(([key]) => stored[key] !== undefined)
+    .map(([key, { label, type }]): AttributeRow => [key, label, stored[key], type]);
+  const orphaned = Object.entries(stored)
+    .filter(([key]) => !byKey.has(key))
+    .map(([key, value]): AttributeRow => [key, humanizeFieldKey(key), value, null]);
   return [...defined, ...orphaned];
 }
 
-function humanizeFieldKey(key: string): string {
+/** Keys are slugs of the original label (`makeCustomFieldKey`), so un-slugging
+ *  beats showing `water_level` raw. */
+export function humanizeFieldKey(key: string): string {
   const spaced = key.replace(/[_-]+/g, " ").trim();
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+/** A stored value as it reads in an attribute table. A date is stored
+ *  date-only, so `formatDateKey` reads it in UTC (CH-001). */
+export function formatFieldValue(value: unknown, type?: string | null): string {
+  if (value === null || value === undefined || value === "") return "—";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (type === "date" && typeof value === "string") return formatDateKey(value);
+  return String(value);
 }

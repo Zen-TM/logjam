@@ -120,21 +120,9 @@
   color: var(--theme-text-muted);
 }
 
-/* A parked value is a DECISION, so unlike the tables above it sits on a
-   surface with its verbs (Logjam GPS, places §"A parked attribute is a
-   CARD"). */
-.parked {
+/* The parked value's dialog: the value, then its verbs as rows. */
+.foreignActions {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 10px 12px;
-  border: var(--hairline);
-  border-radius: var(--radius-md);
-  background: var(--theme-secondary);
-}
-
-.parkedActions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
 }

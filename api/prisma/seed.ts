@@ -5,6 +5,7 @@ import { CURRENT_CONSENT_VERSION } from "../src/constants/consent";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import {
   enforceCanyoningTag,
+  linksCanyon,
   setFieldValues,
   routeLengthM,
   routeToGpx,
@@ -271,10 +272,15 @@ const KANANGRA_LINE: [number, number][] = [
 // and a trip-log definition has no type picker to answer the question with. The
 // seed wrote all three with the default and they were invisible on the trip
 // form until 20260911140000 repaired them.
+//
+// `rope_length_m` is scoped to the `canyoning` TRIP TYPE rather than to every
+// trip, so dev has an attribute that appears and disappears as a trip's tags
+// change — the case the trip form and the stats drill-down both have to get
+// right, and one nobody can try without a scoped definition existing.
 const ALICE_TRIP_FIELD_DEFS = [
-  { key: "water_level", label: "Water Level", type: "string", appliesToAllTypes: true },
-  { key: "rope_length_m", label: "Rope Length (m)", type: "integer", appliesToAllTypes: true },
-  { key: "wetsuit", label: "Wetsuit", type: "boolean", appliesToAllTypes: true },
+  { key: "water_level", label: "Water Level", type: "string", appliesToAllTypes: true, tripTypes: [] as string[] },
+  { key: "rope_length_m", label: "Rope Length (m)", type: "integer", appliesToAllTypes: false, tripTypes: ["canyoning"] },
+  { key: "wetsuit", label: "Wetsuit", type: "boolean", appliesToAllTypes: true, tripTypes: [] as string[] },
 ];
 
 // A place type ALICE made herself, so copy reconciliation (§2.6) is
@@ -415,6 +421,13 @@ const CAROL_PLACES: SeedPlace[] = [
 ];
 
 const ALL_PLACES = [...ALICE_PLACES, ...BOB_PLACES, ...CAROL_PLACES];
+
+/** A seeded place's type, with the same Canyon default the insert applies. */
+function seedPlaceTypeId(placeId: string): string {
+  const place = ALL_PLACES.find((entry) => entry.id === placeId);
+  if (!place) throw new Error(`seed trip links an unknown place ${placeId}`);
+  return place.placeTypeId ?? SYSTEM_PLACE_TYPE_IDS.canyon;
+}
 
 // Deterministic fabricated trip-log generator.
 const PARTIES = [
@@ -794,7 +807,10 @@ async function main() {
         date: t.date,
         displayName: t.displayName,
         notes: t.notes,
-        types: enforceCanyoningTag([], Boolean(t.placeId)),
+        types: enforceCanyoningTag(
+          [],
+          linksCanyon(t.placeId ? [seedPlaceTypeId(t.placeId)] : []),
+        ),
         ...(t.customFields ? { customFields: t.customFields } : {}),
         ...(t.placeId
           ? { places: { create: [{ placeId: t.placeId, position: 0 }] } }

@@ -70,6 +70,11 @@ const SENSITIVE_KEYS = new Set([
   "customfields",
   "foreignfields",
   "fielddefssnapshot",
+  // Trip types are user-authored tags, and a trip attribute's scoping is a
+  // list of them. `types` is a generic key and will over-censor now and then;
+  // over-censoring is the safe direction for a crash report.
+  "types",
+  "triptypes",
   "authorization",
   "cookie",
 ]);

@@ -36,6 +36,7 @@ import {
   removeShareConfirm,
   routeLengthM,
   placeStatus,
+  attributeRows,
 } from "@logjam/shared";
 
 import { tripTitle } from "../api/tripTitle";
@@ -47,6 +48,7 @@ import {
 import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
 import { removeSharedPlace } from "../sharing/removeShare";
 import { useFieldDefs } from "../customFields/useFieldDefs";
+import { AttributeTable } from "../customFields/CustomFieldValues";
 import { useConnectivity } from "../map/connectivity";
 import { MediaStrip } from "../media/MediaStrip";
 import { resolveRouteAttachmentBbox } from "../media/routeAttachmentBbox";
@@ -252,23 +254,7 @@ export function PlaceDetailScreen({
     "Place";
   const storedFields = userFieldValues(place.fieldValues);
   const labellingDefs = [...fieldDefs, ...(place.fieldDefsSnapshot ?? [])];
-  const customFields = [
-    ...labellingDefs
-      .filter((def) => storedFields[def.key] !== undefined)
-      .map(
-        (def) =>
-          [
-            // The bare LABEL, not `customFieldDisplayLabel`: the "(1-5)" that
-            // helps someone typing into a box is noise beside a value that has
-            // already been typed.
-            def.label,
-            storedFields[def.key],
-          ] as const,
-      ),
-    ...Object.entries(storedFields)
-      .filter(([key]) => !labellingDefs.some((def) => def.key === key))
-      .map(([key, value]) => [humanizeFieldKey(key), value] as const),
-  ];
+  const customFields = attributeRows(labellingDefs, storedFields);
 
   // OVERVIEW IS WHAT EVERY PLACE HAS, and that is only its position.
   //
@@ -451,20 +437,7 @@ export function PlaceDetailScreen({
                 campsite these are Capacity and Is-a-cave, which are the app's,
                 not the user's. */}
             <SectionHeader label={`${placeTypeName} ${ATTRIBUTE_NOUN.many}`} />
-            <View style={styles.fieldCard}>
-              {customFields.map(([label, value], index) => (
-                <View
-                  key={label}
-                  style={[
-                    styles.fieldRow,
-                    index === customFields.length - 1 ? styles.fieldRowLast : null,
-                  ]}
-                >
-                  <Text style={styles.fieldKey}>{label}</Text>
-                  <Text style={styles.fieldValue}>{formatFieldValue(value)}</Text>
-                </View>
-              ))}
-            </View>
+            <AttributeTable rows={customFields} />
           </>
         ) : null}
 
@@ -1056,20 +1029,6 @@ function tickLabel(trips: number): string {
   return trips === 1 ? "Visited · 1 trip" : `Visited · ${trips} trips`;
 }
 
-/** Fallback label for a value whose DEFINITION is gone — deleted on another
- * device, or not loaded because we are offline. Keys are slugs of the original
- * label, so un-slugging beats showing `water_level` raw. */
-function humanizeFieldKey(key: string): string {
-  const spaced = key.replace(/[_-]+/g, " ").trim();
-  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
-}
-
-function formatFieldValue(value: unknown): string {
-  if (value === null || value === undefined || value === "") return "—";
-  if (typeof value === "boolean") return value ? "Yes" : "No";
-  return String(value);
-}
-
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: theme.primary },
   pillRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing(0.75) },
@@ -1086,7 +1045,6 @@ const styles = StyleSheet.create({
   // spaced apart, a long label and a right-aligned value had nothing but white
   // space between them, which is hard to track across on a phone. Hairline
   // rules per row give the eye the line to follow and cost no colour.
-  fieldCard: { gap: 0 },
   fieldRow: {
     flexDirection: "row",
     justifyContent: "space-between",

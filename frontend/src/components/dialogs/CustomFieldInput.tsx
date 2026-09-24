@@ -5,13 +5,22 @@ import {
   systemFieldDef,
 } from "@logjam/shared";
 import { numericFieldError, type NumericFieldConstraints } from "../../numberInput";
-import { Checkbox, ChipRail, NumberField, TextField } from "../../ui";
+import { ChipRail, NumberField, TextField } from "../../ui";
 import classes from "./CustomFieldInput.module.css";
 
 /** The stop that means "no answer". Unset has to stay reachable: most imported
  *  places have gaps, and a picker with no way back to blank turns "I don't
  *  know" into a wrong answer. */
 const UNSET = "";
+
+/** A yes/no is THREE states, "—" first, as on Logjam GPS. A checkbox has no
+ *  empty state, so it wrote `false` for every yes/no the form showed — a "No"
+ *  nobody gave, kept after the trip was retagged and counted as answered. */
+const BOOLEAN_OPTIONS = [
+  { value: UNSET, label: "—" },
+  { value: "true", label: "Yes" },
+  { value: "false", label: "No" },
+];
 
 /**
  * Numeric constraints for a custom field. Integer-ness comes from the field
@@ -51,9 +60,8 @@ export function customFieldValueError(
  * here knowing that canyons exist. They used to be seven hand-written selects
  * in `PlaceDialog` with their reserved keys spelled out.
  *
- * `value` is expected to come from `customFieldValues.getFieldValue`, which
- * defaults unset boolean fields to "false" (UX-004) so the checkbox below
- * and the persisted value agree.
+ * `value` is the raw form string; "" is unset for every type, a yes/no
+ * included (`BOOLEAN_OPTIONS`).
  */
 function CustomFieldInput({
   def,
@@ -93,7 +101,12 @@ function CustomFieldInput({
   }
 
   if (def.type === "boolean") {
-    return <Checkbox label={label} checked={value === "true"} onChange={(next) => onChange(String(next))} />;
+    return (
+      <div className={classes.rail}>
+        <span className={classes.railLabel}>{label}</span>
+        <ChipRail label={label} options={BOOLEAN_OPTIONS} value={value} onChange={onChange} />
+      </div>
+    );
   }
 
   if (def.type === "integer" || def.type === "float") {

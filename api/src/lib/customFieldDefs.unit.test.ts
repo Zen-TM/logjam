@@ -11,8 +11,51 @@ vi.mock("../services/prisma", () => ({
   },
 }));
 
-import { placeCustomFieldsRecord } from "./customFieldDefs";
+import { createFieldDef, placeCustomFieldsRecord } from "./customFieldDefs";
+import prisma from "../services/prisma";
 import { tripLogHasCustomFieldValue } from "@logjam/shared";
+
+// Each entity has ONE kind of scoping. A write that fills the other list is
+// refused before anything is stored — a scoping the server silently dropped
+// would leave the field on forms the user never chose, or on none.
+describe("createFieldDef scoping", () => {
+  const def = { key: "flow", label: "Flow", type: "integer" as const };
+
+  it("refuses place types on a trip attribute", async () => {
+    await expect(
+      createFieldDef("user-1", "tripLog", { def, position: 0, placeTypeIds: ["type-1"] }),
+    ).rejects.toMatchObject({ statusCode: 400 });
+    expect(prisma.customFieldDef.create).not.toHaveBeenCalled();
+  });
+
+  it("refuses trip types on a place attribute", async () => {
+    await expect(
+      createFieldDef("user-1", "place", { def, position: 0, tripTypes: ["packrafting"] }),
+    ).rejects.toMatchObject({ statusCode: 400 });
+    expect(prisma.customFieldDef.create).not.toHaveBeenCalled();
+  });
+
+  // A trip attribute that names trip types is NOT on every form — the default
+  // "all" is for a definition that names nothing.
+  it("stores a trip attribute's trip types and leaves 'all' off", async () => {
+    vi.mocked(prisma.customFieldDef.create).mockResolvedValueOnce({} as never);
+    await createFieldDef("user-1", "tripLog", { def, position: 0, tripTypes: ["packrafting"] });
+    expect(prisma.customFieldDef.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        tripTypes: ["packrafting"],
+        appliesToAllTypes: false,
+      }),
+    });
+  });
+
+  it("puts a trip attribute that names no trip types on every trip", async () => {
+    vi.mocked(prisma.customFieldDef.create).mockResolvedValueOnce({} as never);
+    await createFieldDef("user-1", "tripLog", { def, position: 0 });
+    expect(prisma.customFieldDef.create).toHaveBeenLastCalledWith({
+      data: expect.objectContaining({ tripTypes: [], appliesToAllTypes: true }),
+    });
+  });
+});
 
 describe("placeCustomFieldsRecord", () => {
   // Values are at the TOP LEVEL of fieldValues now. They used to be nested

@@ -642,8 +642,8 @@ function App() {
   } = useLiveVectorStyle(loadsUserData);
 
   // Trip-log definitions, read from the same row-grain endpoint as the place
-  // ones. A trip field carries scoping too (§2.7 scopes a trip's fields by the
-  // types of the places it links), and reading both the same way means one
+  // ones. A trip field carries scoping too (`tripTypes`, the trip's own tags),
+  // and reading both the same way means one
   // shape reaches every dialog instead of two.
   const [customFieldDefs, setCustomFieldDefs] = useState<
     ScopedCustomFieldDef[]

@@ -38,6 +38,11 @@ export const redactPaths = [
   // as sensitive as `notes` in the comment above and then redacted neither.
   'req.body.label',
   'req.body.field.label',
+  // TRIP TYPES are user-authored tags ("Claustral recon", "with Dad") on the
+  // same footing as a label, and a trip attribute's scoping is a list of them.
+  'req.body.types',
+  'req.body.tripTypes',
+  'req.body.trips[*].types',
   // THE SYNC PUSH IS THE PHONE'S ONLY WRITE PATH, and every name, note and
   // field value it has ever sent travels inside `ops[*].fields`, which nothing
   // above reaches. Same defence-in-depth argument as the bulk rows below — no
@@ -51,6 +56,8 @@ export const redactPaths = [
   'req.body.ops[*].fields.fieldValues',
   'req.body.ops[*].fields.customFields',
   'req.body.ops[*].fields.label',
+  'req.body.ops[*].fields.types',
+  'req.body.ops[*].fields.tripTypes',
   'req.body.ops[*].fields.displayName',
   'req.body.ops[*].fields.points',
   // Generic wildcards for nested payloads

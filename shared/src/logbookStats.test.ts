@@ -20,6 +20,7 @@ function def(
     min: null,
     max: null,
     placeTypeIds: [],
+    tripTypes: [],
     appliesToAllTypes: false,
     ...over,
   } as ScopedCustomFieldDef;
@@ -366,28 +367,55 @@ describe("computeLogbookStats", () => {
       ).toBeUndefined();
     });
 
-    it("still counts a value whose definition no longer applies to the linked type", () => {
-      // The union clause `tripFieldDefs` needs: rescoping a definition must not
-      // silently drop values the user already typed.
-      const tripDefs = [def({ key: "rope_length_m", type: "integer", placeTypeIds: ["type-gone"] })];
-      const answered = [trip("2026-01-01", { customFields: { rope_length_m: 50 } })];
-      const rope = stat(run({ trips: answered, tripDefs }).tripFieldStats, "rope_length_m");
-      expect(rope.kind).toBe("quantity");
-    });
-
-    it("asks a trip definition scoped to a linked place's type", () => {
-      const tripDefs = [def({ key: "car_shuttle", type: "boolean", placeTypeIds: [CANYON] })];
+    // Trip attributes are scoped by TAG. The All screen answers "what does every
+    // trip say"; an attribute one activity asks waits for that activity.
+    describe("scoped by trip type", () => {
+      const tripDefs = [
+        def({ key: "wetsuit", type: "boolean", appliesToAllTypes: true }),
+        def({ key: "flow", type: "integer", tripTypes: ["packrafting"] }),
+      ];
       const answered = [
         trip("2026-01-01", {
-          places: [{ id: "p1", name: "Claustral" }],
-          customFields: { car_shuttle: true },
+          types: ["packrafting"],
+          customFields: { wetsuit: true, flow: 12 },
         }),
+        trip("2026-01-02", { types: ["canyoning"], customFields: { wetsuit: false } }),
       ];
-      expect(
-        run({ trips: answered, places, tripDefs }).tripFieldStats.map(
-          (entry) => entry.key,
-        ),
-      ).toContain("car_shuttle");
+
+      it("keeps an activity's attribute off the All screen, and says so", () => {
+        const stats = run({ trips: answered, tripDefs });
+        expect(stats.tripFieldStats.map((entry) => entry.key)).toEqual(["wetsuit"]);
+        expect(stats.tripFieldsUnderActivities).toBe(1);
+      });
+
+      it("shows it on that activity's screen, over that activity's trips only", () => {
+        const stats = run({ trips: answered, tripDefs, activity: "Packrafting" });
+        expect(stats.tripFieldStats.map((entry) => entry.key)).toEqual(["wetsuit", "flow"]);
+        const wetsuit = stat(stats.tripFieldStats, "wetsuit");
+        if (wetsuit.kind !== "boolean") throw new Error("expected a boolean");
+        expect(wetsuit).toMatchObject({ yes: 1, of: 1 });
+        expect(stats.tripFieldsUnderActivities).toBe(0);
+      });
+
+      it("keeps it off an activity that does not ask it", () => {
+        const stats = run({ trips: answered, tripDefs, activity: "canyoning" });
+        expect(stats.tripFieldStats.map((entry) => entry.key)).toEqual(["wetsuit"]);
+      });
+
+      it("does not mention activity attributes nobody has answered", () => {
+        const unanswered = answered.map((entry) => ({ ...entry, customFields: {} }));
+        expect(run({ trips: unanswered, tripDefs }).tripFieldsUnderActivities).toBe(0);
+      });
+
+      // The union clause `tripFieldDefs` needs: retagging a trip or rescoping a
+      // definition must not silently drop a value the user already recorded.
+      it("still counts a value on a trip that no longer carries the attribute's tag", () => {
+        const retagged = [
+          trip("2026-01-01", { types: [], customFields: { flow: 12 } }),
+        ];
+        const stats = run({ trips: retagged, tripDefs, activity: UNTAGGED_ACTIVITY });
+        expect(stat(stats.tripFieldStats, "flow").kind).toBe("quantity");
+      });
     });
 
     it("keeps a trip's own attributes out of the place groups", () => {

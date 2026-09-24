@@ -28,6 +28,7 @@ import { userPatchLimiter } from "../middleware/rateLimit";
 import { AppError } from "../middleware/errorHandler";
 import { resolveUser } from "../lib/resolveUser";
 import { getParam } from "../lib/getParam";
+import { parseTripTypes } from "./tripLogsGlobal";
 import {
   assertValidDef,
   countRowsWithValue,
@@ -53,9 +54,19 @@ const router = Router();
  */
 function parseScoping(body: {
   placeTypeIds?: unknown;
+  tripTypes?: unknown;
   appliesToAllTypes?: unknown;
-}): { placeTypeIds?: string[]; appliesToAllTypes?: boolean } {
-  const out: { placeTypeIds?: string[]; appliesToAllTypes?: boolean } = {};
+}): { placeTypeIds?: string[]; tripTypes?: string[]; appliesToAllTypes?: boolean } {
+  const out: {
+    placeTypeIds?: string[];
+    tripTypes?: string[];
+    appliesToAllTypes?: boolean;
+  } = {};
+  // The same normaliser a trip's own `types` goes through, so a scoping can
+  // hold exactly the tags a trip can: trimmed, capped, case-insensitively
+  // unique.
+  const tripTypes = parseTripTypes(body.tripTypes);
+  if (tripTypes !== undefined) out.tripTypes = tripTypes;
   if (body.placeTypeIds !== undefined) {
     if (
       !Array.isArray(body.placeTypeIds) ||
@@ -108,6 +119,7 @@ router.post(
     const body = req.body as {
       field?: unknown;
       placeTypeIds?: unknown;
+      tripTypes?: unknown;
       appliesToAllTypes?: unknown;
     };
     const def = assertValidDef(body?.field);
@@ -138,6 +150,7 @@ router.patch(
 
     const body = req.body as {
       placeTypeIds?: unknown;
+      tripTypes?: unknown;
       appliesToAllTypes?: unknown;
       label?: unknown;
       type?: unknown;
