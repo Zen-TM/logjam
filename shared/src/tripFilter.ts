@@ -21,6 +21,7 @@ import {
   passesCustomFieldFilters,
   type CustomFieldFilter,
 } from "./customFieldFilter.js";
+import { tripFieldDefs, type ScopedCustomFieldDef } from "./tripLogFields.js";
 
 /** The type-filter value meaning "trips with no type at all". Distinct from
  * `""` (any type), which never matches an actual `types` entry. */
@@ -89,6 +90,38 @@ export function tripMatchesFilter(
     criteria.custom,
     criteria.includeUnknowns ?? false,
   );
+}
+
+/**
+ * The attributes worth OFFERING as filters under the selected activity chip —
+ * the same way the place filters follow the selected place type.
+ *
+ * With a tag chosen: the definitions scoped to that tag, union every key a trip
+ * carrying it has answered. With "No type": the all-types definitions, union
+ * what the untagged trips answered. With any type: every loaded trip's tags and
+ * answers. The union half is `tripFieldDefs` doing the job it does on a form —
+ * a retagged trip still holds its answer, and dropping that field would hide it
+ * behind an axis the user cannot see.
+ */
+export function tripFilterFieldDefs(
+  defs: readonly ScopedCustomFieldDef[],
+  trips: readonly Pick<FilterableTrip, "types" | "customFields">[],
+  type: string,
+): ScopedCustomFieldDef[] {
+  const inScope =
+    type === NO_TYPE_FILTER_VALUE
+      ? trips.filter((trip) => trip.types.length === 0)
+      : type
+        ? trips.filter((trip) => trip.types.includes(type))
+        : trips;
+  const answered: Record<string, unknown> = {};
+  for (const trip of inScope) {
+    for (const [key, value] of Object.entries(trip.customFields ?? {})) {
+      if (value != null) answered[key] = value;
+    }
+  }
+  const tags = type === NO_TYPE_FILTER_VALUE ? [] : type ? [type] : inScope.flatMap((trip) => trip.types);
+  return tripFieldDefs(defs, tags, answered);
 }
 
 export function filterTrips<T extends FilterableTrip>(

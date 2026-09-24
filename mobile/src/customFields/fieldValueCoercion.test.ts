@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import type { TripLogCustomFieldDef } from "@logjam/shared";
 
 import {
-  attributeRows,
   coerceCustomFields,
   sameFieldValues,
   withoutClearedFields,
@@ -74,30 +73,5 @@ describe("sameFieldValues", () => {
     expect(sameFieldValues({ wetsuit: true }, { wetsuit: true, permit: "NP-1" })).toBe(false);
     expect(sameFieldValues({ wetsuit: true, permit: "NP-1" }, { wetsuit: true })).toBe(false);
     expect(sameFieldValues({ permit: undefined }, { other: undefined })).toBe(false);
-  });
-});
-
-describe("attributeRows", () => {
-  it("lists defined values in definition order under the bare label, then orphans", () => {
-    const bounded: TripLogCustomFieldDef = { ...capacity, min: 1, max: 5 };
-    expect(
-      attributeRows([bounded, isCave, permit], {
-        water_level: "low",
-        is_cave: false,
-        capacity: 3,
-      }),
-    ).toEqual([
-      ["capacity", "Capacity", 3],
-      ["is_cave", "Is a cave?", false],
-      ["water_level", "Water level", "low"],
-    ]);
-  });
-
-  // A shared place labels with the viewer's definitions AND the owner's
-  // snapshot, and a key both carry must not print twice.
-  it("lists a key defined twice once, under the first label", () => {
-    expect(
-      attributeRows([permit, { ...permit, label: "Owner's permit" }], { permit: "NP-1" }),
-    ).toEqual([["permit", "Permit", "NP-1"]]);
   });
 });

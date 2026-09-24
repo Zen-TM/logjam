@@ -14,6 +14,7 @@ import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import {
   ATTRIBUTE_NOUN,
+  attributeRows,
   distinctTripTypes,
   formatTripDate,
   mediaCategory,
@@ -24,7 +25,6 @@ import { useConnectivity } from "../map/connectivity";
 import { tripTitle } from "../api/tripTitle";
 import { useFieldDefs } from "../customFields/useFieldDefs";
 import { AttributeTable } from "../customFields/CustomFieldValues";
-import { attributeRows } from "../customFields/fieldValueCoercion";
 import { MediaStrip } from "../media/MediaStrip";
 import { resolveRouteAttachmentBbox } from "../media/routeAttachmentBbox";
 import { fontSize, lineHeight, spacing, theme } from "../theme";

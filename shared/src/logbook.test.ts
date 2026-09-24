@@ -18,7 +18,9 @@ import {
   statsHeadline,
   statsSpark,
   todayDateKey,
-  tripAttributeEntries,
+  attributeRows,
+  formatDateKey,
+  formatFieldValue,
   tripYear,
   yearBuckets,
 } from "./logbook.js";
@@ -369,35 +371,43 @@ describe("stats presentation", () => {
   });
 });
 
-describe("tripAttributeEntries", () => {
-  const defs: TripLogCustomFieldDef[] = [
-    { key: "party_size", label: "Party size", type: "integer" },
-    { key: "wetsuit", label: "Wetsuit", type: "boolean" },
-    { key: "permit", label: "Permit", type: "string" },
-  ];
+describe("attributeRows", () => {
+  const capacity: TripLogCustomFieldDef = { key: "capacity", label: "Capacity", type: "integer", min: 1, max: 5 };
+  const isCave: TripLogCustomFieldDef = { key: "is_cave", label: "Is a cave?", type: "boolean" };
+  const permit: TripLogCustomFieldDef = { key: "permit", label: "Permit", type: "string" };
 
-  it("lists defined values in definition order, skipping ones the trip never answered", () => {
-    expect(tripAttributeEntries(defs, { wetsuit: false, party_size: 4 })).toEqual([
-      { key: "party_size", label: "Party size", value: 4, type: "integer" },
-      { key: "wetsuit", label: "Wetsuit", value: false, type: "boolean" },
+  it("lists defined values in definition order under the bare label, then orphans", () => {
+    expect(attributeRows([capacity, isCave, permit], { water_level: "low", is_cave: false, capacity: 3 })).toEqual([
+      ["capacity", "Capacity", 3, "integer"],
+      ["is_cave", "Is a cave?", false, "boolean"],
+      ["water_level", "Water level", "low", null],
+    ]);
+  });
+
+  // A shared place labels with the viewer's definitions AND the owner's
+  // snapshot, and a key both carry must not print twice.
+  it("lists a key defined twice once, under the first label", () => {
+    expect(attributeRows([permit, { ...permit, label: "Owner's permit" }], { permit: "NP-1" })).toEqual([
+      ["permit", "Permit", "NP-1", "string"],
     ]);
   });
 
   it("keeps a stored null, which is an answer the form wrote", () => {
-    expect(tripAttributeEntries(defs, { permit: null })).toHaveLength(1);
+    expect(attributeRows([permit], { permit: null })).toHaveLength(1);
   });
 
-  it("puts a value whose definition is gone last, under an un-slugged label", () => {
-    expect(tripAttributeEntries(defs, { water_level: "low", wetsuit: true }).at(-1)).toEqual({
-      key: "water_level",
-      label: "Water level",
-      value: "low",
-      type: null,
-    });
+  it("is empty for nothing stored", () => {
+    expect(attributeRows([permit], null)).toEqual([]);
   });
+});
 
-  it("is empty for a trip with nothing stored", () => {
-    expect(tripAttributeEntries(defs, null)).toEqual([]);
+describe("formatFieldValue", () => {
+  it("reads empty as —, a yes/no as Yes/No, and a date in UTC", () => {
+    expect(formatFieldValue(null)).toBe("—");
+    expect(formatFieldValue("")).toBe("—");
+    expect(formatFieldValue(false, "boolean")).toBe("No");
+    expect(formatFieldValue("2026-03-01T00:00:00.000Z", "date")).toBe(formatDateKey("2026-03-01T00:00:00.000Z"));
+    expect(formatFieldValue("2026-03-01T00:00:00.000Z", "string")).toBe("2026-03-01T00:00:00.000Z");
   });
 });
 

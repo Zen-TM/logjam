@@ -16,10 +16,14 @@ import { useState, useEffect, useMemo, useRef, type CSSProperties } from "react"
 import {
   Activity,
   Check,
+  ChevronRight,
+  CircleHelp,
+  CirclePlus,
   Copy,
   CopyPlus,
   EllipsisVertical,
   ExternalLink,
+  FileText,
   Link as LinkIcon,
   Link2Off,
   LocateFixed,
@@ -38,6 +42,8 @@ import {
   defsForType,
   fieldValue,
   formatDateKey,
+  formatFieldValue,
+  isReservedFieldKey,
   mediaCategory,
   primaryTripType,
   removeShareConfirm,
@@ -74,7 +80,7 @@ import { placeTypeLucideIcon } from "./placeTypeIcon";
 import { tripTypeLook } from "./tripTypeIcon";
 import { placeVerbs, type PlaceVerbId } from "./placesModel";
 import {
-  Button,
+  Dialog,
   EmptyState,
   Hero,
   IconButton,
@@ -126,6 +132,14 @@ function displayValue(def: TripLogCustomFieldDef, raw: unknown): string | null {
   if (text == null) return null;
   const unit = systemFieldDef(def.key)?.unit;
   return unit ? `${text} ${unit}` : text;
+}
+
+/** A parked value as one line. Objects are stringified rather than dropped:
+ *  the point of the section is that the user can SEE what arrived before
+ *  deciding what to do with it. */
+function foreignValueText(item: { value: unknown; type: string }): string {
+  if (item.value !== null && typeof item.value === "object") return JSON.stringify(item.value);
+  return formatFieldValue(item.value, item.type);
 }
 
 /** The site a source points at, for the row's second line. A URL the parser
@@ -237,9 +251,11 @@ function PlaceDetailPanel({
 
   const [copying, setCopying] = useState(false);
   const [placeShares, setPlaceShares] = useState<TPlaceShare[]>([]);
-  /** Which parked attribute is being acted on — the buttons disable together,
-   *  so two presses cannot race one row into two states. */
-  const [foreignFieldBusy, setForeignFieldBusy] = useState<string | null>(null);
+  /** The parked value whose dialog is open, whether its action is running,
+   *  and whether its Discard is being confirmed. */
+  const [foreignKey, setForeignKey] = useState<string | null>(null);
+  const [foreignFieldBusy, setForeignFieldBusy] = useState(false);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
 
   // The other end of every link touching this place. The list arrives on the
   // OWNED place rows (`linkedPlaceIds`, owner-private), so the names come from
@@ -255,6 +271,7 @@ function PlaceDetailPanel({
     () => asForeignFields(place?.foreignFields),
     [place?.foreignFields],
   );
+  const foreignItem = foreignFields.find((item) => item.key === foreignKey) ?? null;
   const placeType = placeTypes.find((type) => type.id === place?.placeTypeId);
   const TypeGlyph = placeTypeLucideIcon(placeType?.iconKey ?? "map-pin");
   const placeTypeName = placeType?.name ?? "this type";
@@ -275,26 +292,25 @@ function PlaceDetailPanel({
    * design (it is absent from the push allowlist), so there is no offline
    * queue for this and the failure is reported rather than swallowed.
    */
-  async function runForeignFieldAction(
-    key: string,
-    action: "adopt" | "discard" | "notes",
-  ) {
-    if (!place) return;
-    setForeignFieldBusy(key);
+  async function runForeignFieldAction(action: "adopt" | "discard" | "notes") {
+    if (!place || !foreignItem) return;
+    setForeignFieldBusy(true);
     try {
-      await resolveForeignField(place.id, key, action);
+      await resolveForeignField(place.id, foreignItem.key, action);
       // Adopting creates a definition, so the field list has to move with it —
       // otherwise the value lands in a field the form does not yet know about
       // and reads as having vanished.
       if (action === "adopt") {
         onPlaceCustomFieldDefsChange(await getCustomFields("place"));
       }
+      setConfirmDiscard(false);
+      setForeignKey(null);
       onRefetch();
     } catch (err) {
       console.error(err);
       toast.error(messageFromError(err, "Couldn't update that attribute."));
     } finally {
-      setForeignFieldBusy(null);
+      setForeignFieldBusy(false);
     }
   }
 
@@ -811,43 +827,24 @@ function PlaceDetailPanel({
           {isOwnedPlace && foreignFields.length > 0 && (
             <section className={classes.section}>
               <SectionHeader title="Doesn't fit this type" count={foreignFields.length} />
+              <p className={classes.muted}>
+                {current.forkedFromId
+                  ? "These came across when you copied this place. Click one to decide what to do with it."
+                  : "These are left over from when you changed this place\u2019s type. Click one to decide what to do with it."}
+              </p>
+              {/* A CARD PER ROW, like Logjam GPS: every row here is a decision,
+                  so it wears the same row as every other thing that opens, and
+                  the three verbs live in the dialog it opens rather than
+                  wrapping under each value. */}
               {foreignFields.map((item) => (
-                <div key={item.key} className={classes.parked}>
-                  <dl className={classes.table}>
-                    <div className={classes.tableRow}>
-                      <dt>{item.label}</dt>
-                      <dd className={classes.figure}>
-                        {formatCustomFieldValue(
-                          item.value,
-                          item.type as TripLogCustomFieldDef["type"],
-                        ) ?? String(item.value)}
-                      </dd>
-                    </div>
-                  </dl>
-                  <div className={classes.parkedActions}>
-                    <Button
-                      compact
-                      disabled={foreignFieldBusy !== null}
-                      onClick={() => runForeignFieldAction(item.key, "adopt")}
-                    >
-                      Add to {placeTypeName}
-                    </Button>
-                    <Button
-                      compact
-                      disabled={foreignFieldBusy !== null}
-                      onClick={() => runForeignFieldAction(item.key, "notes")}
-                    >
-                      Append to notes
-                    </Button>
-                    <Button
-                      compact
-                      disabled={foreignFieldBusy !== null}
-                      onClick={() => runForeignFieldAction(item.key, "discard")}
-                    >
-                      Discard
-                    </Button>
-                  </div>
-                </div>
+                <Row
+                  key={item.key}
+                  leading={<IconTile icon={CircleHelp} hue="var(--theme-accent)" />}
+                  title={item.label}
+                  subtitle={foreignValueText(item)}
+                  trailing={<ChevronRight size={18} aria-hidden />}
+                  onOpen={() => setForeignKey(item.key)}
+                />
               ))}
             </section>
           )}
@@ -895,6 +892,62 @@ function PlaceDetailPanel({
         onCustomFieldDefsChange={onPlaceCustomFieldDefsChange}
         placeTypes={placeTypes}
         onMediaChanged={reloadPlaceMedia}
+      />
+
+      {/* The three actions on one parked value, as Logjam GPS's sheet: the
+          title says what the dialog is for, and the value is shown as the
+          same label/value row it was clicked from. */}
+      <Dialog
+        open={foreignItem !== null && !confirmDiscard}
+        title="What should this become?"
+        onClose={() => setForeignKey(null)}
+        dismissible={!foreignFieldBusy}
+      >
+        {foreignItem && (
+          <div className={classes.foreignActions}>
+            <dl className={classes.table}>
+              <div className={classes.tableRow}>
+                <dt>{foreignItem.label}</dt>
+                <dd className={classes.figure}>{foreignValueText(foreignItem)}</dd>
+              </div>
+            </dl>
+            {/* HIDDEN on a built-in key: the system definition already owns
+                it and the API answers 409, so it is not an action that is
+                unavailable, it is one that does not exist for this value. */}
+            {!isReservedFieldKey(foreignItem.key) && (
+              <Row
+                leading={<IconTile icon={CirclePlus} hue="var(--theme-accent)" />}
+                title="Create a new attribute for this place type"
+                onOpen={() => runForeignFieldAction("adopt")}
+                disabled={foreignFieldBusy}
+              />
+            )}
+            <Row
+              leading={<IconTile icon={FileText} hue="var(--theme-accent)" />}
+              title="Add to notes as text"
+              onOpen={() => runForeignFieldAction("notes")}
+              disabled={foreignFieldBusy}
+            />
+            <Row
+              leading={<IconTile icon={Trash2} hue="var(--theme-accent)" />}
+              title="Discard"
+              onOpen={() => setConfirmDiscard(true)}
+              disabled={foreignFieldBusy}
+            />
+          </div>
+        )}
+      </Dialog>
+
+      {/* The only one of the three that LOSES something, so it asks first. */}
+      <ConfirmDialog
+        open={foreignItem !== null && confirmDiscard}
+        title={`Discard "${foreignItem?.label ?? ""}"?`}
+        message="The value is removed from this place. This can't be undone."
+        confirmLabel="Discard"
+        confirmColor="error"
+        busy={foreignFieldBusy}
+        onConfirm={() => runForeignFieldAction("discard")}
+        onClose={() => setConfirmDiscard(false)}
       />
 
       <ConfirmDialog

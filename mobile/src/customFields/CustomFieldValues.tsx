@@ -16,11 +16,12 @@ import { StyleSheet, Text, View } from "react-native";
 import {
   customFieldDisplayLabel,
   formatDateKey,
+  formatFieldValue,
   railStops,
+  type AttributeRow,
   type TripLogCustomFieldDef,
 } from "@logjam/shared";
 
-import { formatFieldValue, type AttributeRow } from "./fieldValueCoercion";
 import { fontSize, fontWeight, spacing, surface, theme } from "../theme";
 import { IconButton, Row, SegmentedControl, TextField, type SegmentOption } from "../ui";
 
@@ -89,13 +90,13 @@ export function CustomFieldValueInputs({
 export function AttributeTable({ rows }: { rows: AttributeRow[] }) {
   return (
     <View>
-      {rows.map(([key, label, value], index) => (
+      {rows.map(([key, label, value, type], index) => (
         <View
           key={key}
           style={[styles.tableRow, index === rows.length - 1 ? styles.tableRowLast : null]}
         >
           <Text style={styles.tableKey}>{label}</Text>
-          <Text style={styles.tableValue}>{formatFieldValue(value)}</Text>
+          <Text style={styles.tableValue}>{formatFieldValue(value, type)}</Text>
         </View>
       ))}
     </View>

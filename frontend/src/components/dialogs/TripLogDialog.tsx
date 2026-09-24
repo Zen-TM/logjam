@@ -1,10 +1,11 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { Check, ChevronRight, MapPin, MapPinPlus, Plus, Trash2 } from "lucide-react";
+import { Check, ChevronRight, CircleHelp, MapPin, MapPinPlus, Plus, Trash2, X } from "lucide-react";
 import { useIsMobile } from "../../useIsMobile";
 import {
   buildCustomFieldDef,
   CANYONING_TRIP_TYPE,
   coerceFieldValue,
+  formatFieldValue,
   enforceCanyoningTag,
   linksCanyon,
   formatTripPlaceNames,
@@ -169,9 +170,10 @@ function TripLogDialog({
   // At most one pending inline "create new place" at a time.
   const [creating, setCreating] = useState<CreateForm | null>(null);
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
-  // Custom-field keys typed into (or restored from a draft) since the dialog
-  // opened — kept on the form whatever the tags say. See `visibleFieldDefs`.
-  const [editedFieldKeys, setEditedFieldKeys] = useState<ReadonlySet<string>>(
+  // The attribute keys this form keeps whatever the tags say: the ones stored
+  // when it opened and the ones typed into (or restored from a draft) since.
+  // See `visibleFieldDefs`.
+  const [keptFieldKeys, setKeptFieldKeys] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
   const [saving, setSaving] = useState(false);
@@ -236,25 +238,25 @@ function TripLogDialog({
   const [fieldToDelete, setFieldToDelete] = useState<TripLogCustomFieldDef | null>(null);
 
   /**
-   * THE FIELDS THIS TRIP IS ASKED FOR: the ones scoped to the trip's own TYPES
-   * (the selected tags), union any key already stored, union any key typed into
-   * since the dialog opened (`tripFieldDefs`).
+   * THE FIELDS THIS TRIP IS ASKED FOR — the ones scoped to the trip's own TYPES
+   * (the selected tags) — and, after them, the ones it only KEEPS: stored when
+   * the dialog opened, or typed into since (`tripFieldDefs`).
    *
-   * Both union halves exist because the save writes exactly the fields shown:
-   * the stored half keeps a recorded answer when a tag comes off, the edited
-   * half keeps an UNSAVED one. A value only goes when the user clears it or
-   * deletes its definition, which has its own impact count.
+   * The save writes exactly the fields shown, so a kept field must stay on the
+   * form when its tag comes off or the save drops it. Kept-only fields sit in
+   * their own "Leftover attributes" section with a remove button, as on Logjam
+   * GPS: removing drops the key from the kept set, so the save leaves it out;
+   * closing without saving brings it back, which is why there is no confirm.
    */
   const visibleFieldDefs = useMemo(
-    () =>
-      tripFieldDefs(
-        customFieldDefs,
-        selectedTypes,
-        tripLog?.customFields,
-        editedFieldKeys,
-      ),
-    [customFieldDefs, editedFieldKeys, selectedTypes, tripLog],
+    () => tripFieldDefs(customFieldDefs, selectedTypes, null, keptFieldKeys),
+    [customFieldDefs, keptFieldKeys, selectedTypes],
   );
+  const askedFieldDefs = useMemo(
+    () => tripFieldDefs(customFieldDefs, selectedTypes, null),
+    [customFieldDefs, selectedTypes],
+  );
+  const leftoverFieldDefs = visibleFieldDefs.filter((def) => !askedFieldDefs.includes(def));
 
   // Names of the currently selected places (incl. a pending create, for a live
   // preview), in selection order — feeds the derived title.
@@ -349,7 +351,13 @@ function TripLogDialog({
     setAddedTypes([]);
     setCreating(null);
     setFieldValues(initialFieldValues);
-    setEditedFieldKeys(new Set());
+    setKeptFieldKeys(
+      new Set(
+        Object.entries(tripLog?.customFields ?? {})
+          .filter(([, value]) => value != null)
+          .map(([key]) => key),
+      ),
+    );
     setMode("form");
     setPlaceSearch("");
     setPlacesError(null);
@@ -490,8 +498,12 @@ function TripLogDialog({
     setFieldValues(form.fieldValues);
     // A restored answer is the user's typing too: keep it on the form whatever
     // the restored tags say, or the save would drop it.
-    setEditedFieldKeys(
-      new Set(Object.keys(form.fieldValues).filter((key) => form.fieldValues[key] !== "")),
+    setKeptFieldKeys(
+      (prev) =>
+        new Set([
+          ...prev,
+          ...Object.keys(form.fieldValues).filter((key) => form.fieldValues[key] !== ""),
+        ]),
     );
     setCreating(form.creating);
     // The guard's baseline moves with the restore: the form was just populated
@@ -615,8 +627,17 @@ function TripLogDialog({
   }
 
   function setFieldValue(key: string, value: string) {
-    setEditedFieldKeys((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
+    setKeptFieldKeys((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
     setFieldValues((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function removeLeftoverField(key: string) {
+    setKeptFieldKeys((prev) => {
+      const next = new Set(prev);
+      next.delete(key);
+      return next;
+    });
+    setFieldValues((prev) => ({ ...prev, [key]: "" }));
   }
 
   function handlePickCoords() {
@@ -1102,8 +1123,8 @@ function TripLogDialog({
           />
 
           <section className={classes.section}>
-            <SectionHeader title="Attributes" />
-            {visibleFieldDefs.map((def) => (
+            <SectionHeader title="Trip attributes" />
+            {askedFieldDefs.map((def) => (
               <div key={def.key} className={classes.attribute}>
                 <div className={classes.grow}>
                   <CustomFieldInput
@@ -1153,6 +1174,34 @@ function TripLogDialog({
               </Button>
             )}
           </section>
+
+          {/* Not a place's "Doesn't fit this type" and its three actions:
+              these are the user's own definitions, so there is nothing to
+              adopt — only keep or remove. The same card row, though, so the
+              two read as the same kind of thing. */}
+          {leftoverFieldDefs.length > 0 && (
+            <section className={classes.section}>
+              <SectionHeader title="Leftover attributes" count={leftoverFieldDefs.length} />
+              <p className={classes.muted}>
+                These attributes are left over from when this trip was saved as a different type.
+              </p>
+              {leftoverFieldDefs.map((def) => (
+                <Row
+                  key={def.key}
+                  leading={<IconTile icon={CircleHelp} hue="var(--theme-accent)" />}
+                  title={def.label}
+                  subtitle={formatFieldValue(coerceFieldValue(getFieldValue(def.key), def.type), def.type)}
+                  trailing={
+                    <IconButton
+                      icon={X}
+                      label={`Remove ${def.label} from this trip`}
+                      onClick={() => removeLeftoverField(def.key)}
+                    />
+                  }
+                />
+              ))}
+            </section>
+          )}
 
           {/* Media. In create mode the first upload lazily creates a draft trip
               to link files to; discarding deletes it (and its files). */}

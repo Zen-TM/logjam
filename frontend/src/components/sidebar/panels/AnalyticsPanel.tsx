@@ -302,7 +302,7 @@ function AttributeSections({ stats, tripOnly = false }: { stats: LogbookStats; t
       ))}
       {(stats.tripFieldStats.length > 0 || underActivities > 0) && (
         <section className={classes.section}>
-          <SectionHeader title="Your trip attributes" />
+          <SectionHeader title="Trip attributes" />
           {stats.tripFieldStats.map((entry) => (
             <AttributeStat key={`trip:${entry.key}`} stat={entry} />
           ))}

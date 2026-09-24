@@ -39,6 +39,9 @@ export type TPlace = {
    *  have. OWNER-PRIVATE — never present on a place shared WITH the viewer. */
   foreignFields?: ForeignFieldValue[] | null;
   ropeWikiId: number | null;
+  /** The place this one was copied from, or null. Says which of the two ways a
+   *  value came to not fit this type. */
+  forkedFromId?: string | null;
   /** The other end of every link touching this place. OWNER-PRIVATE and
    *  present on the OWNED list and the owner's detail response only: a link
    *  grants no visibility, and a sharee must not learn which other places the

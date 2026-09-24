@@ -36,6 +36,7 @@ import {
   removeShareConfirm,
   routeLengthM,
   placeStatus,
+  attributeRows,
 } from "@logjam/shared";
 
 import { tripTitle } from "../api/tripTitle";
@@ -48,7 +49,6 @@ import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
 import { removeSharedPlace } from "../sharing/removeShare";
 import { useFieldDefs } from "../customFields/useFieldDefs";
 import { AttributeTable } from "../customFields/CustomFieldValues";
-import { attributeRows } from "../customFields/fieldValueCoercion";
 import { useConnectivity } from "../map/connectivity";
 import { MediaStrip } from "../media/MediaStrip";
 import { resolveRouteAttachmentBbox } from "../media/routeAttachmentBbox";

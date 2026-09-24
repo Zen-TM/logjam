@@ -28,7 +28,7 @@ import {
   reconcileCustomFieldFilters,
   sortTrips,
   TRIP_SORT_OPTIONS,
-  tripFieldDefs,
+  tripFilterFieldDefs,
   tripTypeLabel,
   type CustomFieldFilter,
   type ScopedCustomFieldDef,
@@ -167,21 +167,12 @@ function TripLogsPanel({
   const distinctTypes = useMemo(() => distinctTripTypes(tripLogs), [tripLogs]);
   const anyUntyped = useMemo(() => tripLogs.some((trip) => trip.types.length === 0), [tripLogs]);
 
-  // The attributes worth OFFERING as filters: the definitions scoped to the
-  // types these trips are tagged with, union every key a loaded trip has
-  // actually answered. That second half is `tripFieldDefs`' union clause doing
-  // the same job it does on a form — a trip that was retagged still has its
-  // answer, and a filter list that dropped the field would hide those trips
-  // behind an axis the user cannot see.
-  const filterableDefs = useMemo(() => {
-    const answered: Record<string, unknown> = {};
-    for (const trip of tripLogs) {
-      for (const [key, value] of Object.entries(trip.customFields ?? {})) {
-        if (value != null) answered[key] = value;
-      }
-    }
-    return tripFieldDefs(customFieldDefs, existingTripTypes, answered);
-  }, [tripLogs, customFieldDefs, existingTripTypes]);
+  // The attributes worth OFFERING as filters follow the activity chip, the
+  // way a place's follow its type (`tripFilterFieldDefs`).
+  const filterableDefs = useMemo(
+    () => tripFilterFieldDefs(customFieldDefs, tripLogs, typeFilter),
+    [customFieldDefs, tripLogs, typeFilter],
+  );
 
   // A filter whose definition was deleted, or retyped under it, would narrow
   // the list with no control left in the sheet to say so or undo it.
