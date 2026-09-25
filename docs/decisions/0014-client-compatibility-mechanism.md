@@ -1,6 +1,6 @@
 # 0014. Client compatibility mechanism
 
-- **Date:** 2026-09-25
+- **Date:** 2026-07-23
 - **Status:** Accepted
 - **Supersedes:** —
 
@@ -26,7 +26,7 @@ The compatibility mechanism consists of the following components as shipped:
 
 Known gaps in the shipped mechanism:
 1. **The header is validated and never recorded.** Nothing in `api/src/middleware/` or `logger.ts` touches it, though a comment in `sync.ts` claims the version is logged. Fleet composition is unobservable, so `MIN_MOBILE_VERSION` can't be chosen safely.
-2. **`CLIENT_SEMVER` is hand-kept in three places** — `mobile/src/config.ts:32`, `mobile/package.json:3`, `mobile/app.json:7` — no guard. Violates the repo's "two lists that must agree = one declaration + a test" rule, and fails silently: ship `0.2.0` with the header still saying `0.1.0` and the gate blocks everyone or nobody. `mobile/app.config.ts` exists and doesn't touch `version`.
+2. **`CLIENT_SEMVER` is hand-kept in three places** — `mobile/src/config.ts:32`, `mobile/package.json:3`, `mobile/app.json:7` — no guard. Violates the repo's "two lists that must agree = one declaration + a test" rule, and fails silently: ship `0.2.0` with the header still saying `0.1.0` and the gate blocks everyone or nobody. `mobile/app.config.ts` exists and doesn't touch `version`. **Resolved 2026-09-25 (`79b212b`):** `mobile/package.json` is now the one declaration, guarded by `mobile/src/versionAgreement.test.ts`.
 3. **No written bump policy for `MIN_MOBILE_VERSION`; no `CHANGELOG.md`**.
 4. **`runtimeVersion.policy: "appVersion"` in `mobile/app.json`** — OTA footgun.
 

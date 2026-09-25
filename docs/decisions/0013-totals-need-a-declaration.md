@@ -1,6 +1,6 @@
 # 0013. Totals need a declaration
 
-- **Date:** 2026-09-25
+- **Date:** 2026-09-13
 - **Status:** Accepted
 - **Supersedes:** —
 

@@ -1,6 +1,6 @@
 # 0010. What syncs
 
-- **Date:** 2026-09-25
+- **Date:** 2026-09-04
 - **Status:** Accepted
 - **Supersedes:** —
 
