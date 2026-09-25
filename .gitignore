@@ -31,6 +31,9 @@ CLAUDE.local.md
 .claude/settings.local.json
 .claude/worktrees/
 
+# Screenshots and snapshots from the Playwright MCP server declared in .mcp.json
+.playwright-mcp/
+
 # Personal skills: anything named `<name>.local/` is yours alone
 /.claude/skills/*.local/
 
