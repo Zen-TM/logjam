@@ -1,26 +1,29 @@
-# Frontend — Logjam
+# Frontend — Logjam Web
 
 React 19 + TypeScript + Vite SPA. MapLibre GL JS = core UI surface; most features = map interactions, sidebar panels, dialogs on top.
 
 ## React / TypeScript rules
 
-- **Hooks pattern for API data:** `useState + useEffect + fetchCount + refetch`. Bump `fetchCount` to retrigger. Return `{ data, loading, error, refetch }`. Match `placeUtils.ts`.
-- **API calls:** always via `apiFetch` / `apiFetchBlob` from `placeUtils.ts`. Never raw `fetch` — helper injects auth + base URL.
-- **Strict TS:** no `any` (use `unknown` + narrow), explicit return types on exported functions/hooks. Don't widen types to silence compiler — fix source.
-- **No new React contexts** without justification. Codebase has one (`themePreferences`); local state + prop-passing = default.
-- **Component file layout:** co-locate `Component.tsx` + `Component.module.css`. Component-specific hooks/utils sit next to component, not global `hooks/` dir.
+- **Hooks pattern for API data:** `useState + useEffect + fetchCount + refetch`; return `{ data, loading, error, refetch }`. Match `placeUtils.ts`.
+- **API calls:** always `apiFetch` / `apiFetchBlob` from `placeUtils.ts` (they inject auth + base URL). Never raw `fetch`.
+- **Strict TS:** no `any` (use `unknown` + narrow), explicit return types on exported functions/hooks.
+- **No new React contexts** without justification; local state + props is the default.
+- **Co-locate** `Component.tsx` + `Component.module.css` and component-specific hooks/utils.
+- **No router:** navigation is `activePanel: PanelId | null`; page ids and titles live in `components/sidebar/panels.ts`. Panels never import from `Map.tsx` — they get callbacks from `App.tsx`.
 
-## Styling
+## UI
 
-> **Self-updating:** when user establishes new design conventions, ask before appending here.
-
-- **`frontend/DESIGN.md` and the `src/ui` kit govern all UI.** Compose the kit; a screen needing something it lacks adds it to the kit. MUI and Emotion are uninstalled (Phase C, 2026-09-19) and importing either is an ESLint error anywhere in `src` (`eslint.config.js`). `PlacesPanel.tsx` is the reference page.
-
-- **A control's size is a token, never px** (2026-09-14). Heights and hit targets read `--control-lg` / `--control-md` / `--control-sm` (36/32/24 under a mouse), margins `--gutter`, type `--font-*` with 12px as the floor; `@media (pointer: coarse)` in `index.css` gives a touch screen Logjam GPS's 44/40/32. The phone's sizes made the 380px panel feel cramped because the content was too big, and a hard-coded height silently opts out of both the density and the touch step. Map chrome keeps its own larger step (42). Guard: `src/ui/controlSizes.test.ts`, scoped to the kit (screens compose it); see `DESIGN.md` §4.
-
-- **CSS Modules** (`.module.css` co-located): screen modules do layout, the kit does look.
-- **Every colour, radius, transition and text size is a custom property in `src/index.css`** (`var(--theme-*)`, `--ink`, `--hue-*`, `--font-*`, `--radius-*`) — never hardcode a hex or a px literal for these. No styled-components, no Emotion.
+- **`frontend/DESIGN.md` and the `src/ui` kit govern all UI.** Compose the kit; a screen needing something it lacks adds it to the kit. MUI and Emotion are an ESLint error anywhere in `src` (`eslint.config.js`). `components/sidebar/panels/PlacesPanel.tsx` is the reference page.
+- **A control's size is a token, never px:** `--control-lg` / `--control-md` / `--control-sm`, `--gutter`, `--font-*` (12px floor). Guard: `src/ui/controlSizes.test.ts`; see `DESIGN.md` §4.
+- **A compact control grows its hit area, not its box** (the kit's `IconButton`, `Checkbox`, `Button compact`); only a dialog's footer buttons get a real 44px height. [0065](../docs/decisions/0065-compact-controls-grow-their-hit-area.md)
+- **Every colour, radius, transition and text size is a custom property in `src/index.css`** — never a hex or px literal. CSS Modules only: screen modules do layout, the kit does look. **No inline `style` props**, except to set a custom property the kit reads (`--tile-hue`, `--chip-hue`).
 - **Icons are lucide-react**, everywhere.
+- **Every page owns its layout:** hero and rails pinned, only its list scrolls; never nest a second scroll container.
+- **A `useIsMobile()` branch may change the furniture, never what the thing is:** the bottom sheet is the same named landmark as the desktop panel, and its grab bar is a keyboard `role="slider"` (`e2e/a11y.spec.ts`; `DESIGN.md`).
+- **The Places type rail is the first chip rail and the attribute filters follow it** (`defsForType`). [0066](../docs/decisions/0066-place-type-rail-is-a-permanent-control.md)
+- **Custom-field forms:** use `components/dialogs/AddCustomFieldForm.tsx` + `components/dialogs/CustomFieldInput.tsx`, never an inline re-implementation. A yes/no is a `ChipRail` of — / Yes / No; unset is `""` and saves nothing (`components/dialogs/CustomFieldInput.render.test.tsx`). A form writes only the fields it showed (root `AGENTS.md`, [0012](../docs/decisions/0012-custom-field-definitions.md)).
+- **Media before the entity exists** (`TripLogDialog`): the first upload creates a draft row; Save PATCHes it, Cancel DELETEs it.
+- **Tooltips** only when a label can't convey units, scale or consequence: the kit `Tooltip`; an `IconButton`'s `label` already is one.
 
 ## Error display
 
@@ -32,55 +35,27 @@ Three surfaces. One rule each. **Never render raw `err.message` from `apiFetch` 
 | `<FieldError message={msg \| null}>` | Per-field validation, directly under the input. Renders nothing when `null`. | `from "../feedback/FieldError"` |
 | `useToast().error(msg)` | Background failures with no form to attach to (refetch, async panel actions). Auto-dismisses after 6 s. | `from "../feedback/ToastProvider"` |
 
-**Message rules:**
-1. Pass every caught error through `messageFromError(err, "Couldn't do X.")` from `../../errors/messageFromError`.
-2. Server-supplied `{ error }` text wins automatically (parsed by `apiFetch`). Good for 409 domain messages like "Already friends or request pending."
-3. Always `console.error(err)` before calling `messageFromError` — never lose raw detail.
-4. Hand-crafted context beats generic: `"Couldn't save place."` not `"An error occurred."`.
-5. No HTTP status codes, path strings, or stack traces in user-facing text.
-6. **Best-effort background operations** (prefetch, hydration, poll-resume) that intentionally don't surface a toast on failure: `.catch(console.error)` is acceptable, but add a one-line `// Best-effort: <why>` comment so the silence reads as intentional, not an oversight.
+- Pass every caught error through `messageFromError(err, "Couldn't do X.")` (`src/errors/messageFromError`); server `{ error }` text wins automatically. `console.error(err)` first.
+- Specific beats generic ("Couldn't save place."); no status codes, paths or stacks in user text.
+- A best-effort background op may `.catch(console.error)` with a `// Best-effort: <why>` comment.
+- Every data hook returns `error: string | null`, already user-friendly.
 
-**Hook contract:** every data hook returns `error: string | null` (already user-friendly via `messageFromError`). Callers surface via `<ErrorBanner>` or toast.
+## Behaviour rules
 
-## Pointers
+- **Consent:** `consentGate()` in `src/consent.ts` (`src/consent.test.ts`) is the one decision: `blocked` renders the gate, `settled` is the `enabled` argument every user-data hook and boot effect takes — never `authenticated`, or data loads behind the gate. Only `useAuth` and `useCurrentUser` stay on `authenticated`. Bumping `CURRENT_CONSENT_VERSION` is the whole client change; no per-feature consent prompts.
+- **File inputs:** reset `<input type=file>` `.value` AFTER calling the handler — `input.files` is live.
+- **Date-only values** (trip dates, date fields; stored UTC-midnight) format with `timeZone: "UTC"`; true timestamps use local time.
+- **Responsive:** one breakpoint, `max-width: 768px`; `useIsMobile()` (`src/useIsMobile.ts`, `MOBILE_MAX_WIDTH_PX`) and every `@media (max-width: 768px)` must agree. CSS for layout, the hook only for behaviour CSS can't express. Use `100dvh`, not `100vh`.
+- **Narrow-web z-index contract:** bottom sheet 4, backdrop 3, mobile NavRail 5 — the sheet's drag sweeps over the nav, so a lower nav traps the user in the panel.
+- **Dialogs** use the kit `Dialog` (`DESIGN.md` §6): `size="large"` fills a narrow screen from its own CSS, `size="small"` stays centred — never pass `isMobile`. A multi-column grid inside collapses in that dialog's own `@media (max-width: 768px)` block.
+- **Map-pick flows** pass `collapseToPeek` so the sheet drops to peek; dialog-initiated picks hide their own dialog.
+- **Heavy authoring tools** (GeoPDF, topo settings, CSV import) are desktop-first, but a field whose `scrollWidth` exceeds its `clientWidth` gets a narrow-width rule (`GeoPdfDialog.module.css`; `DESIGN.md` §5).
+- **CSP:** a new external host (tiles, API, image CDN) goes in `CSP_PROD` in `vite.config.ts` — use the **csp-hosts** skill.
 
-- **CSP / security headers:** adding a tile provider, API, or image CDN needs `CSP_PROD` in `vite.config.ts` updated — see the **csp-hosts** skill.
-- **E2E (Playwright):** `frontend/e2e/CLAUDE.md`.
+## Testing
 
-## Conventions log (additive)
-
-### Custom-field forms in dialogs
-
-Never re-implement the add-custom-field sub-form or per-field inputs inline — use `dialogs/AddCustomFieldForm.tsx` + `dialogs/CustomFieldInput.tsx`, both on the kit's `TextField`/`Select`/`ChipRail`. The two dialogs drifted visually when this was duplicated (UX-002/003). A yes/no is a `ChipRail` of — / Yes / No; unset is `""` and saves nothing, exactly as on Logjam GPS (guard `dialogs/CustomFieldInput.render.test.tsx`).
-
-### Consent versioning
-
-Bumping `CURRENT_CONSENT_VERSION` (only with materially changed ToS/privacy wording) is all that's needed client-side: `App.tsx` blocks existing users behind `ConsentGate`; the server rejects any other version on record. Don't add per-feature consent prompts.
-
-The block is one decision, `consentGate()` in `src/consent.ts` (tested in `consent.test.ts`), used twice: `blocked` renders the gate, and `settled` is the `enabled` argument every user-data hook and boot effect takes instead of `authenticated` (`loadsUserData` in App.tsx). Gate on `authenticated` alone and you get FECO-005 back — the gate stops the UI while the app fetches the user's places, trips, friends and notifications behind it. `useAuth` and `useCurrentUser` are the only two that stay on `authenticated`: they are how the answer arrives.
-
-### File inputs
-
-- Reset `<input type=file>` `.value` **after** invoking the handler, never before — `input.files` is a live `FileList`; clearing first empties the selection (drop path is unaffected, so click-select silently breaks).
-
-### Tooltips
-
-Add when a label alone doesn't convey units, scale, or consequence. Content: what it means + a real-world example if helpful. Skip if self-explanatory.
-
-Patterns: `src/ui` `Tooltip` (hover AND focus, Escape-dismissable, DESIGN.md §10) everywhere; an `IconButton`'s required `label` is already its tooltip, and a `SettingsRow`/`InfoTip` carries one beside a label that needs more than it can say.
-
-### Mobile / responsive
-
-Single breakpoint: **`max-width: 768px`**, the canonical source being `useIsMobile()` (`src/useIsMobile.ts`, `MOBILE_MAX_WIDTH_PX`). Every mobile CSS `@media (max-width: 768px)` block and the hook must agree on this value.
-
-- **Two mechanisms, kept in sync:** CSS media queries in the co-located `.module.css` for layout; `useIsMobile()` in JS for behaviour CSS can't express (rendering `BottomSheet` vs the desktop flyout, `fullScreen` dialogs, collapsing the sheet during map-pick).
-- **Layout model on mobile:** map is full-bleed (`--nav-rail-width` overridden to `0` in `index.css`); NavRail becomes Logjam GPS's 68px **tab bar** (Map · Places · Logs · Ways · More; Map closes the panel); the active panel renders in a draggable **bottom sheet** (`sidebar/BottomSheet.tsx`, snap points peek/half/full).
-- **z-index contract (don't break):** bottom sheet `z-index: 4`, backdrop `3`, and the mobile NavRail **must be above the sheet (`z-index: 5`)**. The sheet is bottom-anchored above the nav (`bottom: var(--bottom-nav-height)`); its drag translate sweeps its bottom edge *over* the nav region, so the nav only stays visible/tappable because it paints on top. Lowering the nav's z-index silently traps the user in whatever panel is open.
-- **Dialogs** use the kit `Dialog` (`DESIGN.md` §6): `size="large"` fills a narrow screen from its own CSS and `size="small"` stays centred, so no `isMobile` is passed. A multi-column grid inside one collapses to a single column in that dialog's own `@media (max-width: 768px)` block.
-- **Map-pick flows** (coord pick, area/bbox/extent select): App passes `collapseToPeek` to SidebarPanel so the sheet drops to peek and the map is reachable; dialog-initiated picks already hide their own dialog.
-- **Heavy authoring tools** (GeoPDF, topo settings, CSV import) are desktop-first: dense grids and a "best on a larger screen" note, **not** full reflow — but desktop-first buys a cramped layout, never an unreadable value. A field whose `scrollWidth` exceeds its `clientWidth` is hiding the user's own data and gets a narrow-width rule of its own (DESIGN.md §5; `GeoPdfDialog.module.css` is the worked example).
-- Use `100dvh` (not `100vh`) for full-height containers — mobile address-bar resize.
-
-### Date-only values format with `timeZone: "UTC"`
-
-Trip-log dates and date-typed custom fields are stored as UTC-midnight (the API does `new Date("YYYY-MM-DD")`, date-only). Any `new Date(iso).toLocaleDateString(...)` displaying one of these MUST pass `timeZone: "UTC"`, or AEST (UTC+10/+11) renders the previous calendar day (CH-001, 2026-06-22). This applies only to date-only values; true timestamps (`createdAt`, `*ResetAt`) display in local TZ correctly without it. Filter comparisons stay consistent because both sides parse as UTC midnight.
+- Unit: `npm test` (vitest, jsdom); `npm run lint` gates too.
+- E2E (Playwright, `playwright.config.ts`, specs in `e2e/`): `npm run e2e`, `npm run e2e:ui`. Uses system Chrome (`channel: "chrome"`); cross-browser needs the Playwright Docker image. Targets `E2E_BASE_URL` (default `http://localhost:5173`); the config starts Vite with `VITE_AUTH_MODE=fake` but not the API — bring that up first. The sign-in screen only renders on the second, non-fake server (`SIGN_IN_URL`, default `http://localhost:5199`).
+- `e2e/a11y.spec.ts` is the per-surface a11y gate. A case never writes to the account; reach an unreachable state with a `page.route` stub that calls `route.fetch()` and rewrites only the field the decision reads. Fixtures in `e2e/__fixtures__/` are synthetic, never a real place.
+- **Prod runs are unauth-only** (`E2E_BASE_URL=https://logjamnsw.com`): assert the sign-in screen, nothing more; a credentialed prod flow needs the maintainer's sign-off. The real-Cognito spec `e2e/auth-lifecycle.spec.ts` skips unless `E2E_AUTH_BASE_URL` + `E2E_TEST_EMAIL` + `E2E_TEST_PASSWORD` (a staging account) are set.
+- `.mcp.json` registers `@playwright/mcp` so an agent can drive a live browser against local dev.

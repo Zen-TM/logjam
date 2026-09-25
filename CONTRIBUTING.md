@@ -53,6 +53,13 @@ make reset    # rebuild shared, reseed, restart
 Stack-specific rules live in the per-package guides: `frontend/CLAUDE.md`,
 `api/CLAUDE.md`, `topo/CLAUDE.md`, and the root `CLAUDE.md`.
 
+## Agent tooling
+
+Claude Code, Codex and Antigravity all pick up the `AGENTS.md` files (each
+`CLAUDE.md` is a one-line `@AGENTS.md` import) and the skills in
+`.agents/skills/`. Personal skills go in `.agents/skills/<name>.local/`, which
+is gitignored.
+
 ## Before opening a PR
 
 - Keep changes focused; one concern per PR.
