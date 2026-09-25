@@ -1,6 +1,6 @@
 # 0020. Prod migrations run in a gated pre-deploy task; migrations are expand/contract
 
-- **Date:** 2026-09-25
+- **Date:** 2026-07-17
 - **Status:** Accepted
 - **Supersedes:** —
 
@@ -24,7 +24,7 @@ mid-swap or break the old image.
 - **CI migration validation:** CI additionally validates every migration against
   an ephemeral Postgres (`ci.yml` `migrations` job) so bad SQL is caught at PR
   time, and replays them over a seeded `origin/main` database with data assertions
-  and a zero-drift check (`migration-upgrade`; root CLAUDE.md → Testing).
+  and a zero-drift check (`migration-upgrade`; root `AGENTS.md` → Testing).
 - **Migrations MUST be backward-compatible with the currently-running image (expand/contract).**
   The pre-deploy migrate applies the new schema *before* the new image serves, so
   the old image runs against the new schema during the swap window. Never

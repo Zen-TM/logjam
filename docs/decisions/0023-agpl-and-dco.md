@@ -6,9 +6,8 @@
 
 ## Context
 
-Contribution licensing and terms must be established for contributors without
-introducing friction that discourages contributions or compromising copyleft
-protections.
+The repository is public under AGPL-3.0 (`LICENSE`) and is recruiting
+contributors, so the terms a contribution is made under had to be settled.
 
 ## Decision
 
@@ -18,11 +17,12 @@ protections.
   `prepare-commit-msg` hook installed with the repo's hooks (least friction; the
   contributor agrees to the DCO once, in `CONTRIBUTING.md`), and a CI check
   rejects unsigned commits.
+- Not yet built as of 2026-09-25: the hook and the CI check are planned work.
 
 ## Consequences
 
 - **Positive:** Least friction for contributors; sign-off is automated via
-  `prepare-commit-msg`; strong copyleft guarantees under AGPL-3.0.
+  `prepare-commit-msg`.
 - **Negative:** Not recorded.
 - **Neutral:** Contributors must agree to the DCO once in `CONTRIBUTING.md`, and
   every commit must carry a DCO sign-off.
