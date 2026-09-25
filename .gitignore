@@ -35,7 +35,7 @@ CLAUDE.local.md
 .playwright-mcp/
 
 # Personal skills: anything named `<name>.local/` is yours alone
-/.claude/skills/*.local/
+/.agents/skills/*.local/
 
 # Scratch space: everything under private/ stays on your machine (see
 # private/.gitignore). Machine-specific ignores belong in .git/info/exclude.
