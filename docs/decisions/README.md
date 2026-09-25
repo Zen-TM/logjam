@@ -40,3 +40,11 @@ which links back here for the reasoning.
 | [0045](0045-on-device-data-privacy.md) | On-device data privacy: app lock off by default, declared stores, one wipe path | 2026-08-04 | Accepted |
 | [0046](0046-mobile-sentry-and-scrubber.md) | Mobile crash reporting: Sentry behind a scrubber and a consent gate | 2026-07-23 | Accepted |
 | [0047](0047-signed-ota-updates.md) | OTA updates are code-signed, with the private key outside the repo | 2026-08-16 | Accepted |
+| [0060](0060-parallel-lists-and-invariants-need-a-test.md) | Two lists that must agree are one declaration plus a test; an invariant needs an executable check | 2026-08-13 | Accepted |
+| [0061](0061-format-assertions-run-against-the-seed.md) | A new format assertion on a request path is run against the seed and the fixtures, with a test | 2026-08-21 | Accepted |
+| [0062](0062-upstream-failures-are-apperrors.md) | An upstream or infra failure is thrown as an AppError whose status names the layer | 2026-08-30 | Accepted |
+| [0063](0063-external-corpora-snapshot-and-real-fixtures.md) | Slow-changing external corpora are held as an S3 snapshot; parser fixtures are the source's real output | 2026-08-30 | Accepted |
+| [0064](0064-rds-tls-via-bundled-ca.md) | The API image connects to RDS over verified TLS using a bundled CA | 2026-06-11 | Accepted |
+| [0065](0065-compact-controls-grow-their-hit-area.md) | A compact control grows its hit area, not its rendered box | 2026-07-16 | Accepted |
+| [0066](0066-place-type-rail-is-a-permanent-control.md) | On Logjam Web, the place-type rail is a permanent control and the attribute filters follow it | 2026-09-10 | Accepted |
+| [0067](0067-topo-worker-post-complete-never-self-cleans.md) | A topo worker never self-cleans after `complete`; the Dockerfile COPY list is derived | 2026-08-28 | Accepted |

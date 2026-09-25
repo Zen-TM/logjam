@@ -50,7 +50,7 @@ Prod topology (EB, ECS Fargate, S3, CloudFront, Cognito; IaC in `infra/terraform
 > would make the comment redundant, rename instead. No comment restates its
 > line.
 
-- No internal audit codes (`SEC-001`, `ARCH-001`, …); stripped in Phase 6.
+- No internal audit codes (`SEC-001`, `ARCH-001`, …): they point at reports no contributor can open. Say what the code guards instead.
 - A critical invariant gets a test, not an essay, and the comment cites the test.
 
 ## Testing
