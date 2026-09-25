@@ -1,35 +1,37 @@
 import { describe, expect, it } from "vitest";
+import { SYSTEM_PLACE_TYPE_IDS } from "./placeTypes.js";
 import {
   CANYONING_TRIP_TYPE,
   enforceCanyoningTag,
-  formatTripCanyonNames,
+  formatTripPlaceNames,
+  linksCanyon,
   MAX_TRIP_TYPES_PER_TRIP,
   TRIP_TYPE_SUGGESTIONS,
 } from "./tripName.js";
 
-describe("formatTripCanyonNames", () => {
+describe("formatTripPlaceNames", () => {
   it("returns null for an empty list", () => {
-    expect(formatTripCanyonNames([])).toBeNull();
+    expect(formatTripPlaceNames([])).toBeNull();
   });
 
   it("returns the single name unchanged", () => {
-    expect(formatTripCanyonNames(["Claustral"])).toBe("Claustral");
+    expect(formatTripPlaceNames(["Claustral"])).toBe("Claustral");
   });
 
   it("joins two names with 'and'", () => {
-    expect(formatTripCanyonNames(["Claustral", "Ranon"])).toBe(
+    expect(formatTripPlaceNames(["Claustral", "Ranon"])).toBe(
       "Claustral and Ranon",
     );
   });
 
   it("comma-separates with 'and' before the last of three", () => {
     expect(
-      formatTripCanyonNames(["Claustral", "Ranon", "Whungee Whengee"]),
+      formatTripPlaceNames(["Claustral", "Ranon", "Whungee Whengee"]),
     ).toBe("Claustral, Ranon and Whungee Whengee");
   });
 
   it("preserves order for four names", () => {
-    expect(formatTripCanyonNames(["A", "B", "C", "D"])).toBe("A, B, C and D");
+    expect(formatTripPlaceNames(["A", "B", "C", "D"])).toBe("A, B, C and D");
   });
 });
 
@@ -40,16 +42,37 @@ describe("TRIP_TYPE_SUGGESTIONS", () => {
   });
 });
 
+describe("linksCanyon", () => {
+  it("is true when any linked place is a canyon", () => {
+    expect(
+      linksCanyon([SYSTEM_PLACE_TYPE_IDS.campsite, SYSTEM_PLACE_TYPE_IDS.canyon]),
+    ).toBe(true);
+  });
+
+  // THE REGRESSION. "Links any place" tagged a night at a campsite as
+  // canyoning, and the tag decides which trip attributes a trip is asked.
+  it("is false for a trip that links only non-canyon places", () => {
+    expect(
+      linksCanyon([SYSTEM_PLACE_TYPE_IDS.campsite, SYSTEM_PLACE_TYPE_IDS.marker]),
+    ).toBe(false);
+    expect(linksCanyon(["a-user-type-id"])).toBe(false);
+  });
+
+  it("is false for a trip that links nothing", () => {
+    expect(linksCanyon([])).toBe(false);
+  });
+});
+
 describe("enforceCanyoningTag", () => {
   // Ten distinct user types — the cap, with no canyoning among them.
   const atCap = Array.from({ length: MAX_TRIP_TYPES_PER_TRIP }, (_, i) => `t${i}`);
 
-  it("leaves a canyon-less trip untouched", () => {
+  it("leaves a place-less trip untouched", () => {
     expect(enforceCanyoningTag([], false)).toEqual([]);
     expect(enforceCanyoningTag(["bushwalking"], false)).toEqual(["bushwalking"]);
   });
 
-  it("adds the tag to a canyon-linked trip with no types", () => {
+  it("adds the tag to a place-linked trip with no types", () => {
     expect(enforceCanyoningTag([], true)).toEqual([CANYONING_TRIP_TYPE]);
   });
 
@@ -90,7 +113,7 @@ describe("enforceCanyoningTag", () => {
     expect(result).toContain(CANYONING_TRIP_TYPE);
   });
 
-  it("never force-removes: a canyon-less trip keeps an existing tag", () => {
+  it("never force-removes: a place-less trip keeps an existing tag", () => {
     expect(enforceCanyoningTag([CANYONING_TRIP_TYPE], false)).toEqual([
       CANYONING_TRIP_TYPE,
     ]);
@@ -119,7 +142,7 @@ describe("enforceCanyoningTag", () => {
   });
 });
 
-// The round-trips the fix exists to protect: a stored 10-type canyon-linked
+// The round-trips the fix exists to protect: a stored 10-type place-linked
 // trip must stay editable. The dialog reopens on the stored array, re-enforces,
 // and PATCHes the result back — that result must never exceed the cap, or
 // parseTripTypes 400s and the trip is wedged.
@@ -153,7 +176,7 @@ describe("enforceCanyoningTag — dialog round-trips at the cap", () => {
     const unlinked = enforceCanyoningTag(stored, false);
     expect(unlinked).toEqual(stored);
 
-    // Reopen + save on the now canyon-less trip.
+    // Reopen + save on the now place-less trip.
     const saved = enforceCanyoningTag(enforceCanyoningTag(unlinked, false), false);
     expect(saved).toHaveLength(MAX_TRIP_TYPES_PER_TRIP);
     expect(saved).toContain(CANYONING_TRIP_TYPE);

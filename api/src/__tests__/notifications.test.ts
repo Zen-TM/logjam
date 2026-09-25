@@ -1,6 +1,7 @@
 import { describe, it, expect, afterAll } from "vitest";
 import request from "supertest";
 import prisma from "../services/prisma";
+import { ALICE_ID, BOB_ID, NONEXISTENT_ID, CANYON_TYPE_ID} from "./_actors";
 
 // Requires `make dev` running with AUTH_MODE=fake (requests = seeded alice).
 // Each test creates its own notification rows directly via Prisma (the API
@@ -10,18 +11,13 @@ import prisma from "../services/prisma";
 const API_URL = process.env.API_URL ?? "http://localhost:8080";
 const AUTH = { Authorization: "Bearer fake-token" } as const;
 
-const ALICE_ID = "00000000-0000-0000-0000-000000000001";
-const BOB_ID = "00000000-0000-0000-0000-000000000002";
-
-const NONEXISTENT_ID = "99999999-9999-9999-9999-999999999999";
-
 describe("GET /notifications (fake auth = alice)", () => {
-  it("drops a canyon_shared notification whose referenced canyon no longer exists (PRIV-001)", async () => {
+  it("drops a place_shared notification whose referenced place no longer exists (PRIV-001)", async () => {
     const notification = await prisma.notification.create({
       data: {
         userId: ALICE_ID,
-        type: "canyon_shared",
-        payload: { canyonId: NONEXISTENT_ID, sharedById: BOB_ID },
+        type: "place_shared",
+        payload: { placeId: NONEXISTENT_ID, sharedById: BOB_ID },
         read: false,
       },
     });
@@ -56,20 +52,29 @@ describe("GET /notifications (fake auth = alice)", () => {
     }
   });
 
-  it("resolves canyonName and sharedByUsername for a live canyon_shared notification", async () => {
-    const canyon = await prisma.canyon.create({
+  // "Live" means a live SHARE, not merely a live place (APIR-012/PRIV-103).
+  // This fixture used to own the place as ALICE and create no PlaceShare at
+  // all — an impossible state that only resolved because the old read-time
+  // fallback checked place existence. Bob owns it and shares it, as the
+  // notification claims.
+  it("resolves placeName and sharedByUsername for a live place_shared notification", async () => {
+    const place = await prisma.place.create({
       data: {
-        ownerId: ALICE_ID,
-        name: "CH-002 notification canyon",
+        placeTypeId: CANYON_TYPE_ID,
+        ownerId: BOB_ID,
+        name: "CH-002 notification place",
         latitude: -33.7,
         longitude: 150.3,
       },
     });
+    const share = await prisma.placeShare.create({
+      data: { placeId: place.id, sharedById: BOB_ID, sharedWithId: ALICE_ID },
+    });
     const notification = await prisma.notification.create({
       data: {
         userId: ALICE_ID,
-        type: "canyon_shared",
-        payload: { canyonId: canyon.id, sharedById: BOB_ID },
+        type: "place_shared",
+        payload: { placeId: place.id, sharedById: BOB_ID },
         read: false,
       },
     });
@@ -78,11 +83,21 @@ describe("GET /notifications (fake auth = alice)", () => {
       expect(res.status).toBe(200);
       const found = res.body.find((n: { id: string }) => n.id === notification.id);
       expect(found).toBeDefined();
-      expect(found.payload.canyonName).toBe("CH-002 notification canyon");
+      expect(found.payload.placeName).toBe("CH-002 notification place");
       expect(found.payload.sharedByUsername).toBe("bob");
+
+      // The other half of the same rule: revoke the share, leave the place
+      // alive, and the name must stop resolving.
+      await prisma.placeShare.delete({ where: { id: share.id } });
+      const after = await request(API_URL).get("/notifications").set(AUTH);
+      expect(after.status).toBe(200);
+      expect(
+        after.body.some((n: { id: string }) => n.id === notification.id),
+      ).toBe(false);
     } finally {
       await prisma.notification.deleteMany({ where: { id: notification.id } });
-      await prisma.canyon.delete({ where: { id: canyon.id } });
+      await prisma.placeShare.deleteMany({ where: { placeId: place.id } });
+      await prisma.place.delete({ where: { id: place.id } });
     }
   });
 
@@ -145,7 +160,10 @@ describe("PATCH /notifications/:id/read and DELETE /notifications/:id (fake auth
     expect(deleteRes.status).toBe(404);
   });
 
-  it("403s when the notification belongs to another user", async () => {
+  // 404, not 403 (APIR-013/PRIV-105): a foreign notification id must be
+  // indistinguishable from one that does not exist, or the status confirms the
+  // id is real to someone who cannot see it.
+  it("404s when the notification belongs to another user", async () => {
     const bobNotification = await prisma.notification.create({
       data: {
         userId: BOB_ID,
@@ -158,12 +176,12 @@ describe("PATCH /notifications/:id/read and DELETE /notifications/:id (fake auth
       const patchRes = await request(API_URL)
         .patch(`/notifications/${bobNotification.id}/read`)
         .set(AUTH);
-      expect(patchRes.status).toBe(403);
+      expect(patchRes.status).toBe(404);
 
       const deleteRes = await request(API_URL)
         .delete(`/notifications/${bobNotification.id}`)
         .set(AUTH);
-      expect(deleteRes.status).toBe(403);
+      expect(deleteRes.status).toBe(404);
 
       // Confirm bob's notification was untouched.
       const after = await prisma.notification.findUnique({ where: { id: bobNotification.id } });
@@ -188,6 +206,21 @@ describe("PATCH /notifications/:id/read and DELETE /notifications/:id (fake auth
         .set(AUTH);
       expect(patchRes.status).toBe(200);
       expect(patchRes.body.read).toBe(true);
+
+      // Logjam Web's "Mark as unread" is the same route with a body.
+      const unreadRes = await request(API_URL)
+        .patch(`/notifications/${notification.id}/read`)
+        .set(AUTH)
+        .send({ read: false });
+      expect(unreadRes.status).toBe(200);
+      expect(unreadRes.body.read).toBe(false);
+
+      // Anything but a boolean false still marks it read, as the bodyless call always did.
+      const junkRes = await request(API_URL)
+        .patch(`/notifications/${notification.id}/read`)
+        .set(AUTH)
+        .send({ read: "no" });
+      expect(junkRes.body.read).toBe(true);
 
       const deleteRes = await request(API_URL)
         .delete(`/notifications/${notification.id}`)

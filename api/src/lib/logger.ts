@@ -3,11 +3,11 @@ import { getEnv } from "./env";
 
 const env = getEnv();
 
-// Redact paths that could leak canyon coordinates or names into logs.
+// Redact paths that could leak place coordinates or names into logs.
 // Pino redaction is shallow on nested objects unless the path is exact;
-// enumerate every known leak vector for canyon/trip-log payloads.
+// enumerate every known leak vector for place/trip-log payloads.
 export const redactPaths = [
-  // Express request body shapes for canyon/trip endpoints
+  // Express request body shapes for place/trip endpoints
   'req.body.latitude',
   'req.body.longitude',
   'req.body.name',
@@ -15,19 +15,60 @@ export const redactPaths = [
   'req.body.notes',
   'req.body.coords',
   'req.body.coordinates',
-  'req.body.canyon.latitude',
-  'req.body.canyon.longitude',
-  'req.body.canyon.name',
-  'req.body.canyon.notes',
+  'req.body.place.latitude',
+  'req.body.place.longitude',
+  'req.body.place.name',
+  'req.body.place.notes',
+  // FIELD VALUES. A user-authored field LABEL names the thing it describes
+  // ("Which slot for the Ranon exit") and its VALUE is whatever they typed, so
+  // both are as sensitive as `notes` — and no wildcard above reaches them: the
+  // `*.latitude` family matches coordinate KEYS by name, and a field value can
+  // be keyed anything at all. The whole object is censored rather than any key
+  // inside it, because the keys themselves are user-authored.
+  //
+  // `foreignFields` is the same data arriving from someone else's place, which
+  // makes it a second person's field labels in one user's log line.
+  'req.body.fieldValues',
+  'req.body.foreignFields',
+  'req.body.place.fieldValues',
+  'req.body.rows[*].data.fieldValues',
+  'req.body.places[*].fieldValues',
+  // A definition's LABEL is the user's own words about a place, arriving on a
+  // different route: the mobile scrubber censors it and this file said it was
+  // as sensitive as `notes` in the comment above and then redacted neither.
+  'req.body.label',
+  'req.body.field.label',
+  // TRIP TYPES are user-authored tags ("Claustral recon", "with Dad") on the
+  // same footing as a label, and a trip attribute's scoping is a list of them.
+  'req.body.types',
+  'req.body.tripTypes',
+  'req.body.trips[*].types',
+  // THE SYNC PUSH IS THE PHONE'S ONLY WRITE PATH, and every name, note and
+  // field value it has ever sent travels inside `ops[*].fields`, which nothing
+  // above reaches. Same defence-in-depth argument as the bulk rows below — no
+  // current log site emits this body — applied to the shape that now carries
+  // the most user data by far.
+  'req.body.ops[*].fields.name',
+  'req.body.ops[*].fields.altNames',
+  'req.body.ops[*].fields.notes',
+  'req.body.ops[*].fields.latitude',
+  'req.body.ops[*].fields.longitude',
+  'req.body.ops[*].fields.fieldValues',
+  'req.body.ops[*].fields.customFields',
+  'req.body.ops[*].fields.label',
+  'req.body.ops[*].fields.types',
+  'req.body.ops[*].fields.tripTypes',
+  'req.body.ops[*].fields.displayName',
+  'req.body.ops[*].fields.points',
   // Generic wildcards for nested payloads
   '*.latitude',
   '*.longitude',
   '*.coords',
   '*.coordinates',
-  // Array-shaped bulk-import/bulk-create payloads carry user-typed canyon/trip
+  // Array-shaped bulk-import/bulk-create payloads carry user-typed place/trip
   // names that the *.latitude wildcard can't reach (it only matches coordinate
   // keys). Unproven hardening: no log site currently emits req.body for these
-  // routes (canyonsBulk/tripLogsBulk/imports log nothing; pino-http omits the
+  // routes (placesBulk/tripLogsBulk/imports log nothing; pino-http omits the
   // body; errorHandler logs safeErrorForLog(err), not the body), but redacting
   // them belt-and-braces guards the mandatory privacy boundary if a future log
   // site ever carries the payload. See PRIV-001 defence-in-depth.
@@ -38,15 +79,21 @@ export const redactPaths = [
   'req.body.rows[*].data.longitude',
   'req.body.trips[*].name',
   'req.body.trips[*].notes',
-  'req.body.canyons[*].name',
-  'req.body.canyons[*].altNames',
-  'req.body.canyons[*].notes',
-  'req.body.canyons[*].latitude',
-  'req.body.canyons[*].longitude',
+  'req.body.places[*].name',
+  'req.body.places[*].altNames',
+  'req.body.places[*].notes',
+  'req.body.places[*].latitude',
+  'req.body.places[*].longitude',
   'req.body.displayName',
+  // Region-clip endpoint (stage 4a): the bbox IS a place-area coordinate.
+  // Body-shaped only — the route design keeps bounds out of URLs entirely.
+  'req.body.west',
+  'req.body.south',
+  'req.body.east',
+  'req.body.north',
   // Authorization headers (never log credentials)
   'req.headers.authorization',
-  'req.headers["x-fake-auth"]',
+  'req.headers["x-fake-sub"]',
   'req.headers.cookie',
 ];
 
@@ -58,9 +105,22 @@ export const redactPaths = [
  * strings (e.g. fetch errors embedding the request URL), so coordinate-
  * bearing fragments are removed before the message is logged at all.
  */
+// A decimal lat/lng pair in free text — "-33.5621, 150.4017", "[150.40,-33.56]"
+// and the GeoJSON-ish forms in between. Keyed redaction (redactPaths) cannot
+// reach a coordinate that was interpolated into a message before it got here,
+// which is exactly what an error string carries. Mirrors COORDINATE_PAIR in
+// mobile/src/sentry/scrubEvent.ts — the same rule on the other side of the API.
+//
+// Four decimal places (~11 m) is the floor: below that the false-positive rate
+// on ordinary numbers (timings, versions, ratios) costs more debuggability than
+// the ~1 km it would protect. Anything formatted from a real GPS fix has more
+// precision than that, not less.
+const COORDINATE_PAIR = /-?\d{1,3}\.\d{4,}\s*,\s*-?\d{1,3}\.\d{4,}/g;
+
 export function redactTilePathPatterns(message: string): string {
   return message
     .replace(/\bhttps?:\/\/\S+/gi, "[redacted-url]")
+    .replace(COORDINATE_PAIR, "[redacted-coords]")
     .replace(/\b\d+\/\d+\/\d+\b/g, "[redacted-tile]");
 }
 
@@ -71,9 +131,9 @@ export function redactTilePathPatterns(message: string): string {
  * cannot scrub free text embedded inside an Error's `message`/`stack`. Prisma is
  * the concrete leak vector: a `PrismaClientValidationError` (e.g. a bulk-import
  * row with a wrong-typed field that our hand validators don't cover) renders the
- * FULL query arguments — including canyon `name`, `latitude`, `longitude`,
+ * FULL query arguments — including place `name`, `latitude`, `longitude`,
  * `notes` — into `err.message` AND `err.stack`. Logging the raw `{ err }` (pino's
- * default Error serializer emits message + stack) would put canyon names/coords
+ * default Error serializer emits message + stack) would put place names/coords
  * in plaintext logs, violating the root CLAUDE.md privacy rule.
  *
  * So: never log the raw Error. Log only the class name plus a scrubbed message
@@ -92,7 +152,7 @@ export function safeErrorForLog(err: unknown): {
   let message = err.message;
   // Strip Prisma's rendered invocation-argument block. Prisma formats validation
   // /known-request errors as:
-  //   Invalid `prisma.canyon.createMany()` invocation\n\n<reason>\n{ ...args }
+  //   Invalid `prisma.place.createMany()` invocation\n\n<reason>\n{ ...args }
   // The trailing `{ ... }` (often multi-line) is the user-supplied data — drop
   // everything from the first brace that starts an args/object render onward.
   const argsBlockIndex = message.search(/\n\s*[{[]/);
@@ -102,6 +162,27 @@ export function safeErrorForLog(err: unknown): {
   return {
     name: err.name || "Error",
     message: redactTilePathPatterns(message),
+  };
+}
+
+/**
+ * pino-http request serializer. Logs the PATH ONLY: the query string carries
+ * user-typed search terms (`GET /trips?search=` matches place NAMES,
+ * `/friends/search?q=` usernames) and pino's `redact.paths` cannot reach inside
+ * a URL string, so a full `req.url` would put place names in plaintext access
+ * logs — the exact thing the root CLAUDE.md privacy rule forbids. Nothing
+ * operational needs the query string. (PRIV-109)
+ */
+export function serializeRequestForLog(req: {
+  id?: unknown;
+  method?: string;
+  url?: string;
+}): { id: unknown; method: string | undefined; url: string } {
+  return {
+    id: req.id,
+    method: req.method,
+    // Deliberately omit body — payloads may contain place names/coords.
+    url: String(req.url ?? "").split("?")[0],
   };
 }
 

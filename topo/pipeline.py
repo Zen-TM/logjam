@@ -176,7 +176,7 @@ class Benchmark:
         """Record the per-footprint overlapping-survey resolution (see
         select_surveys_by_layer). None/empty when no footprint had more than one
         survey (the common single-survey job) or for DEM-only jobs. Privacy-safe:
-        numeric tile ids + area/date survey labels only, never canyon
+        numeric tile ids + area/date survey labels only, never place
         names/coords."""
         self._survey_decisions = decisions
 
@@ -453,6 +453,13 @@ CONTOUR_DEFAULTS = {
     "majorWidthM": 18,
     "minorWidthM": 8,
 }
+
+# How many stored contour-width units make one pixel at z18. Mirrors
+# CONTOUR_WIDTH_UNITS_PER_PX in shared/src/topoSettings.ts: a contour and an OSM
+# feature line asked for the same width must be the same line, in the composite
+# bake as on the live map. This bake had its own divisor (zoom / 16 / 6), which
+# made a baked contour half again as thick as the one the user tuned on screen.
+CONTOUR_WIDTH_UNITS_PER_PX = 8
 
 # Contour smoothing. Raw gdal_contour output on a LiDAR DTM is extremely knobbly
 # — every cell-level wiggle becomes a vertex. That noise has two costs: the lines
@@ -1857,7 +1864,7 @@ class SurveySelection:
     terrain_tiles feeds the DTM (hillshade/slope/contours); veg_tiles feeds the
     vegetation-return counts. A footprint with a single survey contributes the
     same tile to both. `decisions` is a privacy-safe per-footprint audit
-    (numeric tile ids + area/date survey labels only, never canyon names/coords)
+    (numeric tile ids + area/date survey labels only, never place names/coords)
     folded into the job metrics.
     """
     terrain_tiles: List[str]
@@ -2452,7 +2459,7 @@ def fetch_osm_features(lon_min: float, lat_min: float, lon_max: float, lat_max: 
     }
 
     import time as _time
-    resp = None
+    raw: Optional[dict] = None
     last_err: Optional[str] = None
     attempts = 0
     for endpoint in endpoints:
@@ -2462,21 +2469,28 @@ def fetch_osm_features(lon_min: float, lat_min: float, lon_max: float, lat_max: 
                 resp = requests.post(endpoint, data={"data": query},
                                      headers=headers, timeout=180)
                 resp.raise_for_status()
+                # Decoded INSIDE the retry loop (STP-003): a mirror answering
+                # 200 with an HTML interstitial is a mirror failure, not a job
+                # failure — rotate to the next endpoint instead of raising out
+                # of a function whose contract is "degrade to an empty layer".
+                decoded = resp.json()
+                if not isinstance(decoded, dict):
+                    raise ValueError(f"expected a JSON object, got {type(decoded).__name__}")
+                raw = decoded
                 break
             except Exception as e:
                 last_err = f"{endpoint}: {e}"
                 log.warning(f"Overpass attempt {attempts} failed ({last_err})")
-                resp = None
+                raw = None
                 if retry == 0:
                     _time.sleep(10)
-        if resp is not None and resp.ok:
+        if raw is not None:
             break
-    if resp is None or not resp.ok:
+    if raw is None:
         log.warning(f"Overpass API failed after {attempts} attempts across {len(endpoints)} endpoints. "
                     f"Features layer will be empty. Last error: {last_err}")
         return None
 
-    raw = resp.json()
     geojson_path = os.path.join(work_dir, "osm_features.geojson")
     features = []
 
@@ -3313,8 +3327,8 @@ def render_contours_tile(
                 is_major = abs(m - round(m)) < 1e-3
 
             colour = major_colour if is_major else minor_colour
-            line_width = max(1, int((major_width_m if is_major else minor_width_m)
-                                    * zoom / 16 / 6))
+            width_px_z18 = (major_width_m if is_major else minor_width_m) / CONTOUR_WIDTH_UNITS_PER_PX
+            line_width = max(1, int(width_px_z18 * zoom / 18))
             draw.line(pts, fill=colour, width=line_width)
 
             if zoom >= LABEL_MIN_ZOOM and label_interval and is_major and len(pts) >= 4:

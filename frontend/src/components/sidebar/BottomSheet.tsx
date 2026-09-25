@@ -4,10 +4,18 @@ import classes from "./BottomSheet.module.css";
 
 export type SheetSnap = "peek" | "half" | "full";
 
+/** Shortest first, so the index doubles as the slider's value: taller is more. */
+const SNAP_ORDER: SheetSnap[] = ["peek", "half", "full"];
+const SNAP_LABELS: Record<SheetSnap, string> = {
+  peek: "Peek",
+  half: "Half height",
+  full: "Full height",
+};
+
 const PEEK_REVEAL_PX = 96;
 // Bottom nav strip height; the sheet sits above it. Keep in sync with
 // --bottom-nav-height in index.css.
-const NAV_HEIGHT_PX = 56;
+const NAV_HEIGHT_PX = 68;
 // Fraction of viewport height revealed at the "half" snap. Panels with pinned
 // top-of-list chrome (search box, action buttons, a collapsed filter
 // accordion) were eating most of a plain 50% reveal, leaving as little as
@@ -61,14 +69,23 @@ function useViewportHeight(): number {
 }
 
 /** Draggable bottom sheet for mobile panels. Controlled snap point so callers
- *  (App.tsx) can collapse it to "peek" during map-pick flows. */
+ *  (App.tsx) can collapse it to "peek" during map-pick flows.
+ *
+ *  It is the same COMPLEMENTARY LANDMARK the desktop panel is, named by the page
+ *  it holds — a reader jumping by landmark should not lose the panel by being on
+ *  a phone. Its grab bar is a `slider`, because a bar that only answers a drag
+ *  is a control a keyboard cannot reach (WCAG 2.1.1) and "full" was unreachable
+ *  without one. */
 function BottomSheet({
   snap,
   onSnapChange,
+  title,
   children,
 }: {
   snap: SheetSnap;
   onSnapChange: (snap: SheetSnap) => void;
+  /** The page's own title: the landmark's accessible name. */
+  title: string;
   children: ReactNode;
 }) {
   const viewportHeight = useViewportHeight();
@@ -112,6 +129,22 @@ function BottomSheet({
     setDragTranslate(null);
   }
 
+  function handleKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    const index = SNAP_ORDER.indexOf(snap);
+    const next = {
+      ArrowUp: index + 1,
+      ArrowRight: index + 1,
+      ArrowDown: index - 1,
+      ArrowLeft: index - 1,
+      Home: 0,
+      End: SNAP_ORDER.length - 1,
+    }[event.key];
+    if (next === undefined) return;
+    event.preventDefault();
+    const clamped = Math.min(Math.max(next, 0), SNAP_ORDER.length - 1);
+    if (clamped !== index) onSnapChange(SNAP_ORDER[clamped]);
+  }
+
   const translate = dragTranslate ?? snapTranslate(snap, viewportHeight);
 
   // The sheet element is always full-height and slides down via translateY.
@@ -132,8 +165,9 @@ function BottomSheet({
           onClick={() => onSnapChange("half")}
         />
       )}
-      <div
+      <aside
         className={classes.sheet}
+        aria-label={title}
         style={{
           transform: `translateY(${translate}px)`,
           transition: dragTranslate !== null ? "none" : undefined,
@@ -142,6 +176,14 @@ function BottomSheet({
         <div
           ref={handleRef}
           className={classes.handle}
+          role="slider"
+          tabIndex={0}
+          aria-label="Panel height"
+          aria-valuemin={0}
+          aria-valuemax={SNAP_ORDER.length - 1}
+          aria-valuenow={SNAP_ORDER.indexOf(snap)}
+          aria-valuetext={SNAP_LABELS[snap]}
+          onKeyDown={handleKeyDown}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
@@ -152,7 +194,7 @@ function BottomSheet({
         <div className={classes.content} style={{ height: visibleContentHeight }}>
           {children}
         </div>
-      </div>
+      </aside>
     </>
   );
 }

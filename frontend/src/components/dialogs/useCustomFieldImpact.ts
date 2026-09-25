@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
-import { getCustomFieldImpact, type CustomFieldEntityKind } from "../../canyonUtils";
+import { getCustomFieldImpact, type CustomFieldEntityKind } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
 
 /**
  * Impact count for a custom field: how many of the user's rows (trip logs or
- * canyons, per `entity`) carry a value for `fieldKey`. Fetched from the server
+ * places, per `entity`) carry a value for `fieldKey`. Fetched from the server
  * (the client's row lists are capped, so a client-side count could undercount).
  * Drives the warning shown in the rename/delete confirm dialogs — pass `null`
  * for `fieldKey` while no confirm is open.
@@ -27,7 +27,7 @@ export function useCustomFieldImpact(
     setError(null);
     if (!fieldKey) return;
     let cancelled = false;
-    const noun = entity === "canyon" ? "canyons" : "trips";
+    const noun = entity === "place" ? "places" : "trips";
     getCustomFieldImpact(entity, fieldKey)
       .then(({ count: impactCount }) => {
         if (!cancelled) setCount(impactCount);

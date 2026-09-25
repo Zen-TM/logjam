@@ -1,0 +1,4 @@
+name,latitude,longitude,notes,V grade,Number of abseils,Longest abseil (m)
+Test Alpha Gorge,-33.7101,150.3102,Synthetic row for the a11y suite,3,4,25
+Test Bravo Chasm,-33.7202,150.3203,Synthetic row for the a11y suite,2,2,12
+Test Charlie Slot,-33.7303,150.3304,Synthetic row for the a11y suite,4,7,38

@@ -1,10 +1,17 @@
 import { describe, it, expect } from "vitest";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import pino from "pino";
-import { redactPaths, redactTilePathPatterns, safeErrorForLog } from "./logger";
+import {
+  redactPaths,
+  redactTilePathPatterns,
+  safeErrorForLog,
+  serializeRequestForLog,
+} from "./logger";
 
 // Build a pino logger using the SAME redact paths the app logger uses, but
 // writing to an in-memory buffer so we can assert what actually gets censored.
-// This guards the CLAUDE.md privacy rule: canyon coords/names must never reach
+// This guards the CLAUDE.md privacy rule: place coords/names must never reach
 // logs in plain text.
 function captureLog(obj: unknown): Record<string, unknown> {
   const lines: string[] = [];
@@ -18,9 +25,9 @@ function captureLog(obj: unknown): Record<string, unknown> {
 }
 
 describe("logger redaction", () => {
-  it("censors canyon coordinates and name in a request body", () => {
+  it("censors place coordinates and name in a request body", () => {
     const out = captureLog({
-      req: { body: { latitude: -33.5, longitude: 150.3, name: "Secret Canyon", notes: "beta" } },
+      req: { body: { latitude: -33.5, longitude: 150.3, name: "Secret Place", notes: "beta" } },
     });
     const body = (out.req as { body: Record<string, unknown> }).body;
     expect(body.latitude).toBe("[redacted]");
@@ -29,7 +36,7 @@ describe("logger redaction", () => {
     expect(body.notes).toBe("[redacted]");
   });
 
-  it("censors nested canyon coordinates via wildcard paths", () => {
+  it("censors nested place coordinates via wildcard paths", () => {
     const out = captureLog({ anything: { latitude: -33.5, longitude: 150.3, coords: [1, 2] } });
     const nested = out.anything as Record<string, unknown>;
     expect(nested.latitude).toBe("[redacted]");
@@ -46,22 +53,43 @@ describe("logger redaction", () => {
     expect(headers.cookie).toBe("[redacted]");
   });
 
+  // Trip types are user-authored tags, and a trip attribute's scoping is a list
+  // of them — on the REST body and inside a sync push op alike.
+  it("censors trip types and a trip attribute's scoping", () => {
+    const out = captureLog({
+      req: {
+        body: {
+          types: ["with Dad"],
+          tripTypes: ["Claustral recon"],
+          ops: [{ fields: { types: ["with Dad"], tripTypes: ["Claustral recon"] } }],
+        },
+      },
+    });
+    const body = (out.req as {
+      body: Record<string, unknown> & { ops: { fields: Record<string, unknown> }[] };
+    }).body;
+    expect(body.types).toBe("[redacted]");
+    expect(body.tripTypes).toBe("[redacted]");
+    expect(body.ops[0].fields.types).toBe("[redacted]");
+    expect(body.ops[0].fields.tripTypes).toBe("[redacted]");
+  });
+
   it("leaves non-sensitive fields intact", () => {
-    const out = captureLog({ req: { body: { id: "canyon-1" } } });
+    const out = captureLog({ req: { body: { id: "place-1" } } });
     const body = (out.req as { body: Record<string, unknown> }).body;
-    expect(body.id).toBe("canyon-1");
+    expect(body.id).toBe("place-1");
   });
 
   // PRIV-001 defence-in-depth: array-shaped bulk-import/create payloads carry
   // user-typed names the coordinate wildcards can't reach. No log site emits
   // these today (unproven hardening), but the redact paths must censor them if
   // one ever does.
-  it("censors array-shaped bulk-import canyon names/coords", () => {
+  it("censors array-shaped bulk-import place names/coords", () => {
     const out = captureLog({
       req: {
         body: {
           rows: [
-            { data: { name: "Secret Canyon", latitude: -33.5, longitude: 150.3, altNames: ["X"], notes: "beta" } },
+            { data: { name: "Secret Place", latitude: -33.5, longitude: 150.3, altNames: ["X"], notes: "beta" } },
           ],
         },
       },
@@ -72,6 +100,89 @@ describe("logger redaction", () => {
     expect(row.longitude).toBe("[redacted]");
     expect(row.altNames).toBe("[redacted]");
     expect(row.notes).toBe("[redacted]");
+  });
+
+  // PLACE FIELD VALUES. A user-authored field label names the thing it
+  // describes and its value is whatever they typed, so both are as sensitive as
+  // notes — and NO existing wildcard reaches them: the `*.latitude` family
+  // matches coordinate keys BY NAME, and a field value can be keyed anything.
+  // The whole object is censored because the keys are user-authored too.
+  it("censors place field values, whose keys the coordinate wildcards cannot match", () => {
+    const out = captureLog({
+      req: {
+        body: {
+          fieldValues: { rap_2_anchor: "tree on the true left", v_grade: 4 },
+          foreignFields: [
+            { key: "bolt_count", label: "Bolt count", type: "integer", value: 3 },
+          ],
+        },
+      },
+    });
+    const body = (out.req as { body: Record<string, unknown> }).body;
+    expect(body.fieldValues).toBe("[redacted]");
+    expect(body.foreignFields).toBe("[redacted]");
+  });
+
+  // THE SYNC PUSH is the phone's only write path: every place the app has ever
+  // created reached the server inside `ops[*].fields`, which no path in the list
+  // reached until 2026-09-10.
+  it("censors a place inside a sync push op", () => {
+    const out = captureLog({
+      req: {
+        body: {
+          protocol: 1,
+          ops: [
+            {
+              opId: "op-1",
+              entity: "place",
+              op: "create",
+              id: "p1",
+              fields: {
+                name: "Secret Canyon",
+                notes: "abseil from the tree",
+                latitude: -33.5,
+                longitude: 150.4,
+                fieldValues: { access_beta: "gate code 1234" },
+              },
+            },
+          ],
+        },
+      },
+    });
+    const op = (
+      (out.req as { body: { ops: { fields: Record<string, unknown> }[] } }).body.ops
+    )[0].fields;
+    for (const key of ["name", "notes", "latitude", "longitude", "fieldValues"]) {
+      expect(op[key], `${key} leaked out of a push op`).toBe("[redacted]");
+    }
+    // The envelope is not sensitive and stays readable — an id and an entity
+    // name are what makes a log line useful at all.
+    const body = out.req as { body: { ops: { entity: string }[] } };
+    expect(body.body.ops[0].entity).toBe("place");
+  });
+
+  // A definition's LABEL is the user's own words about a place, arriving on a
+  // route of its own.
+  it("censors a field definition's label", () => {
+    const out = captureLog({
+      req: { body: { label: "Which slot for the exit" } },
+    });
+    const body = (out.req as { body: Record<string, unknown> }).body;
+    expect(body.label).toBe("[redacted]");
+  });
+
+  it("censors field values inside a bulk-import row", () => {
+    const out = captureLog({
+      req: {
+        body: {
+          rows: [
+            { data: { name: "Secret Place", fieldValues: { access_beta: "gate code 1234" } } },
+          ],
+        },
+      },
+    });
+    const row = ((out.req as { body: { rows: Array<{ data: Record<string, unknown> }> } }).body.rows)[0].data;
+    expect(row.fieldValues).toBe("[redacted]");
   });
 
   it("censors array-shaped bulk trip names", () => {
@@ -118,20 +229,20 @@ describe("redactTilePathPatterns", () => {
 });
 
 // Guards the SEC-001 (DoD) boundary: pino redact paths cannot scrub free text
-// inside err.message/err.stack, and Prisma renders user-supplied canyon
+// inside err.message/err.stack, and Prisma renders user-supplied place
 // name/coords into a validation error's message. safeErrorForLog must drop the
 // rendered argument block before it can reach logs.
 describe("safeErrorForLog", () => {
-  it("strips a Prisma rendered-args block carrying canyon name/coords", () => {
+  it("strips a Prisma rendered-args block carrying place name/coords", () => {
     const err = new Error(
-      "Invalid `prisma.canyon.createMany()` invocation\n\n" +
+      "Invalid `prisma.place.createMany()` invocation\n\n" +
         "Argument `notes`: Invalid value provided. Expected String or Null, provided Int.\n" +
-        '{ name: "Secret Slot Canyon", latitude: -33.7, longitude: 150.3, notes: 12345 }',
+        '{ name: "Secret Slot Place", latitude: -33.7, longitude: 150.3, notes: 12345 }',
     );
     err.name = "PrismaClientValidationError";
     const safe = safeErrorForLog(err);
     expect(safe.name).toBe("PrismaClientValidationError");
-    expect(safe.message).not.toMatch(/Secret Slot Canyon/);
+    expect(safe.message).not.toMatch(/Secret Slot Place/);
     expect(safe.message).not.toMatch(/-33\.7|150\.3/);
     expect(safe.message).toContain("[redacted-args]");
     // The reason line survives so the throw site is still diagnosable.
@@ -156,8 +267,89 @@ describe("safeErrorForLog", () => {
     expect(safe.message).toContain("[redacted-url]");
   });
 
+  // Mirrors COORDINATE_PAIR in mobile/src/sentry/scrubEvent.ts — the same rule
+  // on both sides of the API. Keyed redaction cannot reach a coordinate that
+  // was interpolated into a message before it arrived here.
+  it("redacts a decimal lat/lng pair interpolated into an error message", () => {
+    const safe = safeErrorForLog(
+      new Error("failed to place waypoint at -33.5621, 150.4017 for job"),
+    );
+    expect(safe.message).not.toMatch(/33\.5621/);
+    expect(safe.message).not.toMatch(/150\.4017/);
+    expect(safe.message).toContain("[redacted-coords]");
+  });
+
+  it("redacts coordinate pairs in bracketed / lng-first forms", () => {
+    for (const text of [
+      "[150.40170,-33.56210]",
+      "point(-33.56210 , 150.40170)",
+      "-33.5621,150.4017",
+    ]) {
+      expect(redactTilePathPatterns(text)).toContain("[redacted-coords]");
+    }
+  });
+
+  it("leaves low-precision and non-coordinate number pairs alone", () => {
+    // Four decimals is the floor: below it the false-positive rate on ordinary
+    // numbers costs more debuggability than the ~1 km it would protect.
+    expect(redactTilePathPatterns("took 1.23, 4.56 seconds")).toBe(
+      "took 1.23, 4.56 seconds",
+    );
+    expect(redactTilePathPatterns("v2.1, build 7")).toBe("v2.1, build 7");
+  });
+
   it("handles non-Error throwables", () => {
     expect(safeErrorForLog("just a string").name).toBe("NonError");
     expect(safeErrorForLog("just a string").message).toBe("just a string");
+  });
+});
+
+// PRIV-109: the query string carries user search terms (?search= is matched
+// against place NAMES in GET /trips), and no redact path can reach inside a
+// URL string.
+describe("serializeRequestForLog", () => {
+  it("logs the path without the query string", () => {
+    const out = serializeRequestForLog({
+      id: "req-1",
+      method: "GET",
+      url: "/trips?search=Claustral&limit=20",
+    });
+    expect(out.url).toBe("/trips");
+    expect(JSON.stringify(out)).not.toContain("Claustral");
+  });
+
+  it("keeps a query-free path intact and never emits a body", () => {
+    const out = serializeRequestForLog({ id: "req-2", method: "POST", url: "/places" });
+    expect(out.url).toBe("/places");
+    expect(out).not.toHaveProperty("body");
+  });
+});
+
+// The api/CLAUDE.md rule "never log a raw thrown error; scrub it with
+// safeErrorForLog" was a comment until this test: 21 sites had drifted past it
+// by the 2026-08-28 review (APIC-001). Pino's redact.paths only censor
+// structured keys — they cannot reach free text inside err.message/err.stack,
+// where Prisma renders user-supplied place names and coordinates.
+describe("no raw err reaches a log site", () => {
+  function sourceFiles(dir: string): string[] {
+    return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) return sourceFiles(full);
+      if (!entry.name.endsWith(".ts") || entry.name.endsWith(".test.ts")) return [];
+      return [full];
+    });
+  }
+
+  it("every logger.* call scrubs its error argument", () => {
+    // An `err` key in a logger call's object argument whose value is not a
+    // safeErrorForLog(...) call (shorthand `{ err }` included).
+    const rawErrLogSite =
+      /logger\.\w+\(\s*\{[^}]*?[{,]\s*err\s*(?::(?!\s*safeErrorForLog\()|[,}])/g;
+    const offenders = sourceFiles(join(__dirname, "..")).flatMap((file) =>
+      (readFileSync(file, "utf8").match(rawErrLogSite) ?? []).map(
+        (hit) => `${file}: ${hit.replace(/\s+/g, " ")}`,
+      ),
+    );
+    expect(offenders).toEqual([]);
   });
 });

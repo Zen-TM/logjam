@@ -1,22 +1,63 @@
-import { useState, useEffect, useRef } from "react";
-import { ChevronRight } from "lucide-react";
+// Friends — "who can I share a place with, and who is waiting on me?"
+//
+// The page answers with a count and owns the one acquisition action: Add, which
+// opens the username search in a dialog rather than sitting above the list. The
+// old panel led with that search box, so the first thing on the page was a way
+// to look for people who are not on it (DESIGN.md §1, and Logjam GPS's
+// FriendsScreen, which settled this shape).
+//
+// One pinned rail partitions All / Friends / Requests — a true partition,
+// because a pending request is not a friendship yet — over one flat list.
+//
+// A friend's row OPENS their sharing audit, and its ⋯ ACTS (§7): the audit is
+// read-only, so a mis-tap there costs nothing, while Remove friend stays behind
+// the menu. A request has nowhere to open to, so it carries Accept and Decline
+// on the card's own footer line.
+//
+// FILES SENT TO YOU used to have a section here as well. They are the Inbox's,
+// and always were — every send writes the recipient a notification and both
+// verbs resolve it (api/src/routes/fileSends.ts) — so this page held a second,
+// separately-fetched copy of a list the Inbox draws better.
+//
+// PRIVACY: usernames only, everywhere. `/friends`, `/friends/requests` and
+// `/friends/search` never return an email (root CLAUDE.md), and nothing here
+// would have somewhere to put one.
+import { useEffect, useRef, useState } from "react";
+import { EllipsisVertical, Share2, UserMinus, UserPlus, Users } from "lucide-react";
 import classes from "./FriendsPanel.module.css";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
 import FriendSharingSection from "./FriendSharingSection";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
-import type {
-  TFriend,
-  TFriendRequest,
-  TSearchUser,
-} from "../../../canyonUtils";
+import {
+  Avatar,
+  Button,
+  ChipRail,
+  Dialog,
+  EmptyState,
+  Hero,
+  IconButton,
+  Menu,
+  Row,
+  SearchField,
+  StatusPill,
+  type ChipOption,
+} from "../../../ui";
+import type { TFriend, TFriendRequest, TSearchUser } from "../../../placeUtils";
 import {
   searchUsers,
   sendFriendRequest,
   acceptFriendRequest,
   declineFriendRequest,
   removeFriend,
-} from "../../../canyonUtils";
+} from "../../../placeUtils";
+
+/** Shorter than this and the server has nothing useful to match on. */
+const SEARCH_MIN_CHARS = 3;
+
+type Bucket = "all" | "friends" | "requests";
+
+const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
 
 function FriendsPanel({
   friends,
@@ -31,246 +72,351 @@ function FriendsPanel({
   onRefetchShared: () => void;
   onRefetchNotifications: () => void;
 }) {
-  const [friendSearch, setFriendSearch] = useState("");
-  const [searchResults, setSearchResults] = useState<TSearchUser[]>([]);
-  const [sendingUserIds, setSendingUserIds] = useState<Set<string>>(new Set());
-  const [removingFriendId, setRemovingFriendId] = useState<string | null>(null);
-  const [loadingRequestId, setLoadingRequestId] = useState<string | null>(null);
-  const [showRemoveConfirm, setShowRemoveConfirm] = useState<{
-    id: string;
-    username: string;
-  } | null>(null);
-  // Non-null = the sharing audit for that friend replaces the list (fix 24).
-  const [openFriend, setOpenFriend] = useState<TFriend | null>(null);
-  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toast = useToast();
+  const [bucket, setBucket] = useState<Bucket>("all");
+  const [addOpen, setAddOpen] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<TFriend | null>(null);
+  // Non-null = the sharing audit for that friend replaces the list: at 380px
+  // there is no room for both, and the audit is a page you go and read.
+  const [openFriend, setOpenFriend] = useState<TFriend | null>(null);
 
-  useEffect(() => {
-    if (friendSearch.length < 3) {
-      setSearchResults([]);
-      return;
-    }
-    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
-    searchTimerRef.current = setTimeout(() => {
-      searchUsers(friendSearch)
-        .then(setSearchResults)
-        .catch((err) => { console.error(err); toast.error(messageFromError(err, "Couldn't search users.")); });
-    }, 300);
-    return () => {
-      if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
-    };
-  }, [friendSearch, toast]);
-
-  // Refetch on every panel open — friends/requests are otherwise only ever
-  // fetched once at app boot (FRIEND-3), so a request received mid-session
-  // stays invisible until a full reload.
+  // Refetch on every panel open — friends and requests are otherwise fetched
+  // once at app boot (FRIEND-3), so a request that arrives mid-session stays
+  // invisible until a full reload.
   useEffect(() => {
     onRefetchFriends();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function handleSendFriendRequest(user: TSearchUser) {
-    // Guard against a double-click firing two POSTs for the same user: the
-    // second would 409 ("Friend request already pending") and, without this
-    // guard, could race the first's success and clobber its feedback (FRIEND-1).
-    setSendingUserIds((prev) => new Set(prev).add(user.id));
+  async function runAction(id: string, action: () => Promise<unknown>, failure: string, success?: string) {
+    setBusyId(id);
+    try {
+      await action();
+      if (success) toast.success(success);
+      onRefetchFriends();
+    } catch (err) {
+      console.error(err);
+      toast.error(messageFromError(err, failure));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleRemove(friend: TFriend) {
+    await runAction(
+      friend.friendshipId,
+      () => removeFriend(friend.friendshipId),
+      "Couldn't remove friend.",
+    );
+    setRemoving(null);
+    onRefetchShared();
+  }
+
+  if (openFriend) {
+    return (
+      <FriendSharingSection
+        friend={openFriend}
+        onBack={() => setOpenFriend(null)}
+        onSharesChanged={onRefetchShared}
+      />
+    );
+  }
+
+  const buckets: ChipOption<Bucket>[] = [
+    { value: "all", label: "All", count: friends.length + friendRequests.length },
+    { value: "friends", label: "Friends", count: friends.length, disabled: friends.length === 0 },
+    {
+      value: "requests",
+      label: "Requests",
+      count: friendRequests.length,
+      hue: "var(--hue-shared)",
+      disabled: friendRequests.length === 0,
+    },
+  ];
+
+  // Requests first in All: they are the only rows that need a decision.
+  const showRequests = bucket !== "friends";
+  const showFriends = bucket !== "requests";
+
+  return (
+    <div className={classes.root}>
+      {/* A request outranks the count: it is the only thing on this page that
+          is waiting on you. Otherwise the title is the count of FRIENDS, not of
+          rows — a request is not one yet. */}
+      <Hero
+        title={
+          friendRequests.length > 0
+            ? plural(friendRequests.length, "request")
+            : friends.length === 0
+              ? "No friends yet"
+              : plural(friends.length, "friend")
+        }
+        actions={
+          <Button compact variant="outline" icon={UserPlus} onClick={() => setAddOpen(true)}>
+            Add
+          </Button>
+        }
+      />
+
+      <div className={classes.rails}>
+        <ChipRail label="Which people" options={buckets} value={bucket} onChange={setBucket} />
+      </div>
+
+      {friends.length === 0 && friendRequests.length === 0 ? (
+        <div className={classes.emptyArea}>
+          <EmptyState
+            icon={Users}
+            title="No friends yet"
+            body="Friends are who you can share a place, a route or a map with. Find one by their username."
+            actions={
+              <Button variant="filled" icon={UserPlus} onClick={() => setAddOpen(true)}>
+                Add a friend
+              </Button>
+            }
+          />
+        </div>
+      ) : (
+        <div className={classes.list}>
+          {showRequests &&
+            friendRequests.map((request) => (
+              <Row
+                key={request.id}
+                leading={<Avatar username={request.requester.username} />}
+                title={request.requester.username}
+                subtitle="Wants to be friends"
+                disabled={busyId === request.id}
+                accentEdge
+                footer={
+                  <>
+                    <Button
+                      compact
+                      variant="filled"
+                      disabled={busyId === request.id}
+                      onClick={() =>
+                        void runAction(
+                          request.id,
+                          () => acceptFriendRequest(request.id),
+                          "Couldn't accept friend request.",
+                          `${request.requester.username} is now a friend.`,
+                        ).then(onRefetchNotifications)
+                      }
+                    >
+                      Accept
+                    </Button>
+                    <Button
+                      compact
+                      variant="outline"
+                      disabled={busyId === request.id}
+                      onClick={() =>
+                        void runAction(
+                          request.id,
+                          () => declineFriendRequest(request.id),
+                          "Couldn't decline friend request.",
+                          "Request declined.",
+                        )
+                      }
+                    >
+                      Decline
+                    </Button>
+                  </>
+                }
+              />
+            ))}
+
+          {showFriends &&
+            friends.map((friend) => (
+              <Row
+                key={friend.friendshipId}
+                leading={<Avatar username={friend.username} />}
+                title={friend.username}
+                description="Opens what you share with each other"
+                disabled={busyId === friend.friendshipId}
+                onOpen={() => setOpenFriend(friend)}
+                trailing={
+                  <Menu
+                    label={`Actions for ${friend.username}`}
+                    title={friend.username}
+                    placement="bottom-end"
+                    entries={[
+                      {
+                        id: "shares",
+                        label: "Shared items",
+                        icon: Share2,
+                        onSelect: () => setOpenFriend(friend),
+                      },
+                      {
+                        id: "remove",
+                        label: "Remove friend",
+                        icon: UserMinus,
+                        danger: true,
+                        onSelect: () => setRemoving(friend),
+                      },
+                    ]}
+                    trigger={(props) => (
+                      <IconButton
+                        {...props}
+                        icon={EllipsisVertical}
+                        label={`Actions for ${friend.username}`}
+                      />
+                    )}
+                  />
+                }
+              />
+            ))}
+        </div>
+      )}
+
+      <AddFriendDialog
+        open={addOpen}
+        friends={friends}
+        onClose={() => setAddOpen(false)}
+        onSent={onRefetchFriends}
+      />
+
+      <ConfirmDialog
+        open={removing != null}
+        title={removing ? `Remove ${removing.username}?` : ""}
+        message={
+          removing
+            ? `Everything you share with each other stops being shared, both ways. You can send ${removing.username} a friend request again later, and sharing does not come back with it.`
+            : null
+        }
+        confirmLabel="Remove"
+        busy={busyId != null}
+        onConfirm={() => removing && void handleRemove(removing)}
+        onClose={() => setRemoving(null)}
+      />
+    </div>
+  );
+}
+
+/** Username search → friend request. Already-a-friend and already-pending are
+ *  refused server-side with a 409 whose message is worth showing, so the row
+ *  stays and the error arrives as a toast. */
+function AddFriendDialog({
+  open,
+  friends,
+  onClose,
+  onSent,
+}: {
+  open: boolean;
+  friends: TFriend[];
+  onClose: () => void;
+  onSent: () => void;
+}) {
+  const toast = useToast();
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<TSearchUser[]>([]);
+  const [sentIds, setSentIds] = useState<ReadonlySet<string>>(new Set());
+  const [sendingId, setSendingId] = useState<string | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      setQuery("");
+      setResults([]);
+      setSentIds(new Set());
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (!open || query.trim().length < SEARCH_MIN_CHARS) {
+      setResults([]);
+      return;
+    }
+    if (timerRef.current) clearTimeout(timerRef.current);
+    // FEUI-008: guards a stale response landing after a newer query's already
+    // replaced it (type "abel" then "abelin" — if "abel"'s GET resolves last,
+    // its results must not overwrite "abelin"'s). `searchUsers`/`apiFetch` take
+    // no signal, so this is the cancelled-flag form of the same guard.
+    let cancelled = false;
+    timerRef.current = setTimeout(() => {
+      searchUsers(query.trim())
+        .then((found) => {
+          if (!cancelled) setResults(found);
+        })
+        .catch((err) => {
+          if (cancelled) return;
+          console.error(err);
+          toast.error(messageFromError(err, "Couldn't search users."));
+        });
+    }, 300);
+    return () => {
+      cancelled = true;
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [open, query, toast]);
+
+  async function handleSend(user: TSearchUser) {
+    setSendingId(user.id);
     try {
       await sendFriendRequest(user.id);
-      toast.success(`Friend request sent to ${user.username}.`);
-      // Remove just this row rather than the whole result set, so a search
-      // with multiple matches can keep going.
-      setSearchResults((prev) => prev.filter((u) => u.id !== user.id));
+      // Mark the row rather than dropping it: a search with several matches can
+      // keep going, and the pill is what says the request went.
+      setSentIds((prev) => new Set(prev).add(user.id));
+      onSent();
     } catch (err) {
       console.error(err);
       toast.error(messageFromError(err, "Couldn't send friend request."));
     } finally {
-      setSendingUserIds((prev) => {
-        const next = new Set(prev);
-        next.delete(user.id);
-        return next;
-      });
+      setSendingId(null);
     }
   }
 
-  async function handleAcceptRequest(friendshipId: string) {
-    setLoadingRequestId(friendshipId);
-    try {
-      await acceptFriendRequest(friendshipId);
-      onRefetchFriends();
-      onRefetchNotifications();
-    } catch (err) {
-      console.error(err);
-      toast.error(messageFromError(err, "Couldn't accept friend request."));
-    } finally {
-      setLoadingRequestId(null);
-    }
-  }
-
-  async function handleDeclineRequest(friendshipId: string) {
-    setLoadingRequestId(friendshipId);
-    try {
-      await declineFriendRequest(friendshipId);
-      onRefetchFriends();
-    } catch (err) {
-      console.error(err);
-      toast.error(messageFromError(err, "Couldn't decline friend request."));
-    } finally {
-      setLoadingRequestId(null);
-    }
-  }
-
-  async function handleRemoveFriend(friendshipId: string) {
-    setRemovingFriendId(friendshipId);
-    try {
-      await removeFriend(friendshipId);
-      setShowRemoveConfirm(null);
-      onRefetchFriends();
-      onRefetchShared();
-    } catch (err) {
-      console.error(err);
-      toast.error(messageFromError(err, "Couldn't remove friend."));
-    } finally {
-      setRemovingFriendId(null);
-    }
-  }
-
-  // The sharing audit takes over the whole panel rather than nesting under the
-  // list: at 280px there is no room for both, and the audit is a "go and read
-  // this" surface, not a glance.
-  if (openFriend) {
-    return (
-      <div className={classes.optionsContent}>
-        <FriendSharingSection
-          friend={openFriend}
-          onBack={() => setOpenFriend(null)}
-          onSharesChanged={onRefetchShared}
-        />
-      </div>
-    );
-  }
+  const friendIds = new Set(friends.map((friend) => friend.id));
+  const typed = query.trim();
 
   return (
-    <>
-      <div className={classes.optionsContent}>
-        <div className={classes.friendSearchContainer}>
-          <input
-            type="text"
-            className={classes.searchInput}
-            placeholder="Search by username..."
-            value={friendSearch}
-            onChange={(e) => setFriendSearch(e.target.value)}
-            aria-label="Search friends by username"
-          />
-          {searchResults.length > 0 && (
-            <div className={classes.searchResults}>
-              {searchResults.map((user) => (
-                <div key={user.id} className={classes.searchResultItem}>
-                  <span>{user.username}</span>
-                  <button
-                    className={classes.addFriendButton}
-                    onClick={() => handleSendFriendRequest(user)}
-                    disabled={sendingUserIds.has(user.id)}
-                  >
-                    {sendingUserIds.has(user.id) ? "Sending…" : "Add Friend"}
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {friendRequests.length > 0 && (
-          <>
-            <span className={classes.sectionTitle}>Pending Requests</span>
-            <div className={classes.pendingScrollList}>
-              {friendRequests.map((req) => (
-                <div key={req.id} className={classes.friendRow}>
-                  <span className={classes.friendName}>
-                    {req.requester.username}
-                  </span>
-                  <div className={classes.friendActions}>
-                    <button
-                      className={classes.acceptButton}
-                      onClick={() => handleAcceptRequest(req.id)}
-                      disabled={loadingRequestId === req.id}
-                    >
-                      Accept
-                    </button>
-                    <button
-                      className={classes.declineButton}
-                      onClick={() => handleDeclineRequest(req.id)}
-                      disabled={loadingRequestId === req.id}
-                    >
-                      Decline
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-
-        <span className={classes.sectionTitle}>Friends ({friends.length})</span>
-        {friends.length === 0 ? (
-          <span className={classes.caption}>
-            No friends yet. Search for a username above.
-          </span>
+    <Dialog
+      open={open}
+      title="Add a friend"
+      onClose={onClose}
+      dismissible={sendingId === null}
+      footer={<Button onClick={onClose}>Close</Button>}
+    >
+      <div className={classes.addBody}>
+        <SearchField
+          label="Search by username"
+          placeholder="Search by username"
+          value={query}
+          data-autofocus
+          onChange={(event) => setQuery(event.target.value)}
+        />
+        {typed.length < SEARCH_MIN_CHARS ? (
+          <p className={classes.note}>
+            Keep typing — at least {SEARCH_MIN_CHARS} characters.
+          </p>
+        ) : results.length === 0 ? (
+          <p className={classes.note}>No one by that name.</p>
         ) : (
-          <div className={classes.friendsScrollList}>
-            {friends.map((friend) => (
-              <div key={friend.id} className={classes.friendRow}>
-                {/* The name is the affordance into the sharing audit — "what
-                    does Bob see?" is a question you ask about a person, so it
-                    lives on the person (fix 24). Styled as a tappable row with a
-                    drill-in chevron so the affordance is obvious. */}
-                <button
-                  className={classes.friendNameButton}
-                  onClick={() => setOpenFriend(friend)}
-                  title={`Sharing with ${friend.username}`}
-                >
-                  <span className={classes.friendNameText}>
-                    {friend.username}
-                  </span>
-                  <ChevronRight
-                    size={16}
-                    className={classes.friendChevron}
-                    aria-hidden="true"
-                  />
-                </button>
-                <button
-                  className={classes.removeButton}
-                  onClick={() =>
-                    setShowRemoveConfirm({
-                      id: friend.friendshipId,
-                      username: friend.username,
-                    })
-                  }
-                >
-                  Remove
-                </button>
-              </div>
-            ))}
-          </div>
+          results.map((user) => (
+            <Row
+              key={user.id}
+              leading={<Avatar username={user.username} />}
+              title={user.username}
+              trailing={
+                friendIds.has(user.id) ? (
+                  <StatusPill label="Friend" tone="muted" />
+                ) : sentIds.has(user.id) ? (
+                  <StatusPill label="Requested" tone="outline" />
+                ) : (
+                  <Button
+                    compact
+                    variant="outline"
+                    busy={sendingId === user.id}
+                    disabled={sendingId !== null}
+                    onClick={() => void handleSend(user)}
+                  >
+                    Add
+                  </Button>
+                )
+              }
+            />
+          ))
         )}
       </div>
-
-      <ConfirmDialog
-        open={showRemoveConfirm != null}
-        title="Remove Friend"
-        message={
-          <>
-            Remove {showRemoveConfirm?.username}? Shared canyons between you will
-            be unshared.
-          </>
-        }
-        confirmLabel="Remove"
-        busy={removingFriendId != null}
-        onConfirm={() => {
-          if (showRemoveConfirm) handleRemoveFriend(showRemoveConfirm.id);
-        }}
-        onClose={() => setShowRemoveConfirm(null)}
-      />
-    </>
+    </Dialog>
   );
 }
 

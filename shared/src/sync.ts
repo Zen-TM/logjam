@@ -1,0 +1,829 @@
+// Stage 8 sync protocol — shared vocabulary for the API and the mobile
+// client (the TOPO_LAYERS-style single source; see .claude/mobile-plan/
+// stage8-sync.md). PR-1 defines the tombstone entity vocabulary; the delta /
+// push protocol types land with their endpoints.
+
+/**
+ * Entity types that participate in delta sync and therefore in the
+ * per-user tombstone log. A tombstone row (userId, entityType, entityId)
+ * means "that user must remove that entity from any local mirror".
+ */
+export const SYNC_ENTITY_TYPES = [
+  "place",
+  "placeType",
+  "tripLog",
+  "media",
+  "placeShare",
+  "placeLink",
+  "friendship",
+  "route",
+  "customFieldDef",
+] as const;
+
+export type SyncEntityType = (typeof SYNC_ENTITY_TYPES)[number];
+
+/**
+ * Strict UUIDv4 shape — the only accepted form for client-minted entity ids
+ * (§3.5: idempotency backbone). The mobile client mints with this shape and
+ * the API rejects anything else with 400; both sides validate against this
+ * single definition.
+ */
+export const UUID_V4_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function isUuidV4(value: unknown): value is string {
+  return typeof value === "string" && UUID_V4_REGEX.test(value);
+}
+
+// ── Protocol constants (§4, §8, §10) ─────────────────────────────────────────
+
+export const SYNC_PROTOCOL = 1;
+export const SYNC_DELTA_DEFAULT_LIMIT = 500;
+export const SYNC_DELTA_MAX_LIMIT = 1000;
+export const SYNC_PUSH_MAX_OPS = 50;
+/**
+ * Watermark overlap: the next cursor's ts is serverTime − this, so rows
+ * committed by transactions that started before the previous pull observed
+ * its watermark are re-delivered (Postgres timestamps are transaction-start
+ * times). Re-delivery is free — the client applies pages as idempotent
+ * upserts.
+ */
+export const SYNC_OVERLAP_MS = 60_000;
+
+/** The `changes` keys of a delta response, in the fixed budget-fill order
+ * (§4.4). Order matters only for client convenience — places before the
+ * trips that embed their names, and custom field definitions before both,
+ * since a place's and a trip's stored values are keyed by them and a screen
+ * that applies a page mid-pull would otherwise have values it cannot label.
+ *
+ * TYPES COME FIRST, ahead of the definitions, because a definition points at
+ * the types it is scoped to: a defs page applied before its types would carry
+ * scopings naming rows the mirror does not have yet. Same argument as defs
+ * before values, one level up. */
+export const DELTA_ENTITY_ORDER = [
+  "placeTypes",
+  "customFieldDefs",
+  "places",
+  "placeLinks",
+  "tripLogs",
+  "routes",
+  "media",
+  "placeShares",
+  "friendships",
+] as const;
+
+export type DeltaEntityKey = (typeof DELTA_ENTITY_ORDER)[number];
+
+/**
+ * Per-page row cap for routes specifically, well under
+ * SYNC_DELTA_DEFAULT_LIMIT. A route carries its whole geometry inline (up to
+ * MAX_ROUTE_POINTS ≈ 20 KB), so the default 500-row budget would build a
+ * ~10 MB page. Every other delta entity is a fixed-size row and keeps the
+ * default.
+ */
+export const SYNC_DELTA_ROUTE_LIMIT = 50;
+
+// ── Push op wire shape (§8.1) ────────────────────────────────────────────────
+
+/** Entities the push endpoint accepts. Media is deliberately absent — the
+ * three-phase presign flow owns media creation (§7.1).
+ *
+ * A notification has no create (the server raises them) and no update beyond
+ * its read bit, so it carries three ops: the read bit in both directions and a
+ * delete. `markRead` is NOT monotonic any more — `markUnread` exists — so the
+ * pair is last-writer-wins and the enqueue planner supersedes rather than
+ * dedups them (see planOutboxEnqueue). */
+export const SYNC_PUSH_OPS_BY_ENTITY = {
+  place: ["create", "update", "delete"],
+  // A place TYPE. Created, renamed and deleted OFFLINE like every other
+  // user-made row — deliberately not an online-only path, and that applies to
+  // guest installs too. A delete CASCADES SERVER-SIDE (the definitions scoped
+  // only to it go with it), for the same reason a customFieldDef delete does:
+  // a phone can only reach the rows in its own mirror, so anything stripped
+  // client-side would resurface the moment a later type slugged to the same id.
+  placeType: ["create", "update", "delete"],
+  // A place<->place LINK. Create and delete only, and NO UPDATE — a link has
+  // no fields to change.
+  //
+  // A first-class entity rather than a `linkedPlaceIds` array on the place row,
+  // and the difference matters: `waypoint.canyonIds` was a whole-list field,
+  // safe only because the relationship was one-sided. A SYMMETRIC link edited
+  // from both ends means two devices clobber each other. The codebase already
+  // learned this — fieldDefsStore.ts documents that moving definitions from a
+  // whole-list PATCH to per-row writes is what made "two devices that each add
+  // a field now both keep it".
+  placeLink: ["create", "delete"],
+  tripLog: ["create", "update", "delete"],
+  route: ["create", "update", "delete"],
+  notification: ["markRead", "markUnread", "delete"],
+  // A custom field DEFINITION. `delete` is not a plain row delete: the server
+  // also strips the now-orphaned values off every trip log or place that
+  // carried one, in the same transaction (lib/customFieldDefs.ts). That has to
+  // stay server-side — a phone can only reach the rows in its own mirror, and
+  // a value left behind on a row the phone has not pulled would resurface the
+  // moment a later field slugged to the same key.
+  customFieldDef: ["create", "update", "delete"],
+} as const;
+
+export type SyncPushEntity = keyof typeof SYNC_PUSH_OPS_BY_ENTITY;
+export type SyncPushOpKind =
+  (typeof SYNC_PUSH_OPS_BY_ENTITY)[SyncPushEntity][number];
+
+export type SyncPushOp = {
+  /** Client-minted, for result correlation only. */
+  opId: string;
+  entity: SyncPushEntity;
+  op: SyncPushOpKind;
+  /** Entity id (client-minted UUIDv4 for creates). */
+  id: string;
+  /** Updates only: server updatedAt the edit was based on — conflict
+   * DETECTION only, never resolution (§6). */
+  baseUpdatedAt?: string;
+  /** Create: full payload; update: dirty fields only. */
+  fields?: Record<string, unknown>;
+};
+
+export type SyncPushOpStatus =
+  | "applied"
+  | "appliedWithConflict"
+  | "alreadyApplied"
+  | "rejected"
+  | "dependencyFailed";
+
+export type SyncConflictReceipt = { field: string; serverValue: unknown };
+
+export type SyncPushOpResult = {
+  opId: string;
+  status: SyncPushOpStatus;
+  row?: unknown;
+  conflicts?: SyncConflictReceipt[];
+  error?: { code: number; message: string };
+};
+
+export type SyncPushResponse = {
+  serverTime: string;
+  results: SyncPushOpResult[];
+};
+
+/**
+ * Ids this op depends on having been created successfully (earlier in the
+ * batch, or already server-side): its own target for update/delete, plus any
+ * place references in its fields. Both ends use it — the server for
+ * dependencyFailed propagation, the client for the flush engine's
+ * dependency-closure skip (§8.3).
+ */
+export function pushOpDependencies(op: SyncPushOp): string[] {
+  const deps: string[] = [];
+  if (op.op === "update" || op.op === "delete") deps.push(op.id);
+  // `placeIds` is the TRIP-LOG link array; `placeId` is the ROUTE link. Both
+  // are place references whose create must land first.
+  const placeIds = op.fields?.placeIds;
+  if (Array.isArray(placeIds)) {
+    deps.push(...placeIds.filter((v): v is string => typeof v === "string"));
+  }
+  const placeId = op.fields?.placeId;
+  if (typeof placeId === "string") deps.push(placeId);
+  // A LINK depends on BOTH its endpoints. Without this, a link created offline
+  // in the same batch as the places it joins would be pushed before them and
+  // rejected — and the client's own flush engine reads this same function, so
+  // the two ends would disagree about the order.
+  for (const key of ["aPlaceId", "bPlaceId"] as const) {
+    const value = op.fields?.[key];
+    if (typeof value === "string") deps.push(value);
+  }
+  return deps;
+}
+
+// ── Delta wire shapes (§4.1) ─────────────────────────────────────────────────
+//
+// Client-side view of the delta serializers in api/src/routes/sync.ts —
+// dates arrive as ISO strings. The server builds these from Prisma rows, so
+// the shapes are mirrored here, not imported there; syncBoundary.test.ts
+// (integration) is the drift guard. Additive-only on protocol 1 (§10.3):
+// clients must tolerate unknown extra keys (preserved via extra_json in the
+// mobile mirror, never round-tripped).
+
+import type { ForeignFieldValue } from "./fieldValues.js";
+
+export type SyncUserRef = { id: string; username: string };
+
+export type SyncDeltaPlaceRow = {
+  id: string;
+  ownerId: string;
+  /** 'owner' | 'shared' — the caller's relationship to the row. */
+  syncRole: "owner" | "shared";
+  name: string;
+  altNames: string[];
+  latitude: number;
+  longitude: number;
+  placeTypeId: string;
+  notes: string | null;
+  /** Metres, or null. Folded in with the waypoints in phase 1c. */
+  elevation: number | null;
+  /** Type-specific values, keyed by CustomFieldDef.key. Replaces the seven
+   *  grade columns and the free-form `attributes` blob. */
+  fieldValues: Record<string, unknown>;
+  /**
+   * The definitions that label this row's values, for a place whose type the
+   * CALLER does not own — a place of the sender's own type, shared with them.
+   * Without it a sharee sees bare keys.
+   *
+   * Derived LIVE from the owner's current definitions, and present only when
+   * syncRole is "shared". `foreignFields` is the same shape persisted at copy
+   * time, which is why this is not a third field mechanism.
+   */
+  fieldDefsSnapshot?: { key: string; label: string; type: string; min?: number | null; max?: number | null }[];
+  /**
+   * OWNER-PRIVATE — present only when syncRole is "owner". The server strips
+   * it from every shared row, because it records what the SENDER's definitions
+   * said and re-emitting it down a share chain is the propagation problem that
+   * got the "append it to notes" design rejected.
+   */
+  foreignFields?: ForeignFieldValue[] | null;
+  ropeWikiId: number | null;
+  forkedFromId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SyncDeltaPlaceTypeRow = {
+  id: string;
+  /** Null for a SYSTEM type — one global row shared by every user, which is
+   *  what makes a shared place of a system type resolve with no
+   *  reconciliation. A client must not treat null as "mine". */
+  ownerId: string | null;
+  name: string;
+  iconKey: string;
+  color: string;
+  position: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SyncDeltaTripRow = {
+  id: string;
+  userId: string;
+  date: string;
+  displayName: string | null;
+  types: string[];
+  notes: string | null;
+  customFields: Record<string, unknown>;
+  /** Ordered — order drives the derived title (shared/src/tripName.ts). */
+  places: { id: string; name: string }[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SyncDeltaPlaceLinkRow = {
+  id: string;
+  ownerId: string;
+  /** Lexicographically LOWER id. Symmetric and stored once; a client renders
+   *  the link from whichever end it is looking at. */
+  aPlaceId: string;
+  bPlaceId: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/**
+ * A user-authored route. Unlike media, the geometry travels INLINE — a route
+ * is a vertex list on the row, not a blob behind a presigned URL.
+ *
+ * `syncRole` mirrors SyncDeltaPlaceRow: 'shared' means the row arrives only
+ * because it is LINKED to a place shared with the caller. A sharee may render
+ * and export it, never edit it — and unlinking it revokes their copy via a
+ * tombstone with no delete anywhere.
+ */
+export type SyncDeltaRouteRow = {
+  id: string;
+  ownerId: string;
+  syncRole: "owner" | "shared";
+  placeId: string | null;
+  name: string;
+  color: string;
+  /** [[lon, lat], ...] — see MAX_ROUTE_POINTS in routeValidation.ts. */
+  points: [number, number][];
+  /**
+   * Indices into `points` marking the vertices the USER placed, as opposed to
+   * those snapping filled in. Null on routes drawn before snapping existed,
+   * which reads as "every point is the user's".
+   */
+  anchors: number[] | null;
+  /** Owner rows only: a share fan-out is owner-private derived cardinality
+   *  (root CLAUDE.md), so a recipient's copy of a row never carries one. */
+  sharedCount?: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** Metadata only — blobs come via POST /media/download-urls (§7.3).
+ *
+ * `linkedId` is null on a standalone file (`linkedType: "none"`): the user's
+ * own import or recording, which belongs to no place. `metadata` is what lets
+ * such a row be LISTED without downloading the blob — see mediaMetadata.ts.
+ *
+ * Keysets on `updatedAt`, not `createdAt`: a media row used to be immutable, so
+ * creation time was a sufficient watermark. Linking a file to a place (and
+ * unlinking it again) mutates the row, and a createdAt keyset would never
+ * redeliver it — the other device would keep showing a stale parent forever. */
+export type SyncDeltaMediaRow = {
+  id: string;
+  linkedType: string;
+  linkedId: string | null;
+  mediaType: string;
+  filename: string | null;
+  fileSizeBytes: string;
+  color: string | null;
+  origin: string | null;
+  displayName: string | null;
+  metadata: unknown;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SyncDeltaShareRow = {
+  id: string;
+  placeId: string;
+  sharedById: string;
+  sharedWithId: string;
+  createdAt: string;
+  sharedBy: SyncUserRef;
+  sharedWith: SyncUserRef;
+};
+
+export type SyncDeltaFriendshipRow = {
+  id: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  counterpart: SyncUserRef;
+  direction: "sent" | "received";
+};
+
+/**
+ * A custom field DEFINITION. Always the caller's own — definitions are not
+ * shared, so unlike a place or a route this row carries no `syncRole`.
+ *
+ * `min`/`max` are present together or both null; the type-specific rules
+ * (numeric fields only, min < max, whole numbers on an integer field) are
+ * `isTripLogCustomFieldDef`'s and are re-checked before the row is stored.
+ */
+export type SyncDeltaCustomFieldDefRow = {
+  id: string;
+  /** NULL for a SYSTEM definition — the seven canyon grades and their kin are
+   *  GLOBAL rows owned by no account, exactly like a system place type. */
+  ownerId: string | null;
+  entity: string;
+  key: string;
+  label: string;
+  type: string;
+  min: number | null;
+  max: number | null;
+  position: number;
+  /** WHERE the definition appears. Without these two a client holds every
+   *  definition and cannot tell which form any of them belongs on — it would
+   *  render a canyon's grades on a campsite. `CustomFieldDefPlaceType` is not a
+   *  sync entity of its own, so the join rides here, flattened. */
+  placeTypeIds: string[];
+  /** The trip types (tags) a TRIP definition applies to. Empty on a place
+   *  definition. Case preserved; compared case-insensitively. */
+  tripTypes: string[];
+  appliesToAllTypes: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/**
+ * A tombstone names a row to forget.
+ *
+ * `type` is deliberately NOT narrowed to `SyncEntityType`: a server newer than
+ * this client can name an entity the client has never heard of, and that is an
+ * ordinary additive protocol change (§10.3), not corruption. Callers narrow
+ * with `isKnownSyncEntityType` and ignore the rest — see `applyTombstone`.
+ */
+export type SyncDeltaTombstone = {
+  type: SyncEntityType | (string & {});
+  id: string;
+};
+
+export function isKnownSyncEntityType(
+  value: string,
+): value is SyncEntityType {
+  return (SYNC_ENTITY_TYPES as readonly string[]).includes(value);
+}
+
+export type SyncDeltaResponse = {
+  protocol: number;
+  epoch: number;
+  serverTime: string;
+  cursor: string;
+  hasMore: boolean;
+  resetRequired: boolean;
+  changes: {
+    placeTypes: SyncDeltaPlaceTypeRow[];
+    customFieldDefs: SyncDeltaCustomFieldDefRow[];
+    places: SyncDeltaPlaceRow[];
+    placeLinks: SyncDeltaPlaceLinkRow[];
+    tripLogs: SyncDeltaTripRow[];
+    routes: SyncDeltaRouteRow[];
+    media: SyncDeltaMediaRow[];
+    placeShares: SyncDeltaShareRow[];
+    friendships: SyncDeltaFriendshipRow[];
+  };
+  tombstones: SyncDeltaTombstone[];
+};
+
+// ── Delta row validation (trust boundary) ────────────────────────────────────
+//
+// The rows above are a hand-mirrored view of what the server sends: TypeScript
+// asserts nothing at runtime, so a renamed or newly-nullable field lands in a
+// client's local mirror as corruption that no compiler ever saw. These parsers
+// are the boundary check — call them before writing a server row into local
+// storage. They throw rather than coerce: a mirror is a rebuildable cache, so
+// failing the apply and re-pulling is always cheaper than storing junk.
+//
+// PRIVACY: messages name FIELDS ONLY, never values — a row carries place
+// names and coordinates and these messages reach logs.
+// Unknown extra keys are ALLOWED (protocol §10.3 is additive-only).
+
+export class SyncRowError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SyncRowError";
+  }
+}
+
+type FieldCheck = (value: unknown) => boolean;
+
+const isString: FieldCheck = (value) => typeof value === "string";
+const isNumber: FieldCheck = (value) =>
+  typeof value === "number" && Number.isFinite(value);
+const isPlainObject: FieldCheck = (value) =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+const isSyncRole: FieldCheck = (value) =>
+  value === "owner" || value === "shared";
+const nullable =
+  (check: FieldCheck): FieldCheck =>
+  (value) =>
+    value === null || check(value);
+const arrayOf =
+  (check: FieldCheck): FieldCheck =>
+  (value) =>
+    Array.isArray(value) && value.every(check);
+const isPlaceRef: FieldCheck = (value) =>
+  isPlainObject(value) &&
+  isString((value as Record<string, unknown>).id) &&
+  isString((value as Record<string, unknown>).name);
+
+const PLACE_ROW_SPEC: Record<string, FieldCheck> = {
+  id: isString,
+  ownerId: isString,
+  syncRole: isSyncRole,
+  name: isString,
+  altNames: arrayOf(isString),
+  latitude: isNumber,
+  longitude: isNumber,
+  placeTypeId: isString,
+  notes: nullable(isString),
+  elevation: nullable(isNumber),
+  fieldValues: isPlainObject,
+  ropeWikiId: nullable(isNumber),
+  forkedFromId: nullable(isString),
+  createdAt: isString,
+  updatedAt: isString,
+  // fieldDefsSnapshot and foreignFields are deliberately UNCHECKED here and
+  // therefore optional: one is present only on a shared row of a type the
+  // caller does not own, the other only on an owned row. Requiring either
+  // would reject the rows that legitimately lack it, and a row that fails
+  // validation takes its whole delta page with it.
+};
+
+const PLACE_TYPE_ROW_SPEC: Record<string, FieldCheck> = {
+  id: isString,
+  // NULL for a SYSTEM type — global, owned by no one. Not an error.
+  ownerId: nullable(isString),
+  name: isString,
+  iconKey: isString,
+  color: isString,
+  position: isNumber,
+  createdAt: isString,
+  updatedAt: isString,
+};
+
+const TRIP_ROW_SPEC: Record<string, FieldCheck> = {
+  id: isString,
+  userId: isString,
+  date: isString,
+  displayName: nullable(isString),
+  types: arrayOf(isString),
+  notes: nullable(isString),
+  customFields: isPlainObject,
+  places: arrayOf(isPlaceRef),
+  createdAt: isString,
+  updatedAt: isString,
+};
+
+const PLACE_LINK_ROW_SPEC: Record<string, FieldCheck> = {
+  id: isString,
+  ownerId: isString,
+  aPlaceId: isString,
+  bPlaceId: isString,
+  createdAt: isString,
+  updatedAt: isString,
+};
+
+const isUserRef: FieldCheck = (value) =>
+  isPlainObject(value) &&
+  isString((value as Record<string, unknown>).id) &&
+  isString((value as Record<string, unknown>).username);
+
+/** A [lon, lat] pair — the shape every route point must have to be drawable. */
+const isLonLatPair: FieldCheck = (value) =>
+  Array.isArray(value) && value.length === 2 && value.every(isNumber);
+
+const ROUTE_ROW_SPEC: Record<string, FieldCheck> = {
+  id: isString,
+  ownerId: isString,
+  syncRole: isSyncRole,
+  placeId: nullable(isString),
+  name: isString,
+  color: isString,
+  points: arrayOf(isLonLatPair),
+  anchors: nullable(arrayOf(isNumber)),
+  createdAt: isString,
+  updatedAt: isString,
+};
+
+const MEDIA_ROW_SPEC: Record<string, FieldCheck> = {
+  id: isString,
+  linkedType: isString,
+  linkedId: nullable(isString),
+  mediaType: isString,
+  filename: nullable(isString),
+  // A string, not a number: it is a BigInt on the server and JSON-encoded as
+  // text so it survives the round trip.
+  fileSizeBytes: isString,
+  color: nullable(isString),
+  origin: nullable(isString),
+  displayName: nullable(isString),
+  // Shape-checked on the way IN (parseMediaMetadata, server-side) rather than
+  // here: a client that rejected the whole delta page over one malformed stats
+  // object would stop syncing everything else too. Readers go through
+  // readMediaMetadata, which degrades to {}.
+  metadata: isPlainObject,
+  createdAt: isString,
+  updatedAt: isString,
+};
+
+const SHARE_ROW_SPEC: Record<string, FieldCheck> = {
+  id: isString,
+  placeId: isString,
+  sharedById: isString,
+  sharedWithId: isString,
+  createdAt: isString,
+  sharedBy: isUserRef,
+  sharedWith: isUserRef,
+};
+
+const CUSTOM_FIELD_DEF_ROW_SPEC: Record<string, FieldCheck> = {
+  id: isString,
+  // NULL for a SYSTEM definition — global, owned by no one, and the same shape
+  // a system place type has. Requiring a string here dropped all NINE system
+  // definitions off every delta page a phone pulled: the grades arrived on
+  // places with no definition to label or bound them, and `defsForType`
+  // answered "no fields" for a canyon. Found by running the app (2026-09-10),
+  // invisible to every unit test because they all built rows by hand.
+  ownerId: nullable(isString),
+  entity: isString,
+  key: isString,
+  label: isString,
+  type: isString,
+  min: nullable(isNumber),
+  max: nullable(isNumber),
+  position: isNumber,
+  // `placeTypeIds`, `tripTypes` and `appliesToAllTypes` are
+  // deliberately UNCHECKED, and therefore optional: a row from a server that
+  // predates the scoping fields is still a definition, and rejecting it would
+  // take its whole delta page down (§10.3 is additive). A client reads them
+  // with a default of "no types, not all", which renders the definition on no
+  // form rather than on every one — the safe direction.
+  createdAt: isString,
+  updatedAt: isString,
+};
+
+const FRIENDSHIP_ROW_SPEC: Record<string, FieldCheck> = {
+  id: isString,
+  status: isString,
+  createdAt: isString,
+  updatedAt: isString,
+  counterpart: isUserRef,
+  direction: (value) => value === "sent" || value === "received",
+};
+
+function parseRow<Row>(
+  entity: string,
+  value: unknown,
+  spec: Record<string, FieldCheck>,
+): Row {
+  if (!isPlainObject(value)) {
+    throw new SyncRowError(`sync ${entity} row is not an object`);
+  }
+  const row = value as Record<string, unknown>;
+  const bad = Object.keys(spec).filter((field) => !spec[field](row[field]));
+  if (bad.length > 0) {
+    throw new SyncRowError(
+      `sync ${entity} row has missing or invalid fields: ${bad.join(", ")}`,
+    );
+  }
+  return value as Row;
+}
+
+export function parseSyncDeltaPlaceRow(value: unknown): SyncDeltaPlaceRow {
+  return parseRow<SyncDeltaPlaceRow>("place", value, PLACE_ROW_SPEC);
+}
+
+export function parseSyncDeltaPlaceTypeRow(value: unknown): SyncDeltaPlaceTypeRow {
+  return parseRow<SyncDeltaPlaceTypeRow>("placeType", value, PLACE_TYPE_ROW_SPEC);
+}
+
+export function parseSyncDeltaTripRow(value: unknown): SyncDeltaTripRow {
+  return parseRow<SyncDeltaTripRow>("tripLog", value, TRIP_ROW_SPEC);
+}
+
+export function parseSyncDeltaPlaceLinkRow(value: unknown): SyncDeltaPlaceLinkRow {
+  return parseRow<SyncDeltaPlaceLinkRow>("placeLink", value, PLACE_LINK_ROW_SPEC);
+}
+
+export function parseSyncDeltaRouteRow(value: unknown): SyncDeltaRouteRow {
+  return parseRow<SyncDeltaRouteRow>("route", value, ROUTE_ROW_SPEC);
+}
+
+export function parseSyncDeltaMediaRow(value: unknown): SyncDeltaMediaRow {
+  return parseRow<SyncDeltaMediaRow>("media", value, MEDIA_ROW_SPEC);
+}
+
+export function parseSyncDeltaShareRow(value: unknown): SyncDeltaShareRow {
+  return parseRow<SyncDeltaShareRow>("placeShare", value, SHARE_ROW_SPEC);
+}
+
+/**
+ * Shape check only — `entity` and `type` are validated against their allowed
+ * values by `isTripLogCustomFieldDef` at the point the row becomes a
+ * definition, so an unknown field type from a NEWER server reaches the mirror
+ * intact (protocol §10.3 is additive) instead of failing the whole page.
+ */
+export function parseSyncDeltaCustomFieldDefRow(
+  value: unknown,
+): SyncDeltaCustomFieldDefRow {
+  return parseRow<SyncDeltaCustomFieldDefRow>(
+    "customFieldDef",
+    value,
+    CUSTOM_FIELD_DEF_ROW_SPEC,
+  );
+}
+
+export function parseSyncDeltaFriendshipRow(
+  value: unknown,
+): SyncDeltaFriendshipRow {
+  return parseRow<SyncDeltaFriendshipRow>(
+    "friendship",
+    value,
+    FRIENDSHIP_ROW_SPEC,
+  );
+}
+
+/**
+ * A tombstone names a row to delete, so a malformed one is as dangerous as a
+ * malformed row — `type` decides WHICH table the delete cascades through.
+ *
+ * SHAPE is checked here; the VOCABULARY is not. `type` used to be validated
+ * against `SYNC_ENTITY_TYPES`, which made every addition to that list a
+ * breaking change for clients already in the field: the server emitted a
+ * tombstone for a new entity, the parser called it invalid, and the phone told
+ * its user it had "dropped N unreadable rows from a delta page" — a data-loss
+ * warning for a row it correctly had nothing to do with. Adding
+ * `customFieldDef` produced exactly that on a 0.1.0 build.
+ *
+ * An unknown type is a NEWER SERVER, not corruption. It is parsed, and
+ * `applyTombstone` ignores it (there is no local table it could name).
+ */
+export function parseSyncDeltaTombstone(value: unknown): SyncDeltaTombstone {
+  return parseRow<SyncDeltaTombstone>("tombstone", value, {
+    type: isString,
+    id: isString,
+  });
+}
+
+// ── Cursor codec (§4.2) ──────────────────────────────────────────────────────
+//
+// The cursor is server-minted and opaque to the client (stored + returned
+// verbatim), but the codec lives in shared/ because it is pure, unit-tested,
+// and §11 puts the protocol's TypeScript in one place. Unsigned by design:
+// the delta query is per-user scoped server-side regardless of cursor
+// contents, so tampering can only change which of your own rows re-download.
+
+/** Per-entity keyset resume point: [watermark ISO, last id]. `tombstones` is
+ * a pseudo-entity key used when a page ends inside the tombstone list. */
+export type SyncCursorKeysets = Partial<
+  Record<DeltaEntityKey | "tombstones", [string, string]>
+>;
+
+export type SyncCursor = {
+  /** Cursor format version — mismatch forces resetRequired. */
+  v: number;
+  /** Watermark: entities changed strictly after this ISO instant. */
+  ts: string;
+  /** Server epoch the cursor was minted under (defaults to 1 when absent) —
+   * mismatch with the server's current epoch forces resetRequired (§10.5). */
+  e?: number;
+  /** Present only mid-pagination (hasMore pages). */
+  k?: SyncCursorKeysets;
+};
+
+// Hand-rolled base64url over ASCII (cursor JSON is ASCII by construction:
+// ISO timestamps, UUIDs, entity keys). No Buffer/btoa dependency — this file
+// runs in Node and React Native Hermes alike.
+const B64_ALPHABET =
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+
+function base64UrlEncode(input: string): string {
+  let out = "";
+  for (let i = 0; i < input.length; i += 3) {
+    const c1 = input.charCodeAt(i);
+    const c2 = i + 1 < input.length ? input.charCodeAt(i + 1) : NaN;
+    const c3 = i + 2 < input.length ? input.charCodeAt(i + 2) : NaN;
+    out += B64_ALPHABET[c1 >> 2];
+    out += B64_ALPHABET[((c1 & 3) << 4) | (Number.isNaN(c2) ? 0 : c2 >> 4)];
+    if (!Number.isNaN(c2)) {
+      out += B64_ALPHABET[((c2 & 15) << 2) | (Number.isNaN(c3) ? 0 : c3 >> 6)];
+    }
+    if (!Number.isNaN(c3)) out += B64_ALPHABET[c3 & 63];
+  }
+  return out; // unpadded, per base64url convention
+}
+
+function base64UrlDecode(input: string): string | null {
+  let out = "";
+  let buffer = 0;
+  let bits = 0;
+  for (const char of input) {
+    const value = B64_ALPHABET.indexOf(char);
+    if (value === -1) return null;
+    buffer = (buffer << 6) | value;
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      out += String.fromCharCode((buffer >> bits) & 0xff);
+    }
+  }
+  return out;
+}
+
+export function encodeSyncCursor(cursor: SyncCursor): string {
+  return base64UrlEncode(JSON.stringify(cursor));
+}
+
+/**
+ * Decode + validate a cursor string. Returns null on ANY malformation —
+ * the server treats null as resetRequired (§4.3), never as an error.
+ */
+export function decodeSyncCursor(value: string): SyncCursor | null {
+  const json = base64UrlDecode(value);
+  if (json === null) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null) return null;
+  const { v, ts, e, k } = parsed as {
+    v?: unknown;
+    ts?: unknown;
+    e?: unknown;
+    k?: unknown;
+  };
+  if (typeof v !== "number") return null;
+  if (typeof ts !== "string" || Number.isNaN(Date.parse(ts))) return null;
+  if (e !== undefined && typeof e !== "number") return null;
+  if (k !== undefined) {
+    if (typeof k !== "object" || k === null || Array.isArray(k)) return null;
+    for (const entry of Object.values(k as Record<string, unknown>)) {
+      if (
+        !Array.isArray(entry) ||
+        entry.length !== 2 ||
+        typeof entry[0] !== "string" ||
+        typeof entry[1] !== "string" ||
+        Number.isNaN(Date.parse(entry[0]))
+      ) {
+        return null;
+      }
+    }
+  }
+  return {
+    v,
+    ts,
+    ...(e !== undefined && { e }),
+    ...(k !== undefined && { k: k as SyncCursorKeysets }),
+  };
+}

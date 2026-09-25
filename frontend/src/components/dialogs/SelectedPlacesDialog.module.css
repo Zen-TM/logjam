@@ -1,0 +1,49 @@
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--theme-text-muted);
+}
+
+/* The format and its verb read as one line: pick, then take it. */
+.exportRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.format {
+  flex: 1;
+  min-width: 140px;
+}
+
+.shareVerb {
+  align-self: flex-end;
+  margin-top: 2px;
+}
+
+/* The destructive verb sits at the far left of the footer, away from Close
+   (DESIGN.md §6). */
+.deleteVerb {
+  margin-right: auto;
+}
+
+.addMark {
+  display: flex;
+  color: var(--theme-text-muted);
+}

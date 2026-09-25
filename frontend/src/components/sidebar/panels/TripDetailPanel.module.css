@@ -1,0 +1,90 @@
+/* The hero is pinned; everything under it scrolls, like every other page. */
+.root {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gutter);
+  padding: 12px var(--gutter) var(--gutter);
+}
+
+.summary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.date {
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--theme-text-muted);
+}
+
+.pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.muted {
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--theme-text-muted);
+}
+
+.notes {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: var(--font-sm);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.attributes {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+/* The same table of facts a place's attributes wear. */
+.attribute {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 0;
+  border-bottom: var(--hairline);
+}
+
+.attribute:last-child {
+  border-bottom: none;
+}
+
+.attribute dt {
+  flex-shrink: 0;
+  font-size: var(--font-sm);
+  color: var(--theme-text-muted);
+}
+
+.attribute dd {
+  margin: 0;
+  min-width: 0;
+  font-size: var(--font-sm);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}

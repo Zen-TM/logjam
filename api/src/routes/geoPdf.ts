@@ -17,7 +17,7 @@ import { AppError } from "../middleware/errorHandler";
 import { GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { s3 } from "../services/awsClients";
-import { logger } from "../lib/logger";
+import { logger, safeErrorForLog } from "../lib/logger";
 import type {
   GeoPdfConfig,
   VectorStyleSettings,
@@ -31,10 +31,22 @@ import {
 } from "@logjam/shared";
 import { getEnv } from "../lib/env";
 import { getParam } from "../lib/getParam";
+import { geoPdfTitle } from "../lib/geoPdfTitle";
 import { launchFargateTask } from "../lib/ecsRunTask";
-import { assertHasStorageQuota } from "../lib/storageQuota";
+import { assertHasStorageQuota, decrementStorageUsed } from "../lib/storageQuota";
+import { assertHasEgressQuota } from "../lib/egressQuota";
+import { Prisma } from "@prisma/client";
 import { resolveUser as getUser } from "../lib/resolveUser";
+import {
+  deleteSharesFor,
+  directlySharedIds,
+  getJobRole,
+  requireShareAccess,
+  requireShareOwner,
+} from "../lib/shareAccess";
 import { estimateGeoPdfSeconds } from "../lib/runtimeEstimates";
+import { assertHasCredits } from "../lib/computeCredits";
+import { assertGlobalCapacity } from "../lib/fargateCapacity";
 
 const router = Router();
 
@@ -55,18 +67,6 @@ const PRESIGN_TTL_SECONDS = 86400; // 24h
 // Server-side cap on the GeoPDF list. X-Total-Count carries the true total so
 // the client can show a truncation caption when this cap bites (UX-002).
 const GEO_PDF_LIST_CAP = 50;
-
-// The map title from a job's config (config.elements.title), trimmed, or null.
-function geoPdfTitle(config: unknown): string | null {
-  if (config && typeof config === "object" && "elements" in config) {
-    const elements = (config as { elements?: unknown }).elements;
-    if (elements && typeof elements === "object" && "title" in elements) {
-      const title = (elements as { title?: unknown }).title;
-      if (typeof title === "string" && title.trim().length > 0) return title.trim();
-    }
-  }
-  return null;
-}
 
 // Derive a human download filename from the job's title, falling back to a
 // date-stamped name. The stored S3 key stays the generic logjam-export.pdf
@@ -111,6 +111,7 @@ async function presignResult(
 function rowToView(
   row: {
     id: string;
+    userId: string;
     status: string;
     config: unknown;
     estimatedSeconds: number | null;
@@ -120,6 +121,7 @@ function rowToView(
     completedAt: Date | null;
   },
   download: { url: string; expiresAt: string } | null,
+  callerId: string,
 ): GeoPdfJobView {
   return {
     id: row.id,
@@ -130,6 +132,7 @@ function rowToView(
     errorMessage: row.errorMessage,
     createdAt: row.createdAt.toISOString(),
     completedAt: row.completedAt?.toISOString() ?? null,
+    syncRole: row.userId === callerId ? "owner" : "shared",
     downloadUrl: download?.url ?? null,
     downloadExpiresAt: download?.expiresAt ?? null,
   };
@@ -179,19 +182,25 @@ router.post(
     }
 
     // Estimator failure must never block submission — best-effort, and never
-    // logs the config itself (coords/canyon markers).
+    // logs the config itself (coords/place markers).
     let estimatedSeconds: number | null = null;
     try {
       estimatedSeconds = await estimateGeoPdfSeconds(config);
     } catch (err) {
-      logger.warn({ reason: String(err) }, "geo_pdf_estimate_failed");
+      logger.warn({ err: safeErrorForLog(err) }, "geo_pdf_estimate_failed");
     }
+
+    // Account-wide capacity before anything is persisted, so a refusal leaves
+    // no queued row for the reaper to clean up.
+    await assertGlobalCapacity("geoPdf");
 
     // Count + create in one transaction so concurrent submissions can't both
     // pass the per-user cap. The user-row lock closes the read-committed
     // double-read window the same way topo-exports does (ARCH-009).
     const job = await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT id FROM users WHERE id = ${user.id} FOR UPDATE`;
+      // Monthly allowance, inside the same lock as the concurrency cap.
+      await assertHasCredits(user, "geoPdf", estimatedSeconds, tx);
       const inFlight = await tx.geoPdfJob.count({
         where: { userId: user.id, status: { in: ["queued", "running"] } },
       });
@@ -241,6 +250,10 @@ router.post(
       rowToView(
         {
           id: job.id,
+          // The creator IS the owner on this path, so syncRole resolves to
+          // "owner" — but it is passed rather than hardcoded so there is one
+          // rule for the field, not one rule plus an exception.
+          userId: user.id,
           status: "queued",
           config: job.config,
           estimatedSeconds: job.estimatedSeconds,
@@ -250,6 +263,7 @@ router.post(
           completedAt: null,
         },
         null,
+        user.id,
       ),
     );
   },
@@ -261,7 +275,13 @@ router.get(
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await getUser(req.user!.sub);
-    const where = { userId: user.id };
+    // Own jobs, plus jobs shared directly with me (read-only there).
+    const where: Prisma.GeoPdfJobWhereInput = {
+      OR: [
+        { userId: user.id },
+        { id: { in: await directlySharedIds(user.id, "geoPdfJob") } },
+      ],
+    };
     const [rows, total] = await Promise.all([
       prisma.geoPdfJob.findMany({
         where,
@@ -277,6 +297,7 @@ router.get(
           r.status === "completed"
             ? await presignResult(r.resultKey, geoPdfDownloadFilename(r.config, r.createdAt))
             : null,
+          user.id,
         ),
       ),
     );
@@ -296,12 +317,20 @@ router.get(
       where: { id: getParam(req.params.id) },
     });
     if (!row) throw new AppError(404, "GeoPDF job not found");
-    if (row.userId !== user.id) throw new AppError(404, "GeoPDF job not found");
+    // Owner or share recipient; a stranger gets the same 404 a missing id gets.
+    // The presigned download below rides this decision — a sharee may download,
+    // which is the whole point of sharing a rendered PDF.
+    requireShareAccess(await getJobRole(user.id, "geoPdfJob", row), "geoPdfJob");
+    // Charged to the job's OWNER, not the caller: a sharee downloading a
+    // rendered PDF spends the owner's allowance, because S3 attributes the
+    // object to the owner. Gating on the caller instead would leave the
+    // owner's allowance drainable by anyone they shared with.
+    if (row.status === "completed") await assertHasEgressQuota(row.userId);
     const download =
       row.status === "completed"
         ? await presignResult(row.resultKey, geoPdfDownloadFilename(row.config, row.createdAt))
         : null;
-    res.json(rowToView(row, download));
+    res.json(rowToView(row, download, user.id));
   },
 );
 
@@ -315,7 +344,11 @@ router.delete(
       where: { id: getParam(req.params.id) },
     });
     if (!row) throw new AppError(404, "GeoPDF job not found");
-    if (row.userId !== user.id) throw new AppError(404, "GeoPDF job not found");
+    requireShareOwner(
+      await getJobRole(user.id, "geoPdfJob", row),
+      "geoPdfJob",
+      "Only the owner can delete this GeoPDF",
+    );
     if (row.status === "queued" || row.status === "running") {
       throw new AppError(409, "Cannot delete an in-progress GeoPDF job");
     }
@@ -327,11 +360,12 @@ router.delete(
     }
     await prisma.$transaction(async (tx) => {
       if (row.status === "completed" && row.resultBytes) {
-        await tx.user.update({
-          where: { id: user.id },
-          data: { storageUsedBytes: { decrement: row.resultBytes } },
-        });
+        await decrementStorageUsed(user.id, row.resultBytes, tx);
       }
+      // Share.entityId is polymorphic, so Postgres cannot cascade. No
+      // tombstone: GeoPDF jobs are not delta-synced, so a recipient's next
+      // GET /geo-pdf simply stops returning it.
+      await deleteSharesFor(tx, "geoPdfJob", [row.id]);
       await tx.geoPdfJob.delete({ where: { id: row.id } });
     });
     res.status(204).send();

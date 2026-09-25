@@ -6,20 +6,25 @@ import {
   isThemeSchemeId,
   normalizeUserUiPreferences,
   normalizeImportMergePolicy,
-  isTripLogCustomFieldDef,
   isNotificationPreferences,
 } from "@logjam/shared";
+import {
+  defsForUserResponse,
+} from "../lib/customFieldDefs";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
+import { placeIdOfMedia } from "../lib/mediaLink";
 import { AppError } from "../middleware/errorHandler";
 import { resolveUser } from "../lib/resolveUser";
 import { userPatchLimiter } from "../middleware/rateLimit";
 import { cognitoIdp } from "../services/awsClients";
-import { getMonthlyTileUsage } from "../lib/tileQuota";
+import { getMonthlyCreditUsage } from "../lib/computeCredits";
+import { getEgressUsage } from "../lib/egressQuota";
 import { CURRENT_CONSENT_VERSION } from "../constants/consent";
 import { getEnv } from "../lib/env";
 import { deleteS3Keys, deleteS3Prefix } from "../lib/s3Cleanup";
-import { logger } from "../lib/logger";
+import { logger, safeErrorForLog } from "../lib/logger";
+import { accountDeleteTombstones } from "../lib/syncTombstones";
 
 const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
 const TOPO_BUCKET = getEnv().S3_BUCKET_TOPO ?? "";
@@ -30,14 +35,19 @@ function shortHash(value: string): string {
 }
 
 async function cognitoUserExists(sub: string): Promise<boolean> {
-  const poolId = process.env.COGNITO_USER_POOL_ID;
-  if (!poolId) return true; // fail safe: assume exists if pool not configured
+  // env.ts makes COGNITO_USER_POOL_ID required whenever AUTH_MODE=cognito, so an
+  // unset pool id only ever happens in fake-auth dev, where there is no Cognito
+  // directory to ask and no takeover to guard against. Deliberate fail-safe.
+  const poolId = getEnv().COGNITO_USER_POOL_ID;
+  if (!poolId) return true;
   try {
     await cognitoIdp.send(new AdminGetUserCommand({ UserPoolId: poolId, Username: sub }));
     return true;
   } catch (err) {
     if (err instanceof UserNotFoundException) return false;
-    // IAM not granted or network error — fail safe: treat as existing
+    // IAM not granted or network error — fail safe: treat as existing, but say
+    // so, or a missing AdminGetUser permission silently disables the guard.
+    logger.warn({ err: safeErrorForLog(err) }, "cognito_user_exists_check_failed");
     return true;
   }
 }
@@ -132,8 +142,18 @@ const usernameSchema = z
 
 const router = Router();
 
-function serializeUserForResponse(
+// `uiPreferences.tripLogCustomFields` / `.placeCustomFields` are a PROJECTION,
+// not storage: the definitions live in `custom_field_defs` and are read back
+// onto the response under the two key names the web and mobile already consume
+// (`customFieldDefsOf`, `App.tsx`). Keeping the response shape meant not
+// rewriting every custom-field dialog in the frontend for a change that is
+// entirely about where the rows live.
+//
+// This also keeps the APP 12 data export complete — it serializes the user
+// through here, so a user's field definitions leave with the rest of their data.
+async function serializeUserForResponse(
   user: {
+    id: string;
     storageUsedBytes: bigint;
     storageQuotaBytes: bigint;
     uiPreferences: Prisma.JsonValue;
@@ -143,26 +163,40 @@ function serializeUserForResponse(
     ...user,
     storageUsedBytes: Number(user.storageUsedBytes),
     storageQuotaBytes: Number(user.storageQuotaBytes),
-    uiPreferences: normalizeUserUiPreferences(user.uiPreferences),
+    uiPreferences: {
+      ...normalizeUserUiPreferences(user.uiPreferences),
+      ...(await defsForUserResponse(user.id)),
+    },
   };
 }
 
-// serializeUserForResponse + the derived monthly-tile-usage fields
-// (monthlyTileUsage/monthlyTileResetAt are NOT columns — they're a live _sum
-// over TopoJob.tileCount). Both GET and PATCH /me return this so the cached
-// user the frontend keeps never loses tile usage after a profile update.
-async function serializeUserWithTileUsage(
+// serializeUserForResponse + the derived monthly-usage fields.
+//
+// None of these are columns: credit usage is a live sum over the three worker
+// job tables (see lib/computeCredits.ts), and egress applies the same lazy
+// month rollover the sweeper's write does. Both GET and PATCH /me return them
+// so the cached user the frontend keeps never loses its meters after a
+// profile update.
+async function serializeUserWithUsage(
   user: Parameters<typeof serializeUserForResponse>[0] & {
     id: string;
-    monthlyTileQuota: number;
+    monthlyComputeCredits: number;
   },
 ) {
-  const tileUsage = await getMonthlyTileUsage(user.id, user.monthlyTileQuota);
+  const [credits, egress] = await Promise.all([
+    getMonthlyCreditUsage(user.id, user.monthlyComputeCredits),
+    getEgressUsage(user.id),
+  ]);
   return {
-    ...serializeUserForResponse(user),
-    monthlyTileQuota: tileUsage.quota,
-    monthlyTileUsage: tileUsage.used,
-    monthlyTileResetAt: tileUsage.resetAt,
+    ...(await serializeUserForResponse(user)),
+    monthlyComputeCredits: credits.quota,
+    monthlyComputeUsage: credits.used,
+    monthlyComputeResetAt: credits.resetAt,
+    // Egress has no progress bar in the UI — the cap sits far above real use
+    // and is surfaced only by notification. These ship anyway so a client can
+    // explain a 429 without a second round trip.
+    monthlyEgressQuotaBytes: egress.quota.toString(),
+    monthlyEgressUsedBytes: egress.used.toString(),
   };
 }
 
@@ -250,7 +284,7 @@ router.get(
       }
     }
 
-    res.json(await serializeUserWithTileUsage(user));
+    res.json(await serializeUserWithUsage(user));
   },
 );
 
@@ -261,16 +295,49 @@ router.patch(
   userPatchLimiter,
   async (req: AuthenticatedRequest, res: Response) => {
     const { sub } = req.user!;
-    const { username, themeSchemeId, tripLogCustomFields, canyonCustomFields, notifications, autoDownloadGeoPdfs, importMergePolicy, consentVersion } = req.body as {
+    // `tripLogCustomFields` / `placeCustomFields` USED TO BE ACCEPTED HERE, as
+    // a whole list reconciled by `replaceFieldDefs`. Both are gone, and the
+    // deletion is deliberate rather than a tidy-up — the whole-list shape
+    // cannot express what a definition now is:
+    //
+    //  * It carried `{key,label,type,min,max}` and nothing else, so every save
+    //    from a dialog that round-tripped the list would have wiped
+    //    `placeTypeIds` and `appliesToAllTypes` on every definition — silently,
+    //    because the payload simply did not mention them.
+    //  * It matched `existing` scoped to `ownerId: userId`, so the SYSTEM
+    //    definitions (ownerId null) fell through to the create branch and the
+    //    user acquired a private duplicate of every built-in field, colliding
+    //    with the real one under the same key.
+    //
+    // Definitions have been rows since the custom_field_defs table landed; the
+    // row-grain endpoints in routes/customFields.ts and the sync push op are
+    // the write paths. A client sending the old key gets a 400 naming the
+    // replacement rather than a silent no-op.
+    const {
+      username,
+      themeSchemeId,
+      notifications,
+      autoDownloadGeoPdfs,
+      importMergePolicy,
+      copyPlaceMedia,
+      consentVersion,
+    } = req.body as {
       username?: unknown;
       themeSchemeId?: unknown;
-      tripLogCustomFields?: unknown;
-      canyonCustomFields?: unknown;
       notifications?: unknown;
       autoDownloadGeoPdfs?: unknown;
       importMergePolicy?: unknown;
+      copyPlaceMedia?: unknown;
       consentVersion?: unknown;
     };
+    for (const legacy of ["tripLogCustomFields", "placeCustomFields"] as const) {
+      if ((req.body as Record<string, unknown>)[legacy] !== undefined) {
+        throw new AppError(
+          400,
+          `${legacy} is no longer accepted here — use /custom-fields/:entity.`,
+        );
+      }
+    }
 
     const user = await resolveUser(sub);
 
@@ -305,36 +372,22 @@ router.patch(
 
     if (
       themeSchemeId !== undefined ||
-      tripLogCustomFields !== undefined ||
-      canyonCustomFields !== undefined ||
       notifications !== undefined ||
       autoDownloadGeoPdfs !== undefined ||
-      importMergePolicy !== undefined
+      importMergePolicy !== undefined ||
+      copyPlaceMedia !== undefined
     ) {
       if (themeSchemeId !== undefined && !isThemeSchemeId(themeSchemeId)) {
         throw new AppError(400, "Invalid themeSchemeId");
-      }
-      if (tripLogCustomFields !== undefined) {
-        if (
-          !Array.isArray(tripLogCustomFields) ||
-          !tripLogCustomFields.every(isTripLogCustomFieldDef)
-        ) {
-          throw new AppError(400, "Invalid tripLogCustomFields");
-        }
-      }
-      if (canyonCustomFields !== undefined) {
-        if (
-          !Array.isArray(canyonCustomFields) ||
-          !canyonCustomFields.every(isTripLogCustomFieldDef)
-        ) {
-          throw new AppError(400, "Invalid canyonCustomFields");
-        }
       }
       if (notifications !== undefined && !isNotificationPreferences(notifications)) {
         throw new AppError(400, "Invalid notifications");
       }
       if (autoDownloadGeoPdfs !== undefined && typeof autoDownloadGeoPdfs !== "boolean") {
         throw new AppError(400, "Invalid autoDownloadGeoPdfs");
+      }
+      if (copyPlaceMedia !== undefined && typeof copyPlaceMedia !== "boolean") {
+        throw new AppError(400, "Invalid copyPlaceMedia");
       }
       if (importMergePolicy !== undefined) {
         const normalized = normalizeImportMergePolicy(importMergePolicy);
@@ -346,13 +399,16 @@ router.patch(
       const current = normalizeUserUiPreferences(user.uiPreferences);
       updates.uiPreferences = {
         ...current,
+        // The projection this object was built from carries the two custom
+        // field keys; drop them so they are never written back to storage.
+        tripLogCustomFields: undefined,
+        placeCustomFields: undefined,
         ...(themeSchemeId !== undefined ? { themeSchemeId } : {}),
-        ...(tripLogCustomFields !== undefined ? { tripLogCustomFields } : {}),
-        ...(canyonCustomFields !== undefined ? { canyonCustomFields } : {}),
         ...(notifications !== undefined
           ? { notifications: { ...current.notifications, ...(notifications as Record<string, boolean>) } }
           : {}),
         ...(autoDownloadGeoPdfs !== undefined ? { autoDownloadGeoPdfs } : {}),
+        ...(copyPlaceMedia !== undefined ? { copyPlaceMedia } : {}),
         ...(importMergePolicy !== undefined ? { importMergePolicy: normalizeImportMergePolicy(importMergePolicy) } : {}),
       };
     }
@@ -381,7 +437,7 @@ router.patch(
       throw e;
     }
 
-    res.json(await serializeUserWithTileUsage(updated));
+    res.json(await serializeUserWithUsage(updated));
   },
 );
 
@@ -395,7 +451,7 @@ router.get(
     const user = await resolveUser(sub);
 
     const [
-      canyons,
+      places,
       tripLogs,
       geoPdfTemplates,
       sharesGiven,
@@ -406,14 +462,14 @@ router.get(
       topoTemplates,
       notifications,
     ] = await Promise.all([
-      prisma.canyon.findMany({ where: { ownerId: user.id } }),
+      prisma.place.findMany({ where: { ownerId: user.id } }),
       prisma.tripLog.findMany({ where: { userId: user.id } }),
       prisma.geoPdfTemplate.findMany({ where: { userId: user.id } }),
-      prisma.canyonShare.findMany({
+      prisma.placeShare.findMany({
         where: { sharedById: user.id },
         include: { sharedWith: { select: { id: true, username: true } } },
       }),
-      prisma.canyonShare.findMany({
+      prisma.placeShare.findMany({
         where: { sharedWithId: user.id },
         include: { sharedBy: { select: { id: true, username: true } } },
       }),
@@ -432,8 +488,8 @@ router.get(
       exportedAt: new Date().toISOString(),
       // v2: adds topoJobs, topoExportJobs, topoTemplates, notifications.
       schemaVersion: 2,
-      user: serializeUserForResponse(user),
-      canyons,
+      user: await serializeUserForResponse(user),
+      places,
       tripLogs,
       geoPdfTemplates,
       sharesGiven,
@@ -472,33 +528,88 @@ router.delete(
     // rows are deleted the keys are unrecoverable, so cleanup must run S3-first:
     // if an S3 delete throws, the DB rows still exist and a retried DELETE /me
     // can re-derive the keys (ARCH-004 — no orphaned objects, no lost keys).
-    const [topoJobs, topoExportJobs, geoPdfJobs, media, ownedCanyons, friendships] =
-      await Promise.all([
-        prisma.topoJob.findMany({ where: { userId: user.id }, select: { id: true } }),
-        prisma.topoExportJob.findMany({
-          where: { userId: user.id },
-          select: { id: true, resultKey: true },
-        }),
-        prisma.geoPdfJob.findMany({ where: { userId: user.id }, select: { id: true } }),
-        prisma.media.findMany({
-          where: { ownerId: user.id },
-          select: { s3KeyDisplay: true, s3KeyThumbnail: true },
-        }),
-        // Canyon IDs and friendship IDs are needed to purge cross-user
-        // notifications that reference this user's data (PRIV-003).
-        prisma.canyon.findMany({
-          where: { ownerId: user.id },
-          select: { id: true },
-        }),
-        prisma.friendship.findMany({
-          where: {
-            OR: [{ requesterId: user.id }, { addresseeId: user.id }],
-          },
-          select: { id: true },
-        }),
-      ]);
+    const [
+      topoJobs,
+      topoExportJobs,
+      geoPdfJobs,
+      media,
+      ownedPlaces,
+      friendships,
+      sharesOut,
+      sharesIn,
+      directSharesOut,
+      placeLinkedRoutes,
+    ] = await Promise.all([
+      prisma.topoJob.findMany({ where: { userId: user.id }, select: { id: true } }),
+      prisma.topoExportJob.findMany({
+        where: { userId: user.id },
+        select: { id: true, resultKey: true },
+      }),
+      prisma.geoPdfJob.findMany({ where: { userId: user.id }, select: { id: true } }),
+      // linkedType/linkedId feed the sync-tombstone fan-out below (which
+      // place each media row belonged to).
+      prisma.media.findMany({
+        where: { ownerId: user.id },
+        select: {
+          id: true,
+          linkedType: true,
+          linkedId: true,
+          s3KeyDisplay: true,
+          s3KeyThumbnail: true,
+        },
+      }),
+      // Place IDs and friendship IDs are needed to purge cross-user
+      // notifications that reference this user's data (PRIV-003); the party
+      // ids feed the sync-tombstone fan-out (counterparts must forget the
+      // friendship edge).
+      prisma.place.findMany({
+        where: { ownerId: user.id },
+        select: { id: true },
+      }),
+      prisma.friendship.findMany({
+        where: {
+          OR: [{ requesterId: user.id }, { addresseeId: user.id }],
+        },
+        select: { id: true, requesterId: true, addresseeId: true },
+      }),
+      // Shares of places this user OWNS: each sharee's mirror must forget the
+      // place + its place-level media (sync tombstones).
+      prisma.placeShare.findMany({
+        where: { place: { ownerId: user.id } },
+        select: { placeId: true, sharedWithId: true },
+      }),
+      // Shares this user RECEIVED: the place owner's mirror must forget the
+      // share row.
+      prisma.placeShare.findMany({
+        where: { sharedWithId: user.id },
+        select: { id: true, sharedById: true },
+      }),
+      // Direct shares of synced entities this user OWNS. The account delete is
+      // a delete site like any other, so each recipient's mirror must forget
+      // the route (the Share row itself cascades away with the user, but a
+      // cascade writes no tombstone). Jobs are excluded: they are not synced
+      // entities, so there is no mirror row to revoke.
+      prisma.share.findMany({
+        where: { sharedById: user.id, entityType: "route" },
+        select: { entityType: true, entityId: true, sharedWithId: true },
+      }),
+      // Routes are hard-deleted below and a place sharee could see them
+      // through `Route.placeId`. The place tombstone does NOT imply them — the
+      // single-place delete path fans them out explicitly — so they need their
+      // own rows or the sharee's mirror keeps the geometry forever.
+      //
+      // PlaceLinks need no equivalent: they are owner-private, and the owner is
+      // the account going away.
+      prisma.route.findMany({
+        where: { ownerId: user.id, placeId: { not: null } },
+        select: {
+          id: true,
+          place: { select: { shares: { select: { sharedWithId: true } } } },
+        },
+      }),
+    ]);
 
-    const ownedCanyonIds = ownedCanyons.map((c) => c.id);
+    const ownedPlaceIds = ownedPlaces.map((c) => c.id);
     const friendshipIds = friendships.map((f) => f.id);
 
     const mediaKeys = media.flatMap((m) =>
@@ -530,6 +641,12 @@ router.delete(
       ...geoPdfJobs.map(({ id }) =>
         deleteS3Prefix(TOPO_BUCKET, `exports/geo-pdf/${id}/`),
       ),
+      // Sent copies live in the MEDIA bucket under file-sends/{senderId}/.
+      // One prefix delete covers every send, including one whose upload was
+      // presigned but never confirmed (no row, so the per-id list above would
+      // miss it). The lifecycle rule would eventually collect these; this is
+      // the same belt-and-braces the topo prefixes get.
+      deleteS3Prefix(MEDIA_BUCKET, `file-sends/${user.id}/`),
     ]);
 
     // The user-owned FKs are now ON DELETE CASCADE (see migration
@@ -538,20 +655,60 @@ router.delete(
     // defense-in-depth and to keep the delete deterministic if a future child
     // table is added without a cascade. `Media` has a polymorphic linkedId with
     // no DB FK, so its row delete MUST stay explicit.
+    // Sync tombstones for OTHER users' mirrors (Stage 8): the deleted user's
+    // own tombstones are pointless (the cascade wipes their account, and
+    // SyncTombstone.userId cascades too), so every row here targets a
+    // counterpart. Ids only — never names/coords.
+    const mediaIdsByPlace = new Map<string, string[]>();
+    for (const m of media) {
+      const placeId = placeIdOfMedia(m);
+      if (placeId === null) continue;
+      const list = mediaIdsByPlace.get(placeId) ?? [];
+      list.push(m.id);
+      mediaIdsByPlace.set(placeId, list);
+    }
+    const placeInheritedOut = placeLinkedRoutes.flatMap((route) => {
+      const userIds = (route.place?.shares ?? []).map((s) => s.sharedWithId);
+      return userIds.length > 0
+        ? [{ entityType: "route" as const, entityId: route.id, userIds }]
+        : [];
+    });
+
+    const accountTombstones = accountDeleteTombstones({
+      userId: user.id,
+      placeInheritedOut,
+      mediaIdsByPlace,
+      placeSharesOut: sharesOut,
+      placeSharesIn: sharesIn,
+      friendships,
+      // Share.entityType is a plain string column; the query above already
+      // restricted it to the one synced type, so this narrows rather than
+      // widens.
+      directSharesOut: directSharesOut.flatMap((share) =>
+        share.entityType === "route" ? [{ ...share, entityType: share.entityType }] : [],
+      ),
+    });
+
     await prisma.$transaction([
+      ...(accountTombstones.length > 0
+        ? [prisma.syncTombstone.createMany({ data: accountTombstones })]
+        : []),
+      // The deleted user's own tombstone log (rows other users' deletes wrote
+      // FOR this user) — cascade covers it; explicit per ARCH-001 convention.
+      prisma.syncTombstone.deleteMany({ where: { userId: user.id } }),
       prisma.notification.deleteMany({ where: { userId: user.id } }),
       // Purge notifications held by OTHER users that reference this user's data
-      // (PRIV-003): canyon_shared rows pointing at any of the deleted user's
-      // canyons, and friend_request(_accepted) rows pointing at any friendship
-      // this user was party to. The cascade removes the canyons/shares/
+      // (PRIV-003): place_shared rows pointing at any of the deleted user's
+      // places, and friend_request(_accepted) rows pointing at any friendship
+      // this user was party to. The cascade removes the places/shares/
       // friendships but not the recipient's denormalised notification rows.
-      ...(ownedCanyonIds.length > 0
+      ...(ownedPlaceIds.length > 0
         ? [
             prisma.notification.deleteMany({
               where: {
-                type: "canyon_shared",
-                OR: ownedCanyonIds.map((canyonId) => ({
-                  payload: { path: ["canyonId"], equals: canyonId },
+                type: "place_shared",
+                OR: ownedPlaceIds.map((placeId) => ({
+                  payload: { path: ["placeId"], equals: placeId },
                 })),
               },
             }),
@@ -569,7 +726,7 @@ router.delete(
             }),
           ]
         : []),
-      prisma.canyonShare.deleteMany({
+      prisma.placeShare.deleteMany({
         where: { OR: [{ sharedById: user.id }, { sharedWithId: user.id }] },
       }),
       prisma.friendship.deleteMany({
@@ -578,17 +735,31 @@ router.delete(
       prisma.topoJob.deleteMany({ where: { userId: user.id } }),
       prisma.topoExportJob.deleteMany({ where: { userId: user.id } }),
       prisma.geoPdfJob.deleteMany({ where: { userId: user.id } }),
+      prisma.fileSend.deleteMany({ where: { senderId: user.id } }),
       prisma.media.deleteMany({ where: { ownerId: user.id } }),
-      // Explicit even though TripLogCanyon.tripLogId cascades on TripLog
+      // Explicit even though TripLogPlace.tripLogId cascades on TripLog
       // delete — ARCH-001 convention: never rely solely on an implicit
       // cascade for the account-delete purge list.
-      prisma.tripLogCanyon.deleteMany({
+      prisma.tripLogPlace.deleteMany({
         where: { tripLog: { userId: user.id } },
       }),
       prisma.tripLog.deleteMany({ where: { userId: user.id } }),
-      prisma.canyon.deleteMany({ where: { ownerId: user.id } }),
+      prisma.place.deleteMany({ where: { ownerId: user.id } }),
       prisma.geoPdfTemplate.deleteMany({ where: { userId: user.id } }),
       prisma.topoTemplate.deleteMany({ where: { userId: user.id } }),
+      prisma.deviceToken.deleteMany({ where: { userId: user.id } }),
+      // Routes store their geometry on the row, so there is no S3 leg here —
+      // that is the point of the design (ARCH-001). No S3 objects involved;
+      // explicit per convention even though the cascade covers the rows.
+      prisma.route.deleteMany({ where: { ownerId: user.id } }),
+      // Links between this account's places. Owner-private, no S3 leg, no
+      // tombstone fan-out — the only viewer is the account being deleted.
+      prisma.placeLink.deleteMany({ where: { ownerId: user.id } }),
+      // Custom field definitions: user-authored labels, no S3 leg, and never
+      // shared — so no tombstone fan-out either, the only viewer is the
+      // account being deleted. Explicit per the ARCH-001 convention even
+      // though the FK cascade covers the rows.
+      prisma.customFieldDef.deleteMany({ where: { ownerId: user.id } }),
       prisma.user.delete({ where: { id: user.id } }),
     ]);
 

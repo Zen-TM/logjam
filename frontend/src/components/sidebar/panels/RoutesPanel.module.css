@@ -1,0 +1,48 @@
+/* Ways gives the panel body its full height: the hero and the kind rail are
+   pinned, and only the list scrolls (DESIGN.md §2). */
+.root {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.rails {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px var(--gutter) 8px;
+}
+
+.banner {
+  flex-shrink: 0;
+  margin: 0 var(--gutter) 8px;
+}
+
+.list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  /* Room for each card's focus ring inside the scroller. */
+  padding: 4px var(--gutter) var(--gutter);
+}
+
+.emptyArea {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 var(--gutter) 15%;
+}
+
+.loading {
+  margin: 0;
+  text-align: center;
+  font-size: var(--font-sm);
+  color: var(--theme-text-muted);
+}

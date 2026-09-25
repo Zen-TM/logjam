@@ -18,39 +18,54 @@ function twoDigitYear(yy: number): number {
   return yy <= currentYY ? 2000 + yy : 1900 + yy;
 }
 
+// JS Date silently normalizes out-of-range components (new Date(2023, 1, 30) →
+// Mar 2, not "invalid") — isNaN(d.getTime()) can never catch that, so an
+// impossible calendar date (30/02/2023, 31/04/2023) would otherwise roll
+// forward into a *different, wrong* date with no signal (FECO-007). Verify the
+// constructed Date reports back the exact year/month/day it was built from;
+// any mismatch means the input wasn't a real date.
+function isExactYMD(d: Date, year: number, month0: number, day: number): boolean {
+  return d.getFullYear() === year && d.getMonth() === month0 && d.getDate() === day;
+}
+
 export function parseWithFormat(s: string, format: DateFormat): Date | null {
   switch (format) {
     case "YYYY-MM-DD": {
       const m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
       if (!m) return null;
-      const d = new Date(parseInt(m[1]), parseInt(m[2]) - 1, parseInt(m[3]));
-      return isNaN(d.getTime()) ? null : d;
+      const [year, month, day] = [parseInt(m[1]), parseInt(m[2]), parseInt(m[3])];
+      const d = new Date(year, month - 1, day);
+      return isExactYMD(d, year, month - 1, day) ? d : null;
     }
     case "DD/MM/YYYY": {
       const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
       if (!m) return null;
-      const d = new Date(parseInt(m[3]), parseInt(m[2]) - 1, parseInt(m[1]));
-      return isNaN(d.getTime()) ? null : d;
+      const [day, month, year] = [parseInt(m[1]), parseInt(m[2]), parseInt(m[3])];
+      const d = new Date(year, month - 1, day);
+      return isExactYMD(d, year, month - 1, day) ? d : null;
     }
     case "DD-MM-YYYY": {
       const m = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
       if (!m) return null;
-      const d = new Date(parseInt(m[3]), parseInt(m[2]) - 1, parseInt(m[1]));
-      return isNaN(d.getTime()) ? null : d;
+      const [day, month, year] = [parseInt(m[1]), parseInt(m[2]), parseInt(m[3])];
+      const d = new Date(year, month - 1, day);
+      return isExactYMD(d, year, month - 1, day) ? d : null;
     }
     case "DD/MM/YY": {
       const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})$/);
       if (!m) return null;
+      const [day, month] = [parseInt(m[1]), parseInt(m[2])];
       const year = twoDigitYear(parseInt(m[3]));
-      const d = new Date(year, parseInt(m[2]) - 1, parseInt(m[1]));
-      return isNaN(d.getTime()) ? null : d;
+      const d = new Date(year, month - 1, day);
+      return isExactYMD(d, year, month - 1, day) ? d : null;
     }
     case "DD-MM-YY": {
       const m = s.match(/^(\d{1,2})-(\d{1,2})-(\d{2})$/);
       if (!m) return null;
+      const [day, month] = [parseInt(m[1]), parseInt(m[2])];
       const year = twoDigitYear(parseInt(m[3]));
-      const d = new Date(year, parseInt(m[2]) - 1, parseInt(m[1]));
-      return isNaN(d.getTime()) ? null : d;
+      const d = new Date(year, month - 1, day);
+      return isExactYMD(d, year, month - 1, day) ? d : null;
     }
   }
 }

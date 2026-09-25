@@ -65,7 +65,7 @@ describe("numericFieldError", () => {
     expect(numericFieldError("5.5", { integer: true })).toBe("Whole numbers only");
     expect(numericFieldError("5", { integer: true })).toBeNull();
   });
-  it("flags negatives on a non-negative field (CANYON-2/TRIP-2)", () => {
+  it("flags negatives on a non-negative field (PLACE-2/TRIP-2)", () => {
     expect(numericFieldError("-5", { min: 0 })).toBe("Cannot be negative");
     expect(numericFieldError("-5.5", { integer: true, min: 0 })).toBe(
       "Whole numbers only",
@@ -81,7 +81,7 @@ describe("numericFieldError", () => {
     );
     expect(numericFieldError("3.5", { min: 1, max: 5 })).toBeNull();
   });
-  it("enforces coordinate ranges (CANYON-1)", () => {
+  it("enforces coordinate ranges (PLACE-1)", () => {
     expect(numericFieldError("95", { min: -90, max: 90 })).toBe(
       "Must be between -90 and 90",
     );

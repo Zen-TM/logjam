@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
+import type { CustomFieldDefRow } from "./tripLogFields.js";
 import {
+  customFieldDefFromRow,
   makeCustomFieldKey,
   coerceFieldValue,
   coerceFieldValueStrict,
@@ -8,8 +10,13 @@ import {
   tripLogHasCustomFieldValue,
   countTripLogsWithCustomField,
   renameCustomFieldLabel,
+  tripFieldDefs,
+  isSystemFieldDef,
 } from "./tripLogFields.js";
-import type { TripLogCustomFieldDef } from "./tripLogFields.js";
+import type {
+  ScopedCustomFieldDef,
+  TripLogCustomFieldDef,
+} from "./tripLogFields.js";
 
 describe("makeCustomFieldKey", () => {
   it("lowercases and replaces non-alphanumeric runs with underscores", () => {
@@ -279,5 +286,160 @@ describe("renameCustomFieldLabel", () => {
   it("is a no-op when the label is unchanged", () => {
     const result = renameCustomFieldLabel(defs, "rope", "Rope Length");
     expect(result).toEqual({ defs });
+  });
+});
+
+// One-sided bounds, end to end through the row reader. Three of the system
+// definitions are min-only (`hours`, `num_abseils`, `longest_abseil`) — there
+// is no honest ceiling for "how many pitches" — and the both-or-neither rule
+// this replaces dropped their bound silently on the way out of the database.
+describe("customFieldDefFromRow with one-sided bounds", () => {
+  const row = (over: Partial<CustomFieldDefRow>): CustomFieldDefRow => ({
+    entity: "place",
+    key: "num_abseils",
+    label: "Pitches",
+    type: "integer",
+    min: null,
+    max: null,
+    position: 0,
+    ...over,
+  });
+
+  it("keeps a min with no max", () => {
+    expect(customFieldDefFromRow(row({ min: 0 }))).toEqual({
+      key: "num_abseils",
+      label: "Pitches",
+      type: "integer",
+      min: 0,
+    });
+  });
+
+  it("keeps a max with no min", () => {
+    expect(customFieldDefFromRow(row({ max: 10 }))).toMatchObject({ max: 10 });
+  });
+
+  it("keeps both when both are set", () => {
+    expect(customFieldDefFromRow(row({ min: 1, max: 7 }))).toMatchObject({
+      min: 1,
+      max: 7,
+    });
+  });
+
+  it("carries no bounds when neither is set", () => {
+    const def = customFieldDefFromRow(row({}));
+    expect(def).not.toHaveProperty("min");
+    expect(def).not.toHaveProperty("max");
+  });
+});
+
+// A trip's attributes are scoped by its TAGS, and the union clauses are what
+// stop the form eating data: both clients save exactly the fields it shows.
+describe("tripFieldDefs", () => {
+  const scoped = (
+    key: string,
+    tripTypes: string[],
+    appliesToAllTypes = false,
+  ): ScopedCustomFieldDef => ({
+    key,
+    label: key,
+    type: "string",
+    placeTypeIds: [],
+    tripTypes,
+    appliesToAllTypes,
+  });
+
+  const flow = scoped("flow", ["packrafting"]);
+  const pitches = scoped("pitches", ["canyoning"]);
+  const weather = scoped("weather", [], true);
+  const defs = [flow, pitches, weather];
+
+  it("asks the questions the trip's own types ask", () => {
+    expect(tripFieldDefs(defs, ["packrafting"], {}).map((def) => def.key)).toEqual([
+      "flow",
+      "weather",
+    ]);
+  });
+
+  it("unions several tags, showing a field scoped to two of them once", () => {
+    const wet = scoped("wetsuit", ["canyoning", "packrafting"]);
+    expect(
+      tripFieldDefs([...defs, wet], ["canyoning", "packrafting"], {}).map((d) => d.key),
+    ).toEqual(["flow", "pitches", "weather", "wetsuit"]);
+  });
+
+  // The API refuses case-variant duplicates, so "Packrafting" and "packrafting"
+  // are one tag — a field scoped to one must appear for the other.
+  it("matches tags case-insensitively in both directions", () => {
+    expect(tripFieldDefs(defs, ["Packrafting"], {}).map((def) => def.key)).toContain("flow");
+    expect(
+      tripFieldDefs([scoped("x", ["BushWalking"])], ["bushwalking"], {}).map((d) => d.key),
+    ).toEqual(["x"]);
+  });
+
+  // An untagged trip is a real trip, not an unfinished one.
+  it("asks only the always-on fields when a trip has no tags", () => {
+    expect(tripFieldDefs(defs, [], {}).map((def) => def.key)).toEqual(["weather"]);
+  });
+
+  // A trip is not scoped by the places it links any more: a field that names a
+  // place type (a stale row from before tags) asks nothing on its own.
+  it("ignores place-type scoping on a trip field", () => {
+    const stale: ScopedCustomFieldDef = { ...scoped("stale", []), placeTypeIds: ["canyon"] };
+    expect(tripFieldDefs([stale], ["canyoning"], {})).toEqual([]);
+  });
+
+  // THE STORED-VALUE CLAUSE. Untagging a trip or rescoping a definition would
+  // otherwise hide a recorded answer, and the next save would drop it.
+  it("keeps a field whose value is already recorded, whatever the scoping says", () => {
+    expect(
+      tripFieldDefs(defs, [], { flow: "high" }).map((def) => def.key),
+    ).toEqual(["flow", "weather"]);
+  });
+
+  it("does not resurrect a field whose value was cleared", () => {
+    expect(
+      tripFieldDefs(defs, [], { flow: null }).map((def) => def.key),
+    ).toEqual(["weather"]);
+  });
+
+  // THE UNSAVED-EDIT CLAUSE. Tick packrafting, type a flow, untick it: the
+  // stored values know nothing about the typing, so without `keep` the field
+  // unmounts and the save writes the form without it.
+  it("keeps a field the form edited, even with its tag unticked and nothing saved", () => {
+    expect(
+      tripFieldDefs(defs, [], {}, new Set(["flow"])).map((def) => def.key),
+    ).toEqual(["flow", "weather"]);
+  });
+});
+
+describe("isSystemFieldDef", () => {
+  const scoped = (over: Partial<ScopedCustomFieldDef>): ScopedCustomFieldDef => ({
+    key: "water_level",
+    label: "Water level",
+    type: "string",
+    placeTypeIds: [],
+    appliesToAllTypes: true,
+    ...over,
+  });
+
+  it("is true for a built-in", () => {
+    expect(isSystemFieldDef(scoped({ key: "v_grade", ownerId: null }))).toBe(true);
+  });
+
+  // THE REGRESSION. A definition created on the phone has no owner id until the
+  // server sends one back, and `ownerId === null` alone called that a built-in:
+  // the field the user had just added drew a padlock and no verbs until the
+  // next delta landed.
+  it("is false for a locally-created field that has no owner id yet", () => {
+    expect(isSystemFieldDef(scoped({ ownerId: null }))).toBe(false);
+  });
+
+  it("is false for an owned field, reserved key or not", () => {
+    expect(isSystemFieldDef(scoped({ ownerId: "alice" }))).toBe(false);
+    expect(isSystemFieldDef(scoped({ key: "v_grade", ownerId: "alice" }))).toBe(false);
+  });
+
+  it("is false when the owner id is absent entirely — offer the verbs, let the server refuse", () => {
+    expect(isSystemFieldDef(scoped({}))).toBe(false);
   });
 });

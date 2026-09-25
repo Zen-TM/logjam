@@ -12,25 +12,67 @@
   --theme-bonus-2: #6b5f4b;
   --theme-bonus-3: #9c5a2e;
 
-  --owned-canyon-color: #f97316;
-  --shared-canyon-color: #629bf8;
-  --completed-canyon-color: #22c55e; /* owned canyon with a logged trip */
+  /* A place's own colour is its TYPE's now; these two are the fallback for a
+     place whose type has not loaded, and the reserved "shared" hue. Both are
+     read from shared/src/placeTypes.ts — keep them in step (the contrast guard
+     checks the declaration, not this file). */
+  --owned-place-color: #e4c5aa;
+  --shared-place-color: #b79ec0;
+  --completed-place-color: #22c55e; /* owned place with a logged trip */
 
   /* Layout */
-  --nav-rail-width: 56px;
-  --panel-width: 280px;
-  --bottom-nav-height: 56px;
+  --nav-rail-width: 84px;
+  --panel-width: 380px;
+  /* The same width as the panel it opens beside, by decision rather than
+     coincidence. */
+  --filter-sheet-width: var(--panel-width);
+  --bottom-nav-height: 68px;
 
-  /* Border radius */
+  /* Border radius — the same scale as Logjam GPS (RADIUS in @logjam/shared). */
   --radius-sm: 4px;
   --radius-md: 8px;
   --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-pill: 999px;
+  /* A PERCENTAGE, so it is a circle only on a square box — a wider one gets
+     an ellipse. Anything pill-shaped wants `--radius-pill`. */
   --radius-full: 50%;
 
-  /* Shadows */
+  /* `--ink` and the `--hue-*` identity colours are scheme-independent and are
+     set from @logjam/shared at startup (themePreferences.tsx), not restated
+     here. */
+
+  /* Type — rem, so a browser text-size setting reaches every label. A desktop
+     density: a mouse and a big screen want more on it than a phone does.
+     12px is the floor; nothing is drawn smaller. */
+  --font-xs: 0.75rem;
+  --font-sm: 0.8125rem;
+  --font-base: 0.875rem;
+  --font-lg: 1.125rem;
+  --font-xl: 1.25rem;
+
+  /* Control sizes. Every height and hit target in the kit reads one of these,
+     so density is decided here and nowhere else. A mouse gets the compact set
+     (still clear of WCAG 2.5.8's 24px); a touch screen gets Logjam GPS's. */
+  --control-lg: 36px; /* buttons, text fields */
+  --control-md: 32px; /* compact buttons, chips, icon buttons, menu items */
+  --control-sm: 24px; /* the round icon button at a pill's end */
+  /* A switch is its own size, and a column of them lines up with one. */
+  --switch-width: 36px;
+  /* The side margin every panel, sheet and list keeps. */
+  --gutter: 16px;
+
+  /* Kit surfaces. A text field sits a step darker than the page it is on. */
+  --surface-field: color-mix(in srgb, black 12%, var(--theme-primary));
+  --hairline: 1px solid var(--theme-bonus-2);
+  /* Behind a modal: the page dims rather than disappears. */
+  --scrim: color-mix(in srgb, black 40%, transparent);
+
+  /* Shadows. Only things floating OVER THE MAP cast one; panels and sheets
+     separate with a hairline. */
   --shadow-nav: 8px 0 8px -4px rgba(0, 0, 0, 0.2);
   --shadow-panel: 4px 0 12px rgba(0, 0, 0, 0.2);
-  --shadow-float: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-float: 0 2px 10px rgba(0, 0, 0, 0.28);
   --shadow-modal: 0 4px 12px rgba(0, 0, 0, 0.3);
 
   /* Transitions */
@@ -48,17 +90,72 @@
   --opacity-disabled: 0.5;
 }
 
+/* The reset. Every width in this app is written as though padding and border
+   are inside it, so `border-box` is not a preference — it is the unit the
+   layout is measured in. It is set on `html` and inherited rather than forced
+   on `*`, so a third-party subtree (MapLibre's canvas furniture) can opt back
+   out on itself without fighting a universal selector. */
+html {
+  box-sizing: border-box;
+  /* iOS enlarges text in landscape without this, which silently breaks every
+     size the token scale decides. */
+  -webkit-text-size-adjust: 100%;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: inherit;
+}
+
 body {
   margin: 0;
   padding: 0;
   background-color: var(--theme-primary);
   color: var(--theme-text-primary);
+  /* The reader's own OS font, which is what Logjam GPS shows too: neither app
+     ships a typeface, so both look like the system they are running on. */
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 1rem;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* One focus ring for everything keyboard-reachable (WCAG 2.4.7): a 2px ring in
+   the text colour, 2px off the element, so it reads on a filled accent button
+   and on the page alike. An outline rather than a box-shadow because forced-
+   colours mode keeps outlines and drops shadows. */
+:focus-visible {
+  outline: 2px solid var(--theme-text-primary);
+  outline-offset: 2px;
 }
 
 @media (prefers-color-scheme: dark) {
   .icon {
     filter: invert(1);
   }
+}
+
+/* A coarse pointer (a finger) gets the phone's targets back. Keyed to the
+   POINTER, not the width: a narrow desktop window still has a mouse. */
+@media (pointer: coarse) {
+  :root {
+    --control-lg: 44px;
+    --control-md: 40px;
+    --control-sm: 32px;
+  }
+}
+
+/* Visually hidden, still read by assistive tech. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 /* Mobile (≤768px): map goes full-bleed (no left nav rail); navigation moves to
@@ -69,9 +166,7 @@ body {
   }
 }
 
-/* fullScreen MUI dialogs must fully cover the viewport (MOBILE-12). Dialogs
-   that cap their paper with a desktop-oriented `sx: { maxHeight: "85vh" }`
-   now condition that cap on `useIsMobile()` (`maxHeight: isMobile ? "100%" : "85vh"`)
-   instead of relying on a global override here — see TripLogDialog,
-   TripLogViewDialog, TopoDialog, GeoPdfDialog, UnifiedImportDialog,
-   SelectedCanyonsDialog, TopoTemplateEditDialog. */
+/* A dialog fills the phone's viewport rather than floating in it (MOBILE-12),
+   and the rule that decides this lives with the dialog itself — `Dialog.module.css`
+   keys it off the same 768px breakpoint as the rest of this file. Nothing
+   overrides a dialog from here. */

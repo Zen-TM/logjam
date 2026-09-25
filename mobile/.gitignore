@@ -1,0 +1,35 @@
+# Expo / native build artifacts
+.expo/
+dist/
+web-build/
+*.orig.*
+
+# Native project dirs (managed by prebuild / EAS; regenerated, not committed
+# until/unless the app ejects to bare workflow)
+/ios
+/android
+
+# Local Expo modules: source is committed, Gradle build output is not
+modules/*/android/build/
+
+# Env files carry config (and, if misused, secrets) — never commit
+.env
+.env.*.local
+
+# Maestro E2E credentials (operator-provided test Cognito user)
+e2e/.env.maestro
+
+# FCM config: not a secret (it ships inside the APK) but it carries the Firebase
+# project id + Android API key, and this repo is public. EAS builds read it from
+# the GOOGLE_SERVICES_JSON file env variable — see app.config.ts.
+google-services.json
+
+# expo-updates code signing: the PRIVATE key never leaves this machine / the EAS
+# secret. The certificate under certs/ is public by design — it is embedded in
+# every build and is what the client checks signatures against — so it IS
+# committed. Losing the private key means no further OTA updates until a new
+# certificate ships in a store build; see mobile/CLAUDE.md.
+keys/
+
+# Metro / RN caches
+.metro-health-check*

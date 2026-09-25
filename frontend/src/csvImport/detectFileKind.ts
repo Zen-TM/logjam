@@ -1,20 +1,18 @@
-// Decides whether a dropped file looks like a canyon list or a logbook (trip
+// Decides whether a dropped file looks like a place list or a logbook (trip
 // logs), per plan §7a. Pure heuristic over the parsed headers (and, for the
 // disambiguating cases, a peek at the rows). The user can override the result.
 //
 // Rules:
-//   - latitude + longitude columns present  → "canyon"
+//   - latitude + longitude columns present  → "place"
 //   - a date column AND a name column, no coords → "triplog"
 //   - otherwise → "unknown"
 //
 // Privacy: only column *names* are inspected here, never row values, so no
-// canyon name/coord ever flows through this function.
+// place name/coord ever flows through this function.
 
-export type FileKind = "canyon" | "triplog" | "unknown";
+import { normalize as normalizeHeader } from "./placeColumns";
 
-function normalizeHeader(header: string): string {
-  return header.toLowerCase().replace(/[\s_-]+/g, " ").trim();
-}
+export type FileKind = "place" | "triplog" | "unknown";
 
 const LATITUDE_ALIASES = new Set([
   "lat",
@@ -35,8 +33,8 @@ const LONGITUDE_ALIASES = new Set([
 ]);
 const NAME_ALIASES = new Set([
   "name",
-  "canyon",
-  "canyon name",
+  "place",
+  "place name",
   "location",
   "place",
   "site",
@@ -60,7 +58,7 @@ export function detectFileKind(headers: string[]): FileKind {
   const hasName = hasAny(headers, NAME_ALIASES);
   const hasDate = hasAny(headers, DATE_ALIASES);
 
-  if (hasLatitude && hasLongitude) return "canyon";
+  if (hasLatitude && hasLongitude) return "place";
   if (hasDate && hasName) return "triplog";
   return "unknown";
 }

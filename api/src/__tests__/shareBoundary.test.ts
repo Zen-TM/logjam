@@ -7,8 +7,9 @@ import {
   CAROL_SUB,
   BOB_ID,
   CAROL_ID,
-  SHARED_CANYON_ID,
+  SHARED_PLACE_ID,
   as,
+  CANYON_TYPE_ID
 } from "./_actors";
 
 // Multi-user / share-boundary coverage (gap 1, SEC-001 regression).
@@ -16,7 +17,7 @@ import {
 // Requires `make dev` (Postgres + MiniStack + API on :8080) with AUTH_MODE=fake.
 // Exercises the hybrid-share boundary from the RECIPIENT and STRANGER sides —
 // the perspectives the old single-user fake auth could not reach. Seed baseline:
-// alice owns SHARED_CANYON_ID and shares it with bob; carol is shared nothing.
+// alice owns SHARED_PLACE_ID and shares it with bob; carol is shared nothing.
 // Tests that mutate state create + tear down their own rows so the baseline seed
 // is left intact. The rich seed (2026-06-21) ships an accepted bob↔carol
 // friendship; the lifecycle tests below need that pair EMPTY, so they clear it
@@ -37,23 +38,23 @@ async function clearBobCarolFriendship(): Promise<void> {
   }
 }
 
-async function createCanyon(sub: string, name: string): Promise<string> {
+async function createPlace(sub: string, name: string): Promise<string> {
   const res = await request(API_URL)
-    .post("/canyons")
+    .post("/places")
     .set(as(sub))
-    .send({ name, latitude: -33.7, longitude: 150.3 });
+    .send({ placeTypeId: CANYON_TYPE_ID, name, latitude: -33.7, longitude: 150.3 });
   expect(res.status).toBe(201);
   return res.body.id as string;
 }
 
 describe("share boundary — recipient view (hybrid model)", () => {
-  it("recipient GETs the shared canyon record but NOT the trip-log list", async () => {
+  it("recipient GETs the shared place record but NOT the trip-log list", async () => {
     const res = await request(API_URL)
-      .get(`/canyons/${SHARED_CANYON_ID}`)
+      .get(`/places/${SHARED_PLACE_ID}`)
       .set(as(BOB_SUB));
     expect(res.status).toBe(200);
-    expect(res.body.id).toBe(SHARED_CANYON_ID);
-    // Canyon-level media is visible to recipients...
+    expect(res.body.id).toBe(SHARED_PLACE_ID);
+    // Place-level media is visible to recipients...
     expect(Array.isArray(res.body.media)).toBe(true);
     // ...but the owner-private trip-log list must never be attached.
     expect(res.body.tripLogs).toBeUndefined();
@@ -61,29 +62,29 @@ describe("share boundary — recipient view (hybrid model)", () => {
 
   // The trip-list assertion above has a sibling the count slipped past: the
   // LIST endpoint used to attach `_count: { tripLogLinks, shares }` to every
-  // row on BOTH /canyons and /canyons/shared. Withholding the trip list while
+  // row on BOTH /places and /places/shared. Withholding the trip list while
   // shipping its cardinality is not a boundary — bob learned how many trips
-  // alice had logged on her canyon, and how many other people she'd shared it
+  // alice had logged on her place, and how many other people she'd shared it
   // with. The frontend ignored the number; the API still sent it.
   it("recipient's shared list carries NO owner-private counts (trip tally, share fan-out)", async () => {
     const res = await request(API_URL)
-      .get("/canyons/shared")
+      .get("/places/shared")
       .set(as(BOB_SUB));
     expect(res.status).toBe(200);
     const shared = res.body.find(
-      (c: { id: string }) => c.id === SHARED_CANYON_ID,
+      (c: { id: string }) => c.id === SHARED_PLACE_ID,
     );
-    // Seed baseline: alice shares SHARED_CANYON_ID with bob, so this must be
+    // Seed baseline: alice shares SHARED_PLACE_ID with bob, so this must be
     // present — otherwise the assertions below pass vacuously.
     expect(shared).toBeDefined();
     expect(shared._count).toBeUndefined();
   });
 
   it("owner's own list still carries its counts (the fix must not blank the owned list)", async () => {
-    const res = await request(API_URL).get("/canyons").set(as(ALICE_SUB));
+    const res = await request(API_URL).get("/places").set(as(ALICE_SUB));
     expect(res.status).toBe(200);
     const owned = res.body.find(
-      (c: { id: string }) => c.id === SHARED_CANYON_ID,
+      (c: { id: string }) => c.id === SHARED_PLACE_ID,
     );
     expect(owned).toBeDefined();
     // Powers the "shared by me" filter/badge and the completion filter +
@@ -92,9 +93,9 @@ describe("share boundary — recipient view (hybrid model)", () => {
     expect(typeof owned._count.shares).toBe("number");
   });
 
-  it("recipient's trip list for a shared canyon is empty (trips are owner-private)", async () => {
+  it("recipient's trip list for a shared place is empty (trips are owner-private)", async () => {
     const res = await request(API_URL)
-      .get(`/canyons/${SHARED_CANYON_ID}/trips`)
+      .get(`/places/${SHARED_PLACE_ID}/trips`)
       .set(as(BOB_SUB));
     expect(res.status).toBe(200);
     expect(res.body).toEqual([]);
@@ -105,7 +106,7 @@ describe("share boundary — recipient view (hybrid model)", () => {
     // trip fetch now lives entirely on GET /trips/:id (owner-only). Resolve a
     // real trip ID from the owner's side first.
     const ownerTrips = await request(API_URL)
-      .get(`/canyons/${SHARED_CANYON_ID}/trips`)
+      .get(`/places/${SHARED_PLACE_ID}/trips`)
       .set(as(ALICE_SUB));
     expect(ownerTrips.status).toBe(200);
     expect(ownerTrips.body.length).toBeGreaterThanOrEqual(1);
@@ -117,11 +118,11 @@ describe("share boundary — recipient view (hybrid model)", () => {
     expect(res.status).toBe(404);
   });
 
-  it("alice's trips linked to the shared canyon stay invisible to bob everywhere: nested list, global list, and single GET", async () => {
-    const canyonId = await createCanyon(ALICE_SUB, "share boundary trip invisibility");
+  it("alice's trips linked to the shared place stay invisible to bob everywhere: nested list, global list, and single GET", async () => {
+    const placeId = await createPlace(ALICE_SUB, "share boundary trip invisibility");
     try {
       const shareRes = await request(API_URL)
-        .post(`/canyons/${canyonId}/share`)
+        .post(`/places/${placeId}/share`)
         .set(as(ALICE_SUB))
         .send({ sharedWithUserId: BOB_ID });
       expect(shareRes.status).toBe(201);
@@ -130,20 +131,20 @@ describe("share boundary — recipient view (hybrid model)", () => {
       const tripRes = await request(API_URL)
         .post("/trips")
         .set(as(ALICE_SUB))
-        .send({ canyonIds: [canyonId], date: "2026-06-01", displayName: uniqueTag });
+        .send({ placeIds: [placeId], date: "2026-06-01", displayName: uniqueTag });
       expect(tripRes.status).toBe(201);
       const tripId = tripRes.body.id as string;
 
       try {
-        // Nested list on the shared canyon: bob sees [] (owner-private trips).
+        // Nested list on the shared place: bob sees [] (owner-private trips).
         const nested = await request(API_URL)
-          .get(`/canyons/${canyonId}/trips`)
+          .get(`/places/${placeId}/trips`)
           .set(as(BOB_SUB));
         expect(nested.status).toBe(200);
         expect(nested.body).toEqual([]);
 
         // Global list: bob's own /trips never surfaces alice's trip, even when
-        // searching by the exact shared canyon's name.
+        // searching by the exact shared place's name.
         const global = await request(API_URL)
           .get("/trips")
           .query({ search: uniqueTag })
@@ -161,41 +162,41 @@ describe("share boundary — recipient view (hybrid model)", () => {
         await request(API_URL).delete(`/trips/${tripId}`).set(as(ALICE_SUB));
       }
     } finally {
-      await request(API_URL).delete(`/canyons/${canyonId}`).set(as(ALICE_SUB));
+      await request(API_URL).delete(`/places/${placeId}`).set(as(ALICE_SUB));
     }
   });
 
-  it("recipient may copy a shared canyon under their own account", async () => {
+  it("recipient may copy a shared place under their own account", async () => {
     const res = await request(API_URL)
-      .post(`/canyons/${SHARED_CANYON_ID}/copy`)
+      .post(`/places/${SHARED_PLACE_ID}/copy`)
       .set(as(BOB_SUB))
       .send({});
     expect(res.status).toBe(201);
     const copyId = res.body.id as string;
-    expect(res.body.forkedFromId).toBe(SHARED_CANYON_ID);
+    expect(res.body.forkedFromId).toBe(SHARED_PLACE_ID);
     // Cleanup: bob owns the copy, bob deletes it.
-    await request(API_URL).delete(`/canyons/${copyId}`).set(as(BOB_SUB));
+    await request(API_URL).delete(`/places/${copyId}`).set(as(BOB_SUB));
   });
 });
 
 describe("share boundary — stranger view", () => {
-  it("stranger cannot read a canyon shared only with someone else", async () => {
+  it("stranger cannot read a place shared only with someone else", async () => {
     const res = await request(API_URL)
-      .get(`/canyons/${SHARED_CANYON_ID}`)
+      .get(`/places/${SHARED_PLACE_ID}`)
       .set(as(CAROL_SUB));
-    // 404 (not 403): the status must not confirm the canyon exists to someone
+    // 404 (not 403): the status must not confirm the place exists to someone
     // with no access — matches the trip-level anti-oracle.
     expect(res.status).toBe(404);
   });
 
   it("stranger's trip-log access is denied and individual trips 404", async () => {
     const list = await request(API_URL)
-      .get(`/canyons/${SHARED_CANYON_ID}/trips`)
+      .get(`/places/${SHARED_PLACE_ID}/trips`)
       .set(as(CAROL_SUB));
     expect(list.status).toBe(404);
 
     const ownerTrips = await request(API_URL)
-      .get(`/canyons/${SHARED_CANYON_ID}/trips`)
+      .get(`/places/${SHARED_PLACE_ID}/trips`)
       .set(as(ALICE_SUB));
     const tripId = ownerTrips.body[0].id as string;
 
@@ -210,34 +211,34 @@ describe("share boundary — stranger view", () => {
 
 describe("share revocation", () => {
   it("recipient loses access once the owner revokes the share", async () => {
-    const canyonId = await createCanyon(ALICE_SUB, "share revocation test");
+    const placeId = await createPlace(ALICE_SUB, "share revocation test");
     try {
       // alice shares with bob (they are seed friends)
       const shareRes = await request(API_URL)
-        .post(`/canyons/${canyonId}/share`)
+        .post(`/places/${placeId}/share`)
         .set(as(ALICE_SUB))
         .send({ sharedWithUserId: BOB_ID });
       expect(shareRes.status).toBe(201);
 
       // bob can read it while shared
       const beforeRes = await request(API_URL)
-        .get(`/canyons/${canyonId}`)
+        .get(`/places/${placeId}`)
         .set(as(BOB_SUB));
       expect(beforeRes.status).toBe(200);
 
       // alice revokes
       const revokeRes = await request(API_URL)
-        .delete(`/canyons/${canyonId}/share/${BOB_ID}`)
+        .delete(`/places/${placeId}/share/${BOB_ID}`)
         .set(as(ALICE_SUB));
       expect(revokeRes.status).toBe(204);
 
-      // bob can no longer read it — 404, the canyon is now invisible to him
+      // bob can no longer read it — 404, the place is now invisible to him
       const afterRes = await request(API_URL)
-        .get(`/canyons/${canyonId}`)
+        .get(`/places/${placeId}`)
         .set(as(BOB_SUB));
       expect(afterRes.status).toBe(404);
     } finally {
-      await request(API_URL).delete(`/canyons/${canyonId}`).set(as(ALICE_SUB));
+      await request(API_URL).delete(`/places/${placeId}`).set(as(ALICE_SUB));
     }
   });
 });

@@ -1,26 +1,15 @@
 import { useEffect, useState, useCallback } from "react";
-import { useIsMobile } from "../../useIsMobile";
-import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Button,
-  IconButton,
-  Typography,
-  Box,
-} from "@mui/material";
-import CloseIcon from "@mui/icons-material/Close";
-import { applyRopeWikiImport } from "../../canyonUtils";
+import { applyRopeWikiImport } from "../../placeUtils";
 import type {
   RopeWikiApplyDecision,
   RopeWikiCandidatePayload,
-} from "../../canyonUtils";
+} from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import { ErrorBanner } from "../feedback/ErrorBanner";
 import { useToast } from "../feedback/ToastProvider";
 import MatchReview from "./MatchReview";
 import type { ReviewItem, ReviewDecision } from "./MatchReview";
+import { Button, Dialog } from "../../ui";
 import classes from "./RopeWikiReviewDialog.module.css";
 
 // ── Adapter: RopeWikiCandidatePayload → ReviewItem ─────────────────────────
@@ -33,14 +22,14 @@ function toReviewItem(row: RopeWikiCandidatePayload): ReviewItem {
     topCandidate.distanceMeters <= 1000;
 
   const options = row.candidates.map((c, i) => ({
-    id: c.canyonId,
+    id: c.placeId,
     label: c.name,
     distanceMeters: c.distanceMeters,
     isGuess: i === 0 && topIsGuess,
   }));
 
   const decision: ReviewDecision = topIsGuess
-    ? { kind: "link" as const, id: topCandidate.canyonId }
+    ? { kind: "link" as const, id: topCandidate.placeId }
     : { kind: "create" as const };
 
   return {
@@ -48,7 +37,7 @@ function toReviewItem(row: RopeWikiCandidatePayload): ReviewItem {
     options,
     allowCreate: true,
     allowSkip: true,
-    allowNoCanyon: false,
+    allowNoPlace: false,
     decision,
   };
 }
@@ -64,12 +53,12 @@ function toApplyDecision(
       return {
         ropeWikiId: row.ropeWikiId,
         action: "link",
-        targetCanyonId: decision.id,
+        targetPlaceId: decision.id,
       };
     case "create":
       return { ropeWikiId: row.ropeWikiId, action: "create" };
     case "skip":
-    case "noCanyon":
+    case "noPlace":
       return { ropeWikiId: row.ropeWikiId, action: "skip" };
   }
 }
@@ -91,7 +80,6 @@ function RopeWikiReviewDialog({
   onClose: () => void;
   onApplied: () => void;
 }): React.JSX.Element {
-  const isMobile = useIsMobile();
   const toast = useToast();
   const [items, setItems] = useState<ReviewItem[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -152,74 +140,44 @@ function RopeWikiReviewDialog({
 
   return (
     <Dialog
-      fullScreen={isMobile}
       open={open}
-      onClose={submitting ? undefined : onClose}
-      maxWidth="sm"
-      fullWidth
-      PaperProps={{
-        sx: {
-          backgroundColor: "var(--theme-primary)",
-          color: "var(--theme-text-primary)",
-        },
-      }}
+      title="Review possible duplicates"
+      size="large"
+      dismissible={!submitting}
+      onClose={onClose}
+      footer={
+        <>
+          <Button onClick={onClose} disabled={submitting}>
+            Cancel
+          </Button>
+          <Button
+            variant="filled"
+            busy={submitting}
+            disabled={review.length === 0}
+            onClick={handleApply}
+          >
+            Apply
+          </Button>
+        </>
+      }
     >
-      <DialogTitle
-        sx={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          pb: 1,
-        }}
-      >
-        Review possible duplicates
-        <IconButton
-          aria-label="Close dialog"
-          size="small"
-          onClick={submitting ? undefined : onClose}
-          disabled={submitting}
-          sx={{ color: "var(--theme-text-primary)" }}
-        >
-          <CloseIcon fontSize="small" />
-        </IconButton>
-      </DialogTitle>
-      <DialogContent dividers sx={{ borderColor: "rgba(255,255,255,0.1)" }}>
+      <div className={classes.body}>
+        {/* What the refresh already did, before what it is asking about: a
+            count of places that appeared without being asked about is the
+            first thing to account for (IMPORT-3). */}
         {autoParts.length > 0 && (
-          <Typography className={classes.intro} sx={{ color: "var(--theme-text-muted)" }}>
-            Already imported automatically: {autoParts.join(", ")}. The{" "}
-            {review.length} below looked like canyons you may already have —
-            they were NOT imported yet.
-          </Typography>
+          <p className={classes.intro}>
+            Already imported automatically: {autoParts.join(", ")}. The {review.length}{" "}
+            below looked like places you may already have, so they were left alone.
+          </p>
         )}
-        <Typography className={classes.intro}>
-          These RopeWiki canyons may already exist in your collection. For each
-          one, pick whether to link it to an existing canyon, create it as new,
-          or skip it.
-        </Typography>
-        {error && (
-          <Box sx={{ mb: 2 }}>
-            <ErrorBanner message={error} />
-          </Box>
-        )}
+        <p className={classes.intro}>
+          These RopeWiki places may already be in your collection. For each one, say
+          whether to link it to a place you have, create it as new, or skip it.
+        </p>
+        {error && <ErrorBanner message={error} />}
         <MatchReview items={items} onChange={handleChange} />
-      </DialogContent>
-      <DialogActions>
-        <Button
-          onClick={onClose}
-          disabled={submitting}
-          sx={{ color: "var(--theme-text-primary)" }}
-        >
-          Cancel
-        </Button>
-        <Button
-          variant="contained"
-          color="secondary"
-          onClick={handleApply}
-          disabled={submitting || review.length === 0}
-        >
-          {submitting ? "Applying..." : "Apply"}
-        </Button>
-      </DialogActions>
+      </div>
     </Dialog>
   );
 }

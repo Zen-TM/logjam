@@ -8,6 +8,7 @@ the status UPDATE, and the 0-rows (reaped/deleted) path skips the charge.
 import os
 import sys
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(__file__))
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
@@ -181,6 +182,75 @@ class TestExportWorkerUpdateStatusGuards(unittest.TestCase):
     def test_increment_user_storage_helper_is_gone(self):
         # The separate-commit charge path (ARCH-003) must not come back.
         self.assertFalse(hasattr(export_worker, "increment_user_storage"))
+
+
+@unittest.skipUnless(_WORKER_OK, f"worker import failed: {globals().get('_WORKER_ERR', '?')}")
+class TestWorkerPostCompletionSelfClean(unittest.TestCase):
+    """STP-001: a raise AFTER the `complete` flip must never delete outputs.
+
+    The guarded `failed` write matches 0 rows once the row is `complete`, and
+    the 0-rowcount branch means "reaped or deleted" — self-clean S3. That is
+    only true before the flip. Post-flip (the lazy `from push_send import
+    send_push` of STP-006, a create_notification blip) it destroyed the
+    finished job's PMTiles/COGs while the row still said complete.
+    """
+
+    def _run_main(self, *, fail_in_process_job=False, fail_after_complete=False):
+        deleted = []
+        statuses = []
+
+        class _Conn:
+            def close(self):
+                pass
+
+        def _update_status(conn, job_id, status, **kwargs):
+            statuses.append(status)
+            # claim + complete succeed; the guarded `failed` write matches 0
+            # rows (row is `complete` or the reaper already failed it) — the
+            # rowcount the buggy code read as "reaped, delete the outputs".
+            return 0 if status == "failed" else 1
+
+        def _process_job(job, tmp):
+            if fail_in_process_job:
+                raise RuntimeError("pipeline blew up")
+            return ([], None, False, 0, None)
+
+        def _create_notification(conn, user_id, kind, payload):
+            if fail_after_complete and kind == "topo_complete":
+                raise RuntimeError("transient DB blip")
+
+        with mock.patch.multiple(
+            worker,
+            db_connect=lambda: _Conn(),
+            get_job=lambda conn, job_id: {"id": job_id, "user_id": "u1",
+                                          "name": "n", "s3_input_key": "in.zip"},
+            update_status=_update_status,
+            process_job=_process_job,
+            create_notification=_create_notification,
+            get_user_email=lambda conn, uid: None,
+            delete_s3_prefix_best_effort=lambda prefix: deleted.append(prefix),
+            s3=mock.MagicMock(),
+        ), mock.patch.dict(sys.modules, {"push_send": mock.MagicMock()}):
+            try:
+                worker.main()
+            except SystemExit as exit_exc:
+                self.assertEqual(exit_exc.code, 1)
+        return deleted, statuses
+
+    def test_post_complete_failure_does_not_delete_outputs(self):
+        deleted, statuses = self._run_main(fail_after_complete=True)
+        self.assertEqual(deleted, [], "outputs of a COMPLETE job were deleted")
+        self.assertIn("complete", statuses)
+        self.assertNotIn("failed", statuses,
+                         "a completed job must not be re-flipped to failed")
+
+    def test_pre_complete_failure_still_self_cleans(self):
+        # The reaped/deleted path must survive the fix: a failure before the
+        # flip whose guarded `failed` write matches 0 rows still cleans up.
+        deleted, statuses = self._run_main(fail_in_process_job=True)
+        self.assertNotIn("complete", statuses)
+        self.assertIn("failed", statuses)
+        self.assertEqual(deleted, ["outputs/job-123/"])
 
 
 if __name__ == "__main__":

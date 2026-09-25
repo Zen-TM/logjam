@@ -8,7 +8,10 @@ import {
   type ReactNode,
 } from "react";
 import {
+  ASSET_HUES,
   DEFAULT_THEME_SCHEME_ID,
+  INK,
+  PLACE_STATUS_HUES,
   normalizeUserUiPreferences,
   THEME_SCHEMES,
   THEME_SCHEME_ORDER,
@@ -16,12 +19,25 @@ import {
   type ThemeSchemeId,
   type ThemeTokens,
 } from "@logjam/shared";
-import { createThemeFromTokens } from "./theme";
-import { fetchCurrentUser, updateCurrentUserThemeScheme } from "./canyonUtils";
+import { fetchCurrentUser, updateCurrentUserThemeScheme } from "./placeUtils";
 import { messageFromError } from "./errors/messageFromError";
+
+/** The scheme-independent tokens, written once at module load so the first
+ *  paint already has them. Read from @logjam/shared rather than restated in
+ *  index.css, so a retuned hue reaches both clients and the contrast guard. */
+function applyStaticTokensToCss() {
+  const root = document.documentElement;
+  root.style.setProperty("--ink", INK);
+  for (const [name, hue] of Object.entries({ ...ASSET_HUES, ...PLACE_STATUS_HUES })) {
+    root.style.setProperty(`--hue-${name}`, hue);
+  }
+}
+applyStaticTokensToCss();
 
 function applyTokensToCss(tokens: ThemeTokens) {
   const root = document.documentElement;
+
+  root.style.setProperty("--theme-success", tokens.success);
 
   root.style.setProperty("--theme-primary", tokens.primary);
   root.style.setProperty("--theme-secondary", tokens.secondary);
@@ -49,7 +65,6 @@ type ThemePreferencesContextValue = {
   isHydrating: boolean;
   isSaving: boolean;
   error: string | null;
-  muiTheme: ReturnType<typeof createThemeFromTokens>;
   setThemeScheme: (id: ThemeSchemeId) => Promise<void>;
   hydrateFromUser: () => Promise<void>;
 };
@@ -70,10 +85,6 @@ export function ThemePreferencesProvider({
   const [error, setError] = useState<string | null>(null);
 
   const scheme = THEME_SCHEMES[schemeId];
-  const muiTheme = useMemo(
-    () => createThemeFromTokens(scheme.tokens),
-    [scheme],
-  );
 
   useEffect(() => {
     applyTokensToCss(scheme.tokens);
@@ -87,8 +98,11 @@ export function ThemePreferencesProvider({
       const user = await fetchCurrentUser();
       const normalized = normalizeUserUiPreferences(user.uiPreferences);
       setSchemeId(normalized.themeSchemeId);
-    } catch {
-      // Keep local default when offline or unauthenticated.
+    } catch (err) {
+      // Best-effort: keep the local default theme rather than surface a
+      // toast for a background hydration failure — but still log it, or a
+      // systematic failure (e.g. a 500 on /users/me) is invisible (FECO-011).
+      console.error(err);
     } finally {
       setIsHydrating(false);
     }
@@ -125,7 +139,6 @@ export function ThemePreferencesProvider({
       isHydrating,
       isSaving,
       error,
-      muiTheme,
       setThemeScheme,
       hydrateFromUser,
     }),
@@ -134,7 +147,6 @@ export function ThemePreferencesProvider({
       isHydrating,
       isSaving,
       error,
-      muiTheme,
       setThemeScheme,
       hydrateFromUser,
     ],

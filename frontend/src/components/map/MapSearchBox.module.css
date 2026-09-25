@@ -1,106 +1,126 @@
 .root {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  z-index: 3;
-  width: min(320px, calc(100% - 24px));
-  margin-left: 0;
-  transition: margin-left var(--transition-med) ease-out;
+  position: relative;
 }
 
-/* Slide clear of an open sidebar panel, like the attribution control. */
-.shifted {
-  margin-left: var(--panel-width);
-}
-
-/* Mobile: panel is a bottom sheet, not a left flyout — don't shift. */
-@media (max-width: 768px) {
-  .shifted {
-    margin-left: 0;
-  }
-  .root {
-    /* Stop short of the map's top-right zoom/compass control (MapLibre
-       NavigationControl: 29px button + 10px margin ≈ 39px) so the full-width
-       search bar can't sit on top of it and steal zoom taps (MOBILE-1). */
-    right: 50px;
-    width: auto;
-  }
-}
-
-.inputRow {
+.field {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 10px;
+  min-height: 42px;
+  box-sizing: border-box;
+  padding: 0 10px 0 16px;
+  border-radius: var(--radius-pill);
   background: var(--theme-primary);
-  color: var(--theme-text-primary);
-  padding: 0.4em 0.6em;
-  border-radius: var(--radius-sm);
+  color: var(--theme-text-muted);
   box-shadow: var(--shadow-float);
 }
 
-.icon {
-  color: var(--theme-text-muted);
-  flex-shrink: 0;
+.field:focus-within {
+  outline: 2px solid var(--theme-text-primary);
+  outline-offset: 2px;
+}
+
+.glyph {
+  flex: none;
 }
 
 .input {
   flex: 1;
   min-width: 0;
-  background: transparent;
   border: none;
-  outline: none;
+  background: transparent;
   color: var(--theme-text-primary);
-  font-size: var(--text-sm);
+  font: inherit;
+  /* Map chrome's own step (MapControl.module.css), between the panel's base
+     and the old 16px. */
+  font-size: 0.9375rem;
 }
 
-.clear {
+.input::placeholder {
+  color: var(--theme-text-muted);
+}
+
+.input:focus-visible {
+  outline: none;
+}
+
+.kbd {
+  min-width: 24px;
+  height: 24px;
+  box-sizing: border-box;
+  padding: 0 6px;
   display: flex;
   align-items: center;
-  background: transparent;
-  border: none;
-  color: var(--theme-text-muted);
-  cursor: pointer;
-  padding: 2px;
-}
-
-.clear:hover {
-  color: var(--theme-text-primary);
+  justify-content: center;
+  border: 1px solid var(--theme-text-muted);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: var(--font-xs);
 }
 
 .results {
-  margin-top: 4px;
-  background: var(--theme-secondary);
-  border-radius: var(--radius-sm);
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  padding: 6px;
+  border: var(--hairline);
+  border-radius: var(--radius-lg);
+  background: var(--theme-primary);
   box-shadow: var(--shadow-float);
-  overflow: hidden;
-  max-height: 240px;
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 320px;
   overflow-y: auto;
 }
 
-.status {
-  padding: 0.5em 0.7em;
-  color: var(--theme-text-muted);
-  font-size: var(--text-sm);
-}
-
-.resultItem {
-  display: block;
-  width: 100%;
-  text-align: left;
-  background: transparent;
-  border: none;
+.option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 40px;
+  padding: 0 10px;
+  border-radius: var(--radius-md);
   color: var(--theme-text-primary);
-  padding: 0.5em 0.7em;
+  font-size: var(--font-sm);
   cursor: pointer;
-  font-size: var(--text-sm);
-  border-bottom: 1px solid
-    color-mix(in srgb, var(--theme-text-primary) 8%, transparent);
 }
 
-.resultItem:last-child {
-  border-bottom: none;
+.option:hover,
+.option[aria-selected="true"] {
+  background: color-mix(in srgb, var(--theme-text-primary) 10%, transparent);
 }
 
-.resultItem:hover {
-  background: color-mix(in srgb, var(--theme-text-primary) 8%, transparent);
+.option[aria-selected="true"] {
+  outline: 2px solid var(--theme-text-primary);
+  outline-offset: -2px;
+}
+
+.optionGlyph {
+  flex: none;
+  color: var(--theme-text-muted);
+}
+
+.optionLabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.optionMeta {
+  font-size: var(--font-xs);
+  color: var(--theme-text-muted);
+}
+
+.status {
+  margin: 0;
+  padding: 8px 10px;
+  font-size: var(--font-sm);
+  color: var(--theme-text-muted);
 }

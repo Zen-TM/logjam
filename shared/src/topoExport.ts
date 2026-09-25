@@ -61,7 +61,7 @@ export const EXPORT_FORMAT_RULES: Record<ExportFormat, ExportFormatRule> = {
     allowComposite: true,
     allowPerLayer: true,
     label: "GeoTIFF",
-    description: "Raster layers only. Per-layer is a direct copy of the stored COG; composite is rendered.",
+    description: "Geo-referenced image format. Raster layers only.",
   },
   gpkg: {
     format: "gpkg",
@@ -70,7 +70,7 @@ export const EXPORT_FORMAT_RULES: Record<ExportFormat, ExportFormatRule> = {
     allowComposite: true,
     allowPerLayer: false,
     label: "GeoPackage",
-    description: "QGIS-native single-file package. Vectors as feature tables; rasters as a tile pyramid.",
+    description: "QGIS-native single-file format.",
   },
   geojson: {
     format: "geojson",
@@ -79,7 +79,7 @@ export const EXPORT_FORMAT_RULES: Record<ExportFormat, ExportFormatRule> = {
     allowComposite: false,
     allowPerLayer: true,
     label: "GeoJSON",
-    description: "Vector layers only. One file per layer (ZIP if multiple).",
+    description: "Geo-referenced JSON file. Vector layers only. One file per layer (ZIP if multiple).",
   },
   gpx: {
     format: "gpx",
@@ -89,7 +89,7 @@ export const EXPORT_FORMAT_RULES: Record<ExportFormat, ExportFormatRule> = {
     allowPerLayer: true,
     layerAllowlist: ["features"],
     label: "GPX",
-    description: "Features layer only (lines + points). For Garmin / Basecamp.",
+    description: "Garmin's geo-referenced XML format. Feature layer only.",
   },
 };
 

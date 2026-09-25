@@ -32,6 +32,15 @@ const baseSchema = z.object({
 
   CORS_ORIGIN: z.string().optional(),
 
+  // Forced-upgrade lever for the mobile app (GET /meta/min-mobile-version).
+  // Mobile builds below this semver show a blocking upgrade prompt. Default
+  // 0.0.0 = no build is ever blocked; bump only when a breaking API change
+  // strands stale clients.
+  MIN_MOBILE_VERSION: z
+    .string()
+    .regex(/^\d+\.\d+\.\d+$/, "must be a bare semver like 1.2.3")
+    .default("0.0.0"),
+
   // CloudFront origin-verify (WAF-bypass guard, SEC). CloudFront injects a
   // secret X-Origin-Verify header on every origin fetch; a request lacking the
   // matching value reached Elastic Beanstalk directly, bypassing the edge WAF.
@@ -58,6 +67,12 @@ const baseSchema = z.object({
   ECS_SUBNETS: z.string().optional(),
   ECS_SECURITY_GROUPS: z.string().optional(),
   TOPO_CDN_BASE_URL: z.string().url().optional(),
+
+  // Protomaps basemap archive the region-clip endpoint extracts from
+  // (stage 4a). s3:// URI in prod (go-pmtiles reads S3 natively under the
+  // task role); an https:// URL works for local dev (public CDN archive).
+  // Optional: the endpoint 503s when unset instead of crashing the API.
+  PROTOMAPS_ARCHIVE_URI: z.string().optional(),
 
   // Transactional email (Resend). Only the geoPdfWorker sends from the Node
   // side; the API server itself sends none. Both optional so a worker with no
@@ -108,6 +123,23 @@ const baseSchema = z.object({
   // any task ECS has not finished reaping. Raise this only alongside the AWS
   // quota; 0 disables the check.
   MAX_CONCURRENT_WORKER_VCPUS: z.coerce.number().int().nonnegative().default(24),
+  // Egress meter (lib/egressMeter.ts). The sweep rides the topo reaper's
+  // existing interval rather than owning a timer — it is incremental and does
+  // nothing when no new log objects have been delivered.
+  //
+  // Empty bucket name disables the sweep, which also means the monthly egress
+  // cap stops advancing and therefore stops biting. Local dev has no access
+  // logs and leaves it empty.
+  S3_BUCKET_ACCESS_LOGS: z.string().default(""),
+  // Substring identifying the API's own IAM principal in an access log's
+  // requester field. Only requests signed by the API are user downloads; the
+  // workers' same-region reads and CloudFront's basemap reads share the same
+  // buckets and must not be charged to anyone. An empty value matches nothing
+  // (fail closed — under-count rather than bill users for worker traffic).
+  EGRESS_API_REQUESTER_PATTERN: z.string().default("logjam-eb-role"),
+  // Ceiling on access-log objects consumed per sweep, so a backlog is worked
+  // through over several passes instead of one unbounded run.
+  EGRESS_MAX_LOG_OBJECTS_PER_SWEEP: z.coerce.number().int().positive().default(500),
   // TopoExportJob sweeps (ARCH-002): queued rows older than the QUEUED timeout
   // (task never placed/started) and running rows older than the RUNNING
   // timeout (worker SIGKILLed before its except path ran) are force-failed.
@@ -128,6 +160,38 @@ const baseSchema = z.object({
   // the periodic sweep. Must comfortably exceed UPLOAD_URL_TTL_SECONDS so an
   // in-flight upload+confirm is never raced. 0 disables the sweep.
   MEDIA_ORPHAN_TTL_MS: z.coerce.number().int().nonnegative().default(86_400_000), // 24 h
+  // Sync tombstones (Stage 8) older than this are swept by the reaper. A
+  // client whose delta cursor predates the horizon is told to full-resync
+  // (resetRequired), so the TTL bounds table growth, not correctness.
+  // 0 disables the sweep (rows kept forever).
+  SYNC_TOMBSTONE_TTL_MS: z.coerce.number().int().nonnegative().default(7_776_000_000), // 90 days
+  // Fleet-wide full-resync lever (stage8 §10.5): bump when server-side data
+  // changes shape without moving updatedAt (e.g. a migration rewriting rows).
+  // Clients whose cursor was minted under a different epoch get resetRequired.
+  // 2: the places rework renames every canyon row and empties the tombstone
+  // log, so no pre-rework cursor can be resumed (plan §4 step 14).
+  SYNC_EPOCH: z.coerce.number().int().positive().default(2),
+
+  // Read at module load by services/prisma.ts (not via getEnv(), which would
+  // run before boot.ts resolves DB credentials) — declared here so the values
+  // are still validated at boot and appear in the var list. DATABASE_SSL is an
+  // exact-string compare against "disable": before this entry, a well-meant
+  // `DATABASE_SSL=DISABLED`/`false` silently left verified TLS on and the local
+  // worker died with an opaque pg_hba error. Now it fails loud at boot.
+  DATABASE_SSL: z.enum(["disable"]).optional(),
+  DATABASE_SSL_CA: z.string().optional(),
+  // CI-only headroom for the global rate limiter (middleware/rateLimit.ts,
+  // which reads it from process.env at module load — declared here so it is
+  // still validated and appears in the var list). IGNORED when
+  // NODE_ENV=production, so it can never widen the production abuse cap. Set
+  // only by the api-integration job in .github/workflows/ci.yml; no dev value,
+  // so it is deliberately absent from the env.local Terraform template.
+  RATE_LIMIT_GLOBAL_MAX: z.coerce.number().int().positive().optional(),
+  // Same contract for the per-user write limiter (userPatchLimitMax).
+  RATE_LIMIT_USER_PATCH_MAX: z.coerce.number().int().positive().optional(),
+  // Job id for the one-shot GeoPDF worker container (worker/geoPdfWorker.ts
+  // CLI entrypoint); unset in the API process.
+  GEO_PDF_JOB_ID: z.string().optional(),
 });
 
 type Env = z.infer<typeof baseSchema> & {

@@ -18,8 +18,10 @@
 import { PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { s3 } from "../services/awsClients";
 import prisma from "../services/prisma";
+import { incrementStorageUsed } from "../lib/storageQuota";
 import { getEnv } from "../lib/env";
-import { logger } from "../lib/logger";
+import { logger, safeErrorForLog } from "../lib/logger";
+import { sendPushToUser } from "../services/push";
 import { generateGeoPdf } from "../services/generateGeoPdf";
 import { sendEmail } from "../services/email";
 import type { GeoPdfConfig, VectorStyleSettings } from "@logjam/shared";
@@ -122,7 +124,7 @@ export async function processGeoPdfJob(jobId: string): Promise<number> {
   } catch (err) {
     // Keep the raw exception (which may reference tile URLs / extents) out of
     // the user-facing/stored error message — log only the error class, never
-    // canyon coords/names (CLAUDE.md privacy rule).
+    // place coords/names (CLAUDE.md privacy rule).
     logger.error(
       { jobId, errClass: err instanceof Error ? err.constructor.name : typeof err },
       "geo_pdf_worker_render_failed",
@@ -158,10 +160,7 @@ export async function processGeoPdfJob(jobId: string): Promise<number> {
         },
       });
       if (result.count > 0) {
-        await tx.user.update({
-          where: { id: job.userId },
-          data: { storageUsedBytes: { increment: BigInt(resultBytes!) } },
-        });
+        await incrementStorageUsed(job.userId, BigInt(resultBytes!), tx);
       }
       return result.count;
     });
@@ -191,6 +190,17 @@ export async function processGeoPdfJob(jobId: string): Promise<number> {
     },
   });
 
+  // Best-effort push, mirroring email — generic title + opaque IDs only. A
+  // failed render pushes `geo_pdf_failed` ("GeoPDF failed"), not the cheerful
+  // complete title; the push carries no status field, so the type IS the title
+  // (APIC-002). The stored notification row above deliberately keeps the
+  // `geo_pdf_complete` type in both cases — mobile and web both switch on that
+  // type and branch on `payload.status` for the failure wording.
+  await sendPushToUser(job.userId, {
+    type: ok ? "geo_pdf_complete" : "geo_pdf_failed",
+    geoPdfJobId: jobId,
+  });
+
   // Best-effort completion email (Resend), mirroring the Python workers'
   // send_completion_email. Gated on the user's geoPdfEmail preference (default
   // true). The in-app notification above is the source of truth — a missing
@@ -204,9 +214,9 @@ export async function processGeoPdfJob(jobId: string): Promise<number> {
   if (recipient?.email && wantsEmail) {
     const base = (env.FRONTEND_URL ?? "").replace(/\/$/, "");
     const openUrl = base ? `${base}/?geoPdfJob=${jobId}` : "";
-    const openLink = openUrl ? `\n\nOpen Logjam: ${openUrl}` : "";
+    const openLink = openUrl ? `\n\nOpen Logjam Web: ${openUrl}` : "";
     const openLinkHtml = openUrl
-      ? `<p><a href="${openUrl}">Open Logjam</a></p>`
+      ? `<p><a href="${openUrl}">Open Logjam Web</a></p>`
       : "";
     // Logo header is served by the frontend SPA bucket, so it only resolves
     // when FRONTEND_URL is configured (unset in local dev).
@@ -247,7 +257,7 @@ if (require.main === module) {
       process.exit(code);
     })
     .catch(async (err) => {
-      logger.error({ err }, "geo_pdf_worker_unhandled_error");
+      logger.error({ err: safeErrorForLog(err) }, "geo_pdf_worker_unhandled_error");
       await prisma.$disconnect();
       process.exit(1);
     });

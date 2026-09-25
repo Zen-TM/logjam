@@ -1,0 +1,128 @@
+/* The hero is pinned; everything under it scrolls, like every other page. */
+.root {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gutter);
+  padding: 12px var(--gutter) var(--gutter);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* The type, as a fact in its own glyph and colour. */
+.identity {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--theme-text-primary);
+}
+
+.typeGlyph {
+  color: var(--tile-hue, var(--theme-accent));
+  flex-shrink: 0;
+}
+
+.meta {
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--theme-text-muted);
+}
+
+/* A list of FACTS: label left, answer right, a hairline between. Transparent
+   and flat on purpose — Logjam GPS's rule is that a recorded attribute is a
+   table row while a decision is a card, and giving these a surface made them
+   look pressable. */
+.table {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.tableRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 0;
+  border-bottom: var(--hairline);
+}
+
+.tableRow:last-child {
+  border-bottom: none;
+}
+
+.tableRow dt {
+  flex-shrink: 0;
+  font-size: var(--font-sm);
+  color: var(--theme-text-muted);
+}
+
+.tableRow dd {
+  margin: 0;
+  min-width: 0;
+  text-align: right;
+  font-size: var(--font-sm);
+  color: var(--theme-text-primary);
+  overflow-wrap: anywhere;
+}
+
+/* A measured number reads down the column when the digits line up. */
+.figure {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Inline "N more" inside the "Shared with" answer — opens the share dialog. */
+.sharedMoreLink {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--theme-accent);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.notes {
+  margin: 0;
+  font-size: var(--font-sm);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.list {
+  margin: 0;
+  padding-left: 1.2em;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--font-sm);
+}
+
+.muted {
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--theme-text-muted);
+}
+
+/* The parked value's dialog: the value, then its verbs as rows. */
+.foreignActions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}

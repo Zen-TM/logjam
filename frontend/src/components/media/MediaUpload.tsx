@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { Upload, Loader2 } from "lucide-react";
 import type { MediaItem, MediaLinkedType } from "@logjam/shared";
-import { uploadMedia } from "../../canyonUtils";
+import { uploadMedia } from "../../placeUtils";
 import { resolveMediaType, generateThumbnail } from "./mediaFiles";
 import { messageFromError } from "../../errors/messageFromError";
 import classes from "./MediaUpload.module.css";
@@ -42,11 +42,11 @@ export default function MediaUpload({
   // Constrain accepted files. Mismatched files are rejected client-side; the
   // server still validates authoritatively.
   category?: UploadCategory;
-  // Cap files per selection (e.g. 1 for a canyon's single track). When 1, the
+  // Cap files per selection (e.g. 1 for a place's single track). When 1, the
   // native picker is single-select.
   maxFiles?: number;
   // When set, the dropzone is locked and shows this text instead of the hint
-  // (e.g. "This canyon already has a track").
+  // (e.g. "This place already has a track").
   disabledReason?: string;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);

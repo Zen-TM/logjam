@@ -1,38 +1,24 @@
-import { useState } from "react";
-import { useIsMobile } from "../../useIsMobile";
-import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Button,
-  IconButton,
-  TextField,
-  Typography,
-  CircularProgress,
-} from "@mui/material";
-import CloseIcon from "@mui/icons-material/Close";
+import { useId, useState } from "react";
 import { updateUserAttribute, confirmUserAttribute } from "aws-amplify/auth";
 import { messageFromError } from "../../errors/messageFromError";
 import { ErrorBanner } from "../feedback/ErrorBanner";
-import { FieldError } from "../feedback/FieldError";
 import { isValidEmailFormat } from "../../emailValidation";
-
-const inputSx = {
-  "& .MuiInputBase-input": { color: "var(--theme-text-primary)" },
-  "& .MuiInputLabel-root": { color: "var(--theme-text-muted)" },
-  "& .MuiInputLabel-root.Mui-focused": { color: "var(--theme-accent)" },
-  "& .MuiOutlinedInput-notchedOutline": { borderColor: "rgba(255,255,255,0.3)" },
-  "& .MuiOutlinedInput-root:hover .MuiOutlinedInput-notchedOutline": {
-    borderColor: "rgba(255,255,255,0.5)",
-  },
-  "& .MuiOutlinedInput-root.Mui-focused .MuiOutlinedInput-notchedOutline": {
-    borderColor: "var(--theme-accent)",
-  },
-};
+import { Button, Dialog, TextField } from "../../ui";
+import classes from "./ChangeEmailDialog.module.css";
 
 type Stage = "input" | "verify" | "done";
 
+const TITLES: Record<Stage, string> = {
+  input: "Change email",
+  verify: "Verify new email",
+  done: "Email updated",
+};
+
+/**
+ * Two steps, because Cognito owns the email and verifies it: ask for the new
+ * address, then confirm with the code sent TO that address. The step is state,
+ * never a second dialog — the same shape Logjam GPS's email sheet has.
+ */
 function ChangeEmailDialog({
   open,
   onClose,
@@ -44,27 +30,33 @@ function ChangeEmailDialog({
   onSuccess: (newEmail: string) => void;
   currentEmail?: string;
 }) {
-  const isMobile = useIsMobile();
+  return open ? (
+    <ChangeEmailForm onClose={onClose} onSuccess={onSuccess} currentEmail={currentEmail} />
+  ) : null;
+}
+
+/** Mounted on open, so the stage and the typing start fresh each time. */
+function ChangeEmailForm({
+  onClose,
+  onSuccess,
+  currentEmail,
+}: {
+  onClose: () => void;
+  onSuccess: (newEmail: string) => void;
+  currentEmail: string;
+}) {
+  const formId = useId();
   const [stage, setStage] = useState<Stage>("input");
   const [newEmail, setNewEmail] = useState("");
   const [code, setCode] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Inline per-field validation for the email input (empty / bad format /
-  // same-as-current), shown under the field before we call Cognito.
+  // The address is this one field's problem, so it is reported under it
+  // (DESIGN.md §8) — before Cognito is called at all.
   const [emailError, setEmailError] = useState<string | null>(null);
-  // Captured at send-code time so the verify screen can display it
+  // Captured when the code is sent, so the verify step can name the address it
+  // went to even while the field is being retyped.
   const [pendingEmail, setPendingEmail] = useState("");
-
-  function handleClose() {
-    if (loading) return;
-    setStage("input");
-    setNewEmail("");
-    setCode("");
-    setError(null);
-    setEmailError(null);
-    onClose();
-  }
 
   async function handleSendCode() {
     const trimmed = newEmail.trim();
@@ -77,28 +69,26 @@ function ChangeEmailDialog({
       return;
     }
     if (currentEmail && trimmed.toLowerCase() === currentEmail.toLowerCase()) {
-      setEmailError("That's already your current email address.");
+      setEmailError("That's already your email address.");
       return;
     }
     setEmailError(null);
-    setLoading(true);
+    setBusy(true);
     setError(null);
     try {
-      await updateUserAttribute({
-        userAttribute: { attributeKey: "email", value: trimmed },
-      });
+      await updateUserAttribute({ userAttribute: { attributeKey: "email", value: trimmed } });
       setPendingEmail(trimmed);
       setStage("verify");
     } catch (err) {
       console.error(err);
-      setError(messageFromError(err, "Couldn't send verification code. Please try again."));
+      setError(messageFromError(err, "Couldn't send the verification code. Please try again."));
     } finally {
-      setLoading(false);
+      setBusy(false);
     }
   }
 
   async function handleResend() {
-    setLoading(true);
+    setBusy(true);
     setError(null);
     try {
       await updateUserAttribute({
@@ -106,167 +96,124 @@ function ChangeEmailDialog({
       });
     } catch (err) {
       console.error(err);
-      setError(messageFromError(err, "Couldn't resend verification code. Please try again."));
+      setError(messageFromError(err, "Couldn't resend the verification code. Please try again."));
     } finally {
-      setLoading(false);
+      setBusy(false);
     }
   }
 
   async function handleConfirm() {
     const trimmedCode = code.trim();
     if (!trimmedCode) return;
-    setLoading(true);
+    setBusy(true);
     setError(null);
     try {
-      await confirmUserAttribute({ userAttributeKey: "email", confirmationCode: trimmedCode });
+      await confirmUserAttribute({
+        userAttributeKey: "email",
+        confirmationCode: trimmedCode,
+      });
       setStage("done");
       onSuccess(pendingEmail);
     } catch (err) {
       console.error(err);
       setError(messageFromError(err, "Incorrect or expired code. Please try again."));
     } finally {
-      setLoading(false);
+      setBusy(false);
     }
   }
 
-  const titles: Record<Stage, string> = {
-    input: "Change email",
-    verify: "Verify new email",
-    done: "Email updated",
-  };
-
   return (
     <Dialog
-      fullScreen={isMobile}
-      open={open}
-      maxWidth="sm"
-      fullWidth
-      onClose={handleClose}
-      PaperProps={{
-        sx: { backgroundColor: "var(--theme-primary)", color: "var(--theme-text-primary)" },
-      }}
-    >
-      <DialogTitle
-        sx={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          pb: 1,
-        }}
-      >
-        {titles[stage]}
-        <IconButton
-          aria-label="Close dialog"
-          size="small"
-          onClick={handleClose}
-          disabled={loading}
-          sx={{ color: "var(--theme-text-primary)" }}
-        >
-          <CloseIcon fontSize="small" />
-        </IconButton>
-      </DialogTitle>
-      <DialogContent
-        dividers
-        sx={{ borderColor: "rgba(255,255,255,0.1)", display: "flex", flexDirection: "column", gap: 2 }}
-      >
-        {stage === "input" && (
-          <>
-            <Typography sx={{ color: "var(--theme-text-muted)", fontSize: "var(--text-sm)" }}>
-              Enter your new email address. A verification code will be sent to it.
-            </Typography>
-            <TextField
-              label="New email"
-              type="email"
-              size="small"
-              fullWidth
-              value={newEmail}
-              onChange={(e) => { setNewEmail(e.target.value); if (emailError) setEmailError(null); }}
-              onKeyDown={(e) => { if (e.key === "Enter") handleSendCode(); }}
-              disabled={loading}
-              autoFocus
-              error={emailError != null}
-              sx={inputSx}
-            />
-            <FieldError message={emailError} />
-          </>
-        )}
-        {stage === "verify" && (
-          <>
-            <Typography sx={{ color: "var(--theme-text-muted)", fontSize: "var(--text-sm)" }}>
-              A verification code was sent to{" "}
-              <strong style={{ color: "var(--theme-text-primary)" }}>{pendingEmail}</strong> (check spam).
-              Enter it below.
-            </Typography>
-            <TextField
-              label="Verification code"
-              size="small"
-              fullWidth
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") handleConfirm(); }}
-              disabled={loading}
-              autoFocus
-              inputProps={{ maxLength: 10 }}
-              sx={inputSx}
-            />
-          </>
-        )}
-        {stage === "done" && (
-          <Typography sx={{ color: "var(--theme-text-primary)", fontSize: "var(--text-sm)" }}>
-            Your email has been updated to{" "}
-            <strong>{pendingEmail}</strong>. Use it to sign in next time.
-          </Typography>
-        )}
-        {error && <ErrorBanner message={error} />}
-      </DialogContent>
-      <DialogActions>
-        {stage === "done" ? (
-          <Button onClick={handleClose} sx={{ color: "var(--theme-text-primary)" }}>
+      open
+      title={TITLES[stage]}
+      onClose={onClose}
+      dismissible={!busy}
+      footer={
+        stage === "done" ? (
+          <Button variant="filled" onClick={onClose}>
             Close
           </Button>
         ) : (
           <>
-            <Button
-              onClick={handleClose}
-              disabled={loading}
-              sx={{ color: "var(--theme-text-primary)" }}
-            >
+            <Button onClick={onClose} disabled={busy}>
               Cancel
             </Button>
-            {stage === "input" && (
-              <Button
-                variant="contained"
-                color="secondary"
-                disabled={!newEmail.trim() || loading}
-                onClick={handleSendCode}
-                startIcon={loading ? <CircularProgress size={14} color="inherit" /> : undefined}
-              >
-                {loading ? "Sending…" : "Send code"}
+            {stage === "verify" && (
+              <Button onClick={handleResend} disabled={busy}>
+                Resend code
               </Button>
             )}
-            {stage === "verify" && (
-              <>
-                <Button
-                  onClick={handleResend}
-                  disabled={loading}
-                  sx={{ color: "var(--theme-text-muted)" }}
-                >
-                  Resend code
-                </Button>
-                <Button
-                  variant="contained"
-                  color="secondary"
-                  disabled={!code.trim() || loading}
-                  onClick={handleConfirm}
-                  startIcon={loading ? <CircularProgress size={14} color="inherit" /> : undefined}
-                >
-                  {loading ? "Confirming…" : "Confirm"}
-                </Button>
-              </>
-            )}
+            <Button
+              type="submit"
+              form={formId}
+              variant="filled"
+              busy={busy}
+              disabled={stage === "input" ? !newEmail.trim() : !code.trim()}
+            >
+              {stage === "input" ? "Send code" : "Confirm"}
+            </Button>
+          </>
+        )
+      }
+    >
+      <form
+        id={formId}
+        className={classes.form}
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (stage === "input") handleSendCode();
+          else if (stage === "verify") handleConfirm();
+        }}
+      >
+        {stage === "input" && (
+          <>
+            <p className={classes.note}>
+              We send a code to the new address to check it reaches you. You sign in with it
+              from then on.
+            </p>
+            <TextField
+              label="New email"
+              type="email"
+              value={newEmail}
+              onChange={(event) => {
+                setNewEmail(event.target.value);
+                if (emailError) setEmailError(null);
+              }}
+              error={emailError}
+              disabled={busy}
+              data-autofocus
+            />
           </>
         )}
-      </DialogActions>
+
+        {stage === "verify" && (
+          <>
+            <p className={classes.note}>
+              A code went to <b className={classes.address}>{pendingEmail}</b>. Check the spam
+              folder if it hasn't arrived.
+            </p>
+            <TextField
+              label="Verification code"
+              value={code}
+              onChange={(event) => setCode(event.target.value)}
+              maxLength={10}
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              disabled={busy}
+              data-autofocus
+            />
+          </>
+        )}
+
+        {stage === "done" && (
+          <p className={classes.note}>
+            Your email is now <b className={classes.address}>{pendingEmail}</b>. Sign in with it
+            next time.
+          </p>
+        )}
+
+        {error && <ErrorBanner message={error} />}
+      </form>
     </Dialog>
   );
 }

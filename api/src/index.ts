@@ -16,31 +16,42 @@ import helmet from "helmet";
 import pinoHttp from "pino-http";
 import { randomUUID, timingSafeEqual } from "crypto";
 import { getEnv } from "./lib/env";
-import { logger } from "./lib/logger";
+import { logger, safeErrorForLog, serializeRequestForLog } from "./lib/logger";
 import prisma from "./services/prisma";
 import { AppError, errorHandler } from "./middleware/errorHandler";
 import { globalLimiter } from "./middleware/rateLimit";
 import { startTopoJobReaper } from "./lib/topoJobReaper";
 import usersRouter from "./routes/users";
-import canyonsRouter from "./routes/canyons";
+import placesRouter from "./routes/places";
+import placeTypesRouter from "./routes/placeTypes";
 import tripLogsRouter from "./routes/tripLogs";
 import tripLogsGlobalRouter from "./routes/tripLogsGlobal";
 import tripLogsBulkRouter from "./routes/tripLogsBulk";
-import canyonsBulkRouter from "./routes/canyonsBulk";
+import placesBulkRouter from "./routes/placesBulk";
+import foreignFieldsRouter from "./routes/foreignFields";
 import sharingRouter from "./routes/sharing";
+import sharesRouter from "./routes/shares";
+import bulkShareRouter from "./routes/bulkShare";
+import fileSendsRouter from "./routes/fileSends";
 import friendsRouter from "./routes/friends";
 import notificationsRouter from "./routes/notifications";
 import ropewikiRouter from "./routes/ropewiki";
 import topoJobsRouter from "./routes/topoJobs";
 import mediaRouter from "./routes/media";
 import topoExportsRouter from "./routes/topoExports";
+import computeEstimateRouter from "./routes/computeEstimate";
 import geoPdfTemplatesRouter from "./routes/geoPdfTemplates";
 import topoTemplatesRouter from "./routes/topoTemplates";
 import vectorStyleRouter from "./routes/vectorStyle";
 import geoPdfRouter from "./routes/geoPdf";
-import analyticsRouter from "./routes/analytics";
 import customFieldsRouter from "./routes/customFields";
 import importsRouter from "./routes/imports";
+import metaRouter from "./routes/meta";
+import devicesRouter from "./routes/devices";
+import basemapRouter from "./routes/basemap";
+import routesRouter from "./routes/routes";
+import elevationRouter from "./routes/elevation";
+import syncRouter from "./routes/sync";
 
 const env = getEnv();
 
@@ -71,12 +82,8 @@ app.use(
       return "info";
     },
     serializers: {
-      req: (req) => ({
-        id: req.id,
-        method: req.method,
-        url: req.url,
-        // Deliberately omit body — payloads may contain canyon names/coords.
-      }),
+      // Path-only URL + no body: see serializeRequestForLog in lib/logger.
+      req: serializeRequestForLog,
     },
   }),
 );
@@ -90,7 +97,7 @@ app.use(
       return callback(null, false);
     },
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Fake-Auth", "X-Request-Id"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Fake-Sub", "X-Request-Id"],
     exposedHeaders: ["X-Request-Id", "X-Total-Count"],
     credentials: true,
   }),
@@ -140,7 +147,7 @@ app.get("/ready", async (_req, res) => {
     ]);
     res.json({ status: "ready" });
   } catch (err) {
-    logger.warn({ err }, "ready_check_failed");
+    logger.warn({ err: safeErrorForLog(err) }, "ready_check_failed");
     res.status(503).json({ status: "db_unavailable" });
   }
 });
@@ -184,26 +191,43 @@ if (env.ORIGIN_VERIFY_SECRET) {
 // IP otherwise. Per-route stricter limiters layered inside individual routers.
 app.use(globalLimiter);
 
+app.use("/meta", metaRouter);
 app.use("/users", usersRouter);
-app.use("/canyons", canyonsRouter);
-app.use("/canyons/:canyonId/trips", tripLogsRouter);
+app.use("/place-types", placeTypesRouter);
+app.use("/places", placesRouter);
+app.use("/places/:placeId/trips", tripLogsRouter);
 app.use("/trips/bulk", tripLogsBulkRouter);
-app.use("/canyons/bulk", canyonsBulkRouter);
+app.use("/places/bulk", placesBulkRouter);
 app.use("/imports", importsRouter);
 app.use("/trips", tripLogsGlobalRouter);
-app.use("/canyons", sharingRouter);
+app.use("/places", sharingRouter);
+// Mounted on /places too: the actions are per PLACE, and keeping them under
+// the place's own path is what makes "owner only, 404 otherwise" the same
+// answer the rest of that path gives.
+app.use("/places", foreignFieldsRouter);
+app.use("/shares", sharesRouter);
+// Its own path, NOT /shares/bulk: it also ends a bulk action made entirely of
+// file copies, which grant no Share row at all, and mounting it under the
+// direct-share router would say otherwise.
+app.use("/bulk-share", bulkShareRouter);
+app.use("/file-sends", fileSendsRouter);
 app.use("/friends", friendsRouter);
 app.use("/notifications", notificationsRouter);
+app.use("/devices", devicesRouter);
+app.use("/basemap", basemapRouter);
 app.use("/ropewiki", ropewikiRouter);
 app.use("/topo-jobs", topoJobsRouter);
 app.use("/media", mediaRouter);
 app.use("/topo-exports", topoExportsRouter);
+app.use("/compute-estimate", computeEstimateRouter);
 app.use("/geo-pdf-templates", geoPdfTemplatesRouter);
 app.use("/topo-templates", topoTemplatesRouter);
 app.use("/vector-style", vectorStyleRouter);
 app.use("/geo-pdf", geoPdfRouter);
-app.use("/analytics", analyticsRouter);
 app.use("/custom-fields", customFieldsRouter);
+app.use("/routes", routesRouter);
+app.use("/elevation", elevationRouter);
+app.use("/sync", syncRouter);
 
 app.use(errorHandler);
 
@@ -231,13 +255,13 @@ function shutdown(signal: string) {
   force.unref();
 
   server.close(async (err) => {
-    if (err) logger.error({ err }, "server_close_error");
+    if (err) logger.error({ err: safeErrorForLog(err) }, "server_close_error");
     try {
       await prisma.$disconnect();
       logger.info("shutdown_complete");
       process.exit(0);
     } catch (disconnectErr) {
-      logger.error({ err: disconnectErr }, "prisma_disconnect_error");
+      logger.error({ err: safeErrorForLog(disconnectErr) }, "prisma_disconnect_error");
       process.exit(1);
     }
   });
@@ -247,11 +271,11 @@ process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT", () => shutdown("SIGINT"));
 
 process.on("unhandledRejection", (reason) => {
-  logger.error({ err: reason }, "unhandled_rejection");
+  logger.error({ err: safeErrorForLog(reason) }, "unhandled_rejection");
 });
 
 process.on("uncaughtException", (err) => {
-  logger.fatal({ err }, "uncaught_exception");
+  logger.fatal({ err: safeErrorForLog(err) }, "uncaught_exception");
   shutdown("uncaughtException");
 });
 

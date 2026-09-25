@@ -1,0 +1,64 @@
+.toggle {
+  position: relative;
+  flex: none;
+  width: var(--switch-width);
+  height: 22px;
+  padding: 0;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--theme-text-muted);
+  background: transparent;
+  cursor: pointer;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-pill);
+  background: var(--theme-text-muted);
+  transition: left var(--transition-fast);
+}
+
+.toggle[aria-checked="true"] {
+  background: var(--theme-accent);
+  border-color: var(--theme-accent);
+}
+
+.toggle[aria-checked="true"] .thumb {
+  left: 17px;
+  background: var(--ink);
+}
+
+.toggle:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.title {
+  font-size: var(--font-sm);
+  color: var(--theme-text-primary);
+}
+
+.description {
+  font-size: var(--font-xs);
+  color: var(--theme-text-muted);
+  /* A description may hold an unbroken token (an OSM query) wider than the row. */
+  overflow-wrap: anywhere;
+}

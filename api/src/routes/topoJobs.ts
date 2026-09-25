@@ -22,16 +22,82 @@ import {
 import { getEnv } from "../lib/env";
 import { getParam } from "../lib/getParam";
 import { launchFargateTask } from "../lib/ecsRunTask";
-import { assertCanSubmit } from "../lib/tileQuota";
+import { assertHasCredits } from "../lib/computeCredits";
+import { estimateTopoSeconds } from "../lib/runtimeEstimates";
+import { assertGlobalCapacity } from "../lib/fargateCapacity";
 import { assertHasStorageQuota, decrementStorageUsed } from "../lib/storageQuota";
 import { deleteS3Prefix } from "../lib/s3Cleanup";
 import { logger } from "../lib/logger";
 import { resolveUser as getUser } from "../lib/resolveUser";
+import {
+  deleteSharesFor,
+  directlySharedIds,
+  getJobRole,
+  requireShareAccess,
+  requireShareOwner,
+} from "../lib/shareAccess";
 
 const router = Router();
 
 const env = getEnv();
 const TOPO_BUCKET = env.S3_BUCKET_TOPO ?? "";
+/** A job's user-facing label. Same ceiling place names use. */
+export const TOPO_JOB_NAME_MAX_LENGTH = 200;
+
+// ── One job view, three surfaces ──────────────────────────────────────────
+//
+// GET /topo-jobs, GET /topo-jobs/:id and (for the role stamp)
+// /completed-overlays all answer the same two questions about a TopoJob row:
+// which columns a client is allowed to see, and what a NON-owner is allowed to
+// see of them. Answering them three times is how they drifted — the detail
+// endpoint used to stamp no syncRole at all, so a client polling a shared job
+// could not tell from that response that it was read-only.
+//
+// Two rules, declared once:
+//   - userId NEVER leaves this file. A recipient has no business learning the
+//     owner's internal id; the derived syncRole is the whole answer they need.
+//   - s3OutputKeys is owner-only. It names raw bucket keys, and a key can name
+//     a place (root privacy rule) — so it is stripped for a recipient even on
+//     the detail endpoint that owners use to poll for outputs.
+//
+// A new column reaches clients by being added to TOPO_JOB_SELECT, which forces
+// the same decision for every surface at once.
+
+export const TOPO_JOB_SELECT = {
+  id: true,
+  userId: true, // consumed by serializeTopoJobFor; never emitted
+  status: true,
+  name: true,
+  footprint: true,
+  tileCount: true,
+  estimatedSeconds: true,
+  layerOptions: true,
+  errorMessage: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
+
+/** syncRole mirrors the waypoint/route delta convention: a 'shared' row is
+ *  read-only on the client. */
+function syncRoleFor(row: { userId: string }, callerId: string) {
+  return row.userId === callerId ? ("owner" as const) : ("shared" as const);
+}
+
+/** The client-facing view of a job row, for owner and recipient alike. Pass a
+ *  row selected with TOPO_JOB_SELECT; `s3OutputKeys` is included only when the
+ *  caller selected it AND owns the row. */
+export function serializeTopoJobFor<T extends { userId: string; s3OutputKeys?: unknown }>(
+  row: T,
+  callerId: string,
+) {
+  const { userId, s3OutputKeys, ...rest } = row;
+  const isOwner = userId === callerId;
+  return {
+    ...rest,
+    ...(isOwner && s3OutputKeys !== undefined ? { s3OutputKeys } : {}),
+    syncRole: syncRoleFor(row, callerId),
+  };
+}
 
 // Input-ZIP size caps (zip-bomb / disk-DoS guard for the Fargate worker).
 // A legitimate ELVIS export is bounded by the monthly tile quota (default 40
@@ -47,60 +113,6 @@ const ECS_TASK_DEFINITION = env.ECS_TOPO_TASK_DEF;
 // disables the launch and leaves the job pending.
 const ECS_SUBNETS = env.ECS_SUBNETS_LIST;
 
-/**
- * Adaptive processing-time estimate (seconds) for a job of `inputTileCount`
- * ELVIS tiles. Fits a per-input-tile rate from recent completed jobs' real
- * runtimes (TopoJob.pipeline_metrics / startedAt→updatedAt), falling back to a
- * configurable cold-start default below TOPO_ESTIMATE_MIN_SAMPLES so the
- * estimate self-corrects as the pipeline's performance changes.
- *
- * Privacy: reads only aggregate timing + tile counts across jobs — never canyon
- * names, coordinates, or footprints.
- */
-async function computeEstimatedSeconds(
-  inputTileCount: number | null,
-): Promise<number | null> {
-  if (!inputTileCount) return null;
-  const recent = await prisma.topoJob.findMany({
-    where: {
-      status: "complete",
-      outputTileCount: { not: null },
-      tileCount: { not: null },
-    },
-    orderBy: { createdAt: "desc" },
-    take: 20,
-    select: {
-      tileCount: true,
-      outputTileCount: true,
-      pipelineMetrics: true,
-      startedAt: true,
-      updatedAt: true,
-    },
-  });
-  const actuals: JobActual[] = [];
-  for (const job of recent) {
-    if (!job.tileCount) continue;
-    const metrics = job.pipelineMetrics as { wallSeconds?: number } | null;
-    const wallSeconds =
-      typeof metrics?.wallSeconds === "number"
-        ? metrics.wallSeconds
-        : job.startedAt
-          ? (job.updatedAt.getTime() - job.startedAt.getTime()) / 1000
-          : null;
-    if (wallSeconds && wallSeconds > 0) {
-      actuals.push({
-        inputTileCount: job.tileCount,
-        outputTileCount: job.outputTileCount ?? undefined,
-        wallSeconds,
-      });
-    }
-  }
-  return estimateRuntimeSeconds(actuals, inputTileCount, {
-    defaultSecondsPerInputTile: env.TOPO_ESTIMATE_DEFAULT_SECONDS_PER_TILE,
-    minSamples: env.TOPO_ESTIMATE_MIN_SAMPLES,
-  });
-}
-
 // POST /topo-jobs — create job + return presigned S3 upload URL
 router.post(
   "/",
@@ -109,7 +121,24 @@ router.post(
     const user = await getUser(req.user!.sub);
     const { tileCount, jobName, settings, autoExport } = req.body;
 
-    await assertCanSubmit(user, tileCount);
+    // Same class as APIR-010, on a route no finding named: a non-string
+    // jobName reached Prisma and came back as a raw 500. The name is a user
+    // label, so cap it alongside the type check rather than storing whatever
+    // fits in the body budget.
+    if (jobName !== undefined && jobName !== null) {
+      if (typeof jobName !== "string")
+        throw new AppError(400, "jobName must be a string");
+      if (jobName.length > TOPO_JOB_NAME_MAX_LENGTH)
+        throw new AppError(
+          400,
+          `jobName must be at most ${TOPO_JOB_NAME_MAX_LENGTH} characters`,
+        );
+    }
+
+    // Advisory pre-check so an over-allowance user is told before uploading a
+    // multi-GB ZIP rather than after. The authoritative, serialised check runs
+    // in /start against the server-verified tile count.
+    await assertHasCredits(user, "topo", await estimateTopoSeconds(tileCount ?? null));
     await assertHasStorageQuota(user.id);
 
     // Optional raster template settings. Worker falls back to its built-in
@@ -140,7 +169,7 @@ router.post(
     // independently. Falls back to defaults if the column is null.
     const vectorStyleSnapshot = (user.vectorStyle as object | null) ?? VECTOR_STYLE_DEFAULTS;
 
-    const estimatedSeconds = await computeEstimatedSeconds(tileCount ?? null);
+    const estimatedSeconds = await estimateTopoSeconds(tileCount ?? null);
 
     const job = await prisma.topoJob.create({
       data: {
@@ -185,7 +214,11 @@ router.post(
 
     const job = await prisma.topoJob.findUnique({ where: { id: jobId } });
     if (!job) throw new AppError(404, "Job not found");
-    if (job.userId !== user.id) throw new AppError(403, "Access denied");
+    requireShareOwner(
+      await getJobRole(user.id, "topoJob", job),
+      "topoJob",
+      "Only the owner can delete this job",
+    );
     if (job.status !== "uploading") throw new AppError(400, "Job is not awaiting upload");
 
     // Verify the S3 object was actually uploaded
@@ -248,10 +281,18 @@ router.post(
     // DB transactions); the earlier checks above remain advisory pre-checks.
     // Adaptive estimate from server-verified tile count. Computed before the
     // transaction — it's a DB read, kept out of the FOR UPDATE critical section.
-    const verifiedEstimate = await computeEstimatedSeconds(verifiedTileCount);
+    const verifiedEstimate = await estimateTopoSeconds(verifiedTileCount);
+
+    // Account-wide capacity, checked BEFORE the status flip: refusing after the
+    // row goes `pending` would leave a job nobody launches, waiting 15 minutes
+    // for the reaper to fail it. Deliberately not serialised — it is a coarse
+    // ceiling with headroom under the AWS quota, so a rare concurrent overshoot
+    // of one task is harmless.
+    await assertGlobalCapacity("topo");
+
     await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT id FROM users WHERE id = ${user.id} FOR UPDATE`;
-      await assertCanSubmit(user, verifiedTileCount, tx);
+      await assertHasCredits(user, "topo", verifiedEstimate, tx);
       await assertHasStorageQuota(user.id, 0n, tx);
       const flipped = await tx.topoJob.updateMany({
         // Status guard doubles as a double-/start race close: a concurrent
@@ -291,7 +332,7 @@ router.post(
         });
       } catch (launchErr) {
         // Do not leak the raw AWS error to the client or the job row; log the
-        // reason server-side (no canyon coords/names involved here).
+        // reason server-side (no place coords/names involved here).
         logger.error(
           { jobId, reason: String(launchErr) },
           "topo_runtask_failed",
@@ -314,23 +355,18 @@ router.get(
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await getUser(req.user!.sub);
+    // Own jobs, plus jobs shared directly with me (read-only there).
     const jobs = await prisma.topoJob.findMany({
-      where: { userId: user.id },
-      orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        status: true,
-        name: true,
-        footprint: true,
-        tileCount: true,
-        estimatedSeconds: true,
-        layerOptions: true,
-        errorMessage: true,
-        createdAt: true,
-        updatedAt: true,
+      where: {
+        OR: [
+          { userId: user.id },
+          { id: { in: await directlySharedIds(user.id, "topoJob") } },
+        ],
       },
+      orderBy: { createdAt: "desc" },
+      select: TOPO_JOB_SELECT,
     });
-    res.json(jobs);
+    res.json(jobs.map((job) => serializeTopoJobFor(job, user.id)));
   },
 );
 
@@ -345,10 +381,17 @@ router.get(
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await getUser(req.user!.sub);
     const jobs = await prisma.topoJob.findMany({
-      where: { userId: user.id, status: "complete" },
+      where: {
+        status: "complete",
+        OR: [
+          { userId: user.id },
+          { id: { in: await directlySharedIds(user.id, "topoJob") } },
+        ],
+      },
       orderBy: { createdAt: "desc" },
       select: {
         id: true,
+        userId: true,
         name: true,
         footprint: true,
         createdAt: true,
@@ -394,6 +437,11 @@ router.get(
           createdAt: j.createdAt,
           footprint: j.footprint,
           layers,
+          // Same rule as the job view above — the role is the whole answer,
+          // and the owner's internal id is never emitted. This payload is a
+          // derived overlay shape rather than a job row, so it stamps the role
+          // directly instead of going through serializeTopoJobFor.
+          syncRole: syncRoleFor(j, user.id),
         };
       }),
     );
@@ -410,24 +458,13 @@ router.get(
     const user = await getUser(req.user!.sub);
     const job = await prisma.topoJob.findUnique({
       where: { id: getParam(req.params.id) },
-      select: {
-        id: true,
-        userId: true, // needed for ownership check below
-        status: true,
-        name: true,
-        footprint: true,
-        tileCount: true,
-        estimatedSeconds: true,
-        layerOptions: true,
-        errorMessage: true,
-        createdAt: true,
-        updatedAt: true,
-        s3OutputKeys: true,
-      },
+      select: { ...TOPO_JOB_SELECT, s3OutputKeys: true },
     });
     if (!job) throw new AppError(404, "Job not found");
-    if (job.userId !== user.id) throw new AppError(403, "Access denied");
-    res.json(job);
+    // Was a 403, which confirmed the id existed to anyone who guessed it.
+    // shareAccess gives a stranger the same 404 a missing id gets.
+    requireShareAccess(await getJobRole(user.id, "topoJob", job), "topoJob");
+    res.json(serializeTopoJobFor(job, user.id));
   },
 );
 
@@ -446,7 +483,11 @@ router.delete(
     const jobId = getParam(req.params.id);
     const job = await prisma.topoJob.findUnique({ where: { id: jobId } });
     if (!job) throw new AppError(404, "Job not found");
-    if (job.userId !== user.id) throw new AppError(403, "Access denied");
+    requireShareOwner(
+      await getJobRole(user.id, "topoJob", job),
+      "topoJob",
+      "Only the owner can delete this job",
+    );
 
     // A running export is actively reading this job's COGs from
     // outputs/{jobId}/ — refuse until it finishes (no FK on sourceJobIds, so
@@ -520,6 +561,12 @@ router.delete(
           errorMessage: "A source topo job was deleted before the export started.",
         },
       });
+      // Share.entityId is polymorphic, so Postgres cannot cascade: without
+      // this the rows outlive the job and keep it in a recipient's list.
+      // No tombstone — topo jobs are not delta-synced; the recipient's next
+      // GET /topo-jobs simply stops returning it and the client reconciles
+      // its downloaded overlay from that.
+      await deleteSharesFor(tx, "topoJob", [jobId]);
       await tx.topoJob.delete({ where: { id: jobId } });
       await decrementStorageUsed(job.userId, fresh.outputBytes ?? 0n, tx);
     });

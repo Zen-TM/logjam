@@ -2,17 +2,27 @@
 // generating client-side thumbnails (canvas resize for images, captured poster
 // frame for videos). Tracks have no thumbnail.
 
-import { mediaCategory, type MediaCategory } from "@logjam/shared";
+import {
+  MEDIA_EXTENSION_BY_MIME,
+  TRACK_MIME_TYPES,
+  mediaCategory,
+  type MediaCategory,
+} from "@logjam/shared";
 
 const THUMBNAIL_MAX_PX = 400;
 const THUMBNAIL_QUALITY = 0.7;
 
-// Browsers report unreliable MIME types for GPX/KML (often "" or
+// Browsers report unreliable MIME types for GPX/KML/GeoJSON (often "" or
 // application/octet-stream), so tracks are resolved by extension.
-const TRACK_MIME_BY_EXTENSION: Record<string, string> = {
-  gpx: "application/gpx+xml",
-  kml: "application/vnd.google-earth.kml+xml",
-};
+//
+// INVERTED from the shared table rather than restated: two lists that must
+// agree are one declaration (root CLAUDE.md). Hand-keeping this one already
+// cost a disagreement — `application/geo+json` joined TRACK_MIME_TYPES when
+// standalone imports became media, and this copy kept rejecting the .geojson
+// the API had started accepting.
+const TRACK_MIME_BY_EXTENSION: Record<string, string> = Object.fromEntries(
+  TRACK_MIME_TYPES.map((mime) => [MEDIA_EXTENSION_BY_MIME[mime], mime]),
+);
 
 export function resolveMediaType(
   file: File,

@@ -1,7 +1,7 @@
 import type { PaperSize, Orientation, CoordMode } from "./geoPdfExtent.js";
 import { TOPO_LAYERS } from "./topoSettings.js";
 
-export interface CanyonMarker {
+export interface PlaceMarker {
   lat: number;
   lon: number;
   name: string;
@@ -23,7 +23,7 @@ export interface GeoPdfConfig {
     scaleBar: boolean;
     gridLines?: CoordMode;
   };
-  canyonMarkers?: CanyonMarker[];
+  placeMarkers?: PlaceMarker[];
 }
 
 // ── Allowlists ────────────────────────────────────────────────────────────────
@@ -118,11 +118,11 @@ function validateGeoPdfConfigCore(
     }
   }
 
-  if (config.canyonMarkers !== undefined) {
-    if (!Array.isArray(config.canyonMarkers)) {
-      return "Invalid canyonMarkers: must be an array";
+  if (config.placeMarkers !== undefined) {
+    if (!Array.isArray(config.placeMarkers)) {
+      return "Invalid placeMarkers: must be an array";
     }
-    for (const m of config.canyonMarkers) {
+    for (const m of config.placeMarkers) {
       if (
         !m ||
         typeof m.lat !== "number" ||
@@ -130,7 +130,7 @@ function validateGeoPdfConfigCore(
         typeof m.name !== "string" ||
         (m.color !== "owned" && m.color !== "shared")
       ) {
-        return "Invalid canyon marker entry";
+        return "Invalid place marker entry";
       }
     }
   }
@@ -176,4 +176,13 @@ export interface GeoPdfJobView {
   completedAt: string | null;
   downloadUrl: string | null; // presigned, set only when status=completed
   downloadExpiresAt: string | null;
+  // Whether this row belongs to the caller or reached them through a direct
+  // share. Same convention as the topo-job and waypoint/route delta rows: a
+  // 'shared' job is READ-ONLY, and the clients use this to withhold Share and
+  // Delete rather than rendering buttons the API answers with 403.
+  //
+  // The owner's user id is deliberately NOT exposed — the role is the whole
+  // answer, and a recipient has no business learning who owns a job from a
+  // list row.
+  syncRole: "owner" | "shared";
 }

@@ -1,0 +1,164 @@
+.chip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: var(--control-md);
+  padding: 0 10px;
+  border-radius: var(--radius-pill);
+  border: var(--hairline);
+  background: var(--theme-secondary);
+  color: var(--theme-text-primary);
+  font: inherit;
+  font-size: var(--font-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color var(--transition-fast);
+}
+
+.chip:hover:not(:disabled) {
+  border-color: var(--chip-hue, var(--theme-accent));
+}
+
+.glyph {
+  flex: none;
+  color: var(--chip-hue, var(--theme-accent));
+}
+
+.count {
+  min-width: 20px;
+  height: 18px;
+  padding: 0 5px;
+  box-sizing: border-box;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--theme-text-primary) 12%, transparent);
+  font-size: var(--font-xs);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.active {
+  background: var(--chip-hue, var(--theme-accent));
+  border-color: var(--chip-hue, var(--theme-accent));
+  color: var(--ink);
+}
+
+.active .glyph {
+  color: var(--ink);
+}
+
+.active .count {
+  background: color-mix(in srgb, var(--ink) 14%, transparent);
+}
+
+.chip:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.dashed {
+  background: transparent;
+  border-style: dashed;
+  border-color: var(--theme-text-muted);
+  color: var(--theme-text-muted);
+}
+
+.dashed .glyph {
+  color: var(--theme-text-muted);
+}
+
+/* ── Picker ────────────────────────────────────────────────────────────── */
+
+.picker {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* A field's label, not a section title: sentence case, like TextField's. */
+.pickerLabel {
+  font-size: var(--font-sm);
+  color: var(--theme-text-muted);
+}
+
+.pickerChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pickerInput {
+  width: 140px;
+  min-height: var(--control-md);
+  box-sizing: border-box;
+  padding: 0 12px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--theme-accent);
+  background: var(--surface-field);
+  color: var(--theme-text-primary);
+  font: inherit;
+  font-size: var(--font-sm);
+}
+
+.pickerInput:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1px var(--theme-accent);
+}
+
+.pickerHint {
+  margin: 0;
+  font-size: var(--font-xs);
+  color: var(--theme-text-muted);
+}
+
+/* ── Rail ──────────────────────────────────────────────────────────────── */
+
+.rail {
+  --fade: 48px;
+  position: relative;
+  min-width: 0;
+}
+
+.scroller {
+  --fade-start-size: 0px;
+  --fade-end-size: 0px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  /* Room for the focus ring, which the scroll container would otherwise clip;
+     the negative margin keeps the chips on the panel's text edge. */
+  padding: 4px;
+  margin: -4px;
+  /* The browser's focus scrolling stops this far from each edge — clear of the
+     fade (WCAG 2.4.11). */
+  scroll-padding-inline: var(--fade);
+  mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    black var(--fade-start-size),
+    black calc(100% - var(--fade-end-size)),
+    transparent 100%
+  );
+}
+
+.scroller::-webkit-scrollbar {
+  display: none;
+}
+
+.rail[data-fade-start="true"] .scroller {
+  --fade-start-size: var(--fade);
+}
+
+.rail[data-fade-end="true"] .scroller {
+  --fade-end-size: var(--fade);
+}
+
+.group {
+  display: flex;
+  gap: 8px;
+}

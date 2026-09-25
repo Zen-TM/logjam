@@ -1,0 +1,80 @@
+.hero {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  /* ONE height on every page and every view of a page, so swapping Logs | Stats
+     moves neither the rail under it nor the list under that. A hero carrying
+     actions is as tall as a --control-md button; a title-only one is its text,
+     which is shorter — measured 57 vs 55 (operator, 2026-09-16). Stated on the
+     border box: the two addends are this rule's own padding and its border. */
+  min-height: calc(var(--control-md) + 2 * 12px + 1px);
+  box-sizing: border-box;
+  padding: 12px var(--gutter);
+  border-bottom: 1px solid color-mix(in srgb, var(--theme-accent) 25%, transparent);
+}
+
+/* The back arrow's button box carries its own whitespace, so it sits on the
+   gutter's inner half rather than indenting the title by a whole gutter. */
+.hero[data-back] {
+  padding-left: calc(var(--gutter) / 2);
+}
+
+.title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--font-xl);
+  font-weight: 700;
+  color: var(--theme-text-primary);
+}
+
+.meter {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.track {
+  display: flex;
+  height: 6px;
+  gap: 2px;
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+  background: color-mix(in srgb, var(--theme-text-primary) 10%, transparent);
+}
+
+.segment {
+  background: var(--segment-hue);
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.legendItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-xs);
+  color: var(--theme-text-muted);
+}
+
+.legendItem b {
+  color: var(--theme-text-primary);
+  font-weight: 600;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: var(--radius-pill);
+  background: var(--segment-hue);
+}

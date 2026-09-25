@@ -1,0 +1,277 @@
+import { describe, expect, it } from "vitest";
+import {
+  decodeSyncCursor,
+  encodeSyncCursor,
+  isUuidV4,
+  parseSyncDeltaCustomFieldDefRow,
+  parseSyncDeltaPlaceRow,
+  parseSyncDeltaPlaceTypeRow,
+  parseSyncDeltaTombstone,
+  parseSyncDeltaTripRow,
+  parseSyncDeltaPlaceLinkRow,
+  SYNC_ENTITY_TYPES,
+  SyncRowError,
+} from "./sync";
+
+describe("isUuidV4", () => {
+  it("accepts canonical v4 UUIDs", () => {
+    expect(isUuidV4("a2f6f30c-1f9d-4c07-8b3e-2f5d6a7b8c9d")).toBe(true);
+    // Uppercase accepted (case-insensitive per RFC 4122 §3).
+    expect(isUuidV4("A2F6F30C-1F9D-4C07-8B3E-2F5D6A7B8C9D")).toBe(true);
+    // All four variant nibbles.
+    for (const variant of ["8", "9", "a", "b"]) {
+      expect(isUuidV4(`a2f6f30c-1f9d-4c07-${variant}b3e-2f5d6a7b8c9d`)).toBe(true);
+    }
+  });
+
+  it("rejects non-v4 and malformed values", () => {
+    expect(isUuidV4(undefined)).toBe(false);
+    expect(isUuidV4(42)).toBe(false);
+    expect(isUuidV4("")).toBe(false);
+    expect(isUuidV4("not-a-uuid")).toBe(false);
+    // v1 version nibble
+    expect(isUuidV4("a2f6f30c-1f9d-1c07-8b3e-2f5d6a7b8c9d")).toBe(false);
+    // bad variant nibble
+    expect(isUuidV4("a2f6f30c-1f9d-4c07-7b3e-2f5d6a7b8c9d")).toBe(false);
+    // wrong length
+    expect(isUuidV4("a2f6f30c-1f9d-4c07-8b3e-2f5d6a7b8c9")).toBe(false);
+    // no injection through anchoring gaps
+    expect(isUuidV4("a2f6f30c-1f9d-4c07-8b3e-2f5d6a7b8c9d\n")).toBe(false);
+  });
+});
+
+describe("sync cursor codec", () => {
+  it("round-trips a plain watermark cursor", () => {
+    const cursor = { v: 1, ts: "2026-07-24T01:00:00.000Z" };
+    expect(decodeSyncCursor(encodeSyncCursor(cursor))).toEqual(cursor);
+  });
+
+  it("round-trips mid-pagination keysets", () => {
+    const cursor = {
+      v: 1,
+      ts: "2026-07-24T01:00:00.000Z",
+      k: {
+        tripLogs: [
+          "2026-07-24T00:59:12.345Z",
+          "a2f6f30c-1f9d-4c07-8b3e-2f5d6a7b8c9d",
+        ] as [string, string],
+        tombstones: ["2026-07-24T00:58:00.000Z", "12345"] as [string, string],
+      },
+    };
+    expect(decodeSyncCursor(encodeSyncCursor(cursor))).toEqual(cursor);
+  });
+
+  it("output is base64url-safe (no +, /, =)", () => {
+    const encoded = encodeSyncCursor({
+      v: 1,
+      ts: "2026-07-24T01:00:00.000Z",
+      k: { places: ["2026-07-24T00:00:00.000Z", "x".repeat(37)] },
+    });
+    expect(encoded).toMatch(/^[A-Za-z0-9_-]+$/);
+  });
+
+  it("returns null (→ resetRequired) on any malformation", () => {
+    expect(decodeSyncCursor("not base64url!!")).toBeNull();
+    expect(decodeSyncCursor(base64ish("[1,2,3]"))).toBeNull();
+    expect(decodeSyncCursor(base64ish('{"v":"1","ts":"2026-01-01"}'))).toBeNull();
+    expect(decodeSyncCursor(base64ish('{"v":1,"ts":"garbage"}'))).toBeNull();
+    expect(decodeSyncCursor(base64ish('{"v":1}'))).toBeNull();
+    expect(
+      decodeSyncCursor(base64ish('{"v":1,"ts":"2026-01-01","k":{"a":["x"]}}')),
+    ).toBeNull();
+    expect(
+      decodeSyncCursor(
+        base64ish('{"v":1,"ts":"2026-01-01","k":{"a":["garbage","id"]}}'),
+      ),
+    ).toBeNull();
+  });
+
+  // Encode arbitrary JSON through the same alphabet the codec uses, without
+  // exporting the private helper: round-trip a valid cursor to steal nothing —
+  // just re-encode with Buffer in this Node-only test.
+  function base64ish(json: string): string {
+    return Buffer.from(json, "ascii")
+      .toString("base64")
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=+$/, "");
+  }
+});
+
+describe("SYNC_ENTITY_TYPES", () => {
+  it("covers the nine synced entities", () => {
+    expect(SYNC_ENTITY_TYPES).toEqual([
+      "place",
+      // A place TYPE is a synced entity of its own: it is created, renamed and
+      // deleted OFFLINE like every other user-made row (§2.9), which an
+      // online-only path could not do — and would break guest installs, which
+      // never reach the server at all until they link.
+      "placeType",
+      "tripLog",
+      "media",
+      "placeShare",
+      // A place<->place LINK. Its own entity rather than an array on the place
+      // row: a SYMMETRIC relationship edited from both ends means two devices
+      // clobber each other, which is why `waypoint.canyonIds` could be a
+      // whole-list field and this cannot.
+      "placeLink",
+      "friendship",
+      "route",
+      "customFieldDef",
+    ]);
+  });
+});
+
+// A tombstone naming an entity this build has never heard of is a NEWER
+// SERVER, not corruption. Validating `type` against SYNC_ENTITY_TYPES made
+// every addition to that list a breaking change for phones already in the
+// field: adding `customFieldDef` made a 0.1.0 build report "dropped 12
+// unreadable row(s) from a delta page" — a data-loss warning about rows it
+// correctly had nothing to do with. Caught on-device, not by this suite, which
+// is why the test exists now.
+describe("parseSyncDeltaTombstone", () => {
+  it("accepts every known entity type", () => {
+    for (const type of SYNC_ENTITY_TYPES) {
+      expect(parseSyncDeltaTombstone({ type, id: "x" })).toEqual({ type, id: "x" });
+    }
+  });
+
+  it("accepts an entity type this build does not know", () => {
+    expect(parseSyncDeltaTombstone({ type: "placeType", id: "x" })).toEqual({
+      type: "placeType",
+      id: "x",
+    });
+  });
+
+  it("still rejects a malformed SHAPE", () => {
+    expect(() => parseSyncDeltaTombstone({ type: "place" })).toThrow(SyncRowError);
+    expect(() => parseSyncDeltaTombstone({ type: 7, id: "x" })).toThrow(SyncRowError);
+    expect(() => parseSyncDeltaTombstone(null)).toThrow(SyncRowError);
+  });
+});
+
+describe("delta row parsers", () => {
+  const place = {
+    id: "c1",
+    ownerId: "u1",
+    syncRole: "owner",
+    name: "Claustral",
+    altNames: [],
+    latitude: -33.5,
+    longitude: 150.4,
+    placeTypeId: "b0000000-0000-4000-8000-000000000001",
+    notes: null,
+    elevation: null,
+    fieldValues: { v_grade: 4, a_grade: 3, commitment: 3, num_abseils: 6, hours: 7 },
+    ropeWikiId: null,
+    forkedFromId: null,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-02T00:00:00.000Z",
+  };
+  const trip = {
+    id: "t1",
+    userId: "u1",
+    date: "2026-01-01T00:00:00.000Z",
+    displayName: null,
+    types: ["place"],
+    notes: null,
+    customFields: {},
+    places: [{ id: "c1", name: "Claustral" }],
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  };
+  const placeLink = {
+    id: "l1",
+    ownerId: "u1",
+    aPlaceId: "c1",
+    bPlaceId: "c2",
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  };
+
+  // A SYSTEM row belongs to no account, and there are two kinds of them: the
+  // three place types and the nine field definitions. `ownerId: isString` on
+  // the definition spec dropped all nine off every delta page a phone pulled —
+  // the grades arrived on places with nothing to label or bound them — and no
+  // test saw it, because every test on both sides built its rows by hand.
+  // Ground truth for this now lives in `api/src/__tests__/syncBoundary.test.ts`,
+  // which parses what the live server actually sends.
+  it("accepts a global row, whichever kind it is, with a null owner", () => {
+    const systemType = {
+      id: "b0000000-0000-4000-8000-000000000001",
+      ownerId: null,
+      name: "Canyon",
+      iconKey: "droplet",
+      color: "#E4C5AA",
+      position: 0,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    expect(parseSyncDeltaPlaceTypeRow(systemType).ownerId).toBeNull();
+
+    const systemDef = {
+      id: "c0000000-0000-4000-8000-000000000001",
+      ownerId: null,
+      entity: "place",
+      key: "v_grade",
+      label: "V Grade",
+      type: "integer",
+      min: 1,
+      max: 7,
+      position: 0,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    expect(parseSyncDeltaCustomFieldDefRow(systemDef).ownerId).toBeNull();
+  });
+
+  it("accepts well-formed rows and preserves unknown extra keys", () => {
+    expect(parseSyncDeltaPlaceRow({ ...place, futureField: 1 })).toMatchObject({
+      id: "c1",
+      futureField: 1,
+    });
+    expect(parseSyncDeltaTripRow(trip).id).toBe("t1");
+    expect(parseSyncDeltaPlaceLinkRow(placeLink).id).toBe("l1");
+  });
+
+  it("rejects non-objects", () => {
+    for (const value of [null, undefined, 7, "row", []]) {
+      expect(() => parseSyncDeltaPlaceRow(value)).toThrow(SyncRowError);
+    }
+  });
+
+  it("rejects a missing or wrongly-typed field, naming it", () => {
+    expect(() =>
+      parseSyncDeltaPlaceRow({ ...place, latitude: "-33.5" }),
+    ).toThrow(/latitude/);
+    const { name: _dropped, ...noName } = place;
+    expect(() => parseSyncDeltaPlaceRow(noName)).toThrow(/name/);
+    // Required-but-nullable stays required: undefined is not null.
+    expect(() => parseSyncDeltaPlaceRow({ ...place, notes: undefined })).toThrow(
+      /notes/,
+    );
+    expect(() => parseSyncDeltaTripRow({ ...trip, places: [{ id: "c1" }] })).toThrow(
+      /places/,
+    );
+    // A link's endpoints are the whole row — a malformed one must not reach
+    // the mirror, where it would render as an edge to nowhere.
+    expect(() =>
+      parseSyncDeltaPlaceLinkRow({ ...placeLink, aPlaceId: 7 }),
+    ).toThrow(/aPlaceId/);
+    expect(() =>
+      parseSyncDeltaPlaceLinkRow({ ...placeLink, bPlaceId: null }),
+    ).toThrow(/bPlaceId/);
+  });
+
+  it("never puts field VALUES in the message (they are names and coords)", () => {
+    try {
+      parseSyncDeltaPlaceRow({ ...place, latitude: "-33.5", name: 7 });
+      throw new Error("expected a throw");
+    } catch (err) {
+      const message = (err as Error).message;
+      expect(message).toContain("latitude");
+      expect(message).not.toContain("-33.5");
+      expect(message).not.toContain("Claustral");
+    }
+  });
+});

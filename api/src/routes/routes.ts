@@ -1,0 +1,323 @@
+// User-authored routes (drawn, imported, or derived from a recording).
+// Geometry is a vertex list on the row, so this is ordinary CRUD — there is no
+// S3 leg, no presign/confirm, and no orphan sweeper. See the Route model in
+// schema.prisma for why.
+//
+// Visibility has TWO sources, and lib/shareAccess.ts is the only place they
+// are combined:
+//   - unlinked, unshared route → owner-private;
+//   - linked route             → visible to everyone the place is shared with;
+//   - directly shared route    → visible to each Share recipient.
+// Either way a non-owner is read-only (view + export, never edit).
+// Non-owned ids are 404, never 403, so a status can't confirm a route exists
+// to someone who can't see it (SEC-001 anti-oracle). A SHAREE attempting a
+// mutation gets 403 — they legitimately see the route, they just can't change
+// it — matching requirePlaceOwnerAccess's split.
+import { Router, Response } from "express";
+import { Prisma } from "@prisma/client";
+import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
+import prisma from "../services/prisma";
+import { AppError } from "../middleware/errorHandler";
+import { getParam } from "../lib/getParam";
+import { resolveUser } from "../lib/resolveUser";
+import {
+  validateRoutePayload,
+  parseRouteColor,
+  parseRoutePoints,
+  pickNextTrackColor,
+} from "@logjam/shared";
+import {
+  applyRoutePlaceLink,
+  placeShareeIds,
+  parseAnchorsOrNull,
+  resolveRoutePlaceId,
+} from "../lib/routeLink";
+import {
+  directShareRevokeTombstones,
+  routeDeleteTombstones,
+  writeTombstones,
+} from "../lib/syncTombstones";
+import {
+  deleteSharesFor,
+  directShareeIds,
+  directlySharedIds,
+  getRouteRole,
+  requireShareAccess,
+  requireShareOwner,
+} from "../lib/shareAccess";
+import {
+  assertClientIdReplayable,
+  parseClientSuppliedId,
+} from "../lib/clientSuppliedId";
+
+const router = Router();
+
+// Hard cap on the list; true total rides X-Total-Count (UX-001 — matches
+// /places, /trips and /waypoints).
+const LIST_TAKE = 500;
+
+const NOT_FOUND = "Route not found";
+
+/** Load a route for a mutation, or throw. none → 404, sharee → 403. */
+async function requireOwnedRoute(userId: string, id: string) {
+  const route = await prisma.route.findUnique({ where: { id } });
+  if (!route) throw new AppError(404, NOT_FOUND);
+  requireShareOwner(
+    await getRouteRole(userId, route),
+    "route",
+    "Only the owner can change this route",
+  );
+  return route;
+}
+
+// ── GET /routes ───────────────────────────────────────────────
+// Owned routes, plus routes linked to places shared with the caller. Derived
+// purely from the caller's own access set (same shape as GET /places/tracks),
+// so it never accepts an arbitrary id.
+router.get("/", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  const user = await resolveUser(req.user!.sub);
+  // Owned, place-inherited, or directly shared — the same three-way union
+  // lib/shareAccess.ts resolves for a single row, expressed as a query.
+  const where: Prisma.RouteWhereInput = {
+    OR: [
+      { ownerId: user.id },
+      { place: { shares: { some: { sharedWithId: user.id } } } },
+      { id: { in: await directlySharedIds(user.id, "route") } },
+    ],
+  };
+  const [rows, total] = await Promise.all([
+    prisma.route.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      take: LIST_TAKE,
+    }),
+    prisma.route.count({ where }),
+  ]);
+  res.set("X-Total-Count", String(total));
+  res.json(rows);
+});
+
+// ── GET /routes/:id ───────────────────────────────────────────
+router.get("/:id", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  const user = await resolveUser(req.user!.sub);
+  const id = getParam(req.params.id);
+  const route = await prisma.route.findUnique({ where: { id } });
+  if (!route) throw new AppError(404, NOT_FOUND);
+  requireShareAccess(await getRouteRole(user.id, route), "route");
+  res.json(route);
+});
+
+// ── POST /routes ──────────────────────────────────────────────
+router.post("/", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  const user = await resolveUser(req.user!.sub);
+  const body = req.body ?? {};
+
+  const validationError = validateRoutePayload(body, { requireCore: true });
+  if (validationError) throw new AppError(400, validationError);
+  // Re-parse for the normalised (rounded, elevation-stripped) points; the
+  // validator above has already proved the shape.
+  const parsed = parseRoutePoints(body.points);
+  if ("error" in parsed) throw new AppError(400, parsed.error);
+
+  const placeId = (await resolveRoutePlaceId(user.id, body.placeId)) ?? null;
+
+  // Optional client-minted id (Stage 8 §3.5): own-id replay → 200 with the
+  // existing row; foreign id → 404 (see lib/clientSuppliedId.ts).
+  const clientId = parseClientSuppliedId(body.id);
+  if (clientId) {
+    const existing = await prisma.route.findUnique({ where: { id: clientId } });
+    if (existing) {
+      assertClientIdReplayable(existing.ownerId, user.id, NOT_FOUND);
+      res.status(200).json(existing);
+      return;
+    }
+  }
+
+  try {
+    // Create unlinked, then route the link through applyRoutePlaceLink so the
+    // displacement rule and its tombstones have exactly one implementation.
+    const created = await prisma.$transaction(async (tx) => {
+      let assignedColor = parseRouteColor(body.color);
+      if (!assignedColor) {
+        const existingRoutes = await tx.route.findMany({
+          where: placeId
+            ? { OR: [{ ownerId: user.id }, { placeId }] }
+            : { ownerId: user.id },
+          select: { color: true },
+        });
+        assignedColor = pickNextTrackColor(existingRoutes.map((r) => r.color));
+      }
+
+      const route = await tx.route.create({
+        data: {
+          ...(clientId && { id: clientId }),
+          ownerId: user.id,
+          placeId: null,
+          name: (body.name as string).trim(),
+          // The client may choose from the shared palette; when it doesn't,
+          // the server picks avoiding collisions. Mobile picks at draw time so the line
+          // is its final colour from the first frame rather than changing under
+          // the user when the create op comes back.
+          color: assignedColor,
+          points: parsed.points,
+          anchors: parseAnchorsOrNull(body.anchors, parsed.points.length),
+        },
+      });
+      if (placeId === null) return { route, displacedRoute: null };
+      const { displacedRoute } = await applyRoutePlaceLink(tx, {
+        routeId: route.id,
+        placeId,
+        currentPlaceId: null,
+      });
+      const linked = await tx.route.findUniqueOrThrow({ where: { id: route.id } });
+      return { route: linked, displacedRoute };
+    });
+    res.status(201).json({ ...created.route, displacedRoute: created.displacedRoute });
+  } catch (err) {
+    // Concurrent replay of the same client id — return the winner's row,
+    // mirroring media-confirm and waypoints.
+    if (
+      clientId &&
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === "P2002"
+    ) {
+      const winner = await prisma.route.findUnique({ where: { id: clientId } });
+      if (winner && winner.ownerId === user.id) {
+        res.status(200).json(winner);
+        return;
+      }
+    }
+    throw err;
+  }
+});
+
+// ── POST /routes/:id/copy ─────────────────────────────────────
+// Copy a route someone shared with you into your own account — the sibling of
+// POST /places/:id/copy, and the same promise: the copy is yours to edit and it
+// outlives the share.
+//
+// NOT owner-only. A sharee copying is the whole point, so this reads with
+// requireShareAccess (404 for no access) and never reaches the 403 branch —
+// the owner may copy their own route too, which is an ordinary duplicate.
+//
+// THE COPY IS UNLINKED, always. `Route.placeId` is a @unique slot on the
+// OWNER's place; pointing a copy at it would displace the original out of the
+// place it belongs to. A sharee who wants the route attached to a place copies
+// the PLACE, which brings this route with it (routes/places.ts).
+router.post("/:id/copy", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  const user = await resolveUser(req.user!.sub);
+  const id = getParam(req.params.id);
+  const source = await prisma.route.findUnique({ where: { id } });
+  if (!source) throw new AppError(404, NOT_FOUND);
+  requireShareAccess(await getRouteRole(user.id, source), "route");
+
+  const copy = await prisma.$transaction(async (tx) => {
+    // A fresh colour from the COPIER's palette, not the source's: the owner's
+    // choice was made to keep their own lines apart, and carrying it over is
+    // how two routes end up the same colour on the copier's map.
+    const existingRoutes = await tx.route.findMany({
+      where: { ownerId: user.id },
+      select: { color: true },
+    });
+    return tx.route.create({
+      data: {
+        ownerId: user.id,
+        placeId: null,
+        name: source.name,
+        color: pickNextTrackColor(existingRoutes.map((r) => r.color)),
+        points: source.points as Prisma.InputJsonValue,
+        // Carried as-is: anchors are INDICES into `points`, and the points are
+        // copied verbatim, so the two cannot fall out of step. Null stays null
+        // — "every vertex is the user's" is the honest reading of a route drawn
+        // before anchors existed, and inventing one here would claim otherwise.
+        anchors: source.anchors === null ? Prisma.DbNull : (source.anchors as Prisma.InputJsonValue),
+      },
+    });
+  });
+
+  res.status(201).json(copy);
+});
+
+// ── PATCH /routes/:id ─────────────────────────────────────────
+// Field-sparse update. `placeId` accepts an explicit null to unlink.
+router.patch("/:id", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  const user = await resolveUser(req.user!.sub);
+  const id = getParam(req.params.id);
+  const route = await requireOwnedRoute(user.id, id);
+
+  const body = req.body ?? {};
+  const validationError = validateRoutePayload(body, { requireCore: false });
+  if (validationError) throw new AppError(400, validationError);
+
+  const color = parseRouteColor(body.color) ?? undefined;
+  let points: [number, number][] | undefined;
+  let anchors: number[] | typeof Prisma.DbNull | undefined;
+  if (body.points !== undefined) {
+    const parsed = parseRoutePoints(body.points);
+    if ("error" in parsed) throw new AppError(400, parsed.error);
+    points = parsed.points;
+    // Anchors travel with the geometry they index. A PATCH that moves points
+    // without sending anchors clears them, which reads as "no record" — never
+    // as stale indices into geometry that has changed underneath them.
+    anchors = parseAnchorsOrNull(body.anchors, parsed.points.length);
+  }
+  const resolvedPlaceId = await resolveRoutePlaceId(user.id, body.placeId);
+
+  const result = await prisma.$transaction(async (tx) => {
+    if (body.name !== undefined || points !== undefined || color !== undefined) {
+      await tx.route.update({
+        where: { id },
+        data: {
+          ...(body.name !== undefined && { name: (body.name as string).trim() }),
+          ...(points !== undefined && { points, anchors }),
+          ...(color !== undefined && { color }),
+        },
+      });
+    }
+    let displacedRoute: { id: string; name: string } | null = null;
+    if (resolvedPlaceId !== undefined) {
+      ({ displacedRoute } = await applyRoutePlaceLink(tx, {
+        routeId: id,
+        placeId: resolvedPlaceId,
+        currentPlaceId: route.placeId,
+      }));
+    }
+    const updated = await tx.route.findUniqueOrThrow({ where: { id } });
+    return { updated, displacedRoute };
+  });
+
+  res.json({ ...result.updated, displacedRoute: result.displacedRoute });
+});
+
+// ── DELETE /routes/:id ────────────────────────────────────────
+router.delete("/:id", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  const user = await resolveUser(req.user!.sub);
+  const id = getParam(req.params.id);
+  const route = await requireOwnedRoute(user.id, id);
+
+  await prisma.$transaction(async (tx) => {
+    // Sharees of the linked place must forget it too (a linked route is part
+    // of the shared place record). Read the fan-out BEFORE the delete.
+    const shareeIds =
+      route.placeId === null ? [] : await placeShareeIds(tx, route.placeId);
+    // Direct recipients likewise — also read before the rows go.
+    const directIds = await directShareeIds(tx, "route", id);
+    // Share.entityId is polymorphic, so Postgres cannot cascade: without this
+    // the rows outlive the route and grant access to a dead (reusable) id.
+    await deleteSharesFor(tx, "route", [id]);
+    await tx.route.delete({ where: { id } });
+    // Same transaction as the delete (sync tombstone rule).
+    await writeTombstones(tx, [
+      ...routeDeleteTombstones({ ownerId: user.id, routeId: id, shareeIds }),
+      ...directShareRevokeTombstones({
+        entityType: "route",
+        entityId: id,
+        userIds: directIds,
+      }),
+    ]);
+  });
+
+  res.status(204).send();
+});
+
+export default router;

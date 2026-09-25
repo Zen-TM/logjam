@@ -1,12 +1,22 @@
+import type { MediaMetadata, MediaOrigin } from "./mediaMetadata.js";
+
 // Media (object storage) shared types + validation.
 //
-// Media rows link an uploaded file (image/video/track) to either a Canyon or a
-// TripLog. Each image/video stores two S3 objects — a full-res "display" copy
-// and a client-generated "thumbnail"; track files (GPX/KML) store the display
-// copy only. The category drives both server-side validation and client-side
-// rendering (image → <img>, video → <video>, track → download link).
+// A media row is ONE uploaded file belonging to one account. It may hang off a
+// Place or a TripLog, or off nothing at all — a `"none"` row is the user's own
+// standalone file (an import they brought in, a track they recorded), which is
+// what lets those sync at all. Each image/video stores two S3 objects — a
+// full-res "display" copy and a client-generated "thumbnail"; track files
+// (GPX/KML/GeoJSON) store the display copy only. The category drives both
+// server-side validation and client-side rendering (image → <img>,
+// video → <video>, track → line on the map + download).
+//
+// A standalone file becomes a place's way by having its PARENT set, never by
+// being copied (api/src/routes/media.ts, PATCH /:id/link). Linking and
+// unlinking are therefore visibility changes on one file, and unlinking a
+// shared place's way must tombstone it for that place's sharees.
 
-export type MediaLinkedType = "canyon" | "tripLog";
+export type MediaLinkedType = "place" | "tripLog" | "none";
 export type MediaCategory = "image" | "video" | "track";
 
 export const IMAGE_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
@@ -14,6 +24,7 @@ export const VIDEO_MIME_TYPES = ["video/mp4", "video/quicktime", "video/webm"] a
 export const TRACK_MIME_TYPES = [
   "application/gpx+xml",
   "application/vnd.google-earth.kml+xml",
+  "application/geo+json",
 ] as const;
 
 // Per-category upload size caps, enforced authoritatively server-side against
@@ -35,11 +46,12 @@ export const MEDIA_EXTENSION_BY_MIME: Record<string, string> = {
   "video/webm": "webm",
   "application/gpx+xml": "gpx",
   "application/vnd.google-earth.kml+xml": "kml",
+  "application/geo+json": "geojson",
 };
 
-// Palette assigned to canyon/trip-log tracks at upload time and reused for the
+// Palette assigned to place/trip-log tracks at upload time and reused for the
 // track card icon and the map track layer. Hand-picked to be perceptually
-// distinct and legible on the map, avoiding the canyon-marker colours
+// distinct and legible on the map, avoiding the place-marker colours
 // (#f97316 owned, #629bf8 shared) and the topo layer tints.
 export const TRACK_COLORS = [
   "#e6194b", // red
@@ -54,10 +66,92 @@ export const TRACK_COLORS = [
   "#dcbeff", // lavender
 ] as const;
 
-// Pick a random colour from the canonical track palette. Assigned server-side
-// when a track is confirmed so the colour is stable across the card and map.
+export type TrackColor = (typeof TRACK_COLORS)[number];
+
+/**
+ * What to CALL a palette colour.
+ *
+ * Both clients used the hex itself as the accessible name of a swatch
+ * ("#e6194b"), which is a name but not a helpful one: it is unreadable aloud,
+ * and a screen-reader user picking a route colour was offered ten of them. The
+ * names live HERE, beside the palette they name, so the phone's picker and the
+ * browser's cannot disagree about which one is "Teal" — the same rule the
+ * status labels and filter words already follow.
+ *
+ * The comments on TRACK_COLORS above were already these words; this promotes
+ * them from a comment to something the UI can read.
+ */
+export const TRACK_COLOR_NAMES: Record<TrackColor, string> = {
+  "#e6194b": "Red",
+  "#3cb44b": "Green",
+  "#ffe119": "Yellow",
+  "#911eb4": "Purple",
+  "#42d4f4": "Cyan",
+  "#f032e6": "Magenta",
+  "#bfef45": "Lime",
+  "#469990": "Teal",
+  "#9a6324": "Brown",
+  "#dcbeff": "Lavender",
+};
+
+/**
+ * The spoken name of a colour, for a label or an accessible name.
+ *
+ * A colour outside the palette comes back AS ITS HEX rather than as "Custom":
+ * routes drawn before the palette existed carry arbitrary values, and a made-up
+ * word would hide which colour it actually is. Unhelpful is better than wrong.
+ */
+export function trackColorName(color: string | null | undefined): string {
+  if (!color) return "No colour";
+  return TRACK_COLOR_NAMES[color.toLowerCase() as TrackColor] ?? color;
+}
+
+/**
+ * Picks the next best track/route colour avoiding collisions with existing items.
+ * 1. Returns the first unused colour from TRACK_COLORS.
+ * 2. If all colours are present, returns the colour with the lowest frequency.
+ */
+export function pickNextTrackColor(
+  existingColors: readonly (string | null | undefined)[] | (string | null | undefined)[],
+): string {
+  const counts = new Map<string, number>();
+  for (const c of TRACK_COLORS) counts.set(c, 0);
+
+  for (const c of existingColors) {
+    if (c && counts.has(c)) {
+      counts.set(c, counts.get(c)! + 1);
+    }
+  }
+
+  let minCount = Infinity;
+  let bestColor: string = TRACK_COLORS[0];
+
+  for (const c of TRACK_COLORS) {
+    const count = counts.get(c)!;
+    if (count < minCount) {
+      minCount = count;
+      bestColor = c;
+      if (minCount === 0) break; // Found an unused colour
+    }
+  }
+
+  return bestColor;
+}
+
+/**
+ * Picks a deterministic palette colour given an item index (e.g. for batch imports).
+ */
+export function pickTrackColorByIndex(index: number): string {
+  const normalized = Math.max(0, Math.floor(index));
+  return TRACK_COLORS[normalized % TRACK_COLORS.length];
+}
+
+/**
+ * @deprecated Use `pickNextTrackColor` or `pickTrackColorByIndex`.
+ * Retained for backwards compatibility.
+ */
 export function randomTrackColor(): string {
-  return TRACK_COLORS[Math.floor(Math.random() * TRACK_COLORS.length)];
+  return pickNextTrackColor([]);
 }
 
 export function mediaCategory(mimeType: string): MediaCategory | null {
@@ -77,14 +171,67 @@ export function categoryHasThumbnail(category: MediaCategory): boolean {
 export interface MediaItem {
   id: string;
   linkedType: MediaLinkedType;
-  linkedId: string;
+  /** Null exactly when `linkedType` is `"none"` — a standalone file. */
+  linkedId: string | null;
   mediaType: string; // MIME type
   filename: string;
   fileSizeBytes: number;
   createdAt: string;
+  /** Bumped by a link/unlink; the delta pull keysets on it. */
+  updatedAt: string;
   displayUrl: string;
   thumbnailUrl: string | null;
-  // Assigned only for track (GPX/KML) media; null for image/video. Drives the
-  // track card icon tint and the map track layer colour.
+  // Assigned only for track (GPX/KML/GeoJSON) media; null for image/video.
+  // Drives the track card icon tint and the map track layer colour.
   color: string | null;
+  /** How a standalone file came to exist; null for place/trip attachments. */
+  origin: MediaOrigin | null;
+  /** User-facing label; null falls back to `filename`. See mediaDisplayName. */
+  displayName: string | null;
+  /** Row-level stats — see shared/src/mediaMetadata.ts. `{}` when origin is null. */
+  metadata: MediaMetadata;
+}
+
+/**
+ * What to CALL a file in the UI.
+ *
+ * One derivation, in the shape the trip-title rule already takes: the user's
+ * own label if there is one, else the file's name. Never store the result —
+ * `displayName` stays null until something sets it, so a fallback that got
+ * persisted would freeze a name the user never chose.
+ */
+export function mediaDisplayName(media: {
+  displayName?: string | null;
+  filename?: string | null;
+}): string {
+  const label = media.displayName?.trim();
+  if (label) return label;
+  return media.filename?.trim() || "Untitled file";
+}
+
+/** Cap for a user-supplied media label, matching the trip-title cap. */
+export const MEDIA_DISPLAY_NAME_MAX = 200;
+
+/**
+ * A standalone file as listed for a client that is NOT delta-synced (the web
+ * app). Metadata only — no presigned URLs.
+ *
+ * Deliberately without them: minting a URL per row would put the whole list
+ * through the egress meter every time the page loaded, whether or not anything
+ * was opened. Content comes from POST /media/download-urls, which is where the
+ * gate lives.
+ */
+export interface StandaloneFile {
+  id: string;
+  mediaType: string;
+  filename: string;
+  displayName: string | null;
+  fileSizeBytes: number;
+  color: string | null;
+  origin: MediaOrigin;
+  metadata: MediaMetadata;
+  /** The place it is linked to as that place's way, or null. */
+  linkedPlaceId: string | null;
+  createdAt: string;
+  updatedAt: string;
 }

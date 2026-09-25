@@ -25,18 +25,18 @@ async function putToPresignedUrl(url: string, body: Buffer, contentType: string)
 }
 
 describe("media upload lifecycle (fake auth)", () => {
-  it("presign → upload → confirm → appears on canyon → delete", async () => {
-    const canyonsRes = await request(API_URL).get("/canyons").set(AUTH);
-    expect(canyonsRes.status).toBe(200);
-    const canyonId: string = canyonsRes.body[0].id;
+  it("presign → upload → confirm → appears on place → delete", async () => {
+    const placesRes = await request(API_URL).get("/places").set(AUTH);
+    expect(placesRes.status).toBe(200);
+    const placeId: string = placesRes.body[0].id;
 
     // Presign
     const presignRes = await request(API_URL)
       .post("/media/presign")
       .set(AUTH)
       .send({
-        linkedType: "canyon",
-        linkedId: canyonId,
+        linkedType: "place",
+        linkedId: placeId,
         filename: "test-photo.png",
         mediaType: "image/png",
         sizeBytes: PNG_BYTES.length,
@@ -57,8 +57,8 @@ describe("media upload lifecycle (fake auth)", () => {
       .post(`/media/${mediaId}/confirm`)
       .set(AUTH)
       .send({
-        linkedType: "canyon",
-        linkedId: canyonId,
+        linkedType: "place",
+        linkedId: placeId,
         filename: "test-photo.png",
         mediaType: "image/png",
       });
@@ -69,8 +69,8 @@ describe("media upload lifecycle (fake auth)", () => {
     expect(confirmRes.body.displayUrl).toContain("http");
     expect(confirmRes.body.thumbnailUrl).toContain("http");
 
-    // Appears on the canyon detail with a presigned URL
-    const detailRes = await request(API_URL).get(`/canyons/${canyonId}`).set(AUTH);
+    // Appears on the place detail with a presigned URL
+    const detailRes = await request(API_URL).get(`/places/${placeId}`).set(AUTH);
     expect(detailRes.status).toBe(200);
     const found = detailRes.body.media.find(
       (m: { id: string }) => m.id === mediaId,
@@ -82,22 +82,22 @@ describe("media upload lifecycle (fake auth)", () => {
     const deleteRes = await request(API_URL).delete(`/media/${mediaId}`).set(AUTH);
     expect(deleteRes.status).toBe(204);
 
-    // Gone from the canyon detail
-    const afterRes = await request(API_URL).get(`/canyons/${canyonId}`).set(AUTH);
+    // Gone from the place detail
+    const afterRes = await request(API_URL).get(`/places/${placeId}`).set(AUTH);
     expect(
       afterRes.body.media.some((m: { id: string }) => m.id === mediaId),
     ).toBe(false);
   });
 
   it("rejects an unsupported media type", async () => {
-    const canyonsRes = await request(API_URL).get("/canyons").set(AUTH);
-    const canyonId: string = canyonsRes.body[0].id;
+    const placesRes = await request(API_URL).get("/places").set(AUTH);
+    const placeId: string = placesRes.body[0].id;
     const res = await request(API_URL)
       .post("/media/presign")
       .set(AUTH)
       .send({
-        linkedType: "canyon",
-        linkedId: canyonId,
+        linkedType: "place",
+        linkedId: placeId,
         filename: "archive.zip",
         mediaType: "application/zip",
         sizeBytes: 1024,
@@ -106,14 +106,14 @@ describe("media upload lifecycle (fake auth)", () => {
   });
 
   it("rejects a presign without sizeBytes (SEC-003)", async () => {
-    const canyonsRes = await request(API_URL).get("/canyons").set(AUTH);
-    const canyonId: string = canyonsRes.body[0].id;
+    const placesRes = await request(API_URL).get("/places").set(AUTH);
+    const placeId: string = placesRes.body[0].id;
     const res = await request(API_URL)
       .post("/media/presign")
       .set(AUTH)
       .send({
-        linkedType: "canyon",
-        linkedId: canyonId,
+        linkedType: "place",
+        linkedId: placeId,
         filename: "test-photo.png",
         mediaType: "image/png",
       });
@@ -121,14 +121,14 @@ describe("media upload lifecycle (fake auth)", () => {
   });
 
   it("rejects a presign whose sizeBytes exceeds the category cap (SEC-003)", async () => {
-    const canyonsRes = await request(API_URL).get("/canyons").set(AUTH);
-    const canyonId: string = canyonsRes.body[0].id;
+    const placesRes = await request(API_URL).get("/places").set(AUTH);
+    const placeId: string = placesRes.body[0].id;
     const res = await request(API_URL)
       .post("/media/presign")
       .set(AUTH)
       .send({
-        linkedType: "canyon",
-        linkedId: canyonId,
+        linkedType: "place",
+        linkedId: placeId,
         filename: "test-photo.png",
         mediaType: "image/png",
         sizeBytes: 31 * 1024 * 1024, // image cap is 30 MB
@@ -138,14 +138,14 @@ describe("media upload lifecycle (fake auth)", () => {
   });
 
   it("S3 rejects an upload larger than the signed Content-Length (SEC-003)", async () => {
-    const canyonsRes = await request(API_URL).get("/canyons").set(AUTH);
-    const canyonId: string = canyonsRes.body[0].id;
+    const placesRes = await request(API_URL).get("/places").set(AUTH);
+    const placeId: string = placesRes.body[0].id;
     const presignRes = await request(API_URL)
       .post("/media/presign")
       .set(AUTH)
       .send({
-        linkedType: "canyon",
-        linkedId: canyonId,
+        linkedType: "place",
+        linkedId: placeId,
         filename: "test-photo.png",
         mediaType: "image/png",
         sizeBytes: PNG_BYTES.length,
@@ -175,14 +175,14 @@ describe("media upload lifecycle (fake auth)", () => {
   });
 
   it("rejects a GPX whose extension doesn't match the track MIME", async () => {
-    const canyonsRes = await request(API_URL).get("/canyons").set(AUTH);
-    const canyonId: string = canyonsRes.body[0].id;
+    const placesRes = await request(API_URL).get("/places").set(AUTH);
+    const placeId: string = placesRes.body[0].id;
     const res = await request(API_URL)
       .post("/media/presign")
       .set(AUTH)
       .send({
-        linkedType: "canyon",
-        linkedId: canyonId,
+        linkedType: "place",
+        linkedId: placeId,
         filename: "track.png",
         mediaType: "application/gpx+xml",
         sizeBytes: 1024,
@@ -190,17 +190,17 @@ describe("media upload lifecycle (fake auth)", () => {
     expect(res.status).toBe(400);
   });
 
-  it("forbids attaching media to a canyon the user does not own", async () => {
-    const sharedRes = await request(API_URL).get("/canyons/shared").set(AUTH);
+  it("forbids attaching media to a place the user does not own", async () => {
+    const sharedRes = await request(API_URL).get("/places/shared").set(AUTH);
     expect(sharedRes.status).toBe(200);
-    if (sharedRes.body.length === 0) return; // no shared canyons in this seed
-    const sharedCanyonId: string = sharedRes.body[0].id;
+    if (sharedRes.body.length === 0) return; // no shared places in this seed
+    const sharedPlaceId: string = sharedRes.body[0].id;
     const res = await request(API_URL)
       .post("/media/presign")
       .set(AUTH)
       .send({
-        linkedType: "canyon",
-        linkedId: sharedCanyonId,
+        linkedType: "place",
+        linkedId: sharedPlaceId,
         filename: "test-photo.png",
         mediaType: "image/png",
         sizeBytes: PNG_BYTES.length,

@@ -11,7 +11,7 @@ discovery.
 Proves a live database enforces the `WHERE status = ...` guard, so a
 reaped-but-alive worker cannot resurrect a force-failed job (ARCH-001) or charge
 storage for it (ARCH-007). Needs a real `psycopg2` (the host stubs it) and a
-reachable DB; gated on `RUN_DB_IT=1`.
+reachable DB; gated on `RUN_DB_IT=1`. **CI runs it** in the `api-integration` job, against that job's seeded DB.
 
 **Lightest local run (no image build)** — against the `make dev` Postgres:
 

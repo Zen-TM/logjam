@@ -1,0 +1,146 @@
+{
+  "expo": {
+    "name": "Logjam",
+    "slug": "logjam-mobile",
+    "owner": "logjamnsw",
+    "scheme": "logjam",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "icon": "./assets/icon.png",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/8008fb2a-ea4c-4cc1-a637-97eb64500cb7",
+      "fallbackToCacheTimeout": 0,
+      "codeSigningCertificate": "./certs/certificate.pem",
+      "codeSigningMetadata": {
+        "keyid": "main",
+        "alg": "rsa-v1_5-sha256"
+      }
+    },
+    "ios": {
+      "bundleIdentifier": "com.logjamnsw.mobile",
+      "supportsTablet": false,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "UIBackgroundModes": [
+          "location"
+        ]
+      }
+    },
+    "android": {
+      "package": "com.logjamnsw.mobile",
+      "allowBackup": false,
+      "blockedPermissions": [
+        "android.permission.SYSTEM_ALERT_WINDOW"
+      ],
+      "edgeToEdgeEnabled": true,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#4E4944"
+      },
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "category": [
+            "DEFAULT"
+          ],
+          "data": [
+            {
+              "mimeType": "application/pdf"
+            },
+            {
+              "mimeType": "application/gpx+xml"
+            },
+            {
+              "mimeType": "application/vnd.google-earth.kml+xml"
+            },
+            {
+              "mimeType": "application/vnd.google-earth.kmz"
+            },
+            {
+              "mimeType": "application/geo+json"
+            }
+          ]
+        }
+      ]
+    },
+    "plugins": [
+      "expo-dev-client",
+      "./plugins/withSensorLogging.js",
+      "./plugins/withLocalApiCleartext.js",
+      "./plugins/withLocalDebuggableRelease.js",
+      "expo-asset",
+      [
+        "expo-font",
+        {
+          "fonts": [
+            "./assets/fonts/feather.ttf",
+            "./assets/fonts/material-community.ttf"
+          ]
+        }
+      ],
+      [
+        "@maplibre/maplibre-react-native",
+        {
+          "android": {
+            "nativeVariant": "vulkan",
+            "nativeVersion": "13.5.0"
+          }
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#DEB188"
+        }
+      ],
+      "expo-secure-store",
+      "@sentry/react-native",
+      "expo-sqlite",
+      [
+        "expo-location",
+        {
+          "isAndroidForegroundServiceEnabled": true,
+          "locationWhenInUsePermission": "Logjam shows your position on the map and records tracks you start."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Logjam attaches photos from your library to places and trips.",
+          "cameraPermission": "Logjam lets you take photos to attach to places and trips.",
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "savePhotosPermission": "Logjam saves photos and videos you take in the app to your device's gallery.",
+          "isAccessMediaLocationEnabled": false
+        }
+      ],
+      "expo-video",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/adaptive-icon.png",
+          "imageWidth": 180,
+          "resizeMode": "contain",
+          "backgroundColor": "#4E4944"
+        }
+      ],
+      "expo-updates",
+      "./plugins/withCameraCapture"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "8008fb2a-ea4c-4cc1-a637-97eb64500cb7"
+      }
+    }
+  }
+}

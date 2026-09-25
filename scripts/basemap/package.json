@@ -1,0 +1,12 @@
+{
+  "name": "logjam-basemap-style-generator",
+  "private": true,
+  "type": "module",
+  "description": "Generates the committed Protomaps basemap layer JSONs for mobile (see generate-style.mjs). Not part of the app build.",
+  "scripts": {
+    "generate": "node generate-style.mjs"
+  },
+  "devDependencies": {
+    "@protomaps/basemaps": "5.7.2"
+  }
+}

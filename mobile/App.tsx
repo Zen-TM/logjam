@@ -1,0 +1,195 @@
+import { useEffect, useState } from "react";
+import { Alert, AppState, Linking, Platform, StyleSheet, Text } from "react-native";
+import Constants from "expo-constants";
+// SystemBars (react-native-edge-to-edge) rather than expo-status-bar: with
+// android.edgeToEdgeEnabled the app draws behind BOTH system bars, so the
+// navigation bar needs light icons too — expo-status-bar only styles the status
+// bar, which left the gesture area a black strip below the tab bar.
+import { SystemBars } from "react-native-edge-to-edge";
+import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+
+import { CLIENT_VERSION } from "./src/config";
+import { useMinVersionGate } from "./src/useMinVersionGate";
+import { storeListingUrl } from "./src/version";
+import { mountsAppShell, useAuth } from "./src/auth/useAuth";
+import { countUnsyncedChanges } from "./src/sync/syncDb";
+import { wipeAllLocalData } from "./src/offline/wipeLocalData";
+import { unregisterPushNotifications } from "./src/notifications/pushRegistration";
+import { AuthFlow } from "./src/screens/AuthFlow";
+import { LandingScreen } from "./src/screens/LandingScreen";
+import { CrashReportConsent } from "./src/screens/CrashReportConsent";
+import { AppShell } from "./src/AppShell";
+import { AppLockGate } from "./src/offline/AppLockGate";
+import { applyScreenCapturePolicy } from "./src/offline/appLockPreference";
+import { excludeLocalDataFromBackup } from "./src/offline/localStores";
+import { LoadingState } from "./src/ui/ScreenStates";
+import { Button } from "./src/ui/Button";
+import { fontSize, spacing, theme } from "./src/theme";
+
+// The blocked build's only way out (MAPP-001). The rule itself — Android only,
+// from app.json's package id, https so it resolves without the Play app — is
+// `storeListingUrl` in ./src/version, pure and tested, because mobile/ has no
+// React Native test environment and a rule inside a component is a rule nothing
+// can run. This file keeps only the platform values it is fed.
+const storeUrl = storeListingUrl({
+  os: Platform.OS,
+  androidPackage: Constants.expoConfig?.android?.package,
+});
+
+export default function App() {
+  const minVersionGate = useMinVersionGate();
+  const auth = useAuth();
+
+  // Two process-scoped privacy settings that have to be re-applied on every
+  // launch because neither survives one: FLAG_SECURE (follows the app-lock
+  // preference — see applyScreenCapturePolicy) and the iOS backup exclusion
+  // on the documents tree (a no-op on Android, which has allowBackup=false).
+  useEffect(() => {
+    void applyScreenCapturePolicy().catch(console.error);
+    void excludeLocalDataFromBackup().catch(console.error);
+  }, []);
+
+  // MAPP-002: the hard block is for a build that is too old AND on a
+  // connection where the update is free and to hand. Everything else shows the
+  // same screen with a way past it and keeps working — a dead app in a place
+  // holds the user's offline maps and their in-progress track hostage to a Play
+  // Store they may have no way to reach.
+  const upgradeEnforcement =
+    minVersionGate.status === "upgradeRequired" ? minVersionGate.enforcement : "none";
+  const openStore = storeUrl
+    ? () => {
+        void Linking.openURL(storeUrl).catch(console.error);
+      }
+    : undefined;
+
+  // The warn screen is the same screen as the block, plus a way past it, and
+  // the way past lasts only until the app is next foregrounded. Not sticky on
+  // purpose: a build below the minimum stays below it, and the one gesture that
+  // dismisses this screen and leaves — tapping through to the Play Store — is
+  // exactly the one after which it should be shown again. `block` never reads
+  // this flag; it renders no dismiss button, so nothing can set it.
+  const [warnDismissed, setWarnDismissed] = useState(false);
+  useEffect(() => {
+    if (upgradeEnforcement !== "warn") return;
+    const subscription = AppState.addEventListener("change", (next) => {
+      if (next === "active") setWarnDismissed(false);
+    });
+    return () => subscription.remove();
+  }, [upgradeEnforcement]);
+
+  const warning = upgradeEnforcement === "warn";
+  if (minVersionGate.status === "upgradeRequired" && !(warning && warnDismissed)) {
+    return (
+      <SafeAreaProvider>
+        <SafeAreaView style={styles.blockingContainer}>
+          <SystemBars style="light" />
+          <Text style={styles.blockingTitle}>Update required</Text>
+          {/* The warn copy says "over mobile data, or on Wi-Fi later" and NOT
+              "connect to Wi-Fi to install it", because the update is perfectly
+              installable over mobile data — the metered check governs whether
+              we may take the app away, not whether they can act. */}
+          <Text style={styles.blockingLine}>
+            {warning
+              ? `This version (${CLIENT_VERSION}) is no longer supported. You can update now over mobile data, or on Wi-Fi later.`
+              : `This version (${CLIENT_VERSION}) is no longer supported. Minimum supported version is ${minVersionGate.minVersion}. Please update the app to continue.`}
+          </Text>
+          {openStore ? (
+            <Button label="Open the Play Store" icon="external-link" onPress={openStore} />
+          ) : null}
+          {warning ? (
+            <Button
+              label="Continue for now"
+              variant="ghost"
+              onPress={() => setWarnDismissed(true)}
+            />
+          ) : null}
+        </SafeAreaView>
+      </SafeAreaProvider>
+    );
+  }
+
+  return (
+    <SafeAreaProvider>
+      <SystemBars style="light" />
+      {/* App lock (Stage 4): active once offline map data exists on-device. */}
+      <AppLockGate>
+      {auth.state === "loading" ? (
+        <LoadingState />
+      ) : mountsAppShell(auth.state) ? (
+        <>
+        {/* Asked once, on the first arrival INTO the app — guest or signed in.
+            It sits beside the shell rather than inside it so the question is
+            not owned by any one screen. */}
+        <CrashReportConsent />
+        <AppShell
+          accountState={auth.accountState}
+          onLinkAccount={auth.linkAccount}
+          onSignOut={async () => {
+            // Sign-out wipes the sync mirror AND the outbox (stage8 §9), plus
+            // the offline registry and every downloaded file — unflushed local
+            // changes die with it, so block on a confirmation when any exist.
+            const unsynced = await countUnsyncedChanges();
+            if (unsynced > 0) {
+              const confirmed = await new Promise<boolean>((resolve) => {
+                Alert.alert(
+                  "Unsynced changes",
+                  `You have ${unsynced} unsynced change${unsynced === 1 ? "" : "s"} that will be lost. Sign out anyway?`,
+                  [
+                    { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
+                    { text: "Sign out", style: "destructive", onPress: () => resolve(true) },
+                  ],
+                  { cancelable: true, onDismiss: () => resolve(false) },
+                );
+              });
+              if (!confirmed) return;
+            }
+            // Unregister the push token BEFORE tokens are cleared (the DELETE
+            // needs an authenticated request); best-effort inside.
+            await unregisterPushNotifications();
+            const wiped = await wipeAllLocalData();
+            if (wiped.failed.length > 0) {
+              // The privacy line held only partly. Say so — the next person to
+              // use this phone would otherwise inherit the remains silently.
+              Alert.alert(
+                "Some data couldn't be removed",
+                `This phone kept your ${wiped.failed.join(" and ")}. Signing out anyway; clear the app's storage in Android settings to be sure.`,
+              );
+            }
+            await auth.signOut();
+          }}
+        />
+        </>
+      ) : auth.state === "chooser" || auth.state === "signIn" ? (
+        // One screen for both: the landing screen IS the sign-in screen, and
+        // the only thing the two states change is whether "continue without an
+        // account" is on offer.
+        <SafeAreaView style={styles.authSafeArea}>
+          <LandingScreen auth={auth} />
+        </SafeAreaView>
+      ) : (
+        <SafeAreaView style={styles.authSafeArea}>
+          <AuthFlow auth={auth} />
+        </SafeAreaView>
+      )}
+      </AppLockGate>
+    </SafeAreaProvider>
+  );
+}
+
+const styles = StyleSheet.create({
+  blockingContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: spacing(3),
+    gap: spacing(1),
+    backgroundColor: theme.primary,
+  },
+  blockingTitle: { fontSize: fontSize.xl, fontWeight: "600", color: theme.textPrimary },
+  blockingLine: {
+    fontSize: fontSize.sm,
+    color: theme.textMuted,
+    textAlign: "center",
+  },
+  authSafeArea: { flex: 1, backgroundColor: theme.primary },
+});

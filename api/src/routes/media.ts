@@ -19,12 +19,32 @@ import {
 import { deleteS3Keys, deleteS3KeysBestEffort } from "../lib/s3Cleanup";
 import { validateUploadSizes } from "../lib/mediaUploadValidation";
 import { toMediaItem } from "../lib/mediaPresign";
-import { requireCanyonOwnerAccess } from "../lib/canyonAccess";
+import { mediaKeys } from "../lib/mediaKeys";
+import { exhaustedEgressOwnerIds } from "../lib/egressQuota";
+import { requirePlaceOwnerAccess } from "../lib/placeAccess";
+import { placeIdOfMedia } from "../lib/mediaLink";
+import {
+  mediaDeleteTombstones,
+  mediaUnlinkTombstones,
+  writeTombstones,
+} from "../lib/syncTombstones";
+import {
+  assertClientIdReplayable,
+  parseClientSuppliedId,
+} from "../lib/clientSuppliedId";
 import {
   mediaCategory,
   categoryHasThumbnail,
-  randomTrackColor,
+  isMediaOrigin,
+  parseMediaMetadata,
+  MediaMetadataError,
+  type MediaLinkedType,
+  type MediaOrigin,
+  pickNextTrackColor,
   MEDIA_SIZE_CAPS,
+  MEDIA_DISPLAY_NAME_MAX,
+  readMediaMetadata,
+  type StandaloneFile,
   MEDIA_EXTENSION_BY_MIME,
   TRACK_MIME_TYPES,
   type MediaCategory,
@@ -36,24 +56,67 @@ const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
 const UPLOAD_URL_TTL_SECONDS = 900; // 15 minutes
 const THUMBNAIL_MIME = "image/jpeg";
 
-// Only the owner of the target canyon (or the canyon owning the trip log) may
-// attach media — even on canyons shared with them.
+/**
+ * The parent a file is being uploaded or moved to, validated as a pair.
+ *
+ * The two columns only make sense together — `"none"` with an id is a
+ * standalone file that claims a parent, and a parent type with a null id is an
+ * attachment attached to nothing. Both would pass a field-at-a-time check and
+ * neither is a state anything downstream can read.
+ *
+ * `origin` is required on a standalone file: it is what puts the row in the
+ * Saved list's Imports or Tracks category, and a row with neither a parent nor
+ * an origin is invisible in every surface the user has.
+ */
+function parseLinkTarget(body: Record<string, unknown>): {
+  linkedType: MediaLinkedType;
+  linkedId: string | null;
+  origin: MediaOrigin | null;
+} {
+  const { linkedType, linkedId, origin } = body;
+  if (linkedType !== "place" && linkedType !== "tripLog" && linkedType !== "none") {
+    throw new AppError(400, "Invalid linkedType");
+  }
+  if (origin !== undefined && origin !== null && !isMediaOrigin(origin)) {
+    throw new AppError(400, "Invalid origin");
+  }
+  const parsedOrigin = isMediaOrigin(origin) ? origin : null;
+  if (linkedType === "none") {
+    if (linkedId !== undefined && linkedId !== null) {
+      throw new AppError(400, "A standalone file must not carry a linkedId");
+    }
+    if (parsedOrigin === null) {
+      throw new AppError(400, "A standalone file requires an origin");
+    }
+    return { linkedType, linkedId: null, origin: parsedOrigin };
+  }
+  if (typeof linkedId !== "string" || !linkedId) {
+    throw new AppError(400, "linkedId is required");
+  }
+  return { linkedType, linkedId, origin: parsedOrigin };
+}
+
+// Only the owner of the target place (or the place owning the trip log) may
+// attach media — even on places shared with them. A standalone file's target
+// is the caller themselves, so there is nothing to check.
 async function assertOwnsTarget(
   userId: string,
   linkedType: string,
-  linkedId: string,
+  linkedId: string | null,
 ) {
-  if (linkedType === "canyon") {
-    const canyon = await prisma.canyon.findUnique({
+  if (linkedType === "none") return;
+  if (linkedId === null) throw new AppError(400, "linkedId is required");
+  if (linkedType === "place") {
+    const place = await prisma.place.findUnique({
       where: { id: linkedId },
       select: { id: true, ownerId: true },
     });
-    if (!canyon) throw new AppError(404, "Canyon not found");
-    // none → 404 (no existence oracle for canyons the caller can't see);
-    // sharee → 403 (legitimately sees the canyon, just can't attach media).
-    await requireCanyonOwnerAccess(
+    if (!place) throw new AppError(404, "Place not found");
+    // none → 404 (no existence oracle for places the caller can't see);
+    // sharee → 403 (legitimately sees the place, just can't attach media).
+    await requirePlaceOwnerAccess(
       userId,
-      canyon,
+      place,
       "Only the owner can attach media",
     );
   } else if (linkedType === "tripLog") {
@@ -70,54 +133,82 @@ async function assertOwnsTarget(
   }
 }
 
-// A canyon may have at most one track (GPX/KML). Trip logs are unconstrained.
+// A place may have at most one track (GPX/KML). Trip logs are unconstrained.
 // Checked in both presign (fail fast) and confirm (authoritative — the presign
 // check can race; the orphan sweeper reclaims a blob whose confirm is rejected).
-async function assertCanyonTrackSlotFree(
+async function assertPlaceTrackSlotFree(
   linkedType: string,
-  linkedId: string,
+  linkedId: string | null,
   category: MediaCategory,
+  /** The row being MOVED, on a re-link: it is otherwise its own incumbent. */
+  ignoreMediaId?: string,
 ) {
-  if (linkedType !== "canyon" || category !== "track") return;
+  if (linkedType !== "place" || linkedId === null || category !== "track") return;
   const existing = await prisma.media.count({
     where: {
-      linkedType: "canyon",
+      linkedType: "place",
       linkedId,
       mediaType: { in: TRACK_MIME_TYPES as unknown as string[] },
+      ...(ignoreMediaId ? { id: { not: ignoreMediaId } } : {}),
     },
   });
-  if (existing > 0) throw new AppError(409, "This canyon already has a track");
+  if (existing > 0) throw new AppError(409, "This place already has a track");
 }
 
-function validateMediaType(mediaType: unknown, filename: unknown): MediaCategory {
+/**
+ * A user-supplied label, or null. Capped like a trip title: an uncapped label
+ * persists something the rename endpoint would then refuse, stranding the file
+ * at a name its own edit screen cannot save.
+ */
+function parseMediaDisplayName(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string") throw new AppError(400, "displayName must be a string");
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (trimmed.length > MEDIA_DISPLAY_NAME_MAX) {
+    throw new AppError(400, `displayName must be ${MEDIA_DISPLAY_NAME_MAX} characters or fewer`);
+  }
+  return trimmed;
+}
+
+/** parseMediaMetadata, with its shape complaint turned into a 400. The message
+ * names the offending FIELD and never its value — metadata holds coordinates. */
+function parseMediaMetadataOr400(origin: MediaOrigin | null, value: unknown) {
+  try {
+    return parseMediaMetadata(origin, value);
+  } catch (err) {
+    if (err instanceof MediaMetadataError) throw new AppError(400, err.message);
+    throw err;
+  }
+}
+
+/** Validates the file's type and name together and hands both back narrowed —
+ * callers need the strings, and re-asserting them at each use is how one site
+ * ends up trusting an unvalidated one. */
+function validateMediaType(
+  rawMediaType: unknown,
+  rawFilename: unknown,
+): { category: MediaCategory; mediaType: string; filename: string } {
   if (
-    typeof mediaType !== "string" ||
-    typeof filename !== "string" ||
-    !filename.trim()
+    typeof rawMediaType !== "string" ||
+    typeof rawFilename !== "string" ||
+    !rawFilename.trim()
   ) {
     throw new AppError(400, "filename and mediaType are required");
   }
+  const mediaType = rawMediaType;
+  const filename = rawFilename;
   const category = mediaCategory(mediaType);
   if (!category) throw new AppError(400, `Unsupported media type: ${mediaType}`);
-  // Browsers report inconsistent MIME types for GPX/KML, so require a matching
-  // extension to pin down the format.
+  // Clients report inconsistent MIME types for GPX/KML/GeoJSON, so require a
+  // matching extension to pin down the format.
   if (category === "track") {
     const ext = filename.split(".").pop()?.toLowerCase();
     const expected = MEDIA_EXTENSION_BY_MIME[mediaType];
     if (ext !== expected)
       throw new AppError(400, `Track file must have a .${expected} extension`);
   }
-  return category;
-}
-
-// Keys are derived entirely from server-side values (ownerId + mediaId + MIME),
-// so the client can never point a confirm at someone else's object.
-function mediaKeys(ownerId: string, mediaId: string, mediaType: string) {
-  const ext = MEDIA_EXTENSION_BY_MIME[mediaType];
-  return {
-    displayKey: `media/${ownerId}/${mediaId}/display.${ext}`,
-    thumbnailKey: `media/${ownerId}/${mediaId}/thumb.jpg`,
-  };
+  return { category, mediaType, filename };
 }
 
 // POST /media/presign — validate ownership + type, return presigned PUT URL(s).
@@ -127,16 +218,18 @@ router.post(
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await getUser(req.user!.sub);
-    const { linkedType, linkedId, filename, mediaType, sizeBytes, thumbnailSizeBytes } =
-      req.body ?? {};
-    if (typeof linkedId !== "string")
-      throw new AppError(400, "linkedId is required");
-    const category = validateMediaType(mediaType, filename);
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const { sizeBytes, thumbnailSizeBytes } = body;
+    const { linkedType, linkedId, origin } = parseLinkTarget(body);
+    const { category, mediaType } = validateMediaType(body.mediaType, body.filename);
+    // Shape-checked here as well as at confirm so a bad stats object costs a
+    // 400 rather than a wasted upload of the blob it describes.
+    parseMediaMetadataOr400(origin, body.metadata);
     // Declared sizes bound the presigned PUTs (SEC-003): they are signed into
     // Content-Length below, so S3 rejects uploads that exceed the declaration.
     const sizes = validateUploadSizes(category, sizeBytes, thumbnailSizeBytes);
     await assertOwnsTarget(user.id, linkedType, linkedId);
-    await assertCanyonTrackSlotFree(linkedType, linkedId, category);
+    await assertPlaceTrackSlotFree(linkedType, linkedId, category);
     // Headroom pre-check including the declared upload; the authoritative
     // quota charge still happens on confirm against the real S3 size.
     await assertHasStorageQuota(
@@ -144,7 +237,26 @@ router.post(
       BigInt(sizes.sizeBytes + (sizes.thumbnailSizeBytes ?? 0)),
     );
 
-    const mediaId = randomUUID();
+    // Optional client-minted mediaId (Stage 8 §3.5). A client id whose row
+    // already exists means the whole three-phase flow already completed —
+    // return the existing item (200), never fresh upload URLs. Foreign id →
+    // 404 (anti-oracle; see lib/clientSuppliedId.ts).
+    const clientMediaId = parseClientSuppliedId(
+      (req.body ?? {}).mediaId,
+      "mediaId",
+    );
+    if (clientMediaId) {
+      const existing = await prisma.media.findUnique({
+        where: { id: clientMediaId },
+      });
+      if (existing) {
+        assertClientIdReplayable(existing.ownerId, user.id, "Media not found");
+        res.status(200).json(await toMediaItem(existing));
+        return;
+      }
+    }
+
+    const mediaId = clientMediaId ?? randomUUID();
     const { displayKey, thumbnailKey } = mediaKeys(user.id, mediaId, mediaType);
 
     const displayUploadUrl = await getSignedUrl(
@@ -184,26 +296,31 @@ router.post(
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await getUser(req.user!.sub);
     const mediaId = getParam(req.params.mediaId);
-    const { linkedType, linkedId, filename, mediaType } = req.body ?? {};
-    if (typeof linkedId !== "string")
-      throw new AppError(400, "linkedId is required");
-    const category = validateMediaType(mediaType, filename);
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const { linkedType, linkedId, origin } = parseLinkTarget(body);
+    const metadata = parseMediaMetadataOr400(origin, body.metadata);
+    const { category, mediaType, filename } = validateMediaType(
+      body.mediaType,
+      body.filename,
+    );
     await assertOwnsTarget(user.id, linkedType, linkedId);
 
     // Idempotent confirm (ARCH-005): if the row already exists, this confirm
     // already succeeded — return it (handled below) before the track-slot guard
-    // so a retried confirm of the same row is a no-op, not a spurious 409.
-    // already succeeded — return it without re-charging quota, so client
-    // retries / double-clicks are benign no-ops. A foreign-owned row can't
-    // happen with server-minted UUIDs, but fail closed anyway.
+    // so a retried confirm of the same row is a no-op, not a spurious 409,
+    // and without re-charging quota (client retries / double-clicks are benign).
+    // A foreign-owned row is 404, not 403: with client-minted presign ids
+    // (Stage 8 §3.5) a probed foreign mediaId is reachable here, and 403 would
+    // confirm it exists (SEC-001 anti-oracle).
     const existing = await prisma.media.findUnique({ where: { id: mediaId } });
     if (existing) {
-      if (existing.ownerId !== user.id) throw new AppError(403, "Access denied");
+      if (existing.ownerId !== user.id)
+        throw new AppError(404, "Media not found");
       res.status(200).json(await toMediaItem(existing));
       return;
     }
 
-    await assertCanyonTrackSlotFree(linkedType, linkedId, category);
+    await assertPlaceTrackSlotFree(linkedType, linkedId, category);
 
     const { displayKey, thumbnailKey } = mediaKeys(user.id, mediaId, mediaType);
     const expectThumb = categoryHasThumbnail(category);
@@ -257,20 +374,39 @@ router.post(
             quota: quota.toString(),
           });
         }
+
+        let assignedColor: string | null = null;
+        if (category === "track") {
+          const existingTracks = await tx.media.findMany({
+            where: {
+              OR: [
+                { ownerId: user.id },
+                ...(linkedId ? [{ linkedId }] : []),
+              ],
+              color: { not: null },
+            },
+            select: { color: true },
+          });
+          assignedColor = pickNextTrackColor(existingTracks.map((t) => t.color));
+        }
+
         return tx.media.create({
           data: {
             id: mediaId,
             ownerId: user.id,
             linkedType,
             linkedId,
+            origin,
+            displayName: parseMediaDisplayName(body.displayName),
+            metadata,
             s3KeyDisplay: displayKey,
             s3KeyThumbnail: expectThumb ? thumbnailKey : null,
             mediaType,
             filename,
             fileSizeBytes: totalBytes,
-            // Tracks get a stable random colour from the canonical palette;
+            // Tracks get a deterministic next colour avoiding collisions;
             // image/video media carry none.
-            color: category === "track" ? randomTrackColor() : null,
+            color: assignedColor,
           },
         });
       });
@@ -303,17 +439,266 @@ router.post(
   },
 );
 
+// POST /media/download-urls — batch presigned GET URLs for the mobile blob
+// cache (Stage 8 §7.3; delta media rows carry metadata only). Authorization
+// per id: owner, or sharee of the place a place-linked row is attached to.
+// Rows the caller can't see are OMITTED, never erred — the response must not
+// confirm foreign ids (anti-oracle; deliberately supersedes the attach-403
+// pattern rather than copying it).
+const DOWNLOAD_URLS_MAX_IDS = 100;
+
+router.post(
+  "/download-urls",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const user = await getUser(req.user!.sub);
+    const { ids } = (req.body ?? {}) as { ids?: unknown };
+    if (
+      !Array.isArray(ids) ||
+      ids.length === 0 ||
+      ids.some((id) => typeof id !== "string")
+    ) {
+      throw new AppError(400, "ids array is required");
+    }
+    if (ids.length > DOWNLOAD_URLS_MAX_IDS) {
+      throw new AppError(
+        413,
+        `At most ${DOWNLOAD_URLS_MAX_IDS} ids per request`,
+      );
+    }
+
+    const rows = await prisma.media.findMany({
+      where: { id: { in: ids as string[] } },
+    });
+    // Visibility set derived from the caller's own shares — one query, no
+    // per-id role lookups.
+    const candidatePlaceIds = Array.from(
+      new Set(
+        rows
+          .filter((m) => m.ownerId !== user.id)
+          .map(placeIdOfMedia)
+          .filter((placeId): placeId is string => placeId !== null),
+      ),
+    );
+    const sharedPlaceIds = new Set(
+      candidatePlaceIds.length > 0
+        ? (
+            await prisma.placeShare.findMany({
+              where: {
+                sharedWithId: user.id,
+                placeId: { in: candidatePlaceIds },
+              },
+              select: { placeId: true },
+            })
+          ).map((s) => s.placeId)
+        : [],
+    );
+    const visible = rows.filter((m) => {
+      if (m.ownerId === user.id) return true;
+      const placeId = placeIdOfMedia(m);
+      return placeId !== null && sharedPlaceIds.has(placeId);
+    });
+
+    // Monthly egress cap. This is the bulk media pull (the mobile blob cache
+    // asks for up to 100 blobs at a time), so it is where a download loop would
+    // actually live — the inline presigns on place/trip reads are small and
+    // interactive and are deliberately left ungated.
+    //
+    // Charged to the media's OWNER, so rows belonging to an exhausted owner are
+    // dropped. Omitting rather than erroring matches this endpoint's existing
+    // contract, which already omits rows the caller may not see.
+    const exhausted = await exhaustedEgressOwnerIds(
+      Array.from(new Set(visible.map((m) => m.ownerId))),
+    );
+    const servable = visible.filter((m) => !exhausted.has(m.ownerId));
+
+    const items = await Promise.all(
+      servable.map(async (row) => {
+        const item = await toMediaItem(row);
+        return {
+          id: item.id,
+          displayUrl: item.displayUrl,
+          thumbnailUrl: item.thumbnailUrl,
+        };
+      }),
+    );
+    res.json({ items });
+  },
+);
+
 // DELETE /media/:id — remove a single media item (owner only). Bulk/cascade
-// deletes on canyon/trip/account live in their respective routes.
+// deletes on place/trip/account live in their respective routes.
+// GET /media/standalone — the caller's own imports and recorded tracks.
+//
+// For the web app, which is not delta-synced and so has no other way to see a
+// file that hangs off no place. Metadata only: presigning every row would put
+// the whole list through the egress meter on page load, whether or not anything
+// was opened. Content comes from POST /media/download-urls, which is gated.
+//
+// Owner-scoped by construction — a standalone file is visible to nobody else,
+// and one LINKED to a place is reported here for its owner only (a sharee
+// sees it as that place's way, through the place).
+router.get(
+  "/standalone",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const user = await getUser(req.user!.sub);
+    const rows = await prisma.media.findMany({
+      where: { ownerId: user.id, origin: { not: null } },
+      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+    });
+    const files: StandaloneFile[] = rows.flatMap((row) => {
+      if (!isMediaOrigin(row.origin)) return [];
+      return [
+        {
+          id: row.id,
+          mediaType: row.mediaType,
+          filename: row.filename,
+          displayName: row.displayName,
+          fileSizeBytes: Number(row.fileSizeBytes),
+          color: row.color,
+          origin: row.origin,
+          metadata: readMediaMetadata(row.origin, row.metadata),
+          linkedPlaceId: placeIdOfMedia(row),
+          createdAt: row.createdAt.toISOString(),
+          updatedAt: row.updatedAt.toISOString(),
+        },
+      ];
+    });
+    res.json(files);
+  },
+);
+
+// PATCH /media/:id — rename a standalone file.
+//
+// The label has to sync or it diverges per device, which is the inconsistency
+// this whole change exists to remove. Only `displayName` is editable: the
+// filename is what the download is called and what pins the track format, and
+// nothing about the bytes can change once they are confirmed.
+router.patch(
+  "/:id",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const user = await getUser(req.user!.sub);
+    const id = getParam(req.params.id);
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    if (!("displayName" in body)) {
+      throw new AppError(400, "displayName is required");
+    }
+    const displayName = parseMediaDisplayName(body.displayName);
+
+    // Owner-scoped; a foreign id gets the same 404 a missing one gets (the
+    // anti-oracle this file's other handlers argue).
+    const media = await prisma.media.findFirst({ where: { id, ownerId: user.id } });
+    if (!media) throw new AppError(404, "Media not found");
+    if (media.origin === null) {
+      throw new AppError(400, "Only an import or a recorded track can be renamed");
+    }
+
+    const updated = await prisma.media.update({
+      where: { id },
+      data: { displayName },
+    });
+    res.json(await toMediaItem(updated));
+  },
+);
+
+// PATCH /media/:id/link — move a standalone file between "nobody" and a place.
+//
+// This is what makes a place's way a LINK rather than a copy. Attaching an
+// import used to upload a second copy of it, so the user held two files, only
+// one of which was in their Saved list, and replacing the way DELETED the copy.
+// Now the same row changes parent, and detaching leaves the file standing.
+//
+// Only a standalone file (one with an `origin`) may be moved: a photo has no
+// existence apart from what it is attached to, and moving one is not a thing
+// any surface offers.
+router.patch(
+  "/:id/link",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const user = await getUser(req.user!.sub);
+    const id = getParam(req.params.id);
+    const body = (req.body ?? {}) as Record<string, unknown>;
+
+    const { linkedType, linkedId } = body;
+    if (linkedType !== "place" && linkedType !== "none") {
+      // Deliberately narrower than parseLinkTarget: a file is linked to a
+      // place or to nothing. Trip logs hold attachments, not ways.
+      throw new AppError(400, "linkedType must be \"place\" or \"none\"");
+    }
+    if (linkedType === "place" && (typeof linkedId !== "string" || !linkedId)) {
+      throw new AppError(400, "linkedId is required");
+    }
+    if (linkedType === "none" && linkedId !== undefined && linkedId !== null) {
+      throw new AppError(400, "Unlinking must not carry a linkedId");
+    }
+    const nextLinkedId = linkedType === "place" ? (linkedId as string) : null;
+
+    // Owner-scoped lookup, and a foreign id gets the SAME 404 a missing one
+    // gets — a sharee sees place-level media ids in a shared place payload,
+    // so a 403 here would confirm which of them are real (the anti-oracle this
+    // file's DELETE and presign already argue).
+    const media = await prisma.media.findFirst({ where: { id, ownerId: user.id } });
+    if (!media) throw new AppError(404, "Media not found");
+    if (media.origin === null) {
+      throw new AppError(400, "Only an import or a recorded track can be linked");
+    }
+
+    const category = mediaCategory(media.mediaType);
+    if (!category) throw new AppError(400, "Unsupported media type");
+    await assertOwnsTarget(user.id, linkedType, nextLinkedId);
+    await assertPlaceTrackSlotFree(linkedType, nextLinkedId, category, id);
+
+    // Whoever could see this file only through its OLD place must be told to
+    // forget it, in the same transaction as the move (the tombstone rule). A
+    // LINK needs no tombstone in the other direction: the new place's sharees
+    // simply gain the row on their next delta.
+    const previousPlaceId = placeIdOfMedia(media);
+    const losingPlaceId =
+      previousPlaceId !== null && previousPlaceId !== nextLinkedId
+        ? previousPlaceId
+        : null;
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const row = await tx.media.update({
+        where: { id },
+        data: { linkedType, linkedId: nextLinkedId },
+      });
+      if (losingPlaceId !== null) {
+        const sharees = await tx.placeShare.findMany({
+          where: { placeId: losingPlaceId },
+          select: { sharedWithId: true },
+        });
+        await writeTombstones(
+          tx,
+          mediaUnlinkTombstones({
+            mediaId: id,
+            shareeIds: sharees.map((share) => share.sharedWithId),
+          }),
+        );
+      }
+      return row;
+    });
+
+    res.json(await toMediaItem(updated));
+  },
+);
+
 router.delete(
   "/:id",
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await getUser(req.user!.sub);
     const id = getParam(req.params.id);
-    const media = await prisma.media.findUnique({ where: { id } });
+    // Owner-scoped: a foreign media id gets the SAME 404 a non-existent one
+    // gets. A sharee sees place-level media ids in a shared place payload,
+    // so a 403 here would confirm which of them are real (APIR-013/PRIV-106) —
+    // the presign path in this same file already argues exactly that.
+    const media = await prisma.media.findFirst({
+      where: { id, ownerId: user.id },
+    });
     if (!media) throw new AppError(404, "Media not found");
-    if (media.ownerId !== user.id) throw new AppError(403, "Access denied");
 
     // S3-first (ARCH-004): blobs go before the row, so an S3 failure leaves
     // the row (and therefore the keys) intact for a retried DELETE. The row
@@ -326,8 +711,27 @@ router.delete(
       ),
     );
     await prisma.$transaction(async (tx) => {
+      // Place-level media is visible to the place's sharees (hybrid model),
+      // so they must be told to forget it too. Trip media is owner-private —
+      // no fan-out (sync tombstone rule, same transaction as the delete).
+      const deletedFromPlaceId = placeIdOfMedia(media);
+      const sharees =
+        deletedFromPlaceId !== null
+          ? await tx.placeShare.findMany({
+              where: { placeId: deletedFromPlaceId },
+              select: { sharedWithId: true },
+            })
+          : [];
       await tx.media.delete({ where: { id } });
       await decrementStorageUsed(user.id, media.fileSizeBytes, tx);
+      await writeTombstones(
+        tx,
+        mediaDeleteTombstones({
+          ownerId: user.id,
+          mediaId: id,
+          shareeIds: sharees.map((s) => s.sharedWithId),
+        }),
+      );
     });
 
     res.status(204).send();

@@ -1,24 +1,17 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { useIsMobile } from "../../useIsMobile";
-import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Button,
-  IconButton,
-  CircularProgress,
-  Select,
-  MenuItem,
-  TextField,
-  Tooltip,
-} from "@mui/material";
-import CloseIcon from "@mui/icons-material/Close";
+// A GeoPDF: a printable map of one area, on one sheet of paper, at one scale.
+// The form asks those three things in that order, then what goes on top.
+//
+// Nothing here is live — the paper is drawn on the map while you pick an area
+// (App's frame), and everything else only matters once the worker renders it —
+// so the whole dialog is one form with a Make it at the end, unlike the topo
+// settings beside it (DESIGN.md §6).
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { SquareDashed } from "lucide-react";
 import type { TBbox } from "../map/Map";
 import { BASE_LAYERS } from "../map/Map";
 import { TOPO_LAYERS } from "../../topoLayerTypes";
 import type { CompletedTopoJob } from "../../topoLayerTypes";
-import { apiFetch, type TCanyon, type GeoPdfJobView } from "../../canyonUtils";
+import { apiFetch, type TPlace, type GeoPdfJobView } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import { ApiError } from "../../errors/ApiError";
 import { ErrorBanner } from "../feedback/ErrorBanner";
@@ -57,7 +50,19 @@ import {
 } from "@logjam/shared";
 import type { GeoPdfConfig } from "@logjam/shared";
 import { useStoredState } from "../../useStoredState";
-import { buildCanyonMarkers } from "./geoPdfCanyonMarkers";
+import { buildPlaceMarkers } from "./geoPdfPlaceMarkers";
+import {
+  Button,
+  Checkbox,
+  ChipRail,
+  Dialog,
+  InfoTip,
+  SectionHeader,
+  Select,
+  SettingsRow,
+  TextField,
+  type ChipOption,
+} from "../../ui";
 import classes from "./GeoPdfDialog.module.css";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -77,17 +82,67 @@ export type GeoPdfTemplate = {
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const PAPER_SIZES: PaperSize[] = ["A2", "A3", "A4", "A5", "custom"];
-const PIVOT_POINTS: PivotPoint[] = [
-  "tl",
-  "tc",
-  "tr",
-  "ml",
-  "mc",
-  "mr",
-  "bl",
-  "bc",
-  "br",
+// The pivot's nine points, in reading order, with the name a reader hears:
+// the grid SHOWS which corner is anchored, so the words are the control's
+// accessible name rather than a caption under it (DESIGN.md §9).
+const PIVOT_POINTS: { value: PivotPoint; label: string }[] = [
+  { value: "tl", label: "Top left" },
+  { value: "tc", label: "Top centre" },
+  { value: "tr", label: "Top right" },
+  { value: "ml", label: "Middle left" },
+  { value: "mc", label: "Centre" },
+  { value: "mr", label: "Middle right" },
+  { value: "bl", label: "Bottom left" },
+  { value: "bc", label: "Bottom centre" },
+  { value: "br", label: "Bottom right" },
 ];
+
+const PAPER_OPTIONS: ChipOption<PaperSize>[] = PAPER_SIZES.map((size) => ({
+  value: size,
+  label: size === "custom" ? "Custom" : size,
+}));
+
+const ORIENTATION_OPTIONS: ChipOption<Orientation>[] = [
+  { value: "portrait", label: "Portrait" },
+  { value: "landscape", label: "Landscape" },
+];
+
+const LOCK_OPTIONS: ChipOption<ExtentState["lockMode"]>[] = [
+  { value: "scale", label: "Scale" },
+  { value: "position", label: "Position" },
+];
+
+const COORD_OPTIONS: ChipOption<CoordMode>[] = [
+  { value: "latlon", label: "Lat/Lon" },
+  { value: "enNorthing", label: "E/N" },
+];
+
+// Raster only — the renderer fetches XYZ tiles, which a vector PMTiles archive
+// cannot provide.
+const BASE_LAYER_OPTIONS: ChipOption<string>[] = BASE_LAYERS.filter(
+  (layer) => layer.kind === "raster" && !layer.id.startsWith("osm") && layer.id !== "six-base",
+).map((layer) => ({ value: layer.id, label: layer.name }));
+
+const FALLBACK_BASE_LAYER = "six-topo";
+
+/**
+ * The base layer to open with, given whatever the map is showing. The map's own
+ * layer is kept when this form can honour it, and otherwise the fallback is —
+ * asking the LIST rather than testing the id's prefix, which is what makes this
+ * hold for a basemap added later.
+ */
+function seedBaseLayer(activeLayerId: string): string {
+  return BASE_LAYER_OPTIONS.some((option) => option.value === activeLayerId)
+    ? activeLayerId
+    : FALLBACK_BASE_LAYER;
+}
+
+const LOCK_TOOLTIP = "Whichever one you lock stays as it is while you change the other.";
+const COORD_TOOLTIP =
+  "Lat/Lon is what a GPS shows you. E/N is the MGA2020 grid, the one printed on NSW topo maps.";
+const PIVOT_TOOLTIP = "The part of the box that stays put while the rest of it moves.";
+const SCALE_TOOLTIP =
+  "1:25 000 means 1 cm on the paper is 250 m on the ground. Most topo maps are 1:25 000 or 1:50 000.";
 
 const DEFAULT_EXTENT_STATE: ExtentState = {
   paperSize: "A4",
@@ -113,8 +168,8 @@ function GeoPdfDialog({
   activeLayerId,
   completedTopoJobs,
   mapCenter,
-  canyons,
-  sharedCanyons,
+  places,
+  sharedPlaces,
   templateMode,
   editingTemplate,
   onTemplateSaved,
@@ -134,8 +189,8 @@ function GeoPdfDialog({
   activeLayerId: string;
   completedTopoJobs: CompletedTopoJob[];
   mapCenter?: { lat: number; lng: number } | null;
-  canyons?: TCanyon[];
-  sharedCanyons?: TCanyon[];
+  places?: TPlace[];
+  sharedPlaces?: TPlace[];
   templateMode?: boolean;
   editingTemplate?: GeoPdfTemplate | null;
   onTemplateSaved?: () => void;
@@ -145,10 +200,10 @@ function GeoPdfDialog({
   // ── State ────────────────────────────────────────────────────────────────
 
   const toast = useToast();
+  const formId = useId();
 
   const [extentState, setExtentState] =
     useState<ExtentState>(DEFAULT_EXTENT_STATE);
-  const isMobile = useIsMobile();
   const [templates, setTemplates] = useState<GeoPdfTemplate[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(
     null,
@@ -157,9 +212,7 @@ function GeoPdfDialog({
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
 
   // Layers
-  const [selectedBaseLayer, setSelectedBaseLayer] = useState(
-    activeLayerId.startsWith("osm") ? "six-topo" : activeLayerId,
-  );
+  const [selectedBaseLayer, setSelectedBaseLayer] = useState(() => seedBaseLayer(activeLayerId));
   const [selectedOverlays, setSelectedOverlays] = useState<Set<string>>(() => {
     return new Set(TOPO_LAYERS.map((l) => l.name));
   });
@@ -173,15 +226,15 @@ function GeoPdfDialog({
   const [gridLinesEnabled, setGridLinesEnabled] = useState(false);
   const [gridLinesMode, setGridLinesMode] = useState<CoordMode>("latlon");
 
-  // Canyon overlays. Persisted so a deliberate opt-in survives reopen.
-  // Shared canyons default OFF (PRIV-006): a friend consented to in-app
+  // Place overlays. Persisted so a deliberate opt-in survives reopen.
+  // Shared places default OFF (PRIV-006): a friend consented to in-app
   // viewing, not to being named on a printable artifact — opt-in only.
-  const [showOwnedCanyonsOnPdf, setShowOwnedCanyonsOnPdf] = useStoredState(
-    "logjam.geoPdf.showOwnedCanyons",
+  const [showOwnedPlacesOnPdf, setShowOwnedPlacesOnPdf] = useStoredState(
+    "logjam.geoPdf.showOwnedPlaces",
     true,
   );
-  const [showSharedCanyonsOnPdf, setShowSharedCanyonsOnPdf] = useStoredState(
-    "logjam.geoPdf.showSharedCanyons",
+  const [showSharedPlacesOnPdf, setShowSharedPlacesOnPdf] = useStoredState(
+    "logjam.geoPdf.showSharedPlaces",
     false,
   );
 
@@ -247,7 +300,7 @@ function GeoPdfDialog({
     setScaleBarEnabled(true);
     setGridLinesEnabled(false);
     setGridLinesMode("latlon");
-    // Canyon-marker toggles are deliberately NOT reset — they persist via
+    // Place-marker toggles are deliberately NOT reset — they persist via
     // localStorage so the user's explicit choice carries across sessions.
     setError(null);
     setEditTemplateName("");
@@ -265,10 +318,7 @@ function GeoPdfDialog({
     if (seededViewRef.current) return;
     seededViewRef.current = true;
 
-    const activeLayer = activeLayerIdRef.current;
-    setSelectedBaseLayer(
-      activeLayer.startsWith("osm") ? "six-topo" : activeLayer,
-    );
+    setSelectedBaseLayer(seedBaseLayer(activeLayerIdRef.current));
     setSelectedOverlays(new Set(TOPO_LAYERS.map((l) => l.name)));
 
     const center = mapCenterRef.current;
@@ -629,15 +679,15 @@ function GeoPdfDialog({
       },
     };
 
-    // Build canyon markers from canyons within the current extent. Shared
-    // canyons are opt-in only (PRIV-006) — boundary enforced and tested in
-    // buildCanyonMarkers.
-    const markers = buildCanyonMarkers(canyons, sharedCanyons, config.extent, {
-      includeOwned: showOwnedCanyonsOnPdf,
-      includeShared: showSharedCanyonsOnPdf,
+    // Build place markers from places within the current extent. Shared
+    // places are opt-in only (PRIV-006) — boundary enforced and tested in
+    // buildPlaceMarkers.
+    const markers = buildPlaceMarkers(places, sharedPlaces, config.extent, {
+      includeOwned: showOwnedPlacesOnPdf,
+      includeShared: showSharedPlacesOnPdf,
     });
     if (markers.length > 0) {
-      config.canyonMarkers = markers;
+      config.placeMarkers = markers;
     }
 
     try {
@@ -666,6 +716,14 @@ function GeoPdfDialog({
     scaleBarEnabled,
     gridLinesEnabled,
     gridLinesMode,
+    // The place-marker inputs are dependencies like any other. Left out, a
+    // session that only touched these four kept the callback it was built
+    // with — so turning Shared places OFF and pressing Generate still drew
+    // them, which is the one direction of this bug that matters (PRIV-006).
+    places,
+    sharedPlaces,
+    showOwnedPlacesOnPdf,
+    showSharedPlacesOnPdf,
     onJobQueued,
     toast,
     onClose,
@@ -705,769 +763,548 @@ function GeoPdfDialog({
 
   // ── Render ───────────────────────────────────────────────────────────────
 
+  const title = templateMode
+    ? editingTemplate
+      ? "Edit template"
+      : "New template"
+    : "Make a GeoPDF";
+
   return (
     <>
-    <Dialog
-      fullScreen={isMobile}
-      open={open}
-      onClose={generating ? undefined : guard.requestClose}
-      maxWidth="sm"
-      fullWidth
-      PaperProps={{
-        sx: {
-          backgroundColor: "var(--theme-primary)",
-          color: "var(--theme-text-primary)",
-          maxHeight: isMobile ? "100%" : "85vh",
-        },
-      }}
-    >
-      <DialogTitle
-        sx={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          pb: 1,
-        }}
-      >
-        {templateMode
-          ? editingTemplate
-            ? `Edit Template: ${editingTemplate.name}`
-            : "New Template"
-          : "Export GeoPDF"}
-        <IconButton
-          aria-label="Close dialog"
-          size="small"
-          onClick={guard.requestClose}
-          disabled={generating}
-          sx={{ color: "var(--theme-text-primary)" }}
-        >
-          <CloseIcon fontSize="small" />
-        </IconButton>
-      </DialogTitle>
-
-      <DialogContent dividers sx={{ borderColor: "rgba(255,255,255,0.1)" }}>
-        {isMobile && (
-          <div
-            style={{
-              marginBottom: "12px",
-              fontSize: "0.85em",
-              color: "var(--theme-text-muted)",
-            }}
-          >
-            This tool is best used on a larger screen.
-          </div>
-        )}
-        <p className={classes.safetyWarning} role="note">
-          Generated maps use user-generated and third-party data that may be
-          inaccurate or outdated. Not a substitute for your own navigation,
-          judgement, or rescue planning.
-        </p>
-        {/* ── Template name (template mode) ────────────────────── */}
-        {templateMode && (
-          <div className={classes.section}>
-            <div className={classes.sectionLabel}>Template name</div>
-            <TextField
-              placeholder="Template name"
-              value={editTemplateName}
-              onChange={(e) => {
-                setEditTemplateName(e.target.value);
-                markDirty();
+      <Dialog
+        open={open}
+        title={title}
+        size="large"
+        dismissible={!generating}
+        onClose={guard.requestClose}
+        // Pinned: which template this form came from, and the button that turns
+        // the whole form into one, both act on everything below rather than on
+        // the section on screen (DESIGN.md §6). In template mode the NAME is
+        // what the dialog is about, so it sits here for the same reason.
+        toolbar={
+          templateMode ? (
+            <form
+              id={formId}
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (editTemplateName.trim()) void handleSaveTemplateMode();
               }}
-              size="small"
-              color="secondary"
-              sx={{
-                width: "100%",
-                background: "transparent",
-                "& .MuiOutlinedInput-notchedOutline": {
-                  border: "1px solid var(--theme-accent)",
-                },
-                "&:hover .MuiOutlinedInput-notchedOutline": {
-                  border: "1px solid var(--theme-accent)",
-                },
-                "&.Mui-focused .MuiOutlinedInput-notchedOutline": {
-                  border: "1px solid var(--theme-accent)",
-                },
-                "& .MuiOutlinedInput-input": {
-                  padding: "0.25rem 0.5rem !important",
-                },
-              }}
-            />
-          </div>
-        )}
-
-        {/* ── Template loader (normal mode) ────────────────────── */}
-        {!templateMode && (
-          <div className={classes.section}>
-            <div className={classes.sectionLabel}>Template</div>
-            <div className={classes.templateRow}>
-              <Select
-                value={selectedTemplateId ?? ""}
-                onChange={(e) => {
-                  if (e.target.value) handleTemplateSelect(e.target.value);
-                  else setSelectedTemplateId(null);
+            >
+              <TextField
+                label="Template name"
+                value={editTemplateName}
+                data-autofocus
+                onChange={(event) => {
+                  setEditTemplateName(event.target.value);
+                  markDirty();
                 }}
-                size="small"
-                sx={{
-                  flex: 1,
-                  background: "transparent",
-                  border: "1px solid var(--theme-accent)",
-                  borderRadius: "var(--radius-sm)",
-                  "& .MuiOutlinedInput-notchedOutline": {
-                    border: "none",
-                  },
-                  "&:hover .MuiOutlinedInput-notchedOutline": {
-                    border: "none",
-                  },
-                  "&.Mui-focused .MuiOutlinedInput-notchedOutline": {
-                    border: "none",
-                  },
-                  "& .MuiOutlinedInput-input": {
-                    padding: "0.25rem 0.5rem !important",
-                  },
-                }}
-                MenuProps={{
-                  PaperProps: {
-                    sx: {
-                      backgroundColor: "var(--theme-primary)",
-                      boxShadow: "0 8px 16px rgba(0, 0, 0, 0.3)",
-                    },
-                  },
-                }}
-              >
-                <MenuItem value="">— None —</MenuItem>
-                {templates.map((t) => (
-                  <MenuItem key={t.id} value={t.id}>
-                    {t.name}
-                  </MenuItem>
-                ))}
-              </Select>
-              <button
-                className={classes.smallButtonActive}
-                onClick={() => setShowSaveTemplate(!showSaveTemplate)}
-                style={{ fontSize: "0.9em", alignSelf: "stretch" }}
-              >
-                {showSaveTemplate ? "Cancel" : "Save as template"}
-              </button>
+              />
+            </form>
+          ) : (
+            <div className={classes.templateLine}>
+              {showSaveTemplate ? (
+                <>
+                  <TextField
+                    label="Template name"
+                    hideLabel
+                    className={classes.templateField}
+                    placeholder="Name this template"
+                    value={templateName}
+                    autoFocus
+                    onChange={(event) => {
+                      setTemplateName(event.target.value);
+                      markDirty();
+                    }}
+                  />
+                  <Button
+                    variant="filled"
+                    compact
+                    disabled={!templateName.trim()}
+                    onClick={handleSaveTemplate}
+                  >
+                    Save
+                  </Button>
+                  <Button
+                    compact
+                    onClick={() => {
+                      setShowSaveTemplate(false);
+                      setTemplateName("");
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Select
+                    label="Template"
+                    hideLabel
+                    className={classes.templateField}
+                    value={selectedTemplateId ?? ""}
+                    onChange={(event) => {
+                      if (event.target.value) handleTemplateSelect(event.target.value);
+                      else setSelectedTemplateId(null);
+                    }}
+                  >
+                    <option value="">No template</option>
+                    {templates.map((template) => (
+                      <option key={template.id} value={template.id}>
+                        {template.name}
+                      </option>
+                    ))}
+                  </Select>
+                  <Button compact variant="outline" onClick={() => setShowSaveTemplate(true)}>
+                    Save as a template
+                  </Button>
+                </>
+              )}
             </div>
-            {showSaveTemplate && (
-              <div className={classes.templateSaveRow}>
-                <TextField
-                  placeholder="Template name"
-                  value={templateName}
-                  onChange={(e) => {
-                    setTemplateName(e.target.value);
-                    markDirty();
-                  }}
-                  size="small"
-                  color="secondary"
-                  sx={{
-                    flex: 1,
-                    background: "transparent",
-                    border: "1px solid var(--theme-accent)",
-                    borderRadius: "var(--radius-sm)",
-                    "& .MuiOutlinedInput-notchedOutline": {
-                      border: "none",
-                    },
-                    "&:hover .MuiOutlinedInput-notchedOutline": {
-                      border: "none",
-                    },
-                    "&.Mui-focused .MuiOutlinedInput-notchedOutline": {
-                      border: "none",
-                    },
-                    "& .MuiOutlinedInput-input": {
-                      padding: "0.25rem 0.5rem !important",
-                    },
-                  }}
-                />
-                <button
-                  className={classes.smallButtonActive}
-                  onClick={handleSaveTemplate}
-                  style={{ fontSize: "0.9em", alignSelf: "stretch" }}
-                >
-                  Save
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── Paper ────────────────────────────────────────────── */}
-        <div className={classes.section}>
-          <div className={classes.sectionLabel}>Paper</div>
-          <div className={classes.paperRow}>
-            {PAPER_SIZES.map((size) => (
-              <button
-                key={size}
-                aria-pressed={extentState.paperSize === size}
-                className={
-                  extentState.paperSize === size
-                    ? classes.smallButtonActive
-                    : classes.smallButton
+          )
+        }
+        footer={
+          <>
+            <Button onClick={guard.requestClose} disabled={generating}>
+              Cancel
+            </Button>
+            {templateMode ? (
+              <Button
+                type="submit"
+                form={formId}
+                variant="filled"
+                disabled={!editTemplateName.trim()}
+              >
+                Save
+              </Button>
+            ) : (
+              <Button
+                variant="filled"
+                busy={generating}
+                onClick={handleGenerate}
+                disabled={
+                  generating ||
+                  !extentValid ||
+                  hasExtentFieldError(extentInputErrors) ||
+                  scaleInputError !== null
                 }
-                onClick={() => {
+              >
+                Make it
+              </Button>
+            )}
+          </>
+        }
+      >
+        <div className={classes.form}>
+          <p className={classes.wideHint}>This is easier on a bigger screen.</p>
+
+          {error && <ErrorBanner message={error} />}
+
+          <section className={classes.group}>
+            <SectionHeader title="Paper" />
+            <SettingsRow label="Size">
+              <ChipRail
+                label="Paper size"
+                className={classes.railCell}
+                options={PAPER_OPTIONS}
+                value={extentState.paperSize}
+                onChange={(size) => {
                   setExtentState(applyPaperChange(extentState, size));
                   markDirty();
                 }}
-              >
-                {size}
-              </button>
-            ))}
-          </div>
-          <div
-            className={classes.orientationRow}
-            style={
-              extentState.paperSize === "custom"
-                ? { opacity: 0.4, pointerEvents: "none" }
-                : undefined
-            }
-          >
-            {(["portrait", "landscape"] as Orientation[]).map((o) => (
-              <button
-                key={o}
-                aria-pressed={extentState.orientation === o}
-                className={
-                  extentState.orientation === o
-                    ? classes.smallButtonActive
-                    : classes.smallButton
-                }
-                onClick={() => {
-                  setExtentState(applyOrientationChange(extentState, o));
-                  markDirty();
-                }}
-              >
-                {o.charAt(0).toUpperCase() + o.slice(1)}
-              </button>
-            ))}
-          </div>
-          {extentState.paperSize === "custom" && (
-            <div className={classes.customRatioRow}>
-              <input
-                type="number"
-                className={classes.ratioInput}
-                value={extentState.customRatio?.w ?? 210}
-                onChange={(e) => {
-                  const w = parseFloat(e.target.value) || 1;
-                  const h = extentState.customRatio?.h ?? 297;
-                  setExtentState(
-                    applyPaperChange(extentState, "custom", { w, h }),
-                  );
+              />
+            </SettingsRow>
+            <SettingsRow label="Orientation" disabled={extentState.paperSize === "custom"}>
+              <ChipRail
+                label="Orientation"
+                className={classes.railCell}
+                options={ORIENTATION_OPTIONS}
+                value={extentState.orientation}
+                onChange={(orientation) => {
+                  setExtentState(applyOrientationChange(extentState, orientation));
                   markDirty();
                 }}
               />
-              <span>:</span>
-              <input
-                type="number"
-                className={classes.ratioInput}
-                value={extentState.customRatio?.h ?? 297}
-                onChange={(e) => {
-                  const h = parseFloat(e.target.value) || 1;
-                  const w = extentState.customRatio?.w ?? 210;
-                  setExtentState(
-                    applyPaperChange(extentState, "custom", { w, h }),
-                  );
-                  markDirty();
-                }}
+            </SettingsRow>
+            {extentState.paperSize === "custom" && (
+              <SettingsRow label="Ratio" tooltip="Width against height, in whatever units. A4 is 210 by 297.">
+                <div className={classes.ratioRow}>
+                  <TextField
+                    label="Ratio width"
+                    hideLabel
+                    className={classes.ratioField}
+                    type="text"
+                    inputMode="decimal"
+                    value={String(extentState.customRatio?.w ?? 210)}
+                    onChange={(event) => {
+                      const w = parseFloat(sanitizeDecimalInput(event.target.value)) || 1;
+                      const h = extentState.customRatio?.h ?? 297;
+                      setExtentState(applyPaperChange(extentState, "custom", { w, h }));
+                      markDirty();
+                    }}
+                  />
+                  <span aria-hidden>:</span>
+                  <TextField
+                    label="Ratio height"
+                    hideLabel
+                    className={classes.ratioField}
+                    type="text"
+                    inputMode="decimal"
+                    value={String(extentState.customRatio?.h ?? 297)}
+                    onChange={(event) => {
+                      const h = parseFloat(sanitizeDecimalInput(event.target.value)) || 1;
+                      const w = extentState.customRatio?.w ?? 210;
+                      setExtentState(applyPaperChange(extentState, "custom", { w, h }));
+                      markDirty();
+                    }}
+                  />
+                </div>
+              </SettingsRow>
+            )}
+          </section>
+
+          <section className={classes.group}>
+            <SectionHeader title="Extent" />
+            <SettingsRow label="Lock" tooltip={LOCK_TOOLTIP}>
+              <ChipRail
+                label="Lock"
+                className={classes.railCell}
+                options={LOCK_OPTIONS}
+                value={extentState.lockMode}
+                onChange={(lockMode) => setExtentState({ ...extentState, lockMode })}
               />
-            </div>
-          )}
-        </div>
+            </SettingsRow>
+            <SettingsRow label="Coordinates" tooltip={COORD_TOOLTIP}>
+              <ChipRail
+                label="Coordinates"
+                className={classes.railCell}
+                options={COORD_OPTIONS}
+                value={extentState.coordMode}
+                onChange={(coordMode) =>
+                  setExtentState(applyCoordModeChange(extentState, coordMode))
+                }
+              />
+            </SettingsRow>
 
-        {/* ── Extent ───────────────────────────────────────────── */}
-        <div className={classes.section}>
-          <div className={classes.sectionLabel}>Extent</div>
-
-          {/* Lock mode + Coord mode toggles */}
-          <div className={classes.toggleRow}>
-            <Tooltip title="Keeps the map scale constant when you move the extent box — the box resizes instead of stretching." placement="top" arrow>
-              <button
-                aria-pressed={extentState.lockMode === "scale"}
-                className={
-                  extentState.lockMode === "scale"
-                    ? classes.smallButtonActive
-                    : classes.smallButton
-                }
-                onClick={() =>
-                  setExtentState({ ...extentState, lockMode: "scale" })
-                }
-              >
-                Lock Scale
-              </button>
-            </Tooltip>
-            <Tooltip title="Keeps the map centre fixed when you change the scale — the box expands or contracts around the centre." placement="top" arrow>
-              <button
-                aria-pressed={extentState.lockMode === "position"}
-                className={
-                  extentState.lockMode === "position"
-                    ? classes.smallButtonActive
-                    : classes.smallButton
-                }
-                onClick={() =>
-                  setExtentState({ ...extentState, lockMode: "position" })
-                }
-              >
-                Lock Position
-              </button>
-            </Tooltip>
-          </div>
-          <div className={classes.toggleRow}>
-            <Tooltip title="Decimal degrees — global standard GPS format (e.g. -33.8912, 150.1234)." placement="top" arrow>
-              <button
-                aria-pressed={extentState.coordMode === "latlon"}
-                className={
-                  extentState.coordMode === "latlon"
-                    ? classes.smallButtonActive
-                    : classes.smallButton
-                }
-                onClick={() =>
-                  setExtentState(applyCoordModeChange(extentState, "latlon"))
-                }
-              >
-                Lat/Lon
-              </button>
-            </Tooltip>
-            <Tooltip title="Easting/Northing in MGA2020 (GDA2020) — the standard for NSW topo maps and field navigation with a grid reference." placement="top" arrow>
-              <button
-                aria-pressed={extentState.coordMode === "enNorthing"}
-                className={
-                  extentState.coordMode === "enNorthing"
-                    ? classes.smallButtonActive
-                    : classes.smallButton
-                }
-                onClick={() =>
-                  setExtentState(applyCoordModeChange(extentState, "enNorthing"))
-                }
-              >
-                E/N
-              </button>
-            </Tooltip>
-          </div>
-
-          {/* NSEW inputs + pivot */}
-          <div
-            className={classes.extentGrid}
-            style={
-              templateMode ? { opacity: 0.4, pointerEvents: "none" } : undefined
-            }
-          >
-            <div className={classes.extentNorth}>
-              <div className={classes.extentLabel}>
-                {extentState.coordMode === "latlon" ? "North" : "N (northing)"}
+            {/* The four edges laid out where they are on the map, with the
+                point they move around in the middle of them. In template mode
+                there is no area yet — a template is the HOW, not the where —
+                so the box is inert. */}
+            <div className={classes.extentGrid} data-disabled={templateMode || undefined}>
+              <div className={classes.extentNorth}>
+                <ExtentField
+                  which="n"
+                  label={extentState.coordMode === "latlon" ? "North" : "N (northing)"}
+                  value={rawN}
+                  error={templateMode ? null : extentInputErrors.n}
+                  focusedField={focusedField}
+                  onDraft={setRawN}
+                  onCommit={(deg) => setExtentState((s) => applyNorthChange(s, deg))}
+                  parse={(raw) => parseExtentField("n", raw, extentState)}
+                  valid={extentInputErrors.n === null}
+                  markDirty={markDirty}
+                />
               </div>
-              <input
-                type="text"
-                inputMode="decimal"
-                className={classes.extentInput}
-                value={rawN}
-                onFocus={() => {
-                  focusedField.current = "n";
-                }}
-                onChange={(e) => {
-                  setRawN(sanitizeDecimalInput(e.target.value));
-                  markDirty();
-                }}
-                onBlur={() => {
-                  focusedField.current = null;
-                  // Apply only a valid value; invalid input stays visible with
-                  // its FieldError instead of being silently discarded.
-                  const deg = parseExtentField("n", rawN, extentState);
-                  if (deg !== null && extentInputErrors.n === null)
-                    setExtentState((s: ExtentState) => applyNorthChange(s, deg));
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") e.currentTarget.blur();
-                }}
-              />
-              {!templateMode && <FieldError message={extentInputErrors.n} />}
-            </div>
-            <div className={classes.extentWest}>
-              <div className={classes.extentLabel}>
-                {extentState.coordMode === "latlon" ? "West" : "W (easting)"}
+              <div className={classes.extentWest}>
+                <ExtentField
+                  which="w"
+                  label={extentState.coordMode === "latlon" ? "West" : "W (easting)"}
+                  value={rawW}
+                  error={templateMode ? null : extentInputErrors.w}
+                  focusedField={focusedField}
+                  onDraft={setRawW}
+                  onCommit={(deg) => setExtentState((s) => applyWestChange(s, deg))}
+                  parse={(raw) => parseExtentField("w", raw, extentState)}
+                  valid={extentInputErrors.w === null}
+                  markDirty={markDirty}
+                />
               </div>
-              <input
-                type="text"
-                inputMode="decimal"
-                className={classes.extentInput}
-                value={rawW}
-                onFocus={() => {
-                  focusedField.current = "w";
-                }}
-                onChange={(e) => {
-                  setRawW(sanitizeDecimalInput(e.target.value));
-                  markDirty();
-                }}
-                onBlur={() => {
-                  focusedField.current = null;
-                  const deg = parseExtentField("w", rawW, extentState);
-                  if (deg !== null && extentInputErrors.w === null)
-                    setExtentState((s: ExtentState) => applyWestChange(s, deg));
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") e.currentTarget.blur();
-                }}
-              />
-              {!templateMode && <FieldError message={extentInputErrors.w} />}
-            </div>
-            <div className={classes.extentCenter}>
-              {/* Pivot picker */}
-              <Tooltip title="The point that stays fixed when you resize the extent or change the scale. E.g. top-left keeps the NW corner anchored." placement="top" arrow>
-                <div className={classes.pivotGrid}>
-                  {PIVOT_POINTS.map((p) => (
+              <div className={classes.extentCenter}>
+                <span className={classes.pivotLabel}>
+                  Pivot
+                  <InfoTip label="the pivot" content={PIVOT_TOOLTIP} />
+                </span>
+                <div className={classes.pivotGrid} role="radiogroup" aria-label="Pivot">
+                  {PIVOT_POINTS.map((point) => (
                     <button
-                      key={p}
+                      key={point.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={extentState.pivot === point.value}
+                      aria-label={point.label}
                       className={
-                        extentState.pivot === p
+                        extentState.pivot === point.value
                           ? classes.pivotButtonActive
                           : classes.pivotButton
                       }
-                      onClick={() =>
-                        setExtentState(applyPivotChange(extentState, p))
-                      }
-                      title={p}
+                      onClick={() => setExtentState(applyPivotChange(extentState, point.value))}
                     />
                   ))}
                 </div>
-              </Tooltip>
-            </div>
-            <div className={classes.extentEast}>
-              <div className={classes.extentLabel}>
-                {extentState.coordMode === "latlon" ? "East" : "E (easting)"}
               </div>
-              <input
-                type="text"
-                inputMode="decimal"
-                className={classes.extentInput}
-                value={rawE}
-                onFocus={() => {
-                  focusedField.current = "e";
-                }}
-                onChange={(e) => {
-                  setRawE(sanitizeDecimalInput(e.target.value));
-                  markDirty();
-                }}
-                onBlur={() => {
-                  focusedField.current = null;
-                  const deg = parseExtentField("e", rawE, extentState);
-                  if (deg !== null && extentInputErrors.e === null)
-                    setExtentState((s: ExtentState) => applyEastChange(s, deg));
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") e.currentTarget.blur();
-                }}
-              />
-              {!templateMode && <FieldError message={extentInputErrors.e} />}
-            </div>
-            <div className={classes.extentSouth}>
-              <div className={classes.extentLabel}>
-                {extentState.coordMode === "latlon" ? "South" : "S (northing)"}
+              <div className={classes.extentEast}>
+                <ExtentField
+                  which="e"
+                  label={extentState.coordMode === "latlon" ? "East" : "E (easting)"}
+                  value={rawE}
+                  error={templateMode ? null : extentInputErrors.e}
+                  focusedField={focusedField}
+                  onDraft={setRawE}
+                  onCommit={(deg) => setExtentState((s) => applyEastChange(s, deg))}
+                  parse={(raw) => parseExtentField("e", raw, extentState)}
+                  valid={extentInputErrors.e === null}
+                  markDirty={markDirty}
+                />
               </div>
-              <input
-                type="text"
-                inputMode="decimal"
-                className={classes.extentInput}
-                value={rawS}
-                onFocus={() => {
-                  focusedField.current = "s";
-                }}
-                onChange={(e) => {
-                  setRawS(sanitizeDecimalInput(e.target.value));
+              <div className={classes.extentSouth}>
+                <ExtentField
+                  which="s"
+                  label={extentState.coordMode === "latlon" ? "South" : "S (northing)"}
+                  value={rawS}
+                  error={templateMode ? null : extentInputErrors.s}
+                  focusedField={focusedField}
+                  onDraft={setRawS}
+                  onCommit={(deg) => setExtentState((s) => applySouthChange(s, deg))}
+                  parse={(raw) => parseExtentField("s", raw, extentState)}
+                  valid={extentInputErrors.s === null}
+                  markDirty={markDirty}
+                />
+              </div>
+            </div>
+
+            <SettingsRow label="Scale" tooltip={SCALE_TOOLTIP}>
+              <div className={classes.scaleRow}>
+                <span className={classes.scalePrefix} aria-hidden>
+                  1 :
+                </span>
+                <TextField
+                  label="Scale"
+                  hideLabel
+                  className={classes.scaleField}
+                  type="text"
+                  inputMode="numeric"
+                  value={rawScale}
+                  onFocus={() => {
+                    focusedField.current = "scale";
+                  }}
+                  onChange={(event) => {
+                    setRawScale(sanitizeDecimalInput(event.target.value));
+                    markDirty();
+                  }}
+                  onBlur={() => {
+                    focusedField.current = null;
+                    const value = Number(rawScale);
+                    if (scaleInputError === null && Number.isFinite(value))
+                      setExtentState((s: ExtentState) => applyScaleChange(s, value));
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") event.currentTarget.blur();
+                  }}
+                />
+              </div>
+            </SettingsRow>
+            <FieldError message={scaleInputError} />
+
+            {!templateMode && (
+              <div className={classes.errandLine}>
+                <Button icon={SquareDashed} compact variant="outline" onClick={handleSelectOnMap}>
+                  Draw the area on the map
+                </Button>
+              </div>
+            )}
+          </section>
+
+          <section className={classes.group}>
+            <SectionHeader title="Layers" />
+            <SettingsRow label="Base layer">
+              <ChipRail
+                label="Base layer"
+                className={classes.railCell}
+                options={BASE_LAYER_OPTIONS}
+                value={selectedBaseLayer}
+                onChange={(id) => {
+                  setSelectedBaseLayer(id);
                   markDirty();
                 }}
-                onBlur={() => {
-                  focusedField.current = null;
-                  const deg = parseExtentField("s", rawS, extentState);
-                  if (deg !== null && extentInputErrors.s === null)
-                    setExtentState((s: ExtentState) => applySouthChange(s, deg));
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") e.currentTarget.blur();
-                }}
               />
-              {!templateMode && <FieldError message={extentInputErrors.s} />}
-            </div>
-          </div>
-
-          {/* Scale. The tooltip wraps only the input so it centres on the
-              field, not the full-width row (GEOPDF-1). */}
-          <div className={classes.scaleRow}>
-            <span className={classes.scalePrefix}>1 :</span>
-            <Tooltip title="Map scale ratio. 25000 means 1 cm on the PDF = 250 m on the ground. Standard topo maps: 1:25 000 or 1:50 000." placement="top" arrow>
-              <input
-                type="text"
-                inputMode="numeric"
-                className={classes.scaleInput}
-                value={rawScale}
-                onFocus={() => {
-                  focusedField.current = "scale";
-                }}
-                onChange={(e) => {
-                  setRawScale(sanitizeDecimalInput(e.target.value));
-                  markDirty();
-                }}
-                onBlur={() => {
-                  focusedField.current = null;
-                  const v = Number(rawScale);
-                  if (scaleInputError === null && Number.isFinite(v))
-                    setExtentState((s: ExtentState) => applyScaleChange(s, v));
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") e.currentTarget.blur();
-                }}
-              />
-            </Tooltip>
-          </div>
-          <FieldError message={scaleInputError} />
-
-          {/* Select on map (hidden in template mode) */}
-          {!templateMode && (
-            <button
-              className={classes.selectOnMapButton}
-              onClick={handleSelectOnMap}
-            >
-              Select on map
-            </button>
-          )}
-        </div>
-
-        {/* ── Layers ───────────────────────────────────────────── */}
-        <div className={classes.section}>
-          <div className={classes.sectionLabel}>Layers</div>
-          <div className={classes.layerColumns}>
-            <div className={classes.layerColumn}>
-              <div className={classes.layerColumnLabel}>Base layer</div>
-              {BASE_LAYERS.filter((l) => !l.id.startsWith("osm") && l.id !== "six-base").map((layer) => (
-                <label key={layer.id} className={classes.layerOption}>
-                  <input
-                    type="radio"
-                    name="geopdf-base-layer"
-                    checked={selectedBaseLayer === layer.id}
-                    onChange={() => {
-                      setSelectedBaseLayer(layer.id);
-                      markDirty();
-                    }}
-                    style={{
-                      accentColor: "var(--theme-accent)",
-                    }}
-                  />
-                  {layer.name}
-                </label>
-              ))}
-            </div>
-            <div className={classes.layerColumn}>
-              <div className={classes.layerColumnLabel}>Overlays</div>
+            </SettingsRow>
+            <p className={classes.groupLabel}>Overlays</p>
+            <div className={classes.checkList}>
               {lidarOverlap &&
                 TOPO_LAYERS.map((layer) => (
-                  <label key={layer.name} className={classes.layerOption}>
-                    <input
-                      type="checkbox"
-                      checked={selectedOverlays.has(layer.name)}
-                      onChange={() => toggleOverlay(layer.name)}
-                      style={{
-                        accentColor: "var(--theme-accent)",
-                      }}
-                    />
-                    {layer.label}
-                  </label>
+                  <Checkbox
+                    key={layer.name}
+                    label={layer.label}
+                    checked={selectedOverlays.has(layer.name)}
+                    onChange={() => toggleOverlay(layer.name)}
+                  />
                 ))}
-              <label className={classes.layerOption}>
-                <input
-                  type="checkbox"
-                  checked={showOwnedCanyonsOnPdf}
-                  onChange={(e) => setShowOwnedCanyonsOnPdf(e.target.checked)}
-                  style={{ accentColor: "var(--theme-accent)" }}
-                />
-                My Canyons
-              </label>
-              <label className={classes.layerOption}>
-                <input
-                  type="checkbox"
-                  checked={showSharedCanyonsOnPdf}
-                  onChange={(e) => setShowSharedCanyonsOnPdf(e.target.checked)}
-                  style={{ accentColor: "var(--theme-accent)" }}
-                />
-                Shared Canyons
-              </label>
+              <Checkbox
+                label="My places"
+                checked={showOwnedPlacesOnPdf}
+                onChange={setShowOwnedPlacesOnPdf}
+              />
+              <Checkbox
+                label="Shared places"
+                description="A friend shared these with you, not with whoever you hand the PDF to."
+                checked={showSharedPlacesOnPdf}
+                onChange={setShowSharedPlacesOnPdf}
+              />
             </div>
-          </div>
-        </div>
+          </section>
 
-        {/* ── Map elements ─────────────────────────────────────── */}
-        <div className={classes.section}>
-          <div className={classes.sectionLabel}>Map elements</div>
+          <section className={classes.group}>
+            <SectionHeader title="Map elements" />
+            <div className={classes.checkList}>
+              <div className={classes.elementRow}>
+                <Checkbox
+                  label="Title"
+                  checked={titleEnabled}
+                  onChange={(next) => {
+                    setTitleEnabled(next);
+                    markDirty();
+                  }}
+                />
+                {titleEnabled && (
+                  <TextField
+                    label="Map title"
+                    hideLabel
+                    className={classes.elementField}
+                    placeholder="Map title"
+                    value={titleText}
+                    onChange={(event) => {
+                      setTitleText(event.target.value);
+                      markDirty();
+                    }}
+                  />
+                )}
+              </div>
 
-          <div className={classes.elementRow}>
-            <input
-              type="checkbox"
-              checked={titleEnabled}
-              onChange={(e) => {
-                setTitleEnabled(e.target.checked);
-                markDirty();
-              }}
-              style={{
-                accentColor: "var(--theme-accent)",
-              }}
-            />
-            <span>Title</span>
-            {titleEnabled && (
-              <input
-                className={classes.elementInput}
-                placeholder="Map title"
-                value={titleText}
-                onChange={(e) => {
-                  setTitleText(e.target.value);
+              <Checkbox
+                label="North arrow (TN / GN / MN)"
+                checked={compassEnabled}
+                onChange={(next) => {
+                  setCompassEnabled(next);
                   markDirty();
                 }}
               />
-            )}
-          </div>
 
-          <div className={classes.elementRow}>
-            <input
-              type="checkbox"
-              checked={compassEnabled}
-              onChange={(e) => {
-                setCompassEnabled(e.target.checked);
-                markDirty();
-              }}
-              style={{
-                accentColor: "var(--theme-accent)",
-              }}
-            />
-            <span>North arrow (TN / GN / MN)</span>
-          </div>
+              <div className={classes.elementRow}>
+                <Checkbox
+                  label="Scale text"
+                  checked={scaleTextEnabled}
+                  onChange={(next) => {
+                    setScaleTextEnabled(next);
+                    markDirty();
+                  }}
+                />
+                {scaleTextEnabled && (
+                  <span className={classes.elementSuffix}>
+                    1:{Math.round(extentState.scale).toLocaleString()}
+                  </span>
+                )}
+              </div>
 
-          <div className={classes.elementRow}>
-            <input
-              type="checkbox"
-              checked={scaleTextEnabled}
-              onChange={(e) => {
-                setScaleTextEnabled(e.target.checked);
-                markDirty();
-              }}
-              style={{
-                accentColor: "var(--theme-accent)",
-              }}
-            />
-            <span>Scale text</span>
-            {scaleTextEnabled && (
-              <span className={classes.elementSuffix}>
-                1:{Math.round(extentState.scale).toLocaleString()}
-              </span>
-            )}
-          </div>
+              <Checkbox
+                label="Scale bar"
+                checked={scaleBarEnabled}
+                onChange={(next) => {
+                  setScaleBarEnabled(next);
+                  markDirty();
+                }}
+              />
 
-          <div className={classes.elementRow}>
-            <input
-              type="checkbox"
-              checked={scaleBarEnabled}
-              onChange={(e) => {
-                setScaleBarEnabled(e.target.checked);
-                markDirty();
-              }}
-              style={{
-                accentColor: "var(--theme-accent)",
-              }}
-            />
-            <span>Scale bar</span>
-          </div>
-
-          <div className={classes.elementRow}>
-            <input
-              type="checkbox"
-              checked={gridLinesEnabled}
-              onChange={(e) => {
-                setGridLinesEnabled(e.target.checked);
-                markDirty();
-              }}
-              style={{
-                accentColor: "var(--theme-accent)",
-              }}
-            />
-            <span>Grid lines</span>
-            {gridLinesEnabled && (
-              <>
-                {(
-                  [
-                    ["latlon", "Lat/Lon"],
-                    ["enNorthing", "E/N"],
-                  ] as [CoordMode, string][]
-                ).map(([mode, label]) => (
-                  <button
-                    key={mode}
-                    aria-pressed={gridLinesMode === mode}
-                    className={
-                      gridLinesMode === mode
-                        ? classes.smallButtonActive
-                        : classes.smallButton
-                    }
-                    onClick={() => {
+              <div className={classes.elementRow}>
+                <Checkbox
+                  label="Grid lines"
+                  checked={gridLinesEnabled}
+                  onChange={(next) => {
+                    setGridLinesEnabled(next);
+                    markDirty();
+                  }}
+                />
+                {gridLinesEnabled && (
+                  <ChipRail
+                    label="Grid lines"
+                    className={classes.railCell}
+                    options={COORD_OPTIONS}
+                    value={gridLinesMode}
+                    onChange={(mode) => {
                       setGridLinesMode(mode);
                       markDirty();
                     }}
-                    style={{ padding: "0.15em 0.5em", fontSize: "0.8em" }}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </>
-            )}
-          </div>
+                  />
+                )}
+              </div>
+            </div>
+          </section>
         </div>
+      </Dialog>
 
-        {error && <ErrorBanner message={error} />}
-      </DialogContent>
-
-      <DialogActions>
-        <Button
-          onClick={guard.requestClose}
-          disabled={generating}
-          sx={{ color: "var(--theme-text-primary)" }}
-        >
-          Cancel
-        </Button>
-        {templateMode ? (
-          <Button
-            variant="contained"
-            onClick={handleSaveTemplateMode}
-            disabled={!editTemplateName.trim()}
-            color="secondary"
-          >
-            Save Template
-          </Button>
-        ) : (
-          <Button
-            variant="contained"
-            onClick={handleGenerate}
-            disabled={
-              generating ||
-              !extentValid ||
-              hasExtentFieldError(extentInputErrors) ||
-              scaleInputError !== null
-            }
-            color="secondary"
-          >
-            {generating ? (
-              <>
-                <CircularProgress size={16} sx={{ mr: 1, color: "white" }} />
-                Queuing…
-              </>
-            ) : (
-              "Generate GeoPDF"
-            )}
-          </Button>
-        )}
-      </DialogActions>
-    </Dialog>
-
-    <ConfirmDialog
-      open={guard.guardOpen}
-      title="Discard unsaved changes?"
-      message="Your changes will be lost."
-      confirmLabel="Discard"
-      confirmColor="error"
-      onConfirm={guard.confirmDiscard}
-      onClose={guard.cancelDiscard}
-    />
+      <ConfirmDialog
+        open={guard.guardOpen}
+        title="Discard unsaved changes?"
+        message="Your changes will be lost."
+        confirmLabel="Discard"
+        confirmColor="error"
+        onConfirm={guard.confirmDiscard}
+        onClose={guard.cancelDiscard}
+      />
     </>
+  );
+}
+
+/**
+ * One edge of the extent. The typing is held here and only a VALID number is
+ * applied, so a half-finished coordinate stays on screen under its own error
+ * instead of being silently discarded (GEOPDF-1); leaving the field with a good
+ * one commits it, and Enter is the same as leaving.
+ */
+function ExtentField({
+  which,
+  label,
+  value,
+  error,
+  focusedField,
+  onDraft,
+  onCommit,
+  parse,
+  valid,
+  markDirty,
+}: {
+  which: "n" | "s" | "e" | "w";
+  label: string;
+  value: string;
+  error: string | null;
+  focusedField: React.RefObject<"n" | "s" | "e" | "w" | "scale" | null>;
+  onDraft: (next: string) => void;
+  onCommit: (degrees: number) => void;
+  parse: (raw: string) => number | null;
+  valid: boolean;
+  markDirty: () => void;
+}) {
+  return (
+    <TextField
+      label={label}
+      className={classes.extentField}
+      type="text"
+      inputMode="decimal"
+      value={value}
+      error={error}
+      onFocus={() => {
+        focusedField.current = which;
+      }}
+      onChange={(event) => {
+        onDraft(sanitizeDecimalInput(event.target.value));
+        markDirty();
+      }}
+      onBlur={() => {
+        focusedField.current = null;
+        const degrees = parse(value);
+        if (degrees !== null && valid) onCommit(degrees);
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") event.currentTarget.blur();
+      }}
+    />
   );
 }
 

@@ -1,7 +1,13 @@
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 .intro {
-  font-size: var(--text-sm);
+  margin: 0;
+  font-size: var(--font-sm);
   color: var(--theme-text-muted);
-  margin-bottom: 12px;
 }
 
 .row {

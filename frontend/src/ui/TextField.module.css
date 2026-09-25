@@ -1,0 +1,220 @@
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Sentence case, like every other control's label. Uppercase belongs to section
+   titles, which a field label sitting under one must not mimic. */
+.label {
+  font-size: var(--font-sm);
+  color: var(--theme-text-muted);
+}
+
+.input {
+  min-height: var(--control-lg);
+  box-sizing: border-box;
+  padding: 0 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--theme-text-muted);
+  background: var(--surface-field);
+  color: var(--theme-text-primary);
+  font: inherit;
+  font-size: var(--font-base);
+}
+
+.input::placeholder {
+  color: var(--theme-text-muted);
+}
+
+.input:focus-visible {
+  outline: none;
+  border-color: var(--theme-accent);
+  box-shadow: 0 0 0 1px var(--theme-accent);
+}
+
+.input[aria-invalid="true"] {
+  border-color: var(--theme-warning);
+}
+
+.input:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* Grows with its text between two row counts. `field-sizing` does the growing;
+   without it the box stays at `rows` and the user drags it. */
+.textarea {
+  --line: 1.4em;
+  padding: 8px 10px;
+  line-height: 1.4;
+  resize: vertical;
+  field-sizing: content;
+  min-height: calc(var(--min-rows) * var(--line) + 18px);
+  max-height: calc(var(--max-rows) * var(--line) + 18px);
+}
+
+.hint {
+  margin: 0;
+  font-size: var(--font-xs);
+  color: var(--theme-text-muted);
+}
+
+.selectBox {
+  position: relative;
+  display: flex;
+}
+
+/* The platform arrow is replaced so it matches the kit's glyphs; the list the
+   select opens stays the platform's. */
+.select {
+  flex: 1;
+  min-width: 0;
+  appearance: none;
+  padding-right: 32px;
+  cursor: pointer;
+}
+
+.selectGlyph {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  translate: 0 -50%;
+  color: var(--theme-text-muted);
+  pointer-events: none;
+}
+
+.search {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--control-md);
+  box-sizing: border-box;
+  padding: 0 6px 0 12px;
+  border-radius: var(--radius-pill);
+  border: 1px solid color-mix(in srgb, var(--theme-accent) 45%, transparent);
+  background: var(--surface-field);
+  color: var(--theme-text-muted);
+}
+
+.search:focus-within {
+  border-color: var(--theme-accent);
+  box-shadow: 0 0 0 1px var(--theme-accent);
+}
+
+.searchGlyph {
+  flex: none;
+}
+
+.searchInput {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--theme-text-primary);
+  font: inherit;
+  font-size: var(--font-sm);
+}
+
+.searchInput::placeholder {
+  color: var(--theme-text-muted);
+}
+
+/* The pill draws the focus state. */
+.searchInput:focus-visible {
+  outline: none;
+}
+
+
+/* The slider: its label and reading on one line, the track and its two ends on
+   the next, so the bounds are readable and not merely implied by the geometry. */
+.rangeField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rangeHead {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.rangeHead > .label {
+  flex: 1;
+  min-width: 0;
+}
+
+.rangeValue {
+  flex: none;
+  font-size: var(--font-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--theme-text-primary);
+}
+
+.range {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--control-md);
+}
+
+.rangeEnd {
+  flex: none;
+  font-size: var(--font-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--theme-text-muted);
+}
+
+/* The track and thumb are drawn here rather than left to `accent-color`, which
+   painted a grey knob whatever the scheme said (operator, 2026-09-18). */
+.rangeInput {
+  flex: 1;
+  min-width: 0;
+  height: var(--control-sm);
+  margin: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.rangeInput::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(to right, var(--theme-accent) var(--fill), var(--surface-field) var(--fill));
+}
+
+.rangeInput::-moz-range-track {
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(to right, var(--theme-accent) var(--fill), var(--surface-field) var(--fill));
+}
+
+.rangeInput::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: var(--control-sm);
+  height: var(--control-sm);
+  /* Centred on a 4px track. */
+  margin-top: calc((4px - var(--control-sm)) / 2);
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--theme-accent);
+}
+
+.rangeInput::-moz-range-thumb {
+  width: var(--control-sm);
+  height: var(--control-sm);
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--theme-accent);
+}
+
+.rangeInput:focus-visible {
+  outline: 2px solid var(--theme-text-primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-pill);
+}

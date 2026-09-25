@@ -27,8 +27,10 @@ import {
 import { getEnv } from "../lib/env";
 import { getParam } from "../lib/getParam";
 import { createAndLaunchTopoExport } from "../lib/topoExportLauncher";
-import { assertHasStorageQuota } from "../lib/storageQuota";
+import { assertHasStorageQuota, decrementStorageUsed } from "../lib/storageQuota";
+import { assertHasEgressQuota } from "../lib/egressQuota";
 import { resolveUser as getUser } from "../lib/resolveUser";
+import { directlySharedIds } from "../lib/shareAccess";
 
 const exportRequestSchema = z.object({
   sourceJobIds: z.array(z.string()).length(1),
@@ -119,9 +121,21 @@ router.post(
     const v = validateExportRequest({ format, bundling, layers });
     if (!v.ok) throw new AppError(400, v.error);
 
-    // Ownership check on every source job.
+    // Read-access check on every source job — owned OR directly shared with
+    // the caller, the same OR arm the list endpoints use. A recipient can
+    // already see the topo's overlay tiles, so exporting it broadens nothing;
+    // the export job is created under THEIR user id, so it charges their quota
+    // and lands in their downloads, not the owner's.
+    // A job the caller cannot read is 404 (never 403) — the id must not be
+    // confirmable to a stranger who guessed it.
     const jobs = await prisma.topoJob.findMany({
-      where: { id: { in: sourceJobIds }, userId: user.id },
+      where: {
+        id: { in: sourceJobIds },
+        OR: [
+          { userId: user.id },
+          { id: { in: await directlySharedIds(user.id, "topoJob") } },
+        ],
+      },
     });
     if (jobs.length !== sourceJobIds.length) {
       throw new AppError(404, "One or more source jobs not found");
@@ -167,6 +181,7 @@ router.post(
       // zod pins sourceJobIds to length 1 (exportRequestSchema above) — if that
       // ever loosens to multiple source jobs, sum their tileCounts here instead.
       sourceTileCount: jobs[0].tileCount ?? null,
+      monthlyComputeCredits: user.monthlyComputeCredits,
     });
 
     res.status(201).json({ id: exportJobId });
@@ -203,11 +218,18 @@ router.get(
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await getUser(req.user!.sub);
-    const row = await prisma.topoExportJob.findUnique({
-      where: { id: getParam(req.params.id) },
+    // Owner-scoped lookup: a foreign export id gets the SAME 404 a
+    // non-existent one gets, so the status is no existence oracle for export
+    // ids the caller may not see (APIR-013/PRIV-106, matching topoJobs.ts).
+    const row = await prisma.topoExportJob.findFirst({
+      where: { id: getParam(req.params.id), userId: user.id },
     });
     if (!row) throw new AppError(404, "Export not found");
-    if (row.userId !== user.id) throw new AppError(403, "Access denied");
+    // An export artefact is one of the largest single objects the app serves,
+    // and this endpoint exists to re-mint an expired URL — i.e. it is the
+    // deliberate "download it again" action. Owner-scoped above, so the caller
+    // is the owner whose allowance pays for it.
+    if (row.status === "completed") await assertHasEgressQuota(user.id);
     const download = row.status === "completed" ? await presignResult(row.resultKey) : null;
     res.json(rowToView(row, download));
   },
@@ -219,11 +241,13 @@ router.delete(
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await getUser(req.user!.sub);
-    const row = await prisma.topoExportJob.findUnique({
-      where: { id: getParam(req.params.id) },
+    // Owner-scoped lookup: a foreign export id gets the SAME 404 a
+    // non-existent one gets, so the status is no existence oracle for export
+    // ids the caller may not see (APIR-013/PRIV-106, matching topoJobs.ts).
+    const row = await prisma.topoExportJob.findFirst({
+      where: { id: getParam(req.params.id), userId: user.id },
     });
     if (!row) throw new AppError(404, "Export not found");
-    if (row.userId !== user.id) throw new AppError(403, "Access denied");
     if (row.status === "queued" || row.status === "running") {
       throw new AppError(409, "Cannot delete an in-progress export");
     }
@@ -235,10 +259,7 @@ router.delete(
     }
     await prisma.$transaction(async (tx) => {
       if (row.status === "completed" && row.resultBytes) {
-        await tx.user.update({
-          where: { id: user.id },
-          data: { storageUsedBytes: { decrement: row.resultBytes } },
-        });
+        await decrementStorageUsed(user.id, row.resultBytes, tx);
       }
       await tx.topoExportJob.delete({ where: { id: row.id } });
     });

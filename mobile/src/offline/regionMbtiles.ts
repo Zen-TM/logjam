@@ -1,0 +1,426 @@
+// MBTiles writer for downloaded raster basemap regions (stage4a-basemaps.md §4).
+//
+// Same on-disk shape as a Stage 6 GeoPDF import — one raster MBTiles per region,
+// TMS row order, `logjam:*` namespaced metadata — but written from JS rather
+// than the native rasteriser, because there is no pixel work in this path: the
+// bytes arrive off the network already encoded.
+//
+// THE FILE IS THE CHECKPOINT. A tile is only in the file if its batch
+// transaction committed, so a kill mid-download loses at most one batch and the
+// next attempt resumes from exactly what is there (§4.4). The plan also spec'd a
+// `region_download` progress table for this; it isn't needed — the metadata rows
+// already carry the source, bbox and zoom range, so an unfinished file describes
+// its own job. `logjam:build_state` present ⇒ incomplete ⇒ never registered as a
+// usable artifact.
+//
+// PRIVACY: these files hold place-area coordinates in their `bounds` metadata
+// and live in app-private, backup-excluded storage behind the app lock. Never
+// log a path or a bbox from here — progress logging is counts and state words.
+import * as FileSystem from "expo-file-system/legacy";
+import * as SQLite from "expo-sqlite";
+import {
+  xyzToTmsRow,
+  type DownloadableTileSourceId,
+  type RegionBbox,
+} from "@logjam/shared";
+
+import type { MapArtifact } from "../map/sourceResolver";
+
+import { REGION_DIR } from "./localStores";
+import { sweepOrphanFiles } from "./registryDb";
+
+/** expo-sqlite's `directory` argument is a plain path, not a file:// URI. */
+const REGION_DIR_PATH = REGION_DIR.replace(/^file:\/\//, "");
+
+export type RegionTile = { z: number; x: number; y: number; bytes: Uint8Array };
+
+/**
+ * Transient resume state, stored as one metadata row and rewritten inside each
+ * tile batch's transaction.
+ *
+ * `gaps` are tiles the provider answered 404 for — uncached area, or a level it
+ * never built there. They are not failures and must not be retried on resume, or
+ * every resume re-pokes the provider for tiles that do not exist.
+ */
+export type RegionBuildState = {
+  v: 1;
+  planHash: string;
+  gaps: [z: number, x: number, y: number][];
+};
+
+const BUILD_STATE_KEY = "logjam:build_state";
+
+export type RegionMbtiles = {
+  db: SQLite.SQLiteDatabase;
+  /** Scheme-less absolute path — what the artifact registry stores. */
+  path: string;
+  uri: string;
+};
+
+export function regionFileName(id: string): string {
+  return `${id}.mbtiles`;
+}
+
+/** Open (creating if absent) the MBTiles for a region job. */
+export async function openRegionMbtiles(id: string): Promise<RegionMbtiles> {
+  await FileSystem.makeDirectoryAsync(REGION_DIR, { intermediates: true });
+  const fileName = regionFileName(id);
+  const db = await SQLite.openDatabaseAsync(fileName, {}, REGION_DIR_PATH);
+  // Wait for a lock rather than throwing at the first contended moment.
+  //
+  // `PRAGMA journal_mode` takes an EXCLUSIVE lock, and more than one thing in
+  // this app opens a region file: the queue writing it, and anything scanning
+  // the region directory for unfinished downloads. When those overlapped the
+  // pragma failed with SQLITE_BUSY ("database is locked"), which surfaced as a
+  // download that "didn't finish" for no stated reason — measured on a Pixel 9,
+  // resuming a failed job from the layers sheet, whose own scan had the file
+  // open. Five seconds is far longer than any of these reads take.
+  await db.execAsync("PRAGMA busy_timeout = 5000;");
+  // Only SET the journal mode when it is not already what we want: the read is
+  // cheap and lock-free, the write is exclusive, and on a resume the file is
+  // already in WAL. Not a substitute for the timeout above — both, because the
+  // first open of a fresh file still has to take the lock.
+  const journal = await db.getFirstAsync<{ journal_mode: string }>(
+    "PRAGMA journal_mode",
+  );
+  if (journal?.journal_mode?.toLowerCase() !== "wal") {
+    await db.execAsync("PRAGMA journal_mode = WAL;");
+  }
+  // NORMAL sync while building: many small insert batches. `finalize` flips the
+  // journal to DELETE so the finished artifact is a single file with no sidecars
+  // for the native MapLibre reader to trip on.
+  await db.execAsync(`
+    PRAGMA synchronous = NORMAL;
+    CREATE TABLE IF NOT EXISTS metadata (name TEXT, value TEXT);
+    CREATE TABLE IF NOT EXISTS tiles (
+      zoom_level INTEGER, tile_column INTEGER, tile_row INTEGER, tile_data BLOB
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS tile_index
+      ON tiles (zoom_level, tile_column, tile_row);
+    CREATE UNIQUE INDEX IF NOT EXISTS metadata_name ON metadata (name);
+  `);
+  return {
+    db,
+    path: `${REGION_DIR_PATH}${fileName}`,
+    uri: `${REGION_DIR}${fileName}`,
+  };
+}
+
+async function putMetadata(
+  db: SQLite.SQLiteDatabase,
+  rows: Record<string, string>,
+): Promise<void> {
+  for (const [name, value] of Object.entries(rows)) {
+    await db.runAsync(
+      "INSERT OR REPLACE INTO metadata (name, value) VALUES (?, ?)",
+      name,
+      value,
+    );
+  }
+}
+
+export async function readRegionMetadata(
+  db: SQLite.SQLiteDatabase,
+  name: string,
+): Promise<string | null> {
+  const row = await db.getFirstAsync<{ value: string }>(
+    "SELECT value FROM metadata WHERE name = ?",
+    name,
+  );
+  return row?.value ?? null;
+}
+
+/**
+ * Write the metadata a viewer needs plus the build-state marker that says
+ * "not finished". Idempotent: resuming an existing file rewrites the same rows.
+ */
+export async function initRegionMbtiles(
+  target: RegionMbtiles,
+  spec: {
+    label: string;
+    /** The download run, so a resume from disk recovers the user's area name. */
+    groupId: string;
+    groupLabel: string;
+    basemapId: DownloadableTileSourceId;
+    /** What this file IS — a drawable basemap, or the DEM behind elevation. */
+    kind: MapArtifact["kind"];
+    bbox: RegionBbox;
+    zMin: number;
+    zMax: number;
+    attribution: string;
+    planHash: string;
+  },
+): Promise<void> {
+  const { west, south, east, north } = spec.bbox;
+  await putMetadata(target.db, {
+    name: spec.label,
+    // The SIX caches serve MIXED PNG/JPEG. MBTiles can only name one format, so
+    // this row is advisory — MapLibre Native decodes raster tiles by content,
+    // not by this string.
+    format: "png",
+    type: "baselayer",
+    bounds: `${west},${south},${east},${north}`,
+    center: `${(west + east) / 2},${(south + north) / 2},${spec.zMin}`,
+    minzoom: String(spec.zMin),
+    maxzoom: String(spec.zMax),
+    attribution: spec.attribution,
+    "logjam:schema": "1",
+    "logjam:kind": spec.kind,
+    "logjam:source": spec.basemapId,
+    "logjam:group": spec.groupId,
+    "logjam:groupLabel": spec.groupLabel,
+  });
+  const existing = await readRegionBuildState(target.db);
+  if (existing?.planHash !== spec.planHash) {
+    // A checkpoint from a different premise (bbox or zoom changed) can't be
+    // resumed against this plan. Inserts are idempotent, so the tiles already
+    // present are still valid — only the gap list is discarded.
+    await writeRegionBuildState(target.db, {
+      v: 1,
+      planHash: spec.planHash,
+      gaps: [],
+    });
+  }
+}
+
+export async function readRegionBuildState(
+  db: SQLite.SQLiteDatabase,
+): Promise<RegionBuildState | null> {
+  const raw = await readRegionMetadata(db, BUILD_STATE_KEY);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as RegionBuildState;
+    return parsed.v === 1 ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+async function writeRegionBuildState(
+  db: SQLite.SQLiteDatabase,
+  state: RegionBuildState,
+): Promise<void> {
+  await putMetadata(db, { [BUILD_STATE_KEY]: JSON.stringify(state) });
+}
+
+/** "z/x/y" keys already in the file, in XYZ terms (the row is stored flipped). */
+export async function listRegionTileKeys(
+  db: SQLite.SQLiteDatabase,
+): Promise<Set<string>> {
+  const rows = await db.getAllAsync<{
+    zoom_level: number;
+    tile_column: number;
+    tile_row: number;
+  }>("SELECT zoom_level, tile_column, tile_row FROM tiles");
+  return new Set(
+    rows.map(
+      (row) =>
+        `${row.zoom_level}/${row.tile_column}/${xyzToTmsRow(row.zoom_level, row.tile_row)}`,
+    ),
+  );
+}
+
+/**
+ * One batch of fetched tiles plus the updated gap list, in a single transaction
+ * — so the file never claims progress it doesn't have, and a kill between
+ * batches leaves a consistent resume point.
+ */
+export async function writeRegionBatch(
+  target: RegionMbtiles,
+  tiles: RegionTile[],
+  state: RegionBuildState,
+): Promise<void> {
+  await target.db.withExclusiveTransactionAsync(async (tx) => {
+    for (const tile of tiles) {
+      await tx.runAsync(
+        `INSERT OR REPLACE INTO tiles (zoom_level, tile_column, tile_row, tile_data)
+         VALUES (?, ?, ?, ?)`,
+        tile.z,
+        tile.x,
+        xyzToTmsRow(tile.z, tile.y),
+        tile.bytes,
+      );
+    }
+    await tx.runAsync(
+      "INSERT OR REPLACE INTO metadata (name, value) VALUES (?, ?)",
+      BUILD_STATE_KEY,
+      JSON.stringify(state),
+    );
+  });
+}
+
+export async function countRegionTiles(db: SQLite.SQLiteDatabase): Promise<number> {
+  const row = await db.getFirstAsync<{ n: number }>(
+    "SELECT COUNT(*) AS n FROM tiles",
+  );
+  return row?.n ?? 0;
+}
+
+/**
+ * Sample a few stored blobs and check they start like an image. Cheap integrity
+ * check against a provider that answered 200 with an HTML error page — the
+ * per-tile content-type check should have caught that, and this is the backstop
+ * that runs before the region is declared usable.
+ */
+export async function sampleRegionTilesLookLikeImages(
+  db: SQLite.SQLiteDatabase,
+  sampleSize = 10,
+): Promise<boolean> {
+  const rows = await db.getAllAsync<{ tile_data: Uint8Array }>(
+    "SELECT tile_data FROM tiles ORDER BY RANDOM() LIMIT ?",
+    sampleSize,
+  );
+  return rows.every((row) => looksLikeImage(row.tile_data));
+}
+
+/** PNG (\x89PNG) or JPEG (\xFF\xD8\xFF) leading bytes. */
+export function looksLikeImage(bytes: Uint8Array): boolean {
+  if (bytes.length < 4) return false;
+  const png =
+    bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
+  const jpeg = bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  return png || jpeg;
+}
+
+/**
+ * Drop the build-state marker (the file is now complete), record the gap count
+ * for the UI, and flip to a single-file journal.
+ */
+export async function finalizeRegionMbtiles(
+  target: RegionMbtiles,
+  gapCount: number,
+): Promise<void> {
+  await putMetadata(target.db, { "logjam:gap_count": String(gapCount) });
+  await target.db.runAsync("DELETE FROM metadata WHERE name = ?", BUILD_STATE_KEY);
+  // No VACUUM: an insert-only database has nothing to reclaim.
+  //
+  // The journal flip is the one statement here that can lose a race, and it is
+  // also the one that must not be skipped (a finished region left in WAL keeps
+  // its sidecars, which the native MapLibre reader trips on, and its size on
+  // disk reads as ~4 KB because the tiles are all in the -wal). Measured on a
+  // Pixel 9 while two jobs of one run overlapped: "cannot change out of wal
+  // mode from within a transaction", which failed an otherwise complete
+  // download. So: its own statement (not bundled with `optimize`, whose
+  // failure is harmless), and retried rather than fatal.
+  await checkpointOutOfWal(target.db);
+  await target.db.execAsync("PRAGMA optimize;").catch(() => {});
+}
+
+const JOURNAL_FLIP_ATTEMPTS = 5;
+const JOURNAL_FLIP_BACKOFF_MS = 250;
+
+async function checkpointOutOfWal(db: SQLite.SQLiteDatabase): Promise<void> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await db.execAsync("PRAGMA journal_mode = DELETE;");
+      return;
+    } catch (err) {
+      if (attempt >= JOURNAL_FLIP_ATTEMPTS) throw err;
+      await new Promise((resolve) =>
+        setTimeout(resolve, JOURNAL_FLIP_BACKOFF_MS * attempt),
+      );
+    }
+  }
+}
+
+export async function closeRegionMbtiles(target: RegionMbtiles): Promise<void> {
+  await target.db.closeAsync().catch(() => {});
+}
+
+export type UnfinishedRegion = {
+  id: string;
+  label: string;
+  /**
+   * The run this file belonged to, and the name the USER gave that area.
+   *
+   * Recorded in the file because the queue is memory only: after a relaunch,
+   * a resumed download rebuilt its group from the per-basemap label and the
+   * area came back into Saved calling itself "SIX Maps Topo region" instead of
+   * the name its owner typed. Absent on files written before this row existed.
+   */
+  groupId?: string;
+  groupLabel?: string;
+  basemapId: DownloadableTileSourceId;
+  bbox: RegionBbox;
+  zMin: number;
+  zMax: number;
+  tilesStored: number;
+};
+
+/**
+ * Regions left half-downloaded by a previous session (app killed, phone died).
+ *
+ * Discovered by reading the FILES, not a progress table: a file carrying
+ * `logjam:build_state` is by definition incomplete, and its own metadata says
+ * which source, area and depth it was for. That is why there is no
+ * `region_download` row to keep in step with the disk.
+ */
+export async function listUnfinishedRegions(
+  /**
+   * Ids the queue is working on right now. Their files are unfinished BY
+   * DEFINITION and the caller drops them from the result anyway — but opening
+   * them to find that out puts a second connection on a file being written,
+   * which is how a job's finalize lost the race for its journal flip. Skipped
+   * before the open, not after.
+   */
+  liveIds: ReadonlySet<string> = new Set(),
+): Promise<UnfinishedRegion[]> {
+  const dir = await FileSystem.getInfoAsync(REGION_DIR);
+  if (!dir.exists) return [];
+  // MOT-002: the single-file Protomaps clip (regionDownloads.ts) writes a
+  // `.pmtiles` here with no checkpoint of its own — an app kill mid-transfer
+  // leaves it with nothing to resume into, unlike the MBTiles below. This is
+  // the one place that already walks this directory on every Saved-tab open.
+  await sweepOrphanFiles(REGION_DIR, ".pmtiles", liveIds);
+  const names = await FileSystem.readDirectoryAsync(REGION_DIR);
+  const unfinished: UnfinishedRegion[] = [];
+  for (const name of names) {
+    if (!name.endsWith(".mbtiles")) continue;
+    const id = name.replace(/\.mbtiles$/, "");
+    if (liveIds.has(id)) continue;
+    const db = await SQLite.openDatabaseAsync(name, {}, REGION_DIR_PATH);
+    try {
+      // Read-only scan, but it still has to queue behind a writer's lock
+      // rather than throw — this runs over files the queue may be writing.
+      await db.execAsync("PRAGMA busy_timeout = 5000;");
+      if (!(await readRegionBuildState(db))) continue;
+      const bounds = await readRegionMetadata(db, "bounds");
+      const source = await readRegionMetadata(db, "logjam:source");
+      const maxzoom = await readRegionMetadata(db, "maxzoom");
+      const minzoom = await readRegionMetadata(db, "minzoom");
+      if (!bounds || !source || !maxzoom || !minzoom) continue;
+      const [west, south, east, north] = bounds.split(",").map(Number);
+      unfinished.push({
+        id,
+        label: (await readRegionMetadata(db, "name")) ?? "Offline map region",
+        groupId: (await readRegionMetadata(db, "logjam:group")) ?? undefined,
+        groupLabel:
+          (await readRegionMetadata(db, "logjam:groupLabel")) ?? undefined,
+        basemapId: source as DownloadableTileSourceId,
+        bbox: { west, south, east, north },
+        zMin: Number(minzoom),
+        zMax: Number(maxzoom),
+        tilesStored: await countRegionTiles(db),
+      });
+    } catch (err) {
+      // A file we can't read is not a reason to hide the ones we can.
+      console.error(err);
+    } finally {
+      await db.closeAsync().catch(() => {});
+    }
+  }
+  return unfinished;
+}
+
+export async function deleteRegionFile(id: string): Promise<void> {
+  // An UNFINISHED region is still in WAL mode (finalize is what flips it to
+  // DELETE), so if the app was killed its -wal/-shm were never checkpointed
+  // away. Deleting only the .mbtiles left them behind, and since
+  // listUnfinishedRegions filters on `.endsWith(".mbtiles")` they were
+  // invisible to the UI and uncounted in the storage total — tens of MB of
+  // orphan for a half-done imagery region.
+  const base = `${REGION_DIR}${regionFileName(id)}`;
+  for (const uri of [base, `${base}-wal`, `${base}-shm`]) {
+    await FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {});
+  }
+}

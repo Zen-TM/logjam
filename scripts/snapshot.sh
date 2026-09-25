@@ -35,18 +35,9 @@ createdb "$TEMP_DB" 2>/dev/null || true
 psql "$TEMP_DB" < "$SNAPSHOTS_DIR/raw.sql" > /dev/null
 
 echo "Sanitizing PII..."
-psql "$TEMP_DB" <<'SQL'
-  -- Anonymise user data — replace real emails and Cognito IDs with safe locals
-  UPDATE users
-  SET
-    email      = 'user-' || id || '@local',
-    cognito_id = 'sanitized-' || id,
-    username   = 'user-' || substring(id::text, 1, 8);
-
-  -- Clear free-text notes that may contain location-sensitive content
-  UPDATE canyons SET notes = NULL WHERE notes IS NOT NULL;
-  UPDATE trip_logs SET notes = NULL WHERE notes IS NOT NULL;
-SQL
+# -f, not a heredoc: a heredoc lets psql exit 0 after a statement error, which
+# is how this scrub silently failed open. The file sets ON_ERROR_STOP itself.
+psql "$TEMP_DB" -f "$SCRIPT_DIR/snapshot-scrub.sql"
 
 echo "Exporting sanitized snapshot..."
 pg_dump --no-owner --no-acl "$TEMP_DB" > "$SNAPSHOTS_DIR/latest.sql"

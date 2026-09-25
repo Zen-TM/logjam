@@ -1,4 +1,4 @@
-import { apiFetch } from "../../canyonUtils";
+import { apiFetch } from "../../placeUtils";
 import type { TopoTemplate } from "./TopoDialog";
 
 // Module-level in-flight dedup for GET /topo-templates (TOPO-6).

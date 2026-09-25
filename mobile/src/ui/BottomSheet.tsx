@@ -1,0 +1,393 @@
+import { createContext, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Animated,
+  Dimensions,
+  Keyboard,
+  Modal,
+  PanResponder,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+import { fontSize, fontWeight, radius, scrim, spacing, theme, withAlpha } from "../theme";
+import { IconButton } from "./IconButton";
+
+// Slide-up modal sheet with a draggable handle + title, capped at 80% height
+// and scrolling within.
+//
+// Motion: the backdrop FADES while the sheet SLIDES (RN's
+// `animationType="slide"` animates the whole modal, dragging the scrim up from
+// the bottom with it, which reads as one moving slab instead of a dimmed
+// screen). Hence `animationType="none"` plus two driven values.
+//
+// The handle is real: drag it down past ~120pt (or flick it) to dismiss,
+// otherwise it springs back. An affordance that doesn't respond is worse than
+// no affordance. The PanResponder is bound to the handle only, so the sheet's
+// inner ScrollView keeps its own gestures.
+//
+// Coverage: `statusBarTranslucent` + `navigationBarTranslucent` put the scrim
+// behind BOTH system bars, and the sheet carries the bottom inset in its own
+// padding — so its surface runs to the physical bottom edge instead of
+// stopping on the tab bar's colour.
+const SHEET_TRAVEL = Dimensions.get("window").height;
+const DISMISS_DISTANCE = 120;
+const DISMISS_VELOCITY = 1.2;
+
+/**
+ * Lets a child freeze the sheet's scroll for the rest of a touch.
+ *
+ * A gesture has ONE owner. The scroll and a child that reads a drag (the
+ * profile charts) are competing for the same finger, and the native ScrollView
+ * will happily intercept a drag mid-way through if it wanders vertically past
+ * its touch slop — so a scrub that curves gets stolen and the reading jumps
+ * away under the finger. A child that has decided the gesture is ITS gesture
+ * locks the scroll until the finger lifts.
+ *
+ * The context is optional: a chart rendered outside a sheet reads null here and
+ * simply has nothing to lock.
+ */
+export const SheetScrollLock = createContext<{
+  setLocked: (locked: boolean) => void;
+} | null>(null);
+
+/**
+ * How a `FieldError` that has just appeared asks the sheet to bring it into
+ * view (DESIGN.md §8, "Form errors"). Null outside a sheet.
+ */
+export const SheetErrorReveal = createContext<((target: View) => void) | null>(null);
+
+export function BottomSheet({
+  visible,
+  onClose,
+  onClosed,
+  title,
+  onBack,
+  footer,
+  overlay,
+  header,
+  children,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  title: string;
+  /**
+   * Renders a back arrow beside the title. Present only for a sheet showing a
+   * SUB-MODE — it returns to the parent mode, and is not a way to close.
+   */
+  onBack?: () => void;
+  /**
+   * Fired once the sheet has finished closing AND unmounted. Use it to run
+   * anything that must not overlap the modal window — a permission request or a
+   * system picker launched while a Modal is up can never attach its own window,
+   * and its promise simply never settles.
+   */
+  onClosed?: () => void;
+  /**
+   * Pinned below the scroll area — put the sheet's primary action here whenever
+   * its content can outgrow the 80% cap. A confirm button that scrolls away
+   * with a long list leaves the handle as the only way out, and dragging the
+   * handle means "discard", not "done".
+   */
+  footer?: React.ReactNode;
+  /**
+   * A sub-mode drawn OVER the scroll area, with `children` left mounted
+   * underneath. Use it for a step that replaces the sheet's content
+   * temporarily — a date picker inside a long filter list.
+   *
+   * Swapping `children` instead would collapse the scroll content to the
+   * sub-mode's height; RN clamps the offset to 0, and the user lands back at
+   * the top of a list they were halfway down.
+   *
+   * It is absolutely positioned, so it cannot make the sheet taller: keep
+   * overlay content shorter than the list it covers.
+   */
+  overlay?: React.ReactNode;
+  /**
+   * Pinned ABOVE the scroll area — the mirror of `footer`. For a filter or
+   * search field that governs the list: scrolling the control that narrows the
+   * list out of reach is how you end up hunting a list you were given a way to
+   * search.
+   */
+  header?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  const insets = useSafeAreaInsets();
+  const [scrollLocked, setScrollLocked] = useState(false);
+  const scrollLock = useMemo(
+    () => ({ setLocked: (locked: boolean) => setScrollLocked(locked) }),
+    [],
+  );
+  // A submit can turn up several errors at once. Each reports itself; the
+  // topmost of the frame wins, and the sheet scrolls only when THAT one is out
+  // of view — so a live limit appearing under the field being typed in never
+  // moves the sheet.
+  const scrollRef = useRef<ScrollView>(null);
+  const contentRef = useRef<View>(null);
+  const viewport = useRef({ y: 0, height: 0 });
+  const pendingReveal = useRef<{ y: number; height: number } | null>(null);
+  const revealError = useMemo(
+    () => (target: View) => {
+      const content = contentRef.current;
+      if (content == null) return;
+      target.measureLayout(content, (_left, top, _width, height) => {
+        const pending = pendingReveal.current;
+        if (pending != null) {
+          if (top < pending.y) pendingReveal.current = { y: top, height };
+          return;
+        }
+        pendingReveal.current = { y: top, height };
+        requestAnimationFrame(() => {
+          const first = pendingReveal.current;
+          pendingReveal.current = null;
+          if (first == null) return;
+          const { y, height: visible } = viewport.current;
+          if (first.y >= y && first.y + first.height <= y + visible) return;
+          scrollRef.current?.scrollTo({ y: Math.max(0, first.y - visible / 2), animated: true });
+        });
+      });
+    },
+    [],
+  );
+  // Keyboard handling is done by hand rather than with KeyboardAvoidingView.
+  // KAV's "height" behavior shrinks its own frame, and a sheet that MOUNTS
+  // while the IME is already up inherits that shrunk frame and never gets it
+  // back — the sheet then floats a nav-bar's height above the screen edge with
+  // a stripe of tab bar showing beneath it. Measuring the keyboard ourselves
+  // and lifting by exactly that much is deterministic in both orders.
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  useEffect(() => {
+    const shown = Keyboard.addListener("keyboardDidShow", (event) =>
+      setKeyboardHeight(event.endCoordinates.height),
+    );
+    const hidden = Keyboard.addListener("keyboardDidHide", () => setKeyboardHeight(0));
+    return () => {
+      shown.remove();
+      hidden.remove();
+    };
+  }, []);
+  const keyboardUp = keyboardHeight > 0;
+  // Kept mounted through the close animation, then torn down.
+  const [mounted, setMounted] = useState(visible);
+  const onClosedRef = useRef(onClosed);
+  onClosedRef.current = onClosed;
+  const progress = useRef(new Animated.Value(0)).current;
+  const drag = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (visible) {
+      setMounted(true);
+      drag.setValue(0);
+      Animated.timing(progress, {
+        toValue: 1,
+        duration: 220,
+        useNativeDriver: true,
+      }).start();
+      return;
+    }
+    Animated.timing(progress, {
+      toValue: 0,
+      duration: 180,
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (!finished) return;
+      setMounted(false);
+      onClosedRef.current?.();
+    });
+  }, [drag, progress, visible]);
+
+
+
+  // The PanResponder is created once; route its release through a ref so it
+  // always calls the current onClose.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  const handlePan = useRef(
+    PanResponder.create({
+      // Claim on touch-down: the handle has nothing else to do with a touch,
+      // and waiting for a move lets a fast flick start before we own the
+      // responder (the gesture then never reaches us at all).
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderMove: (_event, gesture) => {
+        drag.setValue(Math.max(0, gesture.dy));
+      },
+      onPanResponderRelease: (_event, gesture) => {
+        if (gesture.dy > DISMISS_DISTANCE || gesture.vy > DISMISS_VELOCITY) {
+          onCloseRef.current();
+          return;
+        }
+        Animated.spring(drag, {
+          toValue: 0,
+          useNativeDriver: true,
+          bounciness: 0,
+        }).start();
+      },
+    }),
+  ).current;
+
+  if (!mounted) return null;
+
+  const translateY = Animated.add(
+    progress.interpolate({ inputRange: [0, 1], outputRange: [SHEET_TRAVEL, 0] }),
+    drag,
+  );
+
+  return (
+    <Modal
+      visible
+      transparent
+      animationType="none"
+      statusBarTranslucent
+      navigationBarTranslucent
+      onRequestClose={onClose}
+    >
+      <Animated.View style={[styles.backdrop, { opacity: progress }]}>
+        {/* The screen-reader dismiss. A one-finger drag is a gesture TalkBack
+            and VoiceOver claim for their own navigation, so the handle below is
+            not operable by either — this labelled Pressable is, and it is the
+            only announced way out of a sheet apart from the OS back gesture. */}
+        <Pressable
+          style={styles.backdropPress}
+          accessibilityRole="button"
+          accessibilityLabel={`Close ${title}`}
+          onPress={onClose}
+        />
+      </Animated.View>
+      {/* Keyboard-aware: a sheet containing a TextInput must ride above the
+          keyboard, or the field it exists to expose is the one thing hidden.
+          The bottom inset is dropped while the keyboard is up — the keyboard
+          already covers the nav bar, so keeping it leaves a dead band. */}
+      <View style={styles.dock} pointerEvents="box-none">
+        <Animated.View
+          style={[
+            styles.sheet,
+            {
+              marginBottom: keyboardHeight,
+              // Lifting a tall sheet by the keyboard height would push its TOP
+              // off the screen, taking whatever field is up there with it — the
+              // exact field the user just tapped. Cap the height to what is left
+              // above the keyboard instead, and let the inner ScrollView pan.
+              maxHeight: keyboardUp
+                ? SHEET_TRAVEL - keyboardHeight - insets.top - spacing(2)
+                : "80%",
+              paddingBottom: spacing(3) + (keyboardUp ? 0 : insets.bottom),
+              transform: [{ translateY }],
+            },
+          ]}
+        >
+          {/* Hidden from assistive tech rather than labelled: it used to
+              announce "Drag down to close", which is an instruction a screen
+              reader cannot carry out — the one-finger drag never reaches this
+              view. Announcing an action that cannot be performed is worse than
+              announcing nothing; the backdrop above carries the real one. */}
+          <View
+            style={styles.handleHit}
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+            {...handlePan.panHandlers}
+          >
+            <View style={styles.handle} />
+          </View>
+          {/* Back sits on the TITLE line, not in `header`: a sub-mode's title
+              IS what you are going back from, and a header slot may be empty
+              (the tag picker has no explainer), which left the arrow floating
+              on its own row looking like a stray control. */}
+          {onBack ? (
+            <View style={styles.titleRow}>
+              <IconButton icon="arrow-left" accessibilityLabel="Back" onPress={onBack} />
+              <Text style={[styles.title, styles.titleInRow]}>{title}</Text>
+            </View>
+          ) : (
+            <Text style={styles.title}>{title}</Text>
+          )}
+          {header != null ? <View style={styles.header}>{header}</View> : null}
+          {/* flexShrink so the scroll area yields to the pinned footer under
+              the sheet's maxHeight cap. Without it this wrapper claims the
+              full content height and pushes the footer off-screen. */}
+          <View style={styles.scrollArea}>
+            <ScrollView
+              ref={scrollRef}
+              onLayout={(event) => {
+                viewport.current = { ...viewport.current, height: event.nativeEvent.layout.height };
+              }}
+              onScroll={(event) => {
+                viewport.current = { ...viewport.current, y: event.nativeEvent.contentOffset.y };
+              }}
+              scrollEventThrottle={32}
+              contentContainerStyle={styles.scrollContent}
+              showsVerticalScrollIndicator={false}
+              // Without this the FIRST tap on any control while the keyboard is
+              // up is swallowed dismissing it, and the button only fires on the
+              // second press — which read as "Save didn't save".
+              keyboardShouldPersistTaps="handled"
+              // Frozen while a sub-mode covers it: a drag on the overlay must
+              // not scroll the list hidden behind it. Frozen too while a child
+              // owns the current touch (SheetScrollLock).
+              scrollEnabled={overlay == null && !scrollLocked}
+            >
+              <SheetScrollLock.Provider value={scrollLock}>
+                <SheetErrorReveal.Provider value={revealError}>
+                  {/* The frame an error measures itself against. Not
+                      collapsable, or Android flattens it away. */}
+                  <View ref={contentRef} collapsable={false}>
+                    {children}
+                  </View>
+                </SheetErrorReveal.Provider>
+              </SheetScrollLock.Provider>
+            </ScrollView>
+            {overlay != null ? <View style={styles.overlay}>{overlay}</View> : null}
+          </View>
+          {footer != null ? <View style={styles.footer}>{footer}</View> : null}
+        </Animated.View>
+      </View>
+    </Modal>
+  );
+}
+
+const styles = StyleSheet.create({
+  header: { paddingBottom: spacing(1) },
+  scrollArea: { flexShrink: 1 },
+  // Opaque, so the list it covers doesn't ghost through.
+  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: theme.primary },
+  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: scrim.light },
+  backdropPress: { flex: 1 },
+  dock: { flex: 1, justifyContent: "flex-end" },
+  sheet: {
+    backgroundColor: theme.primary,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
+    paddingHorizontal: spacing(2),
+  },
+  handleHit: { alignItems: "center", paddingVertical: spacing(1.5) },
+  handle: {
+    width: 44,
+    height: 5,
+    borderRadius: radius.pill,
+    backgroundColor: theme.bonus1,
+    opacity: 0.5,
+  },
+  titleRow: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
+  // The row owns the bottom gap when there is one, so the arrow and the words
+  // stay on a single baseline.
+  titleInRow: { marginBottom: 0, flexShrink: 1 },
+  title: {
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.bold,
+    color: theme.textPrimary,
+    marginBottom: spacing(1),
+  },
+  scrollContent: { paddingBottom: spacing(2) },
+  // Hairline above the pinned action, so it reads as attached to the sheet
+  // rather than floating over the last row.
+  footer: {
+    paddingTop: spacing(1.5),
+    borderTopWidth: 1,
+    borderTopColor: withAlpha(theme.bonus1, 0.2),
+  },
+});

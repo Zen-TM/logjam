@@ -1,0 +1,172 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+// The place tombstone cascade — the code path that killed sync on every fresh
+// install. It ran `UPDATE waypoints SET place_id = NULL`, a column the schema
+// stopped declaring when waypoint→place links went many-to-many, so the whole
+// delta transaction rolled back, the cursor never advanced, and the same page
+// re-failed every cycle forever.
+//
+// getSyncDb reaches for expo-sqlite (no native runtime here), so the database
+// is a recording stand-in: this asserts the STATEMENTS, which is where the bug
+// was. Column existence is checked against the schema in mirrorSchema.test.ts.
+
+type Call = { sql: string; args: unknown[] };
+const calls: Call[] = [];
+let linkRows: { id: string; a_place_id: string; b_place_id: string }[] = [];
+let tripRows: { id: string; places_json: string | null }[] = [];
+
+const DEAD = "dead-place";
+
+const db = {
+  runAsync: (sql: string, ...args: unknown[]) => {
+    calls.push({ sql, args });
+    return Promise.resolve({ changes: 1, lastInsertRowId: 1 });
+  },
+  getFirstAsync: () => Promise.resolve(null),
+  getAllAsync: (sql: string) => {
+    calls.push({ sql, args: [] });
+    if (sql.includes("FROM place_links")) return Promise.resolve(linkRows);
+    if (sql.includes("FROM trip_logs")) return Promise.resolve(tripRows);
+    return Promise.resolve([]);
+  },
+};
+
+vi.mock("./syncDb", () => ({
+  getSyncDb: () => Promise.resolve(db),
+  notifyMirrorChanged: () => {},
+  withSyncTransaction: async (_db: unknown, task: () => Promise<void>) => task(),
+}));
+
+vi.mock("./mediaSyncBridge", () => ({ scheduleMutationSync: () => {} }));
+vi.mock("expo-file-system/legacy", () => ({
+  deleteAsync: () => Promise.resolve(),
+}));
+vi.mock("expo-crypto", () => ({
+  randomUUID: () => "00000000-0000-4000-8000-000000000000",
+}));
+
+const { applyTombstone } = await import("./mirrorStore");
+const { deletePlaceLocal } = await import("./outbox");
+
+function sqlText(): string {
+  return calls.map((call) => call.sql).join("\n");
+}
+
+// The other half of the tolerance the shared parser now allows: a type from a
+// newer server reaches here, and must touch NOTHING — not the mirror, and not
+// the outbox (the pending-op parking at the end of applyTombstone would
+// otherwise mark a local row deadRemote against an id it knows nothing about).
+describe("a tombstone type this build does not know", () => {
+  beforeEach(() => {
+    calls.length = 0;
+  });
+
+  it("issues no statement at all", async () => {
+    // `placeType` used to stand in for "an entity a NEWER server knows and this
+    // build does not". It is a real entity now, so the stand-in has to be
+    // something genuinely unknown — which is the point of the test, not the
+    // particular word.
+    const orphaned = await applyTombstone(db as never, {
+      type: "somethingFromTheFuture",
+      id: "from-a-newer-server",
+    });
+    expect(orphaned).toEqual([]);
+    expect(calls).toEqual([]);
+  });
+
+  it("still cascades a type it DOES know", async () => {
+    await applyTombstone(db as never, { type: "placeLink", id: "link-1" });
+    expect(sqlText()).toMatch(/DELETE FROM place_links WHERE id = \?/);
+  });
+});
+
+describe("place tombstone cascade", () => {
+  beforeEach(() => {
+    calls.length = 0;
+    linkRows = [{ id: "link-1", a_place_id: DEAD, b_place_id: "other" }];
+    tripRows = [{ id: "trip-1", places_json: JSON.stringify([{ id: DEAD, name: "X" }]) }];
+  });
+
+  it("never writes a table the schema no longer declares", async () => {
+    await applyTombstone(db as never, { type: "place", id: DEAD });
+    expect(sqlText()).not.toMatch(/waypoints/);
+  });
+
+  it("deletes the links touching it, from BOTH ends", async () => {
+    await applyTombstone(db as never, { type: "place", id: DEAD });
+    const del = calls.find((call) =>
+      call.sql.includes("DELETE FROM place_links WHERE a_place_id = ? OR b_place_id = ?"),
+    );
+    expect(del).toBeDefined();
+    // The place at the other end is NOT deleted — a link is not a container.
+    expect(del!.args).toEqual([DEAD, DEAD]);
+    expect(sqlText()).not.toMatch(/DELETE FROM places WHERE id = \?\n.*other/);
+  });
+
+  it("scrubs the trip link list in its own {id,name} shape", async () => {
+    await applyTombstone(db as never, { type: "place", id: DEAD });
+    const update = calls.find((call) =>
+      call.sql.includes("UPDATE trip_logs SET places_json"),
+    );
+    expect(update!.args).toEqual(["[]", "trip-1"]);
+  });
+
+  it("still deletes the place, its media, its shares and nulls route links", async () => {
+    await applyTombstone(db as never, { type: "place", id: DEAD });
+    const text = sqlText();
+    expect(text).toContain("DELETE FROM places WHERE id = ?");
+    expect(text).toContain("DELETE FROM media WHERE linked_type = 'place'");
+    expect(text).toContain("DELETE FROM place_shares WHERE place_id = ?");
+    expect(text).toContain("UPDATE routes SET place_id = NULL");
+  });
+
+  it("drops a pending local delete and parks the other pending ops", async () => {
+    await applyTombstone(db as never, { type: "place", id: DEAD });
+    const text = sqlText();
+    expect(text).toContain("DELETE FROM outbox WHERE entity_id = ? AND op = 'delete'");
+    expect(text).toContain("UPDATE outbox SET state = 'deadRemote'");
+  });
+});
+
+describe("deletePlaceLocal runs the SAME cascade as the tombstone", () => {
+  // The divergence this pins: the local delete used to scrub links and shares
+  // only, so the place's media rows (and their cached blobs) and any route
+  // pointing at it survived until a later delta pull tidied up — i.e. forever
+  // for a guest, whose device is never registered for pulls at all.
+  beforeEach(() => {
+    calls.length = 0;
+    linkRows = [];
+    tripRows = [];
+  });
+
+  it("deletes the place's media rows, shares and route links", async () => {
+    await deletePlaceLocal(DEAD);
+    const text = sqlText();
+    expect(text).toContain("DELETE FROM places WHERE id = ?");
+    expect(text).toContain("DELETE FROM media WHERE linked_type = 'place'");
+    expect(text).toContain("DELETE FROM place_shares WHERE place_id = ?");
+    expect(text).toContain("UPDATE routes SET place_id = NULL");
+  });
+
+  it("still queues the place delete op", async () => {
+    await deletePlaceLocal(DEAD);
+    const op = calls.find((call) => call.sql.includes("INSERT INTO outbox"));
+    expect(op).toBeDefined();
+    expect(op!.args).toContain("place");
+    expect(op!.args).toContain("delete");
+  });
+
+  it("issues every statement the tombstone cascade issues", async () => {
+    await applyTombstone(db as never, { type: "place", id: DEAD });
+    const tombstoneSql = calls
+      .map((call) => call.sql)
+      // The tombstone additionally reconciles the outbox; the local delete
+      // owns its own op planning, so compare the MIRROR statements only.
+      .filter((sql) => !sql.includes("outbox"));
+    expect(tombstoneSql.length).toBeGreaterThan(3); // the scan really ran
+    calls.length = 0;
+    await deletePlaceLocal(DEAD);
+    const localSql = new Set(calls.map((call) => call.sql));
+    expect(tombstoneSql.filter((sql) => !localSql.has(sql))).toEqual([]);
+  });
+});

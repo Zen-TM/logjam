@@ -8,8 +8,8 @@ const customFields: TripLogCustomFieldDef[] = [
 
 describe("detectColumns", () => {
   it("maps name/date/notes aliases regardless of case and separators", () => {
-    const result = detectColumns(["Canyon Name", "Trip_Date", "  COMMENTS "], []);
-    expect(result["Canyon Name"]).toBe("name");
+    const result = detectColumns(["Place Name", "Trip_Date", "  COMMENTS "], []);
+    expect(result["Place Name"]).toBe("name");
     expect(result["Trip_Date"]).toBe("date");
     expect(result["  COMMENTS "]).toBe("notes");
   });

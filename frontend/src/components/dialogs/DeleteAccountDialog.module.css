@@ -1,0 +1,13 @@
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* The consequence, in the body rather than in a banner: a banner is for a
+   failure that has happened, and this has not happened yet. */
+.warning {
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--theme-text-primary);
+}

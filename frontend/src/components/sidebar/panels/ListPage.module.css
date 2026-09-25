@@ -1,0 +1,82 @@
+/* The shape every list PAGE inside Settings takes: hero pinned, only the list
+   scrolls (DESIGN.md §2). Shared by the place types and the two attribute
+   lists, which are the same page with different rows. */
+.root {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  /* Room for each card's focus ring inside the scroller. */
+  padding: 4px var(--gutter) var(--gutter);
+}
+
+/* A line of explanation under a control, or in place of an empty list. */
+.note {
+  margin: 0;
+  font-size: var(--font-xs);
+  color: var(--theme-text-muted);
+}
+
+.state {
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--theme-text-muted);
+}
+
+/* The editor these pages raise: the dialog supplies the surface, this stacks
+   the fields inside it. */
+.dialogForm {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* The curated icons, as a grid of equal cells — the same shape as the phone's,
+   which is what makes "pick one of these" read at a glance. */
+.iconGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--control-lg), 1fr));
+  gap: 6px;
+}
+
+.iconCell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  border: var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--theme-secondary);
+  color: var(--theme-text-primary);
+  cursor: pointer;
+}
+
+.iconCell:hover {
+  border-color: var(--theme-text-muted);
+}
+
+.iconCell:has(:focus-visible) {
+  outline: 2px solid var(--theme-accent);
+  outline-offset: 2px;
+}
+
+.iconCell[data-selected] {
+  border-color: var(--theme-accent);
+  color: var(--theme-accent);
+}
+
+/* The impact line sits under the shared form inside a dialog, and the form
+   supplies no trailing space of its own. */
+.dialogNote {
+  composes: note;
+  margin-top: 8px;
+}

@@ -4,6 +4,8 @@ import { getEnv } from "./env";
 import { launchFargateTask } from "./ecsRunTask";
 import { logger } from "./logger";
 import { estimateExportSeconds } from "./runtimeEstimates";
+import { assertHasCredits } from "./computeCredits";
+import { assertGlobalCapacity } from "./fargateCapacity";
 import type { ExportFormat, ExportBundling, TopoLayerKey } from "@logjam/shared";
 
 // Cap to prevent users from flooding ECS with queued exports. Shared by the
@@ -19,6 +21,9 @@ export interface CreateAndLaunchExportInput {
   bundling: ExportBundling;
   vectorStyleSnapshot: object;
   sourceTileCount: number | null;
+  /** The submitting user's monthly credit allowance, passed in because both
+   * callers have already loaded the user row. */
+  monthlyComputeCredits: number;
 }
 
 /**
@@ -51,8 +56,20 @@ export async function createAndLaunchTopoExport(
     input.sourceTileCount,
   );
 
+  // Account-wide capacity before anything is persisted, so a refusal leaves no
+  // row behind for the reaper to clean up.
+  await assertGlobalCapacity("topoExport");
+
   const exportJob = await prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT id FROM users WHERE id = ${input.userId} FOR UPDATE`;
+    // Monthly allowance, inside the same user-row lock as the concurrency cap
+    // so concurrent submissions serialise against one another (ARCH-009).
+    await assertHasCredits(
+      { id: input.userId, monthlyComputeCredits: input.monthlyComputeCredits },
+      "topoExport",
+      estimatedSeconds,
+      tx,
+    );
     const queued = await tx.topoExportJob.count({
       where: { userId: input.userId, status: { in: ["queued", "running"] } },
     });

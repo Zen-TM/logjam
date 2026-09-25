@@ -1,0 +1,96 @@
+/* The panel body gives Places the full height: hero and rails are pinned, the
+   list scrolls. The sheet opens to the RIGHT of the panel — positioned against
+   the panel's <aside>, so nothing between here and there may be positioned or
+   clip. */
+.root {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.rails {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px var(--gutter) 8px;
+}
+
+/* Selection keeps the type rail mounted but out of reach, so the list below
+   does not jump when the status rail becomes the bar. */
+.inert {
+  opacity: 0.4;
+}
+
+.strip {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--control-md);
+  box-sizing: border-box;
+  margin: 0 var(--gutter) 8px;
+  /* The end pad centres the round clear button in the pill's end cap. */
+  padding: 0 calc((var(--control-md) - var(--control-sm)) / 2) 0 12px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--theme-accent) 12%, var(--theme-primary));
+  font-size: var(--font-sm);
+}
+
+.stripText {
+  flex: 1;
+  min-width: 0;
+}
+
+.listHead {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 var(--gutter) 6px;
+  font-size: var(--font-xs);
+  color: var(--theme-text-muted);
+}
+
+.note {
+  flex-shrink: 0;
+  margin: 0 var(--gutter) 8px;
+  font-size: var(--font-xs);
+  color: var(--theme-text-muted);
+}
+
+.list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  /* Room for each card's focus ring inside the scroller. */
+  padding: 4px var(--gutter) var(--gutter);
+}
+
+.emptyArea {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 var(--gutter) 15%;
+}
+
+.loading {
+  margin: 0;
+  text-align: center;
+  font-size: var(--font-sm);
+  color: var(--theme-text-muted);
+}
+
+.meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 2px;
+}

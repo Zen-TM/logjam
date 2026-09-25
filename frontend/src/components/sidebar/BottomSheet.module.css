@@ -5,7 +5,7 @@
   right: 0;
   /* Leave the bottom nav strip uncovered so it stays tappable. */
   bottom: var(--bottom-nav-height);
-  background: color-mix(in srgb, black 40%, transparent);
+  background: var(--scrim);
   z-index: 3;
   border: none;
   padding: 0;
@@ -32,7 +32,10 @@
   touch-action: none;
 }
 
-/* Drag handle bar — the only grab area, so panel-body scroll stays usable. */
+/* Drag handle bar — the only grab area, so panel-body scroll stays usable, and
+   a `slider` the arrow keys move between the three snaps. The whole bar is the
+   target: it is 36px of grip on a full-width row, and a keyboard reaching a
+   4px-tall pill would be a worse promise than reaching none. */
 .handle {
   flex-shrink: 0;
   display: flex;
@@ -43,6 +46,17 @@
   touch-action: none;
 }
 
+/* The ring hugs the grip rather than the full-width bar it sits in, so focus
+   points at the thing that moves. */
+.handle:focus-visible {
+  outline: none;
+}
+
+.handle:focus-visible .grip {
+  outline: 2px solid var(--theme-text-primary);
+  outline-offset: 4px;
+}
+
 .handle:active {
   cursor: grabbing;
 }
@@ -50,7 +64,8 @@
 .grip {
   width: 36px;
   height: 4px;
-  border-radius: var(--radius-full);
+  /* A pill, not an ellipse: `--radius-full` is 50% and this box is 9:1. */
+  border-radius: var(--radius-pill);
   background-color: color-mix(in srgb, var(--theme-text-primary) 30%, transparent);
 }
 

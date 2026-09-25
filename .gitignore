@@ -40,3 +40,15 @@ postgres-data/
 CLAUDE.local.md
 .stfolder/
 .stignore
+
+# Protomaps planet extract (operator-produced, uploaded to S3; never commit)
+/nsw.pmtiles
+*.pmtiles
+
+# Personal kiosk dev helper (not shared)
+scripts/kiosk-dev.sh
+
+# Syncthing's in-flight temp copies. This checkout is mirrored to the kiosk dev
+# box (CLAUDE.local.md), so a sync landing mid-commit drops these beside the
+# real files — one reached a commit that way.
+.syncthing.*.tmp

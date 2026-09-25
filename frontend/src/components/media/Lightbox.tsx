@@ -4,7 +4,7 @@ import { mediaCategory, type MediaItem } from "@logjam/shared";
 import classes from "./Lightbox.module.css";
 
 // Full-res image/video overlay with a focus trap (WCAG 2.1.2 / 4.1.2). Shared
-// by MediaGallery (grid thumbnails) and CanyonSlideshow so the close/Esc/focus
+// by MediaGallery (grid thumbnails) and PlaceSlideshow so the close/Esc/focus
 // behaviour lives in one place. Mounts only while an item is selected.
 export default function Lightbox({
   item,
@@ -25,14 +25,20 @@ export default function Lightbox({
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
     closeRef.current?.focus();
 
+    const container = containerRef.current;
+    if (!container) return;
+    // On the overlay itself, not the document: opened from a kit Dialog, the
+    // dialog hears a document-bound Escape first and would close under it. The
+    // overlay takes focus on any press inside it (tabIndex -1), so its keys
+    // start here.
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
         onClose();
         return;
       }
-      if (e.key !== "Tab") return;
-      const container = containerRef.current;
-      if (!container) return;
+      if (e.key !== "Tab" || !container) return;
       const focusable = Array.from(
         container.querySelectorAll<HTMLElement>(
           'button, [href], input, select, textarea, video[controls], [tabindex]:not([tabindex="-1"])',
@@ -51,9 +57,9 @@ export default function Lightbox({
       }
     }
 
-    document.addEventListener("keydown", handleKeyDown);
+    container.addEventListener("keydown", handleKeyDown);
     return () => {
-      document.removeEventListener("keydown", handleKeyDown);
+      container.removeEventListener("keydown", handleKeyDown);
       triggerBeforeRef.current?.focus();
     };
   }, [onClose]);
@@ -72,6 +78,7 @@ export default function Lightbox({
       role="dialog"
       aria-modal="true"
       aria-label="Media preview"
+      tabIndex={-1}
     >
       <button
         ref={closeRef}

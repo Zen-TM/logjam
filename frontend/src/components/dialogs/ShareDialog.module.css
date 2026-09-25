@@ -1,0 +1,47 @@
+/* Who can see this, and how to take it back. Layout only — every control is
+   the kit's (DESIGN.md §6, §9). */
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* One section and its rows. */
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* What pressing a name will do, said before anything is pressed. Tinted with
+   the accent rather than the warning: this grant comes back off. */
+.promise {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--theme-accent) 50%, transparent);
+  border-left-width: 3px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--theme-accent) 12%, transparent);
+  font-size: var(--font-sm);
+  line-height: 1.45;
+}
+
+/* A dead end inside a section: nobody left to share with, or nobody matching. */
+.note {
+  margin: 2px 0;
+  font-size: var(--font-sm);
+  color: var(--theme-text-muted);
+}
+
+/* The + at the end of a grantable row. Decoration, not a control — the whole
+   card is the button (DESIGN.md §7), and a second target here would put two
+   ways to do one thing on one line. */
+.grantMark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-sm);
+  height: var(--control-sm);
+  color: var(--theme-accent);
+}
