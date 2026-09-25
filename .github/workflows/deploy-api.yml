@@ -24,6 +24,10 @@ env:
 jobs:
   deploy:
     name: Build and deploy
+    # The deploy role trusts only jobs in the `prod` Environment, which only
+    # main may deploy to — a workflow pushed to any other branch can't
+    # assume it.
+    environment: prod
     runs-on: ubuntu-latest
     # Only deploy when the triggering CI run passed, was a push (not a PR run),
     # and targeted main. Belt-and-suspenders with the workflow_run `branches`

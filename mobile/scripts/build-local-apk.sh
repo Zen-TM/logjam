@@ -25,7 +25,7 @@
 # Usage:  ./scripts/build-local-apk.sh [--no-install]
 #
 # Assumes the API + MiniStack are reachable on the HOST at 8080 / 4566 (over an
-# ssh tunnel if they run on the kiosk box) and that `.env` points the app at
+# ssh tunnel if they run on another machine) and that `.env` points the app at
 # http://127.0.0.1:8080 — loopback plus `adb reverse` is the one configuration
 # that works on the emulator and a physical device alike, so it never needs
 # editing per target. Never 10.0.2.2: that is emulator-only and routes nowhere

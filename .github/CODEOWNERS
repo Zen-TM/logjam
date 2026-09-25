@@ -1,0 +1,3 @@
+# Every path needs the maintainer's review: the main ruleset requires a code
+# owner's approval on the latest push (scripts/github-settings.sh).
+* @Zen-TM

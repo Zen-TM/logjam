@@ -11,7 +11,6 @@ pipeline.py              main entry — CLI + processing pipeline (~77K, monolit
 worker.py                ECS-launched worker wrapper around pipeline (job-time)
 export_worker.py         ECS-launched worker for on-demand TopoExportJob (export-time)
 renderers/               per-format export renderers + shared tile compositor
-inspect_mbtiles.py       debug tool
 build_svtm_formation.py  one-off preprocess: PCT raster → formation raster (Stage 3 of veg rework)
 Dockerfile               GDAL + PDAL system deps, Python venv
 docker-compose.yml       local run config

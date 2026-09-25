@@ -34,7 +34,7 @@ import prisma from "../services/prisma";
 //
 // bob<->carol is ESTABLISHED BY THIS FILE rather than assumed, because a dev
 // database seeded before that row was added to seed.ts still lacks it (found
-// 2026-08-22 on the kiosk box) — and re-seeding to fix a test is a destructive
+// 2026-08-22) — and re-seeding to fix a test is a destructive
 // answer to a setup problem. `ensureFriends` is idempotent, so the suite is
 // correct on a fresh seed and on a stale one alike.
 //

@@ -1,20 +1,3 @@
-# Personal scratch data — datasets, screenshots, plans, one-off exports
-/private/
-
-# Claude Code: skills + project settings are checked in; local overrides aren't
-.claude/settings.local.json
-
-.playwright-mcp/
-repomix-output.xml
-
-# Audit skill outputs (local-only)
-docs/audits/
-.audit-tmp/
-
-# Python bytecode
-__pycache__/
-*.pyc
-
 # Dependencies
 node_modules/
 
@@ -23,32 +6,36 @@ dist/
 # TypeScript incremental build cache (emitted by `tsc -b`)
 *.tsbuildinfo
 
+# Python bytecode
+__pycache__/
+*.pyc
+
 # Environment files — never commit secrets
 .env
 .env.local
 .env.*.local
+*.env.local
 # Terraform var files may carry secrets (e.g. TF_VAR_resend_api_key overrides)
 *.tfvars
 *.auto.tfvars
 
-# Local dev environment
+# Sanitised prod DB dumps written by `make snapshot`
 snapshots/*.sql
-localstack-data/
-postgres-data/
 
-# Personal, un-committed dev setup (syncthing repo mirror, local CLAUDE.md overrides)
-CLAUDE.local.md
-.stfolder/
-.stignore
-
-# Protomaps planet extract (operator-produced, uploaded to S3; never commit)
-/nsw.pmtiles
+# Map archives are large and regenerable — never committed
 *.pmtiles
 
-# Personal kiosk dev helper (not shared)
-scripts/kiosk-dev.sh
+# Claude Code: personal instructions, local settings, and worktrees (a worktree
+# committed by mistake is a second copy of the repo)
+CLAUDE.local.md
+.claude/settings.local.json
+.claude/worktrees/
 
-# Syncthing's in-flight temp copies. This checkout is mirrored to the kiosk dev
-# box (CLAUDE.local.md), so a sync landing mid-commit drops these beside the
-# real files — one reached a commit that way.
-.syncthing.*.tmp
+# Screenshots and snapshots from the Playwright MCP server declared in .mcp.json
+.playwright-mcp/
+
+# Personal skills: anything named `<name>.local/` is yours alone
+/.claude/skills/*.local/
+
+# Scratch space: everything under private/ stays on your machine (see
+# private/.gitignore). Machine-specific ignores belong in .git/info/exclude.

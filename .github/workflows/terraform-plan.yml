@@ -1,13 +1,13 @@
 name: terraform-plan
 
 # Plan-on-PR for envs/prod: shows the real infra diff as a PR comment so infra
-# changes are reviewed before merge. Read-only against AWS — the CI role has
+# changes are reviewed before merge. Read-only against AWS — the plan role has
 # ReadOnlyAccess (minus the user-data buckets, explicit deny) and the plan runs
-# with -lock=false so it never writes state or the lockfile. Apply stays
-# manual (operator) until Phase 3 of .claude/cicd-staging-plan.md.
+# with -lock=false so it never writes state or the lockfile. Apply is manual,
+# by the maintainer.
 #
-# Only runs on PRs from this repo (not forks): the OIDC role trusts
-# repo:Zen-TM/logjam:* and fork PRs get no id-token anyway.
+# Only runs on PRs from this repo (not forks): the plan role trusts this
+# repo's pull_request and main subjects, and fork PRs get no id-token anyway.
 
 on:
   pull_request:
@@ -33,7 +33,7 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6
         with:
-          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/logjam-github-actions-role
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/logjam-github-actions-plan-role
           aws-region: ${{ secrets.AWS_REGION }}
 
       - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
