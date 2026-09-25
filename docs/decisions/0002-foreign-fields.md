@@ -1,6 +1,6 @@
 # 0002. foreignFields for values whose definition the recipient lacks
 
-- **Date:** 2026-09-25
+- **Date:** 2026-09-06
 - **Status:** Accepted
 - **Supersedes:** —
 
@@ -11,8 +11,6 @@ carry field values keyed by definitions the recipient (or the target type) does 
 have:
 - Dumping foreign values into notes was considered, but killed by a propagation
   objection: B copies A's place, shares it with C, and C reads A's field labels.
-- Allowing clients to edit or push arbitrary foreign field structures would bypass
-  field validation.
 
 ## Decision
 

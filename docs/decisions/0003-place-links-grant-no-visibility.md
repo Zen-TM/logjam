@@ -1,6 +1,6 @@
 # 0003. A PlaceLink grants no visibility
 
-- **Date:** 2026-09-25
+- **Date:** 2026-09-06
 - **Status:** Accepted
 - **Supersedes:** —
 
