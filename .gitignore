@@ -14,6 +14,7 @@ __pycache__/
 .env
 .env.local
 .env.*.local
+*.env.local
 # Terraform var files may carry secrets (e.g. TF_VAR_resend_api_key overrides)
 *.tfvars
 *.auto.tfvars
@@ -33,4 +34,5 @@ CLAUDE.local.md
 # Personal skills: anything named `<name>.local/` is yours alone
 /.claude/skills/*.local/
 
-# Your own machine-specific ignores belong in .git/info/exclude, not here.
+# Scratch space: everything under private/ stays on your machine (see
+# private/.gitignore). Machine-specific ignores belong in .git/info/exclude.
