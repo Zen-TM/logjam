@@ -4,9 +4,9 @@
       "type": "stdio",
       "command": "npx",
       "args": [
-        "@playwright/mcp@latest",
+        "@playwright/mcp@0.0.82",
         "--browser",
-        "chrome"
+        "${PLAYWRIGHT_MCP_BROWSER:-chrome}"
       ],
       "env": {}
     }
