@@ -1,5 +1,7 @@
 import type { ConfigContext, ExpoConfig } from "expo/config";
 
+import packageJson from "./package.json";
+
 // Static config stays in app.json — Expo passes it in as `config` here, and this
 // file only layers on the parts that must come from the environment.
 //
@@ -20,6 +22,8 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     // `config` is typed loosely by ConfigContext; app.json always supplies these.
     name: config.name ?? "Logjam",
     slug: config.slug ?? "logjam-mobile",
+    // The one declaration of the app version (guard: src/versionAgreement.test.ts).
+    version: packageJson.version,
     android: {
       ...config.android,
       ...(googleServicesFile ? { googleServicesFile } : {}),

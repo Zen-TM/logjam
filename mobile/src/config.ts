@@ -1,3 +1,5 @@
+import packageJson from "../package.json";
+
 // Runtime config, read from EXPO_PUBLIC_* env at build time (parallels the web
 // VITE_* split: dev vs prod parity via separate env files / EAS profiles).
 // Non-secret values only — Cognito pool/client IDs are public by design; no
@@ -27,7 +29,8 @@ export const config = {
 
 // Client-version discipline (Stage 0): every API request carries this header so
 // the server can enforce a min-supported-version / forced-upgrade lever before
-// any stale build ships. Keep in sync with package.json version.
+// any stale build ships. package.json is the one declaration of the app version;
+// app.config.ts reads the same field (guard: versionAgreement.test.ts).
 export const CLIENT_VERSION_HEADER = "x-logjam-client";
-export const CLIENT_SEMVER = "0.1.0";
+export const CLIENT_SEMVER: string = packageJson.version;
 export const CLIENT_VERSION = `mobile/${CLIENT_SEMVER}`;
