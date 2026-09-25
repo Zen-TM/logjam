@@ -30,7 +30,7 @@ Logjam = **private** mapping/logbook app for canyoning NSW. **Not** publication 
 
 ## AWS architecture
 
-Prod runs on Elastic Beanstalk (API) + ECS Fargate (workers) + S3 + CloudFront + Cognito, IaC'd in `infra/terraform/`. All AWS CLI calls use `--profile logjam --region ap-southeast-2`. Full topology, task-def/bucket/distribution details, and CLI one-liners: the **aws-architecture** skill.
+Prod runs on Elastic Beanstalk (API) + ECS Fargate (workers) + S3 + CloudFront + Cognito, IaC'd in `infra/terraform/`. Full topology, task-def/bucket/distribution details: `docs/architecture.md`.
 
 ## Conventions (self-updating)
 
