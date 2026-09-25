@@ -111,6 +111,10 @@ jobs:
 
   deploy:
     name: Build and push worker image
+    # The deploy role trusts only jobs in the `prod` Environment, which only
+    # main may deploy to — a workflow pushed to any other branch can't
+    # assume it.
+    environment: prod
     runs-on: ubuntu-latest
     needs: changes
     # `!cancelled()` is load-bearing: with a plain `needs`, a FAILED `changes`

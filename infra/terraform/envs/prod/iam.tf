@@ -31,20 +31,55 @@ resource "aws_iam_role" "topo_worker" {
   })
 }
 
-# GitHub Actions OIDC deploy role (repo Zen-TM/logjam). The oidc-provider itself
-# is left unmanaged — the trust policy embeds its ARN as a literal, so no
-# provider resource is required for a clean plan.
+# GitHub Actions OIDC roles (repo Zen-TM/logjam). The oidc-provider's ARN is
+# embedded as a literal, as before.
+#
+# Two roles, split by what may assume them. The OIDC `sub` claim names where a
+# workflow run came from, and it used to be matched with `repo:Zen-TM/logjam:*`
+# — any workflow on ANY branch could assume the deploy role, so anyone able to
+# push a branch could deploy to prod or run the migrate task without a PR.
+#   - deploy (this role, name kept so nothing else moves): only jobs running in
+#     the `prod` GitHub Environment, which only `main` may deploy to.
+#   - plan (below): read-only, for terraform plan on PRs and on main.
+locals {
+  github_oidc_provider_arn = "arn:aws:iam::620853681701:oidc-provider/token.actions.githubusercontent.com"
+}
+
 resource "aws_iam_role" "github_actions" {
   name = "logjam-github-actions-role"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
       Effect    = "Allow"
-      Principal = { Federated = "arn:aws:iam::620853681701:oidc-provider/token.actions.githubusercontent.com" }
+      Principal = { Federated = local.github_oidc_provider_arn }
       Action    = "sts:AssumeRoleWithWebIdentity"
       Condition = {
-        StringEquals = { "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com" }
-        StringLike   = { "token.actions.githubusercontent.com:sub" = "repo:Zen-TM/logjam:*" }
+        StringEquals = {
+          "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
+          "token.actions.githubusercontent.com:sub" = "repo:Zen-TM/logjam:environment:prod"
+        }
+      }
+    }]
+  })
+}
+
+resource "aws_iam_role" "github_actions_plan" {
+  name        = "logjam-github-actions-plan-role"
+  description = "Read-only terraform plan from GitHub Actions (PRs and main)."
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Federated = local.github_oidc_provider_arn }
+      Action    = "sts:AssumeRoleWithWebIdentity"
+      Condition = {
+        StringEquals = {
+          "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
+          "token.actions.githubusercontent.com:sub" = [
+            "repo:Zen-TM/logjam:pull_request",
+            "repo:Zen-TM/logjam:ref:refs/heads/main",
+          ]
+        }
       }
     }]
   })
@@ -222,6 +257,20 @@ resource "aws_iam_role_policy_attachment" "gha_readonly" {
   policy_arn = "arn:aws:iam::aws:policy/ReadOnlyAccess"
 }
 
+# The plan role gets the same read-only grant and the same privacy carve-out
+# (one document, local.ci_readonly_privacy_deny, attached to both roles). The
+# deploy role keeps its copy until its permissions are narrowed separately.
+resource "aws_iam_role_policy_attachment" "gha_plan_readonly" {
+  role       = aws_iam_role.github_actions_plan.name
+  policy_arn = "arn:aws:iam::aws:policy/ReadOnlyAccess"
+}
+
+resource "aws_iam_role_policy" "gha_plan_readonly_privacy_deny" {
+  name   = "logjam-ci-readonly-privacy-deny"
+  role   = aws_iam_role.github_actions_plan.id
+  policy = local.ci_readonly_privacy_deny
+}
+
 # ── Inline policy ──────────────────────────────────────────────────────────────
 
 resource "aws_iam_role_policy" "gha_frontend_deploy" {
@@ -261,9 +310,13 @@ resource "aws_iam_role_policy" "gha_frontend_deploy" {
 # enumeration only — keys are opaque UUIDs/job ids, never canyon names —
 # while object content stays denied.
 resource "aws_iam_role_policy" "gha_readonly_privacy_deny" {
-  name = "logjam-ci-readonly-privacy-deny"
-  role = aws_iam_role.github_actions.id
-  policy = jsonencode({
+  name   = "logjam-ci-readonly-privacy-deny"
+  role   = aws_iam_role.github_actions.id
+  policy = local.ci_readonly_privacy_deny
+}
+
+locals {
+  ci_readonly_privacy_deny = jsonencode({
     Version = "2012-10-17"
     Statement = [
       {
