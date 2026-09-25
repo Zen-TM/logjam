@@ -10,6 +10,14 @@ which links back here for the reasoning.
 
 | # | Decision | Date | Status |
 |---|---|---|---|
+| [0001](0001-place-share-visibility.md) | Place share visibility | 2026-07-04 | Accepted |
+| [0002](0002-foreign-fields.md) | foreignFields for values whose definition the recipient lacks | 2026-09-06 | Accepted |
+| [0003](0003-place-links-grant-no-visibility.md) | A PlaceLink grants no visibility | 2026-09-06 | Accepted |
+| [0010](0010-what-syncs.md) | What syncs | 2026-09-04 | Accepted |
+| [0011](0011-place-types-and-system-rows.md) | Place types and system rows | 2026-09-06 | Accepted |
+| [0012](0012-custom-field-definitions.md) | Custom field definitions | 2026-09-13 | Accepted |
+| [0013](0013-totals-need-a-declaration.md) | Totals need a declaration | 2026-09-13 | Accepted |
+| [0014](0014-client-compatibility-mechanism.md) | Client compatibility mechanism | 2026-07-23 | Accepted |
 | [0020](0020-pre-deploy-migrations-expand-contract.md) | Prod migrations run in a gated pre-deploy task; migrations are expand/contract | 2026-07-17 | Accepted |
 | [0021](0021-design-system-and-contrast-gate.md) | Design system placement and the WCAG contrast gate | 2026-09-13 | Accepted |
 | [0022](0022-share-the-decision-not-the-drawing.md) | Share the decision, not the drawing: shared declarations + parity tests, no generated cross-platform UI | 2026-09-25 | Accepted |
