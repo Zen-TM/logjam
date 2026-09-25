@@ -2,43 +2,38 @@
 
 Python + GDAL + PDAL pipeline. Converts NSW ELVIS LiDAR ZIPs to raster MBTiles (hillshade / vegetation / slope / contours / OSM features + composite).
 
-**Authoritative doc:** `topo/README.md`. Read for output format, flags, dep install, perf, troubleshooting. This file = Claude-specific gotchas only.
+**Authoritative doc:** `topo/README.md` (output format, flags, deps, perf, troubleshooting). This file = agent gotchas only.
 
 ## Key files
 
 ```
-pipeline.py              main entry — CLI + processing pipeline (~77K, monolithic by design)
+pipeline.py              main entry — CLI + processing pipeline (monolithic by design)
 worker.py                ECS-launched worker wrapper around pipeline (job-time)
 export_worker.py         ECS-launched worker for on-demand TopoExportJob (export-time)
 renderers/               per-format export renderers + shared tile compositor
-build_svtm_formation.py  one-off preprocess: PCT raster → formation raster (Stage 3 of veg rework)
+build_svtm_formation.py  one-off preprocess: PCT raster → formation raster
+build_fire_history.py    one-off preprocess: NPWS fire history → year raster
 Dockerfile               GDAL + PDAL system deps, Python venv
-docker-compose.yml       local run config
-requirements.txt         Python deps (GDAL pinned to system version)
-SVTM/                    NSW State Vegetation Type Map raw + derived rasters
 ```
 
 ## Gotchas
 
-- **GDAL Python binding must match system GDAL version.** `pip install "GDAL==$(gdal-config --version)"` — no pin in `requirements.txt`.
-- **PDAL single-threaded.** Parallelism in tile renderer (`ProcessPoolExecutor`). No multi-process PDAL step.
-- **Run inside Docker** unless user asks host run — host GDAL/PDAL installs drift constantly.
-- **Worker invoked from API** via ECS RunTask (`api/src/routes/topoJobs.ts`). No worker CLI contract change without API update.
-- **Output goes to S3** (bucket `S3_BUCKET_TOPO`, key prefix `outputs/<jobId>/`). Local dev = MiniStack.
-- **Two entrypoints, one image.** Dockerfile ENTRYPOINT is `worker.py`. The `logjam-topo-export-worker` task def MUST override the command to `python3 /app/export_worker.py` or it runs the wrong worker. The three worker task defs are now Terraform-managed in `infra/terraform/envs/prod/ecs.tf` (the export def's override lives there as `entryPoint`) — change them via `terraform apply`, not `aws ecs register-task-definition`/console, or Terraform will show drift.
-- **Terminal status writes are guarded.** Both workers flip job status with a `WHERE status = 'processing'/'running'` guard so a reaped (force-failed) job can never be resurrected to `complete` by a worker that outlived the reaper's deadline (ARCH-001). Any new status transition must keep this guard — `tests/test_status_guards.py` checks the SQL emission; `tests/test_status_guard_db.py` proves it against a real Postgres (gated on `RUN_DB_IT=1` + real `psycopg2`, skips on host; see `tests/INTEGRATION.md`).
-- **Layer list drift is guarded.** `tests/test_layer_sync.py` fails if `worker.py` `ALL_LAYERS`/`RASTER_LAYERS`/`VECTOR_LAYERS` drift from the canonical `shared/src/topoSettings.ts` `TOPO_LAYERS`. Same file now also guards the other three cross-language mirrors: `worker.py` `VECTOR_STYLE_DEFAULTS` ↔ TS `VECTOR_STYLE_DEFAULTS`, `pipeline.py` `OSM_STYLE_META` (icon + `size_z18`) ↔ TS `OSM_POINT_ICON`, and `build_svtm_formation.py` `SVTM_FORMATION_MU` keys ↔ TS `SVTM_FORMATIONS`.
-- **The Dockerfile COPY list is derived, not remembered.** `tests/test_docker_image_files.py` walks the import graph from `worker.py`/`export_worker.py` (function-local imports included) and fails if any local module is missing a `COPY` line. `push_send.py` was absent for a month; before it, `email_send.py` (743b1a3). A missing module raises `ModuleNotFoundError` *after* the terminal status flip, which used to take the self-clean path and delete the finished job's S3 outputs.
-- **A post-`complete` exception must never self-clean.** `worker.py` `main()` sets `completed = True` immediately after the guarded `complete` flip; the except branch returns early when it is set. The 0-rowcount → `delete_s3_prefix_best_effort` inference only means "reaped or deleted" *before* the flip (STP-001). Guarded by `TestWorkerPostCompletionSelfClean` in `tests/test_status_guards.py`.
-- **Export bytes are quota-accounted, with a 7-day app-side TTL.** `export_worker.py` increments `users.storage_used_bytes` in the same commit as the `completed` status flip; `DELETE /topo-exports/:id` deletes the S3 object and decrements. Completed exports older than `TOPO_EXPORT_TTL_MS` (default 7 days, 0 disables) are swept by the API reaper (`expireCompletedExports` in `api/src/lib/topoJobReaper.ts`): S3 object deleted, quota decremented, row removed in one transaction — **the sweep is authoritative**. The bucket's `expire-exports` lifecycle rule (7-day expiry on `exports/`, verified live 2026-06-11) is backstop-only against orphaned objects; keep its retention in lockstep with `TOPO_EXPORT_TTL_MS`.
+- **Run inside Docker** unless the user asks for a host run — host GDAL/PDAL installs drift. On a host, the GDAL binding must match system GDAL: `pip install "GDAL==$(gdal-config --version)"`.
+- **PDAL is single-threaded.** Parallelism lives in the tile renderer (`ProcessPoolExecutor`).
+- **The API launches workers** via ECS RunTask (`api/src/routes/topoJobs.ts`); no worker CLI contract change without the API change. Output goes to `S3_BUCKET_TOPO` under `outputs/<jobId>/` (MiniStack locally).
+- **Two entrypoints, one image.** ENTRYPOINT is `worker.py`; the export task def overrides it to `export_worker.py`. The worker task defs live in `infra/terraform/envs/prod/ecs.tf` — change them there, never via the console or `register-task-definition`.
+- **Terminal status writes are guarded** (`WHERE status = 'processing'/'running'`) so a reaped job can't be resurrected. Any new transition keeps the guard: `tests/test_status_guards.py`, and `tests/test_status_guard_db.py` against real Postgres.
+- **A post-`complete` exception never self-cleans; the Dockerfile COPY list is derived from the import graph.** Guards: `TestWorkerPostCompletionSelfClean` in `tests/test_status_guards.py`, `tests/test_docker_image_files.py`. [0067](../docs/decisions/0067-topo-worker-post-complete-never-self-cleans.md)
+- **Cross-language mirrors are guarded by `tests/test_layer_sync.py`:** `worker.py` layer lists ↔ `TOPO_LAYERS` (`shared/src/topoSettings.ts`, canonical — a new MBTiles layer starts there), `VECTOR_STYLE_DEFAULTS`, `OSM_STYLE_META` ↔ `OSM_POINT_ICON`, `SVTM_FORMATION_MU` ↔ `SVTM_FORMATIONS`.
+- **Export bytes are quota-accounted:** `export_worker.py` increments `users.storage_used_bytes` in the same commit as `completed`; the API reaper's `expireCompletedExports` (`api/src/lib/topoJobReaper.ts`) is the authoritative TTL sweep (`TOPO_EXPORT_TTL_MS`). The bucket's `expire-exports` lifecycle rule is a backstop; keep its retention equal to the TTL.
+- **SVTM and fire history are preprocessed once, not per job.** Re-run `build_svtm_formation.py` only when the raw PCT raster changes; the pipeline reads the formation raster and μ from its legend JSON. `build_fire_history.py` builds the fire-year raster the pipeline reads via `FIRE_HISTORY_S3_PATH`; fire history only flags staleness — it **never modifies density**, because the LiDAR already captures regrowth.
 
 ## When editing
 
-- Test small ELVIS ZIP first — full runs take minutes to hours (see README perf table).
-- `--keep-work` preserves intermediate rasters for inspection.
-- No new MBTiles layers without updating the canonical `TOPO_LAYERS` constant (`shared/src/topoSettings.ts` — api/frontend re-export it; `worker.py` `ALL_LAYERS` is the hand-synced Python mirror).
+- Test a small ELVIS ZIP first — full runs take minutes to hours. `--keep-work` keeps intermediate rasters.
 
-## Conventions log (additive)
+## Testing
 
-- **SVTM is preprocessed once, not per-job.** Raw 2.3 GB PCT raster lives at `topo/SVTM/SVTM_NSW_Extant_PCT_vC2_0_M2_2_5m.tif`. Run `python build_svtm_formation.py` once to produce `topo/SVTM/svtm_formation.tif` (uint8, ~17 classes) + `svtm_formation_legend.json`. Re-run only when the raw SVTM raster is replaced. The topo job pipeline reads the formation raster, never the raw PCT raster. Resistance multipliers (μ) per formation live in `SVTM_FORMATION_MU` in `build_svtm_formation.py`; pipeline reads μ from the legend JSON, not the constant.
-- **Fire history is preprocessed once, not per-job** (same pattern as SVTM). Raw NPWS Fire History shapefile (not committed, `topo/fire/` is gitignored) → `python build_fire_history.py --input <NPWSFireHistory.shp>` produces `topo/fire/fire_history_year.tif` (uint16, EPSG:3577, 100 m; per-cell most-recent valid fire year, 0 = never-burned/undated) + legend. Uploaded to `s3://logjam-topo-jobs/fire/fire_history_year.tif`; pipeline reads it via `FIRE_HISTORY_S3_PATH` (`/vsis3/`, or a verbatim local path for dev). At job time `apply_fire_history` warps it onto the DTM grid and flags cells whose most-recent fire postdates the LiDAR **capture** date (parsed from the ELVIS filename `<Area><YYYYMM>-LID…`) → `fire_stale.tif` + `fire_stale_summary.json`. **It never modifies density** — the LiDAR already captures post-fire regrowth, so a multiplier would double-count; the fire layer only marks staleness.
+- `python -m unittest discover -s tests` from `topo/`. Pure-logic tests import `tests/_native_stub.py` first, which stubs `osgeo`/`psycopg2`/etc when absent so they run on a host and in CI; inside the worker image it is a no-op.
+- A test exercising a real native lib skips when stubbed (`tests/test_tile_compose.py` for GDAL). `tests/test_status_guard_db.py` needs `RUN_DB_IT=1` + real `psycopg2`; CI runs it against the `api-integration` job's DB (runbook §1).
+- Runbook §2 in `tests/INTEGRATION.md` (full worker end-to-end: worker image + a LiDAR fixture) is manual: run it before committing worker changes it covers.
