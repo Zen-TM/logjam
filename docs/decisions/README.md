@@ -10,6 +10,10 @@ which links back here for the reasoning.
 
 | # | Decision | Date | Status |
 |---|---|---|---|
+| [0020](0020-pre-deploy-migrations-expand-contract.md) | Prod migrations run in a gated pre-deploy task; migrations are expand/contract | 2026-07-17 | Accepted |
+| [0021](0021-design-system-and-contrast-gate.md) | Design system placement and the WCAG contrast gate | 2026-09-13 | Accepted |
+| [0022](0022-share-the-decision-not-the-drawing.md) | Share the decision, not the drawing: shared declarations + parity tests, no generated cross-platform UI | 2026-09-25 | Accepted |
+| [0023](0023-agpl-and-dco.md) | AGPL-3.0 only; DCO sign-off, not a CLA | 2026-09-25 | Accepted |
 | [0030](0030-maplibre-vulkan-and-native-sdk-floor.md) | Run MapLibre on Vulkan on Android, with a native SDK floor of 13.3.0 | 2026-08-18 | Accepted |
 | [0031](0031-mlrn-11-map-interaction-rules.md) | MLRN 11 (Fabric): the map interaction rules that follow from it | 2026-08-18 | Accepted |
 | [0032](0032-line-symbol-glyphs-centred-in-advance-box.md) | A glyph on a line-placed symbol layer has its ink centred in its advance box | 2026-08-30 | Accepted |
