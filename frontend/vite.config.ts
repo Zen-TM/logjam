@@ -5,9 +5,9 @@ import path from 'path'
 // CSP injected only on production build. Vite dev server uses inline scripts +
 // eval for HMR, both of which would be blocked by 'self' policies.
 //
-// Source of truth for the policy string: scripts/csp-policy.json at repo root.
-// Mirror any allowlist additions there.
-const CSP_PROD = [
+// Source of truth for the policy string: CSP_PROD below (the string actually shipped).
+// scripts/csp-policy.json mirrors it, guarded by frontend/src/cspAgreement.test.ts.
+export const CSP_PROD = [
   "default-src 'self'",
   "script-src 'self'",
   "style-src 'self' 'unsafe-inline'",
