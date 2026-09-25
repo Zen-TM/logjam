@@ -47,6 +47,7 @@ Three surfaces. One rule each. **Never render raw `err.message` from `apiFetch` 
 - **Date-only values** (trip dates, date fields; stored UTC-midnight) format with `timeZone: "UTC"`; true timestamps use local time.
 - **Responsive:** one breakpoint, `max-width: 768px`; `useIsMobile()` (`src/useIsMobile.ts`, `MOBILE_MAX_WIDTH_PX`) and every `@media (max-width: 768px)` must agree. CSS for layout, the hook only for behaviour CSS can't express. Use `100dvh`, not `100vh`.
 - **Narrow-web z-index contract:** bottom sheet 4, backdrop 3, mobile NavRail 5 — the sheet's drag sweeps over the nav, so a lower nav traps the user in the panel.
+- **Dialogs** use the kit `Dialog` (`DESIGN.md` §6): `size="large"` fills a narrow screen from its own CSS, `size="small"` stays centred — never pass `isMobile`. A multi-column grid inside collapses in that dialog's own `@media (max-width: 768px)` block.
 - **Map-pick flows** pass `collapseToPeek` so the sheet drops to peek; dialog-initiated picks hide their own dialog.
 - **Heavy authoring tools** (GeoPDF, topo settings, CSV import) are desktop-first, but a field whose `scrollWidth` exceeds its `clientWidth` gets a narrow-width rule (`GeoPdfDialog.module.css`; `DESIGN.md` §5).
 - **CSP:** a new external host (tiles, API, image CDN) goes in `CSP_PROD` in `vite.config.ts` — use the **csp-hosts** skill.
