@@ -4,6 +4,8 @@ logs
 
 dist-ssr
 *.local
+# Vite's dependency pre-bundle cache
+.vite/
 
 # Playwright
 /test-results/
