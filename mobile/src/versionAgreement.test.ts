@@ -15,7 +15,10 @@ describe("app version has one declaration", () => {
   ) as { expo: Record<string, unknown> };
 
   it("app.json does not declare its own version", () => {
-    expect(appJson.expo).not.toHaveProperty("version");
+    expect(
+      appJson.expo,
+      "package.json is the one declaration of the app version; app.config.ts and src/config.ts read it",
+    ).not.toHaveProperty("version");
   });
 
   it("the resolved Expo config uses package.json's version", () => {

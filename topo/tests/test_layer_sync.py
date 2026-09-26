@@ -133,7 +133,9 @@ class TestTopoLayerSync(unittest.TestCase):
         self.assertEqual(
             _parse_py_frozenset("ALL_LAYERS"),
             self.ts_names,
-            "worker.py ALL_LAYERS drifted from shared TOPO_LAYERS names",
+            "worker.py ALL_LAYERS drifted from shared TOPO_LAYERS names. "
+            "TOPO_LAYERS (shared/src/topoSettings.ts) is canonical: a new "
+            "layer is added there first, then mirrored in worker.py.",
         )
 
     def test_raster_layers_matches(self):
