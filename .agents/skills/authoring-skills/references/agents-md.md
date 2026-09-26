@@ -25,7 +25,7 @@ Read when adding, changing or moving a rule in any `AGENTS.md`.
   `docs/decisions/README.md`, and leave one line in `AGENTS.md` that links it.
 - **Name the source, not its contents.** Point at the declaring file or symbol
   (`SYSTEM_PLACE_TYPES` in `shared/src/placeTypes.ts`), not a copy of its values.
-- Apply the four pruning tests in [SKILL.md](SKILL.md) to the entry and to the
+- Apply the four pruning tests in [SKILL.md](../SKILL.md) to the entry and to the
   section it lands in.
 
 ## Changing or removing a rule

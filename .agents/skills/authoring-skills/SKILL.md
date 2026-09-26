@@ -20,14 +20,15 @@ Both cost context on every load, so every line must change what an agent does.
 
 A nested `AGENTS.md` loads by path, which is more reliable than a description
 match. If you keep wanting a skill to "always" apply, it is an `AGENTS.md` rule.
-Editing an `AGENTS.md`? Read [agents-md.md](agents-md.md) first.
+Editing an `AGENTS.md`? Read [references/agents-md.md](references/agents-md.md) first.
 
 ## Layout
 
 ```
-.agents/skills/<name>/SKILL.md        committed, one per task
-.agents/skills/<name>/<topic>.md      reference files, loaded on demand
-.agents/skills/<name>.local/SKILL.md  personal, gitignored
+.agents/skills/<name>/SKILL.md                committed, one per task
+.agents/skills/<name>/references/<topic>.md   read on demand
+.agents/skills/<name>/scripts/                run, not read
+.agents/skills/<name>.local/SKILL.md          personal, gitignored
 ```
 
 `.claude/skills` is a symlink to `.agents/skills`: create and edit under
@@ -56,13 +57,37 @@ deciding to load the skill, so:
 
 ## Size budget and progressive disclosure
 
-- `SKILL.md` stays under **120 lines**. It holds the steps and rules needed
-  every time the skill loads.
-- Detail needed only in some runs goes in a reference file beside it. Link it
-  from `SKILL.md` with the condition for reading it ("Editing an `AGENTS.md`?
-  Read …"), never a bare "see also".
-- Scripts go beside the skill only when a Makefile target or package script
-  cannot hold them; prefer adding the target and pointing at it.
+`SKILL.md` loads whole, every time the skill triggers. What goes in it:
+
+- **In:** the steps and rules needed on *every* run of the task, and the
+  conditions that send the reader to a reference file.
+- **Out, to `references/<topic>.md`:** anything needed only on *some* runs: a
+  variant (one provider, one platform), a long checklist for a rare case,
+  background a step depends on. Link it with the condition for reading it
+  ("Editing an `AGENTS.md`? Read …"), never a bare "see also".
+- **Out entirely:** whatever fails the pruning tests below.
+
+Most skills in this repo land well under ~120 lines. That number is a guide,
+not a limit: going over it is a prompt to check that every line is needed on
+every run, not a failure. A reference file over ~300 lines gets a contents
+list at the top.
+
+### Tested commands
+
+A task's commands belong in the Makefile or a package script when they are run
+routinely; the skill names the target. A command that is diagnostic or
+situational (inspect a state, recover from a failure) and has no such home can
+live in `references/commands.md`, and each entry says:
+
+- what it answers or fixes, in the words of the symptom;
+- the command, with placeholders for anything that varies (`<task-id>`);
+- that it has been run, and what it returned when it worked.
+
+A command you have not run does not go in. Once one is run often, promote it
+to a Makefile target and point at that instead.
+
+A multi-step procedure that must be exact goes in `scripts/`. A script runs
+without being read into context, which a pasted command list cannot do.
 
 ## Point at the source; do not restate it
 
@@ -113,4 +138,5 @@ maintainer's own setup follows the same rule.
    and reread for machine, tool or account names.
 3. **Commands run.** Every command the skill names exists and does what the
    skill says. Run the cheap ones.
-4. **Self-check.** The skill passes the pruning tests above and the size budget.
+4. **Self-check.** Every line of `SKILL.md` is needed on every run; the rest is
+   in `references/` or gone.
