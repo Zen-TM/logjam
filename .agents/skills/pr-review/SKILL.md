@@ -15,7 +15,8 @@ The session that wrote the code shares its assumptions. Hand the review to a
 fresh-context reviewer: a subagent, or a new session where your tool has none.
 Give it:
 
-- **What to review:** the branch since it left `origin/main`, plus any
+- **What to review:** the branch since it left its base (usually
+  `origin/main`; for a stacked branch, the branch below it), plus any
   uncommitted work, or the PR number. There need not be a PR yet.
 - **Optionally, facts it cannot get from the repo:** what is deliberately
   deferred, a decision the maintainer already made. Not what the code does or
@@ -30,25 +31,32 @@ misread a rule, answer with the rule's text instead of complying; pass every
 - **The change:** the diff, and the commits in it.
 - **The intent:** the PR title and body, the linked issue, the author's
   message.
-- **The rules, read fresh every run:** root `AGENTS.md`; the `AGENTS.md` of
-  every directory holding a changed file, and of its parents; every ADR in
-  `docs/decisions/` those files link from a rule the change touches.
+- **The rules, read fresh every run:** root `AGENTS.md`, and the `AGENTS.md`
+  of every directory holding a changed file, and of its parents; and every
+  skill in `.agents/skills/` whose description covers what the change touches.
+- **The decisions that apply:** scan the titles in `docs/decisions/README.md`
+  and grep `docs/decisions/` for the changed paths and the symbols the change
+  touches. Read the Decision section of each match whose status is Accepted;
+  a Superseded ADR no longer binds.
 
 You may check the branch out locally to read and grep. Do not run the PR's
 code without asking.
 
 ## 2. Review in independent passes
 
-Run the passes as parallel subagents where your tool can, otherwise one after
-another. Give each the change, the intent and the list of rule files; each
+If your tool offers subagents, run each pass as its own subagent, in
+parallel, however small the change: a pass that shares a context with the
+others is not independent. Only a tool without subagents runs the passes one
+after another. Give
+each the change, the intent, and the rule files and ADRs found above; each
 returns findings with the reason it flagged them (the rule, or the bug).
 
 1. **Rules.** Every rule and ADR decision that applies to the changed files.
    A rule in a package's `AGENTS.md` applies only under that package. Follow a
    rule out of the diff where it points: the callers and sibling entry points
    of what changed, and the other half of any list the change edits.
-2. **Bugs in the diff.** From the diff alone: code that will not compile or
-   parse, and logic that is wrong whatever the input.
+2. **Bugs in the diff.** From the diff alone: logic that is wrong whatever
+   the input.
 3. **Bugs in context.** Problems the changed code introduces that need the
    surrounding code to see: security holes, wrong logic, a caller the change
    breaks, lost data on an error path, a race.
@@ -59,16 +67,17 @@ returns findings with the reason it flagged them (the rule, or the bug).
 
 ## 3. Validate every finding
 
-Check each finding in a fresh subagent where your tool can, otherwise
-yourself: re-read the code and confirm the issue is real. For a rule finding,
-quote the rule and confirm it is scoped to that file. Drop what does not
+If your tool offers subagents, check each finding in its own fresh subagent,
+however small; otherwise check it yourself. Re-read the code and confirm the issue is real.
+For a rule finding, quote the rule and confirm it is scoped to that file. Drop what does not
 survive; a finding that is plausible but unconfirmed is a `question` at most.
 False positives cost the author more than a miss costs the review.
 
 ## Not findings
 
-- Anything a CI job in `.github/workflows/` gates: lint, types, tests
-  passing, contrast, migration validity, secrets. Do not run them to check.
+- Whether a job in `.github/workflows/` passes; do not run it to check. A
+  rule no job can see (a missing test, a new entry a checking script does not
+  list) is still a finding.
 - Problems that were there before the change.
 - Style, naming and quality opinions no written rule backs, unless the change
   clearly breaks the pattern of the neighbouring files.
@@ -76,7 +85,7 @@ False positives cost the author more than a miss costs the review.
   Duplication the change introduces is a finding.
 - A rule the code explicitly silences, with a comment saying why.
 - The PR's title, body and commit messages, other than as a statement of
-  intent.
+  intent or where a rule requires something in them.
 
 ## Output
 
