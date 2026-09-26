@@ -61,10 +61,9 @@ deciding to load the skill, so:
 
 - **In:** the steps and rules needed on *every* run of the task, and the
   conditions that send the reader to a reference file.
-- **Out, to `references/<topic>.md`:** anything needed only on *some* runs: a
-  variant (one provider, one platform), a long checklist for a rare case,
-  background a step depends on. Link it with the condition for reading it
-  ("Editing an `AGENTS.md`? Read …"), never a bare "see also".
+- **Out, to `references/<topic>.md`:** detail needed only on *some* runs
+  (below). Link it with the condition for reading it ("Editing an
+  `AGENTS.md`? Read …"), never a bare "see also".
 - **Out entirely:** whatever fails the pruning tests below.
 
 Most skills in this repo land well under ~120 lines. That number is a guide,
@@ -72,22 +71,30 @@ not a limit: going over it is a prompt to check that every line is needed on
 every run, not a failure. A reference file over ~300 lines gets a contents
 list at the top.
 
-### Tested commands
+### What earns a reference file
 
-A task's commands belong in the Makefile or a package script when they are run
-routinely; the skill names the target. A command that is diagnostic or
-situational (inspect a state, recover from a failure) and has no such home can
-live in `references/commands.md`, and each entry says:
+All three must hold:
 
-- what it answers or fixes, in the words of the symptom;
-- the command, with placeholders for anything that varies (`<task-id>`);
-- that it has been run, and what it returned when it worked.
+1. **An agent gets it wrong without it.** Best evidence is a mistake that has
+   happened more than once. A capable agent missing one local fact is the
+   usual case; a guess that it might struggle is not.
+2. **Only some runs need it.** Otherwise it belongs in `SKILL.md`.
+3. **Nothing else holds it.** If a Makefile target, test, schema or ADR does,
+   point there.
 
-A command you have not run does not go in. Once one is run often, promote it
-to a Makefile target and point at that instead.
+Shapes that pass: **traps** (symptom → cause → fix, for recurring mistakes
+that come from missing local knowledge, with the right command only when the
+command itself was the trap); **variants** (one file per platform or case, so
+only the relevant one is read); **a sub-task's checklist** for a case the main
+task hits only sometimes; **worked examples** where the task is judgement and
+the rules alone leave room for error (a before/after rewrite).
 
-A multi-step procedure that must be exact goes in `scripts/`. A script runs
-without being read into context, which a pasted command list cannot do.
+Shapes that fail: "just in case" material, anything an agent works out
+unaided (most commands), copies of docs or config, reasoning and history
+(an ADR), tutorials.
+
+An exact multi-step procedure goes in `scripts/` instead: a script runs
+without being read into context.
 
 ## Point at the source; do not restate it
 
