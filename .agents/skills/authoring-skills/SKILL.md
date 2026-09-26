@@ -141,9 +141,11 @@ maintainer's own setup follows the same rule.
 
    Paste both requests and outcomes in the PR. A miss means the description
    names the topic instead of the task; rewrite it and rerun.
-2. **Setup check.** `git grep -il -e "$HOME" -e '/Users/[a-z]' .agents/skills` is empty,
+2. **Setup check.** `git grep --untracked -il -e "$HOME" -e '/Users/[a-z]' .agents/skills` is empty,
    and reread for machine, tool or account names.
-3. **Commands run.** Every command the skill names exists and does what the
-   skill says. Run the cheap ones.
+3. **Everything named exists.** Every command, file, test and ADR the skill
+   names is committed (in this change or before) or created by a committed
+   command or setup step, and does what the skill says. Never cite one that is
+   only planned, or that exists only on your machine. Run the cheap commands.
 4. **Self-check.** Every line of `SKILL.md` is needed on every run; the rest is
    in `references/` or gone.
