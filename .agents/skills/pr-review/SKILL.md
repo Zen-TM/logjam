@@ -61,7 +61,8 @@ severity from Output and the reason (the rule, or the bug).
 4. **Intent.** The change does what its PR and issue say, all of it, and
    nothing unrelated. Tests are present where root `AGENTS.md` → Testing
    requires them. A change that root `AGENTS.md` → How we work says needs an
-   issue, arriving without one, is a `question`.
+   issue or the maintainer's sign-off, arriving with neither named, is a
+   `question`.
 
 ## 3. Validate every finding
 
