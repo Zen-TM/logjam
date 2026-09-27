@@ -30,7 +30,9 @@ run_session() {
 # while deciding can mention rate limits.
 api_error() {
   case "$harness" in
-    claude) grep -q '"api_error_status"' ;;
+    # Every claude result carries api_error_status; only a non-null one is an error.
+    claude) jq -rR 'fromjson? | select(.type=="result" and .api_error_status != null) | "x"' 2>/dev/null |
+              grep -q x ;;
     codex)  jq -rR 'fromjson? | select(.type=="error" or .type=="turn.failed") | "x"' 2>/dev/null | grep -q x ;;
     # A run cut off by --print-timeout also ends in ERROR; only quota errors stop the script.
     agy)    jq -rR 'fromjson? | select(.event=="result" and .result.status=="ERROR") | .result.error' 2>/dev/null |

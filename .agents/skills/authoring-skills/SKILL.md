@@ -164,7 +164,10 @@ maintainer's own setup follows the same rule.
    counts when the agent opens the `SKILL.md`. Every request that should
    trigger does so at least 2 times in 3, and every near-miss 0 times. A
    missed request means the description names the topic instead of the task;
-   a firing near-miss means it is too broad. Rewrite, rerun, and paste the
+   a firing near-miss means it is too broad. Antigravity opens any skill
+   whose topic a request touches, even to answer a question about it, so no
+   description gets its near-misses to 0 there: under agy, read each firing
+   near-miss's transcript and rewrite only for a load that misled the run. Rewrite, rerun, and paste the
    table in the PR. One-step requests an agent handles unaided rarely load
    any skill, so test with substantive ones.
 2. **With and without.** Give 2–3 realistic tasks to the same CLI, read-only,
