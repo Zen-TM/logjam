@@ -45,8 +45,7 @@ test green, then red under the mutation, before you drop the line.
 
 - One imperative line, with the why in a clause: "Log through `logger`, never a
   raw error: Prisma renders place names into its messages." The full
-  reasoning is an ADR (`docs/decisions/0000-template.md`, indexed in its
-  `README.md`), which the line links.
+  reasoning is an ADR (the `writing-adrs` skill), which the line links.
 - Cite the guard test when there is one. A rule kept without one says so, and
   the gap is raised with the maintainer.
 - Name the declaring file or symbol, not a copy of its values.
