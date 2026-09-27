@@ -411,10 +411,10 @@ export function povCameraCenter(
   if (!Number.isFinite(forwardPx) || forwardPx === 0) return fix;
   const meters = forwardPx * metersPerPixel(latitude, zoom);
   const bearing = normalizeBearing(headingDeg) * DEG;
-  const dLat = ((meters * Math.cos(bearing)) / EARTH_RADIUS_M) / DEG;
+  const dLat = (meters * Math.cos(bearing)) / EARTH_RADIUS_M / DEG;
   const dLon =
-    ((meters * Math.sin(bearing)) /
-      (EARTH_RADIUS_M * Math.cos(latitude * DEG))) /
+    (meters * Math.sin(bearing)) /
+    (EARTH_RADIUS_M * Math.cos(latitude * DEG)) /
     DEG;
   return [longitude + dLon, latitude + dLat];
 }
@@ -486,7 +486,8 @@ export function deviceSampleTimeMs(
   timestampSeconds: number | undefined,
   nowMs: number,
 ): number {
-  if (timestampSeconds == null || !Number.isFinite(timestampSeconds)) return nowMs;
+  if (timestampSeconds == null || !Number.isFinite(timestampSeconds))
+    return nowMs;
   const sensorMs = timestampSeconds * 1000;
   filter.sensorClockOffsetMs ??= nowMs - sensorMs;
   return sensorMs + filter.sensorClockOffsetMs;
@@ -516,7 +517,8 @@ export function noteHeadingSample(
   // Drag, don't jump: keep the target exactly HEADING_HYSTERESIS_DEG behind the
   // sample so continuous motion produces continuous target movement.
   const moved = drift - Math.sign(drift) * HEADING_HYSTERESIS_DEG;
-  const gapMs = filter.lastTargetMoveAt == null ? 0 : nowMs - filter.lastTargetMoveAt;
+  const gapMs =
+    filter.lastTargetMoveAt == null ? 0 : nowMs - filter.lastTargetMoveAt;
   if (gapMs > 0) {
     filter.lastTargetGapMs = Math.min(gapMs, HEADING_RATE_MAX_GAP_MS);
     // Averaged over the REAL gap, not per sample: the same turn reported twice
@@ -532,7 +534,8 @@ export function noteHeadingSample(
         Math.min(HEADING_MAX_SLEW_DEG_PER_S, (moved * 1000) / gapMs),
       );
       filter.rateDegPerS +=
-        lowPassAlpha(HEADING_RATE_TAU_MS, gapMs) * (instant - filter.rateDegPerS);
+        lowPassAlpha(HEADING_RATE_TAU_MS, gapMs) *
+        (instant - filter.rateDegPerS);
     }
   }
   filter.target = normalizeBearing(filter.target + moved);
@@ -573,7 +576,10 @@ export function stepHeadingFilter(
   // This is an animation clock: missing frames means drawing the frames you
   // did get, not covering the whole gap in one of them.
   const dt = Math.min(
-    Math.max(filter.lastStepAt == null ? HEADING_TICK_MS : nowMs - filter.lastStepAt, 1),
+    Math.max(
+      filter.lastStepAt == null ? HEADING_TICK_MS : nowMs - filter.lastStepAt,
+      1,
+    ),
     HEADING_MAX_STEP_MS,
   );
   filter.lastStepAt = nowMs;
@@ -581,13 +587,16 @@ export function stepHeadingFilter(
   // Has the turn stopped? Judged against the cadence being seen, because that
   // runs from ~50 ms in a fast turn to seconds in a slow one.
   const sinceMove =
-    filter.lastTargetMoveAt == null ? Infinity : nowMs - filter.lastTargetMoveAt;
+    filter.lastTargetMoveAt == null
+      ? Infinity
+      : nowMs - filter.lastTargetMoveAt;
   const stallMs = Math.max(
     HEADING_RATE_STALL_FLOOR_MS,
     HEADING_RATE_STALL_MULTIPLE * (filter.lastTargetGapMs || 200),
   );
   if (sinceMove > stallMs) {
-    filter.rateDegPerS -= lowPassAlpha(HEADING_RATE_TAU_MS, dt) * filter.rateDegPerS;
+    filter.rateDegPerS -=
+      lowPassAlpha(HEADING_RATE_TAU_MS, dt) * filter.rateDegPerS;
   }
 
   // Dead reckon, then correct the drift slowly. The first term is what makes a
@@ -615,7 +624,11 @@ export function stepHeadingFilter(
     Math.sign(filter.rateDegPerS) ||
     Math.sign(shortestAngleDelta(filter.value, next));
   const lead = shortestAngleDelta(filter.target, next);
-  if (heading !== 0 && Math.sign(lead) === heading && Math.abs(lead) > leadCap) {
+  if (
+    heading !== 0 &&
+    Math.sign(lead) === heading &&
+    Math.abs(lead) > leadCap
+  ) {
     next = filter.target + heading * leadCap;
   }
 
@@ -705,7 +718,8 @@ export function learnDeclination(sample: {
   trueHeading: number;
   magHeading: number;
 }): boolean {
-  if (!hasTrueHeading(sample.trueHeading) || !(sample.magHeading >= 0)) return false;
+  if (!hasTrueHeading(sample.trueHeading) || !(sample.magHeading >= 0))
+    return false;
   declinationDeg = shortestAngleDelta(sample.magHeading, sample.trueHeading);
   return true;
 }
@@ -780,7 +794,10 @@ export function headingFromDeviceRotation(
   if (!rotation || !Number.isFinite(rotation.alpha)) return null;
   const magneticDeg = (-rotation.alpha * 180) / Math.PI;
   // Reuse the one declination path, rather than a second copy of it here.
-  return resolveTrueHeading({ trueHeading: -1, magHeading: normalizeBearing(magneticDeg) });
+  return resolveTrueHeading({
+    trueHeading: -1,
+    magHeading: normalizeBearing(magneticDeg),
+  });
 }
 
 /**
@@ -993,7 +1010,10 @@ export const EMPTY_FIELD_WINDOW: FieldWindow = {
   samples: 0,
 };
 
-export function addFieldSample(window: FieldWindow, strengthUt: number): FieldWindow {
+export function addFieldSample(
+  window: FieldWindow,
+  strengthUt: number,
+): FieldWindow {
   if (!Number.isFinite(strengthUt)) return window;
   return {
     minUt: Math.min(window.minUt, strengthUt),
@@ -1159,5 +1179,8 @@ export function useQuantisedLiveHeading(): number | null {
 
 function getQuantisedLiveHeading(): number | null {
   if (liveHeading == null) return null;
-  return Math.round(liveHeading / HEADING_DISPLAY_STEP_DEG) * HEADING_DISPLAY_STEP_DEG;
+  return (
+    Math.round(liveHeading / HEADING_DISPLAY_STEP_DEG) *
+    HEADING_DISPLAY_STEP_DEG
+  );
 }

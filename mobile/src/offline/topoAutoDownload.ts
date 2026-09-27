@@ -72,7 +72,9 @@ function readHandled(): string[] {
   if (!raw) return [];
   try {
     const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === "string") : [];
+    return Array.isArray(parsed)
+      ? parsed.filter((v): v is string => typeof v === "string")
+      : [];
   } catch {
     // A corrupted row means "nothing handled" — it costs one re-download, where
     // throwing would break the feature permanently.
@@ -83,7 +85,10 @@ function readHandled(): string[] {
 function markHandled(key: string): void {
   const handled = readHandled();
   if (handled.includes(key)) return;
-  writePref(HANDLED_PREF_KEY, JSON.stringify([...handled, key].slice(-HANDLED_CAP)));
+  writePref(
+    HANDLED_PREF_KEY,
+    JSON.stringify([...handled, key].slice(-HANDLED_CAP)),
+  );
 }
 
 /** Test seam / sign-out: forget which overlays this device has taken. */

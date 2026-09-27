@@ -48,71 +48,85 @@ const requestSchema = z.discriminatedUnion("kind", [
 ]);
 
 // POST /compute-estimate — what a job would cost, and what's left this month
-router.post("/", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
-  const user = await getUser(req.user!.sub);
+router.post(
+  "/",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const user = await getUser(req.user!.sub);
 
-  const parsed = requestSchema.safeParse(req.body);
-  if (!parsed.success) {
-    throw new AppError(400, parsed.error.issues[0]?.message ?? "Invalid estimate request");
-  }
-  const request = parsed.data;
-
-  let estimatedSeconds: number | null = null;
-
-  switch (request.kind) {
-    case "topo":
-      estimatedSeconds = await estimateTopoSeconds(request.tileCount);
-      break;
-
-    case "topoExport": {
-      // Same read-access rule the real submit uses — owned OR directly shared.
-      // A job the caller cannot read is 404, never 403, so this endpoint is not
-      // an existence oracle for job ids (APIR-013/PRIV-106).
-      const job = await prisma.topoJob.findFirst({
-        where: {
-          id: request.sourceJobId,
-          OR: [
-            { userId: user.id },
-            { id: { in: await directlySharedIds(user.id, "topoJob") } },
-          ],
-        },
-        select: { tileCount: true },
-      });
-      if (!job) throw new AppError(404, "Source job not found");
-      estimatedSeconds = await estimateExportSeconds(
-        request.format,
-        request.bundling,
-        job.tileCount ?? null,
+    const parsed = requestSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new AppError(
+        400,
+        parsed.error.issues[0]?.message ?? "Invalid estimate request",
       );
-      break;
+    }
+    const request = parsed.data;
+
+    let estimatedSeconds: number | null = null;
+
+    switch (request.kind) {
+      case "topo":
+        estimatedSeconds = await estimateTopoSeconds(request.tileCount);
+        break;
+
+      case "topoExport": {
+        // Same read-access rule the real submit uses — owned OR directly shared.
+        // A job the caller cannot read is 404, never 403, so this endpoint is not
+        // an existence oracle for job ids (APIR-013/PRIV-106).
+        const job = await prisma.topoJob.findFirst({
+          where: {
+            id: request.sourceJobId,
+            OR: [
+              { userId: user.id },
+              { id: { in: await directlySharedIds(user.id, "topoJob") } },
+            ],
+          },
+          select: { tileCount: true },
+        });
+        if (!job) throw new AppError(404, "Source job not found");
+        estimatedSeconds = await estimateExportSeconds(
+          request.format,
+          request.bundling,
+          job.tileCount ?? null,
+        );
+        break;
+      }
+
+      case "geoPdf": {
+        const configError = validateGeoPdfConfig(
+          request.config as GeoPdfConfig,
+        );
+        if (configError) throw new AppError(400, configError);
+        estimatedSeconds = await estimateGeoPdfSeconds(
+          request.config as GeoPdfConfig,
+        );
+        break;
+      }
     }
 
-    case "geoPdf": {
-      const configError = validateGeoPdfConfig(request.config as GeoPdfConfig);
-      if (configError) throw new AppError(400, configError);
-      estimatedSeconds = await estimateGeoPdfSeconds(request.config as GeoPdfConfig);
-      break;
-    }
-  }
+    const usage = await getMonthlyCreditUsage(
+      user.id,
+      user.monthlyComputeCredits,
+    );
+    const credits = estimateCredits(request.kind, estimatedSeconds);
 
-  const usage = await getMonthlyCreditUsage(user.id, user.monthlyComputeCredits);
-  const credits = estimateCredits(request.kind, estimatedSeconds);
-
-  res.json({
-    estimatedSeconds,
-    // null = the adaptive estimator has too little history to have an opinion.
-    // Clients must render that as "unknown", never as "free".
-    credits,
-    used: usage.used,
-    quota: usage.quota,
-    remaining: usage.remaining,
-    resetAt: usage.resetAt,
-    // Whether submitting would be refused, so a dialog can disable its button
-    // instead of letting the user find out via a 429.
-    wouldExceed:
-      usage.used >= usage.quota ||
-      (credits !== null && usage.used + credits > usage.quota),
-  });
-});
+    res.json({
+      estimatedSeconds,
+      // null = the adaptive estimator has too little history to have an opinion.
+      // Clients must render that as "unknown", never as "free".
+      credits,
+      used: usage.used,
+      quota: usage.quota,
+      remaining: usage.remaining,
+      resetAt: usage.resetAt,
+      // Whether submitting would be refused, so a dialog can disable its button
+      // instead of letting the user find out via a 429.
+      wouldExceed:
+        usage.used >= usage.quota ||
+        (credits !== null && usage.used + credits > usage.quota),
+    });
+  },
+);
 
 export default router;

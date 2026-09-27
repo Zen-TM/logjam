@@ -34,105 +34,109 @@ const router = Router();
 
 // ── POST /shares ──────────────────────────────────────────────
 // Share one item with one friend. Body: { entityType, entityId, sharedWithUserId }
-router.post("/", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
-  const user = await resolveUser(req.user!.sub);
-  const body = req.body ?? {};
+router.post(
+  "/",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const user = await resolveUser(req.user!.sub);
+    const body = req.body ?? {};
 
-  const entityType = parseSharableEntityType(body.entityType);
-  const entityId = typeof body.entityId === "string" ? body.entityId : "";
-  if (!entityId) throw new AppError(400, "entityId is required");
-  const { sharedWithUserId } = body;
-  if (!sharedWithUserId || typeof sharedWithUserId !== "string") {
-    throw new AppError(400, "sharedWithUserId is required");
-  }
-
-  // Owner-only, decided by shareAccess. A stranger gets the same 404 a
-  // non-existent id gets; a sharee re-sharing gets 403.
-  await requireEntityOwner(
-    user.id,
-    entityType,
-    entityId,
-    "Only the owner can share this item",
-  );
-
-  if (sharedWithUserId === user.id) {
-    throw new AppError(400, "You already own this item");
-  }
-
-  // Friends only — same rule place sharing enforces, and checked BEFORE the
-  // target-user lookup so an unknown id and an existing non-friend get the
-  // same 403 rather than 404-vs-403 (PRIV-101).
-  const friendship = await prisma.friendship.findFirst({
-    where: {
-      status: "accepted",
-      OR: [
-        { requesterId: user.id, addresseeId: sharedWithUserId },
-        { requesterId: sharedWithUserId, addresseeId: user.id },
-      ],
-    },
-  });
-  if (!friendship) {
-    throw new AppError(403, "You can only share items with friends");
-  }
-
-  // Unreachable given the friendship above; kept so a missing row fails loud
-  // rather than reading preferences off undefined.
-  const targetUser = await prisma.user.findUnique({
-    where: { id: sharedWithUserId },
-  });
-  if (!targetUser) throw new AppError(404, "Target user not found");
-
-  const existing = await prisma.share.findUnique({
-    where: {
-      entityType_entityId_sharedWithId: {
-        entityType,
-        entityId,
-        sharedWithId: sharedWithUserId,
-      },
-    },
-  });
-  if (existing) throw new AppError(409, "Already shared with this user");
-
-  const notifyRecipient = normalizeUserUiPreferences(targetUser.uiPreferences)
-    .notifications.shareInApp;
-
-  const share = await prisma.$transaction(async (tx) => {
-    const created = await tx.share.create({
-      data: {
-        entityType,
-        entityId,
-        sharedById: user.id,
-        sharedWithId: sharedWithUserId,
-      },
-    });
-    await touchSharedForDelta(tx, entityType, [entityId]);
-    if (notifyRecipient) {
-      // Reference IDs ONLY — never a waypoint/route name or any coordinate in
-      // a notification payload (PRIV-005). Display strings are resolved from
-      // the live rows at read time in notifications.ts, so a revoked share has
-      // nothing left to resolve and surfaces no stale name.
-      await tx.notification.create({
-        data: {
-          userId: sharedWithUserId,
-          type: "item_shared",
-          payload: { entityType, entityId, sharedById: user.id },
-        },
-      });
+    const entityType = parseSharableEntityType(body.entityType);
+    const entityId = typeof body.entityId === "string" ? body.entityId : "";
+    if (!entityId) throw new AppError(400, "entityId is required");
+    const { sharedWithUserId } = body;
+    if (!sharedWithUserId || typeof sharedWithUserId !== "string") {
+      throw new AppError(400, "sharedWithUserId is required");
     }
-    return created;
-  });
 
-  if (notifyRecipient) {
-    // Best-effort push after commit; generic title + opaque ids only.
-    void sendPushToUser(sharedWithUserId, {
-      type: "item_shared",
+    // Owner-only, decided by shareAccess. A stranger gets the same 404 a
+    // non-existent id gets; a sharee re-sharing gets 403.
+    await requireEntityOwner(
+      user.id,
       entityType,
       entityId,
-    });
-  }
+      "Only the owner can share this item",
+    );
 
-  res.status(201).json(share);
-});
+    if (sharedWithUserId === user.id) {
+      throw new AppError(400, "You already own this item");
+    }
+
+    // Friends only — same rule place sharing enforces, and checked BEFORE the
+    // target-user lookup so an unknown id and an existing non-friend get the
+    // same 403 rather than 404-vs-403 (PRIV-101).
+    const friendship = await prisma.friendship.findFirst({
+      where: {
+        status: "accepted",
+        OR: [
+          { requesterId: user.id, addresseeId: sharedWithUserId },
+          { requesterId: sharedWithUserId, addresseeId: user.id },
+        ],
+      },
+    });
+    if (!friendship) {
+      throw new AppError(403, "You can only share items with friends");
+    }
+
+    // Unreachable given the friendship above; kept so a missing row fails loud
+    // rather than reading preferences off undefined.
+    const targetUser = await prisma.user.findUnique({
+      where: { id: sharedWithUserId },
+    });
+    if (!targetUser) throw new AppError(404, "Target user not found");
+
+    const existing = await prisma.share.findUnique({
+      where: {
+        entityType_entityId_sharedWithId: {
+          entityType,
+          entityId,
+          sharedWithId: sharedWithUserId,
+        },
+      },
+    });
+    if (existing) throw new AppError(409, "Already shared with this user");
+
+    const notifyRecipient = normalizeUserUiPreferences(targetUser.uiPreferences)
+      .notifications.shareInApp;
+
+    const share = await prisma.$transaction(async (tx) => {
+      const created = await tx.share.create({
+        data: {
+          entityType,
+          entityId,
+          sharedById: user.id,
+          sharedWithId: sharedWithUserId,
+        },
+      });
+      await touchSharedForDelta(tx, entityType, [entityId]);
+      if (notifyRecipient) {
+        // Reference IDs ONLY — never a waypoint/route name or any coordinate in
+        // a notification payload (PRIV-005). Display strings are resolved from
+        // the live rows at read time in notifications.ts, so a revoked share has
+        // nothing left to resolve and surfaces no stale name.
+        await tx.notification.create({
+          data: {
+            userId: sharedWithUserId,
+            type: "item_shared",
+            payload: { entityType, entityId, sharedById: user.id },
+          },
+        });
+      }
+      return created;
+    });
+
+    if (notifyRecipient) {
+      // Best-effort push after commit; generic title + opaque ids only.
+      void sendPushToUser(sharedWithUserId, {
+        type: "item_shared",
+        entityType,
+        entityId,
+      });
+    }
+
+    res.status(201).json(share);
+  },
+);
 
 // ── DELETE /shares/:entityType/:entityId/:userId ──────────────
 // Revoke. Callable by the owner, or by the recipient removing their own access

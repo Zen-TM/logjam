@@ -68,7 +68,11 @@ import {
   type FrameInsets,
   type FrameViewport,
 } from "./regionFrame";
-import { resolveMapSource, type BasemapId, type ResolveContext } from "./sourceResolver";
+import {
+  resolveMapSource,
+  type BasemapId,
+  type ResolveContext,
+} from "./sourceResolver";
 
 /** Matches `MapScreen`'s — every map in the app renders the same vector basemap. */
 const PROTOMAPS_FLAVOR = "light" as const;
@@ -86,7 +90,6 @@ const PROTOMAPS_FLAVOR = "light" as const;
  * area itself still comes back exactly as it was saved.
  */
 const RESTORE_PADDING = 56;
-
 
 export function PickAreaScreen({
   initialArea,
@@ -288,11 +291,18 @@ export function PickAreaScreen({
         </Map>
 
         {frame && size.width > 0 ? (
-          <SelectionFrame insets={frame} size={size} onChange={handleFrameChange} />
+          <SelectionFrame
+            insets={frame}
+            size={size}
+            onChange={handleFrameChange}
+          />
         ) : null}
       </View>
 
-      <View style={[styles.hint, { top: insets.top + spacing(2) }]} pointerEvents="none">
+      <View
+        style={[styles.hint, { top: insets.top + spacing(2) }]}
+        pointerEvents="none"
+      >
         <Text style={styles.hintText}>
           Move the map, drag the edges to frame an area
         </Text>

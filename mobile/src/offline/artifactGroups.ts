@@ -79,7 +79,8 @@ export function groupArtifacts(
     if (group) {
       group.members.push(artifact);
       group.sizeBytes += artifact.sizeBytes;
-      group.label = group.label ?? artifact.groupLabel ?? artifact.label ?? null;
+      group.label =
+        group.label ?? artifact.groupLabel ?? artifact.label ?? null;
       group.bbox = unionBbox([group.bbox, artifact.bbox]);
     } else {
       groups.set(key, {

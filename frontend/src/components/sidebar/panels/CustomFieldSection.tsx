@@ -1,5 +1,12 @@
 import { useState } from "react";
-import { EllipsisVertical, Lock, Pencil, Plus, Tag, Trash2 } from "lucide-react";
+import {
+  EllipsisVertical,
+  Lock,
+  Pencil,
+  Plus,
+  Tag,
+  Trash2,
+} from "lucide-react";
 import {
   ATTRIBUTE_NOUN,
   buildCustomFieldDef,
@@ -34,7 +41,9 @@ import {
 import classes from "./ListPage.module.css";
 
 function customFieldTypeName(type: TripLogCustomFieldDef["type"]): string {
-  return CUSTOM_FIELD_TYPES.find((option) => option.value === type)?.label ?? type;
+  return (
+    CUSTOM_FIELD_TYPES.find((option) => option.value === type)?.label ?? type
+  );
 }
 
 /**
@@ -80,8 +89,12 @@ function CustomFieldSection({
   onBack: () => void;
 }) {
   /** The dialog's subject: an existing attribute, or a new one. */
-  const [editing, setEditing] = useState<ScopedCustomFieldDef | "new" | null>(null);
-  const [deletingDef, setDeletingDef] = useState<TripLogCustomFieldDef | null>(null);
+  const [editing, setEditing] = useState<ScopedCustomFieldDef | "new" | null>(
+    null,
+  );
+  const [deletingDef, setDeletingDef] = useState<TripLogCustomFieldDef | null>(
+    null,
+  );
 
   const own = defs.filter((def) => !isSystemFieldDef(def));
   const system = defs.filter(isSystemFieldDef);
@@ -93,7 +106,12 @@ function CustomFieldSection({
         onBack={onBack}
         backLabel="Back to Settings"
         actions={
-          <Button compact variant="outline" icon={Plus} onClick={() => setEditing("new")}>
+          <Button
+            compact
+            variant="outline"
+            icon={Plus}
+            onClick={() => setEditing("new")}
+          >
             Add
           </Button>
         }
@@ -106,8 +124,8 @@ function CustomFieldSection({
           <>
             {own.length === 0 && (
               <p className={classes.note}>
-                Add your own {ATTRIBUTE_NOUN.one} to record on every {rowNoun} — water level,
-                say, or party size.
+                Add your own {ATTRIBUTE_NOUN.one} to record on every {rowNoun} —
+                water level, say, or party size.
               </p>
             )}
             {/* "Yours" only earns a line when there is a "Built in" opposite
@@ -170,7 +188,9 @@ function CustomFieldSection({
                 {system.map((def) => (
                   <Row
                     key={def.key}
-                    leading={<IconTile icon={Lock} hue="var(--theme-bonus-2)" />}
+                    leading={
+                      <IconTile icon={Lock} hue="var(--theme-bonus-2)" />
+                    }
                     title={customFieldDisplayLabel(def)}
                     subtitle={rowSubtitle(def, placeTypes)}
                   />
@@ -213,11 +233,16 @@ function CustomFieldSection({
  *  a user cannot see from the form it produces, so the list says it. Logjam
  *  Web cannot SET a trip attribute's tags yet (Logjam GPS can), which is all
  *  the more reason to say what they are. */
-function rowSubtitle(def: ScopedCustomFieldDef, placeTypes?: TPlaceType[]): string {
+function rowSubtitle(
+  def: ScopedCustomFieldDef,
+  placeTypes?: TPlaceType[],
+): string {
   const type = customFieldTypeName(def.type);
   if (def.appliesToAllTypes) return `${type} · all types`;
   if (!placeTypes) {
-    return def.tripTypes.length > 0 ? `${type} · ${def.tripTypes.map(tripTypeLabel).join(", ")}` : `${type} · no types`;
+    return def.tripTypes.length > 0
+      ? `${type} · ${def.tripTypes.map(tripTypeLabel).join(", ")}`
+      : `${type} · no types`;
   }
   const names = placeTypes
     .filter((placeType) => def.placeTypeIds.includes(placeType.id))
@@ -255,15 +280,21 @@ function AttributeDialog({
   onClose: () => void;
 }) {
   const [label, setLabel] = useState(def?.label ?? "");
-  const [type, setType] = useState<TripLogCustomFieldType>(def?.type ?? "string");
+  const [type, setType] = useState<TripLogCustomFieldType>(
+    def?.type ?? "string",
+  );
   const [bounded, setBounded] = useState(def?.min != null && def?.max != null);
   const [min, setMin] = useState(def?.min != null ? String(def.min) : "");
   const [max, setMax] = useState(def?.max != null ? String(def.max) : "");
-  const [selectedTypeIds, setSelectedTypeIds] = useState<string[]>(def?.placeTypeIds ?? []);
+  const [selectedTypeIds, setSelectedTypeIds] = useState<string[]>(
+    def?.placeTypeIds ?? [],
+  );
   // A NEW attribute defaults to "all types": the user is defining one with no
   // place in front of them, so the honest default shows it everywhere rather
   // than nowhere.
-  const [appliesToAllTypes, setAppliesToAllTypes] = useState(def?.appliesToAllTypes ?? true);
+  const [appliesToAllTypes, setAppliesToAllTypes] = useState(
+    def?.appliesToAllTypes ?? true,
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -307,7 +338,9 @@ function AttributeDialog({
       onSaved(updated);
     } catch (err) {
       console.error(err);
-      setError(messageFromError(err, `Couldn't save that ${ATTRIBUTE_NOUN.one}.`));
+      setError(
+        messageFromError(err, `Couldn't save that ${ATTRIBUTE_NOUN.one}.`),
+      );
     } finally {
       setSaving(false);
     }
@@ -316,7 +349,9 @@ function AttributeDialog({
   return (
     <Dialog
       open
-      title={def ? `Edit "${def.label}"` : `New ${rowNoun} ${ATTRIBUTE_NOUN.one}`}
+      title={
+        def ? `Edit "${def.label}"` : `New ${rowNoun} ${ATTRIBUTE_NOUN.one}`
+      }
       onClose={onClose}
       dismissible={!saving}
       footer={
@@ -377,7 +412,11 @@ function AttributeDialog({
             : undefined
         }
       />
-      {def && <p className={classes.dialogNote}>{impactSentence(impactCount, rowNoun)}</p>}
+      {def && (
+        <p className={classes.dialogNote}>
+          {impactSentence(impactCount, rowNoun)}
+        </p>
+      )}
     </Dialog>
   );
 }
@@ -387,7 +426,8 @@ function AttributeDialog({
  *  this dialog can do will lose them. */
 function impactSentence(count: number | null, rowNoun: string): string {
   if (count === null) return `Checking how many ${rowNoun}s use it…`;
-  if (count === 0) return `No ${rowNoun} has a value for this ${ATTRIBUTE_NOUN.one} yet.`;
+  if (count === 0)
+    return `No ${rowNoun} has a value for this ${ATTRIBUTE_NOUN.one} yet.`;
   return `${count} ${count === 1 ? rowNoun : `${rowNoun}s`} ${
     count === 1 ? "has" : "have"
   } a value for this ${ATTRIBUTE_NOUN.one}.`;

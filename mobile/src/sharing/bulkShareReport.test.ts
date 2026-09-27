@@ -7,7 +7,10 @@
 // went, and there is no unsend.
 import { describe, expect, it } from "vitest";
 
-import { bulkShareButtonLabel, bulkShareOutcomeMessage } from "./bulkShareTargets";
+import {
+  bulkShareButtonLabel,
+  bulkShareOutcomeMessage,
+} from "./bulkShareTargets";
 
 const clean = {
   granted: 12,
@@ -59,7 +62,11 @@ describe("bulkShareOutcomeMessage", () => {
 
   it("quotes the grant leg's own error when nothing at all landed", () => {
     expect(
-      bulkShareOutcomeMessage({ ...clean, granted: 0, shareError: "You're offline." }),
+      bulkShareOutcomeMessage({
+        ...clean,
+        granted: 0,
+        shareError: "You're offline.",
+      }),
     ).toEqual({ text: "You're offline.", tone: "error" });
   });
 
@@ -86,7 +93,9 @@ describe("bulkShareButtonLabel", () => {
 
   it("takes the irrevocable verb whenever one copy is in the run", () => {
     expect(bulkShareButtonLabel(mixed, 3, null)).toBe("Send with 3 friends");
-    expect(bulkShareButtonLabel(sharesOnly, 3, null)).toBe("Share with 3 friends");
+    expect(bulkShareButtonLabel(sharesOnly, 3, null)).toBe(
+      "Share with 3 friends",
+    );
   });
 
   it("REPORTS THE QUEUE, so a two-minute upload is not a silent spinner", () => {
@@ -101,6 +110,8 @@ describe("bulkShareButtonLabel", () => {
   });
 
   it("names the grant leg too — it is not instant on a bad link", () => {
-    expect(bulkShareButtonLabel(mixed, 3, { phase: "shares" })).toBe("Sharing…");
+    expect(bulkShareButtonLabel(mixed, 3, { phase: "shares" })).toBe(
+      "Sharing…",
+    );
   });
 });

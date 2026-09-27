@@ -8,9 +8,7 @@ import {
   normalizeImportMergePolicy,
   isNotificationPreferences,
 } from "@logjam/shared";
-import {
-  defsForUserResponse,
-} from "../lib/customFieldDefs";
+import { defsForUserResponse } from "../lib/customFieldDefs";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
 import { placeIdOfMedia } from "../lib/mediaLink";
@@ -28,7 +26,10 @@ import { accountDeleteTombstones } from "../lib/syncTombstones";
 
 const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
 const TOPO_BUCKET = getEnv().S3_BUCKET_TOPO ?? "";
-import { AdminGetUserCommand, UserNotFoundException } from "@aws-sdk/client-cognito-identity-provider";
+import {
+  AdminGetUserCommand,
+  UserNotFoundException,
+} from "@aws-sdk/client-cognito-identity-provider";
 
 function shortHash(value: string): string {
   return createHash("sha256").update(value).digest("hex").slice(0, 12);
@@ -41,13 +42,18 @@ async function cognitoUserExists(sub: string): Promise<boolean> {
   const poolId = getEnv().COGNITO_USER_POOL_ID;
   if (!poolId) return true;
   try {
-    await cognitoIdp.send(new AdminGetUserCommand({ UserPoolId: poolId, Username: sub }));
+    await cognitoIdp.send(
+      new AdminGetUserCommand({ UserPoolId: poolId, Username: sub }),
+    );
     return true;
   } catch (err) {
     if (err instanceof UserNotFoundException) return false;
     // IAM not granted or network error — fail safe: treat as existing, but say
     // so, or a missing AdminGetUser permission silently disables the guard.
-    logger.warn({ err: safeErrorForLog(err) }, "cognito_user_exists_check_failed");
+    logger.warn(
+      { err: safeErrorForLog(err) },
+      "cognito_user_exists_check_failed",
+    );
     return true;
   }
 }
@@ -330,7 +336,10 @@ router.patch(
       copyPlaceMedia?: unknown;
       consentVersion?: unknown;
     };
-    for (const legacy of ["tripLogCustomFields", "placeCustomFields"] as const) {
+    for (const legacy of [
+      "tripLogCustomFields",
+      "placeCustomFields",
+    ] as const) {
       if ((req.body as Record<string, unknown>)[legacy] !== undefined) {
         throw new AppError(
           400,
@@ -365,7 +374,10 @@ router.patch(
     if (username !== undefined) {
       const parsed = usernameSchema.safeParse(username);
       if (!parsed.success) {
-        throw new AppError(400, parsed.error.issues[0]?.message ?? "Invalid username");
+        throw new AppError(
+          400,
+          parsed.error.issues[0]?.message ?? "Invalid username",
+        );
       }
       updates.username = parsed.data;
     }
@@ -380,10 +392,16 @@ router.patch(
       if (themeSchemeId !== undefined && !isThemeSchemeId(themeSchemeId)) {
         throw new AppError(400, "Invalid themeSchemeId");
       }
-      if (notifications !== undefined && !isNotificationPreferences(notifications)) {
+      if (
+        notifications !== undefined &&
+        !isNotificationPreferences(notifications)
+      ) {
         throw new AppError(400, "Invalid notifications");
       }
-      if (autoDownloadGeoPdfs !== undefined && typeof autoDownloadGeoPdfs !== "boolean") {
+      if (
+        autoDownloadGeoPdfs !== undefined &&
+        typeof autoDownloadGeoPdfs !== "boolean"
+      ) {
         throw new AppError(400, "Invalid autoDownloadGeoPdfs");
       }
       if (copyPlaceMedia !== undefined && typeof copyPlaceMedia !== "boolean") {
@@ -405,11 +423,18 @@ router.patch(
         placeCustomFields: undefined,
         ...(themeSchemeId !== undefined ? { themeSchemeId } : {}),
         ...(notifications !== undefined
-          ? { notifications: { ...current.notifications, ...(notifications as Record<string, boolean>) } }
+          ? {
+              notifications: {
+                ...current.notifications,
+                ...(notifications as Record<string, boolean>),
+              },
+            }
           : {}),
         ...(autoDownloadGeoPdfs !== undefined ? { autoDownloadGeoPdfs } : {}),
         ...(copyPlaceMedia !== undefined ? { copyPlaceMedia } : {}),
-        ...(importMergePolicy !== undefined ? { importMergePolicy: normalizeImportMergePolicy(importMergePolicy) } : {}),
+        ...(importMergePolicy !== undefined
+          ? { importMergePolicy: normalizeImportMergePolicy(importMergePolicy) }
+          : {}),
       };
     }
 
@@ -511,7 +536,13 @@ router.get(
     const filename = `logjam-export-${new Date().toISOString().slice(0, 10)}.json`;
     res.setHeader("Content-Type", "application/json; charset=utf-8");
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-    res.json(JSON.parse(JSON.stringify(payload, (_, v) => (typeof v === "bigint" ? Number(v) : v))));
+    res.json(
+      JSON.parse(
+        JSON.stringify(payload, (_, v) =>
+          typeof v === "bigint" ? Number(v) : v,
+        ),
+      ),
+    );
   },
 );
 
@@ -540,12 +571,18 @@ router.delete(
       directSharesOut,
       placeLinkedRoutes,
     ] = await Promise.all([
-      prisma.topoJob.findMany({ where: { userId: user.id }, select: { id: true } }),
+      prisma.topoJob.findMany({
+        where: { userId: user.id },
+        select: { id: true },
+      }),
       prisma.topoExportJob.findMany({
         where: { userId: user.id },
         select: { id: true, resultKey: true },
       }),
-      prisma.geoPdfJob.findMany({ where: { userId: user.id }, select: { id: true } }),
+      prisma.geoPdfJob.findMany({
+        where: { userId: user.id },
+        select: { id: true },
+      }),
       // linkedType/linkedId feed the sync-tombstone fan-out below (which
       // place each media row belonged to).
       prisma.media.findMany({
@@ -685,7 +722,9 @@ router.delete(
       // restricted it to the one synced type, so this narrows rather than
       // widens.
       directSharesOut: directSharesOut.flatMap((share) =>
-        share.entityType === "route" ? [{ ...share, entityType: share.entityType }] : [],
+        share.entityType === "route"
+          ? [{ ...share, entityType: share.entityType }]
+          : [],
       ),
     });
 

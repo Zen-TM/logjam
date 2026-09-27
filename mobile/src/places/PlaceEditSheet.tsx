@@ -88,7 +88,9 @@ export function PlaceEditSheet({
    * navigate to — this sheet is also mounted on the map itself and on a
    * place's detail screen, and only the Places list owns the picker route.
    */
-  onPickOnMap?: (current: { latitude: number; longitude: number } | null) => void;
+  onPickOnMap?: (
+    current: { latitude: number; longitude: number } | null,
+  ) => void;
   /** A point the picker returned: writes the two fields and nothing else. */
   pickedCoords?: { latitude: number; longitude: number } | null;
   /**
@@ -110,7 +112,9 @@ export function PlaceEditSheet({
   const [latitude, setLatitude] = useState("");
   const [longitude, setLongitude] = useState("");
   const [notes, setNotes] = useState("");
-  const [placeTypeId, setPlaceTypeId] = useState<string>(SYSTEM_PLACE_TYPE_IDS.canyon);
+  const [placeTypeId, setPlaceTypeId] = useState<string>(
+    SYSTEM_PLACE_TYPE_IDS.canyon,
+  );
   // Attributed to their own control (DESIGN.md §8): the name check and
   // `validatePlacePayload`'s coordinate messages ("Latitude must be…",
   // "Longitude must be…") each go under the field they're about. Everything
@@ -122,13 +126,16 @@ export function PlaceEditSheet({
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [mode, setMode] = useState<Mode>("form");
-  const { defs: customFieldDefs, setDefs: setCustomFieldDefs } = useFieldDefs("place");
+  const { defs: customFieldDefs, setDefs: setCustomFieldDefs } =
+    useFieldDefs("place");
   const placeTypes = useMirrorPlaceTypes();
   // Values are strings while editing and coerced on save, like every other
   // custom-field form.
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   const [dateFieldKey, setDateFieldKey] = useState<string | null>(null);
-  const [editingField, setEditingField] = useState<ScopedCustomFieldDef | null>(null);
+  const [editingField, setEditingField] = useState<ScopedCustomFieldDef | null>(
+    null,
+  );
 
   // Read through a ref so it is NOT a dependency: `resuming` and `visible` flip
   // in the same commit, and listing it would re-run the seed the moment the
@@ -149,8 +156,12 @@ export function PlaceEditSheet({
     setAltNames((place?.altNames ?? []).join(", "));
     // An existing place's stored value is shown exactly; a freshly picked point
     // is trimmed, because a map press carries fifteen meaningless decimals.
-    setLatitude(place ? numberText(place.latitude) : seedCoord(initialCoords?.latitude));
-    setLongitude(place ? numberText(place.longitude) : seedCoord(initialCoords?.longitude));
+    setLatitude(
+      place ? numberText(place.latitude) : seedCoord(initialCoords?.latitude),
+    );
+    setLongitude(
+      place ? numberText(place.longitude) : seedCoord(initialCoords?.longitude),
+    );
     // The grades are ordinary field values, seeded by the one path every other
     // field uses — there is no second reader for them any more.
     setNotes(place?.notes ?? "");
@@ -236,7 +247,10 @@ export function PlaceEditSheet({
       setNameError("A place needs a name.");
       return;
     }
-    const effectiveCustomFields = coerceCustomFields(fieldValues, typeFieldDefs);
+    const effectiveCustomFields = coerceCustomFields(
+      fieldValues,
+      typeFieldDefs,
+    );
     // The same predicate the API applies, run before anything is queued: a
     // rejected op would otherwise sit in the outbox as a dead push whose reason
     // the user never sees.
@@ -277,7 +291,8 @@ export function PlaceEditSheet({
         // field on another device isn't clobbered (§6 LWW).
         const changes: Record<string, unknown> = {};
         if (draft.name !== place.name) changes.name = draft.name;
-        if (!sameList(draft.altNames, place.altNames)) changes.altNames = draft.altNames;
+        if (!sameList(draft.altNames, place.altNames))
+          changes.altNames = draft.altNames;
         if (draft.latitude != null && draft.latitude !== place.latitude) {
           changes.latitude = draft.latitude;
         }
@@ -285,7 +300,8 @@ export function PlaceEditSheet({
           changes.longitude = draft.longitude;
         }
         if (draft.notes !== place.notes) changes.notes = draft.notes;
-        if (placeTypeId !== place.placeTypeId) changes.placeTypeId = placeTypeId;
+        if (placeTypeId !== place.placeTypeId)
+          changes.placeTypeId = placeTypeId;
         // `fieldValues` is replaced wholesale by the server, so the edit is
         // built OVER the place's existing values — `_sources`, which only the
         // web writes, and any key another client added would otherwise be
@@ -294,7 +310,10 @@ export function PlaceEditSheet({
         // what keeps `_sources`, another client's key, and — on a type change —
         // the OLD type's values, which the server needs in the payload to park
         // them in `foreignFields` rather than lose them (§2.6).
-        const nextValues = withFieldValues(place.fieldValues, effectiveCustomFields);
+        const nextValues = withFieldValues(
+          place.fieldValues,
+          effectiveCustomFields,
+        );
         if (!sameFieldValues(nextValues, place.fieldValues ?? {})) {
           changes.fieldValues = nextValues;
         }
@@ -356,11 +375,14 @@ export function PlaceEditSheet({
 
   const title =
     mode === "date"
-      ? (customFieldDefs.find((def) => def.key === dateFieldKey)?.label ?? "Date")
+      ? (customFieldDefs.find((def) => def.key === dateFieldKey)?.label ??
+        "Date")
       : mode === "fields"
         ? `Your place ${ATTRIBUTE_NOUN.many}`
         : mode === "fieldForm"
-          ? (editingField ? editingField.label : `New place ${ATTRIBUTE_NOUN.one}`)
+          ? editingField
+            ? editingField.label
+            : `New place ${ATTRIBUTE_NOUN.one}`
           : editing
             ? "Edit place"
             : "Add a place";
@@ -432,7 +454,10 @@ export function PlaceEditSheet({
               icon="x"
               variant="ghost"
               onPress={() => {
-                setFieldValues((current) => ({ ...current, [dateFieldKey]: "" }));
+                setFieldValues((current) => ({
+                  ...current,
+                  [dateFieldKey]: "",
+                }));
                 setMode("form");
               }}
             />
@@ -454,8 +479,8 @@ export function PlaceEditSheet({
       {mode === "fieldForm" ? fieldForm.body : null}
 
       {mode !== "form" ? null : (
-      <View style={styles.form}>
-        {/* TYPE FIRST, because everything below it depends on the answer: the
+        <View style={styles.form}>
+          {/* TYPE FIRST, because everything below it depends on the answer: the
             fields the form asks for, the colour of the pin, the tab it lands
             under. A rail rather than a wizard step — the form reshapes under
             it, so the choice is visible and reversible instead of a screen you
@@ -465,143 +490,146 @@ export function PlaceEditSheet({
             retyping a place keeps its media, routes, links and trips where
             delete-and-recreate would lose them. Values the new type has no
             field for are kept and offered back (§2.6), never dropped. */}
-        {typeOptions.length > 1 ? (
-          <View style={styles.field}>
-            <SectionHeader label="Type" />
-            <SegmentedControl
-              scroll
-              options={typeOptions}
-              value={placeTypeId}
-              onChange={setPlaceTypeId}
-            />
-          </View>
-        ) : null}
+          {typeOptions.length > 1 ? (
+            <View style={styles.field}>
+              <SectionHeader label="Type" />
+              <SegmentedControl
+                scroll
+                options={typeOptions}
+                value={placeTypeId}
+                onChange={setPlaceTypeId}
+              />
+            </View>
+          ) : null}
 
-        <TextField
-          label="Name"
-          value={name}
-          onChangeText={(next) => {
-            setName(next);
-            if (nameError) setNameError(null);
-          }}
-          error={nameError}
-          autoCapitalize="words"
-        />
-        <View style={styles.field}>
           <TextField
-            label="Also known as"
-            value={altNames}
-            onChangeText={setAltNames}
+            label="Name"
+            value={name}
+            onChangeText={(next) => {
+              setName(next);
+              if (nameError) setNameError(null);
+            }}
+            error={nameError}
             autoCapitalize="words"
           />
-          <Text style={styles.hint}>
-            Separate alternative names with commas — they&rsquo;re searchable too.
-          </Text>
-        </View>
+          <View style={styles.field}>
+            <TextField
+              label="Also known as"
+              value={altNames}
+              onChangeText={setAltNames}
+              autoCapitalize="words"
+            />
+            <Text style={styles.hint}>
+              Separate alternative names with commas — they&rsquo;re searchable
+              too.
+            </Text>
+          </View>
 
-        <SectionHeader label="Position" />
-        <View style={styles.coordRow}>
-          <View style={styles.coordField}>
-            <TextField
-              label="Latitude"
-              value={latitude}
-              onChangeText={(next) => {
-                setLatitude(next);
-                if (latitudeError) setLatitudeError(null);
-              }}
-              error={latitudeError}
-              keyboardType="numbers-and-punctuation"
-            />
+          <SectionHeader label="Position" />
+          <View style={styles.coordRow}>
+            <View style={styles.coordField}>
+              <TextField
+                label="Latitude"
+                value={latitude}
+                onChangeText={(next) => {
+                  setLatitude(next);
+                  if (latitudeError) setLatitudeError(null);
+                }}
+                error={latitudeError}
+                keyboardType="numbers-and-punctuation"
+              />
+            </View>
+            <View style={styles.coordField}>
+              <TextField
+                label="Longitude"
+                value={longitude}
+                onChangeText={(next) => {
+                  setLongitude(next);
+                  if (longitudeError) setLongitudeError(null);
+                }}
+                error={longitudeError}
+                keyboardType="numbers-and-punctuation"
+              />
+            </View>
           </View>
-          <View style={styles.coordField}>
-            <TextField
-              label="Longitude"
-              value={longitude}
-              onChangeText={(next) => {
-                setLongitude(next);
-                if (longitudeError) setLongitudeError(null);
-              }}
-              error={longitudeError}
-              keyboardType="numbers-and-punctuation"
-            />
-          </View>
-        </View>
-        {/* Under the coordinates it fills in, because that is what it does —
+          {/* Under the coordinates it fills in, because that is what it does —
             not at the top as a second way to start, which is what the old
             two-option "Add a place" sheet made it. Nothing is lost by going:
             the form comes back exactly as it was left. */}
-        {onPickOnMap ? (
-          <Button
-            label="Select on map"
-            icon="map-pin"
-            variant="outlineAccent"
-            onPress={() =>
-              onPickOnMap(
-                draft.latitude != null && draft.longitude != null
-                  ? { latitude: draft.latitude, longitude: draft.longitude }
-                  : null,
-              )
-            }
-          />
-        ) : null}
-        {!editing && initialCoords ? (
-          <View style={styles.fixNote}>
-            <Feather name="map-pin" size={14} color={theme.accent} />
+          {onPickOnMap ? (
+            <Button
+              label="Select on map"
+              icon="map-pin"
+              variant="outlineAccent"
+              onPress={() =>
+                onPickOnMap(
+                  draft.latitude != null && draft.longitude != null
+                    ? { latitude: draft.latitude, longitude: draft.longitude }
+                    : null,
+                )
+              }
+            />
+          ) : null}
+          {!editing && initialCoords ? (
+            <View style={styles.fixNote}>
+              <Feather name="map-pin" size={14} color={theme.accent} />
+              <Text style={styles.hint}>
+                Filled in from the point you pressed.
+              </Text>
+            </View>
+          ) : null}
+
+          {/* No SectionHeader: the field's own label already says "Notes", and
+            the pair printed it twice. */}
+          <View style={styles.field}>
+            <TextField
+              label="Notes"
+              value={notes}
+              onChangeText={setNotes}
+              multiline
+              autoCapitalize="sentences"
+            />
             <Text style={styles.hint}>
-              Filled in from the point you pressed.
+              Visible to anyone you share the place with. Per-trip notes stay
+              private.
             </Text>
           </View>
-        ) : null}
 
-        {/* No SectionHeader: the field's own label already says "Notes", and
-            the pair printed it twice. */}
-        <View style={styles.field}>
-          <TextField
-            label="Notes"
-            value={notes}
-            onChangeText={setNotes}
-            multiline
-            autoCapitalize="sentences"
-          />
-          <Text style={styles.hint}>
-            Visible to anyone you share the place with. Per-trip notes stay private.
-          </Text>
-        </View>
-
-
-        {/* Named for the TYPE, not for the user: on a Campsite these are
+          {/* Named for the TYPE, not for the user: on a Campsite these are
             Capacity and Is-a-cave, which are ours, not theirs. Absent when the
             type has none rather than standing over nothing. */}
-        {typeFieldDefs.length > 0 ? (
-          <SectionHeader
-            label={`${typeName(placeTypeId, placeTypes.data)} ${ATTRIBUTE_NOUN.many}`}
+          {typeFieldDefs.length > 0 ? (
+            <SectionHeader
+              label={`${typeName(placeTypeId, placeTypes.data)} ${ATTRIBUTE_NOUN.many}`}
+            />
+          ) : null}
+          <CustomFieldValueInputs
+            defs={typeFieldDefs}
+            values={fieldValues}
+            onChange={(key, next) =>
+              setFieldValues((current) => ({ ...current, [key]: next }))
+            }
+            onPickDate={(key) => {
+              setDateFieldKey(key);
+              setMode("date");
+            }}
           />
-        ) : null}
-        <CustomFieldValueInputs
-          defs={typeFieldDefs}
-          values={fieldValues}
-          onChange={(key, next) =>
-            setFieldValues((current) => ({ ...current, [key]: next }))
-          }
-          onPickDate={(key) => {
-            setDateFieldKey(key);
-            setMode("date");
-          }}
-        />
-        {/* Definitions are local rows written through the outbox, so this door
+          {/* Definitions are local rows written through the outbox, so this door
             is open with no account and no signal, for everyone. */}
-        <Row
-          icon="sliders"
-          title={`Your place ${ATTRIBUTE_NOUN.many}`}
-          subtitle={
-            typeFieldDefs.length === 0
-              ? "Add your own — permits, access notes, anything."
-              : `${typeFieldDefs.length} on this type`
-          }
-          right={<Feather name="chevron-right" size={20} color={theme.textMuted} />}
-          onPress={() => setMode("fields")}
-        />
-      </View>
+          <Row
+            icon="sliders"
+            title={`Your place ${ATTRIBUTE_NOUN.many}`}
+            subtitle={
+              typeFieldDefs.length === 0
+                ? "Add your own — permits, access notes, anything."
+                : `${typeFieldDefs.length} on this type`
+            }
+            right={
+              <Feather name="chevron-right" size={20} color={theme.textMuted} />
+            }
+            onPress={() => setMode("fields")}
+          />
+        </View>
       )}
     </BottomSheet>
   );
@@ -636,7 +664,9 @@ function numberText(value: number | null | undefined): string {
  */
 const SEED_COORD_DECIMALS = 6;
 function seedCoord(value: number | null | undefined): string {
-  return value == null ? "" : String(Number(value.toFixed(SEED_COORD_DECIMALS)));
+  return value == null
+    ? ""
+    : String(Number(value.toFixed(SEED_COORD_DECIMALS)));
 }
 
 function sameList(a: string[], b: string[]): boolean {

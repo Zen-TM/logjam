@@ -55,7 +55,9 @@ describe("revocationsNeedingTombstones", () => {
   // mirror row to tombstone and writing one would name an entity type sync
   // does not carry.
   it("never tombstones a topo or GeoPDF job", () => {
-    expect(revocationsNeedingTombstones([TOPO, GEO_PDF], new Set())).toEqual([]);
+    expect(revocationsNeedingTombstones([TOPO, GEO_PDF], new Set())).toEqual(
+      [],
+    );
   });
 
   it("keys per recipient, so one friend's surviving path spares only theirs", () => {

@@ -16,10 +16,12 @@ const AUTH = { Authorization: "Bearer fake-token" } as const;
 const NONEXISTENT_ID = "99999999-9999-9999-9999-999999999999";
 
 async function createPlace(name: string): Promise<string> {
-  const res = await request(API_URL)
-    .post("/places")
-    .set(AUTH)
-    .send({ placeTypeId: CANYON_TYPE_ID, name, latitude: -33.7, longitude: 150.3 });
+  const res = await request(API_URL).post("/places").set(AUTH).send({
+    placeTypeId: CANYON_TYPE_ID,
+    name,
+    latitude: -33.7,
+    longitude: 150.3,
+  });
   expect(res.status).toBe(201);
   return res.body.id as string;
 }

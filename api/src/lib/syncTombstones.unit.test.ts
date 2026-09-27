@@ -30,8 +30,12 @@ describe("tripDeleteTombstones", () => {
       mediaIds: ["m1", "m2"],
     });
     expect(rows).toHaveLength(3);
-    expect(has(rows, { userId: "alice", entityType: "tripLog", entityId: "trip-1" })).toBe(true);
-    expect(has(rows, { userId: "alice", entityType: "media", entityId: "m2" })).toBe(true);
+    expect(
+      has(rows, { userId: "alice", entityType: "tripLog", entityId: "trip-1" }),
+    ).toBe(true);
+    expect(
+      has(rows, { userId: "alice", entityType: "media", entityId: "m2" }),
+    ).toBe(true);
     expect(rows.every((r) => r.userId === "alice")).toBe(true);
   });
 });
@@ -49,14 +53,28 @@ describe("placeDeleteTombstones", () => {
     });
     // owner: place + 1 media + 2 placeShare; each sharee: place + 1 media.
     expect(rows).toHaveLength(4 + 2 * 2);
-    expect(has(rows, { userId: "alice", entityType: "placeShare", entityId: "s-bob" })).toBe(true);
-    expect(has(rows, { userId: "bob", entityType: "place", entityId: "c1" })).toBe(true);
-    expect(has(rows, { userId: "bob", entityType: "media", entityId: "m1" })).toBe(true);
-    expect(has(rows, { userId: "carol", entityType: "place", entityId: "c1" })).toBe(true);
+    expect(
+      has(rows, {
+        userId: "alice",
+        entityType: "placeShare",
+        entityId: "s-bob",
+      }),
+    ).toBe(true);
+    expect(
+      has(rows, { userId: "bob", entityType: "place", entityId: "c1" }),
+    ).toBe(true);
+    expect(
+      has(rows, { userId: "bob", entityType: "media", entityId: "m1" }),
+    ).toBe(true);
+    expect(
+      has(rows, { userId: "carol", entityType: "place", entityId: "c1" }),
+    ).toBe(true);
     // Sharees never receive placeShare tombstones for shares that aren't
     // theirs (a sharee cannot enumerate co-sharees — §4.6.1).
     expect(
-      rows.filter((r) => r.entityType === "placeShare").every((r) => r.userId === "alice"),
+      rows
+        .filter((r) => r.entityType === "placeShare")
+        .every((r) => r.userId === "alice"),
     ).toBe(true);
   });
 
@@ -81,7 +99,9 @@ describe("mediaDeleteTombstones", () => {
       shareeIds: ["bob"],
     });
     expect(rows).toHaveLength(2);
-    expect(has(rows, { userId: "bob", entityType: "media", entityId: "m1" })).toBe(true);
+    expect(
+      has(rows, { userId: "bob", entityType: "media", entityId: "m1" }),
+    ).toBe(true);
   });
 });
 
@@ -94,9 +114,15 @@ describe("shareRevokeTombstones", () => {
       placeId: "c1",
       placeMediaIds: ["m1", "m2"],
     });
-    expect(has(rows, { userId: "bob", entityType: "place", entityId: "c1" })).toBe(true);
-    expect(has(rows, { userId: "bob", entityType: "media", entityId: "m1" })).toBe(true);
-    expect(has(rows, { userId: "alice", entityType: "placeShare", entityId: "s1" })).toBe(true);
+    expect(
+      has(rows, { userId: "bob", entityType: "place", entityId: "c1" }),
+    ).toBe(true);
+    expect(
+      has(rows, { userId: "bob", entityType: "media", entityId: "m1" }),
+    ).toBe(true);
+    expect(
+      has(rows, { userId: "alice", entityType: "placeShare", entityId: "s1" }),
+    ).toBe(true);
     // The sharee's signal is indistinguishable from a place delete: exactly
     // one `place` tombstone, nothing owner-only rides along (§4.6.3).
     const shareeRows = rows.filter((r) => r.userId === "bob");
@@ -124,8 +150,12 @@ describe("routeDeleteTombstones", () => {
       shareeIds: ["bob", "carol"],
     });
     expect(rows).toHaveLength(3);
-    expect(has(rows, { userId: "bob", entityType: "route", entityId: "r1" })).toBe(true);
-    expect(has(rows, { userId: "carol", entityType: "route", entityId: "r1" })).toBe(true);
+    expect(
+      has(rows, { userId: "bob", entityType: "route", entityId: "r1" }),
+    ).toBe(true);
+    expect(
+      has(rows, { userId: "carol", entityType: "route", entityId: "r1" }),
+    ).toBe(true);
   });
 });
 
@@ -133,9 +163,14 @@ describe("routeUnlinkTombstones", () => {
   // The trap this guards: unlinking revokes sharee visibility with NO delete
   // anywhere, so without these rows a sharee's mirror keeps the route forever.
   it("revokes from sharees but NOT from the owner, who keeps it standalone", () => {
-    const rows = routeUnlinkTombstones({ routeId: "r1", shareeIds: ["bob", "carol"] });
+    const rows = routeUnlinkTombstones({
+      routeId: "r1",
+      shareeIds: ["bob", "carol"],
+    });
     expect(rows).toHaveLength(2);
-    expect(has(rows, { userId: "bob", entityType: "route", entityId: "r1" })).toBe(true);
+    expect(
+      has(rows, { userId: "bob", entityType: "route", entityId: "r1" }),
+    ).toBe(true);
     expect(rows.some((r) => r.userId === "alice")).toBe(false);
   });
 
@@ -156,9 +191,9 @@ describe("standalone files linked as a place's way", () => {
       shares: [{ id: "s1", sharedWithId: "bob" }],
       unlinkedMediaIds: ["import-1"],
     });
-    expect(has(rows, { userId: "bob", entityType: "media", entityId: "import-1" })).toBe(
-      true,
-    );
+    expect(
+      has(rows, { userId: "bob", entityType: "media", entityId: "import-1" }),
+    ).toBe(true);
     expect(
       has(rows, { userId: "alice", entityType: "media", entityId: "import-1" }),
     ).toBe(false);
@@ -172,12 +207,12 @@ describe("standalone files linked as a place's way", () => {
       shares: [{ id: "s1", sharedWithId: "bob" }],
       unlinkedMediaIds: ["import-1"],
     });
-    expect(has(rows, { userId: "alice", entityType: "media", entityId: "photo-1" })).toBe(
-      true,
-    );
-    expect(has(rows, { userId: "bob", entityType: "media", entityId: "photo-1" })).toBe(
-      true,
-    );
+    expect(
+      has(rows, { userId: "alice", entityType: "media", entityId: "photo-1" }),
+    ).toBe(true);
+    expect(
+      has(rows, { userId: "bob", entityType: "media", entityId: "photo-1" }),
+    ).toBe(true);
   });
 
   it("omitting unlinkedMediaIds emits nothing extra", () => {
@@ -204,7 +239,9 @@ describe("mediaUnlinkTombstones", () => {
   });
 
   it("emits nothing when the place was not shared", () => {
-    expect(mediaUnlinkTombstones({ mediaId: "import-1", shareeIds: [] })).toEqual([]);
+    expect(
+      mediaUnlinkTombstones({ mediaId: "import-1", shareeIds: [] }),
+    ).toEqual([]);
   });
 });
 
@@ -219,8 +256,12 @@ describe("linked routes in place-delete and share-revoke", () => {
       shares: [{ id: "s1", sharedWithId: "bob" }],
       routeId: "r1",
     });
-    expect(has(rows, { userId: "bob", entityType: "route", entityId: "r1" })).toBe(true);
-    expect(has(rows, { userId: "alice", entityType: "route", entityId: "r1" })).toBe(false);
+    expect(
+      has(rows, { userId: "bob", entityType: "route", entityId: "r1" }),
+    ).toBe(true);
+    expect(
+      has(rows, { userId: "alice", entityType: "route", entityId: "r1" }),
+    ).toBe(false);
   });
 
   it("emits no route rows when the place had none", () => {
@@ -243,8 +284,12 @@ describe("linked routes in place-delete and share-revoke", () => {
       placeMediaIds: [],
       routeId: "r1",
     });
-    expect(has(rows, { userId: "bob", entityType: "route", entityId: "r1" })).toBe(true);
-    expect(has(rows, { userId: "alice", entityType: "route", entityId: "r1" })).toBe(false);
+    expect(
+      has(rows, { userId: "bob", entityType: "route", entityId: "r1" }),
+    ).toBe(true);
+    expect(
+      has(rows, { userId: "alice", entityType: "route", entityId: "r1" }),
+    ).toBe(false);
   });
 });
 
@@ -272,9 +317,9 @@ describe("placeLinkDeleteTombstones", () => {
   });
 
   it("is empty for a place that was linked to nothing", () => {
-    expect(placeLinkDeleteTombstones({ ownerId: "alice", linkIds: [] })).toEqual(
-      [],
-    );
+    expect(
+      placeLinkDeleteTombstones({ ownerId: "alice", linkIds: [] }),
+    ).toEqual([]);
   });
 });
 
@@ -325,11 +370,19 @@ describe("accountDeleteTombstones", () => {
       ...base,
       directSharesOut: [
         { entityType: "route" as const, entityId: "rt-1", sharedWithId: "bob" },
-        { entityType: "route" as const, entityId: "rt-2", sharedWithId: "carol" },
+        {
+          entityType: "route" as const,
+          entityId: "rt-2",
+          sharedWithId: "carol",
+        },
       ],
     });
-    expect(has(rows, { userId: "bob", entityType: "route", entityId: "rt-1" })).toBe(true);
-    expect(has(rows, { userId: "carol", entityType: "route", entityId: "rt-2" })).toBe(true);
+    expect(
+      has(rows, { userId: "bob", entityType: "route", entityId: "rt-1" }),
+    ).toBe(true);
+    expect(
+      has(rows, { userId: "carol", entityType: "route", entityId: "rt-2" }),
+    ).toBe(true);
   });
 
   it("never tombstones the departing user — their own log goes with them", () => {
@@ -350,9 +403,15 @@ describe("accountDeleteTombstones", () => {
       mediaIdsByPlace: new Map([["c-1", ["m-1", "m-2"]]]),
       placeSharesOut: [{ placeId: "c-1", sharedWithId: "bob" }],
     });
-    expect(has(rows, { userId: "bob", entityType: "place", entityId: "c-1" })).toBe(true);
-    expect(has(rows, { userId: "bob", entityType: "media", entityId: "m-1" })).toBe(true);
-    expect(has(rows, { userId: "bob", entityType: "media", entityId: "m-2" })).toBe(true);
+    expect(
+      has(rows, { userId: "bob", entityType: "place", entityId: "c-1" }),
+    ).toBe(true);
+    expect(
+      has(rows, { userId: "bob", entityType: "media", entityId: "m-1" }),
+    ).toBe(true);
+    expect(
+      has(rows, { userId: "bob", entityType: "media", entityId: "m-2" }),
+    ).toBe(true);
   });
 
   it("gives the friendship edge to the OTHER party, whichever side I was on", () => {
@@ -382,11 +441,19 @@ describe("accountDeleteTombstones", () => {
       ...base,
       placeSharesOut: [{ placeId: "c-1", sharedWithId: "bob" }],
       placeInheritedOut: [
-        { entityType: "route" as const, entityId: "rt-1", userIds: ["bob", "carol"] },
+        {
+          entityType: "route" as const,
+          entityId: "rt-1",
+          userIds: ["bob", "carol"],
+        },
       ],
     });
-    expect(has(rows, { userId: "bob", entityType: "route", entityId: "rt-1" })).toBe(true);
-    expect(has(rows, { userId: "carol", entityType: "route", entityId: "rt-1" })).toBe(true);
+    expect(
+      has(rows, { userId: "bob", entityType: "route", entityId: "rt-1" }),
+    ).toBe(true);
+    expect(
+      has(rows, { userId: "carol", entityType: "route", entityId: "rt-1" }),
+    ).toBe(true);
     // Still never the departing user.
     expect(rows.some((r) => r.userId === "me")).toBe(false);
   });

@@ -343,10 +343,12 @@ router.get(
         }),
       (row) => row.updatedAt,
     );
-    const customFieldDefs = customFieldDefRows.map(({ placeTypes, ...def }) => ({
-      ...def,
-      placeTypeIds: placeTypes.map((link) => link.placeTypeId),
-    }));
+    const customFieldDefs = customFieldDefRows.map(
+      ({ placeTypes, ...def }) => ({
+        ...def,
+        placeTypeIds: placeTypes.map((link) => link.placeTypeId),
+      }),
+    );
 
     // For a shared place of a USER type, the recipient owns none of the sender's
     // definitions, so without this they would see bare keys where the values
@@ -362,10 +364,7 @@ router.get(
           where: {
             AND: [
               {
-                OR: [
-                  { ownerId: user.id },
-                  { id: { in: sharedPlaceIds } },
-                ],
+                OR: [{ ownerId: user.id }, { id: { in: sharedPlaceIds } }],
               },
               keysetWhere("updatedAt", since, after),
             ],
@@ -573,7 +572,10 @@ router.get(
       if (rows.length > remaining) {
         tombstones = rows.slice(0, remaining);
         const last = tombstones[tombstones.length - 1];
-        nextKeysets.tombstones = [last.deletedAt.toISOString(), String(last.id)];
+        nextKeysets.tombstones = [
+          last.deletedAt.toISOString(),
+          String(last.id),
+        ];
         hasMore = true;
       } else {
         tombstones = rows;
@@ -645,7 +647,9 @@ router.get(
       changes: {
         placeTypes,
         customFieldDefs,
-        places: places.map((place) => serializePlace(place, user.id, sharedDefsByType)),
+        places: places.map((place) =>
+          serializePlace(place, user.id, sharedDefsByType),
+        ),
         // No syncRole and no sharedCount: a link is owner-private, so every row
         // here is the caller's own and neither field would ever vary.
         placeLinks,
@@ -797,7 +801,8 @@ export function conflictReceipts(
   current: Record<string, unknown>,
 ): { field: string; serverValue: unknown }[] {
   if (!baseUpdatedAt) return [];
-  if (new Date(baseUpdatedAt).getTime() === serverUpdatedAt.getTime()) return [];
+  if (new Date(baseUpdatedAt).getTime() === serverUpdatedAt.getTime())
+    return [];
   const receipts: { field: string; serverValue: unknown }[] = [];
   for (const [field, value] of Object.entries(incoming)) {
     const serverValue = current[field];
@@ -876,7 +881,8 @@ export const opDependencies = pushOpDependencies;
  */
 function tripDateFromPush(value: unknown): Date {
   const parsed = new Date(value as string);
-  if (Number.isNaN(parsed.getTime())) throw new AppError(400, "date is invalid");
+  if (Number.isNaN(parsed.getTime()))
+    throw new AppError(400, "date is invalid");
   return new Date(
     Date.UTC(
       parsed.getUTCFullYear(),
@@ -912,7 +918,10 @@ async function applyPlaceOp(userId: string, op: PushOp): Promise<PushOpResult> {
     // Row already gone (or never visible): idempotent success — a delete's
     // goal state is "not there" (§8.1), and distinguishing foreign from
     // missing would be an oracle.
-    return { opId: op.opId, status: deleted.length ? "applied" : "alreadyApplied" };
+    return {
+      opId: op.opId,
+      status: deleted.length ? "applied" : "alreadyApplied",
+    };
   }
 
   const fields = op.fields ?? {};
@@ -925,7 +934,11 @@ async function applyPlaceOp(userId: string, op: PushOp): Promise<PushOpResult> {
   if (validationError) throw new AppError(400, validationError);
 
   if (op.op === "create") {
-    if (!fields.name || fields.latitude === undefined || fields.longitude === undefined) {
+    if (
+      !fields.name ||
+      fields.latitude === undefined ||
+      fields.longitude === undefined
+    ) {
       throw new AppError(400, "name, latitude, and longitude are required");
     }
     const existing = await prisma.place.findUnique({ where: { id: op.id } });
@@ -1028,7 +1041,9 @@ async function applyPlaceOp(userId: string, op: PushOp): Promise<PushOpResult> {
         longitude: fields.longitude as number,
       }),
       ...(fields.placeTypeId !== undefined && { placeTypeId: typeId }),
-      ...(fields.notes !== undefined && { notes: fields.notes as string | null }),
+      ...(fields.notes !== undefined && {
+        notes: fields.notes as string | null,
+      }),
       ...(fields.elevation !== undefined && {
         elevation: fields.elevation as number | null,
       }),
@@ -1051,7 +1066,10 @@ async function applyPlaceOp(userId: string, op: PushOp): Promise<PushOpResult> {
 async function applyTripOp(userId: string, op: PushOp): Promise<PushOpResult> {
   if (op.op === "delete") {
     const deleted = await deleteTripsCascade(userId, [op.id]);
-    return { opId: op.opId, status: deleted.length ? "applied" : "alreadyApplied" };
+    return {
+      opId: op.opId,
+      status: deleted.length ? "applied" : "alreadyApplied",
+    };
   }
 
   const fields = op.fields ?? {};
@@ -1075,10 +1093,7 @@ async function applyTripOp(userId: string, op: PushOp): Promise<PushOpResult> {
     if (await createAlreadyTombstoned(userId, "tripLog", op.id)) {
       return { opId: op.opId, status: "alreadyApplied" };
     }
-    const resolvedPlaceIds = await resolveTripPlaceIds(
-      userId,
-      fields.placeIds,
-    );
+    const resolvedPlaceIds = await resolveTripPlaceIds(userId, fields.placeIds);
     const trimmedDisplayName = parseDisplayName(fields.displayName) ?? null;
     const parsedTypes = enforceCanyoningTag(
       parseTripTypes(fields.types) ?? [],
@@ -1167,7 +1182,8 @@ async function applyTripOp(userId: string, op: PushOp): Promise<PushOpResult> {
         notes: fields.notes as string | null,
       }),
       ...(fields.customFields !== undefined && {
-        customFields: (fields.customFields ?? Prisma.JsonNull) as Prisma.InputJsonValue,
+        customFields: (fields.customFields ??
+          Prisma.JsonNull) as Prisma.InputJsonValue,
       }),
       ...(trimmedDisplayName !== undefined && {
         displayName: trimmedDisplayName,
@@ -1265,7 +1281,9 @@ async function applyPlaceLinkOp(
   // that won rather than an error: both devices asked for the same state and
   // they now both have it.
   const duplicate = await prisma.placeLink.findUnique({
-    where: { ownerId_aPlaceId_bPlaceId: { ownerId: userId, aPlaceId, bPlaceId } },
+    where: {
+      ownerId_aPlaceId_bPlaceId: { ownerId: userId, aPlaceId, bPlaceId },
+    },
   });
   if (duplicate) {
     return { opId: op.opId, status: "alreadyApplied", row: duplicate };
@@ -1276,10 +1294,7 @@ async function applyPlaceLinkOp(
   return { opId: op.opId, status: "applied", row: link };
 }
 
-async function applyRouteOp(
-  userId: string,
-  op: PushOp,
-): Promise<PushOpResult> {
+async function applyRouteOp(userId: string, op: PushOp): Promise<PushOpResult> {
   if (op.op === "delete") {
     const route = await prisma.route.findUnique({ where: { id: op.id } });
     // Non-owner (including a sharee, who can see it but not change it) gets
@@ -1297,7 +1312,11 @@ async function applyRouteOp(
       await deleteSharesFor(tx, "route", [op.id]);
       await tx.route.delete({ where: { id: op.id } });
       await writeTombstones(tx, [
-        ...routeDeleteTombstones({ ownerId: userId, routeId: op.id, shareeIds }),
+        ...routeDeleteTombstones({
+          ownerId: userId,
+          routeId: op.id,
+          shareeIds,
+        }),
         ...directShareRevokeTombstones({
           entityType: "route",
           entityId: op.id,
@@ -1332,7 +1351,8 @@ async function applyRouteOp(
   if (op.op === "create") {
     const existing = await prisma.route.findUnique({ where: { id: op.id } });
     if (existing) {
-      if (existing.ownerId !== userId) throw new AppError(404, "Route not found");
+      if (existing.ownerId !== userId)
+        throw new AppError(404, "Route not found");
       return { opId: op.opId, status: "alreadyApplied", row: existing };
     }
     if (await createAlreadyTombstoned(userId, "route", op.id)) {
@@ -1380,7 +1400,8 @@ async function applyRouteOp(
   const route = await prisma.route.findUnique({ where: { id: op.id } });
   // A sharee may see this route but never edit it — same 404 as a stranger,
   // so the status can't distinguish "yours" from "someone else's".
-  if (!route || route.ownerId !== userId) throw new AppError(404, "Route not found");
+  if (!route || route.ownerId !== userId)
+    throw new AppError(404, "Route not found");
   const conflicts = conflictReceipts(
     op.baseUpdatedAt,
     route.updatedAt,
@@ -1388,7 +1409,11 @@ async function applyRouteOp(
     route as unknown as Record<string, unknown>,
   );
   const updated = await prisma.$transaction(async (tx) => {
-    if (fields.name !== undefined || points !== undefined || color !== undefined) {
+    if (
+      fields.name !== undefined ||
+      points !== undefined ||
+      color !== undefined
+    ) {
       await tx.route.update({
         where: { id: op.id },
         data: {
@@ -1430,7 +1455,10 @@ async function applyNotificationOp(
     const { count } = await prisma.notification.deleteMany({
       where: { id: op.id, userId },
     });
-    return { opId: op.opId, status: count === 1 ? "applied" : "alreadyApplied" };
+    return {
+      opId: op.opId,
+      status: count === 1 ? "applied" : "alreadyApplied",
+    };
   }
   const { count } = await prisma.notification.updateMany({
     where: { id: op.id, userId },
@@ -1570,7 +1598,9 @@ async function applyPlaceTypeOp(
 
   if (op.op === "create") {
     assertKnownFields(fields, PLACE_TYPE_FIELDS);
-    const existing = await prisma.placeType.findUnique({ where: { id: op.id } });
+    const existing = await prisma.placeType.findUnique({
+      where: { id: op.id },
+    });
     if (existing) {
       // Foreign id gets the same 404 a missing one would — no existence oracle.
       if (existing.ownerId !== userId) {
@@ -1581,7 +1611,11 @@ async function applyPlaceTypeOp(
     if (await createAlreadyTombstoned(userId, "placeType", op.id)) {
       return { opId: op.opId, status: "alreadyApplied" };
     }
-    const row = await createPlaceType(userId, op.id, assertValidPlaceType(fields));
+    const row = await createPlaceType(
+      userId,
+      op.id,
+      assertValidPlaceType(fields),
+    );
     return { opId: op.opId, status: "applied", row };
   }
 
@@ -1695,7 +1729,9 @@ async function applyCustomFieldDefOp(
         ? { appliesToAllTypes: fields.appliesToAllTypes }
         : {}),
     });
-    const row = await prisma.customFieldDef.findUnique({ where: { id: op.id } });
+    const row = await prisma.customFieldDef.findUnique({
+      where: { id: op.id },
+    });
     return { opId: op.opId, status: "applied", row: row ?? undefined };
   }
 

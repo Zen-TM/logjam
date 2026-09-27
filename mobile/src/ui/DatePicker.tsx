@@ -9,7 +9,15 @@ import {
   View,
 } from "react-native";
 
-import { fontSize, fontWeight, hitSlop, radius, spacing, theme, withAlpha } from "../theme";
+import {
+  fontSize,
+  fontWeight,
+  hitSlop,
+  radius,
+  spacing,
+  theme,
+  withAlpha,
+} from "../theme";
 import {
   addMonths,
   formatMonthLabel,
@@ -65,7 +73,9 @@ export function DatePicker({
   );
   const [pickingYear, setPickingYear] = useState(false);
   // First year of the visible 20-year block.
-  const [yearPageStart, setYearPageStart] = useState(() => yearBlockStart(currentYear, YEARS_PER_PAGE));
+  const [yearPageStart, setYearPageStart] = useState(() =>
+    yearBlockStart(currentYear, YEARS_PER_PAGE),
+  );
 
   const { width, onLayout, pan, page, pagingRef } = usePager();
 
@@ -75,7 +85,9 @@ export function DatePicker({
   // Unclamped in both directions. Paging into the future lands on a block of
   // disabled years, which is honest; refusing to move at all just looks broken.
   const changeYearPage = (delta: number) =>
-    page(delta, () => setYearPageStart((current) => current + delta * YEARS_PER_PAGE));
+    page(delta, () =>
+      setYearPageStart((current) => current + delta * YEARS_PER_PAGE),
+    );
 
   const swipe = useRef(
     PanResponder.create({
@@ -86,13 +98,18 @@ export function DatePicker({
       // Capturing claims the gesture before any child, and the predicate keeps
       // taps and vertical sheet scrolling working.
       onMoveShouldSetPanResponderCapture: (_event, gesture) =>
-        Math.abs(gesture.dx) > SWIPE_SLOP && Math.abs(gesture.dx) > Math.abs(gesture.dy),
+        Math.abs(gesture.dx) > SWIPE_SLOP &&
+        Math.abs(gesture.dx) > Math.abs(gesture.dy),
       // Never hand the gesture back mid-swipe: a terminated drag skips
       // onPanResponderRelease, leaving the grid translated off-screen with no
       // way back — which reads as "swiping stopped working".
       onPanResponderTerminationRequest: () => false,
       onPanResponderTerminate: () => {
-        Animated.spring(pan, { toValue: 0, useNativeDriver: true, bounciness: 0 }).start();
+        Animated.spring(pan, {
+          toValue: 0,
+          useNativeDriver: true,
+          bounciness: 0,
+        }).start();
       },
       // Ignore drags while a page animation is running: writing to `pan`
       // mid-flight interrupts it, and an interrupted animation can leave the
@@ -120,7 +137,10 @@ export function DatePicker({
   const forwardRef = useRef(changeMonth);
   forwardRef.current = pickingYear ? changeYearPage : changeMonth;
 
-  const years = Array.from({ length: YEARS_PER_PAGE }, (_, i) => yearPageStart + i);
+  const years = Array.from(
+    { length: YEARS_PER_PAGE },
+    (_, i) => yearPageStart + i,
+  );
 
   return (
     <View style={styles.wrap} onLayout={onLayout}>
@@ -134,7 +154,8 @@ export function DatePicker({
         onPrev={() => (pickingYear ? changeYearPage(-1) : changeMonth(-1))}
         onNext={() => (pickingYear ? changeYearPage(1) : changeMonth(1))}
         onLabel={() => {
-          if (!pickingYear) setYearPageStart(yearBlockStart(visibleMonth.year, YEARS_PER_PAGE));
+          if (!pickingYear)
+            setYearPageStart(yearBlockStart(visibleMonth.year, YEARS_PER_PAGE));
           setPickingYear(!pickingYear);
         }}
         labelAccessibility={pickingYear ? "Back to months" : "Pick a year"}
@@ -158,52 +179,50 @@ export function DatePicker({
           inert) gets optimised out of the native hierarchy, and the touch then
           never reaches this responder at all — the grid became unswipeable
           exactly when nothing in it was pressable. */}
-      <View
-        style={styles.viewport}
-        collapsable={false}
-        {...swipe.panHandlers}
-      >
+      <View style={styles.viewport} collapsable={false} {...swipe.panHandlers}>
         <Animated.View style={{ transform: [{ translateX: pan }] }}>
-          {pickingYear ? (
-            // Explicit rows rather than flex-wrap: wrapped cells size
-            // themselves independently, which left the first row's pills
-            // sitting at slightly different heights.
-            chunk(years, YEAR_COLUMNS).map((row, rowIndex) => (
-              <View key={rowIndex} style={styles.yearRow}>
-                {row.map((year) => (
-                  <YearCell
-                    key={year}
-                    year={year}
-                    selected={year === visibleMonth.year}
-                    isCurrent={year === currentYear}
-                    disabled={year > currentYear}
-                    onPress={() => {
-                      setVisibleMonth((current) => ({ year, month: current.month }));
-                      setPickingYear(false);
-                    }}
-                  />
-                ))}
-              </View>
-            ))
-          ) : (
-            chunk(monthGrid(visibleMonth), 7).map((week, weekIndex) => (
-              <View key={weekIndex} style={styles.week}>
-                {week.map((key, dayIndex) => {
-                  if (key === null) return <View key={dayIndex} style={styles.day} />;
-                  return (
-                    <DayCell
-                      key={dayIndex}
-                      dateKey={key}
-                      selected={key === value}
-                      isToday={key === today}
-                      disabled={key > today}
-                      onPress={() => onChange(key)}
+          {pickingYear
+            ? // Explicit rows rather than flex-wrap: wrapped cells size
+              // themselves independently, which left the first row's pills
+              // sitting at slightly different heights.
+              chunk(years, YEAR_COLUMNS).map((row, rowIndex) => (
+                <View key={rowIndex} style={styles.yearRow}>
+                  {row.map((year) => (
+                    <YearCell
+                      key={year}
+                      year={year}
+                      selected={year === visibleMonth.year}
+                      isCurrent={year === currentYear}
+                      disabled={year > currentYear}
+                      onPress={() => {
+                        setVisibleMonth((current) => ({
+                          year,
+                          month: current.month,
+                        }));
+                        setPickingYear(false);
+                      }}
                     />
-                  );
-                })}
-              </View>
-            ))
-          )}
+                  ))}
+                </View>
+              ))
+            : chunk(monthGrid(visibleMonth), 7).map((week, weekIndex) => (
+                <View key={weekIndex} style={styles.week}>
+                  {week.map((key, dayIndex) => {
+                    if (key === null)
+                      return <View key={dayIndex} style={styles.day} />;
+                    return (
+                      <DayCell
+                        key={dayIndex}
+                        dateKey={key}
+                        selected={key === value}
+                        isToday={key === today}
+                        disabled={key > today}
+                        onPress={() => onChange(key)}
+                      />
+                    );
+                  })}
+                </View>
+              ))}
         </Animated.View>
       </View>
     </View>
@@ -274,7 +293,13 @@ function DayCell({
   onPress: () => void;
 }) {
   const label = (
-    <Text style={[styles.dayText, selected && styles.selectedText, disabled && styles.disabledText]}>
+    <Text
+      style={[
+        styles.dayText,
+        selected && styles.selectedText,
+        disabled && styles.disabledText,
+      ]}
+    >
       {Number(dateKey.slice(8))}
     </Text>
   );
@@ -332,7 +357,13 @@ function YearCell({
   onPress: () => void;
 }) {
   const label = (
-    <Text style={[styles.yearText, selected && styles.selectedText, disabled && styles.disabledText]}>
+    <Text
+      style={[
+        styles.yearText,
+        selected && styles.selectedText,
+        disabled && styles.disabledText,
+      ]}
+    >
       {year}
     </Text>
   );
@@ -474,7 +505,12 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.medium,
     paddingBottom: spacing(0.5),
   },
-  day: { flex: 1, aspectRatio: 1, alignItems: "center", justifyContent: "center" },
+  day: {
+    flex: 1,
+    aspectRatio: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   // Pill sized to the glyph and centred in its cell, not filling it.
   //
   // Two Android-specific details, both learned the hard way: the radius is

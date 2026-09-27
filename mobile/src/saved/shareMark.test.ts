@@ -21,7 +21,12 @@ describe("the two share marks", () => {
     // Whatever the mirror is missing, the pill still says which direction.
     for (const placeIds of [[], [null], ["place-unknown"]]) {
       expect(
-        shareMark({ syncRole: "shared", sharedCount: null, placeIds, ownersByPlace: owners }),
+        shareMark({
+          syncRole: "shared",
+          sharedCount: null,
+          placeIds,
+          ownersByPlace: owners,
+        }),
       ).toEqual({ pill: { label: "Shared with you", tone: "outline" } });
     }
   });
@@ -52,7 +57,12 @@ describe("the two share marks", () => {
     // 0 is a real answer ("nobody"), null is "not known yet" — both render bare.
     for (const sharedCount of [0, null]) {
       expect(
-        shareMark({ syncRole: "owner", sharedCount, placeIds: [], ownersByPlace: owners }),
+        shareMark({
+          syncRole: "owner",
+          sharedCount,
+          placeIds: [],
+          ownersByPlace: owners,
+        }),
       ).toEqual({});
     }
   });

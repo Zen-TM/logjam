@@ -21,7 +21,11 @@ import NetInfo from "@react-native-community/netinfo";
 import { readPref, writePref } from "../prefsDb";
 
 /** The jobs whose data cost the user can govern. */
-export type MeteredJob = "geoPdfDownload" | "topoDownload" | "sync" | "mediaUpload";
+export type MeteredJob =
+  | "geoPdfDownload"
+  | "topoDownload"
+  | "sync"
+  | "mediaUpload";
 
 const KEYS: Record<MeteredJob, string> = {
   geoPdfDownload: "meteredGeoPdfDownload",
@@ -73,7 +77,10 @@ export type ConnectionState = {
  * at each call site.
  */
 export function meteredness(state: ConnectionState): boolean | null {
-  const details = state.details as { isConnectionExpensive?: unknown } | null | undefined;
+  const details = state.details as
+    | { isConnectionExpensive?: unknown }
+    | null
+    | undefined;
   return typeof details?.isConnectionExpensive === "boolean"
     ? details.isConnectionExpensive
     : null;
@@ -113,7 +120,10 @@ export function connectionAllowsMetered(
  */
 export async function canRunNow(job: MeteredJob): Promise<boolean> {
   try {
-    return connectionAllowsMetered(await NetInfo.fetch(), isMeteredAllowed(job));
+    return connectionAllowsMetered(
+      await NetInfo.fetch(),
+      isMeteredAllowed(job),
+    );
   } catch (err) {
     console.error(err);
     return false;

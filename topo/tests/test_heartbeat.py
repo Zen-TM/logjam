@@ -5,6 +5,7 @@ render-progress columns while it runs. It must (a) write status="processing"
 guarded on expected_status="processing", (b) never raise into the job on a DB or
 file error, and (c) disable itself cleanly if it can't get a DB connection.
 """
+
 import json
 import os
 import sys
@@ -27,6 +28,7 @@ os.environ.setdefault("JOB_ID", "job-123")
 
 try:
     import worker  # noqa: E402
+
     _WORKER_OK = True
 except Exception as _exc:  # noqa: BLE001
     _WORKER_OK = False
@@ -45,7 +47,9 @@ class _FakeConn:
         self.closed = True
 
 
-@unittest.skipUnless(_WORKER_OK, f"worker import failed: {globals().get('_WORKER_ERR', '?')}")
+@unittest.skipUnless(
+    _WORKER_OK, f"worker import failed: {globals().get('_WORKER_ERR', '?')}"
+)
 class TestHeartbeatLoop(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
@@ -61,8 +65,10 @@ class TestHeartbeatLoop(unittest.TestCase):
             stop.set()  # exit after the first successful tick
             return 1
 
-        with mock.patch.object(worker, "db_connect", return_value=_FakeConn()), \
-                mock.patch.object(worker, "update_status", side_effect=fake_update):
+        with (
+            mock.patch.object(worker, "db_connect", return_value=_FakeConn()),
+            mock.patch.object(worker, "update_status", side_effect=fake_update),
+        ):
             worker._heartbeat_loop("job-1", self.progress, stop, interval=0.01)
 
         self.assertEqual(len(calls), 1)
@@ -83,8 +89,10 @@ class TestHeartbeatLoop(unittest.TestCase):
             stop.set()
             raise RuntimeError("db down")
 
-        with mock.patch.object(worker, "db_connect", return_value=conn), \
-                mock.patch.object(worker, "update_status", side_effect=boom):
+        with (
+            mock.patch.object(worker, "db_connect", return_value=conn),
+            mock.patch.object(worker, "update_status", side_effect=boom),
+        ):
             # Must return normally — never propagate into the job.
             worker._heartbeat_loop("job-1", self.progress, stop, interval=0.01)
         self.assertTrue(conn.rolled_back)
@@ -92,8 +100,10 @@ class TestHeartbeatLoop(unittest.TestCase):
     def test_disabled_when_no_db_connection(self):
         stop = threading.Event()
         update = mock.Mock()
-        with mock.patch.object(worker, "db_connect", side_effect=RuntimeError("no db")), \
-                mock.patch.object(worker, "update_status", update):
+        with (
+            mock.patch.object(worker, "db_connect", side_effect=RuntimeError("no db")),
+            mock.patch.object(worker, "update_status", update),
+        ):
             worker._heartbeat_loop("job-1", self.progress, stop, interval=0.01)
         update.assert_not_called()
 
@@ -112,9 +122,11 @@ class TestHeartbeatLoop(unittest.TestCase):
             tick["n"] += 1
             return tick["n"] > 2  # False, False, then True → exits after 2 ticks
 
-        with mock.patch.object(worker, "db_connect", return_value=_FakeConn()), \
-                mock.patch.object(worker, "update_status", side_effect=fake_update), \
-                mock.patch.object(stop, "wait", side_effect=fake_wait):
+        with (
+            mock.patch.object(worker, "db_connect", return_value=_FakeConn()),
+            mock.patch.object(worker, "update_status", side_effect=fake_update),
+            mock.patch.object(stop, "wait", side_effect=fake_wait),
+        ):
             worker._heartbeat_loop("job-1", self.progress, stop, interval=0.01)
 
         # Two ticks, same done → only the first writes.

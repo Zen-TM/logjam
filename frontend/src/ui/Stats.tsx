@@ -39,10 +39,16 @@ export function ActivitySpark({
           <div key={`${bucket.name}-${index}`} className={classes.column}>
             <div className={classes.track}>
               {bucket.count > 0 && (
-                <div className={classes.fill} style={{ height: `${(bucket.count / peak) * 100}%` }} />
+                <div
+                  className={classes.fill}
+                  style={{ height: `${(bucket.count / peak) * 100}%` }}
+                />
               )}
             </div>
-            <span className={classes.axis} data-current={bucket.current || undefined}>
+            <span
+              className={classes.axis}
+              data-current={bucket.current || undefined}
+            >
               {bucket.label}
             </span>
           </div>
@@ -55,7 +61,9 @@ export function ActivitySpark({
           </li>
         ))}
       </ul>
-      {caption && <figcaption className={classes.caption}>{caption}</figcaption>}
+      {caption && (
+        <figcaption className={classes.caption}>{caption}</figcaption>
+      )}
     </figure>
   );
 }
@@ -79,7 +87,11 @@ export function StatGrid({ stats }: { stats: readonly Stat[] }) {
   return (
     <dl className={classes.grid}>
       {stats.map((stat) => (
-        <div key={stat.label} className={classes.cell} data-span={stat.span || undefined}>
+        <div
+          key={stat.label}
+          className={classes.cell}
+          data-span={stat.span || undefined}
+        >
           <dt className={classes.statLabel}>{stat.label}</dt>
           <dd className={classes.statValue}>{stat.value}</dd>
         </div>

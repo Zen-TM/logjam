@@ -15,9 +15,8 @@ import {
   selectRequested,
 } from "./friends";
 
-const findUnique = (
-  prisma as unknown as { friendship: { findUnique: Mock } }
-).friendship.findUnique;
+const findUnique = (prisma as unknown as { friendship: { findUnique: Mock } })
+  .friendship.findUnique;
 
 const ME = "user-me";
 const FRIEND = "user-friend";
@@ -186,7 +185,9 @@ describe("selectRequested — what a bulk revoke body may narrow", () => {
   // in the set being narrowed, so it cannot be added by asking for it.
   it("cannot introduce a row that was not in the caller's own set", () => {
     expect(
-      selectRequested(MINE, [{ entityType: "place", entityId: "someone-elses" }]),
+      selectRequested(MINE, [
+        { entityType: "place", entityId: "someone-elses" },
+      ]),
     ).toEqual([]);
   });
 

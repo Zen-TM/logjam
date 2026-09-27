@@ -83,7 +83,11 @@ describe("getPaperDimensions", () => {
 
   it("handles custom ratio with landscape", () => {
     const dims = getPaperDimensions(
-      baseState({ paperSize: "custom", customRatio: { w: 300, h: 400 }, orientation: "landscape" }),
+      baseState({
+        paperSize: "custom",
+        customRatio: { w: 300, h: 400 },
+        orientation: "landscape",
+      }),
     );
     expect(dims).toEqual({ w: 400, h: 300 });
   });
@@ -283,7 +287,9 @@ describe("applyScaleChange", () => {
     expect(centreLonAfter).toBeCloseTo(centreLonBefore, 4);
 
     // Area should be larger
-    expect(result.north - result.south).toBeGreaterThan(state.north - state.south);
+    expect(result.north - result.south).toBeGreaterThan(
+      state.north - state.south,
+    );
     expect(result.east - result.west).toBeGreaterThan(state.east - state.west);
 
     assertRatioInvariant(result);
@@ -399,7 +405,10 @@ describe("applyOrientationChange", () => {
     // Paper ratio should have inverted
     const paperBefore = getPaperDimensions(state);
     const paperAfter = getPaperDimensions(result);
-    expect(paperAfter.w / paperAfter.h).toBeCloseTo(paperBefore.h / paperBefore.w, 2);
+    expect(paperAfter.w / paperAfter.h).toBeCloseTo(
+      paperBefore.h / paperBefore.w,
+      2,
+    );
 
     assertRatioInvariant(result);
     assertValidBounds(result);
@@ -506,7 +515,17 @@ describe("gridConvergence", () => {
 // ── Invariant: ratio preserved across all mutations ──────────────────────────
 
 describe("ratio invariant across all mutations", () => {
-  const allPivots: PivotPoint[] = ["tl", "tc", "tr", "ml", "mc", "mr", "bl", "bc", "br"];
+  const allPivots: PivotPoint[] = [
+    "tl",
+    "tc",
+    "tr",
+    "ml",
+    "mc",
+    "mr",
+    "bl",
+    "bc",
+    "br",
+  ];
 
   for (const pivot of allPivots) {
     it(`holds after applyScaleChange with pivot=${pivot}`, () => {

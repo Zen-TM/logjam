@@ -189,11 +189,17 @@ export async function createPlaceType(
       },
     });
   } catch (e) {
-    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+    if (
+      e instanceof Prisma.PrismaClientKnownRequestError &&
+      e.code === "P2002"
+    ) {
       // The name is unique per owner because §2.6's copy reconciliation matches
       // an incoming type BY NAME. Two types called "Campsite" would make that
       // match ambiguous, so it is refused here rather than resolved later.
-      throw new AppError(409, `You already have a type called "${input.name}".`);
+      throw new AppError(
+        409,
+        `You already have a type called "${input.name}".`,
+      );
     }
     throw e;
   }

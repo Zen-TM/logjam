@@ -17,7 +17,9 @@ vi.mock("../prefsDb", () => ({
   }),
 }));
 
-const authenticate = vi.fn(async () => ({ success: true }) as { success: boolean });
+const authenticate = vi.fn(
+  async () => ({ success: true }) as { success: boolean },
+);
 vi.mock("expo-local-authentication", () => ({
   SecurityLevel: { NONE: 0 },
   getEnrolledLevelAsync: vi.fn(async () => 2),
@@ -27,9 +29,15 @@ vi.mock("expo-local-authentication", () => ({
 // FLAG_SECURE is set through our own native module, not expo-screen-capture —
 // see applyScreenCapturePolicy for why.
 const setSecureFlag = vi.fn(async (_enabled: boolean) => {});
-vi.mock("../../modules/logjam-pdf-renderer/src/LogjamPdfRendererModule", () => ({
-  default: { setSecureFlag: (...args: unknown[]) => setSecureFlag(...(args as [boolean])) },
-}));
+vi.mock(
+  "../../modules/logjam-pdf-renderer/src/LogjamPdfRendererModule",
+  () => ({
+    default: {
+      setSecureFlag: (...args: unknown[]) =>
+        setSecureFlag(...(args as [boolean])),
+    },
+  }),
+);
 vi.mock("react-native", () => ({ Platform: { OS: "android" } }));
 
 const { applyScreenCapturePolicy, isAppLockEnabled, setAppLockEnabled } =

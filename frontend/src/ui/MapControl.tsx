@@ -17,7 +17,10 @@ export function MapButton({
   ref,
   type = "button",
   ...rest
-}: Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children" | "aria-label" | "aria-pressed" | "aria-expanded"> & {
+}: Omit<
+  ButtonHTMLAttributes<HTMLButtonElement>,
+  "children" | "aria-label" | "aria-pressed" | "aria-expanded"
+> & {
   icon: LucideIcon;
   label: string;
   pressed?: boolean;
@@ -41,7 +44,13 @@ export function MapButton({
 }
 
 /** Buttons that belong together (zoom in / out), one shadowed block. */
-export function MapButtonGroup({ label, children }: { label: string; children: ReactNode }) {
+export function MapButtonGroup({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
   return (
     <div role="group" aria-label={label} className={classes.group}>
       {children}
@@ -63,7 +72,9 @@ export function Notice({
   action?: ReactNode;
 }) {
   return (
-    <div className={[classes.notice, action ? classes.withAction : ""].join(" ")}>
+    <div
+      className={[classes.notice, action ? classes.withAction : ""].join(" ")}
+    >
       <Icon size={16} aria-hidden className={classes.noticeGlyph} />
       <span>{children}</span>
       {action}

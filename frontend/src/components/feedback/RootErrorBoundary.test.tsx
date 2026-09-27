@@ -53,7 +53,9 @@ describe("RootErrorBoundary", () => {
     );
 
     expect(screen.getByRole("alert")).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Something went wrong" })).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "Something went wrong" }),
+    ).toBeTruthy();
     expect(screen.getByRole("button", { name: "Reload" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Sign out" })).toBeTruthy();
     // A render error and a component stack carry no user data (privacy rule).

@@ -68,8 +68,12 @@ describe("pickTrackColorByIndex", () => {
   });
   it("wraps modulo the palette length", () => {
     expect(pickTrackColorByIndex(TRACK_COLORS.length)).toBe(TRACK_COLORS[0]);
-    expect(pickTrackColorByIndex(TRACK_COLORS.length + 1)).toBe(TRACK_COLORS[1]);
-    expect(pickTrackColorByIndex(25)).toBe(TRACK_COLORS[25 % TRACK_COLORS.length]);
+    expect(pickTrackColorByIndex(TRACK_COLORS.length + 1)).toBe(
+      TRACK_COLORS[1],
+    );
+    expect(pickTrackColorByIndex(25)).toBe(
+      TRACK_COLORS[25 % TRACK_COLORS.length],
+    );
   });
   it("handles negative or non-integer indices safely", () => {
     expect(pickTrackColorByIndex(-5)).toBe(TRACK_COLORS[0]);
@@ -84,12 +88,18 @@ describe("pickNextTrackColor", () => {
 
   it("returns first unused colour in palette order", () => {
     expect(pickNextTrackColor([TRACK_COLORS[0]])).toBe(TRACK_COLORS[1]);
-    expect(pickNextTrackColor([TRACK_COLORS[0], TRACK_COLORS[1]])).toBe(TRACK_COLORS[2]);
-    expect(pickNextTrackColor([TRACK_COLORS[1], TRACK_COLORS[2]])).toBe(TRACK_COLORS[0]);
+    expect(pickNextTrackColor([TRACK_COLORS[0], TRACK_COLORS[1]])).toBe(
+      TRACK_COLORS[2],
+    );
+    expect(pickNextTrackColor([TRACK_COLORS[1], TRACK_COLORS[2]])).toBe(
+      TRACK_COLORS[0],
+    );
   });
 
   it("ignores null, undefined, and unrecognized colours", () => {
-    expect(pickNextTrackColor([null, undefined, "#123456", "not-a-color"])).toBe(TRACK_COLORS[0]);
+    expect(
+      pickNextTrackColor([null, undefined, "#123456", "not-a-color"]),
+    ).toBe(TRACK_COLORS[0]);
     expect(
       pickNextTrackColor([null, TRACK_COLORS[0], undefined, "#ffffff"]),
     ).toBe(TRACK_COLORS[1]);
@@ -97,10 +107,7 @@ describe("pickNextTrackColor", () => {
 
   it("returns lowest frequency colour when all palette colours are used", () => {
     // Every colour used once except index 3 used once, and all others used twice
-    const used = [
-      ...TRACK_COLORS,
-      ...TRACK_COLORS.filter((_, i) => i !== 3),
-    ];
+    const used = [...TRACK_COLORS, ...TRACK_COLORS.filter((_, i) => i !== 3)];
     expect(pickNextTrackColor(used)).toBe(TRACK_COLORS[3]);
   });
 
@@ -129,7 +136,9 @@ describe("trackColorName", () => {
 
   // The declaration and the palette are two lists that must agree.
   it("names the palette and nothing else", () => {
-    expect(Object.keys(TRACK_COLOR_NAMES).sort()).toEqual([...TRACK_COLORS].sort());
+    expect(Object.keys(TRACK_COLOR_NAMES).sort()).toEqual(
+      [...TRACK_COLORS].sort(),
+    );
   });
 
   it("is case-insensitive, since a stored hex may be upper case", () => {

@@ -151,7 +151,9 @@ export function passesCustomFieldFilters(
         if (Boolean(value) !== filter.value) return false;
         break;
       case "date":
-        if (!passesDateRangeFilter(String(value), filter.range, includeUnknowns))
+        if (
+          !passesDateRangeFilter(String(value), filter.range, includeUnknowns)
+        )
           return false;
         break;
     }

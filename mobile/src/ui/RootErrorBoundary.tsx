@@ -56,7 +56,11 @@ export class RootErrorBoundary extends Component<Props, State> {
         <Text style={styles.message}>
           Logjam hit an unexpected error. Restarting the app usually fixes it.
         </Text>
-        <Button label="Restart" variant="outlineAccent" onPress={this.handleRestart} />
+        <Button
+          label="Restart"
+          variant="outlineAccent"
+          onPress={this.handleRestart}
+        />
       </View>
     );
   }

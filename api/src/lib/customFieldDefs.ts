@@ -213,9 +213,7 @@ export function loadDefRows(userId: string): Promise<CustomFieldDefRecord[]> {
  * mobile `/users/me` reader still consume. The table is the source; these two
  * keys are a projection onto the user response, not storage.
  */
-export async function defsForUserResponse(
-  userId: string,
-): Promise<{
+export async function defsForUserResponse(userId: string): Promise<{
   tripLogCustomFields: TripLogCustomFieldDef[];
   placeCustomFields: TripLogCustomFieldDef[];
 }> {
@@ -451,7 +449,10 @@ export async function createFieldDef(
       e instanceof Prisma.PrismaClientKnownRequestError &&
       e.code === "P2002"
     ) {
-      throw new AppError(409, `A field with the key "${def.key}" already exists.`);
+      throw new AppError(
+        409,
+        `A field with the key "${def.key}" already exists.`,
+      );
     }
     throw e;
   }
@@ -530,7 +531,9 @@ export async function updateFieldDef(
         ...(patch.appliesToAllTypes !== undefined
           ? { appliesToAllTypes: patch.appliesToAllTypes }
           : {}),
-        ...(patch.tripTypes !== undefined ? { tripTypes: patch.tripTypes } : {}),
+        ...(patch.tripTypes !== undefined
+          ? { tripTypes: patch.tripTypes }
+          : {}),
       },
     });
     // Scoping is REPLACED rather than merged: the client sends the set it

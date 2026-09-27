@@ -132,8 +132,7 @@ export function syncHealth(input: SyncHealthInput): SyncHealth {
   if (input.errorKind === "unsupported") {
     return {
       headline: "The server isn't ready to sync",
-      detail:
-        "Your changes are safe on this phone and will upload once it is.",
+      detail: "Your changes are safe on this phone and will upload once it is.",
       tone: "problem",
     };
   }
@@ -163,7 +162,10 @@ export function syncHealth(input: SyncHealthInput): SyncHealth {
       };
     }
     return {
-      headline: pendingCount > 0 ? `Sending ${plural(pendingCount, "change", "changes")}…` : "Syncing…",
+      headline:
+        pendingCount > 0
+          ? `Sending ${plural(pendingCount, "change", "changes")}…`
+          : "Syncing…",
       detail: lastSyncDetail(lastSyncAt, now),
       tone: "pending",
     };

@@ -40,7 +40,11 @@ export function customFieldDefDeleteTombstones(args: {
   defId: string;
 }): TombstoneRow[] {
   return [
-    { userId: args.ownerId, entityType: "customFieldDef", entityId: args.defId },
+    {
+      userId: args.ownerId,
+      entityType: "customFieldDef",
+      entityId: args.defId,
+    },
   ];
 }
 
@@ -76,7 +80,11 @@ export function tripDeleteTombstones(args: {
   return [
     { userId: ownerId, entityType: "tripLog", entityId: tripId },
     ...mediaIds.map(
-      (id): TombstoneRow => ({ userId: ownerId, entityType: "media", entityId: id }),
+      (id): TombstoneRow => ({
+        userId: ownerId,
+        entityType: "media",
+        entityId: id,
+      }),
     ),
   ];
 }
@@ -110,7 +118,11 @@ export function placeDeleteTombstones(args: {
   const rows: TombstoneRow[] = [
     { userId: ownerId, entityType: "place", entityId: placeId },
     ...mediaIds.map(
-      (id): TombstoneRow => ({ userId: ownerId, entityType: "media", entityId: id }),
+      (id): TombstoneRow => ({
+        userId: ownerId,
+        entityType: "media",
+        entityId: id,
+      }),
     ),
     ...shares.map(
       (share): TombstoneRow => ({
@@ -121,15 +133,31 @@ export function placeDeleteTombstones(args: {
     ),
   ];
   for (const share of shares) {
-    rows.push({ userId: share.sharedWithId, entityType: "place", entityId: placeId });
+    rows.push({
+      userId: share.sharedWithId,
+      entityType: "place",
+      entityId: placeId,
+    });
     for (const id of mediaIds) {
-      rows.push({ userId: share.sharedWithId, entityType: "media", entityId: id });
+      rows.push({
+        userId: share.sharedWithId,
+        entityType: "media",
+        entityId: id,
+      });
     }
     if (routeId) {
-      rows.push({ userId: share.sharedWithId, entityType: "route", entityId: routeId });
+      rows.push({
+        userId: share.sharedWithId,
+        entityType: "route",
+        entityId: routeId,
+      });
     }
     for (const id of unlinkedMediaIds) {
-      rows.push({ userId: share.sharedWithId, entityType: "media", entityId: id });
+      rows.push({
+        userId: share.sharedWithId,
+        entityType: "media",
+        entityId: id,
+      });
     }
   }
   return rows;
@@ -146,11 +174,13 @@ export function mediaUnlinkTombstones(args: {
   shareeIds: string[];
 }): TombstoneRow[] {
   const { mediaId, shareeIds } = args;
-  return shareeIds.map((userId): TombstoneRow => ({
-    userId,
-    entityType: "media",
-    entityId: mediaId,
-  }));
+  return shareeIds.map(
+    (userId): TombstoneRow => ({
+      userId,
+      entityType: "media",
+      entityId: mediaId,
+    }),
+  );
 }
 
 /** DELETE /media/:id: the owner forgets it; if it was place-level media of a
@@ -164,7 +194,11 @@ export function mediaDeleteTombstones(args: {
   return [
     { userId: ownerId, entityType: "media", entityId: mediaId },
     ...shareeIds.map(
-      (userId): TombstoneRow => ({ userId, entityType: "media", entityId: mediaId }),
+      (userId): TombstoneRow => ({
+        userId,
+        entityType: "media",
+        entityId: mediaId,
+      }),
     ),
   ];
 }
@@ -188,7 +222,11 @@ export function shareRevokeTombstones(args: {
   return [
     { userId: shareeId, entityType: "place", entityId: placeId },
     ...placeMediaIds.map(
-      (id): TombstoneRow => ({ userId: shareeId, entityType: "media", entityId: id }),
+      (id): TombstoneRow => ({
+        userId: shareeId,
+        entityType: "media",
+        entityId: id,
+      }),
     ),
     ...(routeId
       ? [{ userId: shareeId, entityType: "route" as const, entityId: routeId }]
@@ -227,7 +265,11 @@ export function routeDeleteTombstones(args: {
   return [
     { userId: ownerId, entityType: "route", entityId: routeId },
     ...shareeIds.map(
-      (userId): TombstoneRow => ({ userId, entityType: "route", entityId: routeId }),
+      (userId): TombstoneRow => ({
+        userId,
+        entityType: "route",
+        entityId: routeId,
+      }),
     ),
   ];
 }
@@ -243,7 +285,11 @@ export function routeUnlinkTombstones(args: {
 }): TombstoneRow[] {
   const { routeId, shareeIds } = args;
   return shareeIds.map(
-    (userId): TombstoneRow => ({ userId, entityType: "route", entityId: routeId }),
+    (userId): TombstoneRow => ({
+      userId,
+      entityType: "route",
+      entityId: routeId,
+    }),
   );
 }
 
@@ -259,7 +305,11 @@ export function placeLinkDeleteTombstones(args: {
 }): TombstoneRow[] {
   const { ownerId, linkIds } = args;
   return linkIds.map(
-    (linkId): TombstoneRow => ({ userId: ownerId, entityType: "placeLink", entityId: linkId }),
+    (linkId): TombstoneRow => ({
+      userId: ownerId,
+      entityType: "placeLink",
+      entityId: linkId,
+    }),
   );
 }
 
@@ -279,7 +329,9 @@ export function directShareRevokeTombstones(args: {
   userIds: string[];
 }): TombstoneRow[] {
   const { entityType, entityId, userIds } = args;
-  return userIds.map((userId): TombstoneRow => ({ userId, entityType, entityId }));
+  return userIds.map(
+    (userId): TombstoneRow => ({ userId, entityType, entityId }),
+  );
 }
 
 /** DELETE /users/me: every OTHER user whose mirror held something of this
@@ -333,7 +385,11 @@ export function accountDeleteTombstones(args: {
   } = args;
   return [
     ...placeSharesOut.flatMap((share): TombstoneRow[] => [
-      { userId: share.sharedWithId, entityType: "place", entityId: share.placeId },
+      {
+        userId: share.sharedWithId,
+        entityType: "place",
+        entityId: share.placeId,
+      },
       ...(mediaIdsByPlace.get(share.placeId) ?? []).map(
         (mediaId): TombstoneRow => ({
           userId: share.sharedWithId,

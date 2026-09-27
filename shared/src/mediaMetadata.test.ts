@@ -6,7 +6,11 @@ import {
   readMediaMetadata,
 } from "./mediaMetadata";
 
-const IMPORT = { bbox: [150, -34, 150.5, -33.5], featureCount: 2, positionCount: 400 };
+const IMPORT = {
+  bbox: [150, -34, 150.5, -33.5],
+  featureCount: 2,
+  positionCount: 400,
+};
 const TRACK = {
   bbox: [150, -34, 150.5, -33.5],
   distanceM: 4200,
@@ -43,15 +47,15 @@ describe("parseMediaMetadata", () => {
   });
 
   it("rejects a negative magnitude", () => {
-    expect(() => parseMediaMetadata("track", { ...TRACK, elevationLossM: -1 })).toThrow(
-      MediaMetadataError,
-    );
+    expect(() =>
+      parseMediaMetadata("track", { ...TRACK, elevationLossM: -1 }),
+    ).toThrow(MediaMetadataError);
   });
 
   it("rejects out-of-range and malformed bounds", () => {
-    expect(() => parseMediaMetadata("import", { ...IMPORT, bbox: [150, -34, 150.5] })).toThrow(
-      MediaMetadataError,
-    );
+    expect(() =>
+      parseMediaMetadata("import", { ...IMPORT, bbox: [150, -34, 150.5] }),
+    ).toThrow(MediaMetadataError);
     expect(() =>
       parseMediaMetadata("import", { ...IMPORT, bbox: [150, -34, 181, -33.5] }),
     ).toThrow(MediaMetadataError);
@@ -63,14 +67,17 @@ describe("parseMediaMetadata", () => {
       parseMediaMetadata("import", { ...IMPORT, bbox: [150, -33, 150.5, -34] }),
     ).toThrow(MediaMetadataError);
     expect(() =>
-      parseMediaMetadata("import", { ...IMPORT, bbox: [150, Number.NaN, 150.5, -33.5] }),
+      parseMediaMetadata("import", {
+        ...IMPORT,
+        bbox: [150, Number.NaN, 150.5, -33.5],
+      }),
     ).toThrow(MediaMetadataError);
   });
 
   it("rejects a non-ISO timestamp", () => {
-    expect(() => parseMediaMetadata("track", { ...TRACK, endedAt: "yesterday" })).toThrow(
-      MediaMetadataError,
-    );
+    expect(() =>
+      parseMediaMetadata("track", { ...TRACK, endedAt: "yesterday" }),
+    ).toThrow(MediaMetadataError);
   });
 
   it("accepts an antimeridian-crossing extent (west > east is legal)", () => {

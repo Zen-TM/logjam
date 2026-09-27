@@ -52,16 +52,24 @@ function seededFile(
   line: [number, number][],
   format: "gpx" | "kml",
 ): SeededFile {
-  const body = format === "gpx" ? routeToGpx(name, line) : routeToKml(name, line);
+  const body =
+    format === "gpx" ? routeToGpx(name, line) : routeToKml(name, line);
   const lons = line.map(([lon]) => lon);
   const lats = line.map(([, lat]) => lat);
   return {
     key,
     body,
     contentType:
-      format === "gpx" ? "application/gpx+xml" : "application/vnd.google-earth.kml+xml",
+      format === "gpx"
+        ? "application/gpx+xml"
+        : "application/vnd.google-earth.kml+xml",
     fileSizeBytes: Buffer.byteLength(body, "utf8"),
-    bbox: [Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)],
+    bbox: [
+      Math.min(...lons),
+      Math.min(...lats),
+      Math.max(...lons),
+      Math.max(...lats),
+    ],
     positionCount: line.length,
     distanceM: Math.round(routeLengthM(line)),
   };
@@ -79,7 +87,9 @@ function seededFile(
 async function uploadSeededFiles(files: SeededFile[]): Promise<void> {
   const bucket = process.env.S3_BUCKET_MEDIA;
   if (!bucket) {
-    console.warn("S3_BUCKET_MEDIA is unset — seeded track files were not uploaded.");
+    console.warn(
+      "S3_BUCKET_MEDIA is unset — seeded track files were not uploaded.",
+    );
     return;
   }
   try {
@@ -93,7 +103,9 @@ async function uploadSeededFiles(files: SeededFile[]): Promise<void> {
         }),
       );
     }
-    console.log(`Uploaded ${files.length} seeded track files to s3://${bucket}/media/seed/`);
+    console.log(
+      `Uploaded ${files.length} seeded track files to s3://${bucket}/media/seed/`,
+    );
   } catch (err) {
     console.warn(
       `Could not upload seeded track files (${(err as Error).message}). The rows still exist; their pages will report a file that isn't there.`,
@@ -170,19 +182,19 @@ const BOB_SHARED_PLACE_ID = seedId("2", 2);
 const CLAUSTRAL_LINE: [number, number][] = [
   [150.4033, -33.5603],
   [150.4041, -33.5611],
-  [150.4052, -33.5620],
+  [150.4052, -33.562],
   [150.4066, -33.5629],
   [150.4078, -33.5641],
   [150.4089, -33.5653],
   [150.4097, -33.5666],
-  [150.4101, -33.5680],
+  [150.4101, -33.568],
   [150.4098, -33.5694],
   [150.4089, -33.5707],
 ];
 
 const DU_FAUR_LINE: [number, number][] = [
   [150.3298, -33.5121],
-  [150.3310, -33.5128],
+  [150.331, -33.5128],
   [150.3322, -33.5136],
   [150.3334, -33.5145],
   [150.3343, -33.5153],
@@ -192,7 +204,7 @@ const DU_FAUR_LINE: [number, number][] = [
 const COIN_SLOT_LINE: [number, number][] = [
   [150.3271, -33.1198],
   [150.3282, -33.1207],
-  [150.3290, -33.1216],
+  [150.329, -33.1216],
   [150.3297, -33.1224],
   [150.3303, -33.1233],
   [150.3308, -33.1243],
@@ -205,18 +217,18 @@ const COIN_SLOT_DESCENT_LINE: [number, number][] = [
   [150.3308, -33.1243],
   [150.3312, -33.1252],
   [150.3313, -33.1262],
-  [150.3310, -33.1271],
+  [150.331, -33.1271],
   [150.3304, -33.1279],
   [150.3296, -33.1285],
 ];
 
 const EMPRESS_FALLS_LINE: [number, number][] = [
-  [150.3625, -33.7200],
+  [150.3625, -33.72],
   [150.3631, -33.7209],
   [150.3634, -33.7219],
   [150.3633, -33.7229],
   [150.3628, -33.7238],
-  [150.3620, -33.7245],
+  [150.362, -33.7245],
 ];
 
 const BELL_CREEK_LINE: [number, number][] = [
@@ -230,20 +242,20 @@ const BELL_CREEK_LINE: [number, number][] = [
 ];
 
 const BUTTERBOX_LINE: [number, number][] = [
-  [150.3970, -33.6304],
+  [150.397, -33.6304],
   [150.3979, -33.6313],
   [150.3986, -33.6324],
   [150.3991, -33.6336],
   [150.3993, -33.6349],
-  [150.3990, -33.6362],
+  [150.399, -33.6362],
 ];
 
 const GRAND_CANYON_LINE: [number, number][] = [
   [150.3179, -33.6563],
   [150.3188, -33.6572],
-  [150.3199, -33.6580],
+  [150.3199, -33.658],
   [150.3212, -33.6586],
-  [150.3226, -33.6590],
+  [150.3226, -33.659],
   [150.3241, -33.6591],
   [150.3255, -33.6588],
 ];
@@ -254,8 +266,8 @@ const WOLLANGAMBE_LINE: [number, number][] = [
   [150.3617, -33.4903],
   [150.3634, -33.4908],
   [150.3652, -33.4911],
-  [150.3670, -33.4912],
-  [150.3688, -33.4910],
+  [150.367, -33.4912],
+  [150.3688, -33.491],
   [150.3705, -33.4905],
 ];
 
@@ -278,9 +290,27 @@ const KANANGRA_LINE: [number, number][] = [
 // change — the case the trip form and the stats drill-down both have to get
 // right, and one nobody can try without a scoped definition existing.
 const ALICE_TRIP_FIELD_DEFS = [
-  { key: "water_level", label: "Water Level", type: "string", appliesToAllTypes: true, tripTypes: [] as string[] },
-  { key: "rope_length_m", label: "Rope Length (m)", type: "integer", appliesToAllTypes: false, tripTypes: ["canyoning"] },
-  { key: "wetsuit", label: "Wetsuit", type: "boolean", appliesToAllTypes: true, tripTypes: [] as string[] },
+  {
+    key: "water_level",
+    label: "Water Level",
+    type: "string",
+    appliesToAllTypes: true,
+    tripTypes: [] as string[],
+  },
+  {
+    key: "rope_length_m",
+    label: "Rope Length (m)",
+    type: "integer",
+    appliesToAllTypes: false,
+    tripTypes: ["canyoning"],
+  },
+  {
+    key: "wetsuit",
+    label: "Wetsuit",
+    type: "boolean",
+    appliesToAllTypes: true,
+    tripTypes: [] as string[],
+  },
 ];
 
 // A place type ALICE made herself, so copy reconciliation (§2.6) is
@@ -354,40 +384,445 @@ const sources = (...entries: [string, string][]): Record<string, unknown> => ({
 
 const ALICE_PLACES: SeedPlace[] = [
   // --- anchors (ids referenced by tests) ---
-  { id: PLACE_IDS[0], ownerId: ALICE_ID, name: "Grand Canyon", latitude: -33.6563, longitude: 150.3179, numAbseils: 1, longestAbseil: 20, vGrade: 2, aGrade: 2, commitment: 3, quality: 3.4, hours: 3, fieldValues: {} },
-  { id: PLACE_IDS[1], ownerId: ALICE_ID, name: "Claustral Canyon", latitude: -33.5603, longitude: 150.4033, numAbseils: 6, longestAbseil: 15, vGrade: 3, aGrade: 3, commitment: 3, quality: 4.9, hours: 9, fieldValues: {} },
-  { id: PLACE_IDS[2], ownerId: ALICE_ID, name: "Empress Falls", latitude: -33.72, longitude: 150.3625, numAbseils: 1, longestAbseil: 28, vGrade: 3, aGrade: 2, commitment: 2, quality: 3, hours: 2.5, altNames: ["Valley-of-the-Waters"], fieldValues: {} },
-  { id: PLACE_IDS[3], ownerId: ALICE_ID, name: "Hidden Slot", latitude: -33.701, longitude: 150.302, quality: 3, notes: "Fabricated test place — not a real location.", fieldValues: {} },
-  { id: PLACE_IDS[4], ownerId: ALICE_ID, name: "Deep Pass", latitude: -33.3396, longitude: 150.3076, numAbseils: 0, vGrade: 1, aGrade: 2, quality: 2, hours: 3, fieldValues: {} },
+  {
+    id: PLACE_IDS[0],
+    ownerId: ALICE_ID,
+    name: "Grand Canyon",
+    latitude: -33.6563,
+    longitude: 150.3179,
+    numAbseils: 1,
+    longestAbseil: 20,
+    vGrade: 2,
+    aGrade: 2,
+    commitment: 3,
+    quality: 3.4,
+    hours: 3,
+    fieldValues: {},
+  },
+  {
+    id: PLACE_IDS[1],
+    ownerId: ALICE_ID,
+    name: "Claustral Canyon",
+    latitude: -33.5603,
+    longitude: 150.4033,
+    numAbseils: 6,
+    longestAbseil: 15,
+    vGrade: 3,
+    aGrade: 3,
+    commitment: 3,
+    quality: 4.9,
+    hours: 9,
+    fieldValues: {},
+  },
+  {
+    id: PLACE_IDS[2],
+    ownerId: ALICE_ID,
+    name: "Empress Falls",
+    latitude: -33.72,
+    longitude: 150.3625,
+    numAbseils: 1,
+    longestAbseil: 28,
+    vGrade: 3,
+    aGrade: 2,
+    commitment: 2,
+    quality: 3,
+    hours: 2.5,
+    altNames: ["Valley-of-the-Waters"],
+    fieldValues: {},
+  },
+  {
+    id: PLACE_IDS[3],
+    ownerId: ALICE_ID,
+    name: "Hidden Slot",
+    latitude: -33.701,
+    longitude: 150.302,
+    quality: 3,
+    notes: "Fabricated test place — not a real location.",
+    fieldValues: {},
+  },
+  {
+    id: PLACE_IDS[4],
+    ownerId: ALICE_ID,
+    name: "Deep Pass",
+    latitude: -33.3396,
+    longitude: 150.3076,
+    numAbseils: 0,
+    vGrade: 1,
+    aGrade: 2,
+    quality: 2,
+    hours: 3,
+    fieldValues: {},
+  },
 
   // --- more published classics ---
-  { id: cid(6), ownerId: ALICE_ID, name: "Butterbox Canyon", latitude: -33.6304, longitude: 150.397, numAbseils: 11, longestAbseil: 20, vGrade: 4, aGrade: 2, commitment: 4, quality: 3.9, hours: 6.5, altNames: ["Mt Hay"], fieldValues: sources(["OzUltimate", "https://ozultimate.com/canyoning/track_notes/mt_hay.htm"]) },
-  { id: cid(7), ownerId: ALICE_ID, name: "Hole-in-the-Wall", latitude: -33.3754, longitude: 150.3292, numAbseils: 5, longestAbseil: 15, vGrade: 2, aGrade: 2, commitment: 3, quality: 4.4, hours: 7, fieldValues: {} },
-  { id: cid(8), ownerId: ALICE_ID, name: "Fortress Canyon", latitude: -33.6445, longitude: 150.3593, numAbseils: 2, longestAbseil: 6, vGrade: 2, aGrade: 2, quality: 2.5, hours: 6, fieldValues: {} },
-  { id: cid(9), ownerId: ALICE_ID, name: "Whungee Wheengee", latitude: -33.4757, longitude: 150.3742, numAbseils: 7, longestAbseil: 15, vGrade: 2, aGrade: 2, quality: 4, altNames: ["The Green Room"], fieldValues: {} },
-  { id: cid(10), ownerId: ALICE_ID, name: "Dione Dell", latitude: -34.0027, longitude: 150.0909, numAbseils: 6, longestAbseil: 25, vGrade: 3, aGrade: 2, commitment: 2, quality: 2.2, hours: 6, altNames: ["Upper Christys Creek"] },
-  { id: cid(11), ownerId: ALICE_ID, name: "Tiger Snake Canyon", latitude: -33.2214, longitude: 150.2527, numAbseils: 5, longestAbseil: 25, vGrade: 2, aGrade: 1, commitment: 2, quality: 3.8, hours: 7, altNames: ["Bottleneck"], fieldValues: {} },
-  { id: cid(12), ownerId: ALICE_ID, name: "Rocky Creek Canyon", latitude: -33.2878, longitude: 150.2932, numAbseils: 0, vGrade: 1, aGrade: 2, commitment: 2, quality: 4.2, hours: 4.5, fieldValues: {} },
-  { id: cid(13), ownerId: ALICE_ID, name: "Twister Canyon", latitude: -33.2876, longitude: 150.2864, numAbseils: 0, vGrade: 2, aGrade: 2, commitment: 2, quality: 3.4, hours: 2, altNames: ["Sheep Dip"], fieldValues: {} },
+  {
+    id: cid(6),
+    ownerId: ALICE_ID,
+    name: "Butterbox Canyon",
+    latitude: -33.6304,
+    longitude: 150.397,
+    numAbseils: 11,
+    longestAbseil: 20,
+    vGrade: 4,
+    aGrade: 2,
+    commitment: 4,
+    quality: 3.9,
+    hours: 6.5,
+    altNames: ["Mt Hay"],
+    fieldValues: sources([
+      "OzUltimate",
+      "https://ozultimate.com/canyoning/track_notes/mt_hay.htm",
+    ]),
+  },
+  {
+    id: cid(7),
+    ownerId: ALICE_ID,
+    name: "Hole-in-the-Wall",
+    latitude: -33.3754,
+    longitude: 150.3292,
+    numAbseils: 5,
+    longestAbseil: 15,
+    vGrade: 2,
+    aGrade: 2,
+    commitment: 3,
+    quality: 4.4,
+    hours: 7,
+    fieldValues: {},
+  },
+  {
+    id: cid(8),
+    ownerId: ALICE_ID,
+    name: "Fortress Canyon",
+    latitude: -33.6445,
+    longitude: 150.3593,
+    numAbseils: 2,
+    longestAbseil: 6,
+    vGrade: 2,
+    aGrade: 2,
+    quality: 2.5,
+    hours: 6,
+    fieldValues: {},
+  },
+  {
+    id: cid(9),
+    ownerId: ALICE_ID,
+    name: "Whungee Wheengee",
+    latitude: -33.4757,
+    longitude: 150.3742,
+    numAbseils: 7,
+    longestAbseil: 15,
+    vGrade: 2,
+    aGrade: 2,
+    quality: 4,
+    altNames: ["The Green Room"],
+    fieldValues: {},
+  },
+  {
+    id: cid(10),
+    ownerId: ALICE_ID,
+    name: "Dione Dell",
+    latitude: -34.0027,
+    longitude: 150.0909,
+    numAbseils: 6,
+    longestAbseil: 25,
+    vGrade: 3,
+    aGrade: 2,
+    commitment: 2,
+    quality: 2.2,
+    hours: 6,
+    altNames: ["Upper Christys Creek"],
+  },
+  {
+    id: cid(11),
+    ownerId: ALICE_ID,
+    name: "Tiger Snake Canyon",
+    latitude: -33.2214,
+    longitude: 150.2527,
+    numAbseils: 5,
+    longestAbseil: 25,
+    vGrade: 2,
+    aGrade: 1,
+    commitment: 2,
+    quality: 3.8,
+    hours: 7,
+    altNames: ["Bottleneck"],
+    fieldValues: {},
+  },
+  {
+    id: cid(12),
+    ownerId: ALICE_ID,
+    name: "Rocky Creek Canyon",
+    latitude: -33.2878,
+    longitude: 150.2932,
+    numAbseils: 0,
+    vGrade: 1,
+    aGrade: 2,
+    commitment: 2,
+    quality: 4.2,
+    hours: 4.5,
+    fieldValues: {},
+  },
+  {
+    id: cid(13),
+    ownerId: ALICE_ID,
+    name: "Twister Canyon",
+    latitude: -33.2876,
+    longitude: 150.2864,
+    numAbseils: 0,
+    vGrade: 2,
+    aGrade: 2,
+    commitment: 2,
+    quality: 3.4,
+    hours: 2,
+    altNames: ["Sheep Dip"],
+    fieldValues: {},
+  },
   // null grades edge case (quality only)
-  { id: cid(14), ownerId: ALICE_ID, name: "Wollangambe One", latitude: -33.4888, longitude: 150.3587, numAbseils: 0, quality: 2.5, hours: 7, fieldValues: {} },
-  { id: cid(15), ownerId: ALICE_ID, name: "Bell Creek Canyon", latitude: -33.4999, longitude: 150.3371, vGrade: 1, aGrade: 1, commitment: 4, quality: 4.5, hours: 9, fieldValues: {} },
-  { id: cid(16), ownerId: ALICE_ID, name: "Arethusa Canyon", latitude: -33.6589, longitude: 150.3467, numAbseils: 6, longestAbseil: 30, vGrade: 4, aGrade: 4, commitment: 3, quality: 4, hours: 9, fieldValues: {} },
-  { id: cid(17), ownerId: ALICE_ID, name: "Starlight Canyon", latitude: -33.1516, longitude: 150.2844, numAbseils: 3, longestAbseil: 25, vGrade: 2, aGrade: 1, quality: 4.5, hours: 9, altNames: ["Newnes", "Wallaby Tunnel"], fieldValues: {} },
-  { id: cid(18), ownerId: ALICE_ID, name: "Kanangra Main", latitude: -33.9809, longitude: 150.0991, numAbseils: 17, longestAbseil: 58, vGrade: 4, aGrade: 3, commitment: 5, quality: 4.6, hours: 12, altNames: ["Kanangra Falls"], fieldValues: {} },
+  {
+    id: cid(14),
+    ownerId: ALICE_ID,
+    name: "Wollangambe One",
+    latitude: -33.4888,
+    longitude: 150.3587,
+    numAbseils: 0,
+    quality: 2.5,
+    hours: 7,
+    fieldValues: {},
+  },
+  {
+    id: cid(15),
+    ownerId: ALICE_ID,
+    name: "Bell Creek Canyon",
+    latitude: -33.4999,
+    longitude: 150.3371,
+    vGrade: 1,
+    aGrade: 1,
+    commitment: 4,
+    quality: 4.5,
+    hours: 9,
+    fieldValues: {},
+  },
+  {
+    id: cid(16),
+    ownerId: ALICE_ID,
+    name: "Arethusa Canyon",
+    latitude: -33.6589,
+    longitude: 150.3467,
+    numAbseils: 6,
+    longestAbseil: 30,
+    vGrade: 4,
+    aGrade: 4,
+    commitment: 3,
+    quality: 4,
+    hours: 9,
+    fieldValues: {},
+  },
+  {
+    id: cid(17),
+    ownerId: ALICE_ID,
+    name: "Starlight Canyon",
+    latitude: -33.1516,
+    longitude: 150.2844,
+    numAbseils: 3,
+    longestAbseil: 25,
+    vGrade: 2,
+    aGrade: 1,
+    quality: 4.5,
+    hours: 9,
+    altNames: ["Newnes", "Wallaby Tunnel"],
+    fieldValues: {},
+  },
+  {
+    id: cid(18),
+    ownerId: ALICE_ID,
+    name: "Kanangra Main",
+    latitude: -33.9809,
+    longitude: 150.0991,
+    numAbseils: 17,
+    longestAbseil: 58,
+    vGrade: 4,
+    aGrade: 3,
+    commitment: 5,
+    quality: 4.6,
+    hours: 12,
+    altNames: ["Kanangra Falls"],
+    fieldValues: {},
+  },
   // ropewiki snapshot edge cases
-  { id: cid(19), ownerId: ALICE_ID, name: "Yileen Canyon", latitude: -33.5666, longitude: 150.3295, numAbseils: 6, longestAbseil: 50, vGrade: 4, aGrade: 2, commitment: 2, quality: 3, hours: 3.5, ropeWikiId: 90019, ropeWikiSnapshot: { name: "Yileen", region: "Wollemi", quality: 3, rating: "4C2 IV", rappels: 6, longestRappelFt: 164, fetchedAt: "2025-11-02T00:00:00.000Z" }, fieldValues: sources(["RopeWiki", "https://ropewiki.com/Yileen"]) },
-  { id: cid(20), ownerId: ALICE_ID, name: "Serendipity Canyon", latitude: -33.4947, longitude: 150.3812, numAbseils: 6, longestAbseil: 20, vGrade: 2, aGrade: 2, commitment: 3, quality: 3.4, hours: 4, altNames: ["Why Don't We Do It In The Road"], ropeWikiId: 90020, ropeWikiSnapshot: { name: "Serendipity", region: "Blue Mountains", quality: 3, rating: "3C2", rappels: 6, fetchedAt: "2025-11-02T00:00:00.000Z" }, fieldValues: sources(["RopeWiki", "https://ropewiki.com/Serendipity"]) },
+  {
+    id: cid(19),
+    ownerId: ALICE_ID,
+    name: "Yileen Canyon",
+    latitude: -33.5666,
+    longitude: 150.3295,
+    numAbseils: 6,
+    longestAbseil: 50,
+    vGrade: 4,
+    aGrade: 2,
+    commitment: 2,
+    quality: 3,
+    hours: 3.5,
+    ropeWikiId: 90019,
+    ropeWikiSnapshot: {
+      name: "Yileen",
+      region: "Wollemi",
+      quality: 3,
+      rating: "4C2 IV",
+      rappels: 6,
+      longestRappelFt: 164,
+      fetchedAt: "2025-11-02T00:00:00.000Z",
+    },
+    fieldValues: sources(["RopeWiki", "https://ropewiki.com/Yileen"]),
+  },
+  {
+    id: cid(20),
+    ownerId: ALICE_ID,
+    name: "Serendipity Canyon",
+    latitude: -33.4947,
+    longitude: 150.3812,
+    numAbseils: 6,
+    longestAbseil: 20,
+    vGrade: 2,
+    aGrade: 2,
+    commitment: 3,
+    quality: 3.4,
+    hours: 4,
+    altNames: ["Why Don't We Do It In The Road"],
+    ropeWikiId: 90020,
+    ropeWikiSnapshot: {
+      name: "Serendipity",
+      region: "Blue Mountains",
+      quality: 3,
+      rating: "3C2",
+      rappels: 6,
+      fetchedAt: "2025-11-02T00:00:00.000Z",
+    },
+    fieldValues: sources(["RopeWiki", "https://ropewiki.com/Serendipity"]),
+  },
   // all-null grades + quality
-  { id: cid(21), ownerId: ALICE_ID, name: "Devils Pinch", latitude: -33.1606, longitude: 150.2754, numAbseils: 6, longestAbseil: 30, quality: 4.5, hours: 9, fieldValues: {} },
-  { id: cid(22), ownerId: ALICE_ID, name: "Du Faur Creek", latitude: -33.5153, longitude: 150.3343, numAbseils: 0, vGrade: 1, aGrade: 2, commitment: 3, quality: 3.5, hours: 10, altNames: ["Clatterteeth"], fieldValues: {} },
-  { id: cid(23), ownerId: ALICE_ID, name: "Heart Attack Canyon", latitude: -33.2383, longitude: 150.3029, numAbseils: 6, longestAbseil: 37, vGrade: 4, aGrade: 1, commitment: 4, quality: 4, hours: 10, fieldValues: {} },
-  { id: cid(24), ownerId: ALICE_ID, name: "Jugglers Canyon", latitude: -33.6592, longitude: 150.3294, numAbseils: 8, longestAbseil: 20, vGrade: 3, aGrade: 1, commitment: 2, quality: 2.3, hours: 4, altNames: ["Pilcher"], fieldValues: {} },
-  { id: cid(25), ownerId: ALICE_ID, name: "Sarcophagus Canyon", latitude: -33.5693, longitude: 150.3235, numAbseils: 7, longestAbseil: 25, vGrade: 3, aGrade: 1, quality: 2.8, hours: 8, ropeWikiId: 90025, ropeWikiSnapshot: { name: "Sarcophagus", region: "Blue Mountains", quality: 2.8, rating: "3C1", rappels: 7, fetchedAt: "2025-11-02T00:00:00.000Z" }, fieldValues: {} },
-  { id: cid(26), ownerId: ALICE_ID, name: "Bowens Creek North (Lower)", latitude: -33.5215, longitude: 150.3932, numAbseils: 3, longestAbseil: 12, vGrade: 2, aGrade: 2, commitment: 3, quality: 3.4, hours: 6, altNames: ["Gobsmacker"], fieldValues: {} },
-  { id: cid(27), ownerId: ALICE_ID, name: "Crayfish Creek", latitude: -33.5976, longitude: 150.3037, numAbseils: 0, vGrade: 1, aGrade: 2, quality: 1.5, hours: 7, fieldValues: {} },
+  {
+    id: cid(21),
+    ownerId: ALICE_ID,
+    name: "Devils Pinch",
+    latitude: -33.1606,
+    longitude: 150.2754,
+    numAbseils: 6,
+    longestAbseil: 30,
+    quality: 4.5,
+    hours: 9,
+    fieldValues: {},
+  },
+  {
+    id: cid(22),
+    ownerId: ALICE_ID,
+    name: "Du Faur Creek",
+    latitude: -33.5153,
+    longitude: 150.3343,
+    numAbseils: 0,
+    vGrade: 1,
+    aGrade: 2,
+    commitment: 3,
+    quality: 3.5,
+    hours: 10,
+    altNames: ["Clatterteeth"],
+    fieldValues: {},
+  },
+  {
+    id: cid(23),
+    ownerId: ALICE_ID,
+    name: "Heart Attack Canyon",
+    latitude: -33.2383,
+    longitude: 150.3029,
+    numAbseils: 6,
+    longestAbseil: 37,
+    vGrade: 4,
+    aGrade: 1,
+    commitment: 4,
+    quality: 4,
+    hours: 10,
+    fieldValues: {},
+  },
+  {
+    id: cid(24),
+    ownerId: ALICE_ID,
+    name: "Jugglers Canyon",
+    latitude: -33.6592,
+    longitude: 150.3294,
+    numAbseils: 8,
+    longestAbseil: 20,
+    vGrade: 3,
+    aGrade: 1,
+    commitment: 2,
+    quality: 2.3,
+    hours: 4,
+    altNames: ["Pilcher"],
+    fieldValues: {},
+  },
+  {
+    id: cid(25),
+    ownerId: ALICE_ID,
+    name: "Sarcophagus Canyon",
+    latitude: -33.5693,
+    longitude: 150.3235,
+    numAbseils: 7,
+    longestAbseil: 25,
+    vGrade: 3,
+    aGrade: 1,
+    quality: 2.8,
+    hours: 8,
+    ropeWikiId: 90025,
+    ropeWikiSnapshot: {
+      name: "Sarcophagus",
+      region: "Blue Mountains",
+      quality: 2.8,
+      rating: "3C1",
+      rappels: 7,
+      fetchedAt: "2025-11-02T00:00:00.000Z",
+    },
+    fieldValues: {},
+  },
+  {
+    id: cid(26),
+    ownerId: ALICE_ID,
+    name: "Bowens Creek North (Lower)",
+    latitude: -33.5215,
+    longitude: 150.3932,
+    numAbseils: 3,
+    longestAbseil: 12,
+    vGrade: 2,
+    aGrade: 2,
+    commitment: 3,
+    quality: 3.4,
+    hours: 6,
+    altNames: ["Gobsmacker"],
+    fieldValues: {},
+  },
+  {
+    id: cid(27),
+    ownerId: ALICE_ID,
+    name: "Crayfish Creek",
+    latitude: -33.5976,
+    longitude: 150.3037,
+    numAbseils: 0,
+    vGrade: 1,
+    aGrade: 2,
+    quality: 1.5,
+    hours: 7,
+    fieldValues: {},
+  },
   // second fabricated place
-  { id: cid(28), ownerId: ALICE_ID, name: "Test Gorge", latitude: -33.55, longitude: 150.28, numAbseils: 2, longestAbseil: 10, quality: 2, notes: "Fabricated place for local development.", fieldValues: {} },
+  {
+    id: cid(28),
+    ownerId: ALICE_ID,
+    name: "Test Gorge",
+    latitude: -33.55,
+    longitude: 150.28,
+    numAbseils: 2,
+    longestAbseil: 10,
+    quality: 2,
+    notes: "Fabricated place for local development.",
+    fieldValues: {},
+  },
 
   // ── the field machinery, made visible in dev ─────────────────────────────
   //
@@ -402,22 +837,118 @@ const ALICE_PLACES: SeedPlace[] = [
   //    what a copy has to reconcile (§2.6)
   //  * a place of a SYSTEM type that is not Canyon, so the Places screen has
   //    more than one populated tab and the zero-places hide rule is observable
-  { id: cid(29), ownerId: ALICE_ID, name: "Rocky Creek Canyon", latitude: -33.4487, longitude: 150.3311, numAbseils: 4, longestAbseil: 18, vGrade: 3, aGrade: 2, commitment: 3, quality: 3.2, hours: 5, fieldValues: { permit_no: "NPWS-2026-114" } },
-  { id: cid(30), ownerId: ALICE_ID, name: "Wollangambe Crater", latitude: -33.4602, longitude: 150.2588, placeTypeId: ALICE_TYPE_ID, quality: 4, fieldValues: { access_beta: "Park at the locked gate, walk the fire trail 20 min." } },
-  { id: cid(31), ownerId: ALICE_ID, name: "Newnes camp", latitude: -33.2074, longitude: 150.2247, placeTypeId: SYSTEM_PLACE_TYPE_IDS.campsite, quality: 4, fieldValues: { capacity: 12, is_cave: false } },
+  {
+    id: cid(29),
+    ownerId: ALICE_ID,
+    name: "Rocky Creek Canyon",
+    latitude: -33.4487,
+    longitude: 150.3311,
+    numAbseils: 4,
+    longestAbseil: 18,
+    vGrade: 3,
+    aGrade: 2,
+    commitment: 3,
+    quality: 3.2,
+    hours: 5,
+    fieldValues: { permit_no: "NPWS-2026-114" },
+  },
+  {
+    id: cid(30),
+    ownerId: ALICE_ID,
+    name: "Wollangambe Crater",
+    latitude: -33.4602,
+    longitude: 150.2588,
+    placeTypeId: ALICE_TYPE_ID,
+    quality: 4,
+    fieldValues: {
+      access_beta: "Park at the locked gate, walk the fire trail 20 min.",
+    },
+  },
+  {
+    id: cid(31),
+    ownerId: ALICE_ID,
+    name: "Newnes camp",
+    latitude: -33.2074,
+    longitude: 150.2247,
+    placeTypeId: SYSTEM_PLACE_TYPE_IDS.campsite,
+    quality: 4,
+    fieldValues: { capacity: 12, is_cave: false },
+  },
 ];
 
 // bob owns a fork of alice's shared Grand Canyon + two of his own.
 const BOB_PLACES: SeedPlace[] = [
-  { id: seedId("2", 1), ownerId: BOB_ID, name: "Grand Canyon (copy)", latitude: -33.6563, longitude: 150.3179, numAbseils: 1, longestAbseil: 20, vGrade: 2, aGrade: 2, commitment: 3, quality: 3.4, hours: 3, forkedFromId: PLACE_IDS[0], fieldValues: {} },
-  { id: seedId("2", 2), ownerId: BOB_ID, name: "Coin Slot", latitude: -33.1224, longitude: 150.3297, numAbseils: 5, longestAbseil: 35, vGrade: 3, aGrade: 1, commitment: 4, quality: 4, hours: 3.5, fieldValues: {} },
-  { id: seedId("2", 3), ownerId: BOB_ID, name: "Galah Canyon", latitude: -33.2514, longitude: 150.3037, numAbseils: 8, longestAbseil: 30, quality: 4, hours: 10, fieldValues: {} },
+  {
+    id: seedId("2", 1),
+    ownerId: BOB_ID,
+    name: "Grand Canyon (copy)",
+    latitude: -33.6563,
+    longitude: 150.3179,
+    numAbseils: 1,
+    longestAbseil: 20,
+    vGrade: 2,
+    aGrade: 2,
+    commitment: 3,
+    quality: 3.4,
+    hours: 3,
+    forkedFromId: PLACE_IDS[0],
+    fieldValues: {},
+  },
+  {
+    id: seedId("2", 2),
+    ownerId: BOB_ID,
+    name: "Coin Slot",
+    latitude: -33.1224,
+    longitude: 150.3297,
+    numAbseils: 5,
+    longestAbseil: 35,
+    vGrade: 3,
+    aGrade: 1,
+    commitment: 4,
+    quality: 4,
+    hours: 3.5,
+    fieldValues: {},
+  },
+  {
+    id: seedId("2", 3),
+    ownerId: BOB_ID,
+    name: "Galah Canyon",
+    latitude: -33.2514,
+    longitude: 150.3037,
+    numAbseils: 8,
+    longestAbseil: 30,
+    quality: 4,
+    hours: 10,
+    fieldValues: {},
+  },
 ];
 
 // carol owns her own places (and is shared nothing of alice's — the stranger).
 const CAROL_PLACES: SeedPlace[] = [
-  { id: seedId("3", 1), ownerId: CAROL_ID, name: "Pipeline Canyon", latitude: -33.1658, longitude: 150.2634, numAbseils: 10, longestAbseil: 25, quality: 4, hours: 7, fieldValues: {} },
-  { id: seedId("3", 2), ownerId: CAROL_ID, name: "Surefire Canyon", latitude: -33.2286, longitude: 150.2926, numAbseils: 5, longestAbseil: 15, quality: 4.5, hours: 12, fieldValues: {} },
+  {
+    id: seedId("3", 1),
+    ownerId: CAROL_ID,
+    name: "Pipeline Canyon",
+    latitude: -33.1658,
+    longitude: 150.2634,
+    numAbseils: 10,
+    longestAbseil: 25,
+    quality: 4,
+    hours: 7,
+    fieldValues: {},
+  },
+  {
+    id: seedId("3", 2),
+    ownerId: CAROL_ID,
+    name: "Surefire Canyon",
+    latitude: -33.2286,
+    longitude: 150.2926,
+    numAbseils: 5,
+    longestAbseil: 15,
+    quality: 4.5,
+    hours: 12,
+    fieldValues: {},
+  },
 ];
 
 const ALL_PLACES = [...ALICE_PLACES, ...BOB_PLACES, ...CAROL_PLACES];
@@ -491,7 +1022,7 @@ function buildTrips(): SeedTrip[] {
               // it is reached — every seeded trip got "low" and the vocabulary
               // tally rendered as a single row. Any sampling index has to be
               // coprime with the gate that decides whether it runs at all.
-              water_level: WATER[(seed / 3) % WATER.length | 0],
+              water_level: WATER[((seed / 3) % WATER.length) | 0],
               // TYPED to match their definitions, not stringified. A value of
               // the wrong type READS AS ABSENT everywhere (the forgiving-read
               // rule in shared/src/fieldValues.ts), so a stringified integer is
@@ -508,7 +1039,12 @@ function buildTrips(): SeedTrip[] {
   }
 
   // alice: named no-place trips (displayName set, placeId null).
-  for (const name of ["Newnes weekend (multi-place)", "Kanangra exploratory", "Wollangambe float", "Rescue practice day"]) {
+  for (const name of [
+    "Newnes weekend (multi-place)",
+    "Kanangra exploratory",
+    "Wollangambe float",
+    "Rescue practice day",
+  ]) {
     seed++;
     trips.push({
       placeId: null,
@@ -532,7 +1068,13 @@ function buildTrips(): SeedTrip[] {
     }
   }
   seed++;
-  trips.push({ placeId: null, userId: BOB_ID, date: tripDate(seed), displayName: "Canyoning festival 2024", notes: "Three places in a day. Logged as one entry." });
+  trips.push({
+    placeId: null,
+    userId: BOB_ID,
+    date: tripDate(seed),
+    displayName: "Canyoning festival 2024",
+    notes: "Three places in a day. Logged as one entry.",
+  });
 
   // carol: trips on her own places.
   for (const place of CAROL_PLACES) {
@@ -587,8 +1129,22 @@ async function main() {
         consentVersion: CURRENT_CONSENT_VERSION,
         uiPreferences: { autoDownloadGeoPdfs: false },
       },
-      { id: BOB_ID, cognitoId: BOB_COGNITO_ID, username: "bob", email: "bob@local", consentedAt, consentVersion: CURRENT_CONSENT_VERSION },
-      { id: CAROL_ID, cognitoId: CAROL_COGNITO_ID, username: "carol", email: "carol@local", consentedAt, consentVersion: CURRENT_CONSENT_VERSION },
+      {
+        id: BOB_ID,
+        cognitoId: BOB_COGNITO_ID,
+        username: "bob",
+        email: "bob@local",
+        consentedAt,
+        consentVersion: CURRENT_CONSENT_VERSION,
+      },
+      {
+        id: CAROL_ID,
+        cognitoId: CAROL_COGNITO_ID,
+        username: "carol",
+        email: "carol@local",
+        consentedAt,
+        consentVersion: CURRENT_CONSENT_VERSION,
+      },
     ],
   });
 
@@ -676,7 +1232,9 @@ async function main() {
         ...(def.placeTypeIds.length
           ? {
               placeTypes: {
-                create: def.placeTypeIds.map((placeTypeId) => ({ placeTypeId })),
+                create: def.placeTypeIds.map((placeTypeId) => ({
+                  placeTypeId,
+                })),
               },
             }
           : {}),
@@ -687,9 +1245,30 @@ async function main() {
   // Friendships: alice<->bob accepted (invariant), carol->alice pending
   // (invariant), bob<->carol accepted (extra graph; does NOT make carol alice's
   // friend, so the share->carol 403 test still holds).
-  await prisma.friendship.create({ data: { id: seedId("d", 1), requesterId: ALICE_ID, addresseeId: BOB_ID, status: "accepted" } });
-  const carolPending = await prisma.friendship.create({ data: { id: seedId("d", 2), requesterId: CAROL_ID, addresseeId: ALICE_ID, status: "pending" } });
-  await prisma.friendship.create({ data: { id: seedId("d", 3), requesterId: BOB_ID, addresseeId: CAROL_ID, status: "accepted" } });
+  await prisma.friendship.create({
+    data: {
+      id: seedId("d", 1),
+      requesterId: ALICE_ID,
+      addresseeId: BOB_ID,
+      status: "accepted",
+    },
+  });
+  const carolPending = await prisma.friendship.create({
+    data: {
+      id: seedId("d", 2),
+      requesterId: CAROL_ID,
+      addresseeId: ALICE_ID,
+      status: "pending",
+    },
+  });
+  await prisma.friendship.create({
+    data: {
+      id: seedId("d", 3),
+      requesterId: BOB_ID,
+      addresseeId: CAROL_ID,
+      status: "accepted",
+    },
+  });
 
   // Places. Forks reference an existing id, so insert non-forks first.
   for (const c of ALL_PLACES.filter((c) => !c.forkedFromId)) {
@@ -739,11 +1318,51 @@ async function main() {
   // notes came across unchanged.
   await prisma.place.createMany({
     data: [
-      { id: wpid(1), ownerId: ALICE_ID, placeTypeId: SYSTEM_PLACE_TYPE_IDS.marker, name: "Grand Canyon carpark", latitude: -33.6501, longitude: 150.3122, elevation: 1010 },
-      { id: wpid(2), ownerId: ALICE_ID, placeTypeId: SYSTEM_PLACE_TYPE_IDS.marker, name: "Claustral first abseil", latitude: -33.5611, longitude: 150.4041, elevation: 880, notes: "Tree anchor on the true left." },
-      { id: wpid(3), ownerId: ALICE_ID, placeTypeId: SYSTEM_PLACE_TYPE_IDS.marker, name: "Ranger station", latitude: -33.7188, longitude: 150.3099 },
-      { id: wpid(4), ownerId: BOB_ID, placeTypeId: SYSTEM_PLACE_TYPE_IDS.marker, name: "Coin Slot pothole", latitude: -33.1231, longitude: 150.3288, elevation: 720, notes: "Bob's note — a sharee must not be able to edit this." },
-      { id: wpid(5), ownerId: BOB_ID, placeTypeId: SYSTEM_PLACE_TYPE_IDS.marker, name: "Galah exit gully", latitude: -33.2521, longitude: 150.3044 },
+      {
+        id: wpid(1),
+        ownerId: ALICE_ID,
+        placeTypeId: SYSTEM_PLACE_TYPE_IDS.marker,
+        name: "Grand Canyon carpark",
+        latitude: -33.6501,
+        longitude: 150.3122,
+        elevation: 1010,
+      },
+      {
+        id: wpid(2),
+        ownerId: ALICE_ID,
+        placeTypeId: SYSTEM_PLACE_TYPE_IDS.marker,
+        name: "Claustral first abseil",
+        latitude: -33.5611,
+        longitude: 150.4041,
+        elevation: 880,
+        notes: "Tree anchor on the true left.",
+      },
+      {
+        id: wpid(3),
+        ownerId: ALICE_ID,
+        placeTypeId: SYSTEM_PLACE_TYPE_IDS.marker,
+        name: "Ranger station",
+        latitude: -33.7188,
+        longitude: 150.3099,
+      },
+      {
+        id: wpid(4),
+        ownerId: BOB_ID,
+        placeTypeId: SYSTEM_PLACE_TYPE_IDS.marker,
+        name: "Coin Slot pothole",
+        latitude: -33.1231,
+        longitude: 150.3288,
+        elevation: 720,
+        notes: "Bob's note — a sharee must not be able to edit this.",
+      },
+      {
+        id: wpid(5),
+        ownerId: BOB_ID,
+        placeTypeId: SYSTEM_PLACE_TYPE_IDS.marker,
+        name: "Galah exit gully",
+        latitude: -33.2521,
+        longitude: 150.3044,
+      },
     ],
   });
 
@@ -753,9 +1372,21 @@ async function main() {
   // link belong to one owner, which the server asserts on create.
   await prisma.placeLink.createMany({
     data: [
-      { id: seedId("6", 101), ownerId: ALICE_ID, ...canonicalLinkPair(PLACE_IDS[0], wpid(1)) },
-      { id: seedId("6", 102), ownerId: ALICE_ID, ...canonicalLinkPair(PLACE_IDS[1], wpid(2)) },
-      { id: seedId("6", 103), ownerId: BOB_ID, ...canonicalLinkPair(BOB_SHARED_PLACE_ID, wpid(4)) },
+      {
+        id: seedId("6", 101),
+        ownerId: ALICE_ID,
+        ...canonicalLinkPair(PLACE_IDS[0], wpid(1)),
+      },
+      {
+        id: seedId("6", 102),
+        ownerId: ALICE_ID,
+        ...canonicalLinkPair(PLACE_IDS[1], wpid(2)),
+      },
+      {
+        id: seedId("6", 103),
+        ownerId: BOB_ID,
+        ...canonicalLinkPair(BOB_SHARED_PLACE_ID, wpid(4)),
+      },
     ],
   });
 
@@ -766,16 +1397,72 @@ async function main() {
   // one, and the places that carry a FILE are named in the media block.
   await prisma.route.createMany({
     data: [
-      { id: rtid(1), ownerId: ALICE_ID, placeId: PLACE_IDS[1], name: "Claustral through-trip", color: TRACK_COLORS[3], points: CLAUSTRAL_LINE, anchors: [0, 4, CLAUSTRAL_LINE.length - 1] },
-      { id: rtid(2), ownerId: ALICE_ID, placeId: null, name: "Du Faur Head approach", color: TRACK_COLORS[4], points: DU_FAUR_LINE, anchors: Prisma.DbNull },
+      {
+        id: rtid(1),
+        ownerId: ALICE_ID,
+        placeId: PLACE_IDS[1],
+        name: "Claustral through-trip",
+        color: TRACK_COLORS[3],
+        points: CLAUSTRAL_LINE,
+        anchors: [0, 4, CLAUSTRAL_LINE.length - 1],
+      },
+      {
+        id: rtid(2),
+        ownerId: ALICE_ID,
+        placeId: null,
+        name: "Du Faur Head approach",
+        color: TRACK_COLORS[4],
+        points: DU_FAUR_LINE,
+        anchors: Prisma.DbNull,
+      },
       // Bob's route is UNLINKED now, so his Coin Slot can carry the track file
       // below. It keeps its direct share to alice, which is the whole point of
       // it: a route shared with you on its own row, removable by you.
-      { id: rtid(3), ownerId: BOB_ID, placeId: null, name: "Coin Slot approach", color: TRACK_COLORS[5], points: COIN_SLOT_LINE, anchors: [0, COIN_SLOT_LINE.length - 1] },
-      { id: rtid(4), ownerId: ALICE_ID, placeId: cid(6), name: "Butterbox descent", color: TRACK_COLORS[6], points: BUTTERBOX_LINE, anchors: [0, 3, BUTTERBOX_LINE.length - 1] },
-      { id: rtid(5), ownerId: ALICE_ID, placeId: PLACE_IDS[0], name: "Grand Canyon descent", color: TRACK_COLORS[7], points: GRAND_CANYON_LINE, anchors: [0, GRAND_CANYON_LINE.length - 1] },
-      { id: rtid(6), ownerId: ALICE_ID, placeId: cid(14), name: "Wollangambe One float", color: TRACK_COLORS[8], points: WOLLANGAMBE_LINE, anchors: [0, 4, WOLLANGAMBE_LINE.length - 1] },
-      { id: rtid(7), ownerId: ALICE_ID, placeId: null, name: "Kanangra tops walk in", color: TRACK_COLORS[9], points: KANANGRA_LINE, anchors: Prisma.DbNull },
+      {
+        id: rtid(3),
+        ownerId: BOB_ID,
+        placeId: null,
+        name: "Coin Slot approach",
+        color: TRACK_COLORS[5],
+        points: COIN_SLOT_LINE,
+        anchors: [0, COIN_SLOT_LINE.length - 1],
+      },
+      {
+        id: rtid(4),
+        ownerId: ALICE_ID,
+        placeId: cid(6),
+        name: "Butterbox descent",
+        color: TRACK_COLORS[6],
+        points: BUTTERBOX_LINE,
+        anchors: [0, 3, BUTTERBOX_LINE.length - 1],
+      },
+      {
+        id: rtid(5),
+        ownerId: ALICE_ID,
+        placeId: PLACE_IDS[0],
+        name: "Grand Canyon descent",
+        color: TRACK_COLORS[7],
+        points: GRAND_CANYON_LINE,
+        anchors: [0, GRAND_CANYON_LINE.length - 1],
+      },
+      {
+        id: rtid(6),
+        ownerId: ALICE_ID,
+        placeId: cid(14),
+        name: "Wollangambe One float",
+        color: TRACK_COLORS[8],
+        points: WOLLANGAMBE_LINE,
+        anchors: [0, 4, WOLLANGAMBE_LINE.length - 1],
+      },
+      {
+        id: rtid(7),
+        ownerId: ALICE_ID,
+        placeId: null,
+        name: "Kanangra tops walk in",
+        color: TRACK_COLORS[9],
+        points: KANANGRA_LINE,
+        anchors: Prisma.DbNull,
+      },
     ],
   });
 
@@ -788,11 +1475,23 @@ async function main() {
   // share->carol.
   await prisma.share.createMany({
     data: [
-      { id: seedId("8", 2), entityType: "route", entityId: rtid(1), sharedById: ALICE_ID, sharedWithId: BOB_ID },
+      {
+        id: seedId("8", 2),
+        entityType: "route",
+        entityId: rtid(1),
+        sharedById: ALICE_ID,
+        sharedWithId: BOB_ID,
+      },
       // The INCOMING direction, so every sharee-perspective surface (a
       // read-only row, a "Shared with you" mark, a refused delete) is
       // reachable in dev without hand-creating data as two users.
-      { id: seedId("8", 3), entityType: "route", entityId: rtid(3), sharedById: BOB_ID, sharedWithId: ALICE_ID },
+      {
+        id: seedId("8", 3),
+        entityType: "route",
+        entityId: rtid(3),
+        sharedById: BOB_ID,
+        sharedWithId: ALICE_ID,
+      },
     ],
   });
 
@@ -830,22 +1529,41 @@ async function main() {
   // above and uploaded now, so every figure a row states — extent, point count,
   // length, size — is read back off the bytes rather than typed by hand.
   const empressFile = seededFile(
-    "media/seed/empress-falls.gpx", "Empress Falls abseils", EMPRESS_FALLS_LINE, "gpx",
+    "media/seed/empress-falls.gpx",
+    "Empress Falls abseils",
+    EMPRESS_FALLS_LINE,
+    "gpx",
   );
   const duFaurFile = seededFile(
-    "media/seed/du-faur.kml", "Du Faur approach", DU_FAUR_LINE, "kml",
+    "media/seed/du-faur.kml",
+    "Du Faur approach",
+    DU_FAUR_LINE,
+    "kml",
   );
   const coinSlotFile = seededFile(
-    "media/seed/coin-slot.gpx", "Coin Slot descent", COIN_SLOT_DESCENT_LINE, "gpx",
+    "media/seed/coin-slot.gpx",
+    "Coin Slot descent",
+    COIN_SLOT_DESCENT_LINE,
+    "gpx",
   );
   const wollangambeFile = seededFile(
-    "media/seed/recording-2026-08-02.gpx", "Wollangambe, 2 Aug", WOLLANGAMBE_LINE, "gpx",
+    "media/seed/recording-2026-08-02.gpx",
+    "Wollangambe, 2 Aug",
+    WOLLANGAMBE_LINE,
+    "gpx",
   );
   const bellCreekFile = seededFile(
-    "media/seed/recording-2026-05-17.gpx", "Bell Creek, 17 May", BELL_CREEK_LINE, "gpx",
+    "media/seed/recording-2026-05-17.gpx",
+    "Bell Creek, 17 May",
+    BELL_CREEK_LINE,
+    "gpx",
   );
   await uploadSeededFiles([
-    empressFile, duFaurFile, coinSlotFile, wollangambeFile, bellCreekFile,
+    empressFile,
+    duFaurFile,
+    coinSlotFile,
+    wollangambeFile,
+    bellCreekFile,
   ]);
 
   // Media. Every VECTOR row has a real object behind it (above); the photo is
@@ -861,32 +1579,152 @@ async function main() {
   // path untested by the integration suite.
   await prisma.media.createMany({
     data: [
-      { id: seedId("4", 1), ownerId: ALICE_ID, linkedType: "place", linkedId: PLACE_IDS[0], s3KeyDisplay: "media/seed/grand-1.jpg", s3KeyThumbnail: "media/seed/grand-1-thumb.jpg", mediaType: "image/jpeg", filename: "grand-canyon.jpg", fileSizeBytes: BigInt(2_048_000) },
+      {
+        id: seedId("4", 1),
+        ownerId: ALICE_ID,
+        linkedType: "place",
+        linkedId: PLACE_IDS[0],
+        s3KeyDisplay: "media/seed/grand-1.jpg",
+        s3KeyThumbnail: "media/seed/grand-1-thumb.jpg",
+        mediaType: "image/jpeg",
+        filename: "grand-canyon.jpg",
+        fileSizeBytes: BigInt(2_048_000),
+      },
       // Empress Falls carries a FILE as its way (no route is linked to it), and
       // its extent sits on Empress Falls. Every extent below is the file's own,
       // so it brackets the place it belongs to by construction: a file whose
       // extent is nowhere near its own name is what made the old fixtures read
       // as broken data.
-      { id: seedId("4", 2), ownerId: ALICE_ID, linkedType: "place", linkedId: PLACE_IDS[2], s3KeyDisplay: empressFile.key, mediaType: empressFile.contentType, filename: "empress-falls.gpx", displayName: "Empress Falls abseils", fileSizeBytes: BigInt(empressFile.fileSizeBytes), color: TRACK_COLORS[0], origin: "import", metadata: { bbox: empressFile.bbox, featureCount: 1, positionCount: empressFile.positionCount } },
-      { id: seedId("4", 3), ownerId: ALICE_ID, linkedType: "none", linkedId: null, s3KeyDisplay: duFaurFile.key, mediaType: duFaurFile.contentType, filename: "du-faur-approach.kml", displayName: "Du Faur approach", fileSizeBytes: BigInt(duFaurFile.fileSizeBytes), color: TRACK_COLORS[1], origin: "import", metadata: { bbox: duFaurFile.bbox, featureCount: 1, positionCount: duFaurFile.positionCount } },
-      { id: seedId("4", 4), ownerId: ALICE_ID, linkedType: "none", linkedId: null, s3KeyDisplay: wollangambeFile.key, mediaType: wollangambeFile.contentType, filename: "Wollangambe, 2 Aug.gpx", displayName: "Wollangambe, 2 Aug", fileSizeBytes: BigInt(wollangambeFile.fileSizeBytes), color: TRACK_COLORS[2], origin: "track", metadata: { bbox: wollangambeFile.bbox, distanceM: wollangambeFile.distanceM, durationMs: 5_400_000, elevationGainM: 95, elevationLossM: 130, pointCount: wollangambeFile.positionCount, startedAt: "2026-08-02T22:05:00.000Z", endedAt: "2026-08-02T23:35:00.000Z" } },
+      {
+        id: seedId("4", 2),
+        ownerId: ALICE_ID,
+        linkedType: "place",
+        linkedId: PLACE_IDS[2],
+        s3KeyDisplay: empressFile.key,
+        mediaType: empressFile.contentType,
+        filename: "empress-falls.gpx",
+        displayName: "Empress Falls abseils",
+        fileSizeBytes: BigInt(empressFile.fileSizeBytes),
+        color: TRACK_COLORS[0],
+        origin: "import",
+        metadata: {
+          bbox: empressFile.bbox,
+          featureCount: 1,
+          positionCount: empressFile.positionCount,
+        },
+      },
+      {
+        id: seedId("4", 3),
+        ownerId: ALICE_ID,
+        linkedType: "none",
+        linkedId: null,
+        s3KeyDisplay: duFaurFile.key,
+        mediaType: duFaurFile.contentType,
+        filename: "du-faur-approach.kml",
+        displayName: "Du Faur approach",
+        fileSizeBytes: BigInt(duFaurFile.fileSizeBytes),
+        color: TRACK_COLORS[1],
+        origin: "import",
+        metadata: {
+          bbox: duFaurFile.bbox,
+          featureCount: 1,
+          positionCount: duFaurFile.positionCount,
+        },
+      },
+      {
+        id: seedId("4", 4),
+        ownerId: ALICE_ID,
+        linkedType: "none",
+        linkedId: null,
+        s3KeyDisplay: wollangambeFile.key,
+        mediaType: wollangambeFile.contentType,
+        filename: "Wollangambe, 2 Aug.gpx",
+        displayName: "Wollangambe, 2 Aug",
+        fileSizeBytes: BigInt(wollangambeFile.fileSizeBytes),
+        color: TRACK_COLORS[2],
+        origin: "track",
+        metadata: {
+          bbox: wollangambeFile.bbox,
+          distanceM: wollangambeFile.distanceM,
+          durationMs: 5_400_000,
+          elevationGainM: 95,
+          elevationLossM: 130,
+          pointCount: wollangambeFile.positionCount,
+          startedAt: "2026-08-02T22:05:00.000Z",
+          endedAt: "2026-08-02T23:35:00.000Z",
+        },
+      },
       // BOB's file on the place he shares with alice. This is the only way a
       // track on someone ELSE's place is reachable in dev, and it is what the
       // Ways page lists beside alice's own files — the case that had no fixture
       // at all, so its column read as permanently empty.
-      { id: seedId("4", 5), ownerId: BOB_ID, linkedType: "place", linkedId: BOB_SHARED_PLACE_ID, s3KeyDisplay: coinSlotFile.key, mediaType: coinSlotFile.contentType, filename: "coin-slot.gpx", displayName: "Coin Slot descent", fileSizeBytes: BigInt(coinSlotFile.fileSizeBytes), color: TRACK_COLORS[3], origin: "import", metadata: { bbox: coinSlotFile.bbox, featureCount: 1, positionCount: coinSlotFile.positionCount } },
+      {
+        id: seedId("4", 5),
+        ownerId: BOB_ID,
+        linkedType: "place",
+        linkedId: BOB_SHARED_PLACE_ID,
+        s3KeyDisplay: coinSlotFile.key,
+        mediaType: coinSlotFile.contentType,
+        filename: "coin-slot.gpx",
+        displayName: "Coin Slot descent",
+        fileSizeBytes: BigInt(coinSlotFile.fileSizeBytes),
+        color: TRACK_COLORS[3],
+        origin: "import",
+        metadata: {
+          bbox: coinSlotFile.bbox,
+          featureCount: 1,
+          positionCount: coinSlotFile.positionCount,
+        },
+      },
       // A second recording of alice's, so Tracks is not a single row and the
       // kind rail has something to narrow.
-      { id: seedId("4", 6), ownerId: ALICE_ID, linkedType: "none", linkedId: null, s3KeyDisplay: bellCreekFile.key, mediaType: bellCreekFile.contentType, filename: "Bell Creek, 17 May.gpx", displayName: "Bell Creek, 17 May", fileSizeBytes: BigInt(bellCreekFile.fileSizeBytes), color: TRACK_COLORS[4], origin: "track", metadata: { bbox: bellCreekFile.bbox, distanceM: bellCreekFile.distanceM, durationMs: 3_600_000, elevationGainM: 70, elevationLossM: 95, pointCount: bellCreekFile.positionCount, startedAt: "2026-05-16T23:40:00.000Z", endedAt: "2026-05-17T00:40:00.000Z" } },
+      {
+        id: seedId("4", 6),
+        ownerId: ALICE_ID,
+        linkedType: "none",
+        linkedId: null,
+        s3KeyDisplay: bellCreekFile.key,
+        mediaType: bellCreekFile.contentType,
+        filename: "Bell Creek, 17 May.gpx",
+        displayName: "Bell Creek, 17 May",
+        fileSizeBytes: BigInt(bellCreekFile.fileSizeBytes),
+        color: TRACK_COLORS[4],
+        origin: "track",
+        metadata: {
+          bbox: bellCreekFile.bbox,
+          distanceM: bellCreekFile.distanceM,
+          durationMs: 3_600_000,
+          elevationGainM: 70,
+          elevationLossM: 95,
+          pointCount: bellCreekFile.positionCount,
+          startedAt: "2026-05-16T23:40:00.000Z",
+          endedAt: "2026-05-17T00:40:00.000Z",
+        },
+      },
     ],
   });
 
   // Notifications (payloads are enriched server-side from the referenced ids).
   await prisma.notification.createMany({
     data: [
-      { userId: BOB_ID, type: "place_shared", payload: { placeId: PLACE_IDS[0], sharedById: ALICE_ID }, read: false },
-      { userId: BOB_ID, type: "place_shared", payload: { placeId: PLACE_IDS[1], sharedById: ALICE_ID }, read: true },
-      { userId: ALICE_ID, type: "friend_request", payload: { friendshipId: carolPending.id, requesterUsername: "carol" }, read: false },
+      {
+        userId: BOB_ID,
+        type: "place_shared",
+        payload: { placeId: PLACE_IDS[0], sharedById: ALICE_ID },
+        read: false,
+      },
+      {
+        userId: BOB_ID,
+        type: "place_shared",
+        payload: { placeId: PLACE_IDS[1], sharedById: ALICE_ID },
+        read: true,
+      },
+      {
+        userId: ALICE_ID,
+        type: "friend_request",
+        payload: { friendshipId: carolPending.id, requesterUsername: "carol" },
+        read: false,
+      },
     ],
   });
 
@@ -935,10 +1773,15 @@ function placeCreate(c: SeedPlace): Prisma.PlaceCreateInput {
     placeType: {
       connect: { id: c.placeTypeId ?? SYSTEM_PLACE_TYPE_IDS.canyon },
     },
-    ...(c.forkedFromId ? { forkedFrom: { connect: { id: c.forkedFromId } } } : {}),
+    ...(c.forkedFromId
+      ? { forkedFrom: { connect: { id: c.forkedFromId } } }
+      : {}),
   };
 }
 
 main()
-  .catch((e) => { console.error(e); process.exit(1); })
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  })
   .finally(() => prisma.$disconnect());

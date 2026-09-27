@@ -7,7 +7,9 @@ describe("the sync boundary", () => {
     for (const category of SAVED_CATEGORIES) {
       expect(typeof CATEGORY_SYNCS[category]).toBe("boolean");
     }
-    expect(Object.keys(CATEGORY_SYNCS).sort()).toEqual([...SAVED_CATEGORIES].sort());
+    expect(Object.keys(CATEGORY_SYNCS).sort()).toEqual(
+      [...SAVED_CATEGORIES].sort(),
+    );
   });
 
   it("splits on what the user MADE versus what they downloaded", () => {

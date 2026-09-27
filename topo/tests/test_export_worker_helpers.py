@@ -9,6 +9,7 @@ dialog) and embed raw subprocess stderr from ogr2ogr / gdal_translate /
 tippecanoe, which can carry temp dirs (/tmp/export_*) and internal paths.
 _scrub_paths must remove those while keeping the human-readable prefix.
 """
+
 import os
 import sys
 import unittest
@@ -26,6 +27,7 @@ os.environ.setdefault("EXPORT_JOB_ID", "export-123")
 
 try:
     from export_worker import _scrub_paths  # noqa: E402
+
     _IMPORT_OK = True
 except Exception as _exc:  # noqa: BLE001
     _IMPORT_OK = False

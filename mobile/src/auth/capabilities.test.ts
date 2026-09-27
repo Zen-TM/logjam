@@ -40,7 +40,10 @@ describe("capabilityStatus", () => {
   it("reports needs-account over needs-connection for an offline guest", () => {
     for (const capability of ALL_CAPABILITIES) {
       const result = capabilityStatus(capability, "guest", false);
-      expect(result).toEqual({ status: "unavailable", reason: "needs-account" });
+      expect(result).toEqual({
+        status: "unavailable",
+        reason: "needs-account",
+      });
     }
   });
 
@@ -75,7 +78,9 @@ describe("capabilityStatus", () => {
 describe("unavailableReasonText", () => {
   it("uses the canonical strings", () => {
     expect(unavailableReasonText("needs-account")).toBe("Needs an account");
-    expect(unavailableReasonText("needs-connection")).toBe("Needs a connection");
+    expect(unavailableReasonText("needs-connection")).toBe(
+      "Needs a connection",
+    );
     expect(unavailableReasonText("needs-upload")).toBe("Needs to sync first");
   });
 });
@@ -132,7 +137,9 @@ describe("shareCapabilityStatus", () => {
 
 describe("statusRowProps", () => {
   it("words every reason the same way capabilityRowProps does", () => {
-    expect(statusRowProps({ status: "available" })).toEqual({ disabled: false });
+    expect(statusRowProps({ status: "available" })).toEqual({
+      disabled: false,
+    });
     expect(
       statusRowProps(shareCapabilityStatus("linked", true, false)),
     ).toEqual({ disabled: true, subtitle: "Needs to sync first" });

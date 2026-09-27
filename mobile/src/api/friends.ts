@@ -37,11 +37,16 @@ export function getFriendRequests(): Promise<FriendRequest[]> {
 
 /** Username search (server requires ≥3 chars). Caller must pre-check length. */
 export function searchUsers(query: string): Promise<UserSearchResult[]> {
-  return apiFetch<UserSearchResult[]>(`/friends/search?q=${encodeURIComponent(query)}`);
+  return apiFetch<UserSearchResult[]>(
+    `/friends/search?q=${encodeURIComponent(query)}`,
+  );
 }
 
 export function sendFriendRequest(addresseeId: string): Promise<unknown> {
-  return apiFetch("/friends/request", { method: "POST", body: { addresseeId } });
+  return apiFetch("/friends/request", {
+    method: "POST",
+    body: { addresseeId },
+  });
 }
 
 export function acceptFriendRequest(friendshipId: string): Promise<unknown> {
@@ -49,18 +54,25 @@ export function acceptFriendRequest(friendshipId: string): Promise<unknown> {
 }
 
 export function declineFriendRequest(friendshipId: string): Promise<void> {
-  return apiFetch<void>(`/friends/${friendshipId}/decline`, { method: "PATCH" });
+  return apiFetch<void>(`/friends/${friendshipId}/decline`, {
+    method: "PATCH",
+  });
 }
 
 export function removeFriend(friendshipId: string): Promise<void> {
   return apiFetch<void>(`/friends/${friendshipId}`, { method: "DELETE" });
 }
 
-export function getPlaceShares(placeId: string): Promise<PlaceShareRecipient[]> {
+export function getPlaceShares(
+  placeId: string,
+): Promise<PlaceShareRecipient[]> {
   return apiFetch<PlaceShareRecipient[]>(`/places/${placeId}/shares`);
 }
 
-export function sharePlace(placeId: string, sharedWithUserId: string): Promise<unknown> {
+export function sharePlace(
+  placeId: string,
+  sharedWithUserId: string,
+): Promise<unknown> {
   return apiFetch(`/places/${placeId}/share`, {
     method: "POST",
     body: { sharedWithUserId },
@@ -68,7 +80,9 @@ export function sharePlace(placeId: string, sharedWithUserId: string): Promise<u
 }
 
 export function unsharePlace(placeId: string, userId: string): Promise<void> {
-  return apiFetch<void>(`/places/${placeId}/share/${userId}`, { method: "DELETE" });
+  return apiFetch<void>(`/places/${placeId}/share/${userId}`, {
+    method: "DELETE",
+  });
 }
 
 // ── The per-friend sharing audit ─────────────────────────────
@@ -100,7 +114,10 @@ export function unshareWithFriend(
   return apiFetch(`/friends/${friendshipId}/shares`, {
     method: "DELETE",
     body: {
-      items: items.map(({ entityType, entityId }) => ({ entityType, entityId })),
+      items: items.map(({ entityType, entityId }) => ({
+        entityType,
+        entityId,
+      })),
     },
   });
 }

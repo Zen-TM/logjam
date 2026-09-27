@@ -18,9 +18,9 @@ import { throttleWrites } from "./_rateLimitGate";
 vi.setConfig({ testTimeout: 90_000, hookTimeout: 90_000 });
 
 /** A write that must succeed even if the previous file spent the budget. */
-async function write<T extends { status: number; headers: Record<string, string> }>(
-  send: () => Promise<T>,
-): Promise<T> {
+async function write<
+  T extends { status: number; headers: Record<string, string> },
+>(send: () => Promise<T>): Promise<T> {
   const first = await send();
   return (await throttleWrites(first)) ? await send() : first;
 }
@@ -73,7 +73,9 @@ describe("custom-fields route (fake auth)", () => {
   // blob, alice silently has no fields and every custom-field feature looks
   // broken for reasons that point somewhere else entirely.
   it("serves the seeded definitions, and /users/me projects the same list", async () => {
-    const listed = await request(API_URL).get("/custom-fields/trip-log").set(AUTH);
+    const listed = await request(API_URL)
+      .get("/custom-fields/trip-log")
+      .set(AUTH);
     expect(listed.status).toBe(200);
     expect(listed.body.fields.map((f: { key: string }) => f.key)).toEqual([
       "water_level",
@@ -110,7 +112,9 @@ describe("custom-fields route (fake auth)", () => {
       request(API_URL)
         .post("/custom-fields/place")
         .set(AUTH)
-        .send({ field: { key: "permit_no", label: "Permit no.", type: "string" } }),
+        .send({
+          field: { key: "permit_no", label: "Permit no.", type: "string" },
+        }),
     );
     expect(created.status).toBe(201);
 
@@ -120,7 +124,9 @@ describe("custom-fields route (fake auth)", () => {
       request(API_URL)
         .post("/custom-fields/place")
         .set(AUTH)
-        .send({ field: { key: "permit_no", label: "Permit no.", type: "string" } }),
+        .send({
+          field: { key: "permit_no", label: "Permit no.", type: "string" },
+        }),
     );
     expect(dup.status).toBe(409);
 
@@ -209,7 +215,9 @@ describe("custom-fields route (fake auth)", () => {
         request(API_URL)
           .patch("/users/me")
           .set(AUTH)
-          .send({ [key]: [{ key: "access", label: "Access", type: "string" }] }),
+          .send({
+            [key]: [{ key: "access", label: "Access", type: "string" }],
+          }),
       );
       expect(res.status, key).toBe(400);
       expect(res.body.error).toContain("/custom-fields/");
@@ -236,7 +244,9 @@ describe("custom-fields route (fake auth)", () => {
     );
     expect(created.status, JSON.stringify(created.body)).toBe(201);
 
-    const list = await request(API_URL).get("/custom-fields/trip-log").set(AUTH);
+    const list = await request(API_URL)
+      .get("/custom-fields/trip-log")
+      .set(AUTH);
     const def = (list.body.fields as Record<string, unknown>[]).find(
       (f) => f.key === key,
     );
@@ -246,7 +256,10 @@ describe("custom-fields route (fake auth)", () => {
 
     // And the seeded three, which is where this was found. Each is on SOME
     // form: two on every trip, `rope_length_m` on canyoning trips.
-    const seededScoping: Record<string, { appliesToAllTypes: boolean; tripTypes: string[] }> = {
+    const seededScoping: Record<
+      string,
+      { appliesToAllTypes: boolean; tripTypes: string[] }
+    > = {
       water_level: { appliesToAllTypes: true, tripTypes: [] },
       rope_length_m: { appliesToAllTypes: false, tripTypes: ["canyoning"] },
       wetsuit: { appliesToAllTypes: true, tripTypes: [] },
@@ -256,9 +269,10 @@ describe("custom-fields route (fake auth)", () => {
         (f) => f.key === seeded,
       );
       expect(row, `${seeded} should be listed`).toBeTruthy();
-      expect(row, `${seeded} is on no form unless it is scoped somewhere`).toMatchObject(
-        scoping,
-      );
+      expect(
+        row,
+        `${seeded} is on no form unless it is scoped somewhere`,
+      ).toMatchObject(scoping);
     }
 
     await write(() =>
@@ -284,7 +298,9 @@ describe("custom-fields route (fake auth)", () => {
     expect(created.status, JSON.stringify(created.body)).toBe(201);
 
     try {
-      const list = await request(API_URL).get("/custom-fields/trip-log").set(AUTH);
+      const list = await request(API_URL)
+        .get("/custom-fields/trip-log")
+        .set(AUTH);
       const def = (list.body.fields as Record<string, unknown>[]).find(
         (f) => f.key === key,
       );
@@ -307,9 +323,9 @@ describe("custom-fields route (fake auth)", () => {
         .set({ ...AUTH, "x-logjam-client": "mobile/0.1.0-test" })
         .query({ limit: 500 });
       expect(delta.status).toBe(200);
-      const row = (delta.body.changes.customFieldDefs as Record<string, unknown>[]).find(
-        (f) => f.key === key,
-      );
+      const row = (
+        delta.body.changes.customFieldDefs as Record<string, unknown>[]
+      ).find((f) => f.key === key);
       expect(row, "the delta should carry the definition").toMatchObject({
         tripTypes: ["packrafting", "Bushwalking"],
         appliesToAllTypes: false,
@@ -330,7 +346,11 @@ describe("custom-fields route (fake auth)", () => {
         .post("/custom-fields/trip-log")
         .set(AUTH)
         .send({
-          field: { key: "mismatched_trip", label: "Mismatched trip", type: "string" },
+          field: {
+            key: "mismatched_trip",
+            label: "Mismatched trip",
+            type: "string",
+          },
           placeTypeIds: ["00000000-0000-4000-8000-000000000000"],
         }),
     );
@@ -341,7 +361,11 @@ describe("custom-fields route (fake auth)", () => {
         .post("/custom-fields/place")
         .set(AUTH)
         .send({
-          field: { key: "mismatched_place", label: "Mismatched place", type: "string" },
+          field: {
+            key: "mismatched_place",
+            label: "Mismatched place",
+            type: "string",
+          },
           tripTypes: ["canyoning"],
         }),
     );
@@ -353,7 +377,11 @@ describe("custom-fields route (fake auth)", () => {
       request(API_URL)
         .post("/place-types")
         .set(AUTH)
-        .send({ name: `Scoped ${Date.now()}`, iconKey: "map-pin", color: PLACE_TYPE_COLORS[1] }),
+        .send({
+          name: `Scoped ${Date.now()}`,
+          iconKey: "map-pin",
+          color: PLACE_TYPE_COLORS[1],
+        }),
     );
     expect(type.status, JSON.stringify(type.body)).toBe(201);
     const typeId = type.body.id as string;
@@ -392,9 +420,9 @@ describe("custom-fields route (fake auth)", () => {
       .set({ ...AUTH, "x-logjam-client": "mobile/0.1.0-test" })
       .query({ limit: 500 });
     expect(delta.status).toBe(200);
-    const row = (delta.body.changes.customFieldDefs as Record<string, unknown>[]).find(
-      (f) => f.key === key,
-    );
+    const row = (
+      delta.body.changes.customFieldDefs as Record<string, unknown>[]
+    ).find((f) => f.key === key);
     expect(row, "the delta should carry the definition").toBeTruthy();
     expect(row!.placeTypeIds).toEqual([typeId]);
     expect(row!.appliesToAllTypes).toBe(false);
@@ -402,6 +430,8 @@ describe("custom-fields route (fake auth)", () => {
     await write(() =>
       request(API_URL).delete(`/custom-fields/place/${key}`).set(AUTH),
     );
-    await write(() => request(API_URL).delete(`/place-types/${typeId}`).set(AUTH));
+    await write(() =>
+      request(API_URL).delete(`/place-types/${typeId}`).set(AUTH),
+    );
   });
 });

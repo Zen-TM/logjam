@@ -56,9 +56,7 @@ describe("requirePlaceAccess", () => {
 
   it("returns 'shared' for a share recipient", async () => {
     shareFindFirst.mockResolvedValue({ id: "share-1" });
-    await expect(requirePlaceAccess("friend-1", PLACE)).resolves.toBe(
-      "shared",
-    );
+    await expect(requirePlaceAccess("friend-1", PLACE)).resolves.toBe("shared");
   });
 
   it("throws 404 (not 403) for a stranger — no existence oracle for place IDs", async () => {
@@ -121,9 +119,7 @@ describe("requirePlaceOwner", () => {
 
   it("throws the caller-supplied denial (404 anti-oracle for trip logs)", () => {
     const denial = new AppError(404, "Trip log not found");
-    expect(() => requirePlaceOwner("friend-1", PLACE, denial)).toThrow(
-      denial,
-    );
+    expect(() => requirePlaceOwner("friend-1", PLACE, denial)).toThrow(denial);
   });
 });
 

@@ -8,6 +8,7 @@ emit waypoints (points) + routes (lines), dropping polygons.
 Runs a real ogr2ogr subprocess + GDAL, so it is skipped when osgeo is the host
 stub and runs for real inside the worker Docker image.
 """
+
 import json
 import os
 import sys
@@ -24,6 +25,7 @@ _REAL_GDAL = not _native_stub.is_stubbed("osgeo")
 
 if _REAL_GDAL:
     from osgeo import gdal  # noqa: E402
+
     gdal.UseExceptions()
 
 from renderers.context import RenderContext  # noqa: E402
@@ -33,19 +35,35 @@ from renderers.gpx import render_gpx  # noqa: E402
 _MIXED_FEATURES = {
     "type": "FeatureCollection",
     "features": [
-        {"type": "Feature",
-         "geometry": {"type": "Point", "coordinates": [150.30, -33.70]},
-         "properties": {"name": "Peak X", "_category": "peak"}},
-        {"type": "Feature",
-         "geometry": {"type": "LineString",
-                      "coordinates": [[150.30, -33.70], [150.31, -33.71], [150.32, -33.70]]},
-         "properties": {"name": "Track Y", "_category": "track"}},
-        {"type": "Feature",
-         "geometry": {"type": "Polygon",
-                      "coordinates": [[[150.30, -33.70], [150.31, -33.70],
-                                       [150.31, -33.71], [150.30, -33.71],
-                                       [150.30, -33.70]]]},
-         "properties": {"name": "Lake Z", "_category": "water"}},
+        {
+            "type": "Feature",
+            "geometry": {"type": "Point", "coordinates": [150.30, -33.70]},
+            "properties": {"name": "Peak X", "_category": "peak"},
+        },
+        {
+            "type": "Feature",
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [[150.30, -33.70], [150.31, -33.71], [150.32, -33.70]],
+            },
+            "properties": {"name": "Track Y", "_category": "track"},
+        },
+        {
+            "type": "Feature",
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [150.30, -33.70],
+                        [150.31, -33.70],
+                        [150.31, -33.71],
+                        [150.30, -33.71],
+                        [150.30, -33.70],
+                    ]
+                ],
+            },
+            "properties": {"name": "Lake Z", "_category": "water"},
+        },
     ],
 }
 

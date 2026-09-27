@@ -81,7 +81,10 @@ def tokens_to_prune(tokens: list[str], tickets: list[dict]) -> list[str]:
     stale = []
     for i, token in enumerate(tokens):
         ticket = tickets[i] if i < len(tickets) else None
-        if ticket and (ticket.get("details") or {}).get("error") == "DeviceNotRegistered":
+        if (
+            ticket
+            and (ticket.get("details") or {}).get("error") == "DeviceNotRegistered"
+        ):
             stale.append(token)
     return stale
 

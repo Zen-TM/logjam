@@ -125,7 +125,9 @@ export function useMirrorTrips(): MirrorQueryState<MirrorTrip[]> {
   return useMirrorQuery(readTrips);
 }
 
-export function useMirrorPlace(id: string): MirrorQueryState<MirrorPlace | null> {
+export function useMirrorPlace(
+  id: string,
+): MirrorQueryState<MirrorPlace | null> {
   const read = useCallback(() => getMirrorPlace(id), [id]);
   return useMirrorQuery(read);
 }
@@ -162,12 +164,17 @@ export function useMirrorPlaceTracks(
 export function useMirrorMediaCounts(
   linkedType: "place" | "tripLog",
 ): MirrorQueryState<Record<string, number>> {
-  const read = useCallback(() => countMediaByLinkedId(linkedType), [linkedType]);
+  const read = useCallback(
+    () => countMediaByLinkedId(linkedType),
+    [linkedType],
+  );
   return useMirrorQuery(read);
 }
 
 /** Share fan-out per owned place, for the "Shared with N" badge. */
-export function useMirrorShareCounts(): MirrorQueryState<Record<string, number>> {
+export function useMirrorShareCounts(): MirrorQueryState<
+  Record<string, number>
+> {
   return useMirrorQuery(readShareCounts);
 }
 
@@ -175,7 +182,9 @@ export function useMirrorShareCounts(): MirrorQueryState<Record<string, number>>
  * Username of whoever shared each incoming place with the viewer, keyed by
  * place id — the "From <name>" mark on a shared route or place in Saved.
  */
-export function useMirrorIncomingShareOwners(): MirrorQueryState<Record<string, string>> {
+export function useMirrorIncomingShareOwners(): MirrorQueryState<
+  Record<string, string>
+> {
   return useMirrorQuery(readIncomingShareOwners);
 }
 

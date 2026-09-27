@@ -21,7 +21,9 @@ describe("topo-jobs route (fake auth)", () => {
   });
 
   it("returns the completed-overlays envelope", async () => {
-    const res = await request(API_URL).get("/topo-jobs/completed-overlays").set(AUTH);
+    const res = await request(API_URL)
+      .get("/topo-jobs/completed-overlays")
+      .set(AUTH);
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body.jobs)).toBe(true);
     expect(typeof res.body.expiresAt).toBe("string");
@@ -29,11 +31,17 @@ describe("topo-jobs route (fake auth)", () => {
 
   it("404s an unknown job id (get / delete / start)", async () => {
     const missing = randomUUID();
-    const getRes = await request(API_URL).get(`/topo-jobs/${missing}`).set(AUTH);
+    const getRes = await request(API_URL)
+      .get(`/topo-jobs/${missing}`)
+      .set(AUTH);
     expect(getRes.status).toBe(404);
-    const delRes = await request(API_URL).delete(`/topo-jobs/${missing}`).set(AUTH);
+    const delRes = await request(API_URL)
+      .delete(`/topo-jobs/${missing}`)
+      .set(AUTH);
     expect(delRes.status).toBe(404);
-    const startRes = await request(API_URL).post(`/topo-jobs/${missing}/start`).set(AUTH);
+    const startRes = await request(API_URL)
+      .post(`/topo-jobs/${missing}/start`)
+      .set(AUTH);
     expect(startRes.status).toBe(404);
   });
 
@@ -51,7 +59,9 @@ describe("topo-jobs route (fake auth)", () => {
 
     try {
       // Owner can read it.
-      const ownRes = await request(API_URL).get(`/topo-jobs/${jobId}`).set(AUTH);
+      const ownRes = await request(API_URL)
+        .get(`/topo-jobs/${jobId}`)
+        .set(AUTH);
       expect(ownRes.status).toBe(200);
       expect(ownRes.body.status).toBe("uploading");
 
@@ -64,15 +74,21 @@ describe("topo-jobs route (fake auth)", () => {
       // rule in. A SHAREE attempting an owner-only action still gets 403 —
       // they can legitimately see the job, so its existence is not a secret
       // from them (see directShare.test.ts).
-      const bobRes = await request(API_URL).get(`/topo-jobs/${jobId}`).set(as(BOB_SUB));
+      const bobRes = await request(API_URL)
+        .get(`/topo-jobs/${jobId}`)
+        .set(as(BOB_SUB));
       expect(bobRes.status).toBe(404);
 
       // Starting before the ZIP is uploaded is rejected (S3 HeadObject miss),
       // still launch-free.
-      const startRes = await request(API_URL).post(`/topo-jobs/${jobId}/start`).set(AUTH);
+      const startRes = await request(API_URL)
+        .post(`/topo-jobs/${jobId}/start`)
+        .set(AUTH);
       expect(startRes.status).toBe(400);
     } finally {
-      const delRes = await request(API_URL).delete(`/topo-jobs/${jobId}`).set(AUTH);
+      const delRes = await request(API_URL)
+        .delete(`/topo-jobs/${jobId}`)
+        .set(AUTH);
       expect(delRes.status).toBe(204);
     }
 
@@ -90,10 +106,11 @@ describe("topo-jobs route (fake auth)", () => {
     const jobId: string = createRes.body.jobId;
 
     try {
-      const shareRes = await request(API_URL)
-        .post("/shares")
-        .set(AUTH)
-        .send({ entityType: "topoJob", entityId: jobId, sharedWithUserId: BOB_ID });
+      const shareRes = await request(API_URL).post("/shares").set(AUTH).send({
+        entityType: "topoJob",
+        entityId: jobId,
+        sharedWithUserId: BOB_ID,
+      });
       expect(shareRes.status).toBe(201);
 
       const bobRes = await request(API_URL)
@@ -112,7 +129,9 @@ describe("topo-jobs route (fake auth)", () => {
       expect(bobRes.body.syncRole).toBe("shared");
 
       // The owner's own detail response: keys yes, internal id still never.
-      const aliceRes = await request(API_URL).get(`/topo-jobs/${jobId}`).set(AUTH);
+      const aliceRes = await request(API_URL)
+        .get(`/topo-jobs/${jobId}`)
+        .set(AUTH);
       expect(aliceRes.status).toBe(200);
       expect(aliceRes.body.userId).toBeUndefined();
       expect(aliceRes.body.syncRole).toBe("owner");

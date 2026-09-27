@@ -15,7 +15,9 @@ import {
 // logs in plain text.
 function captureLog(obj: unknown): Record<string, unknown> {
   const lines: string[] = [];
-  const stream: pino.DestinationStream = { write: (s: string) => void lines.push(s) };
+  const stream: pino.DestinationStream = {
+    write: (s: string) => void lines.push(s),
+  };
   const log = pino(
     { redact: { paths: redactPaths, censor: "[redacted]" } },
     stream,
@@ -27,7 +29,14 @@ function captureLog(obj: unknown): Record<string, unknown> {
 describe("logger redaction", () => {
   it("censors place coordinates and name in a request body", () => {
     const out = captureLog({
-      req: { body: { latitude: -33.5, longitude: 150.3, name: "Secret Place", notes: "beta" } },
+      req: {
+        body: {
+          latitude: -33.5,
+          longitude: 150.3,
+          name: "Secret Place",
+          notes: "beta",
+        },
+      },
     });
     const body = (out.req as { body: Record<string, unknown> }).body;
     expect(body.latitude).toBe("[redacted]");
@@ -37,7 +46,9 @@ describe("logger redaction", () => {
   });
 
   it("censors nested place coordinates via wildcard paths", () => {
-    const out = captureLog({ anything: { latitude: -33.5, longitude: 150.3, coords: [1, 2] } });
+    const out = captureLog({
+      anything: { latitude: -33.5, longitude: 150.3, coords: [1, 2] },
+    });
     const nested = out.anything as Record<string, unknown>;
     expect(nested.latitude).toBe("[redacted]");
     expect(nested.longitude).toBe("[redacted]");
@@ -46,7 +57,9 @@ describe("logger redaction", () => {
 
   it("masks authorization and cookie headers", () => {
     const out = captureLog({
-      req: { headers: { authorization: "Bearer secret", cookie: "session=abc" } },
+      req: {
+        headers: { authorization: "Bearer secret", cookie: "session=abc" },
+      },
     });
     const headers = (out.req as { headers: Record<string, unknown> }).headers;
     expect(headers.authorization).toBe("[redacted]");
@@ -61,13 +74,19 @@ describe("logger redaction", () => {
         body: {
           types: ["with Dad"],
           tripTypes: ["Claustral recon"],
-          ops: [{ fields: { types: ["with Dad"], tripTypes: ["Claustral recon"] } }],
+          ops: [
+            { fields: { types: ["with Dad"], tripTypes: ["Claustral recon"] } },
+          ],
         },
       },
     });
-    const body = (out.req as {
-      body: Record<string, unknown> & { ops: { fields: Record<string, unknown> }[] };
-    }).body;
+    const body = (
+      out.req as {
+        body: Record<string, unknown> & {
+          ops: { fields: Record<string, unknown> }[];
+        };
+      }
+    ).body;
     expect(body.types).toBe("[redacted]");
     expect(body.tripTypes).toBe("[redacted]");
     expect(body.ops[0].fields.types).toBe("[redacted]");
@@ -89,12 +108,22 @@ describe("logger redaction", () => {
       req: {
         body: {
           rows: [
-            { data: { name: "Secret Place", latitude: -33.5, longitude: 150.3, altNames: ["X"], notes: "beta" } },
+            {
+              data: {
+                name: "Secret Place",
+                latitude: -33.5,
+                longitude: 150.3,
+                altNames: ["X"],
+                notes: "beta",
+              },
+            },
           ],
         },
       },
     });
-    const row = ((out.req as { body: { rows: Array<{ data: Record<string, unknown> }> } }).body.rows)[0].data;
+    const row = (
+      out.req as { body: { rows: Array<{ data: Record<string, unknown> }> } }
+    ).body.rows[0].data;
     expect(row.name).toBe("[redacted]");
     expect(row.latitude).toBe("[redacted]");
     expect(row.longitude).toBe("[redacted]");
@@ -113,7 +142,12 @@ describe("logger redaction", () => {
         body: {
           fieldValues: { rap_2_anchor: "tree on the true left", v_grade: 4 },
           foreignFields: [
-            { key: "bolt_count", label: "Bolt count", type: "integer", value: 3 },
+            {
+              key: "bolt_count",
+              label: "Bolt count",
+              type: "integer",
+              value: 3,
+            },
           ],
         },
       },
@@ -150,9 +184,15 @@ describe("logger redaction", () => {
       },
     });
     const op = (
-      (out.req as { body: { ops: { fields: Record<string, unknown> }[] } }).body.ops
-    )[0].fields;
-    for (const key of ["name", "notes", "latitude", "longitude", "fieldValues"]) {
+      out.req as { body: { ops: { fields: Record<string, unknown> }[] } }
+    ).body.ops[0].fields;
+    for (const key of [
+      "name",
+      "notes",
+      "latitude",
+      "longitude",
+      "fieldValues",
+    ]) {
       expect(op[key], `${key} leaked out of a push op`).toBe("[redacted]");
     }
     // The envelope is not sensitive and stays readable — an id and an entity
@@ -176,18 +216,29 @@ describe("logger redaction", () => {
       req: {
         body: {
           rows: [
-            { data: { name: "Secret Place", fieldValues: { access_beta: "gate code 1234" } } },
+            {
+              data: {
+                name: "Secret Place",
+                fieldValues: { access_beta: "gate code 1234" },
+              },
+            },
           ],
         },
       },
     });
-    const row = ((out.req as { body: { rows: Array<{ data: Record<string, unknown> }> } }).body.rows)[0].data;
+    const row = (
+      out.req as { body: { rows: Array<{ data: Record<string, unknown> }> } }
+    ).body.rows[0].data;
     expect(row.fieldValues).toBe("[redacted]");
   });
 
   it("censors array-shaped bulk trip names", () => {
-    const out = captureLog({ req: { body: { trips: [{ name: "Secret trip", notes: "beta" }] } } });
-    const trip = ((out.req as { body: { trips: Array<Record<string, unknown>> } }).body.trips)[0];
+    const out = captureLog({
+      req: { body: { trips: [{ name: "Secret trip", notes: "beta" }] } },
+    });
+    const trip = (
+      out.req as { body: { trips: Array<Record<string, unknown>> } }
+    ).body.trips[0];
     expect(trip.name).toBe("[redacted]");
     expect(trip.notes).toBe("[redacted]");
   });
@@ -250,7 +301,7 @@ describe("safeErrorForLog", () => {
   });
 
   it("never carries the stack (which re-embeds the args)", () => {
-    const err = new Error("boom { name: \"X\" }");
+    const err = new Error('boom { name: "X" }');
     const safe = safeErrorForLog(err) as Record<string, unknown>;
     expect(safe).not.toHaveProperty("stack");
   });
@@ -262,7 +313,9 @@ describe("safeErrorForLog", () => {
   });
 
   it("redacts tile/url fragments embedded in an error message", () => {
-    const safe = safeErrorForLog(new Error("fetch failed https://tiles.example/17/120/78.png"));
+    const safe = safeErrorForLog(
+      new Error("fetch failed https://tiles.example/17/120/78.png"),
+    );
     expect(safe.message).not.toMatch(/tiles\.example/);
     expect(safe.message).toContain("[redacted-url]");
   });
@@ -319,7 +372,11 @@ describe("serializeRequestForLog", () => {
   });
 
   it("keeps a query-free path intact and never emits a body", () => {
-    const out = serializeRequestForLog({ id: "req-2", method: "POST", url: "/places" });
+    const out = serializeRequestForLog({
+      id: "req-2",
+      method: "POST",
+      url: "/places",
+    });
     expect(out.url).toBe("/places");
     expect(out).not.toHaveProperty("body");
   });
@@ -335,7 +392,8 @@ describe("no raw err reaches a log site", () => {
     return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
       const full = join(dir, entry.name);
       if (entry.isDirectory()) return sourceFiles(full);
-      if (!entry.name.endsWith(".ts") || entry.name.endsWith(".test.ts")) return [];
+      if (!entry.name.endsWith(".ts") || entry.name.endsWith(".test.ts"))
+        return [];
       return [full];
     });
   }

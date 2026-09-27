@@ -1,7 +1,14 @@
 import { Feather } from "@expo/vector-icons";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import { fontSize, fontWeight, radius, spacing, surface, theme } from "../theme";
+import {
+  fontSize,
+  fontWeight,
+  radius,
+  spacing,
+  surface,
+  theme,
+} from "../theme";
 
 export type Stat = {
   label: string;
@@ -32,7 +39,12 @@ export function StatGrid({ stats }: { stats: Stat[] }) {
             <View style={styles.valueRow}>
               <Text style={styles.value}>{stat.value}</Text>
               {stat.onCopy ? (
-                <Feather name="copy" size={14} color={theme.textMuted} style={styles.copyGlyph} />
+                <Feather
+                  name="copy"
+                  size={14}
+                  color={theme.textMuted}
+                  style={styles.copyGlyph}
+                />
               ) : null}
             </View>
           </>
@@ -53,7 +65,10 @@ export function StatGrid({ stats }: { stats: Stat[] }) {
             {content}
           </Pressable>
         ) : (
-          <View key={stat.label} style={[styles.cell, stat.wide && styles.wide]}>
+          <View
+            key={stat.label}
+            style={[styles.cell, stat.wide && styles.wide]}
+          >
             {content}
           </View>
         );

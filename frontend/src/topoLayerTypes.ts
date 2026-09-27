@@ -41,7 +41,11 @@ export type CompletedTopoJob = {
   name: string | null;
   createdAt: string;
   footprint: GeoJsonPolygonal | null;
-  layers: { name: TopoLayerName; format: TopoLayerFormat; pmtilesUrl: string }[];
+  layers: {
+    name: TopoLayerName;
+    format: TopoLayerFormat;
+    pmtilesUrl: string;
+  }[];
 };
 
 /** Response shape from GET /topo-jobs/completed-overlays. Includes presigned-URL expiry so the client can pre-refetch. */

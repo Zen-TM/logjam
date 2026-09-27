@@ -4,6 +4,7 @@ We smooth the surface, not the lines: contours of a smoothed DEM are level sets
 of a continuous field and so cannot cross (the property per-line simplification
 can't guarantee on cliffs). The GDAL raster I/O wrapper `smooth_dem_for_contours`
 runs in the worker image; here we test the array math that gives that property."""
+
 import os
 import sys
 import unittest
@@ -55,7 +56,9 @@ class TestNormalizedGaussian(unittest.TestCase):
         arr = np.random.default_rng(4).normal(size=(25, 25))
         valid = np.ones_like(arr, dtype=bool)
         np.testing.assert_allclose(
-            _normalized_gaussian(arr, valid, 2.0), _gaussian_blur_2d(arr, 2.0), atol=1e-9
+            _normalized_gaussian(arr, valid, 2.0),
+            _gaussian_blur_2d(arr, 2.0),
+            atol=1e-9,
         )
 
     def test_monotonic_surface_stays_monotonic(self):

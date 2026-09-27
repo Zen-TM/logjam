@@ -17,7 +17,10 @@ import {
   assertSystemIdsAreUuidV4,
 } from "./placeTypes.js";
 import { isUuidV4 } from "./sync.js";
-import { makeCustomFieldKey, isTripLogCustomFieldDef } from "./tripLogFields.js";
+import {
+  makeCustomFieldKey,
+  isTripLogCustomFieldDef,
+} from "./tripLogFields.js";
 
 describe("system row ids", () => {
   // The seedIds.ts incident, in its new home. parsePushOp validates every
@@ -53,7 +56,9 @@ describe("the three system place types", () => {
     for (const type of SYSTEM_PLACE_TYPES) {
       expect(SYSTEM_PLACE_TYPE_IDS[type.key]).toBe(type.id);
     }
-    expect(Object.keys(SYSTEM_PLACE_TYPE_IDS).length).toBe(SYSTEM_PLACE_TYPES.length);
+    expect(Object.keys(SYSTEM_PLACE_TYPE_IDS).length).toBe(
+      SYSTEM_PLACE_TYPES.length,
+    );
   });
 
   // Marker carries no fields at all — it is where every existing Waypoint lands
@@ -100,7 +105,10 @@ describe("system field definitions", () => {
 
   it("scope every def to at least one system type", () => {
     for (const def of SYSTEM_FIELD_DEFS) {
-      expect(def.placeTypes.length, `${def.key} is scoped to nothing`).toBeGreaterThan(0);
+      expect(
+        def.placeTypes.length,
+        `${def.key} is scoped to nothing`,
+      ).toBeGreaterThan(0);
       for (const key of def.placeTypes) {
         expect(SYSTEM_PLACE_TYPE_IDS[key]).toBeDefined();
       }
@@ -185,7 +193,9 @@ describe("CANYON_FORM_FIELD_KEYS", () => {
 
   it("does not swallow a system field belonging to another type", () => {
     for (const key of ["capacity", "is_cave"]) {
-      expect(RESERVED_FIELD_KEYS.has(key), `${key} is still reserved`).toBe(true);
+      expect(RESERVED_FIELD_KEYS.has(key), `${key} is still reserved`).toBe(
+        true,
+      );
       expect(
         CANYON_FORM_FIELD_KEYS.has(key),
         `${key} has no control of its own and must render generically`,
@@ -207,7 +217,9 @@ describe("SHARED_PLACE_COLOR", () => {
 
   it("is not the colour of any system type", () => {
     for (const type of SYSTEM_PLACE_TYPES) {
-      expect(type.color.toUpperCase()).not.toBe(SHARED_PLACE_COLOR.toUpperCase());
+      expect(type.color.toUpperCase()).not.toBe(
+        SHARED_PLACE_COLOR.toUpperCase(),
+      );
     }
   });
 

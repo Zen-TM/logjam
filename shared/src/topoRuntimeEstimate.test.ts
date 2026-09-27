@@ -55,11 +55,10 @@ describe("estimateRuntimeSeconds", () => {
   });
 
   it("applies default overhead when unset", () => {
-    const est = estimateRuntimeSeconds(
-      [],
-      2,
-      { defaultSecondsPerInputTile: 100, minSamples: 3 },
-    );
+    const est = estimateRuntimeSeconds([], 2, {
+      defaultSecondsPerInputTile: 100,
+      minSamples: 3,
+    });
     expect(est).toBe(120 + 100 * 2); // DEFAULT_OVERHEAD_SECONDS = 120
   });
 });

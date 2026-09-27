@@ -14,6 +14,7 @@ exercised here — it mirrors apply_svtm_weighting's warp block, which is only
 integration-tested against real GDAL. This suite is intentionally scoped to
 the pure pre/post logic around that warp.
 """
+
 import os
 import sys
 import unittest

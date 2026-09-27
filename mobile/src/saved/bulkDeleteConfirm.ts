@@ -21,7 +21,8 @@ export function bulkDeleteConfirmBody({
   /** Disk the on-device half gives back. Zero for kinds with no file size. */
   onDeviceBytes: number;
 }): string {
-  const freed = onDeviceBytes > 0 ? `, freeing ${formatBytes(onDeviceBytes)}` : "";
+  const freed =
+    onDeviceBytes > 0 ? `, freeing ${formatBytes(onDeviceBytes)}` : "";
   const accountReach =
     "removed from your account and from any friends they're shared with";
   const undone = "This can't be undone.";

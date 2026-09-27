@@ -1,7 +1,28 @@
-import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import type maplibregl from "maplibre-gl";
-import { createLucideIcon, LocateFixed, Minus, Mountain, PencilRuler, Plus, type LucideIcon } from "lucide-react";
-import { MapButton, MapButtonGroup, Menu, useEscape, type MenuEntry } from "../../ui";
+import {
+  createLucideIcon,
+  LocateFixed,
+  Minus,
+  Mountain,
+  PencilRuler,
+  Plus,
+  type LucideIcon,
+} from "lucide-react";
+import {
+  MapButton,
+  MapButtonGroup,
+  Menu,
+  useEscape,
+  type MenuEntry,
+} from "../../ui";
 import { useToast } from "../feedback/ToastProvider";
 import classes from "./MapChrome.module.css";
 
@@ -9,7 +30,10 @@ import classes from "./MapChrome.module.css";
  *  "navigation" whose needle points nowhere in particular, while this one
  *  rotates with the map, so its shape is the reading. North is the filled half. */
 const NorthNeedle = createLucideIcon("north-needle", [
-  ["path", { d: "M12 2.5 16.5 12h-9z", className: classes.needleNorth, key: "north" }],
+  [
+    "path",
+    { d: "M12 2.5 16.5 12h-9z", className: classes.needleNorth, key: "north" },
+  ],
   ["path", { d: "M7.5 12h9L12 21.5z", key: "south" }],
 ]);
 
@@ -22,7 +46,8 @@ type LocateState = "off" | "waiting" | "on" | "error";
 /** MapLibre's GeolocateControl state, read from the classes it puts on its own
  *  (hidden) button — the documented styling hooks for exactly this. */
 function locateStateOf(button: Element): LocateState {
-  const has = (name: string) => button.classList.contains(`maplibregl-ctrl-geolocate-${name}`);
+  const has = (name: string) =>
+    button.classList.contains(`maplibregl-ctrl-geolocate-${name}`);
   if (has("waiting")) return "waiting";
   if (has("active-error") || has("background-error")) return "error";
   if (has("active") || has("background")) return "on";
@@ -74,7 +99,10 @@ export default function MapChrome({
     const sync = () => {
       setBearing(map.getBearing());
       const current = map.getZoom();
-      setZoom({ atMin: current <= map.getMinZoom(), atMax: current >= map.getMaxZoom() });
+      setZoom({
+        atMin: current <= map.getMinZoom(),
+        atMax: current >= map.getMaxZoom(),
+      });
     };
     sync();
     map.on("rotate", sync);
@@ -87,11 +115,21 @@ export default function MapChrome({
 
   useEffect(() => {
     if (!map || !geolocate) return;
-    const button = map.getContainer().querySelector(".maplibregl-ctrl-geolocate");
-    if (!button) throw new Error("GeolocateControl button not found — was the control added?");
-    const observer = new MutationObserver(() => setLocate(locateStateOf(button)));
+    const button = map
+      .getContainer()
+      .querySelector(".maplibregl-ctrl-geolocate");
+    if (!button)
+      throw new Error(
+        "GeolocateControl button not found — was the control added?",
+      );
+    const observer = new MutationObserver(() =>
+      setLocate(locateStateOf(button)),
+    );
     observer.observe(button, { attributes: true, attributeFilter: ["class"] });
-    const onError = () => toast.error("Couldn't find your location. Check that this site may use it.");
+    const onError = () =>
+      toast.error(
+        "Couldn't find your location. Check that this site may use it.",
+      );
     geolocate.on("error", onError);
     return () => {
       observer.disconnect();
@@ -122,7 +160,13 @@ export default function MapChrome({
       <div className={classes.actions}>
         <div className={classes.toolsLine}>
           {toolsOpen && (
-            <div ref={trayRef} id={trayId} role="group" aria-label="Tools" className={classes.tray}>
+            <div
+              ref={trayRef}
+              id={trayId}
+              role="group"
+              aria-label="Tools"
+              className={classes.tray}
+            >
               {tools.map((tool) =>
                 "menu" in tool ? (
                   <Menu
@@ -130,11 +174,21 @@ export default function MapChrome({
                     label={tool.label}
                     placement="top-end"
                     entries={tool.menu.map((entry) =>
-                      "separator" in entry ? entry : { ...entry, onSelect: () => runTool(entry.onSelect) },
+                      "separator" in entry
+                        ? entry
+                        : { ...entry, onSelect: () => runTool(entry.onSelect) },
                     )}
                     trigger={(props) => (
-                      <button {...props} type="button" className={classes.trayItem}>
-                        <tool.icon size={18} aria-hidden className={classes.trayGlyph} />
+                      <button
+                        {...props}
+                        type="button"
+                        className={classes.trayItem}
+                      >
+                        <tool.icon
+                          size={18}
+                          aria-hidden
+                          className={classes.trayGlyph}
+                        />
                         {tool.label}
                       </button>
                     )}
@@ -146,7 +200,11 @@ export default function MapChrome({
                     className={classes.trayItem}
                     onClick={() => runTool(tool.onSelect)}
                   >
-                    <tool.icon size={18} aria-hidden className={classes.trayGlyph} />
+                    <tool.icon
+                      size={18}
+                      aria-hidden
+                      className={classes.trayGlyph}
+                    />
                     {tool.label}
                   </button>
                 ),
@@ -162,7 +220,13 @@ export default function MapChrome({
             onClick={() => setToolsOpen((current) => !current)}
           />
         </div>
-        <MapButton icon={Mountain} label="3D terrain" pressed={is3D} onClick={onToggle3D} disabled={!map} />
+        <MapButton
+          icon={Mountain}
+          label="3D terrain"
+          pressed={is3D}
+          onClick={onToggle3D}
+          disabled={!map}
+        />
         <MapButton
           icon={LocateFixed}
           label="Show my location"
@@ -172,8 +236,18 @@ export default function MapChrome({
           onClick={() => geolocate?.trigger()}
         />
         <MapButtonGroup label="Zoom">
-          <MapButton icon={Plus} label="Zoom in" disabled={!map || zoom.atMax} onClick={() => map?.zoomIn()} />
-          <MapButton icon={Minus} label="Zoom out" disabled={!map || zoom.atMin} onClick={() => map?.zoomOut()} />
+          <MapButton
+            icon={Plus}
+            label="Zoom in"
+            disabled={!map || zoom.atMax}
+            onClick={() => map?.zoomIn()}
+          />
+          <MapButton
+            icon={Minus}
+            label="Zoom out"
+            disabled={!map || zoom.atMin}
+            onClick={() => map?.zoomOut()}
+          />
         </MapButtonGroup>
       </div>
 

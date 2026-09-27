@@ -70,7 +70,8 @@ function NavRail({
   badgeCounts: NavBadgeCounts;
 }) {
   const isNarrow = useIsMobile();
-  const { railItems, moreItems, spacerAfterIndex } = partitionNavItems(isNarrow);
+  const { railItems, moreItems, spacerAfterIndex } =
+    partitionNavItems(isNarrow);
 
   const toggle = (id: PanelId) => onPanelChange(activePanel === id ? null : id);
 
@@ -117,7 +118,10 @@ function NavRail({
         entries={moreItems.map((item) => ({
           id: item.id,
           label: item.label,
-          accessibleLabel: labelWithBadge(item.label, badgeCounts[item.id] ?? 0),
+          accessibleLabel: labelWithBadge(
+            item.label,
+            badgeCounts[item.id] ?? 0,
+          ),
           icon: item.Icon,
           badge: badgeCounts[item.id],
           onSelect: () => toggle(item.id),

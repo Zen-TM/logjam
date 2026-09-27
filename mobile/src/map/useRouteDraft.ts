@@ -74,27 +74,26 @@ export function useRouteDraft(): RouteDraftHandle {
     point: RoutePoint;
   } | null>(null);
 
-  const commit = useCallback(
-    (next: (current: RouteDraft) => RouteDraft) => {
-      setDraft((current) => {
-        if (!current) return current;
-        const updated = next(current);
-        // A no-op must not consume an undo step, or Undo appears to do nothing.
-        if (updated === current) return current;
-        history.current = [...history.current, current].slice(-MAX_HISTORY);
-        setCanUndo(true);
-        return updated;
-      });
-    },
-    [],
-  );
+  const commit = useCallback((next: (current: RouteDraft) => RouteDraft) => {
+    setDraft((current) => {
+      if (!current) return current;
+      const updated = next(current);
+      // A no-op must not consume an undo step, or Undo appears to do nothing.
+      if (updated === current) return current;
+      history.current = [...history.current, current].slice(-MAX_HISTORY);
+      setCanUndo(true);
+      return updated;
+    });
+  }, []);
 
   const open = useCallback(
     (route?: { points: RoutePoint[]; anchors?: number[] | null }) => {
       history.current = [];
       setCanUndo(false);
       setDragging(null);
-      setDraft(route ? draftFromRoute(route.points, route.anchors) : emptyDraft);
+      setDraft(
+        route ? draftFromRoute(route.points, route.anchors) : emptyDraft,
+      );
     },
     [],
   );
@@ -108,7 +107,10 @@ export function useRouteDraft(): RouteDraftHandle {
 
   // What is DRAWN: the committed draft with any live drag applied on top.
   const shown = useMemo(
-    () => (draft && dragging ? moveAnchor(draft, dragging.index, dragging.point) : draft),
+    () =>
+      draft && dragging
+        ? moveAnchor(draft, dragging.index, dragging.point)
+        : draft,
     [draft, dragging],
   );
   const points = useMemo(() => (shown ? draftPoints(shown) : []), [shown]);
@@ -144,7 +146,9 @@ export function useRouteDraft(): RouteDraftHandle {
           const updated = setFiller(current, from, to, between);
           // Refuse a snap that would blow the cap; the straight segment already
           // drawn is a fine answer, and a truncated run would end nowhere.
-          return draftPointCount(updated) > MAX_ROUTE_POINTS ? current : updated;
+          return draftPointCount(updated) > MAX_ROUTE_POINTS
+            ? current
+            : updated;
         }),
       [],
     ),

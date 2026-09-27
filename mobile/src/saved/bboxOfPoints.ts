@@ -2,7 +2,9 @@
 // import it without pulling React Native in (see CLAUDE.md testing notes).
 export type Bbox = [number, number, number, number];
 
-export function bboxOfPoints(points: { lon: number; lat: number }[]): Bbox | null {
+export function bboxOfPoints(
+  points: { lon: number; lat: number }[],
+): Bbox | null {
   if (points.length === 0) return null;
   let west = points[0].lon;
   let east = points[0].lon;

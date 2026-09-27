@@ -25,7 +25,10 @@ import { launchFargateTask } from "../lib/ecsRunTask";
 import { assertHasCredits } from "../lib/computeCredits";
 import { estimateTopoSeconds } from "../lib/runtimeEstimates";
 import { assertGlobalCapacity } from "../lib/fargateCapacity";
-import { assertHasStorageQuota, decrementStorageUsed } from "../lib/storageQuota";
+import {
+  assertHasStorageQuota,
+  decrementStorageUsed,
+} from "../lib/storageQuota";
 import { deleteS3Prefix } from "../lib/s3Cleanup";
 import { logger } from "../lib/logger";
 import { resolveUser as getUser } from "../lib/resolveUser";
@@ -86,10 +89,9 @@ function syncRoleFor(row: { userId: string }, callerId: string) {
 /** The client-facing view of a job row, for owner and recipient alike. Pass a
  *  row selected with TOPO_JOB_SELECT; `s3OutputKeys` is included only when the
  *  caller selected it AND owns the row. */
-export function serializeTopoJobFor<T extends { userId: string; s3OutputKeys?: unknown }>(
-  row: T,
-  callerId: string,
-) {
+export function serializeTopoJobFor<
+  T extends { userId: string; s3OutputKeys?: unknown },
+>(row: T, callerId: string) {
   const { userId, s3OutputKeys, ...rest } = row;
   const isOwner = userId === callerId;
   return {
@@ -138,7 +140,11 @@ router.post(
     // Advisory pre-check so an over-allowance user is told before uploading a
     // multi-GB ZIP rather than after. The authoritative, serialised check runs
     // in /start against the server-verified tile count.
-    await assertHasCredits(user, "topo", await estimateTopoSeconds(tileCount ?? null));
+    await assertHasCredits(
+      user,
+      "topo",
+      await estimateTopoSeconds(tileCount ?? null),
+    );
     await assertHasStorageQuota(user.id);
 
     // Optional raster template settings. Worker falls back to its built-in
@@ -147,7 +153,10 @@ router.post(
     if (settings !== undefined && settings !== null) {
       const validation = validateRasterTemplateSettings(settings);
       if (!validation.ok) {
-        throw new AppError(400, `Invalid topo settings: ${validation.errors.join("; ")}`);
+        throw new AppError(
+          400,
+          `Invalid topo settings: ${validation.errors.join("; ")}`,
+        );
       }
       layerOptions = validation.value as object;
     }
@@ -159,7 +168,10 @@ router.post(
     if (autoExport !== undefined && autoExport !== null) {
       const validation = validateAutoExportSettings(autoExport);
       if (!validation.ok) {
-        throw new AppError(400, `Invalid auto-export settings: ${validation.errors.join("; ")}`);
+        throw new AppError(
+          400,
+          `Invalid auto-export settings: ${validation.errors.join("; ")}`,
+        );
       }
       autoExportConfig = validation.value as object;
     }
@@ -167,7 +179,8 @@ router.post(
     // Snapshot the user's live vector style at submission time. The composite
     // raster bake uses this snapshot; in-app display reads the live value
     // independently. Falls back to defaults if the column is null.
-    const vectorStyleSnapshot = (user.vectorStyle as object | null) ?? VECTOR_STYLE_DEFAULTS;
+    const vectorStyleSnapshot =
+      (user.vectorStyle as object | null) ?? VECTOR_STYLE_DEFAULTS;
 
     const estimatedSeconds = await estimateTopoSeconds(tileCount ?? null);
 
@@ -219,7 +232,8 @@ router.post(
       "topoJob",
       "Only the owner can delete this job",
     );
-    if (job.status !== "uploading") throw new AppError(400, "Job is not awaiting upload");
+    if (job.status !== "uploading")
+      throw new AppError(400, "Job is not awaiting upload");
 
     // Verify the S3 object was actually uploaded
     let objectSize: number;
@@ -339,7 +353,10 @@ router.post(
         );
         await prisma.topoJob.update({
           where: { id: jobId },
-          data: { status: "failed", errorMessage: "Failed to launch processing task." },
+          data: {
+            status: "failed",
+            errorMessage: "Failed to launch processing task.",
+          },
         });
         throw new AppError(500, "Failed to launch topo job");
       }
@@ -404,24 +421,35 @@ router.get(
     );
 
     const presignTtlSeconds = 86400;
-    const expiresAt = new Date(Date.now() + presignTtlSeconds * 1000).toISOString();
+    const expiresAt = new Date(
+      Date.now() + presignTtlSeconds * 1000,
+    ).toISOString();
 
     const jobsResult = await Promise.all(
       jobs.map(async (j) => {
         const outputs =
           (j.s3OutputKeys as
-            | { name: string; cogKey: string | null; pmtilesKey: string | null }[]
+            | {
+                name: string;
+                cogKey: string | null;
+                pmtilesKey: string | null;
+              }[]
             | null) ?? [];
         const layers = await Promise.all(
           outputs
-            .filter((o): o is typeof o & { pmtilesKey: string } =>
-              Boolean(o.pmtilesKey) && layerMetaByName.has(o.name as TopoLayerName),
+            .filter(
+              (o): o is typeof o & { pmtilesKey: string } =>
+                Boolean(o.pmtilesKey) &&
+                layerMetaByName.has(o.name as TopoLayerName),
             )
             .map(async (o) => {
               const meta = layerMetaByName.get(o.name as TopoLayerName)!;
               const pmtilesUrl = await getSignedUrl(
                 s3,
-                new GetObjectCommand({ Bucket: TOPO_BUCKET, Key: o.pmtilesKey }),
+                new GetObjectCommand({
+                  Bucket: TOPO_BUCKET,
+                  Key: o.pmtilesKey,
+                }),
                 { expiresIn: presignTtlSeconds },
               );
               return {
@@ -545,8 +573,8 @@ router.delete(
     // — no orphaned objects, and the quota is only decremented once the bytes
     // are confirmed gone. (decrementStorageUsed clamps at 0 — keep it for that.)
     await Promise.all(
-      [`inputs/${jobId}/`, `outputs/${jobId}/`, `jobs/${jobId}/`].map((prefix) =>
-        deleteS3Prefix(TOPO_BUCKET, prefix),
+      [`inputs/${jobId}/`, `outputs/${jobId}/`, `jobs/${jobId}/`].map(
+        (prefix) => deleteS3Prefix(TOPO_BUCKET, prefix),
       ),
     );
 
@@ -558,7 +586,8 @@ router.delete(
         where: { status: "queued", sourceJobIds: { has: jobId } },
         data: {
           status: "failed",
-          errorMessage: "A source topo job was deleted before the export started.",
+          errorMessage:
+            "A source topo job was deleted before the export started.",
         },
       });
       // Share.entityId is polymorphic, so Postgres cannot cascade: without

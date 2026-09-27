@@ -23,7 +23,10 @@ import {
 } from "@logjam/shared";
 
 import { apiFetch } from "./apiFetch";
-import { downloadFromPresignedUrl, uploadToPresignedUrl } from "./presignedTransfer";
+import {
+  downloadFromPresignedUrl,
+  uploadToPresignedUrl,
+} from "./presignedTransfer";
 
 /** One file waiting in my inbox, or one I already took. */
 export type InboxFileSend = {
@@ -50,7 +53,9 @@ export function acceptFileSend(
 
 /** Turn it down. Terminal for me only — every other recipient is untouched. */
 export function declineFileSend(fileSendId: string): Promise<void> {
-  return apiFetch<void>(`/file-sends/${fileSendId}/decline`, { method: "POST" });
+  return apiFetch<void>(`/file-sends/${fileSendId}/decline`, {
+    method: "POST",
+  });
 }
 
 /**
@@ -116,7 +121,12 @@ export async function sendFileCopy({
     // `batchId` also SILENCES this send's push — one bulk action is one buzz,
     // fired by POST /bulk-share once every upload has landed. See its comment
     // on the confirm route.
-    body: { filename, sourceKind, recipientIds, ...(batchId ? { batchId } : {}) },
+    body: {
+      filename,
+      sourceKind,
+      recipientIds,
+      ...(batchId ? { batchId } : {}),
+    },
   });
 }
 

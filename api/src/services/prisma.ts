@@ -23,7 +23,10 @@ const caPath = process.env.DATABASE_SSL_CA ?? "/app/rds-ca.pem";
 if (process.env.DATABASE_SSL_CA && !existsSync(process.env.DATABASE_SSL_CA)) {
   throw new Error(`DATABASE_SSL_CA points to a missing file: ${caPath}`);
 }
-const ssl = !sslDisabled && existsSync(caPath) ? { ca: readFileSync(caPath, "utf8") } : undefined;
+const ssl =
+  !sslDisabled && existsSync(caPath)
+    ? { ca: readFileSync(caPath, "utf8") }
+    : undefined;
 
 // `password` as an async function is evaluated by node-postgres on every NEW
 // physical connection and overrides the connectionString's password, so the

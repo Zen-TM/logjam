@@ -52,7 +52,10 @@ const ACTIONS = ["adopt", "discard", "notes"] as const;
 type ForeignFieldAction = (typeof ACTIONS)[number];
 
 function parseAction(value: unknown): ForeignFieldAction {
-  if (typeof value === "string" && (ACTIONS as readonly string[]).includes(value)) {
+  if (
+    typeof value === "string" &&
+    (ACTIONS as readonly string[]).includes(value)
+  ) {
     return value as ForeignFieldAction;
   }
   throw new AppError(400, `action must be one of: ${ACTIONS.join(", ")}`);

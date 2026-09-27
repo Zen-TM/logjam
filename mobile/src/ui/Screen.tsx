@@ -1,9 +1,4 @@
-import {
-  ScrollView,
-  StyleSheet,
-  View,
-  type ViewStyle,
-} from "react-native";
+import { ScrollView, StyleSheet, View, type ViewStyle } from "react-native";
 
 import { spacing, theme } from "../theme";
 
@@ -21,7 +16,9 @@ export function Screen({
   style?: ViewStyle | ViewStyle[];
 }) {
   return (
-    <View style={[styles.root, padded && styles.padded, style]}>{children}</View>
+    <View style={[styles.root, padded && styles.padded, style]}>
+      {children}
+    </View>
   );
 }
 

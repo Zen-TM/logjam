@@ -29,7 +29,10 @@ export function linkablePlaces<T extends Linkable>(
 }
 
 /** Null when nothing was cut — the caller renders no row at all then. */
-export function truncationHint(visibleCount: number, hiddenCount: number): string | null {
+export function truncationHint(
+  visibleCount: number,
+  hiddenCount: number,
+): string | null {
   if (hiddenCount <= 0) return null;
   return `Showing ${visibleCount} of ${visibleCount + hiddenCount} — keep typing to narrow it down.`;
 }

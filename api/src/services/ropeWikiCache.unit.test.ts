@@ -1,4 +1,12 @@
-import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from "vitest";
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -133,7 +141,11 @@ describe("getRopeWikiCanyons — fresh=true live path", () => {
   it("bypasses S3 and goes to RopeWiki", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue({ ok: true, status: 200, text: async () => SAMPLE_CSV }),
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: async () => SAMPLE_CSV,
+      }),
     );
 
     const { places, sourceUpdatedAt } = await getRopeWikiCanyons(true);
@@ -146,7 +158,9 @@ describe("getRopeWikiCanyons — fresh=true live path", () => {
   it("surfaces the Cloudflare 403 as a 502, not an unhandled 500", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue({ ok: false, status: 403, text: async () => "" }),
+      vi
+        .fn()
+        .mockResolvedValue({ ok: false, status: 403, text: async () => "" }),
     );
 
     await expect(getRopeWikiCanyons(true)).rejects.toMatchObject({

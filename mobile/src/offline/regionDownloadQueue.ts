@@ -12,7 +12,11 @@
 // them in parallel would triple the request rate at the same host.
 import { useSyncExternalStore } from "react";
 import { AppState } from "react-native";
-import { ApiError, type OfflineBasemapId, type RegionBbox } from "@logjam/shared";
+import {
+  ApiError,
+  type OfflineBasemapId,
+  type RegionBbox,
+} from "@logjam/shared";
 
 import { subscribeReconnect } from "../map/connectivity";
 import type { ToastMessage } from "../ui/Toast";
@@ -93,7 +97,9 @@ function publish(): void {
 // toast at the app shell, wherever the user has got to. Mirrors
 // `onGeoPdfImportToast` in geopdf/importRunner.ts deliberately: one shape for
 // both, one component subscribing to both (BackgroundToast.tsx).
-const toastListeners = new Set<(message: Omit<ToastMessage, "nonce">) => void>();
+const toastListeners = new Set<
+  (message: Omit<ToastMessage, "nonce">) => void
+>();
 
 /** Subscribe to run outcomes — see BackgroundToast, the only consumer. */
 export function onRegionDownloadToast(
@@ -159,7 +165,9 @@ export function useRegionDownloads(): RegionJob[] {
  * decision, the other is the politeness envelope's, and neither is ours to
  * overturn.
  */
-function resumeJobsPausedBy(reason: Extract<PausedReason, "background" | "connectivity">): void {
+function resumeJobsPausedBy(
+  reason: Extract<PausedReason, "background" | "connectivity">,
+): void {
   let changed = false;
   jobs = jobs.map((job) => {
     if (job.state.kind !== "paused" || job.state.reason !== reason) return job;

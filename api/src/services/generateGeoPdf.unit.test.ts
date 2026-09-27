@@ -64,11 +64,6 @@ describe("generateGeoPdf buildPdf georef block", () => {
     const { north, south, east, west } = EXTENT;
     const gpts = numbersIn(await buildGeorefPdf(), "GPTS");
     // BL, BR, TR, TL
-    expect(gpts).toEqual([
-      south, west,
-      south, east,
-      north, east,
-      north, west,
-    ]);
+    expect(gpts).toEqual([south, west, south, east, north, east, north, west]);
   });
 });

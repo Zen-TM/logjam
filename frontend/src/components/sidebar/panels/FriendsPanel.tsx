@@ -23,7 +23,13 @@
 // `/friends/search` never return an email (root CLAUDE.md), and nothing here
 // would have somewhere to put one.
 import { useEffect, useRef, useState } from "react";
-import { EllipsisVertical, Share2, UserMinus, UserPlus, Users } from "lucide-react";
+import {
+  EllipsisVertical,
+  Share2,
+  UserMinus,
+  UserPlus,
+  Users,
+} from "lucide-react";
 import classes from "./FriendsPanel.module.css";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
 import FriendSharingSection from "./FriendSharingSection";
@@ -57,7 +63,8 @@ const SEARCH_MIN_CHARS = 3;
 
 type Bucket = "all" | "friends" | "requests";
 
-const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
+const plural = (count: number, noun: string) =>
+  `${count} ${noun}${count === 1 ? "" : "s"}`;
 
 function FriendsPanel({
   friends,
@@ -89,7 +96,12 @@ function FriendsPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function runAction(id: string, action: () => Promise<unknown>, failure: string, success?: string) {
+  async function runAction(
+    id: string,
+    action: () => Promise<unknown>,
+    failure: string,
+    success?: string,
+  ) {
     setBusyId(id);
     try {
       await action();
@@ -124,8 +136,17 @@ function FriendsPanel({
   }
 
   const buckets: ChipOption<Bucket>[] = [
-    { value: "all", label: "All", count: friends.length + friendRequests.length },
-    { value: "friends", label: "Friends", count: friends.length, disabled: friends.length === 0 },
+    {
+      value: "all",
+      label: "All",
+      count: friends.length + friendRequests.length,
+    },
+    {
+      value: "friends",
+      label: "Friends",
+      count: friends.length,
+      disabled: friends.length === 0,
+    },
     {
       value: "requests",
       label: "Requests",
@@ -153,14 +174,24 @@ function FriendsPanel({
               : plural(friends.length, "friend")
         }
         actions={
-          <Button compact variant="outline" icon={UserPlus} onClick={() => setAddOpen(true)}>
+          <Button
+            compact
+            variant="outline"
+            icon={UserPlus}
+            onClick={() => setAddOpen(true)}
+          >
             Add
           </Button>
         }
       />
 
       <div className={classes.rails}>
-        <ChipRail label="Which people" options={buckets} value={bucket} onChange={setBucket} />
+        <ChipRail
+          label="Which people"
+          options={buckets}
+          value={bucket}
+          onChange={setBucket}
+        />
       </div>
 
       {friends.length === 0 && friendRequests.length === 0 ? (
@@ -170,7 +201,11 @@ function FriendsPanel({
             title="No friends yet"
             body="Friends are who you can share a place, a route or a map with. Find one by their username."
             actions={
-              <Button variant="filled" icon={UserPlus} onClick={() => setAddOpen(true)}>
+              <Button
+                variant="filled"
+                icon={UserPlus}
+                onClick={() => setAddOpen(true)}
+              >
                 Add a friend
               </Button>
             }

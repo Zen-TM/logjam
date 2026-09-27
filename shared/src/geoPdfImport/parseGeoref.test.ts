@@ -15,7 +15,10 @@ import {
 const fixture = (name: string) =>
   new Uint8Array(readFileSync(join(__dirname, "__fixtures__", name)));
 
-const expectCode = async (bytes: Uint8Array, code: GeoPdfParseError["code"]) => {
+const expectCode = async (
+  bytes: Uint8Array,
+  code: GeoPdfParseError["code"],
+) => {
   const err = await parseGeoPdfGeoref(bytes).then(
     () => null,
     (e: unknown) => e,
@@ -200,7 +203,11 @@ describe("parseGeoPdfGeoref — synthetic cases (tier 1c)", () => {
       vp: [
         validVp(
           {},
-          { GPTS: [-90.0000000005, 150.2, -33.7, 150.3, -33.6, 150.3, -33.6, 150.2] },
+          {
+            GPTS: [
+              -90.0000000005, 150.2, -33.7, 150.3, -33.6, 150.3, -33.6, 150.2,
+            ],
+          },
         ),
       ],
     });
@@ -244,7 +251,9 @@ describe("parseGeoPdfGeoref — error codes", () => {
 
   it("MALFORMED_GEOREF on odd-length GPTS", async () => {
     await expectCode(
-      buildTestPdf({ vp: [validVp({}, { GPTS: [-33.7, 150.2, -33.7, 150.3, -33.6] })] }),
+      buildTestPdf({
+        vp: [validVp({}, { GPTS: [-33.7, 150.2, -33.7, 150.3, -33.6] })],
+      }),
       "MALFORMED_GEOREF",
     );
   });
@@ -319,7 +328,10 @@ describe("render box and page rotation", () => {
 
   it("intersects the CropBox with the MediaBox", async () => {
     const result = await parseGeoPdfGeoref(
-      buildTestPdf({ vp: [validVp()], cropBox: { x0: 18, y0: 18, x1: 500, y1: 280 } }),
+      buildTestPdf({
+        vp: [validVp()],
+        cropBox: { x0: 18, y0: 18, x1: 500, y1: 280 },
+      }),
     );
     expect(result.pages[0].renderBoxPt).toEqual({
       x: 18,
@@ -371,7 +383,8 @@ describe("rebaseViewportToRenderBox", () => {
   });
 
   it("returns the viewport untouched when the box is already at the origin", async () => {
-    const page = (await parseGeoPdfGeoref(buildTestPdf({ vp: [validVp()] }))).pages[0];
+    const page = (await parseGeoPdfGeoref(buildTestPdf({ vp: [validVp()] })))
+      .pages[0];
     expect(rebaseViewportToRenderBox(page.viewports[0], page.renderBoxPt)).toBe(
       page.viewports[0],
     );

@@ -28,20 +28,32 @@ type Props = {
  * same way. The form mounts on open, so a reopened dialog starts from the
  * template it is editing NOW and never from the last one's typing.
  */
-export default function TopoTemplateEditDialog({ open, ...form }: Props): React.JSX.Element | null {
+export default function TopoTemplateEditDialog({
+  open,
+  ...form
+}: Props): React.JSX.Element | null {
   return open ? <TemplateForm {...form} /> : null;
 }
 
-function TemplateForm({ onClose, editingTemplate, onSaved }: Omit<Props, "open">) {
+function TemplateForm({
+  onClose,
+  editingTemplate,
+  onSaved,
+}: Omit<Props, "open">) {
   const formId = useId();
   const [name, setName] = useState(editingTemplate?.name ?? "");
   const [settings, setSettings] = useState<RasterTemplateSettings>(() =>
-    cloneRasterTemplateSettings(editingTemplate?.config ?? RASTER_TEMPLATE_DEFAULTS),
+    cloneRasterTemplateSettings(
+      editingTemplate?.config ?? RASTER_TEMPLATE_DEFAULTS,
+    ),
   );
   // Older templates predate auto-export (null) — fall back to defaults.
   const [autoExport, setAutoExport] = useState<AutoExportSettings>(() =>
     editingTemplate?.autoExport
-      ? { ...editingTemplate.autoExport, layers: [...editingTemplate.autoExport.layers] }
+      ? {
+          ...editingTemplate.autoExport,
+          layers: [...editingTemplate.autoExport.layers],
+        }
       : { ...AUTO_EXPORT_DEFAULTS },
   );
   const [tab, setTab] = useState<SettingsTab>("hillshade");
@@ -61,15 +73,22 @@ function TemplateForm({ onClose, editingTemplate, onSaved }: Omit<Props, "open">
     setSaving(true);
     setError(null);
     try {
-      await apiFetch(editingTemplate ? `/topo-templates/${editingTemplate.id}` : "/topo-templates", {
-        method: editingTemplate ? "PATCH" : "POST",
-        body: { name: trimmed, config: settings, autoExport },
-      });
+      await apiFetch(
+        editingTemplate
+          ? `/topo-templates/${editingTemplate.id}`
+          : "/topo-templates",
+        {
+          method: editingTemplate ? "PATCH" : "POST",
+          body: { name: trimmed, config: settings, autoExport },
+        },
+      );
       onSaved();
       onClose();
     } catch (err) {
       console.error(err);
-      setError(messageFromError(err, "Couldn't save template. Please try again."));
+      setError(
+        messageFromError(err, "Couldn't save template. Please try again."),
+      );
     } finally {
       setSaving(false);
     }
@@ -101,7 +120,12 @@ function TemplateForm({ onClose, editingTemplate, onSaved }: Omit<Props, "open">
               data-autofocus
             />
           </form>
-          <ChipRail label="Settings group" options={SETTINGS_TABS} value={tab} onChange={setTab} />
+          <ChipRail
+            label="Settings group"
+            options={SETTINGS_TABS}
+            value={tab}
+            onChange={setTab}
+          />
         </>
       }
       footer={
@@ -109,7 +133,13 @@ function TemplateForm({ onClose, editingTemplate, onSaved }: Omit<Props, "open">
           <Button onClick={onClose} disabled={saving}>
             Cancel
           </Button>
-          <Button type="submit" form={formId} variant="filled" busy={saving} disabled={!canSave}>
+          <Button
+            type="submit"
+            form={formId}
+            variant="filled"
+            busy={saving}
+            disabled={!canSave}
+          >
             Save
           </Button>
         </>

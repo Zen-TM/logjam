@@ -94,7 +94,10 @@ async function readIndex(backend: KeyValueBackend): Promise<string[]> {
   return parsed as string[];
 }
 
-async function writeIndex(backend: KeyValueBackend, keys: string[]): Promise<void> {
+async function writeIndex(
+  backend: KeyValueBackend,
+  keys: string[],
+): Promise<void> {
   await backend.set(INDEX_KEY, JSON.stringify(keys));
 }
 
@@ -157,7 +160,10 @@ export function createChunkedKeyValueStorage(
       await removeKey(backend, key);
 
       const valueBytes = encoder.encode(value).length;
-      if (valueBytes <= maxChunkBytes && !value.startsWith(CHUNK_HEADER_PREFIX)) {
+      if (
+        valueBytes <= maxChunkBytes &&
+        !value.startsWith(CHUNK_HEADER_PREFIX)
+      ) {
         await backend.set(key, value);
       } else {
         const chunks = splitIntoByteChunks(value, maxChunkBytes);
@@ -193,7 +199,10 @@ export function createChunkedKeyValueStorage(
       await removeKey(backend, key);
       const index = await readIndex(backend);
       if (index.includes(key)) {
-        await writeIndex(backend, index.filter((k) => k !== key));
+        await writeIndex(
+          backend,
+          index.filter((k) => k !== key),
+        );
       }
     },
 

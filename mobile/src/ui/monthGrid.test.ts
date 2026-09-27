@@ -13,7 +13,9 @@ import {
 describe("date keys", () => {
   it("round-trips through UTC midnight", () => {
     expect(toDateKey(fromDateKey("2026-03-15"))).toBe("2026-03-15");
-    expect(fromDateKey("2026-03-15").toISOString()).toBe("2026-03-15T00:00:00.000Z");
+    expect(fromDateKey("2026-03-15").toISOString()).toBe(
+      "2026-03-15T00:00:00.000Z",
+    );
   });
 
   it("rejects a non-date", () => {
@@ -23,10 +25,22 @@ describe("date keys", () => {
 
 describe("addMonths", () => {
   it("wraps forward and backward across years", () => {
-    expect(addMonths({ year: 2026, month: 11 }, 1)).toEqual({ year: 2027, month: 0 });
-    expect(addMonths({ year: 2026, month: 0 }, -1)).toEqual({ year: 2025, month: 11 });
-    expect(addMonths({ year: 2026, month: 5 }, 0)).toEqual({ year: 2026, month: 5 });
-    expect(addMonths({ year: 2026, month: 5 }, -18)).toEqual({ year: 2024, month: 11 });
+    expect(addMonths({ year: 2026, month: 11 }, 1)).toEqual({
+      year: 2027,
+      month: 0,
+    });
+    expect(addMonths({ year: 2026, month: 0 }, -1)).toEqual({
+      year: 2025,
+      month: 11,
+    });
+    expect(addMonths({ year: 2026, month: 5 }, 0)).toEqual({
+      year: 2026,
+      month: 5,
+    });
+    expect(addMonths({ year: 2026, month: 5 }, -18)).toEqual({
+      year: 2024,
+      month: 11,
+    });
   });
 });
 
@@ -63,13 +77,17 @@ describe("monthGrid", () => {
   });
 
   it("handles a leap February", () => {
-    const cells = monthGrid({ year: 2024, month: 1 }).filter((cell) => cell !== null);
+    const cells = monthGrid({ year: 2024, month: 1 }).filter(
+      (cell) => cell !== null,
+    );
     expect(cells).toHaveLength(29);
     expect(cells[28]).toBe("2024-02-29");
   });
 
   it("keeps days contiguous and in order", () => {
-    const cells = monthGrid({ year: 2026, month: 6 }).filter((cell) => cell !== null);
+    const cells = monthGrid({ year: 2026, month: 6 }).filter(
+      (cell) => cell !== null,
+    );
     expect(cells[0]).toBe("2026-07-01");
     expect(cells[cells.length - 1]).toBe("2026-07-31");
   });

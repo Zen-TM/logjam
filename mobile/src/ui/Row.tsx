@@ -98,7 +98,9 @@ export function Row({
   const lead =
     leading ??
     (icon ? (
-      <View style={[styles.iconTile, { backgroundColor: withAlpha(tint, 0.16) }]}>
+      <View
+        style={[styles.iconTile, { backgroundColor: withAlpha(tint, 0.16) }]}
+      >
         <Feather name={icon} size={20} color={tint} />
       </View>
     ) : null);
@@ -143,7 +145,12 @@ export function Row({
   if ((!onPress && !onLongPress) || disabled) {
     return (
       <View
-        style={[styles.row, selected && styles.selected, disabled && styles.disabled, style]}
+        style={[
+          styles.row,
+          selected && styles.selected,
+          disabled && styles.disabled,
+          style,
+        ]}
       >
         {body}
       </View>
@@ -200,8 +207,16 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   main: { flex: 1, gap: spacing(0.25) },
-  right: { alignItems: "flex-end", justifyContent: "center", gap: spacing(0.5) },
-  title: { color: theme.textPrimary, fontSize: fontSize.base, fontWeight: fontWeight.medium },
+  right: {
+    alignItems: "flex-end",
+    justifyContent: "center",
+    gap: spacing(0.5),
+  },
+  title: {
+    color: theme.textPrimary,
+    fontSize: fontSize.base,
+    fontWeight: fontWeight.medium,
+  },
   subtitle: { color: theme.textMuted, fontSize: fontSize.sm },
   progressTrack: {
     position: "absolute",

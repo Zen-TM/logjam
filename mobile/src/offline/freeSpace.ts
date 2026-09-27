@@ -23,13 +23,20 @@ import * as FileSystem from "expo-file-system/legacy";
 const HEADROOM = 0.9;
 
 /** Pure half, so the rule is testable without a filesystem. */
-export function fitsInFreeSpace(neededBytes: number, freeBytes: number): boolean {
+export function fitsInFreeSpace(
+  neededBytes: number,
+  freeBytes: number,
+): boolean {
   return neededBytes <= freeBytes * HEADROOM;
 }
 
 /** Static, user-facing; the caller may show it as-is. */
-export function notEnoughSpaceMessage(neededBytes: number, freeBytes: number): string {
-  const mb = (bytes: number) => `${Math.max(1, Math.round(bytes / 1024 / 1024))} MB`;
+export function notEnoughSpaceMessage(
+  neededBytes: number,
+  freeBytes: number,
+): string {
+  const mb = (bytes: number) =>
+    `${Math.max(1, Math.round(bytes / 1024 / 1024))} MB`;
   return `Needs about ${mb(neededBytes)}; the phone has ${mb(freeBytes)} free. Free some space and try again.`;
 }
 
@@ -48,15 +55,21 @@ export class NotEnoughSpaceError extends Error {
  * enough. An unknown answer must not become a phantom "not enough space".
  */
 export async function assertSpaceFor(neededBytes: number): Promise<void> {
-  const freeBytes = await FileSystem.getFreeDiskStorageAsync().catch(() => null);
+  const freeBytes = await FileSystem.getFreeDiskStorageAsync().catch(
+    () => null,
+  );
   if (freeBytes == null) return;
   if (!fitsInFreeSpace(neededBytes, freeBytes)) {
-    throw new NotEnoughSpaceError(notEnoughSpaceMessage(neededBytes, freeBytes));
+    throw new NotEnoughSpaceError(
+      notEnoughSpaceMessage(neededBytes, freeBytes),
+    );
   }
 }
 
 /** The unattended callers' form: no throw, just "should I start". */
 export async function hasSpaceFor(neededBytes: number): Promise<boolean> {
-  const freeBytes = await FileSystem.getFreeDiskStorageAsync().catch(() => null);
+  const freeBytes = await FileSystem.getFreeDiskStorageAsync().catch(
+    () => null,
+  );
   return freeBytes == null || fitsInFreeSpace(neededBytes, freeBytes);
 }

@@ -18,7 +18,12 @@ import {
 const fixture = (name: string) =>
   new Uint8Array(readFileSync(join(__dirname, "__fixtures__", name)));
 
-const bboxClip = (t: { x0: number; y0: number; x1: number; y1: number }): XY[] => [
+const bboxClip = (t: {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}): XY[] => [
   { x: t.x0, y: t.y0 },
   { x: t.x1, y: t.y0 },
   { x: t.x1, y: t.y1 },
@@ -199,7 +204,9 @@ describe("buildTilePlan — GDAL MGA fixture (mesh path)", () => {
 describe("buildTilePlan — estimate", () => {
   it("estimates base tiles + third for the pyramid", async () => {
     const { plan } = await logjamPlan();
-    expect(plan.estimatedTotalTiles).toBe(Math.ceil((plan.tiles.length * 4) / 3));
+    expect(plan.estimatedTotalTiles).toBe(
+      Math.ceil((plan.tiles.length * 4) / 3),
+    );
   });
 });
 
@@ -234,9 +241,17 @@ describe("resumableFrom — the checkpoint guard", () => {
   // planner change moves. A resume then skipped the first nextTileIndex entries
   // of a different tile list and registered the holed map as ready.
   const planOf = (tiles: number, zMax = 14) =>
-    ({ zMin: 10, zMax, tileSize: 512, tiles: Array.from({ length: tiles }), estimatedTotalTiles: tiles }) as unknown as TilePlan;
+    ({
+      zMin: 10,
+      zMax,
+      tileSize: 512,
+      tiles: Array.from({ length: tiles }),
+      estimatedTotalTiles: tiles,
+    }) as unknown as TilePlan;
 
-  const checkpoint = (over: Partial<GeoPdfBuildState> = {}): GeoPdfBuildState => ({
+  const checkpoint = (
+    over: Partial<GeoPdfBuildState> = {},
+  ): GeoPdfBuildState => ({
     phase: "rasterising",
     zMax: 14,
     parserVersion: GEOPDF_PARSER_VERSION,
@@ -251,19 +266,30 @@ describe("resumableFrom — the checkpoint guard", () => {
 
   it("refuses one from another parser version", () => {
     expect(
-      resumableFrom(checkpoint({ parserVersion: GEOPDF_PARSER_VERSION - 1 }), planOf(100)),
+      resumableFrom(
+        checkpoint({ parserVersion: GEOPDF_PARSER_VERSION - 1 }),
+        planOf(100),
+      ),
     ).toBeNull();
-    expect(resumableFrom(checkpoint({ parserVersion: undefined }), planOf(100))).toBeNull();
+    expect(
+      resumableFrom(checkpoint({ parserVersion: undefined }), planOf(100)),
+    ).toBeNull();
   });
 
   it("refuses one whose tile list is a different length at the same zMax", () => {
-    expect(resumableFrom(checkpoint({ tileCount: 99 }), planOf(100))).toBeNull();
+    expect(
+      resumableFrom(checkpoint({ tileCount: 99 }), planOf(100)),
+    ).toBeNull();
     expect(resumableFrom(checkpoint(), planOf(101))).toBeNull();
   });
 
   it("refuses a cursor outside the plan", () => {
-    expect(resumableFrom(checkpoint({ nextTileIndex: 101 }), planOf(100))).toBeNull();
-    expect(resumableFrom(checkpoint({ nextTileIndex: -1 }), planOf(100))).toBeNull();
+    expect(
+      resumableFrom(checkpoint({ nextTileIndex: 101 }), planOf(100)),
+    ).toBeNull();
+    expect(
+      resumableFrom(checkpoint({ nextTileIndex: -1 }), planOf(100)),
+    ).toBeNull();
   });
 
   it("refuses nothing at all", () => {

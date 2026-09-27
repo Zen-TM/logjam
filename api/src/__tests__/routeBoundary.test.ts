@@ -84,7 +84,9 @@ describe("route visibility — linked to a shared place", () => {
       SHARED_PLACE_ID,
     );
 
-    const bob = await request(API_URL).get(`/routes/${routeId}`).set(as(BOB_SUB));
+    const bob = await request(API_URL)
+      .get(`/routes/${routeId}`)
+      .set(as(BOB_SUB));
     expect(bob.status).toBe(200);
     expect(bob.body.points).toHaveLength(3);
 
@@ -137,7 +139,8 @@ describe("route visibility — linked to a shared place", () => {
       SHARED_PLACE_ID,
     );
     expect(
-      (await request(API_URL).get(`/routes/${routeId}`).set(as(BOB_SUB))).status,
+      (await request(API_URL).get(`/routes/${routeId}`).set(as(BOB_SUB)))
+        .status,
     ).toBe(200);
 
     const unlink = await request(API_URL)
@@ -149,7 +152,8 @@ describe("route visibility — linked to a shared place", () => {
 
     // Bob loses it...
     expect(
-      (await request(API_URL).get(`/routes/${routeId}`).set(as(BOB_SUB))).status,
+      (await request(API_URL).get(`/routes/${routeId}`).set(as(BOB_SUB)))
+        .status,
     ).toBe(404);
     // ...but alice still has it. Nothing was deleted.
     const alice = await request(API_URL)
@@ -162,7 +166,11 @@ describe("route visibility — linked to a shared place", () => {
 
 describe("one route per place — linking displaces, never destroys", () => {
   it("displaces the incumbent to standalone and names it in the response", async () => {
-    const first = await createRoute(ALICE_SUB, "Original approach", SHARED_PLACE_ID);
+    const first = await createRoute(
+      ALICE_SUB,
+      "Original approach",
+      SHARED_PLACE_ID,
+    );
     const second = await createRoute(ALICE_SUB, "Better approach");
 
     const link = await request(API_URL)

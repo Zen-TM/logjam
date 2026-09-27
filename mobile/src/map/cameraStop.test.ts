@@ -5,7 +5,9 @@ import { withDefaultEasing } from "./cameraStop";
 describe("withDefaultEasing", () => {
   it("eases a stop that names only a duration", () => {
     // The MLRN 11 regression: this used to ease by default and now jumps.
-    expect(withDefaultEasing({ center: [150.4, -33.5], duration: 600 })).toEqual({
+    expect(
+      withDefaultEasing({ center: [150.4, -33.5], duration: 600 }),
+    ).toEqual({
       center: [150.4, -33.5],
       duration: 600,
       easing: "ease",

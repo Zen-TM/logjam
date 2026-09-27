@@ -137,7 +137,9 @@ describe("shareSelectionCountLabel", () => {
   // "3 selected · 3 removable" is noise; the tally exists for the case where a
   // verb will act on fewer rows than the user picked.
   it("says nothing extra when every row supports every verb", () => {
-    expect(shareSelectionCountLabel(received([PLACE]), "youSee")).toBe("1 selected");
+    expect(shareSelectionCountLabel(received([PLACE]), "youSee")).toBe(
+      "1 selected",
+    );
   });
 
   it("tallies both subsets when both bite", () => {
@@ -168,13 +170,15 @@ describe("unshareAllConfirm", () => {
   // it, and the user cannot see that from the list.
   it("says a place takes more than itself", () => {
     expect(
-      unshareAllConfirm({ count: 1, friendName: FRIEND, includesPlace: true }).body,
+      unshareAllConfirm({ count: 1, friendName: FRIEND, includesPlace: true })
+        .body,
     ).toContain("notes");
   });
 
   it("reads as English for one item", () => {
     expect(
-      unshareAllConfirm({ count: 1, friendName: FRIEND, includesPlace: false }).title,
+      unshareAllConfirm({ count: 1, friendName: FRIEND, includesPlace: false })
+        .title,
     ).toBe("Unshare 1 item from bob?");
   });
 });
@@ -209,7 +213,7 @@ describe("removeAllConfirm", () => {
 
   // "1 of them" needs a THEM: with one row selected there is nothing to be one
   // OF, and the sentence read as a counting error on the device.
-  it("does not say \"1 of them\" about a single row", () => {
+  it('does not say "1 of them" about a single row', () => {
     const body = removeAllConfirm({
       count: 1,
       friendName: FRIEND,
@@ -293,10 +297,20 @@ describe("copyConfirm", () => {
   // button its credibility.
   it("promises the route only on a place", () => {
     expect(
-      copyConfirm({ count: 1, friendName: FRIEND, itemName: "X", kindLabel: "place" }).body,
+      copyConfirm({
+        count: 1,
+        friendName: FRIEND,
+        itemName: "X",
+        kindLabel: "place",
+      }).body,
     ).toContain("with its route");
     expect(
-      copyConfirm({ count: 1, friendName: FRIEND, itemName: "X", kindLabel: "route" }).body,
+      copyConfirm({
+        count: 1,
+        friendName: FRIEND,
+        itemName: "X",
+        kindLabel: "route",
+      }).body,
     ).not.toContain("with its route");
   });
 
@@ -312,7 +326,11 @@ describe("copyConfirm", () => {
   // literal "the owner" put a lower-case word at the start of a sentence:
   // "…stops sharing. the owner's original is untouched."
   it("capitalises the unnamed owner where it starts a sentence", () => {
-    const body = copyConfirm({ count: 1, itemName: "Claustral", kindLabel: "place" }).body;
+    const body = copyConfirm({
+      count: 1,
+      itemName: "Claustral",
+      kindLabel: "place",
+    }).body;
     expect(body).toContain("stays if the owner stops sharing");
     expect(body).toContain("The owner's original is untouched");
     expect(body).not.toMatch(/\. the owner/);
@@ -331,7 +349,9 @@ describe("copyAndRemoveOutcomeMessage", () => {
   };
 
   it("reports a clean run as info", () => {
-    expect(copyAndRemoveOutcomeMessage({ ...clean, done: ["Claustral"] })).toEqual({
+    expect(
+      copyAndRemoveOutcomeMessage({ ...clean, done: ["Claustral"] }),
+    ).toEqual({
       text: "Saved 1 copy and removed the shared one.",
       tone: "info",
     });
@@ -350,8 +370,13 @@ describe("copyAndRemoveOutcomeMessage", () => {
 
   // The reassurance IS the message: a failed copy means nothing was given up.
   it("names a failed copy and says nothing was lost", () => {
-    const message = copyAndRemoveOutcomeMessage({ ...clean, failed: ["Claustral"] });
-    expect(message.text).toBe("Couldn't copy Claustral, so it's still shared with you.");
+    const message = copyAndRemoveOutcomeMessage({
+      ...clean,
+      failed: ["Claustral"],
+    });
+    expect(message.text).toBe(
+      "Couldn't copy Claustral, so it's still shared with you.",
+    );
     expect(message.tone).toBe("error");
   });
 
@@ -380,8 +405,13 @@ describe("copyAndRemoveOutcomeMessage", () => {
 // own TITLE — a question sitting under the button that asks it.
 describe("removeRowSubtitle", () => {
   it("is a statement, not a question", () => {
-    const subtitle = removeRowSubtitle({ kindLabel: "place", friendName: FRIEND });
-    expect(subtitle).toBe("Takes it off your account. bob keeps the original place.");
+    const subtitle = removeRowSubtitle({
+      kindLabel: "place",
+      friendName: FRIEND,
+    });
+    expect(subtitle).toBe(
+      "Takes it off your account. bob keeps the original place.",
+    );
     expect(subtitle).not.toContain("?");
   });
 });

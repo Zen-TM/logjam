@@ -21,7 +21,15 @@ import {
   type MediaCategory,
 } from "@logjam/shared";
 
-import { fontSize, fontWeight, radius, scrim, spacing, theme, withAlpha } from "../theme";
+import {
+  fontSize,
+  fontWeight,
+  radius,
+  scrim,
+  spacing,
+  theme,
+  withAlpha,
+} from "../theme";
 import { attachMediaLocal, deleteMediaLocal } from "../sync/mediaUpload";
 import type { MirrorMedia } from "../sync/mirrorStore";
 import { scratchFileUri } from "../offline/localStores";
@@ -84,7 +92,10 @@ async function saveToGalleryIfWanted(uri: string): Promise<void> {
     await MediaLibrary.saveToLibraryAsync(uri);
   } catch (err) {
     // No filename, no path: this is media on a place.
-    console.error("Gallery copy failed", err instanceof Error ? err.name : "unknown");
+    console.error(
+      "Gallery copy failed",
+      err instanceof Error ? err.name : "unknown",
+    );
   }
 }
 
@@ -161,7 +172,9 @@ export function MediaStrip({
    * promise simply hangs and the button looks dead. Closing first and running
    * the job from the sheet's `onClosed` is the only ordering that works.
    */
-  const [pending, setPending] = useState<null | (() => void | Promise<void>)>(null);
+  const [pending, setPending] = useState<null | (() => void | Promise<void>)>(
+    null,
+  );
   const runAfterSheet = useCallback((job: () => void | Promise<void>) => {
     setPending(() => job);
     setSourceMode(null);
@@ -176,7 +189,11 @@ export function MediaStrip({
   );
 
   const attach = useCallback(
-    async (file: { uri: string; mimeType?: string | null; fileName?: string | null }) => {
+    async (file: {
+      uri: string;
+      mimeType?: string | null;
+      fileName?: string | null;
+    }) => {
       setBusy(true);
       try {
         await attachMediaLocal(linkedType, linkedId, file);
@@ -216,13 +233,20 @@ export function MediaStrip({
         }
       }
       const mediaTypes: ImagePicker.MediaType[] =
-        kind === "video" ? ["videos"] : source === "camera" ? ["images"] : ["images", "videos"];
+        kind === "video"
+          ? ["videos"]
+          : source === "camera"
+            ? ["images"]
+            : ["images", "videos"];
       let result: ImagePicker.ImagePickerResult;
       try {
         result =
           source === "camera"
             ? await ImagePicker.launchCameraAsync({ mediaTypes, quality: 1 })
-            : await ImagePicker.launchImageLibraryAsync({ mediaTypes, quality: 1 });
+            : await ImagePicker.launchImageLibraryAsync({
+                mediaTypes,
+                quality: 1,
+              });
       } catch (err) {
         // launchCameraAsync REJECTS when CAMERA is denied (its own native
         // ensureCameraPermissionsAreGranted), so a denial used to close the
@@ -323,7 +347,8 @@ export function MediaStrip({
     let cancelled = false;
     listTracks()
       .then((all) => {
-        if (!cancelled) setTracks(all.filter((track) => track.state === "done"));
+        if (!cancelled)
+          setTracks(all.filter((track) => track.state === "done"));
       })
       .catch((err: unknown) => {
         console.error(err);
@@ -336,7 +361,9 @@ export function MediaStrip({
 
   const shown = media.filter((item) => {
     const category = mediaCategory(item.mediaType);
-    return kind === "track" ? category === "track" : category === "image" || category === "video";
+    return kind === "track"
+      ? category === "track"
+      : category === "image" || category === "video";
   });
 
   const confirmDelete = useCallback((item: MirrorMedia) => {
@@ -378,8 +405,14 @@ export function MediaStrip({
                 pressed && styles.addTilePressed,
               ]}
             >
-              <Feather name={atLimit ? "repeat" : "plus"} size={20} color={theme.accent} />
-              <Text style={styles.addTileLabel}>{atLimit ? "Replace" : "Add"}</Text>
+              <Feather
+                name={atLimit ? "repeat" : "plus"}
+                size={20}
+                color={theme.accent}
+              />
+              <Text style={styles.addTileLabel}>
+                {atLimit ? "Replace" : "Add"}
+              </Text>
             </Pressable>
           )}
 
@@ -416,7 +449,9 @@ export function MediaStrip({
         visible={sourceMode !== null}
         // The track list is a mode of this sheet, so backing out of it returns
         // to the source list rather than closing the whole thing.
-        onClose={() => setSourceMode(sourceMode === "tracks" ? "sources" : null)}
+        onClose={() =>
+          setSourceMode(sourceMode === "tracks" ? "sources" : null)
+        }
         onClosed={() => {
           const job = pending;
           if (!job) return;
@@ -444,17 +479,23 @@ export function MediaStrip({
                 <Row
                   icon="camera"
                   title="Take photo"
-                  onPress={() => runAfterSheet(() => captureFrom("camera", "photo"))}
+                  onPress={() =>
+                    runAfterSheet(() => captureFrom("camera", "photo"))
+                  }
                 />
                 <Row
                   icon="video"
                   title="Record video"
-                  onPress={() => runAfterSheet(() => captureFrom("camera", "video"))}
+                  onPress={() =>
+                    runAfterSheet(() => captureFrom("camera", "video"))
+                  }
                 />
                 <Row
                   icon="image"
                   title="Choose from library"
-                  onPress={() => runAfterSheet(() => captureFrom("library", "photo"))}
+                  onPress={() =>
+                    runAfterSheet(() => captureFrom("library", "photo"))
+                  }
                 />
               </>
             ) : (
@@ -483,7 +524,8 @@ export function MediaStrip({
               <ActivityIndicator color={theme.accent} />
             ) : tracks.length === 0 ? (
               <Text style={styles.emptyHint}>
-                No finished recordings yet. Start one from the map — it will appear here once you stop it.
+                No finished recordings yet. Start one from the map — it will
+                appear here once you stop it.
               </Text>
             ) : (
               <>
@@ -512,7 +554,6 @@ export function MediaStrip({
           onClose={() => setViewerIndex(null)}
         />
       ) : null}
-
     </View>
   );
 }
@@ -551,7 +592,10 @@ function AttachmentTile({
           style={[
             styles.tile,
             styles.glyphTile,
-            { backgroundColor: withAlpha(tint, 0.16), borderColor: withAlpha(tint, 0.5) },
+            {
+              backgroundColor: withAlpha(tint, 0.16),
+              borderColor: withAlpha(tint, 0.5),
+            },
           ]}
         >
           <Feather name={glyphFor(category)} size={22} color={tint} />
@@ -586,10 +630,13 @@ function glyphFor(
 
 function trackSummary(track: Track): string {
   const km = track.distanceM / 1000;
-  const distance = km >= 1 ? `${km.toFixed(1)} km` : `${Math.round(track.distanceM)} m`;
+  const distance =
+    km >= 1 ? `${km.toFixed(1)} km` : `${Math.round(track.distanceM)} m`;
   const minutes = Math.round(track.durationMs / 60000);
   const duration =
-    minutes >= 60 ? `${Math.floor(minutes / 60)}h ${minutes % 60}m` : `${minutes}m`;
+    minutes >= 60
+      ? `${Math.floor(minutes / 60)}h ${minutes % 60}m`
+      : `${minutes}m`;
   return `${distance} · ${duration}`;
 }
 
@@ -648,7 +695,11 @@ const styles = StyleSheet.create({
     gap: spacing(0.25),
   },
   addTilePressed: { backgroundColor: withAlpha(theme.accent, 0.2) },
-  addTileLabel: { color: theme.accent, fontSize: fontSize.xs, fontWeight: fontWeight.medium },
+  addTileLabel: {
+    color: theme.accent,
+    fontSize: fontSize.xs,
+    fontWeight: fontWeight.medium,
+  },
   tileLoading: {
     ...StyleSheet.absoluteFillObject,
     alignItems: "center",

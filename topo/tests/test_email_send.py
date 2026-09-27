@@ -5,6 +5,7 @@ without importing or calling `resend` (mirrors the old `if not ses` guard so
 local dev and unconfigured workers never crash). The real Resend send path runs
 only in the worker container and is not exercised here.
 """
+
 import importlib
 import os
 import sys
@@ -23,6 +24,7 @@ class TestSendEmailNoOp(unittest.TestCase):
             else:
                 os.environ[key] = val
         import email_send
+
         return importlib.reload(email_send)
 
     def test_no_op_when_both_unset(self):

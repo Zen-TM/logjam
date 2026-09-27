@@ -10,7 +10,9 @@ vi.mock("../prefsDb", () => ({
 
 let storedValue: string | null = null;
 
-const { readMutedTopoAreas, writeMutedTopoAreas } = await import("./topoAreaMuting");
+const { readMutedTopoAreas, writeMutedTopoAreas } = await import(
+  "./topoAreaMuting"
+);
 
 describe("topo area muting", () => {
   it("round-trips a set of area ids", () => {

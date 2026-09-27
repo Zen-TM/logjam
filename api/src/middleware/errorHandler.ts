@@ -32,8 +32,7 @@ export function errorHandler(
   _next: NextFunction,
 ) {
   const reqId = (req as Request & { id?: string }).id;
-  const reqLog =
-    (req as Request & { log?: typeof logger }).log ?? logger;
+  const reqLog = (req as Request & { log?: typeof logger }).log ?? logger;
 
   if (err instanceof AppError) {
     // Never log the raw Error — its message/stack can embed user-supplied place
@@ -58,7 +57,5 @@ export function errorHandler(
   }
 
   reqLog.error({ err: safeErrorForLog(err), reqId }, "unhandled_error");
-  res
-    .status(500)
-    .json({ error: "Internal server error", requestId: reqId });
+  res.status(500).json({ error: "Internal server error", requestId: reqId });
 }

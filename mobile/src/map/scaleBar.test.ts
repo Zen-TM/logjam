@@ -27,7 +27,9 @@ describe("metersPerPixel", () => {
 
   it("throws on out-of-range input rather than returning NaN", () => {
     expect(() => metersPerPixel(91, 10)).toThrow(/latitude out of range/);
-    expect(() => metersPerPixel(Number.NaN, 10)).toThrow(/latitude out of range/);
+    expect(() => metersPerPixel(Number.NaN, 10)).toThrow(
+      /latitude out of range/,
+    );
     expect(() => metersPerPixel(0, -1)).toThrow(/zoom out of range/);
   });
 });

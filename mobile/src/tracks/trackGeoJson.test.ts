@@ -5,7 +5,14 @@ import { trackPointsToFeature } from "./trackGeoJson";
 
 // Synthetic coords only (repo rule).
 function point(lon: number, lat: number, segment: number): RecordedTrackPoint {
-  return { lon, lat, altitudeM: null, accuracyM: null, timestampMs: 0, segment };
+  return {
+    lon,
+    lat,
+    altitudeM: null,
+    accuracyM: null,
+    timestampMs: 0,
+    segment,
+  };
 }
 
 describe("trackPointsToFeature", () => {

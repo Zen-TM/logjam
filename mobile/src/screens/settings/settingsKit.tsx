@@ -7,7 +7,13 @@ import { Feather } from "@expo/vector-icons";
 import { StyleSheet, Text } from "react-native";
 
 import { fontSize, spacing, theme } from "../../theme";
-import { Row, SectionHeader, SegmentedControl, Toggle, type SegmentOption } from "../../ui";
+import {
+  Row,
+  SectionHeader,
+  SegmentedControl,
+  Toggle,
+  type SegmentOption,
+} from "../../ui";
 
 /**
  * A preference switch. `ready` is false until the value is actually known (or
@@ -99,7 +105,11 @@ export function ChoiceGroup<T extends string>({
         onChange={onChange}
         scroll
       />
-      {disabledReason ? <Hint text={disabledReason} /> : hint ? <Hint text={hint} /> : null}
+      {disabledReason ? (
+        <Hint text={disabledReason} />
+      ) : hint ? (
+        <Hint text={hint} />
+      ) : null}
     </>
   );
 }

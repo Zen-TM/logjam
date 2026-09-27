@@ -19,7 +19,9 @@ export const CUSTOM_FIELD_ENTITIES = ["tripLog", "place"] as const;
 
 export type CustomFieldEntity = (typeof CUSTOM_FIELD_ENTITIES)[number];
 
-export function isCustomFieldEntity(value: unknown): value is CustomFieldEntity {
+export function isCustomFieldEntity(
+  value: unknown,
+): value is CustomFieldEntity {
   return CUSTOM_FIELD_ENTITIES.includes(value as CustomFieldEntity);
 }
 
@@ -189,7 +191,9 @@ export function tripFieldDefs(
     (def) =>
       def.appliesToAllTypes ||
       def.tripTypes.some((type) => tagged.has(type.toLowerCase())) ||
-      (values != null && values[def.key] !== undefined && values[def.key] !== null) ||
+      (values != null &&
+        values[def.key] !== undefined &&
+        values[def.key] !== null) ||
       (keep?.has(def.key) ?? false),
   );
 }
@@ -269,10 +273,16 @@ export function customFieldDisplayLabel(def: TripLogCustomFieldDef): string {
 }
 
 export function makeCustomFieldKey(label: string): string {
-  return label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+  return label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_|_$/g, "");
 }
 
-export function coerceFieldValue(value: string, type: TripLogCustomFieldType): unknown {
+export function coerceFieldValue(
+  value: string,
+  type: TripLogCustomFieldType,
+): unknown {
   if (value === "") return null;
   if (type === "integer") return parseInt(value, 10);
   if (type === "float") return parseFloat(value);
@@ -484,7 +494,9 @@ export function customFieldDefsFromRows(
     .filter((def): def is TripLogCustomFieldDef => def !== null);
 }
 
-export function isTripLogCustomFieldDef(v: unknown): v is TripLogCustomFieldDef {
+export function isTripLogCustomFieldDef(
+  v: unknown,
+): v is TripLogCustomFieldDef {
   if (typeof v !== "object" || v === null) return false;
   const c = v as Record<string, unknown>;
   if (
@@ -511,12 +523,16 @@ export function isTripLogCustomFieldDef(v: unknown): v is TripLogCustomFieldDef 
   const hasMax = c.max !== undefined && c.max !== null;
   if (hasMin || hasMax) {
     if (c.type !== "integer" && c.type !== "float") return false;
-    for (const bound of [hasMin ? c.min : undefined, hasMax ? c.max : undefined]) {
+    for (const bound of [
+      hasMin ? c.min : undefined,
+      hasMax ? c.max : undefined,
+    ]) {
       if (bound === undefined) continue;
       if (typeof bound !== "number" || !Number.isFinite(bound)) return false;
       if (c.type === "integer" && !Number.isInteger(bound)) return false;
     }
-    if (hasMin && hasMax && (c.min as number) >= (c.max as number)) return false;
+    if (hasMin && hasMax && (c.min as number) >= (c.max as number))
+      return false;
   }
   return true;
 }

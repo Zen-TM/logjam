@@ -42,7 +42,9 @@ describe("wayVerbs", () => {
 
   // Reading is what a share allows, and a route's geometry is already here.
   it("still lets a sharee export a route", () => {
-    expect(ids(route({ shared: true }))).toEqual(expect.arrayContaining(["exportGpx", "exportKml"]));
+    expect(ids(route({ shared: true }))).toEqual(
+      expect.arrayContaining(["exportGpx", "exportKml"]),
+    );
   });
 
   // The endpoint has existed since sharing shipped; nothing on the web offered
@@ -64,7 +66,9 @@ describe("wayVerbs", () => {
   // The place's share is the only thing holding it: a Remove here would be a
   // control that cannot do what it says.
   it("offers no Remove on a way reached through someone's place", () => {
-    const viaPlace = ids(route({ shared: true, viaPlace: true, placeId: "p1" }));
+    const viaPlace = ids(
+      route({ shared: true, viaPlace: true, placeId: "p1" }),
+    );
     expect(viaPlace).not.toContain("removeShare");
     expect(viaPlace).not.toContain("copy");
     expect(viaPlace).not.toContain("copyAndRemove");
@@ -131,7 +135,9 @@ describe("wayVerbs", () => {
   // The presigned URL is the caller's egress, and a file on someone else's
   // place is not theirs to pull.
   it("offers no download of a file it does not own", () => {
-    expect(ids(importFile({ shared: true, viaPlace: true, placeId: "p1" }))).not.toContain("download");
+    expect(
+      ids(importFile({ shared: true, viaPlace: true, placeId: "p1" })),
+    ).not.toContain("download");
   });
 
   it("renames a file in place, and leaves a route to its own form", () => {

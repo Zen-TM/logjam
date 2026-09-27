@@ -68,13 +68,19 @@ function OnboardingChoiceDialog({
       onClose={onStartEmpty}
       dismissible={!loading}
       footer={
-        <Button variant={loaded ? "filled" : "plain"} onClick={onStartEmpty} disabled={loading}>
+        <Button
+          variant={loaded ? "filled" : "plain"}
+          onClick={onStartEmpty}
+          disabled={loading}
+        >
           {loaded ? "Done" : "Start empty"}
         </Button>
       }
     >
       <div className={classes.body}>
-        <p className={classes.lede}>How would you like to start? You can do any of these later, too.</p>
+        <p className={classes.lede}>
+          How would you like to start? You can do any of these later, too.
+        </p>
 
         <Row
           title="Load the NSW place database (RopeWiki)"
@@ -88,7 +94,9 @@ function OnboardingChoiceDialog({
           leading={
             <IconTile
               icon={loaded ? Check : Database}
-              hue={loaded ? "var(--completed-place-color)" : "var(--theme-accent)"}
+              hue={
+                loaded ? "var(--completed-place-color)" : "var(--theme-accent)"
+              }
             />
           }
           // Absent, not disabled, once it has run: there is nothing left to
@@ -97,7 +105,13 @@ function OnboardingChoiceDialog({
         />
         {loading && <ProgressBar label="Loading the RopeWiki database" />}
 
-        {error && <ErrorBanner message={error} onRetry={handleLoadRopeWiki} onDismiss={() => setError(null)} />}
+        {error && (
+          <ErrorBanner
+            message={error}
+            onRetry={handleLoadRopeWiki}
+            onDismiss={() => setError(null)}
+          />
+        )}
 
         <Row
           title="Import my own files"

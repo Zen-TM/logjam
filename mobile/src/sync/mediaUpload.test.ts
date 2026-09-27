@@ -27,13 +27,18 @@ const db = {
 vi.mock("./syncDb", () => ({
   getSyncDb: () => Promise.resolve(db),
   notifyMirrorChanged: () => {},
-  withSyncTransaction: async (_db: unknown, task: () => Promise<unknown>) => task(),
+  withSyncTransaction: async (_db: unknown, task: () => Promise<unknown>) =>
+    task(),
 }));
 vi.mock("./mediaSyncBridge", () => ({ scheduleMutationSync: () => {} }));
 const apiFetch = vi.fn((..._args: unknown[]) => Promise.resolve<unknown>({}));
-vi.mock("../api/apiFetch", () => ({ apiFetch: (...args: unknown[]) => apiFetch(...args) }));
+vi.mock("../api/apiFetch", () => ({
+  apiFetch: (...args: unknown[]) => apiFetch(...args),
+}));
 const canRunNow = vi.fn((..._args: unknown[]) => Promise.resolve(true));
-vi.mock("../offline/networkPolicy", () => ({ canRunNow: (...args: unknown[]) => canRunNow(...args) }));
+vi.mock("../offline/networkPolicy", () => ({
+  canRunNow: (...args: unknown[]) => canRunNow(...args),
+}));
 // Real localStores.ts reaches react-native (Flow syntax vitest can't parse);
 // same stand-in technique mediaDelete.test.ts already uses, extended with
 // WIPED_DIRS since that's the guard under test.
@@ -48,7 +53,10 @@ vi.mock("../offline/localStores", () => ({
     "file:///docs/sensor-logs/",
   ],
 }));
-vi.mock("expo-image-manipulator", () => ({ manipulateAsync: () => {}, SaveFormat: {} }));
+vi.mock("expo-image-manipulator", () => ({
+  manipulateAsync: () => {},
+  SaveFormat: {},
+}));
 vi.mock("expo-video-thumbnails", () => ({ getThumbnailAsync: () => {} }));
 vi.mock("expo-crypto", () => ({
   randomUUID: () => "00000000-0000-4000-8000-000000000000",

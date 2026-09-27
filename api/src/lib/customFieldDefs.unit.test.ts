@@ -23,14 +23,22 @@ describe("createFieldDef scoping", () => {
 
   it("refuses place types on a trip attribute", async () => {
     await expect(
-      createFieldDef("user-1", "tripLog", { def, position: 0, placeTypeIds: ["type-1"] }),
+      createFieldDef("user-1", "tripLog", {
+        def,
+        position: 0,
+        placeTypeIds: ["type-1"],
+      }),
     ).rejects.toMatchObject({ statusCode: 400 });
     expect(prisma.customFieldDef.create).not.toHaveBeenCalled();
   });
 
   it("refuses trip types on a place attribute", async () => {
     await expect(
-      createFieldDef("user-1", "place", { def, position: 0, tripTypes: ["packrafting"] }),
+      createFieldDef("user-1", "place", {
+        def,
+        position: 0,
+        tripTypes: ["packrafting"],
+      }),
     ).rejects.toMatchObject({ statusCode: 400 });
     expect(prisma.customFieldDef.create).not.toHaveBeenCalled();
   });
@@ -39,7 +47,11 @@ describe("createFieldDef scoping", () => {
   // "all" is for a definition that names nothing.
   it("stores a trip attribute's trip types and leaves 'all' off", async () => {
     vi.mocked(prisma.customFieldDef.create).mockResolvedValueOnce({} as never);
-    await createFieldDef("user-1", "tripLog", { def, position: 0, tripTypes: ["packrafting"] });
+    await createFieldDef("user-1", "tripLog", {
+      def,
+      position: 0,
+      tripTypes: ["packrafting"],
+    });
     expect(prisma.customFieldDef.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         tripTypes: ["packrafting"],

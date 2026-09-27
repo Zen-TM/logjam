@@ -2,7 +2,14 @@ import { useEffect, useRef } from "react";
 import { Animated, StyleSheet, Text, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 
-import { fontSize, fontWeight, radius, spacing, theme, withAlpha } from "../theme";
+import {
+  fontSize,
+  fontWeight,
+  radius,
+  spacing,
+  theme,
+  withAlpha,
+} from "../theme";
 
 export type ToastMessage = {
   text: string;
@@ -41,8 +48,16 @@ export function Toast({
     opacity.setValue(0);
     lift.setValue(12);
     const show = Animated.parallel([
-      Animated.timing(opacity, { toValue: 1, duration: 160, useNativeDriver: true }),
-      Animated.spring(lift, { toValue: 0, useNativeDriver: true, bounciness: 4 }),
+      Animated.timing(opacity, {
+        toValue: 1,
+        duration: 160,
+        useNativeDriver: true,
+      }),
+      Animated.spring(lift, {
+        toValue: 0,
+        useNativeDriver: true,
+        bounciness: 4,
+      }),
     ]);
     show.start();
     const timer = setTimeout(() => {
@@ -104,7 +119,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing(2),
     maxWidth: "100%",
   },
-  toastInfo: { backgroundColor: theme.bonus2, borderColor: withAlpha(theme.accent, 0.45) },
+  toastInfo: {
+    backgroundColor: theme.bonus2,
+    borderColor: withAlpha(theme.accent, 0.45),
+  },
   toastError: { backgroundColor: theme.bonus2, borderColor: theme.warning },
   text: {
     flexShrink: 1,

@@ -43,7 +43,9 @@ export function numericFieldValue(
   key: string,
 ): number | undefined {
   const value = fieldValue(values, key);
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
 }
 
 /** The nullable-column shape the old scalar columns had, for call sites that

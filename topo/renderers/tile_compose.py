@@ -48,10 +48,17 @@ from PIL import Image
 
 import pipeline as tm  # noqa: E402
 from pipeline import (  # noqa: E402
-    TILE_SIZE, ZOOM_MIN, ZOOM_MAX, WGS84_EPSG,
-    create_mbtiles, finalise_bounds, insert_tile,
-    tiles_for_bbox, tile_to_bbox,
-    render_contours_tile, render_features_tile,
+    TILE_SIZE,
+    ZOOM_MIN,
+    ZOOM_MAX,
+    WGS84_EPSG,
+    create_mbtiles,
+    finalise_bounds,
+    insert_tile,
+    tiles_for_bbox,
+    tile_to_bbox,
+    render_contours_tile,
+    render_features_tile,
 )
 
 from .context import RenderContext, RenderError, RASTER_LAYERS, VECTOR_LAYERS
@@ -74,10 +81,13 @@ def _vector_style_to_render_settings(vector_style: Dict[str, Any]) -> Dict[str, 
         )
 
     contours_in = vector_style.get("contours", {}) or {}
-    defaults["contours"].update({
-        k: contours_in[k] for k in ("majorColour", "minorColour", "majorWidthM", "minorWidthM")
-        if k in contours_in
-    })
+    defaults["contours"].update(
+        {
+            k: contours_in[k]
+            for k in ("majorColour", "minorColour", "majorWidthM", "minorWidthM")
+            if k in contours_in
+        }
+    )
 
     features_in = vector_style.get("features", {}) or {}
     if isinstance(features_in, dict):
@@ -119,6 +129,7 @@ def _footprint_geometry(jobs: List[dict]):
     5h33m for 4147 kept tiles before the 3h reaper force-failed it)."""
     from shapely.geometry import shape
     from shapely.ops import unary_union
+
     polys = []
     for j in jobs:
         fp = j.get("footprint")
@@ -126,7 +137,9 @@ def _footprint_geometry(jobs: List[dict]):
             continue
         polys.append(shape(fp))
     if not polys:
-        raise RenderError("No source-job footprints available — cannot compute export bounds")
+        raise RenderError(
+            "No source-job footprints available — cannot compute export bounds"
+        )
     return unary_union(polys)
 
 
@@ -203,7 +216,9 @@ def _warp_cog_to_tile(cog_path: Path, z: int, x: int, y: int) -> Image.Image:
         gray = arr.astype(np.uint8)
         rgba = np.stack([gray, gray, gray, np.full_like(gray, 255)], axis=-1)
     elif bands == 3:
-        rgba = np.stack([arr[0], arr[1], arr[2], np.full_like(arr[0], 255)], axis=-1).astype(np.uint8)
+        rgba = np.stack(
+            [arr[0], arr[1], arr[2], np.full_like(arr[0], 255)], axis=-1
+        ).astype(np.uint8)
     elif bands == 4:
         rgba = np.stack([arr[0], arr[1], arr[2], arr[3]], axis=-1).astype(np.uint8)
     else:
@@ -213,7 +228,9 @@ def _warp_cog_to_tile(cog_path: Path, z: int, x: int, y: int) -> Image.Image:
 
 
 def _composite_tile(
-    z: int, x: int, y: int,
+    z: int,
+    x: int,
+    y: int,
     raster_cogs: Dict[str, Path],
     contour_paths: Dict[float, str],
     features_geojson: str | None,
@@ -241,14 +258,15 @@ def _composite_tile(
     if composite.split()[3].getextrema()[1] == 0:
         return None
     from io import BytesIO
+
     buf = BytesIO()
     composite.save(buf, format="PNG", optimize=True)
     return buf.getvalue()
 
 
-def _prepare_sources(ctx: RenderContext, layers: List[str]) -> Tuple[
-    Dict[str, Path], Dict[float, str], str | None, Dict[str, Any]
-]:
+def _prepare_sources(
+    ctx: RenderContext, layers: List[str]
+) -> Tuple[Dict[str, Path], Dict[float, str], str | None, Dict[str, Any]]:
     raster_cogs: Dict[str, Path] = {}
     contour_paths: Dict[float, str] = {}
     features_geojson: str | None = None
@@ -285,7 +303,9 @@ def _prepare_sources(ctx: RenderContext, layers: List[str]) -> Tuple[
 def _composite_tile_worker(args: Tuple) -> Tuple[int, int, int, bytes | None]:
     """ProcessPoolExecutor entrypoint — must be module-level to be picklable."""
     z, x, y, raster_cogs, contour_paths, features_geojson, settings = args
-    png = _composite_tile(z, x, y, raster_cogs, contour_paths, features_geojson, settings)
+    png = _composite_tile(
+        z, x, y, raster_cogs, contour_paths, features_geojson, settings
+    )
     return z, x, y, png
 
 
@@ -297,7 +317,9 @@ def _composite_workers() -> int:
 
 
 def render_composite_to_mbtiles(ctx: RenderContext, layers: List[str]) -> Path:
-    raster_cogs, contour_paths, features_geojson, settings = _prepare_sources(ctx, layers)
+    raster_cogs, contour_paths, features_geojson, settings = _prepare_sources(
+        ctx, layers
+    )
     geom = _footprint_geometry(ctx.source_jobs)
     lon_min, lat_min, lon_max, lat_max = geom.bounds
 
@@ -339,7 +361,9 @@ def render_composite_to_mbtiles(ctx: RenderContext, layers: List[str]) -> Path:
     finalise_bounds(conn, lon_min, lat_min, lon_max, lat_max)
     conn.commit()
     conn.close()
-    log.info(f"Composite MBTiles written: {total} tiles using {workers} worker(s) → {dst}")
+    log.info(
+        f"Composite MBTiles written: {total} tiles using {workers} worker(s) → {dst}"
+    )
     return dst
 
 
@@ -423,14 +447,21 @@ def render_composite_to_geotiff(ctx: RenderContext, raster_layers: List[str]) ->
             ) / safe
         out_alpha = new_alpha
 
-    composite = np.concatenate(
-        [out_rgb, (out_alpha * 255.0)[None]], axis=0
-    ).round().clip(0, 255).astype(np.uint8)
+    composite = (
+        np.concatenate([out_rgb, (out_alpha * 255.0)[None]], axis=0)
+        .round()
+        .clip(0, 255)
+        .astype(np.uint8)
+    )
 
     intermediate = ctx.work_dir / "composite_intermediate.tif"
     driver = gdal.GetDriverByName("GTiff")
     dst_ds = driver.Create(
-        str(intermediate), xsize, ysize, 4, gdal.GDT_Byte,
+        str(intermediate),
+        xsize,
+        ysize,
+        4,
+        gdal.GDT_Byte,
         options=["COMPRESS=DEFLATE", "TILED=YES", "BIGTIFF=IF_SAFER"],
     )
     dst_ds.SetGeoTransform(geotransform)

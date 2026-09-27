@@ -121,24 +121,38 @@ function PlaceTypeSection({
         onBack={onBack}
         backLabel="Back to Settings"
         actions={
-          <Button compact variant="outline" icon={Plus} onClick={() => setEditing("new")}>
+          <Button
+            compact
+            variant="outline"
+            icon={Plus}
+            onClick={() => setEditing("new")}
+          >
             Add
           </Button>
         }
       />
 
-      {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
+      {error && (
+        <ErrorBanner message={error} onDismiss={() => setError(null)} />
+      )}
 
       <div className={classes.list}>
         {loading ? (
           <p className={classes.state}>Loading…</p>
         ) : (
           <>
-            {own.length > 0 && <SectionHeader title="Yours" count={own.length} />}
+            {own.length > 0 && (
+              <SectionHeader title="Yours" count={own.length} />
+            )}
             {own.map((type) => (
               <Row
                 key={type.id}
-                leading={<IconTile icon={placeTypeLucideIcon(type.iconKey)} hue={type.color} />}
+                leading={
+                  <IconTile
+                    icon={placeTypeLucideIcon(type.iconKey)}
+                    hue={type.color}
+                  />
+                }
                 title={type.name}
                 subtitle={placeCountLabel(type.placeCount)}
                 description="Opens this type for editing"
@@ -172,7 +186,8 @@ function PlaceTypeSection({
                             onSelect: () => {
                               setMergingFrom(type);
                               setMergeTargetId(
-                                types.find((other) => other.id !== type.id)?.id ?? "",
+                                types.find((other) => other.id !== type.id)
+                                  ?.id ?? "",
                               );
                             },
                           }
@@ -203,7 +218,12 @@ function PlaceTypeSection({
             {system.map((type) => (
               <Row
                 key={type.id}
-                leading={<IconTile icon={placeTypeLucideIcon(type.iconKey)} hue={type.color} />}
+                leading={
+                  <IconTile
+                    icon={placeTypeLucideIcon(type.iconKey)}
+                    hue={type.color}
+                  />
+                }
                 title={type.name}
                 subtitle={placeCountLabel(type.placeCount)}
               />
@@ -225,7 +245,10 @@ function PlaceTypeSection({
           onSave={async (draft) => {
             const ok =
               editing === "new"
-                ? await run(() => createPlaceType(draft), "Couldn't create that type.")
+                ? await run(
+                    () => createPlaceType(draft),
+                    "Couldn't create that type.",
+                  )
                 : await run(
                     () => updatePlaceType(editing.id, draft),
                     "Couldn't save that type.",
@@ -245,7 +268,10 @@ function PlaceTypeSection({
         onConfirm={async () => {
           const type = deleting;
           if (!type) return;
-          const ok = await run(() => deletePlaceType(type.id), "Couldn't delete that type.");
+          const ok = await run(
+            () => deletePlaceType(type.id),
+            "Couldn't delete that type.",
+          );
           if (ok) setDeleting(null);
         }}
         onClose={() => {
@@ -277,8 +303,9 @@ function PlaceTypeSection({
             </Select>
             <p className={classes.note}>
               "{mergingFrom?.name ?? ""}" is then deleted. Values{" "}
-              {mergeTarget ? `"${mergeTarget.name}"` : "the new type"} has no attribute for are
-              kept on each place, and can be added to it later.
+              {mergeTarget ? `"${mergeTarget.name}"` : "the new type"} has no
+              attribute for are kept on each place, and can be added to it
+              later.
             </p>
           </>
         }
@@ -322,7 +349,9 @@ function PlaceTypeDialog({
   onSave: (draft: { name: string; iconKey: string; color: string }) => void;
 }) {
   const [name, setName] = useState(editing?.name ?? "");
-  const [iconKey, setIconKey] = useState(editing?.iconKey ?? PLACE_TYPE_ICON_KEYS[0]);
+  const [iconKey, setIconKey] = useState(
+    editing?.iconKey ?? PLACE_TYPE_ICON_KEYS[0],
+  );
   const [color, setColor] = useState(editing?.color ?? PLACE_TYPE_COLORS[0]);
 
   return (

@@ -8,6 +8,7 @@ the rest of the render-tile test suite (test_render_tiles.py): pipeline.py
 imports osgeo at module top, so we stub it first; numpy/PIL must be real
 since these tests do real array/image maths.
 """
+
 import os
 import sys
 import unittest
@@ -24,6 +25,7 @@ try:
         FIRE_STALE_HATCH_ALPHA,
         render_vegetation_tile,
     )
+
     _IMPORT_OK = True
 except Exception as _exc:  # noqa: BLE001
     _IMPORT_OK = False
@@ -52,9 +54,15 @@ class TestStaleFireHatchOverlay(unittest.TestCase):
     def _amber_pixels(self, arr):
         """Boolean mask of pixels matching the caution-amber hatch colour
         (allow ±1 for uint8 rounding), independent of alpha."""
-        r_ok = (arr[..., 0] >= FIRE_STALE_HATCH_COLOUR[0] - 1) & (arr[..., 0] <= FIRE_STALE_HATCH_COLOUR[0] + 1)
-        g_ok = (arr[..., 1] >= FIRE_STALE_HATCH_COLOUR[1] - 1) & (arr[..., 1] <= FIRE_STALE_HATCH_COLOUR[1] + 1)
-        b_ok = (arr[..., 2] >= FIRE_STALE_HATCH_COLOUR[2] - 1) & (arr[..., 2] <= FIRE_STALE_HATCH_COLOUR[2] + 1)
+        r_ok = (arr[..., 0] >= FIRE_STALE_HATCH_COLOUR[0] - 1) & (
+            arr[..., 0] <= FIRE_STALE_HATCH_COLOUR[0] + 1
+        )
+        g_ok = (arr[..., 1] >= FIRE_STALE_HATCH_COLOUR[1] - 1) & (
+            arr[..., 1] <= FIRE_STALE_HATCH_COLOUR[1] + 1
+        )
+        b_ok = (arr[..., 2] >= FIRE_STALE_HATCH_COLOUR[2] - 1) & (
+            arr[..., 2] <= FIRE_STALE_HATCH_COLOUR[2] + 1
+        )
         return r_ok & g_ok & b_ok
 
     def test_all_stale_produces_amber_hatch_with_gaps(self):
@@ -82,7 +90,11 @@ class TestStaleFireHatchOverlay(unittest.TestCase):
     def test_stale_arr_none_is_byte_identical_to_no_stale_render(self):
         # Fire-staleness detection disabled/unavailable for this job — the
         # overlay must be a pure no-op vs. never having the parameter at all.
-        density = np.random.RandomState(42).uniform(0.0, 1.0, size=(TILE_SIZE, TILE_SIZE)).astype(np.float32)
+        density = (
+            np.random.RandomState(42)
+            .uniform(0.0, 1.0, size=(TILE_SIZE, TILE_SIZE))
+            .astype(np.float32)
+        )
 
         out_without_param = np.array(render_vegetation_tile(density, self.SETTINGS))
         out_with_none = np.array(render_vegetation_tile(density, self.SETTINGS, None))
@@ -99,13 +111,17 @@ class TestStaleFireHatchOverlay(unittest.TestCase):
         amber = self._amber_pixels(out)
 
         self.assertTrue(amber[:, :half].any(), "expected amber hatch in the stale half")
-        self.assertFalse(amber[:, half:].any(), "no amber hatch expected outside the stale half")
+        self.assertFalse(
+            amber[:, half:].any(), "no amber hatch expected outside the stale half"
+        )
 
     def test_mismatched_shape_skips_overlay_without_crashing(self):
         density = np.full((TILE_SIZE, TILE_SIZE), 0.5)  # mid-range, well above minRatio
         wrong_shape_stale = np.ones((TILE_SIZE // 2, TILE_SIZE // 2), dtype=np.uint8)
 
-        out_with_mismatch = np.array(render_vegetation_tile(density, self.SETTINGS, wrong_shape_stale))
+        out_with_mismatch = np.array(
+            render_vegetation_tile(density, self.SETTINGS, wrong_shape_stale)
+        )
         out_without_stale = np.array(render_vegetation_tile(density, self.SETTINGS))
 
         # Defensive skip — no amber hatch, no crash, and density rendering

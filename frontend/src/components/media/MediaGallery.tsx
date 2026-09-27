@@ -125,8 +125,16 @@ export default function MediaGallery({
         <div className={classes.trackList}>
           {tracks.map((m) => (
             <div key={m.id} className={classes.trackRow}>
-              <a className={classes.trackLink} href={m.displayUrl} download={m.filename}>
-                {m.color ? <TrackIcon color={m.color} /> : <FileDown size={16} />}
+              <a
+                className={classes.trackLink}
+                href={m.displayUrl}
+                download={m.filename}
+              >
+                {m.color ? (
+                  <TrackIcon color={m.color} />
+                ) : (
+                  <FileDown size={16} />
+                )}
                 <span className={classes.trackName}>{m.filename}</span>
               </a>
               {canDelete && (
@@ -145,15 +153,17 @@ export default function MediaGallery({
         </div>
       )}
 
-      {lightbox && <Lightbox item={lightbox} onClose={() => setLightbox(null)} />}
+      {lightbox && (
+        <Lightbox item={lightbox} onClose={() => setLightbox(null)} />
+      )}
 
       <ConfirmDialog
         open={pendingDelete != null}
         title="Delete file?"
         message={
           <>
-            This permanently deletes <b>{pendingDelete?.filename}</b>. This cannot
-            be undone.
+            This permanently deletes <b>{pendingDelete?.filename}</b>. This
+            cannot be undone.
             {/* Rendered inside the dialog (not the page behind it) — the
                 modal backdrop would otherwise hide a page-level ErrorBanner. */}
             {error && (

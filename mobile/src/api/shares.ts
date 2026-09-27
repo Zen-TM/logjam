@@ -82,7 +82,9 @@ export function bulkShare(args: {
  * being inserted here: the server mints the id and picks the colour.
  */
 export function copySharedRoute(routeId: string): Promise<{ id: string }> {
-  return apiFetch<{ id: string }>(`/routes/${routeId}/copy`, { method: "POST" });
+  return apiFetch<{ id: string }>(`/routes/${routeId}/copy`, {
+    method: "POST",
+  });
 }
 
 export function unshareItem(

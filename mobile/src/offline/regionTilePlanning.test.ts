@@ -80,7 +80,9 @@ describe("classifyTileResponse", () => {
   it("refuses a 200 that isn't an image", () => {
     // A provider error page served as 200 text/html must never be written into
     // the archive as a tile — it would render as a hole with no explanation.
-    expect(classifyTileResponse(200, "text/html; charset=utf-8", 512)).toBe("retry");
+    expect(classifyTileResponse(200, "text/html; charset=utf-8", 512)).toBe(
+      "retry",
+    );
     expect(classifyTileResponse(200, "image/png", 0)).toBe("retry");
     expect(classifyTileResponse(200, null, 900)).toBe("retry");
   });

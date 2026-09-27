@@ -23,9 +23,7 @@ describe("shareRowSubtitle", () => {
     expect(
       subtitleFor({
         shareStatus: { status: "unavailable", reason: "needs-account" },
-        recipients: [
-          { id: "s1", sharedWith: { id: "u1", username: "bob" } },
-        ],
+        recipients: [{ id: "s1", sharedWith: { id: "u1", username: "bob" } }],
       }),
     ).toBe("Needs an account");
     expect(

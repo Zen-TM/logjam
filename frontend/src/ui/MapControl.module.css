@@ -18,7 +18,11 @@
 }
 
 .mapButton:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--theme-text-primary) 14%, var(--theme-primary));
+  background: color-mix(
+    in srgb,
+    var(--theme-text-primary) 14%,
+    var(--theme-primary)
+  );
 }
 
 /* Stays filled under the pointer: hover must not read as "off". */

@@ -19,8 +19,8 @@ import {
   type MediaObjectListing,
 } from "./mediaOrphanSweeper";
 
-const mediaFindMany = (prisma as unknown as { media: { findMany: Mock } })
-  .media.findMany;
+const mediaFindMany = (prisma as unknown as { media: { findMany: Mock } }).media
+  .findMany;
 const s3Send = (s3 as unknown as { send: Mock }).send;
 
 const NOW = new Date("2026-06-11T12:00:00Z");
@@ -49,10 +49,7 @@ describe("mediaIdFromKey", () => {
 describe("selectOrphanedUploadKeys", () => {
   it("selects all objects of an old unconfirmed mediaId", () => {
     const keys = selectOrphanedUploadKeys(
-      [
-        obj("media/o1/m1/display.jpg", OLD),
-        obj("media/o1/m1/thumb.jpg", OLD),
-      ],
+      [obj("media/o1/m1/display.jpg", OLD), obj("media/o1/m1/thumb.jpg", OLD)],
       new Set(),
       CUTOFF,
     );

@@ -18,11 +18,17 @@ import { Prisma } from "@prisma/client";
 import { getParam } from "../lib/getParam";
 import { getEnv } from "../lib/env";
 import { deleteS3Keys } from "../lib/s3Cleanup";
-import { assertHasStorageQuota, decrementStorageUsed } from "../lib/storageQuota";
+import {
+  assertHasStorageQuota,
+  decrementStorageUsed,
+} from "../lib/storageQuota";
 import { copyPlaceMedia, placeMediaToCopy } from "../lib/copyPlaceMedia";
 import { toMediaItems, mediaItemsByLinkedId } from "../lib/mediaPresign";
 import { partitionPlaceMedia, unlinkStandaloneMedia } from "../lib/mediaLink";
-import { requirePlaceAccess, requirePlaceOwnerAccess } from "../lib/placeAccess";
+import {
+  requirePlaceAccess,
+  requirePlaceOwnerAccess,
+} from "../lib/placeAccess";
 import { resolveUser } from "../lib/resolveUser";
 import {
   placeDeleteTombstones,
@@ -342,7 +348,9 @@ router.post(
         err instanceof Prisma.PrismaClientKnownRequestError &&
         err.code === "P2002"
       ) {
-        const winner = await prisma.place.findUnique({ where: { id: clientId } });
+        const winner = await prisma.place.findUnique({
+          where: { id: clientId },
+        });
         if (winner && winner.ownerId === user.id) {
           res.status(200).json(winner);
           return;
@@ -578,7 +586,10 @@ router.get(
     });
     // No `linkedPlaceIds` and no `foreignFields` on the sharee's copy — both
     // owner-private, like the trip list and the `_count` above.
-    res.json({ ...serializeSharedPlace(place), media: await toMediaItems(placeMedia) });
+    res.json({
+      ...serializeSharedPlace(place),
+      media: await toMediaItems(placeMedia),
+    });
   },
 );
 
@@ -736,7 +747,10 @@ router.delete(
     const s3Keys = media.flatMap((m) =>
       [m.s3KeyDisplay, m.s3KeyThumbnail].filter((k): k is string => Boolean(k)),
     );
-    const totalBytes = media.reduce((sum, m) => sum + (m.fileSizeBytes ?? 0n), 0n);
+    const totalBytes = media.reduce(
+      (sum, m) => sum + (m.fileSizeBytes ?? 0n),
+      0n,
+    );
     await deleteS3Keys(MEDIA_BUCKET, s3Keys);
 
     // Trip logs DETACH on place delete (the TripLogPlace join row cascades

@@ -8,6 +8,7 @@ asserted directly (mock call count).
 
 Plain unittest (no pytest dep) so it runs unchanged in the worker Docker image.
 """
+
 import os
 import sys
 import unittest
@@ -18,8 +19,8 @@ import pipeline
 
 
 # Realistic ELVIS tile names. Footprint = everything after "-AHD_".
-MUDGEE_LID1 = "Mudgee201408-LID1-C3-AHD_7766366_55_0002_0002.laz"   # dense, older
-MUDGEE_LID2 = "Mudgee201612-LID2-C3-AHD_7766366_55_0002_0002.laz"   # sparse, newer
+MUDGEE_LID1 = "Mudgee201408-LID1-C3-AHD_7766366_55_0002_0002.laz"  # dense, older
+MUDGEE_LID2 = "Mudgee201612-LID2-C3-AHD_7766366_55_0002_0002.laz"  # sparse, newer
 # A different footprint, single survey.
 OTHER_LID1 = "Mudgee201408-LID1-C3-AHD_7766368_55_0002_0002.laz"
 # No "-C<c>-" classification segment (some ELVIS packages omit it).
@@ -28,8 +29,10 @@ BOOROWA_NOC = "Boorowa201709-LID1-AHD_6666180_55_0002_0002.laz"
 
 def _with_density(mapping):
     """Patch _measure_tile_density to a fixed basename→density lookup."""
+
     def fake(path):
         return mapping[os.path.basename(path)]
+
     return mock.patch.object(pipeline, "_measure_tile_density", side_effect=fake)
 
 
@@ -80,7 +83,7 @@ class TestSelectSurveysByLayer(unittest.TestCase):
         with _with_density({MUDGEE_LID1: 1.7, MUDGEE_LID2: 0.5}):
             sel = pipeline.select_surveys_by_layer([MUDGEE_LID1, MUDGEE_LID2])
         self.assertEqual(sel.terrain_tiles, [MUDGEE_LID1])  # densest
-        self.assertEqual(sel.veg_tiles, [MUDGEE_LID2])      # newest
+        self.assertEqual(sel.veg_tiles, [MUDGEE_LID2])  # newest
         self.assertEqual(len(sel.decisions), 1)
         d = sel.decisions[0]
         self.assertEqual(d["footprint"], "7766366_55_0002_0002")

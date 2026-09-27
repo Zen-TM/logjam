@@ -64,10 +64,7 @@ import { readBasemapPreference } from "./basemapPreference";
 import { useBasemapAssets } from "./basemap/basemapAssets";
 import { ProtomapsLayers } from "./basemap/ProtomapsLayers";
 import { buildShellStyle } from "./basemap/shellStyle";
-import {
-  PlacePinsLayer,
-  toPlaceFeatureCollection,
-} from "./PlacePinsLayer";
+import { PlacePinsLayer, toPlaceFeatureCollection } from "./PlacePinsLayer";
 import { readLastMapCamera } from "./lastCamera";
 import { DEFAULT_CENTER, DEFAULT_ZOOM } from "./mapChrome";
 import { ResolvedSource, sourceIdFor } from "./ResolvedSource";
@@ -264,8 +261,15 @@ export function PickPointScreen({
           showTracks
           onTrackPress={noop}
         />
-        <RoutesLayer routes={routes.data ?? EMPTY_ROUTES} hiddenRouteId={null} />
-        <PlacePinsLayer ownedFc={ownedFc} sharedFc={sharedFc} idPrefix="pick-" />
+        <RoutesLayer
+          routes={routes.data ?? EMPTY_ROUTES}
+          hiddenRouteId={null}
+        />
+        <PlacePinsLayer
+          ownedFc={ownedFc}
+          sharedFc={sharedFc}
+          idPrefix="pick-"
+        />
 
         {/* The dropped point: a ringed dot in the accent — the same cursor the
             map draws for "here is where you pointed", not a place pin. Nothing
@@ -304,9 +308,14 @@ export function PickPointScreen({
         ))}
       </View>
 
-      <View style={[styles.hint, { top: insets.top + spacing(2) }]} pointerEvents="none">
+      <View
+        style={[styles.hint, { top: insets.top + spacing(2) }]}
+        pointerEvents="none"
+      >
         <Text style={styles.hintText}>
-          {picked ? "Tap again to move the point" : `Tap where the ${subject} is`}
+          {picked
+            ? "Tap again to move the point"
+            : `Tap where the ${subject} is`}
         </Text>
       </View>
 

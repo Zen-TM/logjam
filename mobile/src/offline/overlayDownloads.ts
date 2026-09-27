@@ -108,7 +108,11 @@ export async function downloadTopoOverlay(
     // Verify: content-length match when known + PMTiles magic bytes
     // (stage4a §9 http-file verify).
     const info = await FileSystem.getInfoAsync(fileUri);
-    if (!info.exists || info.size === 0 || (expectedBytes > 0 && info.size !== expectedBytes)) {
+    if (
+      !info.exists ||
+      info.size === 0 ||
+      (expectedBytes > 0 && info.size !== expectedBytes)
+    ) {
       throw new Error("Overlay download incomplete");
     }
     const headBase64 = await FileSystem.readAsStringAsync(fileUri, {

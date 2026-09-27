@@ -41,7 +41,12 @@ describe("detectPlaceColumns", () => {
   });
 
   it("still maps the spaced/human aliases", () => {
-    const result = detectPlaceColumns(["Alt Names", "Num Abseils", "Longest Abseil", "V Grade"]);
+    const result = detectPlaceColumns([
+      "Alt Names",
+      "Num Abseils",
+      "Longest Abseil",
+      "V Grade",
+    ]);
     expect(result["Alt Names"]).toBe("altNames");
     expect(result["Num Abseils"]).toBe("numAbseils");
     expect(result["Longest Abseil"]).toBe("longestAbseil");
@@ -49,7 +54,9 @@ describe("detectPlaceColumns", () => {
   });
 
   it("defaults an unrecognised header to discard", () => {
-    expect(detectPlaceColumns(["Mystery Column"])["Mystery Column"]).toBe("discard");
+    expect(detectPlaceColumns(["Mystery Column"])["Mystery Column"]).toBe(
+      "discard",
+    );
   });
 
   it("auto-maps an exported sources column", () => {

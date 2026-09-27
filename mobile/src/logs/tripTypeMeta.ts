@@ -11,12 +11,16 @@ export { primaryTripType, tripTypeLabel } from "@logjam/shared";
  * untyped glyph) is `tripTypeIdentity` in `@logjam/shared`, so Logjam Web draws
  * the same trip the same colour.
  */
-type TripTypeMeta = { icon: React.ComponentProps<typeof Feather>["name"]; hue: string };
+type TripTypeMeta = {
+  icon: React.ComponentProps<typeof Feather>["name"];
+  hue: string;
+};
 
 export function tripTypeMeta(type: string | null | undefined): TripTypeMeta {
   const { icon, hue } = tripTypeIdentity(type);
   return {
     icon,
-    hue: hue === "accent" ? theme.accent : hue === "untyped" ? theme.bonus1 : hue,
+    hue:
+      hue === "accent" ? theme.accent : hue === "untyped" ? theme.bonus1 : hue,
   };
 }

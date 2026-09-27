@@ -80,17 +80,28 @@ const PAGES: {
 type SheetMode =
   | { kind: "closed" }
   | { kind: "fields"; entity: CustomFieldEntity }
-  | { kind: "fieldForm"; entity: CustomFieldEntity; editing: ScopedCustomFieldDef | null }
+  | {
+      kind: "fieldForm";
+      entity: CustomFieldEntity;
+      editing: ScopedCustomFieldDef | null;
+    }
   | { kind: "placeTypes" }
   | { kind: "placeTypeForm"; editing: MirrorPlaceType | null };
 
-export function SettingsScreen({ onOpenPage }: { onOpenPage: (page: SettingsPage) => void }) {
+export function SettingsScreen({
+  onOpenPage,
+}: {
+  onOpenPage: (page: SettingsPage) => void;
+}) {
   const { accountState } = useAccountState();
   const online = useConnectivity() === "online";
   const [toast, setToast] = useState<ToastMessage | null>(null);
-  const notify = useCallback((text: string, tone: ToastMessage["tone"] = "info") => {
-    setToast({ text, tone, nonce: Date.now() });
-  }, []);
+  const notify = useCallback(
+    (text: string, tone: ToastMessage["tone"] = "info") => {
+      setToast({ text, tone, nonce: Date.now() });
+    },
+    [],
+  );
 
   // ── custom fields ────────────────────────────────────────────────────────
   // Two lists rather than a page: two rows behind a chevron would be a page
@@ -101,7 +112,10 @@ export function SettingsScreen({ onOpenPage }: { onOpenPage: (page: SettingsPage
 
   const defsFor = (entity: CustomFieldEntity) =>
     entity === "tripLog" ? tripFields.defs : placeFields.defs;
-  const setDefsFor = (entity: CustomFieldEntity, next: ScopedCustomFieldDef[]) => {
+  const setDefsFor = (
+    entity: CustomFieldEntity,
+    next: ScopedCustomFieldDef[],
+  ) => {
     if (entity === "tripLog") tripFields.setDefs(next);
     else placeFields.setDefs(next);
   };
@@ -116,7 +130,9 @@ export function SettingsScreen({ onOpenPage }: { onOpenPage: (page: SettingsPage
   // Called unconditionally — it is a hook. The entity it is bound to is
   // whichever list is open; with the sheet closed the values are unused.
   const formEntity =
-    sheet.kind === "fields" || sheet.kind === "fieldForm" ? sheet.entity : "place";
+    sheet.kind === "fields" || sheet.kind === "fieldForm"
+      ? sheet.entity
+      : "place";
   const fieldForm = useCustomFieldForm({
     entity: formEntity,
     defs: defsFor(formEntity),
@@ -146,7 +162,9 @@ export function SettingsScreen({ onOpenPage }: { onOpenPage: (page: SettingsPage
                 ? capabilityRowProps("offlineSettings", accountState, online)
                 : {})}
             onPress={() => onOpenPage(page)}
-            right={<Feather name="chevron-right" size={20} color={theme.textMuted} />}
+            right={
+              <Feather name="chevron-right" size={20} color={theme.textMuted} />
+            }
           />
         ))}
 
@@ -161,7 +179,9 @@ export function SettingsScreen({ onOpenPage }: { onOpenPage: (page: SettingsPage
           title="Place types"
           subtitle={placeTypeCountLabel(placeTypes.data ?? [])}
           onPress={() => setSheet({ kind: "placeTypes" })}
-          right={<Feather name="chevron-right" size={20} color={theme.textMuted} />}
+          right={
+            <Feather name="chevron-right" size={20} color={theme.textMuted} />
+          }
         />
 
         <SectionHeader label="Your own attributes" />
@@ -170,14 +190,18 @@ export function SettingsScreen({ onOpenPage }: { onOpenPage: (page: SettingsPage
           title="Trip attributes"
           subtitle={fieldCountLabel(tripFields.defs.length)}
           onPress={() => setSheet({ kind: "fields", entity: "tripLog" })}
-          right={<Feather name="chevron-right" size={20} color={theme.textMuted} />}
+          right={
+            <Feather name="chevron-right" size={20} color={theme.textMuted} />
+          }
         />
         <Row
           icon="tag"
           title="Place attributes"
           subtitle={fieldCountLabel(placeFields.defs.length)}
           onPress={() => setSheet({ kind: "fields", entity: "place" })}
-          right={<Feather name="chevron-right" size={20} color={theme.textMuted} />}
+          right={
+            <Feather name="chevron-right" size={20} color={theme.textMuted} />
+          }
         />
 
         <SectionHeader label="About" />
@@ -223,7 +247,13 @@ export function SettingsScreen({ onOpenPage }: { onOpenPage: (page: SettingsPage
             <Button
               label={ATTRIBUTE_NOUN.add}
               icon="plus"
-              onPress={() => setSheet({ kind: "fieldForm", entity: sheet.entity, editing: null })}
+              onPress={() =>
+                setSheet({
+                  kind: "fieldForm",
+                  entity: sheet.entity,
+                  editing: null,
+                })
+              }
             />
           ) : null
         }
@@ -233,7 +263,11 @@ export function SettingsScreen({ onOpenPage }: { onOpenPage: (page: SettingsPage
             entity={sheet.entity}
             defs={defsFor(sheet.entity)}
             onEdit={(def) =>
-              setSheet({ kind: "fieldForm", entity: sheet.entity, editing: def })
+              setSheet({
+                kind: "fieldForm",
+                entity: sheet.entity,
+                editing: def,
+              })
             }
           />
         ) : null}
@@ -241,7 +275,9 @@ export function SettingsScreen({ onOpenPage }: { onOpenPage: (page: SettingsPage
         {sheet.kind === "placeTypes" ? (
           <PlaceTypeList
             types={placeTypes.data ?? []}
-            onEdit={(type) => setSheet({ kind: "placeTypeForm", editing: type })}
+            onEdit={(type) =>
+              setSheet({ kind: "placeTypeForm", editing: type })
+            }
           />
         ) : null}
         {sheet.kind === "placeTypeForm" ? placeTypeForm.body : null}

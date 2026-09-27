@@ -14,7 +14,11 @@ function line(
   coordinates: number[][],
   properties: ImportedFeature["properties"] = {},
 ): ImportedFeature {
-  return { type: "Feature", geometry: { type: "LineString", coordinates }, properties };
+  return {
+    type: "Feature",
+    geometry: { type: "LineString", coordinates },
+    properties,
+  };
 }
 
 describe("importedFeaturesToSeries", () => {
@@ -55,7 +59,9 @@ describe("importedFeaturesToSeries", () => {
           [150.25, -33.65],
           [150.251, -33.65],
         ],
-        { coordTimes: ["2026-08-17T00:00:00.000Z", "2026-08-17T00:01:00.000Z"] },
+        {
+          coordTimes: ["2026-08-17T00:00:00.000Z", "2026-08-17T00:01:00.000Z"],
+        },
       ),
     ]);
     expect(series.map((point) => point.timestampMs)).toEqual([

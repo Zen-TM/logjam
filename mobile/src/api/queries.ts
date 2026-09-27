@@ -17,13 +17,19 @@ export function fetchCurrentUser(): Promise<TUser> {
 }
 
 export function updateConsent(consentVersion: string): Promise<TUser> {
-  return apiFetch<TUser>("/users/me", { method: "PATCH", body: { consentVersion } });
+  return apiFetch<TUser>("/users/me", {
+    method: "PATCH",
+    body: { consentVersion },
+  });
 }
 
 // Place/trip list + detail reads moved to the Stage 8 offline mirror
 // (src/sync/useSyncQueries.ts) — REST fetchers for them died with the swap.
 
-export function getNotifications(): Promise<{ data: TNotification[]; total: number | null }> {
+export function getNotifications(): Promise<{
+  data: TNotification[];
+  total: number | null;
+}> {
   return apiFetchWithTotal<TNotification[]>("/notifications");
 }
 

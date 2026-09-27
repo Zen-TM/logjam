@@ -26,7 +26,10 @@ describe("vector-style route (fake auth)", () => {
   it("round-trips a valid style (the current one is valid by construction)", async () => {
     const current = await request(API_URL).get("/vector-style").set(AUTH);
     expect(current.status).toBe(200);
-    const putRes = await request(API_URL).put("/vector-style").set(AUTH).send(current.body);
+    const putRes = await request(API_URL)
+      .put("/vector-style")
+      .set(AUTH)
+      .send(current.body);
     expect(putRes.status).toBe(200);
     // PUT echoes the stored style back.
     expect(putRes.body).toBeTypeOf("object");

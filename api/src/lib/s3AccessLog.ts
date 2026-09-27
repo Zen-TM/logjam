@@ -176,7 +176,11 @@ export function isBillableEgress(
  */
 export type KeyAttribution =
   | { kind: "user"; userId: string }
-  | { kind: "job"; table: "topoJob" | "topoExportJob" | "geoPdfJob"; jobId: string };
+  | {
+      kind: "job";
+      table: "topoJob" | "topoExportJob" | "geoPdfJob";
+      jobId: string;
+    };
 
 export function attributeKey(key: string): KeyAttribution | null {
   const segments = key.split("/");
@@ -198,7 +202,9 @@ export function attributeKey(key: string): KeyAttribution | null {
       if (second === "geo-pdf") {
         return third ? { kind: "job", table: "geoPdfJob", jobId: third } : null;
       }
-      return second ? { kind: "job", table: "topoExportJob", jobId: second } : null;
+      return second
+        ? { kind: "job", table: "topoExportJob", jobId: second }
+        : null;
     default:
       // master/* (shared basemap tiles) and anything new we have not taught
       // this function about.

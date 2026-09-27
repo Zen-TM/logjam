@@ -19,8 +19,16 @@ import type { MediaMetadata, MediaOrigin } from "./mediaMetadata.js";
 export type MediaLinkedType = "place" | "tripLog" | "none";
 export type MediaCategory = "image" | "video" | "track";
 
-export const IMAGE_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
-export const VIDEO_MIME_TYPES = ["video/mp4", "video/quicktime", "video/webm"] as const;
+export const IMAGE_MIME_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+] as const;
+export const VIDEO_MIME_TYPES = [
+  "video/mp4",
+  "video/quicktime",
+  "video/webm",
+] as const;
 export const TRACK_MIME_TYPES = [
   "application/gpx+xml",
   "application/vnd.google-earth.kml+xml",
@@ -112,7 +120,9 @@ export function trackColorName(color: string | null | undefined): string {
  * 2. If all colours are present, returns the colour with the lowest frequency.
  */
 export function pickNextTrackColor(
-  existingColors: readonly (string | null | undefined)[] | (string | null | undefined)[],
+  existingColors:
+    | readonly (string | null | undefined)[]
+    | (string | null | undefined)[],
 ): string {
   const counts = new Map<string, number>();
   for (const c of TRACK_COLORS) counts.set(c, 0);
@@ -155,9 +165,12 @@ export function randomTrackColor(): string {
 }
 
 export function mediaCategory(mimeType: string): MediaCategory | null {
-  if ((IMAGE_MIME_TYPES as readonly string[]).includes(mimeType)) return "image";
-  if ((VIDEO_MIME_TYPES as readonly string[]).includes(mimeType)) return "video";
-  if ((TRACK_MIME_TYPES as readonly string[]).includes(mimeType)) return "track";
+  if ((IMAGE_MIME_TYPES as readonly string[]).includes(mimeType))
+    return "image";
+  if ((VIDEO_MIME_TYPES as readonly string[]).includes(mimeType))
+    return "video";
+  if ((TRACK_MIME_TYPES as readonly string[]).includes(mimeType))
+    return "track";
   return null;
 }
 

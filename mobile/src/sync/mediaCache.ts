@@ -110,7 +110,9 @@ export async function syncThumbnailCache(): Promise<void> {
  * when the blob isn't cached and can't be fetched (offline) — the caller
  * renders the thumbnail with an "available online" hint.
  */
-export async function ensureDisplayCached(mediaId: string): Promise<string | null> {
+export async function ensureDisplayCached(
+  mediaId: string,
+): Promise<string | null> {
   const db = await getSyncDb();
   const row = await db.getFirstAsync<{ local_display_path: string | null }>(
     "SELECT local_display_path FROM media WHERE id = ?",

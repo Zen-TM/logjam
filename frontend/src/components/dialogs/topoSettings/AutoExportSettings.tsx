@@ -24,7 +24,11 @@ interface Props {
  * ones the export dialog uses, offering only the layers these settings will
  * actually produce.
  */
-export default function AutoExportSettings({ value, onChange, rasterSettings }: Props) {
+export default function AutoExportSettings({
+  value,
+  onChange,
+  rasterSettings,
+}: Props) {
   // Memoised so TopoExportControls' reconcile effect only re-runs when the
   // produced-layer set or the selection actually changes, not every render.
   const availableLayers = useMemo(
@@ -32,7 +36,11 @@ export default function AutoExportSettings({ value, onChange, rasterSettings }: 
     [rasterSettings],
   );
   const selection = useMemo<ExportSelection>(
-    () => ({ format: value.format, bundling: value.bundling, layers: value.layers }),
+    () => ({
+      format: value.format,
+      bundling: value.bundling,
+      layers: value.layers,
+    }),
     [value.format, value.bundling, value.layers],
   );
 
@@ -49,7 +57,10 @@ export default function AutoExportSettings({ value, onChange, rasterSettings }: 
         />
       </SettingsRow>
 
-      <div className={styles.dependent} data-disabled={value.enabled ? undefined : true}>
+      <div
+        className={styles.dependent}
+        data-disabled={value.enabled ? undefined : true}
+      >
         <TopoExportControls
           value={selection}
           onChange={(next) => onChange({ ...value, ...next })}

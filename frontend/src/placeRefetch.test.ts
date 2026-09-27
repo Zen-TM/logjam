@@ -76,8 +76,8 @@ describe("usePlaces refetch — the map's completed-marker refresh path", () => 
     const { result } = renderHook(() => usePlaces(true));
 
     await waitFor(() => expect(result.current.loaded).toBe(true));
-    expect(
-      isPlaceDoneByViewer(result.current.places[0] as TPlace, false),
-    ).toBe(false);
+    expect(isPlaceDoneByViewer(result.current.places[0] as TPlace, false)).toBe(
+      false,
+    );
   });
 });

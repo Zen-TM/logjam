@@ -42,7 +42,11 @@ import {
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 
-import { friendMatches, messageFromError, type SharableEntityType } from "@logjam/shared";
+import {
+  friendMatches,
+  messageFromError,
+  type SharableEntityType,
+} from "@logjam/shared";
 
 import { useAccountState } from "../auth/AccountStateContext";
 import {
@@ -52,12 +56,26 @@ import {
   unavailableReasonText,
 } from "../auth/capabilities";
 import { usePendingCreateIds } from "../sync/useSyncQueries";
-import { getFriends, getPlaceShares, sharePlace, unsharePlace, type Friend } from "../api/friends";
+import {
+  getFriends,
+  getPlaceShares,
+  sharePlace,
+  unsharePlace,
+  type Friend,
+} from "../api/friends";
 import { getShares, shareItem, unshareItem } from "../api/shares";
 import { sendFileCopy } from "../api/fileSends";
 import type { AssetActions } from "../saved/assetActions";
 import { Button, ErrorBanner, SectionHeader, Row } from "../ui";
-import { fontSize, lineHeight, radius, spacing, surface, theme, withAlpha } from "../theme";
+import {
+  fontSize,
+  lineHeight,
+  radius,
+  spacing,
+  surface,
+  theme,
+  withAlpha,
+} from "../theme";
 import { FriendAvatar } from "./FriendAvatar";
 import { friendListLoadKey } from "./friendListLoad";
 
@@ -181,7 +199,12 @@ export function useSharePanel({
    * six of eight files went.
    */
   onBulkDone?: (outcome: BulkShareOutcome) => void;
-}): { title: string; body: React.ReactNode; footer: React.ReactNode | null; sharing: ReturnType<typeof useSharing> } {
+}): {
+  title: string;
+  body: React.ReactNode;
+  footer: React.ReactNode | null;
+  sharing: ReturnType<typeof useSharing>;
+} {
   const isCopy = target?.kind === "copy";
   const bulkPlan = target?.kind === "bulk" ? target.plan : null;
 
@@ -202,7 +225,9 @@ export function useSharePanel({
           // rather than from the plan object, which the caller rebuilds on
           // every render — the trap the note above is about.
           `bulk:${[
-            ...target.plan.shares.map((item) => `${item.entityType}:${item.entityId}`),
+            ...target.plan.shares.map(
+              (item) => `${item.entityType}:${item.entityId}`,
+            ),
             ...target.plan.copies.map((candidate) => candidate.key),
           ].join(",")}`
         : (placeId ?? (entityId ? `${entityType}:${entityId}` : null));
@@ -252,7 +277,8 @@ export function useSharePanel({
 
   const friends = useFriendList({ active: active && target != null, online });
   const [query, setQuery] = useState("");
-  const [selected, setSelected] = useState<ReadonlySet<string>>(EMPTY_SELECTION);
+  const [selected, setSelected] =
+    useState<ReadonlySet<string>>(EMPTY_SELECTION);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
 
@@ -293,7 +319,9 @@ export function useSharePanel({
 
   // Where the run has got to, so a multi-minute upload queue is not a spinner
   // with nothing behind it. Null while nothing is running.
-  const [bulkProgress, setBulkProgress] = useState<BulkShareProgress | null>(null);
+  const [bulkProgress, setBulkProgress] = useState<BulkShareProgress | null>(
+    null,
+  );
   const runBulk = useCallback(async () => {
     if (!bulkPlan) return;
     setSending(true);
@@ -358,7 +386,9 @@ export function useSharePanel({
     if (friends.status.status === "unavailable") {
       return {
         title,
-        body: <ClosedDoor text={unavailableReasonText(friends.status.reason)} />,
+        body: (
+          <ClosedDoor text={unavailableReasonText(friends.status.reason)} />
+        ),
         footer: null,
         sharing,
       };
@@ -424,7 +454,9 @@ export function useSharePanel({
             label={bulkShareButtonLabel(plan, selected.size, bulkProgress)}
             icon="share-2"
             onPress={confirmBulk}
-            disabled={selected.size === 0 || sending || plan.actionableCount === 0}
+            disabled={
+              selected.size === 0 || sending || plan.actionableCount === 0
+            }
           />
         </View>
       ),
@@ -439,7 +471,9 @@ export function useSharePanel({
     if (friends.status.status === "unavailable") {
       return {
         title: `Send a copy of ${itemLabel}`,
-        body: <ClosedDoor text={unavailableReasonText(friends.status.reason)} />,
+        body: (
+          <ClosedDoor text={unavailableReasonText(friends.status.reason)} />
+        ),
         footer: null,
         sharing,
       };
@@ -481,7 +515,11 @@ export function useSharePanel({
         <View style={styles.footerStack}>
           {sendError ? <ErrorBanner message={sendError} /> : null}
           <Button
-            label={selected.size === 0 ? "Send a copy" : `Send a copy to ${selected.size}`}
+            label={
+              selected.size === 0
+                ? "Send a copy"
+                : `Send a copy to ${selected.size}`
+            }
             icon="send"
             onPress={() => void send()}
             disabled={selected.size === 0 || sending}
@@ -495,7 +533,11 @@ export function useSharePanel({
   if (!sharing.canShare) {
     return {
       title: `Share ${itemLabel}`,
-      body: <ClosedDoor text={shareRowSubtitle(sharing) ?? "Sharing isn't available."} />,
+      body: (
+        <ClosedDoor
+          text={shareRowSubtitle(sharing) ?? "Sharing isn't available."}
+        />
+      ),
       footer: null,
       sharing,
     };
@@ -509,7 +551,9 @@ export function useSharePanel({
   const shareable = (friends.list ?? []).filter(
     (friend) => !sharing.sharedIds.has(friend.id),
   );
-  const shown = shareable.filter((friend) => friendMatches(friend.username, query));
+  const shown = shareable.filter((friend) =>
+    friendMatches(friend.username, query),
+  );
 
   return {
     title: `Share ${itemLabel}`,
@@ -567,7 +611,13 @@ const EMPTY_SELECTION: ReadonlySet<string> = new Set<string>();
  * sheet that is closed (or a guest, who has no friends and no endpoint that
  * would answer) issues no request.
  */
-function useFriendList({ active, online }: { active: boolean; online: boolean }) {
+function useFriendList({
+  active,
+  online,
+}: {
+  active: boolean;
+  online: boolean;
+}) {
   const [list, setList] = useState<Friend[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   // A failed load leaves `list` null and changes none of the other deps, so
@@ -582,7 +632,12 @@ function useFriendList({ active, online }: { active: boolean; online: boolean })
   // tested in ./friendListLoad, because a hook is a place nothing can run: the
   // bug was that a failed load changed none of the effect's inputs, so the key
   // is what the retry moves.
-  const loadKey = friendListLoadKey({ active, available, loaded: list !== null, attempt });
+  const loadKey = friendListLoadKey({
+    active,
+    available,
+    loaded: list !== null,
+    attempt,
+  });
 
   useEffect(() => {
     if (loadKey === null) return;
@@ -593,7 +648,8 @@ function useFriendList({ active, online }: { active: boolean; online: boolean })
         if (!cancelled) setList(friends);
       } catch (err) {
         console.error(err);
-        if (!cancelled) setError(messageFromError(err, "Couldn't load friends."));
+        if (!cancelled)
+          setError(messageFromError(err, "Couldn't load friends."));
       }
     })();
     return () => {
@@ -652,7 +708,9 @@ function FriendRows({
         return (
           <Row
             key={friend.id}
-            leading={<FriendAvatar username={friend.username} selected={selected} />}
+            leading={
+              <FriendAvatar username={friend.username} selected={selected} />
+            }
             title={friend.username}
             selected={selected}
             accessibilityLabel={
@@ -673,7 +731,13 @@ function FriendRows({
                 // mode a tap is the whole interaction, and a checkbox there
                 // would imply a pending one.
                 <Feather
-                  name={mode === "select" ? (selected ? "check-circle" : "circle") : "plus-circle"}
+                  name={
+                    mode === "select"
+                      ? selected
+                        ? "check-circle"
+                        : "circle"
+                      : "plus-circle"
+                  }
                   size={20}
                   color={selected ? theme.accent : theme.textMuted}
                 />
@@ -691,13 +755,22 @@ function FriendRows({
  * you can undo, warning for a copy you cannot — the colour carries the
  * difference for anyone who reads the panel rather than the sentence.
  */
-function PromiseBanner({ tone, text }: { tone: "share" | "copy"; text: string }) {
+function PromiseBanner({
+  tone,
+  text,
+}: {
+  tone: "share" | "copy";
+  text: string;
+}) {
   const hue = tone === "copy" ? theme.warning : theme.accent;
   return (
     <View
       style={[
         styles.promise,
-        { backgroundColor: withAlpha(hue, 0.12), borderColor: withAlpha(hue, 0.5) },
+        {
+          backgroundColor: withAlpha(hue, 0.12),
+          borderColor: withAlpha(hue, 0.5),
+        },
       ]}
     >
       <Feather

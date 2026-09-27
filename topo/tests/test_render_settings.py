@@ -5,6 +5,7 @@ previously hard-coded inside the render and gdaldem call sites.
 
 Plain unittest (no pytest dep) so it runs in the worker Docker image as-is.
 """
+
 import json
 import os
 import sys
@@ -24,13 +25,17 @@ try:
         active_layers_from_settings,
         load_render_settings,
     )
+
     _IMPORT_OK = True
 except Exception as _exc:  # noqa: BLE001
     _IMPORT_OK = False
     _IMPORT_ERR = _exc
 
 
-@unittest.skipUnless(_IMPORT_OK, f"pipeline import failed (missing native deps): {globals().get('_IMPORT_ERR', '?')}")
+@unittest.skipUnless(
+    _IMPORT_OK,
+    f"pipeline import failed (missing native deps): {globals().get('_IMPORT_ERR', '?')}",
+)
 class TestRenderSettings(unittest.TestCase):
     def setUp(self):
         self.default = _default_render_settings
@@ -50,7 +55,7 @@ class TestRenderSettings(unittest.TestCase):
         s = self.default()
         bands = s["slope"]["bands"]
         self.assertEqual([b["fromDeg"] for b in bands], [40, 50, 60, 70])
-        self.assertEqual([b["toDeg"]   for b in bands], [50, 60, 70, 90])
+        self.assertEqual([b["toDeg"] for b in bands], [50, 60, 70, 90])
 
     def test_defaults_match_legacy_vegetation(self):
         s = self.default()
@@ -66,18 +71,39 @@ class TestRenderSettings(unittest.TestCase):
         s = self.default()
         zbs = s["contours"]["zoomBands"]
         self.assertEqual(len(zbs), 3)
-        self.assertEqual((zbs[0]["zoomMin"], zbs[0]["zoomMax"], zbs[0]["intervalM"]), (12, 15, 50))
-        self.assertEqual((zbs[1]["zoomMin"], zbs[1]["zoomMax"], zbs[1]["intervalM"]), (15, 16, 10))
-        self.assertEqual((zbs[2]["zoomMin"], zbs[2]["zoomMax"], zbs[2]["intervalM"]), (17, 18, 5))
+        self.assertEqual(
+            (zbs[0]["zoomMin"], zbs[0]["zoomMax"], zbs[0]["intervalM"]), (12, 15, 50)
+        )
+        self.assertEqual(
+            (zbs[1]["zoomMin"], zbs[1]["zoomMax"], zbs[1]["intervalM"]), (15, 16, 10)
+        )
+        self.assertEqual(
+            (zbs[2]["zoomMin"], zbs[2]["zoomMax"], zbs[2]["intervalM"]), (17, 18, 5)
+        )
         self.assertEqual(s["contours"]["majorWidthM"], 18)
         self.assertEqual(s["contours"]["minorWidthM"], 8)
 
     def test_defaults_include_all_osm_features(self):
         s = self.default()
         feats = s["features"]["features"]
-        for key in ("waterway", "track", "road", "building", "power",
-                    "campsite", "peak", "spring", "gate", "cave",
-                    "bridge", "ford", "waterfall", "trailhead", "viewpoint", "hut"):
+        for key in (
+            "waterway",
+            "track",
+            "road",
+            "building",
+            "power",
+            "campsite",
+            "peak",
+            "spring",
+            "gate",
+            "cave",
+            "bridge",
+            "ford",
+            "waterfall",
+            "trailhead",
+            "viewpoint",
+            "hut",
+        ):
             self.assertIn(key, feats, f"missing OSM feature default: {key}")
         for new_key in ("bridge", "ford", "waterfall", "trailhead", "viewpoint", "hut"):
             self.assertFalse(feats[new_key]["enabled"], f"{new_key} should default off")

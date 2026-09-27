@@ -32,6 +32,7 @@ export function mirrorQueryError(
   syncStatus: SyncStatus,
 ): string | null {
   if (!neverSynced || syncStatus.state !== "error") return null;
-  return syncStatus.errorKind === "applyFailed" ? syncStatus.errorMessage : null;
+  return syncStatus.errorKind === "applyFailed"
+    ? syncStatus.errorMessage
+    : null;
 }
-

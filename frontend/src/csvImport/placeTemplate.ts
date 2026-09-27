@@ -1,4 +1,7 @@
-import { SYSTEM_PLACE_TYPE_IDS, type TripLogCustomFieldDef } from "@logjam/shared";
+import {
+  SYSTEM_PLACE_TYPE_IDS,
+  type TripLogCustomFieldDef,
+} from "@logjam/shared";
 
 // The import template for ONE place type, generated from that type's own field
 // definitions.
@@ -18,7 +21,13 @@ import { SYSTEM_PLACE_TYPE_IDS, type TripLogCustomFieldDef } from "@logjam/share
 // which is exactly what `detectColumns`/`assignableRolesForType` match on.
 
 /** Structural columns every place has, in the order a person fills them in. */
-const STRUCTURAL_HEADERS = ["name", "latitude", "longitude", "altNames", "notes"];
+const STRUCTURAL_HEADERS = [
+  "name",
+  "latitude",
+  "longitude",
+  "altNames",
+  "notes",
+];
 
 /**
  * One example row, so the file opens in a spreadsheet as something to edit

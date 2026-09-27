@@ -46,29 +46,66 @@ function splitExtras<Row extends Record<string, unknown>>(
 }
 
 const PLACE_KNOWN = [
-  "id", "syncRole", "name", "altNames", "latitude", "longitude",
-  "placeTypeId", "notes", "elevation", "fieldValues",
-  "fieldDefsSnapshot", "foreignFields", "forkedFromId", "createdAt",
+  "id",
+  "syncRole",
+  "name",
+  "altNames",
+  "latitude",
+  "longitude",
+  "placeTypeId",
+  "notes",
+  "elevation",
+  "fieldValues",
+  "fieldDefsSnapshot",
+  "foreignFields",
+  "forkedFromId",
+  "createdAt",
   "updatedAt",
 ] as const;
 
 const PLACE_TYPE_KNOWN = [
-  "id", "ownerId", "name", "iconKey", "color", "position",
-  "createdAt", "updatedAt",
+  "id",
+  "ownerId",
+  "name",
+  "iconKey",
+  "color",
+  "position",
+  "createdAt",
+  "updatedAt",
 ] as const;
 
 const TRIP_KNOWN = [
-  "id", "date", "displayName", "types", "notes", "customFields",
-  "places", "createdAt", "updatedAt",
+  "id",
+  "date",
+  "displayName",
+  "types",
+  "notes",
+  "customFields",
+  "places",
+  "createdAt",
+  "updatedAt",
 ] as const;
 
 const PLACE_LINK_KNOWN = [
-  "id", "ownerId", "aPlaceId", "bPlaceId", "createdAt", "updatedAt",
+  "id",
+  "ownerId",
+  "aPlaceId",
+  "bPlaceId",
+  "createdAt",
+  "updatedAt",
 ] as const;
 
 const ROUTE_KNOWN = [
-  "id", "ownerId", "placeId", "name", "color", "points", "syncRole",
-  "sharedCount", "createdAt", "updatedAt",
+  "id",
+  "ownerId",
+  "placeId",
+  "name",
+  "color",
+  "points",
+  "syncRole",
+  "sharedCount",
+  "createdAt",
+  "updatedAt",
 ] as const;
 
 // `ownerId` has a column of its own: NULL means a SYSTEM definition, which the
@@ -77,14 +114,35 @@ const ROUTE_KNOWN = [
 // global ones too, and without the column the phone offered Delete on a
 // built-in field.
 const CUSTOM_FIELD_DEF_KNOWN = [
-  "id", "ownerId", "entity", "key", "label", "type", "min", "max",
-  "position", "placeTypeIds", "tripTypes", "appliesToAllTypes", "createdAt",
+  "id",
+  "ownerId",
+  "entity",
+  "key",
+  "label",
+  "type",
+  "min",
+  "max",
+  "position",
+  "placeTypeIds",
+  "tripTypes",
+  "appliesToAllTypes",
+  "createdAt",
   "updatedAt",
 ] as const;
 
 const MEDIA_KNOWN = [
-  "id", "linkedType", "linkedId", "mediaType", "filename", "displayName",
-  "fileSizeBytes", "color", "origin", "metadata", "createdAt", "updatedAt",
+  "id",
+  "linkedType",
+  "linkedId",
+  "mediaType",
+  "filename",
+  "displayName",
+  "fileSizeBytes",
+  "color",
+  "origin",
+  "metadata",
+  "createdAt",
+  "updatedAt",
 ] as const;
 
 // ── upserts (called inside the delta-apply transaction) ─────────────────────
@@ -214,7 +272,9 @@ export async function rebasePendingPlaceLinks(
         ? (JSON.parse(local.places_json) as SyncDeltaTripRow["places"])
         : row.places,
     },
-    dirtyNames: dirtyNames.map((name) => (name === "placeIds" ? "places" : name)),
+    dirtyNames: dirtyNames.map((name) =>
+      name === "placeIds" ? "places" : name,
+    ),
   };
 }
 
@@ -253,12 +313,12 @@ export async function upsertRoute(
   const sharedCount =
     row.sharedCount !== undefined
       ? row.sharedCount
-      : (
+      : ((
           await db.getFirstAsync<{ shared_count: number | null }>(
             "SELECT shared_count FROM routes WHERE id = ?",
             row.id,
           )
-        )?.shared_count ?? null;
+        )?.shared_count ?? null);
   await db.runAsync(
     `INSERT OR REPLACE INTO routes
        (id, owner_id, place_id, name, color, points_json, anchors_json,
@@ -429,7 +489,10 @@ export async function scrubPlaceLinks(
 ): Promise<void> {
   // LIKE narrows the rewrite to candidate rows (it matches substrings too, so
   // the helpers decide); the alternative is parsing every trip on the phone.
-  const trips = await db.getAllAsync<{ id: string; places_json: string | null }>(
+  const trips = await db.getAllAsync<{
+    id: string;
+    places_json: string | null;
+  }>(
     "SELECT id, places_json FROM trip_logs WHERE places_json LIKE ?",
     `%${placeId}%`,
   );
@@ -550,7 +613,9 @@ export async function applyTombstone(
       break;
     }
     case "media": {
-      orphanedPaths.push(...(await collectMediaPaths(db, "id = ?", tombstone.id)));
+      orphanedPaths.push(
+        ...(await collectMediaPaths(db, "id = ?", tombstone.id)),
+      );
       await db.runAsync("DELETE FROM media WHERE id = ?", tombstone.id);
       break;
     }
@@ -772,7 +837,13 @@ export async function listMirrorCustomFieldDefs(): Promise<
        FROM custom_field_defs ORDER BY position ASC, key ASC`,
   );
   return rows.map(
-    ({ place_type_ids_json, trip_types_json, applies_to_all_types, owner_id, ...def }) => ({
+    ({
+      place_type_ids_json,
+      trip_types_json,
+      applies_to_all_types,
+      owner_id,
+      ...def
+    }) => ({
       ...def,
       ownerId: owner_id,
       placeTypeIds: parseStringList(place_type_ids_json),
@@ -942,7 +1013,9 @@ export type MirrorMedia = {
  * the viewer, not evidence of their own fan-out. Places with no share have no
  * key, which is what "not shared" reads as.
  */
-export async function countOutgoingSharesByPlace(): Promise<Record<string, number>> {
+export async function countOutgoingSharesByPlace(): Promise<
+  Record<string, number>
+> {
   const db = await getSyncDb();
   const rows = await db.getAllAsync<{ place_id: string; n: number }>(
     `SELECT place_id, COUNT(*) AS n FROM place_shares
@@ -961,14 +1034,21 @@ export async function countOutgoingSharesByPlace(): Promise<Record<string, numbe
  * Saved: the sync delta never carries an owner username on the asset rows
  * themselves, but it does carry it on the share row that made them visible.
  */
-export async function incomingShareOwnerByPlace(): Promise<Record<string, string>> {
+export async function incomingShareOwnerByPlace(): Promise<
+  Record<string, string>
+> {
   const db = await getSyncDb();
-  const rows = await db.getAllAsync<{ place_id: string; counterpart_username: string | null }>(
+  const rows = await db.getAllAsync<{
+    place_id: string;
+    counterpart_username: string | null;
+  }>(
     `SELECT place_id, counterpart_username FROM place_shares WHERE direction = 'in'`,
   );
   return Object.fromEntries(
     rows.flatMap((row) =>
-      row.counterpart_username ? [[row.place_id, row.counterpart_username]] : [],
+      row.counterpart_username
+        ? [[row.place_id, row.counterpart_username]]
+        : [],
     ),
   );
 }
@@ -1024,7 +1104,8 @@ function rowToMirrorMedia(row: MediaSqlRow): MirrorMedia {
     color: row.color,
     origin: row.origin,
     metadata,
-    fileSizeBytes: row.file_size_bytes === null ? null : Number(row.file_size_bytes),
+    fileSizeBytes:
+      row.file_size_bytes === null ? null : Number(row.file_size_bytes),
     createdAt: row.created_at ?? "",
     syncState: row.sync_state,
     localThumbPath: row.local_thumb_path,

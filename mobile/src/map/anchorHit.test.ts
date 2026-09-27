@@ -23,9 +23,9 @@ describe("pressIsOnAnchor", () => {
   it("catches the press that starts a drag", () => {
     // The device repro: press-and-hold lands on an anchor, MLRN 11 forwards it
     // to the map's onLongPress, and without this the map inserts a point there.
-    expect(pressIsOnAnchor(ANCHORS, [150.4033, -33.5603], DEGREES_PER_PIXEL)).toBe(
-      true,
-    );
+    expect(
+      pressIsOnAnchor(ANCHORS, [150.4033, -33.5603], DEGREES_PER_PIXEL),
+    ).toBe(true);
   });
 
   it("catches a press a few pixels off — a thumb is not a pixel", () => {

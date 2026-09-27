@@ -1,7 +1,14 @@
 import { StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { fontSize, fontWeight, radius, spacing, theme, withAlpha } from "../theme";
+import {
+  fontSize,
+  fontWeight,
+  radius,
+  spacing,
+  theme,
+  withAlpha,
+} from "../theme";
 import { IconButton } from "./IconButton";
 
 /**
@@ -72,7 +79,9 @@ export function HeroHeader({
       {value ? (
         <Text style={styles.value} numberOfLines={1}>
           {secondaryValue ? `${value} · ${secondaryValue}` : value}
-          {valueSuffix ? <Text style={styles.valueSuffix}> {valueSuffix}</Text> : null}
+          {valueSuffix ? (
+            <Text style={styles.valueSuffix}> {valueSuffix}</Text>
+          ) : null}
         </Text>
       ) : null}
       {children}
@@ -102,7 +111,11 @@ const styles = StyleSheet.create({
   },
   // The back button sits on the eyebrow line and hangs into the horizontal
   // padding, so the title still starts on the screen's text margin.
-  backRow: { flexDirection: "row", alignItems: "center", marginLeft: -spacing(1) },
+  backRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginLeft: -spacing(1),
+  },
   titleRow: { flexDirection: "row", alignItems: "center", gap: spacing(1.5) },
   title: {
     flex: 1,

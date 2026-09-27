@@ -80,7 +80,7 @@ function pushRow(seq: number): Row {
 function run(sql: string, args: unknown[]): void {
   const seqIn = sql.match(/seq IN \(([^)]*)\)/);
   const targets = seqIn
-    ? args.slice(-((seqIn[1].match(/\?/g) ?? []).length))
+    ? args.slice(-(seqIn[1].match(/\?/g) ?? []).length)
     : sql.includes("WHERE seq = ?")
       ? [args[args.length - 1]]
       : rows.map((row) => row.seq);
@@ -92,9 +92,14 @@ function run(sql: string, args: unknown[]): void {
     // ONE attempt per pass.
     const stateIn = sql.match(/state IN \(([^)]*)\)/);
     if (stateIn) {
-      const allowed = [...stateIn[1].matchAll(/'(\w+)'/g)].map((match) => match[1]);
+      const allowed = [...stateIn[1].matchAll(/'(\w+)'/g)].map(
+        (match) => match[1],
+      );
       if (!allowed.includes(row.state)) continue;
-    } else if (/WHERE[\s\S]*state = 'inflight'/.test(sql) && row.state !== "inflight") {
+    } else if (
+      /WHERE[\s\S]*state = 'inflight'/.test(sql) &&
+      row.state !== "inflight"
+    ) {
       continue;
     }
     if (sql.startsWith("DELETE FROM outbox")) {
@@ -138,13 +143,16 @@ const db = {
 vi.mock("./syncDb", () => ({
   getSyncDb: () => Promise.resolve(db),
   notifyMirrorChanged: () => {},
-  withSyncTransaction: async (_db: unknown, task: () => Promise<void>) => task(),
+  withSyncTransaction: async (_db: unknown, task: () => Promise<void>) =>
+    task(),
 }));
 vi.mock("./mediaSyncBridge", () => ({ scheduleMutationSync: () => {} }));
 vi.mock("expo-file-system/legacy", () => ({
   deleteAsync: () => Promise.resolve(),
 }));
-vi.mock("expo-crypto", () => ({ randomUUID: () => "00000000-0000-4000-8000-000000000000" }));
+vi.mock("expo-crypto", () => ({
+  randomUUID: () => "00000000-0000-4000-8000-000000000000",
+}));
 vi.mock("./mirrorStore", () => ({
   upsertPlace: () => Promise.resolve(),
   upsertTrip: () => Promise.resolve(),
@@ -164,7 +172,9 @@ vi.mock("../api/apiFetch", () => ({
     const opIds = init.body.ops.map((op) => op.opId);
     pushCalls.push(opIds);
     if (opIds.some((opId) => poison.has(opId))) {
-      return Promise.reject(Object.assign(new Error("bad op"), { status: 400 }));
+      return Promise.reject(
+        Object.assign(new Error("bad op"), { status: 400 }),
+      );
     }
     const results = opIds.map((opId) => {
       const error = rejections.get(opId);
@@ -209,7 +219,10 @@ describe("who owns a rejection", () => {
 
   it("parks a refusal about the request itself", async () => {
     rows = [pushRow(1)];
-    rejections.set("op-1", { code: 409, message: "This place already has a track." });
+    rejections.set("op-1", {
+      code: 409,
+      message: "This place already has a track.",
+    });
 
     const summary = await flushOutbox();
 

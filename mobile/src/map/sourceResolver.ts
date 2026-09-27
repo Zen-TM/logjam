@@ -156,9 +156,7 @@ function localArtifactSource(
     // blurry at exactly the zoom a canyoner reads it at.
     ...(artifact.sourceType === "raster" && {
       tileSize:
-        artifact.kind === "geopdf-import"
-          ? GEOPDF_TILE_SIZE
-          : RASTER_TILE_SIZE,
+        artifact.kind === "geopdf-import" ? GEOPDF_TILE_SIZE : RASTER_TILE_SIZE,
     }),
     ...(artifact.minzoom != null && { minZoom: artifact.minzoom }),
     ...(artifact.maxzoom != null && { maxZoom: artifact.maxzoom }),
@@ -205,7 +203,11 @@ function resolveBasemap(
       );
     }
     return [
-      { status: "unavailable", key: logicalId, reason: "offline-not-downloaded" },
+      {
+        status: "unavailable",
+        key: logicalId,
+        reason: "offline-not-downloaded",
+      },
     ];
   }
 
@@ -239,7 +241,9 @@ function resolveBasemap(
     ];
   }
   if (regions.length > 0) {
-    return regions.map((r) => localArtifactSource(r, logicalId, entry.attribution));
+    return regions.map((r) =>
+      localArtifactSource(r, logicalId, entry.attribution),
+    );
   }
   return [
     { status: "unavailable", key: logicalId, reason: "offline-not-downloaded" },
@@ -261,7 +265,11 @@ function resolveTopoOverlay(
   }
   if (ctx.connectivity !== "online") {
     return [
-      { status: "unavailable", key: logicalId, reason: "offline-not-downloaded" },
+      {
+        status: "unavailable",
+        key: logicalId,
+        reason: "offline-not-downloaded",
+      },
     ];
   }
   if (!ref.remoteUrl) {

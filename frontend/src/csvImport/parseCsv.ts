@@ -16,7 +16,9 @@ export type ParsedCsv = {
 // so no data is lost, but the rename is invisible unless surfaced: without
 // this, a user staring at the column-mapping step sees an unexplained
 // "lat_1" and no clue two of their columns shared a name.
-function renamedHeaderNotices(renamedHeaders: Record<string, string> | undefined): string[] {
+function renamedHeaderNotices(
+  renamedHeaders: Record<string, string> | undefined,
+): string[] {
   if (!renamedHeaders) return [];
   return Object.entries(renamedHeaders).map(
     ([renamed, original]) =>

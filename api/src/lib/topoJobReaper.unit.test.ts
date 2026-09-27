@@ -61,9 +61,8 @@ const exportFindMany = (
 const geoPdfUpdateMany = (
   prisma as unknown as { geoPdfJob: { updateMany: Mock } }
 ).geoPdfJob.updateMany;
-const geoPdfFindMany = (
-  prisma as unknown as { geoPdfJob: { findMany: Mock } }
-).geoPdfJob.findMany;
+const geoPdfFindMany = (prisma as unknown as { geoPdfJob: { findMany: Mock } })
+  .geoPdfJob.findMany;
 const ecsSend = (ecs as unknown as { send: Mock }).send;
 const s3Send = (s3 as unknown as { send: Mock }).send;
 const transaction = (prisma as unknown as { $transaction: Mock }).$transaction;
@@ -154,7 +153,10 @@ describe("progressStallDeadline", () => {
 
   it("falls back to startedAt before the first heartbeat", () => {
     expect(
-      progressStallDeadline({ startedAt, updatedAt, lastProgressAt: null }, stallMs),
+      progressStallDeadline(
+        { startedAt, updatedAt, lastProgressAt: null },
+        stallMs,
+      ),
     ).toEqual(new Date(startedAt.getTime() + stallMs));
   });
 
@@ -189,7 +191,9 @@ describe("absoluteProcessingDeadline", () => {
       ceilingMs,
     );
     expect(deadline).toEqual(
-      new Date(startedAt.getTime() + ESTIMATE_SAFETY_FACTOR * estimatedSeconds * 1000),
+      new Date(
+        startedAt.getTime() + ESTIMATE_SAFETY_FACTOR * estimatedSeconds * 1000,
+      ),
     );
     expect(deadline.getTime()).toBeGreaterThan(startedAt.getTime() + ceilingMs);
   });
@@ -249,7 +253,9 @@ describe("isProcessingDead", () => {
 
 describe("reapStuckTopoJobs — topo_jobs", () => {
   it("anchors the pending cutoff on the pending timeout", async () => {
-    stageByStatus(jobFindMany, { pending: [{ id: "p1", userId: "u1", name: null }] });
+    stageByStatus(jobFindMany, {
+      pending: [{ id: "p1", userId: "u1", name: null }],
+    });
     jobUpdateMany.mockResolvedValue({ count: 1 });
 
     await reapStuckTopoJobs(NOW);
@@ -268,7 +274,9 @@ describe("reapStuckTopoJobs — topo_jobs", () => {
   });
 
   it("pins the reaper messages to honest retry semantics (ARCH-008)", async () => {
-    stageByStatus(jobFindMany, { pending: [{ id: "p1", userId: "u1", name: null }] });
+    stageByStatus(jobFindMany, {
+      pending: [{ id: "p1", userId: "u1", name: null }],
+    });
     stageByStatus(exportFindMany, {
       queued: [{ id: "q1", userId: "u1", format: "geotiff" }],
     });
@@ -322,8 +330,20 @@ describe("reapStuckTopoJobs — topo_jobs", () => {
     );
     stageByStatus(jobFindMany, {
       processing: [
-        { id: "j1", startedAt: old, updatedAt: old, estimatedSeconds: null, ecsTaskArn: "arn:task/j1" },
-        { id: "j2", startedAt: old, updatedAt: old, estimatedSeconds: null, ecsTaskArn: null },
+        {
+          id: "j1",
+          startedAt: old,
+          updatedAt: old,
+          estimatedSeconds: null,
+          ecsTaskArn: "arn:task/j1",
+        },
+        {
+          id: "j2",
+          startedAt: old,
+          updatedAt: old,
+          estimatedSeconds: null,
+          ecsTaskArn: null,
+        },
       ],
     });
     jobUpdateMany.mockResolvedValue({ count: 2 });
@@ -331,7 +351,9 @@ describe("reapStuckTopoJobs — topo_jobs", () => {
     await reapStuckTopoJobs(NOW);
 
     expect(ecsSend).toHaveBeenCalledTimes(1);
-    expect(ecsSend.mock.calls[0][0].input).toMatchObject({ task: "arn:task/j1" });
+    expect(ecsSend.mock.calls[0][0].input).toMatchObject({
+      task: "arn:task/j1",
+    });
   });
 
   it("a StopTask failure does not abort the sweep", async () => {
@@ -340,7 +362,13 @@ describe("reapStuckTopoJobs — topo_jobs", () => {
     );
     stageByStatus(jobFindMany, {
       processing: [
-        { id: "j1", startedAt: old, updatedAt: old, estimatedSeconds: null, ecsTaskArn: "arn:task/j1" },
+        {
+          id: "j1",
+          startedAt: old,
+          updatedAt: old,
+          estimatedSeconds: null,
+          ecsTaskArn: "arn:task/j1",
+        },
       ],
     });
     jobUpdateMany.mockResolvedValue({ count: 1 });
@@ -387,7 +415,12 @@ describe("reapStuckTopoJobs — topo_export_jobs (ARCH-002)", () => {
   it("force-fails overdue running exports status-guarded and stops their tasks", async () => {
     stageByStatus(exportFindMany, {
       running: [
-        { id: "e1", userId: "u1", format: "geotiff", ecsTaskArn: "arn:task/e1" },
+        {
+          id: "e1",
+          userId: "u1",
+          format: "geotiff",
+          ecsTaskArn: "arn:task/e1",
+        },
         { id: "e2", userId: "u1", format: "geotiff", ecsTaskArn: null },
       ],
     });
@@ -395,14 +428,15 @@ describe("reapStuckTopoJobs — topo_export_jobs (ARCH-002)", () => {
 
     const count = await reapStuckTopoJobs(NOW);
 
-    expect(exportUpdateMany.mock.calls.map((call) => call[0].where.id)).toEqual([
-      "e1",
-      "e2",
-    ]);
+    expect(exportUpdateMany.mock.calls.map((call) => call[0].where.id)).toEqual(
+      ["e1", "e2"],
+    );
     const runningUpdate = exportUpdateMany.mock.calls[0][0];
     expect(runningUpdate.where.status).toBe("running");
     expect(ecsSend).toHaveBeenCalledTimes(1);
-    expect(ecsSend.mock.calls[0][0].input).toMatchObject({ task: "arn:task/e1" });
+    expect(ecsSend.mock.calls[0][0].input).toMatchObject({
+      task: "arn:task/e1",
+    });
     expect(count).toBe(2);
   });
 
@@ -414,7 +448,11 @@ describe("reapStuckTopoJobs — topo_export_jobs (ARCH-002)", () => {
       ],
     });
     stageByStatus(exportFindMany, {
-      queued: ["q1", "q2", "q3"].map((id) => ({ id, userId: "u1", format: "gpkg" })),
+      queued: ["q1", "q2", "q3"].map((id) => ({
+        id,
+        userId: "u1",
+        format: "gpkg",
+      })),
     });
     // Every claim wins → the count is the number of rows this pass claimed.
     jobUpdateMany.mockResolvedValue({ count: 1 });
@@ -526,7 +564,10 @@ describe("reapStuckTopoJobs — notifies the owners of reaped jobs", () => {
 
     expect(pushSend).toHaveBeenCalledTimes(1);
     expect(pushSend.mock.calls[0][0]).toBe("u1");
-    expect(pushSend.mock.calls[0][1]).toMatchObject({ type: "topo_failed", jobId: "p1" });
+    expect(pushSend.mock.calls[0][1]).toMatchObject({
+      type: "topo_failed",
+      jobId: "p1",
+    });
     expect(notificationCreateMany).toHaveBeenCalledTimes(1);
     const rows = notificationCreateMany.mock.calls[0][0].data;
     expect(rows).toHaveLength(1);
@@ -585,13 +626,22 @@ describe("reapStuckTopoJobs — notifies the owners of reaped jobs", () => {
 
     await reapStuckTopoJobs(NOW);
 
-    const written = notificationCreateMany.mock.calls.flatMap((call) => call[0].data);
-    const exportRow = written.find((r: { userId: string }) => r.userId === "u2");
-    const geoPdfRow = written.find((r: { userId: string }) => r.userId === "u3");
+    const written = notificationCreateMany.mock.calls.flatMap(
+      (call) => call[0].data,
+    );
+    const exportRow = written.find(
+      (r: { userId: string }) => r.userId === "u2",
+    );
+    const geoPdfRow = written.find(
+      (r: { userId: string }) => r.userId === "u3",
+    );
     // Types both clients already render, with the failure carried in the
     // payload exactly as the Python/TS workers write it.
     expect(exportRow.type).toBe("topo_export_complete");
-    expect(exportRow.payload).toMatchObject({ status: "failed", format: "geotiff" });
+    expect(exportRow.payload).toMatchObject({
+      status: "failed",
+      format: "geotiff",
+    });
     expect(geoPdfRow.type).toBe("geo_pdf_complete");
     expect(geoPdfRow.payload).toMatchObject({ status: "failed" });
   });
@@ -613,7 +663,11 @@ describe("reapStuckTopoJobs — notifies the owners of reaped jobs", () => {
 // "finishes or fails" and the reaper mails on them. Same claim gate as the
 // notification: only rows this pass won get mail.
 describe("reapStuckTopoJobs — emails the owners of reaped jobs", () => {
-  const RECIPIENT = { id: "u1", email: "alice@example.com", uiPreferences: null };
+  const RECIPIENT = {
+    id: "u1",
+    email: "alice@example.com",
+    uiPreferences: null,
+  };
 
   it("emails a reaped topo job's owner, matching the worker's mail shape", async () => {
     stageByStatus(jobFindMany, {
@@ -721,7 +775,9 @@ describe("reapStuckTopoJobs — emails the owners of reaped jobs", () => {
       pending: [{ id: "p1", userId: "u1", name: null }],
     });
     jobUpdateMany.mockResolvedValue({ count: 1 });
-    userFindMany.mockResolvedValue([{ id: "u1", email: null, uiPreferences: null }]);
+    userFindMany.mockResolvedValue([
+      { id: "u1", email: null, uiPreferences: null },
+    ]);
 
     await reapStuckTopoJobs(NOW);
 
@@ -862,14 +918,15 @@ describe("reapStuckTopoJobs — geo_pdf_jobs", () => {
 
     const count = await reapStuckTopoJobs(NOW);
 
-    expect(geoPdfUpdateMany.mock.calls.map((call) => call[0].where.id)).toEqual([
-      "g1",
-      "g2",
-    ]);
+    expect(geoPdfUpdateMany.mock.calls.map((call) => call[0].where.id)).toEqual(
+      ["g1", "g2"],
+    );
     const runningUpdate = geoPdfUpdateMany.mock.calls[0][0];
     expect(runningUpdate.where.status).toBe("running");
     expect(ecsSend).toHaveBeenCalledTimes(1);
-    expect(ecsSend.mock.calls[0][0].input).toMatchObject({ task: "arn:task/g1" });
+    expect(ecsSend.mock.calls[0][0].input).toMatchObject({
+      task: "arn:task/g1",
+    });
     expect(count).toBe(2);
   });
 
@@ -938,7 +995,11 @@ describe("expireCompletedGeoPdfJobs", () => {
   it("an S3 failure skips that row but does not abort the sweep", async () => {
     geoPdfFindMany.mockResolvedValue([
       expiredRow,
-      { ...expiredRow, id: "geo-2", resultKey: "exports/geo-pdf/geo-2/logjam-export.pdf" },
+      {
+        ...expiredRow,
+        id: "geo-2",
+        resultKey: "exports/geo-pdf/geo-2/logjam-export.pdf",
+      },
     ]);
     s3Send
       .mockRejectedValueOnce(new Error("transient"))
@@ -970,7 +1031,11 @@ describe("expireCompletedGeoPdfJobs", () => {
 describe("exportableLayers", () => {
   it("includes raster layers only when a COG exists", () => {
     const set = exportableLayers([
-      { name: "hillshade", cogKey: "k/hillshade.tif", pmtilesKey: "k/hillshade.pmtiles" },
+      {
+        name: "hillshade",
+        cogKey: "k/hillshade.tif",
+        pmtilesKey: "k/hillshade.pmtiles",
+      },
       { name: "slope", cogKey: null, pmtilesKey: "k/slope.pmtiles" },
     ]);
     expect(set.has("hillshade")).toBe(true);
@@ -988,7 +1053,9 @@ describe("exportableLayers", () => {
 
   it("returns an empty set for malformed / unknown outputs", () => {
     expect(exportableLayers(null).size).toBe(0);
-    expect(exportableLayers([{ name: "bogus", cogKey: "x", pmtilesKey: "y" }]).size).toBe(0);
+    expect(
+      exportableLayers([{ name: "bogus", cogKey: "x", pmtilesKey: "y" }]).size,
+    ).toBe(0);
   });
 });
 
@@ -1007,7 +1074,11 @@ describe("queueAutoExports", () => {
     userId: "user-1",
     autoExport: enabledAutoExport,
     s3OutputKeys: [
-      { name: "hillshade", cogKey: "k/hillshade.tif", pmtilesKey: "k/hillshade.pmtiles" },
+      {
+        name: "hillshade",
+        cogKey: "k/hillshade.tif",
+        pmtilesKey: "k/hillshade.pmtiles",
+      },
       { name: "contours", cogKey: null, pmtilesKey: "k/contours.pmtiles" },
     ],
     vectorStyleSnapshot: { contours: {}, features: {} },
@@ -1058,7 +1129,9 @@ describe("queueAutoExports", () => {
       {
         ...completeJob,
         // Only a raster layer without a COG → nothing exportable.
-        s3OutputKeys: [{ name: "hillshade", cogKey: null, pmtilesKey: "k/h.pmtiles" }],
+        s3OutputKeys: [
+          { name: "hillshade", cogKey: null, pmtilesKey: "k/h.pmtiles" },
+        ],
       },
     ]);
     jobUpdateMany.mockResolvedValueOnce({ count: 1 });
@@ -1080,7 +1153,9 @@ describe("queueAutoExports", () => {
   it("notifies on a cap-exceeded (429) launch failure, claim already set", async () => {
     jobFindMany.mockResolvedValueOnce([completeJob]);
     jobUpdateMany.mockResolvedValueOnce({ count: 1 });
-    launchExport.mockRejectedValueOnce(new AppError(429, "Too many concurrent exports"));
+    launchExport.mockRejectedValueOnce(
+      new AppError(429, "Too many concurrent exports"),
+    );
 
     const count = await queueAutoExports(NOW);
 

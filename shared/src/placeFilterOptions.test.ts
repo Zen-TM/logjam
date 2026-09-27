@@ -11,7 +11,9 @@ const system = (key: string) => {
 describe("filterPillStops", () => {
   it("draws a bounded whole-number axis as pills, whoever owns it", () => {
     expect(filterPillStops(system("v_grade"))).toEqual([1, 2, 3, 4, 5, 6, 7]);
-    expect(filterPillStops({ type: "integer", min: 1, max: 5 })).toEqual([1, 2, 3, 4, 5]);
+    expect(filterPillStops({ type: "integer", min: 1, max: 5 })).toEqual([
+      1, 2, 3, 4, 5,
+    ]);
   });
 
   it("draws quality as pills too, although it is a float", () => {

@@ -36,10 +36,12 @@ const OWNER_DATA_MODELS = ["Place", "TripLog", "CustomFieldDef"];
  * entry here is a decision on the record; an omission is a test failure.
  */
 const SCRUB_EXEMPT: Record<string, string> = {
-  "places.import_key": "derived from name+coords, but opaque and needed for re-import dedupe",
+  "places.import_key":
+    "derived from name+coords, but opaque and needed for re-import dedupe",
   "places.ropewiki_snapshot": "public RopeWiki text, not user-authored",
   "trip_logs.import_key": "opaque",
-  "custom_field_defs.key": "slug of the label, which IS scrubbed; kept so values stay addressable",
+  "custom_field_defs.key":
+    "slug of the label, which IS scrubbed; kept so values stay addressable",
   "custom_field_defs.entity": "protocol vocabulary, not user text",
   "custom_field_defs.type": "protocol vocabulary, not user text",
 };
@@ -51,7 +53,9 @@ function tableOf(model: string): string {
 }
 
 function modelBody(model: string): string {
-  const match = new RegExp(`^model ${model} \\{$([\\s\\S]*?)^\\}$`, "m").exec(schema);
+  const match = new RegExp(`^model ${model} \\{$([\\s\\S]*?)^\\}$`, "m").exec(
+    schema,
+  );
   if (!match) throw new Error(`model ${model} not found in schema.prisma`);
   return match[1];
 }
@@ -110,9 +114,13 @@ describe("snapshot-scrub.sql", () => {
     const tables = new Set(
       [...scrubSql.matchAll(/^UPDATE\s+(\w+)/gim)].map(([, t]) => t),
     );
-    const mapped = new Set([...schema.matchAll(/@@map\("([^"]+)"\)/g)].map(([, t]) => t));
+    const mapped = new Set(
+      [...schema.matchAll(/@@map\("([^"]+)"\)/g)].map(([, t]) => t),
+    );
     for (const table of tables) {
-      expect(mapped.has(table), `scrub targets unknown table "${table}"`).toBe(true);
+      expect(mapped.has(table), `scrub targets unknown table "${table}"`).toBe(
+        true,
+      );
     }
   });
 
@@ -126,7 +134,10 @@ describe("snapshot-scrub.sql", () => {
       const [table, column] = pair.split(".");
       const columns = byTable.get(table);
       expect(columns, `scrub targets unknown table "${table}"`).toBeDefined();
-      expect(columns!.has(column), `scrub targets unknown column "${pair}"`).toBe(true);
+      expect(
+        columns!.has(column),
+        `scrub targets unknown column "${pair}"`,
+      ).toBe(true);
     }
   });
 
@@ -164,7 +175,10 @@ describe("snapshot-scrub.sql", () => {
       ),
     );
     for (const pair of Object.keys(SCRUB_EXEMPT)) {
-      expect(live.has(pair), `SCRUB_EXEMPT names "${pair}", which no longer exists`).toBe(true);
+      expect(
+        live.has(pair),
+        `SCRUB_EXEMPT names "${pair}", which no longer exists`,
+      ).toBe(true);
     }
   });
 });

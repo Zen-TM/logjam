@@ -45,15 +45,15 @@ from osgeo import gdal, ogr, osr
 gdal.UseExceptions()
 ogr.UseExceptions()
 
-TARGET_EPSG = 3577          # GDA94 / Australian Albers — metric, equal-area
+TARGET_EPSG = 3577  # GDA94 / Australian Albers — metric, equal-area
 # 100 m is deliberate: the raster only drives a per-cell "burned since LiDAR
 # capture" stale FLAG (warped onto the job DTM at apply time), not a precise
 # fire boundary. Fires are large-area, the LiDAR AOIs are small, and a ~100 m
 # boundary slop is irrelevant to the flag — while 25 m over all-NSW is 2.6e9
 # cells and ~80 per-year rasterize passes (minutes-to-tens-of-minutes + GBs).
 RASTER_RESOLUTION_M = 100
-NODATA_VALUE = 0             # 0 = never-burned or no usable date on record
-MIN_VALID_YEAR = 1900        # rejects the 1899-12-30 NPWS null-sentinel
+NODATA_VALUE = 0  # 0 = never-burned or no usable date on record
+MIN_VALID_YEAR = 1900  # rejects the 1899-12-30 NPWS null-sentinel
 
 
 def resolve_fire_year(
@@ -92,7 +92,9 @@ def _ogr_field_to_date(feature: "ogr.Feature", field_index: int) -> Optional[dat
     """
     if not feature.IsFieldSetAndNotNull(field_index):
         return None
-    year, month, day, _hour, _minute, _second, _tz_flag = feature.GetFieldAsDateTime(field_index)
+    year, month, day, _hour, _minute, _second, _tz_flag = feature.GetFieldAsDateTime(
+        field_index
+    )
     return date(year, month, day)
 
 
@@ -213,7 +215,9 @@ def rasterize_max_year(
         gdal.GDT_UInt16,
         options=["COMPRESS=LZW", "PREDICTOR=2", "TILED=YES", "BIGTIFF=YES"],
     )
-    dst_ds.SetGeoTransform((xmin, RASTER_RESOLUTION_M, 0, ymax, 0, -RASTER_RESOLUTION_M))
+    dst_ds.SetGeoTransform(
+        (xmin, RASTER_RESOLUTION_M, 0, ymax, 0, -RASTER_RESOLUTION_M)
+    )
     dst_ds.SetProjection(tgt_srs.ExportToWkt())
     band = dst_ds.GetRasterBand(1)
     band.SetNoDataValue(NODATA_VALUE)
@@ -222,7 +226,9 @@ def rasterize_max_year(
     for year in sorted(years_seen):
         mem_layer.SetAttributeFilter(f"fire_year = {year}")
         gdal.RasterizeLayer(dst_ds, [1], mem_layer, burn_values=[year])
-        print(f"  burned year {year} ({mem_layer.GetFeatureCount()} polygons)", flush=True)
+        print(
+            f"  burned year {year} ({mem_layer.GetFeatureCount()} polygons)", flush=True
+        )
     mem_layer.SetAttributeFilter(None)
 
     dst_ds.FlushCache()
@@ -232,7 +238,9 @@ def rasterize_max_year(
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     here = Path(__file__).parent
     parser.add_argument(
         "--input",
@@ -264,7 +272,9 @@ def main():
     if src_srs is None:
         print("ERROR: source layer has no spatial reference defined", file=sys.stderr)
         sys.exit(1)
-    print(f"  {src_layer.GetFeatureCount()} features, source SRS: {src_srs.GetAuthorityCode(None)}")
+    print(
+        f"  {src_layer.GetFeatureCount()} features, source SRS: {src_srs.GetAuthorityCode(None)}"
+    )
 
     tgt_srs = osr.SpatialReference()
     tgt_srs.ImportFromEPSG(TARGET_EPSG)
@@ -273,22 +283,33 @@ def main():
     transform = osr.CoordinateTransformation(src_srs, tgt_srs)
 
     current_year = datetime.now(timezone.utc).year
-    print(f"Resolving fire years (current_year={current_year}, valid range [{MIN_VALID_YEAR}, {current_year}]) …")
+    print(
+        f"Resolving fire years (current_year={current_year}, valid range [{MIN_VALID_YEAR}, {current_year}]) …"
+    )
     mem_ds, mem_layer, valid_count, dropped_count, years_seen = build_valid_year_layer(
         src_layer, transform, tgt_srs, current_year
     )
     print(f"  {valid_count} valid, {dropped_count} dropped (no usable fire date)")
     if not years_seen:
-        print("ERROR: zero features had a resolvable fire year — nothing to rasterize", file=sys.stderr)
+        print(
+            "ERROR: zero features had a resolvable fire year — nothing to rasterize",
+            file=sys.stderr,
+        )
         sys.exit(1)
-    print(f"  {len(years_seen)} distinct fire years, {min(years_seen)}–{max(years_seen)}")
+    print(
+        f"  {len(years_seen)} distinct fire years, {min(years_seen)}–{max(years_seen)}"
+    )
 
     print(f"Computing reprojected extent (EPSG:{TARGET_EPSG}) …")
     extent = compute_reprojected_extent(src_layer, transform)
     print(f"  extent (xmin, xmax, ymin, ymax): {extent}")
 
-    print(f"Rasterizing → {out_path} (uint16, {RASTER_RESOLUTION_M} m, nodata={NODATA_VALUE}) …")
-    width, height = rasterize_max_year(mem_layer, years_seen, extent, tgt_srs, str(out_path))
+    print(
+        f"Rasterizing → {out_path} (uint16, {RASTER_RESOLUTION_M} m, nodata={NODATA_VALUE}) …"
+    )
+    width, height = rasterize_max_year(
+        mem_layer, years_seen, extent, tgt_srs, str(out_path)
+    )
     print(f"  raster size: {width} x {height}")
 
     legend = {

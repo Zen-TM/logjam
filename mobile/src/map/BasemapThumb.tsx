@@ -75,7 +75,11 @@ export function BasemapThumb({ basemapId }: { basemapId: BasemapId }) {
   if (resource === undefined) {
     return (
       <View style={[styles.tile, styles.glyphTile]}>
-        <Feather name={BASEMAP_META[basemapId].icon} size={20} color={assetHue.region} />
+        <Feather
+          name={BASEMAP_META[basemapId].icon}
+          size={20}
+          color={assetHue.region}
+        />
       </View>
     );
   }

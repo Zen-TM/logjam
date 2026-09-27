@@ -1,7 +1,7 @@
 import { describe, it, expect, afterAll } from "vitest";
 import request from "supertest";
 import prisma from "../services/prisma";
-import { ALICE_ID, BOB_ID, NONEXISTENT_ID, CANYON_TYPE_ID} from "./_actors";
+import { ALICE_ID, BOB_ID, NONEXISTENT_ID, CANYON_TYPE_ID } from "./_actors";
 
 // Requires `make dev` running with AUTH_MODE=fake (requests = seeded alice).
 // Each test creates its own notification rows directly via Prisma (the API
@@ -81,7 +81,9 @@ describe("GET /notifications (fake auth = alice)", () => {
     try {
       const res = await request(API_URL).get("/notifications").set(AUTH);
       expect(res.status).toBe(200);
-      const found = res.body.find((n: { id: string }) => n.id === notification.id);
+      const found = res.body.find(
+        (n: { id: string }) => n.id === notification.id,
+      );
       expect(found).toBeDefined();
       expect(found.payload.placeName).toBe("CH-002 notification place");
       expect(found.payload.sharedByUsername).toBe("bob");
@@ -184,10 +186,14 @@ describe("PATCH /notifications/:id/read and DELETE /notifications/:id (fake auth
       expect(deleteRes.status).toBe(404);
 
       // Confirm bob's notification was untouched.
-      const after = await prisma.notification.findUnique({ where: { id: bobNotification.id } });
+      const after = await prisma.notification.findUnique({
+        where: { id: bobNotification.id },
+      });
       expect(after?.read).toBe(false);
     } finally {
-      await prisma.notification.deleteMany({ where: { id: bobNotification.id } });
+      await prisma.notification.deleteMany({
+        where: { id: bobNotification.id },
+      });
     }
   });
 
@@ -227,7 +233,9 @@ describe("PATCH /notifications/:id/read and DELETE /notifications/:id (fake auth
         .set(AUTH);
       expect(deleteRes.status).toBe(204);
 
-      const after = await prisma.notification.findUnique({ where: { id: notification.id } });
+      const after = await prisma.notification.findUnique({
+        where: { id: notification.id },
+      });
       expect(after).toBeNull();
     } finally {
       await prisma.notification.deleteMany({ where: { id: notification.id } });

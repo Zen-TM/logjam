@@ -179,7 +179,11 @@ export const SCHEMA_SQL = `
 // CREATE TABLE statements above only run on a fresh DB, so each addition needs
 // an idempotent ALTER here, guarded by an actual column check rather than a
 // swallowed error (a genuinely broken ALTER must still throw).
-export const ADDED_COLUMNS: { table: string; column: string; definition: string }[] = [
+export const ADDED_COLUMNS: {
+  table: string;
+  column: string;
+  definition: string;
+}[] = [
   // User-facing rename of a downloaded region/overlay (Saved tab). Display
   // only — resolution still keys off `logicalKey`.
   { table: "map_artifact", column: "label", definition: "TEXT" },
@@ -194,7 +198,11 @@ export const ADDED_COLUMNS: { table: string; column: string; definition: string 
   // stored fix series, which stops at the last accepted fix — so the time
   // between the last fix and the Finish tap vanished from the saved track.
   // Pauses are now accumulated explicitly at the pause/resume taps.
-  { table: "track", column: "pausedMs", definition: "INTEGER NOT NULL DEFAULT 0" },
+  {
+    table: "track",
+    column: "pausedMs",
+    definition: "INTEGER NOT NULL DEFAULT 0",
+  },
   { table: "track", column: "pausedAt", definition: "TEXT" },
   // The standalone media row this finished recording was serialised into
   // (`sync/mediaUpload.createStandaloneMediaLocal`, origin "track"). NULL means
@@ -223,5 +231,4 @@ export const ADDED_COLUMNS: { table: string; column: string; definition: string 
   { table: "track_point", column: "speedMps", definition: "REAL" },
   { table: "track_point", column: "headingDeg", definition: "REAL" },
   { table: "track_point", column: "altitudeAccuracyM", definition: "REAL" },
-
 ];

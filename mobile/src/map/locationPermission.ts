@@ -9,7 +9,8 @@ import { alertPermissionDenied } from "../permissionAlert";
 export async function ensureForegroundLocationPermission(): Promise<boolean> {
   let { status, canAskAgain } = await Location.getForegroundPermissionsAsync();
   if (status !== "granted") {
-    ({ status, canAskAgain } = await Location.requestForegroundPermissionsAsync());
+    ({ status, canAskAgain } =
+      await Location.requestForegroundPermissionsAsync());
   }
   if (status === "granted") return true;
   // Android silently auto-denies after one refusal (canAskAgain=false) —

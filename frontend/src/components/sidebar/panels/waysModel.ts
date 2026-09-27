@@ -89,7 +89,12 @@ function boundsOfPoints(
   if (points.length === 0) return null;
   const lngs = points.map(([lng]) => lng);
   const lats = points.map(([, lat]) => lat);
-  return [Math.min(...lngs), Math.min(...lats), Math.max(...lngs), Math.max(...lats)];
+  return [
+    Math.min(...lngs),
+    Math.min(...lats),
+    Math.max(...lngs),
+    Math.max(...lats),
+  ];
 }
 
 /**
@@ -127,7 +132,8 @@ export function wayFromRoute(
     distanceM: routeLengthM(route.points),
     color: route.color,
     shared,
-    viaPlace: shared && route.placeId !== null && sharedPlaceIds.has(route.placeId),
+    viaPlace:
+      shared && route.placeId !== null && sharedPlaceIds.has(route.placeId),
     placeId: route.placeId,
     createdAt: route.createdAt,
     bounds: boundsOfPoints(route.points),
@@ -156,7 +162,9 @@ export function buildWays({
   // belongs at the top whatever produced it. Undated rows keep their relative
   // order at the bottom, which `Array.prototype.sort`'s stability guarantees.
   return sortNewestFirst([
-    ...routes.map((route) => wayFromRoute(route, currentUserId, sharedPlaceIds)),
+    ...routes.map((route) =>
+      wayFromRoute(route, currentUserId, sharedPlaceIds),
+    ),
     ...standaloneFiles.map(
       (file): WayItem => ({
         key: `file-${file.id}`,

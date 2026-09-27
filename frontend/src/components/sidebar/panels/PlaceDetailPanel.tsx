@@ -12,7 +12,13 @@
 // Which verbs it offers is `placeVerbs` (placesModel.ts), not this file's
 // judgement — the same rule `wayActions.ts` holds for ways, so a place's row
 // and its page cannot drift into disagreeing about what can be done with it.
-import { useState, useEffect, useMemo, useRef, type CSSProperties } from "react";
+import {
+  useState,
+  useEffect,
+  useMemo,
+  useRef,
+  type CSSProperties,
+} from "react";
 import {
   Activity,
   Check,
@@ -60,7 +66,13 @@ import PlaceDialog from "../../dialogs/PlaceDialog";
 import ShareDialog from "../../dialogs/ShareDialog";
 import TripLogDialog from "../../dialogs/TripLogDialog";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
-import type { TPlace, TFriend, TTripLog, TPlaceShare, TPlaceType } from "../../../placeUtils";
+import type {
+  TPlace,
+  TFriend,
+  TTripLog,
+  TPlaceShare,
+  TPlaceType,
+} from "../../../placeUtils";
 import {
   deletePlace,
   getCustomFields,
@@ -138,7 +150,8 @@ function displayValue(def: TripLogCustomFieldDef, raw: unknown): string | null {
  *  the point of the section is that the user can SEE what arrived before
  *  deciding what to do with it. */
 function foreignValueText(item: { value: unknown; type: string }): string {
-  if (item.value !== null && typeof item.value === "object") return JSON.stringify(item.value);
+  if (item.value !== null && typeof item.value === "object")
+    return JSON.stringify(item.value);
   return formatFieldValue(item.value, item.type);
 }
 
@@ -247,7 +260,9 @@ function PlaceDetailPanel({
   const [placeMedia, setPlaceMedia] = useState<MediaItem[]>([]);
   const [loadingTrips, setLoadingTrips] = useState(false);
   const [showTripLogDialog, setShowTripLogDialog] = useState(false);
-  const [editingTripLog, setEditingTripLog] = useState<TTripLog | undefined>(undefined);
+  const [editingTripLog, setEditingTripLog] = useState<TTripLog | undefined>(
+    undefined,
+  );
 
   const [copying, setCopying] = useState(false);
   const [placeShares, setPlaceShares] = useState<TPlaceShare[]>([]);
@@ -271,7 +286,8 @@ function PlaceDetailPanel({
     () => asForeignFields(place?.foreignFields),
     [place?.foreignFields],
   );
-  const foreignItem = foreignFields.find((item) => item.key === foreignKey) ?? null;
+  const foreignItem =
+    foreignFields.find((item) => item.key === foreignKey) ?? null;
   const placeType = placeTypes.find((type) => type.id === place?.placeTypeId);
   const TypeGlyph = placeTypeLucideIcon(placeType?.iconKey ?? "map-pin");
   const placeTypeName = placeType?.name ?? "this type";
@@ -281,8 +297,14 @@ function PlaceDetailPanel({
   const attributes = useMemo(() => {
     if (!place) return [];
     return defsForType(placeCustomFieldDefs, place.placeTypeId)
-      .map((def) => ({ def, text: displayValue(def, fieldValue(place.fieldValues, def.key)) }))
-      .filter((row): row is { def: ScopedCustomFieldDef; text: string } => row.text != null);
+      .map((def) => ({
+        def,
+        text: displayValue(def, fieldValue(place.fieldValues, def.key)),
+      }))
+      .filter(
+        (row): row is { def: ScopedCustomFieldDef; text: string } =>
+          row.text != null,
+      );
   }, [place, placeCustomFieldDefs]);
 
   /**
@@ -351,7 +373,7 @@ function PlaceDetailPanel({
       })
       // Best-effort: this line is informational; on failure just omit it.
       .catch(console.error);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [place?.id, isOwnedPlace, showShareDialog]);
 
   useEffect(() => {
@@ -382,15 +404,20 @@ function PlaceDetailPanel({
       .finally(() => {
         if (detailFetchKeyRef.current === requestedId) setLoadingTrips(false);
       });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [place?.id, toast]);
 
   if (!place) {
     return (
       <div className={classes.root}>
-        <Hero title="Place" onBack={onBack} backLabel="Back to Places" actions={
-          <IconButton icon={X} label="Close panel" onClick={onClose} />
-        } />
+        <Hero
+          title="Place"
+          onBack={onBack}
+          backLabel="Back to Places"
+          actions={
+            <IconButton icon={X} label="Close panel" onClick={onClose} />
+          }
+        />
         <div className={classes.body}>
           <EmptyState
             icon={MapPinned}
@@ -472,7 +499,9 @@ function PlaceDetailPanel({
       onAfterDelete();
     } catch (err) {
       console.error(err);
-      toast.error(messageFromError(err, "Couldn't delete place. Please try again."));
+      toast.error(
+        messageFromError(err, "Couldn't delete place. Please try again."),
+      );
       setDeleting(false);
     }
   }
@@ -488,7 +517,9 @@ function PlaceDetailPanel({
       toast.success("Removed.");
     } catch (err) {
       console.error(err);
-      toast.error(messageFromError(err, "Couldn't remove that place. Please try again."));
+      toast.error(
+        messageFromError(err, "Couldn't remove that place. Please try again."),
+      );
     } finally {
       setRemoving(false);
     }
@@ -523,12 +554,16 @@ function PlaceDetailPanel({
             : `Copied, but ${skipped === 1 ? "1 photo or file" : `${skipped} photos and files`} couldn't be copied.`,
         );
       } else {
-        toast.success(andRemove ? "Copied, and the shared one removed." : "Copied.");
+        toast.success(
+          andRemove ? "Copied, and the shared one removed." : "Copied.",
+        );
       }
       onRefetch();
     } catch (err) {
       console.error(err);
-      toast.error(messageFromError(err, "Couldn't copy place. Please try again."));
+      toast.error(
+        messageFromError(err, "Couldn't copy place. Please try again."),
+      );
     } finally {
       setCopying(false);
       setConfirmCopyAndRemove(false);
@@ -574,7 +609,9 @@ function PlaceDetailPanel({
       onQuotaChanged();
     } catch (err) {
       console.error(err);
-      toast.error(messageFromError(err, "Couldn't delete track. Please try again."));
+      toast.error(
+        messageFromError(err, "Couldn't delete track. Please try again."),
+      );
     } finally {
       setDeletingTrack(false);
     }
@@ -650,8 +687,11 @@ function PlaceDetailPanel({
     },
   );
 
-  const visualMedia = placeMedia.filter((m) => mediaCategory(m.mediaType) !== "track");
-  const track = placeMedia.find((m) => mediaCategory(m.mediaType) === "track") ?? null;
+  const visualMedia = placeMedia.filter(
+    (m) => mediaCategory(m.mediaType) !== "track",
+  );
+  const track =
+    placeMedia.find((m) => mediaCategory(m.mediaType) === "track") ?? null;
 
   return (
     <>
@@ -697,9 +737,13 @@ function PlaceDetailPanel({
             {placeType?.name ?? "Unknown type"}
           </p>
           {current.altNames.length > 0 && (
-            <p className={classes.meta}>Also known as {current.altNames.join(", ")}</p>
+            <p className={classes.meta}>
+              Also known as {current.altNames.join(", ")}
+            </p>
           )}
-          {sharedWithNode != null && <p className={classes.meta}>Shared with {sharedWithNode}</p>}
+          {sharedWithNode != null && (
+            <p className={classes.meta}>Shared with {sharedWithNode}</p>
+          )}
 
           {/* WHERE IT IS, as the thing people actually do with it: copy the
               coordinates into whatever they are navigating with. */}
@@ -718,7 +762,9 @@ function PlaceDetailPanel({
 
           {attributes.length > 0 && (
             <section className={classes.section}>
-              <SectionHeader title={`This ${placeTypeName.toLowerCase()}\u2019s attributes`} />
+              <SectionHeader
+                title={`This ${placeTypeName.toLowerCase()}\u2019s attributes`}
+              />
               <dl className={classes.table}>
                 {attributes.map(({ def, text }) => (
                   <div key={def.key} className={classes.tableRow}>
@@ -739,7 +785,10 @@ function PlaceDetailPanel({
 
           {placeSources(current).length > 0 && (
             <section className={classes.section}>
-              <SectionHeader title="Sources" count={placeSources(current).length} />
+              <SectionHeader
+                title="Sources"
+                count={placeSources(current).length}
+              />
               {placeSources(current).map(([label, url], index) => {
                 // FEUI-012: only http(s) becomes a link — a non-http scheme
                 // (from data saved before the save-time check existed) is a
@@ -795,18 +844,24 @@ function PlaceDetailPanel({
               sent no links at all; the list is simply absent for them. */}
           {isOwnedPlace && linkedPlaces.length > 0 && (
             <section className={classes.section}>
-              <SectionHeader title="Linked places" count={linkedPlaces.length} />
+              <SectionHeader
+                title="Linked places"
+                count={linkedPlaces.length}
+              />
               {linkedPlaces.map((linked) => (
                 <Row
                   key={linked.id}
                   leading={
                     <IconTile
                       icon={placeTypeLucideIcon(
-                        placeTypes.find((type) => type.id === linked.placeTypeId)?.iconKey ?? "map-pin",
+                        placeTypes.find(
+                          (type) => type.id === linked.placeTypeId,
+                        )?.iconKey ?? "map-pin",
                       )}
                       hue={
-                        placeTypes.find((type) => type.id === linked.placeTypeId)?.color ??
-                        "var(--theme-accent)"
+                        placeTypes.find(
+                          (type) => type.id === linked.placeTypeId,
+                        )?.color ?? "var(--theme-accent)"
                       }
                     />
                   }
@@ -826,7 +881,10 @@ function PlaceDetailPanel({
               `foreignFields` on a row a sharee can reach. */}
           {isOwnedPlace && foreignFields.length > 0 && (
             <section className={classes.section}>
-              <SectionHeader title="Doesn't fit this type" count={foreignFields.length} />
+              <SectionHeader
+                title="Doesn't fit this type"
+                count={foreignFields.length}
+              />
               <p className={classes.muted}>
                 {current.forkedFromId
                   ? "These came across when you copied this place. Click one to decide what to do with it."
@@ -839,7 +897,9 @@ function PlaceDetailPanel({
               {foreignFields.map((item) => (
                 <Row
                   key={item.key}
-                  leading={<IconTile icon={CircleHelp} hue="var(--theme-accent)" />}
+                  leading={
+                    <IconTile icon={CircleHelp} hue="var(--theme-accent)" />
+                  }
                   title={item.label}
                   subtitle={foreignValueText(item)}
                   trailing={<ChevronRight size={18} aria-hidden />}
@@ -908,7 +968,9 @@ function PlaceDetailPanel({
             <dl className={classes.table}>
               <div className={classes.tableRow}>
                 <dt>{foreignItem.label}</dt>
-                <dd className={classes.figure}>{foreignValueText(foreignItem)}</dd>
+                <dd className={classes.figure}>
+                  {foreignValueText(foreignItem)}
+                </dd>
               </div>
             </dl>
             {/* HIDDEN on a built-in key: the system definition already owns
@@ -916,7 +978,9 @@ function PlaceDetailPanel({
                 unavailable, it is one that does not exist for this value. */}
             {!isReservedFieldKey(foreignItem.key) && (
               <Row
-                leading={<IconTile icon={CirclePlus} hue="var(--theme-accent)" />}
+                leading={
+                  <IconTile icon={CirclePlus} hue="var(--theme-accent)" />
+                }
                 title="Create a new attribute for this place type"
                 onOpen={() => runForeignFieldAction("adopt")}
                 disabled={foreignFieldBusy}
@@ -955,8 +1019,8 @@ function PlaceDetailPanel({
         title="Delete track?"
         message={
           <>
-            This permanently deletes the track <b>{trackToDelete?.filename}</b>. This
-            cannot be undone.
+            This permanently deletes the track <b>{trackToDelete?.filename}</b>.
+            This cannot be undone.
           </>
         }
         busy={deletingTrack}
@@ -971,9 +1035,9 @@ function PlaceDetailPanel({
             <>
               Recipients see this place&rsquo;s details, place-level notes and
               place-level media, and can copy or export it while the share is
-              active. They do <b>not</b> see your trip logs or any per-trip notes
-              or media. Unsharing won&rsquo;t remove copies they&rsquo;ve already
-              made.
+              active. They do <b>not</b> see your trip logs or any per-trip
+              notes or media. Unsharing won&rsquo;t remove copies they&rsquo;ve
+              already made.
             </>
           }
           friends={friends}
@@ -1011,9 +1075,10 @@ function PlaceDetailPanel({
         title="Delete place?"
         message={
           <>
-            This permanently deletes {current.name}, along with its photos, tracks and
-            shares. Your trip logs are kept — they&rsquo;ll be unlinked from this place
-            but stay in your logbook. This cannot be undone.
+            This permanently deletes {current.name}, along with its photos,
+            tracks and shares. Your trip logs are kept — they&rsquo;ll be
+            unlinked from this place but stay in your logbook. This cannot be
+            undone.
           </>
         }
         confirmLabel="Delete"
@@ -1041,7 +1106,6 @@ function PlaceDetailPanel({
         onCustomFieldDefsChange={onCustomFieldDefsChange}
         existingTripTypes={existingTripTypes}
       />
-
     </>
   );
 }

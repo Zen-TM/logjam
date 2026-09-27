@@ -50,4 +50,3 @@ export function stripWaterwaySuffix(name: string): string {
   }
   return n;
 }
-

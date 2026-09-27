@@ -34,9 +34,13 @@ export function notificationLabel(n: TNotification): NotificationLabel {
   const p = n.payload;
   switch (n.type) {
     case "friend_request":
-      return { text: `${str(p.requesterUsername) ?? "Someone"} sent you a friend request` };
+      return {
+        text: `${str(p.requesterUsername) ?? "Someone"} sent you a friend request`,
+      };
     case "friend_request_accepted":
-      return { text: `${str(p.acceptedByUsername) ?? "Someone"} accepted your friend request` };
+      return {
+        text: `${str(p.acceptedByUsername) ?? "Someone"} accepted your friend request`,
+      };
     case "place_shared":
       return {
         text: `${str(p.sharedByUsername) ?? "Someone"} shared ${str(p.placeName) ?? "a place"} with you`,
@@ -70,14 +74,18 @@ export function notificationLabel(n: TNotification): NotificationLabel {
       };
     case "topo_complete":
       return {
-        text: str(p.jobName) ? `${str(p.jobName)} map ready` : "LiDAR map ready",
+        text: str(p.jobName)
+          ? `${str(p.jobName)} map ready`
+          : "LiDAR map ready",
         ...(p.osmFailed === true && {
           warning: "Roads and labels didn't download. Try again.",
         }),
       };
     case "topo_failed":
       return {
-        text: str(p.jobName) ? `${str(p.jobName)} map failed` : "LiDAR map failed",
+        text: str(p.jobName)
+          ? `${str(p.jobName)} map failed`
+          : "LiDAR map failed",
       };
     case "topo_export_complete": {
       const format = String(p.format ?? "Topo").toUpperCase();
@@ -230,7 +238,9 @@ export function notificationsTruncated(total: number | null): boolean {
  * every unread one. An unparseable timestamp sorts last rather than poisoning
  * the comparison.
  */
-export function newestNotificationsFirst(notifications: readonly TNotification[]): TNotification[] {
+export function newestNotificationsFirst(
+  notifications: readonly TNotification[],
+): TNotification[] {
   const time = (n: TNotification) => {
     const parsed = Date.parse(n.createdAt);
     return Number.isNaN(parsed) ? -Infinity : parsed;
@@ -282,12 +292,21 @@ export function groupNotificationsByDay(
       last.data.push(notification);
       continue;
     }
-    sections.push({ key, title: dayTitle(key, at, todayKey, yesterdayKey), data: [notification] });
+    sections.push({
+      key,
+      title: dayTitle(key, at, todayKey, yesterdayKey),
+      data: [notification],
+    });
   }
   return sections;
 }
 
-function dayTitle(key: string, at: Date, todayKey: string, yesterdayKey: string): string {
+function dayTitle(
+  key: string,
+  at: Date,
+  todayKey: string,
+  yesterdayKey: string,
+): string {
   if (key === "unknown") return "Unknown date";
   if (key === todayKey) return "Today";
   if (key === yesterdayKey) return "Yesterday";
@@ -295,6 +314,8 @@ function dayTitle(key: string, at: Date, todayKey: string, yesterdayKey: string)
     day: "numeric",
     month: "short",
     // Only worth the width once the year is ambiguous.
-    ...(at.getFullYear() !== new Date(todayKey).getFullYear() ? { year: "numeric" } : {}),
+    ...(at.getFullYear() !== new Date(todayKey).getFullYear()
+      ? { year: "numeric" }
+      : {}),
   });
 }

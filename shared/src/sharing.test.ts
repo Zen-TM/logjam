@@ -13,9 +13,9 @@ import {
 // the place arm standing and the row comes back on the next pull.
 describe("sharedRowVisibility", () => {
   it("calls an owned row owned, whatever it is linked to", () => {
-    expect(sharedRowVisibility({ syncRole: "owner", visibleLinkedPlaceIds: ["c1"] })).toBe(
-      "owned",
-    );
+    expect(
+      sharedRowVisibility({ syncRole: "owner", visibleLinkedPlaceIds: ["c1"] }),
+    ).toBe("owned");
   });
 
   it("treats an unknown role as owned — a Remove is never offered on a guess", () => {
@@ -25,14 +25,17 @@ describe("sharedRowVisibility", () => {
 
   it("calls a shared row with no visible place link a direct share", () => {
     expect(sharedRowVisibility({ syncRole: "shared" })).toBe("direct");
-    expect(sharedRowVisibility({ syncRole: "shared", visibleLinkedPlaceIds: [] })).toBe(
-      "direct",
-    );
+    expect(
+      sharedRowVisibility({ syncRole: "shared", visibleLinkedPlaceIds: [] }),
+    ).toBe("direct");
   });
 
   it("calls a shared row linked to a place the caller can see inherited", () => {
     expect(
-      sharedRowVisibility({ syncRole: "shared", visibleLinkedPlaceIds: ["c1"] }),
+      sharedRowVisibility({
+        syncRole: "shared",
+        visibleLinkedPlaceIds: ["c1"],
+      }),
     ).toBe("via-place");
   });
 });
@@ -132,7 +135,10 @@ describe("copyAndRemoveConfirm", () => {
   // positions and one of them starts a sentence, so a single lower-case form
   // rendered "…on every device. the owner keeps the original."
   it("capitalises the unnamed owner where it starts a sentence, and not where it does not", () => {
-    const body = copyAndRemoveConfirm({ kindLabel: "route", itemName: "Exit track" }).body;
+    const body = copyAndRemoveConfirm({
+      kindLabel: "route",
+      itemName: "Exit track",
+    }).body;
     expect(body).toContain("The owner keeps the original");
     expect(body).toContain("whether or not the owner keeps sharing");
     expect(body).not.toMatch(/\. the owner/);

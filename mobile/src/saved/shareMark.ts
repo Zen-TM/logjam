@@ -51,7 +51,12 @@ export function shareMark(input: {
     // No owner resolved (the share row hasn't reached the mirror yet, or the
     // asset outlived it) still says the whole phrase. Never the bare word
     // "Shared" — that is the ambiguity this file exists to remove.
-    return { pill: { label: owner ? `From ${owner}` : "Shared with you", tone: "outline" } };
+    return {
+      pill: {
+        label: owner ? `From ${owner}` : "Shared with you",
+        tone: "outline",
+      },
+    };
   }
   return input.sharedCount ? { sharedWithCount: input.sharedCount } : {};
 }

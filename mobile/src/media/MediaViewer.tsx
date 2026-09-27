@@ -16,7 +16,15 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { mediaCategory } from "@logjam/shared";
 
-import { fontSize, fontWeight, radius, scrim, spacing, theme, withAlpha } from "../theme";
+import {
+  fontSize,
+  fontWeight,
+  radius,
+  scrim,
+  spacing,
+  theme,
+  withAlpha,
+} from "../theme";
 import { ensureDisplayCached } from "../sync/mediaCache";
 import type { MirrorMedia } from "../sync/mirrorStore";
 import { IconButton } from "../ui";
@@ -139,7 +147,12 @@ export function MediaViewer({
           </View>
         ) : null}
 
-        <View style={[styles.bottomBar, { paddingBottom: insets.bottom + spacing(1) }]}>
+        <View
+          style={[
+            styles.bottomBar,
+            { paddingBottom: insets.bottom + spacing(1) },
+          ]}
+        >
           <Text style={styles.caption} numberOfLines={1}>
             {current?.filename ?? ""}
           </Text>
@@ -205,9 +218,7 @@ function MediaPage({ item, active }: { item: MirrorMedia; active: boolean }) {
     return (
       <View style={styles.page}>
         <Feather name="map" size={28} color={theme.textMuted} />
-        <Text style={styles.notice}>
-          {item.filename ?? "Route file"}
-        </Text>
+        <Text style={styles.notice}>{item.filename ?? "Route file"}</Text>
         <Text style={styles.noticeMuted}>Routes open on the map.</Text>
       </View>
     );
@@ -252,8 +263,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing(4),
   },
   image: { flex: 1, width: "100%" },
-  notice: { color: theme.textPrimary, fontSize: fontSize.base, textAlign: "center" },
-  noticeMuted: { color: theme.textMuted, fontSize: fontSize.sm, textAlign: "center" },
+  notice: {
+    color: theme.textPrimary,
+    fontSize: fontSize.base,
+    textAlign: "center",
+  },
+  noticeMuted: {
+    color: theme.textMuted,
+    fontSize: fontSize.sm,
+    textAlign: "center",
+  },
   topBar: {
     position: "absolute",
     top: 0,

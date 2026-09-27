@@ -11,7 +11,12 @@ import {
 const CDN = "https://logjamnsw.com";
 
 function ctx(overrides: Partial<ResolveContext> = {}): ResolveContext {
-  return { connectivity: "online", artifacts: [], cdnBaseUrl: CDN, ...overrides };
+  return {
+    connectivity: "online",
+    artifacts: [],
+    cdnBaseUrl: CDN,
+    ...overrides,
+  };
 }
 
 function artifact(overrides: Partial<MapArtifact>): MapArtifact {
@@ -33,7 +38,10 @@ function artifact(overrides: Partial<MapArtifact>): MapArtifact {
 
 describe("basemap resolution", () => {
   it("online: catalog raster resolves to remote XYZ tiles with display cap", () => {
-    const [r] = resolveMapSource({ kind: "basemap", basemapId: "six-topo" }, ctx());
+    const [r] = resolveMapSource(
+      { kind: "basemap", basemapId: "six-topo" },
+      ctx(),
+    );
     expect(r.status).toBe("ok");
     if (r.status !== "ok") return;
     expect(r.sourceType).toBe("raster");
@@ -47,7 +55,10 @@ describe("basemap resolution", () => {
       { kind: "basemap", basemapId: "osm-topo" },
       ctx({ connectivity: "offline" }),
     );
-    expect(r).toMatchObject({ status: "unavailable", reason: "online-only-source" });
+    expect(r).toMatchObject({
+      status: "unavailable",
+      reason: "online-only-source",
+    });
   });
 
   it("offline: offline-capable basemap without downloads is unavailable (no silent remote fallback)", () => {
@@ -55,7 +66,10 @@ describe("basemap resolution", () => {
       { kind: "basemap", basemapId: "six-topo" },
       ctx({ connectivity: "offline" }),
     );
-    expect(r).toMatchObject({ status: "unavailable", reason: "offline-not-downloaded" });
+    expect(r).toMatchObject({
+      status: "unavailable",
+      reason: "offline-not-downloaded",
+    });
   });
 
   it("offline: resolves to ALL downloaded regions with bounds and zoom clamps", () => {
@@ -108,7 +122,11 @@ describe("basemap resolution", () => {
       { kind: "basemap", basemapId: "six-topo" },
       ctx({
         artifacts: [
-          artifact({ kind: "basemap-region", logicalKey: "six-topo", bbox: [1, 2, 3, 4] }),
+          artifact({
+            kind: "basemap-region",
+            logicalKey: "six-topo",
+            bbox: [1, 2, 3, 4],
+          }),
         ],
       }),
     );
@@ -119,10 +137,7 @@ describe("basemap resolution", () => {
 
   it("throws loudly on an unknown basemap id", () => {
     expect(() =>
-      resolveMapSource(
-        { kind: "basemap", basemapId: "bogus" as never },
-        ctx(),
-      ),
+      resolveMapSource({ kind: "basemap", basemapId: "bogus" as never }, ctx()),
     ).toThrow(/Unknown basemap id/);
   });
 });
@@ -158,7 +173,10 @@ describe("topo-overlay resolution (full coverage → local-first always)", () =>
 
   it("a rotated presigned URL produces a different key (remount)", () => {
     const [a] = resolveMapSource(ref, ctx());
-    const [b] = resolveMapSource({ ...ref, remoteUrl: `${ref.remoteUrl}2` }, ctx());
+    const [b] = resolveMapSource(
+      { ...ref, remoteUrl: `${ref.remoteUrl}2` },
+      ctx(),
+    );
     expect(a.key).not.toBe(b.key);
   });
 
@@ -169,7 +187,10 @@ describe("topo-overlay resolution (full coverage → local-first always)", () =>
 
   it("offline without a download: unavailable", () => {
     const [r] = resolveMapSource(ref, ctx({ connectivity: "offline" }));
-    expect(r).toMatchObject({ status: "unavailable", reason: "offline-not-downloaded" });
+    expect(r).toMatchObject({
+      status: "unavailable",
+      reason: "offline-not-downloaded",
+    });
   });
 
   it("mbtiles artifacts ride `tiles`, pmtiles ride `url`", () => {
@@ -177,7 +198,11 @@ describe("topo-overlay resolution (full coverage → local-first always)", () =>
       ref,
       ctx({
         artifacts: [
-          artifact({ logicalKey: "job1/hillshade", format: "mbtiles", path: "/files/x.mbtiles" }),
+          artifact({
+            logicalKey: "job1/hillshade",
+            format: "mbtiles",
+            path: "/files/x.mbtiles",
+          }),
         ],
       }),
     );
@@ -211,7 +236,10 @@ describe("imports (always local)", () => {
   });
 
   it("missing import registry row: unavailable", () => {
-    const [r] = resolveMapSource({ kind: "vector-import", importId: "nope" }, ctx());
+    const [r] = resolveMapSource(
+      { kind: "vector-import", importId: "nope" },
+      ctx(),
+    );
     expect(r.status).toBe("unavailable");
   });
 });
@@ -224,7 +252,12 @@ describe("hashKey", () => {
 });
 
 describe("basemapsCoveringViewport", () => {
-  const CANDIDATES: BasemapId[] = ["protomaps", "six-topo", "six-base", "six-imagery"];
+  const CANDIDATES: BasemapId[] = [
+    "protomaps",
+    "six-topo",
+    "six-base",
+    "six-imagery",
+  ];
   // Two saved regions over roughly the same ground, one basemap each: a big
   // six-topo area with a smaller protomaps clip inside it.
   const saved = [
@@ -250,7 +283,11 @@ describe("basemapsCoveringViewport", () => {
 
   it("names every basemap with saved tiles on screen", () => {
     expect(
-      basemapsCoveringViewport(saved, view(150.45, -33.55, 150.55, -33.45), CANDIDATES),
+      basemapsCoveringViewport(
+        saved,
+        view(150.45, -33.55, 150.55, -33.45),
+        CANDIDATES,
+      ),
     ).toEqual(["protomaps", "six-topo"]);
   });
 
@@ -259,7 +296,11 @@ describe("basemapsCoveringViewport", () => {
     // the case the old any-region-anywhere check got wrong: it reported the
     // vector basemap as available over ground it has nothing for.
     expect(
-      basemapsCoveringViewport(saved, view(150.05, -33.95, 150.15, -33.85), CANDIDATES),
+      basemapsCoveringViewport(
+        saved,
+        view(150.05, -33.95, 150.15, -33.85),
+        CANDIDATES,
+      ),
     ).toEqual(["six-topo"]);
   });
 
@@ -273,16 +314,28 @@ describe("basemapsCoveringViewport", () => {
     // Overlap, not containment: there IS saved map on screen, and telling the
     // user to switch away from it would be wrong.
     expect(
-      basemapsCoveringViewport(saved, view(150.9, -33.1, 151.5, -32.5), CANDIDATES),
+      basemapsCoveringViewport(
+        saved,
+        view(150.9, -33.1, 151.5, -32.5),
+        CANDIDATES,
+      ),
     ).toEqual(["six-topo"]);
   });
 
   it("ignores artifacts that are not basemap regions", () => {
     const overlay = [
-      artifact({ kind: "topo-overlay", logicalKey: "six-topo", bbox: [150, -34, 151, -33] }),
+      artifact({
+        kind: "topo-overlay",
+        logicalKey: "six-topo",
+        bbox: [150, -34, 151, -33],
+      }),
     ];
     expect(
-      basemapsCoveringViewport(overlay, view(150.4, -33.6, 150.6, -33.4), CANDIDATES),
+      basemapsCoveringViewport(
+        overlay,
+        view(150.4, -33.6, 150.6, -33.4),
+        CANDIDATES,
+      ),
     ).toEqual([]);
   });
 });

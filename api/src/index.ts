@@ -97,7 +97,12 @@ app.use(
       return callback(null, false);
     },
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Fake-Sub", "X-Request-Id"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Fake-Sub",
+      "X-Request-Id",
+    ],
     exposedHeaders: ["X-Request-Id", "X-Total-Count"],
     credentials: true,
   }),
@@ -261,7 +266,10 @@ function shutdown(signal: string) {
       logger.info("shutdown_complete");
       process.exit(0);
     } catch (disconnectErr) {
-      logger.error({ err: safeErrorForLog(disconnectErr) }, "prisma_disconnect_error");
+      logger.error(
+        { err: safeErrorForLog(disconnectErr) },
+        "prisma_disconnect_error",
+      );
       process.exit(1);
     }
   });

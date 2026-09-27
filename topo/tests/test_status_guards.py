@@ -5,6 +5,7 @@ Pure SQL-emission tests on a fake connection: assert the guard predicate is
 present, the rowcount is returned, the storage UPDATE shares the commit with
 the status UPDATE, and the 0-rows (reaped/deleted) path skips the charge.
 """
+
 import os
 import sys
 import unittest
@@ -24,6 +25,7 @@ os.environ.setdefault("EXPORT_JOB_ID", "export-123")
 
 try:
     import worker  # noqa: E402
+
     _WORKER_OK = True
 except Exception as _exc:  # noqa: BLE001
     _WORKER_OK = False
@@ -31,6 +33,7 @@ except Exception as _exc:  # noqa: BLE001
 
 try:
     import export_worker  # noqa: E402
+
     _EXPORT_OK = True
 except Exception as _exc:  # noqa: BLE001
     _EXPORT_OK = False
@@ -82,7 +85,9 @@ class _FakeConn:
         return out
 
 
-@unittest.skipUnless(_WORKER_OK, f"worker import failed: {globals().get('_WORKER_ERR', '?')}")
+@unittest.skipUnless(
+    _WORKER_OK, f"worker import failed: {globals().get('_WORKER_ERR', '?')}"
+)
 class TestWorkerUpdateStatusGuards(unittest.TestCase):
     def test_unguarded_write_has_no_status_predicate(self):
         conn = _FakeConn()
@@ -100,42 +105,57 @@ class TestWorkerUpdateStatusGuards(unittest.TestCase):
 
     def test_returns_rowcount(self):
         self.assertEqual(
-            worker.update_status(_FakeConn(rowcount=1), "j1", "complete",
-                                 expected_status="processing"),
+            worker.update_status(
+                _FakeConn(rowcount=1), "j1", "complete", expected_status="processing"
+            ),
             1,
         )
         self.assertEqual(
-            worker.update_status(_FakeConn(rowcount=0), "j1", "complete",
-                                 expected_status="processing"),
+            worker.update_status(
+                _FakeConn(rowcount=0), "j1", "complete", expected_status="processing"
+            ),
             0,
         )
 
     def test_storage_delta_shares_the_single_commit(self):
         conn = _FakeConn(rowcount=1)
-        worker.update_status(conn, "j1", "complete",
-                             expected_status="processing",
-                             storage_delta_bytes=1024)
+        worker.update_status(
+            conn,
+            "j1",
+            "complete",
+            expected_status="processing",
+            storage_delta_bytes=1024,
+        )
         before_commit = conn.ops_before_first_commit()
-        self.assertEqual(len(before_commit), 2, "status + storage UPDATE before one commit")
+        self.assertEqual(
+            len(before_commit), 2, "status + storage UPDATE before one commit"
+        )
         self.assertIn("storage_used_bytes", before_commit[1][1])
         # Exactly one commit overall — no second transaction.
         self.assertEqual(sum(1 for op in conn.ops if op[0] == "commit"), 1)
 
     def test_zero_rows_skips_storage_delta(self):
         conn = _FakeConn(rowcount=0)
-        worker.update_status(conn, "j1", "complete",
-                             expected_status="processing",
-                             storage_delta_bytes=1024)
+        worker.update_status(
+            conn,
+            "j1",
+            "complete",
+            expected_status="processing",
+            storage_delta_bytes=1024,
+        )
         self.assertEqual(len(conn.executes()), 1, "no storage UPDATE for a reaped job")
 
     def test_zero_delta_skips_storage_update(self):
         conn = _FakeConn(rowcount=1)
-        worker.update_status(conn, "j1", "failed", expected_status="processing",
-                             error_message="boom")
+        worker.update_status(
+            conn, "j1", "failed", expected_status="processing", error_message="boom"
+        )
         self.assertEqual(len(conn.executes()), 1)
 
 
-@unittest.skipUnless(_EXPORT_OK, f"export_worker import failed: {globals().get('_EXPORT_ERR', '?')}")
+@unittest.skipUnless(
+    _EXPORT_OK, f"export_worker import failed: {globals().get('_EXPORT_ERR', '?')}"
+)
 class TestExportWorkerUpdateStatusGuards(unittest.TestCase):
     def test_expected_status_appends_guard_and_param(self):
         conn = _FakeConn()
@@ -147,19 +167,24 @@ class TestExportWorkerUpdateStatusGuards(unittest.TestCase):
 
     def test_returns_rowcount(self):
         self.assertEqual(
-            export_worker.update_status(_FakeConn(rowcount=0), "e1", "completed",
-                                        expected_status="running"),
+            export_worker.update_status(
+                _FakeConn(rowcount=0), "e1", "completed", expected_status="running"
+            ),
             0,
         )
 
     def test_completed_charge_shares_the_single_commit(self):
         # ARCH-003 regression: status flip + storage charge must be one commit.
         conn = _FakeConn(rowcount=1)
-        export_worker.update_status(conn, "e1", "completed",
-                                    expected_status="running",
-                                    storage_delta_bytes=2048,
-                                    result_key="exports/e1/out.mbtiles",
-                                    result_bytes=2048)
+        export_worker.update_status(
+            conn,
+            "e1",
+            "completed",
+            expected_status="running",
+            storage_delta_bytes=2048,
+            result_key="exports/e1/out.mbtiles",
+            result_bytes=2048,
+        )
         before_commit = conn.ops_before_first_commit()
         self.assertEqual(len(before_commit), 2)
         self.assertIn("storage_used_bytes", before_commit[1][1])
@@ -167,16 +192,16 @@ class TestExportWorkerUpdateStatusGuards(unittest.TestCase):
 
     def test_zero_rows_skips_storage_charge(self):
         conn = _FakeConn(rowcount=0)
-        export_worker.update_status(conn, "e1", "completed",
-                                    expected_status="running",
-                                    storage_delta_bytes=2048)
+        export_worker.update_status(
+            conn, "e1", "completed", expected_status="running", storage_delta_bytes=2048
+        )
         self.assertEqual(len(conn.executes()), 1)
 
     def test_failed_write_emits_no_storage_update(self):
         conn = _FakeConn(rowcount=1)
-        export_worker.update_status(conn, "e1", "failed",
-                                    expected_status="running",
-                                    error_message="boom")
+        export_worker.update_status(
+            conn, "e1", "failed", expected_status="running", error_message="boom"
+        )
         self.assertEqual(len(conn.executes()), 1)
 
     def test_increment_user_storage_helper_is_gone(self):
@@ -184,7 +209,9 @@ class TestExportWorkerUpdateStatusGuards(unittest.TestCase):
         self.assertFalse(hasattr(export_worker, "increment_user_storage"))
 
 
-@unittest.skipUnless(_WORKER_OK, f"worker import failed: {globals().get('_WORKER_ERR', '?')}")
+@unittest.skipUnless(
+    _WORKER_OK, f"worker import failed: {globals().get('_WORKER_ERR', '?')}"
+)
 class TestWorkerPostCompletionSelfClean(unittest.TestCase):
     """STP-001: a raise AFTER the `complete` flip must never delete outputs.
 
@@ -219,18 +246,25 @@ class TestWorkerPostCompletionSelfClean(unittest.TestCase):
             if fail_after_complete and kind == "topo_complete":
                 raise RuntimeError("transient DB blip")
 
-        with mock.patch.multiple(
-            worker,
-            db_connect=lambda: _Conn(),
-            get_job=lambda conn, job_id: {"id": job_id, "user_id": "u1",
-                                          "name": "n", "s3_input_key": "in.zip"},
-            update_status=_update_status,
-            process_job=_process_job,
-            create_notification=_create_notification,
-            get_user_email=lambda conn, uid: None,
-            delete_s3_prefix_best_effort=lambda prefix: deleted.append(prefix),
-            s3=mock.MagicMock(),
-        ), mock.patch.dict(sys.modules, {"push_send": mock.MagicMock()}):
+        with (
+            mock.patch.multiple(
+                worker,
+                db_connect=lambda: _Conn(),
+                get_job=lambda conn, job_id: {
+                    "id": job_id,
+                    "user_id": "u1",
+                    "name": "n",
+                    "s3_input_key": "in.zip",
+                },
+                update_status=_update_status,
+                process_job=_process_job,
+                create_notification=_create_notification,
+                get_user_email=lambda conn, uid: None,
+                delete_s3_prefix_best_effort=lambda prefix: deleted.append(prefix),
+                s3=mock.MagicMock(),
+            ),
+            mock.patch.dict(sys.modules, {"push_send": mock.MagicMock()}),
+        ):
             try:
                 worker.main()
             except SystemExit as exit_exc:
@@ -241,8 +275,9 @@ class TestWorkerPostCompletionSelfClean(unittest.TestCase):
         deleted, statuses = self._run_main(fail_after_complete=True)
         self.assertEqual(deleted, [], "outputs of a COMPLETE job were deleted")
         self.assertIn("complete", statuses)
-        self.assertNotIn("failed", statuses,
-                         "a completed job must not be re-flipped to failed")
+        self.assertNotIn(
+            "failed", statuses, "a completed job must not be re-flipped to failed"
+        )
 
     def test_pre_complete_failure_still_self_cleans(self):
         # The reaped/deleted path must survive the fix: a failure before the

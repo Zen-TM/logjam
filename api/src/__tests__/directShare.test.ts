@@ -1,6 +1,14 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
-import { API_URL, ALICE_SUB, BOB_SUB, CAROL_SUB, BOB_ID, as, CANYON_TYPE_ID} from "./_actors";
+import {
+  API_URL,
+  ALICE_SUB,
+  BOB_SUB,
+  CAROL_SUB,
+  BOB_ID,
+  as,
+  CANYON_TYPE_ID,
+} from "./_actors";
 
 // Direct per-item sharing (Share model + /shares) from the RECIPIENT's side —
 // the perspective mocked-Prisma unit tests structurally cannot reach, and the
@@ -61,7 +69,9 @@ describe("recipient view", () => {
     const routeId = await createRoute(ALICE_SUB, "direct-share-read");
     expect((await share(ALICE_SUB, routeId, BOB_ID)).status).toBe(201);
 
-    const res = await request(API_URL).get(`/routes/${routeId}`).set(as(BOB_SUB));
+    const res = await request(API_URL)
+      .get(`/routes/${routeId}`)
+      .set(as(BOB_SUB));
     expect(res.status).toBe(200);
     expect(res.body.id).toBe(routeId);
 
@@ -248,10 +258,12 @@ describe("delete cascade", () => {
 // (finding 6).
 describe("revoke with a surviving place arm", () => {
   async function createPlace(sub: string, name: string): Promise<string> {
-    const res = await request(API_URL)
-      .post("/places")
-      .set(as(sub))
-      .send({ placeTypeId: CANYON_TYPE_ID, name, latitude: -33.7, longitude: 150.3 });
+    const res = await request(API_URL).post("/places").set(as(sub)).send({
+      placeTypeId: CANYON_TYPE_ID,
+      name,
+      latitude: -33.7,
+      longitude: 150.3,
+    });
     expect(res.status).toBe(201);
     return res.body.id as string;
   }

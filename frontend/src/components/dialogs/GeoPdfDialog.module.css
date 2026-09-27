@@ -31,7 +31,6 @@
   }
 }
 
-
 /* Which template this came from, and the button that turns the form into one:
    pinned above the body, because both act on all four sections. */
 .templateLine {
@@ -155,10 +154,18 @@
 
   /* The four edges stay together and keep their compass order; the pivot, which
      is about all four, follows them rather than splitting west from east. */
-  .extentNorth { order: 1; }
-  .extentWest  { order: 2; }
-  .extentEast  { order: 3; }
-  .extentSouth { order: 4; }
+  .extentNorth {
+    order: 1;
+  }
+  .extentWest {
+    order: 2;
+  }
+  .extentEast {
+    order: 3;
+  }
+  .extentSouth {
+    order: 4;
+  }
 
   .extentCenter {
     order: 5;
@@ -190,7 +197,8 @@
   width: var(--control-sm);
   height: var(--control-sm);
   padding: 0;
-  border: 2px solid color-mix(in srgb, var(--theme-text-primary) 30%, transparent);
+  border: 2px solid
+    color-mix(in srgb, var(--theme-text-primary) 30%, transparent);
   border-radius: var(--radius-full);
   background: none;
   cursor: pointer;

@@ -48,7 +48,10 @@ function inverseMercatorY(y: number): number {
  * latitude is linear in *Mercator* y, not in degrees (a 1:1 degree mapping
  * skews the box, and the skew grows with how much of the world is on screen).
  */
-export function frameToBbox(view: FrameViewport, frame: FrameInsets): RegionBbox {
+export function frameToBbox(
+  view: FrameViewport,
+  frame: FrameInsets,
+): RegionBbox {
   const lonSpan = view.east - view.west;
   const west = view.west + (frame.left / view.width) * lonSpan;
   const east = view.west + ((view.width - frame.right) / view.width) * lonSpan;
@@ -78,7 +81,10 @@ export function frameToBbox(view: FrameViewport, frame: FrameInsets): RegionBbox
  * fail-safe for when that lands slightly off, not the normal path. Clamping can
  * only ever WIDEN the area, never silently narrow it past what was saved.
  */
-export function bboxToFrame(view: FrameViewport, bbox: RegionBbox): FrameInsets {
+export function bboxToFrame(
+  view: FrameViewport,
+  bbox: RegionBbox,
+): FrameInsets {
   const lonSpan = view.east - view.west;
   const yNorth = mercatorY(view.north);
   const ySpan = mercatorY(view.south) - yNorth;
@@ -127,27 +133,40 @@ export function moveFrameEdge(
   deltaPx: number,
   size: { width: number; height: number },
 ): FrameInsets {
-  const clamp = (value: number, max: number) => Math.min(Math.max(value, 0), max);
+  const clamp = (value: number, max: number) =>
+    Math.min(Math.max(value, 0), max);
   switch (edge) {
     case "top":
       return {
         ...frame,
-        top: clamp(frame.top + deltaPx, size.height - frame.bottom - MIN_FRAME_PX),
+        top: clamp(
+          frame.top + deltaPx,
+          size.height - frame.bottom - MIN_FRAME_PX,
+        ),
       };
     case "bottom":
       return {
         ...frame,
-        bottom: clamp(frame.bottom - deltaPx, size.height - frame.top - MIN_FRAME_PX),
+        bottom: clamp(
+          frame.bottom - deltaPx,
+          size.height - frame.top - MIN_FRAME_PX,
+        ),
       };
     case "left":
       return {
         ...frame,
-        left: clamp(frame.left + deltaPx, size.width - frame.right - MIN_FRAME_PX),
+        left: clamp(
+          frame.left + deltaPx,
+          size.width - frame.right - MIN_FRAME_PX,
+        ),
       };
     case "right":
       return {
         ...frame,
-        right: clamp(frame.right - deltaPx, size.width - frame.left - MIN_FRAME_PX),
+        right: clamp(
+          frame.right - deltaPx,
+          size.width - frame.left - MIN_FRAME_PX,
+        ),
       };
   }
 }

@@ -4,7 +4,11 @@ import { coerceFieldValue, type TripLogCustomFieldDef } from "@logjam/shared";
 
 import CustomFieldInput from "./CustomFieldInput";
 
-const YES_NO: TripLogCustomFieldDef = { key: "wetsuit", label: "Wetsuit", type: "boolean" };
+const YES_NO: TripLogCustomFieldDef = {
+  key: "wetsuit",
+  label: "Wetsuit",
+  type: "boolean",
+};
 
 // jsdom has neither; the rail uses both to keep the chosen chip in view.
 vi.stubGlobal(
@@ -24,7 +28,9 @@ afterEach(cleanup);
 describe("CustomFieldInput, a yes/no", () => {
   it("starts on — and an untouched one saves no answer", () => {
     render(<CustomFieldInput def={YES_NO} value="" onChange={() => {}} />);
-    expect(screen.getByRole("radio", { name: "—" }).getAttribute("aria-checked")).toBe("true");
+    expect(
+      screen.getByRole("radio", { name: "—" }).getAttribute("aria-checked"),
+    ).toBe("true");
     expect(coerceFieldValue("", YES_NO.type)).toBeNull();
   });
 

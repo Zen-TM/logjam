@@ -28,7 +28,6 @@ export function withinBbox(
   degLatLng: number,
 ): boolean {
   return (
-    Math.abs(lat1 - lat2) <= degLatLng &&
-    Math.abs(lng1 - lng2) <= degLatLng
+    Math.abs(lat1 - lat2) <= degLatLng && Math.abs(lng1 - lng2) <= degLatLng
   );
 }

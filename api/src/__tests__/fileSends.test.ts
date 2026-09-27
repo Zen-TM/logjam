@@ -126,7 +126,10 @@ async function ensureFriends(
 }
 
 async function inbox(sub: string) {
-  const res = await request(API_URL).get("/file-sends/inbox").set(as(sub)).set(CLIENT);
+  const res = await request(API_URL)
+    .get("/file-sends/inbox")
+    .set(as(sub))
+    .set(CLIENT);
   expect(res.status).toBe(200);
   return res.body as { fileSendId: string; filename: string; status: string }[];
 }
@@ -139,10 +142,16 @@ describe("file sends — recipient boundary", () => {
   it("reaches every recipient of one send, and nobody else", async () => {
     const id = await sendCopy(BOB_SUB, [ALICE_ID, CAROL_ID]);
 
-    expect((await inbox(ALICE_SUB)).some((row) => row.fileSendId === id)).toBe(true);
-    expect((await inbox(CAROL_SUB)).some((row) => row.fileSendId === id)).toBe(true);
+    expect((await inbox(ALICE_SUB)).some((row) => row.fileSendId === id)).toBe(
+      true,
+    );
+    expect((await inbox(CAROL_SUB)).some((row) => row.fileSendId === id)).toBe(
+      true,
+    );
     // The sender is not a recipient of their own send.
-    expect((await inbox(BOB_SUB)).some((row) => row.fileSendId === id)).toBe(false);
+    expect((await inbox(BOB_SUB)).some((row) => row.fileSendId === id)).toBe(
+      false,
+    );
   });
 
   it("404s a non-recipient's accept — never 403", async () => {
@@ -320,7 +329,11 @@ describe("file sends — sender boundary", () => {
       .post(`/file-sends/${id}/confirm`)
       .set(as(CAROL_SUB))
       .set(CLIENT)
-      .send({ filename: "test-send.gpx", sourceKind: "import", recipientIds: [BOB_ID] });
+      .send({
+        filename: "test-send.gpx",
+        sourceKind: "import",
+        recipientIds: [BOB_ID],
+      });
     expect(res.status).toBe(404);
   });
 });
@@ -343,11 +356,14 @@ describe("file sends — the actionable notification", () => {
   }
 
   async function fileSentNotifications(sub: string) {
-    const res = await request(API_URL).get("/notifications").set(as(sub)).set(CLIENT);
+    const res = await request(API_URL)
+      .get("/notifications")
+      .set(as(sub))
+      .set(CLIENT);
     expect(res.status).toBe(200);
-    return (res.body as { type: string; payload: Record<string, unknown> }[]).filter(
-      (n) => n.type === "file_sent",
-    );
+    return (
+      res.body as { type: string; payload: Record<string, unknown> }[]
+    ).filter((n) => n.type === "file_sent");
   }
 
   // The recipient is entitled to know WHAT they are being offered before they
@@ -439,7 +455,10 @@ describe("file sends — the actionable notification", () => {
     await prisma.notification.update({
       where: { id: notification.id },
       data: {
-        payload: { ...(notification.payload as object), filename: "test-send.gpx" },
+        payload: {
+          ...(notification.payload as object),
+          filename: "test-send.gpx",
+        },
       },
     });
     await prisma.fileSend.delete({ where: { id } });
@@ -490,7 +509,10 @@ describe("file sends — the actionable notification", () => {
   // matters: anything still ACTIONABLE is something the endpoint would serve.
   it("never offers an action the send endpoint would refuse", async () => {
     const id = await sendCopy(ALICE_SUB, [BOB_ID]);
-    await request(API_URL).post(`/file-sends/${id}/decline`).set(as(BOB_SUB)).set(CLIENT);
+    await request(API_URL)
+      .post(`/file-sends/${id}/decline`)
+      .set(as(BOB_SUB))
+      .set(CLIENT);
 
     const inboxIds = (await inbox(BOB_SUB)).map((row) => row.fileSendId);
     const notified = await fileSentNotifications(BOB_SUB);
@@ -498,7 +520,9 @@ describe("file sends — the actionable notification", () => {
     expect(notified.map((n) => n.payload.fileSendId)).not.toContain(id);
     // Expired rows render no buttons (notificationActions returns null), so
     // they are the one kind allowed to be present and absent from the inbox.
-    for (const n of notified.filter((row) => row.payload.fileSendStatus !== "expired")) {
+    for (const n of notified.filter(
+      (row) => row.payload.fileSendStatus !== "expired",
+    )) {
       expect(inboxIds).toContain(n.payload.fileSendId);
     }
   });

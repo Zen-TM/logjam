@@ -35,7 +35,14 @@
 // through navigation params to MapScreen's camera; in memory only, never
 // logged, never persisted.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Animated, ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  Alert,
+  Animated,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import NetInfo from "@react-native-community/netinfo";
 import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
@@ -63,7 +70,11 @@ import {
 } from "./savedKeys";
 import { shareMark, sharedWithLabel } from "./shareMark";
 import { formatBytes, formatMinutes } from "../format";
-import { getGeoPdfJob, listGeoPdfJobs, type GeoPdfJobView } from "../api/geoPdfJobs";
+import {
+  getGeoPdfJob,
+  listGeoPdfJobs,
+  type GeoPdfJobView,
+} from "../api/geoPdfJobs";
 import { useApiQuery } from "../api/queries";
 import {
   useMirrorIncomingShareOwners,
@@ -71,7 +82,14 @@ import {
   usePendingCreateIds,
   usePendingSyncCount,
 } from "../sync/useSyncQueries";
-import { assetHue, fontSize, fontWeight, radius, spacing, theme } from "../theme";
+import {
+  assetHue,
+  fontSize,
+  fontWeight,
+  radius,
+  spacing,
+  theme,
+} from "../theme";
 import {
   BottomSheet,
   Button,
@@ -112,7 +130,10 @@ import { useAccountState } from "../auth/AccountStateContext";
 import { capabilityRowProps, capabilityStatus } from "../auth/capabilities";
 import { useConnectivity } from "../map/connectivity";
 import type { BasemapId, MapArtifact } from "../map/sourceResolver";
-import { mergeSavedOverlayJobs, type CompletedOverlaysResponse } from "../map/topoOverlays";
+import {
+  mergeSavedOverlayJobs,
+  type CompletedOverlaysResponse,
+} from "../map/topoOverlays";
 import { downloadTopoOverlay } from "../offline/overlayDownloads";
 import { deleteDownloadedArtifact } from "../offline/regionDownloads";
 import { renameArtifact, renameArtifactGroup } from "../offline/registryDb";
@@ -153,18 +174,22 @@ import type { Bbox } from "./bboxOfPoints";
 import { bulkDeleteConfirmBody } from "./bulkDeleteConfirm";
 import { RouteOptionsSheet } from "../routes/RouteOptionsSheet";
 
-
 function getCompletedOverlays(): Promise<CompletedOverlaysResponse> {
   return apiFetch<CompletedOverlaysResponse>("/topo-jobs/completed-overlays");
 }
 
 function formatDay(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  return new Date(iso).toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+  });
 }
 
 /** A basemap-region artifact's logicalKey IS the basemap it holds tiles for. */
 function basemapName(logicalKey: string): string {
-  return BASEMAP_CATALOG.find((entry) => entry.id === logicalKey)?.name ?? "Basemap";
+  return (
+    BASEMAP_CATALOG.find((entry) => entry.id === logicalKey)?.name ?? "Basemap"
+  );
 }
 
 /** What one row of a region card is, listed under the ⋯ sheet. */
@@ -256,7 +281,9 @@ const CATEGORY_ORDER: Category[] = [
  *  from `CATEGORY_META`'s plural rather than seven hand-written strings,
  *  "All" being the one case with no entry to derive from. */
 function searchNoun(filter: Category | "all"): string {
-  return filter === "all" ? "everything" : CATEGORY_META[filter].plural.toLowerCase();
+  return filter === "all"
+    ? "everything"
+    : CATEGORY_META[filter].plural.toLowerCase();
 }
 
 /** A single on-device asset, flattened so one renderer covers every kind. */
@@ -323,11 +350,19 @@ type SavedItem = {
   sharedWithYou?: true;
   /** Hand a DIRECT share back — see `AssetActions.removeShare`. The one verb a
    *  row someone else owns does get, and not a delete. */
-  removeShare?: { confirmTitle: string; confirmBody: string; run: () => Promise<unknown> };
+  removeShare?: {
+    confirmTitle: string;
+    confirmBody: string;
+    run: () => Promise<unknown>;
+  };
   /** Absent on an asset this user may not delete — see `AssetActions.delete`.
    *  Such a row offers no Delete in its sheet and cannot be multi-selected,
    *  because deleting is the only thing a selection does. */
-  delete?: { confirmTitle: string; confirmBody: string; run: () => Promise<unknown> };
+  delete?: {
+    confirmTitle: string;
+    confirmBody: string;
+    run: () => Promise<unknown>;
+  };
   /** Present on an editable route — the map's draw tool reopens this id. */
   editableRouteId?: string;
   /** Present on an editable route: flip vertex order (direction is semantic). */
@@ -369,7 +404,11 @@ export function SavedScreen({
    * still the right place to be looking.
    */
   initialHighlight?: { key: string; nonce: number };
-  onOpenMap: (bbox?: Bbox, basemapId?: BasemapId, reveal?: SavedItemReveal) => void;
+  onOpenMap: (
+    bbox?: Bbox,
+    basemapId?: BasemapId,
+    reveal?: SavedItemReveal,
+  ) => void;
   onDownloadRegion: () => void;
   /** Open the map's draw tool on an existing route. Editing is a map gesture,
    *  so this screen hands it over rather than growing an editor of its own. */
@@ -424,9 +463,11 @@ export function SavedScreen({
   // still does something useful without an account.
   const { accountState } = useAccountState();
   const lidarReady =
-    capabilityStatus("lidarOverlays", accountState, online).status === "available";
+    capabilityStatus("lidarOverlays", accountState, online).status ===
+    "available";
   const accountGeoPdfReady =
-    capabilityStatus("accountGeoPdf", accountState, online).status === "available";
+    capabilityStatus("accountGeoPdf", accountState, online).status ===
+    "available";
   const pendingCount = usePendingSyncCount();
   const pendingCreates = usePendingCreateIds();
 
@@ -448,7 +489,9 @@ export function SavedScreen({
   // regains focus (a delete/save on this same screen updates it directly).
   const [freeBytes, setFreeBytes] = useState<number | null>(null);
   const refreshFreeSpace = useCallback(() => {
-    FileSystem.getFreeDiskStorageAsync().then(setFreeBytes).catch(console.error);
+    FileSystem.getFreeDiskStorageAsync()
+      .then(setFreeBytes)
+      .catch(console.error);
   }, []);
   const [filter, setFilter] = useState<Category | "all">(
     initialFilter?.category ?? "all",
@@ -476,7 +519,10 @@ export function SavedScreen({
     (y: number) => {
       if (scrolledForNonce.current === highlightNonce) return;
       scrolledForNonce.current = highlightNonce;
-      scrollRef.current?.scrollTo({ y: Math.max(0, y - spacing(2)), animated: true });
+      scrollRef.current?.scrollTo({
+        y: Math.max(0, y - spacing(2)),
+        animated: true,
+      });
     },
     [highlightNonce],
   );
@@ -510,7 +556,9 @@ export function SavedScreen({
   const clearSelection = useCallback(() => setSelectedKeys([]), []);
   const toggleSelected = useCallback((key: string) => {
     setSelectedKeys((keys) =>
-      keys.includes(key) ? keys.filter((other) => other !== key) : [...keys, key],
+      keys.includes(key)
+        ? keys.filter((other) => other !== key)
+        : [...keys, key],
     );
   }, []);
   /**
@@ -607,39 +655,34 @@ export function SavedScreen({
     // The live ids go IN, rather than filtering the result: opening a file the
     // queue is writing is what cost a download its finalize.
     const live = new Set(queuedIds.split(","));
-    listUnfinishedRegions(live)
-      .then(setOrphans)
-      .catch(console.error);
+    listUnfinishedRegions(live).then(setOrphans).catch(console.error);
   }, [queuedIds]);
   useEffect(refreshOrphans, [refreshOrphans]);
 
-  const resumeOrphan = useCallback(
-    (region: UnfinishedRegion) => {
-      enqueueRegionDownloads([
-        {
-          taskKind: "tile-pyramid",
-          id: region.id,
-          basemapId: region.basemapId,
-          label: region.label,
-          // The file remembers the run it belonged to, so a resume keeps the
-          // name the user gave the area. Files written before that row existed
-          // fall back to standing alone under their own label.
-          groupId: region.groupId ?? region.id,
-          groupLabel: region.groupLabel ?? region.label,
-          bbox: region.bbox,
-          // Both ends of the zoom range come off the file, so a resumed DEM
-          // (one flat level) is re-planned as one flat level rather than as a
-          // basemap pyramid — which would hash to a different plan and throw
-          // the checkpoint's gap list away.
-          zMin: region.zMin,
-          zMax: region.zMax,
-          allowCellular: false,
-        },
-      ]);
-      setOrphans((current) => current.filter((row) => row.id !== region.id));
-    },
-    [],
-  );
+  const resumeOrphan = useCallback((region: UnfinishedRegion) => {
+    enqueueRegionDownloads([
+      {
+        taskKind: "tile-pyramid",
+        id: region.id,
+        basemapId: region.basemapId,
+        label: region.label,
+        // The file remembers the run it belonged to, so a resume keeps the
+        // name the user gave the area. Files written before that row existed
+        // fall back to standing alone under their own label.
+        groupId: region.groupId ?? region.id,
+        groupLabel: region.groupLabel ?? region.label,
+        bbox: region.bbox,
+        // Both ends of the zoom range come off the file, so a resumed DEM
+        // (one flat level) is re-planned as one flat level rather than as a
+        // basemap pyramid — which would hash to a different plan and throw
+        // the checkpoint's gap list away.
+        zMin: region.zMin,
+        zMax: region.zMax,
+        allowCellular: false,
+      },
+    ]);
+    setOrphans((current) => current.filter((row) => row.id !== region.id));
+  }, []);
 
   const discardOrphan = useCallback((region: UnfinishedRegion) => {
     Alert.alert(
@@ -652,7 +695,9 @@ export function SavedScreen({
           style: "destructive",
           onPress: () => {
             void deleteRegionFile(region.id);
-            setOrphans((current) => current.filter((row) => row.id !== region.id));
+            setOrphans((current) =>
+              current.filter((row) => row.id !== region.id),
+            );
           },
         },
       ],
@@ -691,7 +736,9 @@ export function SavedScreen({
     accountState !== "guest",
   );
   const mergedOverlays = mergeSavedOverlayJobs(overlaysQuery.data, artifacts);
-  const savedOverlayArtifacts = artifacts.filter((a) => a.kind === "topo-overlay");
+  const savedOverlayArtifacts = artifacts.filter(
+    (a) => a.kind === "topo-overlay",
+  );
   // "Available to download" is one row per JOB, not per layer: a job's five
   // layers are one thing the user generated, and five near-identical rows with
   // five download buttons is a chore, not a choice. The per-layer
@@ -738,7 +785,11 @@ export function SavedScreen({
     async (item: {
       jobId: string;
       label: string;
-      missing: { name: TopoLayerName; format: TopoLayerFormat; pmtilesUrl: string }[];
+      missing: {
+        name: TopoLayerName;
+        format: TopoLayerFormat;
+        pmtilesUrl: string;
+      }[];
     }) => {
       try {
         if (!(await confirmCellularOk())) return;
@@ -759,7 +810,11 @@ export function SavedScreen({
             (p) =>
               setActiveOp((current) =>
                 current
-                  ? { ...current, fraction: p.bytesTotal > 0 ? p.bytesDone / p.bytesTotal : null }
+                  ? {
+                      ...current,
+                      fraction:
+                        p.bytesTotal > 0 ? p.bytesDone / p.bytesTotal : null,
+                    }
                   : current,
               ),
           );
@@ -860,7 +915,8 @@ export function SavedScreen({
       const completed = jobs.filter((job) => job.status === "completed");
       setAccountJobs(completed);
       setFilter("geoPdf");
-      if (completed.length === 0) info("No generated GeoPDFs on your account yet.");
+      if (completed.length === 0)
+        info("No generated GeoPDFs on your account yet.");
     } catch (err) {
       console.error(err);
       fail(messageFromError(err, "Couldn't load your GeoPDFs."));
@@ -875,7 +931,8 @@ export function SavedScreen({
       // Re-presign right before download — the listed URL may have expired
       // while this list was open.
       const fresh = await getGeoPdfJob(job.id);
-      if (!fresh.downloadUrl) throw new Error("This GeoPDF isn't ready to download.");
+      if (!fresh.downloadUrl)
+        throw new Error("This GeoPDF isn't ready to download.");
       return importGeoPdfFromUrl(
         fresh.title ?? "Logjam GeoPDF",
         fresh.downloadUrl,
@@ -905,7 +962,9 @@ export function SavedScreen({
       // belong to this card) but it is not a MAP: it is never drawn, never
       // switched to, and counting it would tell the user they saved three maps
       // when they picked two.
-      const basemapMembers = group.members.filter((a) => a.kind !== "dem-region");
+      const basemapMembers = group.members.filter(
+        (a) => a.kind !== "dem-region",
+      );
       rows.push({
         key: savedRegionKey(group.key),
         category: "region",
@@ -942,7 +1001,9 @@ export function SavedScreen({
 
     // Same treatment for a generated topo job: five layers, one job, one card.
     for (const group of groupArtifacts(savedOverlayArtifacts, overlayJobId)) {
-      const job = mergedOverlays.jobs.find((candidate) => candidate.jobId === group.key);
+      const job = mergedOverlays.jobs.find(
+        (candidate) => candidate.jobId === group.key,
+      );
       rows.push({
         key: savedOverlayKey(group.key),
         category: "overlay",
@@ -991,7 +1052,9 @@ export function SavedScreen({
         // by the overlay downloader), so the group rename writes each row's
         // own display label. Display only, as everywhere else.
         rename: (name) =>
-          Promise.all(group.members.map((artifact) => renameArtifact(artifact.id, name))),
+          Promise.all(
+            group.members.map((artifact) => renameArtifact(artifact.id, name)),
+          ),
         members: group.members.map((artifact) => ({
           id: artifact.id,
           title: topoLayerLabel(artifact.logicalKey),
@@ -1033,7 +1096,8 @@ export function SavedScreen({
         // No "GeoPDF ·" prefix and nothing restating the pill: the row's glyph
         // and hue say the kind, and "Unfinished" is already a pill.
         subtitle: failed
-          ? (geoPdf.errorCode && GEOPDF_ERRORS[geoPdf.errorCode]) || "Import failed."
+          ? (geoPdf.errorCode && GEOPDF_ERRORS[geoPdf.errorCode]) ||
+            "Import failed."
           : incomplete
             ? undefined
             : `Imported ${formatDay(geoPdf.createdAt)}`,
@@ -1129,7 +1193,9 @@ export function SavedScreen({
     // what that column is for: the same trip must not appear twice because this
     // phone happens to hold both halves of it.
     const localTrackMediaIds = new Set(
-      savedTracks.map((track) => track.mediaId).filter((id): id is string => id !== null),
+      savedTracks
+        .map((track) => track.mediaId)
+        .filter((id): id is string => id !== null),
     );
     for (const file of remoteTracks) {
       if (localTrackMediaIds.has(file.id)) continue;
@@ -1164,7 +1230,8 @@ export function SavedScreen({
     // The mark is per ITEM, not per category, because the category only says
     // what SHOULD be in the account. `pendingCreates` says what is.
     return rows.map((row) => {
-      const entityId = row.syncEntityId === undefined ? row.key : row.syncEntityId;
+      const entityId =
+        row.syncEntityId === undefined ? row.key : row.syncEntityId;
       const backedUp =
         CATEGORY_SYNCS[row.category] &&
         entityId !== null &&
@@ -1242,7 +1309,9 @@ export function SavedScreen({
       case "all":
         return { label: "Add to device", onPress: () => setAddSheetOpen(true) };
       case "region":
-        return online ? { label: "Download a region", onPress: onDownloadRegion } : null;
+        return online
+          ? { label: "Download a region", onPress: onDownloadRegion }
+          : null;
       case "overlay":
         return null;
       case "geoPdf":
@@ -1292,7 +1361,9 @@ export function SavedScreen({
   const highlightPresent =
     highlightKey != null &&
     (visibleItems.some((item) => item.key === highlightKey) ||
-      downloadableJobs.some((job) => savedOverlayKey(job.jobId) === highlightKey) ||
+      downloadableJobs.some(
+        (job) => savedOverlayKey(job.jobId) === highlightKey,
+      ) ||
       (accountJobs ?? []).some((job) => job.id === highlightKey));
   const pulsedForNonce = useRef<number | null>(null);
   useEffect(() => {
@@ -1309,9 +1380,17 @@ export function SavedScreen({
     // it), holds it long enough to be seen as a state, then takes a second to
     // let go: "this one", said once.
     Animated.sequence([
-      Animated.timing(pulse, { toValue: 1, duration: 140, useNativeDriver: true }),
+      Animated.timing(pulse, {
+        toValue: 1,
+        duration: 140,
+        useNativeDriver: true,
+      }),
       Animated.delay(500),
-      Animated.timing(pulse, { toValue: 0, duration: 900, useNativeDriver: true }),
+      Animated.timing(pulse, {
+        toValue: 0,
+        duration: 900,
+        useNativeDriver: true,
+      }),
     ]).start(({ finished }) => {
       // Interrupted means something else took the value over; leaving the wash
       // half-lit would strand a tint on the row.
@@ -1338,14 +1417,19 @@ export function SavedScreen({
     [selectedKeys, visibleItems],
   );
   const selecting = selectedItems.length > 0;
-  const selectedBytes = selectedItems.reduce((sum, item) => sum + item.sizeBytes, 0);
+  const selectedBytes = selectedItems.reduce(
+    (sum, item) => sum + item.sizeBytes,
+    0,
+  );
   const selectableItems = visibleItems.filter((item) => item.delete);
 
   /** One confirm for the whole batch; the sentence itself is
    *  `bulkDeleteConfirmBody`, which owns every count/kind combination. */
   const deleteSelected = useCallback(() => {
     const targets = selectedItems;
-    const syncedCount = targets.filter((item) => item.category === "route").length;
+    const syncedCount = targets.filter(
+      (item) => item.category === "route",
+    ).length;
     const body = bulkDeleteConfirmBody({
       onDeviceCount: targets.length - syncedCount,
       syncedCount,
@@ -1376,13 +1460,21 @@ export function SavedScreen({
             }
             clearSelection();
             refreshFreeSpace();
-            if (failures === 0) info(`Deleted ${countOf(targets.length, "item")}.`);
+            if (failures === 0)
+              info(`Deleted ${countOf(targets.length, "item")}.`);
             else fail(`${failures} of ${targets.length} couldn't be deleted.`);
           })();
         },
       },
     ]);
-  }, [clearSelection, fail, info, refreshFreeSpace, selectedBytes, selectedItems]);
+  }, [
+    clearSelection,
+    fail,
+    info,
+    refreshFreeSpace,
+    selectedBytes,
+    selectedItems,
+  ]);
 
   const deleteItem = useCallback(
     (item: SavedItem) => {
@@ -1472,7 +1564,10 @@ export function SavedScreen({
             fail("This one has no saved location to show.");
             return;
           }
-          onOpenMap(bbox, item.focusBasemapId, { category: item.category, key: item.key });
+          onOpenMap(bbox, item.focusBasemapId, {
+            category: item.category,
+            key: item.key,
+          });
         })
         .catch((err: unknown) => {
           console.error(err);
@@ -1557,15 +1652,23 @@ export function SavedScreen({
     [selectedItems],
   );
 
-
   return (
     <View style={styles.screen}>
       <HeroHeader
         eyebrow="Saved for offline use"
         title="On this device"
         value={formatBytes(usedBytes)}
-        valueSuffix={freeBytes != null ? `used · ${formatBytes(freeBytes)} free` : "used"}
-        action={<Button label="Add" icon="plus" compact onPress={() => setAddSheetOpen(true)} />}
+        valueSuffix={
+          freeBytes != null ? `used · ${formatBytes(freeBytes)} free` : "used"
+        }
+        action={
+          <Button
+            label="Add"
+            icon="plus"
+            compact
+            onPress={() => setAddSheetOpen(true)}
+          />
+        }
       >
         <CapacityBar segments={segments} />
         {/* Offline is a normal state here — everything already on the device
@@ -1591,9 +1694,16 @@ export function SavedScreen({
             // "Everything" means everything a selection can act on — a shared
             // route or waypoint is skipped rather than picked and then refused.
             showSelectAll={selectedItems.length < selectableItems.length}
-            extra={<BulkShareButton online={online} onPress={() => setBulkShareOpen(true)} />}
+            extra={
+              <BulkShareButton
+                online={online}
+                onPress={() => setBulkShareOpen(true)}
+              />
+            }
             onClear={clearSelection}
-            onSelectAll={() => setSelectedKeys(selectableItems.map((item) => item.key))}
+            onSelectAll={() =>
+              setSelectedKeys(selectableItems.map((item) => item.key))
+            }
             onDelete={deleteSelected}
           />
         ) : (
@@ -1782,29 +1892,29 @@ export function SavedScreen({
         {visibleItems.map((item) => {
           const picked = selectedKeys.includes(item.key);
           return (
-          <PulseSlot
-            key={item.key}
-            active={pulsingKey === item.key}
-            opacity={pulse}
-            onMeasure={scrollToPulse}
-          >
-          <Row
-            title={item.title}
-            subtitle={item.subtitle}
-            icon={CATEGORY_META[item.category].icon}
-            hue={assetHue[item.category]}
-            selected={picked}
-            // While selecting, an asset this user may not delete (a shared
-            // route or waypoint) is greyed out — the same dead look an
-            // account-gated row gets — rather than offered and then refused.
-            disabled={selecting && !item.delete}
-            // Press and hold starts a selection anywhere; once one is running a
-            // plain tap toggles. Outside the mode a row still has no onPress —
-            // its verbs live in the ⋯ sheet, and a whole-row tap that did one
-            // of them would be a mis-tap waiting to happen (DESIGN.md §7).
-            onLongPress={() => selectItem(item)}
-            onPress={selecting ? () => selectItem(item) : undefined}
-            /* ONE trailing slot for both modes, and every child of it keeps its
+            <PulseSlot
+              key={item.key}
+              active={pulsingKey === item.key}
+              opacity={pulse}
+              onMeasure={scrollToPulse}
+            >
+              <Row
+                title={item.title}
+                subtitle={item.subtitle}
+                icon={CATEGORY_META[item.category].icon}
+                hue={assetHue[item.category]}
+                selected={picked}
+                // While selecting, an asset this user may not delete (a shared
+                // route or waypoint) is greyed out — the same dead look an
+                // account-gated row gets — rather than offered and then refused.
+                disabled={selecting && !item.delete}
+                // Press and hold starts a selection anywhere; once one is running a
+                // plain tap toggles. Outside the mode a row still has no onPress —
+                // its verbs live in the ⋯ sheet, and a whole-row tap that did one
+                // of them would be a mis-tap waiting to happen (DESIGN.md §7).
+                onLongPress={() => selectItem(item)}
+                onPress={selecting ? () => selectItem(item) : undefined}
+                /* ONE trailing slot for both modes, and every child of it keeps its
                place when the mode changes. Selecting used to render a slot of
                its own holding only the size and a 22px circle: the pill and the
                two buttons went away, the title column got their width back, and
@@ -1812,12 +1922,14 @@ export function SavedScreen({
                and the whole list jumped up under the user's finger. The circle
                therefore takes the ⋯ button's 40pt box rather than replacing it,
                and the pill stays put; only the buttons stop responding. */
-            right={
-              <View style={styles.rowActions}>
-                {item.sizeBytes > 0 ? (
-                  <Text style={styles.size}>{formatBytes(item.sizeBytes)}</Text>
-                ) : null}
-                {/* The pill is wrapped because its own base style carries
+                right={
+                  <View style={styles.rowActions}>
+                    {item.sizeBytes > 0 ? (
+                      <Text style={styles.size}>
+                        {formatBytes(item.sizeBytes)}
+                      </Text>
+                    ) : null}
+                    {/* The pill is wrapped because its own base style carries
                     `alignSelf: "flex-start"` — right in the COLUMN contexts it
                     is used in elsewhere (the hero notes, a detail header),
                     where it stops the pill stretching the full width, but in
@@ -1825,69 +1937,77 @@ export function SavedScreen({
                     the pill floated above the size text beside it. The wrapper
                     takes the container's `alignItems: center` and the pill
                     aligns inside it. */}
-                {item.pill ? (
-                  <View>
-                    <StatusPill label={item.pill.label} tone={item.pill.tone} />
-                  </View>
-                ) : null}
-                {/* Shared out, by the same argument as the cloud below: the
+                    {item.pill ? (
+                      <View>
+                        <StatusPill
+                          label={item.pill.label}
+                          tone={item.pill.tone}
+                        />
+                      </View>
+                    ) : null}
+                    {/* Shared out, by the same argument as the cloud below: the
                     row's own fan-out is a fact the user is not asking about
                     while scanning, and "Shared with 3" spelled out down a list
                     eats the title's width to say it. The count survives in the
                     screen-reader label and on the sharing sheet behind ⋯.
                     Muted, not accent: this is information, not a state to fix. */}
-                {item.sharedWithCount ? (
-                  <Feather
-                    name="users"
-                    size={15}
-                    color={theme.textMuted}
-                    accessibilityLabel={sharedWithLabel(item.sharedWithCount)}
-                  />
-                ) : null}
-                {/* Backed up. A glyph rather than a pill: it is on most rows
+                    {item.sharedWithCount ? (
+                      <Feather
+                        name="users"
+                        size={15}
+                        color={theme.textMuted}
+                        accessibilityLabel={sharedWithLabel(
+                          item.sharedWithCount,
+                        )}
+                      />
+                    ) : null}
+                    {/* Backed up. A glyph rather than a pill: it is on most rows
                     most of the time, and a word repeated down a list stops
                     being read. It marks the POSITIVE — a row with no cloud is
                     on this phone only, which is the ordinary state of a
                     downloaded map and needs no announcement. LAST of the
                     glyphs, so the column it sits in is the same on every row;
                     the share glyph appearing on some rows must not push it. */}
-                {item.backedUp ? (
-                  <Feather
-                    name="cloud"
-                    size={15}
-                    color={theme.success}
-                    accessibilityLabel="Backed up to your account"
-                  />
-                ) : null}
-                {item.inlineAction ? (
-                  <IconButton
-                    icon={item.inlineAction.icon}
-                    accessibilityLabel={item.inlineAction.label}
-                    color={theme.accent}
-                    // Inert while picking — the row's own tap is the verb now —
-                    // but still rendered, because its absence would resize the
-                    // row (see the note above).
-                    disabled={selecting}
-                    onPress={item.inlineAction.onPress}
-                  />
-                ) : null}
-                {selecting ? (
-                  // The ⋯ button's box, holding the checkbox. No circle at all
-                  // on a row that cannot be picked — an empty checkbox is a
-                  // promise that tapping it does something — but the box stays,
-                  // so an unpickable row is still the height it was.
-                  <SelectionMark selected={picked} selectable={item.delete != null} />
-                ) : (
-                  <IconButton
-                    icon="more-vertical"
-                    accessibilityLabel={`Actions for ${item.title}`}
-                    onPress={() => openItemSheet(item.key)}
-                  />
-                )}
-              </View>
-            }
-          />
-          </PulseSlot>
+                    {item.backedUp ? (
+                      <Feather
+                        name="cloud"
+                        size={15}
+                        color={theme.success}
+                        accessibilityLabel="Backed up to your account"
+                      />
+                    ) : null}
+                    {item.inlineAction ? (
+                      <IconButton
+                        icon={item.inlineAction.icon}
+                        accessibilityLabel={item.inlineAction.label}
+                        color={theme.accent}
+                        // Inert while picking — the row's own tap is the verb now —
+                        // but still rendered, because its absence would resize the
+                        // row (see the note above).
+                        disabled={selecting}
+                        onPress={item.inlineAction.onPress}
+                      />
+                    ) : null}
+                    {selecting ? (
+                      // The ⋯ button's box, holding the checkbox. No circle at all
+                      // on a row that cannot be picked — an empty checkbox is a
+                      // promise that tapping it does something — but the box stays,
+                      // so an unpickable row is still the height it was.
+                      <SelectionMark
+                        selected={picked}
+                        selectable={item.delete != null}
+                      />
+                    ) : (
+                      <IconButton
+                        icon="more-vertical"
+                        accessibilityLabel={`Actions for ${item.title}`}
+                        onPress={() => openItemSheet(item.key)}
+                      />
+                    )}
+                  </View>
+                }
+              />
+            </PulseSlot>
           );
         })}
 
@@ -1926,33 +2046,35 @@ export function SavedScreen({
                 opacity={pulse}
                 onMeasure={scrollToPulse}
               >
-              <Row
-                title={job.label}
-                // "Not on this device" restated the section header it sits
-                // under; the layer count does not.
-                subtitle={
-                  lidarReady
-                    ? countOf(job.missing.length, "layer")
-                    : "Connect to download"
-                }
-                icon="layers"
-                hue={assetHue.overlay}
-                right={
-                  <IconButton
-                    icon="download"
-                    accessibilityLabel={`Save ${job.label} for offline use`}
-                    color={theme.accent}
-                    disabled={!lidarReady || overlayBusyKey != null}
-                    onPress={() => handleSaveOverlayJob(job)}
-                  />
-                }
-              />
+                <Row
+                  title={job.label}
+                  // "Not on this device" restated the section header it sits
+                  // under; the layer count does not.
+                  subtitle={
+                    lidarReady
+                      ? countOf(job.missing.length, "layer")
+                      : "Connect to download"
+                  }
+                  icon="layers"
+                  hue={assetHue.overlay}
+                  right={
+                    <IconButton
+                      icon="download"
+                      accessibilityLabel={`Save ${job.label} for offline use`}
+                      color={theme.accent}
+                      disabled={!lidarReady || overlayBusyKey != null}
+                      onPress={() => handleSaveOverlayJob(job)}
+                    />
+                  }
+                />
               </PulseSlot>
             ))}
           </>
         ) : null}
 
-        {filter === "geoPdf" && accountJobs != null && accountJobs.length > 0 ? (
+        {filter === "geoPdf" &&
+        accountJobs != null &&
+        accountJobs.length > 0 ? (
           <>
             <SectionHeader label="In your Logjam account" />
             {accountJobs.map((job) => (
@@ -1966,29 +2088,30 @@ export function SavedScreen({
                 opacity={pulse}
                 onMeasure={scrollToPulse}
               >
-              <Row
-                title={job.title ?? "Untitled GeoPDF"}
-                subtitle={
-                  job.resultBytes != null ? formatBytes(job.resultBytes) : undefined
-                }
-                icon="file-text"
-                hue={assetHue.geoPdf}
-                right={
-                  <IconButton
-                    icon="download"
-                    accessibilityLabel={`Import ${job.title ?? "this GeoPDF"} to this device`}
-                    color={theme.accent}
-                    disabled={geoPdfBusy}
-                    onPress={() => handleImportAccountGeoPdf(job)}
-                  />
-                }
-              />
+                <Row
+                  title={job.title ?? "Untitled GeoPDF"}
+                  subtitle={
+                    job.resultBytes != null
+                      ? formatBytes(job.resultBytes)
+                      : undefined
+                  }
+                  icon="file-text"
+                  hue={assetHue.geoPdf}
+                  right={
+                    <IconButton
+                      icon="download"
+                      accessibilityLabel={`Import ${job.title ?? "this GeoPDF"} to this device`}
+                      color={theme.accent}
+                      disabled={geoPdfBusy}
+                      onPress={() => handleImportAccountGeoPdf(job)}
+                    />
+                  }
+                />
               </PulseSlot>
             ))}
           </>
         ) : null}
       </ScrollView>
-
 
       {/* Share the whole selection — the same sheet the Places screen opens,
           so the two cannot word a bulk share differently. */}
@@ -2036,7 +2159,11 @@ export function SavedScreen({
             }}
           />
           <Row
-            title={accountJobsLoading ? "Loading your GeoPDFs…" : "GeoPDFs from my account"}
+            title={
+              accountJobsLoading
+                ? "Loading your GeoPDFs…"
+                : "GeoPDFs from my account"
+            }
             icon="cloud"
             hue={assetHue.geoPdf}
             {...capabilityRowProps("accountGeoPdf", accountState, online)}
@@ -2261,7 +2388,9 @@ export function SavedScreen({
                       hue={assetHue[menuItem.category]}
                       right={
                         <View style={styles.rowActions}>
-                          <Text style={styles.size}>{formatBytes(member.sizeBytes)}</Text>
+                          <Text style={styles.size}>
+                            {formatBytes(member.sizeBytes)}
+                          </Text>
                           <IconButton
                             icon="trash-2"
                             accessibilityLabel={`Delete ${member.title} from device`}
@@ -2293,7 +2422,10 @@ export function SavedScreen({
         onClose={closeItemSheet}
         onShowOnMap={(bbox) => {
           if (menuTrack) {
-            onOpenMap(bbox, undefined, { category: "track", key: menuTrack.id });
+            onOpenMap(bbox, undefined, {
+              category: "track",
+              key: menuTrack.id,
+            });
           }
         }}
         onContinueRecording={(track) => onContinueRecording(track.id)}
@@ -2307,7 +2439,10 @@ export function SavedScreen({
         onClose={closeItemSheet}
         onShowOnMap={(bbox) => {
           if (menuImport) {
-            onOpenMap(bbox, undefined, { category: "import", key: menuImport.id });
+            onOpenMap(bbox, undefined, {
+              category: "import",
+              key: menuImport.id,
+            });
           }
         }}
         onInfo={info}
@@ -2423,7 +2558,12 @@ function EmptyPanel({
       <Text style={styles.emptyTitle}>{title}</Text>
       <Text style={styles.emptyHint}>{hint}</Text>
       {action ? (
-        <Button label={action.label} icon="plus" compact onPress={action.onPress} />
+        <Button
+          label={action.label}
+          icon="plus"
+          compact
+          onPress={action.onPress}
+        />
       ) : null}
     </View>
   );
@@ -2478,7 +2618,12 @@ function PulseSlot({
           styles.pulseWash,
           // `opacity` runs 0 → 1 and the peak alpha lives here, so the tint can
           // be tuned without touching the animation.
-          { opacity: opacity.interpolate({ inputRange: [0, 1], outputRange: [0, 0.22] }) },
+          {
+            opacity: opacity.interpolate({
+              inputRange: [0, 1],
+              outputRange: [0, 0.22],
+            }),
+          },
         ]}
       />
     </View>
@@ -2502,12 +2647,28 @@ const styles = StyleSheet.create({
   // `disabled` state — a control that still looks pressable but silently
   // no-ops is worse than one that visibly can't be touched.
   railInert: { opacity: 0.45 },
-  rail: { paddingLeft: spacing(2), paddingTop: spacing(1.5), paddingBottom: spacing(1.5) },
-  body: { paddingHorizontal: spacing(2), paddingBottom: spacing(4), gap: spacing(1) },
-  rowActions: { flexDirection: "row", alignItems: "center", gap: spacing(0.75) },
+  rail: {
+    paddingLeft: spacing(2),
+    paddingTop: spacing(1.5),
+    paddingBottom: spacing(1.5),
+  },
+  body: {
+    paddingHorizontal: spacing(2),
+    paddingBottom: spacing(4),
+    gap: spacing(1),
+  },
+  rowActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing(0.75),
+  },
   // IconButton's own box, so the checkbox that stands in for the ⋯ button
   // occupies exactly what it replaced and the row cannot resize on selection.
-  size: { color: theme.textMuted, fontSize: fontSize.xs, fontWeight: fontWeight.medium },
+  size: {
+    color: theme.textMuted,
+    fontSize: fontSize.xs,
+    fontWeight: fontWeight.medium,
+  },
   sheetBody: { gap: spacing(1) },
   // Same treatment as the map's waypoint sheet hint: a footnote above the
   // verbs, not a warning.

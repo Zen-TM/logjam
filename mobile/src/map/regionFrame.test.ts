@@ -30,7 +30,12 @@ describe("frameToBbox", () => {
   });
 
   it("maps longitude linearly in x", () => {
-    const bbox = frameToBbox(VIEW, { top: 0, right: 100, bottom: 0, left: 100 });
+    const bbox = frameToBbox(VIEW, {
+      top: 0,
+      right: 100,
+      bottom: 0,
+      left: 100,
+    });
     expect(bbox.west).toBeCloseTo(150.2, 9);
     expect(bbox.east).toBeCloseTo(150.4, 9);
   });
@@ -49,7 +54,12 @@ describe("frameToBbox", () => {
   });
 
   it("keeps the box ordered for any inset", () => {
-    const bbox = frameToBbox(VIEW, { top: 300, right: 150, bottom: 200, left: 50 });
+    const bbox = frameToBbox(VIEW, {
+      top: 300,
+      right: 150,
+      bottom: 200,
+      left: 50,
+    });
     expect(bbox.west).toBeLessThan(bbox.east);
     expect(bbox.south).toBeLessThan(bbox.north);
   });
@@ -98,8 +108,12 @@ describe("bboxToFrame", () => {
   it("keeps the frame at least MIN_FRAME_PX when the bbox is tiny", () => {
     const speck = { west: 150.3, east: 150.3, south: -33.7, north: -33.7 };
     const frame = bboxToFrame(VIEW, speck);
-    expect(VIEW.width - frame.left - frame.right).toBeGreaterThanOrEqual(MIN_FRAME_PX);
-    expect(VIEW.height - frame.top - frame.bottom).toBeGreaterThanOrEqual(MIN_FRAME_PX);
+    expect(VIEW.width - frame.left - frame.right).toBeGreaterThanOrEqual(
+      MIN_FRAME_PX,
+    );
+    expect(VIEW.height - frame.top - frame.bottom).toBeGreaterThanOrEqual(
+      MIN_FRAME_PX,
+    );
   });
 
   it("keeps the frame on screen when the bbox is entirely outside the view", () => {
@@ -113,8 +127,12 @@ describe("bboxToFrame", () => {
     });
     expect(frame.left).toBeGreaterThanOrEqual(0);
     expect(frame.right).toBeGreaterThanOrEqual(0);
-    expect(VIEW.width - frame.left - frame.right).toBeGreaterThanOrEqual(MIN_FRAME_PX);
-    expect(VIEW.height - frame.top - frame.bottom).toBeGreaterThanOrEqual(MIN_FRAME_PX);
+    expect(VIEW.width - frame.left - frame.right).toBeGreaterThanOrEqual(
+      MIN_FRAME_PX,
+    );
+    expect(VIEW.height - frame.top - frame.bottom).toBeGreaterThanOrEqual(
+      MIN_FRAME_PX,
+    );
   });
 
   it("falls back to the opening frame on a viewport with no extent", () => {
@@ -147,8 +165,7 @@ describe("moveFrameEdge", () => {
   it("never shrinks below MIN_FRAME_PX", () => {
     const squeezed = moveFrameEdge(frame, "top", 10_000, size);
     expect(squeezed.top).toBe(size.height - frame.bottom - MIN_FRAME_PX);
-    const remaining =
-      size.height - squeezed.top - squeezed.bottom;
+    const remaining = size.height - squeezed.top - squeezed.bottom;
     expect(remaining).toBe(MIN_FRAME_PX);
   });
 
@@ -165,7 +182,9 @@ describe("defaultFrameInsets", () => {
     expect(frame.left).toBeGreaterThan(0);
     expect(frame.top).toBeGreaterThan(0);
     expect(size.width - frame.left - frame.right).toBeGreaterThan(MIN_FRAME_PX);
-    expect(size.height - frame.top - frame.bottom).toBeGreaterThan(MIN_FRAME_PX);
+    expect(size.height - frame.top - frame.bottom).toBeGreaterThan(
+      MIN_FRAME_PX,
+    );
   });
 });
 

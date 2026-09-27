@@ -9,7 +9,8 @@ export function geoPdfTitle(config: unknown): string | null {
     const elements = (config as { elements?: unknown }).elements;
     if (elements && typeof elements === "object" && "title" in elements) {
       const title = (elements as { title?: unknown }).title;
-      if (typeof title === "string" && title.trim().length > 0) return title.trim();
+      if (typeof title === "string" && title.trim().length > 0)
+        return title.trim();
     }
   }
   return null;

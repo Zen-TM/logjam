@@ -67,8 +67,16 @@ describe("buildProposals", () => {
 
   it("demotes the lower-scoring row when two rows auto-link the same place", () => {
     const target = place();
-    const closer = rwCanyon({ ropeWikiId: 1, latitude: -33.5, longitude: 150.3 });
-    const farther = rwCanyon({ ropeWikiId: 2, latitude: -33.5008, longitude: 150.3 });
+    const closer = rwCanyon({
+      ropeWikiId: 1,
+      latitude: -33.5,
+      longitude: 150.3,
+    });
+    const farther = rwCanyon({
+      ropeWikiId: 2,
+      latitude: -33.5008,
+      longitude: 150.3,
+    });
     const proposals = buildProposals([closer, farther], [target]);
     const byId = Object.fromEntries(proposals.map((p) => [p.ropeWikiId, p]));
     // Exactly one keeps the auto-link to c1; the other is demoted to review.

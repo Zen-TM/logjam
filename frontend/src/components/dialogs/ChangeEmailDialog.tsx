@@ -31,7 +31,11 @@ function ChangeEmailDialog({
   currentEmail?: string;
 }) {
   return open ? (
-    <ChangeEmailForm onClose={onClose} onSuccess={onSuccess} currentEmail={currentEmail} />
+    <ChangeEmailForm
+      onClose={onClose}
+      onSuccess={onSuccess}
+      currentEmail={currentEmail}
+    />
   ) : null;
 }
 
@@ -76,12 +80,19 @@ function ChangeEmailForm({
     setBusy(true);
     setError(null);
     try {
-      await updateUserAttribute({ userAttribute: { attributeKey: "email", value: trimmed } });
+      await updateUserAttribute({
+        userAttribute: { attributeKey: "email", value: trimmed },
+      });
       setPendingEmail(trimmed);
       setStage("verify");
     } catch (err) {
       console.error(err);
-      setError(messageFromError(err, "Couldn't send the verification code. Please try again."));
+      setError(
+        messageFromError(
+          err,
+          "Couldn't send the verification code. Please try again.",
+        ),
+      );
     } finally {
       setBusy(false);
     }
@@ -96,7 +107,12 @@ function ChangeEmailForm({
       });
     } catch (err) {
       console.error(err);
-      setError(messageFromError(err, "Couldn't resend the verification code. Please try again."));
+      setError(
+        messageFromError(
+          err,
+          "Couldn't resend the verification code. Please try again.",
+        ),
+      );
     } finally {
       setBusy(false);
     }
@@ -116,7 +132,9 @@ function ChangeEmailForm({
       onSuccess(pendingEmail);
     } catch (err) {
       console.error(err);
-      setError(messageFromError(err, "Incorrect or expired code. Please try again."));
+      setError(
+        messageFromError(err, "Incorrect or expired code. Please try again."),
+      );
     } finally {
       setBusy(false);
     }
@@ -168,8 +186,8 @@ function ChangeEmailForm({
         {stage === "input" && (
           <>
             <p className={classes.note}>
-              We send a code to the new address to check it reaches you. You sign in with it
-              from then on.
+              We send a code to the new address to check it reaches you. You
+              sign in with it from then on.
             </p>
             <TextField
               label="New email"
@@ -189,8 +207,8 @@ function ChangeEmailForm({
         {stage === "verify" && (
           <>
             <p className={classes.note}>
-              A code went to <b className={classes.address}>{pendingEmail}</b>. Check the spam
-              folder if it hasn't arrived.
+              A code went to <b className={classes.address}>{pendingEmail}</b>.
+              Check the spam folder if it hasn't arrived.
             </p>
             <TextField
               label="Verification code"
@@ -207,8 +225,8 @@ function ChangeEmailForm({
 
         {stage === "done" && (
           <p className={classes.note}>
-            Your email is now <b className={classes.address}>{pendingEmail}</b>. Sign in with it
-            next time.
+            Your email is now <b className={classes.address}>{pendingEmail}</b>.
+            Sign in with it next time.
           </p>
         )}
 

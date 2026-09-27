@@ -272,20 +272,26 @@ export function bulkShareButtonLabel(
  * ask about, and the count exists so the SERVER can skip the write, not so the
  * sentence can explain it.
  */
-export function bulkShareOutcomeMessage(
-  outcome: BulkShareOutcome,
-): { text: string; tone: "info" | "error" } {
+export function bulkShareOutcomeMessage(outcome: BulkShareOutcome): {
+  text: string;
+  tone: "info" | "error";
+} {
   const failed = outcome.copiesFailed.length;
   const parts: string[] = [];
-  if (outcome.granted > 0) parts.push(`Shared ${countOf(outcome.granted, "item")}`);
-  if (outcome.copiesSent > 0) parts.push(`sent ${countOf(outcome.copiesSent, "copy", "copies")}`);
+  if (outcome.granted > 0)
+    parts.push(`Shared ${countOf(outcome.granted, "item")}`);
+  if (outcome.copiesSent > 0)
+    parts.push(`sent ${countOf(outcome.copiesSent, "copy", "copies")}`);
 
   if (parts.length === 0) {
     // Nothing landed. The share leg's own message beats a generic one; the copy
     // leg has no single error to quote, so it names the count.
     if (outcome.shareError) return { text: outcome.shareError, tone: "error" };
     if (failed > 0) {
-      return { text: `Couldn't send ${countOf(failed, "file")}.`, tone: "error" };
+      return {
+        text: `Couldn't send ${countOf(failed, "file")}.`,
+        tone: "error",
+      };
     }
     return { text: "Nothing to share.", tone: "error" };
   }

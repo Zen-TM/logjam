@@ -2,6 +2,7 @@
 
 Pure math (no GDAL); osgeo is stubbed by _native_stub so this runs on the host.
 """
+
 import math
 import os
 import sys
@@ -24,6 +25,7 @@ try:
         tile_to_bbox,
         tiles_for_bbox,
     )
+
     _IMPORT_OK = True
 except Exception as _exc:  # noqa: BLE001
     _IMPORT_OK = False
@@ -32,7 +34,9 @@ except Exception as _exc:  # noqa: BLE001
 _REAL_SHAPELY = not _native_stub.is_stubbed("shapely")
 
 
-@unittest.skipUnless(_IMPORT_OK, f"pipeline import failed: {globals().get('_IMPORT_ERR', '?')}")
+@unittest.skipUnless(
+    _IMPORT_OK, f"pipeline import failed: {globals().get('_IMPORT_ERR', '?')}"
+)
 class TestTileMath(unittest.TestCase):
     def test_lon_lat_to_tile_origin(self):
         # lon=-180, lat≈85.05 (top-left of the web-mercator world) → tile (0,0).
@@ -71,10 +75,14 @@ class TestTileMath(unittest.TestCase):
         self.assertGreater(ymax, ymin)
 
     def test_ground_metres_per_pixel_halves_each_zoom(self):
-        self.assertAlmostEqual(ground_metres_per_pixel(0), 2 * math.pi * 6378137.0 / TILE_SIZE, places=3)
+        self.assertAlmostEqual(
+            ground_metres_per_pixel(0), 2 * math.pi * 6378137.0 / TILE_SIZE, places=3
+        )
         for z in range(0, 18):
             self.assertAlmostEqual(
-                ground_metres_per_pixel(z) / ground_metres_per_pixel(z + 1), 2.0, places=9
+                ground_metres_per_pixel(z) / ground_metres_per_pixel(z + 1),
+                2.0,
+                places=9,
             )
 
     def test_tiles_for_bbox_single_tile(self):
@@ -82,7 +90,11 @@ class TestTileMath(unittest.TestCase):
         x, y = lon_lat_to_tile(150.3, -33.5, 16)
         lon_min, lat_min, lon_max, lat_max = tile_to_bbox(x, y, 16)
         eps = (lon_max - lon_min) / 100
-        tiles = list(tiles_for_bbox(lon_min + eps, lat_min + eps, lon_max - eps, lat_max - eps, 16))
+        tiles = list(
+            tiles_for_bbox(
+                lon_min + eps, lat_min + eps, lon_max - eps, lat_max - eps, 16
+            )
+        )
         self.assertEqual(tiles, [(x, y)])
 
     def test_tiles_for_bbox_covers_rectangle(self):
@@ -103,6 +115,7 @@ class TestTileMath(unittest.TestCase):
 
 def _square(lon0, lat0, side=0.02):
     from shapely.geometry import box
+
     return box(lon0, lat0, lon0 + side, lat0 + side)
 
 
@@ -114,8 +127,9 @@ class TestFootprintTileCoords(unittest.TestCase):
 
     def test_scattered_footprint_skips_the_gap(self):
         from shapely.ops import unary_union
+
         a = _square(150.00, -33.02)
-        b = _square(151.00, -33.02)          # ~1° (~93 km) gap
+        b = _square(151.00, -33.02)  # ~1° (~93 km) gap
         geom = unary_union([a, b])
         self.assertEqual(geom.geom_type, "MultiPolygon")
 
@@ -136,8 +150,9 @@ class TestFootprintTileCoords(unittest.TestCase):
 
     def test_contiguous_footprint_matches_full_bbox(self):
         a = _square(150.00, -33.02)
-        b = _square(150.02, -33.02)          # adjacent → single polygon, no gap
+        b = _square(150.02, -33.02)  # adjacent → single polygon, no gap
         from shapely.ops import unary_union
+
         geom = unary_union([a, b])
         coords = set(footprint_tile_coords(geom, ZOOM_MIN, ZOOM_MAX))
         lon_min, lat_min, lon_max, lat_max = geom.bounds

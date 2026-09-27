@@ -110,7 +110,8 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
     urlTemplate: "https://a.tile.opentopomap.org/{z}/{x}/{y}.png",
     maxNativeZoom: 17,
     displayMaxZoom: 17,
-    attribution: "Base map © OpenTopoMap (CC-BY-SA), © OpenStreetMap contributors",
+    attribution:
+      "Base map © OpenTopoMap (CC-BY-SA), © OpenStreetMap contributors",
     attributionHtml:
       '<a href="https://github.com/der-stefan/OpenTopoMap">OpenTopo</a> | &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     offlineCapable: false,
@@ -119,7 +120,8 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
     id: "osm-cycle",
     name: "OSM Cycle Topo",
     kind: "raster",
-    urlTemplate: "https://a.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png",
+    urlTemplate:
+      "https://a.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png",
     maxNativeZoom: 20,
     displayMaxZoom: 20,
     attribution: "Base map © CyclOSM, © OpenStreetMap contributors",

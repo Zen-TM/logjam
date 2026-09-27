@@ -89,7 +89,11 @@ export function resolveDemSamples(
   positions: readonly SamplePosition[],
 ): DemSampleAddress[] {
   return positions.map((position) => {
-    const { x, y } = demTileCoordinates(position.lon, position.lat, DEM_TILE_ZOOM);
+    const { x, y } = demTileCoordinates(
+      position.lon,
+      position.lat,
+      DEM_TILE_ZOOM,
+    );
     const tileX = Math.floor(x);
     const tileY = Math.floor(y);
     // Clamp: a position exactly on a tile's far edge floors to size, which
@@ -107,7 +111,11 @@ export function resolveDemSamples(
 }
 
 /** Terrarium pixel → metres above sea level. */
-export function demMetresFromRgb(red: number, green: number, blue: number): number {
+export function demMetresFromRgb(
+  red: number,
+  green: number,
+  blue: number,
+): number {
   return red * 256 + green + blue / 256 - 32768;
 }
 

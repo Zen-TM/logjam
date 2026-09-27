@@ -36,7 +36,9 @@ describe("useStoredState", () => {
 
   describe("storage parameter", () => {
     it("persists to sessionStorage when given, leaving localStorage untouched", () => {
-      const { result } = renderHook(() => useStoredState("k", "", sessionStorage));
+      const { result } = renderHook(() =>
+        useStoredState("k", "", sessionStorage),
+      );
       act(() => result.current[1]("scrub"));
       expect(JSON.parse(sessionStorage.getItem("k")!)).toBe("scrub");
       expect(localStorage.getItem("k")).toBeNull();

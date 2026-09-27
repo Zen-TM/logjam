@@ -1,4 +1,9 @@
-import { useId, type CSSProperties, type HTMLAttributes, type ReactNode } from "react";
+import {
+  useId,
+  type CSSProperties,
+  type HTMLAttributes,
+  type ReactNode,
+} from "react";
 import { Circle, CircleCheck, type LucideIcon } from "lucide-react";
 import { avatarInitials, friendAvatarHue } from "@logjam/shared";
 import classes from "./Row.module.css";
@@ -48,7 +53,15 @@ export function TileCheckbox({
  * tech and as a mouse tooltip when the glyph carries meaning of its own (a
  * status); omit it when the row's text already says the same thing.
  */
-export function IconTile({ icon: Icon, hue, label }: { icon: LucideIcon; hue: string; label?: string }) {
+export function IconTile({
+  icon: Icon,
+  hue,
+  label,
+}: {
+  icon: LucideIcon;
+  hue: string;
+  label?: string;
+}) {
   return (
     <span
       className={classes.tile}
@@ -146,7 +159,10 @@ export function Row({
 }) {
   const subtitleId = useId();
   const descriptionId = useId();
-  const describedBy = [description && descriptionId, subtitle && subtitleId].filter(Boolean).join(" ") || undefined;
+  const describedBy =
+    [description && descriptionId, subtitle && subtitleId]
+      .filter(Boolean)
+      .join(" ") || undefined;
   return (
     <div
       className={[classes.row, className].filter(Boolean).join(" ")}
@@ -162,7 +178,9 @@ export function Row({
             className={classes.open}
             href={href}
             download={download}
-            {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+            {...(external
+              ? { target: "_blank", rel: "noopener noreferrer" }
+              : {})}
             aria-describedby={describedBy}
           >
             <span className={classes.title}>{title}</span>

@@ -47,19 +47,25 @@ def render_gpkg(ctx: RenderContext) -> Path:
         cmd += ["-nln", table, str(dst), str(src)]
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
-            raise RenderError(f"ogr2ogr GPKG ({layer}) failed:\n{result.stderr.strip()}")
+            raise RenderError(
+                f"ogr2ogr GPKG ({layer}) failed:\n{result.stderr.strip()}"
+            )
 
     # Raster pyramid: composite the selected raster layers into a single tile
     # set, then translate into the GPKG with the GPKG GDAL driver
     # (`-of GPKG` + RASTER_TABLE creation option appends the pyramid).
     if raster_layers:
         from .tile_compose import composite_raster_cogs
+
         composite_tif = composite_raster_cogs(ctx, raster_layers)
         cmd = [
             "gdal_translate",
-            "-of", "GPKG",
-            "-co", "RASTER_TABLE=topo_composite",
-            "-co", "APPEND_SUBDATASET=YES" if not first_write else "APPEND_SUBDATASET=NO",
+            "-of",
+            "GPKG",
+            "-co",
+            "RASTER_TABLE=topo_composite",
+            "-co",
+            "APPEND_SUBDATASET=YES" if not first_write else "APPEND_SUBDATASET=NO",
             str(composite_tif),
             str(dst),
         ]

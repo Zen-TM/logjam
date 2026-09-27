@@ -171,14 +171,17 @@ class TokenBucket {
       const now = Date.now();
       this.tokens = Math.min(
         BUCKET_CAPACITY,
-        this.tokens + ((now - this.lastRefill) / 1000) * BUCKET_REFILL_PER_SECOND,
+        this.tokens +
+          ((now - this.lastRefill) / 1000) * BUCKET_REFILL_PER_SECOND,
       );
       this.lastRefill = now;
       if (this.tokens >= 1) {
         this.tokens -= 1;
         return;
       }
-      await sleep(jitter((1000 * (1 - this.tokens)) / BUCKET_REFILL_PER_SECOND));
+      await sleep(
+        jitter((1000 * (1 - this.tokens)) / BUCKET_REFILL_PER_SECOND),
+      );
     }
   }
 }
@@ -189,7 +192,9 @@ class TokenBucket {
  * type and mobile data by cost, and this is the largest data cost in the app.
  * The per-job opt-in (§5.6) takes the place of the stored preference.
  */
-export async function connectionAllows(allowCellular: boolean): Promise<boolean> {
+export async function connectionAllows(
+  allowCellular: boolean,
+): Promise<boolean> {
   const state = await NetInfo.fetch();
   if (state.isConnected !== true) return false;
   return connectionAllowsMetered(state, allowCellular);
@@ -394,7 +399,10 @@ export async function runRegionDownload(
         // Connectivity is re-checked every batch's worth of tiles rather than
         // per tile: NetInfo.fetch() is a native round-trip, and the fetch
         // itself fails fast when the connection has actually gone.
-        if (index % BATCH_TILES === 0 && !(await connectionAllows(spec.allowCellular))) {
+        if (
+          index % BATCH_TILES === 0 &&
+          !(await connectionAllows(spec.allowCellular))
+        ) {
           halt.stop = { kind: "paused", reason: "connectivity" };
           return;
         }
@@ -463,7 +471,10 @@ export async function runRegionDownload(
     // stored, gapped or dead, and a sample of the stored blobs really is imagery.
     const stored = await countRegionTiles(target.db);
     const accounted = stored + gaps.size + dead;
-    if (accounted < plan.totalTiles || !(await sampleRegionTilesLookLikeImages(target.db))) {
+    if (
+      accounted < plan.totalTiles ||
+      !(await sampleRegionTilesLookLikeImages(target.db))
+    ) {
       await closeRegionMbtiles(target);
       return { status: "failed", code: "verify-failed" };
     }

@@ -43,11 +43,17 @@ vi.mock("../api/queries", () => ({
       ? Promise.reject(new Error("Network request failed"))
       : Promise.resolve({ id: serverUserId }),
 }));
-vi.mock("../offline/networkPolicy", () => ({ canRunNow: () => Promise.resolve(true) }));
+vi.mock("../offline/networkPolicy", () => ({
+  canRunNow: () => Promise.resolve(true),
+}));
 // The flush reports what it left behind; a pass with nothing retrying is the
 // ordinary case and the one these tests are about.
-vi.mock("./flush", () => ({ flushOutbox: () => Promise.resolve({ retrying: 0 }) }));
-vi.mock("./mediaCache", () => ({ syncThumbnailCache: () => Promise.resolve() }));
+vi.mock("./flush", () => ({
+  flushOutbox: () => Promise.resolve({ retrying: 0 }),
+}));
+vi.mock("./mediaCache", () => ({
+  syncThumbnailCache: () => Promise.resolve(),
+}));
 // The cycle registers any recording that owes a backup before it flushes. Stubbed
 // here for the same reason the media cache is: the real module reaches the
 // filesystem, and what this suite tests is the cycle's ORDER and its backoff.
@@ -55,12 +61,16 @@ vi.mock("../tracks/trackBackup", () => ({
   sweepTrackBackups: () => Promise.resolve(0),
 }));
 vi.mock("./mediaSyncBridge", () => ({ setMutationSyncHandler: () => {} }));
-vi.mock("./outbox", () => ({ migrateLegacyWaypoints: () => Promise.resolve() }));
+vi.mock("./outbox", () => ({
+  migrateLegacyWaypoints: () => Promise.resolve(),
+}));
 vi.mock("./deltaPull", () => ({
   SyncApplyError: ApplyError,
   runDeltaPull: () => {
     pulls += 1;
-    return pullError ? Promise.reject(pullError) : Promise.resolve({ pages: 1 });
+    return pullError
+      ? Promise.reject(pullError)
+      : Promise.resolve({ pages: 1 });
   },
 }));
 vi.mock("./syncDb", () => ({
@@ -69,7 +79,8 @@ vi.mock("./syncDb", () => ({
     mirrorClears += 1;
     return Promise.resolve();
   },
-  getSyncStateValue: (key: string) => Promise.resolve(stateWrites[key] ?? "user-1"),
+  getSyncStateValue: (key: string) =>
+    Promise.resolve(stateWrites[key] ?? "user-1"),
   setSyncStateValue: (key: string, value: string) => {
     stateWrites[key] = value;
     return Promise.resolve();

@@ -129,7 +129,9 @@ describe("rejectTrackFix", () => {
   });
 
   it("rejects sub-threshold movement (replayed last fix)", () => {
-    expect(rejectTrackFix(prev, point({ timestampMs: 2000 }))).toBe("too-close");
+    expect(rejectTrackFix(prev, point({ timestampMs: 2000 }))).toBe(
+      "too-close",
+    );
   });
 });
 
@@ -223,8 +225,18 @@ describe("computeTrackStats", () => {
     // a drive, not a climb, so it must not read as ascent the party walked.
     const points = [
       point({ altitudeM: 600, timestampMs: 0, segment: 0 }),
-      point({ lat: BASE_LAT + 0.001, altitudeM: 610, timestampMs: 10_000, segment: 0 }),
-      point({ lat: BASE_LAT + 0.002, altitudeM: 700, timestampMs: 600_000, segment: 1 }),
+      point({
+        lat: BASE_LAT + 0.001,
+        altitudeM: 610,
+        timestampMs: 10_000,
+        segment: 0,
+      }),
+      point({
+        lat: BASE_LAT + 0.002,
+        altitudeM: 700,
+        timestampMs: 600_000,
+        segment: 1,
+      }),
     ];
     expect(computeTrackStats(points).elevationGainM).toBe(0);
     expect(computeTrackStats(points).elevationLossM).toBe(0);
@@ -235,11 +247,36 @@ describe("computeTrackStats", () => {
     // between them is a relocation, not a climb: total = 50 + 80, not 180.
     const points = [
       point({ altitudeM: 600, timestampMs: 0, segment: 0 }),
-      point({ lat: BASE_LAT + 0.001, altitudeM: 625, timestampMs: 10_000, segment: 0 }),
-      point({ lat: BASE_LAT + 0.002, altitudeM: 650, timestampMs: 20_000, segment: 0 }),
-      point({ lat: BASE_LAT + 0.003, altitudeM: 700, timestampMs: 600_000, segment: 1 }),
-      point({ lat: BASE_LAT + 0.004, altitudeM: 740, timestampMs: 610_000, segment: 1 }),
-      point({ lat: BASE_LAT + 0.005, altitudeM: 780, timestampMs: 620_000, segment: 1 }),
+      point({
+        lat: BASE_LAT + 0.001,
+        altitudeM: 625,
+        timestampMs: 10_000,
+        segment: 0,
+      }),
+      point({
+        lat: BASE_LAT + 0.002,
+        altitudeM: 650,
+        timestampMs: 20_000,
+        segment: 0,
+      }),
+      point({
+        lat: BASE_LAT + 0.003,
+        altitudeM: 700,
+        timestampMs: 600_000,
+        segment: 1,
+      }),
+      point({
+        lat: BASE_LAT + 0.004,
+        altitudeM: 740,
+        timestampMs: 610_000,
+        segment: 1,
+      }),
+      point({
+        lat: BASE_LAT + 0.005,
+        altitudeM: 780,
+        timestampMs: 620_000,
+        segment: 1,
+      }),
     ];
     const stats = computeTrackStats(points);
     expect(stats.elevationGainM).toBe(130);
@@ -381,7 +418,13 @@ describe("noise rejection (random walk, not sawtooth)", () => {
 
   it("open-sky fixes stay accurate too (the gate is not just conservative)", () => {
     const stats = computeTrackStats(
-      simulate({ minutes: 60, speedMps: 1.2, sigmaM: 4, accuracyM: 8, climbM: 400 }),
+      simulate({
+        minutes: 60,
+        speedMps: 1.2,
+        sigmaM: 4,
+        accuracyM: 8,
+        climbM: 400,
+      }),
     );
     expect(stats.distanceM).toBeGreaterThan(4100);
     expect(stats.distanceM).toBeLessThan(4700);
@@ -398,7 +441,11 @@ describe("rejectTrackFix drift and plausibility gates", () => {
     expect(
       rejectTrackFix(
         coarse,
-        point({ lat: BASE_LAT + twentyMetres, accuracyM: 30, timestampMs: 60_000 }),
+        point({
+          lat: BASE_LAT + twentyMetres,
+          accuracyM: 30,
+          timestampMs: 60_000,
+        }),
       ),
     ).toBe("too-close");
     // 40 m over the same minute clears it.
@@ -419,7 +466,11 @@ describe("rejectTrackFix drift and plausibility gates", () => {
     expect(
       rejectTrackFix(
         sharp,
-        point({ lat: BASE_LAT + 3 / M_PER_DEG_LAT, accuracyM: 1, timestampMs: 60_000 }),
+        point({
+          lat: BASE_LAT + 3 / M_PER_DEG_LAT,
+          accuracyM: 1,
+          timestampMs: 60_000,
+        }),
       ),
     ).toBe("too-close");
   });
@@ -586,7 +637,9 @@ describe("computeTrackDetail", () => {
 
   it("reports average speed over the whole recording", () => {
     // 10 points, 1 milli-degree (111.19 m) apart, 100 s apart: 1.1119 m/s.
-    const detail = computeTrackDetail(walk({ count: 10, stepMilliDeg: 1, stepMs: 100_000 }));
+    const detail = computeTrackDetail(
+      walk({ count: 10, stepMilliDeg: 1, stepMs: 100_000 }),
+    );
     expect(detail.distanceM).toBeCloseTo(9 * LAT_STEP_M_PER_MILLIDEG, 0);
     expect(detail.durationMs).toBe(900_000);
     expect(detail.averageSpeedMps).toBeCloseTo(1.1119, 3);
@@ -653,7 +706,9 @@ describe("computeTrackDetail", () => {
   it("never credits more stopped time than the interval holds", () => {
     // A stop straddling a delivery boundary can carry a span longer than the
     // gap to the next accepted point; the surplus belongs to nobody.
-    const detail = computeTrackDetail(pausedInterval({ stationaryMs: 200_000 }));
+    const detail = computeTrackDetail(
+      pausedInterval({ stationaryMs: 200_000 }),
+    );
     expect(detail.stoppedMs).toBe(90_000);
     expect(detail.movingMs).toBe(0);
   });
@@ -752,9 +807,12 @@ describe("computeTrackDetail", () => {
 
   it("has no time-derived stat at all when the series carries no timestamps", () => {
     // An imported GPX without <time>: real distance, real climb, no speed.
-    const untimed = walk({ count: 10, stepMilliDeg: 1, stepMs: 0, altitudeStepM: 20 }).map(
-      (p) => ({ ...p, timestampMs: null }),
-    );
+    const untimed = walk({
+      count: 10,
+      stepMilliDeg: 1,
+      stepMs: 0,
+      altitudeStepM: 20,
+    }).map((p) => ({ ...p, timestampMs: null }));
     const detail = computeTrackDetail(untimed);
 
     expect(detail.distanceM).toBeCloseTo(9 * LAT_STEP_M_PER_MILLIDEG, 0);
@@ -775,12 +833,20 @@ describe("computeTrackDetail", () => {
     );
     const samples = detail.elevation!.samples;
     expect(samples[0]!.distanceM).toBe(0);
-    expect(samples[samples.length - 1]!.distanceM).toBeCloseTo(detail.distanceM, 6);
+    expect(samples[samples.length - 1]!.distanceM).toBeCloseTo(
+      detail.distanceM,
+      6,
+    );
     expect(detail.minAltitudeM).toBeLessThan(detail.maxAltitudeM!);
   });
 
   it("excludes the pause gap from distance, duration and speed", () => {
-    const first = walk({ count: 5, stepMilliDeg: 1, stepMs: 100_000, segment: 0 });
+    const first = walk({
+      count: 5,
+      stepMilliDeg: 1,
+      stepMs: 100_000,
+      segment: 0,
+    });
     // Segment 1 restarts a kilometre away, an hour later: neither the jump nor
     // the hour is the party's.
     const second = walk({
@@ -799,9 +865,16 @@ describe("computeTrackDetail", () => {
 
   it("thins a long series down to the chart's cap", () => {
     const detail = computeTrackDetail(
-      walk({ count: 2000, stepMilliDeg: 0.1, stepMs: 3000, altitudeStepM: 0.5 }),
+      walk({
+        count: 2000,
+        stepMilliDeg: 0.1,
+        stepMs: 3000,
+        altitudeStepM: 0.5,
+      }),
     );
-    expect(detail.elevation!.samples.length).toBe(ELEVATION_PROFILE_MAX_SAMPLES);
+    expect(detail.elevation!.samples.length).toBe(
+      ELEVATION_PROFILE_MAX_SAMPLES,
+    );
     expect(detail.speed!.samples.length).toBe(ELEVATION_PROFILE_MAX_SAMPLES);
     // Thinning keeps the ends: the chart must still start at 0 and finish at
     // the track's full length.
@@ -866,7 +939,10 @@ describe("computeTrackDetail", () => {
     const last = walked[walked.length - 1]!;
     const detail = computeTrackDetail([
       ...walked,
-      point({ lat: last.lat + 0.0001, timestampMs: last.timestampMs + 3_600_000 }),
+      point({
+        lat: last.lat + 0.0001,
+        timestampMs: last.timestampMs + 3_600_000,
+      }),
     ]);
     const samples = detail.speed!.samples;
     const stopSpan =
@@ -882,11 +958,36 @@ describe("computeTrackDetail", () => {
     // concatenation shows up as a height that goes backwards.
     const points = [
       point({ altitudeM: 700, timestampMs: 0, segment: 0 }),
-      point({ lat: BASE_LAT + 0.001, altitudeM: 710, timestampMs: 10_000, segment: 0 }),
-      point({ lat: BASE_LAT + 0.002, altitudeM: 720, timestampMs: 20_000, segment: 1 }),
-      point({ lat: BASE_LAT + 0.003, altitudeM: 730, timestampMs: 30_000, segment: 1 }),
-      point({ lat: BASE_LAT + 0.004, altitudeM: 740, timestampMs: 40_000, segment: 0 }),
-      point({ lat: BASE_LAT + 0.005, altitudeM: 750, timestampMs: 50_000, segment: 0 }),
+      point({
+        lat: BASE_LAT + 0.001,
+        altitudeM: 710,
+        timestampMs: 10_000,
+        segment: 0,
+      }),
+      point({
+        lat: BASE_LAT + 0.002,
+        altitudeM: 720,
+        timestampMs: 20_000,
+        segment: 1,
+      }),
+      point({
+        lat: BASE_LAT + 0.003,
+        altitudeM: 730,
+        timestampMs: 30_000,
+        segment: 1,
+      }),
+      point({
+        lat: BASE_LAT + 0.004,
+        altitudeM: 740,
+        timestampMs: 40_000,
+        segment: 0,
+      }),
+      point({
+        lat: BASE_LAT + 0.005,
+        altitudeM: 750,
+        timestampMs: 50_000,
+        segment: 0,
+      }),
     ];
     const samples = computeTrackDetail(points).elevation!.samples;
     expect(samples.map((sample) => sample.elevationM)).toEqual([
@@ -918,7 +1019,12 @@ describe("computeTrackDetail", () => {
   });
 
   it("agrees with the cached stats the recorder writes", () => {
-    const points = walk({ count: 20, stepMilliDeg: 1, stepMs: 60_000, altitudeStepM: 8 });
+    const points = walk({
+      count: 20,
+      stepMilliDeg: 1,
+      stepMs: 60_000,
+      altitudeStepM: 8,
+    });
     const detail = computeTrackDetail(points);
     expect(computeTrackStats(points)).toEqual({
       distanceM: detail.distanceM,

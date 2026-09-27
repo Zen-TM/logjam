@@ -49,11 +49,20 @@ import {
 import { apiFetch } from "../../api/apiFetch";
 import { fetchCurrentUser, useApiQuery } from "../../api/queries";
 import { useAccountState } from "../../auth/AccountStateContext";
-import { capabilityStatus, unavailableReasonText } from "../../auth/capabilities";
+import {
+  capabilityStatus,
+  unavailableReasonText,
+} from "../../auth/capabilities";
 import { useConnectivity } from "../../map/connectivity";
 import type { TUser } from "../../api/types";
 import { messageFromError } from "@logjam/shared";
-import { Row, ScreenScroll, SectionHeader, Toast, type ToastMessage } from "../../ui";
+import {
+  Row,
+  ScreenScroll,
+  SectionHeader,
+  Toast,
+  type ToastMessage,
+} from "../../ui";
 import { Hint, PreferenceRow } from "./settingsKit";
 import { spacing } from "../../theme";
 
@@ -115,7 +124,9 @@ export function OfflineSettingsScreen({
   );
 
   const [autoDownload, setAutoDownload] = useState(isAutoDownloadEnabled);
-  const [topoAutoDownload, setTopoAutoDownload] = useState(isTopoAutoDownloadEnabled);
+  const [topoAutoDownload, setTopoAutoDownload] = useState(
+    isTopoAutoDownloadEnabled,
+  );
   // One object rather than three booleans: the rows are data (METERED_ROWS), so
   // their state has to be indexable by the same key.
   const [metered, setMetered] = useState<Record<MeteredJob, boolean>>(() => ({

@@ -19,7 +19,8 @@ export function Toggle({
   describedBy?: string;
   disabled?: boolean;
 }) {
-  if (!label && !labelledBy) throw new Error("Toggle needs a label or labelledBy");
+  if (!label && !labelledBy)
+    throw new Error("Toggle needs a label or labelledBy");
   return (
     <button
       type="button"

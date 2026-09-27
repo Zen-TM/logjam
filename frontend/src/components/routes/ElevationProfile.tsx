@@ -34,7 +34,12 @@ type ElevationProfileProps = {
   onHoverSampleChange?: (index: number | null) => void;
 };
 
-type PlotPoint = { x: number; y: number; index: number; sample: ElevationSample };
+type PlotPoint = {
+  x: number;
+  y: number;
+  index: number;
+  sample: ElevationSample;
+};
 
 export default function ElevationProfile({
   samples,
@@ -74,7 +79,8 @@ export default function ElevationProfile({
     if (sample.elevationM == null || minM == null) return;
     known.push({
       x: totalM === 0 ? 0 : (sample.distanceM / totalM) * WIDTH,
-      y: plotHeight - ((sample.elevationM - minM) / span) * (plotHeight - 4) - 2,
+      y:
+        plotHeight - ((sample.elevationM - minM) / span) * (plotHeight - 4) - 2,
       index,
       sample,
     });
@@ -84,7 +90,9 @@ export default function ElevationProfile({
   // nothing to plot and the text figures above already say so.
   if (known.length < 2 || minM == null || maxM == null) return null;
 
-  const line = known.map((p) => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(" ");
+  const line = known
+    .map((p) => `${p.x.toFixed(2)},${p.y.toFixed(2)}`)
+    .join(" ");
   const area = `M0,${plotHeight} L${line.replace(/ /g, " L")} L${WIDTH},${plotHeight} Z`;
 
   const hover = (point: PlotPoint | null) => {
@@ -165,7 +173,10 @@ export default function ElevationProfile({
       {hovered && (
         <div
           className={`${classes.marker} ${hovered.x > WIDTH * LABEL_FLIP_AT ? classes.markerFlipped : ""}`}
-          style={{ left: `${(hovered.x / WIDTH) * 100}%`, top: `${hovered.y}px` }}
+          style={{
+            left: `${(hovered.x / WIDTH) * 100}%`,
+            top: `${hovered.y}px`,
+          }}
           aria-hidden="true"
         >
           <span className={classes.markerDot} style={{ background: color }} />

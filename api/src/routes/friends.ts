@@ -142,7 +142,10 @@ router.post(
         throw new AppError(403, "Unable to send friend request");
     }
 
-    const notifyAddressee = await wantsInAppNotification(addresseeId, "friendRequestInApp");
+    const notifyAddressee = await wantsInAppNotification(
+      addresseeId,
+      "friendRequestInApp",
+    );
 
     // Create friendship first so the notification can reference its real ID
     // atomically inside the same transaction.
@@ -454,7 +457,10 @@ export function ownedSharesToFriendWhere(userId: string, friendId: string) {
 }
 
 /** Places `friendId` owns that are shared with me. The mirror image. */
-export function receivedSharesFromFriendWhere(userId: string, friendId: string) {
+export function receivedSharesFromFriendWhere(
+  userId: string,
+  friendId: string,
+) {
   return { sharedWithId: userId, place: { ownerId: friendId } };
 }
 
@@ -527,8 +533,8 @@ async function directSharesBetween(args: {
     }),
   );
 
-  return refs.filter((ref) =>
-    ownedByType.get(ref.entityType)?.has(ref.entityId) ?? false,
+  return refs.filter(
+    (ref) => ownedByType.get(ref.entityType)?.has(ref.entityId) ?? false,
   );
 }
 
@@ -602,7 +608,13 @@ async function nameDirectShares(
       refs.map(async (ref) => {
         const synced = syncedEntityType(ref.entityType);
         if (synced === null) return;
-        if (await hasPlaceInheritedAccess(inheritedForUserId, synced, ref.entityId)) {
+        if (
+          await hasPlaceInheritedAccess(
+            inheritedForUserId,
+            synced,
+            ref.entityId,
+          )
+        ) {
           alsoViaPlace.add(key(ref.entityType, ref.entityId));
         }
       }),
@@ -634,10 +646,9 @@ function byNewestShare(rows: FriendShareRow[]): FriendShareRow[] {
  * revokes nothing: a client that computed a list and came up with none must
  * not be read as having asked for everything.
  */
-export function selectRequested<T extends { entityType: string; entityId: string }>(
-  rows: T[],
-  requested: BulkShareItem[] | null,
-): T[] {
+export function selectRequested<
+  T extends { entityType: string; entityId: string },
+>(rows: T[], requested: BulkShareItem[] | null): T[] {
   if (requested === null) return rows;
   const wanted = new Set(
     requested.map((item) => `${item.entityType}:${item.entityId}`),

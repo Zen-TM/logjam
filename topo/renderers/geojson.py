@@ -21,7 +21,9 @@ def render_geojson(ctx: RenderContext) -> Path:
     locals_ = []
     for layer in vector_layers:
         src = ctx.geojson_path(job["id"], layer)
-        dst_name = "contours_5m.geojson" if layer == "contours" else "osm_features.geojson"
+        dst_name = (
+            "contours_5m.geojson" if layer == "contours" else "osm_features.geojson"
+        )
         dst = ctx.work_dir / dst_name
         shutil.copy2(src, dst)
         locals_.append(dst)

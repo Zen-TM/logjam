@@ -40,7 +40,13 @@ export function SettingsRow({
 
 /** The glyph a tooltip hangs from. A button, because it is the thing you move
  *  to and press Escape out of; its own name says which setting it explains. */
-export function InfoTip({ label, content }: { label: string; content: string }) {
+export function InfoTip({
+  label,
+  content,
+}: {
+  label: string;
+  content: string;
+}) {
   return (
     <Tooltip content={content} placement="top-start">
       {(describedById) => (

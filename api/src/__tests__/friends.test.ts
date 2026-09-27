@@ -16,9 +16,7 @@ describe("friends routes (fake auth = alice)", () => {
     const res = await request(API_URL).get("/friends").set(AUTH);
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
-    const bob = res.body.find(
-      (f: { id: string }) => f.id === BOB_ID,
-    );
+    const bob = res.body.find((f: { id: string }) => f.id === BOB_ID);
     expect(bob).toBeTruthy();
     expect(bob.username).toBe("bob");
     expect(bob.friendshipId).toBeTruthy();

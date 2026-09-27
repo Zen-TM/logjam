@@ -127,13 +127,21 @@ export function SelectionFrame({
           The scrim says "not this"; it should not also mean "not here". */}
       <View
         pointerEvents="none"
-        style={[styles.dim, { left: 0, top: 0, width: boxWidth, height: insetTop }]}
+        style={[
+          styles.dim,
+          { left: 0, top: 0, width: boxWidth, height: insetTop },
+        ]}
       />
       <View
         pointerEvents="none"
         style={[
           styles.dim,
-          { left: 0, top: frameBottom, width: boxWidth, height: boxHeight - frameBottom },
+          {
+            left: 0,
+            top: frameBottom,
+            width: boxWidth,
+            height: boxHeight - frameBottom,
+          },
         ]}
       />
       <View
@@ -147,7 +155,12 @@ export function SelectionFrame({
         pointerEvents="none"
         style={[
           styles.dim,
-          { left: frameRight, top: insetTop, width: boxWidth - frameRight, height: frameHeight },
+          {
+            left: frameRight,
+            top: insetTop,
+            width: boxWidth - frameRight,
+            height: frameHeight,
+          },
         ]}
       />
 
@@ -171,7 +184,10 @@ export function SelectionFrame({
         accessibilityLabel="Drag to move the top edge of the area"
         style={[
           styles.handleH,
-          { left: centreX - HANDLE_LENGTH / 2, top: insetTop - HANDLE_TOUCH / 2 },
+          {
+            left: centreX - HANDLE_LENGTH / 2,
+            top: insetTop - HANDLE_TOUCH / 2,
+          },
         ]}
       >
         <View style={styles.barH} />
@@ -196,7 +212,10 @@ export function SelectionFrame({
         accessibilityLabel="Drag to move the left edge of the area"
         style={[
           styles.handleV,
-          { top: centreY - HANDLE_LENGTH / 2, left: insetLeft - HANDLE_TOUCH / 2 },
+          {
+            top: centreY - HANDLE_LENGTH / 2,
+            left: insetLeft - HANDLE_TOUCH / 2,
+          },
         ]}
       >
         <View style={styles.barV} />

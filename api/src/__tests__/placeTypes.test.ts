@@ -21,7 +21,7 @@ import {
   SYSTEM_PLACE_TYPES,
 } from "@logjam/shared";
 
-import { API_URL, ALICE_SUB, BOB_SUB, as, CANYON_TYPE_ID} from "./_actors";
+import { API_URL, ALICE_SUB, BOB_SUB, as, CANYON_TYPE_ID } from "./_actors";
 
 // Place types and the field definitions scoped to them — the mandatory guards
 // from the places-rework plan §7.4, §7.6 and §7.7.
@@ -52,9 +52,9 @@ const createdFields: string[] = [];
  * help: it probes a READ route, so it sees the global limiter and nothing
  * about this one.
  */
-async function write<T extends { status: number; headers: Record<string, string> }>(
-  send: () => Promise<T>,
-): Promise<T> {
+async function write<
+  T extends { status: number; headers: Record<string, string> },
+>(send: () => Promise<T>): Promise<T> {
   const first = await send();
   return (await throttleWrites(first)) ? await send() : first;
 }
@@ -62,7 +62,7 @@ async function write<T extends { status: number; headers: Record<string, string>
 async function makeType(sub: string, name: string): Promise<string> {
   const res = await write(() =>
     request(API_URL)
-    .post("/place-types")
+      .post("/place-types")
       .set(as(sub))
       .send({ name, iconKey: "map-pin", color: PLACE_TYPE_COLORS[1] }),
   );
@@ -81,8 +81,12 @@ afterAll(async () => {
     );
   }
   for (const id of created) {
-    await write(() => request(API_URL).delete(`/place-types/${id}`).set(as(ALICE_SUB)));
-    await write(() => request(API_URL).delete(`/place-types/${id}`).set(as(BOB_SUB)));
+    await write(() =>
+      request(API_URL).delete(`/place-types/${id}`).set(as(ALICE_SUB)),
+    );
+    await write(() =>
+      request(API_URL).delete(`/place-types/${id}`).set(as(BOB_SUB)),
+    );
   }
 });
 
@@ -139,7 +143,10 @@ describe("GET /place-types", () => {
       request(API_URL).get("/place-types").set(as(BOB_SUB)),
     ]);
     const systemIds = (body: { types: { id: string; isSystem: boolean }[] }) =>
-      body.types.filter((t) => t.isSystem).map((t) => t.id).sort();
+      body.types
+        .filter((t) => t.isSystem)
+        .map((t) => t.id)
+        .sort();
     expect(systemIds(mine.body)).toEqual(systemIds(theirs.body));
   });
 });
@@ -150,8 +157,12 @@ describe("GET /place-types", () => {
 describe("system types and definitions cannot be removed", () => {
   it("refuses to delete a system type", async () => {
     for (const id of Object.values(SYSTEM_PLACE_TYPE_IDS)) {
-      const res = await request(API_URL).delete(`/place-types/${id}`).set(as(ALICE_SUB));
-      expect([403, 404], `deleting ${id} answered ${res.status}`).toContain(res.status);
+      const res = await request(API_URL)
+        .delete(`/place-types/${id}`)
+        .set(as(ALICE_SUB));
+      expect([403, 404], `deleting ${id} answered ${res.status}`).toContain(
+        res.status,
+      );
     }
     // Still there afterwards.
     const after = await request(API_URL).get("/place-types").set(as(ALICE_SUB));
@@ -194,11 +205,17 @@ describe("system types and definitions cannot be removed", () => {
         }),
     );
     expect(res.status).toBe(200);
-    expect(res.body.results[0].status, JSON.stringify(res.body)).toBe("rejected");
-    expect(res.body.results[0].error?.status ?? res.body.results[0].status).toBeTruthy();
+    expect(res.body.results[0].status, JSON.stringify(res.body)).toBe(
+      "rejected",
+    );
+    expect(
+      res.body.results[0].error?.status ?? res.body.results[0].status,
+    ).toBeTruthy();
 
     // And it is still there, labelling values.
-    const list = await request(API_URL).get("/custom-fields/place").set(as(ALICE_SUB));
+    const list = await request(API_URL)
+      .get("/custom-fields/place")
+      .set(as(ALICE_SUB));
     expect(
       (list.body.fields as { key: string }[]).map((def) => def.key),
     ).toContain(SYSTEM_FIELD_DEFS[0].key);
@@ -212,17 +229,31 @@ describe("system types and definitions cannot be removed", () => {
     );
     expect(res.status).toBe(404);
     // And it still labels values.
-    const fields = await request(API_URL).get("/custom-fields/place").set(as(ALICE_SUB));
-    expect(fields.body.fields.map((f: { key: string }) => f.key)).toContain("v_grade");
+    const fields = await request(API_URL)
+      .get("/custom-fields/place")
+      .set(as(ALICE_SUB));
+    expect(fields.body.fields.map((f: { key: string }) => f.key)).toContain(
+      "v_grade",
+    );
   });
 
   // The other half of §7.7: RopeWiki import writes keys that EXIST. A key it
   // writes with no definition behind it is a value no form renders and no
   // filter finds.
   it("has a definition for every key RopeWiki writes", async () => {
-    const res = await request(API_URL).get("/custom-fields/place").set(as(ALICE_SUB));
+    const res = await request(API_URL)
+      .get("/custom-fields/place")
+      .set(as(ALICE_SUB));
     const keys = new Set(res.body.fields.map((f: { key: string }) => f.key));
-    for (const key of ["v_grade", "a_grade", "commitment", "quality", "hours", "num_abseils", "longest_abseil"]) {
+    for (const key of [
+      "v_grade",
+      "a_grade",
+      "commitment",
+      "quality",
+      "hours",
+      "num_abseils",
+      "longest_abseil",
+    ]) {
       expect(keys.has(key), `no definition for ${key}`).toBe(true);
     }
   });
@@ -262,7 +293,9 @@ describe("reserved keys are refused", () => {
       request(API_URL)
         .post("/custom-fields/place")
         .set(as(ALICE_SUB))
-        .send({ field: { key: "rope_notes", label: "Rope notes", type: "string" } }),
+        .send({
+          field: { key: "rope_notes", label: "Rope notes", type: "string" },
+        }),
     );
     expect(create.status).toBe(201);
     createdFields.push("rope_notes");
@@ -284,7 +317,9 @@ describe("reserved keys are refused", () => {
       request(API_URL)
         .post("/custom-fields/place")
         .set(as(ALICE_SUB))
-        .send({ field: { key: "water_level", label: "Water level", type: "string" } }),
+        .send({
+          field: { key: "water_level", label: "Water level", type: "string" },
+        }),
     );
     expect(res.status).toBe(201);
     createdFields.push("water_level");
@@ -328,7 +363,9 @@ describe("appliesToAllTypes", () => {
     );
     expect(place.status, JSON.stringify(place.body)).toBe(201);
     expect(place.body.fieldValues[key]).toBe("NPWS-1");
-    await request(API_URL).delete(`/places/${place.body.id}`).set(as(ALICE_SUB));
+    await request(API_URL)
+      .delete(`/places/${place.body.id}`)
+      .set(as(ALICE_SUB));
   });
 
   it("does not make a type-scoped definition apply everywhere", async () => {
@@ -339,7 +376,13 @@ describe("appliesToAllTypes", () => {
         .post("/custom-fields/place")
         .set(as(ALICE_SUB))
         .send({
-          field: { key, label: "Scoped field", type: "integer", min: 1, max: 5 },
+          field: {
+            key,
+            label: "Scoped field",
+            type: "integer",
+            min: 1,
+            max: 5,
+          },
           placeTypeIds: [typeId],
         }),
     );
@@ -378,7 +421,9 @@ describe("appliesToAllTypes", () => {
         }),
     );
     expect(elsewhere.status, JSON.stringify(elsewhere.body)).toBe(201);
-    await request(API_URL).delete(`/places/${elsewhere.body.id}`).set(as(ALICE_SUB));
+    await request(API_URL)
+      .delete(`/places/${elsewhere.body.id}`)
+      .set(as(ALICE_SUB));
   });
 });
 
@@ -415,7 +460,11 @@ describe("place type lifecycle", () => {
       request(API_URL)
         .post("/place-types")
         .set(as(ALICE_SUB))
-        .send({ name: `Bad icon ${Date.now()}`, iconKey: "waves", color: PLACE_TYPE_COLORS[1] }),
+        .send({
+          name: `Bad icon ${Date.now()}`,
+          iconKey: "waves",
+          color: PLACE_TYPE_COLORS[1],
+        }),
     );
     expect(badIcon.status).toBe(400);
 
@@ -423,7 +472,11 @@ describe("place type lifecycle", () => {
       request(API_URL)
         .post("/place-types")
         .set(as(ALICE_SUB))
-        .send({ name: `Bad colour ${Date.now()}`, iconKey: "map-pin", color: "#123456" }),
+        .send({
+          name: `Bad colour ${Date.now()}`,
+          iconKey: "map-pin",
+          color: "#123456",
+        }),
     );
     expect(badColor.status).toBe(400);
   });
@@ -433,22 +486,17 @@ describe("place type lifecycle", () => {
   it("refuses to delete a type that still holds places, then allows it after a reassign", async () => {
     const typeId = await makeType(ALICE_SUB, `Occupied ${Date.now()}`);
     const place = await write(() =>
-      request(API_URL)
-        .post("/places")
-        .set(as(ALICE_SUB))
-        .send({
-          name: "In the way",
-          latitude: -33.5,
-          longitude: 150.3,
-          placeTypeId: typeId,
-        }),
+      request(API_URL).post("/places").set(as(ALICE_SUB)).send({
+        name: "In the way",
+        latitude: -33.5,
+        longitude: 150.3,
+        placeTypeId: typeId,
+      }),
     );
     expect(place.status).toBe(201);
 
     const blocked = await write(() =>
-      request(API_URL)
-        .delete(`/place-types/${typeId}`)
-        .set(as(ALICE_SUB)),
+      request(API_URL).delete(`/place-types/${typeId}`).set(as(ALICE_SUB)),
     );
     expect(blocked.status).toBe(409);
     expect(blocked.body.error).toMatch(/1 place/);
@@ -462,16 +510,20 @@ describe("place type lifecycle", () => {
     expect(moved.status).toBe(200);
     expect(moved.body.movedCount).toBe(1);
 
-    const gone = await request(API_URL).delete(`/place-types/${typeId}`).set(as(ALICE_SUB));
+    const gone = await request(API_URL)
+      .delete(`/place-types/${typeId}`)
+      .set(as(ALICE_SUB));
     expect(gone.status).toBe(200);
 
     // The place survived the delete of its old type, which is the point.
     const survivor = await request(API_URL)
-    .get(`/places/${place.body.id}`)
+      .get(`/places/${place.body.id}`)
       .set(as(ALICE_SUB));
     expect(survivor.status).toBe(200);
     expect(survivor.body.placeTypeId).toBe(SYSTEM_PLACE_TYPE_IDS.marker);
-    await request(API_URL).delete(`/places/${place.body.id}`).set(as(ALICE_SUB));
+    await request(API_URL)
+      .delete(`/places/${place.body.id}`)
+      .set(as(ALICE_SUB));
   });
 
   // 404, not 403: an id the caller does not own must not be confirmed to exist.
@@ -480,7 +532,11 @@ describe("place type lifecycle", () => {
       request(API_URL)
         .post("/place-types")
         .set(as(BOB_SUB))
-        .send({ name: `Bobs ${Date.now()}`, iconKey: "map-pin", color: PLACE_TYPE_COLORS[1] }),
+        .send({
+          name: `Bobs ${Date.now()}`,
+          iconKey: "map-pin",
+          color: PLACE_TYPE_COLORS[1],
+        }),
     );
     expect(bobsType.status).toBe(201);
     created.push(bobsType.body.id);
@@ -511,20 +567,21 @@ describe("place type lifecycle", () => {
       request(API_URL)
         .post("/place-types")
         .set(as(BOB_SUB))
-        .send({ name: `Bobs other ${Date.now()}`, iconKey: "map-pin", color: PLACE_TYPE_COLORS[1] }),
+        .send({
+          name: `Bobs other ${Date.now()}`,
+          iconKey: "map-pin",
+          color: PLACE_TYPE_COLORS[1],
+        }),
     );
     created.push(bobsType.body.id);
 
     const foreign = await write(() =>
-      request(API_URL)
-        .post("/places")
-        .set(as(ALICE_SUB))
-        .send({
-          name: "Someone else's type",
-          latitude: -33.5,
-          longitude: 150.3,
-          placeTypeId: bobsType.body.id,
-        }),
+      request(API_URL).post("/places").set(as(ALICE_SUB)).send({
+        name: "Someone else's type",
+        latitude: -33.5,
+        longitude: 150.3,
+        placeTypeId: bobsType.body.id,
+      }),
     );
     expect(foreign.status).toBe(400);
   });

@@ -37,7 +37,10 @@ describe("validateGeoPdfConfig", () => {
   });
 
   it("rejects a paper size outside the allowlist", () => {
-    const c = { ...validConfig(), paperSize: "A0" as GeoPdfConfig["paperSize"] };
+    const c = {
+      ...validConfig(),
+      paperSize: "A0" as GeoPdfConfig["paperSize"],
+    };
     expect(validateGeoPdfConfig(c)).toBe("Invalid paper size: A0");
   });
 
@@ -50,7 +53,9 @@ describe("validateGeoPdfConfig", () => {
     const c = validConfig();
     // @ts-expect-error deliberately wrong type
     c.extent.north = "0";
-    expect(validateGeoPdfConfig(c)).toMatch(/north, south, east, west must be numbers/);
+    expect(validateGeoPdfConfig(c)).toMatch(
+      /north, south, east, west must be numbers/,
+    );
   });
 
   it("rejects inverted extent (north <= south)", () => {
@@ -66,23 +71,32 @@ describe("validateGeoPdfConfig", () => {
   });
 
   it("rejects non-positive or non-numeric scale", () => {
-    expect(validateGeoPdfConfig({ ...validConfig(), scale: 0 })).toBe("Invalid scale");
-    expect(validateGeoPdfConfig({ ...validConfig(), scale: -5 })).toBe("Invalid scale");
+    expect(validateGeoPdfConfig({ ...validConfig(), scale: 0 })).toBe(
+      "Invalid scale",
+    );
+    expect(validateGeoPdfConfig({ ...validConfig(), scale: -5 })).toBe(
+      "Invalid scale",
+    );
     // @ts-expect-error deliberately wrong type
-    expect(validateGeoPdfConfig({ ...validConfig(), scale: "big" })).toBe("Invalid scale");
+    expect(validateGeoPdfConfig({ ...validConfig(), scale: "big" })).toBe(
+      "Invalid scale",
+    );
   });
 
   it("rejects non-array overlays", () => {
     // @ts-expect-error deliberately wrong type
-    expect(validateGeoPdfConfig({ ...validConfig(), overlays: "hillshade" })).toBe(
-      "Invalid overlays: must be an array",
-    );
+    expect(
+      validateGeoPdfConfig({ ...validConfig(), overlays: "hillshade" }),
+    ).toBe("Invalid overlays: must be an array");
   });
 
   it("rejects an unknown overlay name", () => {
-    expect(validateGeoPdfConfig({ ...validConfig(), overlays: ["hillshade", "secret"] })).toBe(
-      "Invalid overlay name: secret",
-    );
+    expect(
+      validateGeoPdfConfig({
+        ...validConfig(),
+        overlays: ["hillshade", "secret"],
+      }),
+    ).toBe("Invalid overlay name: secret");
   });
 
   it("allows omitted overlays", () => {
@@ -121,7 +135,9 @@ describe("validateGeoPdfTemplateConfig", () => {
     const c = validConfig() as Partial<GeoPdfConfig>;
     delete c.extent;
     delete c.baseLayer;
-    expect(validateGeoPdfTemplateConfig(c)).toMatch(/Missing required fields: baseLayer/);
+    expect(validateGeoPdfTemplateConfig(c)).toMatch(
+      /Missing required fields: baseLayer/,
+    );
   });
 
   it("still validates an extent when one is present", () => {
@@ -133,8 +149,8 @@ describe("validateGeoPdfTemplateConfig", () => {
   it("still enforces the base-layer allowlist", () => {
     const c = validConfig() as Partial<GeoPdfConfig>;
     delete c.extent;
-    expect(validateGeoPdfTemplateConfig({ ...c, baseLayer: "evil-tiles" })).toBe(
-      "Invalid base layer: evil-tiles",
-    );
+    expect(
+      validateGeoPdfTemplateConfig({ ...c, baseLayer: "evil-tiles" }),
+    ).toBe("Invalid base layer: evil-tiles");
   });
 });

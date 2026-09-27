@@ -63,6 +63,8 @@ describe("describeDroppedTripRow", () => {
   });
 
   it("trims the raw value in the message", () => {
-    expect(describeDroppedTripRow(null, "  garbage  ")).toBe('date "garbage" couldn\'t be read');
+    expect(describeDroppedTripRow(null, "  garbage  ")).toBe(
+      'date "garbage" couldn\'t be read',
+    );
   });
 });

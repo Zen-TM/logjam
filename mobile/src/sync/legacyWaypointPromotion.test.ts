@@ -65,10 +65,13 @@ const legacyDb = {
 vi.mock("./syncDb", () => ({
   getSyncDb: () => Promise.resolve(mirrorDb),
   notifyMirrorChanged: () => {},
-  withSyncTransaction: async (_db: unknown, task: () => Promise<unknown>) => task(),
+  withSyncTransaction: async (_db: unknown, task: () => Promise<unknown>) =>
+    task(),
 }));
 vi.mock("./mediaSyncBridge", () => ({ scheduleMutationSync: () => {} }));
-vi.mock("expo-file-system/legacy", () => ({ deleteAsync: () => Promise.resolve() }));
+vi.mock("expo-file-system/legacy", () => ({
+  deleteAsync: () => Promise.resolve(),
+}));
 vi.mock("expo-crypto", () => ({
   randomUUID: () =>
     "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
@@ -106,7 +109,9 @@ describe("migrateLegacyWaypoints", () => {
 
   it("files it as a MARKER, not a canyon", async () => {
     await migrateLegacyWaypoints();
-    const insert = mirrorCalls.find((call) => call.sql.includes("INSERT INTO places"));
+    const insert = mirrorCalls.find((call) =>
+      call.sql.includes("INSERT INTO places"),
+    );
     // Read off the shared declaration rather than pasted here: filing a
     // dropped point as a canyon would put it in the canyon tab and hand it
     // seven grade fields it will never have.
@@ -126,16 +131,18 @@ describe("migrateLegacyWaypoints", () => {
 
   it("drops the legacy table once drained, so it never returns", async () => {
     await migrateLegacyWaypoints();
-    expect(legacyCalls.some((call) => call.sql.includes("DROP TABLE"))).toBe(true);
+    expect(legacyCalls.some((call) => call.sql.includes("DROP TABLE"))).toBe(
+      true,
+    );
   });
 
   it("is a no-op on a fresh install, where the table was never created", async () => {
     legacyTableExists = false;
     await migrateLegacyWaypoints();
     expect(mirrorCalls).toEqual([]);
-    expect(legacyCalls.some((call) => call.sql.includes("FROM waypoint "))).toBe(
-      false,
-    );
+    expect(
+      legacyCalls.some((call) => call.sql.includes("FROM waypoint ")),
+    ).toBe(false);
   });
 
   it("mints a fresh id for a legacy id the push protocol would reject", async () => {

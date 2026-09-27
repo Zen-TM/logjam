@@ -129,7 +129,9 @@ export function MoreScreen({
         <View style={styles.health}>
           <Feather name={tone.icon} size={18} color={tone.color} />
           <View style={styles.healthText}>
-            <Text style={[styles.headline, { color: tone.color }]}>{health.headline}</Text>
+            <Text style={[styles.headline, { color: tone.color }]}>
+              {health.headline}
+            </Text>
             <Text style={styles.detail}>{health.detail}</Text>
           </View>
         </View>
@@ -147,7 +149,11 @@ export function MoreScreen({
           {...capabilityRowProps("inbox", accountState, online)}
           right={
             <Trailing
-              badge={unreadCount ? <StatusPill label={String(unreadCount)} tone="accent" /> : null}
+              badge={
+                unreadCount ? (
+                  <StatusPill label={String(unreadCount)} tone="accent" />
+                ) : null
+              }
             />
           }
         />
@@ -186,7 +192,12 @@ export function MoreScreen({
             }
           />
         )}
-        <Row icon="settings" title="Settings" onPress={onOpenSettings} right={<Trailing />} />
+        <Row
+          icon="settings"
+          title="Settings"
+          onPress={onOpenSettings}
+          right={<Trailing />}
+        />
         <Row
           icon="user"
           // The Account row stays live for a guest: it is the way IN to an

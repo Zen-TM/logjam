@@ -137,9 +137,9 @@ describe("the stats a backed-up recording carries", () => {
 
   it("refuses a recording with no extent and one that has not finished", () => {
     expect(() => trackBackupMetadata(finishedTrack(), [])).toThrow(/extent/);
-    expect(() => trackBackupMetadata(finishedTrack({ endedAt: null }), points())).toThrow(
-      /finished/,
-    );
+    expect(() =>
+      trackBackupMetadata(finishedTrack({ endedAt: null }), points()),
+    ).toThrow(/finished/);
   });
 });
 
@@ -193,9 +193,9 @@ describe("a failure leaves the recording alone", () => {
   it("keeps the track row untouched and deletes the orphaned GPX", async () => {
     createStandaloneMediaLocal.mockRejectedValue(new Error("no store"));
 
-    await expect(backUpFinishedTrack(finishedTrack(), points())).rejects.toBeInstanceOf(
-      TrackBackupError,
-    );
+    await expect(
+      backUpFinishedTrack(finishedTrack(), points()),
+    ).rejects.toBeInstanceOf(TrackBackupError);
 
     expect(updateTrack).not.toHaveBeenCalled();
     expect(deleted).toEqual([written[0]!.path]);
@@ -206,9 +206,9 @@ describe("a failure leaves the recording alone", () => {
     // turn a retryable failure into a row that can never be sent.
     updateTrack.mockRejectedValueOnce(new Error("db is gone"));
 
-    await expect(backUpFinishedTrack(finishedTrack(), points())).rejects.toBeInstanceOf(
-      TrackBackupError,
-    );
+    await expect(
+      backUpFinishedTrack(finishedTrack(), points()),
+    ).rejects.toBeInstanceOf(TrackBackupError);
 
     expect(deleted).toEqual([]);
   });
@@ -217,7 +217,9 @@ describe("a failure leaves the recording alone", () => {
     const cause = new Error("disk full");
     createStandaloneMediaLocal.mockRejectedValue(cause);
 
-    await expect(backUpFinishedTrack(finishedTrack(), points())).rejects.toMatchObject({
+    await expect(
+      backUpFinishedTrack(finishedTrack(), points()),
+    ).rejects.toMatchObject({
       cause,
     });
   });

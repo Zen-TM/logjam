@@ -90,20 +90,36 @@ describe("planRegionTiles", () => {
 describe("caps", () => {
   it("passes the default 10×10 km region without warning", () => {
     const plan = planRegionTiles(TEN_KM, 8, 16);
-    expect(checkRegionCaps(TEN_KM, plan.totalTiles)).toEqual({ ok: true, softWarn: false });
+    expect(checkRegionCaps(TEN_KM, plan.totalTiles)).toEqual({
+      ok: true,
+      softWarn: false,
+    });
   });
 
   it("soft-warns between SOFT_WARN_TILES and MAX_REGION_TILES", () => {
     // ~20×20 km at z16 ≈ 1,700–2,300 tiles — inside the hard cap, over soft.
-    const bbox: RegionBbox = { west: 150.2, south: -33.79, east: 150.416, north: -33.61 };
+    const bbox: RegionBbox = {
+      west: 150.2,
+      south: -33.79,
+      east: 150.416,
+      north: -33.61,
+    };
     const plan = planRegionTiles(bbox, 8, 16);
     expect(plan.totalTiles).toBeGreaterThan(SOFT_WARN_TILES);
     expect(plan.totalTiles).toBeLessThanOrEqual(MAX_REGION_TILES);
-    expect(checkRegionCaps(bbox, plan.totalTiles)).toEqual({ ok: true, softWarn: true });
+    expect(checkRegionCaps(bbox, plan.totalTiles)).toEqual({
+      ok: true,
+      softWarn: true,
+    });
   });
 
   it("rejects over-cap tile counts", () => {
-    const bbox: RegionBbox = { west: 150.0, south: -33.9, east: 150.45, north: -33.55 };
+    const bbox: RegionBbox = {
+      west: 150.0,
+      south: -33.9,
+      east: 150.45,
+      north: -33.55,
+    };
     const plan = planRegionTiles(bbox, 8, 16);
     expect(plan.totalTiles).toBeGreaterThan(MAX_REGION_TILES);
     expect(checkRegionCaps(bbox, plan.totalTiles)).toEqual({
@@ -113,7 +129,12 @@ describe("caps", () => {
   });
 
   it("rejects edges beyond MAX_REGION_EDGE_KM regardless of zoom", () => {
-    const bbox: RegionBbox = { west: 150, south: -34, east: 151, north: -33.99 };
+    const bbox: RegionBbox = {
+      west: 150,
+      south: -34,
+      east: 151,
+      north: -33.99,
+    };
     const [w] = regionEdgesKm(bbox);
     expect(w).toBeGreaterThan(50);
     const plan = planRegionTiles(bbox, 8, 8);
@@ -131,7 +152,8 @@ describe("estimateRegionSize", () => {
     // the shallow rate, or the estimate is out by an order of magnitude.
     const deep = planRegionTiles(TEN_KM, 17, 18);
     const shallow = planRegionTiles(TEN_KM, 12, 13);
-    const perTileDeep = estimateRegionSize(deep, "six-base").meanBytes / deep.totalTiles;
+    const perTileDeep =
+      estimateRegionSize(deep, "six-base").meanBytes / deep.totalTiles;
     const perTileShallow =
       estimateRegionSize(shallow, "six-base").meanBytes / shallow.totalTiles;
     expect(perTileShallow).toBeGreaterThan(perTileDeep * 5);
@@ -177,7 +199,9 @@ describe("estimateRegionSize", () => {
 
   it("throws on an unknown source rather than guessing a size", () => {
     const plan = planRegionTiles(TEN_KM, 12, 12);
-    expect(() => estimateRegionSize(plan, "six-nope" as OfflineBasemapId)).toThrow();
+    expect(() =>
+      estimateRegionSize(plan, "six-nope" as OfflineBasemapId),
+    ).toThrow();
   });
 });
 
@@ -190,7 +214,12 @@ describe("planRegionForBasemaps", () => {
     job.perSource.filter((s) => s.basemapId !== DEM_SOURCE_ID);
 
   it("clamps each source to its own deepest served level", () => {
-    const job = planRegionForBasemaps(TEN_KM, ["six-topo", "six-base"], 18, maxZoomFor);
+    const job = planRegionForBasemaps(
+      TEN_KM,
+      ["six-topo", "six-base"],
+      18,
+      maxZoomFor,
+    );
     expect(basemapSources(job).map((s) => s.zMax)).toEqual([16, 18]);
   });
 
@@ -215,19 +244,28 @@ describe("planRegionForBasemaps", () => {
   // could quietly go wrong are: it stops riding along, or it starts scaling
   // with the detail rail and blows out a download the user sized by eye.
   it("saves the DEM with every region, at one flat level, whatever is selected", () => {
-    for (const ids of [[], ["six-topo"], ["six-topo", "six-imagery"]] as const) {
+    for (const ids of [
+      [],
+      ["six-topo"],
+      ["six-topo", "six-imagery"],
+    ] as const) {
       const job = planRegionForBasemaps(TEN_KM, [...ids], 16, maxZoomFor);
       const dem = job.perSource.filter((s) => s.basemapId === DEM_SOURCE_ID);
       expect(dem).toHaveLength(1);
-      expect(dem[0].plan.perZoom.map((level) => level.z)).toEqual([DEM_TILE_ZOOM]);
+      expect(dem[0].plan.perZoom.map((level) => level.z)).toEqual([
+        DEM_TILE_ZOOM,
+      ]);
     }
   });
 
   it("does not deepen the DEM when the detail rail moves", () => {
     const demAt = (zMax: number) =>
-      planRegionForBasemaps(TEN_KM, ["six-base"], zMax, maxZoomFor).perSource.find(
-        (s) => s.basemapId === DEM_SOURCE_ID,
-      )!;
+      planRegionForBasemaps(
+        TEN_KM,
+        ["six-base"],
+        zMax,
+        maxZoomFor,
+      ).perSource.find((s) => s.basemapId === DEM_SOURCE_ID)!;
     expect(demAt(18).plan.totalTiles).toBe(demAt(12).plan.totalTiles);
     expect(demAt(18).size.p90Bytes).toBe(demAt(12).size.p90Bytes);
   });

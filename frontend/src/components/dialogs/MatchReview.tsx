@@ -62,7 +62,11 @@ function isGuessDecision(item: ReviewItem): boolean {
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
-function MatchReview({ items, onChange, renderItemExtra }: MatchReviewProps): React.JSX.Element {
+function MatchReview({
+  items,
+  onChange,
+  renderItemExtra,
+}: MatchReviewProps): React.JSX.Element {
   const groupId = useId();
 
   function handleAcceptAllGuesses(): void {
@@ -116,7 +120,11 @@ function MatchReview({ items, onChange, renderItemExtra }: MatchReviewProps): Re
             </Button>
           )}
           {hasAnyNoPlace && (
-            <Button variant="plain" compact onClick={handleSetAllRemainingNoPlace}>
+            <Button
+              variant="plain"
+              compact
+              onClick={handleSetAllRemainingNoPlace}
+            >
               Set all remaining to No place
             </Button>
           )}
@@ -135,20 +143,31 @@ function MatchReview({ items, onChange, renderItemExtra }: MatchReviewProps): Re
             <div id={nameId} className={classes.incomingLabel}>
               {item.incomingLabel}
             </div>
-            <div className={classes.options} role="radiogroup" aria-labelledby={nameId}>
+            <div
+              className={classes.options}
+              role="radiogroup"
+              aria-labelledby={nameId}
+            >
               {item.options.map((option) => {
                 const selected =
-                  item.decision.kind === "link" && item.decision.id === option.id;
+                  item.decision.kind === "link" &&
+                  item.decision.id === option.id;
                 const radioId = `${groupId}-${index}-${option.id}`;
                 return (
-                  <label key={option.id} className={classes.option} htmlFor={radioId}>
+                  <label
+                    key={option.id}
+                    className={classes.option}
+                    htmlFor={radioId}
+                  >
                     <input
                       id={radioId}
                       className={classes.radio}
                       type="radio"
                       name={`${groupId}-${index}`}
                       checked={selected}
-                      onChange={() => onChange(index, { kind: "link", id: option.id })}
+                      onChange={() =>
+                        onChange(index, { kind: "link", id: option.id })
+                      }
                     />
                     <span className={classes.optionLabel}>
                       Link to <strong>{option.label}</strong>
@@ -164,7 +183,10 @@ function MatchReview({ items, onChange, renderItemExtra }: MatchReviewProps): Re
               })}
 
               {item.allowCreate && (
-                <label className={classes.option} htmlFor={`${groupId}-${index}-create`}>
+                <label
+                  className={classes.option}
+                  htmlFor={`${groupId}-${index}-create`}
+                >
                   <input
                     id={`${groupId}-${index}-create`}
                     className={classes.radio}
@@ -173,12 +195,17 @@ function MatchReview({ items, onChange, renderItemExtra }: MatchReviewProps): Re
                     checked={item.decision.kind === "create"}
                     onChange={() => onChange(index, { kind: "create" })}
                   />
-                  <span className={classes.optionLabel}>Create as new place</span>
+                  <span className={classes.optionLabel}>
+                    Create as new place
+                  </span>
                 </label>
               )}
 
               {item.allowNoPlace && (
-                <label className={classes.option} htmlFor={`${groupId}-${index}-noplace`}>
+                <label
+                  className={classes.option}
+                  htmlFor={`${groupId}-${index}-noplace`}
+                >
                   <input
                     id={`${groupId}-${index}-noplace`}
                     className={classes.radio}
@@ -192,7 +219,10 @@ function MatchReview({ items, onChange, renderItemExtra }: MatchReviewProps): Re
               )}
 
               {item.allowSkip && (
-                <label className={classes.option} htmlFor={`${groupId}-${index}-skip`}>
+                <label
+                  className={classes.option}
+                  htmlFor={`${groupId}-${index}-skip`}
+                >
                   <input
                     id={`${groupId}-${index}-skip`}
                     className={classes.radio}

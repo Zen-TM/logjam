@@ -188,9 +188,10 @@ export function capabilityRowProps(
  * One implementation, so a third reason can never render as a dimmed row with
  * no subtitle on one surface and a worded one on another.
  */
-export function statusRowProps(
-  status: CapabilityStatus,
-): { disabled: boolean; subtitle?: string } {
+export function statusRowProps(status: CapabilityStatus): {
+  disabled: boolean;
+  subtitle?: string;
+} {
   return status.status === "available"
     ? { disabled: false }
     : { disabled: true, subtitle: unavailableReasonText(status.reason) };
@@ -226,9 +227,7 @@ export function shareCapabilityStatus(
 ): CapabilityStatus {
   const base = capabilityStatus("sharing", accountState, online);
   if (base.status !== "available") return base;
-  return onServer
-    ? base
-    : { status: "unavailable", reason: "needs-upload" };
+  return onServer ? base : { status: "unavailable", reason: "needs-upload" };
 }
 
 /**

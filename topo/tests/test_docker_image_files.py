@@ -15,6 +15,7 @@ and fails if anything reachable is missing from the image.
 Pure AST + text parsing: no imports of the modules themselves, so it runs on
 the dev host with no GDAL/PDAL/psycopg2 (`python -m unittest discover -s tests`).
 """
+
 import ast
 import os
 import re
@@ -79,8 +80,7 @@ def _copied_sources():
     with open(_DOCKERFILE, encoding="utf-8") as fh:
         body = fh.read()
     return {
-        m.group(1)
-        for m in re.finditer(r"^COPY\s+(\S+)\s+\S+\s*$", body, re.MULTILINE)
+        m.group(1) for m in re.finditer(r"^COPY\s+(\S+)\s+\S+\s*$", body, re.MULTILINE)
     }
 
 

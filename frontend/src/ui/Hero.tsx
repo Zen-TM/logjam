@@ -33,7 +33,9 @@ export function Hero({
 }) {
   return (
     <header className={classes.hero} data-back={onBack ? true : undefined}>
-      {onBack && <IconButton icon={ArrowLeft} label={backLabel} onClick={onBack} />}
+      {onBack && (
+        <IconButton icon={ArrowLeft} label={backLabel} onClick={onBack} />
+      )}
       <h2 className={children ? "visually-hidden" : classes.title}>{title}</h2>
       {children}
       {actions}
@@ -58,7 +60,12 @@ export function Meter({ segments }: { segments: readonly MeterSegment[] }) {
             <span
               key={segment.label}
               className={classes.segment}
-              style={{ flexGrow: segment.value, "--segment-hue": segment.hue } as CSSProperties}
+              style={
+                {
+                  flexGrow: segment.value,
+                  "--segment-hue": segment.hue,
+                } as CSSProperties
+              }
             />
           ))}
       </div>

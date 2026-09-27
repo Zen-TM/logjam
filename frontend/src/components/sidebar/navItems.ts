@@ -52,7 +52,13 @@ const NARROW_TAB_IDS: NavItemId[] = ["places", "logs", "ways"];
 
 /** The More menu, most- to least-reached. Inbox first: it is the badged item,
  *  and landing on it is what makes More's badge pay off in one glance. */
-const MORE_ITEM_IDS: NavItemId[] = ["inbox", "maps", "friends", "account", "settings"];
+const MORE_ITEM_IDS: NavItemId[] = [
+  "inbox",
+  "maps",
+  "friends",
+  "account",
+  "settings",
+];
 
 function itemById(id: NavItemId): NavItem {
   const item = ALL_ITEMS.find((candidate) => candidate.id === id);
@@ -87,12 +93,18 @@ export function partitionNavItems(isNarrow: boolean): NavPartition {
 }
 
 /** Total badge count across the given items. Drives More's badge. */
-export function aggregateBadgeCount(items: NavItem[], counts: NavBadgeCounts): number {
+export function aggregateBadgeCount(
+  items: NavItem[],
+  counts: NavBadgeCounts,
+): number {
   return items.reduce((sum, item) => sum + (counts[item.id] ?? 0), 0);
 }
 
 /** True when the open panel lives inside More, so More reads as selected. */
-export function isPanelInMore(moreItems: NavItem[], activePanel: PanelId | null): boolean {
+export function isPanelInMore(
+  moreItems: NavItem[],
+  activePanel: PanelId | null,
+): boolean {
   return moreItems.some((item) => item.id === activePanel);
 }
 

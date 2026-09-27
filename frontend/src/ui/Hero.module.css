@@ -10,7 +10,8 @@
   min-height: calc(var(--control-md) + 2 * 12px + 1px);
   box-sizing: border-box;
   padding: 12px var(--gutter);
-  border-bottom: 1px solid color-mix(in srgb, var(--theme-accent) 25%, transparent);
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--theme-accent) 25%, transparent);
 }
 
 /* The back arrow's button box carries its own whitespace, so it sits on the

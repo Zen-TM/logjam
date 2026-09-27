@@ -4,7 +4,9 @@ import { fileNameWithoutExtension, importDisplayName } from "./importName";
 
 describe("fileNameWithoutExtension", () => {
   it("drops the extension and nothing else", () => {
-    expect(fileNameWithoutExtension("Ridge approach.gpx")).toBe("Ridge approach");
+    expect(fileNameWithoutExtension("Ridge approach.gpx")).toBe(
+      "Ridge approach",
+    );
     expect(fileNameWithoutExtension("a.b.geojson")).toBe("a.b");
     expect(fileNameWithoutExtension("no-extension")).toBe("no-extension");
   });
@@ -37,10 +39,18 @@ describe("importDisplayName", () => {
 
   it("falls back to the file name when the file is nameless", () => {
     expect(
-      importDisplayName({ contentName: null, filename: "waypoints.kml", sentBy: null }),
+      importDisplayName({
+        contentName: null,
+        filename: "waypoints.kml",
+        sentBy: null,
+      }),
     ).toBe("waypoints");
     expect(
-      importDisplayName({ contentName: null, filename: "waypoints.kml", sentBy: "bob" }),
+      importDisplayName({
+        contentName: null,
+        filename: "waypoints.kml",
+        sentBy: "bob",
+      }),
     ).toBe("waypoints");
   });
 });

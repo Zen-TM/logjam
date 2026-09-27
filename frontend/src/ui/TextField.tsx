@@ -12,7 +12,11 @@ import {
 } from "react";
 import { ChevronDown, Search } from "lucide-react";
 import { FieldError } from "../components/feedback/FieldError";
-import { numericFieldError, sanitizeDecimalInput, type NumericFieldConstraints } from "../numberInput";
+import {
+  numericFieldError,
+  sanitizeDecimalInput,
+  type NumericFieldConstraints,
+} from "../numberInput";
 import classes from "./TextField.module.css";
 
 type FieldLabelling = {
@@ -33,10 +37,17 @@ function Field({
   error,
   className,
   children,
-}: FieldLabelling & { inputId: string; className?: string; children: ReactNode }) {
+}: FieldLabelling & {
+  inputId: string;
+  className?: string;
+  children: ReactNode;
+}) {
   return (
     <div className={[classes.field, className].filter(Boolean).join(" ")}>
-      <label htmlFor={inputId} className={hideLabel ? "visually-hidden" : classes.label}>
+      <label
+        htmlFor={inputId}
+        className={hideLabel ? "visually-hidden" : classes.label}
+      >
         {label}
       </label>
       {children}
@@ -51,7 +62,9 @@ function Field({
 }
 
 const describedBy = (inputId: string, hint?: string, error?: string | null) =>
-  [hint && `${inputId}-hint`, error && `${inputId}-error`].filter(Boolean).join(" ") || undefined;
+  [hint && `${inputId}-hint`, error && `${inputId}-error`]
+    .filter(Boolean)
+    .join(" ") || undefined;
 
 /** A labelled input with its validation message under it. The label is
  *  visible (a placeholder is not a label), and the error is tied to the input
@@ -68,11 +81,19 @@ export function TextField({
   className,
   ref,
   ...inputProps
-}: InputHTMLAttributes<HTMLInputElement> & FieldLabelling & { ref?: Ref<HTMLInputElement> }) {
+}: InputHTMLAttributes<HTMLInputElement> &
+  FieldLabelling & { ref?: Ref<HTMLInputElement> }) {
   const autoId = useId();
   const inputId = id ?? autoId;
   return (
-    <Field inputId={inputId} label={label} hideLabel={hideLabel} hint={hint} error={error} className={className}>
+    <Field
+      inputId={inputId}
+      label={label}
+      hideLabel={hideLabel}
+      hint={hint}
+      error={error}
+      className={className}
+    >
       <input
         ref={ref}
         id={inputId}
@@ -103,7 +124,10 @@ export function NumberField({
   showError = false,
   onBlur,
   ...fieldProps
-}: Omit<ComponentProps<typeof TextField>, "value" | "onChange" | "type" | "inputMode" | "error"> & {
+}: Omit<
+  ComponentProps<typeof TextField>,
+  "value" | "onChange" | "type" | "inputMode" | "error"
+> & {
   value: string;
   onChange: (next: string) => void;
   constraints: NumericFieldConstraints;
@@ -155,7 +179,11 @@ export function LiveNumberField({
 }) {
   const [draft, setDraft] = useState(() => String(value));
   useEffect(() => {
-    setDraft((current) => (current.trim() !== "" && Number(current) === value ? current : String(value)));
+    setDraft((current) =>
+      current.trim() !== "" && Number(current) === value
+        ? current
+        : String(value),
+    );
   }, [value]);
 
   return (
@@ -165,7 +193,8 @@ export function LiveNumberField({
       constraints={constraints}
       onChange={(next) => {
         setDraft(next);
-        if (next.trim() !== "" && numericFieldError(next, constraints) === null) onCommit(Number(next));
+        if (next.trim() !== "" && numericFieldError(next, constraints) === null)
+          onCommit(Number(next));
       }}
       // Whatever is left that never committed (empty, "-", out of range) is
       // not a value: the field goes back to what is drawn.
@@ -190,17 +219,34 @@ export function TextArea({
   ref,
   ...textareaProps
 }: TextareaHTMLAttributes<HTMLTextAreaElement> &
-  FieldLabelling & { minRows?: number; maxRows?: number; ref?: Ref<HTMLTextAreaElement> }) {
+  FieldLabelling & {
+    minRows?: number;
+    maxRows?: number;
+    ref?: Ref<HTMLTextAreaElement>;
+  }) {
   const autoId = useId();
   const inputId = id ?? autoId;
   return (
-    <Field inputId={inputId} label={label} hideLabel={hideLabel} hint={hint} error={error} className={className}>
+    <Field
+      inputId={inputId}
+      label={label}
+      hideLabel={hideLabel}
+      hint={hint}
+      error={error}
+      className={className}
+    >
       <textarea
         ref={ref}
         id={inputId}
         rows={minRows}
         className={`${classes.input} ${classes.textarea}`}
-        style={{ ...style, "--min-rows": minRows, "--max-rows": maxRows } as CSSProperties}
+        style={
+          {
+            ...style,
+            "--min-rows": minRows,
+            "--max-rows": maxRows,
+          } as CSSProperties
+        }
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy(inputId, hint, error)}
         {...textareaProps}
@@ -222,11 +268,19 @@ export function Select({
   ref,
   children,
   ...selectProps
-}: SelectHTMLAttributes<HTMLSelectElement> & FieldLabelling & { ref?: Ref<HTMLSelectElement> }) {
+}: SelectHTMLAttributes<HTMLSelectElement> &
+  FieldLabelling & { ref?: Ref<HTMLSelectElement> }) {
   const autoId = useId();
   const inputId = id ?? autoId;
   return (
-    <Field inputId={inputId} label={label} hideLabel={hideLabel} hint={hint} error={error} className={className}>
+    <Field
+      inputId={inputId}
+      label={label}
+      hideLabel={hideLabel}
+      hint={hint}
+      error={error}
+      className={className}
+    >
       <div className={classes.selectBox}>
         <select
           ref={ref}
@@ -271,7 +325,6 @@ export function SearchField({
   );
 }
 
-
 /**
  * A bounded number chosen by feel: a native range input with its ENDS and its
  * reading written out — "0.5×" and "2×" flanking the track, the value itself at
@@ -294,7 +347,10 @@ export function RangeField({
   format,
   onChange,
   ...inputProps
-}: Omit<InputHTMLAttributes<HTMLInputElement>, "type" | "value" | "onChange" | "min" | "max"> & {
+}: Omit<
+  InputHTMLAttributes<HTMLInputElement>,
+  "type" | "value" | "onChange" | "min" | "max"
+> & {
   label: string;
   min: number;
   max: number;

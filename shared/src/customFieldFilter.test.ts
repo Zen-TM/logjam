@@ -9,7 +9,9 @@ import {
 } from "./customFieldFilter.js";
 import type { TripLogCustomFieldDef } from "./tripLogFields.js";
 
-function def(overrides: Partial<TripLogCustomFieldDef> = {}): TripLogCustomFieldDef {
+function def(
+  overrides: Partial<TripLogCustomFieldDef> = {},
+): TripLogCustomFieldDef {
   return {
     key: "rope_length",
     label: "Rope length",
@@ -85,8 +87,12 @@ describe("passesCustomFieldFilters", () => {
   });
 
   it("matches a boolean exactly, including false", () => {
-    expect(pass({ wetsuit: false }, { wetsuit: { kind: "boolean", value: false } })).toBe(true);
-    expect(pass({ wetsuit: true }, { wetsuit: { kind: "boolean", value: false } })).toBe(false);
+    expect(
+      pass({ wetsuit: false }, { wetsuit: { kind: "boolean", value: false } }),
+    ).toBe(true);
+    expect(
+      pass({ wetsuit: true }, { wetsuit: { kind: "boolean", value: false } }),
+    ).toBe(false);
   });
 
   // The regression the extracted module exists to keep fixed: a date that
@@ -139,13 +145,21 @@ describe("passesDateRangeFilter", () => {
     // and failed in CI's UTC.
     const local = (day: number, hour: number, minute: number) =>
       new Date(2026, 0, day, hour, minute).toISOString();
-    expect(passesDateRangeFilter(local(15, 9, 0), ["2026-01-15", null], false)).toBe(true);
-    expect(passesDateRangeFilter(local(15, 23, 59), [null, "2026-01-15"], false)).toBe(true);
-    expect(passesDateRangeFilter(local(14, 23, 59), ["2026-01-15", null], false)).toBe(false);
+    expect(
+      passesDateRangeFilter(local(15, 9, 0), ["2026-01-15", null], false),
+    ).toBe(true);
+    expect(
+      passesDateRangeFilter(local(15, 23, 59), [null, "2026-01-15"], false),
+    ).toBe(true);
+    expect(
+      passesDateRangeFilter(local(14, 23, 59), ["2026-01-15", null], false),
+    ).toBe(false);
   });
 
   it("defers a missing value to includeUnknowns", () => {
-    expect(passesDateRangeFilter(null, ["2026-01-01", null], false)).toBe(false);
+    expect(passesDateRangeFilter(null, ["2026-01-01", null], false)).toBe(
+      false,
+    );
     expect(passesDateRangeFilter(null, ["2026-01-01", null], true)).toBe(true);
   });
 });
@@ -164,7 +178,11 @@ describe("reconcileCustomFieldFilters", () => {
   });
 
   it("drops a filter whose field changed type under it", () => {
-    expect(reconcileCustomFieldFilters(filters, [def({ min: 0, max: 5 })])).toEqual({});
-    expect(reconcileCustomFieldFilters(filters, [def({ type: "string" })])).toEqual({});
+    expect(
+      reconcileCustomFieldFilters(filters, [def({ min: 0, max: 5 })]),
+    ).toEqual({});
+    expect(
+      reconcileCustomFieldFilters(filters, [def({ type: "string" })]),
+    ).toEqual({});
   });
 });

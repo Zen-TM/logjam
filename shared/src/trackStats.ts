@@ -186,7 +186,11 @@ export function rejectTrackFix(
   ) {
     return "invalid";
   }
-  if (maxAccuracyM > 0 && fix.accuracyM != null && fix.accuracyM > maxAccuracyM) {
+  if (
+    maxAccuracyM > 0 &&
+    fix.accuracyM != null &&
+    fix.accuracyM > maxAccuracyM
+  ) {
     return "inaccurate";
   }
   if (prev) {
@@ -224,7 +228,11 @@ export function rejectTrackFix(
  * window's worth of distance; symmetric-shrinking leaves the endpoints exactly
  * where they were measured and passes a straight ramp through untouched.
  */
-function symmetricHalfWidth(index: number, length: number, window: number): number {
+function symmetricHalfWidth(
+  index: number,
+  length: number,
+  window: number,
+): number {
   return Math.min((window - 1) >> 1, index, length - 1 - index);
 }
 
@@ -242,7 +250,9 @@ function movingMedian(values: number[], window: number): number[] {
   if (window <= 1) return values.slice();
   return values.map((_, index) => {
     const half = symmetricHalfWidth(index, values.length, window);
-    const slice = values.slice(index - half, index + half + 1).sort((a, b) => a - b);
+    const slice = values
+      .slice(index - half, index + half + 1)
+      .sort((a, b) => a - b);
     return slice[half]!;
   });
 }
@@ -321,7 +331,8 @@ function demonstratedStoppedMs(
   const stationaryMs = point.stationaryMs;
   if (stationaryMs == null || stationaryMs <= 0) return null;
   const radiusM = Math.max(MIN_POINT_DISTANCE_M, point.accuracyM ?? 0);
-  if (radiusM / (stationaryMs / 1000) >= MOVING_SPEED_THRESHOLD_MPS) return null;
+  if (radiusM / (stationaryMs / 1000) >= MOVING_SPEED_THRESHOLD_MPS)
+    return null;
   return Math.min(stationaryMs, stepMs);
 }
 
@@ -522,7 +533,10 @@ export function computeTrackDetail(
   // segment so a pause gap never averages across the two sides of it.
   for (let start = 0; start < points.length; ) {
     let end = start + 1;
-    while (end < points.length && points[end]!.segment === points[start]!.segment) {
+    while (
+      end < points.length &&
+      points[end]!.segment === points[start]!.segment
+    ) {
       end++;
     }
     const segment = points.slice(start, end);
@@ -544,7 +558,12 @@ export function computeTrackDetail(
     const segmentStopped: number[] = [];
     distanceAt[start] = distanceM;
     for (let i = 1; i < segment.length; i++) {
-      const stepM = haversineMeters(lats[i - 1]!, lons[i - 1]!, lats[i]!, lons[i]!);
+      const stepM = haversineMeters(
+        lats[i - 1]!,
+        lons[i - 1]!,
+        lats[i]!,
+        lons[i]!,
+      );
       distanceM += stepM;
       distanceAt[start + i] = distanceM;
       if (!timed) continue;
@@ -606,7 +625,10 @@ export function computeTrackDetail(
         rawSpeeds.push({ atMs: startMs + stoppedMs, speedMps: 0 });
       }
       if (stoppedMs < segmentDurations[i]!) {
-        rawSpeeds.push({ atMs: startMs + stoppedMs, speedMps: smoothedSpeeds[i]! });
+        rawSpeeds.push({
+          atMs: startMs + stoppedMs,
+          speedMps: smoothedSpeeds[i]!,
+        });
         rawSpeeds.push({ atMs: segmentEnds[i]!, speedMps: smoothedSpeeds[i]! });
       }
     }
@@ -659,7 +681,10 @@ export function computeTrackDetail(
         : [];
     for (const value of smoothed) altitudes.push(value);
     if (smoothed.length < 2) continue;
-    const { gainM, lossM } = elevationGainLoss(smoothed, ELEVATION_HYSTERESIS_M);
+    const { gainM, lossM } = elevationGainLoss(
+      smoothed,
+      ELEVATION_HYSTERESIS_M,
+    );
     elevationGainM += gainM;
     elevationLossM += lossM;
   }
@@ -669,8 +694,10 @@ export function computeTrackDetail(
   const elevationSamples: ElevationSample[] = [];
   for (let k = 0; k < altitudes.length; k++) {
     const elevationM = altitudes[k]!;
-    if (minAltitudeM == null || elevationM < minAltitudeM) minAltitudeM = elevationM;
-    if (maxAltitudeM == null || elevationM > maxAltitudeM) maxAltitudeM = elevationM;
+    if (minAltitudeM == null || elevationM < minAltitudeM)
+      minAltitudeM = elevationM;
+    if (maxAltitudeM == null || elevationM > maxAltitudeM)
+      maxAltitudeM = elevationM;
     elevationSamples.push({
       distanceM: distanceAt[withAltitude[k]!]!,
       elevationM,
@@ -713,7 +740,8 @@ export function computeTrackDetail(
     // Speed over a zero span is not 0 m/s, it is unknown — a track with one
     // point must not claim the party stood still.
     averageSpeedMps: timed && totalMs > 0 ? distanceM / (totalMs / 1000) : null,
-    movingSpeedMps: timed && movingMs > 0 ? distanceM / (movingMs / 1000) : null,
+    movingSpeedMps:
+      timed && movingMs > 0 ? distanceM / (movingMs / 1000) : null,
     minAltitudeM,
     maxAltitudeM,
     elevation:
@@ -749,7 +777,9 @@ export function computeTrackDetail(
  * rest of the detail is derived on demand when something wants to show it, so
  * a new stat never means a migration.
  */
-export function computeTrackStats(points: readonly TrackSeriesPoint[]): TrackStats {
+export function computeTrackStats(
+  points: readonly TrackSeriesPoint[],
+): TrackStats {
   const detail = computeTrackDetail(points);
   return {
     distanceM: detail.distanceM,
@@ -787,8 +817,7 @@ export function recordedDurationMs(input: {
 }): number {
   const { startedAtMs, endedAtMs, pausedMs, pausedAtMs, nowMs } = input;
   const until = endedAtMs ?? nowMs;
-  const openPauseMs =
-    pausedAtMs == null ? 0 : Math.max(0, until - pausedAtMs);
+  const openPauseMs = pausedAtMs == null ? 0 : Math.max(0, until - pausedAtMs);
   return Math.max(0, until - startedAtMs - pausedMs - openPauseMs);
 }
 
@@ -817,7 +846,7 @@ export function initialBearingDegrees(
 /** "N", "NE", … for a bearing in degrees. */
 export function compassPointFor(bearingDeg: number): string {
   const points = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
-  return points[Math.round(((bearingDeg % 360) + 360) % 360 / 45) % 8];
+  return points[Math.round((((bearingDeg % 360) + 360) % 360) / 45) % 8];
 }
 
 /** Human distance: metres under 1 km, else km with one decimal. */
@@ -829,7 +858,8 @@ export function formatDistanceM(distanceM: number): string {
 
 /** Human speed: km/h with one decimal. Null (no timestamps) reads as unknown. */
 export function formatSpeedMps(speedMps: number | null): string {
-  if (speedMps == null || !Number.isFinite(speedMps) || speedMps < 0) return "—";
+  if (speedMps == null || !Number.isFinite(speedMps) || speedMps < 0)
+    return "—";
   return `${(speedMps * 3.6).toFixed(1)} km/h`;
 }
 

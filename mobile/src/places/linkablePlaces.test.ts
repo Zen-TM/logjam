@@ -1,10 +1,20 @@
 import { describe, expect, it } from "vitest";
 
-import { VISIBLE_PLACES, linkablePlaces, truncationHint } from "./linkablePlaces";
+import {
+  VISIBLE_PLACES,
+  linkablePlaces,
+  truncationHint,
+} from "./linkablePlaces";
 
-const place = (name: string, syncRole?: string) => ({ id: name, name, syncRole });
+const place = (name: string, syncRole?: string) => ({
+  id: name,
+  name,
+  syncRole,
+});
 const many = (count: number) =>
-  Array.from({ length: count }, (_, i) => place(`Place ${String(i).padStart(3, "0")}`));
+  Array.from({ length: count }, (_, i) =>
+    place(`Place ${String(i).padStart(3, "0")}`),
+  );
 
 describe("linkablePlaces", () => {
   it("drops places shared with the user — the API refuses those links", () => {
@@ -16,7 +26,10 @@ describe("linkablePlaces", () => {
   });
 
   it("filters case-insensitively on the query", () => {
-    const { visible } = linkablePlaces([place("Claustral"), place("Ranon")], "clau");
+    const { visible } = linkablePlaces(
+      [place("Claustral"), place("Ranon")],
+      "clau",
+    );
     expect(visible.map((c) => c.name)).toEqual(["Claustral"]);
   });
 

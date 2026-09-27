@@ -61,9 +61,7 @@ import { useMirrorPlaceTypes } from "../sync/useSyncQueries";
  * position — the picker is where you see where it is, on a map, deliberately
  * rather than as a coordinate anyone could read over a shoulder.
  */
-type Mode =
-  | { kind: "main" }
-  | { kind: "date"; field: DateField; bound: 0 | 1 };
+type Mode = { kind: "main" } | { kind: "date"; field: DateField; bound: 0 | 1 };
 
 type DateField = "created_at" | "updated_at";
 
@@ -174,8 +172,7 @@ export function PlaceFilterSheet({
   const placeTypes = useMirrorPlaceTypes().data ?? [];
   const typeDefs =
     filters.placeTypeId == null ? defs : defsForType(defs, filters.placeTypeId);
-  const hasReserved = (key: string) =>
-    typeDefs.some((def) => def.key === key);
+  const hasReserved = (key: string) => typeDefs.some((def) => def.key === key);
   // WHAT IS ALREADY DRAWN, not what is reserved. The canyon axes get bespoke
   // controls below (a grade rail beats a number box) and are cut from the
   // generic list — but only when they are actually rendered. Cutting every
@@ -184,7 +181,9 @@ export function PlaceFilterSheet({
   const canyonAxesShown = hasReserved("v_grade");
   const drawnByHand = new Set([
     ...(canyonAxesShown ? CANYON_FORM_FIELD_KEYS : []),
-    ...THRESHOLDS.filter((spec) => hasReserved(spec.key)).map((spec) => spec.key),
+    ...THRESHOLDS.filter((spec) => hasReserved(spec.key)).map(
+      (spec) => spec.key,
+    ),
   ]);
   // A DATE definition gets no control (see the header), so it is cut from the
   // list rather than from the renderer — a section header standing over
@@ -316,7 +315,9 @@ export function PlaceFilterSheet({
               label="Commitment"
               bounds={boundsOf("commitment")}
               value={rangeOf(filters, "commitment")}
-              onChange={(next) => patch(patchRange("commitment", next)(filters))}
+              onChange={(next) =>
+                patch(patchRange("commitment", next)(filters))
+              }
             />
             <RangePills
               label="Quality"
@@ -337,7 +338,9 @@ export function PlaceFilterSheet({
                 unit={spec.unit}
                 presets={spec.presets}
                 value={thresholdOf(filters, spec.key)}
-                onChange={(next) => patch(patchThreshold(spec.key, next)(filters))}
+                onChange={(next) =>
+                  patch(patchThreshold(spec.key, next)(filters))
+                }
               />
             ))}
           </>
@@ -393,13 +396,17 @@ export function PlaceFilterSheet({
         <DateRangeFilter
           label="Added"
           value={filters.created_at}
-          onPick={(bound) => setMode({ kind: "date", field: "created_at", bound })}
+          onPick={(bound) =>
+            setMode({ kind: "date", field: "created_at", bound })
+          }
           onClear={() => patch({ created_at: null })}
         />
         <DateRangeFilter
           label="Updated"
           value={filters.updated_at}
-          onPick={(bound) => setMode({ kind: "date", field: "updated_at", bound })}
+          onPick={(bound) =>
+            setMode({ kind: "date", field: "updated_at", bound })
+          }
           onClear={() => patch({ updated_at: null })}
         />
 
@@ -444,7 +451,11 @@ export function PlaceFilterSheet({
         />
 
         {activeCount > 0 ? (
-        <Button label="Reset filters" variant="outlineAccent" onPress={onReset} />
+          <Button
+            label="Reset filters"
+            variant="outlineAccent"
+            onPress={onReset}
+          />
         ) : null}
       </View>
     </BottomSheet>
@@ -476,7 +487,9 @@ function AreaFilter({
     <View style={styles.block}>
       <View style={styles.blockHeader}>
         <Text style={styles.blockLabel}>Area</Text>
-        <Text style={[styles.blockValue, area != null && styles.blockValueActive]}>
+        <Text
+          style={[styles.blockValue, area != null && styles.blockValueActive]}
+        >
           {area ? "Set" : "Anywhere"}
         </Text>
       </View>

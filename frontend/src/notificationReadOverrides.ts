@@ -10,7 +10,10 @@ import type { TNotification } from "@logjam/shared";
  */
 export type ReadOverrides = ReadonlyMap<string, boolean>;
 
-export function withReadOverrides(notifications: TNotification[], overrides: ReadOverrides): TNotification[] {
+export function withReadOverrides(
+  notifications: TNotification[],
+  overrides: ReadOverrides,
+): TNotification[] {
   if (overrides.size === 0) return notifications;
   return notifications.map((n) => {
     const read = overrides.get(n.id);
@@ -23,9 +26,14 @@ export function withReadOverrides(notifications: TNotification[], overrides: Rea
  * returns. One the fetch DISAGREES with stays: that fetch may have left before
  * the write landed (App refetches the inbox on its own, when a job finishes).
  */
-export function settleReadOverrides(overrides: ReadOverrides, fetched: TNotification[]): ReadOverrides {
+export function settleReadOverrides(
+  overrides: ReadOverrides,
+  fetched: TNotification[],
+): ReadOverrides {
   if (overrides.size === 0) return overrides;
   const fetchedRead = new Map(fetched.map((n) => [n.id, n.read]));
-  const pending = [...overrides].filter(([id, read]) => fetchedRead.has(id) && fetchedRead.get(id) !== read);
+  const pending = [...overrides].filter(
+    ([id, read]) => fetchedRead.has(id) && fetchedRead.get(id) !== read,
+  );
   return pending.length === overrides.size ? overrides : new Map(pending);
 }

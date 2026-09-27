@@ -85,7 +85,8 @@ function fieldLabel(key: string, defs: TripLogCustomFieldDef[]): string {
 
 function descriptionText(c: TPlace, defs: TripLogCustomFieldDef[]): string {
   const parts: string[] = [];
-  if (c.altNames.length > 0) parts.push(`Also known as: ${c.altNames.join(", ")}`);
+  if (c.altNames.length > 0)
+    parts.push(`Also known as: ${c.altNames.join(", ")}`);
   // Whatever the place's type carries, in the order the values are stored. The
   // labels a UI would show live on the definitions, which this module does not
   // have; the KEY is what a third-party reader gets, which is the same thing
@@ -157,7 +158,9 @@ function placesToKml(places: TPlace[], defs: TripLogCustomFieldDef[]): Blob {
       return [
         `  <Placemark>`,
         `    <name>${escapeXml(c.name)}</name>`,
-        desc ? `    <description><![CDATA[${escapeCdata(desc)}]]></description>` : "",
+        desc
+          ? `    <description><![CDATA[${escapeCdata(desc)}]]></description>`
+          : "",
         `    <Point><coordinates>${c.longitude},${c.latitude},0</coordinates></Point>`,
         `  </Placemark>`,
       ]
@@ -288,7 +291,9 @@ function placesToCsv(places: TPlace[]): Blob {
     const row: Record<string, string> = {};
     for (const column of CSV_COLUMNS) {
       const cell = csvCell(c, column);
-      row[column] = CSV_TEXT_COLUMNS.has(column) ? neutralizeFormula(cell) : cell;
+      row[column] = CSV_TEXT_COLUMNS.has(column)
+        ? neutralizeFormula(cell)
+        : cell;
     }
     for (const key of attrKeys) {
       // Empty cell for places lacking the field; String() for present values
@@ -296,7 +301,8 @@ function placesToCsv(places: TPlace[]): Blob {
       // Custom-field values are free-form user text — formula-injection guard
       // applies here too (FECO-010).
       const value = fieldValues[key];
-      row[`attr:${key}`] = value == null ? "" : neutralizeFormula(String(value));
+      row[`attr:${key}`] =
+        value == null ? "" : neutralizeFormula(String(value));
     }
     return row;
   });
@@ -319,12 +325,24 @@ export function buildPlaceExport(
 ): { blob: Blob; filename: string } {
   switch (format) {
     case "gpx":
-      return { blob: placesToGpx(places, defs), filename: buildFilename(places, "gpx") };
+      return {
+        blob: placesToGpx(places, defs),
+        filename: buildFilename(places, "gpx"),
+      };
     case "kml":
-      return { blob: placesToKml(places, defs), filename: buildFilename(places, "kml") };
+      return {
+        blob: placesToKml(places, defs),
+        filename: buildFilename(places, "kml"),
+      };
     case "geojson":
-      return { blob: placesToGeoJson(places), filename: buildFilename(places, "geojson") };
+      return {
+        blob: placesToGeoJson(places),
+        filename: buildFilename(places, "geojson"),
+      };
     case "csv":
-      return { blob: placesToCsv(places), filename: buildFilename(places, "csv") };
+      return {
+        blob: placesToCsv(places),
+        filename: buildFilename(places, "csv"),
+      };
   }
 }

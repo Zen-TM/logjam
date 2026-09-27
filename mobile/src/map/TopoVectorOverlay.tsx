@@ -2,10 +2,17 @@
 // against a resolved PMTiles source — the mobile counterpart of the web's
 // structural layer creation, driven entirely by buildTopoVectorLayerDefs.
 import { memo, useMemo } from "react";
-import { Images, Layer, type LayerProps } from "@maplibre/maplibre-react-native";
+import {
+  Images,
+  Layer,
+  type LayerProps,
+} from "@maplibre/maplibre-react-native";
 import { OSM_POINT_ICON, type VectorStyleSettings } from "@logjam/shared";
 
-import { buildTopoVectorLayerDefs, type TopoVectorLayerDef } from "./topoVectorLayers";
+import {
+  buildTopoVectorLayerDefs,
+  type TopoVectorLayerDef,
+} from "./topoVectorLayers";
 
 // Static require map — Metro needs literal require() calls per asset.
 // Keys match the iconImage names emitted by buildTopoVectorLayerDefs.
@@ -82,6 +89,8 @@ export const TopoVectorOverlay = memo(function TopoVectorOverlay({
     [kind, vectorStyle],
   );
   return (
-    <>{defs.map((def, i) => layerFor(def, idPrefix, sourceID, startIndex + i))}</>
+    <>
+      {defs.map((def, i) => layerFor(def, idPrefix, sourceID, startIndex + i))}
+    </>
   );
 });

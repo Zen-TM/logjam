@@ -23,9 +23,9 @@ describe("detectFileKind", () => {
   it("prefers place when coords AND a date are both present", () => {
     // A place list that also happens to carry a date column is still a place
     // list — coords are the strong signal.
-    expect(
-      detectFileKind(["Name", "Latitude", "Longitude", "Date"]),
-    ).toBe("place");
+    expect(detectFileKind(["Name", "Latitude", "Longitude", "Date"])).toBe(
+      "place",
+    );
   });
 
   it("returns unknown when neither coords nor (date+name) are present", () => {

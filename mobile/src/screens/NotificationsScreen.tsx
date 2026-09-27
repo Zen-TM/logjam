@@ -28,7 +28,14 @@
 // through passes an opaque id and the detail screen fetches over the authed API,
 // so a share revoked since the notification lands on the 404-not-403 path.
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, RefreshControl, SectionList, StyleSheet, Text, View } from "react-native";
+import {
+  Alert,
+  RefreshControl,
+  SectionList,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   batchKeyFromRowId,
@@ -74,7 +81,10 @@ import type { NotificationDestination } from "../notifications/notificationDesti
 import { NotificationOptionsSheet } from "../notifications/NotificationOptionsSheet";
 import type { SavedCategory } from "../saved/savedKeys";
 import { fontSize, fontWeight, spacing, surface, theme } from "../theme";
-import { enqueueNotificationDelete, enqueueNotificationRead } from "../sync/outbox";
+import {
+  enqueueNotificationDelete,
+  enqueueNotificationRead,
+} from "../sync/outbox";
 import {
   fetchAndCacheNotifications,
   patchCachedPayload,
@@ -125,7 +135,9 @@ type NotificationsState = {
 // screen open). It is a parameter rather than a hook read so this stays one
 // decision made by the screen.
 function useNotifications(blocked: boolean): NotificationsState {
-  const [notifications, setNotifications] = useState<TNotification[] | null>(null);
+  const [notifications, setNotifications] = useState<TNotification[] | null>(
+    null,
+  );
   const [total, setTotal] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fetchCount, setFetchCount] = useState(0);
@@ -190,7 +202,10 @@ function formatTime(iso: string): string {
   // so the row only needs the clock.
   const at = new Date(iso);
   if (Number.isNaN(at.getTime())) return "";
-  return at.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  return at.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 type Bucket = "all" | "unread" | "read";
@@ -234,9 +249,12 @@ export function NotificationsScreen({
   // on a scrolled list it lands off screen entirely — which is how accepting a
   // file came to look like it did nothing.
   const [toast, setToast] = useState<ToastMessage | null>(null);
-  const notify = useCallback((text: string, tone: ToastMessage["tone"] = "info") => {
-    setToast({ text, tone, nonce: Date.now() });
-  }, []);
+  const notify = useCallback(
+    (text: string, tone: ToastMessage["tone"] = "info") => {
+      setToast({ text, tone, nonce: Date.now() });
+    },
+    [],
+  );
   const [bucket, setBucket] = useState<Bucket>("all");
   const [search, setSearch] = useState("");
   /** Which row's ⋯ sheet is open, by id — the row itself is looked up from the
@@ -246,9 +264,10 @@ export function NotificationsScreen({
   // list itself reads from the cache offline, so the row is there either way
   // and a vanishing button would read as "this one can't be answered".
   const online = useConnectivity() === "online";
-  const [busy, setBusy] = useState<{ id: string; kind: NotificationActionKind } | null>(
-    null,
-  );
+  const [busy, setBusy] = useState<{
+    id: string;
+    kind: NotificationActionKind;
+  } | null>(null);
   // Rows whose question is answered, hidden before the refetch lands. Every
   // action here except a file ACCEPT deletes the notification server-side, so
   // without this the row sits with live buttons until the fetch returns.
@@ -256,7 +275,10 @@ export function NotificationsScreen({
   // Newest first and never re-sorted by read state — `newestNotificationsFirst`
   // (@logjam/shared) says why, and the web inbox reads the same rule.
   const notifications = useMemo(
-    () => newestNotificationsFirst(query.notifications.filter((n) => !actionedIds.has(n.id))),
+    () =>
+      newestNotificationsFirst(
+        query.notifications.filter((n) => !actionedIds.has(n.id)),
+      ),
     [actionedIds, query.notifications],
   );
 
@@ -266,7 +288,10 @@ export function NotificationsScreen({
   // over a single row is the screen disagreeing with itself. Same arithmetic
   // behind the tab badge (`getCachedUnreadCount`) and the day headers
   // (`countBatchRows`).
-  const tally = useMemo(() => tallyNotifications(notifications), [notifications]);
+  const tally = useMemo(
+    () => tallyNotifications(notifications),
+    [notifications],
+  );
   const unreadCount = tally.unread;
 
   // The rail's tallies come from the OTHER axis only (the search), so a chip
@@ -308,9 +333,8 @@ export function NotificationsScreen({
   // here, over the ALREADY-FILTERED list, so a batch header counts the rows the
   // user can actually see under it rather than promising twelve and opening on
   // four.
-  const [expandedBatches, setExpandedBatches] = useState<ReadonlySet<string>>(
-    EMPTY_BATCH_KEYS,
-  );
+  const [expandedBatches, setExpandedBatches] =
+    useState<ReadonlySet<string>>(EMPTY_BATCH_KEYS);
   const batches = useMemo(() => findNotificationBatches(visible), [visible]);
   const rows = useMemo(
     () => collapseBatches(visible, batches, expandedBatches),
@@ -400,7 +424,9 @@ export function NotificationsScreen({
         notify(
           messageFromError(
             err,
-            read ? "Couldn't mark that as read." : "Couldn't mark that as unread.",
+            read
+              ? "Couldn't mark that as read."
+              : "Couldn't mark that as unread.",
           ),
           "error",
         );
@@ -468,7 +494,9 @@ export function NotificationsScreen({
         await enqueueNotificationDelete(ids);
         onUnreadChanged?.();
         notify(
-          ids.length === 1 ? "Notification deleted." : `Deleted ${ids.length} notifications.`,
+          ids.length === 1
+            ? "Notification deleted."
+            : `Deleted ${ids.length} notifications.`,
         );
       } catch (err) {
         console.error(err);
@@ -497,7 +525,9 @@ export function NotificationsScreen({
     const targets = selectedNotifications;
     const count = targets.length;
     Alert.alert(
-      count === 1 ? "Delete this notification?" : `Delete ${count} notifications?`,
+      count === 1
+        ? "Delete this notification?"
+        : `Delete ${count} notifications?`,
       count === 1
         ? "It goes from every device on your account. This can't be undone."
         : "They go from every device on your account. This can't be undone.",
@@ -557,9 +587,9 @@ export function NotificationsScreen({
       const clear = () => setActionedIds((prev) => new Set([...prev, n.id]));
       try {
         if (target.type === "friend_request") {
-          await (action.kind === "accept" ? acceptFriendRequest : declineFriendRequest)(
-            target.targetId,
-          );
+          await (action.kind === "accept"
+            ? acceptFriendRequest
+            : declineFriendRequest)(target.targetId);
         } else if (action.kind === "accept") {
           await acceptReceivedFile(target.targetId, target.sender);
         } else {
@@ -607,7 +637,11 @@ export function NotificationsScreen({
 
   /** A destructive action is a dialog first, and the dialog carries the why (§7). */
   const requestAction = useCallback(
-    (n: TNotification, target: NotificationActions, action: NotificationInlineAction) => {
+    (
+      n: TNotification,
+      target: NotificationActions,
+      action: NotificationInlineAction,
+    ) => {
       if (!action.confirm) {
         void runAction(n, target, action);
         return;
@@ -643,7 +677,11 @@ export function NotificationsScreen({
     async (batch: NotificationBatch, kind: BatchFileActionKind) => {
       const pending = batchPendingFileSends(batch);
       if (pending.length === 0) return;
-      setBatchBusy({ key: batch.key, kind, progress: { done: 0, total: pending.length } });
+      setBatchBusy({
+        key: batch.key,
+        kind,
+        progress: { done: 0, total: pending.length },
+      });
       try {
         const result = await runBatchFileAction({
           items: pending,
@@ -654,7 +692,9 @@ export function NotificationsScreen({
             // No target means the row is not answerable any more (expired, or
             // already taken) — nothing to do, and not a failure either.
             if (!target) return;
-            const action = target.actions.find((candidate) => candidate.kind === kind);
+            const action = target.actions.find(
+              (candidate) => candidate.kind === kind,
+            );
             if (!action) return;
             await runAction(notification, target, action, { silent: true });
           },
@@ -752,7 +792,9 @@ export function NotificationsScreen({
           member={memberKey != null && batches.has(memberKey)}
           onToggleBatch={toggleBatch}
           onBatchAction={requestBatchAction}
-          batchBusy={batch != null && batchBusy?.key === batch.key ? batchBusy : null}
+          batchBusy={
+            batch != null && batchBusy?.key === batch.key ? batchBusy : null
+          }
           onPress={openNotification}
           onAction={requestAction}
           onMenu={openMenu}
@@ -765,7 +807,9 @@ export function NotificationsScreen({
           // pair stays mounted (dimmed) so the row cannot change height mid-mode.
           // A batch run disables every row's buttons for the same reason it
           // disables the header's: one queue at a time.
-          actionsDisabled={busy !== null || batchBusy !== null || !online || selecting}
+          actionsDisabled={
+            busy !== null || batchBusy !== null || !online || selecting
+          }
           online={online}
         />
       );
@@ -795,7 +839,9 @@ export function NotificationsScreen({
             than as its members — otherwise opening a group of twelve took the
             day from 3 to 14 and shutting it took it back, which reads as
             notifications arriving while you look at them. */}
-        <Text style={styles.dayCount}>{countBatchRows(section.data, batches)}</Text>
+        <Text style={styles.dayCount}>
+          {countBatchRows(section.data, batches)}
+        </Text>
       </View>
     ),
     [batches],
@@ -896,7 +942,12 @@ export function NotificationsScreen({
               onDelete={deleteSelected}
             />
           ) : (
-            <SegmentedControl options={buckets} value={bucket} onChange={changeBucket} scroll />
+            <SegmentedControl
+              options={buckets}
+              value={bucket}
+              onChange={changeBucket}
+              scroll
+            />
           )}
           {/* The name search, in the SAME place in both states so the rail's
               height cannot differ between them (§7). It goes inert rather than
@@ -924,7 +975,11 @@ export function NotificationsScreen({
         windowSize={5}
         removeClippedSubviews
         refreshControl={
-          <RefreshControl refreshing={false} onRefresh={query.refetch} tintColor={theme.accent} />
+          <RefreshControl
+            refreshing={false}
+            onRefresh={query.refetch}
+            tintColor={theme.accent}
+          />
         }
         renderSectionHeader={renderSectionHeader}
         renderItem={renderItem}
@@ -1000,7 +1055,10 @@ const NotificationRow = memo(function NotificationRow({
   onToggleBatch: (key: string) => void;
   onBatchAction: (batch: NotificationBatch, kind: BatchFileActionKind) => void;
   /** This batch's run, while one is going. */
-  batchBusy: { kind: BatchFileActionKind; progress: BatchFileActionProgress } | null;
+  batchBusy: {
+    kind: BatchFileActionKind;
+    progress: BatchFileActionProgress;
+  } | null;
   onPress: (item: TNotification) => void;
   onAction: (
     item: TNotification,
@@ -1039,14 +1097,16 @@ const NotificationRow = memo(function NotificationRow({
   const label = notificationLabel(item);
   const meta = notificationMeta(item);
   const target = notificationActions(item);
-  const subtitle = [label.warning, formatTime(item.createdAt)].filter(Boolean).join(" · ");
+  const subtitle = [label.warning, formatTime(item.createdAt)]
+    .filter(Boolean)
+    .join(" · ");
   // The row's own STATE beats the unread flag in the one trailing slot: unread
   // is already carried by the accent EDGE, "Saved" is carried by nothing else.
-  const pill = target?.pill
-    ? <StatusPill label={target.pill} tone="muted" />
-    : !item.read
-      ? <StatusPill label="New" tone="accent" />
-      : undefined;
+  const pill = target?.pill ? (
+    <StatusPill label={target.pill} tone="muted" />
+  ) : !item.read ? (
+    <StatusPill label="New" tone="accent" />
+  ) : undefined;
   return (
     <Row
       icon={meta.icon}
@@ -1103,7 +1163,9 @@ const NotificationRow = memo(function NotificationRow({
                   label={action.label}
                   // Decline is the outline: two filled buttons side by side
                   // make "no" look like the thing to press.
-                  variant={action.kind === "decline" ? "outlineAccent" : undefined}
+                  variant={
+                    action.kind === "decline" ? "outlineAccent" : undefined
+                  }
                   compact
                   // Split the card's width rather than shrink-wrapping the
                   // label: a full-width target is the one that survives being
@@ -1116,7 +1178,9 @@ const NotificationRow = memo(function NotificationRow({
               ))}
             </View>
             {/* The reason on the thing that is dimmed, not on the screen (§10). */}
-            {!online ? <Text style={styles.actionHint}>Needs a connection</Text> : null}
+            {!online ? (
+              <Text style={styles.actionHint}>Needs a connection</Text>
+            ) : null}
           </>
         ) : null
       }
@@ -1159,7 +1223,10 @@ const BatchRow = memo(function BatchRow({
   expanded: boolean;
   onToggleBatch: (key: string) => void;
   onBatchAction: (batch: NotificationBatch, kind: BatchFileActionKind) => void;
-  batchBusy: { kind: BatchFileActionKind; progress: BatchFileActionProgress } | null;
+  batchBusy: {
+    kind: BatchFileActionKind;
+    progress: BatchFileActionProgress;
+  } | null;
   selecting: boolean;
   selected: boolean;
   onToggle: (item: TNotification) => void;
@@ -1188,24 +1255,30 @@ const BatchRow = memo(function BatchRow({
       titleNumberOfLines={2}
       right={
         <View style={styles.rowTrailing}>
-          {batch.unreadCount > 0 ? <StatusPill label="New" tone="accent" /> : undefined}
+          {batch.unreadCount > 0 ? (
+            <StatusPill label="New" tone="accent" />
+          ) : undefined}
           {selecting ? (
             <SelectionMark selected={selected} />
           ) : (
             <IconButton
               icon={expanded ? "chevron-up" : "chevron-down"}
-              accessibilityLabel={expanded ? "Collapse this group" : "Show each one"}
+              accessibilityLabel={
+                expanded ? "Collapse this group" : "Show each one"
+              }
               onPress={() => onToggleBatch(batch.key)}
             />
           )}
         </View>
       }
       selected={selected}
-      onPress={() =>
-        selecting ? onToggle(item) : onToggleBatch(batch.key)
-      }
+      onPress={() => (selecting ? onToggle(item) : onToggleBatch(batch.key))}
       onLongPress={() => onToggle(item)}
-      style={batch.unreadCount > 0 || selected ? styles.rowEdgeAccent : styles.rowEdgeIdle}
+      style={
+        batch.unreadCount > 0 || selected
+          ? styles.rowEdgeAccent
+          : styles.rowEdgeIdle
+      }
       footer={
         // Shares have nothing to answer — a grant simply IS — so only a batch of
         // sent files gets buttons, and only while some are still unanswered.
@@ -1231,7 +1304,11 @@ const BatchRow = memo(function BatchRow({
                 onPress={() => onBatchAction(batch, "accept")}
               />
               <Button
-                label={batchBusy?.kind === "decline" ? "Turning down…" : "Turn all down"}
+                label={
+                  batchBusy?.kind === "decline"
+                    ? "Turning down…"
+                    : "Turn all down"
+                }
                 variant="outlineAccent"
                 compact
                 grow
@@ -1242,7 +1319,9 @@ const BatchRow = memo(function BatchRow({
             {/* Accepting a batch is a DOWNLOAD QUEUE — each one presigns, pulls
                 the bytes and runs the import — so the row says so rather than
                 spinning silently for a minute on trail signal. */}
-            {!online ? <Text style={styles.actionHint}>Needs a connection</Text> : null}
+            {!online ? (
+              <Text style={styles.actionHint}>Needs a connection</Text>
+            ) : null}
           </>
         ) : null
       }
@@ -1301,9 +1380,17 @@ function EmptyPanel({
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.primary },
-  rail: { paddingHorizontal: spacing(2), paddingTop: spacing(1.5), paddingBottom: spacing(1.5) },
+  rail: {
+    paddingHorizontal: spacing(2),
+    paddingTop: spacing(1.5),
+    paddingBottom: spacing(1.5),
+  },
   list: { flex: 1 },
-  listContent: { paddingHorizontal: spacing(2), gap: spacing(1), paddingBottom: spacing(4) },
+  listContent: {
+    paddingHorizontal: spacing(2),
+    gap: spacing(1),
+    paddingBottom: spacing(4),
+  },
   // The page colour, so rows don't ghost through the sticky header.
   dayHeader: {
     flexDirection: "row",
@@ -1342,7 +1429,11 @@ const styles = StyleSheet.create({
   // above them. Margin, never a border width change — the row's left edge is
   // 3pt in EVERY state for the Fabric clip-bounds reason at `rowEdgeIdle`.
   batchMember: { marginLeft: spacing(2) },
-  rowTrailing: { flexDirection: "row", alignItems: "center", gap: spacing(0.75) },
+  rowTrailing: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing(0.75),
+  },
   // `IconButton`'s own box, so the checkbox standing in for ⋯ occupies exactly
   // what it replaced.
   actions: { flexDirection: "row", gap: spacing(1) },

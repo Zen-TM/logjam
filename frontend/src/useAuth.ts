@@ -105,7 +105,9 @@ export function useAuth() {
         const result = await amplifySignUp({
           username: email,
           password,
-          options: { userAttributes: { email, name, preferred_username: username } },
+          options: {
+            userAttributes: { email, name, preferred_username: username },
+          },
         });
         if (result.nextStep.signUpStep === "CONFIRM_SIGN_UP") {
           setPendingUsername(email);
@@ -132,7 +134,9 @@ export function useAuth() {
         });
       } catch (err) {
         console.error(err);
-        setError(messageFromError(err, "Confirmation failed. Please try again."));
+        setError(
+          messageFromError(err, "Confirmation failed. Please try again."),
+        );
         return;
       }
       // Account verified — sign the user straight in (email is the Cognito
@@ -145,13 +149,19 @@ export function useAuth() {
     [pendingUsername, handleSignIn],
   );
 
-  const handleResendCode = useCallback(async (): Promise<{ ok: boolean; error?: string }> => {
+  const handleResendCode = useCallback(async (): Promise<{
+    ok: boolean;
+    error?: string;
+  }> => {
     try {
       await amplifyResendSignUpCode({ username: pendingUsername });
       return { ok: true };
     } catch (err) {
       console.error(err);
-      return { ok: false, error: messageFromError(err, "Couldn't resend code. Please try again.") };
+      return {
+        ok: false,
+        error: messageFromError(err, "Couldn't resend code. Please try again."),
+      };
     }
   }, [pendingUsername]);
 
@@ -159,13 +169,17 @@ export function useAuth() {
     setError(null);
     try {
       const result = await amplifyResetPassword({ username: email });
-      if (result.nextStep.resetPasswordStep === "CONFIRM_RESET_PASSWORD_WITH_CODE") {
+      if (
+        result.nextStep.resetPasswordStep === "CONFIRM_RESET_PASSWORD_WITH_CODE"
+      ) {
         setPendingUsername(email);
         setState("confirmForgotPassword");
       }
     } catch (err) {
       console.error(err);
-      setError(messageFromError(err, "Couldn't send reset code. Please try again."));
+      setError(
+        messageFromError(err, "Couldn't send reset code. Please try again."),
+      );
     }
   }, []);
 
@@ -182,7 +196,9 @@ export function useAuth() {
         return true;
       } catch (err) {
         console.error(err);
-        setError(messageFromError(err, "Couldn't reset password. Please try again."));
+        setError(
+          messageFromError(err, "Couldn't reset password. Please try again."),
+        );
         return false;
       }
     },
@@ -221,8 +237,17 @@ export function useAuth() {
     forgotPassword: handleForgotPassword,
     confirmForgotPassword: handleConfirmForgotPassword,
     signOut: handleSignOut,
-    goToSignUp: useCallback(() => { setError(null); setState("signUp"); }, []),
-    goToSignIn: useCallback(() => { setError(null); setState("signIn"); }, []),
-    goToForgotPassword: useCallback(() => { setError(null); setState("forgotPassword"); }, []),
+    goToSignUp: useCallback(() => {
+      setError(null);
+      setState("signUp");
+    }, []),
+    goToSignIn: useCallback(() => {
+      setError(null);
+      setState("signIn");
+    }, []),
+    goToForgotPassword: useCallback(() => {
+      setError(null);
+      setState("forgotPassword");
+    }, []),
   };
 }

@@ -196,7 +196,8 @@ export function densifyLineSegments(
     // Advance past any segment that ends before this sample's distance.
     while (
       segIndex < segs.length - 1 &&
-      offset[segIndex]! + cumulative[segIndex]![cumulative[segIndex]!.length - 1]! <
+      offset[segIndex]! +
+        cumulative[segIndex]![cumulative[segIndex]!.length - 1]! <
         target
     ) {
       segIndex++;

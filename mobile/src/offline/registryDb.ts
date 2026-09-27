@@ -49,15 +49,15 @@ async function getDb(): Promise<SQLite.SQLiteDatabase> {
   return dbPromise;
 }
 
-
-
 async function addMissingColumns(db: SQLite.SQLiteDatabase): Promise<void> {
   for (const { table, column, definition } of ADDED_COLUMNS) {
     const columns = await db.getAllAsync<{ name: string }>(
       `PRAGMA table_info(${table})`,
     );
     if (columns.some((existing) => existing.name === column)) continue;
-    await db.execAsync(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    await db.execAsync(
+      `ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`,
+    );
   }
 }
 
@@ -90,7 +90,10 @@ function rowToArtifact(row: ArtifactRow): MapArtifact {
     sourceType: row.sourceType as MapArtifact["sourceType"],
     path: row.path,
     bbox:
-      row.west != null && row.south != null && row.east != null && row.north != null
+      row.west != null &&
+      row.south != null &&
+      row.east != null &&
+      row.north != null
         ? [row.west, row.south, row.east, row.north]
         : null,
     minzoom: row.minzoom,
@@ -148,7 +151,10 @@ export async function insertArtifact(artifact: MapArtifact): Promise<void> {
  * journal flips out of WAL the tiles are in the `-wal` sidecar rather than the
  * file that gets stat'd. Every saved region reported ~4 KB.
  */
-export async function setArtifactSize(id: string, sizeBytes: number): Promise<void> {
+export async function setArtifactSize(
+  id: string,
+  sizeBytes: number,
+): Promise<void> {
   const db = await getDb();
   await db.runAsync(
     "UPDATE map_artifact SET sizeBytes = ? WHERE id = ?",
@@ -161,7 +167,11 @@ export async function setArtifactSize(id: string, sizeBytes: number): Promise<vo
 /** Rename a downloaded region/overlay for display in Saved. */
 export async function renameArtifact(id: string, label: string): Promise<void> {
   const db = await getDb();
-  await db.runAsync("UPDATE map_artifact SET label = ? WHERE id = ?", label, id);
+  await db.runAsync(
+    "UPDATE map_artifact SET label = ? WHERE id = ?",
+    label,
+    id,
+  );
   notifyChanged();
 }
 
@@ -238,7 +248,9 @@ export async function sweepOrphanFiles(
     if (!name.endsWith(extension)) continue;
     const id = name.slice(0, -extension.length);
     if (known.has(id) || liveIds.has(id)) continue;
-    await FileSystem.deleteAsync(`${dir}${name}`, { idempotent: true }).catch(() => {});
+    await FileSystem.deleteAsync(`${dir}${name}`, { idempotent: true }).catch(
+      () => {},
+    );
   }
 }
 

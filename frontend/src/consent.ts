@@ -32,6 +32,7 @@ export function consentGate(
   // sign-up form and not yet recorded server-side. Gating on it would trap a
   // brand-new user behind a gate for a box they already ticked.
   const blocked =
-    needsReconsent(currentUser) && pendingConsentVersion !== CURRENT_CONSENT_VERSION;
+    needsReconsent(currentUser) &&
+    pendingConsentVersion !== CURRENT_CONSENT_VERSION;
   return { blocked, settled: !blocked };
 }

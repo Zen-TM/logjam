@@ -80,9 +80,10 @@ export async function runBatchFileAction({
  * now on their phone. The partial case reads as an ERROR because the part that
  * did not work is the part they have to do something about.
  */
-export function batchFileActionMessage(
-  outcome: BatchFileActionOutcome,
-): { text: string; tone: "info" | "error" } {
+export function batchFileActionMessage(outcome: BatchFileActionOutcome): {
+  text: string;
+  tone: "info" | "error";
+} {
   const { kind, done, failed, total } = outcome;
   if (done === 0) {
     return {

@@ -15,6 +15,7 @@ Two more cannot be shared and stay duplicated:
 Docstrings are excluded: each copy names its own job type ("reaped-job" vs
 "reaped-export"), which is deliberate.
 """
+
 import ast
 import os
 import unittest
@@ -51,7 +52,8 @@ class TestDuplicatedWorkerHelpers(unittest.TestCase):
             self.assertIsNotNone(a, f"{name} missing from worker.py")
             self.assertIsNotNone(b, f"{name} missing from export_worker.py")
             self.assertEqual(
-                a, b,
+                a,
+                b,
                 f"{name} has drifted between worker.py and export_worker.py "
                 f"(it stays duplicated because it {why}) — re-sync the two "
                 f"copies, or move it into worker_common.py if it no longer "
@@ -62,14 +64,17 @@ class TestDuplicatedWorkerHelpers(unittest.TestCase):
         """A copy pasted back into a worker would shadow the shared one."""
         shared = {"compose_database_url", "create_notification", "get_user_email"}
         for filename in ("worker.py", "export_worker.py"):
-            tree = ast.parse(open(os.path.join(_ROOT, filename), encoding="utf-8").read())
+            tree = ast.parse(
+                open(os.path.join(_ROOT, filename), encoding="utf-8").read()
+            )
             local = {
                 node.name
                 for node in tree.body
                 if isinstance(node, ast.FunctionDef) and node.name in shared
             }
             self.assertEqual(
-                local, set(),
+                local,
+                set(),
                 f"{filename} redefines {sorted(local)}, shadowing worker_common.py",
             )
 

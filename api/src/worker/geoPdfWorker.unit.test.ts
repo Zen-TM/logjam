@@ -75,7 +75,10 @@ describe("parseStoredVectorStyle", () => {
   });
 
   it("falls back to defaults on an invalid stored snapshot (degraded, not fatal)", () => {
-    const bad = { ...VECTOR_STYLE_DEFAULTS, contours: { ...VECTOR_STYLE_DEFAULTS.contours, majorColour: "#fff" } };
+    const bad = {
+      ...VECTOR_STYLE_DEFAULTS,
+      contours: { ...VECTOR_STYLE_DEFAULTS.contours, majorColour: "#fff" },
+    };
     expect(parseStoredVectorStyle(bad)).toEqual(VECTOR_STYLE_DEFAULTS);
   });
 });

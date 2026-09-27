@@ -25,7 +25,10 @@ import classes from "./SettingsPanel.module.css";
  *  list of statements is not a list of objects, so one there is decoration. */
 const NOTIFICATIONS: { key: keyof NotificationPreferences; title: string }[] = [
   { key: "topoEmail", title: "Email me when a topo finishes or fails" },
-  { key: "exportEmail", title: "Email me when a topo export finishes or fails" },
+  {
+    key: "exportEmail",
+    title: "Email me when a topo export finishes or fails",
+  },
   { key: "geoPdfEmail", title: "Email me when a GeoPDF finishes or fails" },
   { key: "friendRequestInApp", title: "Tell me here about friend requests" },
   { key: "shareInApp", title: "Tell me here when something is shared with me" },
@@ -72,14 +75,18 @@ function SettingsPanel({
 }) {
   const toast = useToast();
   const [page, setPage] = useState<ListPage | null>(null);
-  const [notifPrefs, setNotifPrefs] = useState<NotificationPreferences | null>(null);
+  const [notifPrefs, setNotifPrefs] = useState<NotificationPreferences | null>(
+    null,
+  );
   // WHICH switch is in flight, not THAT one is: a single boolean disabled all
   // five for the length of the request, and five switches greying and
   // un-greying together reads as the whole list flickering.
-  const [notifSavingKey, setNotifSavingKey] = useState<keyof NotificationPreferences | null>(
-    null,
-  );
-  const [autoDownloadGeoPdfs, setAutoDownloadGeoPdfs] = useState<boolean | null>(null);
+  const [notifSavingKey, setNotifSavingKey] = useState<
+    keyof NotificationPreferences | null
+  >(null);
+  const [autoDownloadGeoPdfs, setAutoDownloadGeoPdfs] = useState<
+    boolean | null
+  >(null);
   const [autoDownloadSaving, setAutoDownloadSaving] = useState(false);
 
   useEffect(() => {
@@ -88,7 +95,9 @@ function SettingsPanel({
       ...DEFAULT_NOTIFICATION_PREFERENCES,
       ...(currentUser.uiPreferences?.notifications ?? {}),
     });
-    setAutoDownloadGeoPdfs(currentUser.uiPreferences?.autoDownloadGeoPdfs ?? true);
+    setAutoDownloadGeoPdfs(
+      currentUser.uiPreferences?.autoDownloadGeoPdfs ?? true,
+    );
   }, [currentUser?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Optimistic, and put back on failure: a switch is the kind of control whose
@@ -105,8 +114,13 @@ function SettingsPanel({
       console.error(err);
       // Put back only the key that failed: another switch may have been
       // answered while this request was out, and `previous` is stale for it.
-      setNotifPrefs((current) => ({ ...(current ?? previous), [key]: previous[key] }));
-      toast.error(messageFromError(err, "Couldn't save that notification setting."));
+      setNotifPrefs((current) => ({
+        ...(current ?? previous),
+        [key]: previous[key],
+      }));
+      toast.error(
+        messageFromError(err, "Couldn't save that notification setting."),
+      );
     } finally {
       setNotifSavingKey((current) => (current === key ? null : current));
     }
@@ -123,7 +137,9 @@ function SettingsPanel({
     } catch (err) {
       console.error(err);
       setAutoDownloadGeoPdfs(previous);
-      toast.error(messageFromError(err, "Couldn't save that download setting."));
+      toast.error(
+        messageFromError(err, "Couldn't save that download setting."),
+      );
     } finally {
       setAutoDownloadSaving(false);
     }
@@ -149,7 +165,9 @@ function SettingsPanel({
         rowNoun={isTrip ? "trip" : "place"}
         loading={!currentUser}
         defs={isTrip ? customFieldDefs : placeCustomFieldDefs}
-        onDefsChange={isTrip ? onCustomFieldDefsChange : onPlaceCustomFieldDefsChange}
+        onDefsChange={
+          isTrip ? onCustomFieldDefsChange : onPlaceCustomFieldDefsChange
+        }
         placeTypes={isTrip ? undefined : placeTypes}
         onBack={() => setPage(null)}
       />

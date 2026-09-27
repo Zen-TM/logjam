@@ -7,6 +7,7 @@ black as nodata.
 
 Plain unittest (no pytest dep) so it runs in the worker Docker image as-is.
 """
+
 import os
 import sys
 import tempfile
@@ -74,10 +75,13 @@ class TestCompositeGeoTiff(unittest.TestCase):
             _make_rgba_cog(work / "hillshade.tif", (255, 0, 0), alpha_left)
             _make_rgba_cog(work / "slope.tif", (0, 0, 255), alpha_right)
 
-            ctx = _make_ctx(work, {
-                "hillshade": work / "hillshade.tif",
-                "slope": work / "slope.tif",
-            })
+            ctx = _make_ctx(
+                work,
+                {
+                    "hillshade": work / "hillshade.tif",
+                    "slope": work / "slope.tif",
+                },
+            )
             out = render_composite_to_geotiff(ctx, ["hillshade", "slope"])
 
             ds = gdal.Open(str(out))
@@ -105,10 +109,13 @@ class TestCompositeGeoTiff(unittest.TestCase):
             _make_rgba_cog(work / "hillshade.tif", (255, 0, 0), alpha_full)
             _make_rgba_cog(work / "slope.tif", (0, 0, 255), alpha_full)
 
-            ctx = _make_ctx(work, {
-                "hillshade": work / "hillshade.tif",
-                "slope": work / "slope.tif",
-            })
+            ctx = _make_ctx(
+                work,
+                {
+                    "hillshade": work / "hillshade.tif",
+                    "slope": work / "slope.tif",
+                },
+            )
             # Request order deliberately reversed (slope before hillshade).
             out = render_composite_to_geotiff(ctx, ["slope", "hillshade"])
 
@@ -146,13 +153,15 @@ def _square_footprint(lon0: float, lat0: float, side: float = 0.02) -> dict:
     """A small axis-aligned square footprint as a GeoJSON Polygon geometry."""
     return {
         "type": "Polygon",
-        "coordinates": [[
-            [lon0, lat0],
-            [lon0 + side, lat0],
-            [lon0 + side, lat0 + side],
-            [lon0, lat0 + side],
-            [lon0, lat0],
-        ]],
+        "coordinates": [
+            [
+                [lon0, lat0],
+                [lon0 + side, lat0],
+                [lon0 + side, lat0 + side],
+                [lon0, lat0 + side],
+                [lon0, lat0],
+            ]
+        ],
     }
 
 
@@ -174,10 +183,16 @@ class TestCompositeTileCoords(unittest.TestCase):
         self.assertTrue(coords)
 
         # Kept tiles equal exactly the per-component tiles — no gap tiles leak in.
-        coords_a = set(tc._composite_tile_coords(
-            tc._footprint_geometry([self.JOB_A]), tc._max_composite_tiles()))
-        coords_b = set(tc._composite_tile_coords(
-            tc._footprint_geometry([self.JOB_B]), tc._max_composite_tiles()))
+        coords_a = set(
+            tc._composite_tile_coords(
+                tc._footprint_geometry([self.JOB_A]), tc._max_composite_tiles()
+            )
+        )
+        coords_b = set(
+            tc._composite_tile_coords(
+                tc._footprint_geometry([self.JOB_B]), tc._max_composite_tiles()
+            )
+        )
         self.assertEqual(coords, coords_a | coords_b)
 
         # And dramatically fewer than naive full-bbox enumeration (which would

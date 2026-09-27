@@ -115,7 +115,12 @@ router.post(
     const outPath = path.join(os.tmpdir(), `clip-${randomUUID()}.pmtiles`);
     const bboxArg = `${bbox.west},${bbox.south},${bbox.east},${bbox.north}`;
     try {
-      await runPmtilesExtract(env.PROTOMAPS_ARCHIVE_URI, outPath, bboxArg, maxzoom);
+      await runPmtilesExtract(
+        env.PROTOMAPS_ARCHIVE_URI,
+        outPath,
+        bboxArg,
+        maxzoom,
+      );
       const { size } = await fs.stat(outPath);
       if (size > MAX_CLIP_OUTPUT_BYTES) {
         await fs.unlink(outPath);

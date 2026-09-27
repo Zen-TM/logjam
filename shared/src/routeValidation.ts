@@ -74,7 +74,8 @@ export type RouteFieldPayload = {
  * colour is also a small injection surface in every style expression it reaches.
  */
 export function parseRouteColor(value: unknown): string | null {
-  return typeof value === "string" && (TRACK_COLORS as readonly string[]).includes(value)
+  return typeof value === "string" &&
+    (TRACK_COLORS as readonly string[]).includes(value)
     ? value
     : null;
 }
@@ -134,8 +135,10 @@ export function parseRoutePoints(
   value: unknown,
 ): { points: RoutePoint[] } | { error: string } {
   if (!Array.isArray(value)) return { error: ROUTE_ERRORS.pointsShape };
-  if (value.length < MIN_ROUTE_POINTS) return { error: ROUTE_ERRORS.tooFewPoints };
-  if (value.length > MAX_ROUTE_POINTS) return { error: ROUTE_ERRORS.tooManyPoints };
+  if (value.length < MIN_ROUTE_POINTS)
+    return { error: ROUTE_ERRORS.tooFewPoints };
+  if (value.length > MAX_ROUTE_POINTS)
+    return { error: ROUTE_ERRORS.tooManyPoints };
 
   const points: RoutePoint[] = [];
   for (const entry of value) {
@@ -333,7 +336,11 @@ export function simplifyRoute(
     let furthest = -1;
     let furthestDistance = toleranceM;
     for (let i = first + 1; i < last; i++) {
-      const distance = perpendicularDistanceM(points[i]!, points[first]!, points[last]!);
+      const distance = perpendicularDistanceM(
+        points[i]!,
+        points[first]!,
+        points[last]!,
+      );
       if (distance > furthestDistance) {
         furthestDistance = distance;
         furthest = i;
@@ -370,8 +377,12 @@ export type SimplifyToFitResult = {
 const SIMPLIFY_INPUT_CEILING_FACTOR = 4;
 
 /** Evenly-spaced subsample keeping both endpoints. */
-function decimateTo(points: readonly RoutePoint[], target: number): RoutePoint[] {
-  if (points.length <= target) return points.map((p): RoutePoint => [p[0], p[1]]);
+function decimateTo(
+  points: readonly RoutePoint[],
+  target: number,
+): RoutePoint[] {
+  if (points.length <= target)
+    return points.map((p): RoutePoint => [p[0], p[1]]);
   const stride = (points.length - 1) / (target - 1);
   const out: RoutePoint[] = [];
   for (let i = 0; i < target - 1; i++) {
@@ -406,7 +417,10 @@ export function simplifyToFit(
       droppedCount: 0,
     };
   }
-  const original = decimateTo(points, maxPoints * SIMPLIFY_INPUT_CEILING_FACTOR);
+  const original = decimateTo(
+    points,
+    maxPoints * SIMPLIFY_INPUT_CEILING_FACTOR,
+  );
   // Geometric escalation from 1 m. A 4000-point day track typically fits by
   // ~8-16 m, so this lands in a handful of passes; the ceiling exists so a
   // pathological input can't loop forever.

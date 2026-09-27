@@ -22,7 +22,11 @@ import type { SharableEntityType } from "@logjam/shared";
 import { unsharePlace } from "../api/friends";
 import { unshareItem } from "../api/shares";
 import { applyTombstone, cascadePlaceDelete } from "../sync/mirrorStore";
-import { getSyncDb, notifyMirrorChanged, withSyncTransaction } from "../sync/syncDb";
+import {
+  getSyncDb,
+  notifyMirrorChanged,
+  withSyncTransaction,
+} from "../sync/syncDb";
 
 /** Cached blobs of rows we just dropped. Best-effort, outside the transaction —
  *  the same order deltaPull uses. */

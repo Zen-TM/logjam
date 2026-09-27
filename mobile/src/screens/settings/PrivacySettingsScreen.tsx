@@ -15,7 +15,10 @@
 import { useCallback, useState } from "react";
 import { StyleSheet, Text } from "react-native";
 
-import { isAppLockEnabled, setAppLockEnabled } from "../../offline/appLockPreference";
+import {
+  isAppLockEnabled,
+  setAppLockEnabled,
+} from "../../offline/appLockPreference";
 import {
   areCrashReportsEnabled,
   setCrashReportsEnabled,
@@ -25,14 +28,22 @@ import {
   setSaveCapturesToGallery,
 } from "../../media/galleryPreference";
 import { fontSize, lineHeight, spacing, theme } from "../../theme";
-import { ScreenScroll, SectionHeader, Toast, type ToastMessage } from "../../ui";
+import {
+  ScreenScroll,
+  SectionHeader,
+  Toast,
+  type ToastMessage,
+} from "../../ui";
 import { PreferenceRow } from "./settingsKit";
 
 export function PrivacySettingsScreen() {
   const [toast, setToast] = useState<ToastMessage | null>(null);
-  const notify = useCallback((text: string, tone: ToastMessage["tone"] = "info") => {
-    setToast({ text, tone, nonce: Date.now() });
-  }, []);
+  const notify = useCallback(
+    (text: string, tone: ToastMessage["tone"] = "info") => {
+      setToast({ text, tone, nonce: Date.now() });
+    },
+    [],
+  );
 
   // Device-scoped and readable synchronously, so this row never renders in the
   // wrong position while a read resolves.
@@ -65,7 +76,9 @@ export function PrivacySettingsScreen() {
 
   // Off by default — see galleryPreference.ts for why that default is a
   // privacy decision and not a taste one.
-  const [saveToGallery, setSaveToGalleryState] = useState(savesCapturesToGallery);
+  const [saveToGallery, setSaveToGalleryState] = useState(
+    savesCapturesToGallery,
+  );
   const toggleSaveToGallery = useCallback(() => {
     const next = !saveToGallery;
     if (!setSaveCapturesToGallery(next)) {

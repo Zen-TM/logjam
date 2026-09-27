@@ -5,6 +5,7 @@ scan that made large-job renders quadratic.
 Runs a real shapely STRtree, so it skips when shapely is the host stub and
 runs for real inside the worker Docker image.
 """
+
 import json
 import os
 import random
@@ -51,10 +52,20 @@ class TestContourIndexEquivalence(unittest.TestCase):
             ]
             feats.append(_linestring(coords))
         # Noise that the index must ignore: a non-LineString and an empty line.
-        feats.append({"type": "Feature", "properties": {},
-                      "geometry": {"type": "Point", "coordinates": [150.1, -33.8]}})
-        feats.append({"type": "Feature", "properties": {},
-                      "geometry": {"type": "LineString", "coordinates": []}})
+        feats.append(
+            {
+                "type": "Feature",
+                "properties": {},
+                "geometry": {"type": "Point", "coordinates": [150.1, -33.8]},
+            }
+        )
+        feats.append(
+            {
+                "type": "Feature",
+                "properties": {},
+                "geometry": {"type": "LineString", "coordinates": []},
+            }
+        )
         self.tmp = tempfile.mkdtemp()
         self.path = os.path.join(self.tmp, "contours.geojson")
         with open(self.path, "w") as f:
@@ -75,8 +86,12 @@ class TestContourIndexEquivalence(unittest.TestCase):
                 continue
             lons = [c[0] for c in coords]
             lats = [c[1] for c in coords]
-            if (max(lons) < qlon0 or min(lons) > qlon1
-                    or max(lats) < qlat0 or min(lats) > qlat1):
+            if (
+                max(lons) < qlon0
+                or min(lons) > qlon1
+                or max(lats) < qlat0
+                or min(lats) > qlat1
+            ):
                 continue
             out.add(tuple(map(tuple, coords)))
         return out
@@ -94,11 +109,17 @@ class TestContourIndexEquivalence(unittest.TestCase):
         for _ in range(50):
             lon0 = rng.uniform(149.9, 150.6)
             lat0 = rng.uniform(-34.1, -33.4)
-            qbox = (lon0, lat0,
-                    lon0 + rng.uniform(0.001, 0.05),
-                    lat0 + rng.uniform(0.001, 0.05))
-            self.assertEqual(self._tree(qbox), self._brute(qbox),
-                             f"index/brute mismatch for query {qbox}")
+            qbox = (
+                lon0,
+                lat0,
+                lon0 + rng.uniform(0.001, 0.05),
+                lat0 + rng.uniform(0.001, 0.05),
+            )
+            self.assertEqual(
+                self._tree(qbox),
+                self._brute(qbox),
+                f"index/brute mismatch for query {qbox}",
+            )
 
     def test_only_valid_linestrings_indexed(self):
         records, _tree = _load_contour_index(self.path)

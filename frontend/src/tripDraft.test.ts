@@ -66,12 +66,16 @@ describe("tripFormFingerprint", () => {
 
 describe("isTripDraftExpired", () => {
   it("keeps a draft inside the window", () => {
-    const savedAt = new Date(NOW.getTime() - TRIP_DRAFT_MAX_AGE_MS + 1000).toISOString();
+    const savedAt = new Date(
+      NOW.getTime() - TRIP_DRAFT_MAX_AGE_MS + 1000,
+    ).toISOString();
     expect(isTripDraftExpired(savedAt, NOW)).toBe(false);
   });
 
   it("expires a draft past the window", () => {
-    const savedAt = new Date(NOW.getTime() - TRIP_DRAFT_MAX_AGE_MS - 1000).toISOString();
+    const savedAt = new Date(
+      NOW.getTime() - TRIP_DRAFT_MAX_AGE_MS - 1000,
+    ).toISOString();
     expect(isTripDraftExpired(savedAt, NOW)).toBe(true);
   });
 
@@ -207,7 +211,10 @@ describe("storage wrappers", () => {
   });
 
   it("does not write a draft over the cap", () => {
-    const result = writeTripDraft(form({ notes: "x".repeat(TRIP_DRAFT_MAX_CHARS) }), NOW);
+    const result = writeTripDraft(
+      form({ notes: "x".repeat(TRIP_DRAFT_MAX_CHARS) }),
+      NOW,
+    );
     expect(result.status).toBe("too-large");
     expect(localStorage.getItem(TRIP_DRAFT_STORAGE_KEY)).toBeNull();
   });
@@ -219,7 +226,10 @@ describe("storage wrappers", () => {
       throw quotaError;
     };
     try {
-      expect(writeTripDraft(form(), NOW)).toEqual({ status: "failed", error: quotaError });
+      expect(writeTripDraft(form(), NOW)).toEqual({
+        status: "failed",
+        error: quotaError,
+      });
     } finally {
       Storage.prototype.setItem = setItem;
     }

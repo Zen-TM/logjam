@@ -28,7 +28,11 @@
 // writing the row) belongs to the API; what is decided here is decided the same
 // way on every path, and can be tested without one.
 
-import { asFieldValues, type FieldValues, type ForeignFieldValue } from "./fieldValues.js";
+import {
+  asFieldValues,
+  type FieldValues,
+  type ForeignFieldValue,
+} from "./fieldValues.js";
 import { isInternalFieldValueKey } from "./placeTypes.js";
 import type { TripLogCustomFieldDef } from "./tripLogFields.js";
 
@@ -66,7 +70,9 @@ export function reconcileCopiedFieldValues(args: {
 }): { fieldValues: FieldValues; foreignFields: ForeignFieldValue[] } {
   const source = asFieldValues(args.fieldValues);
   const senderByKey = new Map(args.senderDefs.map((def) => [def.key, def]));
-  const recipientByKey = new Map(args.recipientDefs.map((def) => [def.key, def]));
+  const recipientByKey = new Map(
+    args.recipientDefs.map((def) => [def.key, def]),
+  );
 
   const fieldValues: FieldValues = {};
   const foreignFields: ForeignFieldValue[] = [];
@@ -113,16 +119,15 @@ export function reconcileCopiedFieldValues(args: {
  * type named after the sender's". Case-insensitive, because "campsite" and
  * "Campsite" are one category to a person.
  */
-export function matchPlaceTypeByName<T extends { id: string; name: string; ownerId: string | null }>(
-  senderTypeName: string,
-  candidates: readonly T[],
-): T | null {
+export function matchPlaceTypeByName<
+  T extends { id: string; name: string; ownerId: string | null },
+>(senderTypeName: string, candidates: readonly T[]): T | null {
   const needle = senderTypeName.trim().toLowerCase();
   if (!needle) return null;
-  const named = candidates.filter((type) => type.name.trim().toLowerCase() === needle);
-  return (
-    named.find((type) => type.ownerId === null) ?? named[0] ?? null
+  const named = candidates.filter(
+    (type) => type.name.trim().toLowerCase() === needle,
   );
+  return named.find((type) => type.ownerId === null) ?? named[0] ?? null;
 }
 
 /** Whatever the database handed back, as foreign fields — tolerant, because

@@ -27,7 +27,10 @@
 // NATIVE CHANGE, so switching between the two shapes needs a fresh
 // `expo prebuild` + build — an OTA update cannot move it (mobile/CLAUDE.md,
 // Builds & distribution).
-const { withAndroidManifest, withSettingsGradle } = require("@expo/config-plugins");
+const {
+  withAndroidManifest,
+  withSettingsGradle,
+} = require("@expo/config-plugins");
 
 const MODULE_NAME = "logjam-sensors";
 const PERMISSION = "android.permission.ACTIVITY_RECOGNITION";

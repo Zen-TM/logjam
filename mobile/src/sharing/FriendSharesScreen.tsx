@@ -30,7 +30,14 @@
 // PRIVACY: usernames and item names only — the payload carries no coordinates
 // and no notes. Nothing here is logged.
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, FlatList, RefreshControl, StyleSheet, Text, View } from "react-native";
+import {
+  Alert,
+  FlatList,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 
 import {
   buildShareCards,
@@ -156,7 +163,9 @@ export function FriendSharesScreen({
     } catch (err) {
       console.error(err);
       // Our own copy, never the error's: it may carry an item name.
-      setLoadError(messageFromError(err, "Couldn't load what's shared with this friend."));
+      setLoadError(
+        messageFromError(err, "Couldn't load what's shared with this friend."),
+      );
     }
   }, [friendshipId, guestBlock]);
 
@@ -173,7 +182,9 @@ export function FriendSharesScreen({
   const cards = useMemo(
     () =>
       buildShareCards(
-        (direction === "theySee" ? shares?.sharedWithThem : shares?.sharedWithYou) ?? [],
+        (direction === "theySee"
+          ? shares?.sharedWithThem
+          : shares?.sharedWithYou) ?? [],
         { direction, friendName: username },
       ),
     [direction, shares, username],
@@ -197,7 +208,11 @@ export function FriendSharesScreen({
     selectedItems,
     selectableItems,
     selecting,
-  } = useBulkSelection({ items: cards, keyOf: cardKey, isDeletable: isSelectable });
+  } = useBulkSelection({
+    items: cards,
+    keyOf: cardKey,
+    isDeletable: isSelectable,
+  });
 
   // Changing direction is a different SET, not a filter, so a selection made in
   // one cannot survive into the other (§7's filter/selection exclusivity).
@@ -221,7 +236,8 @@ export function FriendSharesScreen({
   /** Refetch, and tell the mirror to catch up if the account changed. */
   const settle = useCallback(
     async (pullSync: boolean) => {
-      if (pullSync) void requestSync().catch((err: unknown) => console.error(err));
+      if (pullSync)
+        void requestSync().catch((err: unknown) => console.error(err));
       await load();
     },
     [load],
@@ -244,12 +260,17 @@ export function FriendSharesScreen({
             void unshareWithFriend(friendshipId, targets.map(shareCardItem))
               .then(async ({ revokedCount }) => {
                 clearSelection();
-                notify(unshareOutcomeMessage({ revokedCount, friendName: username }));
+                notify(
+                  unshareOutcomeMessage({ revokedCount, friendName: username }),
+                );
                 await settle(true);
               })
               .catch((err: unknown) => {
                 console.error(err);
-                notify("Couldn't unshare those. Try again in a moment.", "error");
+                notify(
+                  "Couldn't unshare those. Try again in a moment.",
+                  "error",
+                );
               })
               .finally(() => setBusy(false));
           },
@@ -367,7 +388,10 @@ export function FriendSharesScreen({
                   if (card.row.entityType === "place") {
                     await removeSharedPlace(card.row.entityId);
                   } else {
-                    await removeSharedEntity(card.row.entityType, card.row.entityId);
+                    await removeSharedEntity(
+                      card.row.entityType,
+                      card.row.entityId,
+                    );
                   }
                   removed += 1;
                 } catch (err) {
@@ -388,7 +412,10 @@ export function FriendSharesScreen({
     [clearSelection, notify, settle, username],
   );
 
-  const openSheet = useCallback((card: FriendShareCard) => setSheetCard(card), []);
+  const openSheet = useCallback(
+    (card: FriendShareCard) => setSheetCard(card),
+    [],
+  );
   const renderItem = useCallback(
     ({ item }: { item: FriendShareCard }) => (
       <ShareCardRow
@@ -435,7 +462,9 @@ export function FriendSharesScreen({
         title={username}
         onBack={onBack}
         value={String(theirCount)}
-        valueSuffix={theirCount === 1 ? "item they can see" : "items they can see"}
+        valueSuffix={
+          theirCount === 1 ? "item they can see" : "items they can see"
+        }
       />
 
       <View style={styles.rail}>
@@ -447,7 +476,10 @@ export function FriendSharesScreen({
               direction === "theySee" ? (
                 // Share these with someone ELSE — the same sheet Places and
                 // Saved open, so nothing about the promise is worded here.
-                <BulkShareButton online={online} onPress={() => setShareSheetOpen(true)} />
+                <BulkShareButton
+                  online={online}
+                  onPress={() => setShareSheetOpen(true)}
+                />
               ) : copyable.length > 0 ? (
                 <IconButton
                   icon="copy"
@@ -482,7 +514,10 @@ export function FriendSharesScreen({
                 return;
               }
               if (removable.length === 0) {
-                notify("Nothing in this selection can be removed here.", "error");
+                notify(
+                  "Nothing in this selection can be removed here.",
+                  "error",
+                );
                 return;
               }
               runRemove(removable);
@@ -603,7 +638,10 @@ export function FriendSharesScreen({
         visible={shareSheetOpen}
         selection={selectedItems.map((card) => ({
           key: card.key,
-          share: { entityType: card.row.entityType, entityId: card.row.entityId },
+          share: {
+            entityType: card.row.entityType,
+            entityId: card.row.entityId,
+          },
         }))}
         online={online}
         onClose={() => setShareSheetOpen(false)}
@@ -634,7 +672,8 @@ function ShareCardRow({
   onOpen: (card: FriendShareCard) => void;
   onToggle: (card: FriendShareCard) => void;
 }) {
-  const openOrToggle = () => (selecting && selectable ? onToggle(card) : onOpen(card));
+  const openOrToggle = () =>
+    selecting && selectable ? onToggle(card) : onOpen(card);
   return (
     <Row
       icon={SHARE_KIND_ICON[card.row.entityType]}
@@ -707,7 +746,9 @@ function ShareCardMenu({
           icon="user-minus"
           hue={theme.warning}
           title={`Unshare from ${username}`}
-          subtitle={online ? `${username} stops seeing this ${kind}.` : undefined}
+          subtitle={
+            online ? `${username} stops seeing this ${kind}.` : undefined
+          }
           {...(online ? live : offline)}
           onPress={() => onUnshare(card)}
         />
@@ -763,7 +804,9 @@ function ShareCardMenu({
           hue={theme.warning}
           title="Remove"
           subtitle={
-            online ? removeRowSubtitle({ kindLabel: kind, friendName: username }) : undefined
+            online
+              ? removeRowSubtitle({ kindLabel: kind, friendName: username })
+              : undefined
           }
           {...(online ? live : offline)}
           onPress={() => onRemove(card)}

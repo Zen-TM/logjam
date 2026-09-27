@@ -21,7 +21,7 @@ import {
   BOB_ID,
   SHARED_PLACE_ID,
   as,
-  CANYON_TYPE_ID
+  CANYON_TYPE_ID,
 } from "./_actors";
 
 // Stage 8 §11 mandatory privacy-boundary suite for GET /sync/delta.
@@ -133,9 +133,9 @@ describe("sync delta — sharee view (bob)", () => {
     // Owner-private data must be absent: no alice trips, no trip-linked
     // media of another owner, no _count aggregates.
     const trips = changes.tripLogs as { userId?: string }[];
-    expect(trips.every((t) => t.userId === undefined || t.userId === BOB_ID)).toBe(
-      true,
-    );
+    expect(
+      trips.every((t) => t.userId === undefined || t.userId === BOB_ID),
+    ).toBe(true);
     const media = changes.media as { linkedType: string; linkedId: string }[];
     // (bob's own trip media would be legal; foreign trip media never.)
     const bobTripIds = new Set(
@@ -159,9 +159,7 @@ describe("sync delta — sharee view (bob)", () => {
     }[];
     // Every share row involves bob himself.
     expect(
-      shares.every(
-        (s) => s.sharedById === BOB_ID || s.sharedWithId === BOB_ID,
-      ),
+      shares.every((s) => s.sharedById === BOB_ID || s.sharedWithId === BOB_ID),
     ).toBe(true);
     // No email key anywhere in the whole response.
     expect(JSON.stringify(changes)).not.toContain('"email"');
@@ -184,7 +182,12 @@ describe("sync delta — revocation signals", () => {
     const created = await request(API_URL)
       .post("/places")
       .set(as(ALICE_SUB))
-      .send({ placeTypeId: CANYON_TYPE_ID, name: "Tombstone place", latitude: -33.69, longitude: 150.29 });
+      .send({
+        placeTypeId: CANYON_TYPE_ID,
+        name: "Tombstone place",
+        latitude: -33.69,
+        longitude: 150.29,
+      });
     expect(created.status).toBe(201);
     const placeId = created.body.id as string;
     const share = await request(API_URL)
@@ -338,10 +341,15 @@ describe("sync delta — every row the server sends parses on the client", () =>
   // The case that actually broke: a SYSTEM definition belongs to no account.
   it("sends system definitions with a null owner, and the spec accepts them", async () => {
     const { changes } = await fullPull(ALICE_SUB);
-    const defs = (changes.customFieldDefs ?? []) as { ownerId: string | null }[];
+    const defs = (changes.customFieldDefs ?? []) as {
+      ownerId: string | null;
+    }[];
     expect(defs.length).toBeGreaterThan(0);
     const system = defs.filter((def) => def.ownerId === null);
-    expect(system.length, "the seven grades and their kin are global rows").toBeGreaterThan(0);
+    expect(
+      system.length,
+      "the seven grades and their kin are global rows",
+    ).toBeGreaterThan(0);
     for (const def of system) {
       expect(() => parseSyncDeltaCustomFieldDefRow(def)).not.toThrow();
     }

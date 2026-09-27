@@ -31,8 +31,12 @@ describe("usePlaces stale-response race (FECO-001)", () => {
   it("keeps the newer response when the older request resolves last", async () => {
     let resolveFirst!: (value: unknown) => void;
     let resolveSecond!: (value: unknown) => void;
-    const firstResponse = new Promise((resolve) => { resolveFirst = resolve; });
-    const secondResponse = new Promise((resolve) => { resolveSecond = resolve; });
+    const firstResponse = new Promise((resolve) => {
+      resolveFirst = resolve;
+    });
+    const secondResponse = new Promise((resolve) => {
+      resolveSecond = resolve;
+    });
 
     const fetchMock = vi
       .fn()
@@ -45,12 +49,18 @@ describe("usePlaces stale-response race (FECO-001)", () => {
     // Bump refetch (simulates a write completing) before the first request's
     // response has arrived — this is the load(A) -> write -> refetch(B)
     // sequence from the finding.
-    act(() => { result.current.refetch(); });
+    act(() => {
+      result.current.refetch();
+    });
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
 
     // Newer request (B) resolves first.
-    act(() => { resolveSecond(fakeResponse([{ id: "fresh" }])); });
-    await waitFor(() => expect(result.current.places).toEqual([{ id: "fresh" }]));
+    act(() => {
+      resolveSecond(fakeResponse([{ id: "fresh" }]));
+    });
+    await waitFor(() =>
+      expect(result.current.places).toEqual([{ id: "fresh" }]),
+    );
 
     // Older request (A) resolves after — must NOT overwrite the fresh state.
     await act(async () => {

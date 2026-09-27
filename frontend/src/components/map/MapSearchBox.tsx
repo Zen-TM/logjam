@@ -51,9 +51,11 @@ export default function MapSearchBox({
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey)
+        return;
       const target = event.target as HTMLElement | null;
-      if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
+      if (target?.closest("input, textarea, select, [contenteditable='true']"))
+        return;
       event.preventDefault();
       inputRef.current?.focus();
     };
@@ -87,16 +89,28 @@ export default function MapSearchBox({
       place.name.toLowerCase().includes(needle) ||
       place.altNames.some((alt) => alt.toLowerCase().includes(needle));
     const placeOptions: Option[] = [
-      ...places.filter(matches).map((place) => ({ kind: "place" as const, id: `p-${place.id}`, place, shared: false })),
-      ...sharedPlaces
-        .filter(matches)
-        .map((place) => ({ kind: "place" as const, id: `s-${place.id}`, place, shared: true })),
+      ...places.filter(matches).map((place) => ({
+        kind: "place" as const,
+        id: `p-${place.id}`,
+        place,
+        shared: false,
+      })),
+      ...sharedPlaces.filter(matches).map((place) => ({
+        kind: "place" as const,
+        id: `s-${place.id}`,
+        place,
+        shared: true,
+      })),
     ].slice(0, PLACE_RESULTS);
     if (trimmed.length < LOCATION_MIN_CHARS) return placeOptions;
     if (locationQuery === trimmed) {
       return [
         ...placeOptions,
-        ...locations.map((result, index) => ({ kind: "location" as const, id: `l-${index}`, result })),
+        ...locations.map((result, index) => ({
+          kind: "location" as const,
+          id: `l-${index}`,
+          result,
+        })),
       ];
     }
     return [...placeOptions, { kind: "askLocations" as const, id: "ask" }];
@@ -136,7 +150,11 @@ export default function MapSearchBox({
           aria-expanded={open}
           aria-controls={listId}
           aria-autocomplete="list"
-          aria-activedescendant={open && activeIndex >= 0 ? `${listId}-${options[activeIndex]?.id}` : undefined}
+          aria-activedescendant={
+            open && activeIndex >= 0
+              ? `${listId}-${options[activeIndex]?.id}`
+              : undefined
+          }
           placeholder="Search places and locations"
           value={query}
           onFocus={() => setFocused(true)}
@@ -150,9 +168,13 @@ export default function MapSearchBox({
               if (options.length === 0) return;
               event.preventDefault();
               const step = event.key === "ArrowDown" ? 1 : -1;
-              setActiveIndex((current) => (current + step + options.length) % options.length);
+              setActiveIndex(
+                (current) => (current + step + options.length) % options.length,
+              );
             } else if (event.key === "Enter") {
-              const option = options[activeIndex] ?? (options.length === 1 ? options[0] : undefined);
+              const option =
+                options[activeIndex] ??
+                (options.length === 1 ? options[0] : undefined);
               if (option) {
                 event.preventDefault();
                 choose(option);
@@ -171,9 +193,19 @@ export default function MapSearchBox({
       </div>
       {open && (
         <div className={classes.results}>
-          <ul id={listId} role="listbox" aria-label="Search results" className={classes.list}>
+          <ul
+            id={listId}
+            role="listbox"
+            aria-label="Search results"
+            className={classes.list}
+          >
             {options.map((option, index) => {
-              const Icon = option.kind === "place" ? (option.shared ? Users : MapPin) : Globe;
+              const Icon =
+                option.kind === "place"
+                  ? option.shared
+                    ? Users
+                    : MapPin
+                  : Globe;
               const label =
                 option.kind === "place"
                   ? option.place.name
@@ -196,12 +228,17 @@ export default function MapSearchBox({
                 >
                   <Icon size={16} aria-hidden className={classes.optionGlyph} />
                   <span className={classes.optionLabel}>{label}</span>
-                  {option.kind === "place" && option.shared && <span className={classes.optionMeta}>Shared</span>}
+                  {option.kind === "place" && option.shared && (
+                    <span className={classes.optionMeta}>Shared</span>
+                  )}
                 </li>
               );
             })}
           </ul>
-          {(loading || error || (locationQuery === trimmed && !loading && locations.length === 0) || options.length === 0) && (
+          {(loading ||
+            error ||
+            (locationQuery === trimmed && !loading && locations.length === 0) ||
+            options.length === 0) && (
             <p className={classes.status} role="status">
               {loading
                 ? "Searching locations…"

@@ -8,7 +8,14 @@
 // (DESIGN.md §6: a picker inside a dialog swaps the body and backs out to the
 // form). The raster settings are the other sub-view.
 import { useState, useRef, Fragment, useEffect, useCallback } from "react";
-import { CircleCheckBig, ExternalLink, Info, Settings2, SquareDashed, Upload } from "lucide-react";
+import {
+  CircleCheckBig,
+  ExternalLink,
+  Info,
+  Settings2,
+  SquareDashed,
+  Upload,
+} from "lucide-react";
 import {
   apiFetch,
   fetchComputeEstimate,
@@ -182,10 +189,15 @@ export default function TopoDialog({
   const [storageQuota, setStorageQuota] = useState<number | null>(null);
 
   // Advanced settings + templates
-  const [settings, setSettings] = useState<RasterTemplateSettings>(() => cloneRasterTemplateSettings(RASTER_TEMPLATE_DEFAULTS));
-  const [autoExport, setAutoExport] = useState<AutoExportSettings>(() => ({ ...AUTO_EXPORT_DEFAULTS }));
+  const [settings, setSettings] = useState<RasterTemplateSettings>(() =>
+    cloneRasterTemplateSettings(RASTER_TEMPLATE_DEFAULTS),
+  );
+  const [autoExport, setAutoExport] = useState<AutoExportSettings>(() => ({
+    ...AUTO_EXPORT_DEFAULTS,
+  }));
   const [templates, setTemplates] = useState<TopoTemplate[]>([]);
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>(DEFAULT_TEMPLATE_ID);
+  const [selectedTemplateId, setSelectedTemplateId] =
+    useState<string>(DEFAULT_TEMPLATE_ID);
   const [saveAsName, setSaveAsName] = useState("");
   const [showSaveAs, setShowSaveAs] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("hillshade");
@@ -259,7 +271,8 @@ export default function TopoDialog({
   }
 
   const settingsInvalid =
-    slopeBandsError(settings.slope.bands) != null || hillshadeSettingsError(settings.hillshade) != null;
+    slopeBandsError(settings.slope.bands) != null ||
+    hillshadeSettingsError(settings.hillshade) != null;
 
   async function handleSaveAsTemplate() {
     const name = saveAsName.trim();
@@ -398,8 +411,14 @@ export default function TopoDialog({
     if (!file || !stats) return;
     setError(null);
 
-    if (storageUsed !== null && storageQuota !== null && storageUsed >= storageQuota) {
-      setError("Storage quota is full. Free space by deleting old topo jobs before submitting a new one.");
+    if (
+      storageUsed !== null &&
+      storageQuota !== null &&
+      storageUsed >= storageQuota
+    ) {
+      setError(
+        "Storage quota is full. Free space by deleting old topo jobs before submitting a new one.",
+      );
       return;
     }
 
@@ -434,10 +453,15 @@ export default function TopoDialog({
         },
       });
 
-      await putToPresignedUrl(uploadUrl, file, "application/zip", (loaded, total) => {
-        setUploadedBytes(loaded);
-        setTotalBytes(total);
-      });
+      await putToPresignedUrl(
+        uploadUrl,
+        file,
+        "application/zip",
+        (loaded, total) => {
+          setUploadedBytes(loaded);
+          setTotalBytes(total);
+        },
+      );
 
       setPhase("finalizing");
       await apiFetch(`/topo-jobs/${jobId}/start`, { method: "POST" });
@@ -472,7 +496,10 @@ export default function TopoDialog({
   const guard = useUnsavedChangesGuard(isDirty, performClose);
 
   const uploading = phase === "uploading" || phase === "finalizing";
-  const uploadPct = totalBytes > 0 ? Math.min(100, Math.round((uploadedBytes / totalBytes) * 100)) : 0;
+  const uploadPct =
+    totalBytes > 0
+      ? Math.min(100, Math.round((uploadedBytes / totalBytes) * 100))
+      : 0;
   const backToForm = () => {
     setMode("form");
     setShowSaveAs(false);
@@ -525,12 +552,22 @@ export default function TopoDialog({
                     >
                       Save
                     </Button>
-                    <Button compact onClick={() => { setShowSaveAs(false); setSaveAsName(""); }}>
+                    <Button
+                      compact
+                      onClick={() => {
+                        setShowSaveAs(false);
+                        setSaveAsName("");
+                      }}
+                    >
                       Cancel
                     </Button>
                   </>
                 ) : (
-                  <Button compact variant="outline" onClick={() => setShowSaveAs(true)}>
+                  <Button
+                    compact
+                    variant="outline"
+                    onClick={() => setShowSaveAs(true)}
+                  >
                     Save as a template
                   </Button>
                 )}
@@ -585,20 +622,29 @@ export default function TopoDialog({
                 : "Uploaded. Checking it over and starting your topo…"}
             </p>
             <ProgressBar
-              label={phase === "uploading" ? "Upload progress" : "Starting your topo"}
+              label={
+                phase === "uploading" ? "Upload progress" : "Starting your topo"
+              }
               value={phase === "uploading" ? uploadPct : undefined}
             />
             {phase === "uploading" && (
               <p className={classes.workingDetail}>
-                {(uploadedBytes / 1e6).toFixed(1)} of {(totalBytes / 1e6).toFixed(1)} MB
+                {(uploadedBytes / 1e6).toFixed(1)} of{" "}
+                {(totalBytes / 1e6).toFixed(1)} MB
                 {totalBytes > 0 ? ` · ${uploadPct}%` : ""}
               </p>
             )}
           </div>
         ) : phase === "done" ? (
           <div className={classes.done}>
-            <CircleCheckBig size={40} aria-hidden className={classes.doneGlyph} />
-            <p className={classes.doneName}>{submittedJob?.name ?? "Your topo"} is being made</p>
+            <CircleCheckBig
+              size={40}
+              aria-hidden
+              className={classes.doneGlyph}
+            />
+            <p className={classes.doneName}>
+              {submittedJob?.name ?? "Your topo"} is being made
+            </p>
             <p className={classes.workingDetail}>
               {stats?.tileCount
                 ? `${stats.tileCount} tile${stats.tileCount > 1 ? "s" : ""} queued. `
@@ -623,9 +669,13 @@ export default function TopoDialog({
           />
         ) : (
           <>
-            <p className={classes.wideHint}>This is easier on a bigger screen.</p>
+            <p className={classes.wideHint}>
+              This is easier on a bigger screen.
+            </p>
 
-            {(validationError || error) && <ErrorBanner message={validationError ?? error!} />}
+            {(validationError || error) && (
+              <ErrorBanner message={validationError ?? error!} />
+            )}
 
             {/* The ZIP is the whole point of the dialog, so it is the first
                 thing in it; the errand that produces one is a step away. */}
@@ -659,7 +709,9 @@ export default function TopoDialog({
             >
               <Upload size={28} aria-hidden className={classes.dropGlyph} />
               <span className={classes.dropLine}>
-                {file ? file.name : "Drop your ELVIS ZIP here, or select it in your file system."}
+                {file
+                  ? file.name
+                  : "Drop your ELVIS ZIP here, or select it in your file system."}
               </span>
               <span className={classes.dropHint}>
                 {file ? "Choose a different file" : "No need to unzip it."}
@@ -678,7 +730,12 @@ export default function TopoDialog({
             </div>
 
             <div className={classes.errandLine}>
-              <Button icon={Info} compact variant="outline" onClick={() => setMode("instructions")}>
+              <Button
+                icon={Info}
+                compact
+                variant="outline"
+                onClick={() => setMode("instructions")}
+              >
                 Haven't got one? Order LiDAR from ELVIS
               </Button>
             </div>
@@ -689,46 +746,60 @@ export default function TopoDialog({
               </p>
             )}
 
-            {stats && !validating && <ZipSummary stats={stats} creditsUsed={creditsUsed} creditsQuota={creditsQuota} jobCredits={jobCredits} />}
+            {stats && !validating && (
+              <ZipSummary
+                stats={stats}
+                creditsUsed={creditsUsed}
+                creditsQuota={creditsQuota}
+                jobCredits={jobCredits}
+              />
+            )}
 
             {/* Two short answers about the same topo: one line holds both. */}
             <div className={classes.nameRow}>
-            <TextField
-              label="Name"
-              placeholder="Name this topo"
-              value={topoName}
-              onChange={(e) => {
-                setTopoName(e.target.value);
-                setTopoNameTouched(true);
-              }}
-            />
+              <TextField
+                label="Name"
+                placeholder="Name this topo"
+                value={topoName}
+                onChange={(e) => {
+                  setTopoName(e.target.value);
+                  setTopoNameTouched(true);
+                }}
+              />
 
-            <Select
-              label="Template"
-              value={selectedTemplateId}
-              onChange={(e) => selectTemplate(e.target.value)}
-            >
-              {/* Until /topo-templates resolves, render the synthetic system
+              <Select
+                label="Template"
+                value={selectedTemplateId}
+                onChange={(e) => selectTemplate(e.target.value)}
+              >
+                {/* Until /topo-templates resolves, render the synthetic system
                   Default entry (always first in the server list) so the initial
                   value "default" is never out of range (TOPO-3). */}
-              {templates.length === 0 ? (
-                <option value={DEFAULT_TEMPLATE_ID}>Default (system)</option>
-              ) : (
-                templates.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                    {t.isSystem ? " (system)" : ""}
-                  </option>
-                ))
-              )}
-            </Select>
+                {templates.length === 0 ? (
+                  <option value={DEFAULT_TEMPLATE_ID}>Default (system)</option>
+                ) : (
+                  templates.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                      {t.isSystem ? " (system)" : ""}
+                    </option>
+                  ))
+                )}
+              </Select>
             </div>
 
             <div className={classes.errandLine}>
-              <Button icon={Settings2} compact variant="outline" onClick={() => setMode("settings")}>
+              <Button
+                icon={Settings2}
+                compact
+                variant="outline"
+                onClick={() => setMode("settings")}
+              >
                 How this topo is drawn
               </Button>
-              {settingsInvalid && <StatusPill label="A setting needs fixing" tone="warning" />}
+              {settingsInvalid && (
+                <StatusPill label="A setting needs fixing" tone="warning" />
+              )}
             </div>
           </>
         )}
@@ -807,14 +878,15 @@ function ZipSummary({
       {stats.derivativeTifCount > 0 && (
         <p className={classes.summaryNote}>
           {stats.derivativeTifCount} ready-made raster
-          {stats.derivativeTifCount > 1 ? "s" : ""} in here (hillshade and the like) will be
-          ignored — yours are drawn from the survey itself.
+          {stats.derivativeTifCount > 1 ? "s" : ""} in here (hillshade and the
+          like) will be ignored — yours are drawn from the survey itself.
         </p>
       )}
       {stats.overlappingSurveys && (
         <p className={classes.summaryNote}>
-          More than one survey covers this ground. The best of them is used for each layer —
-          the densest for terrain, the most recent for vegetation — at no extra cost.
+          More than one survey covers this ground. The best of them is used for
+          each layer — the densest for terrain, the most recent for vegetation —
+          at no extra cost.
         </p>
       )}
     </div>
@@ -840,70 +912,88 @@ function ElvisInstructions({
     <ol className={classes.steps}>
       <li className={classes.step}>
         <div className={classes.stepBody}>
-        <SectionHeader title="Mark out what you want covered" />
-        <div className={classes.stepControls}>
-          <Button icon={SquareDashed} compact variant="outline" onClick={onSelectBbox}>
-            {pendingBbox ? "Draw it again" : "Draw the area"}
-          </Button>
-          {pendingBbox && area != null && <StatusPill label={formatAreaKm2(area)} />}
-          {pendingBbox && (
-            <Button compact variant="outline" onClick={() => downloadBboxShapefile(pendingBbox)}>
-              Download its shapefile
+          <SectionHeader title="Mark out what you want covered" />
+          <div className={classes.stepControls}>
+            <Button
+              icon={SquareDashed}
+              compact
+              variant="outline"
+              onClick={onSelectBbox}
+            >
+              {pendingBbox ? "Draw it again" : "Draw the area"}
             </Button>
+            {pendingBbox && area != null && (
+              <StatusPill label={formatAreaKm2(area)} />
+            )}
+            {pendingBbox && (
+              <Button
+                compact
+                variant="outline"
+                onClick={() => downloadBboxShapefile(pendingBbox)}
+              >
+                Download its shapefile
+              </Button>
+            )}
+          </div>
+          {warnCredits && (
+            <p className={classes.stepWarning}>
+              An area this size may cost more credits than you have left this
+              month. Try a smaller one.
+            </p>
           )}
         </div>
-        {warnCredits && (
-          <p className={classes.stepWarning}>
-            An area this size may cost more credits than you have left this month. Try a smaller
-            one.
+      </li>
+
+      <li className={classes.step}>
+        <div className={classes.stepBody}>
+          <SectionHeader title="Order the tiles from ELVIS" />
+          <p className={classes.stepLine}>
+            In ELVIS, choose <strong>Order Data</strong>, then{" "}
+            <strong>Load File</strong> and give it the shapefile. Then press{" "}
+            <strong>Search</strong>.
           </p>
-        )}
+          <div className={classes.stepControls}>
+            <Button
+              icon={ExternalLink}
+              compact
+              variant="outline"
+              onClick={() =>
+                window.open(
+                  "https://elevation.fsdf.org.au/",
+                  "_blank",
+                  "noopener,noreferrer",
+                )
+              }
+            >
+              Open the ELVIS portal
+            </Button>
+          </div>
         </div>
       </li>
 
       <li className={classes.step}>
         <div className={classes.stepBody}>
-        <SectionHeader title="Order the tiles from ELVIS" />
-        <p className={classes.stepLine}>
-          In ELVIS, choose <strong>Order Data</strong>, then <strong>Load File</strong> and give
-          it the shapefile. Then press <strong>Search</strong>.
-        </p>
-        <div className={classes.stepControls}>
-          <Button
-            icon={ExternalLink}
-            compact
-            variant="outline"
-            onClick={() => window.open("https://elevation.fsdf.org.au/", "_blank", "noopener,noreferrer")}
-          >
-            Open the ELVIS portal
-          </Button>
-        </div>
+          <SectionHeader title="Take the point clouds" />
+          <p className={classes.stepLine}>
+            Under <strong>NSW Government — Spatial Services</strong> →{" "}
+            <strong>Point Clouds</strong>, beside <strong>AHD</strong>, press{" "}
+            <strong>Select all</strong>, or select the specific tiles you want.
+          </p>
+          <p className={classes.stepLine}>
+            Alternatively, select only DEM files for a faster but less precise
+            topo with no vegetation layer.
+          </p>
         </div>
       </li>
 
       <li className={classes.step}>
         <div className={classes.stepBody}>
-        <SectionHeader title="Take the point clouds" />
-        <p className={classes.stepLine}>
-          Under <strong>NSW Government — Spatial Services</strong> → <strong>Point Clouds</strong>,
-          beside <strong>AHD</strong>, press <strong>Select all</strong>, or select the specific
-          tiles you want.
-        </p>
-        <p className={classes.stepLine}>
-          Alternatively, select only DEM files for a faster but less precise topo with no
-          vegetation layer.
-        </p>
-        </div>
-      </li>
-
-      <li className={classes.step}>
-        <div className={classes.stepBody}>
-        <SectionHeader title="Have it sent to you" />
-        <p className={classes.stepLine}>
-          Under <strong>Industry</strong>, choose <strong>Recreation</strong>. Enter your email
-          and press <strong>Order datasets</strong>. ELVIS emails you a link to the ZIP — that
-          ZIP is what you bring back here.
-        </p>
+          <SectionHeader title="Have it sent to you" />
+          <p className={classes.stepLine}>
+            Under <strong>Industry</strong>, choose <strong>Recreation</strong>.
+            Enter your email and press <strong>Order datasets</strong>. ELVIS
+            emails you a link to the ZIP — that ZIP is what you bring back here.
+          </p>
         </div>
       </li>
     </ol>

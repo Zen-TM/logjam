@@ -105,9 +105,12 @@ export function FriendsScreen({
   const [addOpen, setAddOpen] = useState(false);
   const [menuItem, setMenuItem] = useState<FriendItem | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
-  const notify = useCallback((text: string, tone: ToastMessage["tone"] = "info") => {
-    setToast({ text, tone, nonce: Date.now() });
-  }, []);
+  const notify = useCallback(
+    (text: string, tone: ToastMessage["tone"] = "info") => {
+      setToast({ text, tone, nonce: Date.now() });
+    },
+    [],
+  );
 
   const load = useCallback(async () => {
     if (guestBlock) return;
@@ -138,7 +141,12 @@ export function FriendsScreen({
   }, [load]);
 
   const runAction = useCallback(
-    async (id: string, action: () => Promise<unknown>, fallback: string, done?: string) => {
+    async (
+      id: string,
+      action: () => Promise<unknown>,
+      fallback: string,
+      done?: string,
+    ) => {
       setBusyId(id);
       try {
         await action();
@@ -186,7 +194,10 @@ export function FriendsScreen({
   const openFriend = useCallback(
     (item: FriendItem) => {
       if (item.kind !== "friend") return;
-      onOpenShares({ friendshipId: item.friendshipId, username: item.username });
+      onOpenShares({
+        friendshipId: item.friendshipId,
+        username: item.username,
+      });
     },
     [onOpenShares],
   );
@@ -196,7 +207,10 @@ export function FriendsScreen({
     ({ item }: { item: FriendItem }) => (
       <FriendRow
         item={item}
-        busy={busyId === (item.kind === "friend" ? item.friendshipId : item.requestId)}
+        busy={
+          busyId ===
+          (item.kind === "friend" ? item.friendshipId : item.requestId)
+        }
         onOpen={openFriend}
         onMenu={openMenu}
       />
@@ -241,7 +255,12 @@ export function FriendsScreen({
 
   const buckets: SegmentOption<Bucket>[] = [
     { value: "all", label: "All", count: friends.length + requests.length },
-    { value: "friends", label: "Friends", count: friends.length, disabled: friends.length === 0 },
+    {
+      value: "friends",
+      label: "Friends",
+      count: friends.length,
+      disabled: friends.length === 0,
+    },
     {
       value: "requests",
       label: "Requests",
@@ -271,7 +290,12 @@ export function FriendsScreen({
       />
 
       <View style={styles.rail}>
-        <SegmentedControl options={buckets} value={bucket} onChange={setBucket} scroll />
+        <SegmentedControl
+          options={buckets}
+          value={bucket}
+          onChange={setBucket}
+          scroll
+        />
       </View>
 
       {/* Stays inline with a retry, because a stale list IS the problem and it
@@ -288,7 +312,11 @@ export function FriendsScreen({
         data={items}
         keyExtractor={keyExtractor}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={theme.accent}
+          />
         }
         renderItem={renderItem}
         ListEmptyComponent={
@@ -463,7 +491,8 @@ function AddFriendBody({
         })
         .catch((err: unknown) => {
           console.error(err);
-          if (!cancelled) setSearchError(messageFromError(err, "Search failed."));
+          if (!cancelled)
+            setSearchError(messageFromError(err, "Search failed."));
         })
         .finally(() => {
           if (!cancelled) setSearching(false);
@@ -500,12 +529,18 @@ function AddFriendBody({
         autoCapitalize="none"
         error={searchError}
       />
-      {searching ? <ActivityIndicator color={theme.accent} style={styles.spinner} /> : null}
-      {!searching && trimmed.length >= SEARCH_MIN_CHARS && results.length === 0 ? (
+      {searching ? (
+        <ActivityIndicator color={theme.accent} style={styles.spinner} />
+      ) : null}
+      {!searching &&
+      trimmed.length >= SEARCH_MIN_CHARS &&
+      results.length === 0 ? (
         <Text style={styles.hint}>No one by that name.</Text>
       ) : null}
       {trimmed.length > 0 && trimmed.length < SEARCH_MIN_CHARS ? (
-        <Text style={styles.hint}>Keep typing — at least {SEARCH_MIN_CHARS} characters.</Text>
+        <Text style={styles.hint}>
+          Keep typing — at least {SEARCH_MIN_CHARS} characters.
+        </Text>
       ) : null}
       {results.map((user) => {
         const alreadyFriend = existingIds.includes(user.id);
@@ -559,15 +594,27 @@ function EmptyPanel({ bucket, onAdd }: { bucket: Bucket; onAdd: () => void }) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.primary },
-  rail: { paddingHorizontal: spacing(2), paddingTop: spacing(1.5), paddingBottom: spacing(1.5) },
+  rail: {
+    paddingHorizontal: spacing(2),
+    paddingTop: spacing(1.5),
+    paddingBottom: spacing(1.5),
+  },
   banner: { paddingHorizontal: spacing(2), paddingBottom: spacing(1) },
   list: { flex: 1 },
-  listContent: { paddingHorizontal: spacing(2), gap: spacing(1), paddingBottom: spacing(4) },
+  listContent: {
+    paddingHorizontal: spacing(2),
+    gap: spacing(1),
+    paddingBottom: spacing(4),
+  },
   menuBody: { gap: spacing(1) },
   addBody: { gap: spacing(1) },
   spinner: { alignSelf: "flex-start" },
   hint: { color: theme.textMuted, fontSize: fontSize.sm },
-  empty: { alignItems: "center", gap: spacing(1.5), paddingVertical: spacing(6) },
+  empty: {
+    alignItems: "center",
+    gap: spacing(1.5),
+    paddingVertical: spacing(6),
+  },
   emptyTitle: { color: theme.textPrimary, fontSize: fontSize.base },
   emptyHint: {
     color: theme.textMuted,

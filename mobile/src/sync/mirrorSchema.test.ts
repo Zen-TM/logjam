@@ -2,7 +2,12 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { MIRROR_TABLES, SYNC_TABLES, createSchemaSql, tableSchema } from "./mirrorSchema";
+import {
+  MIRROR_TABLES,
+  SYNC_TABLES,
+  createSchemaSql,
+  tableSchema,
+} from "./mirrorSchema";
 import { OUTBOX_ENTITIES, outboxMirrorTable } from "./outboxTables";
 
 // The regression this file exists for: a tombstone cascade wrote
@@ -18,11 +23,48 @@ import { OUTBOX_ENTITIES, outboxMirrorTable } from "./outboxTables";
 const SYNC_DIR = __dirname;
 
 const SQL_KEYWORDS = new Set([
-  "and", "or", "not", "null", "in", "is", "like", "between", "by", "asc",
-  "desc", "collate", "nocase", "select", "from", "where", "set", "values",
-  "into", "insert", "update", "delete", "replace", "count", "max", "min",
-  "sum", "group", "order", "limit", "offset", "as", "on", "distinct", "case",
-  "when", "then", "else", "end", "exists", "union", "all",
+  "and",
+  "or",
+  "not",
+  "null",
+  "in",
+  "is",
+  "like",
+  "between",
+  "by",
+  "asc",
+  "desc",
+  "collate",
+  "nocase",
+  "select",
+  "from",
+  "where",
+  "set",
+  "values",
+  "into",
+  "insert",
+  "update",
+  "delete",
+  "replace",
+  "count",
+  "max",
+  "min",
+  "sum",
+  "group",
+  "order",
+  "limit",
+  "offset",
+  "as",
+  "on",
+  "distinct",
+  "case",
+  "when",
+  "then",
+  "else",
+  "end",
+  "exists",
+  "union",
+  "all",
 ]);
 
 function sourceFiles(): string[] {
@@ -55,9 +97,11 @@ function identifiers(fragment: string, pattern: RegExp): string[] {
  * a join would need real parsing, and the sync path has none). */
 function tableOf(sql: string): string | null {
   const names = new Set(
-    [...sql.matchAll(/(?:INSERT\s+(?:OR\s+REPLACE\s+)?INTO|UPDATE|FROM)\s+(\w+)/gi)].map(
-      (match) => match[1],
-    ),
+    [
+      ...sql.matchAll(
+        /(?:INSERT\s+(?:OR\s+REPLACE\s+)?INTO|UPDATE|FROM)\s+(\w+)/gi,
+      ),
+    ].map((match) => match[1]),
   );
   return names.size === 1 ? [...names][0] : null;
 }
@@ -65,28 +109,42 @@ function tableOf(sql: string): string | null {
 function columnsOf(sql: string): string[] {
   const columns: string[] = [];
 
-  const insert = sql.match(/INSERT\s+(?:OR\s+REPLACE\s+)?INTO\s+\w+\s*\(([^)]*)\)/i);
+  const insert = sql.match(
+    /INSERT\s+(?:OR\s+REPLACE\s+)?INTO\s+\w+\s*\(([^)]*)\)/i,
+  );
   if (insert) {
-    columns.push(...insert[1].split(",").map((name) => name.trim()).filter(Boolean));
+    columns.push(
+      ...insert[1]
+        .split(",")
+        .map((name) => name.trim())
+        .filter(Boolean),
+    );
   }
 
   const set = sql.match(/\bSET\b([\s\S]*?)(?:\bWHERE\b|$)/i);
   if (set) columns.push(...identifiers(set[1], /(\w+)\s*=/g));
 
-  const where = sql.match(/\bWHERE\b([\s\S]*?)(?:\bORDER\b|\bGROUP\b|\bLIMIT\b|$)/i);
+  const where = sql.match(
+    /\bWHERE\b([\s\S]*?)(?:\bORDER\b|\bGROUP\b|\bLIMIT\b|$)/i,
+  );
   if (where) {
-    columns.push(...identifiers(where[1], /(\w+)\s*(?:=|<|>|!=|\bIN\b|\bLIKE\b|\bIS\b)/gi));
+    columns.push(
+      ...identifiers(where[1], /(\w+)\s*(?:=|<|>|!=|\bIN\b|\bLIKE\b|\bIS\b)/gi),
+    );
   }
 
   const select = sql.match(/\bSELECT\b([\s\S]*?)\bFROM\b/i);
   if (select) {
     for (const item of select[1].split(",")) {
       const name = item.trim();
-      if (/^\w+$/.test(name) && !SQL_KEYWORDS.has(name.toLowerCase())) columns.push(name);
+      if (/^\w+$/.test(name) && !SQL_KEYWORDS.has(name.toLowerCase()))
+        columns.push(name);
     }
   }
 
-  const ordering = sql.match(/\b(?:ORDER|GROUP)\s+BY\b([\s\S]*?)(?:\bLIMIT\b|$)/i);
+  const ordering = sql.match(
+    /\b(?:ORDER|GROUP)\s+BY\b([\s\S]*?)(?:\bLIMIT\b|$)/i,
+  );
   if (ordering) columns.push(...identifiers(ordering[1], /(\w+)/g));
 
   return columns;
@@ -102,7 +160,9 @@ describe("mirror SQL vs the schema declaration", () => {
         if (!schema) continue;
         for (const column of columnsOf(sql)) {
           if (!(column in schema.columns)) {
-            offences.push(`${file.split("/").pop()}: ${table}.${column} — ${sql.trim()}`);
+            offences.push(
+              `${file.split("/").pop()}: ${table}.${column} — ${sql.trim()}`,
+            );
           }
         }
       }
@@ -118,9 +178,9 @@ describe("mirror SQL vs the schema declaration", () => {
       readFileSync(join(SYNC_DIR, "mirrorStore.ts"), "utf8"),
     );
     expect(tombstone.length).toBeGreaterThan(10);
-    expect(columnsOf("UPDATE routes SET place_id = NULL WHERE place_id = ?")).toContain(
-      "place_id",
-    );
+    expect(
+      columnsOf("UPDATE routes SET place_id = NULL WHERE place_id = ?"),
+    ).toContain("place_id");
     // The column that is NOT there: `places` has no `place_id`, and the
     // scanner has to say so — this is the shape of the bug it exists to catch
     // (a cascade writing a column that no fresh install has).

@@ -12,10 +12,7 @@
  */
 import type { PlaceMergePolicy } from "./mergePlace.js";
 import type { MediaItem } from "./media.js";
-import type {
-  NotificationPreferences,
-  ThemeSchemeId,
-} from "./themeSchemes.js";
+import type { NotificationPreferences, ThemeSchemeId } from "./themeSchemes.js";
 import type { ForeignFieldValue } from "./fieldValues.js";
 import type { TripLogCustomFieldDef } from "./tripLogFields.js";
 

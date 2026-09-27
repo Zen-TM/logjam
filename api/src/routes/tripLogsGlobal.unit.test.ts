@@ -4,7 +4,12 @@ import { describe, it, expect, vi } from "vitest";
 // the pure helper under test doesn't require a DB connection.
 vi.mock("../services/prisma", () => ({
   default: {
-    tripLog: { findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
+    tripLog: {
+      findUnique: vi.fn(),
+      findMany: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+    },
     place: { count: vi.fn(), findMany: vi.fn() },
     media: { findMany: vi.fn(), deleteMany: vi.fn() },
     $transaction: vi.fn(),
@@ -171,7 +176,10 @@ describe("resolvePatchedTripTypes — the four PATCH combinations", () => {
   });
 
   describe("at the type cap", () => {
-    const atCap = Array.from({ length: MAX_TRIP_TYPES_PER_TRIP }, (_, i) => `t${i}`);
+    const atCap = Array.from(
+      { length: MAX_TRIP_TYPES_PER_TRIP },
+      (_, i) => `t${i}`,
+    );
 
     it("skips the tag rather than storing an 11th type the validator rejects", () => {
       const { types } = resolvePatchedTripTypes({

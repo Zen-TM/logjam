@@ -4,10 +4,7 @@ import { s3 } from "../services/awsClients";
 import { getEnv } from "./env";
 import { logger, safeErrorForLog } from "./logger";
 import { sendPushToUser } from "../services/push";
-import {
-  currentMonthStart,
-  QUOTA_WARNING_FRACTION,
-} from "@logjam/shared";
+import { currentMonthStart, QUOTA_WARNING_FRACTION } from "@logjam/shared";
 import {
   parseAccessLog,
   isBillableEgress,
@@ -56,7 +53,8 @@ async function resolveOwners(
   };
 
   for (const attribution of attributions) {
-    if (attribution.kind === "job") byTable[attribution.table].add(attribution.jobId);
+    if (attribution.kind === "job")
+      byTable[attribution.table].add(attribution.jobId);
   }
 
   const [topoJobs, exportJobs, geoPdfJobs] = await Promise.all([
@@ -93,7 +91,9 @@ async function resolveOwners(
  * owner and its bytes are dropped. Deliberate: there is nobody left to charge,
  * and inventing an attribution would be worse than under-counting.
  */
-export async function tallyLogContents(contents: string[]): Promise<Map<string, bigint>> {
+export async function tallyLogContents(
+  contents: string[],
+): Promise<Map<string, bigint>> {
   const env = getEnv();
   const pattern = env.EGRESS_API_REQUESTER_PATTERN;
 
@@ -112,7 +112,9 @@ export async function tallyLogContents(contents: string[]): Promise<Map<string, 
   const totals = new Map<string, bigint>();
   for (const { attribution, bytes } of pending) {
     const userId =
-      attribution.kind === "user" ? attribution.userId : owners.get(attribution.jobId);
+      attribution.kind === "user"
+        ? attribution.userId
+        : owners.get(attribution.jobId);
     if (userId === undefined) continue;
     totals.set(userId, (totals.get(userId) ?? 0n) + BigInt(bytes));
   }
@@ -225,7 +227,9 @@ async function sweepPrefix(bucket: string, prefix: string, maxObjects: number) {
 
   const contents: string[] = [];
   for (const key of keys) {
-    const object = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+    const object = await s3.send(
+      new GetObjectCommand({ Bucket: bucket, Key: key }),
+    );
     contents.push((await object.Body?.transformToString()) ?? "");
   }
 
@@ -261,7 +265,10 @@ async function sweepPrefix(bucket: string, prefix: string, maxObjects: number) {
         user.monthlyEgressUsedBytes,
         user.monthlyEgressQuotaBytes,
       ).catch((err) => {
-        logger.warn({ err: safeErrorForLog(err) }, "egress_quota_notify_failed");
+        logger.warn(
+          { err: safeErrorForLog(err) },
+          "egress_quota_notify_failed",
+        );
       });
     }
   }
@@ -293,7 +300,10 @@ export async function sweepEgress(): Promise<void> {
     } catch (err) {
       // One prefix failing must not stop the other. No key or user id in the
       // log line — this is an infrastructure error, not user data.
-      logger.error({ prefix, err: safeErrorForLog(err) }, "egress_sweep_failed");
+      logger.error(
+        { prefix, err: safeErrorForLog(err) },
+        "egress_sweep_failed",
+      );
     }
   }
 }

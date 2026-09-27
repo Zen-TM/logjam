@@ -23,11 +23,19 @@ export function EmptyState({ title, hint }: { title: string; hint?: string }) {
   );
 }
 
-export function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
+export function ErrorState({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry?: () => void;
+}) {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>{message}</Text>
-      {onRetry ? <Button label="Try again" variant="outlineAccent" onPress={onRetry} /> : null}
+      {onRetry ? (
+        <Button label="Try again" variant="outlineAccent" onPress={onRetry} />
+      ) : null}
     </View>
   );
 }

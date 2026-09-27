@@ -67,7 +67,9 @@ function decodeSubFromIdToken(token: string): string | null {
   try {
     const payload = JSON.parse(
       // atob is available in Hermes; JWT payload is base64url.
-      globalThis.atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")),
+      globalThis.atob(
+        token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"),
+      ),
     ) as { sub?: string };
     return typeof payload.sub === "string" ? payload.sub : null;
   } catch {
@@ -217,7 +219,9 @@ export function useAuth() {
           // identity to persist, so the next sign-in would skip this check as
           // well. This used to fall through and sign in blind.
           await amplifySignOut().catch(console.error);
-          setError("Sign-in didn't return an account identity, so it was cancelled. Please try again.");
+          setError(
+            "Sign-in didn't return an account identity, so it was cancelled. Please try again.",
+          );
           return false;
         }
         const previous = await readPreviousIdentity();
@@ -281,7 +285,9 @@ export function useAuth() {
         const result = await amplifySignUp({
           username: email,
           password,
-          options: { userAttributes: { email, name, preferred_username: username } },
+          options: {
+            userAttributes: { email, name, preferred_username: username },
+          },
         });
         if (result.nextStep.signUpStep === "CONFIRM_SIGN_UP") {
           setPendingUsername(email);
@@ -318,7 +324,10 @@ export function useAuth() {
     [pendingUsername, handleSignIn],
   );
 
-  const handleResendCode = useCallback(async (): Promise<{ ok: boolean; error?: string }> => {
+  const handleResendCode = useCallback(async (): Promise<{
+    ok: boolean;
+    error?: string;
+  }> => {
     try {
       await amplifyResendSignUpCode({ username: pendingUsername });
       return { ok: true };
@@ -335,7 +344,9 @@ export function useAuth() {
     setError(null);
     try {
       const result = await amplifyResetPassword({ username: email });
-      if (result.nextStep.resetPasswordStep === "CONFIRM_RESET_PASSWORD_WITH_CODE") {
+      if (
+        result.nextStep.resetPasswordStep === "CONFIRM_RESET_PASSWORD_WITH_CODE"
+      ) {
         setPendingUsername(email);
         setState("confirmForgotPassword");
       }
@@ -454,8 +465,17 @@ export function useAuth() {
     chooseGuest,
     linkAccount,
     backToChooser,
-    goToSignUp: useCallback(() => { setError(null); setState("signUp"); }, []),
-    goToSignIn: useCallback(() => { setError(null); setState("signIn"); }, []),
-    goToForgotPassword: useCallback(() => { setError(null); setState("forgotPassword"); }, []),
+    goToSignUp: useCallback(() => {
+      setError(null);
+      setState("signUp");
+    }, []),
+    goToSignIn: useCallback(() => {
+      setError(null);
+      setState("signIn");
+    }, []),
+    goToForgotPassword: useCallback(() => {
+      setError(null);
+      setState("forgotPassword");
+    }, []),
   };
 }

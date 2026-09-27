@@ -7,19 +7,25 @@ export type LockMode = "scale" | "position";
 export type PaperSize = "A2" | "A3" | "A4" | "A5" | "custom";
 export type Orientation = "portrait" | "landscape";
 export type PivotPoint =
-  | "tl" | "tc" | "tr"
-  | "ml" | "mc" | "mr"
-  | "bl" | "bc" | "br";
+  | "tl"
+  | "tc"
+  | "tr"
+  | "ml"
+  | "mc"
+  | "mr"
+  | "bl"
+  | "bc"
+  | "br";
 
 export interface ExtentState {
   paperSize: PaperSize;
   orientation: Orientation;
   customRatio?: { w: number; h: number };
-  north: number;   // WGS84 latitude (degrees)
-  south: number;   // WGS84 latitude (degrees)
-  east: number;    // WGS84 longitude (degrees)
-  west: number;    // WGS84 longitude (degrees)
-  scale: number;   // denominator, e.g. 25000 for 1:25000
+  north: number; // WGS84 latitude (degrees)
+  south: number; // WGS84 latitude (degrees)
+  east: number; // WGS84 longitude (degrees)
+  west: number; // WGS84 longitude (degrees)
+  scale: number; // denominator, e.g. 25000 for 1:25000
   coordMode: CoordMode;
   lockMode: LockMode;
   pivot: PivotPoint;
@@ -27,7 +33,10 @@ export interface ExtentState {
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-export const PAPER_SIZES_MM: Record<Exclude<PaperSize, "custom">, { w: number; h: number }> = {
+export const PAPER_SIZES_MM: Record<
+  Exclude<PaperSize, "custom">,
+  { w: number; h: number }
+> = {
   A2: { w: 420, h: 594 },
   A3: { w: 297, h: 420 },
   A4: { w: 210, h: 297 },
@@ -53,7 +62,10 @@ const METERS_PER_DEG_LON_EQUATOR = 111320;
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 /** Get paper dimensions in mm, accounting for orientation. */
-export function getPaperDimensions(state: ExtentState): { w: number; h: number } {
+export function getPaperDimensions(state: ExtentState): {
+  w: number;
+  h: number;
+} {
   let dims: { w: number; h: number };
   if (state.paperSize === "custom") {
     dims = state.customRatio ?? { w: 210, h: 297 };
@@ -121,8 +133,8 @@ export function extentFromCentreAndSize(
   widthM: number,
   heightM: number,
 ): { north: number; south: number; east: number; west: number } {
-  const halfHeightDeg = (heightM / 2) / METERS_PER_DEG_LAT;
-  const halfWidthDeg = (widthM / 2) / metersPerDegLon(centreLatDeg);
+  const halfHeightDeg = heightM / 2 / METERS_PER_DEG_LAT;
+  const halfWidthDeg = widthM / 2 / metersPerDegLon(centreLatDeg);
   return {
     north: centreLatDeg + halfHeightDeg,
     south: centreLatDeg - halfHeightDeg,
@@ -135,7 +147,10 @@ export function extentFromCentreAndSize(
  * Compute new extents from scale + paper, distributed around the pivot.
  * This is the core layout function used by multiple apply* functions.
  */
-function extentsFromScaleAndPivot(state: ExtentState, scale: number): ExtentState {
+function extentsFromScaleAndPivot(
+  state: ExtentState,
+  scale: number,
+): ExtentState {
   const map = getMapDimensions(state);
   const targetWidthM = scale * (map.w / 1000);
   const targetHeightM = scale * (map.h / 1000);
@@ -151,7 +166,9 @@ function extentsFromScaleAndPivot(state: ExtentState, scale: number): ExtentStat
   const dh = targetHeightDeg - currentHeightDeg;
 
   // Pivot determines how dw and dh are distributed
-  const { fracLeft, fracRight, fracTop, fracBottom } = pivotFractions(state.pivot);
+  const { fracLeft, fracRight, fracTop, fracBottom } = pivotFractions(
+    state.pivot,
+  );
 
   return {
     ...state,
@@ -172,21 +189,37 @@ function extentsFromScaleAndPivot(state: ExtentState, scale: number): ExtentStat
  *   - left fixed → fracLeft = 0, fracRight = 1
  */
 function pivotFractions(pivot: PivotPoint): {
-  fracLeft: number; fracRight: number;
-  fracTop: number; fracBottom: number;
+  fracLeft: number;
+  fracRight: number;
+  fracTop: number;
+  fracBottom: number;
 } {
   const col = pivot[1] as "l" | "c" | "r"; // second char
   const row = pivot[0] as "t" | "m" | "b"; // first char
 
   let fracLeft: number, fracRight: number;
-  if (col === "l") { fracLeft = 0; fracRight = 1; }
-  else if (col === "r") { fracLeft = 1; fracRight = 0; }
-  else { fracLeft = 0.5; fracRight = 0.5; }
+  if (col === "l") {
+    fracLeft = 0;
+    fracRight = 1;
+  } else if (col === "r") {
+    fracLeft = 1;
+    fracRight = 0;
+  } else {
+    fracLeft = 0.5;
+    fracRight = 0.5;
+  }
 
   let fracTop: number, fracBottom: number;
-  if (row === "t") { fracTop = 0; fracBottom = 1; }
-  else if (row === "b") { fracTop = 1; fracBottom = 0; }
-  else { fracTop = 0.5; fracBottom = 0.5; }
+  if (row === "t") {
+    fracTop = 0;
+    fracBottom = 1;
+  } else if (row === "b") {
+    fracTop = 1;
+    fracBottom = 0;
+  } else {
+    fracTop = 0.5;
+    fracBottom = 0.5;
+  }
 
   return { fracLeft, fracRight, fracTop, fracBottom };
 }
@@ -234,7 +267,10 @@ function fixNSForRatio(state: ExtentState): ExtentState {
 
 // ── Apply Functions ──────────────────────────────────────────────────────────
 
-export function applyNorthChange(state: ExtentState, newNorth: number): ExtentState {
+export function applyNorthChange(
+  state: ExtentState,
+  newNorth: number,
+): ExtentState {
   if (newNorth <= state.south) return state;
 
   if (state.lockMode === "scale") {
@@ -251,7 +287,10 @@ export function applyNorthChange(state: ExtentState, newNorth: number): ExtentSt
   }
 }
 
-export function applySouthChange(state: ExtentState, newSouth: number): ExtentState {
+export function applySouthChange(
+  state: ExtentState,
+  newSouth: number,
+): ExtentState {
   if (newSouth >= state.north) return state;
 
   if (state.lockMode === "scale") {
@@ -266,7 +305,10 @@ export function applySouthChange(state: ExtentState, newSouth: number): ExtentSt
   }
 }
 
-export function applyEastChange(state: ExtentState, newEast: number): ExtentState {
+export function applyEastChange(
+  state: ExtentState,
+  newEast: number,
+): ExtentState {
   if (newEast <= state.west) return state;
 
   if (state.lockMode === "scale") {
@@ -281,7 +323,10 @@ export function applyEastChange(state: ExtentState, newEast: number): ExtentStat
   }
 }
 
-export function applyWestChange(state: ExtentState, newWest: number): ExtentState {
+export function applyWestChange(
+  state: ExtentState,
+  newWest: number,
+): ExtentState {
   if (newWest >= state.east) return state;
 
   if (state.lockMode === "scale") {
@@ -296,12 +341,19 @@ export function applyWestChange(state: ExtentState, newWest: number): ExtentStat
   }
 }
 
-export function applyScaleChange(state: ExtentState, newScale: number): ExtentState {
+export function applyScaleChange(
+  state: ExtentState,
+  newScale: number,
+): ExtentState {
   if (newScale <= 0) return state;
   return extentsFromScaleAndPivot(state, newScale);
 }
 
-export function applyPaperChange(state: ExtentState, newPaperSize: PaperSize, customRatio?: { w: number; h: number }): ExtentState {
+export function applyPaperChange(
+  state: ExtentState,
+  newPaperSize: PaperSize,
+  customRatio?: { w: number; h: number },
+): ExtentState {
   const updated: ExtentState = {
     ...state,
     paperSize: newPaperSize,
@@ -311,18 +363,27 @@ export function applyPaperChange(state: ExtentState, newPaperSize: PaperSize, cu
   return extentsFromScaleAndPivot(updated, state.scale);
 }
 
-export function applyOrientationChange(state: ExtentState, newOrientation: Orientation): ExtentState {
+export function applyOrientationChange(
+  state: ExtentState,
+  newOrientation: Orientation,
+): ExtentState {
   if (newOrientation === state.orientation) return state;
   const updated = { ...state, orientation: newOrientation };
   // Recalculate extents at current scale with swapped aspect ratio
   return extentsFromScaleAndPivot(updated, state.scale);
 }
 
-export function applyPivotChange(state: ExtentState, newPivot: PivotPoint): ExtentState {
+export function applyPivotChange(
+  state: ExtentState,
+  newPivot: PivotPoint,
+): ExtentState {
   return { ...state, pivot: newPivot };
 }
 
-export function applyCoordModeChange(state: ExtentState, newCoordMode: CoordMode): ExtentState {
+export function applyCoordModeChange(
+  state: ExtentState,
+  newCoordMode: CoordMode,
+): ExtentState {
   return { ...state, coordMode: newCoordMode };
 }
 

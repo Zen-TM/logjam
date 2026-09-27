@@ -27,6 +27,7 @@ def render_geotiff(ctx: RenderContext) -> Path:
 
     if ctx.is_composite:
         from .tile_compose import render_composite_to_geotiff
+
         return render_composite_to_geotiff(ctx, raster_layers)
 
     # Per-layer: copy each COG into the working dir and ZIP if more than one.

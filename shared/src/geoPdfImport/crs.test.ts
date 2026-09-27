@@ -29,7 +29,9 @@ describe("resolveCrs — EPSG table", () => {
   });
 
   it("resolves every MGA and UTM-south zone entry to a working projection", () => {
-    for (const epsg of [28354, 28355, 28356, 7854, 7855, 7856, 32754, 32755, 32756]) {
+    for (const epsg of [
+      28354, 28355, 28356, 7854, 7855, 7856, 32754, 32755, 32756,
+    ]) {
       const r = resolveCrs({ kind: "EPSG_ONLY", epsg });
       expect(r.isGeographic).toBe(false);
       const [x, y] = proj4(WGS84, r.def, [150.25, -33.65]);

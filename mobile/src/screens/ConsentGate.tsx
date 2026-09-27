@@ -31,7 +31,12 @@ export function ConsentGate({
       onConsented();
     } catch (err) {
       console.error(err);
-      setError(messageFromError(err, "Couldn't record your consent. Please try again."));
+      setError(
+        messageFromError(
+          err,
+          "Couldn't record your consent. Please try again.",
+        ),
+      );
     } finally {
       setSubmitting(false);
     }
@@ -42,7 +47,10 @@ export function ConsentGate({
       style={styles.root}
       contentContainerStyle={[
         styles.content,
-        { paddingTop: insets.top + spacing(3), paddingBottom: insets.bottom + spacing(3) },
+        {
+          paddingTop: insets.top + spacing(3),
+          paddingBottom: insets.bottom + spacing(3),
+        },
       ]}
     >
       <Text style={styles.title}>Terms & privacy</Text>
@@ -65,6 +73,14 @@ const styles = StyleSheet.create({
     padding: spacing(3),
     gap: spacing(2),
   },
-  title: { fontSize: fontSize.xl, fontWeight: fontWeight.bold, color: theme.textPrimary },
-  body: { fontSize: fontSize.base, color: theme.textPrimary, lineHeight: lineHeight.body },
+  title: {
+    fontSize: fontSize.xl,
+    fontWeight: fontWeight.bold,
+    color: theme.textPrimary,
+  },
+  body: {
+    fontSize: fontSize.base,
+    color: theme.textPrimary,
+    lineHeight: lineHeight.body,
+  },
 });

@@ -75,13 +75,15 @@ describe("batchFileActionMessage", () => {
 
   it("keeps the decline verb distinct — it is never 'saved'", () => {
     expect(
-      batchFileActionMessage({ kind: "decline", done: 4, failed: 0, total: 4 }).text,
+      batchFileActionMessage({ kind: "decline", done: 4, failed: 0, total: 4 })
+        .text,
     ).toBe("Turned down 4 files.");
   });
 
   it("says one file, not 1 files", () => {
     expect(
-      batchFileActionMessage({ kind: "accept", done: 1, failed: 0, total: 1 }).text,
+      batchFileActionMessage({ kind: "accept", done: 1, failed: 0, total: 1 })
+        .text,
     ).toBe("Saved 1 file — find it in Saved.");
   });
 });

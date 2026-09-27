@@ -41,7 +41,12 @@ describe("groupRegionJobs", () => {
   it("aggregates one card per run", () => {
     const groups = groupRegionJobs([
       job("a", "run-1", { kind: "ready", gaps: 0, failed: 0 }),
-      job("b", "run-1", { kind: "downloading" }, { tilesDone: 25, tilesTotal: 100 }),
+      job(
+        "b",
+        "run-1",
+        { kind: "downloading" },
+        { tilesDone: 25, tilesTotal: 100 },
+      ),
       job("c", "run-2", { kind: "queued" }),
     ]);
     expect(groups.map((g) => g.groupId)).toEqual(["run-1", "run-2"]);
@@ -54,7 +59,12 @@ describe("groupRegionJobs", () => {
 
   it("measures a byte-counted job (the vector clip reports no tiles)", () => {
     const [group] = groupRegionJobs([
-      job("a", "run-1", { kind: "downloading" }, { bytesDone: 5, bytesTotal: 10 }),
+      job(
+        "a",
+        "run-1",
+        { kind: "downloading" },
+        { bytesDone: 5, bytesTotal: 10 },
+      ),
     ]);
     expect(group.fraction).toBeCloseTo(0.5);
   });
@@ -67,7 +77,9 @@ describe("groupRegionJobs", () => {
     expect(group.settled).toBe(true);
     expect(group.done).toBe(false);
     // A park the app clears by itself is NOT settled — the run is still live.
-    const [live] = groupRegionJobs([job("a", "run-1", { kind: "paused", reason: "background" })]);
+    const [live] = groupRegionJobs([
+      job("a", "run-1", { kind: "paused", reason: "background" }),
+    ]);
     expect(live.settled).toBe(false);
   });
 });

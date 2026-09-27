@@ -36,7 +36,9 @@ describe("regionCovering", () => {
   it("declines a region clipped shallower than the snap zoom", () => {
     // It would answer "no ways here" rather than "I don't have that" — worse
     // than falling back to the network.
-    expect(regionCovering([region({ maxzoom: 13 })], INSIDE_A, INSIDE_B)).toBeNull();
+    expect(
+      regionCovering([region({ maxzoom: 13 })], INSIDE_A, INSIDE_B),
+    ).toBeNull();
   });
 
   it("ignores artifacts that are not vector basemap regions", () => {

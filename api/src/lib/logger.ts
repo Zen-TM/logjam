@@ -8,17 +8,17 @@ const env = getEnv();
 // enumerate every known leak vector for place/trip-log payloads.
 export const redactPaths = [
   // Express request body shapes for place/trip endpoints
-  'req.body.latitude',
-  'req.body.longitude',
-  'req.body.name',
-  'req.body.altNames',
-  'req.body.notes',
-  'req.body.coords',
-  'req.body.coordinates',
-  'req.body.place.latitude',
-  'req.body.place.longitude',
-  'req.body.place.name',
-  'req.body.place.notes',
+  "req.body.latitude",
+  "req.body.longitude",
+  "req.body.name",
+  "req.body.altNames",
+  "req.body.notes",
+  "req.body.coords",
+  "req.body.coordinates",
+  "req.body.place.latitude",
+  "req.body.place.longitude",
+  "req.body.place.name",
+  "req.body.place.notes",
   // FIELD VALUES. A user-authored field LABEL names the thing it describes
   // ("Which slot for the Ranon exit") and its VALUE is whatever they typed, so
   // both are as sensitive as `notes` — and no wildcard above reaches them: the
@@ -28,43 +28,43 @@ export const redactPaths = [
   //
   // `foreignFields` is the same data arriving from someone else's place, which
   // makes it a second person's field labels in one user's log line.
-  'req.body.fieldValues',
-  'req.body.foreignFields',
-  'req.body.place.fieldValues',
-  'req.body.rows[*].data.fieldValues',
-  'req.body.places[*].fieldValues',
+  "req.body.fieldValues",
+  "req.body.foreignFields",
+  "req.body.place.fieldValues",
+  "req.body.rows[*].data.fieldValues",
+  "req.body.places[*].fieldValues",
   // A definition's LABEL is the user's own words about a place, arriving on a
   // different route: the mobile scrubber censors it and this file said it was
   // as sensitive as `notes` in the comment above and then redacted neither.
-  'req.body.label',
-  'req.body.field.label',
+  "req.body.label",
+  "req.body.field.label",
   // TRIP TYPES are user-authored tags ("Claustral recon", "with Dad") on the
   // same footing as a label, and a trip attribute's scoping is a list of them.
-  'req.body.types',
-  'req.body.tripTypes',
-  'req.body.trips[*].types',
+  "req.body.types",
+  "req.body.tripTypes",
+  "req.body.trips[*].types",
   // THE SYNC PUSH IS THE PHONE'S ONLY WRITE PATH, and every name, note and
   // field value it has ever sent travels inside `ops[*].fields`, which nothing
   // above reaches. Same defence-in-depth argument as the bulk rows below — no
   // current log site emits this body — applied to the shape that now carries
   // the most user data by far.
-  'req.body.ops[*].fields.name',
-  'req.body.ops[*].fields.altNames',
-  'req.body.ops[*].fields.notes',
-  'req.body.ops[*].fields.latitude',
-  'req.body.ops[*].fields.longitude',
-  'req.body.ops[*].fields.fieldValues',
-  'req.body.ops[*].fields.customFields',
-  'req.body.ops[*].fields.label',
-  'req.body.ops[*].fields.types',
-  'req.body.ops[*].fields.tripTypes',
-  'req.body.ops[*].fields.displayName',
-  'req.body.ops[*].fields.points',
+  "req.body.ops[*].fields.name",
+  "req.body.ops[*].fields.altNames",
+  "req.body.ops[*].fields.notes",
+  "req.body.ops[*].fields.latitude",
+  "req.body.ops[*].fields.longitude",
+  "req.body.ops[*].fields.fieldValues",
+  "req.body.ops[*].fields.customFields",
+  "req.body.ops[*].fields.label",
+  "req.body.ops[*].fields.types",
+  "req.body.ops[*].fields.tripTypes",
+  "req.body.ops[*].fields.displayName",
+  "req.body.ops[*].fields.points",
   // Generic wildcards for nested payloads
-  '*.latitude',
-  '*.longitude',
-  '*.coords',
-  '*.coordinates',
+  "*.latitude",
+  "*.longitude",
+  "*.coords",
+  "*.coordinates",
   // Array-shaped bulk-import/bulk-create payloads carry user-typed place/trip
   // names that the *.latitude wildcard can't reach (it only matches coordinate
   // keys). Unproven hardening: no log site currently emits req.body for these
@@ -72,29 +72,29 @@ export const redactPaths = [
   // body; errorHandler logs safeErrorForLog(err), not the body), but redacting
   // them belt-and-braces guards the mandatory privacy boundary if a future log
   // site ever carries the payload. See PRIV-001 defence-in-depth.
-  'req.body.rows[*].data.name',
-  'req.body.rows[*].data.altNames',
-  'req.body.rows[*].data.notes',
-  'req.body.rows[*].data.latitude',
-  'req.body.rows[*].data.longitude',
-  'req.body.trips[*].name',
-  'req.body.trips[*].notes',
-  'req.body.places[*].name',
-  'req.body.places[*].altNames',
-  'req.body.places[*].notes',
-  'req.body.places[*].latitude',
-  'req.body.places[*].longitude',
-  'req.body.displayName',
+  "req.body.rows[*].data.name",
+  "req.body.rows[*].data.altNames",
+  "req.body.rows[*].data.notes",
+  "req.body.rows[*].data.latitude",
+  "req.body.rows[*].data.longitude",
+  "req.body.trips[*].name",
+  "req.body.trips[*].notes",
+  "req.body.places[*].name",
+  "req.body.places[*].altNames",
+  "req.body.places[*].notes",
+  "req.body.places[*].latitude",
+  "req.body.places[*].longitude",
+  "req.body.displayName",
   // Region-clip endpoint (stage 4a): the bbox IS a place-area coordinate.
   // Body-shaped only — the route design keeps bounds out of URLs entirely.
-  'req.body.west',
-  'req.body.south',
-  'req.body.east',
-  'req.body.north',
+  "req.body.west",
+  "req.body.south",
+  "req.body.east",
+  "req.body.north",
   // Authorization headers (never log credentials)
-  'req.headers.authorization',
+  "req.headers.authorization",
   'req.headers["x-fake-sub"]',
-  'req.headers.cookie',
+  "req.headers.cookie",
 ];
 
 /**
@@ -190,7 +190,7 @@ export const logger = pino({
   level: env.LOG_LEVEL,
   redact: {
     paths: redactPaths,
-    censor: '[redacted]',
+    censor: "[redacted]",
   },
   base: { env: env.NODE_ENV },
 });

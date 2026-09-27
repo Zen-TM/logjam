@@ -70,7 +70,11 @@ export function parseExtentField(
 
 const LAT_FIELDS: ExtentFieldKey[] = ["n", "s"];
 
-function rangeError(field: ExtentFieldKey, deg: number, latlon: boolean): string | null {
+function rangeError(
+  field: ExtentFieldKey,
+  deg: number,
+  latlon: boolean,
+): string | null {
   if (LAT_FIELDS.includes(field)) {
     if (deg < -90 || deg > 90) {
       return latlon ? "Must be between -90 and 90" : "Not a valid MGA northing";
@@ -92,7 +96,12 @@ export function extentFieldErrors(
 ): ExtentFieldErrors {
   const latlon = state.coordMode === "latlon";
   const errors: ExtentFieldErrors = { n: null, s: null, e: null, w: null };
-  const degrees: Record<ExtentFieldKey, number | null> = { n: null, s: null, e: null, w: null };
+  const degrees: Record<ExtentFieldKey, number | null> = {
+    n: null,
+    s: null,
+    e: null,
+    w: null,
+  };
 
   for (const field of ["n", "s", "e", "w"] as ExtentFieldKey[]) {
     const deg = parseExtentField(field, values[field], state);
@@ -117,7 +126,12 @@ export function extentFieldErrors(
 }
 
 export function hasExtentFieldError(errors: ExtentFieldErrors): boolean {
-  return errors.n !== null || errors.s !== null || errors.e !== null || errors.w !== null;
+  return (
+    errors.n !== null ||
+    errors.s !== null ||
+    errors.e !== null ||
+    errors.w !== null
+  );
 }
 
 /** Inline error for the scale denominator field ("1 : N"). */

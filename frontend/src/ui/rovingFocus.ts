@@ -7,12 +7,19 @@ const PREVIOUS = new Set(["ArrowLeft", "ArrowUp"]);
 
 /** The index a key moves to, or null when the key is not a movement key or
  *  nothing is enabled. `from` may be -1 (nothing focused yet). */
-export function nextEnabledIndex(disabled: readonly boolean[], from: number, key: string): number | null {
+export function nextEnabledIndex(
+  disabled: readonly boolean[],
+  from: number,
+  key: string,
+): number | null {
   const count = disabled.length;
   const enabled = (index: number) => !disabled[index];
   if (!disabled.some((isDisabled) => !isDisabled)) return null;
   if (key === "Home") return disabled.findIndex((_, index) => enabled(index));
-  if (key === "End") return count - 1 - [...disabled].reverse().findIndex((isDisabled) => !isDisabled);
+  if (key === "End")
+    return (
+      count - 1 - [...disabled].reverse().findIndex((isDisabled) => !isDisabled)
+    );
   const step = NEXT.has(key) ? 1 : PREVIOUS.has(key) ? -1 : 0;
   if (step === 0) return null;
   let index = from;

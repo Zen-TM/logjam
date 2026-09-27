@@ -101,8 +101,12 @@ describe("copyPlaceMedia", () => {
     expect(rows).toHaveLength(1);
     // The key is minted from the COPIER's id, never reused from the source —
     // a shared key would make the owner's delete take the copy's bytes with it.
-    expect(rows[0].s3KeyDisplay).toMatch(/^media\/bob\/[0-9a-f-]{36}\/display\.jpg$/);
-    expect(rows[0].s3KeyThumbnail).toMatch(/^media\/bob\/[0-9a-f-]{36}\/thumb\.jpg$/);
+    expect(rows[0].s3KeyDisplay).toMatch(
+      /^media\/bob\/[0-9a-f-]{36}\/display\.jpg$/,
+    );
+    expect(rows[0].s3KeyThumbnail).toMatch(
+      /^media\/bob\/[0-9a-f-]{36}\/thumb\.jpg$/,
+    );
     expect(rows[0].s3KeyDisplay).not.toBe("media/alice/m1/display.jpg");
     expect(rows[0].id).not.toBe("m1");
     expect(rows[0].ownerId).toBe("bob");

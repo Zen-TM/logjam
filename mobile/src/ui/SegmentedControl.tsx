@@ -82,7 +82,9 @@ function Rail<T extends string>({
   const offsets = useRef(new Map<number, { x: number; width: number }>());
   const viewport = useRef({ x: 0, width: 0 });
   const childArray = children as React.ReactElement<{ children?: unknown }>[];
-  const activeIndex = childArray.findIndex((chip) => chip.key === String(value));
+  const activeIndex = childArray.findIndex(
+    (chip) => chip.key === String(value),
+  );
   // Which ends have content beyond them — each edge only fades when there is
   // something to scroll to, so at rest the first chip isn't dimmed by a fade
   // over nothing.
@@ -97,9 +99,15 @@ function Rail<T extends string>({
     const bandStart = x > 1 ? x + FADE_WIDTH : x;
     const bandEnd = x + width - FADE_WIDTH;
     if (chip.x < bandStart) {
-      scrollRef.current?.scrollTo({ x: Math.max(0, chip.x - FADE_WIDTH), animated: true });
+      scrollRef.current?.scrollTo({
+        x: Math.max(0, chip.x - FADE_WIDTH),
+        animated: true,
+      });
     } else if (chip.x + chip.width > bandEnd) {
-      scrollRef.current?.scrollTo({ x: chip.x + chip.width - width + FADE_WIDTH, animated: true });
+      scrollRef.current?.scrollTo({
+        x: chip.x + chip.width - width + FADE_WIDTH,
+        animated: true,
+      });
     }
   }, [activeIndex]);
 
@@ -107,7 +115,8 @@ function Rail<T extends string>({
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
     viewport.current = { x: contentOffset.x, width: layoutMeasurement.width };
     const start = contentOffset.x > 1;
-    const end = contentOffset.x + layoutMeasurement.width < contentSize.width - 1;
+    const end =
+      contentOffset.x + layoutMeasurement.width < contentSize.width - 1;
     setOverflow((current) =>
       current.start === start && current.end === end ? current : { start, end },
     );
@@ -122,11 +131,16 @@ function Rail<T extends string>({
         contentContainerStyle={styles.rail}
         onScroll={trackOverflow}
         onLayout={(event) => {
-          viewport.current = { ...viewport.current, width: event.nativeEvent.layout.width };
+          viewport.current = {
+            ...viewport.current,
+            width: event.nativeEvent.layout.width,
+          };
         }}
         onContentSizeChange={() =>
           // Seed the end fade before any scroll happens.
-          setOverflow((current) => (current.end ? current : { ...current, end: true }))
+          setOverflow((current) =>
+            current.end ? current : { ...current, end: true },
+          )
         }
         scrollEventThrottle={16}
       >

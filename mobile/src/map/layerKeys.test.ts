@@ -43,8 +43,8 @@ function layerElements(source: string): string[] {
 }
 
 describe("every MLRN Layer carries a key", () => {
-  const files = tsxFilesUnder(SRC).filter((path) =>
-    layerElements(readFileSync(path, "utf8")).length > 0,
+  const files = tsxFilesUnder(SRC).filter(
+    (path) => layerElements(readFileSync(path, "utf8")).length > 0,
   );
 
   it("finds the layers at all — a silent zero would pass forever", () => {

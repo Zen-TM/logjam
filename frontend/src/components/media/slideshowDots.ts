@@ -41,7 +41,10 @@ export function slideshowDots(
   for (let index = start; index <= end; index++) {
     let size: DotSize;
     if (index === active) size = "full";
-    else if ((index === start && hasMoreBefore) || (index === end && hasMoreAfter))
+    else if (
+      (index === start && hasMoreBefore) ||
+      (index === end && hasMoreAfter)
+    )
       size = "small";
     else size = "medium";
     dots.push({ index, size });

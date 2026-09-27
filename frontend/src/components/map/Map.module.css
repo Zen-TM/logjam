@@ -202,7 +202,11 @@
 }
 
 .geoPdfButton:hover {
-  background: color-mix(in srgb, var(--theme-accent) 85%, var(--theme-text-primary));
+  background: color-mix(
+    in srgb,
+    var(--theme-accent) 85%,
+    var(--theme-text-primary)
+  );
 }
 
 /* Draggable vertex handle for the route draw/edit tool. Larger than the

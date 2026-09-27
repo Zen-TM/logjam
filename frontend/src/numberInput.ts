@@ -24,7 +24,8 @@ export function sanitizeDecimalInput(raw: string): string {
   const normalized =
     firstDot === -1
       ? cleaned
-      : cleaned.slice(0, firstDot + 1) + cleaned.slice(firstDot + 1).replace(/\./g, "");
+      : cleaned.slice(0, firstDot + 1) +
+        cleaned.slice(firstDot + 1).replace(/\./g, "");
   return (negative ? "-" : "") + normalized;
 }
 

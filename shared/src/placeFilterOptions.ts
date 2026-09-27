@@ -1,7 +1,11 @@
 // The words and presets of the place filter sheet, shared by Logjam GPS and
 // Logjam Web so the two sheets offer the same sorts, the same RopeWiki choices
 // and the same logistics shortcuts under the same names.
-import type { PlaceFilters, PlaceSortKey, PlaceThresholdFilter } from "./placeFilter.js";
+import type {
+  PlaceFilters,
+  PlaceSortKey,
+  PlaceThresholdFilter,
+} from "./placeFilter.js";
 import type { TripLogCustomFieldDef } from "./tripLogFields.js";
 
 /** The widest span still drawn as pills; a wider axis gets two number boxes. */
@@ -17,7 +21,9 @@ export const MAX_FILTER_PILL_SPAN = 12;
  * A float qualifies, unlike the phone's form rail (`railStops`): a form must be
  * able to WRITE 4.5, while a filter asks for a range, and 4-5 holds a 4.5.
  */
-export function filterPillStops(def: Pick<TripLogCustomFieldDef, "type" | "min" | "max">): number[] | null {
+export function filterPillStops(
+  def: Pick<TripLogCustomFieldDef, "type" | "min" | "max">,
+): number[] | null {
   if (def.type !== "integer" && def.type !== "float") return null;
   if (def.min == null || def.max == null) return null;
   if (!Number.isInteger(def.min) || !Number.isInteger(def.max)) return null;
@@ -36,10 +42,15 @@ export const PLACE_SORT_OPTIONS: { key: PlaceSortKey; label: string }[] = [
 ];
 
 export function placeSortLabel(sort: PlaceSortKey): string {
-  return PLACE_SORT_OPTIONS.find((option) => option.key === sort)?.label ?? "Name";
+  return (
+    PLACE_SORT_OPTIONS.find((option) => option.key === sort)?.label ?? "Name"
+  );
 }
 
-export const PLACE_ROPEWIKI_OPTIONS: { value: PlaceFilters["ropewiki"]; label: string }[] = [
+export const PLACE_ROPEWIKI_OPTIONS: {
+  value: PlaceFilters["ropewiki"];
+  label: string;
+}[] = [
   { value: "any", label: "Any" },
   { value: "linked", label: "From RopeWiki" },
   { value: "unlinked", label: "Not from RopeWiki" },
@@ -89,15 +100,25 @@ export const PLACE_THRESHOLDS: {
   },
 ];
 
-export const THRESHOLD_OPERATORS: PlaceThresholdFilter[0][] = ["Less than", "More than", "Exactly"];
+export const THRESHOLD_OPERATORS: PlaceThresholdFilter[0][] = [
+  "Less than",
+  "More than",
+  "Exactly",
+];
 
-export const THRESHOLD_OPERATOR_LABELS: Record<PlaceThresholdFilter[0], string> = {
+export const THRESHOLD_OPERATOR_LABELS: Record<
+  PlaceThresholdFilter[0],
+  string
+> = {
   Any: "Any",
   "Less than": "Under",
   "More than": "Over",
   Exactly: "Exactly",
 };
 
-export function formatThreshold(filter: PlaceThresholdFilter, unit: string): string {
+export function formatThreshold(
+  filter: PlaceThresholdFilter,
+  unit: string,
+): string {
   return `${THRESHOLD_OPERATOR_LABELS[filter[0]]} ${filter[1]}${unit ? ` ${unit}` : ""}`;
 }

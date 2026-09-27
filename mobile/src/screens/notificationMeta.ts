@@ -20,7 +20,10 @@ export type NotificationMeta = {
   hue: string;
 };
 
-const KIND_META: Record<NotificationKind, { icon: NotificationMeta["icon"]; hue: string }> = {
+const KIND_META: Record<
+  NotificationKind,
+  { icon: NotificationMeta["icon"]; hue: string }
+> = {
   share: { icon: "share-2", hue: notificationHue.share },
   file: { icon: "file-plus", hue: notificationHue.file },
   people: { icon: "users", hue: notificationHue.people },

@@ -9,12 +9,18 @@ function namedError(name: string, message = "boom"): Error {
 
 describe("classifySessionError", () => {
   it("rejects on NotAuthorizedException (expired/revoked refresh token)", () => {
-    expect(classifySessionError(namedError("NotAuthorizedException"))).toBe("rejected");
+    expect(classifySessionError(namedError("NotAuthorizedException"))).toBe(
+      "rejected",
+    );
   });
 
   it("rejects on UserNotFoundException / PasswordResetRequiredException", () => {
-    expect(classifySessionError(namedError("UserNotFoundException"))).toBe("rejected");
-    expect(classifySessionError(namedError("PasswordResetRequiredException"))).toBe("rejected");
+    expect(classifySessionError(namedError("UserNotFoundException"))).toBe(
+      "rejected",
+    );
+    expect(
+      classifySessionError(namedError("PasswordResetRequiredException")),
+    ).toBe("rejected");
   });
 
   it("honours an error `code` property when present", () => {
@@ -24,7 +30,9 @@ describe("classifySessionError", () => {
   });
 
   it("treats network failures as transient", () => {
-    expect(classifySessionError(new TypeError("Network request failed"))).toBe("transient");
+    expect(classifySessionError(new TypeError("Network request failed"))).toBe(
+      "transient",
+    );
     expect(classifySessionError(namedError("NetworkError"))).toBe("transient");
   });
 

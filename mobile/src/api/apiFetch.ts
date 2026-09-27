@@ -73,7 +73,9 @@ function baseHeaders(token: string): Record<string, string> {
  * expo-file-system) that can't go through apiFetch. Same token path, same
  * offline-session semantics.
  */
-export async function getAuthedRequestHeaders(): Promise<Record<string, string>> {
+export async function getAuthedRequestHeaders(): Promise<
+  Record<string, string>
+> {
   return baseHeaders(await getIdToken());
 }
 
@@ -91,7 +93,11 @@ function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
   );
 }
 
-async function throwApiError(res: Response, path: string, method: string): Promise<never> {
+async function throwApiError(
+  res: Response,
+  path: string,
+  method: string,
+): Promise<never> {
   let serverMessage: string | undefined;
   try {
     const body = (await res.clone().json()) as { error?: unknown };

@@ -56,7 +56,9 @@ beforeAll(async () => {
   // stamped at the previous mirror version, with writes still queued.
   sqlite.exec(createSchemaSql("local"));
   sqlite
-    .prepare("INSERT INTO sync_state (key, value) VALUES ('schemaVersion', '4')")
+    .prepare(
+      "INSERT INTO sync_state (key, value) VALUES ('schemaVersion', '4')",
+    )
     .run();
   queued("canyon", "op-canyon");
   // Dead since phase 1c, exactly as `canyon` has been since 1a: a waypoint is

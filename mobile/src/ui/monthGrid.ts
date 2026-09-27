@@ -31,7 +31,10 @@ export type YearMonth = { year: number; month: number };
 export const WEEKS_SHOWN = 6;
 
 /** `month` is 0-indexed, matching Date. Wraps across year boundaries. */
-export function addMonths({ year, month }: YearMonth, delta: number): YearMonth {
+export function addMonths(
+  { year, month }: YearMonth,
+  delta: number,
+): YearMonth {
   const total = year * 12 + month + delta;
   return { year: Math.floor(total / 12), month: ((total % 12) + 12) % 12 };
 }

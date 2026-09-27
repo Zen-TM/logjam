@@ -11,15 +11,14 @@ for the one remaining cross-LANGUAGE mirror.
 Pure text parsing — no GDAL/PDAL, no worker import. Runs on the dev host via
 `python -m unittest discover -s tests`.
 """
+
 import ast
 import os
 import re
 import unittest
 
 _HERE = os.path.dirname(__file__)
-_TOPO_SETTINGS = os.path.join(
-    _HERE, "..", "..", "shared", "src", "topoSettings.ts"
-)
+_TOPO_SETTINGS = os.path.join(_HERE, "..", "..", "shared", "src", "topoSettings.ts")
 _WORKER = os.path.join(_HERE, "..", "worker.py")
 
 # One TOPO_LAYERS entry, on one line or several (the formatter then adds a
@@ -189,12 +188,16 @@ def _balanced_block(src, anchor, opener="{", closer="}"):
     """Return the text of the first balanced {...} / [...] after `anchor`."""
     at = src.find(anchor)
     if at < 0:
-        raise AssertionError(f"Could not locate {anchor!r} — update test_layer_sync.py.")
+        raise AssertionError(
+            f"Could not locate {anchor!r} — update test_layer_sync.py."
+        )
     # Anchor on the assignment, not the first opener: a TS type annotation
     # (`Record<K, { ... }>`, `string[]`) sits between the two.
     assign = re.compile(r"=\s*" + re.escape(opener)).search(src, at)
     if not assign:
-        raise AssertionError(f"No assignment after {anchor!r} — update test_layer_sync.py.")
+        raise AssertionError(
+            f"No assignment after {anchor!r} — update test_layer_sync.py."
+        )
     start = assign.end() - 1
     depth = 0
     for i in range(start, len(src)):
@@ -203,7 +206,7 @@ def _balanced_block(src, anchor, opener="{", closer="}"):
         elif src[i] == closer:
             depth -= 1
             if depth == 0:
-                return src[start:i + 1]
+                return src[start : i + 1]
     raise AssertionError(f"Unbalanced {opener}{closer} after {anchor!r}.")
 
 

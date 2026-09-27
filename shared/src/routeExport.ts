@@ -36,10 +36,15 @@ export const KML_MIME_TYPE = "application/vnd.google-earth.kml+xml";
 export const GEOJSON_MIME_TYPE = "application/geo+json";
 
 /** One `<rte>` of `<rtept>`s. No `<time>`: a drawn route never happened. */
-export function routeToGpx(name: string, points: readonly RoutePoint[]): string {
+export function routeToGpx(
+  name: string,
+  points: readonly RoutePoint[],
+): string {
   const escaped = escapeXml(name);
   const body = points
-    .map(([lon, lat]) => `    <rtept lat="${coord(lat)}" lon="${coord(lon)}" />`)
+    .map(
+      ([lon, lat]) => `    <rtept lat="${coord(lat)}" lon="${coord(lon)}" />`,
+    )
     .join("\n");
   return `<?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="Logjam" xmlns="http://www.topografix.com/GPX/1/1">
@@ -52,9 +57,14 @@ ${body}
 }
 
 /** Minimal KML document holding one LineString. */
-export function routeToKml(name: string, points: readonly RoutePoint[]): string {
+export function routeToKml(
+  name: string,
+  points: readonly RoutePoint[],
+): string {
   const escaped = escapeXml(name);
-  const coords = points.map(([lon, lat]) => `${coord(lon)},${coord(lat)}`).join(" ");
+  const coords = points
+    .map(([lon, lat]) => `${coord(lon)},${coord(lat)}`)
+    .join(" ");
   return `<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
   <Document>

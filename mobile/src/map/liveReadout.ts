@@ -72,7 +72,12 @@ export function deriveSpeedMps(
   if (!previous) return null;
   const gapMs = current.atMs - previous.atMs;
   if (gapMs < MIN_DERIVE_GAP_MS || gapMs > READOUT_STALE_MS) return null;
-  const metres = haversineMeters(previous.lat, previous.lon, current.lat, current.lon);
+  const metres = haversineMeters(
+    previous.lat,
+    previous.lon,
+    current.lat,
+    current.lon,
+  );
   return metres / (gapMs / 1000);
 }
 

@@ -97,22 +97,34 @@ export function isNotificationPreferences(
   return true;
 }
 
-function normalizeNotificationPreferences(value: unknown): NotificationPreferences {
+function normalizeNotificationPreferences(
+  value: unknown,
+): NotificationPreferences {
   if (typeof value !== "object" || value === null) {
     return { ...DEFAULT_NOTIFICATION_PREFERENCES };
   }
   const prefs = value as Record<string, unknown>;
   return {
-    topoEmail: typeof prefs.topoEmail === "boolean" ? prefs.topoEmail : DEFAULT_NOTIFICATION_PREFERENCES.topoEmail,
+    topoEmail:
+      typeof prefs.topoEmail === "boolean"
+        ? prefs.topoEmail
+        : DEFAULT_NOTIFICATION_PREFERENCES.topoEmail,
     exportEmail:
-      typeof prefs.exportEmail === "boolean" ? prefs.exportEmail : DEFAULT_NOTIFICATION_PREFERENCES.exportEmail,
+      typeof prefs.exportEmail === "boolean"
+        ? prefs.exportEmail
+        : DEFAULT_NOTIFICATION_PREFERENCES.exportEmail,
     geoPdfEmail:
-      typeof prefs.geoPdfEmail === "boolean" ? prefs.geoPdfEmail : DEFAULT_NOTIFICATION_PREFERENCES.geoPdfEmail,
+      typeof prefs.geoPdfEmail === "boolean"
+        ? prefs.geoPdfEmail
+        : DEFAULT_NOTIFICATION_PREFERENCES.geoPdfEmail,
     friendRequestInApp:
       typeof prefs.friendRequestInApp === "boolean"
         ? prefs.friendRequestInApp
         : DEFAULT_NOTIFICATION_PREFERENCES.friendRequestInApp,
-    shareInApp: typeof prefs.shareInApp === "boolean" ? prefs.shareInApp : DEFAULT_NOTIFICATION_PREFERENCES.shareInApp,
+    shareInApp:
+      typeof prefs.shareInApp === "boolean"
+        ? prefs.shareInApp
+        : DEFAULT_NOTIFICATION_PREFERENCES.shareInApp,
   };
 }
 
@@ -220,7 +232,9 @@ function normalizeCustomFieldDefs(value: unknown): TripLogCustomFieldDef[] {
   // single bad def can never block all custom-field saves. Invalid defs that
   // can't be repaired are dropped (they were unusable anyway).
   return (value as unknown[])
-    .map((f) => (typeof f === "object" && f !== null ? repairLegacyFieldType(f) : f))
+    .map((f) =>
+      typeof f === "object" && f !== null ? repairLegacyFieldType(f) : f,
+    )
     .filter(isTripLogCustomFieldDef);
 }
 
@@ -262,17 +276,30 @@ export function normalizeUserUiPreferences(value: unknown): UserUiPreferences {
     const themeSchemeId = isThemeSchemeId(prefs.themeSchemeId)
       ? prefs.themeSchemeId
       : DEFAULT_THEME_SCHEME_ID;
-    const tripLogCustomFields = normalizeCustomFieldDefs(prefs.tripLogCustomFields);
+    const tripLogCustomFields = normalizeCustomFieldDefs(
+      prefs.tripLogCustomFields,
+    );
     const placeCustomFields = normalizeCustomFieldDefs(prefs.placeCustomFields);
     const notifications = normalizeNotificationPreferences(prefs.notifications);
     const autoDownloadGeoPdfs =
-      typeof prefs.autoDownloadGeoPdfs === "boolean" ? prefs.autoDownloadGeoPdfs : true;
-    const importMergePolicy = normalizeImportMergePolicy(prefs.importMergePolicy);
+      typeof prefs.autoDownloadGeoPdfs === "boolean"
+        ? prefs.autoDownloadGeoPdfs
+        : true;
+    const importMergePolicy = normalizeImportMergePolicy(
+      prefs.importMergePolicy,
+    );
     // Absent reads as TRUE, so every account that predates the field copies
     // media rather than silently dropping it — see the field's own comment.
     const copyPlaceMedia =
       typeof prefs.copyPlaceMedia === "boolean" ? prefs.copyPlaceMedia : true;
-    const result: UserUiPreferences = { themeSchemeId, tripLogCustomFields, placeCustomFields, notifications, autoDownloadGeoPdfs, copyPlaceMedia };
+    const result: UserUiPreferences = {
+      themeSchemeId,
+      tripLogCustomFields,
+      placeCustomFields,
+      notifications,
+      autoDownloadGeoPdfs,
+      copyPlaceMedia,
+    };
     if (importMergePolicy) result.importMergePolicy = importMergePolicy;
     return result;
   }

@@ -48,7 +48,15 @@ import {
 } from "@logjam/shared";
 
 import { tripTitle } from "../api/tripTitle";
-import { fontSize, fontWeight, radius, spacing, surface, theme, withAlpha } from "../theme";
+import {
+  fontSize,
+  fontWeight,
+  radius,
+  spacing,
+  surface,
+  theme,
+  withAlpha,
+} from "../theme";
 import type { MirrorTrip } from "../sync/mirrorStore";
 import { deleteTripLocal } from "../sync/outbox";
 import { useConnectivity } from "../map/connectivity";
@@ -109,16 +117,22 @@ export function LogsScreen({
   const [search, setSearch] = useState("");
   const [dateFrom, setDateFrom] = useState<string | null>(null);
   const [dateTo, setDateTo] = useState<string | null>(null);
-  const [dateMode, setDateMode] = useState<"presets" | "from" | "to" | null>(null);
+  const [dateMode, setDateMode] = useState<"presets" | "from" | "to" | null>(
+    null,
+  );
   // Attribute filters and the sort live and die with the screen, like every
   // other filter here: the state never leaves the device and is never
   // persisted, so a month-old filter can't greet the user as missing trips.
-  const [customFilters, setCustomFilters] = useState<Record<string, CustomFieldFilter>>({});
+  const [customFilters, setCustomFilters] = useState<
+    Record<string, CustomFieldFilter>
+  >({});
   const [includeUnknowns, setIncludeUnknowns] = useState(false);
   const [sort, setSort] = useState<TripSortKey>("newest");
   const { defs: tripDefs } = useFieldDefs("tripLog");
   const [menuTripId, setMenuTripId] = useState<string | null>(null);
-  const [editing, setEditing] = useState<{ trip: MirrorTrip | null } | null>(null);
+  const [editing, setEditing] = useState<{ trip: MirrorTrip | null } | null>(
+    null,
+  );
   // One toast channel for every async outcome on the screen (DESIGN.md §6).
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const toastNonce = useRef(0);
@@ -177,7 +191,9 @@ export function LogsScreen({
   // A filter whose definition was deleted, or retyped under it, would narrow
   // the list with no control left in the sheet to say so or undo it.
   useEffect(() => {
-    setCustomFilters((current) => reconcileCustomFieldFilters(current, filterableDefs));
+    setCustomFilters((current) =>
+      reconcileCustomFieldFilters(current, filterableDefs),
+    );
   }, [filterableDefs]);
 
   // --- Multi-select ---------------------------------------------------------
@@ -228,7 +244,8 @@ export function LogsScreen({
                 }
               }
               clearSelection();
-              if (failures === 0) info(`Deleted ${count} ${count === 1 ? "trip" : "trips"}.`);
+              if (failures === 0)
+                info(`Deleted ${count} ${count === 1 ? "trip" : "trips"}.`);
               else fail(`${failures} of ${count} couldn't be deleted.`);
             })();
           },
@@ -250,7 +267,9 @@ export function LogsScreen({
     // this chip behaves like the type chips instead of vanishing when a search
     // empties it.
     const anyUntyped = trips.some((trip) => trip.types.length === 0);
-    const untyped = withoutType.filter((trip) => trip.types.length === 0).length;
+    const untyped = withoutType.filter(
+      (trip) => trip.types.length === 0,
+    ).length;
     return [
       { value: ALL_TYPES, label: "All", count: withoutType.length },
       // Busiest activity first: the rail's left end is the reachable end, and
@@ -288,7 +307,10 @@ export function LogsScreen({
   }, [distinctTypes, trips, typeFilter, withoutType]);
 
   const spark = useMemo(() => monthlyTripCounts(trips, new Date()), [trips]);
-  const recentCount = useMemo(() => countTripsInLastMonths(trips, new Date()), [trips]);
+  const recentCount = useMemo(
+    () => countTripsInLastMonths(trips, new Date()),
+    [trips],
+  );
   const placeCount = useMemo(() => distinctPlaceCount(trips), [trips]);
 
   const menuTrip = trips.find((trip) => trip.id === menuTripId) ?? null;
@@ -297,12 +319,20 @@ export function LogsScreen({
   // What the SHEET owns — the search box and the type rail show their own state
   // where they stand, so the sheet's button speaks only for the rest.
   const sheetFilterCount =
-    activeTripFilterCount(criteria) - (search.trim() ? 1 : 0) - (typeFilter ? 1 : 0);
+    activeTripFilterCount(criteria) -
+    (search.trim() ? 1 : 0) -
+    (typeFilter ? 1 : 0);
 
   // Stable identities so the memoised rows below never re-render on a state
   // change that has nothing to do with them.
-  const openTrip = useCallback((trip: MirrorTrip) => onOpenTrip(trip), [onOpenTrip]);
-  const openMenu = useCallback((trip: MirrorTrip) => setMenuTripId(trip.id), []);
+  const openTrip = useCallback(
+    (trip: MirrorTrip) => onOpenTrip(trip),
+    [onOpenTrip],
+  );
+  const openMenu = useCallback(
+    (trip: MirrorTrip) => setMenuTripId(trip.id),
+    [],
+  );
   const keyExtractor = useCallback((trip: MirrorTrip) => trip.id, []);
   const counts = attachmentCounts.data;
   const renderItem = useCallback(
@@ -592,11 +622,19 @@ export function LogsScreen({
         // A calendar mode backs out to the presets, not out of the sheet.
         onClose={() => setDateMode(dateMode === "presets" ? null : "presets")}
         title={
-          dateMode === "from" ? "From" : dateMode === "to" ? "To" : "Sort and filter"
+          dateMode === "from"
+            ? "From"
+            : dateMode === "to"
+              ? "To"
+              : "Sort and filter"
         }
         footer={
           dateMode === "presets" ? (
-            <Button label="Done" icon="check" onPress={() => setDateMode(null)} />
+            <Button
+              label="Done"
+              icon="check"
+              onPress={() => setDateMode(null)}
+            />
           ) : (
             <Button
               label="Clear this bound"
@@ -684,13 +722,19 @@ export function LogsScreen({
             <SectionHeader label="Exact range" />
             <Row
               icon="calendar"
-              title={dateFrom ? formatDateKey(`${dateFrom}T00:00:00.000Z`) : "Any time"}
+              title={
+                dateFrom
+                  ? formatDateKey(`${dateFrom}T00:00:00.000Z`)
+                  : "Any time"
+              }
               subtitle="From"
               onPress={() => setDateMode("from")}
             />
             <Row
               icon="calendar"
-              title={dateTo ? formatDateKey(`${dateTo}T00:00:00.000Z`) : "Today"}
+              title={
+                dateTo ? formatDateKey(`${dateTo}T00:00:00.000Z`) : "Today"
+              }
               subtitle="To"
               onPress={() => setDateMode("to")}
             />
@@ -844,7 +888,11 @@ function EmptyPanel({
           : "Log a trip and it lands here. Readable offline."}
       </Text>
       {filtering ? (
-        <Button label="Clear filters" variant="outlineAccent" onPress={onClear} />
+        <Button
+          label="Clear filters"
+          variant="outlineAccent"
+          onPress={onClear}
+        />
       ) : (
         <Button label="Log your first trip" icon="plus" onPress={onLogTrip} />
       )}
@@ -854,7 +902,11 @@ function EmptyPanel({
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: theme.primary },
-  heroActions: { flexDirection: "row", alignItems: "center", gap: spacing(0.5) },
+  heroActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing(0.5),
+  },
   findRow: { flexDirection: "row", alignItems: "center", gap: spacing(0.5) },
   searchWrap: {
     flex: 1,
@@ -875,7 +927,11 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.regular,
   },
   // The rail's bottom pad is the gap the list scrolls against (DESIGN.md §2).
-  rail: { paddingLeft: spacing(2), paddingTop: spacing(1.5), paddingBottom: spacing(1.5) },
+  rail: {
+    paddingLeft: spacing(2),
+    paddingTop: spacing(1.5),
+    paddingBottom: spacing(1.5),
+  },
   rangeNote: {
     flexDirection: "row",
     alignItems: "center",
@@ -889,7 +945,11 @@ const styles = StyleSheet.create({
   },
   rangeText: { flex: 1, color: theme.textPrimary, fontSize: fontSize.sm },
   list: { flex: 1 },
-  listContent: { paddingHorizontal: spacing(2), paddingBottom: spacing(4), gap: spacing(1) },
+  listContent: {
+    paddingHorizontal: spacing(2),
+    paddingBottom: spacing(4),
+    gap: spacing(1),
+  },
   // Sticky, so a long scroll always says which year you are reading. Opaque:
   // rows pass underneath it.
   yearHeader: {
@@ -906,10 +966,19 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.bold,
   },
   yearCount: { color: theme.textMuted, fontSize: fontSize.xs },
-  rowTrailing: { flexDirection: "row", alignItems: "center", gap: spacing(0.5) },
+  rowTrailing: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing(0.5),
+  },
   // IconButton's own box, so the checkbox that stands in for the ⋯ button
   // occupies exactly what it replaced and the row cannot resize on selection.
-  selectBox: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
+  selectBox: {
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   badge: { flexDirection: "row", alignItems: "center", gap: spacing(0.25) },
   badgeText: { color: theme.textMuted, fontSize: fontSize.xs },
   sheetBody: { gap: spacing(1) },

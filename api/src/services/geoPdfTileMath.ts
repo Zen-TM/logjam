@@ -148,7 +148,12 @@ export function geoPdfNativeMegapixels(
   maxNativeZoom: number,
 ): number {
   const { north, south, east, west } = extent;
-  const zoom = computeZoom(scale, (north + south) / 2, TARGET_DPI, maxNativeZoom);
+  const zoom = computeZoom(
+    scale,
+    (north + south) / 2,
+    TARGET_DPI,
+    maxNativeZoom,
+  );
   const t = computeTileToMapTransform(zoom, north, south, east, west, 1, 1);
   return (t.srcW * t.srcH) / 1e6;
 }

@@ -1,10 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { bboxAreaKm2, bboxShapefileZip } from "./bboxShapefile";
 
-const BLUE_MOUNTAINS = { west: 150.3, south: -33.75, east: 150.4, north: -33.65 };
+const BLUE_MOUNTAINS = {
+  west: 150.3,
+  south: -33.75,
+  east: 150.4,
+  north: -33.65,
+};
 
 /** Read a little-endian u32 at an offset. */
-const u32 = (bytes: Uint8Array, at: number) => new DataView(bytes.buffer).getUint32(at, true);
+const u32 = (bytes: Uint8Array, at: number) =>
+  new DataView(bytes.buffer).getUint32(at, true);
 
 describe("bboxAreaKm2", () => {
   it("measures a tenth of a degree near Sydney at about 103 km²", () => {
@@ -25,7 +31,12 @@ describe("bboxShapefileZip", () => {
   it("writes the four shapefile components ELVIS asks for", () => {
     const zip = bboxShapefileZip(BLUE_MOUNTAINS);
     const text = new TextDecoder().decode(zip);
-    for (const name of ["topo_area.shp", "topo_area.shx", "topo_area.dbf", "topo_area.prj"]) {
+    for (const name of [
+      "topo_area.shp",
+      "topo_area.shx",
+      "topo_area.dbf",
+      "topo_area.prj",
+    ]) {
       // Once as a local header, once in the central directory.
       expect(text.split(name)).toHaveLength(3);
     }
@@ -37,7 +48,12 @@ describe("bboxShapefileZip", () => {
   });
 
   it("carries the drawn box's own corners, not a fixed extent", () => {
-    const other = bboxShapefileZip({ west: 151, south: -34, east: 151.1, north: -33.9 });
+    const other = bboxShapefileZip({
+      west: 151,
+      south: -34,
+      east: 151.1,
+      north: -33.9,
+    });
     expect(bboxShapefileZip(BLUE_MOUNTAINS)).not.toEqual(other);
   });
 });

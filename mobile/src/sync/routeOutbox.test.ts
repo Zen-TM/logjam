@@ -52,7 +52,9 @@ vi.mock("expo-crypto", () => ({
     }),
 }));
 
-const { createRouteLocal, deleteRouteLocal, UPDATE_TARGETS } = await import("./outbox");
+const { createRouteLocal, deleteRouteLocal, UPDATE_TARGETS } = await import(
+  "./outbox"
+);
 
 /** The mirror INSERT/DELETE, and the outbox append, out of the recorded calls. */
 function find(fragment: string): Call | undefined {
@@ -81,7 +83,13 @@ describe("createRouteLocal", () => {
   it("binds one argument per placeholder in the mirror INSERT", async () => {
     // The failure this guards is silent: a mismatch throws inside the
     // transaction, the row never lands, and the UI still closes the tool.
-    await createRouteLocal({ name: "A", points: [[150, -33], [151, -34]] });
+    await createRouteLocal({
+      name: "A",
+      points: [
+        [150, -33],
+        [151, -34],
+      ],
+    });
     const insert = find("INSERT INTO routes")!;
     const placeholders = (insert.sql.match(/\?/g) ?? []).length;
     expect(insert.args).toHaveLength(placeholders);
@@ -102,7 +110,13 @@ describe("createRouteLocal", () => {
   });
 
   it("queues a route/create op carrying name and points", async () => {
-    await createRouteLocal({ name: "Queued", points: [[150, -33], [151, -34]] });
+    await createRouteLocal({
+      name: "Queued",
+      points: [
+        [150, -33],
+        [151, -34],
+      ],
+    });
     const op = find("INSERT INTO outbox")!;
     expect(op.args).toContain("route");
     expect(op.args).toContain("create");
@@ -111,12 +125,21 @@ describe("createRouteLocal", () => {
     );
     expect(JSON.parse(fields as string)).toMatchObject({
       name: "Queued",
-      points: [[150, -33], [151, -34]],
+      points: [
+        [150, -33],
+        [151, -34],
+      ],
     });
   });
 
   it("omits placeId from the op when the route is standalone", async () => {
-    await createRouteLocal({ name: "Standalone", points: [[150, -33], [151, -34]] });
+    await createRouteLocal({
+      name: "Standalone",
+      points: [
+        [150, -33],
+        [151, -34],
+      ],
+    });
     const op = find("INSERT INTO outbox")!;
     const fields = op.args.find(
       (arg) => typeof arg === "string" && arg.includes("points"),
@@ -127,7 +150,10 @@ describe("createRouteLocal", () => {
   it("carries placeId through when linking at create time", async () => {
     await createRouteLocal({
       name: "Linked",
-      points: [[150, -33], [151, -34]],
+      points: [
+        [150, -33],
+        [151, -34],
+      ],
       placeId: "place-1",
     });
     const op = find("INSERT INTO outbox")!;
@@ -140,7 +166,10 @@ describe("createRouteLocal", () => {
   it("returns a client-minted id, so the op needs no remapping on flush", async () => {
     const id = await createRouteLocal({
       name: "Minted",
-      points: [[150, -33], [151, -34]],
+      points: [
+        [150, -33],
+        [151, -34],
+      ],
     });
     expect(id).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
@@ -215,7 +244,9 @@ describe("UPDATE_TARGETS column maps vs the schema declaration", () => {
 
   it("actually inspects every map", () => {
     // A totality guard that silently iterated nothing would pass forever.
-    const mapped = Object.values(UPDATE_TARGETS).filter((target) => target !== null);
+    const mapped = Object.values(UPDATE_TARGETS).filter(
+      (target) => target !== null,
+    );
     // place, placeType, tripLog, route, customFieldDef — `notification` and
     // `placeLink` are the nulls (a markRead materialises nothing).
     expect(mapped).toHaveLength(5);

@@ -1,4 +1,5 @@
 """MBTiles SQLite schema, TMS Y-flip on insert, and bounds finalisation."""
+
 import os
 import sys
 import tempfile
@@ -16,6 +17,7 @@ try:
         finalise_bounds,
         insert_tile,
     )
+
     _IMPORT_OK = True
 except Exception as _exc:  # noqa: BLE001
     _IMPORT_OK = False
@@ -37,14 +39,20 @@ class TestMbtilesSchema(unittest.TestCase):
         conn = create_mbtiles(self.path, "test", "desc")
         try:
             cur = conn.cursor()
-            tables = {r[0] for r in cur.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            )}
+            tables = {
+                r[0]
+                for r in cur.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                )
+            }
             self.assertIn("metadata", tables)
             self.assertIn("tiles", tables)
-            idx = {r[0] for r in cur.execute(
-                "SELECT name FROM sqlite_master WHERE type='index'"
-            )}
+            idx = {
+                r[0]
+                for r in cur.execute(
+                    "SELECT name FROM sqlite_master WHERE type='index'"
+                )
+            }
             self.assertIn("tile_index", idx)
         finally:
             conn.close()
@@ -75,7 +83,7 @@ class TestMbtilesSchema(unittest.TestCase):
             self.assertEqual(row[0], z)
             self.assertEqual(row[1], x)
             # XYZ y=0 (top) → TMS row = 2^z - 1 (top in TMS).
-            self.assertEqual(row[2], (2 ** z - 1) - y)
+            self.assertEqual(row[2], (2**z - 1) - y)
             self.assertEqual(bytes(row[3]), b"PNGDATA")
         finally:
             conn.close()

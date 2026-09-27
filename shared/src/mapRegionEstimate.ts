@@ -110,7 +110,10 @@ export const MAX_REGION_AREA_KM2 = 1600; // 40×40 km
 export function regionEdgesKm(bbox: RegionBbox): [number, number] {
   const centerLatRad = (((bbox.south + bbox.north) / 2) * Math.PI) / 180;
   const width =
-    ((bbox.east - bbox.west) * Math.PI * EARTH_RADIUS_KM * Math.cos(centerLatRad)) /
+    ((bbox.east - bbox.west) *
+      Math.PI *
+      EARTH_RADIUS_KM *
+      Math.cos(centerLatRad)) /
     180;
   const height = ((bbox.north - bbox.south) * Math.PI * EARTH_RADIUS_KM) / 180;
   return [width, height];
@@ -118,7 +121,10 @@ export function regionEdgesKm(bbox: RegionBbox): [number, number] {
 
 export type RegionCapCheck =
   | { ok: true; softWarn: boolean }
-  | { ok: false; reason: "too-many-tiles" | "edge-too-long" | "area-too-large" };
+  | {
+      ok: false;
+      reason: "too-many-tiles" | "edge-too-long" | "area-too-large";
+    };
 
 /** `totalTiles` is the sum across every selected source — see MAX_REGION_TILES. */
 export function checkRegionCaps(

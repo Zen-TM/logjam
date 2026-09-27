@@ -79,7 +79,8 @@ function anchorFeatures(
       type: "Feature" as const,
       geometry: { type: "Point" as const, coordinates: [...anchor] },
       properties: {
-        role: index === 0 ? "start" : index === last && last > 0 ? "end" : "middle",
+        role:
+          index === 0 ? "start" : index === last && last > 0 ? "end" : "middle",
         selected: index === selectedIndex,
       },
     })),
@@ -293,7 +294,10 @@ export function RouteDraftLayer({
           onDrag={(event: NativeSyntheticEvent<ViewAnnotationEvent>) => {
             const moved = event.nativeEvent.lngLat as RoutePoint | undefined;
             if (!moved) return;
-            if (!dragBeyondSlop.current && dragIsTap(anchor, moved, degreesPerDp)) {
+            if (
+              !dragBeyondSlop.current &&
+              dragIsTap(anchor, moved, degreesPerDp)
+            ) {
               return;
             }
             if (!dragBeyondSlop.current) onDragActiveChange?.(true);
@@ -332,7 +336,6 @@ export function RouteDraftLayer({
           <View style={styles.handle} />
         </ViewAnnotation>
       ))}
-
     </>
   );
 }

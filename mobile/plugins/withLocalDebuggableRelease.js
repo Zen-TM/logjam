@@ -53,7 +53,10 @@ module.exports = function withLocalDebuggableRelease(config) {
   return withDangerousMod(config, [
     "android",
     (cfg) => {
-      const buildGradle = path.join(cfg.modRequest.platformProjectRoot, "app/build.gradle");
+      const buildGradle = path.join(
+        cfg.modRequest.platformProjectRoot,
+        "app/build.gradle",
+      );
       if (!fs.existsSync(buildGradle)) {
         return cfg; // no android project yet (e.g. `expo config` without prebuild)
       }

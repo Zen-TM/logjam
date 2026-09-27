@@ -93,7 +93,11 @@ describe("POST /routes/:id/copy — a sharee saving their own copy", () => {
   });
 
   it("gives the copy a colour from the COPIER's palette, and leaves the source's alone", async () => {
-    const routeId = await createRoute(ALICE_SUB, "Second exit", SHARED_PLACE_ID);
+    const routeId = await createRoute(
+      ALICE_SUB,
+      "Second exit",
+      SHARED_PLACE_ID,
+    );
     const res = await request(API_URL)
       .post(`/routes/${routeId}/copy`)
       .set(as(BOB_SUB));

@@ -5,6 +5,7 @@ we set placeholder env before importing. It does not import GDAL, so no osgeo
 stub is needed for this module; boto3/psycopg2/pmtiles are stubbed by
 _native_stub when absent on the host.
 """
+
 import os
 import subprocess
 import sys
@@ -30,6 +31,7 @@ try:
         send_failure_email,
     )
     from email_send import wants_email  # noqa: E402
+
     _IMPORT_OK = True
 except Exception as _exc:  # noqa: BLE001
     _IMPORT_OK = False
@@ -61,7 +63,9 @@ class _FakeConn:
         return _FakeCursor(self._row)
 
 
-@unittest.skipUnless(_IMPORT_OK, f"worker import failed: {globals().get('_IMPORT_ERR', '?')}")
+@unittest.skipUnless(
+    _IMPORT_OK, f"worker import failed: {globals().get('_IMPORT_ERR', '?')}"
+)
 class TestSafeErrorMessage(unittest.TestCase):
     def test_called_process_error_is_generic_with_job_id(self):
         msg = safe_error_message(subprocess.CalledProcessError(1, "pdal"))
@@ -73,10 +77,15 @@ class TestSafeErrorMessage(unittest.TestCase):
         self.assertIn("out of memory", safe_error_message(RuntimeError("exit code -9")))
 
     def test_tippecanoe_runtime_error(self):
-        self.assertIn("vector tiles", safe_error_message(RuntimeError("tippecanoe blew up")))
+        self.assertIn(
+            "vector tiles", safe_error_message(RuntimeError("tippecanoe blew up"))
+        )
 
     def test_pipeline_runtime_error(self):
-        self.assertIn("topo pipeline", safe_error_message(RuntimeError("pipeline.py exited with code 1")))
+        self.assertIn(
+            "topo pipeline",
+            safe_error_message(RuntimeError("pipeline.py exited with code 1")),
+        )
 
     def test_os_error_points_at_input(self):
         self.assertIn("input LiDAR", safe_error_message(OSError("bad zip")))
@@ -85,13 +94,17 @@ class TestSafeErrorMessage(unittest.TestCase):
         self.assertIn("Processing failed", safe_error_message(ValueError("???")))
 
 
-@unittest.skipUnless(_IMPORT_OK, f"worker import failed: {globals().get('_IMPORT_ERR', '?')}")
+@unittest.skipUnless(
+    _IMPORT_OK, f"worker import failed: {globals().get('_IMPORT_ERR', '?')}"
+)
 class TestMergeSettings(unittest.TestCase):
     def test_none_inputs_fall_back_to_vector_defaults(self):
         merged = merge_settings(None, None)
         self.assertEqual(merged["contours"], worker.VECTOR_STYLE_DEFAULTS["contours"])
         self.assertEqual(merged["features"]["enabled"], True)
-        self.assertEqual(merged["features"]["features"], worker.VECTOR_STYLE_DEFAULTS["features"])
+        self.assertEqual(
+            merged["features"]["features"], worker.VECTOR_STYLE_DEFAULTS["features"]
+        )
 
     def test_raster_layers_pass_through_when_present(self):
         merged = merge_settings({"hillshade": {"azimuth": 315}, "slope": {"x": 1}}, {})
@@ -104,8 +117,14 @@ class TestMergeSettings(unittest.TestCase):
         self.assertFalse(merged["features"]["enabled"])
 
     def test_vector_style_contours_override(self):
-        vec = {"contours": {"majorColour": "#111111ff", "minorColour": "#222222ff",
-                            "majorWidthM": 5, "minorWidthM": 2}}
+        vec = {
+            "contours": {
+                "majorColour": "#111111ff",
+                "minorColour": "#222222ff",
+                "majorWidthM": 5,
+                "minorWidthM": 2,
+            }
+        }
         merged = merge_settings({"contours": {"zoomBands": [1, 2, 3]}}, vec)
         self.assertEqual(merged["contours"]["majorColour"], "#111111ff")
         # raster contour fields are preserved alongside vector style.
@@ -121,17 +140,23 @@ class TestMergeSettings(unittest.TestCase):
         self.assertEqual(merged["labelScale"], 1)
 
 
-@unittest.skipUnless(_IMPORT_OK, f"worker import failed: {globals().get('_IMPORT_ERR', '?')}")
+@unittest.skipUnless(
+    _IMPORT_OK, f"worker import failed: {globals().get('_IMPORT_ERR', '?')}"
+)
 class TestWantsEmail(unittest.TestCase):
     def test_missing_user_returns_false(self):
         self.assertFalse(wants_email(_FakeConn(None), "u1", "topoEmail"))
 
     def test_no_prefs_defaults_true(self):
-        self.assertTrue(wants_email(_FakeConn({"ui_preferences": None}), "u1", "topoEmail"))
+        self.assertTrue(
+            wants_email(_FakeConn({"ui_preferences": None}), "u1", "topoEmail")
+        )
 
     def test_no_notifications_key_defaults_true(self):
         self.assertTrue(
-            wants_email(_FakeConn({"ui_preferences": {"themeSchemeId": "x"}}), "u1", "topoEmail")
+            wants_email(
+                _FakeConn({"ui_preferences": {"themeSchemeId": "x"}}), "u1", "topoEmail"
+            )
         )
 
     def test_explicit_false_is_respected(self):
@@ -152,7 +177,9 @@ class TestWantsEmail(unittest.TestCase):
         self.assertTrue(wants_email(_FakeConn(row), "u1", "exportEmail"))
 
 
-@unittest.skipUnless(_IMPORT_OK, f"worker import failed: {globals().get('_IMPORT_ERR', '?')}")
+@unittest.skipUnless(
+    _IMPORT_OK, f"worker import failed: {globals().get('_IMPORT_ERR', '?')}"
+)
 class TestSendFailureEmail(unittest.TestCase):
     """A reaped/failed topo job must mail its owner (APIC-005) — worker.py used
     to email only on success. Captures the send_email call instead of sending."""
@@ -188,7 +215,9 @@ class TestSendFailureEmail(unittest.TestCase):
         self.assertEqual(self.sent, [])
 
 
-@unittest.skipUnless(_IMPORT_OK, f"worker import failed: {globals().get('_IMPORT_ERR', '?')}")
+@unittest.skipUnless(
+    _IMPORT_OK, f"worker import failed: {globals().get('_IMPORT_ERR', '?')}"
+)
 class TestComposeDatabaseUrl(unittest.TestCase):
     def setUp(self):
         self._saved = {

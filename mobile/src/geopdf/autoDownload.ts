@@ -57,7 +57,9 @@ function readHandled(): string[] {
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw) as unknown;
-    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : [];
+    return Array.isArray(parsed)
+      ? parsed.filter((id): id is string => typeof id === "string")
+      : [];
   } catch {
     // A corrupted row means "nothing handled" — it costs one re-download, where
     // throwing would break the feature permanently.
@@ -126,13 +128,15 @@ export async function runGeoPdfAutoDownload(): Promise<void> {
         // native rasteriser, and for the same file over the same directory.
         // The runner reports it like any other import: a card in Saved, a
         // toast when it lands.
-        await runGeoPdfImport(fresh.title ?? "Logjam GeoPDF", (onProgress, token) =>
-          importGeoPdfFromUrl(
-            fresh.title ?? "Logjam GeoPDF",
-            fresh.downloadUrl as string,
-            onProgress,
-            token,
-          ),
+        await runGeoPdfImport(
+          fresh.title ?? "Logjam GeoPDF",
+          (onProgress, token) =>
+            importGeoPdfFromUrl(
+              fresh.title ?? "Logjam GeoPDF",
+              fresh.downloadUrl as string,
+              onProgress,
+              token,
+            ),
         );
       } catch (err) {
         console.error(err);

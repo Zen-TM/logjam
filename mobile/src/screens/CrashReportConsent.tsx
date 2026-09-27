@@ -50,7 +50,11 @@ export function CrashReportConsent() {
       footer={
         <View style={styles.actions}>
           <Button label="Send crash reports" onPress={() => answer(true)} />
-          <Button label="Not now" variant="ghost" onPress={() => answer(false)} />
+          <Button
+            label="Not now"
+            variant="ghost"
+            onPress={() => answer(false)}
+          />
         </View>
       }
     >

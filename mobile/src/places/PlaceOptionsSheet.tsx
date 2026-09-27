@@ -23,7 +23,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Alert, StyleSheet, View } from "react-native";
 
-import { removeShareConfirm , copyAndRemoveOutcomeMessage, copyOutcomeMessage } from "@logjam/shared";
+import {
+  removeShareConfirm,
+  copyAndRemoveOutcomeMessage,
+  copyOutcomeMessage,
+} from "@logjam/shared";
 
 import { spacing, theme } from "../theme";
 import { BottomSheet, Row } from "../ui";
@@ -96,7 +100,8 @@ export function PlaceOptionsSheet({
   // owner's to do and the API refuses it. Memoised on the id: an object literal
   // reloads the hook forever (mobile/CLAUDE.md, SharePanel).
   const shareTarget = useMemo(
-    () => (place && isOwner ? ({ kind: "place", placeId: place.id } as const) : null),
+    () =>
+      place && isOwner ? ({ kind: "place", placeId: place.id } as const) : null,
     [place, isOwner],
   );
   const share = useSharePanel({
@@ -114,7 +119,9 @@ export function PlaceOptionsSheet({
   // No owner USERNAME here — a mirrored place carries an `ownerId` and no name
   // (`removeShareConfirm`'s own note) — so the confirms fall back to "the
   // owner" themselves, rather than this sheet inventing a lookup for one line.
-  const [copyMode, setCopyMode] = useState<"copy" | "copyAndRemove" | null>(null);
+  const [copyMode, setCopyMode] = useState<"copy" | "copyAndRemove" | null>(
+    null,
+  );
   const [copyBusy, setCopyBusy] = useState(false);
   useEffect(() => {
     if (!visible) setCopyMode(null);
@@ -122,7 +129,9 @@ export function PlaceOptionsSheet({
 
   const copyTargets = useMemo<CopyAndRemoveTarget[]>(
     () =>
-      place ? [{ entityType: "place", entityId: place.id, title: place.name }] : [],
+      place
+        ? [{ entityType: "place", entityId: place.id, title: place.name }]
+        : [],
     [place],
   );
 
@@ -163,7 +172,9 @@ export function PlaceOptionsSheet({
           }
           // A plain copy leaves nothing locally to update, so the pull is what
           // brings the new row in. The bundled verb does its own pull mid-way.
-          void requestSync().catch((syncErr: unknown) => console.error(syncErr));
+          void requestSync().catch((syncErr: unknown) =>
+            console.error(syncErr),
+          );
         }
         setCopyBusy(false);
         setCopyMode(null);
@@ -238,7 +249,11 @@ export function PlaceOptionsSheet({
       // Either sub-mode backs out to the verb list; only the list closes the
       // sheet.
       onClose={
-        sharing ? () => setSharing(false) : copyMode ? () => setCopyMode(null) : close
+        sharing
+          ? () => setSharing(false)
+          : copyMode
+            ? () => setCopyMode(null)
+            : close
       }
       title={sharing ? share.title : copyMode ? copy.title : place.name}
       onBack={

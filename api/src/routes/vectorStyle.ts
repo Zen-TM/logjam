@@ -30,7 +30,10 @@ router.put(
     const user = await getUser(req.user!.sub);
     const validation = validateVectorStyleSettings(req.body);
     if (!validation.ok) {
-      throw new AppError(400, `Invalid vector style: ${validation.errors.join("; ")}`);
+      throw new AppError(
+        400,
+        `Invalid vector style: ${validation.errors.join("; ")}`,
+      );
     }
     const updated = await prisma.user.update({
       where: { id: user.id },

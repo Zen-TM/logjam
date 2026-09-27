@@ -76,7 +76,10 @@ function reportBackupFailure(trackId: string): void {
   );
 }
 
-export function confirmFinishRecording(trackId: string, onFinished?: () => void) {
+export function confirmFinishRecording(
+  trackId: string,
+  onFinished?: () => void,
+) {
   Alert.alert("Finish recording?", "The track is saved on this device.", [
     { text: "Keep recording", style: "cancel" },
     {
@@ -92,7 +95,9 @@ export function confirmFinishRecording(trackId: string, onFinished?: () => void)
               // The recording itself finished — the sheet must close on it, or
               // the user is left looking at a live-looking recorder that isn't.
               onFinished?.();
-              console.warn("track-backup: could not queue the finished recording");
+              console.warn(
+                "track-backup: could not queue the finished recording",
+              );
               reportBackupFailure(trackId);
               return;
             }

@@ -76,7 +76,8 @@ describe("the sign-out wipe covers every table this schema creates", () => {
   /** Table names inside the OFFLINE_TABLES array literal. */
   function offlineTables(): string[] {
     const block = wipe.match(/const OFFLINE_TABLES = \[([\s\S]*?)\] as const;/);
-    if (!block) throw new Error("OFFLINE_TABLES is gone — the wipe has no list");
+    if (!block)
+      throw new Error("OFFLINE_TABLES is gone — the wipe has no list");
     return [...block[1].matchAll(/"(\w+)"/g)].map((m) => m[1]!);
   }
 

@@ -66,7 +66,9 @@ describe("groupTripsByYear", () => {
   });
 
   it("puts a 1 January trip in its own year, not the previous one", () => {
-    expect(groupTripsByYear([{ date: "2026-01-01T00:00:00.000Z" }])[0].year).toBe(2026);
+    expect(
+      groupTripsByYear([{ date: "2026-01-01T00:00:00.000Z" }])[0].year,
+    ).toBe(2026);
   });
 });
 
@@ -116,7 +118,10 @@ describe("monthlyTripCounts", () => {
   });
 
   it("crosses the year boundary backwards", () => {
-    const buckets = monthlyTripCounts([{ date: "2025-08-02T00:00:00.000Z" }], now);
+    const buckets = monthlyTripCounts(
+      [{ date: "2025-08-02T00:00:00.000Z" }],
+      now,
+    );
     expect(buckets[0].count).toBe(1);
   });
 });
@@ -167,7 +172,9 @@ describe("todayDateKey", () => {
   it("is the LOCAL calendar day, not the UTC one", () => {
     // 07:00 on 15 March in Sydney is still 14 March in UTC.
     inTimeZone("Australia/Sydney", () => {
-      expect(todayDateKey(new Date("2026-03-14T20:00:00.000Z"))).toBe("2026-03-15");
+      expect(todayDateKey(new Date("2026-03-14T20:00:00.000Z"))).toBe(
+        "2026-03-15",
+      );
     });
   });
 });
@@ -186,7 +193,11 @@ describe("the current-month bucket in a non-UTC timezone", () => {
 
       const trips = [{ date: storedToday.toISOString() }];
       const buckets = monthlyTripCounts(trips, earlyOnTheFirst);
-      expect(buckets[11]).toMatchObject({ label: "A", current: true, count: 1 });
+      expect(buckets[11]).toMatchObject({
+        label: "A",
+        current: true,
+        count: 1,
+      });
       // Reading `now` in UTC put the last bucket on July and dropped the trip
       // out of the window entirely.
       expect(buckets.reduce((sum, bucket) => sum + bucket.count, 0)).toBe(1);
@@ -216,30 +227,46 @@ describe("the current-month bucket in a non-UTC timezone", () => {
     inTimeZone("America/Los_Angeles", () => {
       const storedToday = fromDateKey(todayDateKey(lateOnTheLast));
       expect(storedToday.toISOString()).toBe("2026-07-31T00:00:00.000Z");
-      const buckets = monthlyTripCounts([{ date: storedToday.toISOString() }], lateOnTheLast);
-      expect(buckets[11]).toMatchObject({ label: "J", current: true, count: 1 });
+      const buckets = monthlyTripCounts(
+        [{ date: storedToday.toISOString() }],
+        lateOnTheLast,
+      );
+      expect(buckets[11]).toMatchObject({
+        label: "J",
+        current: true,
+        count: 1,
+      });
     });
   });
 });
 
 describe("logbookRanges", () => {
   it("leads with all time and the relative presets", () => {
-    expect(logbookRanges([], "2026-09-13").slice(0, 4).map((r) => r.label)).toEqual([
-      "All time",
-      "This year",
-      "Last 12 months",
-      "2025",
-    ]);
+    expect(
+      logbookRanges([], "2026-09-13")
+        .slice(0, 4)
+        .map((r) => r.label),
+    ).toEqual(["All time", "This year", "Last 12 months", "2025"]);
   });
 
   it("adds a pill per earlier year the user has trips in, newest first", () => {
     expect(
       logbookRanges([2022, 2024, 2024, 2023], "2026-09-13").map((r) => r.label),
-    ).toEqual(["All time", "This year", "Last 12 months", "2025", "2024", "2023", "2022"]);
+    ).toEqual([
+      "All time",
+      "This year",
+      "Last 12 months",
+      "2025",
+      "2024",
+      "2023",
+      "2022",
+    ]);
   });
 
   it("never repeats a year the presets already cover", () => {
-    const labels = logbookRanges([2026, 2025], "2026-09-13").map((r) => r.label);
+    const labels = logbookRanges([2026, 2025], "2026-09-13").map(
+      (r) => r.label,
+    );
     expect(labels.filter((label) => label === "2025")).toHaveLength(1);
     expect(labels).not.toContain("2026");
   });
@@ -278,7 +305,11 @@ describe("stats spark buckets", () => {
 
   it("marks the current month of the current year", () => {
     inTimeZone("Australia/Sydney", () => {
-      const buckets = monthBucketsForYear([], 2026, new Date("2026-09-13T00:00:00.000Z"));
+      const buckets = monthBucketsForYear(
+        [],
+        2026,
+        new Date("2026-09-13T00:00:00.000Z"),
+      );
       expect(buckets.filter((bucket) => bucket.current)).toHaveLength(1);
       expect(buckets[8].current).toBe(true);
     });
@@ -309,9 +340,27 @@ describe("stats spark buckets", () => {
 describe("stats presentation", () => {
   const base = computeLogbookStats({
     trips: [
-      { id: "1", date: "2024-03-02T00:00:00.000Z", types: ["canyoning"], places: [{ id: "p", name: "Claustral" }], customFields: {} },
-      { id: "2", date: "2026-03-07T00:00:00.000Z", types: ["canyoning", "abseil course"], places: [{ id: "p", name: "Claustral" }], customFields: {} },
-      { id: "3", date: "2026-03-08T00:00:00.000Z", types: [], places: [], customFields: {} },
+      {
+        id: "1",
+        date: "2024-03-02T00:00:00.000Z",
+        types: ["canyoning"],
+        places: [{ id: "p", name: "Claustral" }],
+        customFields: {},
+      },
+      {
+        id: "2",
+        date: "2026-03-07T00:00:00.000Z",
+        types: ["canyoning", "abseil course"],
+        places: [{ id: "p", name: "Claustral" }],
+        customFields: {},
+      },
+      {
+        id: "3",
+        date: "2026-03-08T00:00:00.000Z",
+        types: [],
+        places: [],
+        customFields: {},
+      },
     ],
     places: [{ id: "p", name: "Claustral", placeTypeId: "t", fieldValues: {} }],
     tripDefs: [],
@@ -322,7 +371,11 @@ describe("stats presentation", () => {
 
   it("draws years for a multi-year all-time range, and a year pill's months", () => {
     expect(statsSpark(base, allTime).axis).toBe("year");
-    const pill = statsSpark(base, { label: "2024", from: "2024-01-01", to: "2024-12-31" });
+    const pill = statsSpark(base, {
+      label: "2024",
+      from: "2024-01-01",
+      to: "2024-12-31",
+    });
     expect(pill).toMatchObject({ axis: "month", year: 2024 });
     expect(pill.buckets).toHaveLength(12);
   });
@@ -343,7 +396,10 @@ describe("stats presentation", () => {
       "Activity types",
       "Revisited",
     ]);
-    expect(statsHeadline(base, "canyoning", true).at(-1)).toEqual({ label: "New places", value: "1" });
+    expect(statsHeadline(base, "canyoning", true).at(-1)).toEqual({
+      label: "New places",
+      value: "1",
+    });
   });
 
   it("files a tag-less trip under Untagged, and flags double-counted tags", () => {
@@ -361,23 +417,51 @@ describe("stats presentation", () => {
       average: 7.5,
       best: { value: 12, label: "Claustral" },
     });
-    expect(display).toEqual({ metric: { value: "7.5", suffix: "avg" }, subtitle: "highest 12, Claustral" });
+    expect(display).toEqual({
+      metric: { value: "7.5", suffix: "avg" },
+      subtitle: "highest 12, Claustral",
+    });
   });
 
   it("counts a vocabulary with ×, so a spaced value stays one value", () => {
     expect(
-      fieldStatDisplay({ kind: "vocabulary", key: "k", label: "Permit", values: [{ value: "NPWS 114", count: 4 }] }),
+      fieldStatDisplay({
+        kind: "vocabulary",
+        key: "k",
+        label: "Permit",
+        values: [{ value: "NPWS 114", count: 4 }],
+      }),
     ).toEqual({ subtitle: "NPWS 114 ×4" });
   });
 });
 
 describe("attributeRows", () => {
-  const capacity: TripLogCustomFieldDef = { key: "capacity", label: "Capacity", type: "integer", min: 1, max: 5 };
-  const isCave: TripLogCustomFieldDef = { key: "is_cave", label: "Is a cave?", type: "boolean" };
-  const permit: TripLogCustomFieldDef = { key: "permit", label: "Permit", type: "string" };
+  const capacity: TripLogCustomFieldDef = {
+    key: "capacity",
+    label: "Capacity",
+    type: "integer",
+    min: 1,
+    max: 5,
+  };
+  const isCave: TripLogCustomFieldDef = {
+    key: "is_cave",
+    label: "Is a cave?",
+    type: "boolean",
+  };
+  const permit: TripLogCustomFieldDef = {
+    key: "permit",
+    label: "Permit",
+    type: "string",
+  };
 
   it("lists defined values in definition order under the bare label, then orphans", () => {
-    expect(attributeRows([capacity, isCave, permit], { water_level: "low", is_cave: false, capacity: 3 })).toEqual([
+    expect(
+      attributeRows([capacity, isCave, permit], {
+        water_level: "low",
+        is_cave: false,
+        capacity: 3,
+      }),
+    ).toEqual([
       ["capacity", "Capacity", 3, "integer"],
       ["is_cave", "Is a cave?", false, "boolean"],
       ["water_level", "Water level", "low", null],
@@ -387,9 +471,11 @@ describe("attributeRows", () => {
   // A shared place labels with the viewer's definitions AND the owner's
   // snapshot, and a key both carry must not print twice.
   it("lists a key defined twice once, under the first label", () => {
-    expect(attributeRows([permit, { ...permit, label: "Owner's permit" }], { permit: "NP-1" })).toEqual([
-      ["permit", "Permit", "NP-1", "string"],
-    ]);
+    expect(
+      attributeRows([permit, { ...permit, label: "Owner's permit" }], {
+        permit: "NP-1",
+      }),
+    ).toEqual([["permit", "Permit", "NP-1", "string"]]);
   });
 
   it("keeps a stored null, which is an answer the form wrote", () => {
@@ -406,8 +492,12 @@ describe("formatFieldValue", () => {
     expect(formatFieldValue(null)).toBe("—");
     expect(formatFieldValue("")).toBe("—");
     expect(formatFieldValue(false, "boolean")).toBe("No");
-    expect(formatFieldValue("2026-03-01T00:00:00.000Z", "date")).toBe(formatDateKey("2026-03-01T00:00:00.000Z"));
-    expect(formatFieldValue("2026-03-01T00:00:00.000Z", "string")).toBe("2026-03-01T00:00:00.000Z");
+    expect(formatFieldValue("2026-03-01T00:00:00.000Z", "date")).toBe(
+      formatDateKey("2026-03-01T00:00:00.000Z"),
+    );
+    expect(formatFieldValue("2026-03-01T00:00:00.000Z", "string")).toBe(
+      "2026-03-01T00:00:00.000Z",
+    );
   });
 });
 
@@ -420,7 +510,9 @@ describe("dateSummary", () => {
   });
 
   it("names both bounds when both are set", () => {
-    expect(dateSummary(["2026-01-01", "2026-03-31"])).toBe("2026-01-01 – 2026-03-31");
+    expect(dateSummary(["2026-01-01", "2026-03-31"])).toBe(
+      "2026-01-01 – 2026-03-31",
+    );
   });
 
   it("names the open end when only one is set", () => {

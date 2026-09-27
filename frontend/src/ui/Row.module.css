@@ -30,7 +30,11 @@
    nothing (operator, 2026-09-16). */
 .row:has(.open):hover,
 .row:has(.pick):hover {
-  border-color: color-mix(in srgb, var(--theme-accent) 70%, var(--theme-bonus-2));
+  border-color: color-mix(
+    in srgb,
+    var(--theme-accent) 70%,
+    var(--theme-bonus-2)
+  );
 }
 
 .row[data-selected="true"] {

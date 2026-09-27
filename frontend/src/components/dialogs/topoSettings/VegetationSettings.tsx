@@ -44,10 +44,13 @@ const alphaOf = (colour: string) => {
  * description of the controls, which say what they are themselves.
  */
 export default function VegetationSettings({ value, onChange }: Props) {
-  const patch = (delta: Partial<VegetationSettingsValue>) => onChange({ ...value, ...delta });
+  const patch = (delta: Partial<VegetationSettingsValue>) =>
+    onChange({ ...value, ...delta });
 
   const setWeight = (formation: string, weight: number) =>
-    patch({ formationWeights: { ...value.formationWeights, [formation]: weight } });
+    patch({
+      formationWeights: { ...value.formationWeights, [formation]: weight },
+    });
 
   return (
     <div className={styles.tabPanel}>
@@ -84,21 +87,31 @@ export default function VegetationSettings({ value, onChange }: Props) {
         />
       </SettingsRow>
 
-      <SettingsRow label="Sparse colour" tooltip="The colour used where the scrub is thinnest.">
+      <SettingsRow
+        label="Sparse colour"
+        tooltip="The colour used where the scrub is thinnest."
+      >
         <ColourField
           label="Sparse colour"
           hideLabel
           value={withAlpha(value.sparseColour, value.alphaMin)}
-          onChange={(sparseColour) => patch({ sparseColour, alphaMin: alphaOf(sparseColour) })}
+          onChange={(sparseColour) =>
+            patch({ sparseColour, alphaMin: alphaOf(sparseColour) })
+          }
         />
       </SettingsRow>
 
-      <SettingsRow label="Dense colour" tooltip="The colour used where the scrub is thickest.">
+      <SettingsRow
+        label="Dense colour"
+        tooltip="The colour used where the scrub is thickest."
+      >
         <ColourField
           label="Dense colour"
           hideLabel
           value={withAlpha(value.denseColour, value.alphaMax)}
-          onChange={(denseColour) => patch({ denseColour, alphaMax: alphaOf(denseColour) })}
+          onChange={(denseColour) =>
+            patch({ denseColour, alphaMax: alphaOf(denseColour) })
+          }
         />
       </SettingsRow>
 
@@ -113,7 +126,10 @@ export default function VegetationSettings({ value, onChange }: Props) {
         />
       </SettingsRow>
 
-      <div className={styles.dependent} data-disabled={value.weightsEnabled ? undefined : true}>
+      <div
+        className={styles.dependent}
+        data-disabled={value.weightsEnabled ? undefined : true}
+      >
         <div className={styles.resetLine}>
           <div>
             <SectionHeader title="Resistance per formation" />

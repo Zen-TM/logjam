@@ -25,7 +25,10 @@ import { apiFetch } from "../api/apiFetch";
 import type { MirrorMedia } from "./mirrorStore";
 import { getSyncDb, notifyMirrorChanged, withSyncTransaction } from "./syncDb";
 import { scheduleMutationSync } from "./mediaSyncBridge";
-import { MEDIA_CACHE_DIR as CACHE_DIR, WIPED_DIRS } from "../offline/localStores";
+import {
+  MEDIA_CACHE_DIR as CACHE_DIR,
+  WIPED_DIRS,
+} from "../offline/localStores";
 import { canRunNow } from "../offline/networkPolicy";
 import { uploadToPresignedUrl } from "../api/presignedTransfer";
 
@@ -120,7 +123,9 @@ export async function attachMediaLocal(
   if (category === null) {
     throw new Error(`Unsupported media type for upload: ${mediaType}`);
   }
-  const filename = file.fileName ?? `${mediaId}.${MEDIA_EXTENSION_BY_MIME[mediaType] ?? "bin"}`;
+  const filename =
+    file.fileName ??
+    `${mediaId}.${MEDIA_EXTENSION_BY_MIME[mediaType] ?? "bin"}`;
 
   const displayPath = `${CACHE_DIR}${mediaId}.display`;
   let thumbPath: string | null = null;
@@ -133,7 +138,8 @@ export async function attachMediaLocal(
       // for every category that declares one, so this is not optional.
       const stillUri =
         category === "video"
-          ? (await getThumbnailAsync(file.uri, { time: VIDEO_THUMBNAIL_MS })).uri
+          ? (await getThumbnailAsync(file.uri, { time: VIDEO_THUMBNAIL_MS }))
+              .uri
           : file.uri;
       const thumb = await manipulateAsync(
         stillUri,
@@ -142,9 +148,13 @@ export async function attachMediaLocal(
       );
       thumbPath = `${CACHE_DIR}${mediaId}.thumb`;
       await FileSystem.copyAsync({ from: thumb.uri, to: thumbPath });
-      await FileSystem.deleteAsync(thumb.uri, { idempotent: true }).catch(() => {});
+      await FileSystem.deleteAsync(thumb.uri, { idempotent: true }).catch(
+        () => {},
+      );
       if (stillUri !== file.uri) {
-        await FileSystem.deleteAsync(stillUri, { idempotent: true }).catch(() => {});
+        await FileSystem.deleteAsync(stillUri, { idempotent: true }).catch(
+          () => {},
+        );
       }
     }
 
@@ -154,11 +164,14 @@ export async function attachMediaLocal(
     // picker/camera source left alive here lives outside every declared
     // store and outside the account-transition wipe until now.
     if (!isOwnedStorePath(file.uri)) {
-      await FileSystem.deleteAsync(file.uri, { idempotent: true }).catch(() => {});
+      await FileSystem.deleteAsync(file.uri, { idempotent: true }).catch(
+        () => {},
+      );
     }
 
     const sizeBytes = await fileSize(displayPath);
-    const thumbnailSizeBytes = thumbPath === null ? null : await fileSize(thumbPath);
+    const thumbnailSizeBytes =
+      thumbPath === null ? null : await fileSize(thumbPath);
 
     const db = await getSyncDb();
     await withSyncTransaction(db, async () => {
@@ -205,9 +218,13 @@ export async function attachMediaLocal(
     // bytes on disk: nothing sweeps MEDIA_CACHE_DIR except the
     // account-transition wipe, so an orphaned full-res photo lived for the
     // life of the install.
-    await FileSystem.deleteAsync(displayPath, { idempotent: true }).catch(() => {});
+    await FileSystem.deleteAsync(displayPath, { idempotent: true }).catch(
+      () => {},
+    );
     if (thumbPath !== null) {
-      await FileSystem.deleteAsync(thumbPath, { idempotent: true }).catch(() => {});
+      await FileSystem.deleteAsync(thumbPath, { idempotent: true }).catch(
+        () => {},
+      );
     }
     throw err;
   }
@@ -490,7 +507,9 @@ async function finalizeConfirmed(
 // transient and belongs in the backoff, not in the user's Sync Issues list.
 const PERMANENT_PRESIGN_STATUSES = new Set([400, 403, 404, 409, 413, 422, 507]);
 
-export async function runMediaCreateOp(row: MediaOpRow): Promise<MediaOpOutcome> {
+export async function runMediaCreateOp(
+  row: MediaOpRow,
+): Promise<MediaOpOutcome> {
   const db = await getSyncDb();
   const fields = JSON.parse(row.fields_json ?? "{}") as MediaFields;
 
@@ -515,17 +534,20 @@ export async function runMediaCreateOp(row: MediaOpRow): Promise<MediaOpOutcome>
   // Phase 1: presign. Quota (507) / track-slot (409) → park blocked.
   let presign: PresignResponse | ConfirmedMedia;
   try {
-    presign = await apiFetch<PresignResponse | ConfirmedMedia>("/media/presign", {
-      method: "POST",
-      body: {
-        mediaId: row.entity_id,
-        ...linkBody(fields),
-        filename: fields.filename,
-        mediaType: fields.mediaType,
-        sizeBytes: fields.sizeBytes,
-        thumbnailSizeBytes: fields.thumbnailSizeBytes,
+    presign = await apiFetch<PresignResponse | ConfirmedMedia>(
+      "/media/presign",
+      {
+        method: "POST",
+        body: {
+          mediaId: row.entity_id,
+          ...linkBody(fields),
+          filename: fields.filename,
+          mediaType: fields.mediaType,
+          sizeBytes: fields.sizeBytes,
+          thumbnailSizeBytes: fields.thumbnailSizeBytes,
+        },
       },
-    });
+    );
   } catch (err) {
     const status = (err as { status?: number }).status;
     // Park only what a retry can never fix; rethrow the rest for the engine's
@@ -569,9 +591,17 @@ export async function runMediaCreateOp(row: MediaOpRow): Promise<MediaOpOutcome>
   }
 
   // Phase 2: PUT display + thumbnail to S3 (no limiter cost).
-  await putFile(presign.displayUploadUrl, fields.localDisplayPath, fields.mediaType);
+  await putFile(
+    presign.displayUploadUrl,
+    fields.localDisplayPath,
+    fields.mediaType,
+  );
   if (presign.thumbnailUploadUrl && fields.localThumbPath) {
-    await putFile(presign.thumbnailUploadUrl, fields.localThumbPath, "image/jpeg");
+    await putFile(
+      presign.thumbnailUploadUrl,
+      fields.localThumbPath,
+      "image/jpeg",
+    );
   }
   await db.runAsync(
     "UPDATE outbox SET media_phase = 'uploaded' WHERE seq = ?",
@@ -621,7 +651,9 @@ function linkBody(fields: MediaFields): Record<string, unknown> {
  * same value. A 404 means the file is gone — the goal state — and the op is
  * dropped rather than parked.
  */
-export async function runMediaRenameOp(row: MediaOpRow): Promise<MediaOpOutcome> {
+export async function runMediaRenameOp(
+  row: MediaOpRow,
+): Promise<MediaOpOutcome> {
   const db = await getSyncDb();
   const fields = JSON.parse(row.fields_json ?? "{}") as RenameFields;
   try {
@@ -680,7 +712,9 @@ export async function runMediaLinkOp(row: MediaOpRow): Promise<MediaOpOutcome> {
 
 /** Delete a media row (idempotent: 404 → already gone). Removes the op, the
  * mirror row, and the cached blobs. */
-export async function runMediaDeleteOp(row: MediaOpRow): Promise<MediaOpOutcome> {
+export async function runMediaDeleteOp(
+  row: MediaOpRow,
+): Promise<MediaOpOutcome> {
   const db = await getSyncDb();
   try {
     await apiFetch<void>(`/media/${row.entity_id}`, { method: "DELETE" });
@@ -698,13 +732,15 @@ export async function runMediaDeleteOp(row: MediaOpRow): Promise<MediaOpOutcome>
   await db.runAsync("DELETE FROM media WHERE id = ?", row.entity_id);
   await db.runAsync("DELETE FROM outbox WHERE seq = ?", row.seq);
   for (const path of [media?.local_display_path, media?.local_thumb_path]) {
-    if (path) await FileSystem.deleteAsync(path, { idempotent: true }).catch(() => {});
+    if (path)
+      await FileSystem.deleteAsync(path, { idempotent: true }).catch(() => {});
   }
   return "done";
 }
 
 function messageForBlock(status: number): string {
-  if (status === 507) return "Not enough storage space. Free some space and retry.";
+  if (status === 507)
+    return "Not enough storage space. Free some space and retry.";
   if (status === 409) return "This place already has a track. Remove it first.";
   return "The server rejected this upload.";
 }
@@ -748,7 +784,10 @@ export async function deleteMediaLocal(media: MirrorMedia): Promise<void> {
   });
   if (cancelled) {
     for (const path of [media.localDisplayPath, media.localThumbPath]) {
-      if (path) await FileSystem.deleteAsync(path, { idempotent: true }).catch(() => {});
+      if (path)
+        await FileSystem.deleteAsync(path, { idempotent: true }).catch(
+          () => {},
+        );
     }
   }
   notifyMirrorChanged();

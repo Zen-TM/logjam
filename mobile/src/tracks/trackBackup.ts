@@ -26,7 +26,10 @@ import {
 
 import { RECORDED_TRACK_DIR } from "../offline/localStores";
 import { bboxOfPoints } from "../saved/bboxOfPoints";
-import { createStandaloneMediaLocal, deleteMediaLocal } from "../sync/mediaUpload";
+import {
+  createStandaloneMediaLocal,
+  deleteMediaLocal,
+} from "../sync/mediaUpload";
 import { getMediaById } from "../sync/mirrorStore";
 import {
   getTrack,
@@ -69,8 +72,10 @@ export function trackBackupMetadata(
   points: RecordedTrackPoint[],
 ): MediaMetadata {
   const bbox = bboxOfPoints(points);
-  if (bbox === null) throw new Error("A recording with no points has no extent");
-  if (track.endedAt === null) throw new Error("This recording has not finished");
+  if (bbox === null)
+    throw new Error("A recording with no points has no extent");
+  if (track.endedAt === null)
+    throw new Error("This recording has not finished");
   return parseMediaMetadata("track", {
     bbox,
     distanceM: track.distanceM,
@@ -113,10 +118,16 @@ export async function backUpFinishedTrack(
     // `continueTrackRecording` writes a NEW file: reusing the path would have
     // the previous row's pending delete take the new row's bytes with it.
     filePath = `${RECORDED_TRACK_DIR}${track.id}-${Date.parse(finishedAt)}.gpx`;
-    await FileSystem.makeDirectoryAsync(RECORDED_TRACK_DIR, { intermediates: true });
-    await FileSystem.writeAsStringAsync(filePath, trackPointsToGpx(track.name, points), {
-      encoding: FileSystem.EncodingType.UTF8,
+    await FileSystem.makeDirectoryAsync(RECORDED_TRACK_DIR, {
+      intermediates: true,
     });
+    await FileSystem.writeAsStringAsync(
+      filePath,
+      trackPointsToGpx(track.name, points),
+      {
+        encoding: FileSystem.EncodingType.UTF8,
+      },
+    );
     const mediaId = await createStandaloneMediaLocal({
       filePath,
       filename: exportFilename(track.name, "gpx", "track"),
@@ -127,7 +138,8 @@ export async function backUpFinishedTrack(
       color: track.color,
     });
     registeredMediaId = mediaId;
-    const superseded = track.mediaId === null ? null : await getMediaById(track.mediaId);
+    const superseded =
+      track.mediaId === null ? null : await getMediaById(track.mediaId);
     if (superseded) await deleteMediaLocal(superseded);
     await updateTrack(track.id, { mediaId });
     return mediaId;
@@ -137,7 +149,9 @@ export async function backUpFinishedTrack(
     // point the file is a queued upload's body, and deleting it would turn a
     // recoverable failure into a media row that can never be sent.
     if (filePath && registeredMediaId === null) {
-      await FileSystem.deleteAsync(filePath, { idempotent: true }).catch(() => {});
+      await FileSystem.deleteAsync(filePath, { idempotent: true }).catch(
+        () => {},
+      );
     }
     throw new TrackBackupError(error);
   }
@@ -150,7 +164,9 @@ export async function backUpFinishedTrack(
  *
  * Also what `sweepTrackBackups` calls, so the two paths cannot diverge.
  */
-export async function retryTrackBackup(trackId: string): Promise<string | null> {
+export async function retryTrackBackup(
+  trackId: string,
+): Promise<string | null> {
   const track = await getTrack(trackId);
   if (!track || track.state !== "done") return null;
   return backUpFinishedTrack(track, await listTrackPoints(trackId));
@@ -185,7 +201,10 @@ export async function sweepTrackBackups(): Promise<number> {
   let registered = 0;
   for (const track of owed) {
     try {
-      const mediaId = await backUpFinishedTrack(track, await listTrackPoints(track.id));
+      const mediaId = await backUpFinishedTrack(
+        track,
+        await listTrackPoints(track.id),
+      );
       if (mediaId !== null) registered += 1;
     } catch {
       // The recording is intact — `backUpFinishedTrack` only throws after the

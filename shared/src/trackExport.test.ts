@@ -4,7 +4,9 @@ import { trackPointsToGpx, trackPointsToKml } from "./trackExport.js";
 import { parseGpx } from "./vectorImport.js";
 import type { RecordedTrackPoint } from "./trackStats.js";
 
-function point(overrides: Partial<RecordedTrackPoint> = {}): RecordedTrackPoint {
+function point(
+  overrides: Partial<RecordedTrackPoint> = {},
+): RecordedTrackPoint {
   return {
     lon: 150.123456,
     lat: -33.654321,
@@ -49,7 +51,9 @@ describe("trackPointsToGpx", () => {
 
   it("escapes XML metacharacters in the name", () => {
     const gpx = trackPointsToGpx('Bell & "Claustral" <fast>', [point()]);
-    expect(gpx).toContain("<name>Bell &amp; &quot;Claustral&quot; &lt;fast&gt;</name>");
+    expect(gpx).toContain(
+      "<name>Bell &amp; &quot;Claustral&quot; &lt;fast&gt;</name>",
+    );
     expect(gpx).not.toContain('<name>Bell & "');
   });
 
@@ -109,7 +113,9 @@ describe("trackPointsToKml", () => {
 
   it("escapes the track name", () => {
     const kml = trackPointsToKml('Bell & "Claustral" <fast>', [point()]);
-    expect(kml).toContain("<name>Bell &amp; &quot;Claustral&quot; &lt;fast&gt;</name>");
+    expect(kml).toContain(
+      "<name>Bell &amp; &quot;Claustral&quot; &lt;fast&gt;</name>",
+    );
     expect(kml).not.toContain('<name>Bell & "');
   });
 });

@@ -40,17 +40,27 @@ describe("hillshadeSettingsError", () => {
   });
 
   it("rejects out-of-range azimuth (the UAT -50 case)", () => {
-    expect(hillshadeSettingsError({ ...base, azimuth: -50 })).toMatch(/Azimuth/);
-    expect(hillshadeSettingsError({ ...base, azimuth: 361 })).toMatch(/Azimuth/);
+    expect(hillshadeSettingsError({ ...base, azimuth: -50 })).toMatch(
+      /Azimuth/,
+    );
+    expect(hillshadeSettingsError({ ...base, azimuth: 361 })).toMatch(
+      /Azimuth/,
+    );
   });
 
   it("rejects out-of-range altitude (the UAT 500 case)", () => {
-    expect(hillshadeSettingsError({ ...base, altitude: 500 })).toMatch(/Altitude/);
+    expect(hillshadeSettingsError({ ...base, altitude: 500 })).toMatch(
+      /Altitude/,
+    );
   });
 
   it("rejects zero and negative exaggeration (the UAT 0 / -3 cases)", () => {
-    expect(hillshadeSettingsError({ ...base, zFactor: 0 })).toMatch(/exaggeration/);
-    expect(hillshadeSettingsError({ ...base, zFactor: -3 })).toMatch(/exaggeration/);
+    expect(hillshadeSettingsError({ ...base, zFactor: 0 })).toMatch(
+      /exaggeration/,
+    );
+    expect(hillshadeSettingsError({ ...base, zFactor: -3 })).toMatch(
+      /exaggeration/,
+    );
   });
 
   it("rejects non-finite values", () => {
@@ -73,7 +83,9 @@ describe("slopeBandsError", () => {
   });
 
   it("accepts contiguous ascending integer bands", () => {
-    expect(slopeBandsError([band(25, 35), band(35, 50), band(50, 90)])).toBeNull();
+    expect(
+      slopeBandsError([band(25, 35), band(35, 50), band(50, 90)]),
+    ).toBeNull();
   });
 
   it("rejects an empty list", () => {
@@ -85,11 +97,15 @@ describe("slopeBandsError", () => {
   });
 
   it("rejects a gap between bands", () => {
-    expect(slopeBandsError([band(25, 35), band(40, 50)])).toMatch(/must start where band 1 ends/i);
+    expect(slopeBandsError([band(25, 35), band(40, 50)])).toMatch(
+      /must start where band 1 ends/i,
+    );
   });
 
   it("rejects an overlap between bands", () => {
-    expect(slopeBandsError([band(25, 40), band(35, 50)])).toMatch(/must start where band 1 ends/i);
+    expect(slopeBandsError([band(25, 40), band(35, 50)])).toMatch(
+      /must start where band 1 ends/i,
+    );
   });
 
   it("rejects out-of-range and non-integer angles", () => {
@@ -100,7 +116,11 @@ describe("slopeBandsError", () => {
 });
 
 describe("applySlopeGradient", () => {
-  const band = (fromDeg: number, toDeg: number, colour = "#00000000"): SlopeBand => ({
+  const band = (
+    fromDeg: number,
+    toDeg: number,
+    colour = "#00000000",
+  ): SlopeBand => ({
     fromDeg,
     toDeg,
     colour,
@@ -141,7 +161,10 @@ describe("applySlopeGradient", () => {
   it("preserves band ranges and does not mutate the input", () => {
     const input = [band(40, 50), band(50, 90)];
     const out = applySlopeGradient(input, "#11223344", "#55667788");
-    expect(out.map((b) => [b.fromDeg, b.toDeg])).toEqual([[40, 50], [50, 90]]);
+    expect(out.map((b) => [b.fromDeg, b.toDeg])).toEqual([
+      [40, 50],
+      [50, 90],
+    ]);
     expect(input[0].colour).toBe("#00000000");
   });
 
@@ -284,7 +307,9 @@ describe("vector paint helpers", () => {
   // the same width are the same line, at z18 and at every zoom under it.
   it("draws a contour and a feature of the same width identically", () => {
     const pixels = 2.25;
-    expect(contourWidthStops(pixels * CONTOUR_WIDTH_UNITS_PER_PX)).toEqual(featureLineWidthStops(pixels));
+    expect(contourWidthStops(pixels * CONTOUR_WIDTH_UNITS_PER_PX)).toEqual(
+      featureLineWidthStops(pixels),
+    );
   });
 
   it("lerpZoom interpolates and clamps to [12,18]", () => {

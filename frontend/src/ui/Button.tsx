@@ -38,7 +38,12 @@ export function Button({
     <button
       ref={ref}
       type={type}
-      className={[classes.button, classes[variant], compact && classes.compact, className]
+      className={[
+        classes.button,
+        classes[variant],
+        compact && classes.compact,
+        className,
+      ]
         .filter(Boolean)
         .join(" ")}
       disabled={busy || disabled}
@@ -56,7 +61,11 @@ export function Button({
   );
 }
 
-const ICON_TONE_CLASS = { filled: "tinted", danger: "danger", onFill: "onFill" } as const;
+const ICON_TONE_CLASS = {
+  filled: "tinted",
+  danger: "danger",
+  onFill: "onFill",
+} as const;
 
 /**
  * An icon-only button. `label` is REQUIRED: it is the accessible name and the

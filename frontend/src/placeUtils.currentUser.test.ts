@@ -46,7 +46,9 @@ describe("useCurrentUser load failure", () => {
     await waitFor(() => expect(result.current.error).not.toBeNull());
     expect(result.current.currentUser).toBeNull();
     // The user is told what happened, in the words the shared mapper owns.
-    expect(result.current.error).toBe("Too many requests. Please wait a moment and try again.");
+    expect(result.current.error).toBe(
+      "Too many requests. Please wait a moment and try again.",
+    );
   });
 
   it("clears the error and caches the user when a retry lands", async () => {

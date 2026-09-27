@@ -13,11 +13,11 @@ function setEnv(vars: Record<string, string | undefined>) {
   }
 }
 
-const exitSpy = vi
-  .spyOn(process, "exit")
-  .mockImplementation(((code?: number) => {
-    throw new Error(`process.exit(${code})`);
-  }) as never);
+const exitSpy = vi.spyOn(process, "exit").mockImplementation(((
+  code?: number,
+) => {
+  throw new Error(`process.exit(${code})`);
+}) as never);
 
 beforeEach(() => {
   exitSpy.mockClear();
@@ -159,4 +159,3 @@ describe("TLS + worker env vars are in the schema", () => {
     expect(validateEnv().DATABASE_SSL).toBeUndefined();
   });
 });
-

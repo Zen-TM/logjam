@@ -114,7 +114,10 @@ function bboxOf(metadata: MediaMetadata): [number, number, number, number] {
   return metadata.bbox ?? EMPTY_BBOX;
 }
 
-function join(media: MirrorMedia, view: ViewStateRow | undefined): VectorImport {
+function join(
+  media: MirrorMedia,
+  view: ViewStateRow | undefined,
+): VectorImport {
   return {
     id: media.id,
     name: mediaDisplayName(media),
@@ -134,7 +137,9 @@ function join(media: MirrorMedia, view: ViewStateRow | undefined): VectorImport 
 
 async function viewStatesById(): Promise<Map<string, ViewStateRow>> {
   const db = await getOfflineDb();
-  const rows = await db.getAllAsync<ViewStateRow>("SELECT * FROM import_view_state");
+  const rows = await db.getAllAsync<ViewStateRow>(
+    "SELECT * FROM import_view_state",
+  );
   return new Map(rows.map((row) => [row.mediaId, row]));
 }
 
@@ -146,7 +151,9 @@ export async function listVectorImports(): Promise<VectorImport[]> {
   return media.map((row) => join(row, views.get(row.id)));
 }
 
-export async function getVectorImport(id: string): Promise<VectorImport | null> {
+export async function getVectorImport(
+  id: string,
+): Promise<VectorImport | null> {
   const media = await getMediaById(id);
   if (!media || media.origin !== "import") return null;
   const db = await getOfflineDb();
@@ -161,7 +168,9 @@ export async function getVectorImport(id: string): Promise<VectorImport | null> 
  * Record where an import's bytes are on this phone. Called when it is first
  * imported here, and again when a file that arrived as a row is downloaded.
  */
-export async function upsertImportViewState(state: ImportViewState): Promise<void> {
+export async function upsertImportViewState(
+  state: ImportViewState,
+): Promise<void> {
   const db = await getOfflineDb();
   await db.runAsync(
     `INSERT INTO import_view_state (mediaId, visible, path, sourcePath, sentBy)

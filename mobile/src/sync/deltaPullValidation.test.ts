@@ -26,8 +26,13 @@ let fetchCount = 0;
 vi.mock("../api/apiFetch", () => ({
   apiFetch: () => Promise.resolve(pages[fetchCount++]),
 }));
-vi.mock("expo-file-system/legacy", () => ({ deleteAsync: () => Promise.resolve() }));
-vi.mock("./outbox", () => ({ loadOutboxRows: () => Promise.resolve([]), rowToEntry: (r: unknown) => r }));
+vi.mock("expo-file-system/legacy", () => ({
+  deleteAsync: () => Promise.resolve(),
+}));
+vi.mock("./outbox", () => ({
+  loadOutboxRows: () => Promise.resolve([]),
+  rowToEntry: (r: unknown) => r,
+}));
 vi.mock("./mirrorStore", () => ({
   notifyMirrorChanged: () => {},
   upsertPlace: (_db: unknown, row: { id: string }) => {
@@ -43,8 +48,11 @@ vi.mock("./mirrorStore", () => ({
   upsertMedia: () => Promise.resolve(),
   upsertShare: () => Promise.resolve(),
   upsertFriendship: () => Promise.resolve(),
-  rebasePendingPlaceLinks: (_db: unknown, effective: unknown, dirtyNames: unknown) =>
-    Promise.resolve({ effective, dirtyNames }),
+  rebasePendingPlaceLinks: (
+    _db: unknown,
+    effective: unknown,
+    dirtyNames: unknown,
+  ) => Promise.resolve({ effective, dirtyNames }),
   applyTombstone: (_db: unknown, t: { id: string }) => {
     applied.tombstones.push(t.id);
     return Promise.resolve([]);
@@ -121,7 +129,10 @@ describe("a malformed delta row", () => {
       page({
         changes: {
           // latitude as a string is the classic wire-shape slip.
-          places: [goodPlace, { ...goodPlace, id: "place-bad", latitude: "-33.5" }],
+          places: [
+            goodPlace,
+            { ...goodPlace, id: "place-bad", latitude: "-33.5" },
+          ],
           tripLogs: [],
           placeLinks: [],
           routes: [],
@@ -139,7 +150,19 @@ describe("a malformed delta row", () => {
   });
 
   it("does not stall the cursor — the pull completes and is counted as an issue", async () => {
-    pages = [page({ changes: { places: [{ id: "nope" }], tripLogs: [], placeLinks: [], routes: [], media: [], placeShares: [], friendships: [] } })];
+    pages = [
+      page({
+        changes: {
+          places: [{ id: "nope" }],
+          tripLogs: [],
+          placeLinks: [],
+          routes: [],
+          media: [],
+          placeShares: [],
+          friendships: [],
+        },
+      }),
+    ];
 
     // The whole point: this resolves. Before validation existed a bad row threw
     // out of the transaction, and before *skipping* existed it would have

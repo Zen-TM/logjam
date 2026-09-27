@@ -71,7 +71,8 @@ function useOutsidePress(
       onOutsideRef.current();
     };
     document.addEventListener("pointerdown", onPointerDown, true);
-    return () => document.removeEventListener("pointerdown", onPointerDown, true);
+    return () =>
+      document.removeEventListener("pointerdown", onPointerDown, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- refs are stable objects
   }, [open]);
 }
@@ -131,7 +132,9 @@ export function Menu({
       setOpen(false);
       return;
     }
-    const from = itemRefs.current.findIndex((item) => item === document.activeElement);
+    const from = itemRefs.current.findIndex(
+      (item) => item === document.activeElement,
+    );
     const to = nextEnabledIndex(
       items.map((item) => Boolean(item.disabled)),
       from,
@@ -168,7 +171,14 @@ export function Menu({
           </div>
         )}
         {entries.map((entry) => {
-          if (!isItem(entry)) return <div key={entry.id} role="separator" className={classes.separator} />;
+          if (!isItem(entry))
+            return (
+              <div
+                key={entry.id}
+                role="separator"
+                className={classes.separator}
+              />
+            );
           itemIndex += 1;
           const index = itemIndex;
           const Icon = entry.icon;
@@ -183,7 +193,9 @@ export function Menu({
               tabIndex={-1}
               aria-label={entry.accessibleLabel}
               disabled={entry.disabled}
-              className={[classes.item, entry.danger && classes.danger].filter(Boolean).join(" ")}
+              className={[classes.item, entry.danger && classes.danger]
+                .filter(Boolean)
+                .join(" ")}
               onClick={() => {
                 close();
                 entry.onSelect();

@@ -1,7 +1,9 @@
 import { z } from "zod";
 
 const baseSchema = z.object({
-  NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
+  NODE_ENV: z
+    .enum(["development", "production", "test"])
+    .default("development"),
   PORT: z.coerce.number().int().positive().default(8080),
   LOG_LEVEL: z
     .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
@@ -88,32 +90,61 @@ const baseSchema = z.object({
   // longer than the PROCESSING timeout (Fargate task SIGKILLed before its
   // Python `except` ran) is force-failed by the periodic sweep. Set
   // TOPO_REAPER_INTERVAL_MS to 0 to disable the sweep entirely.
-  TOPO_REAPER_INTERVAL_MS: z.coerce.number().int().nonnegative().default(300_000), // 5 min
-  TOPO_REAPER_PENDING_TIMEOUT_MS: z.coerce.number().int().positive().default(900_000), // 15 min
+  TOPO_REAPER_INTERVAL_MS: z.coerce
+    .number()
+    .int()
+    .nonnegative()
+    .default(300_000), // 5 min
+  TOPO_REAPER_PENDING_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(900_000), // 15 min
   // A processing job is reaped when its render/PDAL progress STALLS for this
   // long (the worker heartbeats lastProgressAt through the long phases), so a
   // slow-but-advancing job is never force-failed (ARCH-001).
-  TOPO_REAPER_PROGRESS_STALL_MS: z.coerce.number().int().positive().default(1_200_000), // 20 min
+  TOPO_REAPER_PROGRESS_STALL_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(1_200_000), // 20 min
   // Absolute ceiling backstop for the per-job processing deadline: the reaper
   // allows max(this, ESTIMATE_SAFETY_FACTOR × estimatedSeconds) per job even if
   // it keeps emitting progress, to catch a pathological never-finishing job.
-  TOPO_REAPER_PROCESSING_TIMEOUT_MS: z.coerce.number().int().positive().default(21_600_000), // 6 h
+  TOPO_REAPER_PROCESSING_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(21_600_000), // 6 h
   // Adaptive runtime estimator (routes/topoJobs.ts): the per-input-tile rate is
   // fitted from recent completed jobs once at least MIN_SAMPLES exist; until
   // then it falls back to DEFAULT_SECONDS_PER_TILE (= the old 8.5 min/tile
   // constant — conservative, self-corrects down as real jobs accumulate).
-  TOPO_ESTIMATE_DEFAULT_SECONDS_PER_TILE: z.coerce.number().positive().default(510),
+  TOPO_ESTIMATE_DEFAULT_SECONDS_PER_TILE: z.coerce
+    .number()
+    .positive()
+    .default(510),
   TOPO_ESTIMATE_MIN_SAMPLES: z.coerce.number().int().positive().default(3),
   // Adaptive runtime estimator for topo exports (lib/runtimeEstimates.ts):
   // fitted per-(format, bundling) bucket from recent completed exports' actual
   // runtimes, keyed on the source job's input tile count. Falls back to this
   // cold-start rate below MIN_SAMPLES.
-  TOPO_EXPORT_ESTIMATE_DEFAULT_SECONDS_PER_TILE: z.coerce.number().positive().default(20),
-  TOPO_EXPORT_ESTIMATE_MIN_SAMPLES: z.coerce.number().int().positive().default(3),
+  TOPO_EXPORT_ESTIMATE_DEFAULT_SECONDS_PER_TILE: z.coerce
+    .number()
+    .positive()
+    .default(20),
+  TOPO_EXPORT_ESTIMATE_MIN_SAMPLES: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(3),
   // Adaptive runtime estimator for GeoPDF jobs (lib/runtimeEstimates.ts): fitted
   // per-megapixel rate (native render-canvas size) from recent completed jobs.
   // Falls back to this cold-start rate below MIN_SAMPLES.
-  GEO_PDF_ESTIMATE_DEFAULT_SECONDS_PER_MEGAPIXEL: z.coerce.number().positive().default(6),
+  GEO_PDF_ESTIMATE_DEFAULT_SECONDS_PER_MEGAPIXEL: z.coerce
+    .number()
+    .positive()
+    .default(6),
   GEO_PDF_ESTIMATE_MIN_SAMPLES: z.coerce.number().int().positive().default(3),
   // Account-wide ceiling on concurrently running worker vCPUs
   // (lib/fargateCapacity.ts). Sits BELOW the AWS Fargate On-Demand vCPU
@@ -122,7 +153,11 @@ const baseSchema = z.object({
   // a job failure. The 6 vCPU of headroom absorbs the api_migrate one-shot and
   // any task ECS has not finished reaping. Raise this only alongside the AWS
   // quota; 0 disables the check.
-  MAX_CONCURRENT_WORKER_VCPUS: z.coerce.number().int().nonnegative().default(24),
+  MAX_CONCURRENT_WORKER_VCPUS: z.coerce
+    .number()
+    .int()
+    .nonnegative()
+    .default(24),
   // Egress meter (lib/egressMeter.ts). The sweep rides the topo reaper's
   // existing interval rather than owning a timer — it is incremental and does
   // nothing when no new log objects have been delivered.
@@ -139,32 +174,64 @@ const baseSchema = z.object({
   EGRESS_API_REQUESTER_PATTERN: z.string().default("logjam-eb-role"),
   // Ceiling on access-log objects consumed per sweep, so a backlog is worked
   // through over several passes instead of one unbounded run.
-  EGRESS_MAX_LOG_OBJECTS_PER_SWEEP: z.coerce.number().int().positive().default(500),
+  EGRESS_MAX_LOG_OBJECTS_PER_SWEEP: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(500),
   // TopoExportJob sweeps (ARCH-002): queued rows older than the QUEUED timeout
   // (task never placed/started) and running rows older than the RUNNING
   // timeout (worker SIGKILLed before its except path ran) are force-failed.
-  TOPO_REAPER_EXPORT_QUEUED_TIMEOUT_MS: z.coerce.number().int().positive().default(900_000), // 15 min
-  TOPO_REAPER_EXPORT_RUNNING_TIMEOUT_MS: z.coerce.number().int().positive().default(10_800_000), // 3 h
+  TOPO_REAPER_EXPORT_QUEUED_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(900_000), // 15 min
+  TOPO_REAPER_EXPORT_RUNNING_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(10_800_000), // 3 h
   // Completed exports older than this are swept: S3 object deleted, quota
   // decremented, row removed (ARCH-006). 0 disables the sweep.
-  TOPO_EXPORT_TTL_MS: z.coerce.number().int().nonnegative().default(604_800_000), // 7 days
+  TOPO_EXPORT_TTL_MS: z.coerce
+    .number()
+    .int()
+    .nonnegative()
+    .default(604_800_000), // 7 days
   // GeoPdfJob sweeps (mirrors TOPO_REAPER_EXPORT_*_TIMEOUT_MS): queued rows
   // older than the QUEUED timeout (task never placed/started) and running
   // rows older than the RUNNING timeout (worker SIGKILLed before its terminal
   // write) are force-failed.
-  GEO_PDF_QUEUED_TIMEOUT_MS: z.coerce.number().int().positive().default(900_000), // 15 min
-  GEO_PDF_RUNNING_TIMEOUT_MS: z.coerce.number().int().positive().default(1_800_000), // 30 min
+  GEO_PDF_QUEUED_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(900_000), // 15 min
+  GEO_PDF_RUNNING_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(1_800_000), // 30 min
   // Unconfirmed media uploads (presigned PUT done, /media/:id/confirm never
   // called — no Media row exists) are orphans in S3 with no quota charge
   // (SEC-003). Objects older than this with no confirmed row are deleted by
   // the periodic sweep. Must comfortably exceed UPLOAD_URL_TTL_SECONDS so an
   // in-flight upload+confirm is never raced. 0 disables the sweep.
-  MEDIA_ORPHAN_TTL_MS: z.coerce.number().int().nonnegative().default(86_400_000), // 24 h
+  MEDIA_ORPHAN_TTL_MS: z.coerce
+    .number()
+    .int()
+    .nonnegative()
+    .default(86_400_000), // 24 h
   // Sync tombstones (Stage 8) older than this are swept by the reaper. A
   // client whose delta cursor predates the horizon is told to full-resync
   // (resetRequired), so the TTL bounds table growth, not correctness.
   // 0 disables the sweep (rows kept forever).
-  SYNC_TOMBSTONE_TTL_MS: z.coerce.number().int().nonnegative().default(7_776_000_000), // 90 days
+  SYNC_TOMBSTONE_TTL_MS: z.coerce
+    .number()
+    .int()
+    .nonnegative()
+    .default(7_776_000_000), // 90 days
   // Fleet-wide full-resync lever (stage8 §10.5): bump when server-side data
   // changes shape without moving updatedAt (e.g. a migration rewriting rows).
   // Clients whose cursor was minted under a different epoch get resetRequired.
@@ -263,7 +330,9 @@ export function validateEnv(): Env {
   }
 
   const corsList = env.CORS_ORIGIN
-    ? env.CORS_ORIGIN.split(",").map((s) => s.trim()).filter(Boolean)
+    ? env.CORS_ORIGIN.split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
     : env.AUTH_MODE === "fake"
       ? ["http://localhost:5173", "http://127.0.0.1:5173"]
       : [];
@@ -271,10 +340,14 @@ export function validateEnv(): Env {
   return {
     ...env,
     ECS_SUBNETS_LIST: env.ECS_SUBNETS
-      ? env.ECS_SUBNETS.split(",").map((s) => s.trim()).filter(Boolean)
+      ? env.ECS_SUBNETS.split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
       : [],
     ECS_SECURITY_GROUPS_LIST: env.ECS_SECURITY_GROUPS
-      ? env.ECS_SECURITY_GROUPS.split(",").map((s) => s.trim()).filter(Boolean)
+      ? env.ECS_SECURITY_GROUPS.split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
       : [],
     CORS_ORIGIN_LIST: corsList,
   };

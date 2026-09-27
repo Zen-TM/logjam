@@ -48,7 +48,10 @@ function str(payload: Record<string, unknown>, key: string): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
-function saved(filter: SavedCategory, highlightKey: string | null): NotificationDestination {
+function saved(
+  filter: SavedCategory,
+  highlightKey: string | null,
+): NotificationDestination {
   return { tab: "saved", label: "View in Saved", filter, highlightKey };
 }
 
@@ -100,7 +103,10 @@ export function notificationDestination(
       // goes through the GeoPDF pipeline, everything else becomes a vector
       // import. The id it was given on this device is not in the payload, so the
       // filter is as far as this can point.
-      return saved(filename.toLowerCase().endsWith(".pdf") ? "geoPdf" : "import", null);
+      return saved(
+        filename.toLowerCase().endsWith(".pdf") ? "geoPdf" : "import",
+        null,
+      );
     }
 
     // place_shared already has "Open" in the same sheet.

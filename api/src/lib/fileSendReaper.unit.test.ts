@@ -55,7 +55,10 @@ function withDeleteCount(count: number) {
   transaction.mockImplementation(async (fn: (tx: unknown) => unknown) => {
     notificationDeleteMany = vi.fn().mockResolvedValue({ count: 1 });
     notificationFindMany = vi.fn().mockResolvedValue([
-      { id: "notif-1", payload: { fileSendId: "send-1", sentById: "sender-1" } },
+      {
+        id: "notif-1",
+        payload: { fileSendId: "send-1", sentById: "sender-1" },
+      },
     ]);
     notificationUpdate = vi.fn().mockResolvedValue({});
     return fn({

@@ -1,4 +1,10 @@
-import { useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
+import {
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type RefObject,
+} from "react";
 import {
   ArrowLeft,
   ChevronRight,
@@ -18,7 +24,16 @@ import { PROTOMAPS_SWATCH } from "../../basemapSwatch";
 import { previewUrlFor, type TileLayer } from "../sidebar/panels/tilePreview";
 import { boundsIntersect, footprintBounds } from "./topoFootprint";
 import { nextEnabledIndex } from "../../ui/rovingFocus";
-import { Chip, ChipRail, IconButton, IconTile, Popover, Row, SearchField, Toggle } from "../../ui";
+import {
+  Chip,
+  ChipRail,
+  IconButton,
+  IconTile,
+  Popover,
+  Row,
+  SearchField,
+  Toggle,
+} from "../../ui";
 import classes from "./LayersPopover.module.css";
 
 type BaseLayer = TileLayer & { id: string; name: string };
@@ -35,19 +50,41 @@ const LAYER_DESCRIPTIONS: Partial<Record<string, string>> = {
     "so the estimate there may be out of date.",
 };
 
-const countOf = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
+const countOf = (count: number, noun: string) =>
+  `${count} ${noun}${count === 1 ? "" : "s"}`;
 
-const TOPO_DATE = new Intl.DateTimeFormat("en-AU", { month: "short", year: "numeric" });
+const TOPO_DATE = new Intl.DateTimeFormat("en-AU", {
+  month: "short",
+  year: "numeric",
+});
 
 /** A drawn scrap of the vector basemap's own palette — land, a creek, a road
  *  and a lane — because a vector basemap has no XYZ tile to thumbnail. */
 function VectorSwatch() {
   return (
-    <svg className={classes.thumb} viewBox="0 0 40 40" preserveAspectRatio="none" aria-hidden="true">
+    <svg
+      className={classes.thumb}
+      viewBox="0 0 40 40"
+      preserveAspectRatio="none"
+      aria-hidden="true"
+    >
       <rect width="40" height="40" fill={PROTOMAPS_SWATCH.earth} />
-      <path d="M-2 27 C 8 22, 12 32, 22 27 S 34 18, 42 22" fill="none" stroke={PROTOMAPS_SWATCH.water} strokeWidth="3" />
-      <path d="M-2 14 L 42 9" stroke={PROTOMAPS_SWATCH.road} strokeWidth="3.5" />
-      <path d="M14 -2 L 20 42" stroke={PROTOMAPS_SWATCH.minor} strokeWidth="2" />
+      <path
+        d="M-2 27 C 8 22, 12 32, 22 27 S 34 18, 42 22"
+        fill="none"
+        stroke={PROTOMAPS_SWATCH.water}
+        strokeWidth="3"
+      />
+      <path
+        d="M-2 14 L 42 9"
+        stroke={PROTOMAPS_SWATCH.road}
+        strokeWidth="3.5"
+      />
+      <path
+        d="M14 -2 L 20 42"
+        stroke={PROTOMAPS_SWATCH.minor}
+        strokeWidth="2"
+      />
     </svg>
   );
 }
@@ -114,11 +151,19 @@ export default function LayersPopover({
 }) {
   const [view, setView] = useState<View>("overlays");
 
-  const shownJobs = completedTopoJobs.filter((job) => lidarJobToggles[job.jobId] ?? true);
+  const shownJobs = completedTopoJobs.filter(
+    (job) => lidarJobToggles[job.jobId] ?? true,
+  );
   const shownLayerLabels = lidarLayerOrder
     .filter((name) => lidarLayerToggles[name])
-    .map((name) => TOPO_LAYERS.find((layer) => layer.name === name)?.label.toLowerCase() ?? name);
-  const overlaysOn = [showPlaces, showWays, lidarEnabled].filter(Boolean).length;
+    .map(
+      (name) =>
+        TOPO_LAYERS.find((layer) => layer.name === name)?.label.toLowerCase() ??
+        name,
+    );
+  const overlaysOn = [showPlaces, showWays, lidarEnabled].filter(
+    Boolean,
+  ).length;
 
   const close = () => {
     setView("overlays");
@@ -199,13 +244,19 @@ export default function LayersPopover({
                 icon={Route}
                 hue="var(--hue-route)"
                 title="Ways"
-                subtitle={wayCount == null ? "Every line you have" : countOf(wayCount, "way")}
+                subtitle={
+                  wayCount == null
+                    ? "Every line you have"
+                    : countOf(wayCount, "way")
+                }
                 checked={showWays}
                 onToggle={setShowWays}
               />
               {completedTopoJobs.length === 0 ? (
                 <Row
-                  leading={<IconTile icon={Mountain} hue="var(--hue-overlay)" />}
+                  leading={
+                    <IconTile icon={Mountain} hue="var(--hue-overlay)" />
+                  }
                   title="LiDAR topos"
                   subtitle="None yet. Make one from Maps."
                 />
@@ -265,8 +316,18 @@ function OverlayRow({
       subtitle={subtitle}
       trailing={
         <>
-          {onOpen && <IconButton icon={ChevronRight} label={openLabel ?? title} onClick={onOpen} />}
-          <Toggle checked={checked} onChange={onToggle} label={`Show ${title.toLowerCase()}`} />
+          {onOpen && (
+            <IconButton
+              icon={ChevronRight}
+              label={openLabel ?? title}
+              onClick={onOpen}
+            />
+          )}
+          <Toggle
+            checked={checked}
+            onChange={onToggle}
+            label={`Show ${title.toLowerCase()}`}
+          />
         </>
       }
     />
@@ -288,8 +349,14 @@ function BasemapGallery({
   const activeIndex = layers.findIndex((layer) => layer.id === activeLayerId);
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    const from = tileRefs.current.findIndex((tile) => tile === document.activeElement);
-    const to = nextEnabledIndex(layers.map(() => false), from, event.key);
+    const from = tileRefs.current.findIndex(
+      (tile) => tile === document.activeElement,
+    );
+    const to = nextEnabledIndex(
+      layers.map(() => false),
+      from,
+      event.key,
+    );
     if (to == null) return;
     event.preventDefault();
     tileRefs.current[to]?.focus();
@@ -297,10 +364,19 @@ function BasemapGallery({
   }
 
   return (
-    <div role="radiogroup" aria-label="Basemap" tabIndex={-1} className={classes.gallery} onKeyDown={onKeyDown}>
+    <div
+      role="radiogroup"
+      aria-label="Basemap"
+      tabIndex={-1}
+      className={classes.gallery}
+      onKeyDown={onKeyDown}
+    >
       {layers.map((layer, index) => {
         const active = layer.id === activeLayerId;
-        const thumbnail = mapView && layer.tiles.length > 0 ? previewUrlFor(layer, mapView) : null;
+        const thumbnail =
+          mapView && layer.tiles.length > 0
+            ? previewUrlFor(layer, mapView)
+            : null;
         return (
           <button
             key={layer.id}
@@ -315,7 +391,12 @@ function BasemapGallery({
             onClick={() => onChange(layer.id)}
           >
             {thumbnail ? (
-              <img src={thumbnail} alt="" className={classes.thumb} draggable={false} />
+              <img
+                src={thumbnail}
+                alt=""
+                className={classes.thumb}
+                draggable={false}
+              />
             ) : (
               <VectorSwatch />
             )}
@@ -368,7 +449,11 @@ function ToposView({
   const inView = useMemo(
     () =>
       mapBounds
-        ? jobs.filter((job) => job.footprint && boundsIntersect(footprintBounds(job.footprint), mapBounds))
+        ? jobs.filter(
+            (job) =>
+              job.footprint &&
+              boundsIntersect(footprintBounds(job.footprint), mapBounds),
+          )
         : jobs,
     [jobs, mapBounds],
   );
@@ -380,14 +465,22 @@ function ToposView({
   return (
     <>
       <div className={classes.head}>
-        <IconButton icon={ArrowLeft} label="Back to overlays" onClick={onBack} />
+        <IconButton
+          icon={ArrowLeft}
+          label="Back to overlays"
+          onClick={onBack}
+        />
         <div className={classes.titleBlock}>
           <span className={classes.title}>LiDAR topos</span>
           <span className={classes.subtitle}>
             {shownCount} of {jobs.length} shown
           </span>
         </div>
-        <Toggle checked={lidarEnabled} onChange={setLidarEnabled} label="Show LiDAR topos" />
+        <Toggle
+          checked={lidarEnabled}
+          onChange={setLidarEnabled}
+          label="Show LiDAR topos"
+        />
         <IconButton icon={X} label="Close" onClick={onClose} />
       </div>
       <div className={classes.body}>
@@ -421,7 +514,12 @@ function ToposView({
                   label="Which topos"
                   className={classes.grow}
                   options={[
-                    { value: "view", label: "In this view", count: inView.length, icon: Scan },
+                    {
+                      value: "view",
+                      label: "In this view",
+                      count: inView.length,
+                      icon: Scan,
+                    },
                     { value: "all", label: "All", count: jobs.length },
                   ]}
                   value={scope}
@@ -440,9 +538,15 @@ function ToposView({
             </div>
             {listed.length === 0 ? (
               <div className={classes.emptyLine}>
-                <span>{needle ? "No topos match." : "No topos in this view."}</span>
+                <span>
+                  {needle ? "No topos match." : "No topos in this view."}
+                </span>
                 {scope === "view" && !needle && (
-                  <Chip label="Show all" count={jobs.length} onClick={() => setScope("all")} />
+                  <Chip
+                    label="Show all"
+                    count={jobs.length}
+                    onClick={() => setScope("all")}
+                  />
                 )}
               </div>
             ) : (
@@ -456,12 +560,19 @@ function ToposView({
                         <span className={classes.listName}>{name}</span>
                         <span className={classes.subtitle}>
                           {TOPO_DATE.format(new Date(job.createdAt))}
-                          {job.syncRole === "shared" ? " · Shared with you" : ""}
+                          {job.syncRole === "shared"
+                            ? " · Shared with you"
+                            : ""}
                         </span>
                       </span>
                       <Toggle
                         checked={lidarJobToggles[job.jobId] ?? true}
-                        onChange={(next) => setLidarJobToggles((prev) => ({ ...prev, [job.jobId]: next }))}
+                        onChange={(next) =>
+                          setLidarJobToggles((prev) => ({
+                            ...prev,
+                            [job.jobId]: next,
+                          }))
+                        }
                         label={`Show ${name}`}
                         disabled={!lidarEnabled}
                       />
@@ -518,10 +629,13 @@ function LayerOrder({
 
   return (
     <>
-      <span className={classes.caption}>Drawn top to bottom, on every topo</span>
+      <span className={classes.caption}>
+        Drawn top to bottom, on every topo
+      </span>
       <ul className={classes.list}>
         {order.map((name, index) => {
-          const label = TOPO_LAYERS.find((layer) => layer.name === name)?.label ?? name;
+          const label =
+            TOPO_LAYERS.find((layer) => layer.name === name)?.label ?? name;
           const description = LAYER_DESCRIPTIONS[name];
           return (
             <li
@@ -565,18 +679,27 @@ function LayerOrder({
                 <span className={classes.listName}>
                   {label}
                   {description && (
-                    <span className={classes.info} title={description} role="img" aria-label={description}>
+                    <span
+                      className={classes.info}
+                      title={description}
+                      role="img"
+                      aria-label={description}
+                    >
                       <Info size={14} aria-hidden />
                     </span>
                   )}
                 </span>
                 {unavailable.has(name) && (
-                  <span className={classes.warning}>Files missing for some topos — re-run them to restore</span>
+                  <span className={classes.warning}>
+                    Files missing for some topos — re-run them to restore
+                  </span>
                 )}
               </span>
               <Toggle
                 checked={toggles[name] ?? true}
-                onChange={(next) => setToggles((prev) => ({ ...prev, [name]: next }))}
+                onChange={(next) =>
+                  setToggles((prev) => ({ ...prev, [name]: next }))
+                }
                 label={`Show ${label}`}
                 disabled={disabled}
               />

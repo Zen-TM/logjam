@@ -34,7 +34,10 @@ function parseArray(raw: string | null): unknown[] | null {
  * rewriting — the `LIKE %id%` prefilter the call sites use matches substrings
  * too.
  */
-export function withoutPlaceLink(raw: string | null, placeId: string): string | null {
+export function withoutPlaceLink(
+  raw: string | null,
+  placeId: string,
+): string | null {
   const list = parseArray(raw) as TripPlaceLink[] | null;
   if (list === null) return null;
   const kept = list.filter((link) => link?.id !== placeId);

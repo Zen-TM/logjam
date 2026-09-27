@@ -18,9 +18,8 @@ vi.mock("expo-secure-store", () => ({
   },
 }));
 
-const { readPreviousIdentity, signInNeedsWipe, writeLocalIdentity } = await import(
-  "./localIdentity"
-);
+const { readPreviousIdentity, signInNeedsWipe, writeLocalIdentity } =
+  await import("./localIdentity");
 
 beforeEach(() => {
   for (const key of Object.keys(store)) delete store[key];
@@ -34,7 +33,10 @@ describe("readPreviousIdentity", () => {
 
   it("answers the record that is there", async () => {
     await writeLocalIdentity({ sub: "alice-sub", username: "alice" });
-    expect(await readPreviousIdentity()).toEqual({ sub: "alice-sub", username: "alice" });
+    expect(await readPreviousIdentity()).toEqual({
+      sub: "alice-sub",
+      username: "alice",
+    });
   });
 
   it("answers unreadable, not null, for a corrupt record", async () => {

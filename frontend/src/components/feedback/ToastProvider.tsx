@@ -1,4 +1,12 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Toast, type ToastSeverity } from "../../ui";
 import classes from "./ToastProvider.module.css";
 
@@ -36,14 +44,21 @@ function TimedToast({
   useEffect(() => {
     if (paused) return;
     const startedAt = Date.now();
-    const timer = window.setTimeout(() => onDismiss(entry.id), remaining.current);
+    const timer = window.setTimeout(
+      () => onDismiss(entry.id),
+      remaining.current,
+    );
     return () => {
       window.clearTimeout(timer);
       remaining.current -= Date.now() - startedAt;
     };
   }, [paused, entry.id, onDismiss]);
   return (
-    <Toast message={entry.message} severity={entry.severity} onDismiss={() => onDismiss(entry.id)} />
+    <Toast
+      message={entry.message}
+      severity={entry.severity}
+      onDismiss={() => onDismiss(entry.id)}
+    />
   );
 }
 
@@ -55,7 +70,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const push = useCallback((message: string, severity: ToastSeverity) => {
     setToasts((prev) => {
       const next = [...prev, { id: nextId++, message, severity }];
-      return next.length > MAX_TOASTS ? next.slice(next.length - MAX_TOASTS) : next;
+      return next.length > MAX_TOASTS
+        ? next.slice(next.length - MAX_TOASTS)
+        : next;
     });
   }, []);
 
@@ -90,7 +107,12 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         onBlur={() => setFocused(false)}
       >
         {toasts.map((t) => (
-          <TimedToast key={t.id} entry={t} paused={hovered || focused} onDismiss={dismiss} />
+          <TimedToast
+            key={t.id}
+            entry={t}
+            paused={hovered || focused}
+            onDismiss={dismiss}
+          />
         ))}
       </div>
     </ToastContext.Provider>

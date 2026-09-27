@@ -26,7 +26,10 @@ import {
 import { apiFetch } from "../../api/apiFetch";
 import { fetchCurrentUser, useApiQuery } from "../../api/queries";
 import { useAccountState } from "../../auth/AccountStateContext";
-import { capabilityStatus, unavailableReasonText } from "../../auth/capabilities";
+import {
+  capabilityStatus,
+  unavailableReasonText,
+} from "../../auth/capabilities";
 import { useConnectivity } from "../../map/connectivity";
 import { requestPushPermission } from "../../notifications/pushRegistration";
 import type { TUser } from "../../api/types";
@@ -50,7 +53,11 @@ const NOTIFICATION_ROWS: {
   group: "email" | "inApp";
 }[] = [
   { key: "topoEmail", title: "A LiDAR map finishes or fails", group: "email" },
-  { key: "exportEmail", title: "A topo export finishes or fails", group: "email" },
+  {
+    key: "exportEmail",
+    title: "A topo export finishes or fails",
+    group: "email",
+  },
   { key: "geoPdfEmail", title: "A GeoPDF finishes or fails", group: "email" },
   { key: "friendRequestInApp", title: "Friend requests", group: "inApp" },
   { key: "shareInApp", title: "A place is shared with me", group: "inApp" },
@@ -65,15 +72,19 @@ export function NotificationSettingsScreen() {
   );
   const online = useConnectivity() === "online";
   const [toast, setToast] = useState<ToastMessage | null>(null);
-  const notify = useCallback((text: string, tone: ToastMessage["tone"] = "info") => {
-    setToast({ text, tone, nonce: Date.now() });
-  }, []);
+  const notify = useCallback(
+    (text: string, tone: ToastMessage["tone"] = "info") => {
+      setToast({ text, tone, nonce: Date.now() });
+    },
+    [],
+  );
 
   const user = userQuery.data;
 
   // Optimistic with rollback: a switch that waits for a round trip feels broken,
   // and a switch that lies about a failed save is worse.
-  const [notifications, setNotifications] = useState<NotificationPreferences | null>(null);
+  const [notifications, setNotifications] =
+    useState<NotificationPreferences | null>(null);
   // Re-seed on the VALUE, not on `user.id` — which never changes for a signed-in
   // user, so a preference edited on another device and pulled in by a refetch
   // while this screen stayed mounted was silently dropped. Keying on the
@@ -88,7 +99,9 @@ export function NotificationSettingsScreen() {
     : null;
   useEffect(() => {
     if (!serverNotificationsKey) return;
-    setNotifications(JSON.parse(serverNotificationsKey) as NotificationPreferences);
+    setNotifications(
+      JSON.parse(serverNotificationsKey) as NotificationPreferences,
+    );
   }, [serverNotificationsKey]);
 
   const toggleNotification = useCallback(

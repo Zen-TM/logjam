@@ -3,6 +3,7 @@
 Pure stdlib (zipfile/os); no GDAL. The ELVIS upload is attacker-controlled, so
 the safety rejections here guard a real boundary.
 """
+
 import os
 import stat
 import sys
@@ -21,6 +22,7 @@ try:
         _safe_extract_zip,
         extract_elvis_zip,
     )
+
     _IMPORT_OK = True
 except Exception as _exc:  # noqa: BLE001
     _IMPORT_OK = False

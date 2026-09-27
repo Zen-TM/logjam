@@ -178,7 +178,8 @@ export async function sampleElevations(
         tile: await fetchDemTile(tileX, tileY),
       })),
     );
-    for (const { key, tile } of fetched) if (tile) cacheTile(key, tile, "network");
+    for (const { key, tile } of fetched)
+      if (tile) cacheTile(key, tile, "network");
   }
 
   return addresses.map(({ tileX, tileY, index }) =>

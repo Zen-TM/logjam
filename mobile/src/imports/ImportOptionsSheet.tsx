@@ -85,16 +85,21 @@ export function ImportOptionsSheet({
     imported,
     visible && showingStats && imported != null,
   );
-  const { profile: demProfile, loading: demLoading } = useElevationProfile(line, {
-    allowNetwork,
-  });
+  const { profile: demProfile, loading: demLoading } = useElevationProfile(
+    line,
+    {
+      allowNetwork,
+    },
+  );
 
   const shareRowProps = useShareRowProps(online);
   const actions = imported ? vectorImportActions(imported) : null;
   // THE sharing panel, in its "send a copy" mode — the same component every
   // other surface renders, with the wording the one non-revocable verb needs.
   const share = useSharePanel({
-    target: actions?.sendCopy ? { kind: "copy", sendCopy: actions.sendCopy } : null,
+    target: actions?.sendCopy
+      ? { kind: "copy", sendCopy: actions.sendCopy }
+      : null,
     itemLabel: imported?.name ?? "",
     online,
     active: sending,
@@ -111,7 +116,8 @@ export function ImportOptionsSheet({
     source: "import",
     active: attaching,
     attach: async (placeId, placeName) => {
-      if (!actions?.attachToPlace) throw new Error("This import has no original file.");
+      if (!actions?.attachToPlace)
+        throw new Error("This import has no original file.");
       await actions.attachToPlace(placeId);
       onInfo(`Attached a copy as ${placeName}'s route.`);
     },

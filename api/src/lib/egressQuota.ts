@@ -44,7 +44,10 @@ export async function getEgressUsage(userId: string, db: DbClient = prisma) {
   return {
     used,
     quota: user.monthlyEgressQuotaBytes,
-    remaining: used >= user.monthlyEgressQuotaBytes ? 0n : user.monthlyEgressQuotaBytes - used,
+    remaining:
+      used >= user.monthlyEgressQuotaBytes
+        ? 0n
+        : user.monthlyEgressQuotaBytes - used,
     resetAt: nextMonthReset().toISOString(),
   };
 }
@@ -79,7 +82,9 @@ export async function exhaustedEgressOwnerIds(
   });
   return new Set(
     rows
-      .filter((row) => row.monthlyEgressUsedBytes >= row.monthlyEgressQuotaBytes)
+      .filter(
+        (row) => row.monthlyEgressUsedBytes >= row.monthlyEgressQuotaBytes,
+      )
       .map((row) => row.id),
   );
 }

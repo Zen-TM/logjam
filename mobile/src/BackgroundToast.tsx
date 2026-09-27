@@ -27,7 +27,10 @@ export function BackgroundToast() {
     // The nonce is what re-runs the animation when the same text repeats.
     const show = (next: Omit<ToastMessage, "nonce">) =>
       setMessage({ ...next, nonce: Date.now() });
-    const unsubscribes = [onGeoPdfImportToast(show), onRegionDownloadToast(show)];
+    const unsubscribes = [
+      onGeoPdfImportToast(show),
+      onRegionDownloadToast(show),
+    ];
     return () => {
       for (const unsubscribe of unsubscribes) unsubscribe();
     };

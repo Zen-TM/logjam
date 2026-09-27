@@ -30,12 +30,17 @@ export function AuthFlow({ auth }: { auth: Auth }) {
       style={styles.root}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        keyboardShouldPersistTaps="handled"
+      >
         <Text style={styles.appTitle}>Logjam</Text>
         {auth.state === "signUp" && <SignUpForm auth={auth} />}
         {auth.state === "confirmSignUp" && <ConfirmSignUpForm auth={auth} />}
         {auth.state === "forgotPassword" && <ForgotPasswordForm auth={auth} />}
-        {auth.state === "confirmForgotPassword" && <ConfirmForgotPasswordForm auth={auth} />}
+        {auth.state === "confirmForgotPassword" && (
+          <ConfirmForgotPasswordForm auth={auth} />
+        )}
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -57,8 +62,18 @@ function SignUpForm({ auth }: { auth: Auth }) {
   return (
     <View style={styles.form}>
       <Text style={styles.heading}>Sign up</Text>
-      <TextField label="Username" value={username} onChangeText={setUsername} autoCapitalize="none" />
-      <TextField label="Name" value={name} onChangeText={setName} autoComplete="name" />
+      <TextField
+        label="Username"
+        value={username}
+        onChangeText={setUsername}
+        autoCapitalize="none"
+      />
+      <TextField
+        label="Name"
+        value={name}
+        onChangeText={setName}
+        autoComplete="name"
+      />
       <TextField
         label="Email"
         value={email}
@@ -98,7 +113,9 @@ function ConfirmSignUpForm({ auth }: { auth: Auth }) {
 
   const resend = async () => {
     const result = await auth.resendSignUpCode();
-    setResendMessage(result.ok ? "Code re-sent — check your email." : (result.error ?? null));
+    setResendMessage(
+      result.ok ? "Code re-sent — check your email." : (result.error ?? null),
+    );
   };
 
   return (
@@ -107,7 +124,12 @@ function ConfirmSignUpForm({ auth }: { auth: Auth }) {
       <Text style={styles.hint}>
         We sent a verification code to {auth.pendingUsername}.
       </Text>
-      <TextField label="Verification code" value={code} onChangeText={setCode} keyboardType="number-pad" />
+      <TextField
+        label="Verification code"
+        value={code}
+        onChangeText={setCode}
+        keyboardType="number-pad"
+      />
       <TextField
         label="Password"
         value={password}
@@ -116,7 +138,11 @@ function ConfirmSignUpForm({ auth }: { auth: Auth }) {
         autoCapitalize="none"
       />
       {auth.error ? <ErrorBanner message={auth.error} /> : null}
-      <Button label="Confirm and sign in" onPress={submit} loading={submitting} />
+      <Button
+        label="Confirm and sign in"
+        onPress={submit}
+        loading={submitting}
+      />
       <FooterLink label="Resend code" onPress={resend} />
       {resendMessage ? <Text style={styles.hint}>{resendMessage}</Text> : null}
     </View>
@@ -168,7 +194,12 @@ function ConfirmForgotPasswordForm({ auth }: { auth: Auth }) {
       <Text style={styles.hint}>
         We sent a reset code to {auth.pendingUsername}.
       </Text>
-      <TextField label="Reset code" value={code} onChangeText={setCode} keyboardType="number-pad" />
+      <TextField
+        label="Reset code"
+        value={code}
+        onChangeText={setCode}
+        keyboardType="number-pad"
+      />
       <TextField
         label="New password"
         value={newPassword}
@@ -184,9 +215,19 @@ function ConfirmForgotPasswordForm({ auth }: { auth: Auth }) {
   );
 }
 
-function FooterLink({ label, onPress }: { label: string; onPress: () => void }) {
+function FooterLink({
+  label,
+  onPress,
+}: {
+  label: string;
+  onPress: () => void;
+}) {
   return (
-    <Pressable onPress={onPress} accessibilityRole="link" style={styles.footerLink}>
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="link"
+      style={styles.footerLink}
+    >
       <Text style={styles.footerLinkText}>{label}</Text>
     </Pressable>
   );
@@ -208,7 +249,11 @@ const styles = StyleSheet.create({
     marginBottom: spacing(2),
   },
   form: { gap: spacing(2) },
-  heading: { fontSize: fontSize.lg, fontWeight: fontWeight.medium, color: theme.textPrimary },
+  heading: {
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.medium,
+    color: theme.textPrimary,
+  },
   hint: { fontSize: fontSize.sm, color: theme.textMuted },
   footerLink: { alignSelf: "center", padding: spacing(1) },
   footerLinkText: { color: theme.accent, fontSize: fontSize.sm },

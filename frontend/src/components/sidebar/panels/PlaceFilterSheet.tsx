@@ -25,7 +25,11 @@ type CustomFilter = PlaceFilters["custom"][string];
 
 /** An inactive custom filter is ABSENT, never present at its default, so "is it
  *  active" stays `key in custom` for every kind. */
-function withCustom(filters: PlaceFilters, key: string, value: CustomFilter | null): PlaceFilters {
+function withCustom(
+  filters: PlaceFilters,
+  key: string,
+  value: CustomFilter | null,
+): PlaceFilters {
   const custom = { ...filters.custom };
   if (value == null) delete custom[key];
   else custom[key] = value;
@@ -71,11 +75,18 @@ export default function PlaceFilterSheet({
   resultCount: number;
 }) {
   const fieldDefs =
-    filters.placeTypeId == null ? placeCustomFieldDefs : defsForType(placeCustomFieldDefs, filters.placeTypeId);
+    filters.placeTypeId == null
+      ? placeCustomFieldDefs
+      : defsForType(placeCustomFieldDefs, filters.placeTypeId);
 
-  const patch = (next: Partial<PlaceFilters>) => onChangeFilters({ ...filters, ...next });
+  const patch = (next: Partial<PlaceFilters>) =>
+    onChangeFilters({ ...filters, ...next });
 
-  const setDateBound = (field: "created_at" | "updated_at", bound: 0 | 1, value: string) => {
+  const setDateBound = (
+    field: "created_at" | "updated_at",
+    bound: 0 | 1,
+    value: string,
+  ) => {
     const current = filters[field] ?? [null, null];
     const next: [string | null, string | null] =
       bound === 0 ? [value || null, current[1]] : [current[0], value || null];
@@ -133,7 +144,9 @@ export default function PlaceFilterSheet({
               key={def.key}
               def={def}
               value={filters.custom[def.key] ?? null}
-              onChange={(next) => onChangeFilters(withCustom(filters, def.key, next))}
+              onChange={(next) =>
+                onChangeFilters(withCustom(filters, def.key, next))
+              }
             />
           ))}
         </SheetSection>
@@ -154,7 +167,11 @@ export default function PlaceFilterSheet({
             </>
           ) : (
             <>
-              <Chip label="Draw on map" icon={SquareDashed} onClick={onDrawArea} />
+              <Chip
+                label="Draw on map"
+                icon={SquareDashed}
+                onClick={onDrawArea}
+              />
               <Chip label="This view" icon={Scan} onClick={onAreaToView} />
             </>
           )}

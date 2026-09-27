@@ -37,5 +37,10 @@ export function SelectionMark({
 }
 
 const styles = StyleSheet.create({
-  box: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
+  box: {
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 });

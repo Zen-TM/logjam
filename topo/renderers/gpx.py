@@ -33,20 +33,20 @@ def _build_gpx_vrt(src: Path, work_dir: Path) -> Path:
     layer = src.stem
     vrt = work_dir / "gpx_features.vrt"
     vrt.write_text(
-        '<OGRVRTDataSource>\n'
+        "<OGRVRTDataSource>\n"
         '  <OGRVRTLayer name="points">\n'
-        f'    <SrcDataSource>{src}</SrcDataSource>\n'
+        f"    <SrcDataSource>{src}</SrcDataSource>\n"
         f'    <SrcSQL dialect="OGRSQL">SELECT * FROM "{layer}" '
         "WHERE OGR_GEOMETRY='POINT'</SrcSQL>\n"
-        '    <GeometryType>wkbPoint</GeometryType>\n'
-        '  </OGRVRTLayer>\n'
+        "    <GeometryType>wkbPoint</GeometryType>\n"
+        "  </OGRVRTLayer>\n"
         '  <OGRVRTLayer name="lines">\n'
-        f'    <SrcDataSource>{src}</SrcDataSource>\n'
+        f"    <SrcDataSource>{src}</SrcDataSource>\n"
         f'    <SrcSQL dialect="OGRSQL">SELECT * FROM "{layer}" '
         "WHERE OGR_GEOMETRY='LINESTRING'</SrcSQL>\n"
-        '    <GeometryType>wkbLineString</GeometryType>\n'
-        '  </OGRVRTLayer>\n'
-        '</OGRVRTDataSource>\n'
+        "    <GeometryType>wkbLineString</GeometryType>\n"
+        "  </OGRVRTLayer>\n"
+        "</OGRVRTDataSource>\n"
     )
     return vrt
 
@@ -66,17 +66,16 @@ def render_gpx(ctx: RenderContext) -> Path:
 
     cmd = [
         "ogr2ogr",
-        "-f", "GPX",
+        "-f",
+        "GPX",
         str(dst),
         str(vrt),
-        "-dsco", "GPX_USE_EXTENSIONS=YES",
+        "-dsco",
+        "GPX_USE_EXTENSIONS=YES",
     ]
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
-        raise RenderError(
-            "ogr2ogr GPX conversion failed:\n"
-            + result.stderr.strip()
-        )
+        raise RenderError("ogr2ogr GPX conversion failed:\n" + result.stderr.strip())
     if not dst.exists():
         raise RenderError("ogr2ogr exited 0 but produced no GPX file")
     return dst

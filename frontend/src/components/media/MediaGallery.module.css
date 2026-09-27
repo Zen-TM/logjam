@@ -21,8 +21,13 @@
   aspect-ratio: 1 / 1;
   border-radius: var(--radius-sm);
   overflow: hidden;
-  background-color: color-mix(in srgb, var(--theme-text-primary) 4%, transparent);
-  border: 1px solid color-mix(in srgb, var(--theme-text-primary) 8%, transparent);
+  background-color: color-mix(
+    in srgb,
+    var(--theme-text-primary) 4%,
+    transparent
+  );
+  border: 1px solid
+    color-mix(in srgb, var(--theme-text-primary) 8%, transparent);
 }
 
 .tileButton {
@@ -138,8 +143,13 @@
   min-width: 0;
   padding: 0.4rem 0.5rem;
   border-radius: var(--radius-sm);
-  background-color: color-mix(in srgb, var(--theme-text-primary) 4%, transparent);
-  border: 1px solid color-mix(in srgb, var(--theme-text-primary) 8%, transparent);
+  background-color: color-mix(
+    in srgb,
+    var(--theme-text-primary) 4%,
+    transparent
+  );
+  border: 1px solid
+    color-mix(in srgb, var(--theme-text-primary) 8%, transparent);
   color: var(--theme-text-primary);
   text-decoration: none;
   font-size: var(--font-sm);
@@ -147,7 +157,11 @@
 }
 
 .trackLink:hover {
-  background-color: color-mix(in srgb, var(--theme-text-primary) 8%, transparent);
+  background-color: color-mix(
+    in srgb,
+    var(--theme-text-primary) 8%,
+    transparent
+  );
 }
 
 .trackName {

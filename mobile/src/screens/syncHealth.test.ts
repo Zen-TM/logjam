@@ -58,21 +58,25 @@ describe("syncHealth", () => {
   it("promises signal, not progress, while offline with a queue", () => {
     const health = syncHealth(input({ online: false, pendingCount: 3 }));
     expect(health.headline).toBe("3 changes waiting to sync");
-    expect(health.detail).toBe("Saved on this phone. It goes up when you have signal.");
+    expect(health.detail).toBe(
+      "Saved on this phone. It goes up when you have signal.",
+    );
     expect(health.tone).toBe("pending");
   });
 
   it("never claims to be syncing while offline", () => {
     // The optimistic-label bug: a cycle can be mid-flight when the link drops.
-    const health = syncHealth(input({ online: false, state: "syncing", pendingCount: 2 }));
+    const health = syncHealth(
+      input({ online: false, state: "syncing", pendingCount: 2 }),
+    );
     expect(health.headline).not.toMatch(/Sending|Syncing/);
     expect(health.headline).toBe("2 changes waiting to sync");
   });
 
   it("counts what it is sending while a cycle runs", () => {
-    expect(syncHealth(input({ state: "syncing", pendingCount: 1 })).headline).toBe(
-      "Sending 1 change…",
-    );
+    expect(
+      syncHealth(input({ state: "syncing", pendingCount: 1 })).headline,
+    ).toBe("Sending 1 change…");
     expect(syncHealth(input({ state: "syncing" })).headline).toBe("Syncing…");
   });
 
@@ -108,14 +112,18 @@ describe("syncHealth", () => {
     // account … It will keep retrying." Both halves were false, and the true
     // one — that nothing new will ever arrive until this is fixed — was nowhere.
     it("does not blame the connection", () => {
-      const health = syncHealth(input({ state: "error", errorKind: "applyFailed" }));
+      const health = syncHealth(
+        input({ state: "error", errorKind: "applyFailed" }),
+      );
       expect(health.headline).toBe("Couldn't download new data on this phone");
       expect(health.headline).not.toMatch(/reach/i);
       expect(health.tone).toBe("problem");
     });
 
     it("promises no retry, and points at the thing that does fix it", () => {
-      const health = syncHealth(input({ state: "error", errorKind: "applyFailed" }));
+      const health = syncHealth(
+        input({ state: "error", errorKind: "applyFailed" }),
+      );
       expect(health.detail).not.toMatch(/keep retrying/i);
       expect(health.detail).toContain("Account sync issues");
     });
@@ -123,13 +131,20 @@ describe("syncHealth", () => {
     it("outranks the queue and the issue list", () => {
       // Nothing incoming works until it is resolved, so it is the answer.
       const health = syncHealth(
-        input({ state: "error", errorKind: "applyFailed", issueCount: 3, pendingCount: 9 }),
+        input({
+          state: "error",
+          errorKind: "applyFailed",
+          issueCount: 3,
+          pendingCount: 9,
+        }),
       );
       expect(health.headline).toBe("Couldn't download new data on this phone");
     });
 
     it("still says 'unreachable' when that is what happened", () => {
-      const health = syncHealth(input({ state: "error", errorKind: "unreachable" }));
+      const health = syncHealth(
+        input({ state: "error", errorKind: "unreachable" }),
+      );
       expect(health.headline).toBe("Can't reach your account");
       expect(health.detail).toContain("It will keep retrying.");
     });
@@ -138,7 +153,9 @@ describe("syncHealth", () => {
     // connection is fine, the queue is fine, and the one true statement is
     // that nothing can move until the server catches up.
     it("names a server that has no sync endpoints, and promises no retry", () => {
-      const health = syncHealth(input({ state: "error", errorKind: "unsupported" }));
+      const health = syncHealth(
+        input({ state: "error", errorKind: "unsupported" }),
+      );
       expect(health.headline).toBe("The server isn't ready to sync");
       expect(health.headline).not.toMatch(/reach/i);
       expect(health.detail).not.toMatch(/retry/i);
@@ -147,18 +164,24 @@ describe("syncHealth", () => {
 
     it("outranks a queue it cannot drain, and yields to an apply failure", () => {
       expect(
-        syncHealth(input({ state: "error", errorKind: "unsupported", pendingCount: 9 }))
-          .headline,
+        syncHealth(
+          input({ state: "error", errorKind: "unsupported", pendingCount: 9 }),
+        ).headline,
       ).toBe("The server isn't ready to sync");
       // applyFailed has a repair; this doesn't, so that one stays the answer.
       expect(
-        syncHealth(input({ state: "error", errorKind: "applyFailed" })).headline,
+        syncHealth(input({ state: "error", errorKind: "applyFailed" }))
+          .headline,
       ).toBe("Couldn't download new data on this phone");
     });
 
     it("leaves a guest out of it — they have no account either way", () => {
       const health = syncHealth(
-        input({ accountState: "guest", state: "error", errorKind: "applyFailed" }),
+        input({
+          accountState: "guest",
+          state: "error",
+          errorKind: "applyFailed",
+        }),
       );
       expect(health.headline).toBe("Saved on this phone");
     });
@@ -183,7 +206,9 @@ describe("syncHealth", () => {
     });
 
     it("says the same thing offline", () => {
-      const health = syncHealth(input({ accountState: "guest", online: false }));
+      const health = syncHealth(
+        input({ accountState: "guest", online: false }),
+      );
       expect(health.headline).toBe("Saved on this phone");
     });
 

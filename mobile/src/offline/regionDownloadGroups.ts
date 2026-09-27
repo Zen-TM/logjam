@@ -52,7 +52,9 @@ export function groupRegionJobs(jobs: RegionJob[]): RegionDownloadGroup[] {
     else groups.set(job.spec.groupId, [job]);
   }
   return [...groups.entries()].map(([groupId, groupJobs]) => {
-    const mapJobs = groupJobs.filter((job) => job.spec.basemapId !== DEM_SOURCE_ID);
+    const mapJobs = groupJobs.filter(
+      (job) => job.spec.basemapId !== DEM_SOURCE_ID,
+    );
     const ready = mapJobs.filter((job) => job.state.kind === "ready").length;
     return {
       groupId,
@@ -64,10 +66,12 @@ export function groupRegionJobs(jobs: RegionJob[]): RegionDownloadGroup[] {
       ready,
       unfinished: mapJobs.length - ready,
       demUnfinished: groupJobs.some(
-        (job) => job.spec.basemapId === DEM_SOURCE_ID && job.state.kind !== "ready",
+        (job) =>
+          job.spec.basemapId === DEM_SOURCE_ID && job.state.kind !== "ready",
       ),
       fraction:
-        groupJobs.reduce((sum, job) => sum + jobFraction(job), 0) / groupJobs.length,
+        groupJobs.reduce((sum, job) => sum + jobFraction(job), 0) /
+        groupJobs.length,
       settled: groupJobs.every(isJobSettled),
       // Over EVERY job, not `ready === mapCount`: `ready` counts maps only, so
       // comparing it to the job count left a finished run permanently
@@ -88,7 +92,9 @@ export function regionGroupToastText(group: RegionDownloadGroup): string {
       ? `${group.label} saved · ${maps(group.ready)}`
       : `${group.label} · nothing saved`;
   const withMaps =
-    group.unfinished > 0 ? `${saved} · ${maps(group.unfinished)} didn't finish` : saved;
+    group.unfinished > 0
+      ? `${saved} · ${maps(group.unfinished)} didn't finish`
+      : saved;
   // Named rather than folded into the map tally: the consequence is specific
   // (no elevation profiles out there), and it is not fixed by re-picking maps.
   return group.demUnfinished ? `${withMaps} · no elevation data` : withMaps;

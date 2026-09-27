@@ -1,5 +1,9 @@
 import { useMemo, useState } from "react";
-import { validateExportRequest, type ExportSelection, type TopoLayerKey } from "@logjam/shared";
+import {
+  validateExportRequest,
+  type ExportSelection,
+  type TopoLayerKey,
+} from "@logjam/shared";
 import { apiFetch } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import { ErrorBanner } from "../feedback/ErrorBanner";
@@ -30,8 +34,14 @@ const INITIAL_SELECTION: ExportSelection = {
  * data and not a navigation aid, that the style is frozen at this moment, and
  * where the result turns up.
  */
-export default function TopoExportDialog({ open, onClose, job, onExportQueued }: Props) {
-  const [selection, setSelection] = useState<ExportSelection>(INITIAL_SELECTION);
+export default function TopoExportDialog({
+  open,
+  onClose,
+  job,
+  onExportQueued,
+}: Props) {
+  const [selection, setSelection] =
+    useState<ExportSelection>(INITIAL_SELECTION);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -39,11 +49,15 @@ export default function TopoExportDialog({ open, onClose, job, onExportQueued }:
   // are hidden; the worker also drops empty layers as a backstop. TopoExportControls
   // reconciles the selection against this set.
   const jobLayerNames = useMemo(
-    () => new Set<TopoLayerKey>((job?.layers ?? []).map((l) => l.name as TopoLayerKey)),
+    () =>
+      new Set<TopoLayerKey>(
+        (job?.layers ?? []).map((l) => l.name as TopoLayerKey),
+      ),
     [job],
   );
 
-  const canSubmit = !submitting && job !== null && validateExportRequest(selection).ok;
+  const canSubmit =
+    !submitting && job !== null && validateExportRequest(selection).ok;
 
   async function handleExport() {
     if (!job) return;
@@ -81,7 +95,12 @@ export default function TopoExportDialog({ open, onClose, job, onExportQueued }:
           <Button onClick={onClose} disabled={submitting}>
             Cancel
           </Button>
-          <Button variant="filled" busy={submitting} disabled={!canSubmit} onClick={handleExport}>
+          <Button
+            variant="filled"
+            busy={submitting}
+            disabled={!canSubmit}
+            onClick={handleExport}
+          >
             Start export
           </Button>
         </>
@@ -89,12 +108,16 @@ export default function TopoExportDialog({ open, onClose, job, onExportQueued }:
     >
       {error && <ErrorBanner message={error} />}
 
-      <TopoExportControls value={selection} onChange={setSelection} availableLayers={jobLayerNames} />
+      <TopoExportControls
+        value={selection}
+        onChange={setSelection}
+        availableLayers={jobLayerNames}
+      />
 
       <p className={classes.exportNote}>
-        It turns up under Exports and downloads itself when it's ready. Your topo
-        style is baked in as it stands now, so restyling later won't change an
-        export you've already made.
+        It turns up under Exports and downloads itself when it's ready. Your
+        topo style is baked in as it stands now, so restyling later won't change
+        an export you've already made.
       </p>
       <p className={classes.exportNote}>
         What comes out is your own data drawn over someone else's survey, and it

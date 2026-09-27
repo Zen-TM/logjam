@@ -54,7 +54,9 @@ export function rowToEntry(row: OutboxRow): OutboxEntry {
       entity: row.entity as SyncPushOp["entity"],
       op: row.op as SyncPushOp["op"],
       id: row.entity_id,
-      ...(row.base_updated_at != null && { baseUpdatedAt: row.base_updated_at }),
+      ...(row.base_updated_at != null && {
+        baseUpdatedAt: row.base_updated_at,
+      }),
       ...(row.fields_json != null && {
         fields: JSON.parse(row.fields_json) as Record<string, unknown>,
       }),
@@ -540,7 +542,12 @@ export async function createPlaceTypeLocal(draft: {
     "SELECT position FROM place_types WHERE owner_id IS NOT NULL ORDER BY position DESC LIMIT 1",
   );
   const position = last ? last.position + 1 : SYSTEM_PLACE_TYPE_COUNT;
-  const fields = { name: draft.name, iconKey: draft.iconKey, color: draft.color, position };
+  const fields = {
+    name: draft.name,
+    iconKey: draft.iconKey,
+    color: draft.color,
+    position,
+  };
 
   await withSyncTransaction(db, async () => {
     await db.runAsync(
@@ -557,7 +564,13 @@ export async function createPlaceTypeLocal(draft: {
       now,
       JSON.stringify(Object.keys(fields)),
     );
-    await appendOp(db, { opId: mintUuid(), entity: "placeType", op: "create", id, fields });
+    await appendOp(db, {
+      opId: mintUuid(),
+      entity: "placeType",
+      op: "create",
+      id,
+      fields,
+    });
   });
   notifyMirrorChanged();
   scheduleMutationSync();
@@ -568,7 +581,13 @@ export async function updatePlaceTypeLocal(
   id: string,
   fields: Record<string, unknown>,
 ): Promise<void> {
-  await enqueueUpdate("placeType", "place_types", id, fields, PLACE_TYPE_UPDATE_COLUMNS);
+  await enqueueUpdate(
+    "placeType",
+    "place_types",
+    id,
+    fields,
+    PLACE_TYPE_UPDATE_COLUMNS,
+  );
 }
 
 /**
@@ -582,7 +601,12 @@ export async function deletePlaceTypeLocal(id: string): Promise<void> {
   const db = await getSyncDb();
   await withSyncTransaction(db, async () => {
     await db.runAsync("DELETE FROM place_types WHERE id = ?", id);
-    await appendOp(db, { opId: mintUuid(), entity: "placeType", op: "delete", id });
+    await appendOp(db, {
+      opId: mintUuid(),
+      entity: "placeType",
+      op: "delete",
+      id,
+    });
   });
   notifyMirrorChanged();
   scheduleMutationSync();
@@ -673,7 +697,9 @@ export type PlaceDraftFields = {
  * so a bad value fails here with a message rather than parking a deadRemote op
  * on the next flush.
  */
-export async function createPlaceLocal(draft: PlaceDraftFields): Promise<string> {
+export async function createPlaceLocal(
+  draft: PlaceDraftFields,
+): Promise<string> {
   const id = draft.id ?? mintUuid();
   const now = new Date().toISOString();
   const altNames = draft.altNames ?? [];
@@ -732,7 +758,6 @@ export async function createPlaceLocal(draft: PlaceDraftFields): Promise<string>
   scheduleMutationSync();
   return id;
 }
-
 
 /**
  * Delete a place offline. Owner-only (the caller gates on syncRole): a
@@ -809,7 +834,9 @@ function placeLinksColumn(links: TripPlaceLink[]): ColumnSpec {
         ((value ?? []) as string[]).map((placeId) => {
           const name = nameById.get(placeId);
           if (name == null) {
-            throw new Error("Trip place link is missing its name for the mirror row");
+            throw new Error(
+              "Trip place link is missing its name for the mirror row",
+            );
           }
           return { id: placeId, name };
         }),
@@ -827,7 +854,9 @@ function placeLinksColumn(links: TripPlaceLink[]): ColumnSpec {
  */
 export async function updateTripLocal(
   id: string,
-  fields: Omit<Partial<TripDraftFields>, "places"> & { places?: TripPlaceLink[] },
+  fields: Omit<Partial<TripDraftFields>, "places"> & {
+    places?: TripPlaceLink[];
+  },
 ): Promise<void> {
   const { places, ...scalar } = fields;
   const columns: Record<string, ColumnSpec> = { ...TRIP_UPDATE_COLUMNS };
@@ -1073,7 +1102,7 @@ async function enqueueUpdate(
         const spec = specFor(field);
         baseSnapshot[field] =
           typeof spec === "string"
-            ? current[spec] ?? null
+            ? (current[spec] ?? null)
             : spec.decode(current[spec.column]);
       }
       dirtyNow.add(field);
@@ -1085,7 +1114,9 @@ async function enqueueUpdate(
     for (const [field, value] of Object.entries(fields)) {
       const spec = specFor(field);
       assignments.push(`${typeof spec === "string" ? spec : spec.column} = ?`);
-      values.push(typeof spec === "string" ? value ?? null : spec.encode(value));
+      values.push(
+        typeof spec === "string" ? (value ?? null) : spec.encode(value),
+      );
     }
     assignments.push("dirty_fields_json = ?");
     values.push(JSON.stringify([...dirtyNow]));
@@ -1244,12 +1275,16 @@ export async function revertDiscardedUpdate(
         : target.columns[field];
     if (!spec) continue;
     assignments.push(`${typeof spec === "string" ? spec : spec.column} = ?`);
-    values.push(typeof spec === "string" ? value ?? null : spec.encode(value));
+    values.push(
+      typeof spec === "string" ? (value ?? null) : spec.encode(value),
+    );
     reverted.push(field);
   }
   if (reverted.length === 0) return;
 
-  const dirty = new Set(JSON.parse(current.dirty_fields_json ?? "[]") as string[]);
+  const dirty = new Set(
+    JSON.parse(current.dirty_fields_json ?? "[]") as string[],
+  );
   for (const field of reverted) dirty.delete(field);
   assignments.push("dirty_fields_json = ?");
   values.push(dirty.size ? JSON.stringify([...dirty]) : null);
@@ -1358,5 +1393,11 @@ export async function updateEntityFieldLocal(
   if (!columns || !table || !Object.hasOwn(columns, field)) {
     throw new Error(`Cannot restore ${entity}.${field}`);
   }
-  await enqueueUpdate(entity as SyncPushEntity, table, id, { [field]: value }, columns);
+  await enqueueUpdate(
+    entity as SyncPushEntity,
+    table,
+    id,
+    { [field]: value },
+    columns,
+  );
 }

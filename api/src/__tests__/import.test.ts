@@ -2,7 +2,7 @@ import { describe, it, expect, afterAll } from "vitest";
 import request from "supertest";
 import { randomUUID } from "node:crypto";
 import prisma from "../services/prisma";
-import { ALICE_ID, CANYON_TYPE_ID} from "./_actors";
+import { ALICE_ID, CANYON_TYPE_ID } from "./_actors";
 
 // Idempotent file-import endpoints (see plan §6b/§6c, §8).
 // Requires `make dev` running with AUTH_MODE=fake (requests = seeded alice).
@@ -43,7 +43,10 @@ describe("POST /places/bulk — idempotent import (fake auth = alice)", () => {
       rows: [placeRow(name, -33.71, 150.31)],
     };
 
-    const first = await request(API_URL).post("/places/bulk").set(AUTH).send(body);
+    const first = await request(API_URL)
+      .post("/places/bulk")
+      .set(AUTH)
+      .send(body);
     expect(first.status).toBe(200);
     expect(first.body.created).toBe(1);
 
@@ -52,7 +55,11 @@ describe("POST /places/bulk — idempotent import (fake auth = alice)", () => {
     const second = await request(API_URL)
       .post("/places/bulk")
       .set(AUTH)
-      .send({ placeTypeId: CANYON_TYPE_ID, ...body, importBatchId: newBatch() });
+      .send({
+        placeTypeId: CANYON_TYPE_ID,
+        ...body,
+        importBatchId: newBatch(),
+      });
     expect(second.status).toBe(200);
     expect(second.body.created).toBe(0);
 
@@ -68,7 +75,13 @@ describe("POST /places/bulk — idempotent import (fake auth = alice)", () => {
     const created = await request(API_URL)
       .post("/places")
       .set(AUTH)
-      .send({ placeTypeId: CANYON_TYPE_ID, name: `IMP merge target ${run}`, latitude: -33.72, longitude: 150.32, fieldValues: { v_grade: 2 } });
+      .send({
+        placeTypeId: CANYON_TYPE_ID,
+        name: `IMP merge target ${run}`,
+        latitude: -33.72,
+        longitude: 150.32,
+        fieldValues: { v_grade: 2 },
+      });
     expect(created.status).toBe(201);
     const placeId = created.body.id as string;
 
@@ -77,7 +90,8 @@ describe("POST /places/bulk — idempotent import (fake auth = alice)", () => {
       .post("/places/bulk")
       .set(AUTH)
       .send({
-        placeTypeId: CANYON_TYPE_ID, importBatchId: batchId,
+        placeTypeId: CANYON_TYPE_ID,
+        importBatchId: batchId,
         // keepExisting on vGrade (conflict → keep 2); notes is null on the
         // existing row so the incoming value fills it regardless of policy.
         mergePolicy: undefined,
@@ -116,8 +130,20 @@ describe("POST /trips/bulk — idempotent import (fake auth = alice)", () => {
     // The frontend sets displayName = sourcePlaceName for a place-less row
     // (plan §7a); the backend stores what it's given, so mirror that here.
     const trips = [
-      { placeId: null, sourcePlaceName, displayName: sourcePlaceName, date, notes: "lap 1" },
-      { placeId: null, sourcePlaceName, displayName: sourcePlaceName, date, notes: "lap 1" }, // identical → occurrence 1
+      {
+        placeId: null,
+        sourcePlaceName,
+        displayName: sourcePlaceName,
+        date,
+        notes: "lap 1",
+      },
+      {
+        placeId: null,
+        sourcePlaceName,
+        displayName: sourcePlaceName,
+        date,
+        notes: "lap 1",
+      }, // identical → occurrence 1
     ];
 
     const first = await request(API_URL)
@@ -152,7 +178,15 @@ describe("POST /trips/bulk — idempotent import (fake auth = alice)", () => {
       .set(AUTH)
       .send({
         importBatchId: newBatch(),
-        trips: [{ placeId: null, sourcePlaceName, displayName: sourcePlaceName, date, notes: "exploratory" }],
+        trips: [
+          {
+            placeId: null,
+            sourcePlaceName,
+            displayName: sourcePlaceName,
+            date,
+            notes: "exploratory",
+          },
+        ],
       });
     expect(first.status).toBe(200);
     expect(first.body.imported).toBe(1);
@@ -165,10 +199,12 @@ describe("POST /trips/bulk — idempotent import (fake auth = alice)", () => {
     expect(beforeRows[0].places).toEqual([]);
 
     // 2) The matching place now exists.
-    const place = await request(API_URL)
-      .post("/places")
-      .set(AUTH)
-      .send({ placeTypeId: CANYON_TYPE_ID, name: sourcePlaceName, latitude: -33.6, longitude: 150.2 });
+    const place = await request(API_URL).post("/places").set(AUTH).send({
+      placeTypeId: CANYON_TYPE_ID,
+      name: sourcePlaceName,
+      latitude: -33.6,
+      longitude: 150.2,
+    });
     const placeId = place.body.id as string;
 
     // 3) Re-import the SAME file, now resolved to the place. importKey is keyed
@@ -207,7 +243,12 @@ describe("DELETE /imports/:batchId — undo (fake auth = alice)", () => {
     const preexisting = await request(API_URL)
       .post("/places")
       .set(AUTH)
-      .send({ placeTypeId: CANYON_TYPE_ID, name: `IMP undo preexisting ${run}`, latitude: -33.5, longitude: 150.1 });
+      .send({
+        placeTypeId: CANYON_TYPE_ID,
+        name: `IMP undo preexisting ${run}`,
+        latitude: -33.5,
+        longitude: 150.1,
+      });
     const preexistingId = preexisting.body.id as string;
 
     const batchId = newBatch();
@@ -217,11 +258,17 @@ describe("DELETE /imports/:batchId — undo (fake auth = alice)", () => {
       .post("/places/bulk")
       .set(AUTH)
       .send({
-        placeTypeId: CANYON_TYPE_ID, importBatchId: batchId,
+        placeTypeId: CANYON_TYPE_ID,
+        importBatchId: batchId,
         rows: [
           placeRow(`IMP undo created ${run}`, -33.8, 150.4),
           {
-            data: { name: `IMP undo preexisting ${run}`, latitude: -33.5, longitude: 150.1, notes: "merged note" },
+            data: {
+              name: `IMP undo preexisting ${run}`,
+              latitude: -33.5,
+              longitude: 150.1,
+              notes: "merged note",
+            },
             resolution: { kind: "merge", placeId: preexistingId },
           },
         ],
@@ -258,7 +305,9 @@ describe("DELETE /imports/:batchId — undo (fake auth = alice)", () => {
       where: { ownerId: ALICE_ID, name: `IMP undo created ${run}` },
     });
     expect(createdAfter).toBeNull();
-    const preexistingAfter = await prisma.place.findUnique({ where: { id: preexistingId } });
+    const preexistingAfter = await prisma.place.findUnique({
+      where: { id: preexistingId },
+    });
     expect(preexistingAfter).not.toBeNull();
     expect(preexistingAfter?.notes).toBe("merged note"); // merge applied + retained
 

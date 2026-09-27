@@ -27,7 +27,11 @@ function DeleteAccountDialog({
   onDeleted: () => void;
 }) {
   return open ? (
-    <DeleteAccountForm onClose={onClose} username={username} onDeleted={onDeleted} />
+    <DeleteAccountForm
+      onClose={onClose}
+      username={username}
+      onDeleted={onDeleted}
+    />
   ) : null;
 }
 
@@ -47,7 +51,8 @@ function DeleteAccountForm({
   const [error, setError] = useState<string | null>(null);
 
   const expectedPhrase = `delete ${username}`;
-  const inputMatches = confirmInput.trim().toLowerCase() === expectedPhrase.toLowerCase();
+  const inputMatches =
+    confirmInput.trim().toLowerCase() === expectedPhrase.toLowerCase();
 
   async function handleDelete() {
     if (!inputMatches || deleting) return;
@@ -61,7 +66,9 @@ function DeleteAccountForm({
       onDeleted();
     } catch (err) {
       console.error(err);
-      setError(messageFromError(err, "Couldn't delete account. Please try again."));
+      setError(
+        messageFromError(err, "Couldn't delete account. Please try again."),
+      );
       setDeleting(false);
     }
   }
@@ -99,8 +106,8 @@ function DeleteAccountForm({
         }}
       >
         <p className={classes.warning}>
-          This deletes your account and everything in it — places, trips, media, maps and
-          settings. It cannot be undone.
+          This deletes your account and everything in it — places, trips, media,
+          maps and settings. It cannot be undone.
         </p>
         <TextField
           label={`Type "${expectedPhrase}" to confirm`}

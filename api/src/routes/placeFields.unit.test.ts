@@ -35,39 +35,65 @@ describe("validatePlaceTextFields", () => {
   });
 
   it("rejects a non-string name", () => {
-    expect(validatePlaceTextFields({ name: 123 })).toMatch(/name must be a string/);
+    expect(validatePlaceTextFields({ name: 123 })).toMatch(
+      /name must be a string/,
+    );
   });
 
   it("rejects a blank name", () => {
-    expect(validatePlaceTextFields({ name: "   " })).toMatch(/name is required/);
+    expect(validatePlaceTextFields({ name: "   " })).toMatch(
+      /name is required/,
+    );
   });
 
   it("caps name length", () => {
-    expect(validatePlaceTextFields({ name: "x".repeat(PLACE_NAME_MAX_LENGTH) })).toBeNull();
+    expect(
+      validatePlaceTextFields({ name: "x".repeat(PLACE_NAME_MAX_LENGTH) }),
+    ).toBeNull();
     expect(
       validatePlaceTextFields({ name: "x".repeat(PLACE_NAME_MAX_LENGTH + 1) }),
     ).toMatch(/at most/);
   });
 
   it("rejects altNames that is not an array of strings", () => {
-    expect(validatePlaceTextFields({ altNames: "x" })).toMatch(/array of strings/);
-    expect(validatePlaceTextFields({ altNames: [1] })).toMatch(/array of strings/);
+    expect(validatePlaceTextFields({ altNames: "x" })).toMatch(
+      /array of strings/,
+    );
+    expect(validatePlaceTextFields({ altNames: [1] })).toMatch(
+      /array of strings/,
+    );
   });
 
   it("caps altNames count and entry length", () => {
     expect(
-      validatePlaceTextFields({ altNames: new Array(PLACE_MAX_ALT_NAMES + 1).fill("a") }),
+      validatePlaceTextFields({
+        altNames: new Array(PLACE_MAX_ALT_NAMES + 1).fill("a"),
+      }),
     ).toMatch(/at most/);
     expect(
-      validatePlaceTextFields({ altNames: ["x".repeat(PLACE_NAME_MAX_LENGTH + 1)] }),
+      validatePlaceTextFields({
+        altNames: ["x".repeat(PLACE_NAME_MAX_LENGTH + 1)],
+      }),
     ).toMatch(/at most/);
   });
 
   it("allows null notes/altNames/attributes but rejects wrong types", () => {
-    expect(validatePlaceTextFields({ notes: null, altNames: null, attributes: null })).toBeNull();
-    expect(validatePlaceTextFields({ notes: 5 })).toMatch(/notes must be a string/);
-    expect(validatePlaceTextFields({ attributes: [1, 2] })).toMatch(/attributes must be an object/);
-    expect(validatePlaceTextFields({ attributes: "x" })).toMatch(/attributes must be an object/);
+    expect(
+      validatePlaceTextFields({
+        notes: null,
+        altNames: null,
+        attributes: null,
+      }),
+    ).toBeNull();
+    expect(validatePlaceTextFields({ notes: 5 })).toMatch(
+      /notes must be a string/,
+    );
+    expect(validatePlaceTextFields({ attributes: [1, 2] })).toMatch(
+      /attributes must be an object/,
+    );
+    expect(validatePlaceTextFields({ attributes: "x" })).toMatch(
+      /attributes must be an object/,
+    );
   });
 });
 
@@ -122,7 +148,9 @@ describe("PLACE_FIELDS (the push allowlist)", () => {
       "longestAbseil",
       "attributes",
     ]) {
-      expect(PLACE_FIELDS.has(legacy), `${legacy} is still accepted`).toBe(false);
+      expect(PLACE_FIELDS.has(legacy), `${legacy} is still accepted`).toBe(
+        false,
+      );
     }
   });
 });

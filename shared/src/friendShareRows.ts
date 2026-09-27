@@ -113,7 +113,8 @@ export function buildShareCards(
 ): FriendShareCard[] {
   return rows.map((row) => {
     const key = shareCardKey(row);
-    const viaPlace = options.direction === "youSee" && row.alsoViaPlace === true;
+    const viaPlace =
+      options.direction === "youSee" && row.alsoViaPlace === true;
     return {
       key,
       row,
@@ -149,7 +150,8 @@ export function shareSelectionCountLabel(
   const parts: string[] = [];
   // Only worth saying when it differs from the total — "5 selected · 5
   // removable" is noise, and noise is what stops the useful case being read.
-  if (copyable > 0 && copyable < cards.length) parts.push(`${copyable} copyable`);
+  if (copyable > 0 && copyable < cards.length)
+    parts.push(`${copyable} copyable`);
   if (removable < cards.length) parts.push(`${removable} removable`);
   return [count, ...parts].join(" · ");
 }
@@ -339,7 +341,8 @@ export function copyAndRemoveOutcomeMessage(outcome: {
   mediaSkipped: number;
   mediaOutOfSpace: boolean;
 }): { text: string; tone: "info" | "error" } {
-  const { done, copiedNotRemoved, failed, mediaSkipped, mediaOutOfSpace } = outcome;
+  const { done, copiedNotRemoved, failed, mediaSkipped, mediaOutOfSpace } =
+    outcome;
   const parts: string[] = [];
 
   if (done.length > 0) {
@@ -373,7 +376,10 @@ export function copyAndRemoveOutcomeMessage(outcome: {
 
   return {
     text: parts.join(" "),
-    tone: failed.length > 0 || copiedNotRemoved.length > 0 || mediaSkipped > 0 ? "error" : "info",
+    tone:
+      failed.length > 0 || copiedNotRemoved.length > 0 || mediaSkipped > 0
+        ? "error"
+        : "info",
   };
 }
 
@@ -404,5 +410,8 @@ export function removeOutcomeMessage(outcome: {
       tone: "error",
     };
   }
-  return { text: `${gone}. Couldn't remove ${failed.join(", ")}.`, tone: "error" };
+  return {
+    text: `${gone}. Couldn't remove ${failed.join(", ")}.`,
+    tone: "error",
+  };
 }

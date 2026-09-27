@@ -1,4 +1,5 @@
 """PDAL pipeline JSON construction (pure dict building; no PDAL run)."""
+
 import os
 import sys
 import unittest
@@ -14,6 +15,7 @@ try:
         SCRUB_STRATUM_LOW_MAX_M,
         build_pipeline_full,
     )
+
     _IMPORT_OK = True
 except Exception as _exc:  # noqa: BLE001
     _IMPORT_OK = False
@@ -28,8 +30,12 @@ def _stages_of_type(pipeline, type_name):
 class TestBuildPipelineFull(unittest.TestCase):
     def setUp(self):
         self.p = build_pipeline_full(
-            ["a.laz", "b.laz"], "dtm.tif",
-            "scrub_low.tif", "scrub_high.tif", "below.tif", "all.tif",
+            ["a.laz", "b.laz"],
+            "dtm.tif",
+            "scrub_low.tif",
+            "scrub_high.tif",
+            "below.tif",
+            "all.tif",
             resolution=0.5,
         )["pipeline"]
 
@@ -64,11 +70,17 @@ class TestBuildPipelineFull(unittest.TestCase):
         for w in writers:
             self.assertEqual(w["resolution"], 0.5)
             self.assertEqual(w["gdalopts"], "COMPRESS=LZW")
-            self.assertEqual(w["output_type"], "count" if w["filename"] != "dtm.tif" else "mean")
+            self.assertEqual(
+                w["output_type"], "count" if w["filename"] != "dtm.tif" else "mean"
+            )
             self.assertEqual(w["nodata"], 0 if w["filename"] != "dtm.tif" else -9999)
 
     def test_dtm_writer_is_mean_of_ground(self):
-        dtm = next(w for w in _stages_of_type(self.p, "writers.gdal") if w["filename"] == "dtm.tif")
+        dtm = next(
+            w
+            for w in _stages_of_type(self.p, "writers.gdal")
+            if w["filename"] == "dtm.tif"
+        )
         self.assertEqual(dtm["output_type"], "mean")
         self.assertEqual(dtm["where"], "Classification == 2")
 
@@ -80,8 +92,12 @@ class TestBuildPipelineFull(unittest.TestCase):
         all_count = writers["all.tif"]
 
         self.assertIn("HeightAboveGround >= 0.25", scrub_low["where"])
-        self.assertIn(f"HeightAboveGround < {SCRUB_STRATUM_LOW_MAX_M}", scrub_low["where"])
-        self.assertIn(f"HeightAboveGround >= {SCRUB_STRATUM_LOW_MAX_M}", scrub_high["where"])
+        self.assertIn(
+            f"HeightAboveGround < {SCRUB_STRATUM_LOW_MAX_M}", scrub_low["where"]
+        )
+        self.assertIn(
+            f"HeightAboveGround >= {SCRUB_STRATUM_LOW_MAX_M}", scrub_high["where"]
+        )
         self.assertIn(f"HeightAboveGround <= {SCRUB_BAND_MAX_M}", scrub_high["where"])
         self.assertIn("HeightAboveGround < 0.25", below["where"])
         # all.tif carries no HAG filter at all — every return counts.

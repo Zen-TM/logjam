@@ -28,7 +28,11 @@ import {
   setFieldValues,
 } from "@logjam/shared";
 
-import { listMirrorPlaces, listMirrorCustomFieldDefs, listMirrorTrips } from "../sync/mirrorStore";
+import {
+  listMirrorPlaces,
+  listMirrorCustomFieldDefs,
+  listMirrorTrips,
+} from "../sync/mirrorStore";
 import {
   createCustomFieldDefLocal,
   deleteCustomFieldDefLocal,
@@ -107,7 +111,8 @@ export async function saveFieldDefs(
     // the local half of a delete is destructive and runs before the server
     // ever sees the op.
     if (row.ownerId === null) continue;
-    if (!incomingKeys.has(row.key)) await removeFieldDefById(row.id, entity, row.key);
+    if (!incomingKeys.has(row.key))
+      await removeFieldDefById(row.id, entity, row.key);
   }
 
   for (const [position, def] of defs.entries()) {
@@ -242,16 +247,18 @@ async function rowsWithFieldValue(
       .map((trip) => ({ id: trip.id, values: trip.customFields ?? {} }));
   }
   const places = await listMirrorPlaces();
-  return places
-    // A place shared WITH this user is read-only, and its owner's fields are
-    // not this user's to strip.
-    .filter(
-      (place) =>
-        place.syncRole === "owner" &&
-        fieldValue(place.fieldValues, key) !== undefined,
-    )
-    .map((place) => ({
-      id: place.id,
-      values: asFieldValues(place.fieldValues),
-    }));
+  return (
+    places
+      // A place shared WITH this user is read-only, and its owner's fields are
+      // not this user's to strip.
+      .filter(
+        (place) =>
+          place.syncRole === "owner" &&
+          fieldValue(place.fieldValues, key) !== undefined,
+      )
+      .map((place) => ({
+        id: place.id,
+        values: asFieldValues(place.fieldValues),
+      }))
+  );
 }

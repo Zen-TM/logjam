@@ -25,9 +25,17 @@ describe("AppError", () => {
 describe("errorHandler", () => {
   it("responds with the AppError status and message", () => {
     const { req, res, status, json } = mockReqRes();
-    errorHandler(new AppError(404, "Place not found"), req, res, vi.fn() as NextFunction);
+    errorHandler(
+      new AppError(404, "Place not found"),
+      req,
+      res,
+      vi.fn() as NextFunction,
+    );
     expect(status).toHaveBeenCalledWith(404);
-    expect(json).toHaveBeenCalledWith({ error: "Place not found", requestId: "req-1" });
+    expect(json).toHaveBeenCalledWith({
+      error: "Place not found",
+      requestId: "req-1",
+    });
   });
 
   it("echoes only whitelisted detail keys (used/quota/resetAt)", () => {
@@ -40,7 +48,12 @@ describe("errorHandler", () => {
       placeName: "Secret Place",
       latitude: -33.5,
     } as unknown as AppError["details"];
-    errorHandler(new AppError(507, "quota", details), req, res, vi.fn() as NextFunction);
+    errorHandler(
+      new AppError(507, "quota", details),
+      req,
+      res,
+      vi.fn() as NextFunction,
+    );
     const body = json.mock.calls[0][0];
     expect(body).toEqual({
       error: "quota",
@@ -55,7 +68,12 @@ describe("errorHandler", () => {
 
   it("omits detail keys that are undefined", () => {
     const { req, res, json } = mockReqRes();
-    errorHandler(new AppError(507, "quota", { used: 3 }), req, res, vi.fn() as NextFunction);
+    errorHandler(
+      new AppError(507, "quota", { used: 3 }),
+      req,
+      res,
+      vi.fn() as NextFunction,
+    );
     const body = json.mock.calls[0][0];
     expect(body).toHaveProperty("used", 3);
     expect(body).not.toHaveProperty("quota");
@@ -64,8 +82,16 @@ describe("errorHandler", () => {
 
   it("maps an unknown error to a generic 500 with no leakage", () => {
     const { req, res, status, json } = mockReqRes();
-    errorHandler(new Error("DB exploded at -33.5,150.3"), req, res, vi.fn() as NextFunction);
+    errorHandler(
+      new Error("DB exploded at -33.5,150.3"),
+      req,
+      res,
+      vi.fn() as NextFunction,
+    );
     expect(status).toHaveBeenCalledWith(500);
-    expect(json).toHaveBeenCalledWith({ error: "Internal server error", requestId: "req-1" });
+    expect(json).toHaveBeenCalledWith({
+      error: "Internal server error",
+      requestId: "req-1",
+    });
   });
 });

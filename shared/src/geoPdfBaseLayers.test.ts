@@ -14,9 +14,9 @@ describe("overlayAttributionLines", () => {
   });
 
   it("dedupes multiple elevation-derived layers to a single line", () => {
-    expect(overlayAttributionLines(["hillshade", "slope", "contours"])).toEqual([
-      GEOPDF_OVERLAY_ATTRIBUTION.elevation,
-    ]);
+    expect(overlayAttributionLines(["hillshade", "slope", "contours"])).toEqual(
+      [GEOPDF_OVERLAY_ATTRIBUTION.elevation],
+    );
   });
 
   it("returns an empty array for no overlays", () => {
@@ -64,8 +64,8 @@ describe("extractionCreditLine", () => {
     // 2026-07-31 09:00 UTC is 2026-07-31 19:00 AEST — same day either way.
     // 2026-07-31 23:30 UTC is 2026-08-01 09:30 AEST; the extraction happened
     // on the 31st UTC and that is what must appear.
-    expect(extractionCreditLine("six-topo", new Date("2026-07-31T23:30:00Z"))).toBe(
-      "© Department of Customer Service 2026-07-31",
-    );
+    expect(
+      extractionCreditLine("six-topo", new Date("2026-07-31T23:30:00Z")),
+    ).toBe("© Department of Customer Service 2026-07-31");
   });
 });

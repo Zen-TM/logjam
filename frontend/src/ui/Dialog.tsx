@@ -69,7 +69,10 @@ function OpenDialog({
     if (!dialog) return;
     const opener = document.activeElement as HTMLElement | null;
     dialog.showModal();
-    (dialog.querySelector<HTMLElement>("[data-autofocus]") ?? headingRef.current)?.focus();
+    (
+      dialog.querySelector<HTMLElement>("[data-autofocus]") ??
+      headingRef.current
+    )?.focus();
 
     const requestClose = () => {
       if (latest.current.dismissible) latest.current.onClose();
@@ -135,16 +138,28 @@ function OpenDialog({
   return (
     <dialog
       ref={dialogRef}
-      className={[classes.dialog, size === "large" && classes.large].filter(Boolean).join(" ")}
+      className={[classes.dialog, size === "large" && classes.large]
+        .filter(Boolean)
+        .join(" ")}
       role={alert ? "alertdialog" : undefined}
       aria-labelledby={titleId}
       aria-describedby={alert ? bodyId : undefined}
     >
       <header className={classes.head}>
-        <h2 id={titleId} ref={headingRef} tabIndex={-1} className={classes.title}>
+        <h2
+          id={titleId}
+          ref={headingRef}
+          tabIndex={-1}
+          className={classes.title}
+        >
           {title}
         </h2>
-        <IconButton icon={X} label="Close" onClick={onClose} disabled={!dismissible} />
+        <IconButton
+          icon={X}
+          label="Close"
+          onClick={onClose}
+          disabled={!dismissible}
+        />
       </header>
       {toolbar && <div className={classes.toolbar}>{toolbar}</div>}
       <div id={bodyId} className={classes.body}>

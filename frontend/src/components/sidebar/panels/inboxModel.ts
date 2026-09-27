@@ -15,8 +15,18 @@ export type InboxDestination =
   | { kind: "place"; label: string; placeId: string }
   | { kind: "page"; label: string; panel: PanelId; mapsView?: MapsView };
 
-const LIDAR: InboxDestination = { kind: "page", label: "View in Maps", panel: "maps", mapsView: "lidar" };
-const GEOPDFS: InboxDestination = { kind: "page", label: "View in Maps", panel: "maps", mapsView: "geopdfs" };
+const LIDAR: InboxDestination = {
+  kind: "page",
+  label: "View in Maps",
+  panel: "maps",
+  mapsView: "lidar",
+};
+const GEOPDFS: InboxDestination = {
+  kind: "page",
+  label: "View in Maps",
+  panel: "maps",
+  mapsView: "geopdfs",
+};
 
 export function inboxDestination(n: TNotification): InboxDestination | null {
   const placeId = notificationPlaceId(n);

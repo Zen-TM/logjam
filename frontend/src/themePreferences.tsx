@@ -28,7 +28,10 @@ import { messageFromError } from "./errors/messageFromError";
 function applyStaticTokensToCss() {
   const root = document.documentElement;
   root.style.setProperty("--ink", INK);
-  for (const [name, hue] of Object.entries({ ...ASSET_HUES, ...PLACE_STATUS_HUES })) {
+  for (const [name, hue] of Object.entries({
+    ...ASSET_HUES,
+    ...PLACE_STATUS_HUES,
+  })) {
     root.style.setProperty(`--hue-${name}`, hue);
   }
 }
@@ -124,7 +127,9 @@ export function ThemePreferencesProvider({
       } catch (err) {
         console.error(err);
         setSchemeId(previous);
-        setError(messageFromError(err, "Couldn't save theme. Please try again."));
+        setError(
+          messageFromError(err, "Couldn't save theme. Please try again."),
+        );
       } finally {
         setIsSaving(false);
       }
@@ -142,14 +147,7 @@ export function ThemePreferencesProvider({
       setThemeScheme,
       hydrateFromUser,
     }),
-    [
-      schemeId,
-      isHydrating,
-      isSaving,
-      error,
-      setThemeScheme,
-      hydrateFromUser,
-    ],
+    [schemeId, isHydrating, isSaving, error, setThemeScheme, hydrateFromUser],
   );
 
   return (

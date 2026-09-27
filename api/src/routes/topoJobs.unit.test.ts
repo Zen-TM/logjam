@@ -37,7 +37,9 @@ describe("serializeTopoJobFor", () => {
   });
 
   it("gives s3OutputKeys to the owner and withholds it from a recipient", () => {
-    expect(serializeTopoJobFor(row, OWNER).s3OutputKeys).toEqual(row.s3OutputKeys);
+    expect(serializeTopoJobFor(row, OWNER).s3OutputKeys).toEqual(
+      row.s3OutputKeys,
+    );
     expect(serializeTopoJobFor(row, SHAREE)).not.toHaveProperty("s3OutputKeys");
   });
 
@@ -48,7 +50,9 @@ describe("serializeTopoJobFor", () => {
 
   it("omits s3OutputKeys entirely when the caller never selected it", () => {
     const { s3OutputKeys: _unused, ...listRow } = row;
-    expect(serializeTopoJobFor(listRow, OWNER)).not.toHaveProperty("s3OutputKeys");
+    expect(serializeTopoJobFor(listRow, OWNER)).not.toHaveProperty(
+      "s3OutputKeys",
+    );
   });
 
   // The parallel-list guard: TOPO_JOB_SELECT decides what is read, the

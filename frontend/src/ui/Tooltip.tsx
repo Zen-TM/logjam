@@ -1,4 +1,11 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useAnchoredPosition, type Placement } from "./floating";
 import classes from "./Tooltip.module.css";
 
@@ -51,7 +58,10 @@ export function Tooltip({
     setOpen(true);
   };
   const hideSoon = () => {
-    closeTimer.current = window.setTimeout(() => setOpen(false), CLOSE_DELAY_MS);
+    closeTimer.current = window.setTimeout(
+      () => setOpen(false),
+      CLOSE_DELAY_MS,
+    );
   };
 
   return (
@@ -64,7 +74,13 @@ export function Tooltip({
       onBlur={() => setOpen(false)}
     >
       {children(id)}
-      <span ref={tipRef} id={id} role="tooltip" popover="manual" className={classes.tip}>
+      <span
+        ref={tipRef}
+        id={id}
+        role="tooltip"
+        popover="manual"
+        className={classes.tip}
+      >
         {content}
       </span>
     </span>

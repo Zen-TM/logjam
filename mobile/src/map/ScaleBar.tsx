@@ -14,7 +14,9 @@ import { StyleSheet, Text, View } from "react-native";
 import { fontSize, fontWeight, radius, spacing, theme } from "../theme";
 import { chooseScaleStep, metersPerPixel } from "./scaleBar";
 
-export type ScaleBarHandle = { update: (latitude: number, zoom: number) => void };
+export type ScaleBarHandle = {
+  update: (latitude: number, zoom: number) => void;
+};
 
 /**
  * The bar's drawn height: label + gap + rule + its own padding, derived from the
@@ -55,7 +57,10 @@ export const ScaleBar = forwardRef<
   // Guard the degenerate first frame (zero-width layout) rather than letting
   // chooseScaleStep throw during mount.
   if (maxWidth <= 0) return null;
-  const step = chooseScaleStep(metersPerPixel(camera.latitude, camera.zoom), maxWidth);
+  const step = chooseScaleStep(
+    metersPerPixel(camera.latitude, camera.zoom),
+    maxWidth,
+  );
 
   return (
     <View style={styles.root} pointerEvents="none">

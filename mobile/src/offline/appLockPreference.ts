@@ -63,13 +63,18 @@ export type AppLockChange =
  * either — there the switch is allowed through, exactly as the gate itself passes
  * through in that case.
  */
-export async function setAppLockEnabled(enabled: boolean): Promise<AppLockChange> {
+export async function setAppLockEnabled(
+  enabled: boolean,
+): Promise<AppLockChange> {
   if (!enabled) {
     const authorised = await confirmWithDeviceAuth();
     if (authorised.status !== "ok") return authorised.result;
   }
   if (!writePref(APP_LOCK_PREF_KEY, enabled ? "on" : "off")) {
-    return { status: "failed", message: "This phone wouldn't store that setting." };
+    return {
+      status: "failed",
+      message: "This phone wouldn't store that setting.",
+    };
   }
   // Logged, not fatal: the lock itself is the guard and it is now set either
   // way; FLAG_SECURE is the thumbnail hardening on top of it, and failing the
@@ -111,7 +116,8 @@ type AuthOutcome = { status: "ok" } | { status: "no"; result: AppLockChange };
 async function confirmWithDeviceAuth(): Promise<AuthOutcome> {
   try {
     const level = await LocalAuthentication.getEnrolledLevelAsync();
-    if (level === LocalAuthentication.SecurityLevel.NONE) return { status: "ok" };
+    if (level === LocalAuthentication.SecurityLevel.NONE)
+      return { status: "ok" };
     const result = await LocalAuthentication.authenticateAsync({
       promptMessage: "Turn off the app lock",
     });
@@ -128,7 +134,10 @@ async function confirmWithDeviceAuth(): Promise<AuthOutcome> {
     console.error(err);
     return {
       status: "no",
-      result: { status: "failed", message: "Couldn't confirm it's you. The lock stays on." },
+      result: {
+        status: "failed",
+        message: "Couldn't confirm it's you. The lock stays on.",
+      },
     };
   }
 }

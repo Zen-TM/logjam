@@ -45,7 +45,10 @@ describe("TRIP_TYPE_SUGGESTIONS", () => {
 describe("linksCanyon", () => {
   it("is true when any linked place is a canyon", () => {
     expect(
-      linksCanyon([SYSTEM_PLACE_TYPE_IDS.campsite, SYSTEM_PLACE_TYPE_IDS.canyon]),
+      linksCanyon([
+        SYSTEM_PLACE_TYPE_IDS.campsite,
+        SYSTEM_PLACE_TYPE_IDS.canyon,
+      ]),
     ).toBe(true);
   });
 
@@ -53,7 +56,10 @@ describe("linksCanyon", () => {
   // canyoning, and the tag decides which trip attributes a trip is asked.
   it("is false for a trip that links only non-canyon places", () => {
     expect(
-      linksCanyon([SYSTEM_PLACE_TYPE_IDS.campsite, SYSTEM_PLACE_TYPE_IDS.marker]),
+      linksCanyon([
+        SYSTEM_PLACE_TYPE_IDS.campsite,
+        SYSTEM_PLACE_TYPE_IDS.marker,
+      ]),
     ).toBe(false);
     expect(linksCanyon(["a-user-type-id"])).toBe(false);
   });
@@ -65,11 +71,16 @@ describe("linksCanyon", () => {
 
 describe("enforceCanyoningTag", () => {
   // Ten distinct user types — the cap, with no canyoning among them.
-  const atCap = Array.from({ length: MAX_TRIP_TYPES_PER_TRIP }, (_, i) => `t${i}`);
+  const atCap = Array.from(
+    { length: MAX_TRIP_TYPES_PER_TRIP },
+    (_, i) => `t${i}`,
+  );
 
   it("leaves a place-less trip untouched", () => {
     expect(enforceCanyoningTag([], false)).toEqual([]);
-    expect(enforceCanyoningTag(["bushwalking"], false)).toEqual(["bushwalking"]);
+    expect(enforceCanyoningTag(["bushwalking"], false)).toEqual([
+      "bushwalking",
+    ]);
   });
 
   it("adds the tag to a place-linked trip with no types", () => {
@@ -162,7 +173,10 @@ describe("enforceCanyoningTag — dialog round-trips at the cap", () => {
   });
 
   it("10 user types (tag skipped) + link → reopen → save stays within the cap", () => {
-    const atCap = Array.from({ length: MAX_TRIP_TYPES_PER_TRIP }, (_, i) => `t${i}`);
+    const atCap = Array.from(
+      { length: MAX_TRIP_TYPES_PER_TRIP },
+      (_, i) => `t${i}`,
+    );
     const stored = enforceCanyoningTag(atCap, true);
     const saved = enforceCanyoningTag(enforceCanyoningTag(stored, true), true);
     expect(saved).toHaveLength(MAX_TRIP_TYPES_PER_TRIP);
@@ -177,16 +191,25 @@ describe("enforceCanyoningTag — dialog round-trips at the cap", () => {
     expect(unlinked).toEqual(stored);
 
     // Reopen + save on the now place-less trip.
-    const saved = enforceCanyoningTag(enforceCanyoningTag(unlinked, false), false);
+    const saved = enforceCanyoningTag(
+      enforceCanyoningTag(unlinked, false),
+      false,
+    );
     expect(saved).toHaveLength(MAX_TRIP_TYPES_PER_TRIP);
     expect(saved).toContain(CANYONING_TRIP_TYPE);
   });
 
   it("10 user types + link → unlink → reopen → save stays within the cap", () => {
-    const atCap = Array.from({ length: MAX_TRIP_TYPES_PER_TRIP }, (_, i) => `t${i}`);
+    const atCap = Array.from(
+      { length: MAX_TRIP_TYPES_PER_TRIP },
+      (_, i) => `t${i}`,
+    );
     const stored = enforceCanyoningTag(atCap, true);
     const unlinked = enforceCanyoningTag(stored, false);
-    const saved = enforceCanyoningTag(enforceCanyoningTag(unlinked, false), false);
+    const saved = enforceCanyoningTag(
+      enforceCanyoningTag(unlinked, false),
+      false,
+    );
     expect(saved).toHaveLength(MAX_TRIP_TYPES_PER_TRIP);
   });
 });

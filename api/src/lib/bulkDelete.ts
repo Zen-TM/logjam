@@ -76,7 +76,10 @@ export async function deletePlacesCascade(
   const s3Keys = media.flatMap((m) =>
     [m.s3KeyDisplay, m.s3KeyThumbnail].filter((k): k is string => Boolean(k)),
   );
-  const totalBytes = media.reduce((sum, m) => sum + (m.fileSizeBytes ?? 0n), 0n);
+  const totalBytes = media.reduce(
+    (sum, m) => sum + (m.fileSizeBytes ?? 0n),
+    0n,
+  );
   await deleteS3Keys(MEDIA_BUCKET, s3Keys);
 
   await prisma.$transaction(async (tx) => {
@@ -153,9 +156,7 @@ export async function deletePlacesCascade(
       placeDeleteTombstones({
         ownerId: userId,
         placeId,
-        mediaIds: media
-          .filter((m) => m.linkedId === placeId)
-          .map((m) => m.id),
+        mediaIds: media.filter((m) => m.linkedId === placeId).map((m) => m.id),
         shares: shares.filter((s) => s.placeId === placeId),
         routeId:
           linkedRoutes.find((route) => route.placeId === placeId)?.id ?? null,
@@ -166,7 +167,10 @@ export async function deletePlacesCascade(
     );
     await writeTombstones(tx, [
       ...tombstones,
-      ...placeLinkDeleteTombstones({ ownerId: userId, linkIds: links.map((l) => l.id) }),
+      ...placeLinkDeleteTombstones({
+        ownerId: userId,
+        linkIds: links.map((l) => l.id),
+      }),
     ]);
     await tx.placeShare.deleteMany({ where: { placeId: { in: ownedIds } } });
     // Purge place_shared notifications held by OTHER users (the share
@@ -229,7 +233,10 @@ export async function deleteTripsCascade(
   const s3Keys = media.flatMap((m) =>
     [m.s3KeyDisplay, m.s3KeyThumbnail].filter((k): k is string => Boolean(k)),
   );
-  const totalBytes = media.reduce((sum, m) => sum + (m.fileSizeBytes ?? 0n), 0n);
+  const totalBytes = media.reduce(
+    (sum, m) => sum + (m.fileSizeBytes ?? 0n),
+    0n,
+  );
   await deleteS3Keys(MEDIA_BUCKET, s3Keys);
 
   await prisma.$transaction(async (tx) => {
@@ -245,9 +252,7 @@ export async function deleteTripsCascade(
         tripDeleteTombstones({
           ownerId: userId,
           tripId,
-          mediaIds: media
-            .filter((m) => m.linkedId === tripId)
-            .map((m) => m.id),
+          mediaIds: media.filter((m) => m.linkedId === tripId).map((m) => m.id),
         }),
       ),
     );

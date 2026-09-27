@@ -10,9 +10,15 @@ interface Props {
 }
 
 // Ranges come from the shared validator's HILLSHADE_LIMITS — never re-derive.
-const AZIMUTH_CONSTRAINTS: NumericFieldConstraints = { ...HILLSHADE_LIMITS.azimuth };
-const ALTITUDE_CONSTRAINTS: NumericFieldConstraints = { ...HILLSHADE_LIMITS.altitude };
-const Z_FACTOR_CONSTRAINTS: NumericFieldConstraints = { ...HILLSHADE_LIMITS.zFactor };
+const AZIMUTH_CONSTRAINTS: NumericFieldConstraints = {
+  ...HILLSHADE_LIMITS.azimuth,
+};
+const ALTITUDE_CONSTRAINTS: NumericFieldConstraints = {
+  ...HILLSHADE_LIMITS.altitude,
+};
+const Z_FACTOR_CONSTRAINTS: NumericFieldConstraints = {
+  ...HILLSHADE_LIMITS.zFactor,
+};
 
 /**
  * The shaded relief: where the sun is, and how hard the terrain is pushed at
@@ -24,7 +30,8 @@ const Z_FACTOR_CONSTRAINTS: NumericFieldConstraints = { ...HILLSHADE_LIMITS.zFac
  * value is reported here and refused there rather than silently clamped.
  */
 export default function HillshadeSettings({ value, onChange }: Props) {
-  const patch = (delta: Partial<HillshadeSettingsValue>) => onChange({ ...value, ...delta });
+  const patch = (delta: Partial<HillshadeSettingsValue>) =>
+    onChange({ ...value, ...delta });
 
   return (
     <div className={styles.tabPanel}>

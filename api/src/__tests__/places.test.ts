@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
-import { BOB_ID, NONEXISTENT_ID, CANYON_TYPE_ID} from "./_actors";
+import { BOB_ID, NONEXISTENT_ID, CANYON_TYPE_ID } from "./_actors";
 
 // Requires `make dev` to be running (Postgres + MiniStack + API on :8080) with
 // AUTH_MODE=fake (every request authenticates as the seeded alice user).
@@ -11,10 +11,12 @@ const API_URL = process.env.API_URL ?? "http://localhost:8080";
 const AUTH = { Authorization: "Bearer fake-token" } as const;
 
 async function createPlace(name: string): Promise<string> {
-  const res = await request(API_URL)
-    .post("/places")
-    .set(AUTH)
-    .send({ placeTypeId: CANYON_TYPE_ID, name, latitude: -33.7, longitude: 150.3 });
+  const res = await request(API_URL).post("/places").set(AUTH).send({
+    placeTypeId: CANYON_TYPE_ID,
+    name,
+    latitude: -33.7,
+    longitude: 150.3,
+  });
   expect(res.status).toBe(201);
   return res.body.id as string;
 }
@@ -88,7 +90,9 @@ describe("places routes (fake auth = alice)", () => {
     // list with no linked places and the deleted place's name backfilled
     // onto displayName (it was null and this was its only linked place) so
     // it still carries a label.
-    const survivorRes = await request(API_URL).get(`/trips/${tripId}`).set(AUTH);
+    const survivorRes = await request(API_URL)
+      .get(`/trips/${tripId}`)
+      .set(AUTH);
     expect(survivorRes.status).toBe(200);
     expect(survivorRes.body.places).toEqual([]);
     expect(survivorRes.body.displayName).toBe(placeName);
@@ -111,14 +115,20 @@ describe("places routes (fake auth = alice)", () => {
     const tripId = tripRes.body.id as string;
 
     try {
-      const delRes = await request(API_URL).delete(`/places/${placeAId}`).set(AUTH);
+      const delRes = await request(API_URL)
+        .delete(`/places/${placeAId}`)
+        .set(AUTH);
       expect(delRes.status).toBe(204);
 
-      const survivorRes = await request(API_URL).get(`/trips/${tripId}`).set(AUTH);
+      const survivorRes = await request(API_URL)
+        .get(`/trips/${tripId}`)
+        .set(AUTH);
       expect(survivorRes.status).toBe(200);
       // Only the surviving place remains linked; no backfill since the trip
       // still derives its title from the survivor.
-      expect(survivorRes.body.places).toEqual([{ id: placeBId, name: placeBName }]);
+      expect(survivorRes.body.places).toEqual([
+        { id: placeBId, name: placeBName },
+      ]);
       expect(survivorRes.body.displayName).toBeNull();
     } finally {
       await request(API_URL).delete(`/trips/${tripId}`).set(AUTH);
@@ -156,13 +166,11 @@ describe("places routes (fake auth = alice)", () => {
         .send({ sharedWithUserId: BOB_ID });
       expect(shareRes.status).toBe(201);
 
-      const sharedRes = await request(API_URL)
-        .get("/places/shared")
-        .set(AUTH);
+      const sharedRes = await request(API_URL).get("/places/shared").set(AUTH);
       expect(sharedRes.status).toBe(200);
-      expect(
-        sharedRes.body.some((c: { id: string }) => c.id === id),
-      ).toBe(false);
+      expect(sharedRes.body.some((c: { id: string }) => c.id === id)).toBe(
+        false,
+      );
     } finally {
       await request(API_URL).delete(`/places/${id}`).set(AUTH);
     }
@@ -189,9 +197,13 @@ describe("POST /places — free-text field validation", () => {
       const res = await request(API_URL)
         .post("/places")
         .set(AUTH_LOCAL)
-        .send({ placeTypeId: CANYON_TYPE_ID, latitude: -33.7, longitude: 150.3, ...fields });
+        .send({
+          placeTypeId: CANYON_TYPE_ID,
+          latitude: -33.7,
+          longitude: 150.3,
+          ...fields,
+        });
       expect(res.status).toBe(400);
     }
   });
 });
-

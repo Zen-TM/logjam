@@ -38,7 +38,10 @@ export class AuthSessionTimeoutError extends Error {
 export function fetchAuthSessionWithTimeout(): Promise<AuthSession> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_resolve, reject) => {
-    timer = setTimeout(() => reject(new AuthSessionTimeoutError()), SESSION_TIMEOUT_MS);
+    timer = setTimeout(
+      () => reject(new AuthSessionTimeoutError()),
+      SESSION_TIMEOUT_MS,
+    );
   });
   return Promise.race([fetchAuthSession(), timeout]).finally(() =>
     clearTimeout(timer),

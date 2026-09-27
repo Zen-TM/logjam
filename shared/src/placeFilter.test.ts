@@ -13,13 +13,20 @@ import {
   passesPlaceFilters as passesFilters,
   reconcileCustomFilters,
 } from "./placeFilter.js";
-import type { PlaceFilterFields, PlaceFilters as TFilters } from "./placeFilter.js";
+import type {
+  PlaceFilterFields,
+  PlaceFilters as TFilters,
+} from "./placeFilter.js";
 import type { TripLogCustomFieldDef } from "./tripLogFields.js";
 import { SYSTEM_PLACE_TYPE_IDS } from "./placeTypes.js";
 
 // Named TPlace here because these cases were written against the web place
 // type; the predicate only ever reads the structural subset.
-type TPlace = PlaceFilterFields & { id: string; latitude: number; longitude: number };
+type TPlace = PlaceFilterFields & {
+  id: string;
+  latitude: number;
+  longitude: number;
+};
 
 // Override type permits null on any field so tests can simulate places with
 // missing values (the API types them non-null, but filters must handle gaps).
@@ -92,8 +99,12 @@ describe("passesFilters — ownership", () => {
 describe("passesFilters — shared by me", () => {
   it("keeps places with at least one share, drops the rest", () => {
     const f = filters({ shared_by_me: true });
-    expect(passesFilters(place({ _count: { tripLogLinks: 0, shares: 2 } }), f, true)).toBe(true);
-    expect(passesFilters(place({ _count: { tripLogLinks: 0, shares: 0 } }), f, true)).toBe(false);
+    expect(
+      passesFilters(place({ _count: { tripLogLinks: 0, shares: 2 } }), f, true),
+    ).toBe(true);
+    expect(
+      passesFilters(place({ _count: { tripLogLinks: 0, shares: 0 } }), f, true),
+    ).toBe(false);
     expect(passesFilters(place(), f, true)).toBe(false); // _count absent
   });
 
@@ -126,7 +137,9 @@ describe("passesFilters — completion", () => {
 
   it("treats a place with one trip as done (boundary)", () => {
     const one = place({ _count: { tripLogLinks: 1, shares: 0 } });
-    expect(passesFilters(one, filters({ completion: "done" }), true)).toBe(true);
+    expect(passesFilters(one, filters({ completion: "done" }), true)).toBe(
+      true,
+    );
     expect(passesFilters(one, filters({ completion: "not_done" }), true)).toBe(
       false,
     );
@@ -139,9 +152,9 @@ describe("passesFilters — completion", () => {
     expect(passesFilters(done, filters({ completion: "done" }), false)).toBe(
       false,
     );
-    expect(passesFilters(done, filters({ completion: "not_done" }), false)).toBe(
-      true,
-    );
+    expect(
+      passesFilters(done, filters({ completion: "not_done" }), false),
+    ).toBe(true);
   });
 
   it("treats an absent _count as not done", () => {
@@ -202,13 +215,19 @@ describe("passesFilters — completion", () => {
 describe("isPlaceDoneByViewer", () => {
   it("is true for an owned place with at least one logged trip", () => {
     expect(
-      isPlaceDoneByViewer(place({ _count: { tripLogLinks: 3, shares: 0 } }), true),
+      isPlaceDoneByViewer(
+        place({ _count: { tripLogLinks: 3, shares: 0 } }),
+        true,
+      ),
     ).toBe(true);
   });
 
   it("is false for an owned place with zero trips", () => {
     expect(
-      isPlaceDoneByViewer(place({ _count: { tripLogLinks: 0, shares: 0 } }), true),
+      isPlaceDoneByViewer(
+        place({ _count: { tripLogLinks: 0, shares: 0 } }),
+        true,
+      ),
     ).toBe(false);
   });
 
@@ -219,7 +238,10 @@ describe("isPlaceDoneByViewer", () => {
   it("is false for a shared place even when the owner's tally is positive", () => {
     // Privacy/self-only boundary: the count is the owner's, not the viewer's.
     expect(
-      isPlaceDoneByViewer(place({ _count: { tripLogLinks: 5, shares: 0 } }), false),
+      isPlaceDoneByViewer(
+        place({ _count: { tripLogLinks: 5, shares: 0 } }),
+        false,
+      ),
     ).toBe(false);
   });
 });
@@ -290,16 +312,24 @@ describe("passesFilters — area", () => {
 describe("isPlaceInArea", () => {
   it("is the comparison passesFilters uses", () => {
     const area = { west: 150.2, south: -33.6, east: 150.4, north: -33.4 };
-    expect(isPlaceInArea({ latitude: -33.5, longitude: 150.3 }, area)).toBe(true);
-    expect(isPlaceInArea({ latitude: -33.5, longitude: 150.5 }, area)).toBe(false);
+    expect(isPlaceInArea({ latitude: -33.5, longitude: 150.3 }, area)).toBe(
+      true,
+    );
+    expect(isPlaceInArea({ latitude: -33.5, longitude: 150.5 }, area)).toBe(
+      false,
+    );
   });
 });
 
 describe("passesFilters — date range", () => {
   it("created_at start bound excludes earlier places", () => {
     const f = filters({ created_at: ["2026-02-01", null] });
-    expect(passesFilters(place({ createdAt: "2026-03-01T00:00:00.000Z" }), f, true)).toBe(true);
-    expect(passesFilters(place({ createdAt: "2026-01-01T00:00:00.000Z" }), f, true)).toBe(false);
+    expect(
+      passesFilters(place({ createdAt: "2026-03-01T00:00:00.000Z" }), f, true),
+    ).toBe(true);
+    expect(
+      passesFilters(place({ createdAt: "2026-01-01T00:00:00.000Z" }), f, true),
+    ).toBe(false);
   });
 
   it("created_at end bound is inclusive of the whole end day", () => {
@@ -311,17 +341,29 @@ describe("passesFilters — date range", () => {
       new Date(wallClock).toISOString();
     const f = filters({ created_at: [null, "2026-06-16"] });
     expect(
-      passesFilters(place({ createdAt: localInstant("2026-06-16T18:30:00") }), f, true),
+      passesFilters(
+        place({ createdAt: localInstant("2026-06-16T18:30:00") }),
+        f,
+        true,
+      ),
     ).toBe(true);
     expect(
-      passesFilters(place({ createdAt: localInstant("2026-06-17T00:00:00") }), f, true),
+      passesFilters(
+        place({ createdAt: localInstant("2026-06-17T00:00:00") }),
+        f,
+        true,
+      ),
     ).toBe(false);
   });
 
   it("updated_at range filters on the updated timestamp", () => {
     const f = filters({ updated_at: ["2026-05-01", "2026-05-31"] });
-    expect(passesFilters(place({ updatedAt: "2026-05-15T00:00:00.000Z" }), f, true)).toBe(true);
-    expect(passesFilters(place({ updatedAt: "2026-06-01T00:00:00.000Z" }), f, true)).toBe(false);
+    expect(
+      passesFilters(place({ updatedAt: "2026-05-15T00:00:00.000Z" }), f, true),
+    ).toBe(true);
+    expect(
+      passesFilters(place({ updatedAt: "2026-06-01T00:00:00.000Z" }), f, true),
+    ).toBe(false);
   });
 
   it("a null-bounded range is treated as inactive", () => {
@@ -332,12 +374,18 @@ describe("passesFilters — date range", () => {
 
 describe("passesFilters — include_unknowns over new fields", () => {
   it("hides places with unknown dates when an active date filter excludes unknowns", () => {
-    const f = filters({ created_at: ["2026-02-01", null], include_unknowns: false });
+    const f = filters({
+      created_at: ["2026-02-01", null],
+      include_unknowns: false,
+    });
     expect(passesFilters(place({ createdAt: null }), f, true)).toBe(false);
   });
 
   it("keeps places with unknown dates when include_unknowns is on", () => {
-    const f = filters({ created_at: ["2026-02-01", null], include_unknowns: true });
+    const f = filters({
+      created_at: ["2026-02-01", null],
+      include_unknowns: true,
+    });
     expect(passesFilters(place({ createdAt: null }), f, true)).toBe(true);
   });
 });
@@ -406,35 +454,55 @@ describe("passesFilters — custom fields", () => {
 
   it("text filter matches case-insensitive substring", () => {
     const f = filters({ custom: { water: { kind: "text", value: "HIGH" } } });
-    expect(passesFilters(withCustom({ water: "Very high flow" }), f, true)).toBe(true);
+    expect(
+      passesFilters(withCustom({ water: "Very high flow" }), f, true),
+    ).toBe(true);
     expect(passesFilters(withCustom({ water: "low" }), f, true)).toBe(false);
   });
 
   it("number filter applies Less than / More than / Exactly", () => {
-    const less = filters({ custom: { size: { kind: "number", op: "Less than", value: 5 } } });
+    const less = filters({
+      custom: { size: { kind: "number", op: "Less than", value: 5 } },
+    });
     expect(passesFilters(withCustom({ size: 4 }), less, true)).toBe(true);
     expect(passesFilters(withCustom({ size: 5 }), less, true)).toBe(false);
 
-    const more = filters({ custom: { size: { kind: "number", op: "More than", value: 5 } } });
+    const more = filters({
+      custom: { size: { kind: "number", op: "More than", value: 5 } },
+    });
     expect(passesFilters(withCustom({ size: 6 }), more, true)).toBe(true);
     expect(passesFilters(withCustom({ size: 5 }), more, true)).toBe(false);
 
-    const exact = filters({ custom: { size: { kind: "number", op: "Exactly", value: 5 } } });
+    const exact = filters({
+      custom: { size: { kind: "number", op: "Exactly", value: 5 } },
+    });
     expect(passesFilters(withCustom({ size: 5 }), exact, true)).toBe(true);
     expect(passesFilters(withCustom({ size: 4 }), exact, true)).toBe(false);
   });
 
   it("number filter works for float values", () => {
-    const f = filters({ custom: { depth: { kind: "number", op: "More than", value: 2.5 } } });
+    const f = filters({
+      custom: { depth: { kind: "number", op: "More than", value: 2.5 } },
+    });
     expect(passesFilters(withCustom({ depth: 2.75 }), f, true)).toBe(true);
     expect(passesFilters(withCustom({ depth: 2.25 }), f, true)).toBe(false);
   });
 
   it("date filter applies start bound and inclusive end day", () => {
-    const f = filters({ custom: { last_visit: { kind: "date", range: ["2026-02-01", "2026-06-16"] } } });
-    expect(passesFilters(withCustom({ last_visit: "2026-03-01" }), f, true)).toBe(true);
-    expect(passesFilters(withCustom({ last_visit: "2026-06-16" }), f, true)).toBe(true);
-    expect(passesFilters(withCustom({ last_visit: "2026-01-15" }), f, true)).toBe(false);
+    const f = filters({
+      custom: {
+        last_visit: { kind: "date", range: ["2026-02-01", "2026-06-16"] },
+      },
+    });
+    expect(
+      passesFilters(withCustom({ last_visit: "2026-03-01" }), f, true),
+    ).toBe(true);
+    expect(
+      passesFilters(withCustom({ last_visit: "2026-06-16" }), f, true),
+    ).toBe(true);
+    expect(
+      passesFilters(withCustom({ last_visit: "2026-01-15" }), f, true),
+    ).toBe(false);
   });
 
   it("boolean filter matches exact truthiness", () => {
@@ -448,7 +516,9 @@ describe("passesFilters — custom fields", () => {
   });
 
   it("hides places missing a custom value unless include_unknowns is on", () => {
-    const off = filters({ custom: { size: { kind: "number", op: "More than", value: 3 } } });
+    const off = filters({
+      custom: { size: { kind: "number", op: "More than", value: 3 } },
+    });
     expect(passesFilters(withCustom({}), off, true)).toBe(false);
     const on = filters({
       custom: { size: { kind: "number", op: "More than", value: 3 } },
@@ -586,10 +656,18 @@ describe("passesFilters — date range timezone and validity", () => {
     // was excluded from "from the 15th" and included in "up to the 14th".
     const addedAt = new Date("2026-01-15T09:00:00").toISOString();
     expect(
-      passesFilters(place({ createdAt: addedAt }), filters({ created_at: ["2026-01-15", null] }), true),
+      passesFilters(
+        place({ createdAt: addedAt }),
+        filters({ created_at: ["2026-01-15", null] }),
+        true,
+      ),
     ).toBe(true);
     expect(
-      passesFilters(place({ createdAt: addedAt }), filters({ created_at: [null, "2026-01-14"] }), true),
+      passesFilters(
+        place({ createdAt: addedAt }),
+        filters({ created_at: [null, "2026-01-14"] }),
+        true,
+      ),
     ).toBe(false);
   });
 
@@ -599,7 +677,11 @@ describe("passesFilters — date range timezone and validity", () => {
     const range: [string, string] = ["2026-01-01", "2026-01-31"];
     const shown = filters({ created_at: range, include_unknowns: true });
     const hidden = filters({ created_at: range, include_unknowns: false });
-    expect(passesFilters(place({ createdAt: "15/01/2026" }), shown, true)).toBe(true);
-    expect(passesFilters(place({ createdAt: "15/01/2026" }), hidden, true)).toBe(false);
+    expect(passesFilters(place({ createdAt: "15/01/2026" }), shown, true)).toBe(
+      true,
+    );
+    expect(
+      passesFilters(place({ createdAt: "15/01/2026" }), hidden, true),
+    ).toBe(false);
   });
 });

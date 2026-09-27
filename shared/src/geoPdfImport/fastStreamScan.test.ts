@@ -30,12 +30,19 @@ function run(
   bytes: Uint8Array,
   from: number,
 ): { end: number; cursor: number } | { threw: true } {
-  const parser = PDFObjectParser.forBytes(bytes, PDFContext.create()) as unknown as {
+  const parser = PDFObjectParser.forBytes(
+    bytes,
+    PDFContext.create(),
+  ) as unknown as {
     bytes: { moveTo(n: number): void; offset(): number };
   };
   parser.bytes.moveTo(from);
   try {
-    const end = implementation.call(parser, { line: 0, column: 0, offset: from });
+    const end = implementation.call(parser, {
+      line: 0,
+      column: 0,
+      offset: from,
+    });
     return { end, cursor: parser.bytes.offset() };
   } catch {
     return { threw: true };
@@ -92,7 +99,11 @@ describe("fastFindEndOfStreamFallback", () => {
   // Real files, end to end: every fallback the parser takes while reading a
   // committed fixture must land on the same byte either way.
   it("agrees on every stream in the committed fixtures", () => {
-    const fixtures = ["gdal-mga56.pdf", "logjam-a5.pdf", "logjam-legacy-a5.pdf"];
+    const fixtures = [
+      "gdal-mga56.pdf",
+      "logjam-a5.pdf",
+      "logjam-legacy-a5.pdf",
+    ];
     for (const name of fixtures) {
       const bytes = new Uint8Array(
         readFileSync(join(__dirname, "__fixtures__", name)),

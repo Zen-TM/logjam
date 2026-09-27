@@ -27,7 +27,10 @@ import {
 import { getEnv } from "../lib/env";
 import { getParam } from "../lib/getParam";
 import { createAndLaunchTopoExport } from "../lib/topoExportLauncher";
-import { assertHasStorageQuota, decrementStorageUsed } from "../lib/storageQuota";
+import {
+  assertHasStorageQuota,
+  decrementStorageUsed,
+} from "../lib/storageQuota";
 import { assertHasEgressQuota } from "../lib/egressQuota";
 import { resolveUser as getUser } from "../lib/resolveUser";
 import { directlySharedIds } from "../lib/shareAccess";
@@ -39,7 +42,11 @@ const exportRequestSchema = z.object({
   bundling: z.enum(["composite", "per-layer"]),
 });
 
-type S3OutputKey = { name: string; cogKey: string | null; pmtilesKey: string | null };
+type S3OutputKey = {
+  name: string;
+  cogKey: string | null;
+  pmtilesKey: string | null;
+};
 
 const router = Router();
 
@@ -51,14 +58,18 @@ const PRESIGN_TTL_SECONDS = 86400; // 24h
 // the client can show a truncation caption when this cap bites (UX-002).
 const EXPORT_LIST_CAP = 50;
 
-async function presignResult(resultKey: string | null): Promise<{ url: string; expiresAt: string } | null> {
+async function presignResult(
+  resultKey: string | null,
+): Promise<{ url: string; expiresAt: string } | null> {
   if (!resultKey) return null;
   const url = await getSignedUrl(
     s3,
     new GetObjectCommand({ Bucket: TOPO_BUCKET, Key: resultKey }),
     { expiresIn: PRESIGN_TTL_SECONDS },
   );
-  const expiresAt = new Date(Date.now() + PRESIGN_TTL_SECONDS * 1000).toISOString();
+  const expiresAt = new Date(
+    Date.now() + PRESIGN_TTL_SECONDS * 1000,
+  ).toISOString();
   return { url, expiresAt };
 }
 
@@ -112,7 +123,10 @@ router.post(
 
     const parsed = exportRequestSchema.safeParse(req.body);
     if (!parsed.success) {
-      throw new AppError(400, parsed.error.issues[0]?.message ?? "Invalid export request");
+      throw new AppError(
+        400,
+        parsed.error.issues[0]?.message ?? "Invalid export request",
+      );
     }
     const { sourceJobIds, bundling } = parsed.data;
     const format = parsed.data.format as ExportFormat;
@@ -155,7 +169,9 @@ router.post(
     // Reject pre-Stage-2 jobs whose outputs predate the COG export source:
     // they would otherwise fail deep inside the export worker. Only raster
     // layers need a COG; vector layers export from raw GeoJSON.
-    const requestedRasterLayers = layers.filter((l) => RASTER_LAYERS.includes(l));
+    const requestedRasterLayers = layers.filter((l) =>
+      RASTER_LAYERS.includes(l),
+    );
     for (const j of jobs) {
       const outputs = (j.s3OutputKeys as S3OutputKey[] | null) ?? [];
       for (const layer of requestedRasterLayers) {
@@ -166,7 +182,8 @@ router.post(
       }
     }
 
-    const vectorStyleSnapshot = (user.vectorStyle as object | null) ?? VECTOR_STYLE_DEFAULTS;
+    const vectorStyleSnapshot =
+      (user.vectorStyle as object | null) ?? VECTOR_STYLE_DEFAULTS;
 
     // Cap-checked create + ECS launch — shared with the reaper's auto-export
     // pass so both enforce the same per-user concurrency limit (ARCH-009) and
@@ -204,7 +221,12 @@ router.get(
       prisma.topoExportJob.count({ where }),
     ]);
     const views = await Promise.all(
-      rows.map(async (r) => rowToView(r, r.status === "completed" ? await presignResult(r.resultKey) : null)),
+      rows.map(async (r) =>
+        rowToView(
+          r,
+          r.status === "completed" ? await presignResult(r.resultKey) : null,
+        ),
+      ),
     );
     // True total (pre-cap) so the client can flag a truncated view (UX-002).
     res.set("X-Total-Count", String(total));
@@ -230,7 +252,8 @@ router.get(
     // deliberate "download it again" action. Owner-scoped above, so the caller
     // is the owner whose allowance pays for it.
     if (row.status === "completed") await assertHasEgressQuota(user.id);
-    const download = row.status === "completed" ? await presignResult(row.resultKey) : null;
+    const download =
+      row.status === "completed" ? await presignResult(row.resultKey) : null;
     res.json(rowToView(row, download));
   },
 );
@@ -255,7 +278,9 @@ router.delete(
     // Delete the S3 object and reclaim the storage quota in the same
     // transaction as the row delete so a completed export never orphans bytes.
     if (row.status === "completed" && row.resultKey) {
-      await s3.send(new DeleteObjectCommand({ Bucket: TOPO_BUCKET, Key: row.resultKey }));
+      await s3.send(
+        new DeleteObjectCommand({ Bucket: TOPO_BUCKET, Key: row.resultKey }),
+      );
     }
     await prisma.$transaction(async (tx) => {
       if (row.status === "completed" && row.resultBytes) {

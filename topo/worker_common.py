@@ -21,6 +21,7 @@ DELIBERATELY NOT HERE:
     through for two copies that differ only in a docstring. Guarded against
     real drift by a test instead (`tests/test_worker_common.py`).
 """
+
 import json
 import os
 from typing import Optional
@@ -63,6 +64,7 @@ def compose_database_url() -> str:
 
 def create_notification(conn, user_id: str, notif_type: str, payload: dict):
     import uuid as _uuid
+
     with conn.cursor() as cur:
         cur.execute(
             "INSERT INTO notifications (id, user_id, type, payload, read, created_at) "

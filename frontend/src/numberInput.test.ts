@@ -62,7 +62,9 @@ describe("numericFieldError", () => {
     expect(numericFieldError("-", { min: 0 })).toBeNull();
   });
   it("flags a decimal in an integer field instead of truncating (TRIP-1)", () => {
-    expect(numericFieldError("5.5", { integer: true })).toBe("Whole numbers only");
+    expect(numericFieldError("5.5", { integer: true })).toBe(
+      "Whole numbers only",
+    );
     expect(numericFieldError("5", { integer: true })).toBeNull();
   });
   it("flags negatives on a non-negative field (PLACE-2/TRIP-2)", () => {

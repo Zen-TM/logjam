@@ -30,7 +30,9 @@ export function SyncStatusPills({
   if (online && !showPending) return null;
   return (
     <View style={styles.row}>
-      {online ? null : <StatusPill label="Offline" tone="muted" icon="cloud-off" />}
+      {online ? null : (
+        <StatusPill label="Offline" tone="muted" icon="cloud-off" />
+      )}
       {showPending ? (
         <StatusPill
           label={`${pendingCount} waiting to sync`}
@@ -43,5 +45,10 @@ export function SyncStatusPills({
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: "row", alignItems: "center", gap: spacing(0.75), flexWrap: "wrap" },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing(0.75),
+    flexWrap: "wrap",
+  },
 });

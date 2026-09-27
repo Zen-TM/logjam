@@ -25,4 +25,3 @@ export function planElevationSources({
   // only network source.
   return { api: !isGuest, tiles: true };
 }
-

@@ -118,7 +118,8 @@ export function groupTripsByYear<T extends { date: string }>(
 
 /** Distinct places across a trip set — "how much of the library have I done". */
 export function distinctPlaceCount(trips: LogbookTrip[]): number {
-  return new Set(trips.flatMap((trip) => trip.places.map((place) => place.id))).size;
+  return new Set(trips.flatMap((trip) => trip.places.map((place) => place.id)))
+    .size;
 }
 
 export type MonthBucket = { label: string; count: number; current: boolean };
@@ -187,7 +188,11 @@ export function countTripsInLastMonths(
 
 // ── Ranges and spark buckets for the stats screen ──────────────────────
 
-export type LogbookRange = { label: string; from: string | null; to: string | null };
+export type LogbookRange = {
+  label: string;
+  from: string | null;
+  to: string | null;
+};
 
 /**
  * The relative ranges people actually ask for, relative to now.
@@ -209,7 +214,11 @@ export function datePresets(today: string = todayDateKey()): LogbookRange[] {
   return [
     { label: "This year", from: `${year}-01-01`, to: today },
     { label: "Last 12 months", from: twelveMonths, to: today },
-    { label: `${year - 1}`, from: `${year - 1}-01-01`, to: `${year - 1}-12-31` },
+    {
+      label: `${year - 1}`,
+      from: `${year - 1}-01-01`,
+      to: `${year - 1}-12-31`,
+    },
   ];
 }
 
@@ -255,8 +264,8 @@ export function monthBucketsForYear(
       .toLocaleDateString("en-AU", { month: "narrow", timeZone: "UTC" })
       .charAt(0),
     count:
-      monthly.find((entry) => entry.year === year && entry.month === month)?.count ??
-      0,
+      monthly.find((entry) => entry.year === year && entry.month === month)
+        ?.count ?? 0,
     current: current.year === year && current.month === month,
   }));
 }
@@ -295,10 +304,16 @@ export function yearBuckets(
 export const UNTAGGED_ACTIVITY_LABEL = "Untagged";
 
 export function logbookActivityLabel(type: string): string {
-  return type === UNTAGGED_ACTIVITY ? UNTAGGED_ACTIVITY_LABEL : tripTypeLabel(type);
+  return type === UNTAGGED_ACTIVITY
+    ? UNTAGGED_ACTIVITY_LABEL
+    : tripTypeLabel(type);
 }
 
-export function pluralCount(count: number, one: string, many = `${one}s`): string {
+export function pluralCount(
+  count: number,
+  one: string,
+  many = `${one}s`,
+): string {
   return `${count} ${count === 1 ? one : many}`;
 }
 
@@ -327,13 +342,25 @@ export function statsSpark(
 ): StatsSpark {
   const explicitYear = /^\d{4}$/.test(range.label) ? Number(range.label) : null;
   if (explicitYear != null) {
-    return { axis: "month", year: explicitYear, buckets: monthBucketsForYear(stats.monthly, explicitYear, now) };
+    return {
+      axis: "month",
+      year: explicitYear,
+      buckets: monthBucketsForYear(stats.monthly, explicitYear, now),
+    };
   }
   if (stats.yearly.length > 1) {
-    return { axis: "year", firstYear: stats.yearly[0].year, buckets: yearBuckets(stats.yearly, now) };
+    return {
+      axis: "year",
+      firstYear: stats.yearly[0].year,
+      buckets: yearBuckets(stats.yearly, now),
+    };
   }
   const year = stats.yearly[0]?.year ?? now.getFullYear();
-  return { axis: "month", year, buckets: monthBucketsForYear(stats.monthly, year, now) };
+  return {
+    axis: "month",
+    year,
+    buckets: monthBucketsForYear(stats.monthly, year, now),
+  };
 }
 
 /**
@@ -352,20 +379,28 @@ export function statsCadence(
   );
   const lines: string[] = [];
   if (!activity && stats.firstDate) {
-    lines.push(`first trip ${formatDateKey(`${stats.firstDate}T00:00:00.000Z`)}`);
+    lines.push(
+      `first trip ${formatDateKey(`${stats.firstDate}T00:00:00.000Z`)}`,
+    );
   }
   if (stats.averageGapDays != null && stats.longestGapDays != null) {
     lines.push(
       `every ${pluralCount(stats.averageGapDays, "day")} on average · longest gap ${stats.longestGapDays}`,
     );
   }
-  lines.push(`${stats.weekendTrips} of ${pluralCount(stats.trips, "trip")} fell on a weekend`);
+  lines.push(
+    `${stats.weekendTrips} of ${pluralCount(stats.trips, "trip")} fell on a weekend`,
+  );
   if (stats.longestRunDays > 1) {
-    lines.push(`longest run ${pluralCount(stats.longestRunDays, "day")} back to back`);
+    lines.push(
+      `longest run ${pluralCount(stats.longestRunDays, "day")} back to back`,
+    );
   }
   return {
     busiest: busiest
-      ? `busiest ${new Date(Date.UTC(busiest.year, busiest.month, 1)).toLocaleDateString(undefined, {
+      ? `busiest ${new Date(
+          Date.UTC(busiest.year, busiest.month, 1),
+        ).toLocaleDateString(undefined, {
           month: "short",
           year: "numeric",
           timeZone: "UTC",
@@ -415,7 +450,10 @@ export function activityTallySubtitle(tally: ActivityTally): string {
 /** A trip tagged twice counts under both tags, so the activity rows out-sum
  *  the trip tile and read as a bug unless a caption says why. */
 export function activityTalliesOverlap(stats: LogbookStats): boolean {
-  return stats.activityTallies.reduce((sum, tally) => sum + tally.trips, 0) > stats.trips;
+  return (
+    stats.activityTallies.reduce((sum, tally) => sum + tally.trips, 0) >
+    stats.trips
+  );
 }
 
 export type FieldStatDisplay = {
@@ -442,12 +480,16 @@ export function fieldStatDisplay(stat: FieldStat): FieldStatDisplay {
       return {
         metric: { value: formatStatNumber(stat.average), suffix: "avg" },
         buckets: stat.buckets,
-        caption: stat.best ? `highest ${formatStatNumber(stat.best.value)} · ${stat.best.label}` : undefined,
+        caption: stat.best
+          ? `highest ${formatStatNumber(stat.best.value)} · ${stat.best.label}`
+          : undefined,
       };
     case "quantity":
       return {
         metric: { value: formatStatNumber(stat.average), suffix: "avg" },
-        subtitle: stat.best ? `highest ${formatStatNumber(stat.best.value)}, ${stat.best.label}` : undefined,
+        subtitle: stat.best
+          ? `highest ${formatStatNumber(stat.best.value)}, ${stat.best.label}`
+          : undefined,
       };
     case "boolean":
       return {
@@ -457,7 +499,11 @@ export function fieldStatDisplay(stat: FieldStat): FieldStatDisplay {
     case "vocabulary":
       // "×" rather than a space: a value can contain spaces of its own, and
       // "NPWS-2026-114 4" read as part of the identifier.
-      return { subtitle: stat.values.map((entry) => `${entry.value} ×${entry.count}`).join(" · ") };
+      return {
+        subtitle: stat.values
+          .map((entry) => `${entry.value} ×${entry.count}`)
+          .join(" · "),
+      };
   }
 }
 
@@ -465,7 +511,12 @@ export function fieldStatDisplay(stat: FieldStat): FieldStatDisplay {
 
 /** One stored value as a row of a detail page's attribute table: key, label,
  *  value, and the definition's type (null when the definition is gone). */
-export type AttributeRow = [key: string, label: string, value: unknown, type: string | null];
+export type AttributeRow = [
+  key: string,
+  label: string,
+  value: unknown,
+  type: string | null,
+];
 
 /**
  * Every stored value as a row of a detail page's attribute table: the defined
@@ -489,14 +540,19 @@ export function attributeRows(
   const stored = values ?? {};
   const byKey = new Map<string, { label: string; type: string | null }>();
   for (const def of defs) {
-    if (!byKey.has(def.key)) byKey.set(def.key, { label: def.label, type: def.type ?? null });
+    if (!byKey.has(def.key))
+      byKey.set(def.key, { label: def.label, type: def.type ?? null });
   }
   const defined = [...byKey]
     .filter(([key]) => stored[key] !== undefined)
-    .map(([key, { label, type }]): AttributeRow => [key, label, stored[key], type]);
+    .map(
+      ([key, { label, type }]): AttributeRow => [key, label, stored[key], type],
+    );
   const orphaned = Object.entries(stored)
     .filter(([key]) => !byKey.has(key))
-    .map(([key, value]): AttributeRow => [key, humanizeFieldKey(key), value, null]);
+    .map(
+      ([key, value]): AttributeRow => [key, humanizeFieldKey(key), value, null],
+    );
   return [...defined, ...orphaned];
 }
 

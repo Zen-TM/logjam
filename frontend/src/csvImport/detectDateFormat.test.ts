@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { parseWithFormat, toIsoDate, detectDateFormat } from "./detectDateFormat";
+import {
+  parseWithFormat,
+  toIsoDate,
+  detectDateFormat,
+} from "./detectDateFormat";
 
 describe("parseWithFormat", () => {
   it("parses DD/MM/YYYY day-first", () => {
@@ -55,7 +59,10 @@ describe("toIsoDate", () => {
 
 describe("detectDateFormat", () => {
   it("returns the default for an all-empty sample", () => {
-    expect(detectDateFormat(["", "  "])).toEqual({ format: "DD/MM/YYYY", ambiguous: false });
+    expect(detectDateFormat(["", "  "])).toEqual({
+      format: "DD/MM/YYYY",
+      ambiguous: false,
+    });
   });
 
   it("detects a unique dash format unambiguously", () => {

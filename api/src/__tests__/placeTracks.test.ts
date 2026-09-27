@@ -1,6 +1,14 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
-import { API_URL, as, ALICE_SUB, BOB_SUB, CAROL_SUB, SHARED_PLACE_ID, CANYON_TYPE_ID} from "./_actors";
+import {
+  API_URL,
+  as,
+  ALICE_SUB,
+  BOB_SUB,
+  CAROL_SUB,
+  SHARED_PLACE_ID,
+  CANYON_TYPE_ID,
+} from "./_actors";
 
 // Requires `make dev` (Postgres + MiniStack + API on :8080, AUTH_MODE=fake).
 // Covers the track-specific media behaviour: colour assignment, the place
@@ -12,9 +20,18 @@ const GPX_BYTES = Buffer.from(
     "</trkseg></trk></gpx>",
 );
 
-async function putToPresignedUrl(url: string, body: Buffer, contentType: string) {
-  const res = await fetch(url, { method: "PUT", headers: { "Content-Type": contentType }, body });
-  if (!res.ok) throw new Error(`presigned PUT failed ${res.status}: ${await res.text()}`);
+async function putToPresignedUrl(
+  url: string,
+  body: Buffer,
+  contentType: string,
+) {
+  const res = await fetch(url, {
+    method: "PUT",
+    headers: { "Content-Type": contentType },
+    body,
+  });
+  if (!res.ok)
+    throw new Error(`presigned PUT failed ${res.status}: ${await res.text()}`);
 }
 
 // Full presign → PUT → confirm for a place track as the given actor.
@@ -33,20 +50,32 @@ async function uploadTrack(
       mediaType: "application/gpx+xml",
       sizeBytes: GPX_BYTES.length,
     });
-  if (presign.status !== 201) return { presign, confirm: null, mediaId: null as string | null };
-  await putToPresignedUrl(presign.body.displayUploadUrl, GPX_BYTES, "application/gpx+xml");
+  if (presign.status !== 201)
+    return { presign, confirm: null, mediaId: null as string | null };
+  await putToPresignedUrl(
+    presign.body.displayUploadUrl,
+    GPX_BYTES,
+    "application/gpx+xml",
+  );
   const confirm = await request(API_URL)
     .post(`/media/${presign.body.mediaId}/confirm`)
     .set(headers)
-    .send({ linkedType: "place", linkedId: placeId, filename, mediaType: "application/gpx+xml" });
+    .send({
+      linkedType: "place",
+      linkedId: placeId,
+      filename,
+      mediaType: "application/gpx+xml",
+    });
   return { presign, confirm, mediaId: presign.body.mediaId as string };
 }
 
 async function createPlace(headers: Record<string, string>) {
-  const res = await request(API_URL)
-    .post("/places")
-    .set(headers)
-    .send({ placeTypeId: CANYON_TYPE_ID, name: "Track Test Place", latitude: -33.7, longitude: 150.3 });
+  const res = await request(API_URL).post("/places").set(headers).send({
+    placeTypeId: CANYON_TYPE_ID,
+    name: "Track Test Place",
+    latitude: -33.7,
+    longitude: 150.3,
+  });
   expect(res.status).toBe(201);
   return res.body.id as string;
 }
@@ -111,15 +140,25 @@ describe("place tracks (fake auth)", () => {
             sizeBytes: GPX_BYTES.length,
           });
         expect(presign.status).toBe(201);
-        await putToPresignedUrl(presign.body.displayUploadUrl, GPX_BYTES, "application/gpx+xml");
+        await putToPresignedUrl(
+          presign.body.displayUploadUrl,
+          GPX_BYTES,
+          "application/gpx+xml",
+        );
         const confirm = await request(API_URL)
           .post(`/media/${presign.body.mediaId}/confirm`)
           .set(as(ALICE_SUB))
-          .send({ linkedType: "tripLog", linkedId: tripId, filename, mediaType: "application/gpx+xml" });
+          .send({
+            linkedType: "tripLog",
+            linkedId: tripId,
+            filename,
+            mediaType: "application/gpx+xml",
+          });
         expect(confirm.status).toBe(201);
       }
     } finally {
-      if (tripId) await request(API_URL).delete(`/trips/${tripId}`).set(as(ALICE_SUB));
+      if (tripId)
+        await request(API_URL).delete(`/trips/${tripId}`).set(as(ALICE_SUB));
       await request(API_URL).delete(`/places/${placeId}`).set(as(ALICE_SUB));
     }
   });
@@ -129,9 +168,13 @@ describe("place tracks (fake auth)", () => {
     expect(upload.confirm!.status).toBe(201);
     const mediaId = upload.mediaId!;
     try {
-      const ownerRes = await request(API_URL).get("/places/tracks").set(as(ALICE_SUB));
+      const ownerRes = await request(API_URL)
+        .get("/places/tracks")
+        .set(as(ALICE_SUB));
       expect(ownerRes.status).toBe(200);
-      const ownerHit = ownerRes.body.find((t: { mediaId: string }) => t.mediaId === mediaId);
+      const ownerHit = ownerRes.body.find(
+        (t: { mediaId: string }) => t.mediaId === mediaId,
+      );
       expect(ownerHit).toBeTruthy();
       expect(ownerHit.placeId).toBe(SHARED_PLACE_ID);
       expect(ownerHit.color).toMatch(/^#[0-9a-f]{6}$/);
@@ -145,14 +188,24 @@ describe("place tracks (fake auth)", () => {
       expect(typeof ownerHit.fileSizeBytes).toBe("number");
 
       // Sharee (bob) sees place-level media → the track.
-      const shareeRes = await request(API_URL).get("/places/tracks").set(as(BOB_SUB));
+      const shareeRes = await request(API_URL)
+        .get("/places/tracks")
+        .set(as(BOB_SUB));
       expect(shareeRes.status).toBe(200);
-      expect(shareeRes.body.some((t: { mediaId: string }) => t.mediaId === mediaId)).toBe(true);
+      expect(
+        shareeRes.body.some((t: { mediaId: string }) => t.mediaId === mediaId),
+      ).toBe(true);
 
       // Stranger (carol) sees nothing for it (no leak, no oracle).
-      const strangerRes = await request(API_URL).get("/places/tracks").set(as(CAROL_SUB));
+      const strangerRes = await request(API_URL)
+        .get("/places/tracks")
+        .set(as(CAROL_SUB));
       expect(strangerRes.status).toBe(200);
-      expect(strangerRes.body.some((t: { mediaId: string }) => t.mediaId === mediaId)).toBe(false);
+      expect(
+        strangerRes.body.some(
+          (t: { mediaId: string }) => t.mediaId === mediaId,
+        ),
+      ).toBe(false);
     } finally {
       await request(API_URL).delete(`/media/${mediaId}`).set(as(ALICE_SUB));
     }

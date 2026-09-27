@@ -24,7 +24,11 @@ import {
   updateEntityFieldLocal,
 } from "./outbox";
 import { loadOutboxEntries } from "./deltaPull";
-import { isOutboxEntity, outboxMirrorTable, type OutboxEntity } from "./outboxTables";
+import {
+  isOutboxEntity,
+  outboxMirrorTable,
+  type OutboxEntity,
+} from "./outboxTables";
 import {
   getSyncDb,
   getSyncStateValue,
@@ -216,7 +220,9 @@ export async function listShelfEntries(): Promise<ShelfEntry[]> {
       at: row.at,
       restoreBlock: target.block,
       canKeepBoth:
-        target.block === null && canKeepBothField(entity, field) && isMergeablePair(shelvedValue, serverValue),
+        target.block === null &&
+        canKeepBothField(entity, field) &&
+        isMergeablePair(shelvedValue, serverValue),
       // The stored name first: it was captured while the row still existed, and
       // the mirror lookup is only the fallback for entries shelved before the
       // column did (`ensureLocalColumns` backfills nothing).
@@ -310,12 +316,19 @@ async function writeShelfValue(
   id: number,
   pick: (entry: ShelfEntry) => unknown,
 ): Promise<void> {
-  const entry = (await listShelfEntries()).find((candidate) => candidate.id === id);
+  const entry = (await listShelfEntries()).find(
+    (candidate) => candidate.id === id,
+  );
   if (!entry) return;
   if (entry.restoreBlock) {
     throw new Error(`Cannot write shelf entry ${id}: ${entry.restoreBlock}`);
   }
-  await updateEntityFieldLocal(entry.entity, entry.entityId, entry.field, pick(entry));
+  await updateEntityFieldLocal(
+    entry.entity,
+    entry.entityId,
+    entry.field,
+    pick(entry),
+  );
   const db = await getSyncDb();
   await db.runAsync("DELETE FROM conflict_shelf WHERE id = ?", id);
   notifyMirrorChanged();
@@ -417,8 +430,10 @@ export async function discardParkedOp(seq: number): Promise<void> {
             "SELECT local_display_path, local_thumb_path FROM media WHERE id = ?",
             row.entity_id,
           );
-          if (media?.local_display_path) orphanedFiles.push(media.local_display_path);
-          if (media?.local_thumb_path) orphanedFiles.push(media.local_thumb_path);
+          if (media?.local_display_path)
+            orphanedFiles.push(media.local_display_path);
+          if (media?.local_thumb_path)
+            orphanedFiles.push(media.local_thumb_path);
         }
         await db.runAsync(`DELETE FROM ${table} WHERE id = ?`, row.entity_id);
       }
@@ -482,7 +497,10 @@ export async function discardParkedOp(seq: number): Promise<void> {
  * back later (see `shelfTarget`), so keeping a receipt for it would be a row
  * whose only verb manufactures this same rejection again.
  */
-export async function retryWithoutFields(seq: number, drop: string[]): Promise<void> {
+export async function retryWithoutFields(
+  seq: number,
+  drop: string[],
+): Promise<void> {
   const db = await getSyncDb();
   const row = await db.getFirstAsync<ParkedRow>(
     "SELECT * FROM outbox WHERE seq = ?",
@@ -523,7 +541,9 @@ export async function retryWithoutFields(seq: number, drop: string[]): Promise<v
  * and both its endpoints may since have been deleted. It falls through to the
  * discard below.
  */
-export async function recreateFromDeadRemote(seq: number): Promise<string | null> {
+export async function recreateFromDeadRemote(
+  seq: number,
+): Promise<string | null> {
   const parked = await listParkedOps();
   const op = parked.find((entry) => entry.seq === seq);
   const fields = op?.fields ?? {};
@@ -533,7 +553,8 @@ export async function recreateFromDeadRemote(seq: number): Promise<string | null
     const existing = await getMirrorPlace(op.entityId);
     if (existing) {
       const merged = { ...existing, ...fields } as Record<string, unknown>;
-      const pick = <T,>(key: string): T | null => (merged[key] ?? null) as T | null;
+      const pick = <T>(key: string): T | null =>
+        (merged[key] ?? null) as T | null;
       // `Number(undefined)` would put NaN in a NOT NULL REAL column: the
       // insert throws, the op stays parked, and Recreate is permanently broken
       // for it until Discard. The mirror row supplies the coordinates, so this
@@ -550,7 +571,9 @@ export async function recreateFromDeadRemote(seq: number): Promise<string | null
         latitude,
         longitude,
         altNames: Array.isArray(merged.altNames)
-          ? merged.altNames.filter((alt): alt is string => typeof alt === "string")
+          ? merged.altNames.filter(
+              (alt): alt is string => typeof alt === "string",
+            )
           : [],
         notes: pick<string>("notes"),
         elevation:
@@ -594,5 +617,3 @@ export async function dismissShelfEntry(id: number): Promise<void> {
   const db = await getSyncDb();
   await db.runAsync("DELETE FROM conflict_shelf WHERE id = ?", id);
 }
-
-

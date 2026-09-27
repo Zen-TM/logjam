@@ -20,14 +20,25 @@ describe("notificationsTruncated", () => {
 
 /** Local-midnight-relative helper: builds an instant N hours before `now`. */
 function at(iso: string): TNotification {
-  return { id: iso, type: "place_shared", payload: {}, read: false, createdAt: iso };
+  return {
+    id: iso,
+    type: "place_shared",
+    payload: {},
+    read: false,
+    createdAt: iso,
+  };
 }
 
 // A fixed LOCAL wall-clock "now". The grouping is about the user's calendar day,
 // so the test has to think in local time exactly as the code does.
 const NOW = new Date(2026, 6, 30, 10, 0, 0); // 30 Jul 2026, 10:00 local
 
-function localIso(year: number, month: number, day: number, hour: number): string {
+function localIso(
+  year: number,
+  month: number,
+  day: number,
+  hour: number,
+): string {
   return new Date(year, month, day, hour).toISOString();
 }
 
@@ -41,7 +52,10 @@ describe("groupNotificationsByDay", () => {
       ],
       NOW,
     );
-    expect(sections.map((section) => section.title)).toEqual(["Today", "Yesterday"]);
+    expect(sections.map((section) => section.title)).toEqual([
+      "Today",
+      "Yesterday",
+    ]);
     expect(sections[0].data).toHaveLength(2);
     expect(sections[1].data).toHaveLength(1);
   });
@@ -49,7 +63,10 @@ describe("groupNotificationsByDay", () => {
   it("keeps an early-morning local time in today", () => {
     // 00:30 AEST is the previous day in UTC. Reading the day in UTC would file
     // this morning's notification under "Yesterday" (DESIGN.md §11).
-    const sections = groupNotificationsByDay([at(localIso(2026, 6, 30, 0))], NOW);
+    const sections = groupNotificationsByDay(
+      [at(localIso(2026, 6, 30, 0))],
+      NOW,
+    );
     expect(sections[0].title).toBe("Today");
   });
 
@@ -97,7 +114,11 @@ describe("newestNotificationsFirst", () => {
   it("orders by time alone, however the server ordered by read state", () => {
     // The API sends unread first. Marking a row read must not move it.
     const older = { ...at(localIso(2026, 6, 29, 9)), id: "older-unread" };
-    const newer = { ...at(localIso(2026, 6, 30, 9)), id: "newer-read", read: true };
+    const newer = {
+      ...at(localIso(2026, 6, 30, 9)),
+      id: "newer-read",
+      read: true,
+    };
     const middle = { ...at(localIso(2026, 6, 30, 1)), id: "middle-unread" };
     const serverOrder = [older, middle, newer];
     expect(newestNotificationsFirst(serverOrder).map((n) => n.id)).toEqual([
@@ -105,7 +126,11 @@ describe("newestNotificationsFirst", () => {
       "middle-unread",
       "older-unread",
     ]);
-    expect(serverOrder.map((n) => n.id)).toEqual(["older-unread", "middle-unread", "newer-read"]);
+    expect(serverOrder.map((n) => n.id)).toEqual([
+      "older-unread",
+      "middle-unread",
+      "newer-read",
+    ]);
   });
 
   it("puts an unparseable timestamp last", () => {

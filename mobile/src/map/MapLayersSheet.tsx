@@ -321,7 +321,10 @@ function LayerRow({ entry }: { entry: LayerToggleEntry }) {
   }
 
   return (
-    <View style={entry.inert ? styles.inert : undefined} pointerEvents={entry.inert ? "none" : "auto"}>
+    <View
+      style={entry.inert ? styles.inert : undefined}
+      pointerEvents={entry.inert ? "none" : "auto"}
+    >
       <Row
         icon={entry.icon}
         hue={entry.hue}
@@ -378,7 +381,9 @@ function LayersTab({
           icon="layers"
           hue={assetHue.overlay}
           title="Topo overlays"
-          onPress={expandable ? () => setExpanded((current) => !current) : undefined}
+          onPress={
+            expandable ? () => setExpanded((current) => !current) : undefined
+          }
           accessibilityLabel={`Topo overlays — ${expanded ? "hide" : "show"} the list`}
           right={
             <View style={styles.trailing}>
@@ -469,7 +474,8 @@ function TopoOverlayList({
   const areas = useMemo(() => {
     const seen = new Map<string, string>();
     for (const overlay of overlays) {
-      if (!seen.has(overlay.areaId)) seen.set(overlay.areaId, overlay.areaLabel);
+      if (!seen.has(overlay.areaId))
+        seen.set(overlay.areaId, overlay.areaLabel);
     }
     return [...seen];
   }, [overlays]);
@@ -501,7 +507,9 @@ function TopoOverlayList({
           hue={assetHue.overlay}
           title={label}
           visible={!mutedAreas.has(areaId)}
-          onVisibility={() => onSetAreasMuted([areaId], !mutedAreas.has(areaId))}
+          onVisibility={() =>
+            onSetAreasMuted([areaId], !mutedAreas.has(areaId))
+          }
         />
       ))}
     </>
@@ -543,7 +551,6 @@ function ItemRow({
   );
 }
 
-
 function OfflineTab({
   online,
   offlineOnly,
@@ -575,11 +582,7 @@ function OfflineTab({
         icon="download-cloud"
         hue={assetHue.region}
         title="Save maps for offline use"
-        subtitle={
-          online
-            ? "Pick an area and the maps"
-            : "Needs a connection"
-        }
+        subtitle={online ? "Pick an area and the maps" : "Needs a connection"}
         disabled={!online}
         onPress={onSaveArea}
       />
@@ -615,7 +618,9 @@ function OfflineTab({
         // Lands on Saved's Regions filter, not its everything-list: a pointer
         // that makes the user find the thing again is not a pointer.
         onPress={() => onOpenSaved("region")}
-        right={<Feather name="chevron-right" size={20} color={theme.textMuted} />}
+        right={
+          <Feather name="chevron-right" size={20} color={theme.textMuted} />
+        }
       />
     </View>
   );

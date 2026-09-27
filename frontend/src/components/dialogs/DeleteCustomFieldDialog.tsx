@@ -1,8 +1,14 @@
 import { useState } from "react";
-import type { ScopedCustomFieldDef, TripLogCustomFieldDef } from "@logjam/shared";
+import type {
+  ScopedCustomFieldDef,
+  TripLogCustomFieldDef,
+} from "@logjam/shared";
 import ConfirmDialog from "./ConfirmDialog";
 import { ErrorBanner } from "../feedback/ErrorBanner";
-import { deleteCustomField, type CustomFieldEntityKind } from "../../placeUtils";
+import {
+  deleteCustomField,
+  type CustomFieldEntityKind,
+} from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import { useCustomFieldImpact } from "./useCustomFieldImpact";
 
@@ -48,7 +54,10 @@ function DeleteCustomFieldDialog({
 }) {
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { count, error: impactError } = useCustomFieldImpact(entity, def?.key ?? null);
+  const { count, error: impactError } = useCustomFieldImpact(
+    entity,
+    def?.key ?? null,
+  );
   const copy = ENTITY_COPY[entity];
 
   async function handleConfirm() {
@@ -61,7 +70,12 @@ function DeleteCustomFieldDialog({
       onClose();
     } catch (err) {
       console.error(err);
-      setError(messageFromError(err, "Couldn't delete the attribute. Please try again."));
+      setError(
+        messageFromError(
+          err,
+          "Couldn't delete the attribute. Please try again.",
+        ),
+      );
     } finally {
       setDeleting(false);
     }
@@ -91,7 +105,8 @@ function DeleteCustomFieldDialog({
       message={
         <>
           <p>
-            This removes the attribute from {copy.removesFrom}. {impact} This can&rsquo;t be undone.
+            This removes the attribute from {copy.removesFrom}. {impact} This
+            can&rsquo;t be undone.
           </p>
           {impactError && <ErrorBanner message={impactError} />}
           {error && <ErrorBanner message={error} />}

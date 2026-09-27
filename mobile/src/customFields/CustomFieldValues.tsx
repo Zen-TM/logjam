@@ -23,7 +23,13 @@ import {
 } from "@logjam/shared";
 
 import { fontSize, fontWeight, spacing, surface, theme } from "../theme";
-import { IconButton, Row, SegmentedControl, TextField, type SegmentOption } from "../ui";
+import {
+  IconButton,
+  Row,
+  SegmentedControl,
+  TextField,
+  type SegmentOption,
+} from "../ui";
 
 /**
  * A yes/no answer has THREE states, and "—" is the one a form starts on.
@@ -93,7 +99,10 @@ export function AttributeTable({ rows }: { rows: AttributeRow[] }) {
       {rows.map(([key, label, value, type], index) => (
         <View
           key={key}
-          style={[styles.tableRow, index === rows.length - 1 ? styles.tableRowLast : null]}
+          style={[
+            styles.tableRow,
+            index === rows.length - 1 ? styles.tableRowLast : null,
+          ]}
         >
           <Text style={styles.tableKey}>{label}</Text>
           <Text style={styles.tableValue}>{formatFieldValue(value, type)}</Text>
@@ -125,12 +134,18 @@ function CustomFieldValueInput({
   const stops = railStops(def);
   if (stops) {
     const options: SegmentOption<string>[] = [{ value: "", label: "—" }];
-    for (const stop of stops) options.push({ value: String(stop), label: String(stop) });
+    for (const stop of stops)
+      options.push({ value: String(stop), label: String(stop) });
     return (
       <View style={styles.field}>
         <Text style={styles.railLabel}>{def.label}</Text>
         <Beside trailing={trailing}>
-          <SegmentedControl scroll options={options} value={value} onChange={onChange} />
+          <SegmentedControl
+            scroll
+            options={options}
+            value={value}
+            onChange={onChange}
+          />
         </Beside>
       </View>
     );
@@ -140,7 +155,11 @@ function CustomFieldValueInput({
       <View style={styles.field}>
         <Text style={styles.railLabel}>{label}</Text>
         <Beside trailing={trailing}>
-          <SegmentedControl options={BOOLEAN_OPTIONS} value={value} onChange={onChange} />
+          <SegmentedControl
+            options={BOOLEAN_OPTIONS}
+            value={value}
+            onChange={onChange}
+          />
         </Beside>
       </View>
     );
@@ -152,7 +171,9 @@ function CustomFieldValueInput({
           icon="calendar"
           title={value ? formatDateKey(`${value}T00:00:00.000Z`) : "Not set"}
           subtitle={label}
-          right={<Feather name="chevron-right" size={20} color={theme.textMuted} />}
+          right={
+            <Feather name="chevron-right" size={20} color={theme.textMuted} />
+          }
           onPress={onPickDate}
         />
       </Beside>

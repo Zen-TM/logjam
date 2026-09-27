@@ -249,7 +249,9 @@ export async function writeRegionBatch(
   });
 }
 
-export async function countRegionTiles(db: SQLite.SQLiteDatabase): Promise<number> {
+export async function countRegionTiles(
+  db: SQLite.SQLiteDatabase,
+): Promise<number> {
   const row = await db.getFirstAsync<{ n: number }>(
     "SELECT COUNT(*) AS n FROM tiles",
   );
@@ -277,7 +279,10 @@ export async function sampleRegionTilesLookLikeImages(
 export function looksLikeImage(bytes: Uint8Array): boolean {
   if (bytes.length < 4) return false;
   const png =
-    bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47;
   const jpeg = bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
   return png || jpeg;
 }
@@ -291,7 +296,10 @@ export async function finalizeRegionMbtiles(
   gapCount: number,
 ): Promise<void> {
   await putMetadata(target.db, { "logjam:gap_count": String(gapCount) });
-  await target.db.runAsync("DELETE FROM metadata WHERE name = ?", BUILD_STATE_KEY);
+  await target.db.runAsync(
+    "DELETE FROM metadata WHERE name = ?",
+    BUILD_STATE_KEY,
+  );
   // No VACUUM: an insert-only database has nothing to reclaim.
   //
   // The journal flip is the one statement here that can lose a race, and it is

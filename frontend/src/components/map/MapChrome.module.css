@@ -83,7 +83,11 @@
 }
 
 .trayItem:hover {
-  background: color-mix(in srgb, var(--theme-text-primary) 14%, var(--theme-primary));
+  background: color-mix(
+    in srgb,
+    var(--theme-text-primary) 14%,
+    var(--theme-primary)
+  );
 }
 
 .trayGlyph {

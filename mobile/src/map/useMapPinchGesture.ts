@@ -139,7 +139,10 @@ export function useMapPinchGesture(params: {
    * writes fire that on every move.
    */
   pinchStart: MutableRefObject<PinchStart | null>;
-  observeTouches: (event: GestureResponderEvent, isTouchStart: boolean) => boolean;
+  observeTouches: (
+    event: GestureResponderEvent,
+    isTouchStart: boolean,
+  ) => boolean;
   handlePinchMove: (event: GestureResponderEvent) => void;
   endPinch: () => void;
 } {
@@ -178,7 +181,9 @@ export function useMapPinchGesture(params: {
   const shouldDrivePinch = useCallback(
     (touchCount: number): boolean => {
       return (
-        followModeRef.current !== "off" && touchCount >= 2 && latestFix.current != null
+        followModeRef.current !== "off" &&
+        touchCount >= 2 &&
+        latestFix.current != null
       );
     },
     [followModeRef, latestFix],
@@ -272,7 +277,8 @@ export function useMapPinchGesture(params: {
       // A locked map scales and nothing else — the same shape as course-up's
       // exception, for the opposite reason. Read through a ref: this callback is
       // memoised for the life of the gesture handlers.
-      const rotating = followModeRef.current === "follow" && !northUpLockedRef.current;
+      const rotating =
+        followModeRef.current === "follow" && !northUpLockedRef.current;
       const heading = rotating
         ? pinchHeading(start.heading, start.angleDeg, touchAngleDeg(touches))
         : null;
@@ -290,7 +296,14 @@ export function useMapPinchGesture(params: {
         duration: 0,
       });
     },
-    [followModeRef, headingRef, latestFix, northUpLockedRef, setCameraStop, zoomRef],
+    [
+      followModeRef,
+      headingRef,
+      latestFix,
+      northUpLockedRef,
+      setCameraStop,
+      zoomRef,
+    ],
   );
 
   const endPinch = useCallback(() => {
@@ -298,5 +311,11 @@ export function useMapPinchGesture(params: {
     setTwoFingerLock(false);
   }, []);
 
-  return { twoFingerLock, pinchStart, observeTouches, handlePinchMove, endPinch };
+  return {
+    twoFingerLock,
+    pinchStart,
+    observeTouches,
+    handlePinchMove,
+    endPinch,
+  };
 }

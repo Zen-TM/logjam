@@ -79,14 +79,20 @@ router.post(
     }
     const validation = validateRasterTemplateSettings(config);
     if (!validation.ok) {
-      throw new AppError(400, `Invalid topo settings: ${validation.errors.join("; ")}`);
+      throw new AppError(
+        400,
+        `Invalid topo settings: ${validation.errors.join("; ")}`,
+      );
     }
 
     let autoExportConfig: object | undefined;
     if (autoExport !== undefined && autoExport !== null) {
       const v = validateAutoExportSettings(autoExport);
       if (!v.ok) {
-        throw new AppError(400, `Invalid auto-export settings: ${v.errors.join("; ")}`);
+        throw new AppError(
+          400,
+          `Invalid auto-export settings: ${v.errors.join("; ")}`,
+        );
       }
       autoExportConfig = v.value as object;
     }
@@ -129,14 +135,20 @@ router.patch(
     if (config !== undefined) {
       const validation = validateRasterTemplateSettings(config);
       if (!validation.ok) {
-        throw new AppError(400, `Invalid topo settings: ${validation.errors.join("; ")}`);
+        throw new AppError(
+          400,
+          `Invalid topo settings: ${validation.errors.join("; ")}`,
+        );
       }
       data.config = validation.value as object;
     }
     if (autoExport !== undefined && autoExport !== null) {
       const v = validateAutoExportSettings(autoExport);
       if (!v.ok) {
-        throw new AppError(400, `Invalid auto-export settings: ${v.errors.join("; ")}`);
+        throw new AppError(
+          400,
+          `Invalid auto-export settings: ${v.errors.join("; ")}`,
+        );
       }
       data.autoExport = v.value as object;
     }

@@ -36,7 +36,14 @@ import {
 import { Feather } from "@expo/vector-icons";
 import { geocode, messageFromError, type GeocodeResult } from "@logjam/shared";
 
-import { fontSize, fontWeight, hitSlop, radius, spacing, theme } from "../theme";
+import {
+  fontSize,
+  fontWeight,
+  hitSlop,
+  radius,
+  spacing,
+  theme,
+} from "../theme";
 import { rankLocalMatches, type LocalSearchCandidate } from "./localSearch";
 import { CHROME_GAP, SEARCH_SIZE } from "./mapChrome";
 import type { Bbox } from "../saved/bboxOfPoints";
@@ -195,7 +202,10 @@ export function MapSearchBar({
   });
   const showPanel =
     expanded &&
-    (loading || error !== null || results.length > 0 || localMatches.length > 0);
+    (loading ||
+      error !== null ||
+      results.length > 0 ||
+      localMatches.length > 0);
 
   return (
     <View
@@ -384,7 +394,11 @@ const styles = StyleSheet.create({
     borderBottomColor: theme.bonus2,
   },
   resultPressed: { backgroundColor: theme.bonus2 },
-  savedResult: { flexDirection: "row", alignItems: "center", gap: spacing(1.5) },
+  savedResult: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing(1.5),
+  },
   savedText: { flex: 1 },
   resultKind: { color: theme.textMuted, fontSize: fontSize.xs },
   resultText: {

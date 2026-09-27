@@ -31,19 +31,25 @@ export class ApiError extends Error {
 
 const AUTH_ERROR_CODES: Record<string, string> = {
   NotAuthorizedException: "Incorrect username or password.",
-  UserNotConfirmedException: "Please confirm your email address before signing in.",
+  UserNotConfirmedException:
+    "Please confirm your email address before signing in.",
   UserNotFoundException: "No account found with that email address.",
   UsernameExistsException: "An account with that email already exists.",
-  InvalidPasswordException: "Password must be at least 8 characters and include uppercase, lowercase, number, and symbol.",
-  CodeMismatchException: "Incorrect verification code. Please check your email (check spam) and try again.",
-  ExpiredCodeException: "That verification code has expired. Please request a new one.",
-  LimitExceededException: "Too many attempts. Please wait a few minutes and try again.",
+  InvalidPasswordException:
+    "Password must be at least 8 characters and include uppercase, lowercase, number, and symbol.",
+  CodeMismatchException:
+    "Incorrect verification code. Please check your email (check spam) and try again.",
+  ExpiredCodeException:
+    "That verification code has expired. Please request a new one.",
+  LimitExceededException:
+    "Too many attempts. Please wait a few minutes and try again.",
   InvalidParameterException: "Please check your details and try again.",
   NetworkError: "Couldn't connect. Please check your internet connection.",
 };
 
 const AUTH_NEXT_STEPS: Record<string, string> = {
-  CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED: "You must set a new password to continue.",
+  CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED:
+    "You must set a new password to continue.",
   CONFIRM_SIGN_IN_WITH_CUSTOM_CHALLENGE: "Additional verification is required.",
   CONFIRM_SIGN_IN_WITH_TOTP_CODE: "Please enter your authenticator code.",
   CONFIRM_SIGN_IN_WITH_SMS_CODE: "Please enter the code sent to your phone.",
@@ -81,7 +87,8 @@ export function messageFromError(err: unknown, fallback: string): string {
     if (err.serverMessage) return err.serverMessage;
     const statusMsg = STATUS_MESSAGES[err.status];
     if (statusMsg) return statusMsg;
-    if (err.status >= 500) return "Something went wrong on the server. Please try again.";
+    if (err.status >= 500)
+      return "Something went wrong on the server. Please try again.";
     if (err.status >= 400) return fallback;
   }
 

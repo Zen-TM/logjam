@@ -14,15 +14,19 @@ const KIT_DIR = dirname(fileURLToPath(import.meta.url));
 // Heights that are deliberately not panel controls, and why. May only shrink.
 const EXEMPT: Record<string, string> = {
   "MapControl.module.css": "map chrome keeps its own, larger step",
-  "Feedback.module.css": "the toast floats over the map and is sized with the map chrome",
+  "Feedback.module.css":
+    "the toast floats over the map and is sized with the map chrome",
   "Row.module.css": "a card, not a control; its height follows its text",
 };
 
-const kitStylesheets = () => readdirSync(KIT_DIR).filter((name) => name.endsWith(".module.css"));
+const kitStylesheets = () =>
+  readdirSync(KIT_DIR).filter((name) => name.endsWith(".module.css"));
 
 describe("kit control sizes", () => {
   it("reads the tokens it is guarding", () => {
-    expect(readFileSync(join(KIT_DIR, "Button.module.css"), "utf8")).toContain("var(--control-md)");
+    expect(readFileSync(join(KIT_DIR, "Button.module.css"), "utf8")).toContain(
+      "var(--control-md)",
+    );
   });
 
   it("writes no min-height in px outside the exempt files", () => {
@@ -31,14 +35,20 @@ describe("kit control sizes", () => {
       .flatMap((name) =>
         readFileSync(join(KIT_DIR, name), "utf8")
           .split("\n")
-          .flatMap((line, index) => (/min-height:\s*\d+px/.test(line) ? [`${name}:${index + 1}: ${line.trim()}`] : [])),
+          .flatMap((line, index) =>
+            /min-height:\s*\d+px/.test(line)
+              ? [`${name}:${index + 1}: ${line.trim()}`]
+              : [],
+          ),
       );
     expect(offenders).toEqual([]);
   });
 
   it("exempts only files that exist", () => {
     const present = new Set(kitStylesheets());
-    expect(Object.keys(EXEMPT).filter((name) => !present.has(name))).toEqual([]);
+    expect(Object.keys(EXEMPT).filter((name) => !present.has(name))).toEqual(
+      [],
+    );
   });
 });
 
@@ -64,7 +74,11 @@ describe("a row keeps its own height", () => {
     const panels = join(KIT_DIR, "..", "components", "sidebar", "panels");
     const offenders = readdirSync(panels)
       .filter((name) => name.endsWith(".module.css"))
-      .filter((name) => /\.row \{\s*\n\s*flex-shrink:\s*0;\s*\n\}/.test(readFileSync(join(panels, name), "utf8")));
+      .filter((name) =>
+        /\.row \{\s*\n\s*flex-shrink:\s*0;\s*\n\}/.test(
+          readFileSync(join(panels, name), "utf8"),
+        ),
+      );
     expect(offenders).toEqual([]);
   });
 });

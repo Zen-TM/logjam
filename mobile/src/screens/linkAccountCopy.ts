@@ -37,7 +37,9 @@ export function describeLocalData(counts: LocalEntityCounts): string | null {
  * matters: what moves, that it can't be undone, and — only when there is a
  * photo backlog worth warning about — that it will take a while.
  */
-export function linkConfirmationMessage(counts: LocalEntityCounts): string | null {
+export function linkConfirmationMessage(
+  counts: LocalEntityCounts,
+): string | null {
   const summary = describeLocalData(counts);
   if (!summary) return null;
 

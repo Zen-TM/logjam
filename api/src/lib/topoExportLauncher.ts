@@ -6,7 +6,11 @@ import { logger } from "./logger";
 import { estimateExportSeconds } from "./runtimeEstimates";
 import { assertHasCredits } from "./computeCredits";
 import { assertGlobalCapacity } from "./fargateCapacity";
-import type { ExportFormat, ExportBundling, TopoLayerKey } from "@logjam/shared";
+import type {
+  ExportFormat,
+  ExportBundling,
+  TopoLayerKey,
+} from "@logjam/shared";
 
 // Cap to prevent users from flooding ECS with queued exports. Shared by the
 // manual export route (POST /topo-exports) and the reaper's auto-export pass so
@@ -74,7 +78,10 @@ export async function createAndLaunchTopoExport(
       where: { userId: input.userId, status: { in: ["queued", "running"] } },
     });
     if (queued >= MAX_QUEUED_PER_USER) {
-      throw new AppError(429, `Too many concurrent exports (limit ${MAX_QUEUED_PER_USER})`);
+      throw new AppError(
+        429,
+        `Too many concurrent exports (limit ${MAX_QUEUED_PER_USER})`,
+      );
     }
     return tx.topoExportJob.create({
       data: {
@@ -110,7 +117,10 @@ export async function createAndLaunchTopoExport(
       );
       await prisma.topoExportJob.update({
         where: { id: exportJob.id },
-        data: { status: "failed", errorMessage: "Failed to launch export task." },
+        data: {
+          status: "failed",
+          errorMessage: "Failed to launch export task.",
+        },
       });
       throw new AppError(500, "Failed to launch export job");
     }

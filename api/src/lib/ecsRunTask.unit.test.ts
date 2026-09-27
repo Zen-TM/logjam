@@ -40,9 +40,7 @@ describe("launchFargateTask", () => {
 
   it("throws when RunTask returns no tasks and no failures", async () => {
     send.mockResolvedValue({ tasks: [], failures: [] });
-    await expect(launchFargateTask(options)).rejects.toThrow(
-      /no task started/,
-    );
+    await expect(launchFargateTask(options)).rejects.toThrow(/no task started/);
   });
 
   it("throws when tasks is undefined", async () => {

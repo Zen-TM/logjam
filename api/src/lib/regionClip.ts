@@ -110,7 +110,10 @@ export interface ClipTokenEntry {
 }
 
 export interface ClipTokenStore {
-  issue(entry: Omit<ClipTokenEntry, "expiresAt">): { token: string; expiresAt: number };
+  issue(entry: Omit<ClipTokenEntry, "expiresAt">): {
+    token: string;
+    expiresAt: number;
+  };
   /** Consume the token: returns and removes the entry when valid for userId. */
   take(token: string, userId: string, now?: number): ClipTokenEntry | null;
   /** Remove expired entries, returning their paths for file cleanup. */

@@ -6,4 +6,8 @@
  * The only remaining mirror is topo/worker.py → ALL_LAYERS (Python).
  */
 export { TOPO_LAYERS } from "@logjam/shared";
-export type { TopoLayerMeta, TopoLayerName, TopoLayerFormat } from "@logjam/shared";
+export type {
+  TopoLayerMeta,
+  TopoLayerName,
+  TopoLayerFormat,
+} from "@logjam/shared";

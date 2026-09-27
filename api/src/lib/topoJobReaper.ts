@@ -223,11 +223,15 @@ async function emailReaped(entries: ReapEntry[]): Promise<void> {
   for (const entry of entries) {
     const recipient = byId.get(entry.userId);
     if (!recipient?.email) continue;
-    const wanted = normalizeUserUiPreferences(recipient.uiPreferences).notifications;
+    const wanted = normalizeUserUiPreferences(
+      recipient.uiPreferences,
+    ).notifications;
     if (!wanted[entry.email.pref]) continue;
     const openUrl = base ? `${base}/?${entry.email.deepLink}` : "";
     const openLink = openUrl ? `\n\nOpen Logjam Web: ${openUrl}` : "";
-    const openLinkHtml = openUrl ? `<p><a href="${openUrl}">Open Logjam Web</a></p>` : "";
+    const openLinkHtml = openUrl
+      ? `<p><a href="${openUrl}">Open Logjam Web</a></p>`
+      : "";
     await sendEmail({
       to: recipient.email,
       subject: entry.email.subject,
@@ -241,10 +245,17 @@ async function notifyReaped(entries: ReapEntry[]): Promise<void> {
   if (entries.length === 0) return;
   try {
     await prisma.notification.createMany({
-      data: entries.map(({ userId, type, payload }) => ({ userId, type, payload })),
+      data: entries.map(({ userId, type, payload }) => ({
+        userId,
+        type,
+        payload,
+      })),
     });
   } catch (err) {
-    logger.error({ err: safeErrorForLog(err) }, "reaper_notification_write_failed");
+    logger.error(
+      { err: safeErrorForLog(err) },
+      "reaper_notification_write_failed",
+    );
     return;
   }
   for (const entry of entries) {
@@ -295,7 +306,11 @@ async function claimAndNotify<Row extends { id: string }>(
 }
 
 /** Same type + payload shape topo/worker.py's failure path writes. */
-function topoJobEntry(row: { id: string; userId: string; name: string | null }): ReapEntry {
+function topoJobEntry(row: {
+  id: string;
+  userId: string;
+  name: string | null;
+}): ReapEntry {
   return {
     userId: row.userId,
     type: "topo_failed",
@@ -313,7 +328,11 @@ function topoJobEntry(row: { id: string; userId: string; name: string | null }):
 }
 
 /** Mirrors topo/export_worker.py's failure notification. */
-function exportJobEntry(row: { id: string; userId: string; format: string }): ReapEntry {
+function exportJobEntry(row: {
+  id: string;
+  userId: string;
+  format: string;
+}): ReapEntry {
   return {
     userId: row.userId,
     type: "topo_export_complete",
@@ -364,12 +383,16 @@ function geoPdfJobEntry(row: { id: string; userId: string }): ReapEntry {
  * status-guarded claim, so a row that reaches a terminal state between read and
  * write is left untouched and its owner is never told it failed.
  */
-export async function reapStuckTopoJobs(now: Date = new Date()): Promise<number> {
+export async function reapStuckTopoJobs(
+  now: Date = new Date(),
+): Promise<number> {
   const env = getEnv();
   let reaped = 0;
 
   // topo_jobs · pending: anchored on updatedAt (set when /start flipped it).
-  const pendingCutoff = new Date(now.getTime() - env.TOPO_REAPER_PENDING_TIMEOUT_MS);
+  const pendingCutoff = new Date(
+    now.getTime() - env.TOPO_REAPER_PENDING_TIMEOUT_MS,
+  );
   // Read the rows first: an updateMany reports a count, leaving nobody to tell.
   const pendingJobs = await prisma.topoJob.findMany({
     where: { status: "pending", updatedAt: { lt: pendingCutoff } },
@@ -568,7 +591,10 @@ export async function expireCompletedExports(
       });
       expired += 1;
     } catch (err) {
-      logger.error({ err: safeErrorForLog(err), id: row.id }, "topo_export_expiry_failed");
+      logger.error(
+        { err: safeErrorForLog(err), id: row.id },
+        "topo_export_expiry_failed",
+      );
     }
   }
   return expired;
@@ -623,7 +649,11 @@ export async function expireCompletedGeoPdfJobs(
   return expired;
 }
 
-type S3OutputKey = { name: string; cogKey: string | null; pmtilesKey: string | null };
+type S3OutputKey = {
+  name: string;
+  cogKey: string | null;
+  pmtilesKey: string | null;
+};
 
 /**
  * The layers a completed job can actually export, from its s3OutputKeys. A
@@ -649,11 +679,18 @@ async function notifyAutoExportSkipped(
   reason: string,
 ): Promise<void> {
   await prisma.notification.create({
-    data: { userId, type: "topo_export_skipped", payload: { topoJobId, reason } },
+    data: {
+      userId,
+      type: "topo_export_skipped",
+      payload: { topoJobId, reason },
+    },
   });
   // Best-effort push — generic title + opaque IDs only (the skip reason
   // stays in the in-app notification, never in the push).
-  await sendPushToUser(userId, { type: "topo_export_skipped", jobId: topoJobId });
+  await sendPushToUser(userId, {
+    type: "topo_export_skipped",
+    jobId: topoJobId,
+  });
 }
 
 /**
@@ -672,7 +709,9 @@ async function notifyAutoExportSkipped(
  *
  * Returns the number of exports queued.
  */
-export async function queueAutoExports(now: Date = new Date()): Promise<number> {
+export async function queueAutoExports(
+  now: Date = new Date(),
+): Promise<number> {
   const candidates = await prisma.topoJob.findMany({
     where: {
       status: "complete",
@@ -728,7 +767,9 @@ export async function queueAutoExports(now: Date = new Date()): Promise<number> 
         await notifyAutoExportSkipped(
           job.userId,
           job.id,
-          valid.ok ? "none of the chosen layers were produced by this job" : valid.error,
+          valid.ok
+            ? "none of the chosen layers were produced by this job"
+            : valid.error,
         );
         continue;
       }
@@ -740,7 +781,8 @@ export async function queueAutoExports(now: Date = new Date()): Promise<number> 
           layers: selection.layers,
           format: selection.format,
           bundling: selection.bundling,
-          vectorStyleSnapshot: (job.vectorStyleSnapshot as object | null) ?? VECTOR_STYLE_DEFAULTS,
+          vectorStyleSnapshot:
+            (job.vectorStyleSnapshot as object | null) ?? VECTOR_STYLE_DEFAULTS,
           sourceTileCount: job.tileCount ?? null,
           monthlyComputeCredits: job.user.monthlyComputeCredits,
         });
@@ -750,12 +792,18 @@ export async function queueAutoExports(now: Date = new Date()): Promise<number> 
           err instanceof AppError && err.statusCode === 429
             ? "too many exports are already in progress"
             : "the export could not be started";
-        logger.error({ err: safeErrorForLog(err), jobId: job.id }, "auto_export_launch_failed");
+        logger.error(
+          { err: safeErrorForLog(err), jobId: job.id },
+          "auto_export_launch_failed",
+        );
         await notifyAutoExportSkipped(job.userId, job.id, reason);
       }
     } catch (err) {
       // One bad job can't wedge the pass (matches expireCompletedExports).
-      logger.error({ err: safeErrorForLog(err), jobId: job.id }, "auto_export_pass_failed");
+      logger.error(
+        { err: safeErrorForLog(err), jobId: job.id },
+        "auto_export_pass_failed",
+      );
     }
   }
   return queued;
@@ -808,21 +856,30 @@ export function startTopoJobReaper(): () => void {
         if (count > 0) logger.info({ count }, "topo_auto_exports_queued");
       })
       .catch((err) => {
-        logger.error({ err: safeErrorForLog(err) }, "topo_auto_export_sweep_failed");
+        logger.error(
+          { err: safeErrorForLog(err) },
+          "topo_auto_export_sweep_failed",
+        );
       });
     expireCompletedExports()
       .then((count) => {
         if (count > 0) logger.info({ count }, "topo_exports_expired");
       })
       .catch((err) => {
-        logger.error({ err: safeErrorForLog(err) }, "topo_export_expiry_sweep_failed");
+        logger.error(
+          { err: safeErrorForLog(err) },
+          "topo_export_expiry_sweep_failed",
+        );
       });
     expireCompletedGeoPdfJobs()
       .then((count) => {
         if (count > 0) logger.info({ count }, "geo_pdf_jobs_expired");
       })
       .catch((err) => {
-        logger.error({ err: safeErrorForLog(err) }, "geo_pdf_expiry_sweep_failed");
+        logger.error(
+          { err: safeErrorForLog(err) },
+          "geo_pdf_expiry_sweep_failed",
+        );
       });
     sweepOrphanedMediaUploads().catch((err) => {
       logger.error({ err: safeErrorForLog(err) }, "media_orphan_sweep_failed");
@@ -832,7 +889,10 @@ export function startTopoJobReaper(): () => void {
         if (count > 0) logger.info({ count }, "sync_tombstones_swept");
       })
       .catch((err) => {
-        logger.error({ err: safeErrorForLog(err) }, "sync_tombstone_sweep_failed");
+        logger.error(
+          { err: safeErrorForLog(err) },
+          "sync_tombstone_sweep_failed",
+        );
       });
     sweepExpiredFileSends()
       .then((count) => {
