@@ -83,4 +83,10 @@ ADD https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /app/rds-c
 
 EXPOSE 8080
 
+# The commit this image was built from, reported by GET /meta. Last, so a new
+# sha rebuilds no earlier layer. The deploy workflow passes it; a local build
+# without it bakes in "" and /meta reports null.
+ARG GIT_SHA=""
+ENV GIT_SHA=$GIT_SHA
+
 CMD ["node", "dist/boot.js"]

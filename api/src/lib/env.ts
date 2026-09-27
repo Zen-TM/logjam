@@ -259,6 +259,12 @@ const baseSchema = z.object({
   // Job id for the one-shot GeoPDF worker container (worker/geoPdfWorker.ts
   // CLI entrypoint); unset in the API process.
   GEO_PDF_JOB_ID: z.string().optional(),
+  // Commit the image was built from, baked in by api/Dockerfile's GIT_SHA
+  // build arg; GET /meta reports it so a deploy can prove what is serving.
+  // Not a sha regex: a build without the arg bakes in "", and a malformed
+  // value must not stop the API booting. No dev value, so it is absent from
+  // the env.local Terraform template.
+  GIT_SHA: z.string().optional(),
 });
 
 type Env = z.infer<typeof baseSchema> & {
