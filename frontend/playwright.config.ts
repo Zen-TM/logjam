@@ -41,8 +41,8 @@ export default defineConfig({
   use: {
     baseURL,
     trace: "on-first-retry",
-    // Host (ubuntu 26.04) has no Playwright-bundled chromium build; drive the
-    // system Google Chrome via the chrome channel instead.
+    // Playwright ships no chromium for some hosts; drive system Chrome via the
+    // chrome channel instead.
     channel: "chrome",
   },
   projects: [
