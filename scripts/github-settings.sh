@@ -24,7 +24,7 @@ RULESET_NAME="main"
 APPLY=false
 [ "${1:-}" = "--apply" ] && APPLY=true
 
-REQUIRED_CHECKS='[{"context":"shared"},{"context":"api"},{"context":"frontend"},{"context":"topo"}]'
+REQUIRED_CHECKS='[{"context":"shared"},{"context":"api"},{"context":"frontend"},{"context":"topo"},{"context":"format"},{"context":"actionlint"}]'
 
 ENVIRONMENT_BODY='{"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true}}'
 
