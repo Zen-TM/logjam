@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Usage: trigger-rate.sh [--harness claude|codex|agy] <skill-name> <cases.tsv> [runs=3]
+# Usage: trigger-rate.sh [--harness claude|codex|agy|grok] <skill-name> <cases.tsv> [runs=3]
 # cases.tsv: one case per line, "yes<TAB>request" (should load the skill) or
 # "no<TAB>request" (a near-miss that should not). Run from the repo root.
 # Each request goes to a fresh read-only session of the chosen agent CLI
@@ -8,7 +8,7 @@
 set -euo pipefail
 harness=claude
 if [ "${1:-}" = --harness ]; then harness=$2; shift 2; fi
-case "$harness" in claude|codex|agy) ;; *) echo "unknown harness: $harness" >&2; exit 64 ;; esac
+case "$harness" in claude|codex|agy|grok) ;; *) echo "unknown harness: $harness" >&2; exit 64 ;; esac
 skill=$1 cases=$2 runs=${3:-3}
 
 # One read-only, non-persistent session; stdin closed so the CLI cannot eat
@@ -22,6 +22,7 @@ run_session() {
     codex)  codex exec --json --sandbox read-only --ephemeral "$1" ;;
     # agy -p keeps exploring after it has its answer; the cap bounds a run.
     agy)    agy -p "$1" --output-format stream-json --mode plan --print-timeout 180s ;;
+    grok)   grok -p "$1" --output-format streaming-messages-json --max-turns 4 --permission-mode plan ;;
   esac </dev/null 2>&1 || true
 }
 
@@ -34,10 +35,13 @@ api_error() {
     # A run cut off by --print-timeout also ends in ERROR; only quota errors stop the script.
     agy)    jq -rR 'fromjson? | select(.event=="result" and .result.status=="ERROR") | .result.error' 2>/dev/null |
               grep -qiE 'RESOURCE_EXHAUSTED|429|quota|rate' ;;
+    # Running out of turns is not an API error.
+    grok)   jq -rR 'fromjson? | select(.type=="result" and .is_error and .subtype!="error_max_turns") | "x"' 2>/dev/null |
+              grep -q x ;;
   esac
 }
 
-# Codex and agy: match the path in what the agent asked for (its tool calls),
+# Codex, agy and grok: match the path in what the agent asked for (its tool calls),
 # not in tool output, where a directory listing can print it.
 triggered() {
   case "$harness" in
@@ -45,6 +49,8 @@ triggered() {
     codex)  jq -rR 'fromjson? | select(.type=="item.started") | .item.command? // empty' 2>/dev/null |
               grep -qF "skills/$skill/SKILL.md" ;;
     agy)    jq -rR 'fromjson? | .step_update.tool_info.parameters? // empty | tostring' 2>/dev/null |
+              grep -qF "skills/$skill/SKILL.md" ;;
+    grok)   jq -rR 'fromjson? | .message.content[]? | select(.type=="tool_use") | .input | tostring' 2>/dev/null |
               grep -qF "skills/$skill/SKILL.md" ;;
   esac
 }

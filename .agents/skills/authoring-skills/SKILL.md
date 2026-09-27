@@ -155,18 +155,18 @@ maintainer's own setup follows the same rule.
    that share its words but need something else. From the repo root:
 
    ```
-   .agents/skills/authoring-skills/scripts/trigger-rate.sh [--harness claude|codex|agy] <name> cases.tsv
+   .agents/skills/authoring-skills/scripts/trigger-rate.sh [--harness claude|codex|agy|grok] <name> cases.tsv
    ```
 
    It runs each request 3 times in a fresh, read-only session of the agent
    CLI you use (Claude Code by default; one is enough, and the PR names it).
-   Codex and Antigravity have no skill-load event, so there a run counts when
-   the agent opens the `SKILL.md`. Every request that should trigger does so
-   at least 2 times in 3, and every near-miss 0 times. A missed request means
-   the description names the topic instead of the task; a firing near-miss
-   means it is too broad. Rewrite, rerun, and paste the table in the PR.
-   One-step requests an agent handles unaided rarely load any skill, so test
-   with substantive ones.
+   Codex, Antigravity and Grok have no skill-load event, so there a run
+   counts when the agent opens the `SKILL.md`. Every request that should
+   trigger does so at least 2 times in 3, and every near-miss 0 times. A
+   missed request means the description names the topic instead of the task;
+   a firing near-miss means it is too broad. Rewrite, rerun, and paste the
+   table in the PR. One-step requests an agent handles unaided rarely load
+   any skill, so test with substantive ones.
 2. **With and without.** Give 2–3 realistic tasks to the same CLI, read-only,
    3 runs each, invoked as `trigger-rate.sh` invokes it: once with the skill
    ("Use the <name> skill. …"), once in a worktree of the base branch, which
