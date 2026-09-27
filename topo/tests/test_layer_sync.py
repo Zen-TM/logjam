@@ -22,13 +22,14 @@ _TOPO_SETTINGS = os.path.join(
 )
 _WORKER = os.path.join(_HERE, "..", "worker.py")
 
-# One TOPO_LAYERS entry:
+# One TOPO_LAYERS entry, on one line or several (the formatter then adds a
+# trailing comma):
 #   { name: "x", label: "...", format: "raster", surveyPick: "density" }
 _TS_ENTRY = re.compile(
     r'\{\s*name:\s*"(?P<name>[^"]+)"\s*,\s*'
     r'label:\s*"[^"]+"\s*,\s*'
     r'format:\s*"(?P<format>[^"]+)"\s*,\s*'
-    r'surveyPick:\s*"(?P<surveyPick>[^"]+)"\s*\}'
+    r'surveyPick:\s*"(?P<surveyPick>[^"]+)"\s*,?\s*\}'
 )
 
 
@@ -91,7 +92,7 @@ def _parse_py_frozenset(name):
     """Return the set of quoted string members of `name = frozenset({...})`."""
     src = _read(_WORKER)
     match = re.search(
-        name + r"\s*:\s*frozenset\[str\]\s*=\s*frozenset\(\{(?P<body>.*?)\}\)",
+        name + r"\s*:\s*frozenset\[str\]\s*=\s*frozenset\(\s*\{(?P<body>.*?)\}\s*\)",
         src,
         re.DOTALL,
     )
