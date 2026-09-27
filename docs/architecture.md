@@ -7,7 +7,7 @@ is an identifier that can drift (bucket names, distribution ids), the
 
 ## Infrastructure as code
 
-- **Terraform** (`infra/terraform/`, see its README) is the single source of
+- **Terraform** (`infra/terraform/`; rules in `infra/AGENTS.md`) is the single source of
   truth for prod AWS. Everything below was imported into Terraform, not
   recreated.
 - The prod root is `envs/prod` (S3 backend); `terraform output` there gives the

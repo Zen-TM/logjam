@@ -32,13 +32,29 @@ platform: privacy constrains every feature. Each package has its own
 - A non-trivial feature, schema migration or convention change needs an issue
   or the maintainer's sign-off on the approach; the PR says which. Small fixes
   land directly.
-- Logic both clients need lives in `shared/`, with a parity test. Read
-  `shared/AGENTS.md` before writing client logic a second client may need. [0022](docs/decisions/0022-share-the-decision-not-the-drawing.md)
+- Logic both clients need lives in `shared/`, with a parity test; look for it
+  there before writing it in a client. [0022](docs/decisions/0022-share-the-decision-not-the-drawing.md)
 - User copy names the surface, **Logjam Web** or **Logjam GPS**, never "the
   app" or "the web app" where either could be meant.
 - Committed files are setup-neutral: no personal machine, host, alias or path.
   Those go in `CLAUDE.local.md`, a `*.local` skill or `.git/info/exclude`.
 - Human-facing docs are written for a reader new to the repo.
+
+## Decisions
+
+An ADR in `docs/decisions/` keeps the reasoning for a choice someone could
+later undo without knowing why. Never write one unasked; offer one, once,
+when a change does all three:
+
+- chooses between real alternatives, and the rejected one would still look
+  reasonable to the next contributor;
+- binds later work or is costly to reverse: a schema, wire or file format, a
+  privacy or security boundary, infrastructure, a dependency floor;
+- leaves the reason invisible in the code and its tests.
+
+A bug fix, a refactor, or work that follows an existing ADR never qualifies.
+Changing an accepted ADR takes a new one that supersedes it
+(`docs/decisions/README.md`).
 
 ## Comments
 

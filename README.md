@@ -86,7 +86,7 @@ logjam/
 │   ├── renderers/ · SVTM/ · icons/
 │   ├── worker.py · export_worker.py · pipeline.py
 │   └── Dockerfile
-├── infra/terraform/        # IaC — single source of truth (see its README)
+├── infra/terraform/        # IaC — single source of truth (rules in infra/AGENTS.md)
 │   ├── bootstrap/          # creates the S3 state bucket
 │   ├── modules/storage/    # reusable S3 bucket module (prod + local)
 │   ├── envs/prod/          # real AWS (S3 backend)

@@ -16,9 +16,14 @@ All three:
 2. **Not inferable.** An agent reading the code it is already touching would
    not work it out. What neighbouring files show, what a linter or type check
    enforces, and generic good practice fail this.
-3. **Right scope.** Root holds what essentially every task can get wrong.
-   Anything tied to one package goes in that package's file, which loads only
-   when files there are read.
+3. **Most sessions there need it.** Root holds what essentially every task
+   can get wrong; a package file, what most sessions in that package must
+   follow. A rule for one feature belongs in that feature's code: a comment,
+   a guard's failure message, its ADR. The agent working on it finds it there.
+
+A line is a rule a change must follow, not a fact about the product. "App
+lock defaults off" describes a feature; "nothing automatic wakes the radio
+behind a dark screen" constrains every change.
 
 **Prefer the guard's failure message.** When a test fails loudly on the
 mistake, put the instruction in its assertion message (what to do, and the
@@ -27,10 +32,10 @@ test green, then red under the mutation, before you drop the line.
 
 ## Which file
 
-- **Root:** privacy, environments and prod safety, how we work, comments,
+- **Root:** privacy, environments and prod safety, how we work, decisions, comments,
   testing policy.
-- **Package** (`api/`, `frontend/`, `mobile/`, `shared/`, `topo/`): that
-  package's rules and how its suites run. A rule stated at the root is not
+- **Package or area** (`api/`, `frontend/`, `mobile/`, `shared/`, `topo/`,
+  `infra/`): its rules and how its suites run. A rule stated at the root is not
   repeated.
 - **Deeper than a package** needs a reason the package file cannot serve;
   raise it with the maintainer first.
