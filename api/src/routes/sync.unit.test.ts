@@ -3,9 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // The route module imports the Prisma singleton (and env) at load; mock them
 // so importing the pure helpers under test needs no DB/env.
 vi.mock("../services/prisma", () => ({ default: {} }));
-vi.mock("../lib/env", () => ({
-  getEnv: () => ({ MIN_MOBILE_VERSION: "0.2.0" }),
-}));
+vi.mock("../lib/env", () => ({ getEnv: () => ({}) }));
 vi.mock("../lib/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
   safeErrorForLog: (err: unknown) => err,
@@ -203,19 +201,6 @@ describe("requireClientHeader logging", () => {
     expect(next).toHaveBeenCalledOnce();
     expect(logger.info).toHaveBeenCalledWith(
       { client_platform: "mobile", client_version: "0.3.1" },
-      "sync_client",
-    );
-  });
-
-  it("version below MIN_MOBILE_VERSION → logged with reason, still passes", () => {
-    const { next } = run("mobile/0.1.9-test");
-    expect(next).toHaveBeenCalledOnce();
-    expect(logger.info).toHaveBeenCalledWith(
-      {
-        client_platform: "mobile",
-        client_version: "0.1.9-test",
-        reason: "below_min",
-      },
       "sync_client",
     );
   });

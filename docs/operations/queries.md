@@ -15,11 +15,9 @@ line:
 {"msg":"sync_client","client_platform":"mobile","client_version":"0.3.1"}
 ```
 
-A build below `MIN_MOBILE_VERSION` still syncs and adds
-`"reason":"below_min"`. A request with a missing or malformed
-`x-logjam-client` header is refused with a 400 and logs
-`{"msg":"sync_client_rejected","reason":"missing"}` (or `"malformed"`),
-never the header itself. Counts are requests, not people: a phone that syncs
+A request with a missing or malformed `x-logjam-client` header is refused
+with a 400 and logs `{"msg":"sync_client_rejected","reason":"missing"}` (or
+`"malformed"`), never the header itself. Counts are requests, not people: a phone that syncs
 often weighs more than one that syncs rarely.
 
 These numbers inform a `MIN_MOBILE_VERSION` bump;
@@ -59,14 +57,6 @@ The same, per day, to see an upgrade taking hold:
 filter msg = "sync_client"
 | stats count(*) as requests by client_version, bin(1d) as day
 | sort day desc, requests desc
-```
-
-Builds syncing below the current minimum:
-
-```
-filter msg = "sync_client" and reason = "below_min"
-| stats count(*) as requests by client_version
-| sort requests desc
 ```
 
 Refused requests by reason. A spike in `malformed` after a release means the

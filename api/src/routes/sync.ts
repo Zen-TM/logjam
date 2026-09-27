@@ -103,20 +103,6 @@ const router = Router();
 // keep a matching value from being an arbitrarily long log string.
 const CLIENT_HEADER_REGEX = /^([a-z]{1,16})\/([0-9A-Za-z.\-+]{1,64})$/;
 
-// Compares major.minor.patch only: a prerelease or build suffix on the client
-// is ignored, and a version with no semver core is never "below".
-function isBelowMinVersion(version: string, min: string): boolean {
-  const have = /^(\d+)\.(\d+)\.(\d+)/.exec(version);
-  const want = /^(\d+)\.(\d+)\.(\d+)$/.exec(min);
-  if (!have || !want) return false;
-  for (let i = 1; i <= 3; i++) {
-    if (Number(have[i]) !== Number(want[i])) {
-      return Number(have[i]) < Number(want[i]);
-    }
-  }
-  return false;
-}
-
 export function requireClientHeader(
   req: AuthenticatedRequest,
   _res: Response,
@@ -132,18 +118,8 @@ export function requireClientHeader(
     throw new AppError(400, "x-logjam-client header is required");
   }
   const [, clientPlatform, clientVersion] = match;
-  // Not a rejection: enforcement is the client's gate (useMinVersionGate),
-  // which lets a below-minimum build keep syncing on a metered connection.
-  const belowMin = isBelowMinVersion(
-    clientVersion,
-    getEnv().MIN_MOBILE_VERSION,
-  );
   logger.info(
-    {
-      client_platform: clientPlatform,
-      client_version: clientVersion,
-      ...(belowMin ? { reason: "below_min" } : {}),
-    },
+    { client_platform: clientPlatform, client_version: clientVersion },
     "sync_client",
   );
   next();

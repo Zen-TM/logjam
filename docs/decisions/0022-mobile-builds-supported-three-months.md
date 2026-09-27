@@ -98,13 +98,13 @@ logged.
   share needs the metric filter that does not exist yet. The counts still
   appear in the bump PR.
 - **Time and traffic together** (cut a build only once it is past the
-  window and below the threshold): rejected, as it keeps the traffic threshold's failure: one
-  stale phone could hold the minimum down indefinitely.
+  window and below the threshold): rejected, as it keeps the traffic
+  threshold's failure: one stale phone could hold the minimum down
+  indefinitely.
 - **Refusing below-minimum builds at `/sync/*`** with a 400, so the server
   enforces the minimum too: rejected. `upgradeEnforcement` deliberately lets
   a below-minimum build keep syncing on a metered connection; a 400 there
-  would strand its unsynced edits on a phone in the field. The server logs
-  such a request with `reason: "below_min"` and serves it.
+  would strand its unsynced edits on a phone in the field.
 - **Keeping API logs for 90 days** to answer the long windows from Logs
   Insights: rejected, as it breaks the 7-day retention promise in
   `frontend/public/privacy.html`.
