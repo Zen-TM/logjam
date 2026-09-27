@@ -133,6 +133,8 @@ ready=()
 for row in "${device_rows[@]:-}"; do
   serial="${row%% *}"
   state="${row##* }"
+  # An explicit ANDROID_SERIAL picks one device out of several.
+  [ -n "${ANDROID_SERIAL:-}" ] && [ "$serial" != "$ANDROID_SERIAL" ] && continue
   case "$state" in
     device)       ready+=("$serial") ;;
     unauthorized) unauthorized+=("$serial") ;;
@@ -144,6 +146,11 @@ if [ ${#unauthorized[@]} -gt 0 ]; then
   die "Device ${unauthorized[0]} is connected but not authorized.
      Unlock the phone and tap 'Allow' on the 'Allow USB debugging?' prompt
      (tick 'Always allow from this computer'). Then re-run this script."
+fi
+
+if [ ${#ready[@]} -eq 0 ] && [ -n "${ANDROID_SERIAL:-}" ]; then
+  die "ANDROID_SERIAL=$ANDROID_SERIAL is not an attached, authorized device.
+     Attached: ${device_rows[*]:-none}"
 fi
 
 if [ ${#ready[@]} -eq 0 ]; then
@@ -176,9 +183,12 @@ say "Device: ${MODEL:-unknown} (Android ${RELEASE:-?}, $SERIAL)"
 
 # --- 2. reverse tunnels ------------------------------------------------------
 
-# Re-reversing an existing tunnel is a no-op, so this needs no teardown; but a
-# port with NOTHING listening on the host is worth calling out, because the
-# failure it produces in-app looks like a bug in the app.
+# Re-adding an existing tunnel is a no-op, so a wedged one (it accepts the
+# connection and returns nothing, yet `reverse --list` still shows it) would
+# survive a rerun: clear them first. A port with NOTHING listening on the host
+# is worth calling out, because the failure it produces in-app looks like a
+# bug in the app.
+adb -s "$SERIAL" reverse --remove-all >/dev/null
 for entry in "${PORTS[@]}"; do
   port="${entry%%:*}"
   label="${entry#*:}"
