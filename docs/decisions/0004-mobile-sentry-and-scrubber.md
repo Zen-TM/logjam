@@ -1,4 +1,4 @@
-# 0046. Mobile crash reporting: Sentry behind a scrubber and a consent gate
+# 0004. Mobile crash reporting: Sentry behind a scrubber and a consent gate
 
 - **Date:** 2026-07-23
 - **Status:** Accepted

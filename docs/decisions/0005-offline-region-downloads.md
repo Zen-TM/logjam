@@ -1,4 +1,4 @@
-# 0034. Offline region downloads: one queue, the file is the checkpoint
+# 0005. Offline region downloads: one queue, the file is the checkpoint
 
 - **Date:** 2026-07-30
 - **Status:** Accepted

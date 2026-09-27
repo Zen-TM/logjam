@@ -1,4 +1,4 @@
-# 0043. Nothing automatic runs or wakes the radio behind a dark screen
+# 0013. Nothing automatic runs or wakes the radio behind a dark screen
 
 - **Date:** 2026-08-17
 - **Status:** Accepted

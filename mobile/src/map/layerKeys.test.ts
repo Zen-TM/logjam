@@ -64,7 +64,7 @@ describe("every MLRN Layer carries a key", () => {
     );
     expect(
       offenders,
-      "every <Layer> needs key equal to its id: MLRN 11 freezes a layer's id, so keyless siblings reconcile by index and crash on unmount (docs/decisions/0031)",
+      "every <Layer> needs key equal to its id: MLRN 11 freezes a layer's id, so keyless siblings reconcile by index and crash on unmount (docs/decisions/0015)",
     ).toEqual([]);
   });
 });

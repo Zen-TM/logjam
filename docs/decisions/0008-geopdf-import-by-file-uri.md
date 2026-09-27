@@ -1,4 +1,4 @@
-# 0035. GeoPDF import takes a file URI, never bytes
+# 0008. GeoPDF import takes a file URI, never bytes
 
 - **Date:** 2026-08-10
 - **Status:** Accepted

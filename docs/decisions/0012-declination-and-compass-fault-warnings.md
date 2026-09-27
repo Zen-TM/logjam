@@ -1,4 +1,4 @@
-# 0042. Declination is learned from the platform; compass faults are warned about, not corrected
+# 0012. Declination is learned from the platform; compass faults are warned about, not corrected
 
 - **Date:** 2026-08-17
 - **Status:** Accepted
@@ -6,7 +6,7 @@
 
 ## Context
 
-The rotation vector the heading comes from ([0041](0041-compass-heading-pipeline.md))
+The rotation vector the heading comes from ([0011](0011-compass-heading-pipeline.md))
 is MAGNETIC-referenced, so a true bearing needs a declination, and a
 miscalibrated or disturbed magnetometer produces a wrong bearing no filter can
 fix. Three traps in the declination path were found by the 2026-08-17 accuracy

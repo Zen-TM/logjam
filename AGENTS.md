@@ -33,7 +33,7 @@ platform: privacy constrains every feature. Each package has its own
   or the maintainer's sign-off on the approach; the PR says which. Small fixes
   land directly.
 - Logic both clients need lives in `shared/`, with a parity test; look for it
-  there before writing it in a client. [0022](docs/decisions/0022-share-the-decision-not-the-drawing.md)
+  there before writing it in a client. [0020](docs/decisions/0020-share-the-decision-not-the-drawing.md)
 - User copy names the surface, **Logjam Web** or **Logjam GPS**, never "the
   app" or "the web app" where either could be meant.
 - Committed files are setup-neutral: no personal machine, host, alias or path.

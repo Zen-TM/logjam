@@ -1,4 +1,4 @@
-# 0044. Track recording: fix-rate presets, and a boost to `finest` while the map is looked at
+# 0014. Track recording: fix-rate presets, and a boost to `finest` while the map is looked at
 
 - **Date:** 2026-08-17
 - **Status:** Accepted
@@ -60,7 +60,7 @@ process that dies boosted leaves FLP delivering at 3 s with nothing left to turn
 it down. Anchor placement is untouched — `rejectTrackFix` still decides by
 displacement, never by time. Guard: `trackRecorder.test.ts`, "the map boost"
 (the effect itself has no executable check, like the other `MapScreen` lifecycle
-effects in [0040](0040-map-sensors-only-while-focused.md)).
+effects in [0010](0010-map-sensors-only-while-focused.md)).
 
 **`distanceInterval` is 0 in every preset, deliberately** (2026-08-20). It saved
 nothing (it is ANDed with the interval, so it only discarded fixes the GNSS

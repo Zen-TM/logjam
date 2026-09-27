@@ -1,4 +1,4 @@
-# 0020. Prod migrations run in a gated pre-deploy task; migrations are expand/contract
+# 0003. Prod migrations run in a gated pre-deploy task; migrations are expand/contract
 
 - **Date:** 2026-07-17
 - **Status:** Accepted

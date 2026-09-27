@@ -1,4 +1,4 @@
-# 0023. AGPL-3.0 only; DCO sign-off, not a CLA
+# 0021. AGPL-3.0 only; DCO sign-off, not a CLA
 
 - **Date:** 2026-09-25
 - **Status:** Accepted

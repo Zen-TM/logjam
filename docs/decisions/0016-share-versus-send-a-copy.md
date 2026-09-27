@@ -1,4 +1,4 @@
-# 0036. Share and Send a copy are two verbs, answered in one panel and the inbox
+# 0016. Share and Send a copy are two verbs, answered in one panel and the inbox
 
 - **Date:** 2026-08-22
 - **Status:** Accepted

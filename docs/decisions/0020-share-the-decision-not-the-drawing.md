@@ -1,4 +1,4 @@
-# 0022. Share the decision, not the drawing
+# 0020. Share the decision, not the drawing
 
 - **Date:** 2026-09-25
 - **Status:** Accepted

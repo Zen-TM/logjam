@@ -1,4 +1,4 @@
-# 0047. OTA updates are code-signed, with the private key outside the repo
+# 0009. OTA updates are code-signed, with the private key outside the repo
 
 - **Date:** 2026-08-16
 - **Status:** Accepted

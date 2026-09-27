@@ -9,7 +9,7 @@
   or a join through `shares`); never trust an id from the body alone.
 - **A place reaches anyone but its owner only through `lib/placeAccess.ts`**
   and `serializeSharedPlace`, on REST and delta alike: no access is 404, not
-  403. Guard: `src/__tests__/shareBoundary.test.ts`. [0001](../docs/decisions/0001-place-share-visibility.md)
+  403. Guard: `src/__tests__/shareBoundary.test.ts`. [0002](../docs/decisions/0002-place-share-visibility.md)
 - **A response about another user carries their username, never their email**
   (`src/__tests__/friends.test.ts`).
 - **Errors are `AppError(status, message)`** from `middleware/errorHandler`,
@@ -47,7 +47,7 @@
   committed migration.
 - **Expand/contract:** prod migrates in a pre-deploy task while the old image
   still runs, so never drop, rename or narrow what it uses in the same
-  migration. [0020](../docs/decisions/0020-pre-deploy-migrations-expand-contract.md)
+  migration. [0003](../docs/decisions/0003-pre-deploy-migrations-expand-contract.md)
 - A migration that moves data replaces the checks in `prisma/upgrade-check/`,
   which CI's `migration-upgrade` job runs against a seeded `origin/main`.
 

@@ -1,4 +1,4 @@
-# 0041. Compass heading: gyro-fused source, one camera writer, a rate-tracking display
+# 0011. Compass heading: gyro-fused source, one camera writer, a rate-tracking display
 
 - **Date:** 2026-08-17
 - **Status:** Accepted

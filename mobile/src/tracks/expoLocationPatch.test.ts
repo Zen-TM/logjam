@@ -20,7 +20,7 @@ describe("expo-location patch", () => {
     );
     expect(
       source,
-      "patches/expo-location+<version>.patch did not apply: an expo-location upgrade needs the patch re-made for the new version (docs/decisions/0044)",
+      "patches/expo-location+<version>.patch did not apply: an expo-location upgrade needs the patch re-made for the new version (docs/decisions/0014)",
     ).toContain("!AppForegroundedSingleton.isForegrounded && options.foregroundService != null && !isUpdatingRunningTask");
   });
 

@@ -1,4 +1,4 @@
-# 0033. Guest mode is "don't sync yet", not a separate storage path
+# 0007. Guest mode is "don't sync yet", not a separate storage path
 
 - **Date:** 2026-08-05
 - **Status:** Accepted
@@ -56,7 +56,7 @@ for a guest, not left to fail. A guaranteed-401 request per screen open is a
 battery cost and a permanently red sync health line.
 
 Crash-report consent, which guest mode made necessary, is in
-[0046](0046-mobile-sentry-and-scrubber.md).
+[0004](0004-mobile-sentry-and-scrubber.md).
 
 ## Consequences
 

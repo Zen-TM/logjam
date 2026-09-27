@@ -1,4 +1,4 @@
-# 0002. foreignFields for values whose definition the recipient lacks
+# 0018. foreignFields for values whose definition the recipient lacks
 
 - **Date:** 2026-09-06
 - **Status:** Accepted

@@ -1,4 +1,4 @@
-# 0045. On-device data privacy: app lock off by default, declared stores, one wipe path
+# 0006. On-device data privacy: app lock off by default, declared stores, one wipe path
 
 - **Date:** 2026-08-04
 - **Status:** Accepted
@@ -7,7 +7,7 @@
 ## Context
 
 Going offline puts place coords/names **on the device**. Guest mode
-([0033](0033-guest-mode-is-dont-sync-yet.md)) made the device the privacy
+([0007](0007-guest-mode-is-dont-sync-yet.md)) made the device the privacy
 boundary between two users of one phone.
 
 ## Decision

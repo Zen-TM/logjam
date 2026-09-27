@@ -1,4 +1,4 @@
-# 0064. The API image connects to RDS over verified TLS using a bundled CA
+# 0001. The API image connects to RDS over verified TLS using a bundled CA
 
 - **Date:** 2026-06-11
 - **Status:** Accepted

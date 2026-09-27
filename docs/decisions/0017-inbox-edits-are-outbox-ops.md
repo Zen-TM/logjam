@@ -1,4 +1,4 @@
-# 0039. Inbox read state and deletion are outbox ops; a refetch replays the queue
+# 0017. Inbox read state and deletion are outbox ops; a refetch replays the queue
 
 - **Date:** 2026-08-30
 - **Status:** Accepted

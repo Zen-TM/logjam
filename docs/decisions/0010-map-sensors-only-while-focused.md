@@ -1,4 +1,4 @@
-# 0040. Map sensors run only while the map is focused and foregrounded; the heading lives outside React state
+# 0010. Map sensors run only while the map is focused and foregrounded; the heading lives outside React state
 
 - **Date:** 2026-08-17
 - **Status:** Accepted

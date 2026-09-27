@@ -1,4 +1,4 @@
-# 0001. Place share visibility
+# 0002. Place share visibility
 
 - **Date:** 2026-07-04
 - **Status:** Accepted

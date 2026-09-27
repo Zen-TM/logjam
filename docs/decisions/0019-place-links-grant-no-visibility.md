@@ -1,4 +1,4 @@
-# 0003. A PlaceLink grants no visibility
+# 0019. A PlaceLink grants no visibility
 
 - **Date:** 2026-09-06
 - **Status:** Accepted
