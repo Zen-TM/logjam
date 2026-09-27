@@ -799,10 +799,15 @@ async function main() {
   // the route's enforcement, which would otherwise leave every seeded trip
   // untagged and make dev the one environment where the trip-type filter has
   // an empty vocabulary.
+  //
+  // Ids are pinned like every other seeded row: a re-seed deletes trips
+  // without tombstones, so random ids left a paired phone holding every past
+  // seed's trips on top of the new ones.
   const trips = buildTrips();
-  for (const t of trips) {
+  for (const [i, t] of trips.entries()) {
     await prisma.tripLog.create({
       data: {
+        id: seedId("c", i + 1),
         userId: t.userId,
         date: t.date,
         displayName: t.displayName,
