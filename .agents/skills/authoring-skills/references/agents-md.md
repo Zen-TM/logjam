@@ -73,11 +73,11 @@ For more than a wording fix, measure it:
 1. Pick 4–6 real tasks from `git log origin/main` that touch the rules you
    changed. Phrase each as its issue would have been, without the fix.
 2. For each, check out the commit before the fix in a scratch worktree, put
-   the old or the new agent files over it, and ask `claude -p` (read-only
-   tools) for a plan. Run each task 3 times per version. Load project
-   settings only (`--setting-sources project --strict-mcp-config`), or your
-   own memory and skills leak in; in a loop, give `claude -p` `</dev/null`,
-   or it reads the remaining tasks as part of its prompt.
+   the old or the new agent files over it, and ask your agent CLI for a plan,
+   invoked as the skill's `scripts/trigger-rate.sh` invokes it: read-only, project
+   settings only (or your own memory and skills leak in), stdin closed (or in
+   a loop it reads the remaining tasks as part of its prompt). Run each task
+   3 times per version.
 3. Compare the plans: rules broken, rules followed that did not apply to the
    task, and the tool calls and tokens each run used.
 
