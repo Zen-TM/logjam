@@ -7,11 +7,16 @@ name: Deploy Frontend
 # pull_request CI runs (event == 'push'), so it does not double-fire.
 # workflow_run always uses this file as it exists on the default branch.
 #
-# Path scoping: workflow_run does NOT support a `paths:` filter, so the
-# frontend/**|shared/** scoping that `on: push` used to provide is rebuilt as
-# the `changes` job below. It skips the deploy only when the CI-validated
-# commit provably touched nothing under frontend/ or shared/ and not this
-# file. The check fails OPEN — see that job for why and how.
+# Scoping and freshness live in deploy-guard.yml: it skips a commit that is no
+# longer main's head, or one that changes nothing under frontend/ or shared/
+# since the live release. It fails OPEN.
+#
+# Releases: hashed assets are uploaded alongside the old ones, never over them
+# (no --delete), and each release's index.html is kept at
+# releases/<sha>/index.html with its file list. index.html is the switch, and
+# its release-sha metadata names the live release. A rollback copies an old
+# releases/<sha>/index.html back (rollback.yml). The prune step deletes what is
+# over 30 days old and belongs to neither this release nor the one it replaces.
 
 on:
   workflow_run:
@@ -19,86 +24,27 @@ on:
     types: [completed]
     branches: [main]
 
+# One frontend deploy or rollback at a time (rollback.yml takes the same group).
+# A newer run queued behind this one replaces an older queued one; the guard
+# compares against the live release, so the newer run still covers it.
+concurrency:
+  group: deploy-frontend
+  cancel-in-progress: false
+
 jobs:
-  # Path scoping for a workflow_run trigger. `on: workflow_run` supports no
-  # `paths:` filter, so the scoping that `on: push` used to give us has to be
-  # rebuilt as a job. This asks the API which files the CI-validated commit
-  # touched and lets the deploy below decide.
-  #
-  # FAIL OPEN — this is the whole design rule. A deploy that runs when it did
-  # not need to costs a few minutes of CI. A deploy that is silently SKIPPED
-  # means prod never receives a fix and nobody is told. So the only value that
-  # skips is an explicit, successfully-computed `false`; every failure mode
-  # (API error, no sha, empty list, truncated list, this job dying outright)
-  # resolves to `unknown` or to no output at all, and both deploy.
-  changes:
-    name: Check for relevant changes
-    runs-on: ubuntu-latest
-    # Same CI gate as the deploy job — no point querying the API for a commit
-    # that cannot deploy anyway.
+  guard:
     if: >-
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_branch == 'main'
+    uses: ./.github/workflows/deploy-guard.yml
+    with:
+      target: frontend
+      sha: ${{ github.event.workflow_run.head_sha }}
+    secrets: inherit
     permissions:
+      id-token: write
       contents: read
-    outputs:
-      # 'false' is the ONLY value that skips the deploy. 'true', 'unknown', or
-      # an absent output (job failed) all deploy.
-      relevant: ${{ steps.check.outputs.relevant }}
-    steps:
-      - name: List files changed by the CI-validated commit
-        id: check
-        env:
-          GH_TOKEN: ${{ github.token }}
-          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
-          REPO: ${{ github.repository }}
-        run: |
-          # No `set -e`: this step must never fail the job in a way that could
-          # be read as "skip". Every exit path below is an explicit exit 0 with
-          # a value written to $GITHUB_OUTPUT.
-          set -uo pipefail
-
-          emit() {
-            echo "relevant=$1" >> "$GITHUB_OUTPUT"
-            echo "==> relevant=$1"
-            exit 0
-          }
-
-          if [ -z "${HEAD_SHA:-}" ]; then
-            echo "::warning::workflow_run carried no head_sha — deploying (fail open)"
-            emit unknown
-          fi
-
-          # For a merge commit the GitHub commits API returns the diff against
-          # the FIRST parent, i.e. exactly what the merged PR changed. Verified
-          # against this repo's own merge commits.
-          if ! FILES=$(gh api --paginate "repos/$REPO/commits/$HEAD_SHA" --jq '.files[]?.filename' 2>&1); then
-            echo "::warning::could not list files for $HEAD_SHA — deploying (fail open). API said: $FILES"
-            emit unknown
-          fi
-
-          if [ -z "$FILES" ]; then
-            echo "::warning::empty file list for $HEAD_SHA — deploying (fail open)"
-            emit unknown
-          fi
-
-          echo "Files changed in $HEAD_SHA:"
-          echo "$FILES" | sed 's/^/  /'
-
-          # The commits API caps files at 300 per page. --paginate should follow
-          # the rest, but if a commit is anywhere near that cap we do not trust a
-          # negative answer derived from a possibly-truncated list.
-          COUNT=$(echo "$FILES" | wc -l)
-          if [ "$COUNT" -ge 300 ]; then
-            echo "::warning::$COUNT files — list may be truncated, deploying (fail open)"
-            emit unknown
-          fi
-
-          if echo "$FILES" | grep -qE '^(frontend/|shared/|\.github/workflows/deploy-frontend\.yml$)'; then
-            emit true
-          fi
-          emit false
 
   deploy:
     name: Build and deploy
@@ -107,22 +53,27 @@ jobs:
     # assume it.
     environment: prod
     runs-on: ubuntu-latest
-    needs: changes
-    # `!cancelled()` is load-bearing: with a plain `needs`, a FAILED `changes`
-    # job would silently skip this deploy — the fail-CLOSED behaviour we must
-    # not have. With it, a failed `changes` yields an empty output, and
-    # '' != 'false' is true, so the deploy proceeds. The CI-gate conditions are
-    # repeated here rather than inherited, because !cancelled() also bypasses
-    # the skip a skipped `changes` job would otherwise propagate.
+    needs: guard
+    # `!cancelled()` is load-bearing: with a plain `needs`, a FAILED guard
+    # would silently skip this deploy — the fail-CLOSED behaviour we must not
+    # have. With it, a failed guard yields an empty output, and '' != 'false'
+    # is true, so the deploy proceeds. The CI-gate conditions are repeated here
+    # rather than inherited, because !cancelled() also bypasses the skip a
+    # skipped guard would otherwise propagate.
     if: >-
       !cancelled() &&
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_branch == 'main' &&
-      needs.changes.outputs.relevant != 'false'
+      needs.guard.outputs.proceed != 'false'
     permissions:
       id-token: write
       contents: read
+    outputs:
+      switched: ${{ steps.switch.outputs.switched }}
+    env:
+      BUCKET: ${{ secrets.FRONTEND_S3_BUCKET }}
+      SHA: ${{ github.event.workflow_run.head_sha }}
 
     steps:
       - name: Checkout code
@@ -162,17 +113,96 @@ jobs:
           VITE_COGNITO_REGION: ${{ secrets.VITE_COGNITO_REGION }}
         run: npm run build
 
-      - name: Sync to S3
+      # No --delete: the previous release's hashed chunks stay, so a rollback
+      # is one index.html copy and an open tab lazy-loading an old chunk still
+      # finds it.
+      - name: Upload assets
         run: |
-          aws s3 sync frontend/dist/ s3://${{ secrets.FRONTEND_S3_BUCKET }}/ \
-            --delete \
+          aws s3 sync frontend/dist/ "s3://$BUCKET/" \
             --cache-control "public, max-age=31536000, immutable" \
             --exclude "index.html"
-          aws s3 cp frontend/dist/index.html s3://${{ secrets.FRONTEND_S3_BUCKET }}/index.html \
+
+      - name: Keep this release's index.html and file list
+        run: |
+          (cd frontend/dist && find . -type f ! -path ./index.html | sed 's|^\./||' | sort) \
+            > "$RUNNER_TEMP/files.txt"
+          aws s3 cp frontend/dist/index.html "s3://$BUCKET/releases/$SHA/index.html" \
+            --cache-control "no-cache, no-store, must-revalidate"
+          aws s3 cp "$RUNNER_TEMP/files.txt" "s3://$BUCKET/releases/$SHA/files.txt" \
+            --cache-control "no-cache, no-store, must-revalidate"
+
+      # Deletes objects over 30 days old unless this release or the live one
+      # (the rollback target if this deploy's smoke test fails) needs them.
+      # Age alone would not do: after a quiet month the live release's files
+      # are all over 30 days old. Without the live release's file list (first
+      # deploy with this step, or live release unknown) it deletes nothing.
+      - name: Prune old assets
+        env:
+          LIVE: ${{ needs.guard.outputs.deployed }}
+        run: |
+          set -euo pipefail
+          if [ -z "$LIVE" ] || ! aws s3 cp "s3://$BUCKET/releases/$LIVE/files.txt" "$RUNNER_TEMP/live.txt"; then
+            echo "::notice::no file list for the live release; nothing pruned"
+            exit 0
+          fi
+          {
+            cat "$RUNNER_TEMP/files.txt" "$RUNNER_TEMP/live.txt"
+            echo index.html
+            for release in "$SHA" "$LIVE"; do
+              printf 'releases/%s/index.html\nreleases/%s/files.txt\n' "$release" "$release"
+            done
+          } | sort -u > "$RUNNER_TEMP/keep.txt"
+          CUTOFF=$(date -u -d '30 days ago' +%Y-%m-%dT%H:%M:%S)
+          aws s3api list-objects-v2 --bucket "$BUCKET" --output json \
+            | jq -r --arg cutoff "$CUTOFF" '.Contents[]? | select(.LastModified < $cutoff) | .Key' \
+            | sort | comm -23 - "$RUNNER_TEMP/keep.txt" > "$RUNNER_TEMP/prune.txt"
+          echo "Pruning $(wc -l < "$RUNNER_TEMP/prune.txt") objects older than $CUTOFF"
+          while read -r key; do
+            aws s3 rm "s3://$BUCKET/$key"
+          done < "$RUNNER_TEMP/prune.txt"
+
+      # From here the site may serve this release, so a failure below still
+      # gets the smoke test (and its rollback).
+      - name: Mark the switch
+        id: switch
+        run: echo "switched=true" >> "$GITHUB_OUTPUT"
+
+      # The metadata names the live release for deploy-guard.yml.
+      - name: Switch index.html to this release
+        run: |
+          aws s3 cp frontend/dist/index.html "s3://$BUCKET/index.html" \
+            --metadata "release-sha=$SHA" \
             --cache-control "no-cache, no-store, must-revalidate"
 
       - name: Invalidate CloudFront cache
+        env:
+          DISTRIBUTION: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
         run: |
-          aws cloudfront create-invalidation \
-            --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
-            --paths "/*"
+          ID=$(aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION" \
+            --paths "/*" --query Invalidation.Id --output text)
+          aws cloudfront wait invalidation-completed --distribution-id "$DISTRIBUTION" --id "$ID"
+
+  smoke:
+    needs: deploy
+    if: ${{ !cancelled() && needs.deploy.outputs.switched == 'true' }}
+    uses: ./.github/workflows/smoke.yml
+    with:
+      target: frontend
+      sha: ${{ github.event.workflow_run.head_sha }}
+
+  # A failed smoke test returns to the release that was live before this run.
+  # If that rollback's own smoke test fails, it stops there.
+  rollback:
+    needs: [guard, smoke]
+    if: >-
+      !cancelled() &&
+      needs.smoke.result == 'failure' &&
+      needs.guard.outputs.deployed != github.event.workflow_run.head_sha
+    uses: ./.github/workflows/rollback.yml
+    with:
+      target: frontend
+      sha: ${{ needs.guard.outputs.deployed }}
+    secrets: inherit
+    permissions:
+      id-token: write
+      contents: read

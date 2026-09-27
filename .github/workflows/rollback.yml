@@ -1,0 +1,167 @@
+name: Rollback
+
+# The one rollback path. A person runs it by hand (Actions → Rollback → Run
+# workflow, on main); deploy-api.yml and deploy-frontend.yml call it when their
+# post-deploy smoke test fails. The same steps as plain AWS CLI, for when
+# GitHub Actions itself is down: docs/operations/rollback.md.
+#
+#   api:      EB back to the version labelled <sha> (every deployed sha is
+#             one) and the two task defs that run the API image repinned. No
+#             migration: the schema stays forward, which is why migrations are
+#             expand/contract and rollback-compat.yml tests the old release
+#             against the new schema.
+#   frontend: releases/<sha>/index.html copied over index.html. The deploy
+#             keeps old hashed assets for 30 days, so nothing else moves.
+#   worker:   the two topo task defs repinned to the <sha> image.
+#
+# Each target refuses before changing anything if the release is gone (ECR
+# keeps 15 images per repo; the frontend prunes after 30 days).
+#
+# No loop: this workflow never calls itself or a deploy. If its own smoke test
+# fails the run goes red and stops.
+#
+# The next green push to main deploys main's head again. To keep a rollback,
+# revert on main.
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: What to roll back
+        type: choice
+        options: [api, frontend, worker]
+        required: true
+      sha:
+        description: Full commit sha of a release that was deployed
+        type: string
+        required: true
+  workflow_call:
+    inputs:
+      target:
+        type: string
+        required: true
+      sha:
+        type: string
+        required: true
+
+# By hand: the target's deploy group, so a rollback and a deploy never
+# overlap. Called from a deploy: that run already holds the group, and taking
+# it again would deadlock, so the group is unique to the caller's run.
+concurrency:
+  group: ${{ github.event_name == 'workflow_dispatch' && format('deploy-{0}', inputs.target) || format('rollback-in-run-{0}', github.run_id) }}
+  cancel-in-progress: false
+
+jobs:
+  rollback:
+    name: Roll ${{ inputs.target }} back to ${{ inputs.sha }}
+    environment: prod
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      TARGET: ${{ inputs.target }}
+      SHA: ${{ inputs.sha }}
+      REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
+    steps:
+      - name: Check the sha
+        run: |
+          if ! [[ "$SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::sha must be a full 40-character commit sha, got '$SHA'. Called from a deploy with none, the live release was unknown before it deployed: roll back by hand (docs/operations/rollback.md)."
+            exit 1
+          fi
+
+      # For infra/scripts/pin-ecs-task-image.sh.
+      - name: Checkout code
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/logjam-github-actions-role
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Roll back the API
+        if: inputs.target == 'api'
+        env:
+          EB_APPLICATION: ${{ secrets.EB_APPLICATION_NAME }}
+          EB_ENVIRONMENT: ${{ secrets.EB_ENVIRONMENT_NAME }}
+        run: |
+          set -euo pipefail
+          LABEL=$(aws elasticbeanstalk describe-application-versions \
+            --application-name "$EB_APPLICATION" --version-labels "$SHA" \
+            --query 'ApplicationVersions[0].VersionLabel' --output text)
+          if [ "$LABEL" != "$SHA" ]; then
+            echo "::error::no EB application version labelled $SHA"; exit 1
+          fi
+          if ! aws ecr describe-images --repository-name logjam-api --image-ids "imageTag=$SHA" > /dev/null; then
+            echo "::error::logjam-api:$SHA is no longer in ECR"; exit 1
+          fi
+
+          for family in logjam-api-migrate logjam-geo-pdf-worker; do
+            infra/scripts/pin-ecs-task-image.sh "$family" "$REGISTRY/logjam-api:$SHA"
+          done
+
+          # Skip the swap when it is already live: each one is a cold restart.
+          CURRENT=$(aws elasticbeanstalk describe-environments --environment-names "$EB_ENVIRONMENT" \
+            --query 'Environments[0].VersionLabel' --output text)
+          if [ "$CURRENT" = "$SHA" ]; then
+            echo "EB already runs $SHA; no swap"
+          else
+            echo "EB: $CURRENT -> $SHA"
+            aws elasticbeanstalk update-environment --environment-name "$EB_ENVIRONMENT" \
+              --version-label "$SHA" > /dev/null
+          fi
+          aws elasticbeanstalk wait environment-updated --environment-names "$EB_ENVIRONMENT"
+          LIVE=$(aws elasticbeanstalk describe-environments --environment-names "$EB_ENVIRONMENT" \
+            --query 'Environments[0].VersionLabel' --output text)
+          if [ "$LIVE" != "$SHA" ]; then
+            echo "::error::EB finished updating on $LIVE, not $SHA"; exit 1
+          fi
+
+      - name: Roll back the frontend
+        if: inputs.target == 'frontend'
+        env:
+          BUCKET: ${{ secrets.FRONTEND_S3_BUCKET }}
+          DISTRIBUTION: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
+        run: |
+          set -euo pipefail
+          # Every file the release shipped must still be there.
+          if ! aws s3 cp "s3://$BUCKET/releases/$SHA/files.txt" "$RUNNER_TEMP/files.txt"; then
+            echo "::error::no releases/$SHA/ in the bucket: never deployed, deployed before releases were kept, or pruned"; exit 1
+          fi
+          aws s3api list-objects-v2 --bucket "$BUCKET" --output json \
+            | jq -r '.Contents[]?.Key' | sort > "$RUNNER_TEMP/present.txt"
+          MISSING=$(sort "$RUNNER_TEMP/files.txt" | comm -23 - "$RUNNER_TEMP/present.txt")
+          if [ -n "$MISSING" ]; then
+            echo "::error::release $SHA is missing files (pruned?):"; echo "$MISSING"; exit 1
+          fi
+
+          # REPLACE drops the source's headers, so each is restated.
+          aws s3 cp "s3://$BUCKET/releases/$SHA/index.html" "s3://$BUCKET/index.html" \
+            --metadata-directive REPLACE \
+            --metadata "release-sha=$SHA" \
+            --content-type "text/html" \
+            --cache-control "no-cache, no-store, must-revalidate"
+          ID=$(aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION" \
+            --paths "/index.html" "/" --query Invalidation.Id --output text)
+          aws cloudfront wait invalidation-completed --distribution-id "$DISTRIBUTION" --id "$ID"
+
+      - name: Roll back the worker
+        if: inputs.target == 'worker'
+        run: |
+          set -euo pipefail
+          if ! aws ecr describe-images --repository-name logjam-topo-worker --image-ids "imageTag=$SHA" > /dev/null; then
+            echo "::error::logjam-topo-worker:$SHA is not in ECR. Only commits that changed topo/ built a worker image; the task def's current tag names the live one."; exit 1
+          fi
+          for family in logjam-topo-worker logjam-topo-export-worker; do
+            infra/scripts/pin-ecs-task-image.sh "$family" "$REGISTRY/logjam-topo-worker:$SHA"
+          done
+
+  smoke:
+    needs: rollback
+    if: inputs.target != 'worker'
+    uses: ./.github/workflows/smoke.yml
+    with:
+      target: ${{ inputs.target }}
+      sha: ${{ inputs.sha }}

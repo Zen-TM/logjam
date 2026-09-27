@@ -1,0 +1,74 @@
+name: Smoke
+
+# Called after a deploy or a rollback: is the release we just shipped the one
+# the public URLs serve, and does it answer? Public requests only, no AWS.
+#   api:      /health answers and /meta reports the shipped sha.
+#   frontend: / serves the shipped release's index.html (kept at
+#             releases/<sha>/index.html by deploy-frontend.yml), and the entry
+#             script it names loads.
+# The worker has no probe: its tasks run on demand, nothing is listening.
+
+on:
+  workflow_call:
+    inputs:
+      target:
+        description: api or frontend
+        type: string
+        required: true
+      sha:
+        description: The commit that should now be live
+        type: string
+        required: true
+
+permissions: {}
+
+jobs:
+  smoke:
+    name: Smoke ${{ inputs.target }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe the public URL
+        env:
+          TARGET: ${{ inputs.target }}
+          SHA: ${{ inputs.sha }}
+          API_URL: https://api.logjamnsw.com
+          WEB_URL: https://logjamnsw.com
+        run: |
+          set -uo pipefail
+          get() { curl -sSf --max-time 15 "$@"; }
+
+          probe_api() {
+            get -o /dev/null "$API_URL/health" || return 1
+            LIVE=$(get "$API_URL/meta" | jq -r .sha) || return 1
+            echo "/meta sha: $LIVE"
+            [ "$LIVE" = "$SHA" ]
+          }
+
+          probe_frontend() {
+            local served want entry
+            served=$(get "$WEB_URL/") || return 1
+            want=$(get "$WEB_URL/releases/$SHA/index.html") || return 1
+            if [ "$served" != "$want" ]; then
+              echo "/ is not release $SHA's index.html"; return 1
+            fi
+            entry=$(grep -o 'src="/assets/[^"]*\.js"' <<<"$served" | head -n1 | cut -d'"' -f2)
+            [ -n "$entry" ] || { echo "no entry script in index.html"; return 1; }
+            get -o /dev/null "$WEB_URL$entry"
+          }
+
+          case "$TARGET" in
+            api | frontend) ;;
+            *) echo "::error::no smoke test for '$TARGET'"; exit 1 ;;
+          esac
+
+          # A single-instance EB swap comes back cold, and CloudFront may
+          # still hold the old index.html for a moment: retry for ~3 minutes.
+          for attempt in $(seq 1 18); do
+            if "probe_$TARGET"; then
+              echo "smoke passed: $TARGET serves $SHA (attempt $attempt)"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::smoke failed: $TARGET does not serve $SHA"
+          exit 1
