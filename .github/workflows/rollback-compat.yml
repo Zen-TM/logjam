@@ -55,7 +55,9 @@ jobs:
           - 4566:4566
     env:
       # Public and unauthenticated: /meta's sha names the live release.
-      PROD_API_URL: https://api.logjamnsw.com
+      # Repository variable, declared in scripts/github-settings.sh; when it
+      # is unset the job falls back to origin/main.
+      PROD_API_URL: ${{ vars.PROD_API_URL }}
       LIVE_DIR: ${{ github.workspace }}/../live-release
       NODE_ENV: development
       AUTH_MODE: fake

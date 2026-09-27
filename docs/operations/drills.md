@@ -58,12 +58,13 @@ note times and surprises. [rollback.md](rollback.md) has the commands.
 
 ### Automatic rollback
 
-- [ ] **Frontend:** merge a throwaway commit that breaks the frontend probe
-      in `smoke.yml` (point `WEB_URL` at a path that 404s). The deploy's smoke
+- [ ] **Frontend:** set the repository variable `PROD_WEB_URL` to a URL
+      that 404s, then merge a change under `frontend/`. The deploy's smoke
       test fails, the rollback job returns to the previous release, its own
       smoke test fails the same way, and the run stops there: no further
-      rollback, no retry. Revert the commit; the revert deploys the newest
-      release. Time from smoke failure to rolled back: ____
+      rollback, no retry. Restore the variable (`scripts/github-settings.sh
+      --apply`) and roll forward with `rollback.yml`. Time from smoke failure
+      to rolled back: ____
 - [ ] **API (optional, three cold restarts):** the same with the API probe.
 - [ ] Nothing pages yet on a failed rollback: until the CloudWatch 5xx and
       crash-loop alarms exist, the signal is the red run and GitHub's failure
