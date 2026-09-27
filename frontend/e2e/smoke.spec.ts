@@ -15,6 +15,8 @@ test("app loads", async ({ page }) => {
 
   await page.goto("/");
   await expect(page).toHaveTitle(/logjam/i);
+  // THROWAWAY: forced failure to prove CI uploads Playwright artifacts. Never merge.
+  await expect(page).toHaveTitle(/forced-failure-demo/, { timeout: 2_000 });
 
   if (isLocal) {
     // Fake auth → MapLibre canvas should mount.
