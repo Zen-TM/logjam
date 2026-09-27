@@ -183,9 +183,12 @@ say "Device: ${MODEL:-unknown} (Android ${RELEASE:-?}, $SERIAL)"
 
 # --- 2. reverse tunnels ------------------------------------------------------
 
-# Re-reversing an existing tunnel is a no-op, so this needs no teardown; but a
-# port with NOTHING listening on the host is worth calling out, because the
-# failure it produces in-app looks like a bug in the app.
+# Re-adding an existing tunnel is a no-op, so a wedged one (it accepts the
+# connection and returns nothing, yet `reverse --list` still shows it) would
+# survive a rerun: clear them first. A port with NOTHING listening on the host
+# is worth calling out, because the failure it produces in-app looks like a
+# bug in the app.
+adb -s "$SERIAL" reverse --remove-all >/dev/null
 for entry in "${PORTS[@]}"; do
   port="${entry%%:*}"
   label="${entry#*:}"
