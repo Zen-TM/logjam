@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { UUID_V4_REGEX, systemRowIds } from "@logjam/shared";
+import { SYNC_ENTITY_TYPES, UUID_V4_REGEX, systemRowIds } from "@logjam/shared";
 import { seedId, cid, SEED_ID_PREFIXES } from "../../prisma/seedIds";
 
 // The dev seed used to hand-mint version-nibble-0 ids
@@ -54,6 +54,44 @@ describe("hand-minted seed ids", () => {
     for (const prefix of used) {
       expect(SEED_ID_PREFIXES).toContain(prefix);
     }
+  });
+
+  // A synced row the seed creates without an id gets a random one, and a
+  // re-seed deletes rows without tombstones: a paired phone keeps every past
+  // seed's copies on top of the new ones (trips reached 381 against 127). So
+  // every create of a SYNC_ENTITY_TYPES model passes an id, in the call or in
+  // the builder the call hands its data to (placeCreate).
+  it("every seeded row of a synced entity is created with a pinned id", () => {
+    const source = readFileSync(join(__dirname, "../../prisma/seed.ts"), "utf8");
+    // The text from an opening paren to its match.
+    const argsAt = (open: number) => {
+      let depth = 0;
+      for (let i = open; i < source.length; i++) {
+        if (source[i] === "(") depth++;
+        else if (source[i] === ")" && --depth === 0) return source.slice(open, i + 1);
+      }
+      throw new Error(`unbalanced call at ${open}`);
+    };
+    // A top-level `function name(…) {…}`: from its signature to the closing
+    // brace at column 0.
+    const builderBody = (name: string) => {
+      const at = source.search(new RegExp(`\\nfunction ${name}\\(`));
+      return at < 0 ? "" : source.slice(at, source.indexOf("\n}\n", at));
+    };
+    const calls = [...source.matchAll(/prisma\.(\w+)\.(create|createMany)\(/g)]
+      .filter((m) => (SYNC_ENTITY_TYPES as readonly string[]).includes(m[1]));
+    expect(calls.length).toBeGreaterThan(0);
+    const withoutId = calls
+      .filter((m) => {
+        const args = argsAt(m.index! + m[0].length - 1);
+        const builder = /data:\s*(\w+)\(/.exec(args)?.[1];
+        return !/\bid:/.test(args) && !(builder && /\bid:/.test(builderBody(builder)));
+      })
+      .map((m) => `prisma.${m[1]}.${m[2]} at seed.ts:${source.slice(0, m.index).split("\n").length}`);
+    expect(
+      withoutId,
+      "synced rows created without an id: mint one with seedId under a declared prefix",
+    ).toEqual([]);
   });
 
   // The SYSTEM rows — place types and their field definitions — are pinned in
