@@ -14,7 +14,7 @@ description: How Logjam ships its Content-Security-Policy and other security hea
 ## Adding a new host (tile provider, API, image CDN)
 
 1. Update `CSP_PROD` in `vite.config.ts` (both `img-src` and `connect-src` if it's a fetched-data host).
-2. Mirror in `scripts/csp-policy.json`.
+2. Mirror in `scripts/csp-policy.json` (guarded by `frontend/src/cspAgreement.test.ts`).
 3. Rebuild + redeploy frontend.
 4. Confirm browser console clean.
 
