@@ -1,39 +1,84 @@
 # Editing an AGENTS.md
 
-Read when adding, changing or moving a rule in any `AGENTS.md`.
+Read when adding, changing, moving or removing a rule in any `AGENTS.md`.
+
+Agents follow what these files say, including rules that do not apply to the
+task in hand, and every line loads on every task in its directory. A line that
+does not prevent a mistake costs attention and adds work.
+
+## What earns a line
+
+All three:
+
+1. **Evidence or blast radius.** A mistake happened without it (an ADR, a
+   commit, an incident, an agent getting it wrong), or getting it wrong once
+   would be severe: a privacy leak, prod damage, lost data.
+2. **Not inferable.** An agent reading the code it is already touching would
+   not work it out. What neighbouring files show, what a linter or type check
+   enforces, and generic good practice fail this.
+3. **Most sessions there need it.** Root holds what essentially every task
+   can get wrong; a package file, what most sessions in that package must
+   follow. A rule for one feature belongs in that feature's code: a comment,
+   a guard's failure message, its ADR. The agent working on it finds it there.
+
+A line is a rule a change must follow, not a fact about the product. "App
+lock defaults off" describes a feature; "nothing automatic wakes the radio
+behind a dark screen" constrains every change.
+
+**Prefer the guard's failure message.** When a test fails loudly on the
+mistake, put the instruction in its assertion message (what to do, and the
+ADR) and leave no line: the agent reads it exactly when it matters. Run the
+test green, then red under the mutation, before you drop the line.
 
 ## Which file
 
-- **Root `AGENTS.md`:** rules for every change in the repo (privacy, prod
-  safety, testing policy, comment policy, conventions that cross packages).
-- **Package `AGENTS.md`** (`api/`, `frontend/`, `mobile/`, `shared/`, `topo/`):
-  the mechanics of that package: how its tests run, its canonical examples,
-  its hard rules. A rule stated at the root is not repeated here; the package
-  file gives only the how.
-- **Deeper than a package** needs a reason the package file cannot serve.
-  Raise it with the maintainer before creating one.
+- **Root:** privacy, environments and prod safety, how we work, decisions, comments,
+  testing policy.
+- **Package or area** (`api/`, `frontend/`, `mobile/`, `shared/`, `topo/`,
+  `infra/`): its rules and how its suites run. A rule stated at the root is not
+  repeated.
+- **Deeper than a package** needs a reason the package file cannot serve;
+  raise it with the maintainer first.
 - `CLAUDE.md` beside each `AGENTS.md` is exactly `@AGENTS.md`. Never write to it.
 
-## A new rule
+## Writing the line
 
-- **One line of rule, plus its guard.** A convention cites the test that fails
-  when it is broken (`path/to/file.test.ts`, the `describe` name if the file
-  is large). An invariant with no executable check is a comment; write the
-  test in the same change.
-- **No guard possible, or the entry needs a paragraph of why?** The reasoning
-  is an ADR: copy `docs/decisions/0000-template.md`, add it to
-  `docs/decisions/README.md`, and leave one line in `AGENTS.md` that links it.
-- **Name the source, not its contents.** Point at the declaring file or symbol
-  (`SYSTEM_PLACE_TYPES` in `shared/src/placeTypes.ts`), not a copy of its values.
-- Apply the four pruning tests in [SKILL.md](../SKILL.md) to the entry and to the
-  section it lands in.
+- One imperative line, with the why in a clause: "Log through `logger`, never a
+  raw error: Prisma renders place names into its messages." The full
+  reasoning is an ADR (`docs/decisions/0000-template.md`, indexed in its
+  `README.md`), which the line links.
+- Cite the guard test when there is one. A rule kept without one says so, and
+  the gap is raised with the maintainer.
+- Name the declaring file or symbol, not a copy of its values.
+- File it under the section for what it governs. There is no catch-all
+  section; a rule that fits no section probably fails the scope test.
+- No capitals for emphasis: the why in the clause does that job.
 
 ## Changing or removing a rule
 
-- Entries are not silently deleted. If a rule looks stale, check its guard
-  test and the code it names; if it is wrong, say so to the maintainer with the
-  evidence before removing it.
-- Moving narrative out to an ADR is not deleting: the rule line stays and links
-  to the ADR.
-- A rule whose reasoning is recorded in an accepted ADR changes by a new ADR
-  that supersedes it, then the line is updated.
+An `AGENTS.md` change is an ordinary PR. Nobody is asked to save rules in the
+middle of other work.
+
+- Show the evidence in the PR as a disposition table: every changed line, what
+  happened to it (kept, moved to where, cut) and why.
+- Cutting a line whose ADR exists loses nothing. A line whose reasoning has no
+  ADR yet gets one before the line goes, if the reasoning is worth keeping.
+- A rule whose reasoning is an accepted ADR changes through a new ADR that
+  supersedes it.
+
+## Testing a change
+
+For more than a wording fix, measure it:
+
+1. Pick 4–6 real tasks from `git log origin/main` that touch the rules you
+   changed. Phrase each as its issue would have been, without the fix.
+2. For each, check out the commit before the fix in a scratch worktree, put
+   the old or the new agent files over it, and ask `claude -p` (read-only
+   tools) for a plan. Run each task 3 times per version. Load project
+   settings only (`--setting-sources project --strict-mcp-config`), or your
+   own memory and skills leak in; in a loop, give `claude -p` `</dev/null`,
+   or it reads the remaining tasks as part of its prompt.
+3. Compare the plans: rules broken, rules followed that did not apply to the
+   task, and the tool calls and tokens each run used.
+
+Report what you find, including no measurable change.

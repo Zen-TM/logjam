@@ -18,7 +18,10 @@ describe("expo-location patch", () => {
       ),
       "utf8",
     );
-    expect(source).toContain("!AppForegroundedSingleton.isForegrounded && options.foregroundService != null && !isUpdatingRunningTask");
+    expect(
+      source,
+      "patches/expo-location+<version>.patch did not apply: an expo-location upgrade needs the patch re-made for the new version (docs/decisions/0044)",
+    ).toContain("!AppForegroundedSingleton.isForegrounded && options.foregroundService != null && !isUpdatingRunningTask");
   });
 
   // The patch is to KOTLIN SOURCE, and expo-location also ships a precompiled
@@ -29,7 +32,10 @@ describe("expo-location patch", () => {
     const packageJson = JSON.parse(
       readFileSync(join(__dirname, "../../package.json"), "utf8"),
     ) as { expo?: { autolinking?: { android?: { buildFromSource?: string[] } } } };
-    expect(packageJson.expo?.autolinking?.android?.buildFromSource).toContain(
+    expect(
+      packageJson.expo?.autolinking?.android?.buildFromSource,
+      "package.json expo.autolinking.android.buildFromSource must list expo-location, or Gradle links the unpatched AAR",
+    ).toContain(
       "expo-location",
     );
   });

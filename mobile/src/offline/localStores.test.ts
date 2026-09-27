@@ -51,7 +51,10 @@ describe("every local store is declared in one place", () => {
       .map((file) => file.slice(SRC_DIR.length + 1));
     // A directory built from documentDirectory anywhere else is a store the
     // wipe has never heard of. Put it in localStores.ts and import it.
-    expect(offenders).toEqual([]);
+    expect(
+      offenders,
+      "declare the store in offline/localStores.ts and import it from there: offline/wipeLocalData.ts, the one wipe path, only knows declared stores",
+    ).toEqual([]);
   });
 
   it("actually looks at the source", () => {

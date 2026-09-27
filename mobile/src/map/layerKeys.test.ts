@@ -62,6 +62,9 @@ describe("every MLRN Layer carries a key", () => {
     const offenders = layerElements(readFileSync(path, "utf8")).filter(
       (element) => !/(^|\s)key=/.test(element),
     );
-    expect(offenders).toEqual([]);
+    expect(
+      offenders,
+      "every <Layer> needs key equal to its id: MLRN 11 freezes a layer's id, so keyless siblings reconcile by index and crash on unmount (docs/decisions/0031)",
+    ).toEqual([]);
   });
 });
