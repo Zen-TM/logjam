@@ -1,0 +1,15 @@
+{
+  "format-on-write": {
+    "PostToolUse": [
+      {
+        "matcher": "write_to_file|replace_file_content",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/agent-format.py"
+          }
+        ]
+      }
+    ]
+  }
+}

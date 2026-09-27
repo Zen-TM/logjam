@@ -43,7 +43,7 @@ const VALID_CSV = [
 describe("fetchAndParseRopeWiki", () => {
   it("parses a valid row across every derived field", async () => {
     mockFetchCsv(VALID_CSV);
-    const { places, errors } = await fetchAndParseRopeWiki();
+    const { places } = await fetchAndParseRopeWiki();
     expect(places).toHaveLength(1);
     const c = places[0];
     expect(c.ropeWikiId).toBe(12345);

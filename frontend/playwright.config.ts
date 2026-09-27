@@ -19,28 +19,21 @@ const SIGN_IN_URL = process.env.E2E_SIGN_IN_URL ?? "http://localhost:5199";
 
 export default defineConfig({
   testDir: "./e2e",
-  // An axe walk is not a user interaction, and 30s (Playwright's default) is a
-  // UI-latency bound, not an analysis one. The a11y spec runs several full
-  // `analyze()` passes per test over the heaviest pages in the app, and with
-  // four workers sharing one machine those crossed 30s while every other test
-  // finished inside 27s (2026-09-17). Raised rather than retried: a retry would
-  // hide a real failure to make a loaded box look green.
-  //
-  // What that raise papered over, found 2026-09-19: the cost is the LIST, not
-  // the machine. axe is per-element, so walking Places charged 7.4s for 311
-  // rows of one repeated component against 0.17s for two, with the same result
-  // — and the dev account had grown from the 37 places the spec was written
-  // against. The cases narrow their list before walking it now (e2e/CLAUDE.md),
-  // which took Places from 51.7s to 13.5s. The 60s cap stays as headroom, not
-  // as the fix.
+  // Timeout: An axe walk is not a user interaction, and 30s (Playwright's default) is a
+  // UI-latency bound, not an analysis one. The 60s cap stays as headroom for a11y.
   timeout: 60_000,
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
+  // Flake policy: 2 retries in CI, 0 locally. In CI, retries are paired with
+  // the github reporter so any test that fails then passes is surfaced as a
+  // flake annotation rather than silently passing. Trace is captured on first
+  // retry and screenshot on failure. Revisit after 30 days of CI history.
   retries: process.env.CI ? 2 : 0,
-  reporter: "html",
+  reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "html",
   use: {
     baseURL,
     trace: "on-first-retry",
+    screenshot: "only-on-failure",
     // Playwright ships no chromium for some hosts; drive system Chrome via the
     // chrome channel instead.
     channel: "chrome",
@@ -58,14 +51,14 @@ export default defineConfig({
         {
           command: "npm run dev",
           url: "http://localhost:5173",
-          reuseExistingServer: true,
+          reuseExistingServer: !process.env.CI,
           env: { VITE_AUTH_MODE: "fake" },
           timeout: 60_000,
         },
         {
           command: "npm run dev -- --port 5199 --strictPort",
           url: SIGN_IN_URL,
-          reuseExistingServer: true,
+          reuseExistingServer: !process.env.CI,
           env: { VITE_AUTH_MODE: "cognito" },
           timeout: 60_000,
         },

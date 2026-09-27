@@ -16,8 +16,6 @@ import {
   validateRasterTemplateSettings,
   validateAutoExportSettings,
   VECTOR_STYLE_DEFAULTS,
-  estimateRuntimeSeconds,
-  type JobActual,
 } from "@logjam/shared";
 import { getEnv } from "../lib/env";
 import { getParam } from "../lib/getParam";

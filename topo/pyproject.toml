@@ -5,3 +5,11 @@ line-length = 88
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
+
+[tool.ruff.lint]
+select = ["E", "F"]
+ignore = [
+    "E501",  # line length handled by ruff format
+    "E402",  # module level import not at top (needed for _native_stub and sys.path)
+    "E741",  # ambiguous variable name
+]

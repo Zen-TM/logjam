@@ -6,7 +6,6 @@ import {
   mapAspectRatio,
   calcScale,
   geoWidthMeters,
-  geoHeightMeters,
   applyNorthChange,
   applySouthChange,
   applyEastChange,
@@ -43,7 +42,7 @@ function baseState(overrides?: Partial<ExtentState>): ExtentState {
 }
 
 /** Assert that the map aspect ratio matches the paper aspect ratio within tolerance. */
-function assertRatioInvariant(state: ExtentState, tolerance = 0.01) {
+function assertRatioInvariant(state: ExtentState) {
   const paper = getPaperDimensions(state);
   const paperRatio = paper.w / paper.h;
   const mapRatio = mapAspectRatio(state);

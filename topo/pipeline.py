@@ -39,7 +39,6 @@ import re
 import shutil
 import sqlite3
 import stat
-import struct
 import subprocess
 import sys
 import tempfile
@@ -69,7 +68,7 @@ def _load_icon(name: str) -> Image.Image:
     return _ICON_CACHE[name]
 
 
-from shapely.geometry import shape, mapping, Polygon, MultiPolygon, box as shapely_box
+from shapely.geometry import shape, mapping, Polygon, box as shapely_box
 from shapely.ops import unary_union
 from shapely.strtree import STRtree
 
@@ -221,7 +220,7 @@ class Benchmark:
         lines = [
             "",
             "═" * (col + bar_max + 20),
-            f"  BENCHMARK REPORT",
+            "  BENCHMARK REPORT",
             "═" * (col + bar_max + 20),
         ]
         for label, elapsed in self._steps:
@@ -2873,7 +2872,7 @@ def generate_contours(dtm_path: str, work_dir: str) -> dict:
     paths = {}
     for intervals_needed in [5, 10, 50]:
         out_path = os.path.join(work_dir, f"contours_{intervals_needed}m.geojson")
-        ds = gdal.ContourGenerate(
+        gdal.ContourGenerate(
             gdal.Open(dtm_path).GetRasterBand(1),
             intervals_needed,  # interval
             0,  # base
@@ -3405,7 +3404,6 @@ def render_features_tile(
         return img
 
     lon_min, lat_min, lon_max, lat_max = bbox_wgs84
-    scale = ground_metres_per_pixel(zoom)
     # This tile's index, used to claim line-label anchors (see draw_tile_label).
     tile_x, tile_y = lon_lat_to_tile(
         (lon_min + lon_max) / 2.0, (lat_min + lat_max) / 2.0, zoom
@@ -4119,7 +4117,6 @@ def main():
         with bench.step("Extract & detect inputs", key="extract"):
             contents = extract_elvis_zip(args.elvis_zip, work_dir)
 
-        las_strs = [str(f) for f in contents.las_files]
         # Populated in the MODE_LAZ_ONLY branch below (needs PDAL for density
         # probing). capture_year is derived from the recency-picked veg tiles so
         # the vegetation fire-staleness baseline reflects the surveys that

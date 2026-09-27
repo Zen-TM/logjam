@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "nodemon --exec ts-node src/index.ts",
     "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
     "start": "node dist/index.js",
     "test": "vitest run",
     "test:unit": "vitest run -c vitest.unit.config.ts"
@@ -43,6 +45,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
@@ -50,11 +53,14 @@
     "@types/pdfkit": "^0.17.5",
     "@types/pg": "^8.18.0",
     "@types/supertest": "^6.0.2",
+    "eslint": "^9.39.5",
+    "globals": "^16.5.0",
     "nodemon": "^3.1.14",
     "prisma": "^7.8.0",
     "supertest": "^7.0.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3",
+    "typescript-eslint": "^8.70.1",
     "vitest": "^4.1.8"
   },
   "overrides": {

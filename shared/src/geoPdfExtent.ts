@@ -393,7 +393,6 @@ const WGS84 = "EPSG:4326";
 
 function mgaProj(zone: 54 | 55 | 56): string {
   // GDA2020 / MGA zone projection string
-  const centralMeridian = (zone - 1) * 6 - 177; // 54→141, 55→147, 56→153
   return `+proj=utm +zone=${zone} +south +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs`;
 }
 

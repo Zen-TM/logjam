@@ -547,7 +547,7 @@ export async function generateGeoPdf(
   }
 
   if (config.elements.compass) {
-    stackY = drawCompass(mapCtx, config, stackY, elementMargin, elementDpi);
+    drawCompass(mapCtx, config, stackY, elementMargin, elementDpi);
   }
 
   if (config.elements.title) {

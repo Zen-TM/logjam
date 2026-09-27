@@ -10,7 +10,6 @@ Plain unittest (no pytest dep) so it runs unchanged in the worker Docker image.
 """
 
 import os
-import sys
 import unittest
 from unittest import mock
 
