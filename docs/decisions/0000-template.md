@@ -1,7 +1,7 @@
 # NNNN. Title in the imperative or as the decision's name
 
 - **Date:** YYYY-MM-DD (when the decision was made, not when this file was written)
-- **Status:** Draft | Accepted | Superseded by [NNNN](NNNN-title.md)
+- **Status:** Accepted | Superseded by [NNNN](NNNN-title.md)
 - **Supersedes:** [NNNN](NNNN-title.md) | —
 
 ## Context
@@ -20,9 +20,10 @@ enforces it, if one exists.
 - **Negative:**
 - **Neutral:**
 
-Only what the source records or the code shows. Otherwise write "Not recorded".
+Name the real cost of the choice. "Not recorded" is only for an ADR that
+backfills an old decision whose sources are silent.
 
 ## Alternatives considered
 
-Each option that was rejected, and why. Otherwise write "Not recorded" — never
-reconstruct history that nobody wrote down.
+Each option that was really rejected, and why; never invent one. "Not
+recorded" is only for a backfilled ADR, whose history nobody wrote down.

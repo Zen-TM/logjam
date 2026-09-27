@@ -1,7 +1,8 @@
 # Architecture decision records
 
 One file per decision, `NNNN-kebab-title.md`, in the order they were made.
-Start a new one from [`0000-template.md`](0000-template.md). An accepted
+Start a new one from [`0000-template.md`](0000-template.md); merging the PR
+that adds it accepts it. An accepted
 decision is never edited to say something else: write a new ADR that
 supersedes it, and mark the old one `Superseded by`.
 
