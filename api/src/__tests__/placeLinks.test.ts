@@ -31,15 +31,12 @@ const CLIENT = { "x-logjam-client": "mobile/0.1.0-test" } as const;
 // Synthetic coords only (committed-fixture rule).
 
 async function createMarker(sub: string, name: string): Promise<string> {
-  const res = await request(API_URL)
-    .post("/places")
-    .set(as(sub))
-    .send({
-      placeTypeId: MARKER_TYPE_ID,
-      name,
-      latitude: -33.65,
-      longitude: 150.25,
-    });
+  const res = await request(API_URL).post("/places").set(as(sub)).send({
+    placeTypeId: MARKER_TYPE_ID,
+    name,
+    latitude: -33.65,
+    longitude: 150.25,
+  });
   expect(res.status).toBe(201);
   return res.body.id as string;
 }
@@ -96,7 +93,10 @@ describe("place links over REST", () => {
 
     // A place that exists but is bob's, and one that exists nowhere: the
     // status must not tell them apart (404-not-403 anti-oracle).
-    for (const other of [BOB_SHARED_PLACE_ID, "00000000-0000-4000-8000-000000000000"]) {
+    for (const other of [
+      BOB_SHARED_PLACE_ID,
+      "00000000-0000-4000-8000-000000000000",
+    ]) {
       const res = await request(API_URL)
         .patch(`/places/${mine}`)
         .set(as(ALICE_SUB))
@@ -177,7 +177,9 @@ describe("a link grants no visibility (§2.5)", () => {
 
     // The carpark at the other end: 404, not 403 — bob must not learn it
     // exists at all.
-    const probe = await request(API_URL).get(`/places/${carpark}`).set(as(BOB_SUB));
+    const probe = await request(API_URL)
+      .get(`/places/${carpark}`)
+      .set(as(BOB_SUB));
     expect(probe.status).toBe(404);
 
     await del(ALICE_SUB, shared.body.id as string);
@@ -208,7 +210,9 @@ describe("a link grants no visibility (§2.5)", () => {
       .set({ ...as(ALICE_SUB), ...CLIENT })
       .query({ limit: 500 });
     expect(mine.status).toBe(200);
-    const linkIds = (mine.body.changes.placeLinks as { id: string }[]).map((l) => l.id);
+    const linkIds = (mine.body.changes.placeLinks as { id: string }[]).map(
+      (l) => l.id,
+    );
     expect(linkIds.length).toBeGreaterThan(0);
 
     const theirs = await request(API_URL)
@@ -303,13 +307,18 @@ describe("place links over the sync push protocol", () => {
       .set({ ...as(ALICE_SUB), ...CLIENT })
       .query({ limit: 500 });
     expect(delta.status).toBe(200);
-    const placeIds = (delta.body.changes.places as { id: string }[]).map((p) => p.id);
+    const placeIds = (delta.body.changes.places as { id: string }[]).map(
+      (p) => p.id,
+    );
     expect(placeIds).toContain(first);
     expect(placeIds).toContain(second);
     const link = (delta.body.changes.placeLinks as { id: string }[]).find(
       (l) => l.id === linkId,
     );
-    expect(link, "the pushed link should come back down the delta").toBeTruthy();
+    expect(
+      link,
+      "the pushed link should come back down the delta",
+    ).toBeTruthy();
     // Dependency order (DELTA_ENTITY_ORDER): places before the links that
     // name them, so a client applying a page never holds a link to a row it
     // has not been given.

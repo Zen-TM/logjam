@@ -10,11 +10,7 @@
 // unsynced changes" confirmation — see wipeAllSyncData).
 import * as SQLite from "expo-sqlite";
 
-import {
-  MIRROR_TABLES,
-  SYNC_TABLES,
-  createSchemaSql,
-} from "./mirrorSchema";
+import { MIRROR_TABLES, SYNC_TABLES, createSchemaSql } from "./mirrorSchema";
 import { OUTBOX_ENTITIES } from "./outboxTables";
 
 /**
@@ -114,7 +110,9 @@ export async function getSyncDb(): Promise<SQLite.SQLiteDatabase> {
       // before the drop-and-rebuild that would have added the column. The
       // mirror stayed at the old shape and every delta apply failed, on every
       // launch, for ever.
-      await db.execAsync(`PRAGMA journal_mode = WAL;\n${createSchemaSql("local")}`);
+      await db.execAsync(
+        `PRAGMA journal_mode = WAL;\n${createSchemaSql("local")}`,
+      );
       await ensureLocalColumns(db);
       if (await dropStaleMirror(db)) await purgeDeadVocabularyOps(db);
       await db.execAsync(createSchemaSql("mirror"));
@@ -149,7 +147,9 @@ async function ensureLocalColumns(db: SQLite.SQLiteDatabase): Promise<void> {
     const present = new Set(existing.map((column) => column.name));
     for (const [name, decl] of Object.entries(table.columns)) {
       if (present.has(name)) continue;
-      await db.execAsync(`ALTER TABLE ${table.name} ADD COLUMN ${name} ${decl}`);
+      await db.execAsync(
+        `ALTER TABLE ${table.name} ADD COLUMN ${name} ${decl}`,
+      );
     }
   }
 }
@@ -197,7 +197,9 @@ async function dropStaleMirror(db: SQLite.SQLiteDatabase): Promise<boolean> {
  * OUTBOX_ENTITIES, so an op the current protocol still understands is never
  * touched. Unsendable by construction, so nothing recoverable is lost.
  */
-async function purgeDeadVocabularyOps(db: SQLite.SQLiteDatabase): Promise<void> {
+async function purgeDeadVocabularyOps(
+  db: SQLite.SQLiteDatabase,
+): Promise<void> {
   const placeholders = OUTBOX_ENTITIES.map(() => "?").join(", ");
   await db.withTransactionAsync(async () => {
     for (const table of ["outbox", "conflict_shelf"]) {
@@ -211,7 +213,9 @@ async function purgeDeadVocabularyOps(db: SQLite.SQLiteDatabase): Promise<void> 
 
 /** Record the shape the mirror now has. Written after the tables exist, never
  *  before — a stamp ahead of the CREATE would make a failed create look done. */
-async function stampMirrorSchemaVersion(db: SQLite.SQLiteDatabase): Promise<void> {
+async function stampMirrorSchemaVersion(
+  db: SQLite.SQLiteDatabase,
+): Promise<void> {
   await db.runAsync(
     "INSERT OR REPLACE INTO sync_state (key, value) VALUES (?, ?)",
     "schemaVersion",
@@ -284,7 +288,10 @@ export async function getSyncStateValue(key: string): Promise<string | null> {
   return row?.value ?? null;
 }
 
-export async function setSyncStateValue(key: string, value: string): Promise<void> {
+export async function setSyncStateValue(
+  key: string,
+  value: string,
+): Promise<void> {
   const db = await getSyncDb();
   await db.runAsync(
     "INSERT OR REPLACE INTO sync_state (key, value) VALUES (?, ?)",

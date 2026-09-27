@@ -12,7 +12,7 @@ import {
   BOB_SHARED_ROUTE_ID,
   NONEXISTENT_ID,
   as,
-  CANYON_TYPE_ID
+  CANYON_TYPE_ID,
 } from "./_actors";
 
 // Sharing-audit surface (fix 24): GET/DELETE /friends/:id/shares.
@@ -50,7 +50,9 @@ type SharesBody = { sharedWithThem: ShareRow[]; sharedWithYou: ShareRow[] };
 
 /** The place ids in one direction of the payload. */
 function placeIdsIn(rows: ShareRow[]): string[] {
-  return rows.filter((row) => row.entityType === "place").map((row) => row.entityId);
+  return rows
+    .filter((row) => row.entityType === "place")
+    .map((row) => row.entityId);
 }
 
 /** A throwaway unlinked route owned by `sub`, for the `Share`-table arm. */
@@ -72,7 +74,10 @@ async function createRoute(sub: string, name: string): Promise<string> {
 let aliceBobFriendshipId: string;
 let seededForwardShares: ShareRow[] = [];
 
-async function friendshipIdFor(sub: string, otherUserId: string): Promise<string> {
+async function friendshipIdFor(
+  sub: string,
+  otherUserId: string,
+): Promise<string> {
   const res = await request(API_URL).get("/friends").set(as(sub));
   expect(res.status).toBe(200);
   const row = res.body.find((f: { id: string }) => f.id === otherUserId);
@@ -92,7 +97,9 @@ beforeAll(async () => {
 afterAll(async () => {
   // Restore every seeded alice->bob PLACE share the bulk-revoke test removed.
   // (Routes created by this file are throwaways — nothing depends on them.)
-  for (const row of seededForwardShares.filter((r) => r.entityType === "place")) {
+  for (const row of seededForwardShares.filter(
+    (r) => r.entityType === "place",
+  )) {
     await request(API_URL)
       .post(`/places/${row.entityId}/share`)
       .set(as(ALICE_SUB))
@@ -157,7 +164,11 @@ describe("GET /friends/:id/shares — the audit surface", () => {
     const grant = await request(API_URL)
       .post("/shares")
       .set(as(ALICE_SUB))
-      .send({ entityType: "route", entityId: routeId, sharedWithUserId: BOB_ID });
+      .send({
+        entityType: "route",
+        entityId: routeId,
+        sharedWithUserId: BOB_ID,
+      });
     expect(grant.status).toBe(201);
 
     const mine = await request(API_URL)
@@ -167,7 +178,10 @@ describe("GET /friends/:id/shares — the audit surface", () => {
     const row = (mine.body as SharesBody).sharedWithThem.find(
       (r) => r.entityId === routeId,
     );
-    expect(row, "the shared route should appear in alice's forward list").toBeTruthy();
+    expect(
+      row,
+      "the shared route should appear in alice's forward list",
+    ).toBeTruthy();
     expect(row!.entityType).toBe("route");
     expect(row!.name).toBe("friend-shares-union");
 
@@ -201,7 +215,9 @@ describe("GET /friends/:id/shares — the audit surface", () => {
       .set(as(ALICE_SUB));
     expect(mine.status).toBe(200);
     const body = mine.body as SharesBody;
-    expect(body.sharedWithThem.map((r) => r.entityId)).not.toContain(carolRoute);
+    expect(body.sharedWithThem.map((r) => r.entityId)).not.toContain(
+      carolRoute,
+    );
     expect(body.sharedWithYou.map((r) => r.entityId)).not.toContain(carolRoute);
   });
 
@@ -218,10 +234,12 @@ describe("GET /friends/:id/shares — the audit surface", () => {
   // distinction is the whole reason this two-arm case still exists.
   it("marks a received row that ALSO rides a place the friend shared", async () => {
     // A place of bob's, shared with alice.
-    const place = await request(API_URL)
-      .post("/places")
-      .set(as(BOB_SUB))
-      .send({ placeTypeId: CANYON_TYPE_ID, name: "friend-shares-inherit", latitude: -33.57, longitude: 150.39 });
+    const place = await request(API_URL).post("/places").set(as(BOB_SUB)).send({
+      placeTypeId: CANYON_TYPE_ID,
+      name: "friend-shares-inherit",
+      latitude: -33.57,
+      longitude: 150.39,
+    });
     expect(place.status).toBe(201);
     const placeId = place.body.id as string;
     await request(API_URL)
@@ -256,10 +274,11 @@ describe("GET /friends/:id/shares — the audit surface", () => {
     expect(loose.status).toBe(201);
 
     for (const id of [linked.body.id, loose.body.id]) {
-      await request(API_URL)
-        .post("/shares")
-        .set(as(BOB_SUB))
-        .send({ entityType: "route", entityId: id, sharedWithUserId: ALICE_ID });
+      await request(API_URL).post("/shares").set(as(BOB_SUB)).send({
+        entityType: "route",
+        entityId: id,
+        sharedWithUserId: ALICE_ID,
+      });
     }
 
     const res = await request(API_URL)
@@ -279,8 +298,12 @@ describe("GET /friends/:id/shares — the audit surface", () => {
     // SHARED bob→alice, so leaving it behind changes the seed baseline the
     // exact-set assertions above depend on — the file then passes on a fresh
     // seed and fails on the second run, which is how this arrived.
-    await request(API_URL).delete(`/routes/${linked.body.id as string}`).set(as(BOB_SUB));
-    await request(API_URL).delete(`/routes/${loose.body.id as string}`).set(as(BOB_SUB));
+    await request(API_URL)
+      .delete(`/routes/${linked.body.id as string}`)
+      .set(as(BOB_SUB));
+    await request(API_URL)
+      .delete(`/routes/${loose.body.id as string}`)
+      .set(as(BOB_SUB));
     await request(API_URL).delete(`/places/${placeId}`).set(as(BOB_SUB));
   });
 
@@ -317,7 +340,10 @@ describe("GET /friends/:id/shares — the audit surface", () => {
       .set(as(ALICE_SUB));
     expect(requests.status).toBe(200);
     const pending = requests.body[0];
-    expect(pending, "expected the seeded carol->alice pending request").toBeTruthy();
+    expect(
+      pending,
+      "expected the seeded carol->alice pending request",
+    ).toBeTruthy();
     const res = await request(API_URL)
       .get(`/friends/${pending.id as string}/shares`)
       .set(as(ALICE_SUB));
@@ -337,10 +363,11 @@ describe("DELETE /friends/:id/shares — unshare all", () => {
   // picked, and nothing else.
   it("revokes only the items named in the body", async () => {
     const routeId = await createRoute(ALICE_SUB, "friend-shares-subset");
-    await request(API_URL)
-      .post("/shares")
-      .set(as(ALICE_SUB))
-      .send({ entityType: "route", entityId: routeId, sharedWithUserId: BOB_ID });
+    await request(API_URL).post("/shares").set(as(ALICE_SUB)).send({
+      entityType: "route",
+      entityId: routeId,
+      sharedWithUserId: BOB_ID,
+    });
 
     const del = await request(API_URL)
       .delete(`/friends/${aliceBobFriendshipId}/shares`)
@@ -431,7 +458,11 @@ describe("DELETE /friends/:id/shares — unshare all", () => {
     expect(bobRead.status).toBe(404);
 
     // The friendship itself survives — that's the difference from unfriending.
-    const stillFriends = await request(API_URL).get("/friends").set(as(ALICE_SUB));
-    expect(stillFriends.body.map((f: { id: string }) => f.id)).toContain(BOB_ID);
+    const stillFriends = await request(API_URL)
+      .get("/friends")
+      .set(as(ALICE_SUB));
+    expect(stillFriends.body.map((f: { id: string }) => f.id)).toContain(
+      BOB_ID,
+    );
   });
 });

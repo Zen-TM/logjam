@@ -13,7 +13,15 @@ import {
   type ScopedCustomFieldDef,
 } from "@logjam/shared";
 
-import { fontSize, fontWeight, radius, spacing, surface, theme, withAlpha } from "../theme";
+import {
+  fontSize,
+  fontWeight,
+  radius,
+  spacing,
+  surface,
+  theme,
+  withAlpha,
+} from "../theme";
 import type { MirrorPlace, MirrorTrip } from "../sync/mirrorStore";
 import {
   createTripLocal,
@@ -123,16 +131,20 @@ export function TripEditSheet({
   // Custom-field VALUES are held as strings while editing (like the web form)
   // and coerced to their declared type on save.
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
-  const {
-    defs: customFieldDefs,
-    setDefs: setCustomFieldDefs,
-  } = useFieldDefs("tripLog");
-  const [editingField, setEditingField] = useState<ScopedCustomFieldDef | null>(null);
+  const { defs: customFieldDefs, setDefs: setCustomFieldDefs } =
+    useFieldDefs("tripLog");
+  const [editingField, setEditingField] = useState<ScopedCustomFieldDef | null>(
+    null,
+  );
   // The attribute keys this form keeps whatever the tags say. See
   // `visibleFieldDefs`.
-  const [keptKeys, setKeptKeys] = useState<ReadonlySet<string>>(() => new Set());
+  const [keptKeys, setKeptKeys] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
   const keepField = useCallback((key: string) => {
-    setKeptKeys((current) => (current.has(key) ? current : new Set(current).add(key)));
+    setKeptKeys((current) =>
+      current.has(key) ? current : new Set(current).add(key),
+    );
   }, []);
   // The trip as it was when the sheet OPENED. Save diffs against this, not the
   // live row: a sync landing mid-edit must neither reset the form nor make a
@@ -241,7 +253,12 @@ export function TripEditSheet({
 
   const typeOptions: ChipOption[] = useMemo(() => {
     const vocabulary = [
-      ...new Set([...TRIP_TYPE_SUGGESTIONS, ...existingTypes, ...customTypes, ...types]),
+      ...new Set([
+        ...TRIP_TYPE_SUGGESTIONS,
+        ...existingTypes,
+        ...customTypes,
+        ...types,
+      ]),
     ];
     return vocabulary.map((type) => ({
       value: type,
@@ -269,7 +286,9 @@ export function TripEditSheet({
       setCustomTypes((current) =>
         current.includes(value) ? current : [...current, value],
       );
-      setTypes((current) => (current.includes(value) ? current : [...current, value]));
+      setTypes((current) =>
+        current.includes(value) ? current : [...current, value],
+      );
     },
     [typeOptions],
   );
@@ -284,7 +303,9 @@ export function TripEditSheet({
         return;
       }
       if (selected.length >= MAX_PLACES_PER_TRIP) {
-        setPlacesError(`A trip can have at most ${MAX_PLACES_PER_TRIP} places.`);
+        setPlacesError(
+          `A trip can have at most ${MAX_PLACES_PER_TRIP} places.`,
+        );
         return;
       }
       setSelected([...selected, { id: place.id, name: place.name }]);
@@ -325,12 +346,15 @@ export function TripEditSheet({
         // so a concurrent edit to another field on another device isn't
         // clobbered (§6 LWW).
         const changes: Parameters<typeof updateTripLocal>[1] = {};
-        if (isoDate !== new Date(base.date).toISOString()) changes.date = isoDate;
+        if (isoDate !== new Date(base.date).toISOString())
+          changes.date = isoDate;
         if ((trimmedName || null) !== base.displayName) {
           changes.displayName = trimmedName || null;
         }
-        if ((trimmedNotes || null) !== base.notes) changes.notes = trimmedNotes || null;
-        if (!sameOrder(effectiveTypes, base.types)) changes.types = effectiveTypes;
+        if ((trimmedNotes || null) !== base.notes)
+          changes.notes = trimmedNotes || null;
+        if (!sameOrder(effectiveTypes, base.types))
+          changes.types = effectiveTypes;
         if (!sameFieldValues(effectiveCustomFields, base.customFields ?? {})) {
           changes.customFields = effectiveCustomFields;
         }
@@ -400,13 +424,16 @@ export function TripEditSheet({
     mode === "date"
       ? dateTarget.kind === "trip"
         ? "Trip date"
-        : (visibleFieldDefs.find((def) => def.key === dateTarget.key)?.label ?? "Date")
+        : (visibleFieldDefs.find((def) => def.key === dateTarget.key)?.label ??
+          "Date")
       : mode === "places"
         ? "Places on this trip"
         : mode === "fields"
           ? `Your trip ${ATTRIBUTE_NOUN.many}`
           : mode === "fieldForm"
-            ? (editingField ? editingField.label : `New trip ${ATTRIBUTE_NOUN.one}`)
+            ? editingField
+              ? editingField.label
+              : `New trip ${ATTRIBUTE_NOUN.one}`
             : editing
               ? "Edit trip"
               : "Log a trip";
@@ -463,18 +490,18 @@ export function TripEditSheet({
             }}
           />
         ) : (
-          <Button
-            label="Done"
-            icon="check"
-            onPress={() => setMode("form")}
-          />
+          <Button label="Done" icon="check" onPress={() => setMode("form")} />
         )
       }
     >
       {mode === "date" ? (
         <View style={styles.modeBody}>
           <DatePicker
-            value={dateTarget.kind === "trip" ? dateKey : (fieldValues[dateTarget.key] || null)}
+            value={
+              dateTarget.kind === "trip"
+                ? dateKey
+                : fieldValues[dateTarget.key] || null
+            }
             onChange={(key) => {
               if (dateTarget.kind === "trip") {
                 setDateKey(key);
@@ -532,7 +559,9 @@ export function TripEditSheet({
             icon="calendar"
             title={formatDateKey(`${dateKey}T00:00:00.000Z`)}
             subtitle="Date"
-            right={<Feather name="chevron-right" size={20} color={theme.textMuted} />}
+            right={
+              <Feather name="chevron-right" size={20} color={theme.textMuted} />
+            }
             onPress={() => setMode("date")}
           />
           <Row
@@ -542,7 +571,9 @@ export function TripEditSheet({
               selected.length === 1 ? "1 place" : `${selected.length} places`
             }
             titleNumberOfLines={2}
-            right={<Feather name="chevron-right" size={20} color={theme.textMuted} />}
+            right={
+              <Feather name="chevron-right" size={20} color={theme.textMuted} />
+            }
             onPress={() => setMode("places")}
           />
 
@@ -571,10 +602,16 @@ export function TripEditSheet({
             // The chips no longer move to show which type leads, so the one
             // that picks the trip's glyph and hue is starred — only once there
             // is a choice between two, when it stops being obvious.
-            primaryValue={types.length > 1 ? (primaryTripType(types) ?? undefined) : undefined}
+            primaryValue={
+              types.length > 1
+                ? (primaryTripType(types) ?? undefined)
+                : undefined
+            }
           />
           {types.length > 1 ? (
-            <Text style={styles.hint}>The starred type sets the trip’s icon.</Text>
+            <Text style={styles.hint}>
+              The starred type sets the trip’s icon.
+            </Text>
           ) : null}
 
           <View style={styles.field}>
@@ -603,8 +640,8 @@ export function TripEditSheet({
                 label={`Leftover ${ATTRIBUTE_NOUN.many} · ${keptOnlyFieldDefs.length}`}
               />
               <Text style={styles.hint}>
-                These {ATTRIBUTE_NOUN.many} are left over from when this trip was saved
-                as a different type.
+                These {ATTRIBUTE_NOUN.many} are left over from when this trip
+                was saved as a different type.
               </Text>
               <CustomFieldValueInputs
                 defs={keptOnlyFieldDefs}
@@ -626,7 +663,9 @@ export function TripEditSheet({
                 ? "Add your own — water level, party size, anything"
                 : `${customFieldDefs.length} ${customFieldDefs.length === 1 ? ATTRIBUTE_NOUN.one : ATTRIBUTE_NOUN.many}`
             }
-            right={<Feather name="chevron-right" size={20} color={theme.textMuted} />}
+            right={
+              <Feather name="chevron-right" size={20} color={theme.textMuted} />
+            }
             onPress={() => setMode("fields")}
           />
         </View>
@@ -661,7 +700,8 @@ function PlacePicker({
   const selectedIds = new Set(selected.map((link) => link.id));
   const query = search.trim().toLowerCase();
   const matches = places.filter(
-    (place) => !selectedIds.has(place.id) && place.name.toLowerCase().includes(query),
+    (place) =>
+      !selectedIds.has(place.id) && place.name.toLowerCase().includes(query),
   );
   const pinned = selected
     .map((link) => places.find((place) => place.id === link.id))

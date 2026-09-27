@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { TOPO_LAYERS, RASTER_TEMPLATE_DEFAULTS, cloneRasterTemplateSettings } from "./topoSettings";
+import {
+  TOPO_LAYERS,
+  RASTER_TEMPLATE_DEFAULTS,
+  cloneRasterTemplateSettings,
+} from "./topoSettings";
 import {
   RASTER_LAYERS,
   VECTOR_LAYERS,
@@ -91,11 +95,19 @@ describe("validateExportRequest", () => {
 
   it("rejects composite bundling for geojson and gpx (no raster pyramid concept)", () => {
     expect(
-      validateExportRequest({ format: "geojson", bundling: "composite", layers: [vector] }),
+      validateExportRequest({
+        format: "geojson",
+        bundling: "composite",
+        layers: [vector],
+      }),
     ).toEqual({ ok: false, error: "GeoJSON cannot be composited" });
 
     expect(
-      validateExportRequest({ format: "gpx", bundling: "composite", layers: ["features"] }),
+      validateExportRequest({
+        format: "gpx",
+        bundling: "composite",
+        layers: ["features"],
+      }),
     ).toEqual({ ok: false, error: "GPX cannot be composited" });
   });
 
@@ -105,7 +117,10 @@ describe("validateExportRequest", () => {
       bundling: "composite",
       layers: [],
     });
-    expect(result).toEqual({ ok: false, error: "at least one layer is required" });
+    expect(result).toEqual({
+      ok: false,
+      error: "at least one layer is required",
+    });
   });
 
   it("rejects an unknown format", () => {
@@ -198,7 +213,11 @@ describe("reconcileExportSelection", () => {
 
   it("drops layers that are not available", () => {
     const out = reconcileExportSelection(
-      { format: "mbtiles", bundling: "composite", layers: ["hillshade", "contours"] },
+      {
+        format: "mbtiles",
+        bundling: "composite",
+        layers: ["hillshade", "contours"],
+      },
       new Set<TopoLayerKey>(["hillshade"]),
     );
     expect(out.layers).toEqual(["hillshade"]);
@@ -206,7 +225,11 @@ describe("reconcileExportSelection", () => {
 
   it("drops layers not eligible for the format (raster for geojson)", () => {
     const out = reconcileExportSelection(
-      { format: "geojson", bundling: "per-layer", layers: ["hillshade", "contours"] },
+      {
+        format: "geojson",
+        bundling: "per-layer",
+        layers: ["hillshade", "contours"],
+      },
       all,
     );
     expect(out.layers).toEqual(["contours"]);
@@ -214,7 +237,11 @@ describe("reconcileExportSelection", () => {
 
   it("drops contours for gpx (features-only allowlist)", () => {
     const out = reconcileExportSelection(
-      { format: "gpx", bundling: "per-layer", layers: ["contours", "features"] },
+      {
+        format: "gpx",
+        bundling: "per-layer",
+        layers: ["contours", "features"],
+      },
       all,
     );
     expect(out.layers).toEqual(["features"]);
@@ -254,7 +281,11 @@ describe("reconcileExportSelection", () => {
 
   it("is idempotent", () => {
     const once = reconcileExportSelection(
-      { format: "geojson", bundling: "composite", layers: ["hillshade", "contours"] },
+      {
+        format: "geojson",
+        bundling: "composite",
+        layers: ["hillshade", "contours"],
+      },
       all,
     );
     const twice = reconcileExportSelection(once, all);

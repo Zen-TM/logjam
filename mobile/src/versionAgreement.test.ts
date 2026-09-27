@@ -11,7 +11,7 @@ import packageJson from "../package.json";
 // MIN_MOBILE_VERSION gate blocks everyone or no one, silently.
 describe("app version has one declaration", () => {
   const appJson = JSON.parse(
-    readFileSync(join(__dirname, "../app.json"), "utf8")
+    readFileSync(join(__dirname, "../app.json"), "utf8"),
   ) as { expo: Record<string, unknown> };
 
   it("app.json does not declare its own version", () => {

@@ -64,6 +64,9 @@ export async function geocode(
       lon: Number(d.lon),
     }))
     .filter(
-      (r) => r.displayName !== "" && Number.isFinite(r.lat) && Number.isFinite(r.lon),
+      (r) =>
+        r.displayName !== "" &&
+        Number.isFinite(r.lat) &&
+        Number.isFinite(r.lon),
     );
 }

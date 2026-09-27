@@ -61,9 +61,9 @@ describe("splitIntoByteChunks", () => {
 
 describe("toSecureStoreKey", () => {
   it("passes safe keys through unchanged", () => {
-    expect(toSecureStoreKey("CognitoIdentityServiceProvider.abc123.idToken")).toBe(
-      "CognitoIdentityServiceProvider.abc123.idToken",
-    );
+    expect(
+      toSecureStoreKey("CognitoIdentityServiceProvider.abc123.idToken"),
+    ).toBe("CognitoIdentityServiceProvider.abc123.idToken");
   });
 
   it("encodes unsafe characters (email-shaped usernames)", () => {
@@ -134,7 +134,9 @@ describe("createChunkedKeyValueStorage", () => {
     await kv.setItem("k", "short");
     expect(await kv.getItem("k")).toBe("short");
     // No orphaned chunk keys remain
-    const chunkKeys = [...backend.store.keys()].filter((k) => k.includes("__chunk_"));
+    const chunkKeys = [...backend.store.keys()].filter((k) =>
+      k.includes("__chunk_"),
+    );
     expect(chunkKeys).toEqual([]);
   });
 
@@ -184,7 +186,9 @@ describe("createChunkedKeyValueStorage", () => {
       if (++writes > 2) throw new Error("power lost");
       await set(k, v);
     };
-    await expect(kv.setItem("token", "x".repeat(50))).rejects.toThrow("power lost");
+    await expect(kv.setItem("token", "x".repeat(50))).rejects.toThrow(
+      "power lost",
+    );
     backend.set = set;
     expect([...backend.store.keys()]).toContain("token__chunk_0");
 
@@ -199,7 +203,9 @@ describe("createChunkedKeyValueStorage", () => {
     backend.store.set("token__chunk_1", "orphan-b");
 
     await kv.removeItem("token");
-    expect([...backend.store.keys()].filter((k) => k.startsWith("token"))).toEqual([]);
+    expect(
+      [...backend.store.keys()].filter((k) => k.startsWith("token")),
+    ).toEqual([]);
   });
 
   it("a later write sweeps orphans left beside the key", async () => {

@@ -58,23 +58,36 @@ describe("placeSummary", () => {
   it("caps at three facts, but promotes a lower-priority one when a gap frees a slot", () => {
     // Nothing ellipsises mid-number in a row this narrow, and an abseil count is
     // worth more than the fourth slot it would otherwise sit in.
-    expect(summaryOf({
-        vGrade: 1, aGrade: 2, hours: 7, numAbseils: 0 })).toBe(
-      "v1a2 · 7 h · 0 abseils",
-    );
+    expect(
+      summaryOf({
+        vGrade: 1,
+        aGrade: 2,
+        hours: 7,
+        numAbseils: 0,
+      }),
+    ).toBe("v1a2 · 7 h · 0 abseils");
   });
 
   it("states only what is known, with no placeholders", () => {
-    expect(summaryOf({
-        vGrade: 3 })).toBe("v3");
+    expect(
+      summaryOf({
+        vGrade: 3,
+      }),
+    ).toBe("v3");
     expect(summaryOf({})).toBe("");
   });
 
   it("trims a whole float but keeps a real fraction", () => {
-    expect(summaryOf({
-        hours: 4 })).toBe("4 h");
-    expect(summaryOf({
-        hours: 4.5 })).toBe("4.5 h");
+    expect(
+      summaryOf({
+        hours: 4,
+      }),
+    ).toBe("4 h");
+    expect(
+      summaryOf({
+        hours: 4.5,
+      }),
+    ).toBe("4.5 h");
   });
 });
 

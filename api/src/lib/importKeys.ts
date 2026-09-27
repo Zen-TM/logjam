@@ -9,10 +9,16 @@ import { normalizePlaceName } from "@logjam/shared";
  * Two CSV rows that refer to the same place (modulo formatting noise) produce
  * the same key, so re-import is idempotent.
  */
-export function placeImportKey(name: string, latitude: number, longitude: number): string {
+export function placeImportKey(
+  name: string,
+  latitude: number,
+  longitude: number,
+): string {
   const base = normalizePlaceName(name).base;
   const coordStr = latitude.toFixed(5) + "," + longitude.toFixed(5);
-  const hash = createHash("sha256").update(base + "|" + coordStr).digest("hex");
+  const hash = createHash("sha256")
+    .update(base + "|" + coordStr)
+    .digest("hex");
   return "csv:" + hash;
 }
 
@@ -27,7 +33,12 @@ export function stableJson(value: unknown): string {
     return "[" + value.map((v) => stableJson(v)).join(",") + "]";
   }
   const sorted = Object.keys(value as Record<string, unknown>).sort();
-  const parts = sorted.map((k) => JSON.stringify(k) + ":" + stableJson((value as Record<string, unknown>)[k]));
+  const parts = sorted.map(
+    (k) =>
+      JSON.stringify(k) +
+      ":" +
+      stableJson((value as Record<string, unknown>)[k]),
+  );
   return "{" + parts.join(",") + "}";
 }
 
@@ -42,7 +53,14 @@ export function tripContentHash(
   notes: string | null | undefined,
   customFields: Record<string, unknown> | null | undefined,
 ): string {
-  const payload = sourcePlaceName + "|" + isoDate + "|" + (notes ?? "") + "|" + stableJson(customFields ?? {});
+  const payload =
+    sourcePlaceName +
+    "|" +
+    isoDate +
+    "|" +
+    (notes ?? "") +
+    "|" +
+    stableJson(customFields ?? {});
   return createHash("sha256").update(payload).digest("hex");
 }
 
@@ -69,7 +87,12 @@ export function assignTripImportKeys(
 ): Array<{ contentHash: string; occurrence: number; importKey: string }> {
   const occurrenceCounts = new Map<string, number>();
   return trips.map((trip) => {
-    const hash = tripContentHash(trip.sourcePlaceName, trip.date, trip.notes, trip.customFields);
+    const hash = tripContentHash(
+      trip.sourcePlaceName,
+      trip.date,
+      trip.notes,
+      trip.customFields,
+    );
     const occurrence = occurrenceCounts.get(hash) ?? 0;
     occurrenceCounts.set(hash, occurrence + 1);
     return {

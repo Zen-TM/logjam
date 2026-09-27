@@ -55,7 +55,11 @@ import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import * as FileSystem from "expo-file-system/legacy";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import * as Location from "expo-location";
-import { DeviceMotion, Magnetometer, type DeviceMotionMeasurement } from "expo-sensors";
+import {
+  DeviceMotion,
+  Magnetometer,
+  type DeviceMotionMeasurement,
+} from "expo-sensors";
 import {
   SYSTEM_PLACE_TYPE_IDS,
   DEM_ATTRIBUTION,
@@ -193,8 +197,16 @@ import {
   type MarkerColorId,
   type NorthReference,
 } from "./mapPreferences";
-import { FIX_MOVE_MIN_M, fixQuality, type FixLiveness, type FixQuality } from "./gpsSignal";
-import { readBasemapPreference, setBasemapPreference } from "./basemapPreference";
+import {
+  FIX_MOVE_MIN_M,
+  fixQuality,
+  type FixLiveness,
+  type FixQuality,
+} from "./gpsSignal";
+import {
+  readBasemapPreference,
+  setBasemapPreference,
+} from "./basemapPreference";
 import { MOBILE_BASEMAPS } from "./basemapMeta";
 import { readMutedTopoAreas, writeMutedTopoAreas } from "./topoAreaMuting";
 import { offlineCoverageMask } from "./offlineMask";
@@ -264,14 +276,18 @@ import {
 } from "../tracks/trackWriteQueue";
 import { useTracks } from "../tracks/useTracks";
 import { ensureForegroundLocationPermission } from "./locationPermission";
-import { listEnabledOverlayKeys, setOverlayEnabled } from "../offline/registryDb";
 import {
-  useRegionDownloads,
-} from "../offline/regionDownloadQueue";
+  listEnabledOverlayKeys,
+  setOverlayEnabled,
+} from "../offline/registryDb";
+import { useRegionDownloads } from "../offline/regionDownloadQueue";
 import { groupRegionJobs } from "../offline/regionDownloadGroups";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
 import { useBasemapAssets } from "./basemap/basemapAssets";
-import { ProtomapsLayers, protomapsLayerCount } from "./basemap/ProtomapsLayers";
+import {
+  ProtomapsLayers,
+  protomapsLayerCount,
+} from "./basemap/ProtomapsLayers";
 import { buildShellStyle } from "./basemap/shellStyle";
 import { withDefaultEasing } from "./cameraStop";
 import {
@@ -389,7 +405,6 @@ async function currentHeading(): Promise<number | null> {
   }
 }
 
-
 /** Gap between the stacked instruments, and the same value their container uses. */
 const INSTRUMENT_GAP = spacing(0.75);
 
@@ -462,11 +477,12 @@ const GPS_TOAST_MIN_GAP_MS = 300_000;
 /** Tag for this screen's wake lock, so releasing it can't release anyone else's. */
 const KEEP_AWAKE_TAG = "logjam-map";
 
-const LOCATE_ICON: Record<FollowMode, "navigation" | "crosshair" | "compass"> = {
-  off: "navigation",
-  follow: "crosshair",
-  "course-up": "compass",
-};
+const LOCATE_ICON: Record<FollowMode, "navigation" | "crosshair" | "compass"> =
+  {
+    off: "navigation",
+    follow: "crosshair",
+    "course-up": "compass",
+  };
 
 const LOCATE_LABEL: Record<FollowMode, string> = {
   off: "Show where I am",
@@ -477,7 +493,6 @@ const LOCATE_LABEL: Record<FollowMode, string> = {
 function getCompletedOverlays(): Promise<CompletedOverlaysResponse> {
   return apiFetch<CompletedOverlaysResponse>("/topo-jobs/completed-overlays");
 }
-
 
 // Contour layers get contour styling; every other vector layer is the OSM
 // features set (web parity: `id.includes("contours")`).
@@ -534,19 +549,39 @@ const UserLocationMarker = memo(function UserLocationMarker({
   // GeoJSONSource plus two symbol layers to MLRN on every render. Same split as
   // LiveCompassStrip below, for the same reason.
   return lockUpright ? (
-    <UprightUserMarker coord={coord} markerColorId={markerColorId} quality={quality} />
+    <UprightUserMarker
+      coord={coord}
+      markerColorId={markerColorId}
+      quality={quality}
+    />
   ) : (
-    <BearingUserMarker coord={coord} markerColorId={markerColorId} quality={quality} />
+    <BearingUserMarker
+      coord={coord}
+      markerColorId={markerColorId}
+      quality={quality}
+    />
   );
 });
 
-const UprightUserMarker = memo(function UprightUserMarker(props: UserMarkerProps) {
+const UprightUserMarker = memo(function UprightUserMarker(
+  props: UserMarkerProps,
+) {
   // Only "is there a heading at all" can change here, which is twice a session.
-  return <UserMarkerLayers {...props} heading={useHasLiveHeading() ? 0 : null} upright />;
+  return (
+    <UserMarkerLayers
+      {...props}
+      heading={useHasLiveHeading() ? 0 : null}
+      upright
+    />
+  );
 });
 
-const BearingUserMarker = memo(function BearingUserMarker(props: UserMarkerProps) {
-  return <UserMarkerLayers {...props} heading={useLiveHeading()} upright={false} />;
+const BearingUserMarker = memo(function BearingUserMarker(
+  props: UserMarkerProps,
+) {
+  return (
+    <UserMarkerLayers {...props} heading={useLiveHeading()} upright={false} />
+  );
 });
 
 type UserMarkerProps = {
@@ -593,7 +628,9 @@ function UserMarkerLayers({
           // where the compass says (that sensor is fine, and needs no sky) —
           // only the claim about WHERE it is standing is withdrawn.
           iconImage:
-            quality === "live" ? `user-arrow-${markerColorId}` : "user-arrow-stale",
+            quality === "live"
+              ? `user-arrow-${markerColorId}`
+              : "user-arrow-stale",
           iconSize: 0.42,
           iconRotate: heading ?? 0,
           iconRotationAlignment: rotationAlignment,
@@ -639,7 +676,9 @@ const USER_MARKER_IMAGES: Record<
   "user-arrow-amber": { source: require("../../assets/user-arrow-amber.png") },
   "user-arrow-red": { source: require("../../assets/user-arrow-red.png") },
   "user-arrow-green": { source: require("../../assets/user-arrow-green.png") },
-  "user-arrow-violet": { source: require("../../assets/user-arrow-violet.png") },
+  "user-arrow-violet": {
+    source: require("../../assets/user-arrow-violet.png"),
+  },
   "user-arrow-white": { source: require("../../assets/user-arrow-white.png") },
   /** Not a colour choice — the state the arrow falls back to when the fix
    *  behind it goes stale or coarse. Same artwork as the others (white halo
@@ -705,7 +744,8 @@ const LiveCompassStrip = memo(function LiveCompassStrip({
   width: number;
   reference: NorthReference;
 }) {
-  if (!enabled) return <CompassStrip heading={null} width={width} reference={reference} />;
+  if (!enabled)
+    return <CompassStrip heading={null} width={width} reference={reference} />;
   return <SubscribedCompassStrip width={width} reference={reference} />;
 });
 
@@ -849,9 +889,9 @@ export function MapScreen({
    * half off it. Screen x arrives in dp — MLRN divides the native press point
    * by the display density before emitting it (MLRNMapView.kt).
    */
-  const [selectedAnchorSide, setSelectedAnchorSide] = useState<"left" | "right">(
-    "left",
-  );
+  const [selectedAnchorSide, setSelectedAnchorSide] = useState<
+    "left" | "right"
+  >("left");
   /** A handle is being dragged. Only the delete button reads it, to get out of
    *  the way for the length of the gesture — it is pinned to the point being
    *  moved, so it would otherwise chase the finger across the map, sitting
@@ -928,13 +968,15 @@ export function MapScreen({
   // allowed set: types arrive from the server and one created on another
   // device would otherwise be invisible here until this screen learned about
   // it. An empty set is "draw everything", which is also the cold-start state.
-  const [hiddenPlaceTypeIds, setHiddenPlaceTypeIds] = useState<ReadonlySet<string>>(
-    () => new Set<string>(),
-  );
+  const [hiddenPlaceTypeIds, setHiddenPlaceTypeIds] = useState<
+    ReadonlySet<string>
+  >(() => new Set<string>());
   const [showGeoPdfs, setShowGeoPdfs] = useState(true);
   const [showVectorImports, setShowVectorImports] = useState(true);
   const [showOverlays, setShowOverlays] = useState(true);
-  const [routesStatus, setRoutesStatus] = useState<PlaceRoutesStatus | null>(null);
+  const [routesStatus, setRoutesStatus] = useState<PlaceRoutesStatus | null>(
+    null,
+  );
   // Settled camera readout, used only to hand the offline-download screen the
   // ground the user is looking at. The scale bar does NOT read this: it follows
   // the camera continuously through its own ref (see scaleBarRef), because
@@ -995,7 +1037,9 @@ export function MapScreen({
   // Enabled topo overlays. Seeded from the persisted set (registryDb) so a
   // downloaded overlay stays visible across a cold offline launch; toggles
   // write through. Saved overlays are auto-enabled on download.
-  const [enabledOverlays, setEnabledOverlays] = useState<ReadonlySet<string>>(new Set());
+  const [enabledOverlays, setEnabledOverlays] = useState<ReadonlySet<string>>(
+    new Set(),
+  );
   // Re-read on focus (not just mount): the Saved screen's "Save offline"
   // action auto-enables an overlay by writing overlay_enabled directly, and
   // that table has no change listener (unlike the artifact registry) — a
@@ -1009,16 +1053,21 @@ export function MapScreen({
   // five reads are synchronous (`prefsDb`), so the first frame after a change is
   // already correct — a chrome column that slides across a beat later would be
   // its own bug.
-  const [controlSide, setControlSide] = useState<MapControlSide>(readMapControlSide);
-  const [markerColorId, setMarkerColorId] = useState<MarkerColorId>(readMarkerColorId);
-  const [keepAwakeMode, setKeepAwakeMode] = useState<KeepAwakeMode>(readKeepAwakeMode);
+  const [controlSide, setControlSide] =
+    useState<MapControlSide>(readMapControlSide);
+  const [markerColorId, setMarkerColorId] =
+    useState<MarkerColorId>(readMarkerColorId);
+  const [keepAwakeMode, setKeepAwakeMode] =
+    useState<KeepAwakeMode>(readKeepAwakeMode);
   const [northUpLocked, setNorthUpLocked] = useState(isNorthUpLocked);
   // Mirror, for the gesture callbacks: they are memoised once and would
   // otherwise close over the value this screen had when it mounted.
   const northUpLockedRef = useRef(northUpLocked);
   northUpLockedRef.current = northUpLocked;
-  const [longPressAction, setLongPressAction] = useState<LongPressAction>(readLongPressAction);
-  const [northReference, setNorthReference] = useState<NorthReference>(readNorthReference);
+  const [longPressAction, setLongPressAction] =
+    useState<LongPressAction>(readLongPressAction);
+  const [northReference, setNorthReference] =
+    useState<NorthReference>(readNorthReference);
   const [scaleBarEnabled, setScaleBarEnabled] = useState(isScaleBarEnabled);
   const [speedElevationEnabled, setSpeedElevationEnabled] = useState(
     isSpeedElevationEnabled,
@@ -1045,7 +1094,8 @@ export function MapScreen({
   // Which areas are hidden wholesale — the "where" axis of the overlay matrix
   // (topoAreaMuting.ts). Independent of the per-cell enabled set above, so
   // unmuting an area restores whatever layers were selected for it.
-  const [mutedAreas, setMutedAreas] = useState<ReadonlySet<string>>(readMutedTopoAreas);
+  const [mutedAreas, setMutedAreas] =
+    useState<ReadonlySet<string>>(readMutedTopoAreas);
   const setAreasMuted = useCallback((areaIds: string[], muted: boolean) => {
     setMutedAreas((prev) => {
       const next = new Set(prev);
@@ -1139,7 +1189,10 @@ export function MapScreen({
       // A route with a single point (a lone waypoint file) has a zero-area
       // bbox; fitting to it asks the camera for infinite zoom. Centre on the
       // point at a fixed close zoom instead.
-      if (east - west < DEGENERATE_BBOX_DEGREES && north - south < DEGENERATE_BBOX_DEGREES) {
+      if (
+        east - west < DEGENERATE_BBOX_DEGREES &&
+        north - south < DEGENERATE_BBOX_DEGREES
+      ) {
         void cameraRef.current.setStop({
           center: [(west + east) / 2, (south + north) / 2],
           zoom: SINGLE_POINT_ZOOM,
@@ -1153,7 +1206,12 @@ export function MapScreen({
       // Bounds are west, south, east, north (GeoJSON order) in MLRN 11 — the
       // same numbers this function already takes as its bbox.
       cameraRef.current.fitBounds(bbox, {
-        padding: { top: padding, right: padding, bottom: padding, left: padding },
+        padding: {
+          top: padding,
+          right: padding,
+          bottom: padding,
+          left: padding,
+        },
         duration: 600,
       });
     },
@@ -1272,7 +1330,8 @@ export function MapScreen({
   const renderedBasemapId = useDeferredValue(basemapId);
 
   const basemapResolved = useMemo(
-    () => resolveMapSource({ kind: "basemap", basemapId: renderedBasemapId }, ctx),
+    () =>
+      resolveMapSource({ kind: "basemap", basemapId: renderedBasemapId }, ctx),
     [renderedBasemapId, ctx],
   );
 
@@ -1317,7 +1376,9 @@ export function MapScreen({
   // basemap is actually being drawn FROM those saved tiles. Online there is
   // nothing to hide behind (see offlineMask.ts).
   const offlineMask = useMemo(() => {
-    if (!basemapResolved.some((r) => r.status === "ok" && r.origin === "local")) {
+    if (
+      !basemapResolved.some((r) => r.status === "ok" && r.origin === "local")
+    ) {
       return null;
     }
     return offlineCoverageMask(
@@ -1456,7 +1517,13 @@ export function MapScreen({
           : [],
         placeTypeColors,
       ),
-    [allowedPlaceIds, hiddenPlaceTypeIds, ownedPlaces, placeTypeColors, showPlaces],
+    [
+      allowedPlaceIds,
+      hiddenPlaceTypeIds,
+      ownedPlaces,
+      placeTypeColors,
+      showPlaces,
+    ],
   );
   // A shared place obeys the per-type switches too: "stop drawing campsites"
   // means campsites, not "my campsites". The global Shared switch is the other
@@ -1563,8 +1630,9 @@ export function MapScreen({
   const selectedAnchorCoord =
     selectedAnchor === null
       ? null
-      : (activeDraft?.draft?.anchors[selectedAnchor] as [number, number] | undefined) ??
-        null;
+      : ((activeDraft?.draft?.anchors[selectedAnchor] as
+          | [number, number]
+          | undefined) ?? null);
 
   const removeSelectedAnchor = useCallback(() => {
     if (selectedAnchor === null || !activeDraft) return;
@@ -1605,10 +1673,14 @@ export function MapScreen({
         ]);
         return;
       }
-      Alert.alert("Discard this route?", "The points you placed will be lost.", [
-        { text: "Keep drawing", style: "cancel" },
-        { text: "Discard", style: "destructive", onPress: discard },
-      ]);
+      Alert.alert(
+        "Discard this route?",
+        "The points you placed will be lost.",
+        [
+          { text: "Keep drawing", style: "cancel" },
+          { text: "Discard", style: "destructive", onPress: discard },
+        ],
+      );
     },
     [editingRouteId, routeDraft],
   );
@@ -1630,7 +1702,11 @@ export function MapScreen({
       "The line is emptied and the tool stays open. Undo brings the points back.",
       [
         { text: "Keep the points", style: "cancel" },
-        { text: "Clear points", style: "destructive", onPress: routeDraft.clear },
+        {
+          text: "Clear points",
+          style: "destructive",
+          onPress: routeDraft.clear,
+        },
       ],
     );
   }, [routeDraft]);
@@ -1692,10 +1768,13 @@ export function MapScreen({
   // silently leaving the map with a draft armed.
   useEffect(() => {
     if (!routeDraft.active) return;
-    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
-      handleCancelRouteDraw();
-      return true;
-    });
+    const subscription = BackHandler.addEventListener(
+      "hardwareBackPress",
+      () => {
+        handleCancelRouteDraw();
+        return true;
+      },
+    );
     return () => subscription.remove();
   }, [handleCancelRouteDraw, routeDraft.active]);
 
@@ -1929,7 +2008,9 @@ export function MapScreen({
         const hit = pressedAnchorIndex(lon, lat);
         if (hit !== null) {
           setSelectedAnchor(hit);
-          setSelectedAnchorSide(anchorDeleteSideFor(event.nativeEvent.point?.[0] ?? null));
+          setSelectedAnchorSide(
+            anchorDeleteSideFor(event.nativeEvent.point?.[0] ?? null),
+          );
           return;
         }
         setSelectedAnchor(null);
@@ -2026,13 +2107,20 @@ export function MapScreen({
       const writeFrame = () => {
         const now = Date.now();
         const elapsed = now - startedAt;
-        const zoom = zoomRampValue(startZoom, targetZoom, elapsed, ZOOM_RAMP_MS);
+        const zoom = zoomRampValue(
+          startZoom,
+          targetZoom,
+          elapsed,
+          ZOOM_RAMP_MS,
+        );
         if (latestFix.current) {
           // ONE CAMERA WRITER AT A TIME. `tickHeading` stands down for the
           // length of the ramp (see there), so this stop carries the BEARING as
           // well as the centre and the zoom.
           const bearing =
-            followModeRef.current === "course-up" ? headingFilter.current.value : null;
+            followModeRef.current === "course-up"
+              ? headingFilter.current.value
+              : null;
           // DURATION 0 — A JUMP PER FRAME, exactly like the pinch
           // (`useMapPinchGesture`), and for the same reason. An ANIMATED stop
           // per tick is what made this jitter: a stop does not blend into the
@@ -2244,7 +2332,12 @@ export function MapScreen({
   const [navTarget, setNavTarget] = useState<Waypoint | null>(null);
   const navDistanceM =
     navTarget && userCoord
-      ? haversineMeters(userCoord[1], userCoord[0], navTarget.lat, navTarget.lon)
+      ? haversineMeters(
+          userCoord[1],
+          userCoord[0],
+          navTarget.lat,
+          navTarget.lon,
+        )
       : null;
   const navBearingDeg =
     navTarget && userCoord
@@ -2382,8 +2475,10 @@ export function MapScreen({
           // decode it a character at a time on the UI thread, then run the
           // import with an empty progress callback — minutes of frozen app with
           // nothing on screen to say why.
-          const outcome = await runGeoPdfImport("Shared map", (onProgress, token) =>
-            importGeoPdfFile("Shared map", url, onProgress, token),
+          const outcome = await runGeoPdfImport(
+            "Shared map",
+            (onProgress, token) =>
+              importGeoPdfFile("Shared map", url, onProgress, token),
           );
           if (outcome?.status === "imported" && outcome.record.bbox) {
             fitCameraToBbox(outcome.record.bbox);
@@ -2444,7 +2539,8 @@ export function MapScreen({
     // View until then), and `setCameraStop` against a null ref is silently
     // dropped — so an effect that ran plainly on mount did nothing at all, on
     // every launch. `mapReady` is the same condition that gate uses.
-    if (!mapReady || centredOnOpen.current || openedWithDestination.current) return;
+    if (!mapReady || centredOnOpen.current || openedWithDestination.current)
+      return;
     centredOnOpen.current = true;
     let cancelled = false;
     void (async () => {
@@ -2519,7 +2615,9 @@ export function MapScreen({
           setShowRoutes(true);
           break;
         case "geoPdf":
-          updateGeoPdfImport(focus.reveal.key, { visible: true }).catch(console.error);
+          updateGeoPdfImport(focus.reveal.key, { visible: true }).catch(
+            console.error,
+          );
           break;
         case "import":
           setVectorImportVisible(focus.reveal.key, true).catch(console.error);
@@ -2534,7 +2632,9 @@ export function MapScreen({
             if (job.jobId !== jobId) continue;
             for (const layer of job.layers) {
               const key = `${job.jobId}/${layer.name}`;
-              setEnabledOverlays((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
+              setEnabledOverlays((prev) =>
+                prev.has(key) ? prev : new Set(prev).add(key),
+              );
               setOverlayEnabled(key, true).catch(console.error);
             }
           }
@@ -2561,7 +2661,14 @@ export function MapScreen({
     if (focus.basemapId) {
       setFocusPulse({ bbox: focus.bbox, nonce: focus.nonce });
     }
-  }, [focus?.nonce, focus, chooseBasemap, fitCameraToBbox, mergedOverlays, setAreasMuted]);
+  }, [
+    focus?.nonce,
+    focus,
+    chooseBasemap,
+    fitCameraToBbox,
+    mergedOverlays,
+    setAreasMuted,
+  ]);
 
   // Frame a draft restored from a killed session, once the map can take a
   // camera stop. Cleared after one use — the user's own panning owns the
@@ -2656,17 +2763,22 @@ export function MapScreen({
 
   // The two-finger gesture and the drag that ends a follow mode — the whole of
   // the touch-responder contract, in its own file (see useMapPinchGesture).
-  const { twoFingerLock, pinchStart, observeTouches, handlePinchMove, endPinch } =
-    useMapPinchGesture({
-      followModeRef,
-      setFollowMode,
-      latestFix,
-      zoomRef,
-      headingRef,
-      northUpLockedRef,
-      userMovedCamera,
-      setCameraStop,
-    });
+  const {
+    twoFingerLock,
+    pinchStart,
+    observeTouches,
+    handlePinchMove,
+    endPinch,
+  } = useMapPinchGesture({
+    followModeRef,
+    setFollowMode,
+    latestFix,
+    zoomRef,
+    headingRef,
+    northUpLockedRef,
+    userMovedCamera,
+    setCameraStop,
+  });
 
   // Live camera → the scale bar only, at gesture rate. Coordinates stay in
   // component state only — never logged (privacy rule).
@@ -2786,14 +2898,17 @@ export function MapScreen({
   );
 
   // Place search result: recentre without changing zoom intent drastically.
-  const handleSelectPlace = useCallback((latitude: number, longitude: number) => {
-    setFollowMode("off");
-    setCameraStop({
-      center: [longitude, latitude],
-      zoom: 13,
-      duration: 800,
-    });
-  }, [setCameraStop]);
+  const handleSelectPlace = useCallback(
+    (latitude: number, longitude: number) => {
+      setFollowMode("off");
+      setCameraStop({
+        center: [longitude, latitude],
+        zoom: 13,
+        duration: 800,
+      });
+    },
+    [setCameraStop],
+  );
 
   /**
    * Put the latest fix back under the crosshair, at the standard scale
@@ -2965,14 +3080,19 @@ export function MapScreen({
     // versa, which is what made a double tap in course-up read as two
     // mechanisms fighting. The heading still ticks and is still PUBLISHED above
     // — the arrow and the compass tape must not freeze.
-    if (followModeRef.current === "course-up" && zoomRampFrame.current == null) {
+    if (
+      followModeRef.current === "course-up" &&
+      zoomRampFrame.current == null
+    ) {
       const previous = lastPovBearing.current;
       if (
         previous == null ||
         Math.abs(shortestAngleDelta(previous, next)) >= POV_DEADBAND_DEG
       ) {
         const sinceLastWrite =
-          lastPovWriteAt.current === 0 ? HEADING_TICK_MS : now - lastPovWriteAt.current;
+          lastPovWriteAt.current === 0
+            ? HEADING_TICK_MS
+            : now - lastPovWriteAt.current;
         lastPovWriteAt.current = now;
         lastPovBearing.current = next;
         setCameraStop({
@@ -3232,47 +3352,44 @@ export function MapScreen({
    */
   const previousReadoutFix = useRef<ReadoutFix | null>(null);
   const readoutSeq = useRef(0);
-  const noteReadoutFix = useCallback(
-    (position: Location.LocationObject) => {
-      if (!speedElevationEnabledRef.current) return;
-      const fix: ReadoutFix = {
-        lon: position.coords.longitude,
-        lat: position.coords.latitude,
-        speedMps: position.coords.speed,
-        atMs: position.timestamp,
-      };
-      const speedMps = deriveSpeedMps(fix, previousReadoutFix.current);
-      previousReadoutFix.current = fix;
-      publishLiveReadout({
-        speedMps,
-        elevationM: position.coords.altitude,
-        fromTerrain: false,
-        atMs: fix.atMs,
-      });
+  const noteReadoutFix = useCallback((position: Location.LocationObject) => {
+    if (!speedElevationEnabledRef.current) return;
+    const fix: ReadoutFix = {
+      lon: position.coords.longitude,
+      lat: position.coords.latitude,
+      speedMps: position.coords.speed,
+      atMs: position.timestamp,
+    };
+    const speedMps = deriveSpeedMps(fix, previousReadoutFix.current);
+    previousReadoutFix.current = fix;
+    publishLiveReadout({
+      speedMps,
+      elevationM: position.coords.altitude,
+      fromTerrain: false,
+      atMs: fix.atMs,
+    });
 
-      // Guarded by a sequence number: tile reads resolve out of order, and a
-      // late answer for a fix two positions ago would overwrite the current
-      // one with the height of somewhere the user has left.
-      const seq = (readoutSeq.current += 1);
-      // `distanceM` describes a position's place along a LINE; a lone point is
-      // at zero of one.
-      sampleElevations([{ lon: fix.lon, lat: fix.lat, distanceM: 0 }], {
-        allowNetwork: !offlineOnlyRef.current,
+    // Guarded by a sequence number: tile reads resolve out of order, and a
+    // late answer for a fix two positions ago would overwrite the current
+    // one with the height of somewhere the user has left.
+    const seq = (readoutSeq.current += 1);
+    // `distanceM` describes a position's place along a LINE; a lone point is
+    // at zero of one.
+    sampleElevations([{ lon: fix.lon, lat: fix.lat, distanceM: 0 }], {
+      allowNetwork: !offlineOnlyRef.current,
+    })
+      .then(([elevationM]) => {
+        if (seq !== readoutSeq.current || elevationM == null) return;
+        publishLiveReadout({
+          speedMps,
+          elevationM,
+          fromTerrain: true,
+          atMs: fix.atMs,
+        });
       })
-        .then(([elevationM]) => {
-          if (seq !== readoutSeq.current || elevationM == null) return;
-          publishLiveReadout({
-            speedMps,
-            elevationM,
-            fromTerrain: true,
-            atMs: fix.atMs,
-          });
-        })
-        // No detail: the error could carry a tile index, which is a position.
-        .catch(() => undefined);
-    },
-    [],
-  );
+      // No detail: the error could carry a tile index, which is a position.
+      .catch(() => undefined);
+  }, []);
 
   // The dot's own position watcher.
   //
@@ -3487,7 +3604,9 @@ export function MapScreen({
    * there is simply no reading and no banner — the map is no worse off than it
    * was, it just cannot warn.
    */
-  const [compassCalibration, setCompassCalibration] = useState(NO_COMPASS_CALIBRATION);
+  const [compassCalibration, setCompassCalibration] = useState(
+    NO_COMPASS_CALIBRATION,
+  );
   const [fieldWindow, setFieldWindow] = useState(EMPTY_FIELD_WINDOW);
   // In the dep array so the cadence changes with the verdict. It flips at most
   // once per transition, and the restart's immediate probe is exactly what a
@@ -3692,7 +3811,9 @@ export function MapScreen({
       if (!routeDraft.active) {
         measureDraft.close();
         setEditingRouteId(null);
-        setDraftColor(pickNextTrackColor(routes.data?.map((r) => r.color) ?? []));
+        setDraftColor(
+          pickNextTrackColor(routes.data?.map((r) => r.color) ?? []),
+        );
         routeDraft.open({ points: [[point.longitude, point.latitude]] });
         return;
       }
@@ -3920,7 +4041,8 @@ export function MapScreen({
       areaLabel: job.name ?? job.jobId.slice(0, 8),
       layer: layer.name,
       layerLabel:
-        TOPO_LAYERS.find((meta) => meta.name === layer.name)?.label ?? layer.name,
+        TOPO_LAYERS.find((meta) => meta.name === layer.name)?.label ??
+        layer.name,
     })),
   );
 
@@ -4121,8 +4243,7 @@ export function MapScreen({
     onTrackWriteHealthChanged,
     isRecordingWriteFailing,
   );
-  const scaleBarMaxWidth =
-    windowWidth - FAB_SIZE - CHROME_GAP * 3 - spacing(1);
+  const scaleBarMaxWidth = windowWidth - FAB_SIZE - CHROME_GAP * 3 - spacing(1);
   // The handedness swap, in three places that must agree: the JS action column,
   // the JS instruments, and MapLibre's own compass ornament (position 2 is
   // bottom-left, 3 is bottom-right). Absolute offsets rather than a flex
@@ -4315,10 +4436,7 @@ export function MapScreen({
         onPress={handleMapPress}
         onLongPress={handleMapLongPress}
       >
-        <Camera
-          ref={cameraRef}
-          initialViewState={CAMERA_DEFAULTS}
-        />
+        <Camera ref={cameraRef} initialViewState={CAMERA_DEFAULTS} />
         {/* Bundled point-feature icons for vector overlays. */}
         <TopoIconImages />
         {/* Locate-me sprite: one baked PNG per Settings → Map colour choice
@@ -4457,7 +4575,11 @@ export function MapScreen({
                 id={`import-line-${imported.id}`}
                 layerIndex={base + 1}
                 filter={
-                  ["any", ["==", "$type", "LineString"], ["==", "$type", "Polygon"]] as never
+                  [
+                    "any",
+                    ["==", "$type", "LineString"],
+                    ["==", "$type", "Polygon"],
+                  ] as never
                 }
                 style={{
                   lineColor: imported.color,
@@ -4488,7 +4610,9 @@ export function MapScreen({
             Mirror-backed, so it draws with no signal for any file this phone
             has fetched; mounted before the place pins so the pins stay on
             top of their own lines. */}
-        {showPlaceRoutes ? <PlaceRoutesLayer onStatus={setRoutesStatus} /> : null}
+        {showPlaceRoutes ? (
+          <PlaceRoutesLayer onStatus={setRoutesStatus} />
+        ) : null}
 
         {/* Saved routes, below the point markers — a route is ink on the map and
             a waypoint or place marker must stay above it (the draft layer below
@@ -4691,41 +4815,50 @@ export function MapScreen({
           interrupted by the button going away — it keeps running, and the card
           is dismissed in one tap. */}
       {collectingPoints ? null : (
-      <View
-        style={[
-          styles.recordSlot,
-          { top: insets.top + CHROME_GAP },
-          controlsOnLeft ? { left: CHROME_GAP } : { right: CHROME_GAP },
-        ]}
-      >
-        <RecordButton
-          state={activeTrack?.state === "done" ? null : (activeTrack?.state ?? null)}
-          // The same gate the sensors run behind: no frames for a screen
-          // nobody is looking at (mobile/CLAUDE.md, Battery).
-          animate={sensorsActive}
-          onPress={() => {
-            if (activeTrack) {
-              setRecordingSheetOpen(true);
-              return;
+        <View
+          style={[
+            styles.recordSlot,
+            { top: insets.top + CHROME_GAP },
+            controlsOnLeft ? { left: CHROME_GAP } : { right: CHROME_GAP },
+          ]}
+        >
+          <RecordButton
+            state={
+              activeTrack?.state === "done"
+                ? null
+                : (activeTrack?.state ?? null)
             }
-            // Explicitly closed, not merely left alone: a recording discarded
-            // from inside the sheet unmounts it while this flag is still true,
-            // and the next one would then open onto a panel nobody asked for.
-            setRecordingSheetOpen(false);
-            void handleStartRecording();
-          }}
-          // Finishing must never require finding the panel first — cold hands,
-          // wet phone, a party waiting. Same confirm as the sheet's button.
-          onLongPress={
-            activeTrack ? () => confirmFinishRecording(activeTrack.id) : undefined
-          }
-        />
-      </View>
+            // The same gate the sensors run behind: no frames for a screen
+            // nobody is looking at (mobile/CLAUDE.md, Battery).
+            animate={sensorsActive}
+            onPress={() => {
+              if (activeTrack) {
+                setRecordingSheetOpen(true);
+                return;
+              }
+              // Explicitly closed, not merely left alone: a recording discarded
+              // from inside the sheet unmounts it while this flag is still true,
+              // and the next one would then open onto a panel nobody asked for.
+              setRecordingSheetOpen(false);
+              void handleStartRecording();
+            }}
+            // Finishing must never require finding the panel first — cold hands,
+            // wet phone, a party waiting. Same confirm as the sheet's button.
+            onLongPress={
+              activeTrack
+                ? () => confirmFinishRecording(activeTrack.id)
+                : undefined
+            }
+          />
+        </View>
       )}
 
       {/* Everything that talks to the user from the top of the map stacks in
           one column, so a second message can never land on top of the first. */}
-      <View style={[styles.noticeStack, { top: noticeTop }]} pointerEvents="box-none">
+      <View
+        style={[styles.noticeStack, { top: noticeTop }]}
+        pointerEvents="box-none"
+      >
         {/* The recording's numbers live behind the record button now, but this
             one line cannot: a recorder that is not saving points must say so
             without being asked (MLIFE-001). Everything else about a running
@@ -4769,7 +4902,8 @@ export function MapScreen({
             atCap={routeDraft.atCap}
             editingName={
               editingRouteId
-                ? (routes.data?.find((r) => r.id === editingRouteId)?.name ?? null)
+                ? (routes.data?.find((r) => r.id === editingRouteId)?.name ??
+                  null)
                 : null
             }
             saving={savingRoute}
@@ -4911,7 +5045,10 @@ export function MapScreen({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={LOCATE_LABEL[followMode]}
-          style={[styles.controlButton, followMode !== "off" && styles.controlActive]}
+          style={[
+            styles.controlButton,
+            followMode !== "off" && styles.controlActive,
+          ]}
           onPress={handleLocateMe}
         >
           {/* Three states, three glyphs: an arrow you are not following, a
@@ -4945,7 +5082,9 @@ export function MapScreen({
             two that were here first must not move when this one is switched
             on. It subscribes to its own value — a fix must not re-render this
             screen (mobile/CLAUDE.md, Battery). */}
-        {speedElevationEnabled ? <SpeedElevationChip active={sensorsActive} /> : null}
+        {speedElevationEnabled ? (
+          <SpeedElevationChip active={sensorsActive} />
+        ) : null}
         <LiveCompassStrip
           enabled={compassEnabled}
           width={compassWidth}
@@ -5152,7 +5291,9 @@ export function MapScreen({
         visible={loggingPlace !== null}
         places={places.data ?? []}
         initialPlaces={
-          loggingPlace ? [{ id: loggingPlace.id, name: loggingPlace.name }] : undefined
+          loggingPlace
+            ? [{ id: loggingPlace.id, name: loggingPlace.name }]
+            : undefined
         }
         existingTypes={tripTypes}
         onClose={() => setLoggingPlace(null)}
@@ -5383,7 +5524,11 @@ const styles = StyleSheet.create({
   // Centred, because the banner is centre-anchored (`alignSelf`) and grows
   // around its own midline — left-aligned text in a box that moves under it
   // reads as drifting, and these wrap to two lines at large text sizes.
-  noticeText: { color: theme.textPrimary, fontSize: fontSize.sm, textAlign: "center" },
+  noticeText: {
+    color: theme.textPrimary,
+    fontSize: fontSize.sm,
+    textAlign: "center",
+  },
   // Takes the slack so the dismiss sits at the pill's right edge rather than
   // floating next to the text.
   filterBadgeText: { flex: 1, color: theme.textPrimary, fontSize: fontSize.sm },
@@ -5460,5 +5605,9 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     fontWeight: fontWeight.regular,
   },
-  deleteText: { color: theme.warning, fontSize: fontSize.sm, fontWeight: "600" },
+  deleteText: {
+    color: theme.warning,
+    fontSize: fontSize.sm,
+    fontWeight: "600",
+  },
 });

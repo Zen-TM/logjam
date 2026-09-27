@@ -37,7 +37,11 @@ const IMPORT_METADATA = {
   positionCount: 2,
 };
 
-async function putToPresignedUrl(url: string, body: Buffer, contentType: string) {
+async function putToPresignedUrl(
+  url: string,
+  body: Buffer,
+  contentType: string,
+) {
   const res = await fetch(url, {
     method: "PUT",
     headers: { "Content-Type": contentType },
@@ -92,15 +96,23 @@ describe("a standalone file belongs to its owner and to nobody else", () => {
   it("uploads with no parent, and lists for the owner alone", async () => {
     const mediaId = await createStandaloneImport(ALICE_SUB);
     try {
-      const mine = await request(API_URL).get("/media/standalone").set(as(ALICE_SUB));
+      const mine = await request(API_URL)
+        .get("/media/standalone")
+        .set(as(ALICE_SUB));
       expect(mine.status).toBe(200);
-      expect(mine.body.some((file: { id: string }) => file.id === mediaId)).toBe(true);
+      expect(
+        mine.body.some((file: { id: string }) => file.id === mediaId),
+      ).toBe(true);
 
       // A stranger's list is their own. Not an authorisation error — the row is
       // simply not theirs, and an error would confirm it exists.
-      const theirs = await request(API_URL).get("/media/standalone").set(as(CAROL_SUB));
+      const theirs = await request(API_URL)
+        .get("/media/standalone")
+        .set(as(CAROL_SUB));
       expect(theirs.status).toBe(200);
-      expect(theirs.body.some((file: { id: string }) => file.id === mediaId)).toBe(false);
+      expect(
+        theirs.body.some((file: { id: string }) => file.id === mediaId),
+      ).toBe(false);
     } finally {
       await deleteMedia(ALICE_SUB, mediaId);
     }
@@ -144,7 +156,11 @@ describe("a standalone file belongs to its owner and to nobody else", () => {
         filename: "bad-stats.gpx",
         mediaType: GPX_MIME,
         sizeBytes: GPX_BYTES.length,
-        metadata: { bbox: [999, -33.5, 150.41, -33.4], featureCount: 1, positionCount: 2 },
+        metadata: {
+          bbox: [999, -33.5, 150.41, -33.4],
+          featureCount: 1,
+          positionCount: 2,
+        },
       });
     expect(res.status).toBe(400);
   });
@@ -156,9 +172,13 @@ describe("linking a standalone file as a place's way", () => {
     const mediaId = await createStandaloneImport(ALICE_SUB);
     try {
       // Before linking: owner-private. Bob sees the place but not the file.
-      const before = await request(API_URL).get(`/places/${placeId}`).set(as(BOB_SUB));
+      const before = await request(API_URL)
+        .get(`/places/${placeId}`)
+        .set(as(BOB_SUB));
       expect(before.status).toBe(200);
-      expect(before.body.media.some((m: { id: string }) => m.id === mediaId)).toBe(false);
+      expect(
+        before.body.media.some((m: { id: string }) => m.id === mediaId),
+      ).toBe(false);
 
       const link = await request(API_URL)
         .patch(`/media/${mediaId}/link`)
@@ -167,8 +187,12 @@ describe("linking a standalone file as a place's way", () => {
       expect(link.status).toBe(200);
       expect(link.body.linkedId).toBe(placeId);
 
-      const after = await request(API_URL).get(`/places/${placeId}`).set(as(BOB_SUB));
-      expect(after.body.media.some((m: { id: string }) => m.id === mediaId)).toBe(true);
+      const after = await request(API_URL)
+        .get(`/places/${placeId}`)
+        .set(as(BOB_SUB));
+      expect(
+        after.body.media.some((m: { id: string }) => m.id === mediaId),
+      ).toBe(true);
 
       const unlink = await request(API_URL)
         .patch(`/media/${mediaId}/link`)
@@ -179,12 +203,20 @@ describe("linking a standalone file as a place's way", () => {
       expect(unlink.body.linkedId).toBeNull();
 
       // Revoked for the sharee...
-      const revoked = await request(API_URL).get(`/places/${placeId}`).set(as(BOB_SUB));
-      expect(revoked.body.media.some((m: { id: string }) => m.id === mediaId)).toBe(false);
+      const revoked = await request(API_URL)
+        .get(`/places/${placeId}`)
+        .set(as(BOB_SUB));
+      expect(
+        revoked.body.media.some((m: { id: string }) => m.id === mediaId),
+      ).toBe(false);
       // ...and still the owner's. THIS is the change: displacing a place's way
       // used to delete the file, because the place held a copy of it.
-      const mine = await request(API_URL).get("/media/standalone").set(as(ALICE_SUB));
-      expect(mine.body.some((file: { id: string }) => file.id === mediaId)).toBe(true);
+      const mine = await request(API_URL)
+        .get("/media/standalone")
+        .set(as(ALICE_SUB));
+      expect(
+        mine.body.some((file: { id: string }) => file.id === mediaId),
+      ).toBe(true);
     } finally {
       await deleteMedia(ALICE_SUB, mediaId);
     }
@@ -242,9 +274,11 @@ describe("linking a standalone file as a place's way", () => {
 
   it("only a standalone file can be linked — a photo has no existence apart from its place", async () => {
     const placeId = SHARED_PLACE_ID;
-    const place = await request(API_URL).get(`/places/${placeId}`).set(as(ALICE_SUB));
-    const photo = place.body.media.find(
-      (m: { mediaType: string }) => m.mediaType.startsWith("image/"),
+    const place = await request(API_URL)
+      .get(`/places/${placeId}`)
+      .set(as(ALICE_SUB));
+    const photo = place.body.media.find((m: { mediaType: string }) =>
+      m.mediaType.startsWith("image/"),
     );
     if (!photo) return; // seed has one; skip rather than fail if it is ever dropped
     const res = await request(API_URL)
@@ -257,7 +291,10 @@ describe("linking a standalone file as a place's way", () => {
 
 describe("renaming a standalone file", () => {
   it("changes the label without touching the filename the download uses", async () => {
-    const mediaId = await createStandaloneImport(ALICE_SUB, "wollangambe-run.gpx");
+    const mediaId = await createStandaloneImport(
+      ALICE_SUB,
+      "wollangambe-run.gpx",
+    );
     try {
       const res = await request(API_URL)
         .patch(`/media/${mediaId}`)
@@ -322,7 +359,10 @@ describe("the delta pull carries standalone files", () => {
     const mediaId = await createStandaloneImport(ALICE_SUB);
     try {
       const first = await drainMedia(ALICE_SUB);
-      const row = first.media.find((m) => m.id === mediaId) as Record<string, unknown>;
+      const row = first.media.find((m) => m.id === mediaId) as Record<
+        string,
+        unknown
+      >;
       expect(row).toBeDefined();
       expect(row.linkedType).toBe("none");
       expect(row.linkedId).toBeNull();
@@ -344,7 +384,9 @@ describe("the delta pull carries standalone files", () => {
         .set(as(ALICE_SUB))
         .set(CLIENT);
       expect(second.status).toBe(200);
-      const moved = second.body.changes.media.find((m: { id: string }) => m.id === mediaId);
+      const moved = second.body.changes.media.find(
+        (m: { id: string }) => m.id === mediaId,
+      );
       expect(moved).toBeDefined();
       expect(moved.linkedId).toBe(placeId);
     } finally {

@@ -105,7 +105,9 @@ function wobble(
   toMs: number,
 ): number {
   const window = played.filter((p) => p.atMs >= fromMs && p.atMs <= toMs);
-  return Math.max(...window.map((p) => Math.abs(shortestAngleDelta(about, p.deg))));
+  return Math.max(
+    ...window.map((p) => Math.abs(shortestAngleDelta(about, p.deg))),
+  );
 }
 
 describe("shortestAngleDelta", () => {
@@ -148,7 +150,8 @@ describe("noteHeadingSample", () => {
     // continuous input produces continuous output.
     const filter = createHeadingFilter();
     noteHeadingSample(filter, 0, 0);
-    for (let i = 1; i <= 20; i += 1) noteHeadingSample(filter, i * 2.5, i * 100);
+    for (let i = 1; i <= 20; i += 1)
+      noteHeadingSample(filter, i * 2.5, i * 100);
     expect(filter.target).toBeCloseTo(50 - HEADING_HYSTERESIS_DEG, 6);
   });
 });
@@ -156,12 +159,21 @@ describe("noteHeadingSample", () => {
 describe("the heading chase, end to end", () => {
   it("never crosses the wrong side of north", () => {
     // The bug this exists to prevent: a plain average of 358 and 2 is 180.
-    const played = playHeading([{ atMs: 0, deg: 358 }, { atMs: 32, deg: 8 }], 400);
+    const played = playHeading(
+      [
+        { atMs: 0, deg: 358 },
+        { atMs: 32, deg: 8 },
+      ],
+      400,
+    );
     for (const { deg } of played) expect(deg > 350 || deg < 10).toBe(true);
   });
 
   it("holds a still phone perfectly still, and stops ticking", () => {
-    const played = playHeading(spun(() => 90, 5_000), 5_000);
+    const played = playHeading(
+      spun(() => 90, 5_000),
+      5_000,
+    );
     expect(wobble(played, 90, 200, 5_000)).toBe(0);
     expect(played[played.length - 1]!.ticking).toBe(false);
   });
@@ -169,7 +181,13 @@ describe("the heading chase, end to end", () => {
   it("settles on a bearing it is given and then stops", () => {
     // Arrival matters twice over: the ticker has to be able to stop, and the
     // display must not park several degrees short of where the phone points.
-    const played = playHeading([{ atMs: 0, deg: 0 }, { atMs: 100, deg: 90 }], 8_000);
+    const played = playHeading(
+      [
+        { atMs: 0, deg: 0 },
+        { atMs: 100, deg: 90 },
+      ],
+      8_000,
+    );
     const last = played[played.length - 1]!;
     // Within the hysteresis, which is the whole of the standing error.
     expect(Math.abs(shortestAngleDelta(90, last.deg))).toBeLessThanOrEqual(
@@ -211,13 +229,17 @@ describe("the heading chase, end to end", () => {
       [25, 5],
       [60, 11],
     ] as const) {
-      const played = playHeading(spun((t) => (t * rateDegPerS) / 1000, 8_000), 8_000);
+      const played = playHeading(
+        spun((t) => (t * rateDegPerS) / 1000, 8_000),
+        8_000,
+      );
       const settled = played.filter((p) => p.atMs > 1_500 && p.atMs < 6_000);
       const rates = settled
         .slice(1)
         .map(
           (p, i) =>
-            (shortestAngleDelta(settled[i]!.deg, p.deg) * 1000) / HEADING_TICK_MS,
+            (shortestAngleDelta(settled[i]!.deg, p.deg) * 1000) /
+            HEADING_TICK_MS,
         );
       const mean = rates.reduce((a, b) => a + b, 0) / rates.length;
       // Tracking the right speed at all, before asking how smoothly.
@@ -230,23 +252,35 @@ describe("the heading chase, end to end", () => {
   it("does not sail past a turn that stops between samples", () => {
     // The price of dead reckoning, and what HEADING_LEAD_DEG/MS bound. Without
     // the lead cap this overshot by tens of degrees and swung back.
-    const played = playHeading(spun((t) => Math.min(t, 800) * 0.11, 8_000), 8_000);
+    const played = playHeading(
+      spun((t) => Math.min(t, 800) * 0.11, 8_000),
+      8_000,
+    );
     const after = played.filter((p) => p.atMs > 800);
-    const overshoot = Math.max(...after.map((p) => shortestAngleDelta(88, p.deg)));
+    const overshoot = Math.max(
+      ...after.map((p) => shortestAngleDelta(88, p.deg)),
+    );
     expect(overshoot).toBeLessThan(7);
     // ...and it is back on the bearing, not parked past it.
-    expect(Math.abs(shortestAngleDelta(88, after[after.length - 1]!.deg))).toBeLessThan(
-      HEADING_HYSTERESIS_DEG + SENSOR_NOISE_DEG,
-    );
+    expect(
+      Math.abs(shortestAngleDelta(88, after[after.length - 1]!.deg)),
+    ).toBeLessThan(HEADING_HYSTERESIS_DEG + SENSOR_NOISE_DEG);
   });
 
   it("never turns the display faster than the slew ceiling", () => {
     // A magnetometer spike is a 180° delta arriving in one sample, and it used
     // to be passed straight through as a snap.
-    const played = playHeading([{ atMs: 0, deg: 0 }, { atMs: 32, deg: 180 }], 400);
+    const played = playHeading(
+      [
+        { atMs: 0, deg: 0 },
+        { atMs: 32, deg: 180 },
+      ],
+      400,
+    );
     for (let i = 1; i < played.length; i += 1) {
       const perSecond =
-        (Math.abs(shortestAngleDelta(played[i - 1]!.deg, played[i]!.deg)) * 1000) /
+        (Math.abs(shortestAngleDelta(played[i - 1]!.deg, played[i]!.deg)) *
+          1000) /
         HEADING_TICK_MS;
       expect(perSecond).toBeLessThanOrEqual(HEADING_MAX_SLEW_DEG_PER_S + 0.001);
     }
@@ -281,7 +315,9 @@ describe("overshoot off a fast flick", () => {
       spun((t) => (Math.min(t, durationMs) * rateDegPerS) / 1000, 5_000),
       5_000,
     ).filter((p) => p.atMs > durationMs);
-    const peak = Math.max(...played.map((p) => shortestAngleDelta(settledAt, p.deg)));
+    const peak = Math.max(
+      ...played.map((p) => shortestAngleDelta(settledAt, p.deg)),
+    );
     const recovered = played.find(
       (p) => Math.abs(shortestAngleDelta(settledAt, p.deg)) < 3,
     );
@@ -340,7 +376,8 @@ describe("the ticker's idle guarantee", () => {
     let nextSample = 0;
     for (let now = 0; now <= totalMs; now += HEADING_TICK_MS) {
       while (nextSample <= now) {
-        const wobble = noiseDeg * Math.sin(nextSample / 37) * Math.cos(nextSample / 11);
+        const wobble =
+          noiseDeg * Math.sin(nextSample / 37) * Math.cos(nextSample / 11);
         if (noteHeadingSample(filter, 90 + wobble, nextSample)) ticking = true;
         nextSample += SENSOR_GAP_MS;
       }
@@ -376,15 +413,22 @@ describe("declination", () => {
     // .declination (LocationModule.kt:603-607), so the difference IS Android's
     // own value and we need no model of our own.
     resetDeclination();
-    expect(learnDeclination({ magHeading: 100, trueHeading: 112.4 })).toBe(true);
-    expect(resolveTrueHeading({ trueHeading: -1, magHeading: 0 })).toBeCloseTo(12.4, 6);
+    expect(learnDeclination({ magHeading: 100, trueHeading: 112.4 })).toBe(
+      true,
+    );
+    expect(resolveTrueHeading({ trueHeading: -1, magHeading: 0 })).toBeCloseTo(
+      12.4,
+      6,
+    );
   });
 
   it("keeps the NSW fallback when there is no fix to derive one from", () => {
     resetDeclination();
     // trueHeading is -1 whenever expo-location has no fix.
     expect(learnDeclination({ magHeading: 100, trueHeading: -1 })).toBe(false);
-    expect(resolveTrueHeading({ trueHeading: -1, magHeading: 347.5 })).toBeCloseTo(0, 6);
+    expect(
+      resolveTrueHeading({ trueHeading: -1, magHeading: 347.5 }),
+    ).toBeCloseTo(0, 6);
   });
 
   it("refreshes on travel, not on a clock", () => {
@@ -410,7 +454,10 @@ describe("declination west of the agonic line", () => {
     // grid but the sign that matters here is the arithmetic one: mag 10, true
     // -5 means 15° WEST.
     expect(learnDeclination({ magHeading: 10, trueHeading: -5 })).toBe(true);
-    expect(resolveTrueHeading({ trueHeading: -1, magHeading: 0 })).toBeCloseTo(345, 6);
+    expect(resolveTrueHeading({ trueHeading: -1, magHeading: 0 })).toBeCloseTo(
+      345,
+      6,
+    );
   });
 
   it("still treats the exact sentinel as no fix", () => {
@@ -421,7 +468,10 @@ describe("declination west of the agonic line", () => {
   it("normalises a negative true heading rather than passing it through", () => {
     // It reaches the camera as a bearing; -5 would be a stop MapLibre reads as
     // 355 anyway, but the arrow and the tape read the same number.
-    expect(resolveTrueHeading({ trueHeading: -5, magHeading: 10 })).toBeCloseTo(355, 6);
+    expect(resolveTrueHeading({ trueHeading: -5, magHeading: 10 })).toBeCloseTo(
+      355,
+      6,
+    );
   });
 });
 
@@ -448,7 +498,11 @@ describe("deviceSampleTimeMs", () => {
     const first = deviceSampleTimeMs(filter, bootSeconds, 1_700_000_000_000);
     expect(first).toBe(1_700_000_000_000);
     // A reading 133 ms later by the sensor's clock, handed over 40 ms late.
-    const second = deviceSampleTimeMs(filter, bootSeconds + 0.133, 1_700_000_000_173);
+    const second = deviceSampleTimeMs(
+      filter,
+      bootSeconds + 0.133,
+      1_700_000_000_173,
+    );
     expect(second - first).toBeCloseTo(133, 6);
   });
 
@@ -520,8 +574,12 @@ describe("the magnetic environment", () => {
   it("measures a field's strength regardless of which way it points", () => {
     // The whole basis of this check: direction has no known correct answer and
     // magnitude does.
-    expect(fieldStrengthUt({ x: NSW_FIELD_STRENGTH_UT, y: 0, z: 0 })).toBeCloseTo(57, 6);
-    expect(fieldStrengthUt({ x: 0, y: 0, z: -NSW_FIELD_STRENGTH_UT })).toBeCloseTo(57, 6);
+    expect(
+      fieldStrengthUt({ x: NSW_FIELD_STRENGTH_UT, y: 0, z: 0 }),
+    ).toBeCloseTo(57, 6);
+    expect(
+      fieldStrengthUt({ x: 0, y: 0, z: -NSW_FIELD_STRENGTH_UT }),
+    ).toBeCloseTo(57, 6);
     expect(fieldStrengthUt({ x: 3, y: 4, z: 0 })).toBeCloseTo(5, 6);
   });
 
@@ -592,7 +650,10 @@ describe("povCameraCenter", () => {
     expect(lon).toBeCloseTo(150.4033, 9);
     expect(lat).toBeGreaterThan(-33.5603);
     const northMeters = (lat + 33.5603) * 111_195;
-    expect(northMeters).toBeCloseTo((POV_USER_SCREEN_FRACTION - 0.5) * 800 * 2.0, -1);
+    expect(northMeters).toBeCloseTo(
+      (POV_USER_SCREEN_FRACTION - 0.5) * 800 * 2.0,
+      -1,
+    );
   });
 
   it("looks along the heading, not along north", () => {
@@ -618,21 +679,18 @@ describe("resolveTrueHeading", () => {
 
   it("corrects magnetic for NSW declination when true is unavailable", () => {
     // Facing true north, the magnetometer reads 347.5° in the Blue Mountains.
-    expect(resolveTrueHeading({ trueHeading: -1, magHeading: 347.5 })).toBeCloseTo(
-      0,
-      6,
-    );
-    expect(resolveTrueHeading({ trueHeading: -1, magHeading: 100 })).toBeCloseTo(
-      112.5,
-      6,
-    );
+    expect(
+      resolveTrueHeading({ trueHeading: -1, magHeading: 347.5 }),
+    ).toBeCloseTo(0, 6);
+    expect(
+      resolveTrueHeading({ trueHeading: -1, magHeading: 100 }),
+    ).toBeCloseTo(112.5, 6);
   });
 
   it("wraps past 360 rather than returning an out-of-range bearing", () => {
-    expect(resolveTrueHeading({ trueHeading: -1, magHeading: 355 })).toBeCloseTo(
-      7.5,
-      6,
-    );
+    expect(
+      resolveTrueHeading({ trueHeading: -1, magHeading: 355 }),
+    ).toBeCloseTo(7.5, 6);
   });
 
   it("returns null when the device has no usable heading at all", () => {

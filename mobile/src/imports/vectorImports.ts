@@ -75,7 +75,10 @@ const MAX_KMZ_UNCOMPRESSED_BYTES = MAX_IMPORT_FILE_BYTES;
  * is a real cap: a record that lies high is refused, one that lies low
  * truncates into an unparseable KML rather than growing the buffer.
  */
-export function kmlFromKmz(bytes: Uint8Array): { fileName: string; text: string } {
+export function kmlFromKmz(bytes: Uint8Array): {
+  fileName: string;
+  text: string;
+} {
   const declared: { name: string; originalSize: number }[] = [];
   try {
     unzipSync(bytes, {
@@ -153,7 +156,9 @@ async function parseAndStore(
   let sourceName = displayName;
   let text: string;
   if (sourceName.toLowerCase().endsWith(".kmz")) {
-    ({ fileName: sourceName, text } = kmlFromKmz(new File(sourceUri).bytesSync()));
+    ({ fileName: sourceName, text } = kmlFromKmz(
+      new File(sourceUri).bytesSync(),
+    ));
   } else {
     text = await FileSystem.readAsStringAsync(sourceUri);
   }
@@ -217,7 +222,8 @@ async function parseAndStore(
       sentBy,
     });
     const record = await getVectorImport(mediaId);
-    if (!record) throw new Error("Import row vanished immediately after writing it");
+    if (!record)
+      throw new Error("Import row vanished immediately after writing it");
     return record;
   } catch (err) {
     await FileSystem.deleteAsync(fileUri, { idempotent: true }).catch(() => {});
@@ -233,9 +239,10 @@ async function parseAndStore(
  * lists that must agree are one declaration (root CLAUDE.md). A format the
  * server does not accept cannot appear here, because it would have no entry.
  */
-const MIME_BY_FORMAT: Record<"gpx" | "kml" | "geojson", string> = Object.fromEntries(
-  TRACK_MIME_TYPES.map((mime) => [MEDIA_EXTENSION_BY_MIME[mime], mime]),
-) as Record<"gpx" | "kml" | "geojson", string>;
+const MIME_BY_FORMAT: Record<"gpx" | "kml" | "geojson", string> =
+  Object.fromEntries(
+    TRACK_MIME_TYPES.map((mime) => [MEDIA_EXTENSION_BY_MIME[mime], mime]),
+  ) as Record<"gpx" | "kml" | "geojson", string>;
 
 /**
  * The stored original's extension: the picked file's own, narrowed to the
@@ -285,7 +292,9 @@ export async function importVectorFileFromPicker(
  * Idempotent and safe to call on every render pass: it short-circuits the
  * moment the derived file exists.
  */
-export async function ensureImportOnDevice(mediaId: string): Promise<string | null> {
+export async function ensureImportOnDevice(
+  mediaId: string,
+): Promise<string | null> {
   const existing = await getVectorImport(mediaId);
   if (!existing) return null;
   if (existing.path) {

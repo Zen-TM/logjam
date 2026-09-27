@@ -19,7 +19,9 @@ const TRIP_A = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const WP_A = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 
 let opCounter = 0;
-function op(partial: Partial<SyncPushOp> & Pick<SyncPushOp, "entity" | "op" | "id">): SyncPushOp {
+function op(
+  partial: Partial<SyncPushOp> & Pick<SyncPushOp, "entity" | "op" | "id">,
+): SyncPushOp {
   return { opId: `op-${++opCounter}`, ...partial };
 }
 
@@ -42,22 +44,45 @@ describe("planOutboxEnqueue (§8.2 coalescing)", () => {
     });
     const plan = planOutboxEnqueue(
       [entry(1, create)],
-      op({ entity: "place", op: "update", id: PLACE_A, fields: { notes: "n" } }),
+      op({
+        entity: "place",
+        op: "update",
+        id: PLACE_A,
+        fields: { notes: "n" },
+      }),
     );
     expect(plan).toEqual({
       dropSeqs: [],
       mergeIntoSeq: 1,
-      mergedFields: { name: "X", latitude: -33.6, longitude: 150.2, notes: "n" },
+      mergedFields: {
+        name: "X",
+        latitude: -33.6,
+        longitude: 150.2,
+        notes: "n",
+      },
     });
   });
 
   it("update merges into the queue-TAIL update on the same row, later fields win", () => {
     const entries = [
-      entry(1, op({ entity: "place", op: "update", id: PLACE_A, fields: { notes: "old", quality: 3 } })),
+      entry(
+        1,
+        op({
+          entity: "place",
+          op: "update",
+          id: PLACE_A,
+          fields: { notes: "old", quality: 3 },
+        }),
+      ),
     ];
     const plan = planOutboxEnqueue(
       entries,
-      op({ entity: "place", op: "update", id: PLACE_A, fields: { notes: "new" } }),
+      op({
+        entity: "place",
+        op: "update",
+        id: PLACE_A,
+        fields: { notes: "new" },
+      }),
     );
     expect(plan.mergeIntoSeq).toBe(1);
     expect(plan.mergedFields).toEqual({ notes: "new", quality: 3 });
@@ -65,12 +90,33 @@ describe("planOutboxEnqueue (§8.2 coalescing)", () => {
 
   it("update does NOT merge across an intervening op (would reorder)", () => {
     const entries = [
-      entry(1, op({ entity: "place", op: "update", id: PLACE_A, fields: { notes: "a" } })),
-      entry(2, op({ entity: "waypoint", op: "create", id: WP_A, fields: { name: "w" } })),
+      entry(
+        1,
+        op({
+          entity: "place",
+          op: "update",
+          id: PLACE_A,
+          fields: { notes: "a" },
+        }),
+      ),
+      entry(
+        2,
+        op({
+          entity: "waypoint",
+          op: "create",
+          id: WP_A,
+          fields: { name: "w" },
+        }),
+      ),
     ];
     const plan = planOutboxEnqueue(
       entries,
-      op({ entity: "place", op: "update", id: PLACE_A, fields: { quality: 4 } }),
+      op({
+        entity: "place",
+        op: "update",
+        id: PLACE_A,
+        fields: { quality: 4 },
+      }),
     );
     expect(plan.mergeIntoSeq).toBeUndefined();
     expect(plan.append).toBeDefined();
@@ -79,11 +125,25 @@ describe("planOutboxEnqueue (§8.2 coalescing)", () => {
   it("update never merges into an inflight or parked op", () => {
     for (const state of ["inflight", "blocked"] as const) {
       const entries = [
-        entry(1, op({ entity: "place", op: "update", id: PLACE_A, fields: { notes: "a" } }), state),
+        entry(
+          1,
+          op({
+            entity: "place",
+            op: "update",
+            id: PLACE_A,
+            fields: { notes: "a" },
+          }),
+          state,
+        ),
       ];
       const plan = planOutboxEnqueue(
         entries,
-        op({ entity: "place", op: "update", id: PLACE_A, fields: { notes: "b" } }),
+        op({
+          entity: "place",
+          op: "update",
+          id: PLACE_A,
+          fields: { notes: "b" },
+        }),
       );
       expect(plan.mergeIntoSeq).toBeUndefined();
       expect(plan.append).toBeDefined();
@@ -92,8 +152,24 @@ describe("planOutboxEnqueue (§8.2 coalescing)", () => {
 
   it("delete after queued create drops the whole lineage, enqueues nothing", () => {
     const entries = [
-      entry(1, op({ entity: "place", op: "create", id: PLACE_A, fields: { name: "X" } })),
-      entry(2, op({ entity: "place", op: "update", id: PLACE_A, fields: { notes: "n" } })),
+      entry(
+        1,
+        op({
+          entity: "place",
+          op: "create",
+          id: PLACE_A,
+          fields: { name: "X" },
+        }),
+      ),
+      entry(
+        2,
+        op({
+          entity: "place",
+          op: "update",
+          id: PLACE_A,
+          fields: { notes: "n" },
+        }),
+      ),
     ];
     const plan = planOutboxEnqueue(
       entries,
@@ -105,7 +181,15 @@ describe("planOutboxEnqueue (§8.2 coalescing)", () => {
 
   it("delete after queued updates drops the updates, keeps the delete", () => {
     const entries = [
-      entry(1, op({ entity: "place", op: "update", id: PLACE_A, fields: { notes: "n" } })),
+      entry(
+        1,
+        op({
+          entity: "place",
+          op: "update",
+          id: PLACE_A,
+          fields: { notes: "n" },
+        }),
+      ),
     ];
     const del = op({ entity: "place", op: "delete", id: PLACE_A });
     const plan = planOutboxEnqueue(entries, del);
@@ -120,7 +204,12 @@ describe("planOutboxEnqueue (§8.2 coalescing)", () => {
     const entries = [
       entry(
         1,
-        op({ entity: "place", op: "create", id: PLACE_A, fields: { name: "X" } }),
+        op({
+          entity: "place",
+          op: "create",
+          id: PLACE_A,
+          fields: { name: "X" },
+        }),
         "queued",
         1,
       ),
@@ -133,7 +222,16 @@ describe("planOutboxEnqueue (§8.2 coalescing)", () => {
 
   it("delete does not cancel an inflight create (server may have applied it)", () => {
     const entries = [
-      entry(1, op({ entity: "place", op: "create", id: PLACE_A, fields: { name: "X" } }), "inflight"),
+      entry(
+        1,
+        op({
+          entity: "place",
+          op: "create",
+          id: PLACE_A,
+          fields: { name: "X" },
+        }),
+        "inflight",
+      ),
     ];
     const plan = planOutboxEnqueue(
       entries,
@@ -199,10 +297,38 @@ describe("selectFlushBatch (§8.3 dependency closure)", () => {
 
   it("defers ops depending on a parked op's entity, transitively", () => {
     const entries = [
-      entry(1, op({ entity: "place", op: "create", id: PLACE_A, fields: {} }), "blocked"),
-      entry(2, op({ entity: "tripLog", op: "create", id: TRIP_A, fields: { placeIds: [PLACE_A] } })),
-      entry(3, op({ entity: "tripLog", op: "update", id: TRIP_A, fields: { notes: "n" } })),
-      entry(4, op({ entity: "waypoint", op: "create", id: WP_A, fields: { placeId: PLACE_B } })),
+      entry(
+        1,
+        op({ entity: "place", op: "create", id: PLACE_A, fields: {} }),
+        "blocked",
+      ),
+      entry(
+        2,
+        op({
+          entity: "tripLog",
+          op: "create",
+          id: TRIP_A,
+          fields: { placeIds: [PLACE_A] },
+        }),
+      ),
+      entry(
+        3,
+        op({
+          entity: "tripLog",
+          op: "update",
+          id: TRIP_A,
+          fields: { notes: "n" },
+        }),
+      ),
+      entry(
+        4,
+        op({
+          entity: "waypoint",
+          op: "create",
+          id: WP_A,
+          fields: { placeId: PLACE_B },
+        }),
+      ),
     ];
     const { ready, deferred } = selectFlushBatch(entries, 50);
     expect(ready.map((e) => e.seq)).toEqual([4]);
@@ -211,8 +337,20 @@ describe("selectFlushBatch (§8.3 dependency closure)", () => {
 
   it("deadRemote parks block dependents too", () => {
     const entries = [
-      entry(1, op({ entity: "place", op: "update", id: PLACE_A, fields: {} }), "deadRemote"),
-      entry(2, op({ entity: "waypoint", op: "create", id: WP_A, fields: { placeId: PLACE_A } })),
+      entry(
+        1,
+        op({ entity: "place", op: "update", id: PLACE_A, fields: {} }),
+        "deadRemote",
+      ),
+      entry(
+        2,
+        op({
+          entity: "waypoint",
+          op: "create",
+          id: WP_A,
+          fields: { placeId: PLACE_A },
+        }),
+      ),
     ];
     const { ready, deferred } = selectFlushBatch(entries, 50);
     expect(ready).toEqual([]);
@@ -226,8 +364,20 @@ describe("selectFlushBatch (§8.3 dependency closure)", () => {
     // the dependent first is how one flaky 503 turns into a real sync issue on
     // a different row.
     const entries = [
-      entry(1, op({ entity: "place", op: "create", id: PLACE_A, fields: {} }), "retrying"),
-      entry(2, op({ entity: "tripLog", op: "create", id: TRIP_A, fields: { placeIds: [PLACE_A] } })),
+      entry(
+        1,
+        op({ entity: "place", op: "create", id: PLACE_A, fields: {} }),
+        "retrying",
+      ),
+      entry(
+        2,
+        op({
+          entity: "tripLog",
+          op: "create",
+          id: TRIP_A,
+          fields: { placeIds: [PLACE_A] },
+        }),
+      ),
     ];
     const { ready, deferred } = selectFlushBatch(entries, 50);
     expect(ready).toEqual([]);
@@ -236,7 +386,11 @@ describe("selectFlushBatch (§8.3 dependency closure)", () => {
 
   it("a delete of the blocked row itself stays ready (discard path)", () => {
     const entries = [
-      entry(1, op({ entity: "place", op: "update", id: PLACE_A, fields: {} }), "blocked"),
+      entry(
+        1,
+        op({ entity: "place", op: "update", id: PLACE_A, fields: {} }),
+        "blocked",
+      ),
       entry(2, op({ entity: "place", op: "delete", id: PLACE_A })),
     ];
     const { ready } = selectFlushBatch(entries, 50);
@@ -265,10 +419,16 @@ describe("filterSelfConflicts (§6 over-report contract)", () => {
   it("compares arrays structurally", () => {
     const base = { placeIds: ["a", "b"] };
     expect(
-      filterSelfConflicts([{ field: "placeIds", serverValue: ["a", "b"] }], base),
+      filterSelfConflicts(
+        [{ field: "placeIds", serverValue: ["a", "b"] }],
+        base,
+      ),
     ).toEqual([]);
     expect(
-      filterSelfConflicts([{ field: "placeIds", serverValue: ["b", "a"] }], base),
+      filterSelfConflicts(
+        [{ field: "placeIds", serverValue: ["b", "a"] }],
+        base,
+      ),
     ).toEqual([{ field: "placeIds", serverValue: ["b", "a"] }]);
   });
 });
@@ -276,14 +436,43 @@ describe("filterSelfConflicts (§6 over-report contract)", () => {
 describe("collectDirtyFields + rebaseRow (§8.5)", () => {
   it("merges pending op fields in seq order; server fields not dirty track the server", () => {
     const entries = [
-      entry(1, op({ entity: "place", op: "update", id: PLACE_A, fields: { notes: "first", quality: 3 } })),
-      entry(2, op({ entity: "place", op: "update", id: PLACE_A, fields: { notes: "second" } })),
-      entry(3, op({ entity: "place", op: "update", id: PLACE_B, fields: { notes: "other row" } })),
+      entry(
+        1,
+        op({
+          entity: "place",
+          op: "update",
+          id: PLACE_A,
+          fields: { notes: "first", quality: 3 },
+        }),
+      ),
+      entry(
+        2,
+        op({
+          entity: "place",
+          op: "update",
+          id: PLACE_A,
+          fields: { notes: "second" },
+        }),
+      ),
+      entry(
+        3,
+        op({
+          entity: "place",
+          op: "update",
+          id: PLACE_B,
+          fields: { notes: "other row" },
+        }),
+      ),
     ];
     const dirty = collectDirtyFields(entries, "place", PLACE_A);
     expect(dirty).toEqual({ notes: "second", quality: 3 });
 
-    const server = { id: PLACE_A, name: "Server name", notes: "server", quality: 5 };
+    const server = {
+      id: PLACE_A,
+      name: "Server name",
+      notes: "server",
+      quality: 5,
+    };
     expect(rebaseRow(server, dirty)).toEqual({
       id: PLACE_A,
       name: "Server name",
@@ -294,8 +483,25 @@ describe("collectDirtyFields + rebaseRow (§8.5)", () => {
 
   it("skips deadRemote ops and deletes; creates contribute their payload", () => {
     const entries = [
-      entry(1, op({ entity: "waypoint", op: "create", id: WP_A, fields: { name: "w", latitude: -33.6 } })),
-      entry(2, op({ entity: "waypoint", op: "update", id: WP_A, fields: { name: "w2" } }), "deadRemote"),
+      entry(
+        1,
+        op({
+          entity: "waypoint",
+          op: "create",
+          id: WP_A,
+          fields: { name: "w", latitude: -33.6 },
+        }),
+      ),
+      entry(
+        2,
+        op({
+          entity: "waypoint",
+          op: "update",
+          id: WP_A,
+          fields: { name: "w2" },
+        }),
+        "deadRemote",
+      ),
       entry(3, op({ entity: "waypoint", op: "delete", id: WP_A })),
     ];
     expect(collectDirtyFields(entries, "waypoint", WP_A)).toEqual({
@@ -336,10 +542,24 @@ describe("computeBackoffMs", () => {
 describe("pushOpDependencies (shared single source)", () => {
   it("update/delete depend on own row; place refs extracted from fields", () => {
     expect(
-      pushOpDependencies(op({ entity: "tripLog", op: "update", id: TRIP_A, fields: { placeIds: [PLACE_A] } })),
+      pushOpDependencies(
+        op({
+          entity: "tripLog",
+          op: "update",
+          id: TRIP_A,
+          fields: { placeIds: [PLACE_A] },
+        }),
+      ),
     ).toEqual([TRIP_A, PLACE_A]);
     expect(
-      pushOpDependencies(op({ entity: "waypoint", op: "create", id: WP_A, fields: { placeId: PLACE_B } })),
+      pushOpDependencies(
+        op({
+          entity: "waypoint",
+          op: "create",
+          id: WP_A,
+          fields: { placeId: PLACE_B },
+        }),
+      ),
     ).toEqual([PLACE_B]);
   });
 });

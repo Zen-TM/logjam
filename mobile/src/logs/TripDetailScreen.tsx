@@ -142,14 +142,24 @@ export function TripDetailScreen({
               icon="map-pin"
               hue={theme.accent}
               title={place.name}
-              right={<Feather name="chevron-right" size={20} color={theme.textMuted} />}
+              right={
+                <Feather
+                  name="chevron-right"
+                  size={20}
+                  color={theme.textMuted}
+                />
+              }
               onPress={() => onOpenPlace(place.id, place.name)}
             />
           ))
         )}
 
         <SectionHeader
-          label={photoCount === 0 ? "Photos & videos" : `Photos & videos · ${photoCount}`}
+          label={
+            photoCount === 0
+              ? "Photos & videos"
+              : `Photos & videos · ${photoCount}`
+          }
         />
         <MediaStrip
           kind="media"
@@ -161,7 +171,9 @@ export function TripDetailScreen({
           onFailed={(text) => notify(text, "error")}
         />
 
-        <SectionHeader label={routeCount === 0 ? "Routes" : `Routes · ${routeCount}`} />
+        <SectionHeader
+          label={routeCount === 0 ? "Routes" : `Routes · ${routeCount}`}
+        />
         <MediaStrip
           kind="track"
           online={online}

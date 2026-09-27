@@ -101,7 +101,13 @@ export function numericConstraintError(
  */
 export function validateFieldValues(
   values: Record<string, unknown>,
-  defs: { key: string; label: string; type: string; min?: number | null; max?: number | null }[],
+  defs: {
+    key: string;
+    label: string;
+    type: string;
+    min?: number | null;
+    max?: number | null;
+  }[],
 ): string | null {
   const byKey = new Map(defs.map((def) => [def.key, def]));
   for (const [key, value] of Object.entries(values)) {
@@ -114,7 +120,8 @@ export function validateFieldValues(
       const error = constraint && numericConstraintError(value, constraint);
       if (error) return error;
     } else if (def.type === "boolean") {
-      if (typeof value !== "boolean") return `${def.label} must be true or false`;
+      if (typeof value !== "boolean")
+        return `${def.label} must be true or false`;
     } else if (typeof value !== "string") {
       return `${def.label} must be text`;
     }
@@ -127,7 +134,13 @@ export function validateFieldValues(
  *  error, because an API rejection is one message). See invalidPlaceFields. */
 export function invalidFieldValueKeys(
   values: Record<string, unknown>,
-  defs: { key: string; label: string; type: string; min?: number | null; max?: number | null }[],
+  defs: {
+    key: string;
+    label: string;
+    type: string;
+    min?: number | null;
+    max?: number | null;
+  }[],
 ): string[] {
   const byKey = new Map(defs.map((def) => [def.key, def]));
   const invalid: string[] = [];
@@ -171,7 +184,13 @@ export function validatePlacePayload(
   payload: PlaceFieldPayload,
   opts: {
     requireCoords: boolean;
-    defs?: { key: string; label: string; type: string; min?: number | null; max?: number | null }[];
+    defs?: {
+      key: string;
+      label: string;
+      type: string;
+      min?: number | null;
+      max?: number | null;
+    }[];
   },
 ): string | null {
   const { latitude, longitude } = payload;
@@ -188,7 +207,10 @@ export function validatePlacePayload(
   }
 
   if (payload.elevation !== undefined && payload.elevation !== null) {
-    if (typeof payload.elevation !== "number" || !Number.isFinite(payload.elevation)) {
+    if (
+      typeof payload.elevation !== "number" ||
+      !Number.isFinite(payload.elevation)
+    ) {
       return "elevation must be a number";
     }
   }
@@ -228,10 +250,17 @@ export function validatePlacePayload(
  */
 export function invalidPlaceFields(
   fields: Record<string, unknown>,
-  defs: { key: string; label: string; type: string; min?: number | null; max?: number | null }[] = [],
+  defs: {
+    key: string;
+    label: string;
+    type: string;
+    min?: number | null;
+    max?: number | null;
+  }[] = [],
 ): string[] {
   const invalid: string[] = [];
-  if ("latitude" in fields && !isValidLatitude(fields.latitude)) invalid.push("latitude");
+  if ("latitude" in fields && !isValidLatitude(fields.latitude))
+    invalid.push("latitude");
   if ("longitude" in fields && !isValidLongitude(fields.longitude)) {
     invalid.push("longitude");
   }
@@ -246,7 +275,9 @@ export function invalidPlaceFields(
   // can act on when it decides which parked fields to resend.
   const values = fields.fieldValues;
   if (values != null && typeof values === "object" && !Array.isArray(values)) {
-    if (invalidFieldValueKeys(values as Record<string, unknown>, defs).length > 0) {
+    if (
+      invalidFieldValueKeys(values as Record<string, unknown>, defs).length > 0
+    ) {
       invalid.push("fieldValues");
     }
   }

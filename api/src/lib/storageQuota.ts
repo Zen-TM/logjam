@@ -30,7 +30,10 @@ export async function assertHasStorageQuota(
 ) {
   const { used, quota } = await getStorageUsage(userId, db);
   if (used >= quota || used + pendingBytes > quota) {
-    throw new AppError(507, "Storage quota exceeded", { used: used.toString(), quota: quota.toString() });
+    throw new AppError(507, "Storage quota exceeded", {
+      used: used.toString(),
+      quota: quota.toString(),
+    });
   }
 }
 

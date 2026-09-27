@@ -11,7 +11,8 @@
   justify-content: center;
   gap: 0.25rem;
   padding: 1rem;
-  border: 1px dashed color-mix(in srgb, var(--theme-text-primary) 20%, transparent);
+  border: 1px dashed
+    color-mix(in srgb, var(--theme-text-primary) 20%, transparent);
   border-radius: var(--radius-md);
   background-color: rgba(255, 255, 255, 0.02);
   color: var(--theme-text-muted);

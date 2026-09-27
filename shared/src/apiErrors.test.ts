@@ -3,8 +3,15 @@ import { messageFromError, ApiError } from "./apiErrors.js";
 
 describe("messageFromError", () => {
   it("prefers a server-supplied message on an ApiError", () => {
-    const err = new ApiError(409, "/friends", "POST", "Already friends or request pending.");
-    expect(messageFromError(err, "fallback")).toBe("Already friends or request pending.");
+    const err = new ApiError(
+      409,
+      "/friends",
+      "POST",
+      "Already friends or request pending.",
+    );
+    expect(messageFromError(err, "fallback")).toBe(
+      "Already friends or request pending.",
+    );
   });
 
   it("maps a known status code when no server message is present", () => {
@@ -23,19 +30,23 @@ describe("messageFromError", () => {
   });
 
   it("falls back for an unmapped 4xx with no server message", () => {
-    expect(messageFromError(new ApiError(418, "/x", "GET"), "custom fallback")).toBe(
-      "custom fallback",
-    );
+    expect(
+      messageFromError(new ApiError(418, "/x", "GET"), "custom fallback"),
+    ).toBe("custom fallback");
   });
 
   it("detects a network fetch TypeError (browser)", () => {
     const err = new TypeError("Failed to fetch");
-    expect(messageFromError(err, "fallback")).toMatch(/Couldn't reach the server/);
+    expect(messageFromError(err, "fallback")).toMatch(
+      /Couldn't reach the server/,
+    );
   });
 
   it("detects a network fetch TypeError (React Native)", () => {
     const err = new TypeError("Network request failed");
-    expect(messageFromError(err, "fallback")).toMatch(/Couldn't reach the server/);
+    expect(messageFromError(err, "fallback")).toMatch(
+      /Couldn't reach the server/,
+    );
   });
 
   it("detects a 'Network Error' message", () => {

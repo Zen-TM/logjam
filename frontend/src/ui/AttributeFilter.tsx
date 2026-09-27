@@ -44,7 +44,8 @@ export function AttributeFilter({
   const clear = () => onChange(null);
 
   if (def.type === "integer" || def.type === "float") {
-    const range = value?.kind === "numberRange" ? (value.range as NumberRange) : null;
+    const range =
+      value?.kind === "numberRange" ? (value.range as NumberRange) : null;
     const stops = filterPillStops(def);
     if (stops) {
       return (
@@ -52,18 +53,33 @@ export function AttributeFilter({
           label={def.label}
           stops={stops}
           value={range}
-          onChange={(next) => onChange(next && { kind: "numberRange", range: next })}
+          onChange={(next) =>
+            onChange(next && { kind: "numberRange", range: next })
+          }
         />
       );
     }
     if (def.min != null && def.max != null) {
-      return <MinMaxFilter label={def.label} bounds={[def.min, def.max]} value={range} onChange={onChange} />;
+      return (
+        <MinMaxFilter
+          label={def.label}
+          bounds={[def.min, def.max]}
+          value={range}
+          onChange={onChange}
+        />
+      );
     }
     return (
       <ThresholdFilter
         label={def.label}
         value={value?.kind === "number" ? [value.op, value.value] : null}
-        onChange={(next) => onChange(next && next[0] !== "Any" ? { kind: "number", op: next[0], value: next[1] } : null)}
+        onChange={(next) =>
+          onChange(
+            next && next[0] !== "Any"
+              ? { kind: "number", op: next[0], value: next[1] }
+              : null,
+          )
+        }
       />
     );
   }
@@ -86,7 +102,13 @@ export function AttributeFilter({
               aria-pressed={current === option}
               // Pressing the active chip clears it: "either" must be reachable
               // without a Reset.
-              onClick={() => onChange(current === option ? null : { kind: "boolean", value: option })}
+              onClick={() =>
+                onChange(
+                  current === option
+                    ? null
+                    : { kind: "boolean", value: option },
+                )
+              }
             />
           ))}
         </div>
@@ -97,12 +119,21 @@ export function AttributeFilter({
   if (def.type === "string") {
     const text = value?.kind === "text" ? value.value : "";
     return (
-      <FilterField label={def.label} summary={text ? `Contains “${text}”` : "Any"} active={text !== ""} onClear={clear}>
+      <FilterField
+        label={def.label}
+        summary={text ? `Contains “${text}”` : "Any"}
+        active={text !== ""}
+        onClear={clear}
+      >
         <TextField
           label="Contains"
           value={text}
           onChange={(event) =>
-            onChange(event.target.value.trim() === "" ? null : { kind: "text", value: event.target.value })
+            onChange(
+              event.target.value.trim() === ""
+                ? null
+                : { kind: "text", value: event.target.value },
+            )
           }
         />
       </FilterField>
@@ -112,14 +143,33 @@ export function AttributeFilter({
   const dates = value?.kind === "date" ? value.range : null;
   const setBound = (bound: 0 | 1, next: string) => {
     const range: [string | null, string | null] =
-      bound === 0 ? [next || null, dates?.[1] ?? null] : [dates?.[0] ?? null, next || null];
-    onChange(range[0] == null && range[1] == null ? null : { kind: "date", range });
+      bound === 0
+        ? [next || null, dates?.[1] ?? null]
+        : [dates?.[0] ?? null, next || null];
+    onChange(
+      range[0] == null && range[1] == null ? null : { kind: "date", range },
+    );
   };
   return (
-    <FilterField label={def.label} summary={dateSummary(dates)} active={dates != null} onClear={clear}>
+    <FilterField
+      label={def.label}
+      summary={dateSummary(dates)}
+      active={dates != null}
+      onClear={clear}
+    >
       <div className={classes.pair}>
-        <TextField type="date" label="From" value={dates?.[0] ?? ""} onChange={(event) => setBound(0, event.target.value)} />
-        <TextField type="date" label="To" value={dates?.[1] ?? ""} onChange={(event) => setBound(1, event.target.value)} />
+        <TextField
+          type="date"
+          label="From"
+          value={dates?.[0] ?? ""}
+          onChange={(event) => setBound(0, event.target.value)}
+        />
+        <TextField
+          type="date"
+          label="To"
+          value={dates?.[1] ?? ""}
+          onChange={(event) => setBound(1, event.target.value)}
+        />
       </div>
     </FilterField>
   );
@@ -156,7 +206,10 @@ function MinMaxFilter({
     const from = nextLow.trim() === "" ? bounds[0] : Number(nextLow);
     const to = nextHigh.trim() === "" ? bounds[1] : Number(nextHigh);
     if (!Number.isFinite(from) || !Number.isFinite(to) || from > to) return;
-    onChange({ kind: "numberRange", range: [Math.max(bounds[0], from), Math.min(bounds[1], to)] });
+    onChange({
+      kind: "numberRange",
+      range: [Math.max(bounds[0], from), Math.min(bounds[1], to)],
+    });
   };
   return (
     <FilterField
@@ -205,7 +258,9 @@ function ThresholdFilter({
   value: PlaceThresholdFilter | null;
   onChange: (next: PlaceThresholdFilter | null) => void;
 }) {
-  const [operator, setOperator] = useState<PlaceThresholdFilter[0]>(value?.[0] ?? "Less than");
+  const [operator, setOperator] = useState<PlaceThresholdFilter[0]>(
+    value?.[0] ?? "Less than",
+  );
   const [text, setText] = useState(value ? String(value[1]) : "");
   const [shownValue, setShownValue] = useState(value);
   if (value !== shownValue) {
@@ -215,7 +270,11 @@ function ThresholdFilter({
 
   const commit = (nextOperator: PlaceThresholdFilter[0], nextText: string) => {
     const parsed = Number(nextText.trim());
-    onChange(nextText.trim() === "" || !Number.isFinite(parsed) ? null : [nextOperator, parsed]);
+    onChange(
+      nextText.trim() === "" || !Number.isFinite(parsed)
+        ? null
+        : [nextOperator, parsed],
+    );
   };
 
   return (

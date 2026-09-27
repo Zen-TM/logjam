@@ -36,11 +36,15 @@ const IN_FLIGHT_STATUSES = {
 
 export async function getInFlightVcpus(db: DbClient = prisma): Promise<number> {
   const [topo, topoExport, geoPdf] = await Promise.all([
-    db.topoJob.count({ where: { status: { in: [...IN_FLIGHT_STATUSES.topo] } } }),
+    db.topoJob.count({
+      where: { status: { in: [...IN_FLIGHT_STATUSES.topo] } },
+    }),
     db.topoExportJob.count({
       where: { status: { in: [...IN_FLIGHT_STATUSES.topoExport] } },
     }),
-    db.geoPdfJob.count({ where: { status: { in: [...IN_FLIGHT_STATUSES.geoPdf] } } }),
+    db.geoPdfJob.count({
+      where: { status: { in: [...IN_FLIGHT_STATUSES.geoPdf] } },
+    }),
   ]);
 
   return (
@@ -75,7 +79,10 @@ export async function assertGlobalCapacity(
     // the whole system, and if it fires regularly the ceiling (or the account
     // quota behind it) is the thing to revisit. No user id — this is a
     // system-capacity event, and the caller already logs its own context.
-    logger.warn({ kind, inFlight, requested, ceiling }, "fargate_capacity_reached");
+    logger.warn(
+      { kind, inFlight, requested, ceiling },
+      "fargate_capacity_reached",
+    );
     throw new AppError(
       429,
       "The system is at capacity right now. Please try again in a few minutes.",

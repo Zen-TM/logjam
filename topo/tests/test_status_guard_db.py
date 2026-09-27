@@ -16,6 +16,7 @@ Run it from the worker image (psycopg2 present) against the dev DB:
     RUN_DB_IT=1 DB_HOST=postgres DB_NAME=logjam DB_USER=... DB_PASSWORD=... \
         JOB_ID=unused python3 -m unittest tests.test_status_guard_db
 """
+
 import os
 import sys
 import unittest
@@ -26,9 +27,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 import _native_stub  # noqa: E402
 
 # Only run with a REAL psycopg2 (not the host stub) and an explicit opt-in.
-_RUN_DB_IT = (
-    os.environ.get("RUN_DB_IT") == "1"
-    and not _native_stub.is_stubbed("psycopg2")
+_RUN_DB_IT = os.environ.get("RUN_DB_IT") == "1" and not _native_stub.is_stubbed(
+    "psycopg2"
 )
 
 # worker.py requires these at import time.
@@ -39,9 +39,7 @@ os.environ.setdefault("JOB_ID", "unused-for-this-test")
 ALICE_ID = "00000000-0000-4000-8000-000000000001"
 
 
-@unittest.skipUnless(
-    _RUN_DB_IT, "real psycopg2 + RUN_DB_IT=1 + reachable DB required"
-)
+@unittest.skipUnless(_RUN_DB_IT, "real psycopg2 + RUN_DB_IT=1 + reachable DB required")
 class TestStatusGuardAgainstRealDb(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

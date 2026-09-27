@@ -33,13 +33,21 @@ export function RouteStatsBody({
    */
   allowNetwork?: boolean;
 }) {
-  const { profile, loading } = useElevationProfile([route.points], { allowNetwork });
+  const { profile, loading } = useElevationProfile([route.points], {
+    allowNetwork,
+  });
 
   return (
     <View style={styles.body}>
       <View style={styles.statRow}>
-        <Stat label="Distance" value={formatDistanceM(routeLengthM(route.points))} />
-        <Stat label="Climb" value={profile ? `↑ ${Math.round(profile.gainM)} m` : "—"} />
+        <Stat
+          label="Distance"
+          value={formatDistanceM(routeLengthM(route.points))}
+        />
+        <Stat
+          label="Climb"
+          value={profile ? `↑ ${Math.round(profile.gainM)} m` : "—"}
+        />
         <Stat
           label="Descent"
           value={profile ? `↓ ${Math.round(profile.lossM)} m` : "—"}
@@ -48,7 +56,8 @@ export function RouteStatsBody({
 
       {profile?.minM != null && profile.maxM != null ? (
         <Text style={styles.band}>
-          {Math.round(profile.minM)}–{Math.round(profile.maxM)} m above sea level
+          {Math.round(profile.minM)}–{Math.round(profile.maxM)} m above sea
+          level
         </Text>
       ) : null}
 

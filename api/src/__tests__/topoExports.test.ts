@@ -44,16 +44,23 @@ describe("topo-exports route (fake auth)", () => {
       bundling: "per-layer",
     };
     for (const actor of [AUTH, as(BOB_SUB)]) {
-      const res = await request(API_URL).post("/topo-exports").set(actor).send(body);
+      const res = await request(API_URL)
+        .post("/topo-exports")
+        .set(actor)
+        .send(body);
       expect(res.status).toBe(404);
     }
   });
 
   it("404s an unknown export id (get / delete)", async () => {
     const missing = randomUUID();
-    const getRes = await request(API_URL).get(`/topo-exports/${missing}`).set(AUTH);
+    const getRes = await request(API_URL)
+      .get(`/topo-exports/${missing}`)
+      .set(AUTH);
     expect(getRes.status).toBe(404);
-    const delRes = await request(API_URL).delete(`/topo-exports/${missing}`).set(AUTH);
+    const delRes = await request(API_URL)
+      .delete(`/topo-exports/${missing}`)
+      .set(AUTH);
     expect(delRes.status).toBe(404);
   });
 });

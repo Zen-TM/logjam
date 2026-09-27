@@ -53,14 +53,18 @@ function lonLatToTile(lon, lat, z) {
 
 function percentile(sorted, p) {
   if (sorted.length === 0) return 0;
-  const index = Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length));
+  const index = Math.min(
+    sorted.length - 1,
+    Math.floor((p / 100) * sorted.length),
+  );
   return sorted[index];
 }
 
 async function tileBytes(source, z, x, y) {
   const response = await fetch(source.url(z, x, y));
   if (response.status === 404) return null; // uncached area — a "gap", not a size
-  if (!response.ok) throw new Error(`${source.id} z${z} HTTP ${response.status}`);
+  if (!response.ok)
+    throw new Error(`${source.id} z${z} HTTP ${response.status}`);
   const buffer = await response.arrayBuffer();
   return buffer.byteLength;
 }
@@ -97,7 +101,9 @@ for (const source of SOURCES) {
       z,
       n: sizes.length,
       gaps,
-      mean: Math.round(sizes.reduce((sum, v) => sum + v, 0) / (sizes.length || 1)),
+      mean: Math.round(
+        sizes.reduce((sum, v) => sum + v, 0) / (sizes.length || 1),
+      ),
       p90: percentile(sizes, 90),
     });
   }

@@ -37,9 +37,8 @@ export const PlaceRoutesLayer = memo(function PlaceRoutesLayer({
   onStatus: (status: PlaceRoutesStatus) => void;
 }) {
   const tracks = useMirrorPlaceTracks(TRACK_MIME_TYPES);
-  const [collection, setCollection] = useState<GeoJSON.FeatureCollection | null>(
-    null,
-  );
+  const [collection, setCollection] =
+    useState<GeoJSON.FeatureCollection | null>(null);
 
   useEffect(() => {
     const rows = tracks.data;
@@ -52,7 +51,8 @@ export const PlaceRoutesLayer = memo(function PlaceRoutesLayer({
       let drawn = 0;
       for (const row of rows) {
         try {
-          const uri = row.localDisplayPath ?? (await ensureDisplayCached(row.id));
+          const uri =
+            row.localDisplayPath ?? (await ensureDisplayCached(row.id));
           if (uri === null) {
             unavailable += 1;
             continue;

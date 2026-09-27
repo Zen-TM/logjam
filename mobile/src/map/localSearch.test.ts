@@ -6,7 +6,11 @@ const items = [
   { title: "Claustral Canyon", alternates: ["Clausy"], value: "claustral" },
   { title: "Ranon Brook", value: "ranon" },
   { title: "Bell Creek Canyon", value: "bell" },
-  { title: "Car park", alternates: ["parking", "clausy start"], value: "carpark" },
+  {
+    title: "Car park",
+    alternates: ["parking", "clausy start"],
+    value: "carpark",
+  },
 ];
 
 describe("rankLocalMatches", () => {
@@ -25,7 +29,9 @@ describe("rankLocalMatches", () => {
   });
 
   it("is case-insensitive and ignores surrounding space", () => {
-    expect(rankLocalMatches("  BELL ", items, 10).map((m) => m.value)).toEqual(["bell"]);
+    expect(rankLocalMatches("  BELL ", items, 10).map((m) => m.value)).toEqual([
+      "bell",
+    ]);
   });
 
   it("answers nothing below the minimum length, so one keystroke isn't a list", () => {

@@ -67,8 +67,10 @@ vi.mock("../sync/outbox", () => ({
 // The API layer is mocked to THROW. Nothing in this file may reach it — that is
 // the assertion the whole suite rests on, and a rejection is louder than a spy.
 vi.mock("../api/queries", () => ({
-  fetchCurrentUser: () => Promise.reject(new Error("definitions must not fetch")),
-  updateCustomFieldDefs: () => Promise.reject(new Error("definitions must not PATCH")),
+  fetchCurrentUser: () =>
+    Promise.reject(new Error("definitions must not fetch")),
+  updateCustomFieldDefs: () =>
+    Promise.reject(new Error("definitions must not PATCH")),
 }));
 
 const { countFieldValues, loadFieldDefs, removeFieldDef, saveFieldDefs } =
@@ -152,7 +154,10 @@ describe("loadFieldDefs", () => {
   });
 
   it("drops a row that does not describe a usable field", async () => {
-    defRows = [row(water, "tripLog"), { ...row(party, "tripLog", 1), type: "nonsense" }];
+    defRows = [
+      row(water, "tripLog"),
+      { ...row(party, "tripLog", 1), type: "nonsense" },
+    ];
     expect(await loadFieldDefs("tripLog")).toEqual([water]);
   });
 });
@@ -254,7 +259,9 @@ describe("saveFieldDefs", () => {
 
     created.length = 0;
     defRows = [row(flow, "tripLog", 0)];
-    await saveFieldDefs("tripLog", [{ ...flow, tripTypes: ["packrafting", "bushwalking"] }]);
+    await saveFieldDefs("tripLog", [
+      { ...flow, tripTypes: ["packrafting", "bushwalking"] },
+    ]);
     expect(created).toEqual([]);
     expect(updated).toEqual([
       { id: "row-flow", fields: { tripTypes: ["packrafting", "bushwalking"] } },
@@ -394,7 +401,9 @@ describe("a built-in definition is not the account's to change", () => {
       { id: "p1", syncRole: "owner", fieldValues: { quality: 4 } },
       { id: "p2", syncRole: "owner", fieldValues: { quality: 5 } },
     ];
-    await expect(removeFieldDef("place", "quality")).rejects.toThrow(/built-in/i);
+    await expect(removeFieldDef("place", "quality")).rejects.toThrow(
+      /built-in/i,
+    );
     expect(placeUpdates, "no place may lose a value").toEqual([]);
     expect(deleted).toEqual([]);
   });

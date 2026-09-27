@@ -10,7 +10,9 @@ describe("describeLocalData", () => {
   });
 
   it("drops empty kinds rather than reporting zeros", () => {
-    expect(describeLocalData({ places: 0, trips: 18, media: 0 })).toBe("18 trips");
+    expect(describeLocalData({ places: 0, trips: 18, media: 0 })).toBe(
+      "18 trips",
+    );
     expect(describeLocalData({ places: 3, trips: 0, media: 9 })).toBe(
       "3 places and 9 photos",
     );
@@ -29,7 +31,9 @@ describe("describeLocalData", () => {
 
 describe("linkConfirmationMessage", () => {
   it("is null with nothing to merge, so the caller can skip the prompt", () => {
-    expect(linkConfirmationMessage({ places: 0, trips: 0, media: 0 })).toBeNull();
+    expect(
+      linkConfirmationMessage({ places: 0, trips: 0, media: 0 }),
+    ).toBeNull();
   });
 
   it("states what moves and that it is irreversible", () => {
@@ -44,7 +48,11 @@ describe("linkConfirmationMessage", () => {
   });
 
   it("warns about duration once the photo backlog is large", () => {
-    const message = linkConfirmationMessage({ places: 1, trips: 0, media: 300 });
+    const message = linkConfirmationMessage({
+      places: 1,
+      trips: 0,
+      media: 300,
+    });
     expect(message).toContain("take a while");
   });
 });

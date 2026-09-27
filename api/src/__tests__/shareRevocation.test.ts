@@ -9,7 +9,7 @@ import {
   CAROL_ID,
   NONEXISTENT_ID,
   as,
-  CANYON_TYPE_ID
+  CANYON_TYPE_ID,
 } from "./_actors";
 
 // Revocation, from the side that loses access. Three findings live here:
@@ -181,14 +181,27 @@ describe("unfriend revokes every share type (APIR-007 / decision D2)", () => {
       .post("/shares")
       .set(as(BOB_SUB))
       .set(CLIENT)
-      .send({ entityType: "route", entityId: routeId, sharedWithUserId: CAROL_ID });
+      .send({
+        entityType: "route",
+        entityId: routeId,
+        sharedWithUserId: CAROL_ID,
+      });
     expect(shared.status).toBe(201);
     expect(
-      (await request(API_URL).get(`/routes/${routeId}`).set(as(CAROL_SUB))).status,
+      (await request(API_URL).get(`/routes/${routeId}`).set(as(CAROL_SUB)))
+        .status,
     ).toBe(200);
 
-    const pendingSendId = await sendCopy(BOB_SUB, [CAROL_ID], "pending-send.gpx");
-    const acceptedSendId = await sendCopy(BOB_SUB, [CAROL_ID], "accepted-send.gpx");
+    const pendingSendId = await sendCopy(
+      BOB_SUB,
+      [CAROL_ID],
+      "pending-send.gpx",
+    );
+    const acceptedSendId = await sendCopy(
+      BOB_SUB,
+      [CAROL_ID],
+      "accepted-send.gpx",
+    );
     expect(
       (
         await request(API_URL)
@@ -207,7 +220,8 @@ describe("unfriend revokes every share type (APIR-007 / decision D2)", () => {
     // Read access is gone, and the denial is a 404 (never 403 — that would
     // confirm the route id still exists to someone who may not see it).
     expect(
-      (await request(API_URL).get(`/routes/${routeId}`).set(as(CAROL_SUB))).status,
+      (await request(API_URL).get(`/routes/${routeId}`).set(as(CAROL_SUB)))
+        .status,
     ).toBe(404);
 
     // The Share row is gone too, not merely unreadable — a surviving row grants
@@ -221,8 +235,12 @@ describe("unfriend revokes every share type (APIR-007 / decision D2)", () => {
     // The copy she never took is revoked; the copy she accepted is HERS and
     // stays (it expires on its own within FILE_SEND_TTL_DAYS).
     const carolInbox = await inbox(CAROL_SUB);
-    expect(carolInbox.some((row) => row.fileSendId === pendingSendId)).toBe(false);
-    expect(carolInbox.some((row) => row.fileSendId === acceptedSendId)).toBe(true);
+    expect(carolInbox.some((row) => row.fileSendId === pendingSendId)).toBe(
+      false,
+    );
+    expect(carolInbox.some((row) => row.fileSendId === acceptedSendId)).toBe(
+      true,
+    );
   });
 });
 
@@ -235,7 +253,12 @@ describe("revoked place share stops resolving the place name (APIR-012)", () => 
       .post("/places")
       .set(as(ALICE_SUB))
       .set(CLIENT)
-      .send({ placeTypeId: CANYON_TYPE_ID, name: "revoke-notification-probe", latitude: -33.4, longitude: 150.4 });
+      .send({
+        placeTypeId: CANYON_TYPE_ID,
+        name: "revoke-notification-probe",
+        latitude: -33.4,
+        longitude: 150.4,
+      });
     expect(place.status).toBe(201);
     const placeId = place.body.id as string;
 
@@ -249,11 +272,13 @@ describe("revoked place share stops resolving the place name (APIR-012)", () => 
       ).status,
     ).toBe(201);
 
-    const notified = await request(API_URL).get("/notifications").set(as(BOB_SUB));
+    const notified = await request(API_URL)
+      .get("/notifications")
+      .set(as(BOB_SUB));
     expect(notified.status).toBe(200);
-    const seen = (notified.body as { type: string; payload: Record<string, unknown> }[]).some(
-      (n) => n.type === "place_shared" && n.payload.placeId === placeId,
-    );
+    const seen = (
+      notified.body as { type: string; payload: Record<string, unknown> }[]
+    ).some((n) => n.type === "place_shared" && n.payload.placeId === placeId);
     // Only assert the drop below if the grant actually produced a notification
     // (bob may have share notifications disabled in a customised dev DB).
     if (!seen) return;
@@ -275,14 +300,18 @@ describe("revoked place share stops resolving the place name (APIR-012)", () => 
       if (n.type !== "place_shared") continue;
       expect(n.payload.placeId).not.toBe(placeId);
       // And in particular the place NAME must not have been resolved for it.
-      expect(JSON.stringify(n.payload)).not.toContain("revoke-notification-probe");
+      expect(JSON.stringify(n.payload)).not.toContain(
+        "revoke-notification-probe",
+      );
     }
   });
 });
 
 describe("foreign notification ids answer 404, never 403 (APIR-013 / PRIV-105)", () => {
   it("a stranger's notification id is indistinguishable from a missing one", async () => {
-    const mine = await request(API_URL).get("/notifications").set(as(ALICE_SUB));
+    const mine = await request(API_URL)
+      .get("/notifications")
+      .set(as(ALICE_SUB));
     expect(mine.status).toBe(200);
     const first = (mine.body as { id: string }[])[0];
     if (!first) return; // no seeded notification to probe with
@@ -302,9 +331,11 @@ describe("foreign notification ids answer 404, never 403 (APIR-013 / PRIV-105)",
       .set(as(CAROL_SUB));
     expect(foreignDelete.status).toBe(404);
     // …and the row is still there for its real owner.
-    const stillMine = await request(API_URL).get("/notifications").set(as(ALICE_SUB));
-    expect((stillMine.body as { id: string }[]).some((n) => n.id === first.id)).toBe(
-      true,
-    );
+    const stillMine = await request(API_URL)
+      .get("/notifications")
+      .set(as(ALICE_SUB));
+    expect(
+      (stillMine.body as { id: string }[]).some((n) => n.id === first.id),
+    ).toBe(true);
   });
 });

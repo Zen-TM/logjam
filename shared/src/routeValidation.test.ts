@@ -19,10 +19,10 @@ const CLAUSTRAL: RoutePoint = [150.4033, -33.5603];
 
 /** A straight-ish line of `count` points heading east from Claustral. */
 function line(count: number, stepDeg = 0.0005): RoutePoint[] {
-  return Array.from({ length: count }, (_, i): RoutePoint => [
-    CLAUSTRAL[0] + i * stepDeg,
-    CLAUSTRAL[1],
-  ]);
+  return Array.from(
+    { length: count },
+    (_, i): RoutePoint => [CLAUSTRAL[0] + i * stepDeg, CLAUSTRAL[1]],
+  );
 }
 
 describe("parseRoutePoints", () => {
@@ -68,7 +68,9 @@ describe("parseRoutePoints", () => {
   });
 
   it("rejects a non-array and malformed pairs", () => {
-    expect(parseRoutePoints("nope")).toEqual({ error: ROUTE_ERRORS.pointsShape });
+    expect(parseRoutePoints("nope")).toEqual({
+      error: ROUTE_ERRORS.pointsShape,
+    });
     expect(parseRoutePoints([[150.4, -33.5], [150.4]])).toEqual({
       error: ROUTE_ERRORS.pointsShape,
     });
@@ -115,13 +117,18 @@ describe("validateRoutePayload", () => {
       validateRoutePayload({ name: "   ", points }, { requireCore: true }),
     ).toBe(ROUTE_ERRORS.nameRequired);
     expect(
-      validateRoutePayload({ name: "x".repeat(201), points }, { requireCore: true }),
+      validateRoutePayload(
+        { name: "x".repeat(201), points },
+        { requireCore: true },
+      ),
     ).toBe(ROUTE_ERRORS.nameTooLong);
   });
 
   it("validates only supplied fields on patch", () => {
     expect(validateRoutePayload({}, { requireCore: false })).toBeNull();
-    expect(validateRoutePayload({ name: "Exit" }, { requireCore: false })).toBeNull();
+    expect(
+      validateRoutePayload({ name: "Exit" }, { requireCore: false }),
+    ).toBeNull();
     expect(validateRoutePayload({ points: [] }, { requireCore: false })).toBe(
       ROUTE_ERRORS.tooFewPoints,
     );
@@ -164,7 +171,9 @@ describe("routeToGeoJson / reverseRoute", () => {
     expect(reversed).toEqual([0, 3, 5]);
     const reversedPoints = reverseRoute(points);
     for (const [i, index] of reversed.entries()) {
-      expect(reversedPoints[index]).toEqual(points[anchors[anchors.length - 1 - i]!]);
+      expect(reversedPoints[index]).toEqual(
+        points[anchors[anchors.length - 1 - i]!],
+      );
     }
   });
 });
@@ -251,7 +260,9 @@ describe("simplifyToFit", () => {
 });
 
 describe("routesFromVectorImport", () => {
-  const bbox: [number, number, number, number] = [150.4, -33.57, 150.41, -33.55];
+  const bbox: [number, number, number, number] = [
+    150.4, -33.57, 150.41, -33.55,
+  ];
 
   function importResult(
     features: VectorImportResult["features"],
@@ -289,7 +300,10 @@ describe("routesFromVectorImport", () => {
       importResult([
         {
           type: "Feature",
-          geometry: { type: "MultiLineString", coordinates: [line(3), line(4)] },
+          geometry: {
+            type: "MultiLineString",
+            coordinates: [line(3), line(4)],
+          },
           properties: {},
         },
       ]),
@@ -326,7 +340,10 @@ describe("routesFromVectorImport", () => {
       importResult([
         {
           type: "Feature",
-          geometry: { type: "LineString", coordinates: line(MAX_ROUTE_POINTS + 500) },
+          geometry: {
+            type: "LineString",
+            coordinates: line(MAX_ROUTE_POINTS + 500),
+          },
           properties: {},
         },
       ]),

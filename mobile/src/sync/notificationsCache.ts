@@ -39,9 +39,10 @@ async function writeCache(
 
 export async function readNotificationsCache(): Promise<NotificationsCache | null> {
   const db = await getSyncDb();
-  const row = await db.getFirstAsync<{ fetched_at: string; payload_json: string }>(
-    "SELECT fetched_at, payload_json FROM notifications_cache LIMIT 1",
-  );
+  const row = await db.getFirstAsync<{
+    fetched_at: string;
+    payload_json: string;
+  }>("SELECT fetched_at, payload_json FROM notifications_cache LIMIT 1");
   if (!row) return null;
   try {
     const parsed = JSON.parse(row.payload_json) as {
@@ -111,7 +112,9 @@ export async function fetchAndCacheNotifications(): Promise<NotificationsCache> 
     });
   const stillDeleting = data.length - notifications.length;
   const adjustedTotal =
-    total === null ? null : Math.max(notifications.length, total - stillDeleting);
+    total === null
+      ? null
+      : Math.max(notifications.length, total - stillDeleting);
   await writeCache(notifications, adjustedTotal);
   return {
     notifications,

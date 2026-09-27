@@ -185,7 +185,9 @@ export async function wipeAllLocalData(): Promise<WipeResult> {
   try {
     if (!CACHE_ROOT) throw new Error("No cacheDirectory to empty");
     for (const entry of await FileSystem.readDirectoryAsync(CACHE_ROOT)) {
-      await FileSystem.deleteAsync(`${CACHE_ROOT}${entry}`, { idempotent: true });
+      await FileSystem.deleteAsync(`${CACHE_ROOT}${entry}`, {
+        idempotent: true,
+      });
     }
   } catch (err) {
     console.error(err);

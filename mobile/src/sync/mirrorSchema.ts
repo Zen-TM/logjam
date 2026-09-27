@@ -362,7 +362,9 @@ export function tableSchema(name: string): TableSchema | undefined {
  * mirror column got an index; `syncDb.test.ts` pins the ordering.
  */
 export function createSchemaSql(kind?: TableKind): string {
-  return SYNC_TABLES.filter((table) => kind === undefined || table.kind === kind)
+  return SYNC_TABLES.filter(
+    (table) => kind === undefined || table.kind === kind,
+  )
     .map(createTableSql)
     .join("\n");
 }

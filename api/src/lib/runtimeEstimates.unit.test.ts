@@ -8,16 +8,18 @@ vi.mock("../services/prisma", () => ({
 }));
 
 import prisma from "../services/prisma";
-import { estimateExportSeconds, estimateGeoPdfSeconds } from "./runtimeEstimates";
+import {
+  estimateExportSeconds,
+  estimateGeoPdfSeconds,
+} from "./runtimeEstimates";
 import { geoPdfNativeMegapixels } from "../services/geoPdfTileMath";
 import type { GeoPdfConfig } from "@logjam/shared";
 
 const exportFindMany = (
   prisma as unknown as { topoExportJob: { findMany: Mock } }
 ).topoExportJob.findMany;
-const geoPdfFindMany = (
-  prisma as unknown as { geoPdfJob: { findMany: Mock } }
-).geoPdfJob.findMany;
+const geoPdfFindMany = (prisma as unknown as { geoPdfJob: { findMany: Mock } })
+  .geoPdfJob.findMany;
 
 // Env defaults (vitest.unit.setup.ts leaves these unset, so the zod schema
 // defaults apply): TOPO_EXPORT_ESTIMATE_DEFAULT_SECONDS_PER_TILE=20,
@@ -75,26 +77,56 @@ describe("estimateExportSeconds", () => {
     // configured default rate regardless of their actual (very different) rates.
     expect(EXPORT_MIN_SAMPLES).toBe(3);
     exportFindMany.mockResolvedValueOnce([
-      { sourceTileCount: 10, startedAt: START, completedAt: completedAfter(100) },
-      { sourceTileCount: 5, startedAt: START, completedAt: completedAfter(500) },
+      {
+        sourceTileCount: 10,
+        startedAt: START,
+        completedAt: completedAfter(100),
+      },
+      {
+        sourceTileCount: 5,
+        startedAt: START,
+        completedAt: completedAfter(500),
+      },
     ]);
 
     const tileCount = 10;
-    const result = await estimateExportSeconds("mbtiles", "composite", tileCount);
+    const result = await estimateExportSeconds(
+      "mbtiles",
+      "composite",
+      tileCount,
+    );
 
-    expect(result).toBe(EXPORT_OVERHEAD_SECONDS + EXPORT_DEFAULT_RATE * tileCount);
+    expect(result).toBe(
+      EXPORT_OVERHEAD_SECONDS + EXPORT_DEFAULT_RATE * tileCount,
+    );
   });
 
   it("uses the fitted median rate at >= minSamples", async () => {
     // Rates: 100/10=10, 300/20=15, 100/5=20 -> median 15 s/tile.
     exportFindMany.mockResolvedValueOnce([
-      { sourceTileCount: 10, startedAt: START, completedAt: completedAfter(100) },
-      { sourceTileCount: 20, startedAt: START, completedAt: completedAfter(300) },
-      { sourceTileCount: 5, startedAt: START, completedAt: completedAfter(100) },
+      {
+        sourceTileCount: 10,
+        startedAt: START,
+        completedAt: completedAfter(100),
+      },
+      {
+        sourceTileCount: 20,
+        startedAt: START,
+        completedAt: completedAfter(300),
+      },
+      {
+        sourceTileCount: 5,
+        startedAt: START,
+        completedAt: completedAfter(100),
+      },
     ]);
 
     const tileCount = 20;
-    const result = await estimateExportSeconds("mbtiles", "composite", tileCount);
+    const result = await estimateExportSeconds(
+      "mbtiles",
+      "composite",
+      tileCount,
+    );
 
     expect(result).toBe(EXPORT_OVERHEAD_SECONDS + 15 * tileCount);
   });
@@ -136,13 +168,19 @@ describe("estimateGeoPdfSeconds", () => {
 
     const result = await estimateGeoPdfSeconds(config);
 
-    expect(result).toBe(Math.round(GEO_PDF_OVERHEAD_SECONDS + GEO_PDF_DEFAULT_RATE * mp));
+    expect(result).toBe(
+      Math.round(GEO_PDF_OVERHEAD_SECONDS + GEO_PDF_DEFAULT_RATE * mp),
+    );
   });
 
   it("skips malformed/legacy history rows without throwing", async () => {
     geoPdfFindMany.mockResolvedValueOnce([
       // Legacy row: config missing `extent` entirely.
-      { config: { paperSize: "A4" }, startedAt: START, completedAt: completedAfter(60) },
+      {
+        config: { paperSize: "A4" },
+        startedAt: START,
+        completedAt: completedAfter(60),
+      },
       // Legacy row: scale is not a number.
       {
         config: { ...config, scale: "not-a-number" },

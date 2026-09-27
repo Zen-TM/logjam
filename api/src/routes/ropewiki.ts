@@ -37,7 +37,10 @@ const router = Router();
 const UPDATE_CHUNK_SIZE = 200;
 
 // Returns a copy of rw with OzUltimate source unioned into attributes.sources.
-function withOzUltimate(rw: RopeWikiCanyon, altNames: string[] = []): RopeWikiCanyon {
+function withOzUltimate(
+  rw: RopeWikiCanyon,
+  altNames: string[] = [],
+): RopeWikiCanyon {
   const ozUrl = matchOzUltimateUrl(rw.name, altNames);
   if (!ozUrl) return rw;
   const existing = rw.attributes?.sources ?? [];
@@ -106,12 +109,21 @@ async function applyAutoLinkAndCreate(
     const updates = toAutoLink.map((p) => {
       const rawFresh = parsedByRwId.get(p.ropeWikiId);
       if (!rawFresh)
-        throw new AppError(500, `Missing parsed RopeWiki place for id ${p.ropeWikiId}`);
+        throw new AppError(
+          500,
+          `Missing parsed RopeWiki place for id ${p.ropeWikiId}`,
+        );
       if (!p.bestPlaceId)
-        throw new AppError(500, `Auto-link proposal for RopeWiki id ${p.ropeWikiId} has no bestPlaceId`);
+        throw new AppError(
+          500,
+          `Auto-link proposal for RopeWiki id ${p.ropeWikiId} has no bestPlaceId`,
+        );
       const existing = existingByPlaceId.get(p.bestPlaceId);
       if (!existing)
-        throw new AppError(500, `Missing existing place for id ${p.bestPlaceId}`);
+        throw new AppError(
+          500,
+          `Missing existing place for id ${p.bestPlaceId}`,
+        );
       const fresh = withOzUltimate(rawFresh, existing.altNames);
       const merged = mergeFillNulls(existing, fresh);
       const { ropeWikiOwnedFields, fieldValues, ropeWikiId } = merged;
@@ -132,7 +144,10 @@ async function applyAutoLinkAndCreate(
   const review: ReviewCandidatePayload[] = toReview.map((p) => {
     const rw = parsedByRwId.get(p.ropeWikiId);
     if (!rw)
-      throw new AppError(500, `Missing parsed RopeWiki place for id ${p.ropeWikiId}`);
+      throw new AppError(
+        500,
+        `Missing parsed RopeWiki place for id ${p.ropeWikiId}`,
+      );
     return {
       ropeWikiId: p.ropeWikiId,
       rw,
@@ -324,7 +339,10 @@ router.post(
           data: {
             ropeWikiId,
             fieldValues: fieldValues as Prisma.InputJsonValue,
-            ropeWikiSnapshot: snapshotFromLink(freshWithOz, ropeWikiOwnedFields),
+            ropeWikiSnapshot: snapshotFromLink(
+              freshWithOz,
+              ropeWikiOwnedFields,
+            ),
           },
         }),
       );
@@ -461,7 +479,9 @@ router.post(
       // Per-field: check user edits and RopeWiki upstream changes.
       const placeData: Record<string, unknown> = {};
       const newOwnedFields: RopeWikiOwnableField[] =
-        effectiveOwnership === "*" ? [...ROPE_WIKI_OWNABLE_FIELDS] : [...effectiveOwnership];
+        effectiveOwnership === "*"
+          ? [...ROPE_WIKI_OWNABLE_FIELDS]
+          : [...effectiveOwnership];
 
       // The snapshot keeps RopeWiki's own camelCase names — it is persisted and
       // compared field by field on every refresh, so renaming its keys would
@@ -485,7 +505,8 @@ router.post(
             if (idx !== -1) newOwnedFields.splice(idx, 1);
           } else if (freshVal !== snapshotVal) {
             // RopeWiki changed this field and user hasn't touched it — update.
-            if (freshVal === null || freshVal === undefined) delete nextValues[key];
+            if (freshVal === null || freshVal === undefined)
+              delete nextValues[key];
             else nextValues[key] = freshVal;
             valuesChanged = true;
           }
@@ -495,11 +516,13 @@ router.post(
 
       // Sources: always union (no ownership semantics).
       const existingSources =
-        (existingValues[SOURCES_FIELD_KEY] as [string, string][] | undefined) ?? [];
+        (existingValues[SOURCES_FIELD_KEY] as [string, string][] | undefined) ??
+        [];
       const freshSources = freshWithOz.attributes?.sources ?? [];
       const mergedSources = [...existingSources];
       for (const [label, url] of freshSources) {
-        if (!mergedSources.some(([, u]) => u === url)) mergedSources.push([label, url]);
+        if (!mergedSources.some(([, u]) => u === url))
+          mergedSources.push([label, url]);
       }
       const sourcesChanged = !attributesSourcesEqual(
         { sources: existingSources.length ? existingSources : undefined },

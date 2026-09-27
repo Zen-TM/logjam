@@ -6,7 +6,10 @@
 import { TOPO_LAYERS, type TopoLayerKey } from "./topoSettings.js";
 // Type-only import keeps the module dependency direction acyclic
 // (topoExport → topoSettings); RasterTemplateSettings is erased at compile.
-import type { RasterTemplateSettings, ValidationResult } from "./topoSettings.js";
+import type {
+  RasterTemplateSettings,
+  ValidationResult,
+} from "./topoSettings.js";
 
 export type ExportFormat = "mbtiles" | "geotiff" | "gpkg" | "geojson" | "gpx";
 // KMZ is intentionally deferred (Stage 3) until Avenza-structure quirks are
@@ -16,7 +19,13 @@ export type ExportBundling = "composite" | "per-layer";
 
 export type ExportStatus = "queued" | "running" | "completed" | "failed";
 
-export const EXPORT_FORMATS: ExportFormat[] = ["mbtiles", "geotiff", "gpkg", "geojson", "gpx"];
+export const EXPORT_FORMATS: ExportFormat[] = [
+  "mbtiles",
+  "geotiff",
+  "gpkg",
+  "geojson",
+  "gpx",
+];
 
 // Derived from the canonical TOPO_LAYERS list (ARCH-010) so a new layer can
 // never be missed here.
@@ -52,7 +61,8 @@ export const EXPORT_FORMAT_RULES: Record<ExportFormat, ExportFormatRule> = {
     allowComposite: true,
     allowPerLayer: true,
     label: "MBTiles",
-    description: "Raster tile pyramid. Gaia GPS-compatible. Vectors are rasterized into the pyramid.",
+    description:
+      "Raster tile pyramid. Gaia GPS-compatible. Vectors are rasterized into the pyramid.",
   },
   geotiff: {
     format: "geotiff",
@@ -79,7 +89,8 @@ export const EXPORT_FORMAT_RULES: Record<ExportFormat, ExportFormatRule> = {
     allowComposite: false,
     allowPerLayer: true,
     label: "GeoJSON",
-    description: "Geo-referenced JSON file. Vector layers only. One file per layer (ZIP if multiple).",
+    description:
+      "Geo-referenced JSON file. Vector layers only. One file per layer (ZIP if multiple).",
   },
   gpx: {
     format: "gpx",
@@ -128,7 +139,9 @@ export interface ExportValidationFail {
 }
 export type ExportValidationResult = ExportValidationOk | ExportValidationFail;
 
-export function validateExportRequest(input: ExportValidationInput): ExportValidationResult {
+export function validateExportRequest(
+  input: ExportValidationInput,
+): ExportValidationResult {
   const rule = EXPORT_FORMAT_RULES[input.format];
   if (!rule) return { ok: false, error: `unknown format: ${input.format}` };
 
@@ -145,7 +158,9 @@ export function validateExportRequest(input: ExportValidationInput): ExportValid
     return { ok: false, error: `${rule.label} does not support vector layers` };
   }
   if (rule.layerAllowlist) {
-    const disallowed = input.layers.find((l) => !rule.layerAllowlist!.includes(l));
+    const disallowed = input.layers.find(
+      (l) => !rule.layerAllowlist!.includes(l),
+    );
     if (disallowed) {
       const meta = TOPO_LAYERS.find((m) => m.name === disallowed);
       return {
@@ -234,7 +249,8 @@ export function reconcileExportSelection(
 
   let bundling = value.bundling;
   if (bundling === "composite" && !rule.allowComposite) bundling = "per-layer";
-  else if (bundling === "per-layer" && !rule.allowPerLayer) bundling = "composite";
+  else if (bundling === "per-layer" && !rule.allowPerLayer)
+    bundling = "composite";
 
   return { format: value.format, bundling, layers };
 }
@@ -245,16 +261,21 @@ export function reconcileExportSelection(
  * legality to validateExportRequest. A disabled config still must be
  * structurally valid so it round-trips through persistence unchanged.
  */
-export function validateAutoExportSettings(input: unknown): ValidationResult<AutoExportSettings> {
+export function validateAutoExportSettings(
+  input: unknown,
+): ValidationResult<AutoExportSettings> {
   if (typeof input !== "object" || input === null || Array.isArray(input)) {
     return { ok: false, errors: ["autoExport must be an object"] };
   }
   const v = input as Record<string, unknown>;
   const errors: string[] = [];
 
-  if (typeof v.enabled !== "boolean") errors.push("autoExport.enabled must be boolean");
+  if (typeof v.enabled !== "boolean")
+    errors.push("autoExport.enabled must be boolean");
   if (!EXPORT_FORMAT_RULES[v.format as ExportFormat]) {
-    errors.push(`autoExport.format must be one of ${EXPORT_FORMATS.join(", ")}`);
+    errors.push(
+      `autoExport.format must be one of ${EXPORT_FORMATS.join(", ")}`,
+    );
   }
   if (v.bundling !== "composite" && v.bundling !== "per-layer") {
     errors.push("autoExport.bundling must be composite or per-layer");
@@ -307,6 +328,6 @@ export interface TopoExportJobView {
   errorMessage: string | null;
   createdAt: string;
   completedAt: string | null;
-  downloadUrl: string | null;   // presigned, set only when status=completed
+  downloadUrl: string | null; // presigned, set only when status=completed
   downloadExpiresAt: string | null;
 }

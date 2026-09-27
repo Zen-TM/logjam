@@ -11,7 +11,10 @@ export function parseSemver(version: string): [number, number, number] {
   return [Number(match[1]), Number(match[2]), Number(match[3])];
 }
 
-export function isVersionBelowMinimum(current: string, minimum: string): boolean {
+export function isVersionBelowMinimum(
+  current: string,
+  minimum: string,
+): boolean {
   const currentParts = parseSemver(current);
   const minimumParts = parseSemver(minimum);
   for (let i = 0; i < 3; i++) {

@@ -7,7 +7,10 @@ import { useEffect, useRef, type RefObject } from "react";
  *  further. A popover's DOM lives inside whatever opened it, so without this a
  *  colour picker's Escape bubbled on to the side sheet holding it and closed
  *  both, with focus left nowhere (DESIGN.md §10, "Escape at every layer"). */
-export function useEscape(ref: RefObject<HTMLElement | null> | null, onEscape: () => void) {
+export function useEscape(
+  ref: RefObject<HTMLElement | null> | null,
+  onEscape: () => void,
+) {
   const onEscapeRef = useRef(onEscape);
   onEscapeRef.current = onEscape;
   useEffect(() => {

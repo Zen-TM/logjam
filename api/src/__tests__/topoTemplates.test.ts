@@ -15,11 +15,17 @@ describe("topo-templates route (fake auth)", () => {
     const res = await request(API_URL).get("/topo-templates").set(AUTH);
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
-    expect(res.body[0]).toMatchObject({ id: "default", isSystem: true, name: "Default" });
+    expect(res.body[0]).toMatchObject({
+      id: "default",
+      isSystem: true,
+      name: "Default",
+    });
   });
 
   it("serves the Default by id but refuses to mutate it", async () => {
-    const getRes = await request(API_URL).get("/topo-templates/default").set(AUTH);
+    const getRes = await request(API_URL)
+      .get("/topo-templates/default")
+      .set(AUTH);
     expect(getRes.status).toBe(200);
     expect(getRes.body.isSystem).toBe(true);
     const patchRes = await request(API_URL)
@@ -27,7 +33,9 @@ describe("topo-templates route (fake auth)", () => {
       .set(AUTH)
       .send({ name: "hijack" });
     expect(patchRes.status).toBe(400);
-    const delRes = await request(API_URL).delete("/topo-templates/default").set(AUTH);
+    const delRes = await request(API_URL)
+      .delete("/topo-templates/default")
+      .set(AUTH);
     expect(delRes.status).toBe(400);
   });
 
@@ -47,7 +55,9 @@ describe("topo-templates route (fake auth)", () => {
   it("404s an unknown template id", async () => {
     const missing = randomUUID();
     for (const m of ["get", "patch", "delete"] as const) {
-      const res = await request(API_URL)[m](`/topo-templates/${missing}`).set(AUTH);
+      const res = await request(API_URL)
+        [m](`/topo-templates/${missing}`)
+        .set(AUTH);
       expect(res.status).toBe(404);
     }
   });
@@ -61,26 +71,36 @@ describe("topo-templates route (fake auth)", () => {
     const id: string = createRes.body.id;
 
     try {
-      const ownRes = await request(API_URL).get(`/topo-templates/${id}`).set(AUTH);
+      const ownRes = await request(API_URL)
+        .get(`/topo-templates/${id}`)
+        .set(AUTH);
       expect(ownRes.status).toBe(200);
 
       // A different user must not see or mutate alice's template — 404, not 403
       // (no oracle that the id exists).
-      const bobGet = await request(API_URL).get(`/topo-templates/${id}`).set(as(BOB_SUB));
+      const bobGet = await request(API_URL)
+        .get(`/topo-templates/${id}`)
+        .set(as(BOB_SUB));
       expect(bobGet.status).toBe(404);
       const bobPatch = await request(API_URL)
         .patch(`/topo-templates/${id}`)
         .set(as(BOB_SUB))
         .send({ name: "stolen" });
       expect(bobPatch.status).toBe(404);
-      const bobDel = await request(API_URL).delete(`/topo-templates/${id}`).set(as(BOB_SUB));
+      const bobDel = await request(API_URL)
+        .delete(`/topo-templates/${id}`)
+        .set(as(BOB_SUB));
       expect(bobDel.status).toBe(404);
     } finally {
-      const delRes = await request(API_URL).delete(`/topo-templates/${id}`).set(AUTH);
+      const delRes = await request(API_URL)
+        .delete(`/topo-templates/${id}`)
+        .set(AUTH);
       expect(delRes.status).toBe(204);
     }
 
-    const goneRes = await request(API_URL).get(`/topo-templates/${id}`).set(AUTH);
+    const goneRes = await request(API_URL)
+      .get(`/topo-templates/${id}`)
+      .set(AUTH);
     expect(goneRes.status).toBe(404);
   });
 });

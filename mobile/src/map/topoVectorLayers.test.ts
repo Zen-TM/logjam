@@ -62,7 +62,9 @@ describe("buildTopoVectorLayerDefs — features", () => {
     const vs = cloneVectorStyleSettings(VECTOR_STYLE_DEFAULTS);
     vs.features.road.enabled = false;
     vs.features.peak.enabled = false;
-    const suffixes = buildTopoVectorLayerDefs("features", vs).map((d) => d.suffix);
+    const suffixes = buildTopoVectorLayerDefs("features", vs).map(
+      (d) => d.suffix,
+    );
     expect(suffixes).not.toContain("road");
     expect(suffixes).not.toContain("road-label");
     expect(suffixes).not.toContain("peak");
@@ -97,7 +99,8 @@ describe("buildTopoVectorLayerDefs — features", () => {
     const base = buildTopoVectorLayerDefs("features", VECTOR_STYLE_DEFAULTS);
     const scaled = buildTopoVectorLayerDefs("features", vs);
     const sizeOf = (defs: typeof base) =>
-      defs.find((d) => d.suffix === "waterway-label")?.style.textSize as number[];
+      defs.find((d) => d.suffix === "waterway-label")?.style
+        .textSize as number[];
     // ["interpolate",["linear"],["zoom"], 14, <size@14>, 18, <size@18>]
     expect(sizeOf(scaled)[4]).toBeCloseTo((sizeOf(base)[4] as number) * 2);
   });

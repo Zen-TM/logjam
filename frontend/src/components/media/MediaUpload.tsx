@@ -11,7 +11,8 @@ import classes from "./MediaUpload.module.css";
 type UploadCategory = "visual" | "track";
 
 const ACCEPT_BY_CATEGORY: Record<UploadCategory, string> = {
-  visual: "image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm",
+  visual:
+    "image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm",
   track: ".gpx,.kml",
 };
 const ACCEPT_ALL = `${ACCEPT_BY_CATEGORY.visual},${ACCEPT_BY_CATEGORY.track}`;
@@ -55,11 +56,15 @@ export default function MediaUpload({
   const [errors, setErrors] = useState<string[]>([]);
 
   const accept = category ? ACCEPT_BY_CATEGORY[category] : ACCEPT_ALL;
-  const subHint = category ? HINT_BY_CATEGORY[category] : "Photos, videos, GPX/KML";
+  const subHint = category
+    ? HINT_BY_CATEGORY[category]
+    : "Photos, videos, GPX/KML";
   const locked = Boolean(disabled) || Boolean(disabledReason) || busy;
 
   // Whether a resolved file's category is allowed by the `category` prop.
-  function categoryAllowed(resolvedCategory: "image" | "video" | "track"): boolean {
+  function categoryAllowed(
+    resolvedCategory: "image" | "video" | "track",
+  ): boolean {
     if (!category) return true;
     if (category === "track") return resolvedCategory === "track";
     return resolvedCategory !== "track";
@@ -73,7 +78,9 @@ export default function MediaUpload({
     setErrors([]);
     const failures: string[] = [];
     if (maxFiles != null && selected.length > maxFiles) {
-      setErrors([`You can upload at most ${maxFiles} file${maxFiles === 1 ? "" : "s"} here.`]);
+      setErrors([
+        `You can upload at most ${maxFiles} file${maxFiles === 1 ? "" : "s"} here.`,
+      ]);
       return;
     }
     setBusy(true);
@@ -103,7 +110,9 @@ export default function MediaUpload({
           onUploaded(item);
         } catch (err) {
           console.error(err);
-          failures.push(`${file.name}: ${messageFromError(err, "upload failed")}`);
+          failures.push(
+            `${file.name}: ${messageFromError(err, "upload failed")}`,
+          );
         }
       }
     } catch (err) {
@@ -143,7 +152,8 @@ export default function MediaUpload({
         role="button"
         tabIndex={0}
         onKeyDown={(e) => {
-          if ((e.key === "Enter" || e.key === " ") && !locked) inputRef.current?.click();
+          if ((e.key === "Enter" || e.key === " ") && !locked)
+            inputRef.current?.click();
         }}
       >
         {busy ? (

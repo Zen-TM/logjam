@@ -55,17 +55,22 @@ import { logger, safeErrorForLog } from "../lib/logger";
 import { getEnv } from "../lib/env";
 
 /** Bounding box of a GeoJSON Polygon/MultiPolygon coords ring. */
-function geomBbox(
-  geom: { type: string; coordinates: unknown },
-): { west: number; south: number; east: number; north: number } | null {
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+function geomBbox(geom: {
+  type: string;
+  coordinates: unknown;
+}): { west: number; south: number; east: number; north: number } | null {
+  let minX = Infinity,
+    minY = Infinity,
+    maxX = -Infinity,
+    maxY = -Infinity;
   const visit = (pt: number[]) => {
     if (pt[0] < minX) minX = pt[0];
     if (pt[0] > maxX) maxX = pt[0];
     if (pt[1] < minY) minY = pt[1];
     if (pt[1] > maxY) maxY = pt[1];
   };
-  const walkRings = (rings: number[][][]) => rings.forEach((r) => r.forEach(visit));
+  const walkRings = (rings: number[][][]) =>
+    rings.forEach((r) => r.forEach(visit));
   if (geom.type === "Polygon") {
     walkRings(geom.coordinates as number[][][]);
   } else if (geom.type === "MultiPolygon") {
@@ -145,7 +150,9 @@ async function loadPointIcons(
     OSM_POINT_FEATURE_KEYS.filter((k) => vectorStyle.features[k]?.enabled).map(
       async (key) => {
         try {
-          const img = await loadImage(path.join(ICON_DIR, OSM_POINT_ICON[key].file));
+          const img = await loadImage(
+            path.join(ICON_DIR, OSM_POINT_ICON[key].file),
+          );
           cache.set(key, img);
         } catch (e) {
           logger.warn(
@@ -301,7 +308,12 @@ export async function generateGeoPdf(
   const styleZoom = displayZoomForScale(config.scale, centreLat);
 
   // 3. Compute the tile transform at zoom=1 scale so we know the native source size.
-  const { north: extNorth, south: extSouth, east: extEast, west: extWest } = config.extent;
+  const {
+    north: extNorth,
+    south: extSouth,
+    east: extEast,
+    west: extWest,
+  } = config.extent;
   const probeTransform = computeTileToMapTransform(
     zoom,
     extNorth,
@@ -332,7 +344,9 @@ export async function generateGeoPdf(
   mapCtx.imageSmoothingEnabled = true;
   // imageSmoothingQuality is a valid DOM property but absent from node-canvas's
   // type defs; scope the cast to this property rather than widening to `any`.
-  (mapCtx as typeof mapCtx & { imageSmoothingQuality: string }).imageSmoothingQuality = "high";
+  (
+    mapCtx as typeof mapCtx & { imageSmoothingQuality: string }
+  ).imageSmoothingQuality = "high";
 
   // Element DPI: how many pixels per inch at native canvas size
   const elementDpi = (nativeW / mapWidthMm) * MM_PER_INCH;
@@ -417,7 +431,9 @@ export async function generateGeoPdf(
     });
     const overlappingJobs = completedJobs.filter((j) => {
       if (!j.footprint) return true;
-      const bb = geomBbox(j.footprint as { type: string; coordinates: unknown });
+      const bb = geomBbox(
+        j.footprint as { type: string; coordinates: unknown },
+      );
       if (!bb) return true;
       return (
         bb.east > config.extent.west &&
@@ -587,7 +603,10 @@ const TILE_USER_AGENT = "Logjam/1.0 (+https://logjamnsw.com)";
  * 5xx / 429 / drop connections; a single retry with short backoff turns a
  * grey square into a successful tile in the common case.
  */
-async function fetchTileWithRetry(url: string, timeoutMs: number): Promise<Response> {
+async function fetchTileWithRetry(
+  url: string,
+  timeoutMs: number,
+): Promise<Response> {
   const attempt = async (): Promise<Response> => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -650,7 +669,17 @@ async function fetchAndDrawHttpTilesDirect(
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const arrayBuf = await response.arrayBuffer();
         const img = await loadImage(Buffer.from(arrayBuf));
-        mapCtx.drawImage(img, 0, 0, TILE_SIZE, TILE_SIZE, dx0, dy0, dx1 - dx0, dy1 - dy0);
+        mapCtx.drawImage(
+          img,
+          0,
+          0,
+          TILE_SIZE,
+          TILE_SIZE,
+          dx0,
+          dy0,
+          dx1 - dx0,
+          dy1 - dy0,
+        );
       } catch (err) {
         mapCtx.fillStyle = "#e8e8e8";
         mapCtx.fillRect(dx0, dy0, dx1 - dx0, dy1 - dy0);
@@ -723,7 +752,17 @@ async function fetchAndDrawPMTilesRasterDirect(
         const dx1 = Math.ceil(rawX + TILE_SIZE * transform.scaleX);
         const dy1 = Math.ceil(rawY + TILE_SIZE * transform.scaleY);
 
-        mapCtx.drawImage(img, 0, 0, TILE_SIZE, TILE_SIZE, dx0, dy0, dx1 - dx0, dy1 - dy0);
+        mapCtx.drawImage(
+          img,
+          0,
+          0,
+          TILE_SIZE,
+          TILE_SIZE,
+          dx0,
+          dy0,
+          dx1 - dx0,
+          dy1 - dy0,
+        );
         return 1;
       } catch (err) {
         logger.warn(
@@ -848,7 +887,11 @@ function interpZoom(
 // bare ramp — the print pxScale already enlarges it — and so deliberately
 // diverges from the live map (1.75× base) and the MBTiles baker (3× base), which
 // bump the base independently of labelScale. No longer a shared-size invariant.
-function labelFontSize(styleZoom: number, pxScale: number, labelScale: number): number {
+function labelFontSize(
+  styleZoom: number,
+  pxScale: number,
+  labelScale: number,
+): number {
   return interpZoom(styleZoom, 14, 9, 18, 12) * labelScale * pxScale;
 }
 
@@ -965,7 +1008,12 @@ function renderContourFeature(
       const my = dy + ring[mid].y * scaleY;
 
       // Skip if too close to an already-placed label
-      if (placedLabels.some((p) => Math.hypot(p.x - mx, p.y - my) < CONTOUR_LABEL_MIN_DISTANCE)) continue;
+      if (
+        placedLabels.some(
+          (p) => Math.hypot(p.x - mx, p.y - my) < CONTOUR_LABEL_MIN_DISTANCE,
+        )
+      )
+        continue;
       placedLabels.push({ x: mx, y: my });
 
       // Calculate angle from adjacent points for text rotation
@@ -983,7 +1031,11 @@ function renderContourFeature(
         y: my,
         angle,
         text: `${elev}m`,
-        fontSize: labelFontSize(styleZoom, pxScale, vectorStyle.labelScale ?? 1),
+        fontSize: labelFontSize(
+          styleZoom,
+          pxScale,
+          vectorStyle.labelScale ?? 1,
+        ),
         haloWidth: 1.5 * pxScale,
         color: labelColor,
       });
@@ -1015,7 +1067,12 @@ function bufferLineLabel(
   const mid = Math.floor(ring.length / 2);
   const mx = dx + ring[mid].x * scaleX;
   const my = dy + ring[mid].y * scaleY;
-  if (placedLabels.some((p) => Math.hypot(p.x - mx, p.y - my) < LINE_LABEL_MIN_DISTANCE)) return;
+  if (
+    placedLabels.some(
+      (p) => Math.hypot(p.x - mx, p.y - my) < LINE_LABEL_MIN_DISTANCE,
+    )
+  )
+    return;
   placedLabels.push({ x: mx, y: my });
   const prev = mid > 0 ? mid - 1 : 0;
   const next = mid < ring.length - 1 ? mid + 1 : ring.length - 1;
@@ -1053,7 +1110,9 @@ function renderOsmFeature(
   pendingLabels: PendingLabel[] = [],
 ) {
   const category = String(props._category ?? "");
-  const style = (vectorStyle.features as Record<string, OsmFeatureStyle | undefined>)[category];
+  const style = (
+    vectorStyle.features as Record<string, OsmFeatureStyle | undefined>
+  )[category];
   if (!style || !style.enabled) return; // per-category enable mirrors the overlay
   const geometry = feature.loadGeometry();
   const colour = rgbaCssFromHex(style.colour);
@@ -1077,7 +1136,9 @@ function renderOsmFeature(
           if (key === "peak") {
             const ele = props.ele;
             const eleStr =
-              ele !== undefined && ele !== null && `${ele}`.trim() !== "" ? `${ele} m` : "";
+              ele !== undefined && ele !== null && `${ele}`.trim() !== ""
+                ? `${ele} m`
+                : "";
             text = [name, eleStr].filter(Boolean).join("\n");
           }
           if (text) {
@@ -1086,7 +1147,11 @@ function renderOsmFeature(
               y: py + t / 2 + interpZoom(styleZoom, 14, 7, 18, 9) * pxScale,
               angle: 0,
               text,
-              fontSize: labelFontSize(styleZoom, pxScale, vectorStyle.labelScale ?? 1),
+              fontSize: labelFontSize(
+                styleZoom,
+                pxScale,
+                vectorStyle.labelScale ?? 1,
+              ),
               haloWidth: 1.5 * pxScale,
               color: colour,
             });
@@ -1113,7 +1178,20 @@ function renderOsmFeature(
           : typeof props.name === "string"
             ? props.name
             : "";
-      bufferLineLabel(geometry, dx, dy, scaleX, scaleY, styleZoom, pxScale, label, colour, placedLabels, pendingLabels, vectorStyle.labelScale ?? 1);
+      bufferLineLabel(
+        geometry,
+        dx,
+        dy,
+        scaleX,
+        scaleY,
+        styleZoom,
+        pxScale,
+        label,
+        colour,
+        placedLabels,
+        pendingLabels,
+        vectorStyle.labelScale ?? 1,
+      );
       break;
     }
     case "track": {
@@ -1127,7 +1205,20 @@ function renderOsmFeature(
         dash: [4 * width, 2 * width],
       });
       const label = typeof props.name === "string" ? props.name : "";
-      bufferLineLabel(geometry, dx, dy, scaleX, scaleY, styleZoom, pxScale, label, colour, placedLabels, pendingLabels, vectorStyle.labelScale ?? 1);
+      bufferLineLabel(
+        geometry,
+        dx,
+        dy,
+        scaleX,
+        scaleY,
+        styleZoom,
+        pxScale,
+        label,
+        colour,
+        placedLabels,
+        pendingLabels,
+        vectorStyle.labelScale ?? 1,
+      );
       break;
     }
     case "power": {
@@ -1341,7 +1432,11 @@ function drawScaleBar(
   // Labels
   ctx.fillStyle = INK;
   ctx.font = `${fontSize}px ${MAP_FONT}`;
-  ctx.fillText("0", x + padH, y + padV + barHeight + fontSize + mmToPx(0.5, dpi));
+  ctx.fillText(
+    "0",
+    x + padH,
+    y + padV + barHeight + fontSize + mmToPx(0.5, dpi),
+  );
   ctx.fillText(
     labelText,
     x + padH + barWidthPx + mmToPx(1, dpi),
@@ -1419,7 +1514,8 @@ function drawCompass(
   const mnLabelExtra = mmToPx(3, dpi);
   const gnLabelExtra = mmToPx(2.6, dpi);
 
-  const fmtDecl = (v: number) => `${Math.abs(v).toFixed(1)}° ${v >= 0 ? "E" : "W"}`;
+  const fmtDecl = (v: number) =>
+    `${Math.abs(v).toFixed(1)}° ${v >= 0 ? "E" : "W"}`;
 
   // ── Dynamic width ──────────────────────────────────────────────────────────
   // The fixed 34 mm box left wide gutters. Size the panel to the wider of two
@@ -1427,7 +1523,12 @@ function drawCompass(
   // x-offsets below are measured RELATIVE TO THE ARM ORIGIN (positive = right).
   const armX: number[] = [0];
   ctx.font = `bold ${tipFont}px ${MAP_FONT}`;
-  const addArm = (deg: number, len: number, labelExtra: number, label: string) => {
+  const addArm = (
+    deg: number,
+    len: number,
+    labelExtra: number,
+    label: string,
+  ) => {
     const s = Math.sin(deg * DEG_TO_RAD);
     armX.push(s * len, s * len - starR, s * len + starR); // tip + star/tick spread
     const lw = ctx.measureText(label).width;
@@ -1461,8 +1562,7 @@ function drawCompass(
 
   const arrowAreaH = headroom + armTN;
   const boxW = Math.max(armBlockWidth, readoutBlockWidth, mmToPx(20, dpi));
-  const boxH =
-    topPad + arrowAreaH + readoutGap + 2 * rowH + bottomPad;
+  const boxH = topPad + arrowAreaH + readoutGap + 2 * rowH + bottomPad;
   const boxX = margin;
   const boxY = stackY - boxH;
 
@@ -1506,7 +1606,11 @@ function drawCompass(
   };
 
   // Single-sided barb (half-arrowhead) at MN tip, per convention.
-  const drawHalfArrow = (tip: { x: number; y: number }, deg: number, color: string) => {
+  const drawHalfArrow = (
+    tip: { x: number; y: number },
+    deg: number,
+    color: string,
+  ) => {
     const r = deg * DEG_TO_RAD;
     const dir = { x: Math.sin(r), y: -Math.cos(r) }; // along arm toward tip
     const perp = { x: -dir.y, y: dir.x }; // left of travel
@@ -1778,7 +1882,13 @@ function drawGridLines(
     // Horizontal lines (latitudes)
     const startLat = Math.ceil(south / latInterval) * latInterval;
     for (let lat = startLat; lat <= north; lat += latInterval) {
-      const { y } = latLonToCanvasPx(lat, west, config.extent, widthPx, heightPx);
+      const { y } = latLonToCanvasPx(
+        lat,
+        west,
+        config.extent,
+        widthPx,
+        heightPx,
+      );
       ctx.beginPath();
       ctx.moveTo(0, y);
       ctx.lineTo(widthPx, y);
@@ -1816,8 +1926,7 @@ function drawAttribution(
   ctx.textBaseline = "bottom";
 
   const baseAttrib =
-    GEOPDF_BASE_LAYER_CONFIG[config.baseLayer]?.attribution ??
-    "Base map data";
+    GEOPDF_BASE_LAYER_CONFIG[config.baseLayer]?.attribution ?? "Base map data";
 
   // Word-wrap each credit to the right ~55% of the map width so the long open-
   // data licence strings never run off the left edge (worst in portrait, where

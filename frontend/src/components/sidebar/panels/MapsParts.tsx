@@ -2,7 +2,14 @@
 // views of one page must not draw the same row two ways.
 import { useState } from "react";
 import { X } from "lucide-react";
-import { Button, IconButton, IconTile, ProgressBar, Row, StatusPill } from "../../../ui";
+import {
+  Button,
+  IconButton,
+  IconTile,
+  ProgressBar,
+  Row,
+  StatusPill,
+} from "../../../ui";
 import { MAP_IDENTITY, type MakingItem } from "./mapsModel";
 import classes from "./MapsPanel.module.css";
 
@@ -68,7 +75,13 @@ export function MakingFooter({
 /** A running job moves a bar; a failed one says so in a pill and in the
  *  worker's own words, and its one verb — Dismiss, which deletes the dead row —
  *  is a button on the row rather than a menu of one. */
-function MakingRow({ item, onDismiss }: { item: MakingItem; onDismiss: (item: MakingItem) => void }) {
+function MakingRow({
+  item,
+  onDismiss,
+}: {
+  item: MakingItem;
+  onDismiss: (item: MakingItem) => void;
+}) {
   const identity = MAP_IDENTITY[item.kind];
   return (
     <Row
@@ -76,16 +89,30 @@ function MakingRow({ item, onDismiss }: { item: MakingItem; onDismiss: (item: Ma
       title={item.title}
       subtitle={item.detail}
       description={identity.label}
-      leading={<IconTile icon={identity.icon} hue={identity.hue} label={identity.label} />}
+      leading={
+        <IconTile
+          icon={identity.icon}
+          hue={identity.hue}
+          label={identity.label}
+        />
+      }
       trailing={
         item.failed ? (
           <>
             <StatusPill label="Failed" tone="warning" />
-            <IconButton icon={X} label={`Dismiss ${item.title}`} onClick={() => onDismiss(item)} />
+            <IconButton
+              icon={X}
+              label={`Dismiss ${item.title}`}
+              onClick={() => onDismiss(item)}
+            />
           </>
         ) : undefined
       }
-      footer={item.failed ? undefined : <ProgressBar label={`${item.title}: ${item.detail}`} />}
+      footer={
+        item.failed ? undefined : (
+          <ProgressBar label={`${item.title}: ${item.detail}`} />
+        )
+      }
     />
   );
 }

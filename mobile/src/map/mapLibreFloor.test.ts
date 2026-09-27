@@ -8,11 +8,15 @@ import { describe, expect, it } from "vitest";
 // comment, so the floor is held here.
 describe("MapLibre native SDK floor", () => {
   const appJson = JSON.parse(
-    readFileSync(join(__dirname, "../../app.json"), "utf8")
+    readFileSync(join(__dirname, "../../app.json"), "utf8"),
   ) as { expo: { plugins: unknown[] } };
   const plugin = appJson.expo.plugins.find(
-    (p): p is [string, { android: { nativeVariant: string; nativeVersion: string } }] =>
-      Array.isArray(p) && p[0] === "@maplibre/maplibre-react-native"
+    (
+      p,
+    ): p is [
+      string,
+      { android: { nativeVariant: string; nativeVersion: string } },
+    ] => Array.isArray(p) && p[0] === "@maplibre/maplibre-react-native",
   );
 
   it("runs Vulkan on 13.3.0 or later", () => {

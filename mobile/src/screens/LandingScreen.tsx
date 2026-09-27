@@ -35,7 +35,14 @@ import {
 } from "react-native";
 
 import type { useAuth } from "../auth/useAuth";
-import { fontSize, fontWeight, lineHeight, radius, spacing, theme } from "../theme";
+import {
+  fontSize,
+  fontWeight,
+  lineHeight,
+  radius,
+  spacing,
+  theme,
+} from "../theme";
 import { Button, ErrorBanner, TextField } from "../ui";
 
 type Auth = ReturnType<typeof useAuth>;
@@ -54,11 +61,20 @@ export function LandingScreen({ auth }: { auth: Auth }) {
       style={styles.root}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={styles.mark}>
-          <Image source={require("../../assets/logo.png")} style={styles.logo} accessibilityIgnoresInvertColors />
+          <Image
+            source={require("../../assets/logo.png")}
+            style={styles.logo}
+            accessibilityIgnoresInvertColors
+          />
           <Text style={styles.appTitle}>Logjam</Text>
-          <Text style={styles.tagline}>Your canyoning logbook and offline maps.</Text>
+          <Text style={styles.tagline}>
+            Your canyoning logbook and offline maps.
+          </Text>
         </View>
 
         {mode === "signIn" ? (
@@ -128,7 +144,11 @@ function SignInPanel({
 
       {/* Everything below the rule is deliberately quieter than Sign in. */}
       <View style={styles.secondary}>
-        <Button label="Create an account" variant="outlineAccent" onPress={auth.goToSignUp} />
+        <Button
+          label="Create an account"
+          variant="outlineAccent"
+          onPress={auth.goToSignUp}
+        />
         {offersGuest ? (
           <Button
             label="Continue without an account"
@@ -171,17 +191,35 @@ function GuestExplainer({
           choice belongs directly above it (§8). */}
       {auth.error ? <ErrorBanner message={auth.error} /> : null}
       <View style={styles.secondary}>
-        <Button label="Continue anyway" variant="outlineAccent" onPress={onContinue} />
-        <Button label="Create an account" variant="ghost" onPress={onCreateAccount} />
+        <Button
+          label="Continue anyway"
+          variant="outlineAccent"
+          onPress={onContinue}
+        />
+        <Button
+          label="Create an account"
+          variant="ghost"
+          onPress={onCreateAccount}
+        />
         <Button label="Back to login" variant="ghost" onPress={onBack} />
       </View>
     </View>
   );
 }
 
-function FooterLink({ label, onPress }: { label: string; onPress: () => void }) {
+function FooterLink({
+  label,
+  onPress,
+}: {
+  label: string;
+  onPress: () => void;
+}) {
   return (
-    <Pressable onPress={onPress} accessibilityRole="link" style={styles.footerLink}>
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="link"
+      style={styles.footerLink}
+    >
       <Text style={styles.footerLinkText}>{label}</Text>
     </Pressable>
   );
@@ -207,16 +245,33 @@ const styles = StyleSheet.create({
   // cannot resolve it, and the Image renders 88pt of nothing — which is
   // exactly what a release build did, silently, while debug was fine. Do not
   // "de-duplicate" these two files.
-  logo: { width: 88, height: 88, borderRadius: radius.xl, marginBottom: spacing(1) },
+  logo: {
+    width: 88,
+    height: 88,
+    borderRadius: radius.xl,
+    marginBottom: spacing(1),
+  },
   appTitle: {
     fontSize: fontSize.xl,
     fontWeight: fontWeight.bold,
     color: theme.textPrimary,
   },
-  tagline: { fontSize: fontSize.sm, color: theme.textMuted, textAlign: "center" },
+  tagline: {
+    fontSize: fontSize.sm,
+    color: theme.textMuted,
+    textAlign: "center",
+  },
   form: { gap: spacing(2) },
-  heading: { fontSize: fontSize.lg, fontWeight: fontWeight.medium, color: theme.textPrimary },
-  body: { fontSize: fontSize.sm, color: theme.textMuted, lineHeight: lineHeight.body },
+  heading: {
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.medium,
+    color: theme.textPrimary,
+  },
+  body: {
+    fontSize: fontSize.sm,
+    color: theme.textMuted,
+    lineHeight: lineHeight.body,
+  },
   secondary: { gap: spacing(0.5) },
   footerLink: { alignSelf: "center", padding: spacing(0.5) },
   footerLinkText: { color: theme.accent, fontSize: fontSize.sm },

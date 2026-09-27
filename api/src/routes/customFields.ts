@@ -56,7 +56,11 @@ function parseScoping(body: {
   placeTypeIds?: unknown;
   tripTypes?: unknown;
   appliesToAllTypes?: unknown;
-}): { placeTypeIds?: string[]; tripTypes?: string[]; appliesToAllTypes?: boolean } {
+}): {
+  placeTypeIds?: string[];
+  tripTypes?: string[];
+  appliesToAllTypes?: boolean;
+} {
   const out: {
     placeTypeIds?: string[];
     tripTypes?: string[];

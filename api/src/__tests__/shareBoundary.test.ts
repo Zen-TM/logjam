@@ -9,7 +9,7 @@ import {
   CAROL_ID,
   SHARED_PLACE_ID,
   as,
-  CANYON_TYPE_ID
+  CANYON_TYPE_ID,
 } from "./_actors";
 
 // Multi-user / share-boundary coverage (gap 1, SEC-001 regression).
@@ -39,10 +39,12 @@ async function clearBobCarolFriendship(): Promise<void> {
 }
 
 async function createPlace(sub: string, name: string): Promise<string> {
-  const res = await request(API_URL)
-    .post("/places")
-    .set(as(sub))
-    .send({ placeTypeId: CANYON_TYPE_ID, name, latitude: -33.7, longitude: 150.3 });
+  const res = await request(API_URL).post("/places").set(as(sub)).send({
+    placeTypeId: CANYON_TYPE_ID,
+    name,
+    latitude: -33.7,
+    longitude: 150.3,
+  });
   expect(res.status).toBe(201);
   return res.body.id as string;
 }
@@ -67,9 +69,7 @@ describe("share boundary — recipient view (hybrid model)", () => {
   // alice had logged on her place, and how many other people she'd shared it
   // with. The frontend ignored the number; the API still sent it.
   it("recipient's shared list carries NO owner-private counts (trip tally, share fan-out)", async () => {
-    const res = await request(API_URL)
-      .get("/places/shared")
-      .set(as(BOB_SUB));
+    const res = await request(API_URL).get("/places/shared").set(as(BOB_SUB));
     expect(res.status).toBe(200);
     const shared = res.body.find(
       (c: { id: string }) => c.id === SHARED_PLACE_ID,
@@ -112,14 +112,15 @@ describe("share boundary — recipient view (hybrid model)", () => {
     expect(ownerTrips.body.length).toBeGreaterThanOrEqual(1);
     const tripId = ownerTrips.body[0].id as string;
 
-    const res = await request(API_URL)
-      .get(`/trips/${tripId}`)
-      .set(as(BOB_SUB));
+    const res = await request(API_URL).get(`/trips/${tripId}`).set(as(BOB_SUB));
     expect(res.status).toBe(404);
   });
 
   it("alice's trips linked to the shared place stay invisible to bob everywhere: nested list, global list, and single GET", async () => {
-    const placeId = await createPlace(ALICE_SUB, "share boundary trip invisibility");
+    const placeId = await createPlace(
+      ALICE_SUB,
+      "share boundary trip invisibility",
+    );
     try {
       const shareRes = await request(API_URL)
         .post(`/places/${placeId}/share`)
@@ -131,7 +132,11 @@ describe("share boundary — recipient view (hybrid model)", () => {
       const tripRes = await request(API_URL)
         .post("/trips")
         .set(as(ALICE_SUB))
-        .send({ placeIds: [placeId], date: "2026-06-01", displayName: uniqueTag });
+        .send({
+          placeIds: [placeId],
+          date: "2026-06-01",
+          displayName: uniqueTag,
+        });
       expect(tripRes.status).toBe(201);
       const tripId = tripRes.body.id as string;
 

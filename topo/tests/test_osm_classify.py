@@ -1,4 +1,5 @@
 """OSM tag → feature category classification (pure dict logic)."""
+
 import os
 import sys
 import unittest
@@ -11,6 +12,7 @@ import _native_stub  # noqa: F401,E402
 try:
     import pipeline  # noqa: E402
     from pipeline import classify_osm_element, fetch_osm_features  # noqa: E402
+
     _IMPORT_OK = True
 except Exception as _exc:  # noqa: BLE001
     _IMPORT_OK = False
@@ -42,26 +44,36 @@ class TestClassifyOsmElement(unittest.TestCase):
             self.assertEqual(classify_osm_element(tags), expected, f"tags={tags}")
 
     def test_trailhead_via_guidepost(self):
-        self.assertEqual(classify_osm_element({"information": "guidepost"}), "trailhead")
+        self.assertEqual(
+            classify_osm_element({"information": "guidepost"}), "trailhead"
+        )
 
     def test_bridge_overrides_highway(self):
         # A highway-tagged bridge classifies as bridge, not track/road.
-        self.assertEqual(classify_osm_element({"highway": "track", "bridge": "yes"}), "bridge")
+        self.assertEqual(
+            classify_osm_element({"highway": "track", "bridge": "yes"}), "bridge"
+        )
 
     def test_ford_overrides_highway(self):
-        self.assertEqual(classify_osm_element({"highway": "path", "ford": "yes"}), "ford")
+        self.assertEqual(
+            classify_osm_element({"highway": "path", "ford": "yes"}), "ford"
+        )
 
     def test_waterfall_overrides_waterway(self):
         self.assertEqual(classify_osm_element({"waterway": "waterfall"}), "waterfall")
 
     def test_alpine_hut_stays_campsite_for_backwards_compat(self):
         self.assertEqual(classify_osm_element({"tourism": "alpine_hut"}), "campsite")
-        self.assertEqual(classify_osm_element({"tourism": "wilderness_hut"}), "campsite")
+        self.assertEqual(
+            classify_osm_element({"tourism": "wilderness_hut"}), "campsite"
+        )
 
     def test_unknown_tags_return_none(self):
         self.assertIsNone(classify_osm_element({}))
         self.assertIsNone(classify_osm_element({"shop": "bakery"}))
-        self.assertIsNone(classify_osm_element({"highway": "motorway"}))  # not in road set
+        self.assertIsNone(
+            classify_osm_element({"highway": "motorway"})
+        )  # not in road set
 
 
 class _FakeResponse:
@@ -98,13 +110,19 @@ class TestOverpassDegradesOnBadBody(unittest.TestCase):
             calls.append(url)
             return _FakeResponse(payload)
 
-        with mock.patch.object(pipeline.requests, "post", _post), \
-                mock.patch("time.sleep", lambda _s: None):
-            result = fetch_osm_features(150.0, -34.0, 150.1, -33.9, work_dir="/nonexistent")
+        with (
+            mock.patch.object(pipeline.requests, "post", _post),
+            mock.patch("time.sleep", lambda _s: None),
+        ):
+            result = fetch_osm_features(
+                150.0, -34.0, 150.1, -33.9, work_dir="/nonexistent"
+            )
         return result, calls
 
     def test_html_body_returns_none_after_rotating_every_mirror(self):
-        result, calls = self._run(ValueError("Expecting value: line 1 column 1 (char 0)"))
+        result, calls = self._run(
+            ValueError("Expecting value: line 1 column 1 (char 0)")
+        )
         self.assertIsNone(result)
         self.assertEqual(len(calls), 6, "3 mirrors x 2 attempts")
         self.assertEqual(len(set(calls)), 3, "all mirrors tried")

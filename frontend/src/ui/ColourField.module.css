@@ -23,7 +23,8 @@
   background:
     linear-gradient(var(--swatch), var(--swatch)),
     repeating-conic-gradient(#888 0% 25%, #ccc 0% 50%) 0 0 / 8px 8px;
-  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--theme-text-muted) 60%, transparent);
+  box-shadow: inset 0 0 0 1.5px
+    color-mix(in srgb, var(--theme-text-muted) 60%, transparent);
 }
 
 .trigger:disabled {
@@ -50,8 +51,7 @@
   border-radius: var(--radius-sm);
   background:
     linear-gradient(to bottom, transparent, #000),
-    linear-gradient(to right, #fff, transparent),
-    hsl(var(--hue) 100% 50%);
+    linear-gradient(to right, #fff, transparent), hsl(var(--hue) 100% 50%);
   cursor: crosshair;
   user-select: none;
   touch-action: none;

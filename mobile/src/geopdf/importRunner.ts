@@ -85,7 +85,9 @@ let current: (GeoPdfImportRun & { token: GeoPdfCancelToken }) | null = null;
 let currentSettled: Promise<void> | null = null;
 
 const runListeners = new Set<() => void>();
-const toastListeners = new Set<(message: Omit<ToastMessage, "nonce">) => void>();
+const toastListeners = new Set<
+  (message: Omit<ToastMessage, "nonce">) => void
+>();
 
 function notifyRun(): void {
   for (const listener of runListeners) listener();

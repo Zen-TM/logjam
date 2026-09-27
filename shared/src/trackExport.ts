@@ -139,7 +139,9 @@ export function trackPointsToKml(
           return `        <gx:coord>${parts.join(" ")}</gx:coord>`;
         })
         .join("\n");
-      return ["      <gx:Track>", whens, coords, "      </gx:Track>"].join("\n");
+      return ["      <gx:Track>", whens, coords, "      </gx:Track>"].join(
+        "\n",
+      );
     })
     .join("\n");
 

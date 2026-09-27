@@ -2,24 +2,45 @@ import { describe, it, expect } from "vitest";
 import { ApiError } from "./apiErrors.js";
 
 import type { TNotification } from "./apiTypes.js";
-import { isResolvedElsewhereError, notificationActions } from "./notificationActions.js";
+import {
+  isResolvedElsewhereError,
+  notificationActions,
+} from "./notificationActions.js";
 
-function notification(type: string, payload: Record<string, unknown>): TNotification {
-  return { id: "n1", type, payload, read: false, createdAt: "2026-08-30T01:00:00Z" };
+function notification(
+  type: string,
+  payload: Record<string, unknown>,
+): TNotification {
+  return {
+    id: "n1",
+    type,
+    payload,
+    read: false,
+    createdAt: "2026-08-30T01:00:00Z",
+  };
 }
 
 describe("notificationActions", () => {
   it("offers nothing on a notification that only reports", () => {
-    expect(notificationActions(notification("topo_complete", { jobId: "j1" }))).toBeNull();
     expect(
-      notificationActions(notification("friend_request_accepted", { friendshipId: "f1" })),
+      notificationActions(notification("topo_complete", { jobId: "j1" })),
     ).toBeNull();
-    expect(notificationActions(notification("place_shared", { placeId: "c1" }))).toBeNull();
+    expect(
+      notificationActions(
+        notification("friend_request_accepted", { friendshipId: "f1" }),
+      ),
+    ).toBeNull();
+    expect(
+      notificationActions(notification("place_shared", { placeId: "c1" })),
+    ).toBeNull();
   });
 
   it("offers accept + decline on a friend request", () => {
     const actions = notificationActions(
-      notification("friend_request", { friendshipId: "f1", requesterUsername: "bob" }),
+      notification("friend_request", {
+        friendshipId: "f1",
+        requesterUsername: "bob",
+      }),
     );
     expect(actions?.type).toBe("friend_request");
     expect(actions?.targetId).toBe("f1");
@@ -37,7 +58,10 @@ describe("notificationActions", () => {
     );
     expect(actions?.type).toBe("file_sent");
     expect(actions?.targetId).toBe("s1");
-    expect(actions?.actions.map((a) => a.label)).toEqual(["Save a copy", "Turn down"]);
+    expect(actions?.actions.map((a) => a.label)).toEqual([
+      "Save a copy",
+      "Turn down",
+    ]);
     expect(actions?.pill).toBeNull();
   });
 
@@ -60,8 +84,14 @@ describe("notificationActions", () => {
   // left to keep "no" away from "yes".
   it("confirms every decline and no accept", () => {
     for (const n of [
-      notification("friend_request", { friendshipId: "f1", requesterUsername: "bob" }),
-      notification("file_sent", { fileSendId: "s1", filename: "Claustral.gpx" }),
+      notification("friend_request", {
+        friendshipId: "f1",
+        requesterUsername: "bob",
+      }),
+      notification("file_sent", {
+        fileSendId: "s1",
+        filename: "Claustral.gpx",
+      }),
     ]) {
       const actions = notificationActions(n);
       for (const action of actions!.actions) {
@@ -72,9 +102,16 @@ describe("notificationActions", () => {
 
   it("reports every action, so none of them can look like a no-op", () => {
     for (const n of [
-      notification("friend_request", { friendshipId: "f1", requesterUsername: "bob" }),
+      notification("friend_request", {
+        friendshipId: "f1",
+        requesterUsername: "bob",
+      }),
       notification("file_sent", { fileSendId: "s1", filename: "x.gpx" }),
-      notification("file_sent", { fileSendId: "s1", filename: "x.gpx", fileSendStatus: "accepted" }),
+      notification("file_sent", {
+        fileSendId: "s1",
+        filename: "x.gpx",
+        fileSendStatus: "accepted",
+      }),
     ]) {
       for (const action of notificationActions(n)!.actions) {
         expect(action.success.length).toBeGreaterThan(0);
@@ -87,7 +124,11 @@ describe("notificationActions", () => {
   // way back is another send.
   it("never offers to 'share' a turned-down file back", () => {
     const body = notificationActions(
-      notification("file_sent", { fileSendId: "s1", filename: "x.gpx", sentByUsername: "bob" }),
+      notification("file_sent", {
+        fileSendId: "s1",
+        filename: "x.gpx",
+        sentByUsername: "bob",
+      }),
     )!.actions.find((a) => a.kind === "decline")!.confirm!.body;
     expect(body).not.toMatch(/shares?\b/i);
     expect(body).toContain("send it again");
@@ -102,7 +143,8 @@ describe("notificationActions", () => {
         sentByUsername: "bob",
       }),
     );
-    const body = actions!.actions.find((a) => a.kind === "decline")!.confirm!.body;
+    const body = actions!.actions.find((a) => a.kind === "decline")!.confirm!
+      .body;
     expect(body).toContain("Claustral.gpx");
     expect(body).toContain("bob");
   });
@@ -126,22 +168,36 @@ describe("notificationActions", () => {
 
   it("renders nothing rather than unwired buttons when the id is missing", () => {
     expect(notificationActions(notification("friend_request", {}))).toBeNull();
-    expect(notificationActions(notification("file_sent", { filename: "x.gpx" }))).toBeNull();
+    expect(
+      notificationActions(notification("file_sent", { filename: "x.gpx" })),
+    ).toBeNull();
   });
 });
 
 describe("isResolvedElsewhereError", () => {
   it("treats already-actioned statuses as dead, not retryable", () => {
     for (const status of [400, 404, 409]) {
-      expect(isResolvedElsewhereError(new ApiError(status, "/friends/f1/accept", "PATCH"))).toBe(
-        true,
-      );
+      expect(
+        isResolvedElsewhereError(
+          new ApiError(status, "/friends/f1/accept", "PATCH"),
+        ),
+      ).toBe(true);
     }
   });
 
   it("leaves a blip or a server fault retryable", () => {
-    expect(isResolvedElsewhereError(new ApiError(500, "/friends/f1/accept", "PATCH"))).toBe(false);
-    expect(isResolvedElsewhereError(new ApiError(401, "/friends/f1/accept", "PATCH"))).toBe(false);
-    expect(isResolvedElsewhereError(new Error("Network request failed"))).toBe(false);
+    expect(
+      isResolvedElsewhereError(
+        new ApiError(500, "/friends/f1/accept", "PATCH"),
+      ),
+    ).toBe(false);
+    expect(
+      isResolvedElsewhereError(
+        new ApiError(401, "/friends/f1/accept", "PATCH"),
+      ),
+    ).toBe(false);
+    expect(isResolvedElsewhereError(new Error("Network request failed"))).toBe(
+      false,
+    );
   });
 });

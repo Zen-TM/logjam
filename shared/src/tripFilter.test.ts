@@ -41,7 +41,9 @@ describe("tripMatchesFilter", () => {
   });
 
   it("ignores a whitespace-only search", () => {
-    expect(tripMatchesFilter(trip({ places: [] }), { search: "   " })).toBe(true);
+    expect(tripMatchesFilter(trip({ places: [] }), { search: "   " })).toBe(
+      true,
+    );
   });
 
   it("treats both date bounds as inclusive", () => {
@@ -59,18 +61,30 @@ describe("tripMatchesFilter", () => {
 
   it("filters typeless trips separately from 'any type'", () => {
     const typeless = trip({ types: [] });
-    expect(tripMatchesFilter(typeless, { type: NO_TYPE_FILTER_VALUE })).toBe(true);
-    expect(tripMatchesFilter(trip(), { type: NO_TYPE_FILTER_VALUE })).toBe(false);
+    expect(tripMatchesFilter(typeless, { type: NO_TYPE_FILTER_VALUE })).toBe(
+      true,
+    );
+    expect(tripMatchesFilter(trip(), { type: NO_TYPE_FILTER_VALUE })).toBe(
+      false,
+    );
     expect(tripMatchesFilter(typeless, { type: "" })).toBe(true);
   });
 
   it("requires every axis to pass", () => {
     const t = trip({ date: "2026-03-15T00:00:00.000Z" });
     expect(
-      tripMatchesFilter(t, { search: "claustral", dateFrom: "2026-01-01", type: "canyoning" }),
+      tripMatchesFilter(t, {
+        search: "claustral",
+        dateFrom: "2026-01-01",
+        type: "canyoning",
+      }),
     ).toBe(true);
     expect(
-      tripMatchesFilter(t, { search: "claustral", dateFrom: "2026-01-01", type: "packrafting" }),
+      tripMatchesFilter(t, {
+        search: "claustral",
+        dateFrom: "2026-01-01",
+        type: "packrafting",
+      }),
     ).toBe(false);
   });
 });
@@ -82,14 +96,19 @@ describe("filterTrips", () => {
       trip({ places: [{ name: "Claustral" }] }),
       trip({ places: [{ name: "Ranon" }] }),
     ];
-    expect(filterTrips(trips, { search: "ranon" })).toEqual([trips[0], trips[2]]);
+    expect(filterTrips(trips, { search: "ranon" })).toEqual([
+      trips[0],
+      trips[2],
+    ]);
   });
 });
 
 describe("hasActiveTripFilter", () => {
   it("is false for empty or whitespace-only criteria", () => {
     expect(hasActiveTripFilter({})).toBe(false);
-    expect(hasActiveTripFilter({ search: "  ", dateFrom: "", dateTo: "", type: "" })).toBe(false);
+    expect(
+      hasActiveTripFilter({ search: "  ", dateFrom: "", dateTo: "", type: "" }),
+    ).toBe(false);
   });
 
   it("is true when any axis narrows", () => {
@@ -121,10 +140,18 @@ describe("attribute filters", () => {
   it("drops a trip that never answered, unless unknowns are included", () => {
     const bare = trip({ customFields: {} });
     const criteria = {
-      custom: { rope_length: { kind: "number" as const, op: "More than" as const, value: 30 } },
+      custom: {
+        rope_length: {
+          kind: "number" as const,
+          op: "More than" as const,
+          value: 30,
+        },
+      },
     };
     expect(tripMatchesFilter(bare, criteria)).toBe(false);
-    expect(tripMatchesFilter(bare, { ...criteria, includeUnknowns: true })).toBe(true);
+    expect(
+      tripMatchesFilter(bare, { ...criteria, includeUnknowns: true }),
+    ).toBe(true);
   });
 
   it("is ignored by a caller that passes no customFields at all", () => {
@@ -132,7 +159,11 @@ describe("attribute filters", () => {
   });
 
   it("counts toward the active-filter tally, while includeUnknowns does not", () => {
-    expect(hasActiveTripFilter({ custom: { wetsuit: { kind: "boolean", value: true } } })).toBe(true);
+    expect(
+      hasActiveTripFilter({
+        custom: { wetsuit: { kind: "boolean", value: true } },
+      }),
+    ).toBe(true);
     expect(hasActiveTripFilter({ includeUnknowns: true })).toBe(false);
     expect(
       activeTripFilterCount({
@@ -155,8 +186,16 @@ describe("sortTrips", () => {
   ];
 
   it("runs newest or oldest first", () => {
-    expect(sortTrips(trips, "newest").map((t) => t.displayName)).toEqual(["newest", "middle", "oldest"]);
-    expect(sortTrips(trips, "oldest").map((t) => t.displayName)).toEqual(["oldest", "middle", "newest"]);
+    expect(sortTrips(trips, "newest").map((t) => t.displayName)).toEqual([
+      "newest",
+      "middle",
+      "oldest",
+    ]);
+    expect(sortTrips(trips, "oldest").map((t) => t.displayName)).toEqual([
+      "oldest",
+      "middle",
+      "newest",
+    ]);
   });
 
   it("sorts a copy, so the caller's list is untouched", () => {
@@ -170,8 +209,14 @@ describe("sortTrips", () => {
       trip({ date: "2026-03-15T00:00:00.000Z", displayName: "first" }),
       trip({ date: "2026-03-15T00:00:00.000Z", displayName: "second" }),
     ];
-    expect(sortTrips(sameDay, "newest").map((t) => t.displayName)).toEqual(["first", "second"]);
-    expect(sortTrips(sameDay, "oldest").map((t) => t.displayName)).toEqual(["first", "second"]);
+    expect(sortTrips(sameDay, "newest").map((t) => t.displayName)).toEqual([
+      "first",
+      "second",
+    ]);
+    expect(sortTrips(sameDay, "oldest").map((t) => t.displayName)).toEqual([
+      "first",
+      "second",
+    ]);
   });
 });
 
@@ -187,7 +232,11 @@ describe("distinctTripTypes", () => {
 });
 
 describe("tripFilterFieldDefs", () => {
-  const def = (key: string, tripTypes: string[], appliesToAllTypes = false): ScopedCustomFieldDef => ({
+  const def = (
+    key: string,
+    tripTypes: string[],
+    appliesToAllTypes = false,
+  ): ScopedCustomFieldDef => ({
     key,
     label: key,
     type: "string",
@@ -195,14 +244,20 @@ describe("tripFilterFieldDefs", () => {
     tripTypes,
     appliesToAllTypes,
   });
-  const defs = [def("party", [], true), def("rope", ["canyoning"]), def("paddle", ["packrafting"]), def("depth", ["caving"])];
+  const defs = [
+    def("party", [], true),
+    def("rope", ["canyoning"]),
+    def("paddle", ["packrafting"]),
+    def("depth", ["caving"]),
+  ];
   const trips = [
     { types: ["canyoning"], customFields: { rope: 60 } },
     { types: ["packrafting"], customFields: { paddle: "yes" } },
     // Retagged since: still holds a caving answer.
     { types: [], customFields: { depth: 12 } },
   ];
-  const keys = (type: string) => tripFilterFieldDefs(defs, trips, type).map((d) => d.key);
+  const keys = (type: string) =>
+    tripFilterFieldDefs(defs, trips, type).map((d) => d.key);
 
   it("offers every loaded trip's attributes with no activity chosen", () => {
     expect(keys("")).toEqual(["party", "rope", "paddle", "depth"]);

@@ -3,7 +3,12 @@ import { StyleSheet, Text, View } from "react-native";
 import { fontSize, fontWeight, spacing, theme } from "../theme";
 import { Chip } from "./Chip";
 import { IconButton } from "./IconButton";
-import { formatRange, isFullRange, nextRange, type NumberRange } from "@logjam/shared";
+import {
+  formatRange,
+  isFullRange,
+  nextRange,
+  type NumberRange,
+} from "@logjam/shared";
 
 /**
  * A graded axis as a row of numbered pills — the mobile form of the web's
@@ -67,13 +72,21 @@ export function RangePills({
 
 const styles = StyleSheet.create({
   wrap: { gap: spacing(0.75) },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
   label: {
     color: theme.textPrimary,
     fontSize: fontSize.sm,
     fontWeight: fontWeight.medium,
   },
-  valueGroup: { flexDirection: "row", alignItems: "center", gap: spacing(0.25) },
+  valueGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing(0.25),
+  },
   value: { color: theme.textMuted, fontSize: fontSize.sm },
   valueActive: { color: theme.accent, fontWeight: fontWeight.medium },
   pills: { flexDirection: "row", flexWrap: "wrap", gap: spacing(0.75) },

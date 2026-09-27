@@ -1,4 +1,12 @@
-import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from "vitest";
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from "vitest";
 import type { Response, NextFunction } from "express";
 
 vi.mock("jsonwebtoken", () => ({ default: { verify: vi.fn() } }));
@@ -44,12 +52,18 @@ describe("requireAuth — cognito mode", () => {
     const { res, status, json } = mockRes();
     requireAuth(req, res, vi.fn() as NextFunction);
     expect(status).toHaveBeenCalledWith(401);
-    expect(json).toHaveBeenCalledWith({ error: "Missing or invalid authorization header" });
+    expect(json).toHaveBeenCalledWith({
+      error: "Missing or invalid authorization header",
+    });
   });
 
   it("401s when token verification fails", () => {
-    verifyMock.mockImplementation((_t, _k, _o, cb) => cb(new Error("bad"), undefined));
-    const req = { headers: { authorization: "Bearer x" } } as AuthenticatedRequest;
+    verifyMock.mockImplementation((_t, _k, _o, cb) =>
+      cb(new Error("bad"), undefined),
+    );
+    const req = {
+      headers: { authorization: "Bearer x" },
+    } as AuthenticatedRequest;
     const { res, status, json } = mockRes();
     requireAuth(req, res, vi.fn() as NextFunction);
     expect(status).toHaveBeenCalledWith(401);
@@ -58,9 +72,16 @@ describe("requireAuth — cognito mode", () => {
 
   it("rejects a non-id token (access token)", () => {
     verifyMock.mockImplementation((_t, _k, _o, cb) =>
-      cb(null, { token_use: "access", sub: "s", email: "e@x", preferred_username: "u" }),
+      cb(null, {
+        token_use: "access",
+        sub: "s",
+        email: "e@x",
+        preferred_username: "u",
+      }),
     );
-    const req = { headers: { authorization: "Bearer x" } } as AuthenticatedRequest;
+    const req = {
+      headers: { authorization: "Bearer x" },
+    } as AuthenticatedRequest;
     const { res, status, json } = mockRes();
     requireAuth(req, res, vi.fn() as NextFunction);
     expect(status).toHaveBeenCalledWith(401);
@@ -68,14 +89,18 @@ describe("requireAuth — cognito mode", () => {
   });
 
   it("rejects an id token missing identity claims", () => {
-    verifyMock.mockImplementation((_t, _k, _o, cb) =>
-      cb(null, { token_use: "id", sub: "s" }), // no email/username
+    verifyMock.mockImplementation(
+      (_t, _k, _o, cb) => cb(null, { token_use: "id", sub: "s" }), // no email/username
     );
-    const req = { headers: { authorization: "Bearer x" } } as AuthenticatedRequest;
+    const req = {
+      headers: { authorization: "Bearer x" },
+    } as AuthenticatedRequest;
     const { res, status, json } = mockRes();
     requireAuth(req, res, vi.fn() as NextFunction);
     expect(status).toHaveBeenCalledWith(401);
-    expect(json).toHaveBeenCalledWith({ error: "Token is missing required identity claims" });
+    expect(json).toHaveBeenCalledWith({
+      error: "Token is missing required identity claims",
+    });
   });
 
   it("accepts a valid id token and populates req.user", () => {
@@ -88,7 +113,9 @@ describe("requireAuth — cognito mode", () => {
         preferred_username: "alice",
       }),
     );
-    const req = { headers: { authorization: "Bearer x" } } as AuthenticatedRequest;
+    const req = {
+      headers: { authorization: "Bearer x" },
+    } as AuthenticatedRequest;
     const next = vi.fn() as NextFunction;
     const { res } = mockRes();
     requireAuth(req, res, next);

@@ -61,8 +61,10 @@ export function buildTestPdf(options: TestPdfOptions): Uint8Array {
     const { x0, y0, x1, y1 } = options.cropBox;
     pageEntries.push(`/CropBox [${x0} ${y0} ${x1} ${y1}]`);
   }
-  if (options.rotate !== undefined) pageEntries.push(`/Rotate ${options.rotate}`);
-  if (options.vp !== undefined) pageEntries.push(`/VP ${serialize(options.vp)}`);
+  if (options.rotate !== undefined)
+    pageEntries.push(`/Rotate ${options.rotate}`);
+  if (options.vp !== undefined)
+    pageEntries.push(`/VP ${serialize(options.vp)}`);
   if (options.lgiDict) {
     pageEntries.push("/LGIDict << /Type /LGIDict /Version (2.1) >>");
   }

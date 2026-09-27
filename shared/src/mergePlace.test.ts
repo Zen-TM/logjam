@@ -115,7 +115,11 @@ describe("mergePlace (shared, per-field policy)", () => {
   });
 
   it("keeps existing when incoming field is absent", () => {
-    const merged = mergePlace(existingPlace({ notes: "kept" }), {}, USE_INCOMING);
+    const merged = mergePlace(
+      existingPlace({ notes: "kept" }),
+      {},
+      USE_INCOMING,
+    );
     expect(merged.notes).toBe("kept");
   });
 
@@ -139,7 +143,9 @@ describe("mergePlace (shared, per-field policy)", () => {
 
   it("always unions the source list regardless of policy", () => {
     const merged = mergePlace(
-      existingPlace({ fieldValues: { _sources: [["OzUltimate", "http://oz"]] } }),
+      existingPlace({
+        fieldValues: { _sources: [["OzUltimate", "http://oz"]] },
+      }),
       { fieldValues: { _sources: [["RopeWiki", "http://rw"]] } },
       KEEP,
     );

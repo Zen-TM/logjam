@@ -15,10 +15,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Alert, StyleSheet, Text, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import {
-  confirmUserAttribute,
-  updateUserAttribute,
-} from "aws-amplify/auth";
+import { confirmUserAttribute, updateUserAttribute } from "aws-amplify/auth";
 import { formatCredits, messageFromError } from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
@@ -31,7 +28,14 @@ import { formatBytes } from "../format";
 import { useConnectivity } from "../map/connectivity";
 import { countLocalEntities, type LocalEntityCounts } from "../sync/syncDb";
 import { describeLocalData, linkConfirmationMessage } from "./linkAccountCopy";
-import { assetHue, fontSize, fontWeight, lineHeight, spacing, theme } from "../theme";
+import {
+  assetHue,
+  fontSize,
+  fontWeight,
+  lineHeight,
+  spacing,
+  theme,
+} from "../theme";
 import {
   BottomSheet,
   Button,
@@ -120,10 +124,14 @@ function GuestAccountScreen({ onBack }: { onBack: () => void }) {
         />
 
         <SectionHeader label="Get an account" />
-        <Button label="Sign in or create an account" icon="user-plus" onPress={startLinking} />
+        <Button
+          label="Sign in or create an account"
+          icon="user-plus"
+          onPress={startLinking}
+        />
         <Text style={styles.guestNote}>
-          What&apos;s on this phone comes with you. It can&apos;t be undone — there&apos;s
-          no way to un-upload it.
+          What&apos;s on this phone comes with you. It can&apos;t be undone —
+          there&apos;s no way to un-upload it.
         </Text>
 
         <Text style={styles.version}>{CLIENT_VERSION}</Text>
@@ -162,7 +170,13 @@ export function AccountScreen({
   // this is a different screen rather than the same one with everything
   // disabled — the whole point of it is the way IN.
   if (accountState === "guest") return <GuestAccountScreen onBack={onBack} />;
-  return <LinkedAccountScreen onBack={onBack} onSignOut={onSignOut} onOpenFriends={onOpenFriends} />;
+  return (
+    <LinkedAccountScreen
+      onBack={onBack}
+      onSignOut={onSignOut}
+      onOpenFriends={onOpenFriends}
+    />
+  );
 }
 
 function LinkedAccountScreen({
@@ -178,9 +192,12 @@ function LinkedAccountScreen({
   const online = useConnectivity() === "online";
   const [sheet, setSheet] = useState<SheetMode>("closed");
   const [toast, setToast] = useState<ToastMessage | null>(null);
-  const notify = useCallback((text: string, tone: ToastMessage["tone"] = "info") => {
-    setToast({ text, tone, nonce: Date.now() });
-  }, []);
+  const notify = useCallback(
+    (text: string, tone: ToastMessage["tone"] = "info") => {
+      setToast({ text, tone, nonce: Date.now() });
+    },
+    [],
+  );
 
   if (query.loading && !query.data) return <LoadingState />;
   if (!query.data) {
@@ -236,8 +253,12 @@ function LinkedAccountScreen({
           legend={false}
         />
         <Text style={styles.meterLabel}>
-          {formatBytes(user.storageUsedBytes)} of {formatBytes(user.storageQuotaBytes)}
-          <Text style={styles.meterHint}> · photos, videos and topo outputs</Text>
+          {formatBytes(user.storageUsedBytes)} of{" "}
+          {formatBytes(user.storageQuotaBytes)}
+          <Text style={styles.meterHint}>
+            {" "}
+            · photos, videos and topo outputs
+          </Text>
         </Text>
 
         <SectionHeader label="Processing credits this month" />
@@ -269,18 +290,27 @@ function LinkedAccountScreen({
           subtitle={online ? user.email : undefined}
           {...capabilityRowProps("serverPrefs", "linked", online)}
           onPress={() => setSheet("email")}
-          right={<Feather name="chevron-right" size={20} color={theme.textMuted} />}
+          right={
+            <Feather name="chevron-right" size={20} color={theme.textMuted} />
+          }
         />
         <Row
           icon="users"
           title="Friends"
           {...capabilityRowProps("friends", "linked", online)}
           onPress={onOpenFriends}
-          right={<Feather name="chevron-right" size={20} color={theme.textMuted} />}
+          right={
+            <Feather name="chevron-right" size={20} color={theme.textMuted} />
+          }
         />
 
         <SectionHeader label="Leaving" />
-        <Button label="Sign out" variant="outlineAccent" icon="log-out" onPress={onSignOut} />
+        <Button
+          label="Sign out"
+          variant="outlineAccent"
+          icon="log-out"
+          onPress={onSignOut}
+        />
         <Row
           icon="trash-2"
           hue={theme.warning}
@@ -393,7 +423,13 @@ function UsernameForm({
  * then confirm with the code sent to the NEW address. The step is state, not a
  * second sheet.
  */
-function EmailForm({ current, onSaved }: { current: string; onSaved: () => void }) {
+function EmailForm({
+  current,
+  onSaved,
+}: {
+  current: string;
+  onSaved: () => void;
+}) {
   const [step, setStep] = useState<"request" | "confirm">("request");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -430,7 +466,10 @@ function EmailForm({ current, onSaved }: { current: string; onSaved: () => void 
     setBusy(true);
     setError(null);
     try {
-      await confirmUserAttribute({ userAttributeKey: "email", confirmationCode: trimmed });
+      await confirmUserAttribute({
+        userAttributeKey: "email",
+        confirmationCode: trimmed,
+      });
       onSaved();
     } catch (err) {
       console.error(err);
@@ -563,7 +602,11 @@ const styles = StyleSheet.create({
     fontSize: fontSize.base,
     fontWeight: fontWeight.medium,
   },
-  version: { color: theme.textMuted, fontSize: fontSize.xs, paddingTop: spacing(1) },
+  version: {
+    color: theme.textMuted,
+    fontSize: fontSize.xs,
+    paddingTop: spacing(1),
+  },
   guestNote: {
     color: theme.textMuted,
     fontSize: fontSize.sm,

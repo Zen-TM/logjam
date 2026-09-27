@@ -1,6 +1,10 @@
 import { useState, useEffect, useId, useMemo, useRef } from "react";
 import { MapPin, Plus, Trash2 } from "lucide-react";
-import type { ScopedCustomFieldDef, TripLogCustomFieldType, MediaItem } from "@logjam/shared";
+import type {
+  ScopedCustomFieldDef,
+  TripLogCustomFieldType,
+  MediaItem,
+} from "@logjam/shared";
 import {
   coerceFieldValue,
   mediaCategory,
@@ -16,7 +20,10 @@ import {
   isValidLatitude,
   isValidLongitude,
 } from "@logjam/shared";
-import { numericFieldError, type NumericFieldConstraints } from "../../numberInput";
+import {
+  numericFieldError,
+  type NumericFieldConstraints,
+} from "../../numberInput";
 import type { TPlace, TPlaceType } from "../../placeUtils";
 import {
   updatePlace,
@@ -119,7 +126,9 @@ function PlaceDialog({
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   // THE TYPE, chosen first. It decides which fields the form below has, so it
   // sits at the top of the dialog rather than among them.
-  const [placeTypeId, setPlaceTypeId] = useState<string>(SYSTEM_PLACE_TYPE_IDS.canyon);
+  const [placeTypeId, setPlaceTypeId] = useState<string>(
+    SYSTEM_PLACE_TYPE_IDS.canyon,
+  );
 
   /**
    * The fields THIS type has. `defsForType` is the shared rule (a definition
@@ -136,7 +145,9 @@ function PlaceDialog({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Which field failed validation, so the input can show error state + aria-invalid.
-  const [invalidField, setInvalidField] = useState<"name" | "coords" | null>(null);
+  const [invalidField, setInvalidField] = useState<"name" | "coords" | null>(
+    null,
+  );
   // Set on a Save attempt so every out-of-range numeric field shows its inline
   // error at once (before that, errors only show after a field is blurred).
   const [showFieldErrors, setShowFieldErrors] = useState(false);
@@ -144,7 +155,8 @@ function PlaceDialog({
   // Add custom field form state
   const [showAddField, setShowAddField] = useState(false);
   const [newFieldLabel, setNewFieldLabel] = useState("");
-  const [newFieldType, setNewFieldType] = useState<TripLogCustomFieldType>("string");
+  const [newFieldType, setNewFieldType] =
+    useState<TripLogCustomFieldType>("string");
   const [newFieldBounded, setNewFieldBounded] = useState(false);
   const [newFieldMin, setNewFieldMin] = useState("");
   const [newFieldMax, setNewFieldMax] = useState("");
@@ -152,7 +164,8 @@ function PlaceDialog({
   const [addFieldError, setAddFieldError] = useState<string | null>(null);
 
   // Custom-field deletion confirmation
-  const [fieldToDelete, setFieldToDelete] = useState<ScopedCustomFieldDef | null>(null);
+  const [fieldToDelete, setFieldToDelete] =
+    useState<ScopedCustomFieldDef | null>(null);
 
   // Media. In edit mode the place exists; in create mode a draft place is
   // lazily materialised on first upload so files have something to link to
@@ -188,7 +201,8 @@ function PlaceDialog({
     // is what this app is for. Retyping IS allowed on an edit: miscategorising
     // is inevitable, and the server parks any value the new type has no
     // definition for rather than dropping it (§2.6).
-    const initialPlaceTypeId = place?.placeTypeId ?? SYSTEM_PLACE_TYPE_IDS.canyon;
+    const initialPlaceTypeId =
+      place?.placeTypeId ?? SYSTEM_PLACE_TYPE_IDS.canyon;
     if (place) {
       initialName = place.name;
       initialAltNames = place.altNames.join(", ");
@@ -196,9 +210,10 @@ function PlaceDialog({
       initialLongitude = String(place.longitude);
       initialNotes = place.notes ?? "";
       const storedSources = place.fieldValues?.[SOURCES_FIELD_KEY];
-      initialSources = (Array.isArray(storedSources)
-        ? (storedSources as [string, string][])
-        : []
+      initialSources = (
+        Array.isArray(storedSources)
+          ? (storedSources as [string, string][])
+          : []
       ).map(([label, url]) => ({ label, url }));
       // Existing field values as strings — the grades among them, which is
       // what makes them ordinary. Reads the TOP level of fieldValues; these
@@ -275,7 +290,10 @@ function PlaceDialog({
       placeTypeId,
     }) !== initialFormSnapshotRef.current;
 
-  const guard = useUnsavedChangesGuard(isDirty, () => void handleRequestClose());
+  const guard = useUnsavedChangesGuard(
+    isDirty,
+    () => void handleRequestClose(),
+  );
 
   // In edit mode, fetch the place's existing media (fresh presigned URLs).
   useEffect(() => {
@@ -300,12 +318,22 @@ function PlaceDialog({
 
     const parsedLat = parseFloat(latitude);
     const parsedLng = parseFloat(longitude);
-    if (!name.trim() || !latitude || !longitude || isNaN(parsedLat) || isNaN(parsedLng)) {
-      return Promise.reject(new Error("Enter a name and location before adding media."));
+    if (
+      !name.trim() ||
+      !latitude ||
+      !longitude ||
+      isNaN(parsedLat) ||
+      isNaN(parsedLng)
+    ) {
+      return Promise.reject(
+        new Error("Enter a name and location before adding media."),
+      );
     }
     if (!isValidLatitude(parsedLat) || !isValidLongitude(parsedLng)) {
       return Promise.reject(
-        new Error("Enter a valid location (latitude -90 to 90, longitude -180 to 180) before adding media."),
+        new Error(
+          "Enter a valid location (latitude -90 to 90, longitude -180 to 180) before adding media.",
+        ),
       );
     }
     const promise = createPlace({
@@ -348,7 +376,12 @@ function PlaceDialog({
         onSaved();
       } catch (err) {
         console.error(err);
-        setError(messageFromError(err, "Couldn't discard uploaded media. Please try again."));
+        setError(
+          messageFromError(
+            err,
+            "Couldn't discard uploaded media. Please try again.",
+          ),
+        );
         return;
       }
     }
@@ -436,7 +469,10 @@ function PlaceDialog({
       // "has a value" filter.
       const attributes: Record<string, unknown> = {};
       for (const def of typeFieldDefs) {
-        attributes[def.key] = coerceFieldValue(getFieldValue(def.key), def.type);
+        attributes[def.key] = coerceFieldValue(
+          getFieldValue(def.key),
+          def.type,
+        );
       }
 
       const data = {
@@ -495,7 +531,13 @@ function PlaceDialog({
 
   async function handleAddField() {
     const result = buildCustomFieldDef(
-      { label: newFieldLabel, type: newFieldType, bounded: newFieldBounded, min: newFieldMin, max: newFieldMax },
+      {
+        label: newFieldLabel,
+        type: newFieldType,
+        bounded: newFieldBounded,
+        min: newFieldMin,
+        max: newFieldMax,
+      },
       customFieldDefs,
     );
     if ("error" in result) {
@@ -516,7 +558,9 @@ function PlaceDialog({
       resetAddField();
     } catch (err) {
       console.error(err);
-      setAddFieldError(messageFromError(err, "Couldn't save custom field. Please try again."));
+      setAddFieldError(
+        messageFromError(err, "Couldn't save custom field. Please try again."),
+      );
     } finally {
       setAddingField(false);
     }
@@ -564,7 +608,12 @@ function PlaceDialog({
           </>
         }
       >
-        <form id={formId} className={classes.form} noValidate onSubmit={handleSubmit}>
+        <form
+          id={formId}
+          className={classes.form}
+          noValidate
+          onSubmit={handleSubmit}
+        >
           <TextField
             label="Name"
             value={name}
@@ -596,8 +645,8 @@ function PlaceDialog({
             />
             {retyped && (
               <p className={classes.hint}>
-                Values this type has no field for are kept on the place, and can be added to
-                it later.
+                Values this type has no field for are kept on the place, and can
+                be added to it later.
               </p>
             )}
           </div>
@@ -641,7 +690,11 @@ function PlaceDialog({
               </Button>
             </div>
             <FieldError
-              message={invalidField === "coords" ? "Valid coordinates are required" : null}
+              message={
+                invalidField === "coords"
+                  ? "Valid coordinates are required"
+                  : null
+              }
             />
           </div>
 
@@ -749,7 +802,9 @@ function PlaceDialog({
                   icon={Trash2}
                   label={`Delete the source ${source.label || index + 1}`}
                   tone="danger"
-                  onClick={() => setSources(sources.filter((_, other) => other !== index))}
+                  onClick={() =>
+                    setSources(sources.filter((_, other) => other !== index))
+                  }
                 />
               </div>
             ))}

@@ -16,12 +16,20 @@ export function ErrorBanner({ message, onRetry, onDismiss }: Props) {
         {(onRetry || onDismiss) && (
           <div className={classes.actions}>
             {onRetry && (
-              <button className={classes.retryBtn} onClick={onRetry} type="button">
+              <button
+                className={classes.retryBtn}
+                onClick={onRetry}
+                type="button"
+              >
                 Try again
               </button>
             )}
             {onDismiss && (
-              <button className={classes.dismissBtn} onClick={onDismiss} type="button">
+              <button
+                className={classes.dismissBtn}
+                onClick={onDismiss}
+                type="button"
+              >
                 Dismiss
               </button>
             )}

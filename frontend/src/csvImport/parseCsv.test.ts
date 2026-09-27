@@ -34,7 +34,9 @@ describe("parseCsv", () => {
   // fields had misaligned.
   it("surfaces PapaParse row errors instead of discarding them (FECO-002)", async () => {
     // Row 2 has an extra field ("B" has 3 commas where the header has 2).
-    const { parseErrors } = await parseCsv(csvFile("name,notes\nA,fine\nB,too,many,fields"));
+    const { parseErrors } = await parseCsv(
+      csvFile("name,notes\nA,fine\nB,too,many,fields"),
+    );
     expect(parseErrors.length).toBeGreaterThan(0);
     expect(parseErrors.some((e) => e.includes("Row 3"))).toBe(true);
   });
@@ -55,6 +57,8 @@ describe("parseCsv", () => {
     );
     expect(headers).toEqual(["name", "lat", "lat_1"]);
     expect(rows[0]).toEqual({ name: "Claustral", lat: "10", lat_1: "20" });
-    expect(parseErrors.some((e) => e.includes('"lat"') && e.includes('"lat_1"'))).toBe(true);
+    expect(
+      parseErrors.some((e) => e.includes('"lat"') && e.includes('"lat_1"')),
+    ).toBe(true);
   });
 });

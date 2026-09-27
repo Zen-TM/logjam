@@ -1,6 +1,13 @@
 import { StyleSheet, Text, View } from "react-native";
 
-import { fontSize, fontWeight, radius, spacing, theme, withAlpha } from "../theme";
+import {
+  fontSize,
+  fontWeight,
+  radius,
+  spacing,
+  theme,
+  withAlpha,
+} from "../theme";
 
 export type CapacitySegment = {
   /** Legend text. */
@@ -49,7 +56,9 @@ export function CapacityBar({
             }}
           />
         ))}
-        {remainder > 0 ? <View style={{ flexGrow: remainder / basis }} /> : null}
+        {remainder > 0 ? (
+          <View style={{ flexGrow: remainder / basis }} />
+        ) : null}
       </View>
       {legend && present.length > 0 ? (
         <View style={styles.legend}>
@@ -57,7 +66,9 @@ export function CapacityBar({
             <View key={segment.label} style={styles.legendItem}>
               <View style={[styles.dot, { backgroundColor: segment.color }]} />
               <Text style={styles.legendLabel}>{segment.label}</Text>
-              <Text style={styles.legendValue}>{segment.display ?? String(segment.value)}</Text>
+              <Text style={styles.legendValue}>
+                {segment.display ?? String(segment.value)}
+              </Text>
             </View>
           ))}
         </View>
@@ -76,7 +87,12 @@ const styles = StyleSheet.create({
     backgroundColor: withAlpha(theme.textPrimary, 0.1),
     gap: 2,
   },
-  legend: { flexDirection: "row", flexWrap: "wrap", gap: spacing(1.5), rowGap: spacing(0.75) },
+  legend: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing(1.5),
+    rowGap: spacing(0.75),
+  },
   legendItem: { flexDirection: "row", alignItems: "center", gap: spacing(0.5) },
   dot: { width: 8, height: 8, borderRadius: radius.pill },
   legendLabel: { color: theme.textMuted, fontSize: fontSize.xs },

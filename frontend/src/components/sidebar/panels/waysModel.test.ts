@@ -111,7 +111,9 @@ describe("buildWays", () => {
     expect(drawn.bounds).toEqual([150, -33, 150.1, -33]);
 
     const [imported] = build({
-      standaloneFiles: [file({ metadata: { bbox: [150.2, -33.6, 150.3, -33.5] } })],
+      standaloneFiles: [
+        file({ metadata: { bbox: [150.2, -33.6, 150.3, -33.5] } }),
+      ],
     });
     expect(imported.bounds).toEqual([150.2, -33.6, 150.3, -33.5]);
   });
@@ -141,7 +143,10 @@ describe("buildWays", () => {
   // Before the id is known, nothing can be called someone else's — saying so
   // would put a "shared" mark on every row the user drew.
   it("claims nothing is shared until the current user is known", () => {
-    const ways = build({ routes: [route({ ownerId: THEM })], currentUserId: null });
+    const ways = build({
+      routes: [route({ ownerId: THEM })],
+      currentUserId: null,
+    });
     expect(ways[0].shared).toBe(false);
   });
 
@@ -150,8 +155,16 @@ describe("buildWays", () => {
   it("sorts a place's track by its origin and titles it by its name", () => {
     const ways = build({
       placeTracks: [
-        placeTrack({ mediaId: "a", origin: "track", displayName: "Their recording" }),
-        placeTrack({ mediaId: "b", origin: "import", filename: "their-import.kml" }),
+        placeTrack({
+          mediaId: "a",
+          origin: "track",
+          displayName: "Their recording",
+        }),
+        placeTrack({
+          mediaId: "b",
+          origin: "import",
+          filename: "their-import.kml",
+        }),
       ],
     });
     expect(ways.map((way) => [way.kind, way.title])).toEqual([
@@ -166,11 +179,21 @@ describe("buildWays", () => {
   // knows the file is theirs.
   it("lists a file on the user's own place once, as their own", () => {
     const ways = build({
-      standaloneFiles: [file({ id: "m1", displayName: "Du Faur approach", linkedPlaceId: "p1" })],
+      standaloneFiles: [
+        file({
+          id: "m1",
+          displayName: "Du Faur approach",
+          linkedPlaceId: "p1",
+        }),
+      ],
       placeTracks: [placeTrack({ mediaId: "m1", placeId: "p1" })],
     });
     expect(ways).toHaveLength(1);
-    expect(ways[0]).toMatchObject({ kind: "import", title: "Du Faur approach", shared: false });
+    expect(ways[0]).toMatchObject({
+      kind: "import",
+      title: "Du Faur approach",
+      shared: false,
+    });
   });
 
   // A friend's place's track is not among the user's own files, so it must
@@ -210,7 +233,10 @@ describe("buildWays", () => {
   // The user's own route on their own place is not shared at all, so it can
   // never be "reached through" anything.
   it("never calls the user's own route reached through a place", () => {
-    const [way] = build({ routes: [route({ placeId: "mine" })], sharedPlaceIds: ["mine"] });
+    const [way] = build({
+      routes: [route({ placeId: "mine" })],
+      sharedPlaceIds: ["mine"],
+    });
     expect(way).toMatchObject({ shared: false, viaPlace: false });
   });
 
@@ -226,8 +252,12 @@ describe("buildWays", () => {
   // reader: a track recorded this morning sat below a route drawn last year.
   it("orders every kind together, newest first", () => {
     const ways = build({
-      routes: [route({ id: "old-route", createdAt: "2026-01-01T00:00:00.000Z" })],
-      standaloneFiles: [file({ id: "new-file", createdAt: "2026-06-01T00:00:00.000Z" })],
+      routes: [
+        route({ id: "old-route", createdAt: "2026-01-01T00:00:00.000Z" }),
+      ],
+      standaloneFiles: [
+        file({ id: "new-file", createdAt: "2026-06-01T00:00:00.000Z" }),
+      ],
     });
     expect(ways.map((way) => way.id)).toEqual(["new-file", "old-route"]);
   });
@@ -238,7 +268,10 @@ describe("buildWays", () => {
   it("puts the undated last, keeping the order they arrived in", () => {
     const ways = build({
       routes: [route({ id: "dated", createdAt: "2026-01-01T00:00:00.000Z" })],
-      placeTracks: [placeTrack({ mediaId: "first" }), placeTrack({ mediaId: "second" })],
+      placeTracks: [
+        placeTrack({ mediaId: "first" }),
+        placeTrack({ mediaId: "second" }),
+      ],
     });
     expect(ways.map((way) => way.id)).toEqual(["dated", "first", "second"]);
   });

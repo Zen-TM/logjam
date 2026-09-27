@@ -265,7 +265,9 @@ async function applyOpResult(
       // path spells out below.
       const attempts = row.attempts + 1;
       const retryable =
-        !isGone && isTransientSyncError(error.code) && attempts < PUSH_MAX_ATTEMPTS;
+        !isGone &&
+        isTransientSyncError(error.code) &&
+        attempts < PUSH_MAX_ATTEMPTS;
       await db.runAsync(
         "UPDATE outbox SET state = ?, error_json = ? WHERE seq = ?",
         // Edit-on-deleted (§6 delete-wins): park as deadRemote so the UI
@@ -294,9 +296,9 @@ async function applyConfirmedRow(
 ): Promise<void> {
   // Only this row's ops matter to the rebase, and this runs once per applied
   // op — reading the whole outbox here was fifty full-table scans per batch.
-  const remaining = (
-    await loadOutboxRowsFor(entry.op.entity, entry.op.id)
-  ).map(rowToEntry);
+  const remaining = (await loadOutboxRowsFor(entry.op.entity, entry.op.id)).map(
+    rowToEntry,
+  );
   const rebased = <Row extends object>(base: Row) => {
     const dirty = collectDirtyFields(remaining, entry.op.entity, entry.op.id);
     return {
@@ -400,7 +402,8 @@ async function flushMediaOps(): Promise<boolean> {
           "UPDATE outbox SET state = 'blocked', error_json = ? WHERE seq = ?",
           JSON.stringify({
             code: 0,
-            message: "This upload keeps failing on this phone. Retry or discard it.",
+            message:
+              "This upload keeps failing on this phone. Retry or discard it.",
           }),
           row.seq,
         );

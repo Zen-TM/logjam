@@ -49,7 +49,16 @@ import {
 } from "@logjam/shared";
 
 import { useAccountState } from "../auth/AccountStateContext";
-import { placeHue, fontSize, fontWeight, radius, spacing, surface, theme, withAlpha } from "../theme";
+import {
+  placeHue,
+  fontSize,
+  fontWeight,
+  radius,
+  spacing,
+  surface,
+  theme,
+  withAlpha,
+} from "../theme";
 import type { MirrorPlace } from "../sync/mirrorStore";
 import { useConnectivity } from "../map/connectivity";
 import {
@@ -106,7 +115,9 @@ const ALL_TYPES = "all";
 const NEW_TYPE = "__new_type__";
 
 /** A place plus the tallies the shared predicate reads off `_count`. */
-type Countable = MirrorPlace & { _count?: { tripLogLinks: number; shares: number } };
+type Countable = MirrorPlace & {
+  _count?: { tripLogLinks: number; shares: number };
+};
 
 export function PlacesScreen({
   onOpenPlace,
@@ -147,14 +158,16 @@ export function PlacesScreen({
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<PlaceFilters>(EMPTY_PLACE_FILTERS);
   const [sort, setSort] = useState<PlaceSortKey>("name");
-  const [sheet, setSheet] = useState<"filters" | "bulkShare" | "placeTypeForm" | null>(
-    null,
-  );
+  const [sheet, setSheet] = useState<
+    "filters" | "bulkShare" | "placeTypeForm" | null
+  >(null);
   const mapFilter = usePlaceMapFilter();
   const [menuPlaceId, setMenuPlaceId] = useState<string | null>(null);
   /** The sheet owns its own share sub-mode and forgets it on close. */
   const closeMenu = useCallback(() => setMenuPlaceId(null), []);
-  const [editing, setEditing] = useState<{ place: MirrorPlace | null } | null>(null);
+  const [editing, setEditing] = useState<{ place: MirrorPlace | null } | null>(
+    null,
+  );
   /**
    * The picker round trip.
    *
@@ -371,7 +384,8 @@ export function PlacesScreen({
                 }
               }
               clearSelection();
-              if (failures === 0) info(`Deleted ${count} ${count === 1 ? "place" : "places"}.`);
+              if (failures === 0)
+                info(`Deleted ${count} ${count === 1 ? "place" : "places"}.`);
               else fail(`${failures} of ${count} couldn't be deleted.`);
             })();
           },
@@ -471,10 +485,17 @@ export function PlacesScreen({
           hue: type.color,
           count: typeCounts.get(type.id) ?? 0,
           disabled:
-            (typeCounts.get(type.id) ?? 0) === 0 && filters.placeTypeId !== type.id,
+            (typeCounts.get(type.id) ?? 0) === 0 &&
+            filters.placeTypeId !== type.id,
         })),
     ],
-    [filters.placeTypeId, placeTypes, typeCounts, typeTotals, withoutType.length],
+    [
+      filters.placeTypeId,
+      placeTypes,
+      typeCounts,
+      typeTotals,
+      withoutType.length,
+    ],
   );
   /**
    * What the rail actually draws: the type chips, then a way to make one.
@@ -487,7 +508,10 @@ export function PlacesScreen({
    * does, not by looking different).
    */
   const railOptions: SegmentOption<string>[] = useMemo(
-    () => [...typeOptions, { value: NEW_TYPE, label: "New type", icon: "plus" }],
+    () => [
+      ...typeOptions,
+      { value: NEW_TYPE, label: "New type", icon: "plus" },
+    ],
     [typeOptions],
   );
 
@@ -500,22 +524,19 @@ export function PlacesScreen({
     [filters.placeTypeId, placeTypes],
   );
 
-  const selectType = useCallback(
-    (next: string) => {
-      // The last chip is an ACTION, not a filter state — it opens the form and
-      // leaves the selection where it was, so a user who changes their mind
-      // comes back to the tab they were on.
-      if (next === NEW_TYPE) {
-        setSheet("placeTypeForm");
-        return;
-      }
-      setFilters((current) => ({
-        ...current,
-        placeTypeId: next === ALL_TYPES ? null : next,
-      }));
-    },
-    [],
-  );
+  const selectType = useCallback((next: string) => {
+    // The last chip is an ACTION, not a filter state — it opens the form and
+    // leaves the selection where it was, so a user who changes their mind
+    // comes back to the tab they were on.
+    if (next === NEW_TYPE) {
+      setSheet("placeTypeForm");
+      return;
+    }
+    setFilters((current) => ({
+      ...current,
+      placeTypeId: next === ALL_TYPES ? null : next,
+    }));
+  }, []);
 
   const placeTypeForm = usePlaceTypeForm({
     editing: null,
@@ -597,8 +618,14 @@ export function PlacesScreen({
 
   // Stable identities so the memoised rows never re-render for a state change
   // that has nothing to do with them (DESIGN.md §9).
-  const openPlace = useCallback((place: MirrorPlace) => onOpenPlace(place), [onOpenPlace]);
-  const openMenu = useCallback((place: MirrorPlace) => setMenuPlaceId(place.id), []);
+  const openPlace = useCallback(
+    (place: MirrorPlace) => onOpenPlace(place),
+    [onOpenPlace],
+  );
+  const openMenu = useCallback(
+    (place: MirrorPlace) => setMenuPlaceId(place.id),
+    [],
+  );
   const keyExtractor = useCallback((place: MirrorPlace) => place.id, []);
   const renderItem = useCallback(
     ({ item }: { item: Countable }) => (
@@ -663,7 +690,12 @@ export function PlacesScreen({
               filled={search.trim() !== ""}
               onPress={() => (findOpen ? clearFind() : setFindOpen(true))}
             />
-            <Button label="Add place" icon="plus" compact onPress={() => startEditing(null)} />
+            <Button
+              label="Add place"
+              icon="plus"
+              compact
+              onPress={() => startEditing(null)}
+            />
           </View>
         }
       >
@@ -699,7 +731,11 @@ export function PlacesScreen({
                 setSheet("filters");
               }}
             />
-            <IconButton icon="x" accessibilityLabel="Clear search" onPress={clearFind} />
+            <IconButton
+              icon="x"
+              accessibilityLabel="Clear search"
+              onPress={clearFind}
+            />
           </View>
         ) : (
           <View style={styles.meterRow}>
@@ -752,14 +788,22 @@ export function PlacesScreen({
             } selected`}
             showSelectAll={selectedItems.length < selectableItems.length}
             extra={
-              <BulkShareButton online={online} onPress={() => setSheet("bulkShare")} />
+              <BulkShareButton
+                online={online}
+                onPress={() => setSheet("bulkShare")}
+              />
             }
             onClear={clearSelection}
             onSelectAll={selectAll}
             onDelete={deleteSelected}
           />
         ) : (
-          <SegmentedControl scroll options={bucketOptions} value={bucket} onChange={setBucket} />
+          <SegmentedControl
+            scroll
+            options={bucketOptions}
+            value={bucket}
+            onChange={setBucket}
+          />
         )}
       </View>
 
@@ -773,13 +817,17 @@ export function PlacesScreen({
               : hiddenFilterCount === 1
                 ? "1 filter active"
                 : `${hiddenFilterCount} filters active`}
-            {hiddenFilterCount === 0 || sort === "name" ? "" : ` · ${placeSortLabel(sort)}`}
+            {hiddenFilterCount === 0 || sort === "name"
+              ? ""
+              : ` · ${placeSortLabel(sort)}`}
           </Text>
           <IconButton
             icon="x"
             size={16}
             accessibilityLabel={
-              hiddenFilterCount === 0 ? "Sort by name again" : "Clear all filters"
+              hiddenFilterCount === 0
+                ? "Sort by name again"
+                : "Clear all filters"
             }
             onPress={() => {
               if (hiddenFilterCount === 0) setSort("name");
@@ -911,7 +959,9 @@ export function PlacesScreen({
         visible={loggingFor !== null}
         places={places}
         initialPlaces={
-          loggingFor ? [{ id: loggingFor.id, name: loggingFor.name }] : undefined
+          loggingFor
+            ? [{ id: loggingFor.id, name: loggingFor.name }]
+            : undefined
         }
         existingTypes={tripTypes}
         onClose={() => setLoggingFor(null)}
@@ -1058,11 +1108,19 @@ function EmptyPanel({
             };
   return (
     <View style={styles.empty}>
-      <Feather name={copy.icon} size={28} color={withAlpha(theme.accent, 0.8)} />
+      <Feather
+        name={copy.icon}
+        size={28}
+        color={withAlpha(theme.accent, 0.8)}
+      />
       <Text style={styles.emptyTitle}>{copy.title}</Text>
       <Text style={styles.emptyBody}>{copy.body}</Text>
       {filtering ? (
-        <Button label="Clear filters" variant="outlineAccent" onPress={onClear} />
+        <Button
+          label="Clear filters"
+          variant="outlineAccent"
+          onPress={onClear}
+        />
       ) : bucket === "all" || bucket === "todo" ? (
         <Button label="Add a place" icon="plus" onPress={onAdd} />
       ) : null}
@@ -1072,7 +1130,11 @@ function EmptyPanel({
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: theme.primary },
-  heroActions: { flexDirection: "row", alignItems: "center", gap: spacing(0.5) },
+  heroActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing(0.5),
+  },
   meterRow: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
   meter: { flex: 1 },
   findRow: { flexDirection: "row", alignItems: "center", gap: spacing(0.5) },
@@ -1100,7 +1162,11 @@ const styles = StyleSheet.create({
   typeRail: { paddingLeft: spacing(2), paddingTop: spacing(1.5) },
   // Dimmed, not gone: see the comment at the render site.
   railInert: { opacity: 0.4 },
-  rail: { paddingLeft: spacing(2), paddingTop: spacing(1.5), paddingBottom: spacing(1.5) },
+  rail: {
+    paddingLeft: spacing(2),
+    paddingTop: spacing(1.5),
+    paddingBottom: spacing(1.5),
+  },
   filterNote: {
     flexDirection: "row",
     alignItems: "center",
@@ -1114,11 +1180,24 @@ const styles = StyleSheet.create({
   },
   filterText: { flex: 1, color: theme.textPrimary, fontSize: fontSize.sm },
   list: { flex: 1 },
-  listContent: { paddingHorizontal: spacing(2), paddingBottom: spacing(4), gap: spacing(1) },
-  rowTrailing: { flexDirection: "row", alignItems: "center", gap: spacing(0.75) },
+  listContent: {
+    paddingHorizontal: spacing(2),
+    paddingBottom: spacing(4),
+    gap: spacing(1),
+  },
+  rowTrailing: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing(0.75),
+  },
   // IconButton's own box, so the checkbox that stands in for the ⋯ button
   // occupies exactly what it replaced and the row cannot resize on selection.
-  selectBox: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
+  selectBox: {
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   quality: { color: theme.textMuted, fontSize: fontSize.xs },
   badge: { flexDirection: "row", alignItems: "center", gap: spacing(0.25) },
   badgeText: { color: theme.textMuted, fontSize: fontSize.xs },
@@ -1137,5 +1216,9 @@ const styles = StyleSheet.create({
     fontSize: fontSize.base,
     fontWeight: fontWeight.medium,
   },
-  emptyBody: { color: theme.textMuted, fontSize: fontSize.sm, textAlign: "center" },
+  emptyBody: {
+    color: theme.textMuted,
+    fontSize: fontSize.sm,
+    textAlign: "center",
+  },
 });

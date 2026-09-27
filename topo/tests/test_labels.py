@@ -1,4 +1,5 @@
 """Label placement + decluttering along polylines (pure geometry + PIL text)."""
+
 import math
 import os
 import sys
@@ -20,6 +21,7 @@ try:
         lonlat_to_world_px,
         tile_label_box,
     )
+
     _IMPORT_OK = True
 except Exception as _exc:  # noqa: BLE001
     _IMPORT_OK = False
@@ -66,8 +68,12 @@ class TestLineLabelAnchors(unittest.TestCase):
         anchors = line_label_anchors(coords, 18, 550)
         self.assertGreater(len(anchors), 2)
         # Consecutive anchors are ~spacing_px apart (straight line case).
-        gaps = [math.hypot(anchors[i + 1][0] - anchors[i][0], anchors[i + 1][1] - anchors[i][1])
-                for i in range(len(anchors) - 1)]
+        gaps = [
+            math.hypot(
+                anchors[i + 1][0] - anchors[i][0], anchors[i + 1][1] - anchors[i][1]
+            )
+            for i in range(len(anchors) - 1)
+        ]
         for g in gaps:
             self.assertAlmostEqual(g, 550, delta=1.0)
 

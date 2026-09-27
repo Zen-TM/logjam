@@ -9,8 +9,8 @@ export const DATE_FORMAT_LABELS: Record<DateFormat, string> = {
   "YYYY-MM-DD": "YYYY-MM-DD / ISO 8601 (e.g. 2023-06-15)",
   "DD/MM/YYYY": "DD/MM/YYYY (e.g. 15/06/2023)",
   "DD-MM-YYYY": "DD-MM-YYYY (e.g. 15-06-2023)",
-  "DD/MM/YY":   "DD/MM/YY (e.g. 15/06/23)",
-  "DD-MM-YY":   "DD-MM-YY (e.g. 15-06-23)",
+  "DD/MM/YY": "DD/MM/YY (e.g. 15/06/23)",
+  "DD-MM-YY": "DD-MM-YY (e.g. 15-06-23)",
 };
 
 function twoDigitYear(yy: number): number {
@@ -24,8 +24,15 @@ function twoDigitYear(yy: number): number {
 // forward into a *different, wrong* date with no signal (FECO-007). Verify the
 // constructed Date reports back the exact year/month/day it was built from;
 // any mismatch means the input wasn't a real date.
-function isExactYMD(d: Date, year: number, month0: number, day: number): boolean {
-  return d.getFullYear() === year && d.getMonth() === month0 && d.getDate() === day;
+function isExactYMD(
+  d: Date,
+  year: number,
+  month0: number,
+  day: number,
+): boolean {
+  return (
+    d.getFullYear() === year && d.getMonth() === month0 && d.getDate() === day
+  );
 }
 
 export function parseWithFormat(s: string, format: DateFormat): Date | null {
@@ -33,21 +40,33 @@ export function parseWithFormat(s: string, format: DateFormat): Date | null {
     case "YYYY-MM-DD": {
       const m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
       if (!m) return null;
-      const [year, month, day] = [parseInt(m[1]), parseInt(m[2]), parseInt(m[3])];
+      const [year, month, day] = [
+        parseInt(m[1]),
+        parseInt(m[2]),
+        parseInt(m[3]),
+      ];
       const d = new Date(year, month - 1, day);
       return isExactYMD(d, year, month - 1, day) ? d : null;
     }
     case "DD/MM/YYYY": {
       const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
       if (!m) return null;
-      const [day, month, year] = [parseInt(m[1]), parseInt(m[2]), parseInt(m[3])];
+      const [day, month, year] = [
+        parseInt(m[1]),
+        parseInt(m[2]),
+        parseInt(m[3]),
+      ];
       const d = new Date(year, month - 1, day);
       return isExactYMD(d, year, month - 1, day) ? d : null;
     }
     case "DD-MM-YYYY": {
       const m = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
       if (!m) return null;
-      const [day, month, year] = [parseInt(m[1]), parseInt(m[2]), parseInt(m[3])];
+      const [day, month, year] = [
+        parseInt(m[1]),
+        parseInt(m[2]),
+        parseInt(m[3]),
+      ];
       const d = new Date(year, month - 1, day);
       return isExactYMD(d, year, month - 1, day) ? d : null;
     }
@@ -79,17 +98,31 @@ export function toIsoDate(s: string, format: DateFormat): string | null {
   return `${y}-${mo}-${dd}`;
 }
 
-export function detectDateFormat(samples: string[]): { format: DateFormat; ambiguous: boolean } {
+export function detectDateFormat(samples: string[]): {
+  format: DateFormat;
+  ambiguous: boolean;
+} {
   const nonEmpty = samples.filter((s) => s.trim() !== "");
   if (nonEmpty.length === 0) return { format: "DD/MM/YYYY", ambiguous: false };
 
-  const all: DateFormat[] = ["YYYY-MM-DD", "DD/MM/YYYY", "DD-MM-YYYY", "DD/MM/YY", "DD-MM-YY"];
-  const matching = all.filter((f) => nonEmpty.every((s) => parseWithFormat(s, f) !== null));
+  const all: DateFormat[] = [
+    "YYYY-MM-DD",
+    "DD/MM/YYYY",
+    "DD-MM-YYYY",
+    "DD/MM/YY",
+    "DD-MM-YY",
+  ];
+  const matching = all.filter((f) =>
+    nonEmpty.every((s) => parseWithFormat(s, f) !== null),
+  );
 
   if (matching.length === 0) return { format: "DD/MM/YYYY", ambiguous: true };
   if (matching.length === 1) return { format: matching[0], ambiguous: false };
 
   // Multiple match (e.g. ambiguous between slash and dash with identical separators) — prefer 4-digit year
   const fourDigit = matching.filter((f) => f.endsWith("YYYY"));
-  return { format: fourDigit.length > 0 ? fourDigit[0] : matching[0], ambiguous: true };
+  return {
+    format: fourDigit.length > 0 ? fourDigit[0] : matching[0],
+    ambiguous: true,
+  };
 }

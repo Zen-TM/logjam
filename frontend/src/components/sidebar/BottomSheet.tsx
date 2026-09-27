@@ -92,7 +92,9 @@ function BottomSheet({
 
   // Live drag translate in px; null when not dragging (snap drives transform).
   const [dragTranslate, setDragTranslate] = useState<number | null>(null);
-  const dragStart = useRef<{ pointerY: number; baseTranslate: number } | null>(null);
+  const dragStart = useRef<{ pointerY: number; baseTranslate: number } | null>(
+    null,
+  );
 
   // Measure the drag-handle height so the content region is sized exactly to
   // the visible area below it. Robust against padding/font changes.
@@ -117,7 +119,10 @@ function BottomSheet({
     if (!dragStart.current) return;
     const delta = event.clientY - dragStart.current.pointerY;
     const maxTranslate = sheetHeightPx(viewportHeight) - PEEK_REVEAL_PX;
-    const next = Math.min(Math.max(dragStart.current.baseTranslate + delta, 0), maxTranslate);
+    const next = Math.min(
+      Math.max(dragStart.current.baseTranslate + delta, 0),
+      maxTranslate,
+    );
     setDragTranslate(next);
   }
 
@@ -191,7 +196,10 @@ function BottomSheet({
         >
           <div className={classes.grip} />
         </div>
-        <div className={classes.content} style={{ height: visibleContentHeight }}>
+        <div
+          className={classes.content}
+          style={{ height: visibleContentHeight }}
+        >
           {children}
         </div>
       </aside>

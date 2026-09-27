@@ -17,7 +17,10 @@ export type StatusBucket = "all" | PlaceStatus;
  * A place you visited is always your own (a trip links only its owner's
  * places), so visited and not visited both mean owned.
  */
-export function withBucket(filters: PlaceFilters, bucket: StatusBucket): PlaceFilters {
+export function withBucket(
+  filters: PlaceFilters,
+  bucket: StatusBucket,
+): PlaceFilters {
   switch (bucket) {
     case "all":
       return { ...filters, ownership: "all", completion: "any" };
@@ -47,14 +50,20 @@ export function bucketOf(filters: PlaceFilters): StatusBucket {
  *  object when they already are. */
 export function normaliseBucket(filters: PlaceFilters): PlaceFilters {
   const normalised = withBucket(filters, bucketOf(filters));
-  return normalised.ownership === filters.ownership && normalised.completion === filters.completion
+  return normalised.ownership === filters.ownership &&
+    normalised.completion === filters.completion
     ? filters
     : normalised;
 }
 
 /** The filters the SHEET owns — everything but the two rails (type, status). */
 export function sheetFilterCount(filters: PlaceFilters): number {
-  return activePlaceFilterCount({ ...filters, placeTypeId: null, ownership: "all", completion: "any" });
+  return activePlaceFilterCount({
+    ...filters,
+    placeTypeId: null,
+    ownership: "all",
+    completion: "any",
+  });
 }
 
 /** Clear what the sheet owns and keep what the rails show. */
@@ -97,7 +106,8 @@ export function placesBounds(
 
   const midLat = (south + north) / 2;
   const minLatSpan = minEdgeKm / KM_PER_DEGREE_LAT;
-  const minLngSpan = minEdgeKm / (KM_PER_DEGREE_LAT * Math.cos((midLat * Math.PI) / 180));
+  const minLngSpan =
+    minEdgeKm / (KM_PER_DEGREE_LAT * Math.cos((midLat * Math.PI) / 180));
   if (north - south < minLatSpan) {
     const mid = (north + south) / 2;
     south = mid - minLatSpan / 2;
@@ -113,7 +123,11 @@ export function placesBounds(
 
 /** The ids from `from` to `to` inclusive, in list order — a shift-click range.
  *  Just `to` when the anchor is no longer in the list. */
-export function idRange(ids: readonly string[], from: string | null, to: string): string[] {
+export function idRange(
+  ids: readonly string[],
+  from: string | null,
+  to: string,
+): string[] {
   const end = ids.indexOf(to);
   const start = from == null ? -1 : ids.indexOf(from);
   if (end < 0) return [];
@@ -172,7 +186,12 @@ export function placeVerbs(
   verbs.push({ id: "makeMap", label: "Make a map here" });
   if (owned) {
     verbs.push({ id: "share", label: "Share or export…", separated: true });
-    verbs.push({ id: "delete", label: "Delete", danger: true, separated: true });
+    verbs.push({
+      id: "delete",
+      label: "Delete",
+      danger: true,
+      separated: true,
+    });
     return verbs;
   }
   // A shared place. Copy is ordinary; the two that end the share sit below the
@@ -180,7 +199,11 @@ export function placeVerbs(
   // share is ONE decision — and the order is the guarantee: copy first, so a
   // failure leaves the user with both rather than neither.
   verbs.push({ id: "copy", label: "Copy to my places" });
-  verbs.push({ id: "copyAndRemove", label: "Copy and remove", separated: true });
+  verbs.push({
+    id: "copyAndRemove",
+    label: "Copy and remove",
+    separated: true,
+  });
   verbs.push({ id: "remove", label: "Remove", separated: true });
   return verbs;
 }

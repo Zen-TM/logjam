@@ -24,7 +24,14 @@ import { memo, useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { formatSpeedMps } from "@logjam/shared";
 
-import { fontSize, fontWeight, radius, spacing, theme, withAlpha } from "../theme";
+import {
+  fontSize,
+  fontWeight,
+  radius,
+  spacing,
+  theme,
+  withAlpha,
+} from "../theme";
 import { READOUT_STALE_MS, useLiveReadout } from "./liveReadout";
 
 const LABEL_LINE = Math.round(fontSize.xs * 1.2);
@@ -70,7 +77,9 @@ export const SpeedElevationChip = memo(function SpeedElevationChip({
       ? UNKNOWN
       : formatSpeedMps(readout.speedMps);
   const elevation =
-    readout?.elevationM == null ? UNKNOWN : `${Math.round(readout.elevationM)} m`;
+    readout?.elevationM == null
+      ? UNKNOWN
+      : `${Math.round(readout.elevationM)} m`;
 
   return (
     <View style={styles.chip} pointerEvents="none">
@@ -90,9 +99,7 @@ export const SpeedElevationChip = memo(function SpeedElevationChip({
         <Text style={styles.label}>Elevation</Text>
         <Text
           style={styles.value}
-          accessibilityLabel={
-            `Elevation ${elevation}${readout?.fromTerrain ? ", from terrain data" : ""}`
-          }
+          accessibilityLabel={`Elevation ${elevation}${readout?.fromTerrain ? ", from terrain data" : ""}`}
         >
           {elevation}
         </Text>

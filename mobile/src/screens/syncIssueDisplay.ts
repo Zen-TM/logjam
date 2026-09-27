@@ -101,7 +101,9 @@ export function opTitle(op: ParkedOp): string {
   const name = opName(op);
   const subject = name ? `“${name}”` : `a ${entityNoun(op.entity)}`;
   if (op.entity === "media") {
-    return op.op === "delete" ? `Couldn't remove ${subject}` : `Couldn't upload ${subject}`;
+    return op.op === "delete"
+      ? `Couldn't remove ${subject}`
+      : `Couldn't upload ${subject}`;
   }
   switch (op.op) {
     case "create":
@@ -264,7 +266,8 @@ export function opChanges(op: ParkedOp): OpChange[] {
   for (const [field, value] of Object.entries(fields)) {
     // A create's own id and its link ids are plumbing, not something the user
     // typed; a coordinate renders as "(hidden)" and says nothing either.
-    if (field === "id" || field.endsWith("Id") || field.endsWith("Ids")) continue;
+    if (field === "id" || field.endsWith("Id") || field.endsWith("Ids"))
+      continue;
     if (UNRENDERABLE_FIELDS.has(field)) continue;
     // `fieldValues` is ONE field on the wire but several things to a reader, so
     // it is expanded into a line per value. They share the blob's rejected
@@ -273,7 +276,9 @@ export function opChanges(op: ParkedOp): OpChange[] {
     // see WHICH value the complaint is about, which is the whole point of
     // marking a line at all.
     if (field === "fieldValues" && value && typeof value === "object") {
-      for (const [key, inner] of Object.entries(value as Record<string, unknown>)) {
+      for (const [key, inner] of Object.entries(
+        value as Record<string, unknown>,
+      )) {
         // Internal `_`-prefixed entries are not something the user typed.
         if (key.startsWith("_")) continue;
         const innerLabel = fieldLabel(key);
@@ -323,7 +328,9 @@ function fieldValueText(field: string, value: unknown): string {
  * Waypoints, routes and media are absent deliberately: none has a screen that
  * can be pushed from here, and a row that navigates nowhere is worse than none.
  */
-export function opTarget(op: ParkedOp): { kind: "place" | "trip"; id: string } | null {
+export function opTarget(
+  op: ParkedOp,
+): { kind: "place" | "trip"; id: string } | null {
   if (op.op === "delete") return null;
   if (op.entity === "place") return { kind: "place", id: op.entityId };
   if (op.entity === "tripLog") return { kind: "trip", id: op.entityId };
@@ -441,10 +448,10 @@ export function restoreSubtitle(entry: ShelfEntry): string | undefined {
  */
 export function restoreConfirmBody(count: number, replacing?: string): string {
   if (count === 1) {
-    const quoted = replacing ? ` It replaces “${truncate(replacing)}”, which is then gone.` : "";
-    return (
-      `Your value goes back into your account, on every device you're signed in on.${quoted}`
-    );
+    const quoted = replacing
+      ? ` It replaces “${truncate(replacing)}”, which is then gone.`
+      : "";
+    return `Your value goes back into your account, on every device you're signed in on.${quoted}`;
   }
   return (
     `Those ${count} values go back into your account, on every device you're ` +

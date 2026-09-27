@@ -29,17 +29,21 @@ def _per_layer_raster_mbtiles(ctx: RenderContext, layer: str) -> Path:
     dst = ctx.work_dir / f"{layer}.mbtiles"
     cmd = [
         "gdal_translate",
-        "-of", "MBTILES",
+        "-of",
+        "MBTILES",
         str(src_cog),
         str(dst),
     ]
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
-        raise RenderError(f"gdal_translate MBTILES ({layer}) failed:\n{result.stderr.strip()}")
+        raise RenderError(
+            f"gdal_translate MBTILES ({layer}) failed:\n{result.stderr.strip()}"
+        )
     # Build overviews so Gaia can zoom out without a black canvas.
     ov = subprocess.run(
         ["gdaladdo", "-r", "average", str(dst), "2", "4", "8", "16", "32"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     if ov.returncode != 0:
         log.warning(f"gdaladdo on {layer}.mbtiles failed: {ov.stderr.strip()}")
@@ -52,10 +56,16 @@ def _per_layer_vector_mbtiles(ctx: RenderContext, layer: str) -> Path:
     layer_name = "contours" if layer == "contours" else "features"
     cmd = [
         "tippecanoe",
-        "-o", str(dst),
-        "-z", "18", "-Z", "12",
-        "--no-feature-limit", "--no-tile-size-limit",
-        "-l", layer_name,
+        "-o",
+        str(dst),
+        "-z",
+        "18",
+        "-Z",
+        "12",
+        "--no-feature-limit",
+        "--no-tile-size-limit",
+        "-l",
+        layer_name,
         "--force",
         str(src),
     ]
@@ -68,6 +78,7 @@ def _per_layer_vector_mbtiles(ctx: RenderContext, layer: str) -> Path:
 def render_mbtiles(ctx: RenderContext) -> Path:
     if ctx.is_composite:
         from .tile_compose import render_composite_to_mbtiles
+
         return render_composite_to_mbtiles(ctx, ctx.layers)
 
     produced: list[Path] = []

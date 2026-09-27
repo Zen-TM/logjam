@@ -14,7 +14,9 @@ const nativeDb = {
   getAllAsync: () => Promise.resolve(artifactRows),
   withTransactionAsync: async (task: () => Promise<void>) => task(),
 };
-vi.mock("expo-sqlite", () => ({ openDatabaseAsync: () => Promise.resolve(nativeDb) }));
+vi.mock("expo-sqlite", () => ({
+  openDatabaseAsync: () => Promise.resolve(nativeDb),
+}));
 
 const dirNames: string[] = [];
 const deleted: string[] = [];

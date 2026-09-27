@@ -36,7 +36,9 @@ export function setAutoDownloadEnabled(enabled: boolean): boolean {
  * Called from the auto-download run itself, which has the user record in hand
  * anyway; it must not cost a fetch of its own.
  */
-export function seedAutoDownloadFromAccount(accountValue: boolean | undefined): void {
+export function seedAutoDownloadFromAccount(
+  accountValue: boolean | undefined,
+): void {
   if (accountValue !== false) return;
   if (readPref(AUTO_DOWNLOAD_KEY) !== null) return;
   setAutoDownloadEnabled(false);

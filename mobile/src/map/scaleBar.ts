@@ -60,7 +60,8 @@ const EQUATOR_METERS_PER_PIXEL_TILE_Z0 = 156543.03392;
  */
 export function tileMetersPerPixel(latitudeDeg: number, zoom: number): number {
   return (
-    (EQUATOR_METERS_PER_PIXEL_TILE_Z0 * Math.cos((latitudeDeg * Math.PI) / 180)) /
+    (EQUATOR_METERS_PER_PIXEL_TILE_Z0 *
+      Math.cos((latitudeDeg * Math.PI) / 180)) /
     2 ** zoom
   );
 }
@@ -107,7 +108,9 @@ export function chooseScaleStep(
   maxWidthPx: number,
 ): ScaleBarStep {
   if (!Number.isFinite(metersPerPixelValue) || metersPerPixelValue <= 0) {
-    throw new Error(`chooseScaleStep: bad metersPerPixel (${metersPerPixelValue})`);
+    throw new Error(
+      `chooseScaleStep: bad metersPerPixel (${metersPerPixelValue})`,
+    );
   }
   if (!Number.isFinite(maxWidthPx) || maxWidthPx <= 0) {
     throw new Error(`chooseScaleStep: bad maxWidthPx (${maxWidthPx})`);

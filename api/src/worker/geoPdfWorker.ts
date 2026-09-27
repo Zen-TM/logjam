@@ -126,7 +126,10 @@ export async function processGeoPdfJob(jobId: string): Promise<number> {
     // the user-facing/stored error message — log only the error class, never
     // place coords/names (CLAUDE.md privacy rule).
     logger.error(
-      { jobId, errClass: err instanceof Error ? err.constructor.name : typeof err },
+      {
+        jobId,
+        errClass: err instanceof Error ? err.constructor.name : typeof err,
+      },
       "geo_pdf_worker_render_failed",
     );
     errorMessage = GENERIC_FAILURE_MESSAGE;
@@ -173,7 +176,9 @@ export async function processGeoPdfJob(jobId: string): Promise<number> {
     // notification/email. Exit 0 either way (the outcome is moot).
     logger.warn({ jobId }, "geo_pdf_worker_reaped_mid_run_cleaning_up");
     if (resultKey) {
-      await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: resultKey }));
+      await s3.send(
+        new DeleteObjectCommand({ Bucket: bucket, Key: resultKey }),
+      );
     }
     return 0;
   }
@@ -209,8 +214,8 @@ export async function processGeoPdfJob(jobId: string): Promise<number> {
     where: { id: job.userId },
     select: { email: true, uiPreferences: true },
   });
-  const wantsEmail =
-    normalizeUserUiPreferences(recipient?.uiPreferences).notifications.geoPdfEmail;
+  const wantsEmail = normalizeUserUiPreferences(recipient?.uiPreferences)
+    .notifications.geoPdfEmail;
   if (recipient?.email && wantsEmail) {
     const base = (env.FRONTEND_URL ?? "").replace(/\/$/, "");
     const openUrl = base ? `${base}/?geoPdfJob=${jobId}` : "";
@@ -257,7 +262,10 @@ if (require.main === module) {
       process.exit(code);
     })
     .catch(async (err) => {
-      logger.error({ err: safeErrorForLog(err) }, "geo_pdf_worker_unhandled_error");
+      logger.error(
+        { err: safeErrorForLog(err) },
+        "geo_pdf_worker_unhandled_error",
+      );
       await prisma.$disconnect();
       process.exit(1);
     });

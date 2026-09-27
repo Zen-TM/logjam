@@ -1,0 +1,6 @@
+# Revisions that only reformatted code. Use with
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+# (GitHub applies it automatically).
+
+# chore(toolchain): format the codebase with Biome and Ruff
+78e99f03ffdb6be35a9a17f9a1ccd2d7a5137372

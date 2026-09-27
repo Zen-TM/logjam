@@ -85,8 +85,12 @@ describe("fix rate preference", () => {
   });
 
   it("asks for positions less often as the rate gets cheaper", () => {
-    const intervals = Object.values(FIX_RATE_OPTIONS).map((o) => o.timeInterval);
-    expect(intervals).toEqual([...intervals].sort((a, b) => Number(a) - Number(b)));
+    const intervals = Object.values(FIX_RATE_OPTIONS).map(
+      (o) => o.timeInterval,
+    );
+    expect(intervals).toEqual(
+      [...intervals].sort((a, b) => Number(a) - Number(b)),
+    );
   });
 });
 

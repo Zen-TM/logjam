@@ -8,7 +8,9 @@
   border: 1px solid var(--theme-text-muted);
   background: transparent;
   cursor: pointer;
-  transition: background-color var(--transition-fast), border-color var(--transition-fast);
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast);
 }
 
 .thumb {

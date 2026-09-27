@@ -91,7 +91,9 @@ describe("the system rows the migration inserts", () => {
         `\\('${type.id}', NULL, '[^']+',\\s*'([^']+)'`,
       ).exec(sql)?.[1];
       expect(
-        isPlaceTypeIconKey(finalValue(sql, "icon_key", type.id, inserted ?? "")),
+        isPlaceTypeIconKey(
+          finalValue(sql, "icon_key", type.id, inserted ?? ""),
+        ),
       ).toBe(true);
     }
   });

@@ -1,8 +1,19 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useIsMobile } from "../../useIsMobile";
 import BottomSheet from "./BottomSheet";
 import type { SheetSnap } from "./BottomSheet";
-import { PANEL_TITLES, type LogsView, type MapsView, type PanelId } from "./panels";
+import {
+  PANEL_TITLES,
+  type LogsView,
+  type MapsView,
+  type PanelId,
+} from "./panels";
 import type {
   TPlace,
   TFilters,
@@ -15,7 +26,13 @@ import type {
   PlaceTrack,
   TPlaceType,
 } from "../../placeUtils";
-import type { RegionBbox, StandaloneFile, VectorStyleSettings, TopoExportJobView, ScopedCustomFieldDef } from "@logjam/shared";
+import type {
+  RegionBbox,
+  StandaloneFile,
+  VectorStyleSettings,
+  TopoExportJobView,
+  ScopedCustomFieldDef,
+} from "@logjam/shared";
 import type { TopoJob, GeoJsonPolygonal } from "../dialogs/TopoDialog";
 import type { CompletedTopoJob } from "../../topoLayerTypes";
 import type { GeoPdfTemplate } from "../dialogs/GeoPdfDialog";
@@ -195,7 +212,11 @@ function SidebarPanel({
   topoExports: TopoExportJobView[];
   topoExportsTotal: number | null;
   onRefetchTopoExports: () => void;
-  setLidarJobToggles: (v: Record<string, boolean> | ((prev: Record<string, boolean>) => Record<string, boolean>)) => void;
+  setLidarJobToggles: (
+    v:
+      | Record<string, boolean>
+      | ((prev: Record<string, boolean>) => Record<string, boolean>),
+  ) => void;
   onOpenTopo: () => void;
   onRefetchCompletedTopoJobs: () => void;
   onDismissActiveJob: (jobId: string) => void;
@@ -330,15 +351,27 @@ function SidebarPanel({
   // titles the landmark and nothing else — place-detail computes it for the
   // same reason, after losing its header.
   const title =
-    activePanel === "place-detail" && place ? place.name : PANEL_TITLES[activePanel];
+    activePanel === "place-detail" && place
+      ? place.name
+      : PANEL_TITLES[activePanel];
 
   // A page with two views draws its switch under its own hero, so the hero
   // stays the page's first line (DESIGN.md §2).
   const logsViewRail = (
-    <ChipRail label="Logs view" options={LOGS_VIEWS} value={logsView} onChange={onLogsViewChange} />
+    <ChipRail
+      label="Logs view"
+      options={LOGS_VIEWS}
+      value={logsView}
+      onChange={onLogsViewChange}
+    />
   );
   const mapsViewRail = (
-    <ChipRail label="Maps view" options={MAPS_VIEWS} value={mapsView} onChange={onMapsViewChange} />
+    <ChipRail
+      label="Maps view"
+      options={MAPS_VIEWS}
+      value={mapsView}
+      onChange={onMapsViewChange}
+    />
   );
 
   const panelContent = (

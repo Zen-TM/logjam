@@ -9,7 +9,11 @@
 // qualifier extraction + relocation, number-word<->digit, edit-distance typo
 // tolerance) plus coordinate corroboration for confidence.
 
-import { norm, stripWaterwaySuffix, WATERWAY_SUFFIXES } from "./placeNameMatch.js";
+import {
+  norm,
+  stripWaterwaySuffix,
+  WATERWAY_SUFFIXES,
+} from "./placeNameMatch.js";
 import { haversineMeters, withinBbox } from "./placeGeo.js";
 
 // Distance thresholds (moved here from api/src/services/ropewikiDedupe.ts so
@@ -208,12 +212,7 @@ export function damerauLevenshtein(a: string, b: string): number {
         distance[i][j - 1] + 1, // insertion
         distance[i - 1][j - 1] + substitutionCost, // substitution
       );
-      if (
-        i > 1 &&
-        j > 1 &&
-        a[i - 1] === b[j - 2] &&
-        a[i - 2] === b[j - 1]
-      ) {
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
         distance[i][j] = Math.min(
           distance[i][j],
           distance[i - 2][j - 2] + 1, // transposition
@@ -261,10 +260,7 @@ export function nameTier(a: NormalizedName, b: NormalizedName): NameTier {
   // Bases that despace-match but disagree on qualifiers were caught above. If
   // bases are within typo distance but qualifiers differ, that is a deliberate
   // non-match (Bowens Creek South vs North).
-  if (
-    !qualifiersEqual &&
-    damerauLevenshtein(a.base, b.base) <= threshold
-  ) {
+  if (!qualifiersEqual && damerauLevenshtein(a.base, b.base) <= threshold) {
     return "qualifier-mismatch";
   }
 
@@ -329,7 +325,8 @@ export function matchPlace(
   candidates: MatchCandidate[],
 ): MatchResult {
   const inputNorm = normalizePlaceName(input.name);
-  const inputHasCoords = hasCoords(input.latitude) && hasCoords(input.longitude);
+  const inputHasCoords =
+    hasCoords(input.latitude) && hasCoords(input.longitude);
 
   const scored: ScoredCandidate[] = [];
   for (const candidate of candidates) {

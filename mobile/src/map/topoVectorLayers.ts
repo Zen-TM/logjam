@@ -63,8 +63,16 @@ function iconSizeInterp(sizeZ18: number): unknown[] {
   ];
 }
 
-const CONTOUR_MAJOR_FILTER = ["==", ["%", ["to-number", ["get", "elev"]], 50], 0];
-const CONTOUR_MINOR_FILTER = ["!=", ["%", ["to-number", ["get", "elev"]], 50], 0];
+const CONTOUR_MAJOR_FILTER = [
+  "==",
+  ["%", ["to-number", ["get", "elev"]], 50],
+  0,
+];
+const CONTOUR_MINOR_FILTER = [
+  "!=",
+  ["%", ["to-number", ["get", "elev"]], 50],
+  0,
+];
 
 function contourLayerDefs(vs: VectorStyleSettings): TopoVectorLayerDef[] {
   const sizeExpr = labelTextSize(vs.labelScale ?? 1);
@@ -163,10 +171,17 @@ function featureLayerDefs(vs: VectorStyleSettings): TopoVectorLayerDef[] {
   }
 
   // Line-feature name labels — label colour follows the line colour.
-  const lineLabelSpecs: { key: "waterway" | "track" | "road"; filter: unknown[] }[] = [
+  const lineLabelSpecs: {
+    key: "waterway" | "track" | "road";
+    filter: unknown[];
+  }[] = [
     {
       key: "waterway",
-      filter: ["all", ["==", ["get", "_category"], "waterway"], ["has", "name"]],
+      filter: [
+        "all",
+        ["==", ["get", "_category"], "waterway"],
+        ["has", "name"],
+      ],
     },
     {
       key: "track",
@@ -226,7 +241,13 @@ function featureLayerDefs(vs: VectorStyleSettings): TopoVectorLayerDef[] {
         ? [
             "case",
             ["all", ["has", "name"], ["has", "ele"]],
-            ["concat", ["get", "name"], "\n", ["to-string", ["get", "ele"]], " m"],
+            [
+              "concat",
+              ["get", "name"],
+              "\n",
+              ["to-string", ["get", "ele"]],
+              " m",
+            ],
             ["has", "name"],
             ["get", "name"],
             ["has", "ele"],

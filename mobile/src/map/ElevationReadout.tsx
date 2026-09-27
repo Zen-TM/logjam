@@ -22,10 +22,16 @@ export function ElevationReadout({
   }
   return (
     <View style={styles.row}>
-      <Text style={styles.value} accessibilityLabel={`Climb ${Math.round(profile.gainM)} metres`}>
+      <Text
+        style={styles.value}
+        accessibilityLabel={`Climb ${Math.round(profile.gainM)} metres`}
+      >
         ↑ {Math.round(profile.gainM)} m
       </Text>
-      <Text style={styles.value} accessibilityLabel={`Descent ${Math.round(profile.lossM)} metres`}>
+      <Text
+        style={styles.value}
+        accessibilityLabel={`Descent ${Math.round(profile.lossM)} metres`}
+      >
         ↓ {Math.round(profile.lossM)} m
       </Text>
       {profile.minM != null && profile.maxM != null ? (

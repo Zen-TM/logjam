@@ -74,7 +74,11 @@ function parseLinkTarget(body: Record<string, unknown>): {
   origin: MediaOrigin | null;
 } {
   const { linkedType, linkedId, origin } = body;
-  if (linkedType !== "place" && linkedType !== "tripLog" && linkedType !== "none") {
+  if (
+    linkedType !== "place" &&
+    linkedType !== "tripLog" &&
+    linkedType !== "none"
+  ) {
     throw new AppError(400, "Invalid linkedType");
   }
   if (origin !== undefined && origin !== null && !isMediaOrigin(origin)) {
@@ -143,7 +147,8 @@ async function assertPlaceTrackSlotFree(
   /** The row being MOVED, on a re-link: it is otherwise its own incumbent. */
   ignoreMediaId?: string,
 ) {
-  if (linkedType !== "place" || linkedId === null || category !== "track") return;
+  if (linkedType !== "place" || linkedId === null || category !== "track")
+    return;
   const existing = await prisma.media.count({
     where: {
       linkedType: "place",
@@ -162,11 +167,15 @@ async function assertPlaceTrackSlotFree(
  */
 function parseMediaDisplayName(value: unknown): string | null {
   if (value === undefined || value === null) return null;
-  if (typeof value !== "string") throw new AppError(400, "displayName must be a string");
+  if (typeof value !== "string")
+    throw new AppError(400, "displayName must be a string");
   const trimmed = value.trim();
   if (!trimmed) return null;
   if (trimmed.length > MEDIA_DISPLAY_NAME_MAX) {
-    throw new AppError(400, `displayName must be ${MEDIA_DISPLAY_NAME_MAX} characters or fewer`);
+    throw new AppError(
+      400,
+      `displayName must be ${MEDIA_DISPLAY_NAME_MAX} characters or fewer`,
+    );
   }
   return trimmed;
 }
@@ -199,7 +208,8 @@ function validateMediaType(
   const mediaType = rawMediaType;
   const filename = rawFilename;
   const category = mediaCategory(mediaType);
-  if (!category) throw new AppError(400, `Unsupported media type: ${mediaType}`);
+  if (!category)
+    throw new AppError(400, `Unsupported media type: ${mediaType}`);
   // Clients report inconsistent MIME types for GPX/KML/GeoJSON, so require a
   // matching extension to pin down the format.
   if (category === "track") {
@@ -221,7 +231,10 @@ router.post(
     const body = (req.body ?? {}) as Record<string, unknown>;
     const { sizeBytes, thumbnailSizeBytes } = body;
     const { linkedType, linkedId, origin } = parseLinkTarget(body);
-    const { category, mediaType } = validateMediaType(body.mediaType, body.filename);
+    const { category, mediaType } = validateMediaType(
+      body.mediaType,
+      body.filename,
+    );
     // Shape-checked here as well as at confirm so a bad stats object costs a
     // 400 rather than a wasted upload of the blob it describes.
     parseMediaMetadataOr400(origin, body.metadata);
@@ -341,7 +354,10 @@ router.post(
       // mask it with a generic 500.
       await deleteS3KeysBestEffort(MEDIA_BUCKET, [displayKey, thumbnailKey]);
       const limitMb = Math.round(MEDIA_SIZE_CAPS[category] / 1024 / 1024);
-      throw new AppError(413, `File exceeds the ${limitMb} MB limit for ${category}s`);
+      throw new AppError(
+        413,
+        `File exceeds the ${limitMb} MB limit for ${category}s`,
+      );
     }
 
     let thumbnailBytes = 0;
@@ -379,15 +395,14 @@ router.post(
         if (category === "track") {
           const existingTracks = await tx.media.findMany({
             where: {
-              OR: [
-                { ownerId: user.id },
-                ...(linkedId ? [{ linkedId }] : []),
-              ],
+              OR: [{ ownerId: user.id }, ...(linkedId ? [{ linkedId }] : [])],
               color: { not: null },
             },
             select: { color: true },
           });
-          assignedColor = pickNextTrackColor(existingTracks.map((t) => t.color));
+          assignedColor = pickNextTrackColor(
+            existingTracks.map((t) => t.color),
+          );
         }
 
         return tx.media.create({
@@ -426,7 +441,9 @@ router.post(
       ) {
         // A concurrent duplicate confirm won the race: this transaction
         // rolled back (nothing double-charged) — return the winner's row.
-        const winner = await prisma.media.findUnique({ where: { id: mediaId } });
+        const winner = await prisma.media.findUnique({
+          where: { id: mediaId },
+        });
         if (winner && winner.ownerId === user.id) {
           res.status(200).json(await toMediaItem(winner));
           return;
@@ -589,10 +606,15 @@ router.patch(
 
     // Owner-scoped; a foreign id gets the same 404 a missing one gets (the
     // anti-oracle this file's other handlers argue).
-    const media = await prisma.media.findFirst({ where: { id, ownerId: user.id } });
+    const media = await prisma.media.findFirst({
+      where: { id, ownerId: user.id },
+    });
     if (!media) throw new AppError(404, "Media not found");
     if (media.origin === null) {
-      throw new AppError(400, "Only an import or a recorded track can be renamed");
+      throw new AppError(
+        400,
+        "Only an import or a recorded track can be renamed",
+      );
     }
 
     const updated = await prisma.media.update({
@@ -625,7 +647,7 @@ router.patch(
     if (linkedType !== "place" && linkedType !== "none") {
       // Deliberately narrower than parseLinkTarget: a file is linked to a
       // place or to nothing. Trip logs hold attachments, not ways.
-      throw new AppError(400, "linkedType must be \"place\" or \"none\"");
+      throw new AppError(400, 'linkedType must be "place" or "none"');
     }
     if (linkedType === "place" && (typeof linkedId !== "string" || !linkedId)) {
       throw new AppError(400, "linkedId is required");
@@ -639,10 +661,15 @@ router.patch(
     // gets — a sharee sees place-level media ids in a shared place payload,
     // so a 403 here would confirm which of them are real (the anti-oracle this
     // file's DELETE and presign already argue).
-    const media = await prisma.media.findFirst({ where: { id, ownerId: user.id } });
+    const media = await prisma.media.findFirst({
+      where: { id, ownerId: user.id },
+    });
     if (!media) throw new AppError(404, "Media not found");
     if (media.origin === null) {
-      throw new AppError(400, "Only an import or a recorded track can be linked");
+      throw new AppError(
+        400,
+        "Only an import or a recorded track can be linked",
+      );
     }
 
     const category = mediaCategory(media.mediaType);

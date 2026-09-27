@@ -77,7 +77,9 @@ export function sameFieldValues(
   const keys = Object.keys(a);
   return (
     keys.length === Object.keys(b).length &&
-    keys.every((key) => key in b && JSON.stringify(a[key]) === JSON.stringify(b[key]))
+    keys.every(
+      (key) => key in b && JSON.stringify(a[key]) === JSON.stringify(b[key]),
+    )
   );
 }
 
@@ -90,4 +92,3 @@ export function withoutClearedFields(
     Object.entries(values).filter(([, value]) => value !== null),
   );
 }
-

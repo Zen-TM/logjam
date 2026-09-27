@@ -18,7 +18,8 @@ describe("no unguarded presigned transfer", () => {
     return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
       const full = join(dir, entry.name);
       if (entry.isDirectory()) return sourceFiles(full);
-      if (!/\.tsx?$/.test(entry.name) || /\.test\.tsx?$/.test(entry.name)) return [];
+      if (!/\.tsx?$/.test(entry.name) || /\.test\.tsx?$/.test(entry.name))
+        return [];
       return [full];
     });
   }

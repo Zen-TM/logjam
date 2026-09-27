@@ -23,13 +23,23 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { isThemeSchemeId, needsReconsent } from "@logjam/shared";
 
-import { fetchCurrentUser, getUnreadNotificationCount, useApiQuery } from "./api/queries";
+import {
+  fetchCurrentUser,
+  getUnreadNotificationCount,
+  useApiQuery,
+} from "./api/queries";
 import { AccountStateProvider } from "./auth/AccountStateContext";
 import type { AccountState } from "./auth/capabilities";
 import { getCachedUnreadCount } from "./sync/notificationsCache";
 import { onMirrorChanged } from "./sync/syncDb";
 import { registerSyncTriggers } from "./sync/syncEngine";
-import { activeThemeSchemeId, persistThemeSchemeId, spacing, theme, withAlpha } from "./theme";
+import {
+  activeThemeSchemeId,
+  persistThemeSchemeId,
+  spacing,
+  theme,
+  withAlpha,
+} from "./theme";
 import { MapScreen } from "./map/MapScreen";
 import { RegionDownloadScreen } from "./map/RegionDownloadScreen";
 import type { BasemapId } from "./map/sourceResolver";
@@ -325,7 +335,10 @@ function MapStackNav() {
         )}
       </MapStack.Screen>
       {/* Its own hero owns the back affordance (DESIGN.md §2). */}
-      <MapStack.Screen name="MapRegionDownload" options={{ headerShown: false }}>
+      <MapStack.Screen
+        name="MapRegionDownload"
+        options={{ headerShown: false }}
+      >
         {({ navigation, route }) => (
           <RegionDownloadScreen
             onBack={() => navigation.goBack()}
@@ -354,12 +367,16 @@ function MapStackNav() {
           <PlaceDetailScreen
             placeId={route.params.placeId}
             onBack={() => navigation.goBack()}
-            onOpenTrip={(trip) => navigation.navigate("MapTripDetail", { trip })}
+            onOpenTrip={(trip) =>
+              navigation.navigate("MapTripDetail", { trip })
+            }
             onShowOnMap={(place) =>
               navigation.navigate("MapView", { focus: placeFocus(place) })
             }
             onFocusOnMap={(bbox) =>
-              navigation.navigate("MapView", { focus: { bbox, nonce: Date.now() } })
+              navigation.navigate("MapView", {
+                focus: { bbox, nonce: Date.now() },
+              })
             }
             onShowPlaceOnMap={(linked) =>
               navigation.getParent()?.navigate("Map", {
@@ -388,7 +405,9 @@ function MapStackNav() {
               navigation.navigate("MapPlaceDetail", { placeId, name })
             }
             onFocusOnMap={(bbox) =>
-              navigation.navigate("MapView", { focus: { bbox, nonce: Date.now() } })
+              navigation.navigate("MapView", {
+                focus: { bbox, nonce: Date.now() },
+              })
             }
           />
         )}
@@ -406,12 +425,18 @@ function SavedStackNav() {
           <SavedScreen
             initialFilter={
               route.params?.filter
-                ? { category: route.params.filter, nonce: route.params.nonce ?? 0 }
+                ? {
+                    category: route.params.filter,
+                    nonce: route.params.nonce ?? 0,
+                  }
                 : undefined
             }
             initialHighlight={
               route.params?.highlightKey
-                ? { key: route.params.highlightKey, nonce: route.params.nonce ?? 0 }
+                ? {
+                    key: route.params.highlightKey,
+                    nonce: route.params.nonce ?? 0,
+                  }
                 : undefined
             }
             onOpenMap={(bbox, basemapId, reveal) =>
@@ -515,7 +540,10 @@ function PlacesStackNav() {
         {({ navigation }) => (
           <PlacesScreen
             onOpenPlace={(place) =>
-              navigation.navigate("PlaceDetail", { placeId: place.id, name: place.name })
+              navigation.navigate("PlaceDetail", {
+                placeId: place.id,
+                name: place.name,
+              })
             }
             onShowOnMap={(place) =>
               navigation.getParent()?.navigate("Map", {
@@ -547,7 +575,10 @@ function PlacesStackNav() {
       </PlacesStack.Screen>
       {/* The picker owns the whole screen — see PickPlacePointScreen for why
           it cannot be a mode of the sheet that opened it. */}
-      <PlacesStack.Screen name="PlacePickPoint" options={{ headerShown: false }}>
+      <PlacesStack.Screen
+        name="PlacePickPoint"
+        options={{ headerShown: false }}
+      >
         {({ navigation, route }) => (
           <PickPointScreen
             initialPoint={route.params ?? null}
@@ -565,7 +596,9 @@ function PlacesStackNav() {
           <PlaceDetailScreen
             placeId={route.params.placeId}
             onBack={() => navigation.goBack()}
-            onOpenTrip={(trip) => navigation.navigate("PlaceTripDetail", { trip })}
+            onOpenTrip={(trip) =>
+              navigation.navigate("PlaceTripDetail", { trip })
+            }
             onShowOnMap={(place) =>
               navigation.getParent()?.navigate("Map", {
                 screen: "MapView",
@@ -596,7 +629,10 @@ function PlacesStackNav() {
           />
         )}
       </PlacesStack.Screen>
-      <PlacesStack.Screen name="PlaceTripDetail" options={{ headerShown: false }}>
+      <PlacesStack.Screen
+        name="PlaceTripDetail"
+        options={{ headerShown: false }}
+      >
         {({ navigation, route }) => (
           <TripDetailScreen
             trip={route.params.trip}
@@ -660,7 +696,10 @@ function TripsStackNav() {
           />
         )}
       </TripsStack.Screen>
-      <TripsStack.Screen name="TripPlaceDetail" options={{ headerShown: false }}>
+      <TripsStack.Screen
+        name="TripPlaceDetail"
+        options={{ headerShown: false }}
+      >
         {({ navigation, route }) => (
           <PlaceDetailScreen
             placeId={route.params.placeId}
@@ -781,7 +820,10 @@ export function AppShell({
   // device copy is what `theme.ts` reads at module-eval time; see DESIGN.md §12.
   useEffect(() => {
     const accountScheme = userQuery.data?.uiPreferences?.themeSchemeId;
-    if (isThemeSchemeId(accountScheme) && accountScheme !== activeThemeSchemeId) {
+    if (
+      isThemeSchemeId(accountScheme) &&
+      accountScheme !== activeThemeSchemeId
+    ) {
       persistThemeSchemeId(accountScheme);
     }
   }, [userQuery.data?.uiPreferences?.themeSchemeId]);
@@ -851,7 +893,9 @@ export function AppShell({
           setUnreadCount(cached);
           return;
         }
-        return getUnreadNotificationCount().then(({ count }) => setUnreadCount(count));
+        return getUnreadNotificationCount().then(({ count }) =>
+          setUnreadCount(count),
+        );
       })
       .catch(console.error);
   }, [isGuest]);
@@ -887,272 +931,335 @@ export function AppShell({
   }
 
   return (
-    <AccountStateProvider accountState={accountState} linkAccount={onLinkAccount}>
-    {/* The background toast is a SIBLING of the whole navigator: a GeoPDF
+    <AccountStateProvider
+      accountState={accountState}
+      linkAccount={onLinkAccount}
+    >
+      {/* The background toast is a SIBLING of the whole navigator: a GeoPDF
         import and a region download both run in the background and can finish
         on any tab, so their outcome has no screen of its own to be announced
         from. */}
-    <View style={{ flex: 1 }}>
-    <NavigationContainer ref={navigationRef} theme={navigationTheme}>
-      <Tabs.Navigator
-        // A route being drawn or edited owns the map's taps and has no home
-        // anywhere else, so the tab bar refuses to take you off it. The draft
-        // does survive (routeDraftStore), but nothing on another tab says so —
-        // leaving would read as losing the route.
-        screenListeners={{
-          tabPress: (event) => {
-            if (!isRouteEditing()) return;
-            const target = event.target ?? "";
-            if (target.startsWith("Map")) return;
-            event.preventDefault();
-            alertFinishRouteFirst();
-          },
-        }}
-        screenOptions={{
-          headerShown: false,
-          tabBarStyle: {
-            backgroundColor: theme.secondary,
-            borderTopColor: withAlpha(theme.textPrimary, 0.25),
-            borderTopWidth: 1,
-            // Breathing room between the border and the icons. The library's
-            // bar is iOS-sized (49pt plus the bottom inset) and sits the icons
-            // hard against the top edge on Android. Padding alone would squeeze
-            // icon and label into the same height, so the height grows by the
-            // same amount — and a set height replaces the library's, so it has
-            // to carry the bottom inset itself (the library still pads by it).
-            paddingTop: TAB_BAR_TOP_PAD,
-            height: TAB_BAR_BASE_HEIGHT + TAB_BAR_TOP_PAD + insets.bottom,
-          },
-          tabBarActiveTintColor: theme.accent,
-          tabBarInactiveTintColor: theme.textMuted,
-        }}
-      >
-        <Tabs.Screen
-          name="Map"
-          options={{ tabBarIcon: ({ color }) => <TabIcon name="map" color={color} /> }}
-        >
-          {() => <MapStackNav />}
-        </Tabs.Screen>
-        <Tabs.Screen
-          name="Places"
-          options={{ tabBarIcon: ({ color }) => <TabIcon name="map-pin" color={color} /> }}
-        >
-          {() => <PlacesStackNav />}
-        </Tabs.Screen>
-        <Tabs.Screen
-          name="Logs"
-          options={{ tabBarIcon: ({ color }) => <TabIcon name="book-open" color={color} /> }}
-        >
-          {() => <TripsStackNav />}
-        </Tabs.Screen>
-        <Tabs.Screen
-          name="Saved"
-          options={{ tabBarIcon: ({ color }) => <TabIcon name="download" color={color} /> }}
-        >
-          {() => <SavedStackNav />}
-        </Tabs.Screen>
-        <Tabs.Screen
-          name="More"
-          options={{
-            tabBarIcon: ({ color }) => <TabIcon name="more-horizontal" color={color} />,
-            ...(unreadCount ? { tabBarBadge: unreadCount } : {}),
-          }}
-        >
-          {() => (
-            <MoreStack.Navigator screenOptions={stackScreenOptions}>
-              {/* Every screen here except Settings leads with its own
+      <View style={{ flex: 1 }}>
+        <NavigationContainer ref={navigationRef} theme={navigationTheme}>
+          <Tabs.Navigator
+            // A route being drawn or edited owns the map's taps and has no home
+            // anywhere else, so the tab bar refuses to take you off it. The draft
+            // does survive (routeDraftStore), but nothing on another tab says so —
+            // leaving would read as losing the route.
+            screenListeners={{
+              tabPress: (event) => {
+                if (!isRouteEditing()) return;
+                const target = event.target ?? "";
+                if (target.startsWith("Map")) return;
+                event.preventDefault();
+                alertFinishRouteFirst();
+              },
+            }}
+            screenOptions={{
+              headerShown: false,
+              tabBarStyle: {
+                backgroundColor: theme.secondary,
+                borderTopColor: withAlpha(theme.textPrimary, 0.25),
+                borderTopWidth: 1,
+                // Breathing room between the border and the icons. The library's
+                // bar is iOS-sized (49pt plus the bottom inset) and sits the icons
+                // hard against the top edge on Android. Padding alone would squeeze
+                // icon and label into the same height, so the height grows by the
+                // same amount — and a set height replaces the library's, so it has
+                // to carry the bottom inset itself (the library still pads by it).
+                paddingTop: TAB_BAR_TOP_PAD,
+                height: TAB_BAR_BASE_HEIGHT + TAB_BAR_TOP_PAD + insets.bottom,
+              },
+              tabBarActiveTintColor: theme.accent,
+              tabBarInactiveTintColor: theme.textMuted,
+            }}
+          >
+            <Tabs.Screen
+              name="Map"
+              options={{
+                tabBarIcon: ({ color }) => <TabIcon name="map" color={color} />,
+              }}
+            >
+              {() => <MapStackNav />}
+            </Tabs.Screen>
+            <Tabs.Screen
+              name="Places"
+              options={{
+                tabBarIcon: ({ color }) => (
+                  <TabIcon name="map-pin" color={color} />
+                ),
+              }}
+            >
+              {() => <PlacesStackNav />}
+            </Tabs.Screen>
+            <Tabs.Screen
+              name="Logs"
+              options={{
+                tabBarIcon: ({ color }) => (
+                  <TabIcon name="book-open" color={color} />
+                ),
+              }}
+            >
+              {() => <TripsStackNav />}
+            </Tabs.Screen>
+            <Tabs.Screen
+              name="Saved"
+              options={{
+                tabBarIcon: ({ color }) => (
+                  <TabIcon name="download" color={color} />
+                ),
+              }}
+            >
+              {() => <SavedStackNav />}
+            </Tabs.Screen>
+            <Tabs.Screen
+              name="More"
+              options={{
+                tabBarIcon: ({ color }) => (
+                  <TabIcon name="more-horizontal" color={color} />
+                ),
+                ...(unreadCount ? { tabBarBadge: unreadCount } : {}),
+              }}
+            >
+              {() => (
+                <MoreStack.Navigator screenOptions={stackScreenOptions}>
+                  {/* Every screen here except Settings leads with its own
                   HeroHeader, which owns the back affordance (DESIGN.md §2).
                   Settings is a plain settings list, so it keeps the native
                   header — the rule that a bare-label hero is the pattern being
                   replaced cuts both ways. */}
-              <MoreStack.Screen name="MoreHome" options={{ headerShown: false }}>
-                {({ navigation }) => (
-                  <MoreScreen
-                    unreadCount={unreadCount}
-                    onOpenInbox={() => navigation.navigate("Inbox")}
-                    onOpenAccount={() => navigation.navigate("Account")}
-                    onOpenFriends={() => navigation.navigate("Friends")}
-                    onOpenSyncIssues={() => navigation.navigate("SyncIssues")}
-                    onOpenSettings={() => navigation.navigate("Settings")}
-                  />
-                )}
-              </MoreStack.Screen>
-              <MoreStack.Screen name="Inbox" options={{ headerShown: false }}>
-                {({ navigation }) => (
-                  <NotificationsScreen
-                    onBack={() => navigation.goBack()}
-                    onUnreadChanged={refreshUnread}
-                    // A share notification is a way in to the place it is
-                    // about; the name is unknown here, so the detail screen
-                    // resolves it from the id over the authed API.
-                    onOpenPlace={(placeId) =>
-                      navigation.navigate("MorePlaceDetail", { placeId })
-                    }
-                    // A notification about a saved item is a way in to that
-                    // item: the Saved tab, on its filter, with the row pulsed.
-                    // The filter alone when the notification names the thing
-                    // but not the row (see notificationDestination.ts).
-                    onOpenSaved={(filter, highlightKey) =>
-                      navigation.getParent()?.navigate("Saved", {
-                        screen: "SavedHome",
-                        params: {
-                          filter,
-                          nonce: Date.now(),
-                          ...(highlightKey ? { highlightKey } : {}),
-                        },
-                      })
-                    }
-                    // Pushed INSIDE the More stack, like the place above, so
-                    // Back returns to the inbox rather than to another tab.
-                    onOpenFriends={() => navigation.navigate("Friends")}
-                  />
-                )}
-              </MoreStack.Screen>
-              <MoreStack.Screen name="MorePlaceDetail" options={{ headerShown: false }}>
-                {({ navigation, route }) => (
-                  <PlaceDetailScreen
-                    placeId={route.params.placeId}
-                    onBack={() => navigation.goBack()}
-                    onOpenTrip={(trip) => navigation.navigate("MoreTripDetail", { trip })}
-                    onShowOnMap={(place) =>
-                      navigation.getParent()?.navigate("Map", {
-                        screen: "MapView",
-                        params: { focus: placeFocus(place) },
-                      })
-                    }
-                    onFocusOnMap={(bbox) =>
-                      navigation.getParent()?.navigate("Map", {
-                        screen: "MapView",
-                        params: { focus: { bbox, nonce: Date.now() } },
-                      })
-                    }
-                    onShowPlaceOnMap={(linked) =>
-                      navigation.getParent()?.navigate("Map", {
-                        screen: "MapView",
-                        // placeFocus, not a route bbox: a single point
-                        // yields a zero-span bbox, which the camera reads as
-                        // "fit nothing".
-                        params: { focus: placeFocus(linked) },
-                      })
-                    }
-                    onDrawRoute={(id) =>
-                      navigation.getParent()?.navigate("Map", {
-                        screen: "MapView",
-                        params: { drawRouteFor: { placeId: id, nonce: Date.now() } },
-                      })
-                    }
-                    onDeleted={() => navigation.goBack()}
-                  />
-                )}
-              </MoreStack.Screen>
-              <MoreStack.Screen name="MoreTripDetail" options={{ headerShown: false }}>
-                {({ navigation, route }) => (
-                  <TripDetailScreen
-                    trip={route.params.trip}
-                    onBack={() => navigation.goBack()}
-                    onOpenPlace={(placeId) =>
-                      navigation.navigate("MorePlaceDetail", { placeId })
-                    }
-                    onFocusOnMap={(bbox) =>
-                      navigation.getParent()?.navigate("Map", {
-                        screen: "MapView",
-                        params: { focus: { bbox, nonce: Date.now() } },
-                      })
-                    }
-                  />
-                )}
-              </MoreStack.Screen>
-              <MoreStack.Screen name="Account" options={{ headerShown: false }}>
-                {({ navigation }) => (
-                  <AccountScreen
-                    onBack={() => navigation.goBack()}
-                    onSignOut={onSignOut}
-                    onOpenFriends={() => navigation.navigate("Friends")}
-                  />
-                )}
-              </MoreStack.Screen>
-              <MoreStack.Screen name="Friends" options={{ headerShown: false }}>
-                {({ navigation }) => (
-                  <FriendsScreen
-                    onBack={() => navigation.goBack()}
-                    onOpenShares={(friend) => navigation.navigate("FriendShares", friend)}
-                  />
-                )}
-              </MoreStack.Screen>
-              <MoreStack.Screen name="FriendShares" options={{ headerShown: false }}>
-                {({ navigation, route }) => (
-                  <FriendSharesScreen
-                    friendshipId={route.params.friendshipId}
-                    username={route.params.username}
-                    onBack={() => navigation.goBack()}
-                    // Inside the More stack, like the inbox's own place route,
-                    // so Back returns to the sharing list.
-                    onOpenPlace={(placeId) =>
-                      navigation.navigate("MorePlaceDetail", { placeId })
-                    }
-                  />
-                )}
-              </MoreStack.Screen>
-              <MoreStack.Screen name="SyncIssues" options={{ headerShown: false }}>
-                {({ navigation }) => (
-                  <SyncIssuesScreen
-                    onBack={() => navigation.goBack()}
-                    // A stuck change is a way IN to the thing it failed on: the
-                    // permanent-failure sheet offers "open it and change it a
-                    // way that works". Pushed inside the More stack, like the
-                    // inbox's own place route, so Back returns to the issue.
-                    onOpenPlace={(placeId) =>
-                      navigation.navigate("MorePlaceDetail", { placeId })
-                    }
-                    onOpenTrip={(trip) => navigation.navigate("MoreTripDetail", { trip })}
-                  />
-                )}
-              </MoreStack.Screen>
-              {/* Settings and its sub-pages are plain preference lists, so they
+                  <MoreStack.Screen
+                    name="MoreHome"
+                    options={{ headerShown: false }}
+                  >
+                    {({ navigation }) => (
+                      <MoreScreen
+                        unreadCount={unreadCount}
+                        onOpenInbox={() => navigation.navigate("Inbox")}
+                        onOpenAccount={() => navigation.navigate("Account")}
+                        onOpenFriends={() => navigation.navigate("Friends")}
+                        onOpenSyncIssues={() =>
+                          navigation.navigate("SyncIssues")
+                        }
+                        onOpenSettings={() => navigation.navigate("Settings")}
+                      />
+                    )}
+                  </MoreStack.Screen>
+                  <MoreStack.Screen
+                    name="Inbox"
+                    options={{ headerShown: false }}
+                  >
+                    {({ navigation }) => (
+                      <NotificationsScreen
+                        onBack={() => navigation.goBack()}
+                        onUnreadChanged={refreshUnread}
+                        // A share notification is a way in to the place it is
+                        // about; the name is unknown here, so the detail screen
+                        // resolves it from the id over the authed API.
+                        onOpenPlace={(placeId) =>
+                          navigation.navigate("MorePlaceDetail", { placeId })
+                        }
+                        // A notification about a saved item is a way in to that
+                        // item: the Saved tab, on its filter, with the row pulsed.
+                        // The filter alone when the notification names the thing
+                        // but not the row (see notificationDestination.ts).
+                        onOpenSaved={(filter, highlightKey) =>
+                          navigation.getParent()?.navigate("Saved", {
+                            screen: "SavedHome",
+                            params: {
+                              filter,
+                              nonce: Date.now(),
+                              ...(highlightKey ? { highlightKey } : {}),
+                            },
+                          })
+                        }
+                        // Pushed INSIDE the More stack, like the place above, so
+                        // Back returns to the inbox rather than to another tab.
+                        onOpenFriends={() => navigation.navigate("Friends")}
+                      />
+                    )}
+                  </MoreStack.Screen>
+                  <MoreStack.Screen
+                    name="MorePlaceDetail"
+                    options={{ headerShown: false }}
+                  >
+                    {({ navigation, route }) => (
+                      <PlaceDetailScreen
+                        placeId={route.params.placeId}
+                        onBack={() => navigation.goBack()}
+                        onOpenTrip={(trip) =>
+                          navigation.navigate("MoreTripDetail", { trip })
+                        }
+                        onShowOnMap={(place) =>
+                          navigation.getParent()?.navigate("Map", {
+                            screen: "MapView",
+                            params: { focus: placeFocus(place) },
+                          })
+                        }
+                        onFocusOnMap={(bbox) =>
+                          navigation.getParent()?.navigate("Map", {
+                            screen: "MapView",
+                            params: { focus: { bbox, nonce: Date.now() } },
+                          })
+                        }
+                        onShowPlaceOnMap={(linked) =>
+                          navigation.getParent()?.navigate("Map", {
+                            screen: "MapView",
+                            // placeFocus, not a route bbox: a single point
+                            // yields a zero-span bbox, which the camera reads as
+                            // "fit nothing".
+                            params: { focus: placeFocus(linked) },
+                          })
+                        }
+                        onDrawRoute={(id) =>
+                          navigation.getParent()?.navigate("Map", {
+                            screen: "MapView",
+                            params: {
+                              drawRouteFor: { placeId: id, nonce: Date.now() },
+                            },
+                          })
+                        }
+                        onDeleted={() => navigation.goBack()}
+                      />
+                    )}
+                  </MoreStack.Screen>
+                  <MoreStack.Screen
+                    name="MoreTripDetail"
+                    options={{ headerShown: false }}
+                  >
+                    {({ navigation, route }) => (
+                      <TripDetailScreen
+                        trip={route.params.trip}
+                        onBack={() => navigation.goBack()}
+                        onOpenPlace={(placeId) =>
+                          navigation.navigate("MorePlaceDetail", { placeId })
+                        }
+                        onFocusOnMap={(bbox) =>
+                          navigation.getParent()?.navigate("Map", {
+                            screen: "MapView",
+                            params: { focus: { bbox, nonce: Date.now() } },
+                          })
+                        }
+                      />
+                    )}
+                  </MoreStack.Screen>
+                  <MoreStack.Screen
+                    name="Account"
+                    options={{ headerShown: false }}
+                  >
+                    {({ navigation }) => (
+                      <AccountScreen
+                        onBack={() => navigation.goBack()}
+                        onSignOut={onSignOut}
+                        onOpenFriends={() => navigation.navigate("Friends")}
+                      />
+                    )}
+                  </MoreStack.Screen>
+                  <MoreStack.Screen
+                    name="Friends"
+                    options={{ headerShown: false }}
+                  >
+                    {({ navigation }) => (
+                      <FriendsScreen
+                        onBack={() => navigation.goBack()}
+                        onOpenShares={(friend) =>
+                          navigation.navigate("FriendShares", friend)
+                        }
+                      />
+                    )}
+                  </MoreStack.Screen>
+                  <MoreStack.Screen
+                    name="FriendShares"
+                    options={{ headerShown: false }}
+                  >
+                    {({ navigation, route }) => (
+                      <FriendSharesScreen
+                        friendshipId={route.params.friendshipId}
+                        username={route.params.username}
+                        onBack={() => navigation.goBack()}
+                        // Inside the More stack, like the inbox's own place route,
+                        // so Back returns to the sharing list.
+                        onOpenPlace={(placeId) =>
+                          navigation.navigate("MorePlaceDetail", { placeId })
+                        }
+                      />
+                    )}
+                  </MoreStack.Screen>
+                  <MoreStack.Screen
+                    name="SyncIssues"
+                    options={{ headerShown: false }}
+                  >
+                    {({ navigation }) => (
+                      <SyncIssuesScreen
+                        onBack={() => navigation.goBack()}
+                        // A stuck change is a way IN to the thing it failed on: the
+                        // permanent-failure sheet offers "open it and change it a
+                        // way that works". Pushed inside the More stack, like the
+                        // inbox's own place route, so Back returns to the issue.
+                        onOpenPlace={(placeId) =>
+                          navigation.navigate("MorePlaceDetail", { placeId })
+                        }
+                        onOpenTrip={(trip) =>
+                          navigation.navigate("MoreTripDetail", { trip })
+                        }
+                      />
+                    )}
+                  </MoreStack.Screen>
+                  {/* Settings and its sub-pages are plain preference lists, so they
                   keep the native header and its back button (DESIGN.md §2). */}
-              <MoreStack.Screen name="Settings" options={{ title: "Settings" }}>
-                {({ navigation }) => (
-                  <SettingsScreen
-                    onOpenPage={(page) => navigation.navigate(SETTINGS_ROUTES[page])}
+                  <MoreStack.Screen
+                    name="Settings"
+                    options={{ title: "Settings" }}
+                  >
+                    {({ navigation }) => (
+                      <SettingsScreen
+                        onOpenPage={(page) =>
+                          navigation.navigate(SETTINGS_ROUTES[page])
+                        }
+                      />
+                    )}
+                  </MoreStack.Screen>
+                  <MoreStack.Screen
+                    name="SettingsDisplay"
+                    component={DisplaySettingsScreen}
+                    options={{ title: "Display" }}
                   />
-                )}
-              </MoreStack.Screen>
-              <MoreStack.Screen
-                name="SettingsDisplay"
-                component={DisplaySettingsScreen}
-                options={{ title: "Display" }}
-              />
-              <MoreStack.Screen
-                name="SettingsMap"
-                component={MapSettingsScreen}
-                options={{ title: "Map" }}
-              />
-              <MoreStack.Screen
-                name="SettingsNotifications"
-                component={NotificationSettingsScreen}
-                options={{ title: "Notifications" }}
-              />
-              <MoreStack.Screen name="SettingsOffline" options={{ title: "Offline and storage" }}>
-                {({ navigation }) => (
-                  <OfflineSettingsScreen
-                    onOpenSaved={() =>
-                      navigation.getParent()?.navigate("Saved", { screen: "SavedHome" })
-                    }
+                  <MoreStack.Screen
+                    name="SettingsMap"
+                    component={MapSettingsScreen}
+                    options={{ title: "Map" }}
                   />
-                )}
-              </MoreStack.Screen>
-              <MoreStack.Screen
-                name="SettingsPrivacy"
-                component={PrivacySettingsScreen}
-                options={{ title: "Privacy and security" }}
-              />
-            </MoreStack.Navigator>
-          )}
-        </Tabs.Screen>
-      </Tabs.Navigator>
-    </NavigationContainer>
-    <BackgroundToast />
-    </View>
+                  <MoreStack.Screen
+                    name="SettingsNotifications"
+                    component={NotificationSettingsScreen}
+                    options={{ title: "Notifications" }}
+                  />
+                  <MoreStack.Screen
+                    name="SettingsOffline"
+                    options={{ title: "Offline and storage" }}
+                  >
+                    {({ navigation }) => (
+                      <OfflineSettingsScreen
+                        onOpenSaved={() =>
+                          navigation
+                            .getParent()
+                            ?.navigate("Saved", { screen: "SavedHome" })
+                        }
+                      />
+                    )}
+                  </MoreStack.Screen>
+                  <MoreStack.Screen
+                    name="SettingsPrivacy"
+                    component={PrivacySettingsScreen}
+                    options={{ title: "Privacy and security" }}
+                  />
+                </MoreStack.Navigator>
+              )}
+            </Tabs.Screen>
+          </Tabs.Navigator>
+        </NavigationContainer>
+        <BackgroundToast />
+      </View>
     </AccountStateProvider>
   );
 }

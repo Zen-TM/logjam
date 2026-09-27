@@ -64,13 +64,15 @@ describe("normalizeUserUiPreferences", () => {
   it("defaults copyPlaceMedia to true, including for junk and absent values", () => {
     expect(normalizeUserUiPreferences(null).copyPlaceMedia).toBe(true);
     expect(normalizeUserUiPreferences({}).copyPlaceMedia).toBe(true);
-    expect(normalizeUserUiPreferences({ copyPlaceMedia: "no" }).copyPlaceMedia).toBe(true);
+    expect(
+      normalizeUserUiPreferences({ copyPlaceMedia: "no" }).copyPlaceMedia,
+    ).toBe(true);
   });
 
   it("keeps an explicit copyPlaceMedia of false", () => {
-    expect(normalizeUserUiPreferences({ copyPlaceMedia: false }).copyPlaceMedia).toBe(
-      false,
-    );
+    expect(
+      normalizeUserUiPreferences({ copyPlaceMedia: false }).copyPlaceMedia,
+    ).toBe(false);
   });
 
   it("clamps an invalid themeSchemeId to the default", () => {
@@ -83,9 +85,11 @@ describe("normalizeUserUiPreferences", () => {
     expect(result.themeSchemeId).toBe("basalt");
   });
 
-  it("repairs the legacy type:\"text\" alias to \"string\"", () => {
+  it('repairs the legacy type:"text" alias to "string"', () => {
     const result = normalizeUserUiPreferences({
-      tripLogCustomFields: [{ key: "water_level", label: "Water Level", type: "text" }],
+      tripLogCustomFields: [
+        { key: "water_level", label: "Water Level", type: "text" },
+      ],
     });
     // Legacy "text" is repaired to the canonical "string" so the def passes the
     // strict write-side guard and can round-trip without a 400.
@@ -175,7 +179,9 @@ describe("normalizeImportMergePolicy", () => {
   // an unknown key from a field this reader has not been told about. An entry
   // for a field that does not exist is inert — nothing merges it.
   it("keeps an entry whose field it cannot verify", () => {
-    expect(normalizeImportMergePolicy({ somethingElse: "useIncoming" })).toEqual({
+    expect(
+      normalizeImportMergePolicy({ somethingElse: "useIncoming" }),
+    ).toEqual({
       somethingElse: "useIncoming",
     });
   });

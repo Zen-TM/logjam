@@ -60,7 +60,10 @@ function solveLinear(matrix: number[][], rhs: number[]): number[] {
       if (Math.abs(a[r][col]) > Math.abs(a[pivot][col])) pivot = r;
     }
     if (Math.abs(a[pivot][col]) < 1e-12) {
-      throw new GeoPdfParseError("MALFORMED_GEOREF", "singular system in transform fit");
+      throw new GeoPdfParseError(
+        "MALFORMED_GEOREF",
+        "singular system in transform fit",
+      );
     }
     [a[col], a[pivot]] = [a[pivot], a[col]];
     for (let r = 0; r < n; r++) {
@@ -172,7 +175,8 @@ function fitHomography(pagePts: XY[], planePts: XY[]): number[] {
     const out = new Array<number>(9).fill(0);
     for (let r = 0; r < 3; r++)
       for (let c = 0; c < 3; c++)
-        for (let k = 0; k < 3; k++) out[r * 3 + c] += a[r * 3 + k] * b[k * 3 + c];
+        for (let k = 0; k < 3; k++)
+          out[r * 3 + c] += a[r * 3 + k] * b[k * 3 + c];
     return out;
   };
   return mul(mul(invert3x3(nq.T), h), np.T);
@@ -230,7 +234,10 @@ export function buildGeoTransform(vp: GeoPdfViewport): GeoTransform {
     Math.max(...ys) - Math.min(...ys),
   );
   if (!(mapWidth > 0)) {
-    throw new GeoPdfParseError("MALFORMED_GEOREF", "control points are coincident in the plane");
+    throw new GeoPdfParseError(
+      "MALFORMED_GEOREF",
+      "control points are coincident in the plane",
+    );
   }
 
   const affine = fitAffine(pagePts, planePts);
@@ -259,7 +266,10 @@ export function buildGeoTransform(vp: GeoPdfViewport): GeoTransform {
   const [a, b, c, d, e, f] = affine.m;
   const det = a * e - b * d;
   if (Math.abs(det) < 1e-15) {
-    throw new GeoPdfParseError("MALFORMED_GEOREF", "degenerate affine transform");
+    throw new GeoPdfParseError(
+      "MALFORMED_GEOREF",
+      "degenerate affine transform",
+    );
   }
 
   const pageToPlane = (p: XY): XY =>
@@ -299,14 +309,12 @@ export function buildGeoTransform(vp: GeoPdfViewport): GeoTransform {
       };
 
   // WGS84 bounds of the clip polygon (neatline if present, else BBox corners).
-  const clip =
-    vp.boundsPolygonPt ??
-    [
-      { x: vp.bboxPt.x0, y: vp.bboxPt.y0 },
-      { x: vp.bboxPt.x1, y: vp.bboxPt.y0 },
-      { x: vp.bboxPt.x1, y: vp.bboxPt.y1 },
-      { x: vp.bboxPt.x0, y: vp.bboxPt.y1 },
-    ];
+  const clip = vp.boundsPolygonPt ?? [
+    { x: vp.bboxPt.x0, y: vp.bboxPt.y0 },
+    { x: vp.bboxPt.x1, y: vp.bboxPt.y0 },
+    { x: vp.bboxPt.x1, y: vp.bboxPt.y1 },
+    { x: vp.bboxPt.x0, y: vp.bboxPt.y1 },
+  ];
   let north = -Infinity,
     south = Infinity,
     east = -Infinity,

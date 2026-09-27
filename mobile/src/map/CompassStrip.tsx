@@ -27,7 +27,15 @@
 import { StyleSheet, Text, View } from "react-native";
 import { compassPointFor } from "@logjam/shared";
 
-import { fontSize, fontWeight, radius, spacing, textScale, theme, withAlpha } from "../theme";
+import {
+  fontSize,
+  fontWeight,
+  radius,
+  spacing,
+  textScale,
+  theme,
+  withAlpha,
+} from "../theme";
 import type { NorthReference } from "./mapPreferences";
 import { compassTicks, displayHeading } from "./compassTape";
 
@@ -104,7 +112,9 @@ export function CompassStrip({
       {/* Marked only when it is NOT the app's convention. Every other bearing
           on this screen is true north, so a tape quietly reading 12° lower is
           the one state worth spending eight pixels of map to declare. */}
-      {reference === "magnetic" ? <Text style={styles.reference}>M</Text> : null}
+      {reference === "magnetic" ? (
+        <Text style={styles.reference}>M</Text>
+      ) : null}
     </View>
   );
 }
@@ -133,7 +143,11 @@ const styles = StyleSheet.create({
     paddingVertical: spacing(0.375),
   },
   markMajor: { width: 1.5, height: 6, backgroundColor: theme.textPrimary },
-  markMinor: { width: 1, height: 3, backgroundColor: withAlpha(theme.textPrimary, 0.6) },
+  markMinor: {
+    width: 1,
+    height: 3,
+    backgroundColor: withAlpha(theme.textPrimary, 0.6),
+  },
   label: {
     color: theme.textPrimary,
     fontSize: fontSize.xs,

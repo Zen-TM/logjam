@@ -189,7 +189,10 @@ export async function loadEntityRole(
         select: { id: true, userId: true },
       });
       return row
-        ? { ownerId: row.userId, role: await getJobRole(userId, "topoJob", row) }
+        ? {
+            ownerId: row.userId,
+            role: await getJobRole(userId, "topoJob", row),
+          }
         : null;
     }
     case "geoPdfJob": {
@@ -284,7 +287,9 @@ export async function revokeAllSharesBetween(
     select: { id: true, entityType: true, entityId: true, sharedWithId: true },
   });
   if (shares.length > 0) {
-    await tx.share.deleteMany({ where: { id: { in: shares.map((s) => s.id) } } });
+    await tx.share.deleteMany({
+      where: { id: { in: shares.map((s) => s.id) } },
+    });
     await writeTombstones(
       tx,
       shares.flatMap((share) =>

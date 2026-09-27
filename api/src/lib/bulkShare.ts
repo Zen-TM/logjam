@@ -134,7 +134,11 @@ export function planBulkShare({
     }
     let granted = false;
     for (const sharedWithId of recipientIds) {
-      if (existingPairKeys.has(sharePairKey(item.entityType, item.entityId, sharedWithId))) {
+      if (
+        existingPairKeys.has(
+          sharePairKey(item.entityType, item.entityId, sharedWithId),
+        )
+      ) {
         alreadyShared += 1;
         continue;
       }

@@ -99,9 +99,9 @@ describe("parseZipCentralDirectory", () => {
   });
 
   it("throws NOT_A_ZIP on too-small buffer", () => {
-    expect(() =>
-      parseZipCentralDirectory(new Uint8Array(10), 10),
-    ).toThrow(ElvisZipError);
+    expect(() => parseZipCentralDirectory(new Uint8Array(10), 10)).toThrow(
+      ElvisZipError,
+    );
   });
 
   it("handles empty zip (no entries)", () => {
@@ -114,7 +114,9 @@ describe("parseZipCentralDirectory", () => {
 describe("isUnsafeZipEntryName", () => {
   it("accepts normal ELVIS paths", () => {
     expect(isUnsafeZipEntryName("folder/sub/file.laz")).toBe(false);
-    expect(isUnsafeZipEntryName("NSW Government/DEM/2 Metre/x.tif")).toBe(false);
+    expect(isUnsafeZipEntryName("NSW Government/DEM/2 Metre/x.tif")).toBe(
+      false,
+    );
   });
 
   it("rejects absolute and traversal paths", () => {

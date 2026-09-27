@@ -29,18 +29,26 @@ const db = {
 vi.mock("./syncDb", () => ({
   getSyncDb: () => Promise.resolve(db),
   notifyMirrorChanged: () => {},
-  withSyncTransaction: async (_db: unknown, task: () => Promise<unknown>) => task(),
+  withSyncTransaction: async (_db: unknown, task: () => Promise<unknown>) =>
+    task(),
 }));
 vi.mock("./mediaSyncBridge", () => ({ scheduleMutationSync: () => {} }));
 // localStores reaches react-native (Flow syntax vitest can't parse) for the
 // platform-specific roots — the constant is all this test needs.
-vi.mock("../offline/localStores", () => ({ MEDIA_CACHE_DIR: "file:///cache/" }));
+vi.mock("../offline/localStores", () => ({
+  MEDIA_CACHE_DIR: "file:///cache/",
+}));
 vi.mock("../api/apiFetch", () => ({ apiFetch: () => Promise.resolve() }));
 // MOT-006: mediaUpload.ts now imports networkPolicy.ts (NetInfo + prefsDb,
 // both native) for the metered-upload gate; deleteMediaLocal never reaches
 // it, so a bare stand-in is enough.
-vi.mock("../offline/networkPolicy", () => ({ canRunNow: () => Promise.resolve(true) }));
-vi.mock("expo-image-manipulator", () => ({ manipulateAsync: () => {}, SaveFormat: {} }));
+vi.mock("../offline/networkPolicy", () => ({
+  canRunNow: () => Promise.resolve(true),
+}));
+vi.mock("expo-image-manipulator", () => ({
+  manipulateAsync: () => {},
+  SaveFormat: {},
+}));
 vi.mock("expo-video-thumbnails", () => ({ getThumbnailAsync: () => {} }));
 vi.mock("expo-crypto", () => ({
   randomUUID: () => "00000000-0000-4000-8000-000000000000",
@@ -97,7 +105,9 @@ describe("deleteMediaLocal", () => {
   it("still enqueues a delete op once the upload has been sent", async () => {
     pendingCreate = null;
     await deleteMediaLocal(media);
-    expect(sqlText()).toContain("UPDATE media SET sync_state = 'pendingDelete'");
+    expect(sqlText()).toContain(
+      "UPDATE media SET sync_state = 'pendingDelete'",
+    );
     expect(sqlText()).toContain("'media', 'delete'");
     // runMediaDeleteOp owns the blobs on this path — it needs them until the
     // server confirms.

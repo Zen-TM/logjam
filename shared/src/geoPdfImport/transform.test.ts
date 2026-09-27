@@ -29,12 +29,25 @@ describe("buildGeoTransform — Logjam fixture (GEOGCS → Web Mercator plane)",
 
   it("reproduces the generator extent at the BBox corners", async () => {
     const t = await load();
-    const corners: [{ x: number; y: number }, { lon: number; lat: number }][] = [
-      [{ x: 28, y: 28 }, { lon: EXTENT.west, lat: EXTENT.south }],
-      [{ x: 393, y: 28 }, { lon: EXTENT.east, lat: EXTENT.south }],
-      [{ x: 393, y: 270 }, { lon: EXTENT.east, lat: EXTENT.north }],
-      [{ x: 28, y: 270 }, { lon: EXTENT.west, lat: EXTENT.north }],
-    ];
+    const corners: [{ x: number; y: number }, { lon: number; lat: number }][] =
+      [
+        [
+          { x: 28, y: 28 },
+          { lon: EXTENT.west, lat: EXTENT.south },
+        ],
+        [
+          { x: 393, y: 28 },
+          { lon: EXTENT.east, lat: EXTENT.south },
+        ],
+        [
+          { x: 393, y: 270 },
+          { lon: EXTENT.east, lat: EXTENT.north },
+        ],
+        [
+          { x: 28, y: 270 },
+          { lon: EXTENT.west, lat: EXTENT.north },
+        ],
+      ];
     for (const [pagePt, lonLat] of corners) {
       const g = t.pageToLonLat(pagePt);
       expect(Math.abs(g.lon - lonLat.lon)).toBeLessThan(1e-9);
@@ -152,7 +165,10 @@ describe("buildGeoTransform — homography fallback on a keystone georef", () =>
       { x: 16721000, y: -3980000 },
     ];
     const controlPoints = pagePts.map((pagePt, i) => {
-      const [lon, lat] = proj4("EPSG:3857", WGS84, [planePts[i].x, planePts[i].y]);
+      const [lon, lat] = proj4("EPSG:3857", WGS84, [
+        planePts[i].x,
+        planePts[i].y,
+      ]);
       return { pagePt, lonLat: { lon, lat } };
     });
     return {

@@ -22,13 +22,15 @@ const DECLARATION = join(SRC_DIR, "offline", "localStores.ts");
 
 /** Every way to name a filesystem ROOT across the two expo-file-system APIs. */
 // Not /g — `.test()` on a global regex carries lastIndex between calls.
-const ROOT_ACCESS = /FileSystem\.(document|cache)Directory|\bPaths\.(document|cache)\b/;
+const ROOT_ACCESS =
+  /FileSystem\.(document|cache)Directory|\bPaths\.(document|cache)\b/;
 
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = join(dir, entry.name);
     if (entry.isDirectory()) return sourceFiles(path);
-    if (!/\.tsx?$/.test(entry.name) || entry.name.endsWith(".test.ts")) return [];
+    if (!/\.tsx?$/.test(entry.name) || entry.name.endsWith(".test.ts"))
+      return [];
     return [path];
   });
 }
@@ -79,7 +81,9 @@ describe("the wipe covers every declared store", () => {
   function wipedDirs(): string[] {
     const block = source.match(/export const WIPED_DIRS = \[([\s\S]*?)\]/);
     if (!block) throw new Error("WIPED_DIRS is gone — the wipe has no list");
-    return [...block[1].matchAll(/\b([A-Z][A-Z0-9_]*_DIR)\b/g)].map((m) => m[1]);
+    return [...block[1].matchAll(/\b([A-Z][A-Z0-9_]*_DIR)\b/g)].map(
+      (m) => m[1],
+    );
   }
 
   it("wipes every declared directory that is not explicitly spared", () => {
@@ -110,7 +114,10 @@ describe("the wipe covers every declared store", () => {
 });
 
 describe("the wipe stops the producers before it deletes", () => {
-  const wipe = readFileSync(join(SRC_DIR, "offline", "wipeLocalData.ts"), "utf8");
+  const wipe = readFileSync(
+    join(SRC_DIR, "offline", "wipeLocalData.ts"),
+    "utf8",
+  );
 
   it("cancels both background workers", () => {
     // A run still going re-created the directory the wipe had deleted and
@@ -138,7 +145,10 @@ describe("the wipe stops the producers before it deletes", () => {
 });
 
 describe("the wipe empties the app cache directory", () => {
-  const wipe = readFileSync(join(SRC_DIR, "offline", "wipeLocalData.ts"), "utf8");
+  const wipe = readFileSync(
+    join(SRC_DIR, "offline", "wipeLocalData.ts"),
+    "utf8",
+  );
 
   it("sweeps the cache ROOT, not a list of picker paths", () => {
     // MOT-005: the OS pickers keep their own copy of every attached photo and
@@ -154,7 +164,9 @@ describe("the wipe empties the app cache directory", () => {
   it("declares the cache root beside every other store", () => {
     // Emptied rather than deleted, so it is not a WIPED_DIRS entry — but it is
     // still the one file allowed to name a filesystem root.
-    expect(declaration()).toMatch(/export const CACHE_ROOT = FileSystem\.cacheDirectory/);
+    expect(declaration()).toMatch(
+      /export const CACHE_ROOT = FileSystem\.cacheDirectory/,
+    );
   });
 
   it("sweeps last, so a cache failure cannot cost a store", () => {

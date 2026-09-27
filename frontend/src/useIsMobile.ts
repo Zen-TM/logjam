@@ -15,7 +15,10 @@ export function useMediaQuery(query: string): boolean {
     },
     [query],
   );
-  return useSyncExternalStore(subscribe, () => window.matchMedia(query).matches);
+  return useSyncExternalStore(
+    subscribe,
+    () => window.matchMedia(query).matches,
+  );
 }
 
 /** True on phone-sized viewports. Drives JS-only narrow behaviour that CSS

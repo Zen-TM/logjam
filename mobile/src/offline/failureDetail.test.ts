@@ -16,11 +16,15 @@ describe("failureDetail", () => {
     // A tile URL carries z/x/y, which IS the region of interest.
     expect(
       failureDetail(
-        new Error("fetch failed https://maps.six.nsw.gov.au/tile/16/60123/39456"),
+        new Error(
+          "fetch failed https://maps.six.nsw.gov.au/tile/16/60123/39456",
+        ),
       ),
     ).toBe("fetch failed");
     expect(
-      failureDetail(new Error("cannot open file:///data/user/0/regions/a.mbtiles")),
+      failureDetail(
+        new Error("cannot open file:///data/user/0/regions/a.mbtiles"),
+      ),
     ).toBe("cannot open");
     expect(failureDetail(new Error("/data/user/0/x.mbtiles"))).toBeUndefined();
   });

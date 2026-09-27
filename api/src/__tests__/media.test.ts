@@ -13,7 +13,11 @@ const PNG_BYTES = Buffer.from(
   "base64",
 );
 
-async function putToPresignedUrl(url: string, body: Buffer, contentType: string) {
+async function putToPresignedUrl(
+  url: string,
+  body: Buffer,
+  contentType: string,
+) {
   const res = await fetch(url, {
     method: "PUT",
     headers: { "Content-Type": contentType },
@@ -70,7 +74,9 @@ describe("media upload lifecycle (fake auth)", () => {
     expect(confirmRes.body.thumbnailUrl).toContain("http");
 
     // Appears on the place detail with a presigned URL
-    const detailRes = await request(API_URL).get(`/places/${placeId}`).set(AUTH);
+    const detailRes = await request(API_URL)
+      .get(`/places/${placeId}`)
+      .set(AUTH);
     expect(detailRes.status).toBe(200);
     const found = detailRes.body.media.find(
       (m: { id: string }) => m.id === mediaId,
@@ -79,7 +85,9 @@ describe("media upload lifecycle (fake auth)", () => {
     expect(found.displayUrl).toContain("http");
 
     // Delete
-    const deleteRes = await request(API_URL).delete(`/media/${mediaId}`).set(AUTH);
+    const deleteRes = await request(API_URL)
+      .delete(`/media/${mediaId}`)
+      .set(AUTH);
     expect(deleteRes.status).toBe(204);
 
     // Gone from the place detail
@@ -92,31 +100,25 @@ describe("media upload lifecycle (fake auth)", () => {
   it("rejects an unsupported media type", async () => {
     const placesRes = await request(API_URL).get("/places").set(AUTH);
     const placeId: string = placesRes.body[0].id;
-    const res = await request(API_URL)
-      .post("/media/presign")
-      .set(AUTH)
-      .send({
-        linkedType: "place",
-        linkedId: placeId,
-        filename: "archive.zip",
-        mediaType: "application/zip",
-        sizeBytes: 1024,
-      });
+    const res = await request(API_URL).post("/media/presign").set(AUTH).send({
+      linkedType: "place",
+      linkedId: placeId,
+      filename: "archive.zip",
+      mediaType: "application/zip",
+      sizeBytes: 1024,
+    });
     expect(res.status).toBe(400);
   });
 
   it("rejects a presign without sizeBytes (SEC-003)", async () => {
     const placesRes = await request(API_URL).get("/places").set(AUTH);
     const placeId: string = placesRes.body[0].id;
-    const res = await request(API_URL)
-      .post("/media/presign")
-      .set(AUTH)
-      .send({
-        linkedType: "place",
-        linkedId: placeId,
-        filename: "test-photo.png",
-        mediaType: "image/png",
-      });
+    const res = await request(API_URL).post("/media/presign").set(AUTH).send({
+      linkedType: "place",
+      linkedId: placeId,
+      filename: "test-photo.png",
+      mediaType: "image/png",
+    });
     expect(res.status).toBe(400);
   });
 
@@ -177,16 +179,13 @@ describe("media upload lifecycle (fake auth)", () => {
   it("rejects a GPX whose extension doesn't match the track MIME", async () => {
     const placesRes = await request(API_URL).get("/places").set(AUTH);
     const placeId: string = placesRes.body[0].id;
-    const res = await request(API_URL)
-      .post("/media/presign")
-      .set(AUTH)
-      .send({
-        linkedType: "place",
-        linkedId: placeId,
-        filename: "track.png",
-        mediaType: "application/gpx+xml",
-        sizeBytes: 1024,
-      });
+    const res = await request(API_URL).post("/media/presign").set(AUTH).send({
+      linkedType: "place",
+      linkedId: placeId,
+      filename: "track.png",
+      mediaType: "application/gpx+xml",
+      sizeBytes: 1024,
+    });
     expect(res.status).toBe(400);
   });
 
@@ -195,17 +194,14 @@ describe("media upload lifecycle (fake auth)", () => {
     expect(sharedRes.status).toBe(200);
     if (sharedRes.body.length === 0) return; // no shared places in this seed
     const sharedPlaceId: string = sharedRes.body[0].id;
-    const res = await request(API_URL)
-      .post("/media/presign")
-      .set(AUTH)
-      .send({
-        linkedType: "place",
-        linkedId: sharedPlaceId,
-        filename: "test-photo.png",
-        mediaType: "image/png",
-        sizeBytes: PNG_BYTES.length,
-        thumbnailSizeBytes: PNG_BYTES.length,
-      });
+    const res = await request(API_URL).post("/media/presign").set(AUTH).send({
+      linkedType: "place",
+      linkedId: sharedPlaceId,
+      filename: "test-photo.png",
+      mediaType: "image/png",
+      sizeBytes: PNG_BYTES.length,
+      thumbnailSizeBytes: PNG_BYTES.length,
+    });
     expect(res.status).toBe(403);
   });
 });

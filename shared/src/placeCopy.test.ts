@@ -33,14 +33,21 @@ describe("reconcileCopiedFieldValues", () => {
     });
     expect(fieldValues).toEqual({});
     expect(foreignFields).toEqual([
-      { key: "permit_no", label: "Permit number", type: "string", value: "NP-4471" },
+      {
+        key: "permit_no",
+        label: "Permit number",
+        type: "string",
+        value: "NP-4471",
+      },
     ]);
   });
 
   it("carries the sender's bounds so an adopted field keeps them", () => {
     const { foreignFields } = reconcileCopiedFieldValues({
       fieldValues: { party: 4 },
-      senderDefs: [def("party", "integer", { label: "Party size", min: 1, max: 12 })],
+      senderDefs: [
+        def("party", "integer", { label: "Party size", min: 1, max: 12 }),
+      ],
       recipientDefs: [],
     });
     expect(foreignFields[0]).toEqual({
@@ -125,9 +132,9 @@ describe("matchPlaceTypeByName", () => {
   // two Campsite tabs, and the zero-places self-heal never fires because the
   // copy just put a place in the new one.
   it("prefers the system type when both share a name", () => {
-    expect(matchPlaceTypeByName("Campsite", [userCampsite, systemCampsite])?.id).toBe(
-      systemCampsite.id,
-    );
+    expect(
+      matchPlaceTypeByName("Campsite", [userCampsite, systemCampsite])?.id,
+    ).toBe(systemCampsite.id);
   });
 
   it("matches case-insensitively — one category to a person", () => {
@@ -144,7 +151,9 @@ describe("matchPlaceTypeByName", () => {
   });
 
   it("is null when nothing matches, which the caller reads as 'create one'", () => {
-    expect(matchPlaceTypeByName("Cave", [systemCampsite, userCampsite])).toBeNull();
+    expect(
+      matchPlaceTypeByName("Cave", [systemCampsite, userCampsite]),
+    ).toBeNull();
     expect(matchPlaceTypeByName("   ", [systemCampsite])).toBeNull();
   });
 });

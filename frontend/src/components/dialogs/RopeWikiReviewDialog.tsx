@@ -86,9 +86,15 @@ function RopeWikiReviewDialog({
   const [error, setError] = useState<string | null>(null);
 
   const autoParts = [
-    autoImported && autoImported.added > 0 ? `${autoImported.added} added` : null,
-    autoImported && autoImported.autoLinked > 0 ? `${autoImported.autoLinked} linked to existing` : null,
-    autoImported && autoImported.updated > 0 ? `${autoImported.updated} updated` : null,
+    autoImported && autoImported.added > 0
+      ? `${autoImported.added} added`
+      : null,
+    autoImported && autoImported.autoLinked > 0
+      ? `${autoImported.autoLinked} linked to existing`
+      : null,
+    autoImported && autoImported.updated > 0
+      ? `${autoImported.updated} updated`
+      : null,
   ].filter(Boolean);
 
   useEffect(() => {
@@ -167,13 +173,15 @@ function RopeWikiReviewDialog({
             first thing to account for (IMPORT-3). */}
         {autoParts.length > 0 && (
           <p className={classes.intro}>
-            Already imported automatically: {autoParts.join(", ")}. The {review.length}{" "}
-            below looked like places you may already have, so they were left alone.
+            Already imported automatically: {autoParts.join(", ")}. The{" "}
+            {review.length} below looked like places you may already have, so
+            they were left alone.
           </p>
         )}
         <p className={classes.intro}>
-          These RopeWiki places may already be in your collection. For each one, say
-          whether to link it to a place you have, create it as new, or skip it.
+          These RopeWiki places may already be in your collection. For each one,
+          say whether to link it to a place you have, create it as new, or skip
+          it.
         </p>
         {error && <ErrorBanner message={error} />}
         <MatchReview items={items} onChange={handleChange} />

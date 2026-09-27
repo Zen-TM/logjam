@@ -148,7 +148,9 @@ export type DeltaPullResult = {
  * Run one full pull to drain (all pages). Concurrency is the caller's
  * problem — the sync engine serializes cycles.
  */
-export async function runDeltaPull(currentUserId: string): Promise<DeltaPullResult> {
+export async function runDeltaPull(
+  currentUserId: string,
+): Promise<DeltaPullResult> {
   let pages = 0;
   let changedRows = 0;
   let didReset = false;
@@ -166,7 +168,8 @@ export async function runDeltaPull(currentUserId: string): Promise<DeltaPullResu
     if (response.resetRequired) {
       // One reset per pull: a second one means the server keeps refusing our
       // cursor — surface it rather than loop.
-      if (didReset) throw new Error("Sync reset loop: server rejected the fresh cursor");
+      if (didReset)
+        throw new Error("Sync reset loop: server rejected the fresh cursor");
       didReset = true;
       await wipeMirror();
       continue;
@@ -220,7 +223,9 @@ export async function runDeltaPull(currentUserId: string): Promise<DeltaPullResu
     for (const [key, rows] of Object.entries(raw)) {
       if ((DELTA_ENTITY_ORDER as readonly string[]).includes(key)) continue;
       if (Array.isArray(rows) && rows.length > 0) {
-        skipped.push(`${key}: ${rows.length} row(s) this app version cannot apply`);
+        skipped.push(
+          `${key}: ${rows.length} row(s) this app version cannot apply`,
+        );
       }
     }
     const tombstones = parsedRows(

@@ -77,8 +77,12 @@ describe("stableJson", () => {
 
 describe("tripContentHash", () => {
   it("is deterministic for the same inputs", () => {
-    const h1 = tripContentHash("Claustral", "2024-01-15", "Great trip", { party: 3 });
-    const h2 = tripContentHash("Claustral", "2024-01-15", "Great trip", { party: 3 });
+    const h1 = tripContentHash("Claustral", "2024-01-15", "Great trip", {
+      party: 3,
+    });
+    const h2 = tripContentHash("Claustral", "2024-01-15", "Great trip", {
+      party: 3,
+    });
     expect(h1).toBe(h2);
     expect(h1).toMatch(/^[a-f0-9]{64}$/);
   });
@@ -97,8 +101,14 @@ describe("tripContentHash", () => {
   });
 
   it("is stable across customFields key reordering", () => {
-    const h1 = tripContentHash("Claustral", "2024-01-15", null, { party: 3, rating: 5 });
-    const h2 = tripContentHash("Claustral", "2024-01-15", null, { rating: 5, party: 3 });
+    const h1 = tripContentHash("Claustral", "2024-01-15", null, {
+      party: 3,
+      rating: 5,
+    });
+    const h2 = tripContentHash("Claustral", "2024-01-15", null, {
+      rating: 5,
+      party: 3,
+    });
     expect(h1).toBe(h2);
   });
 
@@ -125,7 +135,12 @@ describe("tripImportKey", () => {
 describe("assignTripImportKeys", () => {
   it("assigns occurrence 0 to a single trip", () => {
     const trips = [
-      { sourcePlaceName: "Claustral", date: "2024-01-15", notes: null, customFields: null },
+      {
+        sourcePlaceName: "Claustral",
+        date: "2024-01-15",
+        notes: null,
+        customFields: null,
+      },
     ];
     const keys = assignTripImportKeys(trips);
     expect(keys).toHaveLength(1);
@@ -135,9 +150,24 @@ describe("assignTripImportKeys", () => {
 
   it("increments occurrence for same-content trips (same place, same day)", () => {
     const trips = [
-      { sourcePlaceName: "Claustral", date: "2024-01-15", notes: null, customFields: null },
-      { sourcePlaceName: "Claustral", date: "2024-01-15", notes: null, customFields: null },
-      { sourcePlaceName: "Claustral", date: "2024-01-15", notes: null, customFields: null },
+      {
+        sourcePlaceName: "Claustral",
+        date: "2024-01-15",
+        notes: null,
+        customFields: null,
+      },
+      {
+        sourcePlaceName: "Claustral",
+        date: "2024-01-15",
+        notes: null,
+        customFields: null,
+      },
+      {
+        sourcePlaceName: "Claustral",
+        date: "2024-01-15",
+        notes: null,
+        customFields: null,
+      },
     ];
     const keys = assignTripImportKeys(trips);
     expect(keys[0].occurrence).toBe(0);
@@ -151,8 +181,18 @@ describe("assignTripImportKeys", () => {
 
   it("does not increment occurrence for different-content trips", () => {
     const trips = [
-      { sourcePlaceName: "Claustral", date: "2024-01-15", notes: null, customFields: null },
-      { sourcePlaceName: "Kanangra", date: "2024-01-15", notes: null, customFields: null },
+      {
+        sourcePlaceName: "Claustral",
+        date: "2024-01-15",
+        notes: null,
+        customFields: null,
+      },
+      {
+        sourcePlaceName: "Kanangra",
+        date: "2024-01-15",
+        notes: null,
+        customFields: null,
+      },
     ];
     const keys = assignTripImportKeys(trips);
     expect(keys[0].occurrence).toBe(0);
@@ -162,9 +202,24 @@ describe("assignTripImportKeys", () => {
 
   it("re-import of same file produces identical keys", () => {
     const trips = [
-      { sourcePlaceName: "Claustral", date: "2024-01-15", notes: "Good", customFields: { party: 3 } },
-      { sourcePlaceName: "Claustral", date: "2024-01-15", notes: "Good", customFields: { party: 3 } },
-      { sourcePlaceName: "Kanangra", date: "2024-02-01", notes: null, customFields: null },
+      {
+        sourcePlaceName: "Claustral",
+        date: "2024-01-15",
+        notes: "Good",
+        customFields: { party: 3 },
+      },
+      {
+        sourcePlaceName: "Claustral",
+        date: "2024-01-15",
+        notes: "Good",
+        customFields: { party: 3 },
+      },
+      {
+        sourcePlaceName: "Kanangra",
+        date: "2024-02-01",
+        notes: null,
+        customFields: null,
+      },
     ];
     const keys1 = assignTripImportKeys(trips);
     const keys2 = assignTripImportKeys(trips);
@@ -173,8 +228,18 @@ describe("assignTripImportKeys", () => {
 
   it("different notes produce different content hashes", () => {
     const trips = [
-      { sourcePlaceName: "Claustral", date: "2024-01-15", notes: "Trip 1", customFields: null },
-      { sourcePlaceName: "Claustral", date: "2024-01-15", notes: "Trip 2", customFields: null },
+      {
+        sourcePlaceName: "Claustral",
+        date: "2024-01-15",
+        notes: "Trip 1",
+        customFields: null,
+      },
+      {
+        sourcePlaceName: "Claustral",
+        date: "2024-01-15",
+        notes: "Trip 2",
+        customFields: null,
+      },
     ];
     const keys = assignTripImportKeys(trips);
     // Different notes = different contentHash = both occurrence 0.

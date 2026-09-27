@@ -31,7 +31,9 @@ describe("partitionNavItems", () => {
 
   it("puts the spacer on the boundary between the two groups", () => {
     const { railItems, spacerAfterIndex } = partitionNavItems(false);
-    expect(railItems[spacerAfterIndex!].id).toBe(PAGE_ITEMS[PAGE_ITEMS.length - 1].id);
+    expect(railItems[spacerAfterIndex!].id).toBe(
+      PAGE_ITEMS[PAGE_ITEMS.length - 1].id,
+    );
     expect(railItems[spacerAfterIndex! + 1].id).toBe(PERSONAL_ITEMS[0].id);
   });
 

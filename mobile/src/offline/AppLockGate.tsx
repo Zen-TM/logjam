@@ -22,7 +22,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import * as LocalAuthentication from "expo-local-authentication";
 
 import { Button } from "../ui";
-import { isAppLockEnabled, onAppLockPreferenceChanged } from "./appLockPreference";
+import {
+  isAppLockEnabled,
+  onAppLockPreferenceChanged,
+} from "./appLockPreference";
 import { fontSize, fontWeight, spacing, theme } from "../theme";
 
 // The system auth sheet runs in its own activity: launching and dismissing it
@@ -48,7 +51,11 @@ export function AppLockGate({ children }: { children: React.ReactNode }) {
   // would flash the lock screen at someone who has it off. Turning it OFF costs
   // a biometric; see appLockPreference.ts.
   const [lockPreferred, setLockPreferred] = useState(isAppLockEnabled);
-  useEffect(() => onAppLockPreferenceChanged(() => setLockPreferred(isAppLockEnabled())), []);
+  useEffect(
+    () =>
+      onAppLockPreferenceChanged(() => setLockPreferred(isAppLockEnabled())),
+    [],
+  );
 
   const lockRequired = !DEV_LOCK_DISABLED && lockPreferred;
   const [unlocked, setUnlocked] = useState(false);
@@ -174,7 +181,9 @@ export function AppLockGate({ children }: { children: React.ReactNode }) {
     <SafeAreaView style={styles.container}>
       <Text style={styles.title}>Locked</Text>
       {authFailed ? (
-        <Text style={styles.line}>Authentication didn&apos;t complete — try again.</Text>
+        <Text style={styles.line}>
+          Authentication didn&apos;t complete — try again.
+        </Text>
       ) : null}
       <Button label="Unlock" onPress={prompt} />
     </SafeAreaView>
@@ -190,7 +199,11 @@ const styles = StyleSheet.create({
     padding: spacing(3),
     backgroundColor: theme.primary,
   },
-  title: { fontSize: fontSize.xl, fontWeight: fontWeight.bold, color: theme.textPrimary },
+  title: {
+    fontSize: fontSize.xl,
+    fontWeight: fontWeight.bold,
+    color: theme.textPrimary,
+  },
   line: {
     fontSize: fontSize.sm,
     color: theme.textMuted,

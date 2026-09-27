@@ -61,7 +61,9 @@ async function registerGrantedDevice(): Promise<void> {
       // Fail loudly in dev — a missing projectId means misconfigured app.json.
       throw new Error("Missing EAS projectId for push token");
     }
-    const { data: token } = await Notifications.getExpoPushTokenAsync({ projectId });
+    const { data: token } = await Notifications.getExpoPushTokenAsync({
+      projectId,
+    });
 
     await apiFetch("/devices", {
       method: "POST",
@@ -79,7 +81,9 @@ export async function unregisterPushNotifications(): Promise<void> {
   try {
     token = await SecureStore.getItemAsync(PUSH_TOKEN_KEY);
     if (!token) return;
-    await apiFetch(`/devices/${encodeURIComponent(token)}`, { method: "DELETE" });
+    await apiFetch(`/devices/${encodeURIComponent(token)}`, {
+      method: "DELETE",
+    });
   } catch (err) {
     // Best-effort: server-side pruning (DeviceNotRegistered) is the backstop.
     console.error(err);
@@ -89,6 +93,7 @@ export async function unregisterPushNotifications(): Promise<void> {
     // Keeping it meant an offline sign-out left the departing user's binding
     // in SecureStore, and the next user's re-registration is what would have
     // moved it — a step that never runs if they decline notifications.
-    if (token) await SecureStore.deleteItemAsync(PUSH_TOKEN_KEY).catch(console.error);
+    if (token)
+      await SecureStore.deleteItemAsync(PUSH_TOKEN_KEY).catch(console.error);
   }
 }

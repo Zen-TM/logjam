@@ -11,8 +11,11 @@ vi.mock("aws-amplify/auth", () => ({
   fetchAuthSession: () => fetchAuthSessionMock(),
 }));
 
-const { fetchAuthSessionWithTimeout, AuthSessionTimeoutError, SESSION_TIMEOUT_MS } =
-  await import("./authSession");
+const {
+  fetchAuthSessionWithTimeout,
+  AuthSessionTimeoutError,
+  SESSION_TIMEOUT_MS,
+} = await import("./authSession");
 const { classifySessionError } = await import("./sessionErrors");
 
 beforeEach(() => {
@@ -46,11 +49,15 @@ describe("fetchAuthSessionWithTimeout", () => {
   // which is what forces re-auth. Offline-first rule — a timed-out refresh in a
   // place keeps the session and keeps local data usable.
   it("classifies a timeout as transient, never rejected", () => {
-    expect(classifySessionError(new AuthSessionTimeoutError())).toBe("transient");
+    expect(classifySessionError(new AuthSessionTimeoutError())).toBe(
+      "transient",
+    );
   });
 
   it("surfaces a real Amplify failure unchanged", async () => {
-    const err = Object.assign(new Error("nope"), { name: "NotAuthorizedException" });
+    const err = Object.assign(new Error("nope"), {
+      name: "NotAuthorizedException",
+    });
     fetchAuthSessionMock.mockRejectedValue(err);
     await expect(fetchAuthSessionWithTimeout()).rejects.toBe(err);
     expect(classifySessionError(err)).toBe("rejected");

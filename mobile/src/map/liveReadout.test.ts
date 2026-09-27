@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import { deriveSpeedMps, READOUT_STALE_MS } from "./liveReadout";
 
-const at = (atMs: number, speedMps: number | null, lat = -33.56, lon = 150.4) => ({
+const at = (
+  atMs: number,
+  speedMps: number | null,
+  lat = -33.56,
+  lon = 150.4,
+) => ({
   lat,
   lon,
   speedMps,

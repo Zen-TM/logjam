@@ -66,7 +66,9 @@ export function parseTrackGeoJSON(
     }
     parsed = {
       type: "FeatureCollection",
-      features: featuresOfGeoJson(json) as GeoJSON.Feature<GeoJSON.Geometry | null>[],
+      features: featuresOfGeoJson(
+        json,
+      ) as GeoJSON.Feature<GeoJSON.Geometry | null>[],
     };
   } else {
     const doc = new DOMParser().parseFromString(text, "application/xml");
@@ -76,13 +78,17 @@ export function parseTrackGeoJSON(
     const root = doc.documentElement?.localName?.toLowerCase();
     if (root === "gpx") parsed = gpx(doc);
     else if (root === "kml") parsed = kml(doc);
-    else throw new Error("Unrecognised track format (expected GPX, KML or GeoJSON)");
+    else
+      throw new Error(
+        "Unrecognised track format (expected GPX, KML or GeoJSON)",
+      );
   }
 
   // Drop features without geometry (e.g. metadata-only waypoints), then stamp
   // colour + ids so the map line layer can colour via ["get", "color"].
   const features = parsed.features.filter(
-    (feature): feature is GeoJSON.Feature<GeoJSON.Geometry> => feature.geometry != null,
+    (feature): feature is GeoJSON.Feature<GeoJSON.Geometry> =>
+      feature.geometry != null,
   );
   for (const feature of features) {
     feature.properties = { ...(feature.properties ?? {}), color, ...stamp };

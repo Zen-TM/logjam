@@ -1,9 +1,18 @@
 import { useEffect, useState } from "react";
 import { AppState } from "react-native";
 
-import { config, CLIENT_SEMVER, CLIENT_VERSION, CLIENT_VERSION_HEADER } from "./config";
+import {
+  config,
+  CLIENT_SEMVER,
+  CLIENT_VERSION,
+  CLIENT_VERSION_HEADER,
+} from "./config";
 import { meteredness, subscribeConnection } from "./offline/networkPolicy";
-import { isVersionBelowMinimum, upgradeEnforcement, type UpgradeEnforcement } from "./version";
+import {
+  isVersionBelowMinimum,
+  upgradeEnforcement,
+  type UpgradeEnforcement,
+} from "./version";
 
 // Forced-upgrade gate (Stage 0 lever). Checked on app start; "unknown" (offline
 // or endpoint unreachable) NEVER blocks — blocking an offline user mid-trip
@@ -19,7 +28,11 @@ import { isVersionBelowMinimum, upgradeEnforcement, type UpgradeEnforcement } fr
 export type MinVersionGate =
   | { status: "unknown" }
   | { status: "ok" }
-  | { status: "upgradeRequired"; minVersion: string; enforcement: UpgradeEnforcement };
+  | {
+      status: "upgradeRequired";
+      minVersion: string;
+      enforcement: UpgradeEnforcement;
+    };
 
 /** What the SERVER said, before the connection has a say (MAPP-002). */
 type ServerAnswer =
@@ -62,7 +75,7 @@ export function useMinVersionGate(): MinVersionGate {
           setGate(
             isVersionBelowMinimum(CLIENT_SEMVER, minVersion)
               ? { status: "upgradeRequired", minVersion }
-              : { status: "ok" }
+              : { status: "ok" },
           );
         })
         .catch(() => {
@@ -95,5 +108,8 @@ export function useMinVersionGate(): MinVersionGate {
   }, [status]);
 
   if (gate.status !== "upgradeRequired") return gate;
-  return { ...gate, enforcement: upgradeEnforcement({ belowMinimum: true, metered }) };
+  return {
+    ...gate,
+    enforcement: upgradeEnforcement({ belowMinimum: true, metered }),
+  };
 }

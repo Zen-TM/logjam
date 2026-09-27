@@ -32,7 +32,7 @@ export default function PlaceSlideshow({ media }: { media: MediaItem[] }) {
     setIndex((prev) => {
       const count = media.length;
       const base = Math.min(prev, count - 1);
-      return ((base + delta) % count + count) % count;
+      return (((base + delta) % count) + count) % count;
     });
   }
 
@@ -105,7 +105,9 @@ export default function PlaceSlideshow({ media }: { media: MediaItem[] }) {
         </div>
       )}
 
-      {lightbox && <Lightbox item={lightbox} onClose={() => setLightbox(null)} />}
+      {lightbox && (
+        <Lightbox item={lightbox} onClose={() => setLightbox(null)} />
+      )}
     </div>
   );
 }

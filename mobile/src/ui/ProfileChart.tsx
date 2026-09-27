@@ -28,7 +28,14 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 
-import { fontSize, fontWeight, radius, spacing, theme, withAlpha } from "../theme";
+import {
+  fontSize,
+  fontWeight,
+  radius,
+  spacing,
+  theme,
+  withAlpha,
+} from "../theme";
 import { SheetScrollLock } from "./BottomSheet";
 import type { ProfilePoint, ProfileSeries } from "./profileSeries";
 
@@ -268,7 +275,8 @@ export function ProfileChart({
                     height:
                       CHART_HEIGHT *
                       (MIN_COLUMN_FRACTION +
-                        (1 - MIN_COLUMN_FRACTION) * ((column.value - min) / span)),
+                        (1 - MIN_COLUMN_FRACTION) *
+                          ((column.value - min) / span)),
                   },
                 ]}
               />
@@ -294,7 +302,6 @@ export function ProfileChart({
           pointerEvents="none"
         />
       </View>
-
     </View>
   );
 }

@@ -82,7 +82,9 @@ function str(payload: Record<string, unknown>, key: string): string | null {
  * Returns null when the id the calls need is missing, rather than rendering
  * buttons that cannot be wired to anything.
  */
-export function notificationActions(n: TNotification): NotificationActions | null {
+export function notificationActions(
+  n: TNotification,
+): NotificationActions | null {
   const payload = n.payload;
   if (n.type === "friend_request") {
     const friendshipId = str(payload, "friendshipId");

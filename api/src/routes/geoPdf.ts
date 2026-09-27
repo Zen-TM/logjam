@@ -33,7 +33,10 @@ import { getEnv } from "../lib/env";
 import { getParam } from "../lib/getParam";
 import { geoPdfTitle } from "../lib/geoPdfTitle";
 import { launchFargateTask } from "../lib/ecsRunTask";
-import { assertHasStorageQuota, decrementStorageUsed } from "../lib/storageQuota";
+import {
+  assertHasStorageQuota,
+  decrementStorageUsed,
+} from "../lib/storageQuota";
 import { assertHasEgressQuota } from "../lib/egressQuota";
 import { Prisma } from "@prisma/client";
 import { resolveUser as getUser } from "../lib/resolveUser";
@@ -104,7 +107,9 @@ async function presignResult(
     }),
     { expiresIn: PRESIGN_TTL_SECONDS },
   );
-  const expiresAt = new Date(Date.now() + PRESIGN_TTL_SECONDS * 1000).toISOString();
+  const expiresAt = new Date(
+    Date.now() + PRESIGN_TTL_SECONDS * 1000,
+  ).toISOString();
   return { url, expiresAt };
 }
 
@@ -205,7 +210,10 @@ router.post(
         where: { userId: user.id, status: { in: ["queued", "running"] } },
       });
       if (inFlight >= MAX_IN_FLIGHT_PER_USER) {
-        throw new AppError(429, `Too many concurrent GeoPDF jobs (limit ${MAX_IN_FLIGHT_PER_USER})`);
+        throw new AppError(
+          429,
+          `Too many concurrent GeoPDF jobs (limit ${MAX_IN_FLIGHT_PER_USER})`,
+        );
       }
       return tx.geoPdfJob.create({
         data: {
@@ -240,7 +248,10 @@ router.post(
         );
         await prisma.geoPdfJob.update({
           where: { id: job.id },
-          data: { status: "failed", errorMessage: "Failed to launch GeoPDF job." },
+          data: {
+            status: "failed",
+            errorMessage: "Failed to launch GeoPDF job.",
+          },
         });
         throw new AppError(500, "Failed to launch GeoPDF job");
       }
@@ -295,7 +306,10 @@ router.get(
         rowToView(
           r,
           r.status === "completed"
-            ? await presignResult(r.resultKey, geoPdfDownloadFilename(r.config, r.createdAt))
+            ? await presignResult(
+                r.resultKey,
+                geoPdfDownloadFilename(r.config, r.createdAt),
+              )
             : null,
           user.id,
         ),
@@ -320,7 +334,10 @@ router.get(
     // Owner or share recipient; a stranger gets the same 404 a missing id gets.
     // The presigned download below rides this decision — a sharee may download,
     // which is the whole point of sharing a rendered PDF.
-    requireShareAccess(await getJobRole(user.id, "geoPdfJob", row), "geoPdfJob");
+    requireShareAccess(
+      await getJobRole(user.id, "geoPdfJob", row),
+      "geoPdfJob",
+    );
     // Charged to the job's OWNER, not the caller: a sharee downloading a
     // rendered PDF spends the owner's allowance, because S3 attributes the
     // object to the owner. Gating on the caller instead would leave the
@@ -328,7 +345,10 @@ router.get(
     if (row.status === "completed") await assertHasEgressQuota(row.userId);
     const download =
       row.status === "completed"
-        ? await presignResult(row.resultKey, geoPdfDownloadFilename(row.config, row.createdAt))
+        ? await presignResult(
+            row.resultKey,
+            geoPdfDownloadFilename(row.config, row.createdAt),
+          )
         : null;
     res.json(rowToView(row, download, user.id));
   },
@@ -356,7 +376,9 @@ router.delete(
     // Delete the S3 object and reclaim the storage quota in the same
     // transaction as the row delete so a completed job never orphans bytes.
     if (row.status === "completed" && row.resultKey) {
-      await s3.send(new DeleteObjectCommand({ Bucket: TOPO_BUCKET, Key: row.resultKey }));
+      await s3.send(
+        new DeleteObjectCommand({ Bucket: TOPO_BUCKET, Key: row.resultKey }),
+      );
     }
     await prisma.$transaction(async (tx) => {
       if (row.status === "completed" && row.resultBytes) {

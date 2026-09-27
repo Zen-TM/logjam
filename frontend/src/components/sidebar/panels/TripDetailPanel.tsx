@@ -7,13 +7,7 @@
 // 2026-09-19, which meant the only way to READ a trip put the whole app behind
 // a modal, and opening the place it linked had to close the trip first.
 import { useEffect, useState } from "react";
-import {
-  EllipsisVertical,
-  MapPin,
-  Pencil,
-  Trash2,
-  X,
-} from "lucide-react";
+import { EllipsisVertical, MapPin, Pencil, Trash2, X } from "lucide-react";
 import {
   attributeRows,
   formatFieldValue,
@@ -122,7 +116,9 @@ function TripDetailPanel({
       onAfterDelete();
     } catch (err) {
       console.error(err);
-      toast.error(messageFromError(err, "Couldn't delete this trip. Please try again."));
+      toast.error(
+        messageFromError(err, "Couldn't delete this trip. Please try again."),
+      );
     } finally {
       setDeleting(false);
     }
@@ -135,7 +131,9 @@ function TripDetailPanel({
           title="Trip"
           onBack={onBack}
           backLabel="Back to Logs"
-          actions={<IconButton icon={X} label="Close panel" onClick={onClose} />}
+          actions={
+            <IconButton icon={X} label="Close panel" onClick={onClose} />
+          }
         />
         <div className={classes.body}>
           <EmptyState
@@ -149,7 +147,9 @@ function TripDetailPanel({
   }
 
   const trip = tripLog;
-  const photoCount = media.filter((item) => mediaCategory(item.mediaType) !== "track").length;
+  const photoCount = media.filter(
+    (item) => mediaCategory(item.mediaType) !== "track",
+  ).length;
   const trackCount = media.length - photoCount;
   const attributes = attributeRows(customFieldDefs, trip.customFields);
   const title = tripTitle(trip);
@@ -157,7 +157,13 @@ function TripDetailPanel({
   // A VERB is in the ⋯ (DESIGN.md §7). Edit raises the form this page is the
   // read of; Delete sits below the rule with the verbs that end things.
   const entries: MenuEntry[] = [
-    { id: "edit", label: "Edit trip", icon: Pencil, disabled: deleting, onSelect: () => setEditing(true) },
+    {
+      id: "edit",
+      label: "Edit trip",
+      icon: Pencil,
+      disabled: deleting,
+      onSelect: () => setEditing(true),
+    },
     { id: "sep", separator: true },
     {
       id: "delete",
@@ -184,7 +190,11 @@ function TripDetailPanel({
                 placement="bottom-end"
                 entries={entries}
                 trigger={(props) => (
-                  <IconButton {...props} icon={EllipsisVertical} label={`Actions for ${title}`} />
+                  <IconButton
+                    {...props}
+                    icon={EllipsisVertical}
+                    label={`Actions for ${title}`}
+                  />
                 )}
               />
               <IconButton icon={X} label="Close panel" onClick={onClose} />
@@ -198,18 +208,31 @@ function TripDetailPanel({
             <div className={classes.pills}>
               {trip.types.length > 0 ? (
                 trip.types.map((type) => (
-                  <StatusPill key={type} label={tripTypeLabel(type)} icon={tripTypeLook(type).icon} />
+                  <StatusPill
+                    key={type}
+                    label={tripTypeLabel(type)}
+                    icon={tripTypeLook(type).icon}
+                  />
                 ))
               ) : (
-                <StatusPill label="No type set" tone="muted" icon={tripTypeLook(null).icon} />
+                <StatusPill
+                  label="No type set"
+                  tone="muted"
+                  icon={tripTypeLook(null).icon}
+                />
               )}
             </div>
           </div>
 
           <section className={classes.section}>
-            <SectionHeader title="Places" count={trip.places.length || undefined} />
+            <SectionHeader
+              title="Places"
+              count={trip.places.length || undefined}
+            />
             {trip.places.length === 0 ? (
-              <p className={classes.muted}>No places linked. Edit the trip to add one.</p>
+              <p className={classes.muted}>
+                No places linked. Edit the trip to add one.
+              </p>
             ) : (
               trip.places.map((place) => (
                 <Row
@@ -223,7 +246,10 @@ function TripDetailPanel({
           </section>
 
           <section className={classes.section}>
-            <SectionHeader title="Photos & videos" count={photoCount || undefined} />
+            <SectionHeader
+              title="Photos & videos"
+              count={photoCount || undefined}
+            />
             {mediaLoading ? (
               <p className={classes.muted} role="status">
                 Loading files…

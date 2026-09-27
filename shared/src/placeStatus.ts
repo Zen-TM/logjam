@@ -24,7 +24,11 @@ export const PLACE_STATUS_LABELS: Record<PlaceStatus, string> = {
 };
 
 /** Rail order: the question the list answers, then the friend's places. */
-export const PLACE_STATUS_ORDER: readonly PlaceStatus[] = ["todo", "done", "shared"];
+export const PLACE_STATUS_ORDER: readonly PlaceStatus[] = [
+  "todo",
+  "done",
+  "shared",
+];
 
 /**
  * `tripCount` is the viewer's OWN linked-trip count. On a place shared with the
@@ -76,12 +80,16 @@ export function placeSummary(place: PlaceSummaryFields): string {
 
 /** Quality as a compact rating, e.g. "★ 4". Null when unrated — an absent
  * rating is not a zero-star one. */
-export function qualityLabel(quality: number | null | undefined): string | null {
+export function qualityLabel(
+  quality: number | null | undefined,
+): string | null {
   if (quality == null) return null;
   return `★ ${trimNumber(quality)}`;
 }
 
 /** 4 not "4.0", but 3.5 stays 3.5 — grades and hours are stored as floats. */
 function trimNumber(value: number): string {
-  return Number.isInteger(value) ? String(value) : String(Math.round(value * 10) / 10);
+  return Number.isInteger(value)
+    ? String(value)
+    : String(Math.round(value * 10) / 10);
 }

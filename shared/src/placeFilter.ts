@@ -144,7 +144,10 @@ const DATE_FILTER_KEYS = ["created_at", "updated_at"] as const;
  * True when a single filter field is set to anything other than its inactive
  * default. Single source of truth for the count and the "any active" test.
  */
-function isFilterActive(filters: PlaceFilters, key: keyof PlaceFilters): boolean {
+function isFilterActive(
+  filters: PlaceFilters,
+  key: keyof PlaceFilters,
+): boolean {
   if (key === "name") return !!filters.name && filters.name.trim() !== "";
   if (key === "ownership") return filters.ownership !== "all";
   if (key === "shared_by_me") return filters.shared_by_me;
@@ -211,7 +214,9 @@ export function placeMatchesSearch(
   const needle = query.trim().toLowerCase();
   if (needle === "") return true;
   if (place.name.toLowerCase().includes(needle)) return true;
-  return (place.altNames ?? []).some((alt) => alt.toLowerCase().includes(needle));
+  return (place.altNames ?? []).some((alt) =>
+    alt.toLowerCase().includes(needle),
+  );
 }
 
 /**
@@ -290,14 +295,21 @@ export function passesPlaceFilters(
     if (!placeMatchesSearch(place, filters.name)) return false;
   }
 
-  if (filters.placeTypeId != null && place.placeTypeId !== filters.placeTypeId) {
+  if (
+    filters.placeTypeId != null &&
+    place.placeTypeId !== filters.placeTypeId
+  ) {
     return false;
   }
 
-  if (!passesDateRangeFilter(place.createdAt, filters.created_at, includeUnknowns)) {
+  if (
+    !passesDateRangeFilter(place.createdAt, filters.created_at, includeUnknowns)
+  ) {
     return false;
   }
-  if (!passesDateRangeFilter(place.updatedAt, filters.updated_at, includeUnknowns)) {
+  if (
+    !passesDateRangeFilter(place.updatedAt, filters.updated_at, includeUnknowns)
+  ) {
     return false;
   }
 

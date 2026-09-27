@@ -23,7 +23,9 @@ describe("consentGate", () => {
   });
 
   it("releases a user whose recorded consent is current", () => {
-    expect(consentGate({ consentVersion: CURRENT_CONSENT_VERSION }, null)).toEqual({
+    expect(
+      consentGate({ consentVersion: CURRENT_CONSENT_VERSION }, null),
+    ).toEqual({
       blocked: false,
       settled: true,
     });
@@ -32,13 +34,17 @@ describe("consentGate", () => {
   it("releases a fresh sign-up whose consent is pending but not yet recorded", () => {
     // The box was ticked on the sign-up form; the PATCH recording it is in
     // flight. Blocking here would gate a brand-new user on their own answer.
-    expect(consentGate({ consentVersion: null }, CURRENT_CONSENT_VERSION)).toEqual({
+    expect(
+      consentGate({ consentVersion: null }, CURRENT_CONSENT_VERSION),
+    ).toEqual({
       blocked: false,
       settled: true,
     });
   });
 
   it("ignores a pending value left over from an older consent version", () => {
-    expect(consentGate({ consentVersion: null }, "2020-01-01").blocked).toBe(true);
+    expect(consentGate({ consentVersion: null }, "2020-01-01").blocked).toBe(
+      true,
+    );
   });
 });

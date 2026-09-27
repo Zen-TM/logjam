@@ -6,7 +6,10 @@ import { describe, expect, it } from "vitest";
 import type { TNotification } from "../api/types";
 import { notificationDestination } from "./notificationDestination";
 
-function notification(type: string, payload: Record<string, unknown>): TNotification {
+function notification(
+  type: string,
+  payload: Record<string, unknown>,
+): TNotification {
   return {
     id: "n1",
     type,
@@ -18,10 +21,12 @@ function notification(type: string, payload: Record<string, unknown>): TNotifica
 
 describe("notificationDestination", () => {
   it("sends both friendship notifications to Friends", () => {
-    expect(notificationDestination(notification("friend_request", {}))).toEqual({
-      tab: "friends",
-      label: "View in Friends",
-    });
+    expect(notificationDestination(notification("friend_request", {}))).toEqual(
+      {
+        tab: "friends",
+        label: "View in Friends",
+      },
+    );
     expect(
       notificationDestination(notification("friend_request_accepted", {})),
     ).toEqual({ tab: "friends", label: "View in Friends" });
@@ -50,7 +55,9 @@ describe("notificationDestination", () => {
 
   it("has nowhere to send a share whose payload names no entity", () => {
     expect(
-      notificationDestination(notification("item_shared", { entityType: "route" })),
+      notificationDestination(
+        notification("item_shared", { entityType: "route" }),
+      ),
     ).toBeNull();
     expect(
       notificationDestination(
@@ -66,21 +73,31 @@ describe("notificationDestination", () => {
   });
 
   it("offers nothing for a job that produced nothing", () => {
-    expect(notificationDestination(notification("topo_failed", { jobId: "j3" }))).toBeNull();
+    expect(
+      notificationDestination(notification("topo_failed", { jobId: "j3" })),
+    ).toBeNull();
     expect(
       notificationDestination(
-        notification("geo_pdf_complete", { geoPdfJobId: "g1", status: "failed" }),
+        notification("geo_pdf_complete", {
+          geoPdfJobId: "g1",
+          status: "failed",
+        }),
       ),
     ).toBeNull();
     expect(
-      notificationDestination(notification("topo_export_skipped", { reason: "x" })),
+      notificationDestination(
+        notification("topo_export_skipped", { reason: "x" }),
+      ),
     ).toBeNull();
   });
 
   it("points a rendered GeoPDF at its account row", () => {
     expect(
       notificationDestination(
-        notification("geo_pdf_complete", { geoPdfJobId: "g2", status: "completed" }),
+        notification("geo_pdf_complete", {
+          geoPdfJobId: "g2",
+          status: "completed",
+        }),
       ),
     ).toMatchObject({ filter: "geoPdf", highlightKey: "g2" });
   });

@@ -50,7 +50,7 @@ describe("fetchAndParseRopeWiki", () => {
     expect(c.name).toBe("Test Place");
     // DMS → decimal degrees (S/negative lat, E/positive lon).
     expect(c.latitude).toBeCloseTo(-33.55106, 4);
-    expect(c.longitude).toBeCloseTo(150.40170, 4);
+    expect(c.longitude).toBeCloseTo(150.4017, 4);
     expect(c.vGrade).toBe(3);
     expect(c.aGrade).toBe(2);
     expect(c.commitment).toBe(3); // III
@@ -66,7 +66,9 @@ describe("fetchAndParseRopeWiki", () => {
     const { errors } = await fetchAndParseRopeWiki();
     expect(errors).toHaveLength(2);
     expect(errors.some((e) => /invalid PAGEID/.test(e))).toBe(true);
-    expect(errors.some((e) => /could not parse coordinates/.test(e))).toBe(true);
+    expect(errors.some((e) => /could not parse coordinates/.test(e))).toBe(
+      true,
+    );
   });
 
   // 502 rather than a bare Error: errorHandler renders any non-AppError as a
@@ -82,7 +84,9 @@ describe("fetchAndParseRopeWiki", () => {
 
   it("throws when a required column is missing", async () => {
     mockFetchCsv("location,coords\nFoo,bar"); // no pageid column
-    await expect(fetchAndParseRopeWiki()).rejects.toThrow(/missing required column/i);
+    await expect(fetchAndParseRopeWiki()).rejects.toThrow(
+      /missing required column/i,
+    );
   });
 });
 
@@ -113,7 +117,10 @@ describe("fetchAndParseRopeWiki — field parser branches", () => {
 
   it("parses min time as a single value and as a range mean", async () => {
     mockFetchCsv(
-      rows(`1,Single,"${COORD}",,,,2 hours,`, `2,Range,"${COORD}",,,,3-5 hours,`),
+      rows(
+        `1,Single,"${COORD}",,,,2 hours,`,
+        `2,Range,"${COORD}",,,,3-5 hours,`,
+      ),
     );
     const { places } = await fetchAndParseRopeWiki();
     expect(places.map((c) => c.hours)).toEqual([2, 4]);
@@ -134,9 +141,21 @@ describe("fetchAndParseRopeWiki — field parser branches", () => {
       ),
     );
     const { places } = await fetchAndParseRopeWiki();
-    expect({ v: places[0].vGrade, a: places[0].aGrade, c: places[0].commitment }).toEqual({ v: 2, a: 1, c: 4 });
-    expect({ v: places[1].vGrade, a: places[1].aGrade, c: places[1].commitment }).toEqual({ v: 3, a: 2, c: 6 });
-    expect({ v: places[2].vGrade, a: places[2].aGrade, c: places[2].commitment }).toEqual({ v: null, a: null, c: null });
+    expect({
+      v: places[0].vGrade,
+      a: places[0].aGrade,
+      c: places[0].commitment,
+    }).toEqual({ v: 2, a: 1, c: 4 });
+    expect({
+      v: places[1].vGrade,
+      a: places[1].aGrade,
+      c: places[1].commitment,
+    }).toEqual({ v: 3, a: 2, c: 6 });
+    expect({
+      v: places[2].vGrade,
+      a: places[2].aGrade,
+      c: places[2].commitment,
+    }).toEqual({ v: null, a: null, c: null });
   });
 
   it("rejects out-of-range quality as null", async () => {
@@ -152,21 +171,24 @@ describe("fetchAndParseRopeWiki — field parser branches", () => {
   });
 
   it("prefers max time over min time for hours", async () => {
-    const H = "pageid,location,coords,quality,rating,longest,min time,number of rappels,max time";
+    const H =
+      "pageid,location,coords,quality,rating,longest,min time,number of rappels,max time";
     mockFetchCsv([H, `1,Both,"${COORD}",,,,4 hours,,7 hours`].join("\n"));
     const { places } = await fetchAndParseRopeWiki();
     expect(places[0].hours).toBe(7);
   });
 
   it("falls back to min time when max time is empty", async () => {
-    const H = "pageid,location,coords,quality,rating,longest,min time,number of rappels,max time";
+    const H =
+      "pageid,location,coords,quality,rating,longest,min time,number of rappels,max time";
     mockFetchCsv([H, `1,MinOnly,"${COORD}",,,,3 hours,,`].join("\n"));
     const { places } = await fetchAndParseRopeWiki();
     expect(places[0].hours).toBe(3);
   });
 
   it("parses non-breaking-space format like '5\\u00a0hr'", async () => {
-    const H = "pageid,location,coords,quality,rating,longest,min time,number of rappels,max time";
+    const H =
+      "pageid,location,coords,quality,rating,longest,min time,number of rappels,max time";
     mockFetchCsv([H, `1,Nbsp,"${COORD}",,,,,,5 hr`].join("\n"));
     const { places } = await fetchAndParseRopeWiki();
     expect(places[0].hours).toBe(5);
@@ -225,8 +247,26 @@ describe("snapshotsEqual", () => {
   const base: RopeWikiSnapshot = snapshotFromCreate(samplePlace());
 
   it("is true for structurally identical snapshots regardless of source order", () => {
-    const a = snapshotFromCreate(samplePlace({ attributes: { sources: [["A", "u1"], ["B", "u2"]] } }));
-    const b = snapshotFromCreate(samplePlace({ attributes: { sources: [["B", "u2"], ["A", "u1"]] } }));
+    const a = snapshotFromCreate(
+      samplePlace({
+        attributes: {
+          sources: [
+            ["A", "u1"],
+            ["B", "u2"],
+          ],
+        },
+      }),
+    );
+    const b = snapshotFromCreate(
+      samplePlace({
+        attributes: {
+          sources: [
+            ["B", "u2"],
+            ["A", "u1"],
+          ],
+        },
+      }),
+    );
     expect(snapshotsEqual(a, b)).toBe(true);
   });
 
@@ -238,9 +278,19 @@ describe("snapshotsEqual", () => {
 
 describe("attributesSourcesEqual", () => {
   it("compares sources irrespective of order, treating missing as empty", () => {
-    expect(attributesSourcesEqual({ sources: [["A", "u"]] }, { sources: [["A", "u"]] })).toBe(true);
+    expect(
+      attributesSourcesEqual(
+        { sources: [["A", "u"]] },
+        { sources: [["A", "u"]] },
+      ),
+    ).toBe(true);
     expect(attributesSourcesEqual(null, { sources: [] })).toBe(true);
-    expect(attributesSourcesEqual({ sources: [["A", "u"]] }, { sources: [["A", "v"]] })).toBe(false);
+    expect(
+      attributesSourcesEqual(
+        { sources: [["A", "u"]] },
+        { sources: [["A", "v"]] },
+      ),
+    ).toBe(false);
   });
 });
 
@@ -253,10 +303,7 @@ describe("attributesSourcesEqual", () => {
 // empty CSV and HTTP 200. The import would have succeeded, imported nothing,
 // and looked exactly like the Cloudflare block coming back (root CLAUDE.md).
 describe("the RopeWiki query URL", () => {
-  const source = readFileSync(
-    join(import.meta.dirname, "ropewiki.ts"),
-    "utf8",
-  );
+  const source = readFileSync(join(import.meta.dirname, "ropewiki.ts"), "utf8");
 
   it("still asks for the Canyons category", () => {
     expect(

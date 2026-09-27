@@ -37,10 +37,7 @@ import {
 } from "./recordingPreferences";
 import { startSensorLog, stopSensorLog } from "./sensorLog";
 import { backUpFinishedTrack } from "./trackBackup";
-import {
-  enqueueTrackWrite,
-  resetTrackWriteHealth,
-} from "./trackWriteQueue";
+import { enqueueTrackWrite, resetTrackWriteHealth } from "./trackWriteQueue";
 import {
   addTrackPointSuppression,
   appendRejectedFixes,
@@ -103,7 +100,10 @@ export async function applyRecordingOptionsToActiveTrack(): Promise<boolean> {
   if (!(await Location.hasStartedLocationUpdatesAsync(TRACK_RECORDING_TASK))) {
     return false;
   }
-  await Location.startLocationUpdatesAsync(TRACK_RECORDING_TASK, locationOptions());
+  await Location.startLocationUpdatesAsync(
+    TRACK_RECORDING_TASK,
+    locationOptions(),
+  );
   return true;
 }
 
@@ -143,7 +143,9 @@ export async function applyRecordingOptionsToActiveTrack(): Promise<boolean> {
  * is right, since nobody is looking. A boost the PLATFORM persisted across a
  * process death is put back by `reconcileTrackRecording`.
  */
-export async function setRecordingMapFocusBoost(boosted: boolean): Promise<boolean> {
+export async function setRecordingMapFocusBoost(
+  boosted: boolean,
+): Promise<boolean> {
   if (mapFocusBoosted === boosted) return false;
   mapFocusBoosted = boosted;
   return applyRecordingOptionsToActiveTrack();
@@ -155,7 +157,10 @@ export async function setRecordingMapFocusBoost(boosted: boolean): Promise<boole
  * on-screen clock and the Finish tap's trailing minutes never made it into the
  * saved track. `endedAtMs` is null while the recording is still live.
  */
-export function trackDurationMs(track: Track, endedAtMs: number | null): number {
+export function trackDurationMs(
+  track: Track,
+  endedAtMs: number | null,
+): number {
   return recordedDurationMs({
     startedAtMs: Date.parse(track.startedAt),
     endedAtMs,
@@ -295,7 +300,11 @@ async function handleLocationBatch(locations: Location.LocationObject[]) {
       // refused — so no candidate filter could be tested against the fixes it
       // would have to judge. Diagnostic only: a separate table nothing draws,
       // measures or exports (`appendRejectedFixes`).
-      rejected.push({ ...fix, reason: rejection, segment: track.currentSegment });
+      rejected.push({
+        ...fix,
+        reason: rejection,
+        segment: track.currentSegment,
+      });
     }
     if (rejection === "too-close") {
       pendingCount += 1;
@@ -324,7 +333,9 @@ async function handleLocationBatch(locations: Location.LocationObject[]) {
       await appendRejectedFixes(track.id, rejected);
     } catch {
       // Static count only — never the fixes themselves (PRIVACY).
-      console.warn(`track-recording: ${rejected.length} rejected fixes unsaved`);
+      console.warn(
+        `track-recording: ${rejected.length} rejected fixes unsaved`,
+      );
     }
   }
   // The whole job of a backgrounded recorder: write the points. The append
@@ -397,7 +408,10 @@ export async function startTrackRecording(): Promise<Track> {
   await insertTrack(track);
   resetTrackWriteHealth();
   try {
-    await Location.startLocationUpdatesAsync(TRACK_RECORDING_TASK, locationOptions());
+    await Location.startLocationUpdatesAsync(
+      TRACK_RECORDING_TASK,
+      locationOptions(),
+    );
   } catch (error) {
     // No half-armed state: if the service refuses to start, drop the row.
     await deleteTrack(track.id);
@@ -433,7 +447,10 @@ export async function resumeTrackRecording(track: Track): Promise<void> {
     pausedAt: null,
   });
   try {
-    await Location.startLocationUpdatesAsync(TRACK_RECORDING_TASK, locationOptions());
+    await Location.startLocationUpdatesAsync(
+      TRACK_RECORDING_TASK,
+      locationOptions(),
+    );
   } catch (error) {
     // No half-armed state, same rule as startTrackRecording: the row was
     // already flipped to `recording` and the pause closed out, so a refused
@@ -480,7 +497,9 @@ export async function continueTrackRecording(track: Track): Promise<void> {
   // Time since the track was finished is NOT recording time. Measured from
   // `endedAt` (the finish tap), which is the same clock `pausedAt` runs on.
   const gapMs =
-    track.endedAt == null ? 0 : Math.max(0, Date.now() - Date.parse(track.endedAt));
+    track.endedAt == null
+      ? 0
+      : Math.max(0, Date.now() - Date.parse(track.endedAt));
   await updateTrack(track.id, {
     state: "recording",
     currentSegment: track.currentSegment + 1,
@@ -489,7 +508,10 @@ export async function continueTrackRecording(track: Track): Promise<void> {
     pausedAt: null,
   });
   try {
-    await Location.startLocationUpdatesAsync(TRACK_RECORDING_TASK, locationOptions());
+    await Location.startLocationUpdatesAsync(
+      TRACK_RECORDING_TASK,
+      locationOptions(),
+    );
   } catch (error) {
     // No half-armed state, same rule as start/resume: the row is already live,
     // so a refused start (permission revoked, location services off) would
@@ -521,7 +543,9 @@ export async function continueTrackRecording(track: Track): Promise<void> {
  * Returns the new media id, or null when there was nothing to back up (a
  * recording that accepted no fixes).
  */
-export async function finishTrackRecording(trackId: string): Promise<string | null> {
+export async function finishTrackRecording(
+  trackId: string,
+): Promise<string | null> {
   await stopLocationUpdatesIfRunning();
   const track = await getTrack(trackId);
   if (!track) throw new Error(`finishTrackRecording: no track ${trackId}`);
@@ -576,9 +600,8 @@ export async function discardTrackRecording(trackId: string): Promise<void> {
  */
 export async function reconcileTrackRecording(): Promise<void> {
   const active = await findActiveTrack();
-  const taskRunning = await Location.hasStartedLocationUpdatesAsync(
-    TRACK_RECORDING_TASK,
-  );
+  const taskRunning =
+    await Location.hasStartedLocationUpdatesAsync(TRACK_RECORDING_TASK);
   if (active?.state === "recording" && !taskRunning) {
     // The recorder died at some unknown moment; everything from the last fix
     // to now is a gap, not recording time, so open a pause at that fix rather
@@ -598,11 +621,15 @@ export async function reconcileTrackRecording(): Promise<void> {
     // recorder at 3 s with nothing left to turn it down — for the rest of the
     // trip, if the app then reopens on another tab. Re-register only on a
     // mismatch, so an ordinary return to the foreground costs no re-request.
-    const stored = await TaskManager.getTaskOptionsAsync<Location.LocationTaskOptions>(
-      TRACK_RECORDING_TASK,
-    );
+    const stored =
+      await TaskManager.getTaskOptionsAsync<Location.LocationTaskOptions>(
+        TRACK_RECORDING_TASK,
+      );
     if (stored?.timeInterval !== locationOptions().timeInterval) {
-      await Location.startLocationUpdatesAsync(TRACK_RECORDING_TASK, locationOptions());
+      await Location.startLocationUpdatesAsync(
+        TRACK_RECORDING_TASK,
+        locationOptions(),
+      );
     }
   }
 }

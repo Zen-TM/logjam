@@ -100,7 +100,9 @@ async function resolveCurrentUserId(): Promise<string> {
   }
   if (persisted !== current) {
     if (persisted) {
-      console.warn("sync: persisted user id did not match the account; rebuilding the mirror");
+      console.warn(
+        "sync: persisted user id did not match the account; rebuilding the mirror",
+      );
       await clearMirror();
     }
     await setSyncStateValue("userId", current);
@@ -189,9 +191,10 @@ export function requestSync(): Promise<void> {
         // retry the user is then told about. The recovery is a fresh mirror
         // (or a new app version), offered from Sync issues.
         console.error("sync: delta page could not be applied", err.cause);
-        await setSyncStateValue(APPLY_FAILED_KEY, new Date().toISOString()).catch(
-          () => {},
-        );
+        await setSyncStateValue(
+          APPLY_FAILED_KEY,
+          new Date().toISOString(),
+        ).catch(() => {});
         setStatus({
           state: "error",
           errorMessage: "This phone couldn't apply an update.",

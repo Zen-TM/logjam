@@ -36,7 +36,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import * as DocumentPicker from "expo-document-picker";
-import { formatDistanceM, messageFromError, routeLengthM } from "@logjam/shared";
+import {
+  formatDistanceM,
+  messageFromError,
+  routeLengthM,
+} from "@logjam/shared";
 
 import { assetHue, fontSize, spacing, theme } from "../theme";
 import { BottomSheet, Row, SectionHeader, TextField } from "../ui";
@@ -127,7 +131,8 @@ export function AddWaySheet({
     let cancelled = false;
     listTracks()
       .then((all) => {
-        if (!cancelled) setTracks(all.filter((track) => track.state === "done"));
+        if (!cancelled)
+          setTracks(all.filter((track) => track.state === "done"));
       })
       .catch((err: unknown) => {
         console.error(err);
@@ -174,7 +179,9 @@ export function AddWaySheet({
           // UNDER an open sheet, so a failure reported with this one still up
           // is a failure the user never sees.
           close();
-          onError(messageFromError(err, "Couldn't set that as this place's route."));
+          onError(
+            messageFromError(err, "Couldn't set that as this place's route."),
+          );
         })
         .finally(() => setBusy(false));
     },
@@ -271,7 +278,11 @@ export function AddWaySheet({
       header={
         mode === "routes" ? (
           <View style={styles.header}>
-            <TextField label="Find a route" value={query} onChangeText={setQuery} />
+            <TextField
+              label="Find a route"
+              value={query}
+              onChangeText={setQuery}
+            />
           </View>
         ) : undefined
       }
@@ -447,10 +458,13 @@ export function AddWaySheet({
 
 function trackSummary(track: Track): string {
   const km = track.distanceM / 1000;
-  const distance = km >= 1 ? `${km.toFixed(1)} km` : `${Math.round(track.distanceM)} m`;
+  const distance =
+    km >= 1 ? `${km.toFixed(1)} km` : `${Math.round(track.distanceM)} m`;
   const minutes = Math.round(track.durationMs / 60000);
   const duration =
-    minutes >= 60 ? `${Math.floor(minutes / 60)}h ${minutes % 60}m` : `${minutes}m`;
+    minutes >= 60
+      ? `${Math.floor(minutes / 60)}h ${minutes % 60}m`
+      : `${minutes}m`;
   return `${distance} · ${duration}`;
 }
 

@@ -106,7 +106,10 @@ function ShareDialog({
       // whole action, so the list it lands in is what says it worked.
       setShares((prev) => [
         ...prev,
-        { id: `pending:${friend.id}`, sharedWith: { id: friend.id, username: friend.username } },
+        {
+          id: `pending:${friend.id}`,
+          sharedWith: { id: friend.id, username: friend.username },
+        },
       ]);
       refresh();
     } catch (err) {
@@ -121,11 +124,15 @@ function ShareDialog({
     setBusyId(row.sharedWith.id);
     try {
       await unshare(row.sharedWith.id);
-      setShares((prev) => prev.filter((each) => each.sharedWith.id !== row.sharedWith.id));
+      setShares((prev) =>
+        prev.filter((each) => each.sharedWith.id !== row.sharedWith.id),
+      );
       refresh();
     } catch (err) {
       console.error(err);
-      toast.error(messageFromError(err, "Couldn't remove share. Please try again."));
+      toast.error(
+        messageFromError(err, "Couldn't remove share. Please try again."),
+      );
     } finally {
       setBusyId(null);
     }
@@ -195,7 +202,9 @@ function ShareDialog({
           <section className={classes.group}>
             <SectionHeader title="Share with" />
             {shareable.length === 0 ? (
-              <p className={classes.note}>Everyone you know already has this.</p>
+              <p className={classes.note}>
+                Everyone you know already has this.
+              </p>
             ) : shown.length === 0 ? (
               // A different dead end from the one above, and it backs out by
               // clearing the box rather than by adding a friend.
@@ -211,7 +220,11 @@ function ShareDialog({
                   disabled={busyId !== null}
                   trailing={
                     <span className={classes.grantMark} data-mark aria-hidden>
-                      {busyId === friend.id ? <Check size={16} /> : <Plus size={16} />}
+                      {busyId === friend.id ? (
+                        <Check size={16} />
+                      ) : (
+                        <Plus size={16} />
+                      )}
                     </span>
                   }
                 />

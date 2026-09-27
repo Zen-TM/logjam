@@ -43,9 +43,9 @@ describe("decodeDemPng", () => {
   });
 
   it("refuses anything that is not the encoding it was written for", () => {
-    expect(() => decodeDemPng(new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]))).toThrow(
-      /not a PNG/,
-    );
+    expect(() =>
+      decodeDemPng(new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8])),
+    ).toThrow(/not a PNG/);
     const truncated = TILE.slice(0, 40);
     expect(() => decodeDemPng(truncated)).toThrow();
   });

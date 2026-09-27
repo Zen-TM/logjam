@@ -11,9 +11,15 @@ describe("friendListLoadKey", () => {
 
   it.each([
     ["a closed sheet asks for nothing", { active: false }],
-    ["no sharing capability — a guest has no endpoint to ask", { available: false }],
+    [
+      "no sharing capability — a guest has no endpoint to ask",
+      { available: false },
+    ],
     ["a list already loaded never re-fetches on its own", { loaded: true }],
-    ["and none of those become eligible by retrying", { active: false, attempt: 3 }],
+    [
+      "and none of those become eligible by retrying",
+      { active: false, attempt: 3 },
+    ],
     ["", { available: false, attempt: 3 }],
     ["", { loaded: true, attempt: 3 }],
     ["", { active: false, available: false, loaded: true, attempt: 9 }],
@@ -22,7 +28,9 @@ describe("friendListLoadKey", () => {
   });
 
   it("is stable while nothing changes, so a re-render does not re-fetch", () => {
-    expect(friendListLoadKey(eligible)).toBe(friendListLoadKey({ ...eligible }));
+    expect(friendListLoadKey(eligible)).toBe(
+      friendListLoadKey({ ...eligible }),
+    );
   });
 
   // MAPP-007 itself: after a failed load nothing else has moved — the list is
@@ -37,7 +45,11 @@ describe("friendListLoadKey", () => {
   });
 
   it("resumes loading when a sheet closed mid-failure is reopened", () => {
-    const closed = friendListLoadKey({ ...eligible, active: false, attempt: 1 });
+    const closed = friendListLoadKey({
+      ...eligible,
+      active: false,
+      attempt: 1,
+    });
     const reopened = friendListLoadKey({ ...eligible, attempt: 1 });
     expect(closed).toBeNull();
     expect(reopened).not.toBeNull();

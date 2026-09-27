@@ -59,7 +59,9 @@ export async function acceptReceivedFile(
     }
   } finally {
     if (scratchUri) {
-      await FileSystem.deleteAsync(scratchUri, { idempotent: true }).catch(() => {});
+      await FileSystem.deleteAsync(scratchUri, { idempotent: true }).catch(
+        () => {},
+      );
     }
   }
 }

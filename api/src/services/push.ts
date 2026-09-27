@@ -163,7 +163,9 @@ export async function sendPushToUser(
       const body = (await response.json()) as { data?: ExpoPushTicket[] };
       const stale = tokensToPrune(batchTokens, body.data ?? []);
       if (stale.length > 0) {
-        await prisma.deviceToken.deleteMany({ where: { token: { in: stale } } });
+        await prisma.deviceToken.deleteMany({
+          where: { token: { in: stale } },
+        });
         logger.info({ count: stale.length }, "push_tokens_pruned");
       }
     }

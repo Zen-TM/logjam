@@ -1,6 +1,13 @@
 import { StyleSheet, Text, View } from "react-native";
 
-import { fontSize, fontWeight, radius, spacing, theme, withAlpha } from "../theme";
+import {
+  fontSize,
+  fontWeight,
+  radius,
+  spacing,
+  theme,
+  withAlpha,
+} from "../theme";
 
 export type ActivityBucket = {
   /** One- or two-character axis label (month initial, year digits). */

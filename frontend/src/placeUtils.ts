@@ -1,9 +1,30 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { fetchAuthSession } from "aws-amplify/auth";
-import type { ScopedCustomFieldDef, StandaloneFile, ThemeSchemeId, TripLogCustomFieldDef, NotificationPreferences, MediaItem, MediaLinkedType, MediaMetadata, MediaOrigin, PlaceMergePolicy, ElevationProfile, SharableEntityType } from "@logjam/shared";
+import type {
+  ScopedCustomFieldDef,
+  StandaloneFile,
+  ThemeSchemeId,
+  TripLogCustomFieldDef,
+  NotificationPreferences,
+  MediaItem,
+  MediaLinkedType,
+  MediaMetadata,
+  MediaOrigin,
+  PlaceMergePolicy,
+  ElevationProfile,
+  SharableEntityType,
+} from "@logjam/shared";
 import { formatTripPlaceNames, tallyNotifications } from "@logjam/shared";
-import { settleReadOverrides, withReadOverrides, type ReadOverrides } from "./notificationReadOverrides";
-import type { BulkShareItem, FriendShareRow, FriendShares } from "@logjam/shared";
+import {
+  settleReadOverrides,
+  withReadOverrides,
+  type ReadOverrides,
+} from "./notificationReadOverrides";
+import type {
+  BulkShareItem,
+  FriendShareRow,
+  FriendShares,
+} from "@logjam/shared";
 import { ApiError } from "./errors/ApiError";
 import { messageFromError } from "./errors/messageFromError";
 // Profiles already sampled this session, so reopening or editing a line does
@@ -68,8 +89,6 @@ export type TPlaceShare = {
   placeId: string;
   sharedWith: { id: string; username: string };
 };
-
-
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8080";
 
@@ -400,20 +419,26 @@ export function usePlaceTracks(enabled: boolean) {
     // with stale data — mirrors useTopoExports (FECO-001).
     let cancelled = false;
     getPlaceTracks()
-      .then((data) => { if (!cancelled) setTracks(data); })
+      .then((data) => {
+        if (!cancelled) setTracks(data);
+      })
       .catch((err) => {
         console.error(err);
-        if (!cancelled) setError(messageFromError(err, "Couldn't load place tracks."));
+        if (!cancelled)
+          setError(messageFromError(err, "Couldn't load place tracks."));
       })
-      .finally(() => { if (!cancelled) setLoaded(true); });
-    return () => { cancelled = true; };
+      .finally(() => {
+        if (!cancelled) setLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [enabled, fetchCount]);
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
 
   return { tracks, loaded, error, refetch };
 }
-
 
 // ponytail: the web has no marker-specific surface at all until phase 6 — a
 // marker is listed, edited and mapped as the place it is. Upgrade path: the
@@ -545,7 +570,8 @@ export function useElevationProfile(points: [number, number][] | null) {
       })
       .catch((err) => {
         console.error(err);
-        if (current) setError(messageFromError(err, "Couldn't load elevation."));
+        if (current)
+          setError(messageFromError(err, "Couldn't load elevation."));
       })
       .finally(() => {
         if (current) setLoading(false);
@@ -572,13 +598,20 @@ export function useRoutes(enabled: boolean) {
     // Guards a stale in-flight response landing after a newer one (FECO-001).
     let cancelled = false;
     getRoutes()
-      .then((data) => { if (!cancelled) setRoutes(data); })
+      .then((data) => {
+        if (!cancelled) setRoutes(data);
+      })
       .catch((err) => {
         console.error(err);
-        if (!cancelled) setError(messageFromError(err, "Couldn't load routes."));
+        if (!cancelled)
+          setError(messageFromError(err, "Couldn't load routes."));
       })
-      .finally(() => { if (!cancelled) setLoaded(true); });
-    return () => { cancelled = true; };
+      .finally(() => {
+        if (!cancelled) setLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [enabled, fetchCount]);
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
@@ -606,13 +639,19 @@ export function usePlaces(enabled: boolean) {
         setPlaces(data);
         setTotal(total);
       })
-      .catch((err) => { console.error(err); if (!cancelled) setError(messageFromError(err, "Couldn't load places.")); })
+      .catch((err) => {
+        console.error(err);
+        if (!cancelled)
+          setError(messageFromError(err, "Couldn't load places."));
+      })
       .finally(() => {
         if (cancelled) return;
         setLoading(false);
         setLoaded(true);
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [enabled, fetchCount]);
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
@@ -632,10 +671,20 @@ export function useSharedPlaces(enabled: boolean) {
     // Guards a stale in-flight response landing after a newer one (FECO-001).
     let cancelled = false;
     apiFetch<TPlace[]>("/places/shared")
-      .then((data) => { if (!cancelled) setPlaces(data); })
-      .catch((err) => { console.error(err); if (!cancelled) setError(messageFromError(err, "Couldn't load shared places.")); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+      .then((data) => {
+        if (!cancelled) setPlaces(data);
+      })
+      .catch((err) => {
+        console.error(err);
+        if (!cancelled)
+          setError(messageFromError(err, "Couldn't load shared places."));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [enabled, fetchCount]);
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
@@ -666,7 +715,12 @@ export type ComputeEstimate = {
 
 export type ComputeEstimateRequest =
   | { kind: "topo"; tileCount: number | null }
-  | { kind: "topoExport"; sourceJobId: string; format: string; bundling: string }
+  | {
+      kind: "topoExport";
+      sourceJobId: string;
+      format: string;
+      bundling: string;
+    }
   | { kind: "geoPdf"; config: unknown };
 
 export function fetchComputeEstimate(
@@ -702,7 +756,8 @@ export function useCurrentUser(enabled: boolean) {
       // (frontend/CLAUDE.md, "Hook contract"); this one now does too.
       .catch((err) => {
         console.error(err);
-        if (!cancelled) setError(messageFromError(err, "Couldn't load your account."));
+        if (!cancelled)
+          setError(messageFromError(err, "Couldn't load your account."));
       });
     return () => {
       cancelled = true;
@@ -713,7 +768,12 @@ export function useCurrentUser(enabled: boolean) {
 
   // Synchronously replace the cached user (e.g. with the row returned by a
   // consent PATCH) so gates keyed on user fields update without a refetch gap.
-  return { currentUser, error, refetchCurrentUser, applyCurrentUser: setCurrentUser };
+  return {
+    currentUser,
+    error,
+    refetchCurrentUser,
+    applyCurrentUser: setCurrentUser,
+  };
 }
 
 export function updateCurrentUserThemeScheme(
@@ -742,7 +802,10 @@ export function updateUserPreferences(
 export function updateNotificationPreferences(
   notifications: Partial<NotificationPreferences>,
 ): Promise<TUser> {
-  return apiFetch<TUser>("/users/me", { method: "PATCH", body: { notifications } });
+  return apiFetch<TUser>("/users/me", {
+    method: "PATCH",
+    body: { notifications },
+  });
 }
 
 // Which custom-field family a management call targets. Maps 1:1 to the API's
@@ -789,7 +852,12 @@ export function createPlaceType(body: {
 
 export function updatePlaceType(
   id: string,
-  body: Partial<{ name: string; iconKey: string; color: string; position: number }>,
+  body: Partial<{
+    name: string;
+    iconKey: string;
+    color: string;
+    position: number;
+  }>,
 ): Promise<TPlaceType> {
   return apiFetch<TPlaceType>(`/place-types/${id}`, { method: "PATCH", body });
 }
@@ -797,7 +865,9 @@ export function updatePlaceType(
 /** Deletes an EMPTY type. A type holding places is refused — deleting a
  *  category must never delete what is in it — and the caller offers a reassign
  *  instead. Returns how many definitions scoped only to it went with it. */
-export function deletePlaceType(id: string): Promise<{ removedFieldCount: number }> {
+export function deletePlaceType(
+  id: string,
+): Promise<{ removedFieldCount: number }> {
   return apiFetch<{ removedFieldCount: number }>(`/place-types/${id}`, {
     method: "DELETE",
   });
@@ -1023,13 +1093,19 @@ export function deleteTripLog(id: string): Promise<void> {
 
 /** Owner-only, one request for a selection. The server refuses more than its
  *  `BULK_DELETE_LIMIT` at once (413), so a longer selection is sent in chunks. */
-export async function bulkDeleteTripLogs(ids: string[], chunkSize = 500): Promise<string[]> {
+export async function bulkDeleteTripLogs(
+  ids: string[],
+  chunkSize = 500,
+): Promise<string[]> {
   const deleted: string[] = [];
   for (let start = 0; start < ids.length; start += chunkSize) {
-    const { deletedIds } = await apiFetch<{ deletedIds: string[] }>("/trips/bulk/delete", {
-      method: "POST",
-      body: { ids: ids.slice(start, start + chunkSize) },
-    });
+    const { deletedIds } = await apiFetch<{ deletedIds: string[] }>(
+      "/trips/bulk/delete",
+      {
+        method: "POST",
+        body: { ids: ids.slice(start, start + chunkSize) },
+      },
+    );
     deleted.push(...deletedIds);
   }
   return deleted;
@@ -1079,7 +1155,9 @@ export type BulkPlaceResult = {
   errors: { rowIndex: number; message: string }[];
 };
 
-export function bulkPlaceImport(body: BulkPlaceRequest): Promise<BulkPlaceResult> {
+export function bulkPlaceImport(
+  body: BulkPlaceRequest,
+): Promise<BulkPlaceResult> {
   return apiFetch<BulkPlaceResult>("/places/bulk", { method: "POST", body });
 }
 
@@ -1107,7 +1185,9 @@ export type BulkTripLogResult = {
   errors: { index: number; error: string }[];
 };
 
-export function bulkCreateTripLogs(body: BulkTripLogRequest): Promise<BulkTripLogResult> {
+export function bulkCreateTripLogs(
+  body: BulkTripLogRequest,
+): Promise<BulkTripLogResult> {
   return apiFetch<BulkTripLogResult>("/trips/bulk", { method: "POST", body });
 }
 
@@ -1117,7 +1197,9 @@ export type UndoImportResult = {
 };
 
 export function undoImport(batchId: string): Promise<UndoImportResult> {
-  return apiFetch<UndoImportResult>(`/imports/${batchId}`, { method: "DELETE" });
+  return apiFetch<UndoImportResult>(`/imports/${batchId}`, {
+    method: "DELETE",
+  });
 }
 
 export function getAllTripLogs(params?: {
@@ -1155,13 +1237,19 @@ export function useTripLogs(enabled: boolean) {
         setTripLogs(data);
         setTotal(total);
       })
-      .catch((err) => { console.error(err); if (!cancelled) setError(messageFromError(err, "Couldn't load trip logs.")); })
+      .catch((err) => {
+        console.error(err);
+        if (!cancelled)
+          setError(messageFromError(err, "Couldn't load trip logs."));
+      })
       .finally(() => {
         if (cancelled) return;
         setLoading(false);
         setLoaded(true);
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [enabled, fetchCount]);
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
@@ -1242,9 +1330,17 @@ export async function uploadMedia(params: {
       thumbnailSizeBytes: params.thumbnail ? params.thumbnail.size : undefined,
     },
   });
-  await putToPresignedUrl(presigned.displayUploadUrl, params.file, params.mediaType);
+  await putToPresignedUrl(
+    presigned.displayUploadUrl,
+    params.file,
+    params.mediaType,
+  );
   if (presigned.thumbnailUploadUrl && params.thumbnail) {
-    await putToPresignedUrl(presigned.thumbnailUploadUrl, params.thumbnail, "image/jpeg");
+    await putToPresignedUrl(
+      presigned.thumbnailUploadUrl,
+      params.thumbnail,
+      "image/jpeg",
+    );
   }
   return apiFetch<MediaItem>(`/media/${presigned.mediaId}/confirm`, {
     method: "POST",
@@ -1277,13 +1373,20 @@ export function useStandaloneFiles(enabled: boolean) {
     if (!enabled) return;
     let cancelled = false;
     getStandaloneFiles()
-      .then((data) => { if (!cancelled) setFiles(data); })
+      .then((data) => {
+        if (!cancelled) setFiles(data);
+      })
       .catch((err) => {
         console.error(err);
-        if (!cancelled) setError(messageFromError(err, "Couldn't load your files."));
+        if (!cancelled)
+          setError(messageFromError(err, "Couldn't load your files."));
       })
-      .finally(() => { if (!cancelled) setLoaded(true); });
-    return () => { cancelled = true; };
+      .finally(() => {
+        if (!cancelled) setLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [enabled, fetchCount]);
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
@@ -1291,16 +1394,19 @@ export function useStandaloneFiles(enabled: boolean) {
   return { files, loaded, error, refetch };
 }
 
-export function renameMedia(id: string, displayName: string): Promise<MediaItem> {
+export function renameMedia(
+  id: string,
+  displayName: string,
+): Promise<MediaItem> {
   return apiFetch<MediaItem>(`/media/${id}`, {
     method: "PATCH",
     body: { displayName },
   });
 }
 
-export function getMediaDownloadUrls(
-  ids: string[],
-): Promise<{ items: { id: string; displayUrl: string; thumbnailUrl: string | null }[] }> {
+export function getMediaDownloadUrls(ids: string[]): Promise<{
+  items: { id: string; displayUrl: string; thumbnailUrl: string | null }[];
+}> {
   return apiFetch<{
     items: { id: string; displayUrl: string; thumbnailUrl: string | null }[];
   }>("/media/download-urls", { method: "POST", body: { ids } });
@@ -1323,7 +1429,10 @@ export type StandaloneTrack = {
  * fetched twice, presigned twice against the egress meter, and stacked on
  * itself — invisible until two colours disagree.
  */
-export function useStandaloneTracks(files: StandaloneFile[], shownIds: string[]) {
+export function useStandaloneTracks(
+  files: StandaloneFile[],
+  shownIds: string[],
+) {
   const [tracks, setTracks] = useState<StandaloneTrack[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -1351,9 +1460,12 @@ export function useStandaloneTracks(files: StandaloneFile[], shownIds: string[])
       })
       .catch((err) => {
         console.error(err);
-        if (!cancelled) setError(messageFromError(err, "Couldn't load your files."));
+        if (!cancelled)
+          setError(messageFromError(err, "Couldn't load your files."));
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [files, shownIds]);
 
   return { tracks, error };
@@ -1407,12 +1519,26 @@ export function useFriends(enabled: boolean) {
     // Guards a stale in-flight response landing after a newer one (FECO-001).
     let cancelled = false;
     getFriends()
-      .then((data) => { if (!cancelled) setFriends(data); })
-      .catch((err) => { console.error(err); if (!cancelled) setError(messageFromError(err, "Couldn't load friends.")); });
+      .then((data) => {
+        if (!cancelled) setFriends(data);
+      })
+      .catch((err) => {
+        console.error(err);
+        if (!cancelled)
+          setError(messageFromError(err, "Couldn't load friends."));
+      });
     getFriendRequests()
-      .then((data) => { if (!cancelled) setRequests(data); })
-      .catch((err) => { console.error(err); if (!cancelled) setError(messageFromError(err, "Couldn't load friend requests.")); });
-    return () => { cancelled = true; };
+      .then((data) => {
+        if (!cancelled) setRequests(data);
+      })
+      .catch((err) => {
+        console.error(err);
+        if (!cancelled)
+          setError(messageFromError(err, "Couldn't load friend requests."));
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [enabled, fetchCount]);
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
@@ -1524,7 +1650,9 @@ export function acceptFileSend(
 }
 
 export function declineFileSend(fileSendId: string): Promise<void> {
-  return apiFetch<void>(`/file-sends/${fileSendId}/decline`, { method: "POST" });
+  return apiFetch<void>(`/file-sends/${fileSendId}/decline`, {
+    method: "POST",
+  });
 }
 
 // ── Sharing audit, per friend (fix 24) ────────────────────────
@@ -1560,7 +1688,12 @@ export function unshareAllWithFriend(
 ): Promise<{ revokedCount: number }> {
   return apiFetch<{ revokedCount: number }>(`/friends/${friendshipId}/shares`, {
     method: "DELETE",
-    body: { items: items.map(({ entityType, entityId }) => ({ entityType, entityId })) },
+    body: {
+      items: items.map(({ entityType, entityId }) => ({
+        entityType,
+        entityId,
+      })),
+    },
   });
 }
 
@@ -1593,7 +1726,10 @@ export function copyRoute(routeId: string): Promise<TRoute> {
 
 /** `read: false` marks it unread again (the Inbox's ⋯ and its selection bar). */
 export function markNotificationRead(id: string, read = true): Promise<void> {
-  return apiFetch<void>(`/notifications/${id}/read`, { method: "PATCH", body: { read } });
+  return apiFetch<void>(`/notifications/${id}/read`, {
+    method: "PATCH",
+    body: { read },
+  });
 }
 
 export function markAllNotificationsRead(): Promise<void> {
@@ -1617,7 +1753,9 @@ export function useNotifications(enabled: boolean) {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fetchCount, setFetchCount] = useState(0);
-  const [readOverrides, setReadOverrides] = useState<ReadOverrides>(() => new Map());
+  const [readOverrides, setReadOverrides] = useState<ReadOverrides>(
+    () => new Map(),
+  );
 
   useEffect(() => {
     if (!enabled) return;
@@ -1631,9 +1769,17 @@ export function useNotifications(enabled: boolean) {
         setError(null);
         setReadOverrides((prev) => settleReadOverrides(prev, data));
       })
-      .catch((err) => { console.error(err); if (!cancelled) setError(messageFromError(err, "Couldn't load notifications.")); })
-      .finally(() => { if (!cancelled) setLoaded(true); });
-    return () => { cancelled = true; };
+      .catch((err) => {
+        console.error(err);
+        if (!cancelled)
+          setError(messageFromError(err, "Couldn't load notifications."));
+      })
+      .finally(() => {
+        if (!cancelled) setLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [enabled, fetchCount]);
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
@@ -1642,7 +1788,10 @@ export function useNotifications(enabled: boolean) {
   // does. `/notifications/unread-count` counts every stored row, including the
   // ones the list drops because their share or friendship is gone, so the rail
   // said 11 over an inbox that said "5 unread". A batch counts once, as its row.
-  const shown = useMemo(() => withReadOverrides(notifications, readOverrides), [notifications, readOverrides]);
+  const shown = useMemo(
+    () => withReadOverrides(notifications, readOverrides),
+    [notifications, readOverrides],
+  );
   const unreadCount = useMemo(() => tallyNotifications(shown).unread, [shown]);
 
   /** Show `read` for these rows now, ahead of the write; `null` takes it back
@@ -1660,7 +1809,15 @@ export function useNotifications(enabled: boolean) {
     [],
   );
 
-  return { notifications: shown, total, loaded, unreadCount, error, refetch, overrideRead };
+  return {
+    notifications: shown,
+    total,
+    loaded,
+    unreadCount,
+    error,
+    refetch,
+    overrideRead,
+  };
 }
 
 // ── Filters ───────────────────────────────────────────────────
@@ -1687,7 +1844,6 @@ export type {
   PlaceSortKey,
 } from "@logjam/shared";
 
-
 // ── Vector style (live, per-user) ─────────────────────────────
 
 import type { VectorStyleSettings, TopoExportJobView } from "@logjam/shared";
@@ -1710,10 +1866,24 @@ export function useTopoExports(enabled: boolean, pollMs: number = 5000) {
     let cancelled = false;
     setLoading(true);
     apiFetchWithTotal<{ exports: TopoExportJobView[] }>("/topo-exports")
-      .then(({ data, total }) => { if (!cancelled) { setExports(data.exports); setTotal(total); setError(null); } })
-      .catch((err) => { console.error(err); if (!cancelled) setError(messageFromError(err, "Couldn't load exports.")); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+      .then(({ data, total }) => {
+        if (!cancelled) {
+          setExports(data.exports);
+          setTotal(total);
+          setError(null);
+        }
+      })
+      .catch((err) => {
+        console.error(err);
+        if (!cancelled)
+          setError(messageFromError(err, "Couldn't load exports."));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [enabled, fetchCount]);
 
   const hasInProgress = exports.some(
@@ -1760,10 +1930,27 @@ export function useGeoPdfJobs(enabled: boolean, pollMs: number = 5000) {
     let cancelled = false;
     setLoading(true);
     apiFetchWithTotal<{ jobs: GeoPdfJobView[] }>("/geo-pdf")
-      .then(({ data, total }) => { if (!cancelled) { setJobs(data.jobs); setTotal(total); setError(null); } })
-      .catch((err) => { console.error(err); if (!cancelled) setError(messageFromError(err, "Couldn't load GeoPDF jobs.")); })
-      .finally(() => { if (!cancelled) { setLoading(false); setLoaded(true); } });
-    return () => { cancelled = true; };
+      .then(({ data, total }) => {
+        if (!cancelled) {
+          setJobs(data.jobs);
+          setTotal(total);
+          setError(null);
+        }
+      })
+      .catch((err) => {
+        console.error(err);
+        if (!cancelled)
+          setError(messageFromError(err, "Couldn't load GeoPDF jobs."));
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+          setLoaded(true);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [enabled, fetchCount]);
 
   const hasInProgress = jobs.some(
@@ -1787,9 +1974,10 @@ export function deleteGeoPdfJob(id: string): Promise<void> {
   return apiFetch<void>(`/geo-pdf/${id}`, { method: "DELETE" });
 }
 
-
 export function useVectorStyle(enabled: boolean) {
-  const [vectorStyle, setVectorStyle] = useState<VectorStyleSettings | null>(null);
+  const [vectorStyle, setVectorStyle] = useState<VectorStyleSettings | null>(
+    null,
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fetchCount, setFetchCount] = useState(0);
@@ -1798,21 +1986,30 @@ export function useVectorStyle(enabled: boolean) {
     if (!enabled) return;
     setLoading(true);
     apiFetch<VectorStyleSettings>("/vector-style")
-      .then((v) => { setVectorStyle(v); setError(null); })
-      .catch((err) => { console.error(err); setError(messageFromError(err, "Couldn't load vector style.")); })
+      .then((v) => {
+        setVectorStyle(v);
+        setError(null);
+      })
+      .catch((err) => {
+        console.error(err);
+        setError(messageFromError(err, "Couldn't load vector style."));
+      })
       .finally(() => setLoading(false));
   }, [enabled, fetchCount]);
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
 
-  const save = useCallback(async (next: VectorStyleSettings): Promise<VectorStyleSettings> => {
-    const saved = await apiFetch<VectorStyleSettings>("/vector-style", {
-      method: "PUT",
-      body: next,
-    });
-    setVectorStyle(saved);
-    return saved;
-  }, []);
+  const save = useCallback(
+    async (next: VectorStyleSettings): Promise<VectorStyleSettings> => {
+      const saved = await apiFetch<VectorStyleSettings>("/vector-style", {
+        method: "PUT",
+        body: next,
+      });
+      setVectorStyle(saved);
+      return saved;
+    },
+    [],
+  );
 
   return { vectorStyle, loading, error, refetch, save };
 }
@@ -1830,7 +2027,11 @@ export function useLiveVectorStyle(enabled: boolean): {
   loadError: string | null;
   saveError: string | null;
 } {
-  const { vectorStyle: serverStyle, error: loadError, save } = useVectorStyle(enabled);
+  const {
+    vectorStyle: serverStyle,
+    error: loadError,
+    save,
+  } = useVectorStyle(enabled);
   const [liveStyle, setLiveStyle] = useState<VectorStyleSettings | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1841,22 +2042,28 @@ export function useLiveVectorStyle(enabled: boolean): {
     if (serverStyle && liveStyle === null) setLiveStyle(serverStyle);
   }, [serverStyle, liveStyle]);
 
-  const setVectorStyle = useCallback((next: VectorStyleSettings) => {
-    setLiveStyle(next);
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
-      save(next)
-        .then(() => setSaveError(null))
-        .catch((err) => {
-          console.error(err);
-          setSaveError(messageFromError(err, "Couldn't save vector style."));
-        });
-    }, VECTOR_STYLE_SAVE_DEBOUNCE_MS);
-  }, [save]);
+  const setVectorStyle = useCallback(
+    (next: VectorStyleSettings) => {
+      setLiveStyle(next);
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = setTimeout(() => {
+        save(next)
+          .then(() => setSaveError(null))
+          .catch((err) => {
+            console.error(err);
+            setSaveError(messageFromError(err, "Couldn't save vector style."));
+          });
+      }, VECTOR_STYLE_SAVE_DEBOUNCE_MS);
+    },
+    [save],
+  );
 
-  useEffect(() => () => {
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    },
+    [],
+  );
 
   return { vectorStyle: liveStyle, setVectorStyle, loadError, saveError };
 }

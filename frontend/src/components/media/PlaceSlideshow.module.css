@@ -102,7 +102,11 @@
   padding: 0;
   border: none;
   border-radius: 50%;
-  background-color: color-mix(in srgb, var(--theme-text-primary) 30%, transparent);
+  background-color: color-mix(
+    in srgb,
+    var(--theme-text-primary) 30%,
+    transparent
+  );
   cursor: pointer;
   transition:
     background-color var(--transition-fast),

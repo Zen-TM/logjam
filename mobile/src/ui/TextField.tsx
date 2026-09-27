@@ -1,4 +1,10 @@
-import { StyleSheet, Text, TextInput, View, type TextInputProps } from "react-native";
+import {
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  type TextInputProps,
+} from "react-native";
 
 import { fontSize, radius, spacing, theme } from "../theme";
 import { FieldError } from "./FieldError";

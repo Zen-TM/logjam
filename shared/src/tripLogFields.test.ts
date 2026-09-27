@@ -78,23 +78,47 @@ describe("coerceFieldValue", () => {
 describe("isTripLogCustomFieldDef", () => {
   it("accepts a valid definition", () => {
     expect(
-      isTripLogCustomFieldDef({ key: "rope_length_m", label: "Rope Length (m)", type: "integer" }),
+      isTripLogCustomFieldDef({
+        key: "rope_length_m",
+        label: "Rope Length (m)",
+        type: "integer",
+      }),
     ).toBe(true);
   });
 
   it("rejects a missing or empty key", () => {
-    expect(isTripLogCustomFieldDef({ label: "Rope Length", type: "integer" })).toBe(false);
-    expect(isTripLogCustomFieldDef({ key: "", label: "Rope Length", type: "integer" })).toBe(false);
+    expect(
+      isTripLogCustomFieldDef({ label: "Rope Length", type: "integer" }),
+    ).toBe(false);
+    expect(
+      isTripLogCustomFieldDef({
+        key: "",
+        label: "Rope Length",
+        type: "integer",
+      }),
+    ).toBe(false);
   });
 
   it("rejects a missing or empty label", () => {
-    expect(isTripLogCustomFieldDef({ key: "rope_length", type: "integer" })).toBe(false);
-    expect(isTripLogCustomFieldDef({ key: "rope_length", label: "", type: "integer" })).toBe(false);
+    expect(
+      isTripLogCustomFieldDef({ key: "rope_length", type: "integer" }),
+    ).toBe(false);
+    expect(
+      isTripLogCustomFieldDef({
+        key: "rope_length",
+        label: "",
+        type: "integer",
+      }),
+    ).toBe(false);
   });
 
   it("rejects an invalid type", () => {
     expect(
-      isTripLogCustomFieldDef({ key: "rope_length", label: "Rope Length", type: "decimal" }),
+      isTripLogCustomFieldDef({
+        key: "rope_length",
+        label: "Rope Length",
+        type: "decimal",
+      }),
     ).toBe(false);
   });
 
@@ -115,7 +139,9 @@ describe("buildCustomFieldDef", () => {
       { label: "Notes", type: "string", bounded: false, min: "", max: "" },
       [],
     );
-    expect(result).toEqual({ def: { key: "notes", label: "Notes", type: "string" } });
+    expect(result).toEqual({
+      def: { key: "notes", label: "Notes", type: "string" },
+    });
   });
 
   it("rejects empty label", () => {
@@ -128,7 +154,13 @@ describe("buildCustomFieldDef", () => {
 
   it("rejects duplicate key", () => {
     const result = buildCustomFieldDef(
-      { label: "Group Size", type: "integer", bounded: false, min: "", max: "" },
+      {
+        label: "Group Size",
+        type: "integer",
+        bounded: false,
+        min: "",
+        max: "",
+      },
       existing,
     );
     expect("error" in result).toBe(true);
@@ -147,11 +179,23 @@ describe("buildCustomFieldDef", () => {
 
   it("builds bounded float field", () => {
     const result = buildCustomFieldDef(
-      { label: "Temperature", type: "float", bounded: true, min: "-10.5", max: "45.0" },
+      {
+        label: "Temperature",
+        type: "float",
+        bounded: true,
+        min: "-10.5",
+        max: "45.0",
+      },
       [],
     );
     expect(result).toEqual({
-      def: { key: "temperature", label: "Temperature", type: "float", min: -10.5, max: 45 },
+      def: {
+        key: "temperature",
+        label: "Temperature",
+        type: "float",
+        min: -10.5,
+        max: 45,
+      },
     });
   });
 
@@ -160,7 +204,9 @@ describe("buildCustomFieldDef", () => {
       { label: "Rating", type: "integer", bounded: true, min: "", max: "5" },
       [],
     );
-    expect(result).toEqual({ error: "Both min and max are required for a bounded field." });
+    expect(result).toEqual({
+      error: "Both min and max are required for a bounded field.",
+    });
   });
 
   it("rejects missing max for bounded field", () => {
@@ -168,7 +214,9 @@ describe("buildCustomFieldDef", () => {
       { label: "Rating", type: "integer", bounded: true, min: "1", max: "" },
       [],
     );
-    expect(result).toEqual({ error: "Both min and max are required for a bounded field." });
+    expect(result).toEqual({
+      error: "Both min and max are required for a bounded field.",
+    });
   });
 
   it("rejects non-finite bounds", () => {
@@ -192,7 +240,9 @@ describe("buildCustomFieldDef", () => {
       { label: "When", type: "date", bounded: true, min: "1", max: "5" },
       [],
     );
-    expect(result).toEqual({ def: { key: "when", label: "When", type: "date" } });
+    expect(result).toEqual({
+      def: { key: "when", label: "When", type: "date" },
+    });
   });
 
   it("ignores bounded=false even for numeric types", () => {
@@ -200,33 +250,59 @@ describe("buildCustomFieldDef", () => {
       { label: "Count", type: "integer", bounded: false, min: "1", max: "5" },
       [],
     );
-    expect(result).toEqual({ def: { key: "count", label: "Count", type: "integer" } });
+    expect(result).toEqual({
+      def: { key: "count", label: "Count", type: "integer" },
+    });
   });
 });
 
 describe("coerceFieldValueStrict", () => {
   it("treats empty/whitespace as an unset null success", () => {
-    expect(coerceFieldValueStrict("", "integer")).toEqual({ ok: true, value: null });
-    expect(coerceFieldValueStrict("   ", "float")).toEqual({ ok: true, value: null });
+    expect(coerceFieldValueStrict("", "integer")).toEqual({
+      ok: true,
+      value: null,
+    });
+    expect(coerceFieldValueStrict("   ", "float")).toEqual({
+      ok: true,
+      value: null,
+    });
   });
 
   it("parses valid integers and rejects decimals/garbage", () => {
-    expect(coerceFieldValueStrict("42", "integer")).toEqual({ ok: true, value: 42 });
-    expect(coerceFieldValueStrict("-7", "integer")).toEqual({ ok: true, value: -7 });
+    expect(coerceFieldValueStrict("42", "integer")).toEqual({
+      ok: true,
+      value: 42,
+    });
+    expect(coerceFieldValueStrict("-7", "integer")).toEqual({
+      ok: true,
+      value: -7,
+    });
     expect(coerceFieldValueStrict("5.5", "integer")).toEqual({ ok: false });
     expect(coerceFieldValueStrict("abc", "integer")).toEqual({ ok: false });
   });
 
   it("parses valid floats and rejects non-finite input", () => {
-    expect(coerceFieldValueStrict("5.5", "float")).toEqual({ ok: true, value: 5.5 });
+    expect(coerceFieldValueStrict("5.5", "float")).toEqual({
+      ok: true,
+      value: 5.5,
+    });
     expect(coerceFieldValueStrict("banana", "float")).toEqual({ ok: false });
     expect(coerceFieldValueStrict("Infinity", "float")).toEqual({ ok: false });
   });
 
   it("coerces booleans and passes strings through", () => {
-    expect(coerceFieldValueStrict("true", "boolean")).toEqual({ ok: true, value: true });
-    expect(coerceFieldValueStrict("false", "boolean")).toEqual({ ok: true, value: false });
-    expect(coerceFieldValueStrict("hello", "string")).toEqual({ ok: true, value: "hello" });
+    expect(coerceFieldValueStrict("true", "boolean")).toEqual({
+      ok: true,
+      value: true,
+    });
+    expect(coerceFieldValueStrict("false", "boolean")).toEqual({
+      ok: true,
+      value: false,
+    });
+    expect(coerceFieldValueStrict("hello", "string")).toEqual({
+      ok: true,
+      value: "hello",
+    });
   });
 });
 
@@ -274,7 +350,9 @@ describe("renameCustomFieldLabel", () => {
   });
 
   it("rejects an empty label", () => {
-    expect(renameCustomFieldLabel(defs, "rope", "  ")).toEqual({ error: "Label is required." });
+    expect(renameCustomFieldLabel(defs, "rope", "  ")).toEqual({
+      error: "Label is required.",
+    });
   });
 
   it("rejects an unknown key", () => {
@@ -354,37 +432,47 @@ describe("tripFieldDefs", () => {
   const defs = [flow, pitches, weather];
 
   it("asks the questions the trip's own types ask", () => {
-    expect(tripFieldDefs(defs, ["packrafting"], {}).map((def) => def.key)).toEqual([
-      "flow",
-      "weather",
-    ]);
+    expect(
+      tripFieldDefs(defs, ["packrafting"], {}).map((def) => def.key),
+    ).toEqual(["flow", "weather"]);
   });
 
   it("unions several tags, showing a field scoped to two of them once", () => {
     const wet = scoped("wetsuit", ["canyoning", "packrafting"]);
     expect(
-      tripFieldDefs([...defs, wet], ["canyoning", "packrafting"], {}).map((d) => d.key),
+      tripFieldDefs([...defs, wet], ["canyoning", "packrafting"], {}).map(
+        (d) => d.key,
+      ),
     ).toEqual(["flow", "pitches", "weather", "wetsuit"]);
   });
 
   // The API refuses case-variant duplicates, so "Packrafting" and "packrafting"
   // are one tag — a field scoped to one must appear for the other.
   it("matches tags case-insensitively in both directions", () => {
-    expect(tripFieldDefs(defs, ["Packrafting"], {}).map((def) => def.key)).toContain("flow");
     expect(
-      tripFieldDefs([scoped("x", ["BushWalking"])], ["bushwalking"], {}).map((d) => d.key),
+      tripFieldDefs(defs, ["Packrafting"], {}).map((def) => def.key),
+    ).toContain("flow");
+    expect(
+      tripFieldDefs([scoped("x", ["BushWalking"])], ["bushwalking"], {}).map(
+        (d) => d.key,
+      ),
     ).toEqual(["x"]);
   });
 
   // An untagged trip is a real trip, not an unfinished one.
   it("asks only the always-on fields when a trip has no tags", () => {
-    expect(tripFieldDefs(defs, [], {}).map((def) => def.key)).toEqual(["weather"]);
+    expect(tripFieldDefs(defs, [], {}).map((def) => def.key)).toEqual([
+      "weather",
+    ]);
   });
 
   // A trip is not scoped by the places it links any more: a field that names a
   // place type (a stale row from before tags) asks nothing on its own.
   it("ignores place-type scoping on a trip field", () => {
-    const stale: ScopedCustomFieldDef = { ...scoped("stale", []), placeTypeIds: ["canyon"] };
+    const stale: ScopedCustomFieldDef = {
+      ...scoped("stale", []),
+      placeTypeIds: ["canyon"],
+    };
     expect(tripFieldDefs([stale], ["canyoning"], {})).toEqual([]);
   });
 
@@ -413,7 +501,9 @@ describe("tripFieldDefs", () => {
 });
 
 describe("isSystemFieldDef", () => {
-  const scoped = (over: Partial<ScopedCustomFieldDef>): ScopedCustomFieldDef => ({
+  const scoped = (
+    over: Partial<ScopedCustomFieldDef>,
+  ): ScopedCustomFieldDef => ({
     key: "water_level",
     label: "Water level",
     type: "string",
@@ -423,7 +513,9 @@ describe("isSystemFieldDef", () => {
   });
 
   it("is true for a built-in", () => {
-    expect(isSystemFieldDef(scoped({ key: "v_grade", ownerId: null }))).toBe(true);
+    expect(isSystemFieldDef(scoped({ key: "v_grade", ownerId: null }))).toBe(
+      true,
+    );
   });
 
   // THE REGRESSION. A definition created on the phone has no owner id until the
@@ -436,7 +528,9 @@ describe("isSystemFieldDef", () => {
 
   it("is false for an owned field, reserved key or not", () => {
     expect(isSystemFieldDef(scoped({ ownerId: "alice" }))).toBe(false);
-    expect(isSystemFieldDef(scoped({ key: "v_grade", ownerId: "alice" }))).toBe(false);
+    expect(isSystemFieldDef(scoped({ key: "v_grade", ownerId: "alice" }))).toBe(
+      false,
+    );
   });
 
   it("is false when the owner id is absent entirely — offer the verbs, let the server refuse", () => {

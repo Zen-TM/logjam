@@ -1,7 +1,13 @@
 import { describe, it, expect } from "vitest";
 import { buildPlaceExport } from "./placeExport";
 import { parseCsv } from "./csvImport/parseCsv";
-import { parseAltNames, parseFloatStrict, parseIntStrict, parseLatLng, parseSources } from "./csvImport/placeValueParsers";
+import {
+  parseAltNames,
+  parseFloatStrict,
+  parseIntStrict,
+  parseLatLng,
+  parseSources,
+} from "./csvImport/placeValueParsers";
 import { detectPlaceColumns } from "./csvImport/placeColumns";
 import type { TPlace } from "./placeUtils";
 
@@ -41,12 +47,18 @@ async function text(blob: Blob): Promise<string> {
 
 describe("buildPlaceExport — filenames", () => {
   it("slugs a single place name", async () => {
-    const { filename } = buildPlaceExport([place({ name: "Empress Canyon!" })], "gpx");
+    const { filename } = buildPlaceExport(
+      [place({ name: "Empress Canyon!" })],
+      "gpx",
+    );
     expect(filename).toBe("logjam-empress-canyon.gpx");
   });
 
   it("uses a datestamped collection name for multiple places", () => {
-    const { filename } = buildPlaceExport([place(), place({ id: "c2" })], "kml");
+    const { filename } = buildPlaceExport(
+      [place(), place({ id: "c2" })],
+      "kml",
+    );
     expect(filename).toMatch(/^logjam-places-\d{8}\.kml$/);
   });
 });
@@ -65,7 +77,10 @@ describe("buildPlaceExport — GPX", () => {
   });
 
   it("XML-escapes special characters in the name", async () => {
-    const { blob } = buildPlaceExport([place({ name: 'A & B <C> "D" \'E\'' })], "gpx");
+    const { blob } = buildPlaceExport(
+      [place({ name: "A & B <C> \"D\" 'E'" })],
+      "gpx",
+    );
     const xml = await text(blob);
     expect(xml).toContain("A &amp; B &lt;C&gt; &quot;D&quot; &apos;E&apos;");
     expect(xml).not.toContain("<C>");
@@ -88,7 +103,8 @@ describe("buildPlaceExport — KML", () => {
   // sharee exports and opens elsewhere.
   it("escapes a ]]> inside notes instead of letting it close the CDATA section early (FECO-009)", async () => {
     const malicious = place({
-      notes: 'Approach via the north gully]]></description><Placemark><name>INJECTED',
+      notes:
+        "Approach via the north gully]]></description><Placemark><name>INJECTED",
     });
     const { blob } = buildPlaceExport([malicious], "kml");
     const xml = await text(blob);
@@ -144,14 +160,22 @@ describe("buildPlaceExport — GeoJSON", () => {
     const { blob } = buildPlaceExport([place()], "geojson");
     const parsed = JSON.parse(await text(blob));
     expect(parsed.type).toBe("FeatureCollection");
-    expect(parsed.features[0].geometry).toEqual({ type: "Point", coordinates: [150.3, -33.5] });
+    expect(parsed.features[0].geometry).toEqual({
+      type: "Point",
+      coordinates: [150.3, -33.5],
+    });
   });
 
   it("emits exactly the whitelisted properties — no internal fields (EXPORT-2)", async () => {
-    const { blob } = buildPlaceExport([place(INTERNAL_FIELD_OVERRIDES)], "geojson");
+    const { blob } = buildPlaceExport(
+      [place(INTERNAL_FIELD_OVERRIDES)],
+      "geojson",
+    );
     const parsed = JSON.parse(await text(blob));
     const properties = parsed.features[0].properties as Record<string, unknown>;
-    expect(Object.keys(properties).sort()).toEqual([...EXPECTED_PROPERTY_KEYS].sort());
+    expect(Object.keys(properties).sort()).toEqual(
+      [...EXPECTED_PROPERTY_KEYS].sort(),
+    );
   });
 
   it("emits sources as {label, url} objects and every field under fields", async () => {
@@ -198,7 +222,10 @@ describe("buildPlaceExport — internal fields leak nowhere", () => {
   it.each(["gpx", "kml", "geojson", "csv"] as const)(
     "%s output contains no internal identifiers",
     async (format) => {
-      const { blob } = buildPlaceExport([place(INTERNAL_FIELD_OVERRIDES)], format);
+      const { blob } = buildPlaceExport(
+        [place(INTERNAL_FIELD_OVERRIDES)],
+        format,
+      );
       const output = await text(blob);
       expect(output).not.toContain("user-secret-owner-id");
       expect(output).not.toContain("batch-secret-id");
@@ -307,14 +334,36 @@ describe("buildPlaceExport — CSV (EXPORT-1)", () => {
       ok: true,
       value: ["Gobsmacker", "Bubble Bath"],
     });
-    expect(parseIntStrict(r1["attr:v_grade"], "vGrade")).toEqual({ ok: true, value: 5 });
-    expect(parseIntStrict(r1["attr:a_grade"], "aGrade")).toEqual({ ok: true, value: 2 });
-    expect(parseIntStrict(r1["attr:commitment"], "commitment")).toEqual({ ok: true, value: 4 });
-    expect(parseFloatStrict(r1["attr:quality"], "quality")).toEqual({ ok: true, value: 4.5 });
-    expect(parseIntStrict(r1["attr:num_abseils"], "numAbseils")).toEqual({ ok: true, value: 12 });
-    expect(parseFloatStrict(r1["attr:longest_abseil"], "longestAbseil")).toEqual({ ok: true, value: 55.5 });
-    expect(parseFloatStrict(r1["attr:hours"], "hours")).toEqual({ ok: true, value: 7.25 });
-    expect(r1.notes).toBe('Line one, with comma\nLine two has "quotes" and a ; semicolon');
+    expect(parseIntStrict(r1["attr:v_grade"], "vGrade")).toEqual({
+      ok: true,
+      value: 5,
+    });
+    expect(parseIntStrict(r1["attr:a_grade"], "aGrade")).toEqual({
+      ok: true,
+      value: 2,
+    });
+    expect(parseIntStrict(r1["attr:commitment"], "commitment")).toEqual({
+      ok: true,
+      value: 4,
+    });
+    expect(parseFloatStrict(r1["attr:quality"], "quality")).toEqual({
+      ok: true,
+      value: 4.5,
+    });
+    expect(parseIntStrict(r1["attr:num_abseils"], "numAbseils")).toEqual({
+      ok: true,
+      value: 12,
+    });
+    expect(
+      parseFloatStrict(r1["attr:longest_abseil"], "longestAbseil"),
+    ).toEqual({ ok: true, value: 55.5 });
+    expect(parseFloatStrict(r1["attr:hours"], "hours")).toEqual({
+      ok: true,
+      value: 7.25,
+    });
+    expect(r1.notes).toBe(
+      'Line one, with comma\nLine two has "quotes" and a ; semicolon',
+    );
 
     // Absent values round-trip as empty cells.
     expect(r2["attr:a_grade"]).toBe("");
@@ -406,7 +455,10 @@ describe("buildPlaceExport — CSV (EXPORT-1)", () => {
       expect(raw).not.toContain("'-70.2");
       const { rows } = await parseCsv(csvFile(raw));
       expect(parseLatLng(rows[0].latitude)).toEqual({ ok: true, value: -33.5 });
-      expect(parseLatLng(rows[0].longitude)).toEqual({ ok: true, value: -70.2 });
+      expect(parseLatLng(rows[0].longitude)).toEqual({
+        ok: true,
+        value: -70.2,
+      });
     });
 
     it("leaves an ordinary name/notes cell untouched", async () => {

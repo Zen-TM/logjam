@@ -158,7 +158,11 @@ export const PlacePinsLayer = memo(function PlacePinsLayer({
           // dropped from 2.6em with the pin: the label hung off a 12 px disc
           // that is now a 6 px dot, and an offset measured for the old one left
           // the name floating away from its pin.
-          style={{ ...LABEL_STYLE, textOffset: [0, 2.0], textAllowOverlap: true }}
+          style={{
+            ...LABEL_STYLE,
+            textOffset: [0, 2.0],
+            textAllowOverlap: true,
+          }}
         />
       </GeoJSONSource>
       <GeoJSONSource

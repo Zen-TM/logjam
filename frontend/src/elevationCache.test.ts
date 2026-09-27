@@ -29,8 +29,21 @@ describe("the elevation profile cache", () => {
   // re-sampled rather than a stale one being handed back. This is what lets an
   // in-memory cache coexist with "a profile is never persisted".
   it("treats a moved vertex as different geometry", () => {
-    cacheProfile(JSON.stringify([[150, -33], [150.1, -33]]), profile(1));
-    expect(cachedProfile(JSON.stringify([[150, -33], [150.1, -33.5]]))).toBeNull();
+    cacheProfile(
+      JSON.stringify([
+        [150, -33],
+        [150.1, -33],
+      ]),
+      profile(1),
+    );
+    expect(
+      cachedProfile(
+        JSON.stringify([
+          [150, -33],
+          [150.1, -33.5],
+        ]),
+      ),
+    ).toBeNull();
   });
 
   it("replaces rather than duplicates when the same line is sampled again", () => {

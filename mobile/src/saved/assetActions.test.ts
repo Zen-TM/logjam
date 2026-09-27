@@ -27,7 +27,10 @@ vi.mock("../sync/outbox", () => ({
   deleteRouteLocal: vi.fn(),
   updateRouteLocal: vi.fn(),
 }));
-vi.mock("../fileExport", () => ({ exportTrack: vi.fn(), exportStoredFile: vi.fn() }));
+vi.mock("../fileExport", () => ({
+  exportTrack: vi.fn(),
+  exportStoredFile: vi.fn(),
+}));
 vi.mock("../sync/mediaUpload", () => ({
   attachMediaLocal: vi.fn(),
   deleteMediaLocal: vi.fn(),
@@ -90,22 +93,24 @@ describe("assetActions ownership", () => {
   // tell from an owned one. The second case is not hypothetical — a shared
   // LiDAR topo did exactly that, because the screens read "no delete
   // descriptor" as the proxy for shared, and a topo's delete is device-local.
-  it.each([
-    ["route", routeActions(route("shared"))],
-  ])("flags a shared %s and withholds every write verb with it", (_kind, actions) => {
-    expect(actions.sharedWithYou).toBe(true);
-    expect(actions.share).toBeUndefined();
-    expect(actions.rename).toBeUndefined();
-    expect(actions.delete).toBeUndefined();
-  });
+  it.each([["route", routeActions(route("shared"))]])(
+    "flags a shared %s and withholds every write verb with it",
+    (_kind, actions) => {
+      expect(actions.sharedWithYou).toBe(true);
+      expect(actions.share).toBeUndefined();
+      expect(actions.rename).toBeUndefined();
+      expect(actions.delete).toBeUndefined();
+    },
+  );
 
-  it.each([
-    ["route", routeActions(route("owner"))],
-  ])("leaves the flag off an owned %s, which keeps its verbs", (_kind, actions) => {
-    expect(actions.sharedWithYou).toBeUndefined();
-    expect(actions.share).toBeDefined();
-    expect(actions.delete).toBeDefined();
-  });
+  it.each([["route", routeActions(route("owner"))]])(
+    "leaves the flag off an owned %s, which keeps its verbs",
+    (_kind, actions) => {
+      expect(actions.sharedWithYou).toBeUndefined();
+      expect(actions.share).toBeDefined();
+      expect(actions.delete).toBeDefined();
+    },
+  );
 });
 
 // An import's export rows decide WHICH FILE the user gets back, and getting it
@@ -202,7 +207,9 @@ describe("the share / send-a-copy verb matrix", () => {
       trackActions(track(2)),
     ];
     for (const descriptor of descriptors) {
-      expect(descriptor.share != null && descriptor.sendCopy != null).toBe(false);
+      expect(descriptor.share != null && descriptor.sendCopy != null).toBe(
+        false,
+      );
     }
   });
 
@@ -242,7 +249,9 @@ describe("the share / send-a-copy verb matrix", () => {
   it("withholds Send a copy on an import with no retained original", () => {
     // Pre-retention rows degrade to GeoJSON-only export rather than sending a
     // derivation the sender never chose (GPX → GeoJSON is lossy).
-    expect(vectorImportActions(importRow({ sourcePath: null })).sendCopy).toBeUndefined();
+    expect(
+      vectorImportActions(importRow({ sourcePath: null })).sendCopy,
+    ).toBeUndefined();
   });
 
   // A place's route slot takes TRACK media and nothing else, so this verb has
@@ -260,7 +269,9 @@ describe("the share / send-a-copy verb matrix", () => {
       // nothing for it to need locally.
       null,
     ]) {
-      expect(vectorImportActions(importRow({ sourcePath })).attachToPlace).toBeDefined();
+      expect(
+        vectorImportActions(importRow({ sourcePath })).attachToPlace,
+      ).toBeDefined();
     }
   });
 
@@ -274,7 +285,11 @@ describe("the share / send-a-copy verb matrix", () => {
 
   it("offers setColor on trackActions and updates track color", async () => {
     const { updateTrack } = await import("../tracks/tracksDb");
-    const t = { ...track(3), id: "track-123", color: "#e6194b" } as unknown as Track;
+    const t = {
+      ...track(3),
+      id: "track-123",
+      color: "#e6194b",
+    } as unknown as Track;
     const actions = trackActions(t);
     expect(actions.setColor).toBeDefined();
     await actions.setColor?.("#3cb44b");
@@ -338,7 +353,11 @@ describe("the share / send-a-copy verb matrix", () => {
       { lon: 150.1, lat: -33.5, ele: 100, time: "2026-08-22T00:00:00Z" },
       { lon: 150.2, lat: -33.6, ele: 100, time: "2026-08-22T00:01:00Z" },
     ] as never);
-    const t = { ...track(2), name: "My Track", color: "#911eb4" } as unknown as Track;
+    const t = {
+      ...track(2),
+      name: "My Track",
+      color: "#911eb4",
+    } as unknown as Track;
     const actions = trackActions(t);
     await actions.createRouteFrom?.();
     expect(createRouteLocal).toHaveBeenCalledWith(

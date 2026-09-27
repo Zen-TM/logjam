@@ -16,7 +16,15 @@ vi.setConfig({ testTimeout: 90_000, hookTimeout: 90_000 });
 
 import { PLACE_TYPE_COLORS, SYSTEM_PLACE_TYPE_IDS } from "@logjam/shared";
 
-import { API_URL, ALICE_SUB, BOB_SUB, BOB_ID, ALICE_ID, as, CANYON_TYPE_ID } from "./_actors";
+import {
+  API_URL,
+  ALICE_SUB,
+  BOB_SUB,
+  BOB_ID,
+  ALICE_ID,
+  as,
+  CANYON_TYPE_ID,
+} from "./_actors";
 
 // COPYING A SHARED PLACE, from the recipient's side (plan §2.6, §7.1, §7.13,
 // §7.16). Everything here is a two-actor test on purpose: the rules being
@@ -55,7 +63,10 @@ const createdFields: { sub: string; key: string }[] = [];
  * runs low. `_rateLimitGate` cannot do this — it probes a READ route, so it
  * sees the global limiter and nothing about this one.
  */
-async function afterWrite(res: { status: number; headers: Record<string, string> }) {
+async function afterWrite(res: {
+  status: number;
+  headers: Record<string, string>;
+}) {
   await throttleWrites(res);
 }
 
@@ -65,9 +76,9 @@ async function afterWrite(res: { status: number; headers: Record<string, string>
  * lands after the window resets. Without it a 429 arrives as an assertion
  * failure about place types, in whichever file happens to run second.
  */
-async function write<T extends { status: number; headers: Record<string, string> }>(
-  send: () => Promise<T>,
-): Promise<T> {
+async function write<
+  T extends { status: number; headers: Record<string, string> },
+>(send: () => Promise<T>): Promise<T> {
   const first = await send();
   return (await throttleWrites(first)) ? await send() : first;
 }
@@ -86,11 +97,20 @@ async function makeType(sub: string, name: string): Promise<string> {
 
 async function makeField(
   sub: string,
-  field: { key: string; label: string; type: string; min?: number; max?: number },
+  field: {
+    key: string;
+    label: string;
+    type: string;
+    min?: number;
+    max?: number;
+  },
   placeTypeIds: string[],
 ): Promise<void> {
   const res = await write(() =>
-    request(API_URL).post("/custom-fields/place").set(as(sub)).send({ field, placeTypeIds }),
+    request(API_URL)
+      .post("/custom-fields/place")
+      .set(as(sub))
+      .send({ field, placeTypeIds }),
   );
   expect(res.status, JSON.stringify(res.body)).toBe(201);
   createdFields.push({ sub, key: field.key });
@@ -135,7 +155,12 @@ describe("a sharee of a place of the sender's own type", () => {
     const typeId = await makeType(ALICE_SUB, `Cave ${Date.now()}`);
     await makeField(
       ALICE_SUB,
-      { key: "passage_m", label: "Passage length (m)", type: "integer", min: 0 },
+      {
+        key: "passage_m",
+        label: "Passage length (m)",
+        type: "integer",
+        min: 0,
+      },
       [typeId],
     );
     const place = await makePlace(ALICE_SUB, {
@@ -159,7 +184,10 @@ describe("a sharee of a place of the sender's own type", () => {
     expect(row!.syncRole).toBe("shared");
     // THE POINT: labels, from the OWNER's definitions, derived live.
     const snapshot = row!.fieldDefsSnapshot as { key: string; label: string }[];
-    expect(snapshot, "a shared place of a user type must carry its defs").toBeTruthy();
+    expect(
+      snapshot,
+      "a shared place of a user type must carry its defs",
+    ).toBeTruthy();
     expect(snapshot.find((d) => d.key === "passage_m")?.label).toBe(
       "Passage length (m)",
     );
@@ -170,9 +198,9 @@ describe("a sharee of a place of the sender's own type", () => {
       .get("/sync/delta")
       .set({ ...as(BOB_SUB), ...CLIENT })
       .query({ limit: 500 });
-    const canyon = (delta.body.changes.places as Record<string, unknown>[]).find(
-      (p) => p.syncRole === "shared" && p.placeTypeId === CANYON_TYPE_ID,
-    );
+    const canyon = (
+      delta.body.changes.places as Record<string, unknown>[]
+    ).find((p) => p.syncRole === "shared" && p.placeTypeId === CANYON_TYPE_ID);
     expect(canyon, "the seed shares canyons with bob").toBeTruthy();
     // Sending one would be sending the recipient rows they already have, on
     // every page, forever.
@@ -186,7 +214,11 @@ describe("foreignFields is owner-private (§2.6)", () => {
     const typeId = await makeType(ALICE_SUB, `Cave ${Date.now()}-p`);
     await makeField(
       ALICE_SUB,
-      { key: `permit_${Date.now()}`.slice(0, 20), label: "Permit number", type: "string" },
+      {
+        key: `permit_${Date.now()}`.slice(0, 20),
+        label: "Permit number",
+        type: "string",
+      },
       [typeId],
     );
     const source = await makePlace(ALICE_SUB, {
@@ -219,7 +251,9 @@ describe("foreignFields is owner-private (§2.6)", () => {
     expect(detail.status).toBe(200);
     expect(detail.body.foreignFields).toBeUndefined();
 
-    const list = await request(API_URL).get("/places/shared").set(as(ALICE_SUB));
+    const list = await request(API_URL)
+      .get("/places/shared")
+      .set(as(ALICE_SUB));
     expect(list.status).toBe(200);
     const listed = (list.body as Record<string, unknown>[]).find(
       (p) => p.id === copy.body.id,
@@ -372,9 +406,11 @@ describe("copy reconciliation (§2.6 rules 1 and 3)", () => {
     // Bob holds the SAME key, same type, on the type the copy will land in —
     // so that one value lands in the field it belongs in, silently.
     const bobType = await makeType(BOB_SUB, `Cave ${stamp}-r`);
-    await makeField(BOB_SUB, { key: sharedKey, label: "Depth", type: "integer" }, [
-      bobType,
-    ]);
+    await makeField(
+      BOB_SUB,
+      { key: sharedKey, label: "Depth", type: "integer" },
+      [bobType],
+    );
 
     const place = await makePlace(ALICE_SUB, {
       placeTypeId: senderType,
@@ -396,7 +432,12 @@ describe("copy reconciliation (§2.6 rules 1 and 3)", () => {
     expect(copy.body.placeTypeId).toBe(bobType);
     expect(copy.body.fieldValues).toEqual({ [sharedKey]: 40 });
     expect(copy.body.foreignFields).toEqual([
-      { key: strandedKey, label: "Rigging notes", type: "string", value: "two ropes" },
+      {
+        key: strandedKey,
+        label: "Rigging notes",
+        type: "string",
+        value: "two ropes",
+      },
     ]);
 
     // A COPY OF A COPY clears rather than concatenates: bob shares his copy
@@ -452,14 +493,19 @@ describe("the three things an owner can do with a parked value", () => {
     createdFields.push({ sub: BOB_SUB, key });
 
     expect(res.body.foreignFields).toBeNull();
-    expect((res.body.fieldValues as Record<string, unknown>)[key]).toBe("hand line");
+    expect((res.body.fieldValues as Record<string, unknown>)[key]).toBe(
+      "hand line",
+    );
 
     // The definition is now BOB's, scoped to the type of the place he adopted
     // it on — not to all types, which is a choice the field editor makes.
-    const defs = await request(API_URL).get("/custom-fields/place").set(as(BOB_SUB));
+    const defs = await request(API_URL)
+      .get("/custom-fields/place")
+      .set(as(BOB_SUB));
     expect(
-      (defs.body.fields as { key: string; label: string }[]).find((f) => f.key === key)
-        ?.label,
+      (defs.body.fields as { key: string; label: string }[]).find(
+        (f) => f.key === key,
+      )?.label,
     ).toBe("Rigging");
   });
 
@@ -536,7 +582,9 @@ describe("a place-type change parks what the new type cannot hold", () => {
         protocol: 1,
         ops: [
           {
-            opId: `${stamp}`.padStart(8, "0").slice(0, 8) + "-2222-4222-8222-222222222222",
+            opId:
+              `${stamp}`.padStart(8, "0").slice(0, 8) +
+              "-2222-4222-8222-222222222222",
             entity: "place",
             op: "update",
             id: place.id,
@@ -545,9 +593,10 @@ describe("a place-type change parks what the new type cannot hold", () => {
         ],
       });
     expect(pushed.status).toBe(200);
-    expect(pushed.body.results[0].status, JSON.stringify(pushed.body.results[0])).toBe(
-      "applied",
-    );
+    expect(
+      pushed.body.results[0].status,
+      JSON.stringify(pushed.body.results[0]),
+    ).toBe("applied");
 
     const row = pushed.body.results[0].row as Record<string, unknown>;
     expect(row.placeTypeId).toBe(CANYON_TYPE_ID);
@@ -598,7 +647,9 @@ describe("a place-type change parks what the new type cannot hold", () => {
     const stamp = Date.now();
     const key = `flow_${stamp}`.slice(0, 20);
     const typeId = await makeType(ALICE_SUB, `Creek ${stamp}-t`);
-    await makeField(ALICE_SUB, { key, label: "Flow", type: "integer" }, [typeId]);
+    await makeField(ALICE_SUB, { key, label: "Flow", type: "integer" }, [
+      typeId,
+    ]);
     const place = await makePlace(ALICE_SUB, {
       placeTypeId: typeId,
       name: "Edited in place",

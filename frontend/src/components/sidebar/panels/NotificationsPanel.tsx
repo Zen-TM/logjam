@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   ArrowRight,
   Bell,
@@ -112,7 +120,12 @@ const KIND_HUE: Record<NotificationKind, string> = {
 
 type Bucket = "all" | "unread" | "read";
 
-type PendingConfirm = { title: string; message: string; confirmLabel: string; run: () => Promise<void> };
+type PendingConfirm = {
+  title: string;
+  message: string;
+  confirmLabel: string;
+  run: () => Promise<void>;
+};
 
 const NO_KEYS: ReadonlySet<string> = new Set<string>();
 
@@ -124,7 +137,9 @@ function payloadString(n: TNotification, key: string): string | null {
 /** The day is the section heading, so a row only needs the clock. */
 function formatTime(iso: string): string {
   const at = new Date(iso);
-  return Number.isNaN(at.getTime()) ? "" : at.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  return Number.isNaN(at.getTime())
+    ? ""
+    : at.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 }
 
 /**
@@ -168,14 +183,17 @@ function NotificationsPanel({
   const [bucket, setBucket] = useState<Bucket>("all");
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
-  const [expandedBatches, setExpandedBatches] = useState<ReadonlySet<string>>(NO_KEYS);
+  const [expandedBatches, setExpandedBatches] =
+    useState<ReadonlySet<string>>(NO_KEYS);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const selectionAnchor = useRef<string | null>(null);
   // Rows answered or deleted here, hidden before the refetch lands, so a row
   // does not sit with live buttons until the server says it has gone.
   const [hiddenIds, setHiddenIds] = useState<ReadonlySet<string>>(NO_KEYS);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
+  const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(
+    null,
+  );
   const [confirming, setConfirming] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -189,7 +207,10 @@ function NotificationsPanel({
 
   // ── The list ─────────────────────────────────────────────────────────
   const live = useMemo(
-    () => newestNotificationsFirst(notifications.filter((n) => !hiddenIds.has(n.id))),
+    () =>
+      newestNotificationsFirst(
+        notifications.filter((n) => !hiddenIds.has(n.id)),
+      ),
     [notifications, hiddenIds],
   );
   // Every count collapses batches, because the list does: a friend sharing
@@ -199,7 +220,10 @@ function NotificationsPanel({
 
   const needle = query.trim().toLowerCase();
   const searched = useMemo(
-    () => (needle ? live.filter((n) => notificationHaystack(n).includes(needle)) : live),
+    () =>
+      needle
+        ? live.filter((n) => notificationHaystack(n).includes(needle))
+        : live,
     [live, needle],
   );
   // A chip's count applies the search but not its own axis: "how many would I
@@ -213,12 +237,18 @@ function NotificationsPanel({
     [searched],
   );
   const visible = useMemo(
-    () => (bucket === "all" ? searched : searched.filter((n) => (bucket === "unread" ? !n.read : n.read))),
+    () =>
+      bucket === "all"
+        ? searched
+        : searched.filter((n) => (bucket === "unread" ? !n.read : n.read)),
     [searched, bucket],
   );
   // Gathered over the FILTERED list, so a header counts the rows it opens onto.
   const batches = useMemo(() => findNotificationBatches(visible), [visible]);
-  const rows = useMemo(() => collapseBatches(visible, batches, expandedBatches), [visible, batches, expandedBatches]);
+  const rows = useMemo(
+    () => collapseBatches(visible, batches, expandedBatches),
+    [visible, batches, expandedBatches],
+  );
   const sections = useMemo(() => groupNotificationsByDay(rows), [rows]);
 
   // ── Selection ────────────────────────────────────────────────────────
@@ -229,7 +259,10 @@ function NotificationsPanel({
     return rows.filter((row) => picked.has(row.id));
   }, [rows, selectedIds]);
   // A picked batch header stands for every notification under it.
-  const selected = useMemo(() => expandBatchSelection(pickedRows, batches), [pickedRows, batches]);
+  const selected = useMemo(
+    () => expandBatchSelection(pickedRows, batches),
+    [pickedRows, batches],
+  );
   const selecting = pickedRows.length > 0;
   const readAction = useMemo(() => bulkReadAction(selected), [selected]);
 
@@ -243,7 +276,11 @@ function NotificationsPanel({
       const range = idRange(rowIds, selectionAnchor.current, id);
       setSelectedIds((current) => [...new Set([...current, ...range])]);
     } else {
-      setSelectedIds((current) => (current.includes(id) ? current.filter((other) => other !== id) : [...current, id]));
+      setSelectedIds((current) =>
+        current.includes(id)
+          ? current.filter((other) => other !== id)
+          : [...current, id],
+      );
     }
     selectionAnchor.current = id;
   };
@@ -257,7 +294,10 @@ function NotificationsPanel({
       if (event.key === "Escape") {
         event.preventDefault();
         clearSelection();
-      } else if (event.key.toLowerCase() === "a" && (event.ctrlKey || event.metaKey)) {
+      } else if (
+        event.key.toLowerCase() === "a" &&
+        (event.ctrlKey || event.metaKey)
+      ) {
         event.preventDefault();
         setSelectedIds(rowIds);
       }
@@ -274,7 +314,10 @@ function NotificationsPanel({
   };
 
   // ── Verbs ────────────────────────────────────────────────────────────
-  const hide = useCallback((ids: string[]) => setHiddenIds((prev) => new Set([...prev, ...ids])), []);
+  const hide = useCallback(
+    (ids: string[]) => setHiddenIds((prev) => new Set([...prev, ...ids])),
+    [],
+  );
   const unhide = useCallback(
     (ids: string[]) =>
       setHiddenIds((prev) => {
@@ -299,7 +342,14 @@ function NotificationsPanel({
         return true;
       } catch (err) {
         console.error(err);
-        toast.error(messageFromError(err, read ? "Couldn't mark that as read." : "Couldn't mark that as unread."));
+        toast.error(
+          messageFromError(
+            err,
+            read
+              ? "Couldn't mark that as read."
+              : "Couldn't mark that as unread.",
+          ),
+        );
         onOverrideRead(ids, null);
         return false;
       } finally {
@@ -343,14 +393,21 @@ function NotificationsPanel({
       return next;
     });
     if (!expanding || bucket === "unread") return;
-    void setRead(batch.items.filter((item) => !item.read).map((item) => item.id), true);
+    void setRead(
+      batch.items.filter((item) => !item.read).map((item) => item.id),
+      true,
+    );
   };
 
   const deleteNotifications = async (ids: string[]) => {
     hide(ids);
     try {
       await Promise.all(ids.map((id) => deleteNotification(id)));
-      toast.success(ids.length === 1 ? "Notification deleted." : `Deleted ${ids.length} notifications.`);
+      toast.success(
+        ids.length === 1
+          ? "Notification deleted."
+          : `Deleted ${ids.length} notifications.`,
+      );
     } catch (err) {
       console.error(err);
       toast.error(messageFromError(err, "Couldn't delete that."));
@@ -363,7 +420,10 @@ function NotificationsPanel({
 
   const confirmDelete = (ids: string[]) =>
     setPendingConfirm({
-      title: ids.length === 1 ? "Delete this notification?" : `Delete ${ids.length} notifications?`,
+      title:
+        ids.length === 1
+          ? "Delete this notification?"
+          : `Delete ${ids.length} notifications?`,
       message:
         ids.length === 1
           ? "It goes from every device on your account. This can't be undone."
@@ -380,7 +440,8 @@ function NotificationsPanel({
   // no second selection.
   const applyReadAction = async () => {
     if (!readAction) return;
-    if (await setRead(readAction.ids, readAction.read)) toast.success(readAction.success);
+    if (await setRead(readAction.ids, readAction.read))
+      toast.success(readAction.success);
   };
 
   const markAllRead = async () => {
@@ -400,7 +461,8 @@ function NotificationsPanel({
   const confirmClearRead = () =>
     setPendingConfirm({
       title: "Clear read notifications?",
-      message: "Every notification you've read goes, from every device on your account. Unread ones stay.",
+      message:
+        "Every notification you've read goes, from every device on your account. Unread ones stay.",
       confirmLabel: "Clear",
       run: async () => {
         try {
@@ -408,7 +470,9 @@ function NotificationsPanel({
           clearSelection();
         } catch (err) {
           console.error(err);
-          toast.error(messageFromError(err, "Couldn't clear read notifications."));
+          toast.error(
+            messageFromError(err, "Couldn't clear read notifications."),
+          );
         } finally {
           onRefetchNotifications();
         }
@@ -417,7 +481,11 @@ function NotificationsPanel({
 
   // Answer a notification's question. Which calls run is the descriptor's
   // `type`; the words are all `notificationActions`'.
-  const answer = (n: TNotification, target: NotificationActions, action: NotificationInlineAction) => {
+  const answer = (
+    n: TNotification,
+    target: NotificationActions,
+    action: NotificationInlineAction,
+  ) => {
     const run = async () => {
       setBusyId(n.id);
       // Only a file ACCEPT leaves the notification alive (as "Download again");
@@ -425,10 +493,14 @@ function NotificationsPanel({
       const survives = target.type === "file_sent" && action.kind === "accept";
       try {
         if (target.type === "friend_request") {
-          await (action.kind === "accept" ? acceptFriendRequest : declineFriendRequest)(target.targetId);
+          await (action.kind === "accept"
+            ? acceptFriendRequest
+            : declineFriendRequest)(target.targetId);
           onRefetchFriends();
         } else if (action.kind === "accept") {
-          const { downloadUrl, filename } = await acceptFileSend(target.targetId);
+          const { downloadUrl, filename } = await acceptFileSend(
+            target.targetId,
+          );
           triggerDownload(downloadUrl);
           // Logjam Web has no Saved: accepting a copy here IS the download, so
           // the phone's "find it in Saved" would send the user looking for nothing.
@@ -452,7 +524,9 @@ function NotificationsPanel({
           // as a success would rather than bring them back (NOTIF-1).
           hide([n.id]);
           // Best-effort: the server has usually purged it already, which is a 404.
-          deleteNotification(n.id).catch((deleteErr) => console.error(deleteErr));
+          deleteNotification(n.id).catch((deleteErr) =>
+            console.error(deleteErr),
+          );
         }
       } finally {
         setBusyId(null);
@@ -471,7 +545,11 @@ function NotificationsPanel({
     }
   };
 
-  const downloadJobFile = async (n: TNotification, presign: () => Promise<string | null | undefined>, failure: string) => {
+  const downloadJobFile = async (
+    n: TNotification,
+    presign: () => Promise<string | null | undefined>,
+    failure: string,
+  ) => {
     try {
       const url = await presign();
       if (!url) throw new Error("The job has no download URL");
@@ -494,16 +572,37 @@ function NotificationsPanel({
     const entries: MenuEntry[] = [];
     if (destination) {
       entries.push(
-        { id: "go", label: destination.label, icon: ArrowRight, onSelect: () => goTo(n, destination) },
+        {
+          id: "go",
+          label: destination.label,
+          icon: ArrowRight,
+          onSelect: () => goTo(n, destination),
+        },
         { id: "sep-go", separator: true },
       );
     }
     entries.push(
       n.read
-        ? { id: "unread", label: "Mark as unread", icon: EyeOff, onSelect: () => void setRead([n.id], false) }
-        : { id: "read", label: "Mark as read", icon: Eye, onSelect: () => void setRead([n.id], true) },
+        ? {
+            id: "unread",
+            label: "Mark as unread",
+            icon: EyeOff,
+            onSelect: () => void setRead([n.id], false),
+          }
+        : {
+            id: "read",
+            label: "Mark as read",
+            icon: Eye,
+            onSelect: () => void setRead([n.id], true),
+          },
       { id: "sep-delete", separator: true },
-      { id: "delete", label: "Delete", icon: Trash2, danger: true, onSelect: () => confirmDelete([n.id]) },
+      {
+        id: "delete",
+        label: "Delete",
+        icon: Trash2,
+        danger: true,
+        onSelect: () => confirmDelete([n.id]),
+      },
     );
     return entries;
   };
@@ -530,13 +629,23 @@ function NotificationsPanel({
     const footprint = n.payload.footprint as GeoJsonPolygonal | undefined;
     if (n.type === "topo_complete" && footprint) {
       return (
-        <Button compact variant="outline" icon={LocateFixed} disabled={selecting} onClick={() => zoomToMap(n, footprint)}>
+        <Button
+          compact
+          variant="outline"
+          icon={LocateFixed}
+          disabled={selecting}
+          onClick={() => zoomToMap(n, footprint)}
+        >
           Zoom to map
         </Button>
       );
     }
     const exportJobId = payloadString(n, "exportJobId");
-    if (n.type === "topo_export_complete" && n.payload.status === "completed" && exportJobId) {
+    if (
+      n.type === "topo_export_complete" &&
+      n.payload.status === "completed" &&
+      exportJobId
+    ) {
       return (
         <Button
           compact
@@ -544,7 +653,11 @@ function NotificationsPanel({
           icon={Download}
           disabled={selecting}
           onClick={() =>
-            void downloadJobFile(n, async () => (await getTopoExport(exportJobId)).downloadUrl, "Couldn't download the export.")
+            void downloadJobFile(
+              n,
+              async () => (await getTopoExport(exportJobId)).downloadUrl,
+              "Couldn't download the export.",
+            )
           }
         >
           Download
@@ -552,7 +665,11 @@ function NotificationsPanel({
       );
     }
     const geoPdfJobId = payloadString(n, "geoPdfJobId");
-    if (n.type === "geo_pdf_complete" && n.payload.status === "completed" && geoPdfJobId) {
+    if (
+      n.type === "geo_pdf_complete" &&
+      n.payload.status === "completed" &&
+      geoPdfJobId
+    ) {
       return (
         <Button
           compact
@@ -560,7 +677,11 @@ function NotificationsPanel({
           icon={Download}
           disabled={selecting}
           onClick={() =>
-            void downloadJobFile(n, async () => (await getGeoPdfJob(geoPdfJobId)).downloadUrl, "Couldn't download the GeoPDF.")
+            void downloadJobFile(
+              n,
+              async () => (await getGeoPdfJob(geoPdfJobId)).downloadUrl,
+              "Couldn't download the GeoPDF.",
+            )
           }
         >
           Download
@@ -588,7 +709,9 @@ function NotificationsPanel({
       subtitle = [
         batch.unreadCount > 0 ? `${batch.unreadCount} unread` : null,
         // Named, because a partly answered batch otherwise hides what is left.
-        batch.group === "files" && pending.length !== batch.items.length ? `${pending.length} still to answer` : null,
+        batch.group === "files" && pending.length !== batch.items.length
+          ? `${pending.length} still to answer`
+          : null,
         formatTime(batch.representative.createdAt),
       ]
         .filter(Boolean)
@@ -596,7 +719,13 @@ function NotificationsPanel({
     } else {
       const label = notificationLabel(row);
       title = label.text;
-      subtitle = [label.warning, notificationActions(row)?.pill, formatTime(row.createdAt)].filter(Boolean).join(" · ");
+      subtitle = [
+        label.warning,
+        notificationActions(row)?.pill,
+        formatTime(row.createdAt),
+      ]
+        .filter(Boolean)
+        .join(" · ");
     }
 
     return (
@@ -634,7 +763,13 @@ function NotificationsPanel({
               title={title}
               placement="right-start"
               entries={rowEntries(row)}
-              trigger={(props) => <IconButton {...props} icon={EllipsisVertical} label={`Actions for ${title}`} />}
+              trigger={(props) => (
+                <IconButton
+                  {...props}
+                  icon={EllipsisVertical}
+                  label={`Actions for ${title}`}
+                />
+              )}
             />
           )
         }
@@ -651,7 +786,13 @@ function NotificationsPanel({
   const hero = (
     <Hero
       title={
-        !notificationsLoaded ? "Inbox" : tally.unread > 0 ? `${tally.unread} unread` : tally.total > 0 ? "All caught up" : "Nothing yet"
+        !notificationsLoaded
+          ? "Inbox"
+          : tally.unread > 0
+            ? `${tally.unread} unread`
+            : tally.total > 0
+              ? "All caught up"
+              : "Nothing yet"
       }
       actions={
         searchOpen ? (
@@ -685,7 +826,13 @@ function NotificationsPanel({
                   onSelect: confirmClearRead,
                 },
               ]}
-              trigger={(props) => <IconButton {...props} icon={EllipsisVertical} label="Inbox actions" />}
+              trigger={(props) => (
+                <IconButton
+                  {...props}
+                  icon={EllipsisVertical}
+                  label="Inbox actions"
+                />
+              )}
             />
           </>
         )
@@ -708,7 +855,9 @@ function NotificationsPanel({
     </Hero>
   );
 
-  const emptyArea = (children: ReactNode) => <div className={classes.emptyArea}>{children}</div>;
+  const emptyArea = (children: ReactNode) => (
+    <div className={classes.emptyArea}>{children}</div>
+  );
   const showEverything = (
     <Button compact variant="outline" onClick={() => changeBucket("all")}>
       Show everything
@@ -733,7 +882,13 @@ function NotificationsPanel({
       />,
     )
   ) : live.length === 0 ? (
-    emptyArea(<EmptyState icon={Bell} title="Nothing yet" body="Shares, friend requests and finished maps appear here." />)
+    emptyArea(
+      <EmptyState
+        icon={Bell}
+        title="Nothing yet"
+        body="Shares, friend requests and finished maps appear here."
+      />,
+    )
   ) : rows.length === 0 ? (
     emptyArea(
       needle ? (
@@ -748,9 +903,17 @@ function NotificationsPanel({
           }
         />
       ) : bucket === "unread" ? (
-        <EmptyState icon={CheckCheck} title="Nothing unread" actions={showEverything} />
+        <EmptyState
+          icon={CheckCheck}
+          title="Nothing unread"
+          actions={showEverything}
+        />
       ) : (
-        <EmptyState icon={Bell} title="Nothing read yet" actions={showEverything} />
+        <EmptyState
+          icon={Bell}
+          title="Nothing read yet"
+          actions={showEverything}
+        />
       ),
     )
   ) : (
@@ -758,7 +921,11 @@ function NotificationsPanel({
       {sections.map((section) => {
         const headingId = `${dayIdPrefix}-${section.key}`;
         return (
-          <section key={section.key} className={classes.day} aria-labelledby={headingId}>
+          <section
+            key={section.key}
+            className={classes.day}
+            aria-labelledby={headingId}
+          >
             {/* A batch counts as the one thing that happened, so opening a
                 group does not make the day's count jump. */}
             <SectionHeader
@@ -783,7 +950,10 @@ function NotificationsPanel({
               the list does not move when a selection starts (DESIGN.md §7). */}
           <div className={classes.rails}>
             {selecting ? (
-              <SelectionBar countLabel={selectionCountLabel(selected)} onClear={clearSelection}>
+              <SelectionBar
+                countLabel={selectionCountLabel(selected)}
+                onClear={clearSelection}
+              >
                 {/* ONE read/unread button: which way it goes follows the
                     selection, and the count line says the unread tally that
                     decides it. */}
@@ -807,8 +977,18 @@ function NotificationsPanel({
                 options={[
                   { value: "all", label: "All", count: bucketCounts.all },
                   // A bucket the search has emptied stays in place, disabled.
-                  { value: "unread", label: "Unread", count: bucketCounts.unread, disabled: bucketCounts.unread === 0 && bucket !== "unread" },
-                  { value: "read", label: "Read", count: bucketCounts.read, disabled: bucketCounts.read === 0 && bucket !== "read" },
+                  {
+                    value: "unread",
+                    label: "Unread",
+                    count: bucketCounts.unread,
+                    disabled: bucketCounts.unread === 0 && bucket !== "unread",
+                  },
+                  {
+                    value: "read",
+                    label: "Read",
+                    count: bucketCounts.read,
+                    disabled: bucketCounts.read === 0 && bucket !== "read",
+                  },
                 ]}
                 value={bucket}
                 onChange={changeBucket}
@@ -821,7 +1001,8 @@ function NotificationsPanel({
           without a word (UX-002). */}
       {notificationsTruncated(notificationsTotal) && (
         <p className={classes.note}>
-          Showing the {notifications.length} most recent of {notificationsTotal}. Older ones aren&rsquo;t listed.
+          Showing the {notifications.length} most recent of {notificationsTotal}
+          . Older ones aren&rsquo;t listed.
         </p>
       )}
       {list}

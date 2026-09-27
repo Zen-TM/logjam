@@ -34,7 +34,10 @@
 // Regions and topo overlays are NOT here: they are registry artifacts with no
 // per-item row in the layer sheet, and their verbs stay inline in SavedScreen.
 import { deleteGeoPdfImport } from "../geopdf/importPipeline";
-import { updateGeoPdfImport, type GeoPdfImport } from "../geopdf/geoPdfImportsDb";
+import {
+  updateGeoPdfImport,
+  type GeoPdfImport,
+} from "../geopdf/geoPdfImportsDb";
 import { type VectorImport } from "../imports/importsDb";
 import { deleteVectorImport } from "../imports/vectorImports";
 import {
@@ -47,7 +50,12 @@ import {
   type MirrorMedia,
   type MirrorRoute,
 } from "../sync/mirrorStore";
-import { deleteTrack, listTrackPoints, updateTrack, type Track } from "../tracks/tracksDb";
+import {
+  deleteTrack,
+  listTrackPoints,
+  updateTrack,
+  type Track,
+} from "../tracks/tracksDb";
 import {
   createRouteLocal,
   deleteRouteLocal,
@@ -162,7 +170,11 @@ export type AssetActions = {
    * what stops a surface offering the verb — one of the three sheets that
    * offered it used to be the only one that remembered the guard.
    */
-  delete?: { confirmTitle: string; confirmBody: string; run: () => Promise<unknown> };
+  delete?: {
+    confirmTitle: string;
+    confirmBody: string;
+    run: () => Promise<unknown>;
+  };
   /**
    * Set on an editable route: the id the map's draw tool reopens. The action
    * itself is navigation, which lives with the screen, not here.
@@ -180,7 +192,9 @@ export type AssetActions = {
    * Creating and then updating would leave a window where the route exists
    * unlinked, and a failed second write would strand it there.
    */
-  createRouteFrom?: (placeId?: string) => Promise<{ name: string; pointCount: number }>;
+  createRouteFrom?: (
+    placeId?: string,
+  ) => Promise<{ name: string; pointCount: number }>;
   /**
    * Fill a place's route slot with a COPY of this asset's stored original.
    *
@@ -267,14 +281,17 @@ export function geoPdfActions(geoPdf: GeoPdfImport): AssetActions {
       : {}),
     delete: {
       confirmTitle: "Delete this GeoPDF?",
-      confirmBody: "The imported map and its tiles are removed from the device.",
+      confirmBody:
+        "The imported map and its tiles are removed from the device.",
       run: () => deleteGeoPdfImport(geoPdf.id),
     },
   };
 }
 
 /** Extension of the file the user picked, or null on a row with no original. */
-function sourceFormatOf(imported: VectorImport): "gpx" | "kml" | "geojson" | null {
+function sourceFormatOf(
+  imported: VectorImport,
+): "gpx" | "kml" | "geojson" | null {
   const lower = imported.sourcePath?.toLowerCase();
   if (!lower) return null;
   if (lower.endsWith(".gpx")) return "gpx";
@@ -287,7 +304,8 @@ function geoJsonSource(
   imported: VectorImport,
   sourceFormat: "gpx" | "kml" | "geojson" | null,
 ): string | null {
-  if (sourceFormat === "geojson" && imported.sourcePath) return imported.sourcePath;
+  if (sourceFormat === "geojson" && imported.sourcePath)
+    return imported.sourcePath;
   return imported.path;
 }
 
@@ -323,7 +341,7 @@ export function vectorImportActions(imported: VectorImport): AssetActions {
       // NEITHER is on this phone — a file that synced as a row but has not been
       // downloaded here has nothing to export, and the row that can only fail
       // is absent rather than offered (DESIGN.md §7).
-      ...geoJsonSource(imported, sourceFormat)
+      ...(geoJsonSource(imported, sourceFormat)
         ? [
             {
               title: "Export as GeoJSON",
@@ -334,7 +352,7 @@ export function vectorImportActions(imported: VectorImport): AssetActions {
                 ),
             },
           ]
-        : [],
+        : []),
     ],
     // The ORIGINAL bytes, never the derived GeoJSON — the derivation is lossy
     // (shared/src/vectorImport.ts keeps only `name` and `coordTimes`), which is
@@ -426,7 +444,9 @@ export function routeActions(
         });
   return {
     ...(readOnly ? { sharedWithYou: true as const } : {}),
-    ...(shareVisibility === "via-place" ? { sharedViaPlaceIds: viaPlaceIds } : {}),
+    ...(shareVisibility === "via-place"
+      ? { sharedViaPlaceIds: viaPlaceIds }
+      : {}),
     ...(shareVisibility === "direct"
       ? {
           removeShare: {
@@ -476,7 +496,10 @@ export function trackActions(track: Track): AssetActions {
             const { points } = simplifyToFit(
               fixes.map(({ lon, lat }): RoutePoint => [lon, lat]),
             );
-            const name = `${track.name} (route)`.slice(0, ROUTE_NAME_MAX_LENGTH);
+            const name = `${track.name} (route)`.slice(
+              0,
+              ROUTE_NAME_MAX_LENGTH,
+            );
             // No anchors: every vertex came from RDP, not from a finger, so
             // there is no "the user placed these" subset to record.
             await createRouteLocal({
@@ -519,7 +542,10 @@ export function trackActions(track: Track): AssetActions {
               // SCRATCH_DIR, so the file joins the wipe: a serialised
               // recording is precise location history (offline/localStores.ts).
               const uri = await scratchFileUri(`send-${track.id}.gpx`);
-              await writeAsStringAsync(uri, trackPointsToGpx(track.name, points));
+              await writeAsStringAsync(
+                uri,
+                trackPointsToGpx(track.name, points),
+              );
               return {
                 uri,
                 cleanup: () => deleteAsync(uri, { idempotent: true }),

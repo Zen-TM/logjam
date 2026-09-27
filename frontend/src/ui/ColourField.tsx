@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+  type PointerEvent,
+} from "react";
 import { Popover } from "./Menu";
 import { hexToHsva, hsvaToHex, isHexRgba, type Hsva } from "./colour";
 import choice from "./Choice.module.css";
@@ -92,7 +99,15 @@ export function ColourField({
       >
         <div
           className={classes.picker}
-          style={{ "--hue": hsva.h, "--s": `${hsva.s}%`, "--v": `${100 - hsva.v}%`, "--a": `${hsva.a * 100}%`, "--opaque": opaque } as CSSProperties}
+          style={
+            {
+              "--hue": hsva.h,
+              "--s": `${hsva.s}%`,
+              "--v": `${100 - hsva.v}%`,
+              "--a": `${hsva.a * 100}%`,
+              "--opaque": opaque,
+            } as CSSProperties
+          }
         >
           <Plane hsva={hsva} onChange={(s, v) => change({ ...hsva, s, v })} />
           <Strip
@@ -159,7 +174,13 @@ function usePointerTrack(onMove: (x: number, y: number) => void) {
   };
 }
 
-function Plane({ hsva, onChange }: { hsva: Hsva; onChange: (s: number, v: number) => void }) {
+function Plane({
+  hsva,
+  onChange,
+}: {
+  hsva: Hsva;
+  onChange: (s: number, v: number) => void;
+}) {
   const track = usePointerTrack((x, y) => onChange(x * 100, (1 - y) * 100));
   const onKeyDown = (event: KeyboardEvent) => {
     const step = event.shiftKey ? 10 : 1;
@@ -213,8 +234,10 @@ function Strip({
   const onKeyDown = (event: KeyboardEvent) => {
     const delta = step(event.shiftKey);
     let next = ratio;
-    if (event.key === "ArrowLeft" || event.key === "ArrowDown") next = Math.max(0, ratio - delta);
-    else if (event.key === "ArrowRight" || event.key === "ArrowUp") next = Math.min(1, ratio + delta);
+    if (event.key === "ArrowLeft" || event.key === "ArrowDown")
+      next = Math.max(0, ratio - delta);
+    else if (event.key === "ArrowRight" || event.key === "ArrowUp")
+      next = Math.min(1, ratio + delta);
     else if (event.key === "Home") next = 0;
     else if (event.key === "End") next = 1;
     else return;

@@ -121,12 +121,20 @@ function requireBbox(source: Record<string, unknown>): MediaBbox {
   }
   const [west, south, east, north] = value;
   for (const coord of [west, east]) {
-    if (typeof coord !== "number" || !Number.isFinite(coord) || Math.abs(coord) > 180) {
+    if (
+      typeof coord !== "number" ||
+      !Number.isFinite(coord) ||
+      Math.abs(coord) > 180
+    ) {
       throw new MediaMetadataError("metadata.bbox longitudes are out of range");
     }
   }
   for (const coord of [south, north]) {
-    if (typeof coord !== "number" || !Number.isFinite(coord) || Math.abs(coord) > 90) {
+    if (
+      typeof coord !== "number" ||
+      !Number.isFinite(coord) ||
+      Math.abs(coord) > 90
+    ) {
       throw new MediaMetadataError("metadata.bbox latitudes are out of range");
     }
   }

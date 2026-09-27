@@ -31,7 +31,11 @@ export type CompletedOverlaysResponse = {
      * with its reason instead, and the verb needs the network anyway.
      */
     syncRole?: "owner" | "shared";
-    layers: { name: TopoLayerName; format: TopoLayerFormat; pmtilesUrl: string }[];
+    layers: {
+      name: TopoLayerName;
+      format: TopoLayerFormat;
+      pmtilesUrl: string;
+    }[];
   }[];
   expiresAt: string;
 };

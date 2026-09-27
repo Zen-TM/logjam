@@ -10,15 +10,15 @@ describe("fixQuality", () => {
   });
 
   it("goes stale when nothing has arrived for the window", () => {
-    expect(fixQuality({ atMs: NOW - FIX_STALE_MS - 1, accuracyM: 8 }, NOW)).toBe(
-      "stale",
-    );
+    expect(
+      fixQuality({ atMs: NOW - FIX_STALE_MS - 1, accuracyM: 8 }, NOW),
+    ).toBe("stale");
   });
 
   it("does not go stale over an ordinary skipped fix", () => {
-    expect(fixQuality({ atMs: NOW - FIX_STALE_MS + 1, accuracyM: 8 }, NOW)).toBe(
-      "live",
-    );
+    expect(
+      fixQuality({ atMs: NOW - FIX_STALE_MS + 1, accuracyM: 8 }, NOW),
+    ).toBe("live");
   });
 
   it("calls a tower-sized accuracy coarse", () => {
@@ -46,7 +46,9 @@ describe("fixQuality", () => {
   // The cached fix the watcher applies on startup is a real position from a
   // real time, and that time can be yesterday's drive.
   it("treats a stale cached fix as stale, not as a first fix", () => {
-    expect(fixQuality({ atMs: NOW - 3_600_000, accuracyM: 5 }, NOW)).toBe("stale");
+    expect(fixQuality({ atMs: NOW - 3_600_000, accuracyM: 5 }, NOW)).toBe(
+      "stale",
+    );
   });
 
   it("has nothing to trust before the first fix", () => {

@@ -4,7 +4,10 @@ import {
   railStops,
   systemFieldDef,
 } from "@logjam/shared";
-import { numericFieldError, type NumericFieldConstraints } from "../../numberInput";
+import {
+  numericFieldError,
+  type NumericFieldConstraints,
+} from "../../numberInput";
 import { ChipRail, NumberField, TextField } from "../../ui";
 import classes from "./CustomFieldInput.module.css";
 
@@ -90,7 +93,10 @@ function CustomFieldInput({
           label={def.label}
           options={[
             { value: UNSET, label: "—" },
-            ...stops.map((stop) => ({ value: String(stop), label: String(stop) })),
+            ...stops.map((stop) => ({
+              value: String(stop),
+              label: String(stop),
+            })),
           ]}
           value={value}
           onChange={onChange}
@@ -104,7 +110,12 @@ function CustomFieldInput({
     return (
       <div className={classes.rail}>
         <span className={classes.railLabel}>{label}</span>
-        <ChipRail label={label} options={BOOLEAN_OPTIONS} value={value} onChange={onChange} />
+        <ChipRail
+          label={label}
+          options={BOOLEAN_OPTIONS}
+          value={value}
+          onChange={onChange}
+        />
       </div>
     );
   }

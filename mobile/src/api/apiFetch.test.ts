@@ -62,10 +62,14 @@ describe("the /users/me cache", () => {
   });
 
   it("takes a PATCH's own response as the new record", async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({ id: "alice", username: "a" }));
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ id: "alice", username: "a" }),
+    );
     await apiFetch("/users/me");
 
-    fetchMock.mockResolvedValueOnce(jsonResponse({ id: "alice", username: "b" }));
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ id: "alice", username: "b" }),
+    );
     await apiFetch("/users/me", { method: "PATCH", body: { username: "b" } });
 
     // No third request, and the answer is the PATCHed record — not the stale one.

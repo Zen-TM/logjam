@@ -88,7 +88,10 @@ function rowToImport(row: GeoPdfRow): GeoPdfImport {
     state: row.state as GeoPdfImportState,
     errorCode: row.errorCode,
     bbox:
-      row.west != null && row.south != null && row.east != null && row.north != null
+      row.west != null &&
+      row.south != null &&
+      row.east != null &&
+      row.north != null
         ? [row.west, row.south, row.east, row.north]
         : null,
     minzoom: row.minzoom,
@@ -192,7 +195,8 @@ export async function updateGeoPdfImport(
   }
   if (patch.bbox !== undefined) {
     sets.push("west = ?, south = ?, east = ?, north = ?");
-    if (patch.bbox) args.push(patch.bbox[0], patch.bbox[1], patch.bbox[2], patch.bbox[3]);
+    if (patch.bbox)
+      args.push(patch.bbox[0], patch.bbox[1], patch.bbox[2], patch.bbox[3]);
     else args.push(null, null, null, null);
   }
   if (patch.minzoom !== undefined) {

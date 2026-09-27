@@ -40,14 +40,19 @@ describe("geo-pdf-templates route (fake auth)", () => {
     const badLayer = await request(API_URL)
       .post("/geo-pdf-templates")
       .set(AUTH)
-      .send({ name: "bad layer", config: { ...VALID_CONFIG, baseLayer: "evil-tiles" } });
+      .send({
+        name: "bad layer",
+        config: { ...VALID_CONFIG, baseLayer: "evil-tiles" },
+      });
     expect(badLayer.status).toBe(400);
   });
 
   it("404s an unknown template id", async () => {
     const missing = randomUUID();
     for (const m of ["get", "patch", "delete"] as const) {
-      const res = await request(API_URL)[m](`/geo-pdf-templates/${missing}`).set(AUTH);
+      const res = await request(API_URL)
+        [m](`/geo-pdf-templates/${missing}`)
+        .set(AUTH);
       expect(res.status).toBe(404);
     }
   });
@@ -61,24 +66,34 @@ describe("geo-pdf-templates route (fake auth)", () => {
     const id: string = createRes.body.id;
 
     try {
-      const ownRes = await request(API_URL).get(`/geo-pdf-templates/${id}`).set(AUTH);
+      const ownRes = await request(API_URL)
+        .get(`/geo-pdf-templates/${id}`)
+        .set(AUTH);
       expect(ownRes.status).toBe(200);
 
-      const bobGet = await request(API_URL).get(`/geo-pdf-templates/${id}`).set(as(BOB_SUB));
+      const bobGet = await request(API_URL)
+        .get(`/geo-pdf-templates/${id}`)
+        .set(as(BOB_SUB));
       expect(bobGet.status).toBe(404);
       const bobPatch = await request(API_URL)
         .patch(`/geo-pdf-templates/${id}`)
         .set(as(BOB_SUB))
         .send({ name: "stolen" });
       expect(bobPatch.status).toBe(404);
-      const bobDel = await request(API_URL).delete(`/geo-pdf-templates/${id}`).set(as(BOB_SUB));
+      const bobDel = await request(API_URL)
+        .delete(`/geo-pdf-templates/${id}`)
+        .set(as(BOB_SUB));
       expect(bobDel.status).toBe(404);
     } finally {
-      const delRes = await request(API_URL).delete(`/geo-pdf-templates/${id}`).set(AUTH);
+      const delRes = await request(API_URL)
+        .delete(`/geo-pdf-templates/${id}`)
+        .set(AUTH);
       expect(delRes.status).toBe(204);
     }
 
-    const goneRes = await request(API_URL).get(`/geo-pdf-templates/${id}`).set(AUTH);
+    const goneRes = await request(API_URL)
+      .get(`/geo-pdf-templates/${id}`)
+      .set(AUTH);
     expect(goneRes.status).toBe(404);
   });
 });

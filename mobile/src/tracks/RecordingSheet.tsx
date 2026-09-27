@@ -110,9 +110,12 @@ export function RecordingSheet({
   // same terms as a drawn route: saved tiles first, then our API, then the
   // public ones. The line is republished on a throttle (useTrackDetail), so a
   // running recording does not re-sample the DEM on every written batch.
-  const { profile: demProfile, loading: demLoading } = useElevationProfile(line, {
-    allowNetwork,
-  });
+  const { profile: demProfile, loading: demLoading } = useElevationProfile(
+    line,
+    {
+      allowNetwork,
+    },
+  );
 
   const handlePauseResume = useCallback(() => {
     if (!activeTrack) return;
@@ -133,7 +136,9 @@ export function RecordingSheet({
       console.error(err);
       Alert.alert(
         "Recording error",
-        recording ? "Couldn't pause the recording." : "Couldn't resume the recording.",
+        recording
+          ? "Couldn't pause the recording."
+          : "Couldn't resume the recording.",
       );
     });
   }, [activeTrack, recording]);
@@ -163,7 +168,10 @@ export function RecordingSheet({
               () => onClose(),
               (err: unknown) => {
                 console.error(err);
-                Alert.alert("Recording error", "Couldn't delete the recording.");
+                Alert.alert(
+                  "Recording error",
+                  "Couldn't delete the recording.",
+                );
               },
             );
           },

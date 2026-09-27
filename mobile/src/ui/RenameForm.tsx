@@ -81,7 +81,12 @@ export function RenameForm({
         error={showEmptyError ? "Enter a name." : undefined}
       />
       {showNotes ? (
-        <TextField label="Notes" value={notes} onChangeText={setNotes} multiline />
+        <TextField
+          label="Notes"
+          value={notes}
+          onChangeText={setNotes}
+          multiline
+        />
       ) : null}
       <Button label="Save" icon="check" onPress={commit} />
     </>

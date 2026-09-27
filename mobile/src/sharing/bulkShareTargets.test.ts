@@ -37,20 +37,27 @@ const theirs: BulkShareCandidate = {
 
 describe("planBulkShareSelection", () => {
   it("sorts a mixed selection into the two verbs and the leftovers", () => {
-    const plan = planBulkShareSelection([route, track, region, place], ALL_SYNCED);
+    const plan = planBulkShareSelection(
+      [route, track, region, place],
+      ALL_SYNCED,
+    );
     expect(plan.shares).toEqual([
       { entityType: "route", entityId: "w1" },
       { entityType: "place", entityId: "c1" },
     ]);
     expect(plan.copies).toEqual([track]);
-    expect(plan.skipped).toEqual([{ candidate: region, reason: "not-shareable" }]);
+    expect(plan.skipped).toEqual([
+      { candidate: region, reason: "not-shareable" },
+    ]);
     expect(plan.actionableCount).toBe(3);
   });
 
   it("never re-shares something shared WITH the user, even though it has a share descriptor", () => {
     const plan = planBulkShareSelection([theirs], ALL_SYNCED);
     expect(plan.shares).toEqual([]);
-    expect(plan.skipped).toEqual([{ candidate: theirs, reason: "shared-with-you" }]);
+    expect(plan.skipped).toEqual([
+      { candidate: theirs, reason: "shared-with-you" },
+    ]);
   });
 
   it("breaks a both-verbs tie towards the revocable one", () => {
@@ -67,23 +74,31 @@ describe("planBulkShareSelection", () => {
 
 describe("bulkShareTitle", () => {
   it("says Send the moment one copy is in the selection", () => {
-    expect(bulkShareTitle(planBulkShareSelection([route, track], ALL_SYNCED))).toBe("Send 2 items");
+    expect(
+      bulkShareTitle(planBulkShareSelection([route, track], ALL_SYNCED)),
+    ).toBe("Send 2 items");
   });
 
   it("says Share when nothing leaves for good", () => {
-    expect(bulkShareTitle(planBulkShareSelection([route, place], ALL_SYNCED))).toBe("Share 2 items");
+    expect(
+      bulkShareTitle(planBulkShareSelection([route, place], ALL_SYNCED)),
+    ).toBe("Share 2 items");
   });
 
   it("counts what can be acted on, not what was picked", () => {
-    expect(bulkShareTitle(planBulkShareSelection([route, region, region], ALL_SYNCED))).toBe(
-      "Share 1 item",
-    );
+    expect(
+      bulkShareTitle(
+        planBulkShareSelection([route, region, region], ALL_SYNCED),
+      ),
+    ).toBe("Share 1 item");
   });
 });
 
 describe("bulkShareTriageLine", () => {
   it("says nothing when everything can be shared", () => {
-    expect(bulkShareTriageLine(planBulkShareSelection([route, track], ALL_SYNCED))).toBeNull();
+    expect(
+      bulkShareTriageLine(planBulkShareSelection([route, track], ALL_SYNCED)),
+    ).toBeNull();
   });
 
   // The bug this axis exists for, in bulk: a route drawn in the field has no
@@ -93,7 +108,9 @@ describe("bulkShareTriageLine", () => {
     const plan = planBulkShareSelection([route, track], new Set(["w1"]));
     expect(plan.shares).toEqual([]);
     expect(plan.copies).toEqual([track]);
-    expect(plan.skipped).toEqual([{ candidate: route, reason: "not-uploaded" }]);
+    expect(plan.skipped).toEqual([
+      { candidate: route, reason: "not-uploaded" },
+    ]);
     expect(plan.actionableCount).toBe(1);
   });
 
@@ -109,7 +126,9 @@ describe("bulkShareTriageLine", () => {
     const line = bulkShareTriageLine(
       planBulkShareSelection([route, region, theirs], ALL_SYNCED),
     );
-    expect(line).toBe("1 of 3 can be shared — skipping 1 shared with you and 1 can't be shared.");
+    expect(line).toBe(
+      "1 of 3 can be shared — skipping 1 shared with you and 1 can't be shared.",
+    );
   });
 
   it("names all three reasons, and the unsynced one as temporary", () => {
@@ -122,7 +141,9 @@ describe("bulkShareTriageLine", () => {
   });
 
   it("has its own sentence when nothing at all can go", () => {
-    const line = bulkShareTriageLine(planBulkShareSelection([region, region], ALL_SYNCED));
+    const line = bulkShareTriageLine(
+      planBulkShareSelection([region, region], ALL_SYNCED),
+    );
     // Two identical candidates are two rows here — the screen deduped by key
     // long before this, and the plan counts what it is given.
     expect(line).toBe("None of these 2 can be shared — 2 can't be shared.");
@@ -147,21 +168,35 @@ describe("bulkShareConfirm", () => {
   });
 
   it("never says Share on a run that hands anything over for keeps", () => {
-    expect(bulkShareConfirm(planBulkShareSelection([track], ALL_SYNCED), 1)?.confirmLabel).toBe("Send");
-    expect(bulkShareConfirm(planBulkShareSelection([route], ALL_SYNCED), 1)?.confirmLabel).toBe(
-      "Share",
-    );
+    expect(
+      bulkShareConfirm(planBulkShareSelection([track], ALL_SYNCED), 1)
+        ?.confirmLabel,
+    ).toBe("Send");
+    expect(
+      bulkShareConfirm(planBulkShareSelection([route], ALL_SYNCED), 1)
+        ?.confirmLabel,
+    ).toBe("Share");
   });
 
   it("makes no promise about a verb the run does not use", () => {
-    const shareOnly = bulkShareConfirm(planBulkShareSelection([route], ALL_SYNCED), 1);
+    const shareOnly = bulkShareConfirm(
+      planBulkShareSelection([route], ALL_SYNCED),
+      1,
+    );
     expect(shareOnly?.body).not.toContain("copy");
-    const copyOnly = bulkShareConfirm(planBulkShareSelection([track], ALL_SYNCED), 1);
+    const copyOnly = bulkShareConfirm(
+      planBulkShareSelection([track], ALL_SYNCED),
+      1,
+    );
     expect(copyOnly?.body).not.toContain("stop sharing");
   });
 
   it("has nothing to confirm with no recipients or nothing actionable", () => {
-    expect(bulkShareConfirm(planBulkShareSelection([route], ALL_SYNCED), 0)).toBeNull();
-    expect(bulkShareConfirm(planBulkShareSelection([region], ALL_SYNCED), 2)).toBeNull();
+    expect(
+      bulkShareConfirm(planBulkShareSelection([route], ALL_SYNCED), 0),
+    ).toBeNull();
+    expect(
+      bulkShareConfirm(planBulkShareSelection([region], ALL_SYNCED), 2),
+    ).toBeNull();
   });
 });

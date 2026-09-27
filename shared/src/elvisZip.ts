@@ -195,7 +195,14 @@ export function classifyElvisEntries(entries: ZipEntry[]): ElvisStats {
     if (lower.endsWith(".laz") || lower.endsWith(".las")) {
       lazCount++;
       const stemOrig = basenameOrig.replace(/\.[^.]+$/, "");
-      const tileId = extractMeta(stemOrig, entry.filename, surveyNamesSet, tileIds, null, null);
+      const tileId = extractMeta(
+        stemOrig,
+        entry.filename,
+        surveyNamesSet,
+        tileIds,
+        null,
+        null,
+      );
       if (tileId) {
         lazTileFileCounts.set(tileId, (lazTileFileCounts.get(tileId) ?? 0) + 1);
       }
@@ -208,7 +215,14 @@ export function classifyElvisEntries(entries: ZipEntry[]): ElvisStats {
       } else {
         demCount++;
         const stemOrig = basenameOrig.replace(/\.[^.]+$/, "");
-        extractMeta(stemOrig, entry.filename, surveyNamesSet, tileIds, demResolutions, stemOrig);
+        extractMeta(
+          stemOrig,
+          entry.filename,
+          surveyNamesSet,
+          tileIds,
+          demResolutions,
+          stemOrig,
+        );
       }
     }
   }
@@ -231,8 +245,7 @@ export function classifyElvisEntries(entries: ZipEntry[]): ElvisStats {
     // any bundled DEM (topo/pipeline.py extract_elvis_zip). Mirror that here so
     // the submit-time mode/label match what actually runs.
     mode = "LAZ_ONLY";
-    modeLabel =
-      demCount > 0 ? "LiDAR (bundled DEM ignored)" : "LiDAR only";
+    modeLabel = demCount > 0 ? "LiDAR (bundled DEM ignored)" : "LiDAR only";
   } else {
     // demCount > 0 — the empty-input case already threw above.
     mode = "DEM_ONLY";

@@ -26,7 +26,10 @@ import {
   requireOwnPlaceType,
   visiblePlaceTypeWhere,
 } from "../lib/placeTypes";
-import { placeTypeDeleteTombstones, writeTombstones } from "../lib/syncTombstones";
+import {
+  placeTypeDeleteTombstones,
+  writeTombstones,
+} from "../lib/syncTombstones";
 
 const router = Router();
 
@@ -147,12 +150,18 @@ router.post(
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await resolveUser(req.user!.sub);
     const from = getParam(req.params.id);
-    const to = typeof req.body?.placeTypeId === "string" ? req.body.placeTypeId : "";
-    if (!to || to === from) throw new AppError(400, "A different placeTypeId is required");
+    const to =
+      typeof req.body?.placeTypeId === "string" ? req.body.placeTypeId : "";
+    if (!to || to === from)
+      throw new AppError(400, "A different placeTypeId is required");
 
     const [source, target] = await Promise.all([
-      prisma.placeType.findFirst({ where: { id: from, ...visiblePlaceTypeWhere(user.id) } }),
-      prisma.placeType.findFirst({ where: { id: to, ...visiblePlaceTypeWhere(user.id) } }),
+      prisma.placeType.findFirst({
+        where: { id: from, ...visiblePlaceTypeWhere(user.id) },
+      }),
+      prisma.placeType.findFirst({
+        where: { id: to, ...visiblePlaceTypeWhere(user.id) },
+      }),
     ]);
     if (!source || !target) throw new AppError(404, "Place type not found");
 

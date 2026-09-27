@@ -4,7 +4,11 @@
 // integration test.
 import { describe, expect, it } from "vitest";
 
-import { MAX_BULK_SHARE_ITEMS, type BulkShareItem, type BulkShareItemType } from "@logjam/shared";
+import {
+  MAX_BULK_SHARE_ITEMS,
+  type BulkShareItem,
+  type BulkShareItemType,
+} from "@logjam/shared";
 
 import { parseBulkShareItems, planBulkShare, sharePairKey } from "./bulkShare";
 import { AppError } from "../middleware/errorHandler";
@@ -25,10 +29,13 @@ describe("parseBulkShareItems", () => {
   });
 
   it("rejects more than the cap with 413", () => {
-    const tooMany = Array.from({ length: MAX_BULK_SHARE_ITEMS + 1 }, (_, i) => ({
-      entityType: "topoJob",
-      entityId: `t${i}`,
-    }));
+    const tooMany = Array.from(
+      { length: MAX_BULK_SHARE_ITEMS + 1 },
+      (_, i) => ({
+        entityType: "topoJob",
+        entityId: `t${i}`,
+      }),
+    );
     expect(() => parseBulkShareItems(tooMany)).toThrow(
       expect.objectContaining({ statusCode: 413 }),
     );
@@ -41,13 +48,15 @@ describe("parseBulkShareItems", () => {
   });
 
   it("admits place, which /shares does not", () => {
-    expect(parseBulkShareItems([{ entityType: "place", entityId: "c1" }])).toEqual([
-      { entityType: "place", entityId: "c1" },
-    ]);
+    expect(
+      parseBulkShareItems([{ entityType: "place", entityId: "c1" }]),
+    ).toEqual([{ entityType: "place", entityId: "c1" }]);
   });
 
   it("rejects a missing entityId", () => {
-    expect(() => parseBulkShareItems([{ entityType: "route" }])).toThrow(AppError);
+    expect(() => parseBulkShareItems([{ entityType: "route" }])).toThrow(
+      AppError,
+    );
   });
 
   it("drops a repeated item rather than failing the whole action", () => {
@@ -82,7 +91,11 @@ describe("planBulkShare", () => {
       ]),
       existingPairKeys: new Set(),
     });
-    expect(plan.result).toEqual({ granted: 6, alreadyShared: 0, ineligible: 0 });
+    expect(plan.result).toEqual({
+      granted: 6,
+      alreadyShared: 0,
+      ineligible: 0,
+    });
     expect(plan.grants).toHaveLength(6);
   });
 
@@ -99,7 +112,11 @@ describe("planBulkShare", () => {
       ]),
       existingPairKeys: new Set(),
     });
-    expect(plan.result).toEqual({ granted: 6, alreadyShared: 0, ineligible: 3 });
+    expect(plan.result).toEqual({
+      granted: 6,
+      alreadyShared: 0,
+      ineligible: 3,
+    });
     const total =
       plan.result.granted + plan.result.alreadyShared + plan.result.ineligible;
     expect(total).toBe(items.length * 3);
@@ -119,7 +136,11 @@ describe("planBulkShare", () => {
         sharePairKey("place", "c1", "carol"),
       ]),
     });
-    expect(plan.result).toEqual({ granted: 4, alreadyShared: 2, ineligible: 0 });
+    expect(plan.result).toEqual({
+      granted: 4,
+      alreadyShared: 2,
+      ineligible: 0,
+    });
     expect(
       plan.grants.some((g) => g.entityId === "w1" && g.sharedWithId === "bob"),
     ).toBe(false);
@@ -153,7 +174,11 @@ describe("planBulkShare", () => {
       ownedIdsByType: new Map(),
       existingPairKeys: new Set(),
     });
-    expect(plan.result).toEqual({ granted: 0, alreadyShared: 0, ineligible: 0 });
+    expect(plan.result).toEqual({
+      granted: 0,
+      alreadyShared: 0,
+      ineligible: 0,
+    });
     expect(plan.touchedIdsByType.size).toBe(0);
   });
 });

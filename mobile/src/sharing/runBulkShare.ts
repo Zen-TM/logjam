@@ -113,5 +113,12 @@ export async function runBulkShare({
     }
   }
 
-  return { granted, alreadyShared, ineligible, copiesSent, copiesFailed, shareError };
+  return {
+    granted,
+    alreadyShared,
+    ineligible,
+    copiesSent,
+    copiesFailed,
+    shareError,
+  };
 }

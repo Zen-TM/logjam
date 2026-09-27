@@ -145,14 +145,20 @@ export function parseAltNames(raw: string): ParseResult<string[]> {
   if (trimmed.includes(";")) {
     return {
       ok: true,
-      value: trimmed.split(";").map((s) => s.trim()).filter(Boolean),
+      value: trimmed
+        .split(";")
+        .map((s) => s.trim())
+        .filter(Boolean),
     };
   }
 
   // Comma-separated (default)
   return {
     ok: true,
-    value: trimmed.split(",").map((s) => s.trim()).filter(Boolean),
+    value: trimmed
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
   };
 }
 
@@ -229,7 +235,10 @@ export function parseSources(raw: string): ParseResult<[string, string][]> {
   }
 
   const sep = trimmed.includes("\n") ? "\n" : ",";
-  const tokens = trimmed.split(sep).map((s) => s.trim()).filter(Boolean);
+  const tokens = trimmed
+    .split(sep)
+    .map((s) => s.trim())
+    .filter(Boolean);
   const result: [string, string][] = [];
   for (const token of tokens) {
     const url = tryParseUrl(token);

@@ -142,7 +142,10 @@ router.post(
       throw new AppError(400, "rows array is required");
     }
     if (body.rows.length > BULK_IMPORT_LIMIT) {
-      throw new AppError(413, `Cannot import more than ${BULK_IMPORT_LIMIT} places at once`);
+      throw new AppError(
+        413,
+        `Cannot import more than ${BULK_IMPORT_LIMIT} places at once`,
+      );
     }
 
     // Import gains a TYPE: every row of one CSV lands in one type, chosen by
@@ -171,21 +174,39 @@ router.post(
     for (let i = 0; i < body.rows.length; i++) {
       const row = body.rows[i];
       if (!row.data || !row.resolution) {
-        errors.push({ rowIndex: i, message: "data and resolution are required" });
+        errors.push({
+          rowIndex: i,
+          message: "data and resolution are required",
+        });
         continue;
       }
       if (row.resolution.kind !== "create" && row.resolution.kind !== "merge") {
-        errors.push({ rowIndex: i, message: 'resolution.kind must be "create" or "merge"' });
+        errors.push({
+          rowIndex: i,
+          message: 'resolution.kind must be "create" or "merge"',
+        });
         continue;
       }
       if (row.resolution.kind === "merge" && !row.resolution.placeId) {
-        errors.push({ rowIndex: i, message: "resolution.placeId is required for merge" });
+        errors.push({
+          rowIndex: i,
+          message: "resolution.placeId is required for merge",
+        });
         continue;
       }
       if (!validateInput(row.data, i, errors, defs)) continue;
 
-      const importKey = placeImportKey(row.data.name, row.data.latitude, row.data.longitude);
-      validRows.push({ rowIndex: i, data: row.data, importKey, resolution: row.resolution });
+      const importKey = placeImportKey(
+        row.data.name,
+        row.data.latitude,
+        row.data.longitude,
+      );
+      validRows.push({
+        rowIndex: i,
+        data: row.data,
+        importKey,
+        resolution: row.resolution,
+      });
     }
 
     // Look up merge target places, scoped to the caller's own places. A target
@@ -196,16 +217,24 @@ router.post(
       .filter((r) => r.resolution.kind === "merge")
       .map((r) => (r.resolution as { kind: "merge"; placeId: string }).placeId);
 
-    const mergeTargetLookup = mergeTargetIds.length > 0
-      ? await prisma.place.findMany({
-          where: { id: { in: mergeTargetIds }, ownerId: user.id },
-          select: {
-            id: true, ownerId: true, importKey: true, placeTypeId: true,
-            name: true, latitude: true, longitude: true, altNames: true,
-            notes: true, fieldValues: true,
-          },
-        })
-      : [];
+    const mergeTargetLookup =
+      mergeTargetIds.length > 0
+        ? await prisma.place.findMany({
+            where: { id: { in: mergeTargetIds }, ownerId: user.id },
+            select: {
+              id: true,
+              ownerId: true,
+              importKey: true,
+              placeTypeId: true,
+              name: true,
+              latitude: true,
+              longitude: true,
+              altNames: true,
+              notes: true,
+              fieldValues: true,
+            },
+          })
+        : [];
     const mergeTargetById = new Map(mergeTargetLookup.map((c) => [c.id, c]));
 
     // Validate merge targets. A target that doesn't exist OR isn't owned by the
@@ -214,10 +243,14 @@ router.post(
     const rowsAfterTargetCheck: ValidatedRow[] = [];
     for (const row of validRows) {
       if (row.resolution.kind === "merge") {
-        const targetId = (row.resolution as { kind: "merge"; placeId: string }).placeId;
+        const targetId = (row.resolution as { kind: "merge"; placeId: string })
+          .placeId;
         const target = mergeTargetById.get(targetId);
         if (!target) {
-          errors.push({ rowIndex: row.rowIndex, message: "target place not found" });
+          errors.push({
+            rowIndex: row.rowIndex,
+            message: "target place not found",
+          });
           continue;
         }
       }
@@ -226,14 +259,21 @@ router.post(
 
     // Look up existing places by importKey for idempotency.
     const allImportKeys = rowsAfterTargetCheck.map((r) => r.importKey);
-    const existingByKey = new Map<string, typeof mergeTargetLookup[number]>();
+    const existingByKey = new Map<string, (typeof mergeTargetLookup)[number]>();
     if (allImportKeys.length > 0) {
       const existing = await prisma.place.findMany({
         where: { ownerId: user.id, importKey: { in: allImportKeys } },
         select: {
-          id: true, ownerId: true, importKey: true, placeTypeId: true,
-          name: true, latitude: true, longitude: true, altNames: true,
-          notes: true, fieldValues: true,
+          id: true,
+          ownerId: true,
+          importKey: true,
+          placeTypeId: true,
+          name: true,
+          latitude: true,
+          longitude: true,
+          altNames: true,
+          notes: true,
+          fieldValues: true,
         },
       });
       for (const row of existing) {
@@ -253,7 +293,10 @@ router.post(
     // half-applied 409. IMPORT-1.
     const createClaimedImportKeys = new Set<string>();
     for (const row of rowsAfterTargetCheck) {
-      if (row.resolution.kind !== "merge" && !existingByKey.has(row.importKey)) {
+      if (
+        row.resolution.kind !== "merge" &&
+        !existingByKey.has(row.importKey)
+      ) {
         createClaimedImportKeys.add(row.importKey);
       }
     }
@@ -314,7 +357,8 @@ router.post(
 
       if (resolution.kind === "merge") {
         // Merge into a specific pre-existing place.
-        const targetId = (resolution as { kind: "merge"; placeId: string }).placeId;
+        const targetId = (resolution as { kind: "merge"; placeId: string })
+          .placeId;
         const target = mergeTargetById.get(targetId)!;
         const mergedResult = mergePlace(target, data, policy);
         // Set importKey if currently null (so future re-imports are idempotent)
@@ -364,7 +408,8 @@ router.post(
           );
           priorOp.data.altNames = folded.altNames;
           priorOp.data.notes = (folded.notes ?? null) as string | null;
-          priorOp.data.fieldValues = folded.fieldValues as Prisma.InputJsonValue;
+          priorOp.data.fieldValues =
+            folded.fieldValues as Prisma.InputJsonValue;
           continue; // duplicate folded — not a separate create
         }
 
@@ -379,7 +424,9 @@ router.post(
             latitude: data.latitude,
             longitude: data.longitude,
             notes: data.notes ?? null,
-            fieldValues: asFieldValues(data.fieldValues) as Prisma.InputJsonValue,
+            fieldValues: asFieldValues(
+              data.fieldValues,
+            ) as Prisma.InputJsonValue,
             importKey,
             importBatchId: body.importBatchId,
           },
@@ -461,7 +508,10 @@ router.post(
       throw new AppError(400, "ids array is required");
     }
     if (ids.length > BULK_DELETE_LIMIT) {
-      throw new AppError(413, `Cannot delete more than ${BULK_DELETE_LIMIT} places at once`);
+      throw new AppError(
+        413,
+        `Cannot delete more than ${BULK_DELETE_LIMIT} places at once`,
+      );
     }
 
     const deletedIds = await deletePlacesCascade(user.id, ids as string[]);

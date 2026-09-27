@@ -80,7 +80,11 @@ import type {
   TRoute,
 } from "../../placeUtils";
 import type { GeoJsonPolygonal } from "../../topoLayerTypes";
-import { passesFilters, isPlaceDoneByViewer, type TPlaceType } from "../../placeUtils";
+import {
+  passesFilters,
+  isPlaceDoneByViewer,
+  type TPlaceType,
+} from "../../placeUtils";
 import { fetchTrackGeoJSON } from "../media/trackGeo";
 import { useToast } from "../feedback/ToastProvider";
 import { messageFromError } from "../../errors/messageFromError";
@@ -134,7 +138,6 @@ function readCssVar(name: string, fallback: string): string {
   return value || fallback;
 }
 
-
 function applyPlaceThemePaint(map: maplibregl.Map) {
   const fallback = readCssVar("--owned-place-color", "#e4c5aa");
   const shared = readCssVar("--shared-place-color", "#b79ec0");
@@ -146,14 +149,22 @@ function applyPlaceThemePaint(map: maplibregl.Map) {
   // FILL is the place's type; the RING says someone shared it with you — the
   // same two axes Logjam GPS draws (mobile/src/map/PlacePinsLayer.tsx).
   if (map.getLayer("place-circles")) {
-    map.setPaintProperty("place-circles", "circle-color", ["coalesce", ["get", "color"], fallback]);
+    map.setPaintProperty("place-circles", "circle-color", [
+      "coalesce",
+      ["get", "color"],
+      fallback,
+    ]);
     map.setPaintProperty("place-circles", "circle-stroke-color", ink);
     map.setPaintProperty("place-circles", "circle-stroke-width", 1.5);
   }
   // A shared pin is the SAME pin as your own, with a thin ring set apart from
   // it — a mark on a pin rather than a louder pin — as on Logjam GPS.
   if (map.getLayer("shared-place-circles")) {
-    map.setPaintProperty("shared-place-circles", "circle-color", ["coalesce", ["get", "color"], fallback]);
+    map.setPaintProperty("shared-place-circles", "circle-color", [
+      "coalesce",
+      ["get", "color"],
+      fallback,
+    ]);
     map.setPaintProperty("shared-place-circles", "circle-stroke-color", ink);
     map.setPaintProperty("shared-place-circles", "circle-stroke-width", 1.5);
   }
@@ -202,7 +213,9 @@ const PROTOMAPS_SOURCE_ID = "protomaps";
 // The raster "osm" entry ("Default") is left out: the vector basemap draws the
 // same OpenStreetMap cartography and is the default, so offering both put two
 // renderings of one map side by side. Logjam GPS dropped it the same way.
-export const BASE_LAYERS = BASEMAP_CATALOG.filter((entry) => entry.id !== "osm").map((entry) => ({
+export const BASE_LAYERS = BASEMAP_CATALOG.filter(
+  (entry) => entry.id !== "osm",
+).map((entry) => ({
   id: entry.id,
   name: entry.name,
   kind: entry.kind,
@@ -345,22 +358,22 @@ const VECTOR_STYLE_FALLBACK: VectorStyleSettings = {
     minorWidthM: 8,
   },
   features: {
-    waterway:  { enabled: true,  colour: "#2878dcdc", widthZ18: 3 },
-    track:     { enabled: true,  colour: "#a0641edc", widthZ18: 2 },
-    road:      { enabled: true,  colour: "#505050e6", widthZ18: 4 },
-    building:  { enabled: true,  colour: "#a08c78c8", widthZ18: 2 },
-    power:     { enabled: true,  colour: "#c8a000c8", widthZ18: 1 },
-    campsite:  { enabled: true,  colour: "#00a050e6", widthZ18: 14 },
-    peak:      { enabled: true,  colour: "#503214f0", widthZ18: 12 },
-    spring:    { enabled: true,  colour: "#1e5ad2e6", widthZ18: 8 },
-    gate:      { enabled: true,  colour: "#464646dc", widthZ18: 10 },
-    cave:      { enabled: true,  colour: "#3c1e0ae6", widthZ18: 10 },
-    bridge:    { enabled: false, colour: "#403028e6", widthZ18: 3 },
-    ford:      { enabled: false, colour: "#1e90ffe6", widthZ18: 8 },
+    waterway: { enabled: true, colour: "#2878dcdc", widthZ18: 3 },
+    track: { enabled: true, colour: "#a0641edc", widthZ18: 2 },
+    road: { enabled: true, colour: "#505050e6", widthZ18: 4 },
+    building: { enabled: true, colour: "#a08c78c8", widthZ18: 2 },
+    power: { enabled: true, colour: "#c8a000c8", widthZ18: 1 },
+    campsite: { enabled: true, colour: "#00a050e6", widthZ18: 14 },
+    peak: { enabled: true, colour: "#503214f0", widthZ18: 12 },
+    spring: { enabled: true, colour: "#1e5ad2e6", widthZ18: 8 },
+    gate: { enabled: true, colour: "#464646dc", widthZ18: 10 },
+    cave: { enabled: true, colour: "#3c1e0ae6", widthZ18: 10 },
+    bridge: { enabled: false, colour: "#403028e6", widthZ18: 3 },
+    ford: { enabled: false, colour: "#1e90ffe6", widthZ18: 8 },
     waterfall: { enabled: false, colour: "#1e6ad2f0", widthZ18: 10 },
     trailhead: { enabled: false, colour: "#a04020e6", widthZ18: 12 },
     viewpoint: { enabled: false, colour: "#806020e6", widthZ18: 12 },
-    hut:       { enabled: false, colour: "#503820e6", widthZ18: 12 },
+    hut: { enabled: false, colour: "#503820e6", widthZ18: 12 },
   },
   labelScale: 1,
 };
@@ -413,11 +426,31 @@ function applyVectorPaint(
   };
 
   if (isContours) {
-    setPaint(`topo-${entryId}-minor`, "line-color", rgbaCss(vs.contours.minorColour));
-    setPaint(`topo-${entryId}-minor`, "line-width", contourPixelWidth(vs.contours.minorWidthM));
-    setPaint(`topo-${entryId}-major`, "line-color", rgbaCss(vs.contours.majorColour));
-    setPaint(`topo-${entryId}-major`, "line-width", contourPixelWidth(vs.contours.majorWidthM));
-    setPaint(`topo-${entryId}-labels`, "text-color", rgbaCss(vs.contours.majorColour));
+    setPaint(
+      `topo-${entryId}-minor`,
+      "line-color",
+      rgbaCss(vs.contours.minorColour),
+    );
+    setPaint(
+      `topo-${entryId}-minor`,
+      "line-width",
+      contourPixelWidth(vs.contours.minorWidthM),
+    );
+    setPaint(
+      `topo-${entryId}-major`,
+      "line-color",
+      rgbaCss(vs.contours.majorColour),
+    );
+    setPaint(
+      `topo-${entryId}-major`,
+      "line-width",
+      contourPixelWidth(vs.contours.majorWidthM),
+    );
+    setPaint(
+      `topo-${entryId}-labels`,
+      "text-color",
+      rgbaCss(vs.contours.majorColour),
+    );
     setLabelSize(`topo-${entryId}-labels`);
     return;
   }
@@ -426,13 +459,21 @@ function applyVectorPaint(
   for (const key of ["waterway", "track", "road"] as const) {
     const colour = rgbaCss(feat(vs, key).colour);
     setPaint(`topo-${entryId}-${key}`, "line-color", colour);
-    setPaint(`topo-${entryId}-${key}`, "line-width", lineWidthInterp(feat(vs, key).widthZ18));
+    setPaint(
+      `topo-${entryId}-${key}`,
+      "line-width",
+      lineWidthInterp(feat(vs, key).widthZ18),
+    );
     setPaint(`topo-${entryId}-${key}-label`, "text-color", colour);
     setLabelSize(`topo-${entryId}-${key}-label`);
   }
 
   // Power lines: raw pixel width (no zoom interpolation), no labels.
-  setPaint(`topo-${entryId}-power`, "line-color", rgbaCss(feat(vs, "power").colour));
+  setPaint(
+    `topo-${entryId}-power`,
+    "line-color",
+    rgbaCss(feat(vs, "power").colour),
+  );
   setPaint(`topo-${entryId}-power`, "line-width", feat(vs, "power").widthZ18);
 
   // Buildings: translucent fill + matching outline, no width control.
@@ -442,7 +483,11 @@ function applyVectorPaint(
 
   // Point feature name labels follow the category colour (icons are fixed PNGs).
   for (const key of OSM_POINT_FEATURE_KEYS) {
-    setPaint(`topo-${entryId}-${key}-label`, "text-color", rgbaCss(feat(vs, key).colour));
+    setPaint(
+      `topo-${entryId}-${key}-label`,
+      "text-color",
+      rgbaCss(feat(vs, key).colour),
+    );
     setLabelSize(`topo-${entryId}-${key}-label`);
   }
 }
@@ -718,7 +763,9 @@ function Map({
   // those). The structural effect re-runs only when `enabledKey` flips.
   const vectorStyleRef = useRef(vectorStyle);
   const enabledKey = vectorStyle
-    ? Object.values(vectorStyle.features).map((f) => (f.enabled ? "1" : "0")).join("")
+    ? Object.values(vectorStyle.features)
+        .map((f) => (f.enabled ? "1" : "0"))
+        .join("")
     : "";
 
   // Keep refs up to date for use inside event handlers
@@ -912,7 +959,10 @@ function Map({
     geolocateRef.current = geolocate;
     // Compact: it collapses to an (i) once the map is moved, which OSMF's
     // attribution guideline allows while the credit stays one press away.
-    map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-right");
+    map.addControl(
+      new maplibregl.AttributionControl({ compact: true }),
+      "bottom-right",
+    );
     map.addControl(
       new maplibregl.ScaleControl({
         unit: "metric",
@@ -1242,7 +1292,15 @@ function Map({
           source,
           filter: ["==", ["get", "id"], ""],
           paint: {
-            "circle-radius": ["interpolate", ["linear"], ["zoom"], 7, 12, 14, 18],
+            "circle-radius": [
+              "interpolate",
+              ["linear"],
+              ["zoom"],
+              7,
+              12,
+              14,
+              18,
+            ],
             "circle-color": readCssVar("--theme-accent", "#deb188"),
             "circle-opacity": 0.35,
             "circle-stroke-color": readCssVar("--theme-accent", "#deb188"),
@@ -1273,7 +1331,15 @@ function Map({
         type: "circle",
         source: "shared-places",
         paint: {
-          "circle-radius": ["interpolate", ["linear"], ["zoom"], 7, 7.5, 14, 13.5],
+          "circle-radius": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            7,
+            7.5,
+            14,
+            13.5,
+          ],
           "circle-opacity": 0,
           "circle-stroke-color": readCssVar("--shared-place-color", "#b79ec0"),
           "circle-stroke-width": 1.5,
@@ -1378,13 +1444,21 @@ function Map({
       map.on("mouseleave", "place-circles", () => {
         map.getCanvas().style.cursor = "";
       });
-      map.on("mouseenter", ["shared-place-halos", "shared-place-circles"], () => {
-        if (pickModeRef.current) return;
-        map.getCanvas().style.cursor = "pointer";
-      });
-      map.on("mouseleave", ["shared-place-halos", "shared-place-circles"], () => {
-        map.getCanvas().style.cursor = "";
-      });
+      map.on(
+        "mouseenter",
+        ["shared-place-halos", "shared-place-circles"],
+        () => {
+          if (pickModeRef.current) return;
+          map.getCanvas().style.cursor = "pointer";
+        },
+      );
+      map.on(
+        "mouseleave",
+        ["shared-place-halos", "shared-place-circles"],
+        () => {
+          map.getCanvas().style.cursor = "";
+        },
+      );
 
       setMapLoaded(true);
     });
@@ -1453,7 +1527,9 @@ function Map({
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
 
-    const typeColor = new globalThis.Map(placeTypes.map((type) => [type.id, type.color]));
+    const typeColor = new globalThis.Map(
+      placeTypes.map((type) => [type.id, type.color]),
+    );
     const toFeatureCollection = (list: TPlace[], isOwned: boolean) => ({
       type: "FeatureCollection" as const,
       features: list.map((c) => ({
@@ -1759,7 +1835,8 @@ function Map({
       // MapLibre binds its own listener on the container ahead of the marker's,
       // so the map saw the click first and appended a point on top of the one
       // the user was trying to delete.
-      if (Date.now() - handlePressedAt.current < HANDLE_CLICK_SUPPRESS_MS) return;
+      if (Date.now() - handlePressedAt.current < HANDLE_CLICK_SUPPRESS_MS)
+        return;
       const tapped: [number, number] = [e.lngLat.lng, e.lngLat.lat];
       const previous = drawPointsRef.current[drawPointsRef.current.length - 1];
       // No snap to consider: place the point now rather than waiting on an
@@ -1807,10 +1884,18 @@ function Map({
       map.setPaintProperty("route-draft-line", "line-color", effectiveColor);
     }
     if (map.getLayer("route-draft-direction")) {
-      map.setPaintProperty("route-draft-direction", "icon-color", effectiveColor);
+      map.setPaintProperty(
+        "route-draft-direction",
+        "icon-color",
+        effectiveColor,
+      );
     }
     if (map.getLayer("route-draft-vertices")) {
-      map.setPaintProperty("route-draft-vertices", "circle-stroke-color", effectiveColor);
+      map.setPaintProperty(
+        "route-draft-vertices",
+        "circle-stroke-color",
+        effectiveColor,
+      );
       map.setPaintProperty("route-draft-vertices", "circle-color", [
         "match",
         ["get", "role"],
@@ -1887,7 +1972,10 @@ function Map({
       marker.on("drag", () => {
         movedDuringDrag = true;
         const { lng, lat } = marker.getLngLat();
-        previewDraft(map, moveAnchor(draftRef.current, anchorIndex, [lng, lat]));
+        previewDraft(
+          map,
+          moveAnchor(draftRef.current, anchorIndex, [lng, lat]),
+        );
       });
       marker.on("dragend", () => {
         draggingVertexRef.current = false;
@@ -1954,8 +2042,12 @@ function Map({
 
     const onDown = (e: maplibregl.MapMouseEvent) => {
       // A press that landed on a vertex handle belongs to that handle.
-      if (Date.now() - handlePressedAt.current < HANDLE_CLICK_SUPPRESS_MS) return;
-      const near = nearestSegment(draftRef.current, [e.lngLat.lng, e.lngLat.lat]);
+      if (Date.now() - handlePressedAt.current < HANDLE_CLICK_SUPPRESS_MS)
+        return;
+      const near = nearestSegment(draftRef.current, [
+        e.lngLat.lng,
+        e.lngLat.lat,
+      ]);
       if (!near || near.distanceDegrees > toleranceDegrees()) return;
       // Take the gesture off the map so the drag doesn't pan it.
       e.preventDefault();
@@ -2027,7 +2119,9 @@ function Map({
     if (!mapLoaded || !mapRef.current) return;
     const map = mapRef.current;
     const handleClick = (
-      e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] },
+      e: maplibregl.MapMouseEvent & {
+        features?: maplibregl.MapGeoJSONFeature[];
+      },
     ) => {
       if (pickModeRef.current || drawingRouteRef.current) return;
       const id = e.features?.[0]?.properties?.id;
@@ -2119,7 +2213,6 @@ function Map({
     onBboxSelectedRef.current = onBboxSelected;
   }, [onBboxSelected]);
 
-
   const handleTopoBox = useCallback((bbox: RegionBbox) => {
     onBboxSelectedRef.current?.(bbox);
   }, []);
@@ -2177,8 +2270,17 @@ function Map({
           const ctx = canvas.getContext("2d", { willReadFrequently: true });
           if (!ctx) return;
           ctx.drawImage(arrow, 0, 0);
-          const { width, height, data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          map.addImage(id, { width, height, data: new Uint8Array(data) }, { sdf: true });
+          const { width, height, data } = ctx.getImageData(
+            0,
+            0,
+            canvas.width,
+            canvas.height,
+          );
+          map.addImage(
+            id,
+            { width, height, data: new Uint8Array(data) },
+            { sdf: true },
+          );
         };
         arrow.src = ROUTE_ARROW_SDF_URI;
         return;
@@ -2187,7 +2289,10 @@ function Map({
       const key = id.slice(PREFIX.length) as OsmPointFeatureKey;
       const meta = OSM_POINT_ICON[key];
       if (!meta) return;
-      const img = new Image(OSM_POINT_ICON_NATURAL_PX, OSM_POINT_ICON_NATURAL_PX);
+      const img = new Image(
+        OSM_POINT_ICON_NATURAL_PX,
+        OSM_POINT_ICON_NATURAL_PX,
+      );
       img.onload = () => {
         if (!map.hasImage(id)) map.addImage(id, img);
       };
@@ -2213,8 +2318,10 @@ function Map({
 
     // Skip if the layer set and enabled flags are unchanged (avoids flicker from
     // new array references with identical contents).
-    const topoKey = layers.map((l) => `${l.id}:${l.pmtilesUrl}`).join("|")
-                  + "::" + enabledKey;
+    const topoKey =
+      layers.map((l) => `${l.id}:${l.pmtilesUrl}`).join("|") +
+      "::" +
+      enabledKey;
     if (topoKey === prevTopoKeyRef.current) return;
     prevTopoKeyRef.current = topoKey;
 
@@ -2227,7 +2334,8 @@ function Map({
     // again) rather than stay permanently blacklisted from a past error
     // (LAYERS-1).
     for (const failedId of [...failedTopoSourcesRef.current]) {
-      if (!activeIds.has(failedId)) failedTopoSourcesRef.current.delete(failedId);
+      if (!activeIds.has(failedId))
+        failedTopoSourcesRef.current.delete(failedId);
     }
     for (const transientId of [...transientTopoSourcesRef.current]) {
       if (!activeIds.has(transientId)) {
@@ -2260,9 +2368,12 @@ function Map({
       if (dashIdx < 0) continue;
       const entryId = withoutPrefix.slice(0, dashIdx);
       const isContourChild =
-        lid.endsWith("-minor") || lid.endsWith("-major") || lid.endsWith("-labels");
+        lid.endsWith("-minor") ||
+        lid.endsWith("-major") ||
+        lid.endsWith("-labels");
       const isFeatureChild = !lid.endsWith("-raster") && !isContourChild;
-      const drop = !activeIds.has(entryId) || (structureChanged && isFeatureChild);
+      const drop =
+        !activeIds.has(entryId) || (structureChanged && isFeatureChild);
       if (drop && map.getLayer(lid)) map.removeLayer(lid);
     }
     // Remove orphaned sources
@@ -2539,7 +2650,13 @@ function Map({
                 ? [
                     "case",
                     ["all", ["has", "name"], ["has", "ele"]],
-                    ["concat", ["get", "name"], "\n", ["to-string", ["get", "ele"]], " m"],
+                    [
+                      "concat",
+                      ["get", "name"],
+                      "\n",
+                      ["to-string", ["get", "ele"]],
+                      " m",
+                    ],
                     ["has", "name"],
                     ["get", "name"],
                     ["has", "ele"],
@@ -2633,7 +2750,10 @@ function Map({
     if (pairs.length === 0) {
       // No usable coordinates (empty/malformed footprint) — consume the request
       // so it doesn't get retried, but don't fly into a NaN bounds.
-      console.warn("topoFlyTarget had no valid coordinates", topoFlyTarget.type);
+      console.warn(
+        "topoFlyTarget had no valid coordinates",
+        topoFlyTarget.type,
+      );
       onTopoFlyConsumedRef.current?.();
       return;
     }
@@ -2663,7 +2783,11 @@ function Map({
     if (!flyToBounds || !mapLoaded || !mapRef.current) return;
     const [west, south, east, north] = flyToBounds;
     if ([west, south, east, north].every((value) => Number.isFinite(value))) {
-      mapRef.current.fitBounds([west, south, east, north], { padding: 80, duration: 1200, maxZoom: 16 });
+      mapRef.current.fitBounds([west, south, east, north], {
+        padding: 80,
+        duration: 1200,
+        maxZoom: 16,
+      });
     } else {
       // Never the coordinates themselves (privacy rule) — just that it was skipped.
       console.warn("Skipping fit-to-way: bounds out of range");
@@ -2921,7 +3045,9 @@ function Map({
       if (window.matchMedia("(pointer: coarse)").matches) {
         toast.info("Use two fingers to pan and pinch to zoom in 3D mode.");
       } else {
-        toast.info("Use right-click + drag (OR Ctrl + drag) to pan and scroll to zoom in 3D mode.");
+        toast.info(
+          "Use right-click + drag (OR Ctrl + drag) to pan and scroll to zoom in 3D mode.",
+        );
       }
       map.setMaxPitch(60);
       map.touchPitch.enable();
@@ -2958,7 +3084,10 @@ function Map({
             sharedPlaces={sharedPlaces}
             onSelectPlace={(place) => {
               selectPlaceRef.current(place.id);
-              if (isValidLatitude(place.latitude) && isValidLongitude(place.longitude)) {
+              if (
+                isValidLatitude(place.latitude) &&
+                isValidLongitude(place.longitude)
+              ) {
                 setTimeout(() => {
                   mapRef.current?.flyTo({
                     center: [place.longitude, place.latitude],
@@ -2969,7 +3098,11 @@ function Map({
               }
             }}
             onSelectLocation={(lat, lon) =>
-              mapRef.current?.flyTo({ center: [lon, lat], zoom: 13, duration: 1200 })
+              mapRef.current?.flyTo({
+                center: [lon, lat],
+                zoom: 13,
+                duration: 1200,
+              })
             }
           />
         }
@@ -2991,7 +3124,8 @@ function Map({
       )}
       {selectingBbox && (
         <div className={classes.pickBanner}>
-          {pickVerb} to set a corner, then {pickVerb.toLowerCase()} again to define the topo area
+          {pickVerb} to set a corner, then {pickVerb.toLowerCase()} again to
+          define the topo area
         </div>
       )}
       {selectingGeoPdfExtent && (

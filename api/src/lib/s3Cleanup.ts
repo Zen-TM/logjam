@@ -6,35 +6,68 @@ import {
 import { s3 } from "../services/awsClients";
 import { logger, safeErrorForLog } from "./logger";
 
-export async function deleteS3Prefix(bucket: string, prefix: string): Promise<void> {
+export async function deleteS3Prefix(
+  bucket: string,
+  prefix: string,
+): Promise<void> {
   try {
     let continuationToken: string | undefined;
     do {
       const listed: ListObjectsV2CommandOutput = await s3.send(
-        new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix, ContinuationToken: continuationToken }),
+        new ListObjectsV2Command({
+          Bucket: bucket,
+          Prefix: prefix,
+          ContinuationToken: continuationToken,
+        }),
       );
       const keys = listed.Contents?.map((o) => ({ Key: o.Key! })) ?? [];
       if (keys.length) {
-        await s3.send(new DeleteObjectsCommand({ Bucket: bucket, Delete: { Objects: keys } }));
+        await s3.send(
+          new DeleteObjectsCommand({
+            Bucket: bucket,
+            Delete: { Objects: keys },
+          }),
+        );
       }
-      continuationToken = listed.IsTruncated ? listed.NextContinuationToken : undefined;
+      continuationToken = listed.IsTruncated
+        ? listed.NextContinuationToken
+        : undefined;
     } while (continuationToken);
   } catch (err) {
-    logger.error({ bucket, prefix, err: safeErrorForLog(err) }, "s3_delete_prefix_failed");
+    logger.error(
+      { bucket, prefix, err: safeErrorForLog(err) },
+      "s3_delete_prefix_failed",
+    );
     throw err;
   }
 }
 
-export async function deleteS3Keys(bucket: string, keys: string[]): Promise<void> {
+export async function deleteS3Keys(
+  bucket: string,
+  keys: string[],
+): Promise<void> {
   const valid = keys.filter((k): k is string => Boolean(k));
   if (!valid.length) return;
   try {
     for (let i = 0; i < valid.length; i += 1000) {
       const batch = valid.slice(i, i + 1000).map((k) => ({ Key: k }));
-      await s3.send(new DeleteObjectsCommand({ Bucket: bucket, Delete: { Objects: batch } }));
+      await s3.send(
+        new DeleteObjectsCommand({
+          Bucket: bucket,
+          Delete: { Objects: batch },
+        }),
+      );
     }
   } catch (err) {
-    logger.error({ bucket, keyCount: valid.length, sampleKeys: valid.slice(0, 5), err: safeErrorForLog(err) }, "s3_delete_keys_failed");
+    logger.error(
+      {
+        bucket,
+        keyCount: valid.length,
+        sampleKeys: valid.slice(0, 5),
+        err: safeErrorForLog(err),
+      },
+      "s3_delete_keys_failed",
+    );
     throw err;
   }
 }
@@ -45,7 +78,10 @@ export async function deleteS3Keys(bucket: string, keys: string[]): Promise<void
  * but never rejects, so the caller's intended error response is not masked by a
  * generic 500 from a cleanup miss.
  */
-export async function deleteS3KeysBestEffort(bucket: string, keys: string[]): Promise<void> {
+export async function deleteS3KeysBestEffort(
+  bucket: string,
+  keys: string[],
+): Promise<void> {
   try {
     await deleteS3Keys(bucket, keys);
   } catch {

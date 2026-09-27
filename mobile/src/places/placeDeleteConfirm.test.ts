@@ -4,7 +4,9 @@ import { placeDeleteConfirm } from "./placeDeleteConfirm";
 
 describe("placeDeleteConfirm", () => {
   it("names the place in the title", () => {
-    expect(placeDeleteConfirm("Claustral", 0).confirmTitle).toBe("Delete Claustral?");
+    expect(placeDeleteConfirm("Claustral", 0).confirmTitle).toBe(
+      "Delete Claustral?",
+    );
   });
 
   it("omits the trip sentence when nothing links to it", () => {

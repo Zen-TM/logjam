@@ -18,16 +18,20 @@ const SEED = readFileSync(join(__dirname, "../../prisma/seed.ts"), "utf8");
 /** Models the seed writes: `prisma.<model>.create` / `.createMany` / `.upsert`. */
 function writtenModels(): Set<string> {
   return new Set(
-    [...SEED.matchAll(/\bprisma\.([a-zA-Z]+)\.(?:create|createMany|upsert)\b/g)].map(
-      (match) => match[1],
-    ),
+    [
+      ...SEED.matchAll(
+        /\bprisma\.([a-zA-Z]+)\.(?:create|createMany|upsert)\b/g,
+      ),
+    ].map((match) => match[1]),
   );
 }
 
 /** Models the wipe clears: `prisma.<model>.deleteMany()`. */
 function wipedModels(): Set<string> {
   return new Set(
-    [...SEED.matchAll(/\bprisma\.([a-zA-Z]+)\.deleteMany\(\)/g)].map((match) => match[1]),
+    [...SEED.matchAll(/\bprisma\.([a-zA-Z]+)\.deleteMany\(\)/g)].map(
+      (match) => match[1],
+    ),
   );
 }
 
@@ -39,7 +43,9 @@ describe("the dev seed's wipe list", () => {
 
   it("clears every model the seed writes", () => {
     const wiped = wipedModels();
-    const missing = [...writtenModels()].filter((model) => !wiped.has(model)).sort();
+    const missing = [...writtenModels()]
+      .filter((model) => !wiped.has(model))
+      .sort();
     expect(missing).toEqual([]);
   });
 });

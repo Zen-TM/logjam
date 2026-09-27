@@ -36,10 +36,25 @@
 // Consumed by the topo worker's per-footprint survey selection (topo/pipeline.py
 // select_surveys_by_layer). LAYER_SURVEY_PICK in topo/worker.py mirrors this.
 export const TOPO_LAYERS = [
-  { name: "hillshade", label: "Hillshade", format: "raster", surveyPick: "density" },
-  { name: "vegetation", label: "Vegetation", format: "raster", surveyPick: "recency" },
+  {
+    name: "hillshade",
+    label: "Hillshade",
+    format: "raster",
+    surveyPick: "density",
+  },
+  {
+    name: "vegetation",
+    label: "Vegetation",
+    format: "raster",
+    surveyPick: "recency",
+  },
   { name: "slope", label: "Slope", format: "raster", surveyPick: "density" },
-  { name: "contours", label: "Contours", format: "vector", surveyPick: "density" },
+  {
+    name: "contours",
+    label: "Contours",
+    format: "vector",
+    surveyPick: "density",
+  },
   { name: "features", label: "Features", format: "vector", surveyPick: "none" },
 ] as const;
 
@@ -59,10 +74,10 @@ export type RgbaHex = string; // #RRGGBBAA, lowercase hex
 
 export interface HillshadeSettings {
   enabled: boolean;
-  colour: RgbaHex;     // tint applied to greyscale luminance
-  azimuth: number;     // 0–360
-  altitude: number;    // 0–90
-  zFactor: number;     // > 0, vertical exaggeration
+  colour: RgbaHex; // tint applied to greyscale luminance
+  azimuth: number; // 0–360
+  altitude: number; // 0–90
+  zFactor: number; // > 0, vertical exaggeration
   multidirectional: boolean;
 }
 
@@ -76,40 +91,40 @@ export const HILLSHADE_LIMITS = {
 } as const;
 
 export interface SlopeBand {
-  fromDeg: number;     // inclusive
-  toDeg: number;       // exclusive
+  fromDeg: number; // inclusive
+  toDeg: number; // exclusive
   colour: RgbaHex;
 }
 
 export interface SlopeSettings {
   enabled: boolean;
-  bands: SlopeBand[];  // ordered ascending, max 8
+  bands: SlopeBand[]; // ordered ascending, max 8
 }
 
 export interface VegetationSettings {
   enabled: boolean;
-  minRatio: number;        // 0..1
-  maxRatio: number;        // 0..1, > minRatio
-  sparseColour: RgbaHex;   // alpha ignored; uses alphaMin instead
-  denseColour: RgbaHex;    // alpha ignored; uses alphaMax instead
-  alphaMin: number;        // 0..255
-  alphaMax: number;        // 0..255
+  minRatio: number; // 0..1
+  maxRatio: number; // 0..1, > minRatio
+  sparseColour: RgbaHex; // alpha ignored; uses alphaMin instead
+  denseColour: RgbaHex; // alpha ignored; uses alphaMax instead
+  alphaMin: number; // 0..255
+  alphaMax: number; // 0..255
   weightsEnabled: boolean; // false → all μ treated as 1.0 in pipeline
   formationWeights: Record<string, number>; // formation name → μ (0..5 sane range)
 }
 
 export interface ContourZoomBand {
-  zoomMin: number;       // inclusive (fixed at 12/15/17 for the three bands)
-  zoomMax: number;       // inclusive (fixed at 15/16/18)
-  intervalM: number;     // contour vertical spacing in metres
-  majorEveryN: number;   // every Nth contour rendered with major style
+  zoomMin: number; // inclusive (fixed at 12/15/17 for the three bands)
+  zoomMax: number; // inclusive (fixed at 15/16/18)
+  intervalM: number; // contour vertical spacing in metres
+  majorEveryN: number; // every Nth contour rendered with major style
 }
 
 // Raster-bake-only contour fields. Vector contour colors/widths live in
 // VectorStyleSettings now and apply at composite-bake time via the snapshot.
 export interface RasterContoursSettings {
   enabled: boolean;
-  zoomBands: ContourZoomBand[];   // length 3, indices/zooms fixed
+  zoomBands: ContourZoomBand[]; // length 3, indices/zooms fixed
 }
 
 // Raster-bake-only OSM features toggle. Per-category fields live in
@@ -131,9 +146,22 @@ export interface RasterTemplateSettings {
 // ---------------------------------------------------------------------------
 
 export type OsmFeatureKey =
-  | "waterway" | "track" | "road" | "building" | "power"
-  | "campsite" | "peak" | "spring" | "gate" | "cave"
-  | "bridge" | "ford" | "waterfall" | "trailhead" | "viewpoint" | "hut";
+  | "waterway"
+  | "track"
+  | "road"
+  | "building"
+  | "power"
+  | "campsite"
+  | "peak"
+  | "spring"
+  | "gate"
+  | "cave"
+  | "bridge"
+  | "ford"
+  | "waterfall"
+  | "trailhead"
+  | "viewpoint"
+  | "hut";
 
 // Per-category vector style. `enabled` controls both paint-time layer presence
 // in-app and composite-bake-time inclusion. Worker always fetches all
@@ -141,13 +169,13 @@ export type OsmFeatureKey =
 export interface OsmFeatureStyle {
   enabled: boolean;
   colour: RgbaHex;
-  widthZ18: number;   // applies to line/point styling; >= 0
+  widthZ18: number; // applies to line/point styling; >= 0
 }
 
 export interface VectorContoursStyle {
   majorColour: RgbaHex;
   minorColour: RgbaHex;
-  majorWidthM: number;  // line thickness in ground metres
+  majorWidthM: number; // line thickness in ground metres
   minorWidthM: number;
 }
 
@@ -164,23 +192,49 @@ export const LABEL_SCALE_MIN = 0.5;
 export const LABEL_SCALE_MAX = 2;
 
 export const OSM_FEATURE_KEYS: OsmFeatureKey[] = [
-  "waterway", "track", "road", "building", "power",
-  "campsite", "peak", "spring", "gate", "cave",
-  "bridge", "ford", "waterfall", "trailhead", "viewpoint", "hut",
+  "waterway",
+  "track",
+  "road",
+  "building",
+  "power",
+  "campsite",
+  "peak",
+  "spring",
+  "gate",
+  "cave",
+  "bridge",
+  "ford",
+  "waterfall",
+  "trailhead",
+  "viewpoint",
+  "hut",
 ];
 
 // Point features use fixed-design bitmap icons — no colour/width override.
 export const OSM_POINT_FEATURE_KEYS = [
-  "campsite", "peak", "spring", "gate", "cave",
-  "ford", "waterfall", "trailhead", "viewpoint", "hut",
+  "campsite",
+  "peak",
+  "spring",
+  "gate",
+  "cave",
+  "ford",
+  "waterfall",
+  "trailhead",
+  "viewpoint",
+  "hut",
 ] as const;
-export type OsmPointFeatureKey = typeof OSM_POINT_FEATURE_KEYS[number];
+export type OsmPointFeatureKey = (typeof OSM_POINT_FEATURE_KEYS)[number];
 
 // Line/polygon features retain colour + width overrides.
 export const OSM_LINE_FEATURE_KEYS = [
-  "waterway", "track", "road", "building", "power", "bridge",
+  "waterway",
+  "track",
+  "road",
+  "building",
+  "power",
+  "bridge",
 ] as const;
-export type OsmLineFeatureKey = typeof OSM_LINE_FEATURE_KEYS[number];
+export type OsmLineFeatureKey = (typeof OSM_LINE_FEATURE_KEYS)[number];
 
 // Labels used by the OSM features UI tab.
 export const OSM_FEATURE_LABELS: Record<OsmFeatureKey, string> = {
@@ -279,14 +333,14 @@ export const RASTER_TEMPLATE_DEFAULTS: RasterTemplateSettings = {
     weightsEnabled: true,
     formationWeights: {
       "Not classified": 1.0,
-      "Rainforests": 0.7,
+      Rainforests: 0.7,
       "Wet Sclerophyll Forests (Grassy sub-formation)": 0.9,
       "Wet Sclerophyll Forests (Shrubby sub-formation)": 1.2,
       "Dry Sclerophyll Forests (Shrub/grass sub-formation)": 1.2,
       "Dry Sclerophyll Forests (Shrubby sub-formation)": 1.5,
       "Grassy Woodlands": 0.7,
-      "Grasslands": 0.5,
-      "Heathlands": 1.8,
+      Grasslands: 0.5,
+      Heathlands: 1.8,
       "Forested Wetlands": 1.1,
       "Freshwater Wetlands": 1.3,
       "Saline Wetlands": 1.0,
@@ -319,21 +373,21 @@ export const VECTOR_STYLE_DEFAULTS: VectorStyleSettings = {
   },
   features: {
     waterway: { enabled: true, colour: "#2878dcdc", widthZ18: 3 },
-    track:    { enabled: true, colour: "#a0641edc", widthZ18: 2 },
-    road:     { enabled: true, colour: "#505050e6", widthZ18: 4 },
+    track: { enabled: true, colour: "#a0641edc", widthZ18: 2 },
+    road: { enabled: true, colour: "#505050e6", widthZ18: 4 },
     building: { enabled: true, colour: "#a08c78c8", widthZ18: 2 },
-    power:    { enabled: true, colour: "#c8a000c8", widthZ18: 1 },
+    power: { enabled: true, colour: "#c8a000c8", widthZ18: 1 },
     campsite: { enabled: true, colour: "#00a050e6", widthZ18: 14 },
-    peak:     { enabled: true, colour: "#503214f0", widthZ18: 12 },
-    spring:   { enabled: true, colour: "#1e5ad2e6", widthZ18: 8 },
-    gate:     { enabled: true, colour: "#464646dc", widthZ18: 10 },
-    cave:     { enabled: true, colour: "#3c1e0ae6", widthZ18: 10 },
-    bridge:   { enabled: false, colour: "#403028e6", widthZ18: 3 },
-    ford:     { enabled: false, colour: "#1e90ffe6", widthZ18: 8 },
-    waterfall:{ enabled: false, colour: "#1e6ad2f0", widthZ18: 10 },
-    trailhead:{ enabled: false, colour: "#a04020e6", widthZ18: 12 },
-    viewpoint:{ enabled: false, colour: "#806020e6", widthZ18: 12 },
-    hut:      { enabled: false, colour: "#503820e6", widthZ18: 12 },
+    peak: { enabled: true, colour: "#503214f0", widthZ18: 12 },
+    spring: { enabled: true, colour: "#1e5ad2e6", widthZ18: 8 },
+    gate: { enabled: true, colour: "#464646dc", widthZ18: 10 },
+    cave: { enabled: true, colour: "#3c1e0ae6", widthZ18: 10 },
+    bridge: { enabled: false, colour: "#403028e6", widthZ18: 3 },
+    ford: { enabled: false, colour: "#1e90ffe6", widthZ18: 8 },
+    waterfall: { enabled: false, colour: "#1e6ad2f0", widthZ18: 10 },
+    trailhead: { enabled: false, colour: "#a04020e6", widthZ18: 12 },
+    viewpoint: { enabled: false, colour: "#806020e6", widthZ18: 12 },
+    hut: { enabled: false, colour: "#503820e6", widthZ18: 12 },
   },
   labelScale: 1,
 };
@@ -369,7 +423,9 @@ function inRange(n: unknown, lo: number, hi: number): n is number {
 
 const MAX_SLOPE_BANDS = 8;
 
-export function validateRasterTemplateSettings(input: unknown): ValidationResult<RasterTemplateSettings> {
+export function validateRasterTemplateSettings(
+  input: unknown,
+): ValidationResult<RasterTemplateSettings> {
   const errors: string[] = [];
   if (!isObject(input)) {
     return { ok: false, errors: ["root must be an object"] };
@@ -395,7 +451,9 @@ export function validateRasterTemplateSettings(input: unknown): ValidationResult
   return { ok: true, value };
 }
 
-export function validateVectorStyleSettings(input: unknown): ValidationResult<VectorStyleSettings> {
+export function validateVectorStyleSettings(
+  input: unknown,
+): ValidationResult<VectorStyleSettings> {
   const errors: string[] = [];
   if (!isObject(input)) {
     return { ok: false, errors: ["root must be an object"] };
@@ -407,41 +465,105 @@ export function validateVectorStyleSettings(input: unknown): ValidationResult<Ve
   // labelScale is a later addition: pre-existing stored styles omit it, so an
   // absent value is valid and normalises to 1. A present value must be in range.
   if (input.labelScale !== undefined) {
-    pushIf(errors, inRange(input.labelScale, LABEL_SCALE_MIN, LABEL_SCALE_MAX),
-      `labelScale must be ${LABEL_SCALE_MIN}..${LABEL_SCALE_MAX}`);
+    pushIf(
+      errors,
+      inRange(input.labelScale, LABEL_SCALE_MIN, LABEL_SCALE_MAX),
+      `labelScale must be ${LABEL_SCALE_MIN}..${LABEL_SCALE_MAX}`,
+    );
   }
 
   if (errors.length > 0) return { ok: false, errors };
   const value: VectorStyleSettings = {
     contours: input.contours as VectorContoursStyle,
     features: input.features as Record<OsmFeatureKey, OsmFeatureStyle>,
-    labelScale: input.labelScale === undefined ? 1 : (input.labelScale as number),
+    labelScale:
+      input.labelScale === undefined ? 1 : (input.labelScale as number),
   };
   return { ok: true, value };
 }
 
 function validateHillshade(v: unknown, errors: string[]): void {
-  if (!isObject(v)) { errors.push("hillshade must be an object"); return; }
-  pushIf(errors, typeof v.enabled === "boolean", "hillshade.enabled must be boolean");
-  pushIf(errors, typeof v.colour === "string" && HEX_RGBA_RE.test(v.colour as string), "hillshade.colour must be #RRGGBBAA");
-  pushIf(errors, inRange(v.azimuth, HILLSHADE_LIMITS.azimuth.min, HILLSHADE_LIMITS.azimuth.max), "hillshade.azimuth must be 0..360");
-  pushIf(errors, inRange(v.altitude, HILLSHADE_LIMITS.altitude.min, HILLSHADE_LIMITS.altitude.max), "hillshade.altitude must be 0..90");
-  pushIf(errors, inRange(v.zFactor, HILLSHADE_LIMITS.zFactor.min, HILLSHADE_LIMITS.zFactor.max), "hillshade.zFactor must be 0.1..10");
-  pushIf(errors, typeof v.multidirectional === "boolean", "hillshade.multidirectional must be boolean");
+  if (!isObject(v)) {
+    errors.push("hillshade must be an object");
+    return;
+  }
+  pushIf(
+    errors,
+    typeof v.enabled === "boolean",
+    "hillshade.enabled must be boolean",
+  );
+  pushIf(
+    errors,
+    typeof v.colour === "string" && HEX_RGBA_RE.test(v.colour as string),
+    "hillshade.colour must be #RRGGBBAA",
+  );
+  pushIf(
+    errors,
+    inRange(
+      v.azimuth,
+      HILLSHADE_LIMITS.azimuth.min,
+      HILLSHADE_LIMITS.azimuth.max,
+    ),
+    "hillshade.azimuth must be 0..360",
+  );
+  pushIf(
+    errors,
+    inRange(
+      v.altitude,
+      HILLSHADE_LIMITS.altitude.min,
+      HILLSHADE_LIMITS.altitude.max,
+    ),
+    "hillshade.altitude must be 0..90",
+  );
+  pushIf(
+    errors,
+    inRange(
+      v.zFactor,
+      HILLSHADE_LIMITS.zFactor.min,
+      HILLSHADE_LIMITS.zFactor.max,
+    ),
+    "hillshade.zFactor must be 0.1..10",
+  );
+  pushIf(
+    errors,
+    typeof v.multidirectional === "boolean",
+    "hillshade.multidirectional must be boolean",
+  );
 }
 
 function validateSlope(v: unknown, errors: string[]): void {
-  if (!isObject(v)) { errors.push("slope must be an object"); return; }
-  pushIf(errors, typeof v.enabled === "boolean", "slope.enabled must be boolean");
-  if (!Array.isArray(v.bands)) { errors.push("slope.bands must be array"); return; }
+  if (!isObject(v)) {
+    errors.push("slope must be an object");
+    return;
+  }
+  pushIf(
+    errors,
+    typeof v.enabled === "boolean",
+    "slope.enabled must be boolean",
+  );
+  if (!Array.isArray(v.bands)) {
+    errors.push("slope.bands must be array");
+    return;
+  }
   if (v.bands.length > MAX_SLOPE_BANDS) {
     errors.push(`slope.bands max length is ${MAX_SLOPE_BANDS}`);
   }
   let prevTo = -Infinity;
   v.bands.forEach((band, i) => {
-    if (!isObject(band)) { errors.push(`slope.bands[${i}] must be an object`); return; }
-    const okFrom = pushIf(errors, inRange(band.fromDeg, 0, 90), `slope.bands[${i}].fromDeg must be 0..90`);
-    const okTo = pushIf(errors, inRange(band.toDeg, 0, 90), `slope.bands[${i}].toDeg must be 0..90`);
+    if (!isObject(band)) {
+      errors.push(`slope.bands[${i}] must be an object`);
+      return;
+    }
+    const okFrom = pushIf(
+      errors,
+      inRange(band.fromDeg, 0, 90),
+      `slope.bands[${i}].fromDeg must be 0..90`,
+    );
+    const okTo = pushIf(
+      errors,
+      inRange(band.toDeg, 0, 90),
+      `slope.bands[${i}].toDeg must be 0..90`,
+    );
     if (okFrom && okTo && (band.fromDeg as number) >= (band.toDeg as number)) {
       errors.push(`slope.bands[${i}] fromDeg must be < toDeg`);
     }
@@ -449,7 +571,12 @@ function validateSlope(v: unknown, errors: string[]): void {
       errors.push(`slope.bands[${i}] overlaps previous band`);
     }
     if (okTo) prevTo = band.toDeg as number;
-    pushIf(errors, typeof band.colour === "string" && HEX_RGBA_RE.test(band.colour as string), `slope.bands[${i}].colour must be #RRGGBBAA`);
+    pushIf(
+      errors,
+      typeof band.colour === "string" &&
+        HEX_RGBA_RE.test(band.colour as string),
+      `slope.bands[${i}].colour must be #RRGGBBAA`,
+    );
   });
 }
 
@@ -462,7 +589,8 @@ function validateSlope(v: unknown, errors: string[]): void {
  */
 export function slopeBandsError(bands: SlopeBand[]): string | null {
   if (bands.length === 0) return "Add at least one slope band.";
-  if (bands.length > MAX_SLOPE_BANDS) return `At most ${MAX_SLOPE_BANDS} bands allowed.`;
+  if (bands.length > MAX_SLOPE_BANDS)
+    return `At most ${MAX_SLOPE_BANDS} bands allowed.`;
   for (let i = 0; i < bands.length; i++) {
     const b = bands[i];
     if (!Number.isInteger(b.fromDeg) || !Number.isInteger(b.toDeg)) {
@@ -491,68 +619,175 @@ export function slopeBandsError(bands: SlopeBand[]): string | null {
  */
 export function hillshadeSettingsError(h: HillshadeSettings): string | null {
   const { azimuth, altitude, zFactor } = HILLSHADE_LIMITS;
-  if (!Number.isFinite(h.azimuth) || h.azimuth < azimuth.min || h.azimuth > azimuth.max) {
+  if (
+    !Number.isFinite(h.azimuth) ||
+    h.azimuth < azimuth.min ||
+    h.azimuth > azimuth.max
+  ) {
     return `Azimuth must be between ${azimuth.min} and ${azimuth.max}.`;
   }
-  if (!Number.isFinite(h.altitude) || h.altitude < altitude.min || h.altitude > altitude.max) {
+  if (
+    !Number.isFinite(h.altitude) ||
+    h.altitude < altitude.min ||
+    h.altitude > altitude.max
+  ) {
     return `Altitude must be between ${altitude.min} and ${altitude.max}.`;
   }
-  if (!Number.isFinite(h.zFactor) || h.zFactor < zFactor.min || h.zFactor > zFactor.max) {
+  if (
+    !Number.isFinite(h.zFactor) ||
+    h.zFactor < zFactor.min ||
+    h.zFactor > zFactor.max
+  ) {
     return `Vertical exaggeration must be between ${zFactor.min} and ${zFactor.max}.`;
   }
   return null;
 }
 
 function validateVegetation(v: unknown, errors: string[]): void {
-  if (!isObject(v)) { errors.push("vegetation must be an object"); return; }
-  pushIf(errors, typeof v.enabled === "boolean", "vegetation.enabled must be boolean");
-  const okMin = pushIf(errors, inRange(v.minRatio, 0, 1), "vegetation.minRatio must be 0..1");
-  const okMax = pushIf(errors, inRange(v.maxRatio, 0, 1), "vegetation.maxRatio must be 0..1");
+  if (!isObject(v)) {
+    errors.push("vegetation must be an object");
+    return;
+  }
+  pushIf(
+    errors,
+    typeof v.enabled === "boolean",
+    "vegetation.enabled must be boolean",
+  );
+  const okMin = pushIf(
+    errors,
+    inRange(v.minRatio, 0, 1),
+    "vegetation.minRatio must be 0..1",
+  );
+  const okMax = pushIf(
+    errors,
+    inRange(v.maxRatio, 0, 1),
+    "vegetation.maxRatio must be 0..1",
+  );
   if (okMin && okMax && (v.minRatio as number) >= (v.maxRatio as number)) {
     errors.push("vegetation.minRatio must be < maxRatio");
   }
-  pushIf(errors, typeof v.sparseColour === "string" && HEX_RGBA_RE.test(v.sparseColour as string), "vegetation.sparseColour must be #RRGGBBAA");
-  pushIf(errors, typeof v.denseColour === "string" && HEX_RGBA_RE.test(v.denseColour as string), "vegetation.denseColour must be #RRGGBBAA");
-  pushIf(errors, inRange(v.alphaMin, 0, 255), "vegetation.alphaMin must be 0..255");
-  pushIf(errors, inRange(v.alphaMax, 0, 255), "vegetation.alphaMax must be 0..255");
-  pushIf(errors, typeof v.weightsEnabled === "boolean", "vegetation.weightsEnabled must be boolean");
+  pushIf(
+    errors,
+    typeof v.sparseColour === "string" &&
+      HEX_RGBA_RE.test(v.sparseColour as string),
+    "vegetation.sparseColour must be #RRGGBBAA",
+  );
+  pushIf(
+    errors,
+    typeof v.denseColour === "string" &&
+      HEX_RGBA_RE.test(v.denseColour as string),
+    "vegetation.denseColour must be #RRGGBBAA",
+  );
+  pushIf(
+    errors,
+    inRange(v.alphaMin, 0, 255),
+    "vegetation.alphaMin must be 0..255",
+  );
+  pushIf(
+    errors,
+    inRange(v.alphaMax, 0, 255),
+    "vegetation.alphaMax must be 0..255",
+  );
+  pushIf(
+    errors,
+    typeof v.weightsEnabled === "boolean",
+    "vegetation.weightsEnabled must be boolean",
+  );
   if (!isObject(v.formationWeights)) {
     errors.push("vegetation.formationWeights must be an object");
   } else {
     for (const formation of SVTM_FORMATIONS) {
       const w = (v.formationWeights as Record<string, unknown>)[formation];
-      pushIf(errors, inRange(w, 0, 5), `vegetation.formationWeights["${formation}"] must be 0..5`);
+      pushIf(
+        errors,
+        inRange(w, 0, 5),
+        `vegetation.formationWeights["${formation}"] must be 0..5`,
+      );
     }
   }
 }
 
 function validateRasterContours(v: unknown, errors: string[]): void {
-  if (!isObject(v)) { errors.push("contours must be an object"); return; }
-  pushIf(errors, typeof v.enabled === "boolean", "contours.enabled must be boolean");
+  if (!isObject(v)) {
+    errors.push("contours must be an object");
+    return;
+  }
+  pushIf(
+    errors,
+    typeof v.enabled === "boolean",
+    "contours.enabled must be boolean",
+  );
   if (!Array.isArray(v.zoomBands) || v.zoomBands.length !== 3) {
     errors.push("contours.zoomBands must be array of length 3");
   } else {
     v.zoomBands.forEach((band, i) => {
-      if (!isObject(band)) { errors.push(`contours.zoomBands[${i}] must be an object`); return; }
-      pushIf(errors, inRange(band.zoomMin, 0, 22), `contours.zoomBands[${i}].zoomMin must be 0..22`);
-      pushIf(errors, inRange(band.zoomMax, 0, 22), `contours.zoomBands[${i}].zoomMax must be 0..22`);
-      pushIf(errors, inRange(band.intervalM, 0.1, 5000), `contours.zoomBands[${i}].intervalM must be 0.1..5000`);
-      pushIf(errors, inRange(band.majorEveryN, 1, 100) && Number.isInteger(band.majorEveryN), `contours.zoomBands[${i}].majorEveryN must be integer 1..100`);
+      if (!isObject(band)) {
+        errors.push(`contours.zoomBands[${i}] must be an object`);
+        return;
+      }
+      pushIf(
+        errors,
+        inRange(band.zoomMin, 0, 22),
+        `contours.zoomBands[${i}].zoomMin must be 0..22`,
+      );
+      pushIf(
+        errors,
+        inRange(band.zoomMax, 0, 22),
+        `contours.zoomBands[${i}].zoomMax must be 0..22`,
+      );
+      pushIf(
+        errors,
+        inRange(band.intervalM, 0.1, 5000),
+        `contours.zoomBands[${i}].intervalM must be 0.1..5000`,
+      );
+      pushIf(
+        errors,
+        inRange(band.majorEveryN, 1, 100) && Number.isInteger(band.majorEveryN),
+        `contours.zoomBands[${i}].majorEveryN must be integer 1..100`,
+      );
     });
   }
 }
 
 function validateRasterFeatures(v: unknown, errors: string[]): void {
-  if (!isObject(v)) { errors.push("features must be an object"); return; }
-  pushIf(errors, typeof v.enabled === "boolean", "features.enabled must be boolean");
+  if (!isObject(v)) {
+    errors.push("features must be an object");
+    return;
+  }
+  pushIf(
+    errors,
+    typeof v.enabled === "boolean",
+    "features.enabled must be boolean",
+  );
 }
 
 function validateVectorContours(v: unknown, errors: string[]): void {
-  if (!isObject(v)) { errors.push("contours must be an object"); return; }
-  pushIf(errors, typeof v.majorColour === "string" && HEX_RGBA_RE.test(v.majorColour as string), "contours.majorColour must be #RRGGBBAA");
-  pushIf(errors, typeof v.minorColour === "string" && HEX_RGBA_RE.test(v.minorColour as string), "contours.minorColour must be #RRGGBBAA");
-  pushIf(errors, inRange(v.majorWidthM, 0, 200), "contours.majorWidthM must be 0..200");
-  pushIf(errors, inRange(v.minorWidthM, 0, 200), "contours.minorWidthM must be 0..200");
+  if (!isObject(v)) {
+    errors.push("contours must be an object");
+    return;
+  }
+  pushIf(
+    errors,
+    typeof v.majorColour === "string" &&
+      HEX_RGBA_RE.test(v.majorColour as string),
+    "contours.majorColour must be #RRGGBBAA",
+  );
+  pushIf(
+    errors,
+    typeof v.minorColour === "string" &&
+      HEX_RGBA_RE.test(v.minorColour as string),
+    "contours.minorColour must be #RRGGBBAA",
+  );
+  pushIf(
+    errors,
+    inRange(v.majorWidthM, 0, 200),
+    "contours.majorWidthM must be 0..200",
+  );
+  pushIf(
+    errors,
+    inRange(v.minorWidthM, 0, 200),
+    "contours.minorWidthM must be 0..200",
+  );
 }
 
 function validateVectorFeatures(v: unknown, errors: string[]): void {
@@ -562,10 +797,26 @@ function validateVectorFeatures(v: unknown, errors: string[]): void {
   }
   for (const key of OSM_FEATURE_KEYS) {
     const style = (v as Record<string, unknown>)[key];
-    if (!isObject(style)) { errors.push(`features.${key} must be an object`); continue; }
-    pushIf(errors, typeof style.enabled === "boolean", `features.${key}.enabled must be boolean`);
-    pushIf(errors, typeof style.colour === "string" && HEX_RGBA_RE.test(style.colour as string), `features.${key}.colour must be #RRGGBBAA`);
-    pushIf(errors, inRange(style.widthZ18, 0, 100), `features.${key}.widthZ18 must be 0..100`);
+    if (!isObject(style)) {
+      errors.push(`features.${key} must be an object`);
+      continue;
+    }
+    pushIf(
+      errors,
+      typeof style.enabled === "boolean",
+      `features.${key}.enabled must be boolean`,
+    );
+    pushIf(
+      errors,
+      typeof style.colour === "string" &&
+        HEX_RGBA_RE.test(style.colour as string),
+      `features.${key}.colour must be #RRGGBBAA`,
+    );
+    pushIf(
+      errors,
+      inRange(style.widthZ18, 0, 100),
+      `features.${key}.widthZ18 must be 0..100`,
+    );
   }
 }
 
@@ -585,7 +836,10 @@ export function parseRgbaHex(hex: RgbaHex): [number, number, number, number] {
 }
 
 export function rgbaToHex(r: number, g: number, b: number, a: number): RgbaHex {
-  const clip = (v: number) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, "0");
+  const clip = (v: number) =>
+    Math.max(0, Math.min(255, Math.round(v)))
+      .toString(16)
+      .padStart(2, "0");
   return `#${clip(r)}${clip(g)}${clip(b)}${clip(a)}`;
 }
 
@@ -620,11 +874,15 @@ export function applySlopeGradient(
   });
 }
 
-export function cloneRasterTemplateSettings(s: RasterTemplateSettings): RasterTemplateSettings {
+export function cloneRasterTemplateSettings(
+  s: RasterTemplateSettings,
+): RasterTemplateSettings {
   return JSON.parse(JSON.stringify(s)) as RasterTemplateSettings;
 }
 
-export function cloneVectorStyleSettings(s: VectorStyleSettings): VectorStyleSettings {
+export function cloneVectorStyleSettings(
+  s: VectorStyleSettings,
+): VectorStyleSettings {
   return JSON.parse(JSON.stringify(s)) as VectorStyleSettings;
 }
 
@@ -658,17 +916,26 @@ export const CONTOUR_WIDTH_UNITS_PER_PX = 8;
  * to z16, not z18. The gentler of the two is the one kept: a road at the old
  * feature taper was a 0.75px hairline across the whole mid range.
  */
-export function lineWidthStops(widthPxZ18: number): { z12: number; z18: number } {
+export function lineWidthStops(widthPxZ18: number): {
+  z12: number;
+  z18: number;
+} {
   return { z12: Math.max(0.3, widthPxZ18 * 0.4), z18: widthPxZ18 };
 }
 
 /** Zoom stops for a contour, whose stored width is in the units above. */
-export function contourWidthStops(widthM: number): { z12: number; z18: number } {
+export function contourWidthStops(widthM: number): {
+  z12: number;
+  z18: number;
+} {
   return lineWidthStops(widthM / CONTOUR_WIDTH_UNITS_PER_PX);
 }
 
 /** Zoom stops for a line feature, whose stored width is already pixels at z18. */
-export function featureLineWidthStops(widthZ18: number): { z12: number; z18: number } {
+export function featureLineWidthStops(widthZ18: number): {
+  z12: number;
+  z18: number;
+} {
   return lineWidthStops(widthZ18);
 }
 
@@ -690,17 +957,20 @@ export function lerpZoom(zoom: number, z12: number, z18: number): number {
 // user colour/width override for the glyph itself.
 // ---------------------------------------------------------------------------
 
-export const OSM_POINT_ICON: Record<OsmPointFeatureKey, { file: string; sizeZ18: number }> = {
-  campsite:  { file: "campsite.png",  sizeZ18: 20 },
-  peak:      { file: "peak.png",      sizeZ18: 18 },
-  spring:    { file: "spring.png",    sizeZ18: 18 },
-  gate:      { file: "gate.png",      sizeZ18: 18 },
-  cave:      { file: "cave.png",      sizeZ18: 18 },
-  ford:      { file: "ford.png",      sizeZ18: 20 },
+export const OSM_POINT_ICON: Record<
+  OsmPointFeatureKey,
+  { file: string; sizeZ18: number }
+> = {
+  campsite: { file: "campsite.png", sizeZ18: 20 },
+  peak: { file: "peak.png", sizeZ18: 18 },
+  spring: { file: "spring.png", sizeZ18: 18 },
+  gate: { file: "gate.png", sizeZ18: 18 },
+  cave: { file: "cave.png", sizeZ18: 18 },
+  ford: { file: "ford.png", sizeZ18: 20 },
   waterfall: { file: "waterfall.png", sizeZ18: 20 },
   trailhead: { file: "trailhead.png", sizeZ18: 20 },
   viewpoint: { file: "viewpoint.png", sizeZ18: 20 },
-  hut:       { file: "hut.png",       sizeZ18: 20 },
+  hut: { file: "hut.png", sizeZ18: 20 },
 };
 
 /** Natural pixel dimension of every point icon PNG. */

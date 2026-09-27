@@ -56,8 +56,16 @@ export function Button({
         <ActivityIndicator color={tint} />
       ) : (
         <>
-          {icon ? <Feather name={icon} size={compact ? 16 : 18} color={tint} /> : null}
-          <Text style={[styles.label, compact && styles.labelCompact, { color: tint }]}>
+          {icon ? (
+            <Feather name={icon} size={compact ? 16 : 18} color={tint} />
+          ) : null}
+          <Text
+            style={[
+              styles.label,
+              compact && styles.labelCompact,
+              { color: tint },
+            ]}
+          >
             {label}
           </Text>
         </>
@@ -77,7 +85,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing(2),
     minHeight: 44,
   },
-  compact: { paddingVertical: spacing(0.75), paddingHorizontal: spacing(1.5), minHeight: 36 },
+  compact: {
+    paddingVertical: spacing(0.75),
+    paddingHorizontal: spacing(1.5),
+    minHeight: 36,
+  },
   grow: { flex: 1 },
   filledAccent: { backgroundColor: theme.accent },
   outlineAccent: { borderWidth: 1, borderColor: theme.accent },

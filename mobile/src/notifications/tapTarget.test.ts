@@ -40,7 +40,11 @@ describe("notificationTapTarget", () => {
 
   it("blocks nothing once the route is finished", () => {
     const data = { placeId: "c-2" };
-    expect(notificationTapTarget({ data, routeEditing: true }).kind).toBe("blocked");
-    expect(notificationTapTarget({ data, routeEditing: false }).kind).toBe("place");
+    expect(notificationTapTarget({ data, routeEditing: true }).kind).toBe(
+      "blocked",
+    );
+    expect(notificationTapTarget({ data, routeEditing: false }).kind).toBe(
+      "place",
+    );
   });
 });

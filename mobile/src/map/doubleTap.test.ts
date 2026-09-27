@@ -30,7 +30,10 @@ describe("isDoubleTap", () => {
 
   it("rejects a tap too late — two questions about one spot", () => {
     expect(
-      isDoubleTap(first, { ...first, timeMs: first.timeMs + DOUBLE_TAP_MS + 1 }),
+      isDoubleTap(first, {
+        ...first,
+        timeMs: first.timeMs + DOUBLE_TAP_MS + 1,
+      }),
     ).toBe(false);
   });
 
@@ -45,7 +48,9 @@ describe("isDoubleTap", () => {
   });
 
   it("rejects a sample from before the first tap (clock went backwards)", () => {
-    expect(isDoubleTap(first, { ...first, timeMs: first.timeMs - 10 })).toBe(false);
+    expect(isDoubleTap(first, { ...first, timeMs: first.timeMs - 10 })).toBe(
+      false,
+    );
   });
 });
 

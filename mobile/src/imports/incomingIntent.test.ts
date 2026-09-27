@@ -10,9 +10,9 @@ describe("classifyIncomingBytes", () => {
   });
 
   it("detects KMZ (zip) by magic", () => {
-    expect(classifyIncomingBytes(new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0]))).toBe(
-      "kmz",
-    );
+    expect(
+      classifyIncomingBytes(new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0])),
+    ).toBe("kmz");
   });
 
   it("detects GPX and KML by XML root element, past the prolog", () => {
@@ -23,7 +23,9 @@ describe("classifyIncomingBytes", () => {
     ).toBe("gpx");
     expect(
       classifyIncomingBytes(
-        bytes('<?xml version="1.0"?><kml xmlns="http://www.opengis.net/kml/2.2">'),
+        bytes(
+          '<?xml version="1.0"?><kml xmlns="http://www.opengis.net/kml/2.2">',
+        ),
       ),
     ).toBe("kml");
   });
@@ -36,7 +38,9 @@ describe("classifyIncomingBytes", () => {
 
   it("rejects unknown content and tiny buffers", () => {
     expect(classifyIncomingBytes(bytes("hello world"))).toBeNull();
-    expect(classifyIncomingBytes(bytes("<html><body>no</body></html>"))).toBeNull();
+    expect(
+      classifyIncomingBytes(bytes("<html><body>no</body></html>")),
+    ).toBeNull();
     expect(classifyIncomingBytes(new Uint8Array([1, 2]))).toBeNull();
   });
 

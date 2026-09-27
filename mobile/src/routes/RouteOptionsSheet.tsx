@@ -22,7 +22,8 @@
 // acting on the draft (DraftToolPanel.tsx).
 import { useEffect, useMemo, useState } from "react";
 import { Alert, StyleSheet, View } from "react-native";
-import { messageFromError ,
+import {
+  messageFromError,
   copyAndRemoveOutcomeMessage,
   copyOutcomeMessage,
 } from "@logjam/shared";
@@ -91,7 +92,9 @@ export function RouteOptionsSheet({
   const [renaming, setRenaming] = useState(false);
   const [showingStats, setShowingStats] = useState(false);
   const [linking, setLinking] = useState(false);
-  const [copyMode, setCopyMode] = useState<"copy" | "copyAndRemove" | null>(null);
+  const [copyMode, setCopyMode] = useState<"copy" | "copyAndRemove" | null>(
+    null,
+  );
 
   // Reset every sub-mode when the sheet closes. This component stays mounted
   // between openings — `visible` is a prop, not a remount — so a sub-mode left
@@ -127,7 +130,11 @@ export function RouteOptionsSheet({
   // and issues no request.
   const share = useSharePanel({
     target: actions?.share
-      ? { kind: "entity", entityType: actions.share.entityType, entityId: actions.share.entityId }
+      ? {
+          kind: "entity",
+          entityType: actions.share.entityType,
+          entityId: actions.share.entityId,
+        }
       : null,
     itemLabel: route?.name ?? "",
     online,
@@ -182,7 +189,9 @@ export function RouteOptionsSheet({
             console.error(err);
             onError("Couldn't save a copy of this route.");
           }
-          void requestSync().catch((syncErr: unknown) => console.error(syncErr));
+          void requestSync().catch((syncErr: unknown) =>
+            console.error(syncErr),
+          );
         }
         setBusy(false);
         setCopyMode(null);
@@ -341,8 +350,7 @@ export function RouteOptionsSheet({
                 return;
               }
               setBusy(true);
-              actions
-                .rename!(changed.name)
+              actions.rename!(changed.name)
                 .then(() => close())
                 .catch((err: unknown) => {
                   console.error(err);
@@ -355,158 +363,158 @@ export function RouteOptionsSheet({
       ) : showingStats ? (
         <RouteStatsBody route={route} allowNetwork={allowNetwork} />
       ) : (
-      <View style={styles.body}>
-        {/* The one row the two surfaces differ by, and it leads the list. */}
-        {onShowOnMap && actions.locatable ? (
+        <View style={styles.body}>
+          {/* The one row the two surfaces differ by, and it leads the list. */}
+          {onShowOnMap && actions.locatable ? (
+            <Row
+              title="Show on map"
+              icon="map-pin"
+              hue={assetHue.route}
+              disabled={busy}
+              onPress={onShowOnMap}
+            />
+          ) : null}
           <Row
-            title="Show on map"
-            icon="map-pin"
+            title="View stats"
+            icon="bar-chart-2"
             hue={assetHue.route}
             disabled={busy}
-            onPress={onShowOnMap}
+            onPress={() => setShowingStats(true)}
           />
-        ) : null}
-        <Row
-          title="View stats"
-          icon="bar-chart-2"
-          hue={assetHue.route}
-          disabled={busy}
-          onPress={() => setShowingStats(true)}
-        />
-        {actions.editableRouteId ? (
+          {actions.editableRouteId ? (
+            <Row
+              // ONE verb for every way of editing this route. It opens the draw
+              // tool on the map, where the points, the direction and the colour
+              // are all in reach of the line they change.
+              title="Edit"
+              icon="edit-3"
+              hue={assetHue.route}
+              disabled={busy}
+              onPress={onEdit}
+            />
+          ) : null}
+          {actions.editableRouteId ? (
+            <Row
+              // No subtitle: the sheet it opens says the same thing, and saying
+              // it twice makes the row taller for no new information.
+              title={route.placeId ? "Change linked place" : "Link to a place"}
+              icon="link"
+              hue={assetHue.route}
+              disabled={busy}
+              onPress={() => setLinking(true)}
+            />
+          ) : null}
           <Row
-            // ONE verb for every way of editing this route. It opens the draw
-            // tool on the map, where the points, the direction and the colour
-            // are all in reach of the line they change.
-            title="Edit"
-            icon="edit-3"
-            hue={assetHue.route}
+            title="Save as GPX"
+            icon="download"
+            hue={theme.bonus1}
             disabled={busy}
-            onPress={onEdit}
+            onPress={() => save("gpx")}
           />
-        ) : null}
-        {actions.editableRouteId ? (
           <Row
-            // No subtitle: the sheet it opens says the same thing, and saying
-            // it twice makes the row taller for no new information.
-            title={route.placeId ? "Change linked place" : "Link to a place"}
-            icon="link"
-            hue={assetHue.route}
+            title="Save as KML"
+            icon="download"
+            hue={theme.bonus1}
             disabled={busy}
-            onPress={() => setLinking(true)}
+            onPress={() => save("kml")}
           />
-        ) : null}
-        <Row
-          title="Save as GPX"
-          icon="download"
-          hue={theme.bonus1}
-          disabled={busy}
-          onPress={() => save("gpx")}
-        />
-        <Row
-          title="Save as KML"
-          icon="download"
-          hue={theme.bonus1}
-          disabled={busy}
-          onPress={() => save("kml")}
-        />
-        {/* A shared route is not renameable — the API refuses the write — so
+          {/* A shared route is not renameable — the API refuses the write — so
             the verb is absent rather than offered and its typing thrown away.
             The form behind it is a sub-mode of THIS sheet, so neither surface
             can be the one that lacks it. */}
-        {actions.rename ? (
-          <Row
-            title="Rename"
-            icon="edit-2"
-            hue={theme.bonus1}
-            disabled={busy}
-            onPress={() => setRenaming(true)}
-          />
-        ) : null}
-        {/* `actions.share` is absent on a route reached through someone else's
+          {actions.rename ? (
+            <Row
+              title="Rename"
+              icon="edit-2"
+              hue={theme.bonus1}
+              disabled={busy}
+              onPress={() => setRenaming(true)}
+            />
+          ) : null}
+          {/* `actions.share` is absent on a route reached through someone else's
             place, so the verb is withheld rather than offered and refused
             with a 403. The panel behind it is a sub-mode of THIS sheet. */}
-        {actions.share ? (
-          <Row
-            title="Share"
-            icon="share-2"
-            hue={theme.bonus1}
-            {...shareRowProps}
-            disabled={busy || shareRowProps.disabled}
-            onPress={() => setSharing((open) => !open)}
-          />
-        ) : null}
-        {/* A route is a synced record, so this removes it from the ACCOUNT —
+          {actions.share ? (
+            <Row
+              title="Share"
+              icon="share-2"
+              hue={theme.bonus1}
+              {...shareRowProps}
+              disabled={busy || shareRowProps.disabled}
+              onPress={() => setSharing((open) => !open)}
+            />
+          ) : null}
+          {/* A route is a synced record, so this removes it from the ACCOUNT —
             "from device" would promise the copy on another phone survives.
             A route shared through someone else's place carries no delete
             descriptor at all (the API's delete is owner-only), so the verb is
             absent rather than offered and refused. */}
-        {actions.delete ? (
-          <Row
-            title="Delete route"
-            icon="trash-2"
-            hue={theme.warning}
-            disabled={busy}
-            onPress={confirmDelete}
-          />
-        ) : null}
-        {/* The recipient's keep. Offered on EITHER arm — a route inherited
+          {actions.delete ? (
+            <Row
+              title="Delete route"
+              icon="trash-2"
+              hue={theme.warning}
+              disabled={busy}
+              onPress={confirmDelete}
+            />
+          ) : null}
+          {/* The recipient's keep. Offered on EITHER arm — a route inherited
             from a shared place is copyable too — which is why it is gated on
             "someone else owns this" and not on there being a share row. */}
-        {actions.sharedWithYou ? (
-          <Row
-            title="Save a copy"
-            icon="copy"
-            {...shareRowProps}
-            disabled={busy || shareRowProps.disabled}
-            onPress={() => setCopyMode("copy")}
-          />
-        ) : null}
-        {/* The bundled verb, gated on the SECOND half being possible: an
+          {actions.sharedWithYou ? (
+            <Row
+              title="Save a copy"
+              icon="copy"
+              {...shareRowProps}
+              disabled={busy || shareRowProps.disabled}
+              onPress={() => setCopyMode("copy")}
+            />
+          ) : null}
+          {/* The bundled verb, gated on the SECOND half being possible: an
             inherited route has no share of its own to drop, and a button that
             silently did only its first half would be the same button making
             two different promises. */}
-        {actions.sharedWithYou && actions.removeShare ? (
-          <Row
-            title="Save a copy and remove"
-            icon="archive"
-            {...shareRowProps}
-            disabled={busy || shareRowProps.disabled}
-            onPress={() => setCopyMode("copyAndRemove")}
-          />
-        ) : null}
-        {/* The recipient's own verb. Present only on a DIRECT share; it needs a
+          {actions.sharedWithYou && actions.removeShare ? (
+            <Row
+              title="Save a copy and remove"
+              icon="archive"
+              {...shareRowProps}
+              disabled={busy || shareRowProps.disabled}
+              onPress={() => setCopyMode("copyAndRemove")}
+            />
+          ) : null}
+          {/* The recipient's own verb. Present only on a DIRECT share; it needs a
             connection for the same reason granting one does, so it is dimmed
             offline with the reason in place of its subtitle, never hidden. */}
-        {actions.removeShare ? (
-          <Row
-            title="Remove from my account"
-            icon="x-circle"
-            hue={theme.warning}
-            {...shareRowProps}
-            disabled={busy || shareRowProps.disabled}
-            onPress={confirmRemoveShare}
-          />
-        ) : null}
-        {/* Nothing to remove here — this route came with a place. Say which,
+          {actions.removeShare ? (
+            <Row
+              title="Remove from my account"
+              icon="x-circle"
+              hue={theme.warning}
+              {...shareRowProps}
+              disabled={busy || shareRowProps.disabled}
+              onPress={confirmRemoveShare}
+            />
+          ) : null}
+          {/* Nothing to remove here — this route came with a place. Say which,
             and go there, rather than offering a verb the server would refuse. */}
-        {viaPlaces.length > 0 && onOpenPlace
-          ? viaPlaces.map((place) => (
-              <Row
-                key={place.id}
-                title={`Open ${place.name}`}
-                subtitle="This route came with that shared place — remove it there."
-                icon="map-pin"
-                hue={placeHue.shared}
-                disabled={busy}
-                onPress={() => {
-                  close();
-                  onOpenPlace(place.id, place.name);
-                }}
-              />
-            ))
-          : null}
-      </View>
+          {viaPlaces.length > 0 && onOpenPlace
+            ? viaPlaces.map((place) => (
+                <Row
+                  key={place.id}
+                  title={`Open ${place.name}`}
+                  subtitle="This route came with that shared place — remove it there."
+                  icon="map-pin"
+                  hue={placeHue.shared}
+                  disabled={busy}
+                  onPress={() => {
+                    close();
+                    onOpenPlace(place.id, place.name);
+                  }}
+                />
+              ))
+            : null}
+        </View>
       )}
     </BottomSheet>
   );

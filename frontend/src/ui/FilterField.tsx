@@ -34,7 +34,14 @@ export function FilterField({
         <span className={classes.summary} data-active={active}>
           {summary}
         </span>
-        {active && <IconButton icon={X} size={16} label={`Clear the ${label} filter`} onClick={onClear} />}
+        {active && (
+          <IconButton
+            icon={X}
+            size={16}
+            label={`Clear the ${label} filter`}
+            onClick={onClear}
+          />
+        )}
       </div>
       {children}
     </div>

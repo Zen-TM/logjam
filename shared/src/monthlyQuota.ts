@@ -4,7 +4,9 @@ export const SYDNEY_TZ = "Australia/Sydney";
 
 /** Returns the start of the current month (1st 00:00 Sydney time). */
 export function currentMonthStart(now = new Date()): Date {
-  return DateTime.fromJSDate(now, { zone: SYDNEY_TZ }).startOf("month").toJSDate();
+  return DateTime.fromJSDate(now, { zone: SYDNEY_TZ })
+    .startOf("month")
+    .toJSDate();
 }
 
 /** Returns the 1st of next month 00:00 Sydney time (when the quota resets). */

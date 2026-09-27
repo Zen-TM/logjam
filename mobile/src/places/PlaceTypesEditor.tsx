@@ -78,7 +78,9 @@ export function PlaceTypeList({
   ];
   return (
     <View style={styles.body}>
-      <SectionHeader label={`${ordered.length} type${ordered.length === 1 ? "" : "s"}`} />
+      <SectionHeader
+        label={`${ordered.length} type${ordered.length === 1 ? "" : "s"}`}
+      />
       {ordered.map((type) =>
         isSystemPlaceType(type) ? (
           <Row
@@ -156,7 +158,11 @@ export function usePlaceTypeForm({
         }
         onSaved("Type updated.");
       } else {
-        await createPlaceTypeLocal({ name, iconKey: draft.iconKey, color: draft.color });
+        await createPlaceTypeLocal({
+          name,
+          iconKey: draft.iconKey,
+          color: draft.color,
+        });
         onSaved("Type added.");
       }
       onDone();
@@ -182,7 +188,9 @@ export function usePlaceTypeForm({
     // before it enqueues.
     listMirrorPlaces()
       .then((places) => {
-        const inUse = places.filter((place) => place.placeTypeId === editing.id).length;
+        const inUse = places.filter(
+          (place) => place.placeTypeId === editing.id,
+        ).length;
         if (inUse > 0) {
           Alert.alert(
             `“${editing.name}” is still in use`,
@@ -190,30 +198,26 @@ export function usePlaceTypeForm({
           );
           return;
         }
-        Alert.alert(
-          `Delete “${editing.name}”?`,
-          "This can't be undone.",
-          [
-            { text: "Cancel", style: "cancel" },
-            {
-              text: "Delete",
-              style: "destructive",
-              onPress: () => {
-                deletePlaceTypeLocal(editing.id)
-                  .then(() => {
-                    onSaved("Type deleted.");
-                    onDone();
-                  })
-                  .catch((err: unknown) => {
-                    console.error(err);
-                    // Same reasoning as `save`'s catch: the sheet is still up,
-                    // so this is the banner, not a toast under it.
-                    setFormError("Couldn't delete that type.");
-                  });
-              },
+        Alert.alert(`Delete “${editing.name}”?`, "This can't be undone.", [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Delete",
+            style: "destructive",
+            onPress: () => {
+              deletePlaceTypeLocal(editing.id)
+                .then(() => {
+                  onSaved("Type deleted.");
+                  onDone();
+                })
+                .catch((err: unknown) => {
+                  console.error(err);
+                  // Same reasoning as `save`'s catch: the sheet is still up,
+                  // so this is the banner, not a toast under it.
+                  setFormError("Couldn't delete that type.");
+                });
             },
-          ],
-        );
+          },
+        ]);
       })
       .catch((err: unknown) => {
         console.error(err);
@@ -244,52 +248,58 @@ export function usePlaceTypeForm({
       <View style={styles.grid} onLayout={onGridLayout}>
         {/* Nothing until the row has been measured — one frame, and the
             alternative is every cell flashing at its intrinsic size first. */}
-        {cellSize == null ? null : PLACE_TYPE_ICON_KEYS.map((iconKey) => (
-          <Pressable
-            key={iconKey}
-            accessibilityRole="button"
-            accessibilityLabel={iconKey}
-            accessibilityState={{ selected: draft.iconKey === iconKey }}
-            onPress={() => setDraft((current) => ({ ...current, iconKey }))}
-            style={[
-              styles.cell,
-              cellSize,
-              draft.iconKey === iconKey ? styles.cellChosen : null,
-            ]}
-          >
-            <Feather
-              name={placeTypeFeatherIcon(iconKey)}
-              size={20}
-              color={draft.iconKey === iconKey ? theme.accent : theme.textPrimary}
-            />
-          </Pressable>
-        ))}
+        {cellSize == null
+          ? null
+          : PLACE_TYPE_ICON_KEYS.map((iconKey) => (
+              <Pressable
+                key={iconKey}
+                accessibilityRole="button"
+                accessibilityLabel={iconKey}
+                accessibilityState={{ selected: draft.iconKey === iconKey }}
+                onPress={() => setDraft((current) => ({ ...current, iconKey }))}
+                style={[
+                  styles.cell,
+                  cellSize,
+                  draft.iconKey === iconKey ? styles.cellChosen : null,
+                ]}
+              >
+                <Feather
+                  name={placeTypeFeatherIcon(iconKey)}
+                  size={20}
+                  color={
+                    draft.iconKey === iconKey ? theme.accent : theme.textPrimary
+                  }
+                />
+              </Pressable>
+            ))}
       </View>
 
       <SectionHeader label="Colour" />
       <View style={styles.grid} onLayout={onGridLayout}>
-        {cellSize == null ? null : PLACE_TYPE_COLORS.map((color) => (
-          <Pressable
-            key={color}
-            accessibilityRole="button"
-            accessibilityLabel={color}
-            accessibilityState={{ selected: draft.color === color }}
-            onPress={() => setDraft((current) => ({ ...current, color }))}
-            style={[
-              styles.cell,
-              styles.swatch,
-              cellSize,
-              { backgroundColor: color },
-              draft.color === color ? styles.cellChosen : null,
-            ]}
-          >
-            {draft.color === color ? (
-              // Dark ink on a light swatch: the palette is light precisely so a
-              // mark on top of it stays legible.
-              <Feather name="check" size={16} color={theme.primary} />
-            ) : null}
-          </Pressable>
-        ))}
+        {cellSize == null
+          ? null
+          : PLACE_TYPE_COLORS.map((color) => (
+              <Pressable
+                key={color}
+                accessibilityRole="button"
+                accessibilityLabel={color}
+                accessibilityState={{ selected: draft.color === color }}
+                onPress={() => setDraft((current) => ({ ...current, color }))}
+                style={[
+                  styles.cell,
+                  styles.swatch,
+                  cellSize,
+                  { backgroundColor: color },
+                  draft.color === color ? styles.cellChosen : null,
+                ]}
+              >
+                {draft.color === color ? (
+                  // Dark ink on a light swatch: the palette is light precisely so a
+                  // mark on top of it stays legible.
+                  <Feather name="check" size={16} color={theme.primary} />
+                ) : null}
+              </Pressable>
+            ))}
       </View>
 
       <Text style={styles.hint}>
@@ -297,7 +307,12 @@ export function usePlaceTypeForm({
       </Text>
 
       {editing ? (
-        <Row icon="trash-2" hue={theme.warning} title="Delete type" onPress={confirmDelete} />
+        <Row
+          icon="trash-2"
+          hue={theme.warning}
+          title="Delete type"
+          onPress={confirmDelete}
+        />
       ) : null}
     </View>
   );
@@ -354,11 +369,16 @@ function useGridCellSize(): {
       : Math.floor((width - GRID_GAP * (GRID_COLUMNS - 1)) / GRID_COLUMNS);
   return {
     cellSize: size == null ? null : { width: size, height: size },
-    onGridLayout: (event: LayoutChangeEvent) => setWidth(event.nativeEvent.layout.width),
+    onGridLayout: (event: LayoutChangeEvent) =>
+      setWidth(event.nativeEvent.layout.width),
   };
 }
 
-type PlaceTypeDraft = { name: string; iconKey: PlaceTypeIconKey; color: string };
+type PlaceTypeDraft = {
+  name: string;
+  iconKey: PlaceTypeIconKey;
+  color: string;
+};
 
 /** A NEW type starts on the neutral pin and the first palette entry rather than
  *  on nothing: a form whose preview is blank until two more taps reads as

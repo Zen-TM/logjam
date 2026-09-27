@@ -61,10 +61,17 @@ function spatialReviewCandidates(
 ): CandidateScore[] {
   const nearby: CandidateScore[] = [];
   for (const c of existing) {
-    if (!withinBbox(rw.latitude, rw.longitude, c.latitude, c.longitude, BBOX_DEG)) {
+    if (
+      !withinBbox(rw.latitude, rw.longitude, c.latitude, c.longitude, BBOX_DEG)
+    ) {
       continue;
     }
-    const distanceMeters = haversineMeters(rw.latitude, rw.longitude, c.latitude, c.longitude);
+    const distanceMeters = haversineMeters(
+      rw.latitude,
+      rw.longitude,
+      c.latitude,
+      c.longitude,
+    );
     if (distanceMeters > REVIEW_DIST_M) continue;
     nearby.push({
       placeId: c.id,
@@ -73,7 +80,9 @@ function spatialReviewCandidates(
       combinedScore: -distanceMeters, // nearer ranks higher; below any name match
     });
   }
-  return nearby.sort((a, b) => b.combinedScore - a.combinedScore).slice(0, TOP_CANDIDATES);
+  return nearby
+    .sort((a, b) => b.combinedScore - a.combinedScore)
+    .slice(0, TOP_CANDIDATES);
 }
 
 // Build dedupe proposals. Existing places that already have a ropeWikiId
@@ -117,9 +126,7 @@ export function buildProposals(
       }));
 
     const autoBest =
-      result.confidence === "auto" && nameScored[0]
-        ? nameScored[0]
-        : undefined;
+      result.confidence === "auto" && nameScored[0] ? nameScored[0] : undefined;
 
     let tier: DedupeTier;
     let candidates: CandidateScore[];
@@ -158,7 +165,9 @@ export function buildProposals(
     const current = claimed.get(p.bestPlaceId);
     if (!current || myScore > current.score) {
       if (current) {
-        const loser = proposals.find((q) => q.ropeWikiId === current.ropeWikiId);
+        const loser = proposals.find(
+          (q) => q.ropeWikiId === current.ropeWikiId,
+        );
         if (loser) {
           loser.tier = "review";
           loser.bestPlaceId = null;

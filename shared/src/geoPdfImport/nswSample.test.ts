@@ -18,13 +18,18 @@ const sampleDir = process.env.GEOPDF_SAMPLE_DIR;
 
 describe.runIf(enabled)("NSW Spatial Services sample sheets", () => {
   if (!enabled) return;
-  if (!sampleDir) throw new Error("RUN_GEOPDF_SAMPLES=1 needs GEOPDF_SAMPLE_DIR");
-  const samples = readdirSync(sampleDir).filter((f) => f.toLowerCase().endsWith(".pdf"));
+  if (!sampleDir)
+    throw new Error("RUN_GEOPDF_SAMPLES=1 needs GEOPDF_SAMPLE_DIR");
+  const samples = readdirSync(sampleDir).filter((f) =>
+    f.toLowerCase().endsWith(".pdf"),
+  );
   if (samples.length === 0) throw new Error(`no PDFs in ${sampleDir}`);
 
   for (const file of samples) {
     // Real sheets are tens of MB and plan hundreds of mesh tiles.
-    it(`parses, transforms and plans ${file}`, { timeout: 60_000 }, async () => {
+    it(`parses, transforms and plans ${file}`, {
+      timeout: 60_000,
+    }, async () => {
       const parsed = await parseGeoPdfGeoref(
         new Uint8Array(readFileSync(join(sampleDir, file))),
       );
@@ -44,14 +49,12 @@ describe.runIf(enabled)("NSW Spatial Services sample sheets", () => {
       // Georef quality: a published sheet should fit far below the warn line.
       expect(transform.maxResidualFractionOfWidth).toBeLessThan(0.005);
 
-      const clip =
-        main.boundsPolygonPt ??
-        [
-          { x: main.bboxPt.x0, y: main.bboxPt.y0 },
-          { x: main.bboxPt.x1, y: main.bboxPt.y0 },
-          { x: main.bboxPt.x1, y: main.bboxPt.y1 },
-          { x: main.bboxPt.x0, y: main.bboxPt.y1 },
-        ];
+      const clip = main.boundsPolygonPt ?? [
+        { x: main.bboxPt.x0, y: main.bboxPt.y0 },
+        { x: main.bboxPt.x1, y: main.bboxPt.y0 },
+        { x: main.bboxPt.x1, y: main.bboxPt.y1 },
+        { x: main.bboxPt.x0, y: main.bboxPt.y1 },
+      ];
       const plan = buildTilePlan(transform, clip);
       expect(plan.tiles.length).toBeGreaterThan(0);
       expect(plan.zMax).toBeGreaterThanOrEqual(10);

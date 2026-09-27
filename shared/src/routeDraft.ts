@@ -48,7 +48,8 @@ export function draftAnchorIndices(draft: RouteDraft): number[] {
   let cursor = 0;
   draft.anchors.forEach((_, i) => {
     indices.push(cursor);
-    cursor += 1 + (i < draft.anchors.length - 1 ? (draft.filler[i]?.length ?? 0) : 0);
+    cursor +=
+      1 + (i < draft.anchors.length - 1 ? (draft.filler[i]?.length ?? 0) : 0);
   });
   return indices;
 }
@@ -86,7 +87,10 @@ export function draftFromRoute(
     );
 
   if (!usable) {
-    return { anchors: points.map((p) => p), filler: points.map(() => []).slice(1) };
+    return {
+      anchors: points.map((p) => p),
+      filler: points.map(() => []).slice(1),
+    };
   }
 
   const anchors: RoutePoint[] = [];
@@ -94,7 +98,9 @@ export function draftFromRoute(
   anchorIndices.forEach((index, i) => {
     anchors.push(points[index]!);
     if (i < anchorIndices.length - 1) {
-      filler.push(points.slice(index + 1, anchorIndices[i + 1]!) as RoutePoint[]);
+      filler.push(
+        points.slice(index + 1, anchorIndices[i + 1]!) as RoutePoint[],
+      );
     }
   });
   return { anchors, filler };
@@ -132,7 +138,10 @@ export function setFiller(
   return { ...draft, filler };
 }
 
-function samePoint(a: RoutePoint | undefined, b: RoutePoint | undefined): boolean {
+function samePoint(
+  a: RoutePoint | undefined,
+  b: RoutePoint | undefined,
+): boolean {
   return a != null && b != null && a[0] === b[0] && a[1] === b[1];
 }
 
@@ -237,12 +246,19 @@ function distanceToSegment(
   const dx = end[0] - start[0];
   const dy = end[1] - start[1];
   const lengthSquared = dx * dx + dy * dy;
-  if (lengthSquared === 0) return Math.hypot(point[0] - start[0], point[1] - start[1]);
+  if (lengthSquared === 0)
+    return Math.hypot(point[0] - start[0], point[1] - start[1]);
   const t = Math.max(
     0,
-    Math.min(1, ((point[0] - start[0]) * dx + (point[1] - start[1]) * dy) / lengthSquared),
+    Math.min(
+      1,
+      ((point[0] - start[0]) * dx + (point[1] - start[1]) * dy) / lengthSquared,
+    ),
   );
-  return Math.hypot(point[0] - (start[0] + dx * t), point[1] - (start[1] + dy * t));
+  return Math.hypot(
+    point[0] - (start[0] + dx * t),
+    point[1] - (start[1] + dy * t),
+  );
 }
 
 /**

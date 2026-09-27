@@ -37,7 +37,9 @@ export function readEntryChoice(): EntryChoice {
  * didn't stick means the next cold start throws them back to the chooser with
  * their data apparently gone (it isn't, but it looks that way).
  */
-export function writeEntryChoice(choice: Exclude<EntryChoice, "unchosen">): boolean {
+export function writeEntryChoice(
+  choice: Exclude<EntryChoice, "unchosen">,
+): boolean {
   return writePref(GUEST_MODE_PREF_KEY, choice === "guest" ? "on" : "off");
 }
 

@@ -24,7 +24,12 @@ export function hexToHsva(hex: string): Hsva {
   const delta = max - min;
   let h = 0;
   if (delta) {
-    h = max === r ? ((g - b) / delta) % 6 : max === g ? (b - r) / delta + 2 : (r - g) / delta + 4;
+    h =
+      max === r
+        ? ((g - b) / delta) % 6
+        : max === g
+          ? (b - r) / delta + 2
+          : (r - g) / delta + 4;
     h = (h * 60 + 360) % 360;
   }
   return { h, s: max ? (delta / max) * 100 : 0, v: max * 100, a };
@@ -37,6 +42,9 @@ export function hsvaToHex({ h, s, v, a }: Hsva): string {
     const k = (n + h / 60) % 6;
     return value - value * saturation * Math.max(0, Math.min(k, 4 - k, 1));
   };
-  const byte = (x: number) => Math.round(x * 255).toString(16).padStart(2, "0");
+  const byte = (x: number) =>
+    Math.round(x * 255)
+      .toString(16)
+      .padStart(2, "0");
   return `#${byte(channel(5))}${byte(channel(3))}${byte(channel(1))}${byte(a)}`;
 }

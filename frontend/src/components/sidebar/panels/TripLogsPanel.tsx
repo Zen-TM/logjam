@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   AlignLeft,
   ArrowRight,
@@ -35,7 +42,11 @@ import {
   type TripSortKey,
 } from "@logjam/shared";
 import type { TPlace, TTripLog } from "../../../placeUtils";
-import { bulkDeleteTripLogs, deleteTripLog, tripTitle } from "../../../placeUtils";
+import {
+  bulkDeleteTripLogs,
+  deleteTripLog,
+  tripTitle,
+} from "../../../placeUtils";
 import { useStoredState } from "../../../useStoredState";
 import { useIsMobile } from "../../../useIsMobile";
 import TripLogDialog from "../../dialogs/TripLogDialog";
@@ -71,7 +82,8 @@ import classes from "./TripLogsPanel.module.css";
 /** The type rail's "every activity" value — also what `filterTrips` treats as no filter. */
 const ALL_TYPES = "";
 
-const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
+const plural = (count: number, noun: string) =>
+  `${count} ${noun}${count === 1 ? "" : "s"}`;
 
 /**
  * Logs: "what have I done?" (Logjam GPS's `LogsScreen`). The hero answers with
@@ -129,21 +141,45 @@ function TripLogsPanel({
   // the panel's unmount-on-close (and a tab switch) so a mid-task filter isn't
   // retyped, but they're gone next session: a date range remembered for a month
   // hides trips the user never asked to hide (UX finding 5).
-  const [search, setSearch] = useStoredState("logjam.tripSearch", "", sessionStorage);
-  const [dateFrom, setDateFrom] = useStoredState("logjam.tripDateFrom", "", sessionStorage);
-  const [dateTo, setDateTo] = useStoredState("logjam.tripDateTo", "", sessionStorage);
-  const [typeFilter, setTypeFilter] = useStoredState("logjam.tripTypeFilter", ALL_TYPES, sessionStorage);
-  // Attribute filters are ephemeral like the rest of them; the SORT is a
-  // preference and outlives the session, exactly as Places' does.
-  const [customFilters, setCustomFilters] = useStoredState<Record<string, CustomFieldFilter>>(
-    "logjam.tripAttributeFilters",
-    {},
+  const [search, setSearch] = useStoredState(
+    "logjam.tripSearch",
+    "",
     sessionStorage,
   );
-  const [includeUnknowns, setIncludeUnknowns] = useStoredState("logjam.tripIncludeUnknowns", false, sessionStorage);
-  const [sort, setSort] = useStoredState<TripSortKey>("logjam.tripSort", "newest");
+  const [dateFrom, setDateFrom] = useStoredState(
+    "logjam.tripDateFrom",
+    "",
+    sessionStorage,
+  );
+  const [dateTo, setDateTo] = useStoredState(
+    "logjam.tripDateTo",
+    "",
+    sessionStorage,
+  );
+  const [typeFilter, setTypeFilter] = useStoredState(
+    "logjam.tripTypeFilter",
+    ALL_TYPES,
+    sessionStorage,
+  );
+  // Attribute filters are ephemeral like the rest of them; the SORT is a
+  // preference and outlives the session, exactly as Places' does.
+  const [customFilters, setCustomFilters] = useStoredState<
+    Record<string, CustomFieldFilter>
+  >("logjam.tripAttributeFilters", {}, sessionStorage);
+  const [includeUnknowns, setIncludeUnknowns] = useStoredState(
+    "logjam.tripIncludeUnknowns",
+    false,
+    sessionStorage,
+  );
+  const [sort, setSort] = useStoredState<TripSortKey>(
+    "logjam.tripSort",
+    "newest",
+  );
   const [searchOpen, setSearchOpen] = useState(search !== "");
-  const { sheetOpen, openSheet } = usePanelSheet({ onOpenChange: onFiltersOpenChange, onExpandSheet });
+  const { sheetOpen, openSheet } = usePanelSheet({
+    onOpenChange: onFiltersOpenChange,
+    onExpandSheet,
+  });
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const selectionAnchor = useRef<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<string[] | null>(null);
@@ -152,20 +188,35 @@ function TripLogsPanel({
   const [creatingTrip, setCreatingTrip] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
-
   // ── The list ─────────────────────────────────────────────────────────
   const criteria = useMemo(
-    () => ({ search, dateFrom, dateTo, type: typeFilter, custom: customFilters, includeUnknowns }),
+    () => ({
+      search,
+      dateFrom,
+      dateTo,
+      type: typeFilter,
+      custom: customFilters,
+      includeUnknowns,
+    }),
     [search, dateFrom, dateTo, typeFilter, customFilters, includeUnknowns],
   );
-  const visible = useMemo(() => sortTrips(filterTrips(tripLogs, criteria), sort), [tripLogs, criteria, sort]);
+  const visible = useMemo(
+    () => sortTrips(filterTrips(tripLogs, criteria), sort),
+    [tripLogs, criteria, sort],
+  );
   // The year headings run the way the trips inside them do, or "Oldest first"
   // reads bottom-to-top.
   const years = useMemo(() => groupTripsByYear(visible, sort), [visible, sort]);
   // Trip types flattened across the loaded trips, for the form's type chips.
-  const existingTripTypes = useMemo(() => tripLogs.flatMap((trip) => trip.types), [tripLogs]);
+  const existingTripTypes = useMemo(
+    () => tripLogs.flatMap((trip) => trip.types),
+    [tripLogs],
+  );
   const distinctTypes = useMemo(() => distinctTripTypes(tripLogs), [tripLogs]);
-  const anyUntyped = useMemo(() => tripLogs.some((trip) => trip.types.length === 0), [tripLogs]);
+  const anyUntyped = useMemo(
+    () => tripLogs.some((trip) => trip.types.length === 0),
+    [tripLogs],
+  );
 
   // The attributes worth OFFERING as filters follow the activity chip, the
   // way a place's follow its type (`tripFilterFieldDefs`).
@@ -177,14 +228,19 @@ function TripLogsPanel({
   // A filter whose definition was deleted, or retyped under it, would narrow
   // the list with no control left in the sheet to say so or undo it.
   useEffect(() => {
-    setCustomFilters((current) => reconcileCustomFieldFilters(current, filterableDefs));
+    setCustomFilters((current) =>
+      reconcileCustomFieldFilters(current, filterableDefs),
+    );
   }, [filterableDefs, setCustomFilters]);
 
   // A remembered type the logbook no longer has would narrow the list with no
   // chip lit to say so.
   useEffect(() => {
     if (!loaded || typeFilter === ALL_TYPES) return;
-    const exists = typeFilter === NO_TYPE_FILTER_VALUE ? anyUntyped : distinctTypes.includes(typeFilter);
+    const exists =
+      typeFilter === NO_TYPE_FILTER_VALUE
+        ? anyUntyped
+        : distinctTypes.includes(typeFilter);
     if (!exists) setTypeFilter(ALL_TYPES);
   }, [loaded, typeFilter, anyUntyped, distinctTypes, setTypeFilter]);
 
@@ -192,12 +248,17 @@ function TripLogsPanel({
   // would I get if I pressed this" rather than "how many are showing now".
   const typeOptions = useMemo(() => {
     const withoutType = filterTrips(tripLogs, { ...criteria, type: ALL_TYPES });
-    const untyped = withoutType.filter((trip) => trip.types.length === 0).length;
+    const untyped = withoutType.filter(
+      (trip) => trip.types.length === 0,
+    ).length;
     return [
       { value: ALL_TYPES, label: "All", count: withoutType.length },
       // Busiest activity first; ties alphabetical so the order is stable.
       ...distinctTypes
-        .map((type) => ({ type, count: withoutType.filter((trip) => trip.types.includes(type)).length }))
+        .map((type) => ({
+          type,
+          count: withoutType.filter((trip) => trip.types.includes(type)).length,
+        }))
         .sort((a, b) => b.count - a.count || a.type.localeCompare(b.type))
         .map(({ type, count }) => {
           const look = tripTypeLook(type);
@@ -231,11 +292,15 @@ function TripLogsPanel({
   const activeCount = activeTripFilterCount(criteria);
   // What the SHEET owns — the strip and its Reset speak for these, not for the
   // rail or the search box, which say their own state where they stand.
-  const sheetFilterCount = activeCount - (search.trim() ? 1 : 0) - (typeFilter ? 1 : 0);
+  const sheetFilterCount =
+    activeCount - (search.trim() ? 1 : 0) - (typeFilter ? 1 : 0);
 
   // ── Selection ────────────────────────────────────────────────────────
   // Every trip is the user's own, so every row is selectable.
-  const selectableIds = useMemo(() => visible.map((trip) => trip.id), [visible]);
+  const selectableIds = useMemo(
+    () => visible.map((trip) => trip.id),
+    [visible],
+  );
   const selected = useMemo(() => {
     const picked = new Set(selectedIds);
     return visible.filter((trip) => picked.has(trip.id));
@@ -252,7 +317,11 @@ function TripLogsPanel({
       const range = idRange(selectableIds, selectionAnchor.current, id);
       setSelectedIds((current) => [...new Set([...current, ...range])]);
     } else {
-      setSelectedIds((current) => (current.includes(id) ? current.filter((other) => other !== id) : [...current, id]));
+      setSelectedIds((current) =>
+        current.includes(id)
+          ? current.filter((other) => other !== id)
+          : [...current, id],
+      );
     }
     selectionAnchor.current = id;
   };
@@ -262,11 +331,19 @@ function TripLogsPanel({
     if (!root || !selecting) return;
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement;
-      if (target.closest("input, textarea, [role='menu'], section[aria-labelledby]")) return;
+      if (
+        target.closest(
+          "input, textarea, [role='menu'], section[aria-labelledby]",
+        )
+      )
+        return;
       if (event.key === "Escape") {
         event.preventDefault();
         clearSelection();
-      } else if (event.key.toLowerCase() === "a" && (event.ctrlKey || event.metaKey)) {
+      } else if (
+        event.key.toLowerCase() === "a" &&
+        (event.ctrlKey || event.metaKey)
+      ) {
         event.preventDefault();
         setSelectedIds(selectableIds);
       }
@@ -284,10 +361,26 @@ function TripLogsPanel({
 
   // ── Verbs ────────────────────────────────────────────────────────────
   const rowEntries = (trip: TTripLog): MenuEntry[] => [
-    { id: "open", label: "Open trip", icon: ArrowRight, onSelect: () => onOpenTrip(trip.id) },
-    { id: "edit", label: "Edit trip", icon: Pencil, onSelect: () => setEditingTripLog(trip) },
+    {
+      id: "open",
+      label: "Open trip",
+      icon: ArrowRight,
+      onSelect: () => onOpenTrip(trip.id),
+    },
+    {
+      id: "edit",
+      label: "Edit trip",
+      icon: Pencil,
+      onSelect: () => setEditingTripLog(trip),
+    },
     { id: "sep", separator: true },
-    { id: "delete", label: "Delete", icon: Trash2, danger: true, onSelect: () => setPendingDelete([trip.id]) },
+    {
+      id: "delete",
+      label: "Delete",
+      icon: Trash2,
+      danger: true,
+      onSelect: () => setPendingDelete([trip.id]),
+    },
   ];
 
   async function confirmDelete() {
@@ -297,12 +390,21 @@ function TripLogsPanel({
     try {
       if (ids.length === 1) await deleteTripLog(ids[0]);
       else await bulkDeleteTripLogs(ids);
-      toast.success(ids.length === 1 ? "Trip deleted." : `Deleted ${ids.length} trips.`);
+      toast.success(
+        ids.length === 1 ? "Trip deleted." : `Deleted ${ids.length} trips.`,
+      );
       setPendingDelete(null);
       clearSelection();
     } catch (err) {
       console.error(err);
-      toast.error(messageFromError(err, ids.length === 1 ? "Couldn't delete that trip." : "Couldn't delete those trips."));
+      toast.error(
+        messageFromError(
+          err,
+          ids.length === 1
+            ? "Couldn't delete that trip."
+            : "Couldn't delete those trips.",
+        ),
+      );
     } finally {
       setDeleting(false);
       // The refetch says which went, whether or not the request failed part-way.
@@ -341,7 +443,11 @@ function TripLogsPanel({
   const dateButton = (
     <IconButton
       icon={SlidersHorizontal}
-      label={sheetFilterCount > 0 ? `Sort and filter, ${plural(sheetFilterCount, "filter")} active` : "Sort and filter"}
+      label={
+        sheetFilterCount > 0
+          ? `Sort and filter, ${plural(sheetFilterCount, "filter")} active`
+          : "Sort and filter"
+      }
       tone={sheetFilterCount > 0 || sheetOpen ? "filled" : "default"}
       aria-expanded={sheetOpen}
       onClick={() => openSheet(!sheetOpen)}
@@ -351,7 +457,9 @@ function TripLogsPanel({
   const total = tripLogsTotal ?? tripLogs.length;
   const hero = (
     <Hero
-      title={!loaded ? "Logs" : total === 0 ? "No trips yet" : plural(total, "trip")}
+      title={
+        !loaded ? "Logs" : total === 0 ? "No trips yet" : plural(total, "trip")
+      }
       actions={
         searchOpen ? (
           <>
@@ -372,11 +480,27 @@ function TripLogsPanel({
               label="Add trips"
               placement="bottom-end"
               entries={[
-                { id: "log", label: "Log a trip", icon: Plus, onSelect: () => setCreatingTrip(true) },
-                { id: "file", label: "Import from file", icon: Upload, onSelect: onOpenUnifiedImport },
+                {
+                  id: "log",
+                  label: "Log a trip",
+                  icon: Plus,
+                  onSelect: () => setCreatingTrip(true),
+                },
+                {
+                  id: "file",
+                  label: "Import from file",
+                  icon: Upload,
+                  onSelect: onOpenUnifiedImport,
+                },
               ]}
               trigger={(props) => (
-                <Button {...props} compact variant="filled" icon={Plus} trailingIcon={ChevronDown}>
+                <Button
+                  {...props}
+                  compact
+                  variant="filled"
+                  icon={Plus}
+                  trailingIcon={ChevronDown}
+                >
                   Add
                 </Button>
               )}
@@ -408,11 +532,26 @@ function TripLogsPanel({
         {views}
       </div>
       {selecting ? (
-        <SelectionBar countLabel={`${selected.length} selected`} onClear={clearSelection}>
-          <IconButton icon={Trash2} label="Delete" tone="danger" onClick={() => setPendingDelete(selected.map((trip) => trip.id))} />
+        <SelectionBar
+          countLabel={`${selected.length} selected`}
+          onClear={clearSelection}
+        >
+          <IconButton
+            icon={Trash2}
+            label="Delete"
+            tone="danger"
+            onClick={() => setPendingDelete(selected.map((trip) => trip.id))}
+          />
         </SelectionBar>
       ) : (
-        tripLogs.length > 0 && <ChipRail label="Activity" options={typeOptions} value={typeFilter} onChange={changeType} />
+        tripLogs.length > 0 && (
+          <ChipRail
+            label="Activity"
+            options={typeOptions}
+            value={typeFilter}
+            onChange={changeType}
+          />
+        )
       )}
     </div>
   );
@@ -425,11 +564,18 @@ function TripLogsPanel({
       <Row
         key={trip.id}
         title={title}
-        subtitle={[formatTripDate(trip.date), trip.places.length > 1 ? plural(trip.places.length, "place") : null]
+        subtitle={[
+          formatTripDate(trip.date),
+          trip.places.length > 1 ? plural(trip.places.length, "place") : null,
+        ]
           .filter(Boolean)
           .join(" · ")}
         // The tile's glyph and hue say the activity to a sighted reader.
-        description={trip.types.length > 0 ? trip.types.map(tripTypeLabel).join(", ") : "No type"}
+        description={
+          trip.types.length > 0
+            ? trip.types.map(tripTypeLabel).join(", ")
+            : "No type"
+        }
         selected={isSelected}
         onOpen={() => onOpenTrip(trip.id)}
         leading={
@@ -444,7 +590,12 @@ function TripLogsPanel({
         trailing={
           <>
             {trip.notes && (
-              <span className={classes.meta} role="img" aria-label="Has notes" title="Has notes">
+              <span
+                className={classes.meta}
+                role="img"
+                aria-label="Has notes"
+                title="Has notes"
+              >
                 <AlignLeft size={14} aria-hidden />
               </span>
             )}
@@ -454,7 +605,13 @@ function TripLogsPanel({
                 title={title}
                 placement="right-start"
                 entries={rowEntries(trip)}
-                trigger={(props) => <IconButton {...props} icon={EllipsisVertical} label={`Actions for ${title}`} />}
+                trigger={(props) => (
+                  <IconButton
+                    {...props}
+                    icon={EllipsisVertical}
+                    label={`Actions for ${title}`}
+                  />
+                )}
               />
             )}
           </>
@@ -475,10 +632,20 @@ function TripLogsPanel({
         body="Log a trip and it lands here, and on Logjam GPS too."
         actions={
           <>
-            <Button compact variant="filled" icon={Plus} onClick={() => setCreatingTrip(true)}>
+            <Button
+              compact
+              variant="filled"
+              icon={Plus}
+              onClick={() => setCreatingTrip(true)}
+            >
               Log a trip
             </Button>
-            <Button compact variant="outline" icon={Upload} onClick={onOpenUnifiedImport}>
+            <Button
+              compact
+              variant="outline"
+              icon={Upload}
+              onClick={onOpenUnifiedImport}
+            >
               Import
             </Button>
           </>
@@ -505,8 +672,17 @@ function TripLogsPanel({
       {years.map((group) => {
         const headingId = `${yearIdPrefix}-${group.year}`;
         return (
-          <section key={group.year} className={classes.year} aria-labelledby={headingId}>
-            <SectionHeader id={headingId} title={`${group.year}`} count={group.trips.length} className={classes.yearHead} />
+          <section
+            key={group.year}
+            className={classes.year}
+            aria-labelledby={headingId}
+          >
+            <SectionHeader
+              id={headingId}
+              title={`${group.year}`}
+              count={group.trips.length}
+              className={classes.yearHead}
+            />
             {group.trips.map(renderRow)}
           </section>
         );
@@ -515,14 +691,18 @@ function TripLogsPanel({
   );
 
   const presets = datePresets();
-  const activePreset = presets.find((preset) => preset.from === dateFrom && preset.to === dateTo)?.label ?? "";
+  const activePreset =
+    presets.find((preset) => preset.from === dateFrom && preset.to === dateTo)
+      ?.label ?? "";
   const sheet = sheetOpen && (
     <SideSheet
       title="Sort and filter"
       onClose={() => openSheet(false)}
       footer={
         <>
-          <span className={classes.sheetCount}>{plural(visible.length, "trip")}</span>
+          <span className={classes.sheetCount}>
+            {plural(visible.length, "trip")}
+          </span>
           {sheetFilterCount > 0 && (
             <Button compact variant="outline" onClick={clearSheetFilters}>
               Reset
@@ -587,7 +767,10 @@ function TripLogsPanel({
       <SheetSection title="Presets">
         <ChipRail
           label="Date presets"
-          options={presets.map((preset) => ({ value: preset.label, label: preset.label }))}
+          options={presets.map((preset) => ({
+            value: preset.label,
+            label: preset.label,
+          }))}
           value={activePreset}
           onChange={(label) => {
             const preset = presets.find((entry) => entry.label === label);
@@ -644,16 +827,25 @@ function TripLogsPanel({
                   what the closed sheet is doing (DESIGN.md §2). */}
               <span className={classes.stripText}>
                 {rangeSet ? rangeText : plural(sheetFilterCount, "filter")}
-                {rangeSet && sheetFilterCount > 1 && ` · ${plural(sheetFilterCount - 1, "more filter")}`}
+                {rangeSet &&
+                  sheetFilterCount > 1 &&
+                  ` · ${plural(sheetFilterCount - 1, "more filter")}`}
               </span>
-              <IconButton icon={X} size={14} round label="Clear filters" onClick={clearSheetFilters} />
+              <IconButton
+                icon={X}
+                size={14}
+                round
+                label="Clear filters"
+                onClick={clearSheetFilters}
+              />
             </div>
           )}
           {/* The server caps the trip list; say when this is a truncated view so
               the oldest trips aren't silently hidden (UX-001). */}
           {tripLogsTotal != null && tripLogsTotal > tripLogs.length && (
             <p className={classes.note}>
-              Showing your {tripLogs.length} most recent trips of {tripLogsTotal}. Older ones aren&rsquo;t loaded.
+              Showing your {tripLogs.length} most recent trips of{" "}
+              {tripLogsTotal}. Older ones aren&rsquo;t loaded.
             </p>
           )}
           {list}
@@ -699,7 +891,11 @@ function TripLogsPanel({
 
       <ConfirmDialog
         open={pendingDelete != null}
-        title={pendingDelete?.length === 1 ? "Delete this trip?" : `Delete ${pendingDelete?.length ?? 0} trips?`}
+        title={
+          pendingDelete?.length === 1
+            ? "Delete this trip?"
+            : `Delete ${pendingDelete?.length ?? 0} trips?`
+        }
         message={
           pendingDelete?.length === 1
             ? "Its photos, videos and tracks go too. The places it links to stay. This can't be undone."

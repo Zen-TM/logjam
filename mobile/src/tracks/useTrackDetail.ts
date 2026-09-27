@@ -60,7 +60,8 @@ export function useTrackDetail(
   const [line, setLine] = useState<[number, number][][]>([]);
   const linePointCount = useRef(0);
   const detail = useMemo(
-    () => (points.length > 0 ? computeTrackDetail(points, { recordedMs }) : null),
+    () =>
+      points.length > 0 ? computeTrackDetail(points, { recordedMs }) : null,
     [points, recordedMs],
   );
 

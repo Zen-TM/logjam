@@ -2,7 +2,16 @@ import { Feather } from "@expo/vector-icons";
 import { INK } from "@logjam/shared";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import { fontSize, fontWeight, hitSlop, radius, spacing, surface, theme, withAlpha } from "../theme";
+import {
+  fontSize,
+  fontWeight,
+  hitSlop,
+  radius,
+  spacing,
+  surface,
+  theme,
+  withAlpha,
+} from "../theme";
 
 // The single source of a chip's height (padding + font + border collapse to
 // this one number via `minHeight`) — `SegmentedControl` re-exports it so a
@@ -56,7 +65,13 @@ export function Chip({
       {icon ? (
         <Feather name={icon} size={14} color={active ? INK : tint} />
       ) : null}
-      <Text style={[styles.label, active && styles.labelActive, disabled && styles.labelDisabled]}>
+      <Text
+        style={[
+          styles.label,
+          active && styles.labelActive,
+          disabled && styles.labelDisabled,
+        ]}
+      >
         {label}
       </Text>
       {starred ? (
@@ -64,7 +79,9 @@ export function Chip({
       ) : null}
       {count != null ? (
         <View style={[styles.badge, active && styles.badgeActive]}>
-          <Text style={[styles.badgeText, active && styles.badgeTextActive]}>{count}</Text>
+          <Text style={[styles.badgeText, active && styles.badgeTextActive]}>
+            {count}
+          </Text>
         </View>
       ) : null}
     </Pressable>
@@ -86,7 +103,11 @@ const styles = StyleSheet.create({
   },
   pressed: { opacity: 0.75 },
   disabled: { opacity: 0.4 },
-  label: { color: theme.textPrimary, fontSize: fontSize.sm, fontWeight: fontWeight.medium },
+  label: {
+    color: theme.textPrimary,
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.medium,
+  },
   // INK, not `primary`: on the shared heath fill `primary` is 3.7:1 (root
   // CLAUDE.md, "Text or a glyph ON a colour fill uses a dark ink").
   labelActive: { color: INK },
@@ -99,6 +120,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   badgeActive: { backgroundColor: withAlpha(INK, 0.15) },
-  badgeText: { color: theme.textMuted, fontSize: fontSize.xs, fontWeight: fontWeight.medium },
+  badgeText: {
+    color: theme.textMuted,
+    fontSize: fontSize.xs,
+    fontWeight: fontWeight.medium,
+  },
   badgeTextActive: { color: INK },
 });

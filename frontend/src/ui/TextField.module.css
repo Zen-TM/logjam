@@ -127,7 +127,6 @@
   outline: none;
 }
 
-
 /* The slider: its label and reading on one line, the track and its two ends on
    the next, so the bounds are readable and not merely implied by the geometry. */
 .rangeField {
@@ -184,13 +183,21 @@
 .rangeInput::-webkit-slider-runnable-track {
   height: 4px;
   border-radius: var(--radius-pill);
-  background: linear-gradient(to right, var(--theme-accent) var(--fill), var(--surface-field) var(--fill));
+  background: linear-gradient(
+    to right,
+    var(--theme-accent) var(--fill),
+    var(--surface-field) var(--fill)
+  );
 }
 
 .rangeInput::-moz-range-track {
   height: 4px;
   border-radius: var(--radius-pill);
-  background: linear-gradient(to right, var(--theme-accent) var(--fill), var(--surface-field) var(--fill));
+  background: linear-gradient(
+    to right,
+    var(--theme-accent) var(--fill),
+    var(--surface-field) var(--fill)
+  );
 }
 
 .rangeInput::-webkit-slider-thumb {

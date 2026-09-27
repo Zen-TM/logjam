@@ -20,7 +20,9 @@ describe("isUuidV4", () => {
     expect(isUuidV4("A2F6F30C-1F9D-4C07-8B3E-2F5D6A7B8C9D")).toBe(true);
     // All four variant nibbles.
     for (const variant of ["8", "9", "a", "b"]) {
-      expect(isUuidV4(`a2f6f30c-1f9d-4c07-${variant}b3e-2f5d6a7b8c9d`)).toBe(true);
+      expect(isUuidV4(`a2f6f30c-1f9d-4c07-${variant}b3e-2f5d6a7b8c9d`)).toBe(
+        true,
+      );
     }
   });
 
@@ -73,7 +75,9 @@ describe("sync cursor codec", () => {
   it("returns null (→ resetRequired) on any malformation", () => {
     expect(decodeSyncCursor("not base64url!!")).toBeNull();
     expect(decodeSyncCursor(base64ish("[1,2,3]"))).toBeNull();
-    expect(decodeSyncCursor(base64ish('{"v":"1","ts":"2026-01-01"}'))).toBeNull();
+    expect(
+      decodeSyncCursor(base64ish('{"v":"1","ts":"2026-01-01"}')),
+    ).toBeNull();
     expect(decodeSyncCursor(base64ish('{"v":1,"ts":"garbage"}'))).toBeNull();
     expect(decodeSyncCursor(base64ish('{"v":1}'))).toBeNull();
     expect(
@@ -132,7 +136,10 @@ describe("SYNC_ENTITY_TYPES", () => {
 describe("parseSyncDeltaTombstone", () => {
   it("accepts every known entity type", () => {
     for (const type of SYNC_ENTITY_TYPES) {
-      expect(parseSyncDeltaTombstone({ type, id: "x" })).toEqual({ type, id: "x" });
+      expect(parseSyncDeltaTombstone({ type, id: "x" })).toEqual({
+        type,
+        id: "x",
+      });
     }
   });
 
@@ -144,8 +151,12 @@ describe("parseSyncDeltaTombstone", () => {
   });
 
   it("still rejects a malformed SHAPE", () => {
-    expect(() => parseSyncDeltaTombstone({ type: "place" })).toThrow(SyncRowError);
-    expect(() => parseSyncDeltaTombstone({ type: 7, id: "x" })).toThrow(SyncRowError);
+    expect(() => parseSyncDeltaTombstone({ type: "place" })).toThrow(
+      SyncRowError,
+    );
+    expect(() => parseSyncDeltaTombstone({ type: 7, id: "x" })).toThrow(
+      SyncRowError,
+    );
     expect(() => parseSyncDeltaTombstone(null)).toThrow(SyncRowError);
   });
 });
@@ -162,7 +173,13 @@ describe("delta row parsers", () => {
     placeTypeId: "b0000000-0000-4000-8000-000000000001",
     notes: null,
     elevation: null,
-    fieldValues: { v_grade: 4, a_grade: 3, commitment: 3, num_abseils: 6, hours: 7 },
+    fieldValues: {
+      v_grade: 4,
+      a_grade: 3,
+      commitment: 3,
+      num_abseils: 6,
+      hours: 7,
+    },
     ropeWikiId: null,
     forkedFromId: null,
     createdAt: "2026-01-01T00:00:00.000Z",
@@ -247,12 +264,12 @@ describe("delta row parsers", () => {
     const { name: _dropped, ...noName } = place;
     expect(() => parseSyncDeltaPlaceRow(noName)).toThrow(/name/);
     // Required-but-nullable stays required: undefined is not null.
-    expect(() => parseSyncDeltaPlaceRow({ ...place, notes: undefined })).toThrow(
-      /notes/,
-    );
-    expect(() => parseSyncDeltaTripRow({ ...trip, places: [{ id: "c1" }] })).toThrow(
-      /places/,
-    );
+    expect(() =>
+      parseSyncDeltaPlaceRow({ ...place, notes: undefined }),
+    ).toThrow(/notes/);
+    expect(() =>
+      parseSyncDeltaTripRow({ ...trip, places: [{ id: "c1" }] }),
+    ).toThrow(/places/);
     // A link's endpoints are the whole row — a malformed one must not reach
     // the mirror, where it would render as an edge to nowhere.
     expect(() =>

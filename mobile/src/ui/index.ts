@@ -9,7 +9,12 @@ export { ChipPicker, type ChipOption } from "./ChipPicker";
 export { DatePicker } from "./DatePicker";
 export { AttributeFilter, ThresholdFilter } from "./AttributeFilter";
 export { RangePills } from "./RangePills";
-export { formatRange, isFullRange, nextRange, type NumberRange } from "@logjam/shared";
+export {
+  formatRange,
+  isFullRange,
+  nextRange,
+  type NumberRange,
+} from "@logjam/shared";
 export { HeroHeader } from "./HeroHeader";
 export { toDateKey, fromDateKey, todayDateKey } from "./monthGrid";
 export { IconButton } from "./IconButton";
@@ -35,9 +40,7 @@ export { RenameForm } from "./RenameForm";
 export { Screen, ScreenScroll } from "./Screen";
 export { Row } from "./Row";
 export { StatGrid, type Stat } from "./StatGrid";
-export {
-  ProfileChart,
-} from "./ProfileChart";
+export { ProfileChart } from "./ProfileChart";
 export {
   elevationSeries,
   speedSeries,

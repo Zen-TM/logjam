@@ -13,12 +13,17 @@ export function describeDroppedPlaceRow(args: {
   rawLongitude: string;
 }): string | null {
   if (!args.name) return "name is missing";
-  if (isNaN(args.latitude)) return `latitude "${args.rawLatitude}" couldn't be read`;
-  if (isNaN(args.longitude)) return `longitude "${args.rawLongitude}" couldn't be read`;
+  if (isNaN(args.latitude))
+    return `latitude "${args.rawLatitude}" couldn't be read`;
+  if (isNaN(args.longitude))
+    return `longitude "${args.rawLongitude}" couldn't be read`;
   return null;
 }
 
-export function describeDroppedTripRow(isoDate: string | null, rawDate: string): string | null {
+export function describeDroppedTripRow(
+  isoDate: string | null,
+  rawDate: string,
+): string | null {
   if (isoDate) return null;
   return `date "${rawDate.trim()}" couldn't be read`;
 }

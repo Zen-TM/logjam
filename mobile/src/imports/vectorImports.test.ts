@@ -57,7 +57,10 @@ describe("kmlFromKmz", () => {
   // Logjam", a friend's file-send). The old `unzipSync(bytes)` inflated this
   // eagerly and returned the text.
   it("refuses a .kml that declares more than the import ceiling", () => {
-    const zip = zipSync({ "doc.kml": new Uint8Array(31 * 1024 * 1024) }, { level: 9 });
+    const zip = zipSync(
+      { "doc.kml": new Uint8Array(31 * 1024 * 1024) },
+      { level: 9 },
+    );
     expect(zip.length).toBeLessThan(1024 * 1024); // it IS a bomb: ~1000:1
     expect(() => kmlFromKmz(zip)).toThrow(/too (big|large)/i);
   });

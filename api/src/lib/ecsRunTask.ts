@@ -53,7 +53,8 @@ export async function launchFargateTask(
   if (failures.length > 0 || !taskArn) {
     throw new Error(
       `RunTask placement failed: ${
-        failures.map((f) => f.reason ?? "unknown").join(", ") || "no task started"
+        failures.map((f) => f.reason ?? "unknown").join(", ") ||
+        "no task started"
       }`,
     );
   }

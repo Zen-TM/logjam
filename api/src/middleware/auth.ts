@@ -94,7 +94,10 @@ export function requireAuth(
       "fake-alice-sub";
     // Known seed subs get a coherent identity; an unknown sub keeps the historical
     // alice defaults so behaviour is unchanged when no override is present.
-    const actor = FAKE_ACTORS[sub] ?? { email: "alice@local", username: "alice" };
+    const actor = FAKE_ACTORS[sub] ?? {
+      email: "alice@local",
+      username: "alice",
+    };
     req.user = {
       sub,
       email: actor.email,
@@ -151,7 +154,9 @@ export function requireAuth(
         typeof username !== "string" ||
         username.length === 0
       ) {
-        res.status(401).json({ error: "Token is missing required identity claims" });
+        res
+          .status(401)
+          .json({ error: "Token is missing required identity claims" });
         return;
       }
 

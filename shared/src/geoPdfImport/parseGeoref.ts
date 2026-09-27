@@ -103,12 +103,18 @@ const GPTS_CLAMP_EPSILON_DEG = 1e-6;
 
 const name = PDFName.of.bind(PDFName);
 
-function resolve(ctx: PDFContext, obj: PDFObject | undefined): PDFObject | undefined {
+function resolve(
+  ctx: PDFContext,
+  obj: PDFObject | undefined,
+): PDFObject | undefined {
   if (obj instanceof PDFRef) return ctx.lookup(obj);
   return obj;
 }
 
-function asNumberArray(ctx: PDFContext, obj: PDFObject | undefined): number[] | undefined {
+function asNumberArray(
+  ctx: PDFContext,
+  obj: PDFObject | undefined,
+): number[] | undefined {
   const resolved = resolve(ctx, obj);
   if (!(resolved instanceof PDFArray)) return undefined;
   const out: number[] = [];
@@ -120,7 +126,10 @@ function asNumberArray(ctx: PDFContext, obj: PDFObject | undefined): number[] | 
   return out;
 }
 
-function asString(ctx: PDFContext, obj: PDFObject | undefined): string | undefined {
+function asString(
+  ctx: PDFContext,
+  obj: PDFObject | undefined,
+): string | undefined {
   const resolved = resolve(ctx, obj);
   if (resolved instanceof PDFString || resolved instanceof PDFHexString) {
     return resolved.decodeText();
@@ -128,12 +137,18 @@ function asString(ctx: PDFContext, obj: PDFObject | undefined): string | undefin
   return undefined;
 }
 
-function asDict(ctx: PDFContext, obj: PDFObject | undefined): PDFDict | undefined {
+function asDict(
+  ctx: PDFContext,
+  obj: PDFObject | undefined,
+): PDFDict | undefined {
   const resolved = resolve(ctx, obj);
   return resolved instanceof PDFDict ? resolved : undefined;
 }
 
-function nameValue(ctx: PDFContext, obj: PDFObject | undefined): string | undefined {
+function nameValue(
+  ctx: PDFContext,
+  obj: PDFObject | undefined,
+): string | undefined {
   const resolved = resolve(ctx, obj);
   // PDFName.toString() renders "/GEOGCS" — strip the slash.
   return resolved instanceof PDFName ? resolved.toString().slice(1) : undefined;
@@ -155,12 +170,18 @@ function parseViewport(
 
   const typeName = nameValue(ctx, viewportDict.get(name("Type")));
   if (typeName !== undefined && typeName !== "Viewport") {
-    throw new GeoPdfParseError("MALFORMED_GEOREF", `viewport Type is /${typeName}`);
+    throw new GeoPdfParseError(
+      "MALFORMED_GEOREF",
+      `viewport Type is /${typeName}`,
+    );
   }
 
   const bbox = asNumberArray(ctx, viewportDict.get(name("BBox")));
   if (!bbox || bbox.length !== 4) {
-    throw new GeoPdfParseError("MALFORMED_GEOREF", "viewport BBox missing or not 4 numbers");
+    throw new GeoPdfParseError(
+      "MALFORMED_GEOREF",
+      "viewport BBox missing or not 4 numbers",
+    );
   }
   const bboxPt = {
     x0: Math.min(bbox[0], bbox[2]),
@@ -169,7 +190,10 @@ function parseViewport(
     y1: Math.max(bbox[1], bbox[3]),
   };
   if (bboxPt.x1 - bboxPt.x0 <= 0 || bboxPt.y1 - bboxPt.y0 <= 0) {
-    throw new GeoPdfParseError("MALFORMED_GEOREF", "viewport BBox is degenerate");
+    throw new GeoPdfParseError(
+      "MALFORMED_GEOREF",
+      "viewport BBox is degenerate",
+    );
   }
 
   const measure = asDict(ctx, viewportDict.get(name("Measure")));
@@ -179,7 +203,10 @@ function parseViewport(
 
   const gpts = asNumberArray(ctx, measure.get(name("GPTS")));
   if (!gpts || gpts.length < 6 || gpts.length % 2 !== 0) {
-    throw new GeoPdfParseError("MALFORMED_GEOREF", "GPTS missing, too short, or odd length");
+    throw new GeoPdfParseError(
+      "MALFORMED_GEOREF",
+      "GPTS missing, too short, or odd length",
+    );
   }
 
   let lpts = asNumberArray(ctx, measure.get(name("LPTS")));
@@ -223,12 +250,16 @@ function parseViewport(
       Math.abs(lat) > 90 + GPTS_CLAMP_EPSILON_DEG ||
       Math.abs(lon) > 180 + GPTS_CLAMP_EPSILON_DEG
     ) {
-      throw new GeoPdfParseError("MALFORMED_GEOREF", "GPTS coordinate out of range");
+      throw new GeoPdfParseError(
+        "MALFORMED_GEOREF",
+        "GPTS coordinate out of range",
+      );
     }
     if (Math.abs(lat) > 90 || Math.abs(lon) > 180) {
       lat = Math.max(-90, Math.min(90, lat));
       lon = Math.max(-180, Math.min(180, lon));
-      if (!quirks.includes("gpts-out-of-range")) quirks.push("gpts-out-of-range");
+      if (!quirks.includes("gpts-out-of-range"))
+        quirks.push("gpts-out-of-range");
     }
     const u = lpts[i];
     const v = lpts[i + 1];
@@ -245,11 +276,15 @@ function parseViewport(
   const [p0, p1] = [controlPoints[0].pagePt, controlPoints[1].pagePt];
   const collinear = controlPoints.every((cp) => {
     const cross =
-      (p1.x - p0.x) * (cp.pagePt.y - p0.y) - (p1.y - p0.y) * (cp.pagePt.x - p0.x);
+      (p1.x - p0.x) * (cp.pagePt.y - p0.y) -
+      (p1.y - p0.y) * (cp.pagePt.x - p0.x);
     return Math.abs(cross) < 1e-9;
   });
   if (collinear) {
-    throw new GeoPdfParseError("MALFORMED_GEOREF", "control points are collinear");
+    throw new GeoPdfParseError(
+      "MALFORMED_GEOREF",
+      "control points are collinear",
+    );
   }
 
   // Neatline. ISO 32000 puts /Bounds on the Measure dict; some producers put
@@ -292,7 +327,9 @@ function parseViewport(
     const epsg = epsgObj instanceof PDFNumber ? epsgObj.asNumber() : undefined;
     const gcsType = nameValue(ctx, gcs.get(name("Type")));
     if (wkt !== undefined) {
-      const wktKind = wkt.trimStart().startsWith("PROJCS") ? "PROJCS" : "GEOGCS";
+      const wktKind = wkt.trimStart().startsWith("PROJCS")
+        ? "PROJCS"
+        : "GEOGCS";
       if (gcsType !== undefined && gcsType !== wktKind) {
         // Quirk Q2: Type says one thing, WKT says another. Trust the WKT.
         quirks.push("projcs-type-geogcs-wkt");
@@ -304,7 +341,10 @@ function parseViewport(
       quirks.push("logjam-legacy-wkt-as-name");
       crs = { kind: "EPSG_ONLY", epsg: 4326 };
     } else {
-      throw new GeoPdfParseError("MALFORMED_GEOREF", "GCS has neither WKT nor EPSG");
+      throw new GeoPdfParseError(
+        "MALFORMED_GEOREF",
+        "GCS has neither WKT nor EPSG",
+      );
     }
   } else if (isLogjam) {
     // Q0: pdf-lib could not even keep the GCS dict (WKT-as-name corrupted it).
@@ -317,7 +357,9 @@ function parseViewport(
   return { bboxPt, controlPoints, boundsPolygonPt, crs, quirks };
 }
 
-export async function parseGeoPdfGeoref(bytes: Uint8Array): Promise<GeoPdfParseResult> {
+export async function parseGeoPdfGeoref(
+  bytes: Uint8Array,
+): Promise<GeoPdfParseResult> {
   // Before the first load, and the difference between a 35-second frozen app
   // and a responsive one on a phone. See fastStreamScan.ts.
   installFastStreamScan();
@@ -329,7 +371,10 @@ export async function parseGeoPdfGeoref(bytes: Uint8Array): Promise<GeoPdfParseR
       ignoreEncryption: true,
     });
   } catch (err) {
-    throw new GeoPdfParseError("NOT_A_PDF", err instanceof Error ? err.message : undefined);
+    throw new GeoPdfParseError(
+      "NOT_A_PDF",
+      err instanceof Error ? err.message : undefined,
+    );
   }
 
   const ctx = doc.context;
@@ -364,7 +409,10 @@ export async function parseGeoPdfGeoref(bytes: Uint8Array): Promise<GeoPdfParseR
       viewportDicts = [vpRaw];
       vpQuirks = ["vp-not-array"];
     } else {
-      throw new GeoPdfParseError("MALFORMED_GEOREF", "VP is neither array nor dict");
+      throw new GeoPdfParseError(
+        "MALFORMED_GEOREF",
+        "VP is neither array nor dict",
+      );
     }
 
     const quirkCtx: QuirkContext = {
@@ -384,7 +432,8 @@ export async function parseGeoPdfGeoref(bytes: Uint8Array): Promise<GeoPdfParseR
       width:
         Math.min(mediaBox.x + mediaBox.width, cropBox.x + cropBox.width) - boxX,
       height:
-        Math.min(mediaBox.y + mediaBox.height, cropBox.y + cropBox.height) - boxY,
+        Math.min(mediaBox.y + mediaBox.height, cropBox.y + cropBox.height) -
+        boxY,
     };
     const rotationDeg = ((page.getRotation().angle % 360) + 360) % 360;
     const viewports: GeoPdfViewport[] = [];

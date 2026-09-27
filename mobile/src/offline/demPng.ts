@@ -43,7 +43,9 @@ function unfilter(raw: Uint8Array, width: number, height: number): Uint8Array {
       const left = i >= BYTES_PER_PIXEL ? out[line + i - BYTES_PER_PIXEL]! : 0;
       const up = row > 0 ? out[previous + i]! : 0;
       const upLeft =
-        row > 0 && i >= BYTES_PER_PIXEL ? out[previous + i - BYTES_PER_PIXEL]! : 0;
+        row > 0 && i >= BYTES_PER_PIXEL
+          ? out[previous + i - BYTES_PER_PIXEL]!
+          : 0;
       let restored: number;
       switch (filter) {
         case 0:
@@ -66,7 +68,11 @@ function unfilter(raw: Uint8Array, width: number, height: number): Uint8Array {
           const dUpLeft = Math.abs(p - upLeft);
           restored =
             value +
-            (dLeft <= dUp && dLeft <= dUpLeft ? left : dUp <= dUpLeft ? up : upLeft);
+            (dLeft <= dUp && dLeft <= dUpLeft
+              ? left
+              : dUp <= dUpLeft
+                ? up
+                : upLeft);
           break;
         }
         default:
@@ -150,14 +156,20 @@ export function decodeDemPng(bytes: Uint8Array): Float32Array {
   const raw = unzlibSync(compressed);
   const expected = (width * BYTES_PER_PIXEL + 1) * height;
   if (raw.length !== expected) {
-    throw new Error(`DEM tile inflated to ${raw.length} bytes, expected ${expected}`);
+    throw new Error(
+      `DEM tile inflated to ${raw.length} bytes, expected ${expected}`,
+    );
   }
 
   const pixels = unfilter(raw, width, height);
   const elevations = new Float32Array(width * height);
   for (let i = 0; i < elevations.length; i++) {
     const at = i * BYTES_PER_PIXEL;
-    elevations[i] = demMetresFromRgb(pixels[at]!, pixels[at + 1]!, pixels[at + 2]!);
+    elevations[i] = demMetresFromRgb(
+      pixels[at]!,
+      pixels[at + 1]!,
+      pixels[at + 2]!,
+    );
   }
   return elevations;
 }

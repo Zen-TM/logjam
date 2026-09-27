@@ -55,12 +55,10 @@ describe("buildPlaceMarkers", () => {
     const south = { latitude: -34.1, longitude: 150.5, name: "S" };
     const east = { latitude: -33.5, longitude: 151.1, name: "E" };
     const west = { latitude: -33.5, longitude: 149.9, name: "W" };
-    const markers = buildPlaceMarkers(
-      [north, south, east, west],
-      [],
-      EXTENT,
-      { includeOwned: true, includeShared: true },
-    );
+    const markers = buildPlaceMarkers([north, south, east, west], [], EXTENT, {
+      includeOwned: true,
+      includeShared: true,
+    });
     expect(markers).toEqual([]);
   });
 

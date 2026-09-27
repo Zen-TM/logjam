@@ -62,4 +62,6 @@ declare class LogjamSensorsModule extends NativeModule {
  * shapes. Every caller in `tracks/sensorLog.ts` treats null as "this build
  * cannot log".
  */
-export default requireOptionalNativeModule<LogjamSensorsModule>("LogjamSensors");
+export default requireOptionalNativeModule<LogjamSensorsModule>(
+  "LogjamSensors",
+);

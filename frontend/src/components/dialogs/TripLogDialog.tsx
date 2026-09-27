@@ -1,5 +1,14 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { Check, ChevronRight, CircleHelp, MapPin, MapPinPlus, Plus, Trash2, X } from "lucide-react";
+import {
+  Check,
+  ChevronRight,
+  CircleHelp,
+  MapPin,
+  MapPinPlus,
+  Plus,
+  Trash2,
+  X,
+} from "lucide-react";
 import { useIsMobile } from "../../useIsMobile";
 import {
   buildCustomFieldDef,
@@ -227,7 +236,8 @@ function TripLogDialog({
   // Add custom field form state
   const [showAddField, setShowAddField] = useState(false);
   const [newFieldLabel, setNewFieldLabel] = useState("");
-  const [newFieldType, setNewFieldType] = useState<TripLogCustomFieldType>("string");
+  const [newFieldType, setNewFieldType] =
+    useState<TripLogCustomFieldType>("string");
   const [newFieldBounded, setNewFieldBounded] = useState(false);
   const [newFieldMin, setNewFieldMin] = useState("");
   const [newFieldMax, setNewFieldMax] = useState("");
@@ -235,7 +245,8 @@ function TripLogDialog({
   const [addFieldError, setAddFieldError] = useState<string | null>(null);
   // Field pending deletion via the shared impact-aware confirm (also used by
   // Settings' attribute lists).
-  const [fieldToDelete, setFieldToDelete] = useState<TripLogCustomFieldDef | null>(null);
+  const [fieldToDelete, setFieldToDelete] =
+    useState<TripLogCustomFieldDef | null>(null);
 
   /**
    * THE FIELDS THIS TRIP IS ASKED FOR — the ones scoped to the trip's own TYPES
@@ -256,7 +267,9 @@ function TripLogDialog({
     () => tripFieldDefs(customFieldDefs, selectedTypes, null),
     [customFieldDefs, selectedTypes],
   );
-  const leftoverFieldDefs = visibleFieldDefs.filter((def) => !askedFieldDefs.includes(def));
+  const leftoverFieldDefs = visibleFieldDefs.filter(
+    (def) => !askedFieldDefs.includes(def),
+  );
 
   // Names of the currently selected places (incl. a pending create, for a live
   // preview), in selection order — feeds the derived title.
@@ -283,7 +296,9 @@ function TripLogDialog({
   // A restorable draft found on open, awaiting the user's restore/discard
   // answer. Non-null suppresses autosave, so ignoring the offer and typing
   // can't overwrite the very draft being offered. Create mode only.
-  const [restorableDraft, setRestorableDraft] = useState<TripDraft | null>(null);
+  const [restorableDraft, setRestorableDraft] = useState<TripDraft | null>(
+    null,
+  );
   // The same fact as `restorableDraft`, in a ref, because the autosave effect
   // needs it *synchronously*. Both effects run in one commit and this one is
   // declared second, so on the pass that opens the dialog it would still read
@@ -392,7 +407,6 @@ function TripLogDialog({
     setDraftTripId(null);
     committedRef.current = false;
     draftPromiseRef.current = null;
-
   }, [open, tripLog?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Whether a draft will be offered, known in the render that opens the dialog
@@ -412,7 +426,8 @@ function TripLogDialog({
   //    the user has decided to type, hiding the fields they came to fill in.
   //  - the return from picking a point on the map: the date is not what the
   //    user was doing.
-  const focusDateOnOpen = !isMobile && draftOnOpen === null && !pickingRef.current;
+  const focusDateOnOpen =
+    !isMobile && draftOnOpen === null && !pickingRef.current;
 
   // The form as the draft stores it — one object feeding both the dirty-check
   // and the autosave, so the two can't disagree about what "the form" is.
@@ -426,9 +441,20 @@ function TripLogDialog({
       fieldValues,
       creating,
     }),
-    [date, notes, selectedPlaceIds, displayNameInput, selectedTypes, fieldValues, creating],
+    [
+      date,
+      notes,
+      selectedPlaceIds,
+      displayNameInput,
+      selectedTypes,
+      fieldValues,
+      creating,
+    ],
   );
-  const currentFingerprint = useMemo(() => tripFormFingerprint(currentForm), [currentForm]);
+  const currentFingerprint = useMemo(
+    () => tripFormFingerprint(currentForm),
+    [currentForm],
+  );
 
   // Real dirty-check: current form fields vs. the snapshot taken when the
   // dialog was (re)populated — not just "the dialog is open" (TRIP-3). Media
@@ -449,7 +475,10 @@ function TripLogDialog({
     pristineFormSnapshotRef.current !== null &&
     currentFingerprint !== pristineFormSnapshotRef.current;
 
-  const guard = useUnsavedChangesGuard(isDirty, () => void handleRequestClose());
+  const guard = useUnsavedChangesGuard(
+    isDirty,
+    () => void handleRequestClose(),
+  );
 
   // Autosave the create form so a phone call, a tab eviction or a flat battery
   // doesn't take it — the exits `useUnsavedChangesGuard` structurally cannot
@@ -478,10 +507,14 @@ function TripLogDialog({
       if (draftWarnedRef.current) return;
       draftWarnedRef.current = true;
       if (result.status === "too-large") {
-        toast.error("These notes are too long to save a local draft. Save the trip so it isn't lost.");
+        toast.error(
+          "These notes are too long to save a local draft. Save the trip so it isn't lost.",
+        );
       } else {
         console.error(result.error);
-        toast.error("Couldn't save a local draft of this trip. Save it so it isn't lost.");
+        toast.error(
+          "Couldn't save a local draft of this trip. Save it so it isn't lost.",
+        );
       }
     }, DRAFT_AUTOSAVE_DEBOUNCE_MS);
     return () => clearTimeout(timer);
@@ -502,7 +535,9 @@ function TripLogDialog({
       (prev) =>
         new Set([
           ...prev,
-          ...Object.keys(form.fieldValues).filter((key) => form.fieldValues[key] !== ""),
+          ...Object.keys(form.fieldValues).filter(
+            (key) => form.fieldValues[key] !== "",
+          ),
         ]),
     );
     setCreating(form.creating);
@@ -574,7 +609,10 @@ function TripLogDialog({
 
     const customFields: Record<string, unknown> = {};
     for (const def of visibleFieldDefs) {
-      customFields[def.key] = coerceFieldValue(getFieldValue(def.key), def.type);
+      customFields[def.key] = coerceFieldValue(
+        getFieldValue(def.key),
+        def.type,
+      );
     }
     // placeIds and displayName are independent — an empty/unnamed draft is
     // valid (derives "Untitled trip" until the user fills in either).
@@ -615,7 +653,12 @@ function TripLogDialog({
         await deleteTripLog(draftTripId);
       } catch (err) {
         console.error(err);
-        setError(messageFromError(err, "Couldn't discard uploaded files. Please try again."));
+        setError(
+          messageFromError(
+            err,
+            "Couldn't discard uploaded files. Please try again.",
+          ),
+        );
         return;
       }
     }
@@ -659,7 +702,9 @@ function TripLogDialog({
     .map((id) => places.find((place) => place.id === id))
     .filter((place): place is TPlace => !!place);
   const matches = places.filter(
-    (place) => !selectedPlaceIds.includes(place.id) && place.name.toLowerCase().includes(needle),
+    (place) =>
+      !selectedPlaceIds.includes(place.id) &&
+      place.name.toLowerCase().includes(needle),
   );
 
   function openPlacesPicker() {
@@ -673,7 +718,9 @@ function TripLogDialog({
     setPlacesError(null);
     // After the form is shown again: focus goes back to the field that opened
     // the picker rather than to the top of the dialog.
-    requestAnimationFrame(() => placesFieldRef.current?.querySelector("button")?.focus());
+    requestAnimationFrame(() =>
+      placesFieldRef.current?.querySelector("button")?.focus(),
+    );
   }
 
   // Order is kept: a trip's place order is what its derived title reads, so
@@ -696,7 +743,11 @@ function TripLogDialog({
       setPlacesError(`A trip can have at most ${MAX_PLACES_PER_TRIP} places.`);
       return;
     }
-    setCreating({ name, latitude: creating?.latitude ?? "", longitude: creating?.longitude ?? "" });
+    setCreating({
+      name,
+      latitude: creating?.latitude ?? "",
+      longitude: creating?.longitude ?? "",
+    });
     setPlaceSearch("");
   }
 
@@ -705,16 +756,29 @@ function TripLogDialog({
   // types added here — each shown in the casing the SELECTION uses, so a picked
   // "Canyoning" lights the seeded "canyoning" chip instead of adding a second.
   const typeOptions = useMemo(() => {
-    const vocabulary = dedupeTypesPreserveCase([...TRIP_TYPE_SUGGESTIONS, ...existingTripTypes, ...addedTypes]);
+    const vocabulary = dedupeTypesPreserveCase([
+      ...TRIP_TYPE_SUGGESTIONS,
+      ...existingTripTypes,
+      ...addedTypes,
+    ]);
     const values = vocabulary.map(
-      (type) => selectedTypes.find((picked) => picked.toLowerCase() === type.toLowerCase()) ?? type,
+      (type) =>
+        selectedTypes.find(
+          (picked) => picked.toLowerCase() === type.toLowerCase(),
+        ) ?? type,
     );
     for (const picked of selectedTypes) {
-      if (!values.some((value) => value.toLowerCase() === picked.toLowerCase())) values.push(picked);
+      if (!values.some((value) => value.toLowerCase() === picked.toLowerCase()))
+        values.push(picked);
     }
     return values.map((value) => {
       const look = tripTypeLook(value);
-      return { value, label: tripTypeLabel(value), icon: look.icon, hue: look.hue };
+      return {
+        value,
+        label: tripTypeLabel(value),
+        icon: look.icon,
+        hue: look.hue,
+      };
     });
   }, [existingTripTypes, addedTypes, selectedTypes]);
 
@@ -725,7 +789,11 @@ function TripLogDialog({
     () =>
       new Set(
         linkedCanyon
-          ? typeOptions.filter((option) => option.value.toLowerCase() === CANYONING_TRIP_TYPE).map((option) => option.value)
+          ? typeOptions
+              .filter(
+                (option) => option.value.toLowerCase() === CANYONING_TRIP_TYPE,
+              )
+              .map((option) => option.value)
           : [],
       ),
     [linkedCanyon, typeOptions],
@@ -734,11 +802,18 @@ function TripLogDialog({
   function toggleType(value: string) {
     setTypesError(null);
     if (selectedTypes.includes(value)) {
-      setSelectedTypes(enforceCanyoningTag(selectedTypes.filter((type) => type !== value), linkedCanyon));
+      setSelectedTypes(
+        enforceCanyoningTag(
+          selectedTypes.filter((type) => type !== value),
+          linkedCanyon,
+        ),
+      );
       return;
     }
     if (selectedTypes.length >= MAX_TRIP_TYPES_PER_TRIP) {
-      setTypesError(`A trip can have at most ${MAX_TRIP_TYPES_PER_TRIP} types.`);
+      setTypesError(
+        `A trip can have at most ${MAX_TRIP_TYPES_PER_TRIP} types.`,
+      );
       return;
     }
     setSelectedTypes([...selectedTypes, value]);
@@ -747,16 +822,26 @@ function TripLogDialog({
   // Case-insensitive: adding "Canyoning" over "canyoning" picks the existing
   // chip, because the API rejects case-variant duplicates.
   function addType(label: string) {
-    const existing = typeOptions.find((option) => option.value.toLowerCase() === label.toLowerCase());
+    const existing = typeOptions.find(
+      (option) => option.value.toLowerCase() === label.toLowerCase(),
+    );
     const value = existing?.value ?? label;
-    setAddedTypes((current) => (current.some((type) => type.toLowerCase() === value.toLowerCase()) ? current : [...current, value]));
+    setAddedTypes((current) =>
+      current.some((type) => type.toLowerCase() === value.toLowerCase())
+        ? current
+        : [...current, value],
+    );
     if (!selectedTypes.includes(value)) toggleType(value);
   }
 
   const typesHint =
     [
-      linkedCanyon ? "Trips with a linked canyon are always tagged canyoning." : null,
-      selectedTypes.length > 1 ? "The starred type sets the trip’s icon." : null,
+      linkedCanyon
+        ? "Trips with a linked canyon are always tagged canyoning."
+        : null,
+      selectedTypes.length > 1
+        ? "The starred type sets the trip’s icon."
+        : null,
     ]
       .filter(Boolean)
       .join(" ") || undefined;
@@ -844,7 +929,9 @@ function TripLogDialog({
       onClose();
     } catch (err) {
       console.error(err);
-      setError(messageFromError(err, "Couldn't save this trip. Please try again."));
+      setError(
+        messageFromError(err, "Couldn't save this trip. Please try again."),
+      );
     } finally {
       setSaving(false);
     }
@@ -852,7 +939,13 @@ function TripLogDialog({
 
   async function handleAddField() {
     const result = buildCustomFieldDef(
-      { label: newFieldLabel, type: newFieldType, bounded: newFieldBounded, min: newFieldMin, max: newFieldMax },
+      {
+        label: newFieldLabel,
+        type: newFieldType,
+        bounded: newFieldBounded,
+        min: newFieldMin,
+        max: newFieldMax,
+      },
       customFieldDefs,
     );
     if ("error" in result) {
@@ -882,7 +975,9 @@ function TripLogDialog({
       setNewFieldMax("");
     } catch (err) {
       console.error(err);
-      setAddFieldError(messageFromError(err, "Couldn't save the attribute. Please try again."));
+      setAddFieldError(
+        messageFromError(err, "Couldn't save the attribute. Please try again."),
+      );
     } finally {
       setAddingField(false);
     }
@@ -894,7 +989,13 @@ function TripLogDialog({
     <>
       <Dialog
         open={open}
-        title={mode === "places" ? "Places on this trip" : tripLog ? "Edit trip" : "Log a trip"}
+        title={
+          mode === "places"
+            ? "Places on this trip"
+            : tripLog
+              ? "Edit trip"
+              : "Log a trip"
+        }
         size="large"
         dismissible={!saving}
         // Inside the picker, every way out means "back to the form" — not
@@ -918,7 +1019,13 @@ function TripLogDialog({
               </Button>
               {/* type="submit" with no onClick — handleSubmit is the only save
                   path, so a click can't fire alongside the form's submit. */}
-              <Button type="submit" form={formId} variant="filled" busy={saving} disabled={!date}>
+              <Button
+                type="submit"
+                form={formId}
+                variant="filled"
+                busy={saving}
+                disabled={!date}
+              >
                 {tripLog ? "Save changes" : "Log trip"}
               </Button>
             </>
@@ -955,7 +1062,9 @@ function TripLogDialog({
                     title={place.name}
                     subtitle={`${index + 1} of ${selectedCount}`}
                     description="On this trip. Press to take it off."
-                    leading={<IconTile icon={Check} hue="var(--theme-accent)" />}
+                    leading={
+                      <IconTile icon={Check} hue="var(--theme-accent)" />
+                    }
                     onOpen={() => togglePlace(place.id)}
                   />
                 ))}
@@ -965,20 +1074,27 @@ function TripLogDialog({
                     title={creating.name || "New place"}
                     subtitle={`${selectedCount} of ${selectedCount} · made when the trip is saved`}
                     description="A new place. Press to take it off."
-                    leading={<IconTile icon={MapPinPlus} hue="var(--theme-accent)" />}
+                    leading={
+                      <IconTile icon={MapPinPlus} hue="var(--theme-accent)" />
+                    }
                     onOpen={() => setCreating(null)}
                   />
                 )}
               </section>
             )}
             <section className={classes.section}>
-              <SectionHeader title={needle ? "Matches" : "Your places"} count={matches.length} />
+              <SectionHeader
+                title={needle ? "Matches" : "Your places"}
+                count={matches.length}
+              />
               {needle && !creating && (
                 <Row
                   className={classes.row}
                   title={`Create “${placeSearch.trim()}”`}
                   subtitle="A new canyon, made when the trip is saved"
-                  leading={<IconTile icon={MapPinPlus} hue="var(--theme-bonus-1)" />}
+                  leading={
+                    <IconTile icon={MapPinPlus} hue="var(--theme-bonus-1)" />
+                  }
                   onOpen={() => startCreate(placeSearch.trim())}
                 />
               )}
@@ -995,7 +1111,9 @@ function TripLogDialog({
                     className={classes.row}
                     title={place.name}
                     description="Press to add it to this trip."
-                    leading={<IconTile icon={Plus} hue="var(--theme-bonus-1)" />}
+                    leading={
+                      <IconTile icon={Plus} hue="var(--theme-bonus-1)" />
+                    }
                     onOpen={() => togglePlace(place.id)}
                   />
                 ))
@@ -1008,7 +1126,13 @@ function TripLogDialog({
             flight and a half-typed attribute survive the trip there and back.
             The form spans the whole body; its Save lives in the footer and is
             tied to it by id, so Enter in any field saves. */}
-        <form id={formId} noValidate onSubmit={handleSubmit} className={classes.form} hidden={mode !== "form"}>
+        <form
+          id={formId}
+          noValidate
+          onSubmit={handleSubmit}
+          className={classes.form}
+          hidden={mode !== "form"}
+        >
           {/* Autosaved-draft offer. An offer rather than a silent repopulate:
               the form stays fresh until the user asks for the draft back, so
               nobody has to work out why last Tuesday's text is in today's
@@ -1017,7 +1141,8 @@ function TripLogDialog({
           {restorableDraft && (
             <div role="status" className={classes.draft}>
               <p className={classes.draftText}>
-                You have an unsaved trip from {formatDraftSavedAt(restorableDraft.savedAt)}.
+                You have an unsaved trip from{" "}
+                {formatDraftSavedAt(restorableDraft.savedAt)}.
               </p>
               <div className={classes.draftActions}>
                 <Button compact onClick={handleDiscardDraft}>
@@ -1040,7 +1165,9 @@ function TripLogDialog({
             error={date ? null : "Date is required."}
             // Non-blocking — a future date is allowed (trip planning), it is
             // only flagged so an accidental typo doesn't pass unnoticed.
-            hint={isFutureDate(date) ? "This date is in the future." : undefined}
+            hint={
+              isFutureDate(date) ? "This date is in the future." : undefined
+            }
           />
 
           <div ref={placesFieldRef} className={classes.field}>
@@ -1050,10 +1177,18 @@ function TripLogDialog({
             <Row
               className={classes.row}
               title={derivedTitle ?? "No places linked"}
-              subtitle={selectedCount === 1 ? "1 place" : `${selectedCount} places`}
+              subtitle={
+                selectedCount === 1 ? "1 place" : `${selectedCount} places`
+              }
               description="Places on this trip. Press to choose."
               leading={<IconTile icon={MapPin} hue="var(--theme-accent)" />}
-              trailing={<ChevronRight size={18} aria-hidden className={classes.chevron} />}
+              trailing={
+                <ChevronRight
+                  size={18}
+                  aria-hidden
+                  className={classes.chevron}
+                />
+              }
               onOpen={openPlacesPicker}
             />
             {/* The new place's position: typed, or picked on the map. The name
@@ -1061,7 +1196,8 @@ function TripLogDialog({
             {creating && (
               <div className={classes.createPlace}>
                 <p className={classes.muted}>
-                  Where is {creating.name ? `“${creating.name}”` : "the new place"}?
+                  Where is{" "}
+                  {creating.name ? `“${creating.name}”` : "the new place"}?
                 </p>
                 <div className={classes.coordinates}>
                   <TextField
@@ -1071,7 +1207,9 @@ function TripLogDialog({
                     placeholder="-33.123456"
                     value={creating.latitude}
                     onChange={(event) =>
-                      setCreating((prev) => (prev ? { ...prev, latitude: event.target.value } : prev))
+                      setCreating((prev) =>
+                        prev ? { ...prev, latitude: event.target.value } : prev,
+                      )
                     }
                   />
                   <TextField
@@ -1081,11 +1219,19 @@ function TripLogDialog({
                     placeholder="150.123456"
                     value={creating.longitude}
                     onChange={(event) =>
-                      setCreating((prev) => (prev ? { ...prev, longitude: event.target.value } : prev))
+                      setCreating((prev) =>
+                        prev
+                          ? { ...prev, longitude: event.target.value }
+                          : prev,
+                      )
                     }
                   />
                   {onPickCoords && (
-                    <Button variant="outline" icon={MapPinPlus} onClick={handlePickCoords}>
+                    <Button
+                      variant="outline"
+                      icon={MapPinPlus}
+                      onClick={handlePickCoords}
+                    >
                       Pick on map
                     </Button>
                   )}
@@ -1099,7 +1245,11 @@ function TripLogDialog({
             label="Title"
             value={displayNameInput}
             onChange={(event) => setDisplayNameInput(event.target.value)}
-            hint={displayNameInput.trim() ? undefined : `Defaults to ${derivedTitle ?? "“Untitled trip”"}`}
+            hint={
+              displayNameInput.trim()
+                ? undefined
+                : `Defaults to ${derivedTitle ?? "“Untitled trip”"}`
+            }
           />
 
           <ChipPicker
@@ -1110,7 +1260,11 @@ function TripLogDialog({
             onAdd={addType}
             addLabel="Add a type"
             lockedValues={lockedTypes}
-            primaryValue={selectedTypes.length > 1 ? (primaryTripType(selectedTypes) ?? undefined) : undefined}
+            primaryValue={
+              selectedTypes.length > 1
+                ? (primaryTripType(selectedTypes) ?? undefined)
+                : undefined
+            }
             hint={typesHint}
             error={typesError}
           />
@@ -1169,7 +1323,12 @@ function TripLogDialog({
                 }}
               />
             ) : (
-              <Button compact icon={Plus} className={classes.addAttribute} onClick={() => setShowAddField(true)}>
+              <Button
+                compact
+                icon={Plus}
+                className={classes.addAttribute}
+                onClick={() => setShowAddField(true)}
+              >
                 Add an attribute
               </Button>
             )}
@@ -1181,16 +1340,25 @@ function TripLogDialog({
               two read as the same kind of thing. */}
           {leftoverFieldDefs.length > 0 && (
             <section className={classes.section}>
-              <SectionHeader title="Leftover attributes" count={leftoverFieldDefs.length} />
+              <SectionHeader
+                title="Leftover attributes"
+                count={leftoverFieldDefs.length}
+              />
               <p className={classes.muted}>
-                These attributes are left over from when this trip was saved as a different type.
+                These attributes are left over from when this trip was saved as
+                a different type.
               </p>
               {leftoverFieldDefs.map((def) => (
                 <Row
                   key={def.key}
-                  leading={<IconTile icon={CircleHelp} hue="var(--theme-accent)" />}
+                  leading={
+                    <IconTile icon={CircleHelp} hue="var(--theme-accent)" />
+                  }
                   title={def.label}
-                  subtitle={formatFieldValue(coerceFieldValue(getFieldValue(def.key), def.type), def.type)}
+                  subtitle={formatFieldValue(
+                    coerceFieldValue(getFieldValue(def.key), def.type),
+                    def.type,
+                  )}
                   trailing={
                     <IconButton
                       icon={X}

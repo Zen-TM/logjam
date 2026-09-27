@@ -32,7 +32,12 @@ const TOOLS: {
   family: "feather" | "material";
   icon: string;
 }[] = [
-  { id: "measure", label: "Measure distance", family: "material", icon: "ruler" },
+  {
+    id: "measure",
+    label: "Measure distance",
+    family: "material",
+    icon: "ruler",
+  },
   { id: "route", label: "Draw a route", family: "feather", icon: "pen-tool" },
 ];
 
@@ -162,7 +167,11 @@ export function MapToolGroup({
         accessibilityRole="button"
         accessibilityLabel={open ? "Hide map tools" : "Map tools"}
         accessibilityState={{ expanded: open }}
-        style={[styles.controlButton, (open || activeTool) && styles.controlActive, styles.plusButton]}
+        style={[
+          styles.controlButton,
+          (open || activeTool) && styles.controlActive,
+          styles.plusButton,
+        ]}
         onPress={onToggleOpen}
       >
         <Feather

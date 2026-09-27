@@ -29,7 +29,9 @@ export function useBulkSelection<Item>({
 
   const toggleSelected = useCallback((key: string) => {
     setSelectedKeys((keys) =>
-      keys.includes(key) ? keys.filter((other) => other !== key) : [...keys, key],
+      keys.includes(key)
+        ? keys.filter((other) => other !== key)
+        : [...keys, key],
     );
   }, []);
 
@@ -46,7 +48,10 @@ export function useBulkSelection<Item>({
     [items, keyOf, selectedKeys],
   );
 
-  const selectableItems = useMemo(() => items.filter(isDeletable), [items, isDeletable]);
+  const selectableItems = useMemo(
+    () => items.filter(isDeletable),
+    [items, isDeletable],
+  );
 
   const selectAll = useCallback(
     () => setSelectedKeys(selectableItems.map(keyOf)),

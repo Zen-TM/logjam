@@ -167,7 +167,9 @@ export function scrubEvent<E extends ScrubbableEvent>(event: E): E {
     };
   }
   if (scrubbed.breadcrumbs) {
-    scrubbed.breadcrumbs = scrubbed.breadcrumbs.map((crumb) => scrubBreadcrumb(crumb));
+    scrubbed.breadcrumbs = scrubbed.breadcrumbs.map((crumb) =>
+      scrubBreadcrumb(crumb),
+    );
   }
   // Request payloads can embed full URLs (tile paths) — drop wholesale.
   if ("request" in scrubbed) delete scrubbed.request;
@@ -179,7 +181,10 @@ export function scrubEvent<E extends ScrubbableEvent>(event: E): E {
     scrubbed.extra = scrubStructure(scrubbed.extra) as Record<string, unknown>;
   }
   if (scrubbed.contexts) {
-    scrubbed.contexts = scrubStructure(scrubbed.contexts) as Record<string, unknown>;
+    scrubbed.contexts = scrubStructure(scrubbed.contexts) as Record<
+      string,
+      unknown
+    >;
   }
   return scrubbed as E;
 }

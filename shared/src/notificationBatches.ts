@@ -213,7 +213,9 @@ export function batchLabel(batch: NotificationBatch): string {
  * accepted or expired is not offered again, so "Turn down all" on a batch where
  * six are already saved acts on two and says so.
  */
-export function batchPendingFileSends(batch: NotificationBatch): TNotification[] {
+export function batchPendingFileSends(
+  batch: NotificationBatch,
+): TNotification[] {
   if (batch.group !== "files") return [];
   return batch.items.filter(
     (item) =>

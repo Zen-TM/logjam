@@ -65,8 +65,14 @@ function rectangle(
 export function offlineCoverageMask(boxes: MaskBbox[]): GeoJSON.Feature | null {
   if (boxes.length === 0) return null;
 
-  const outerWest = Math.max(-180, Math.min(...boxes.map(([w]) => w)) - MASK_PAD_DEGREES);
-  const outerEast = Math.min(180, Math.max(...boxes.map(([, , e]) => e)) + MASK_PAD_DEGREES);
+  const outerWest = Math.max(
+    -180,
+    Math.min(...boxes.map(([w]) => w)) - MASK_PAD_DEGREES,
+  );
+  const outerEast = Math.min(
+    180,
+    Math.max(...boxes.map(([, , e]) => e)) + MASK_PAD_DEGREES,
+  );
   const outerSouth = Math.max(
     -MERCATOR_LIMIT,
     Math.min(...boxes.map(([, s]) => s)) - MASK_PAD_DEGREES,
@@ -105,7 +111,9 @@ export function offlineCoverageMask(boxes: MaskBbox[]): GeoJSON.Feature | null {
     let cursor = outerSouth;
     for (const [south, north] of covered) {
       if (south > cursor) {
-        polygons.push(rectangle(bandWest, cursor, bandEast, Math.min(south, outerNorth)));
+        polygons.push(
+          rectangle(bandWest, cursor, bandEast, Math.min(south, outerNorth)),
+        );
       }
       cursor = Math.max(cursor, north);
     }

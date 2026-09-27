@@ -86,7 +86,9 @@ export function useRouteDraft(): RouteDraftHandle {
     (route?: { points: RoutePoint[]; anchors?: number[] | null } | null) => {
       history.current = [];
       setCanUndo(false);
-      setDraft(route ? draftFromRoute(route.points, route.anchors) : emptyDraft);
+      setDraft(
+        route ? draftFromRoute(route.points, route.anchors) : emptyDraft,
+      );
     },
     [],
   );
@@ -120,7 +122,9 @@ export function useRouteDraft(): RouteDraftHandle {
           // Refuse a snap that would blow the point cap: the straight segment
           // already drawn is a fine answer, and truncating a snapped run
           // mid-track would leave the line ending nowhere.
-          return draftPointCount(updated) > MAX_ROUTE_POINTS ? current : updated;
+          return draftPointCount(updated) > MAX_ROUTE_POINTS
+            ? current
+            : updated;
         }),
       [],
     ),
@@ -141,7 +145,10 @@ export function useRouteDraft(): RouteDraftHandle {
     // Through `commit`, so Ctrl+Z takes it back like every other edit. The
     // shared model flips the anchors with the geometry, which is what stops a
     // reversed line reassigning which vertices the user placed.
-    reverse: useCallback(() => commit((current) => reverseDraft(current)), [commit]),
+    reverse: useCallback(
+      () => commit((current) => reverseDraft(current)),
+      [commit],
+    ),
     undo,
     reset,
   };

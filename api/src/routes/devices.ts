@@ -16,27 +16,34 @@ const VALID_PLATFORMS = new Set(["ios", "android"]);
 // token: a token re-registered by a different signed-in user moves to them
 // (same physical device, new login) rather than duplicating or leaking pushes
 // to the previous account.
-router.post("/", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
-  const user = await resolveUser(req.user!.sub);
-  const { token, platform } = req.body as { token?: unknown; platform?: unknown };
-  if (
-    typeof token !== "string" ||
-    token.length === 0 ||
-    token.length > TOKEN_MAX_LENGTH
-  ) {
-    throw new AppError(400, "Invalid token");
-  }
-  if (typeof platform !== "string" || !VALID_PLATFORMS.has(platform)) {
-    throw new AppError(400, "Invalid platform");
-  }
+router.post(
+  "/",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const user = await resolveUser(req.user!.sub);
+    const { token, platform } = req.body as {
+      token?: unknown;
+      platform?: unknown;
+    };
+    if (
+      typeof token !== "string" ||
+      token.length === 0 ||
+      token.length > TOKEN_MAX_LENGTH
+    ) {
+      throw new AppError(400, "Invalid token");
+    }
+    if (typeof platform !== "string" || !VALID_PLATFORMS.has(platform)) {
+      throw new AppError(400, "Invalid platform");
+    }
 
-  const device = await prisma.deviceToken.upsert({
-    where: { token },
-    create: { userId: user.id, token, platform },
-    update: { userId: user.id, platform, lastSeenAt: new Date() },
-  });
-  res.status(201).json({ id: device.id });
-});
+    const device = await prisma.deviceToken.upsert({
+      where: { token },
+      create: { userId: user.id, token, platform },
+      update: { userId: user.id, platform, lastSeenAt: new Date() },
+    });
+    res.status(201).json({ id: device.id });
+  },
+);
 
 // DELETE /devices/:token — unregister on sign-out. Idempotent: deleting a
 // token that isn't registered (or isn't yours) is a 204 either way, so the

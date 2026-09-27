@@ -22,7 +22,10 @@ function componentName(key: string): string {
 
 /** The lucide component for a type's icon key, falling back to the pin. */
 export function placeTypeLucideIcon(iconKey: string): lucide.LucideIcon {
-  const icons = lucide as unknown as Record<string, lucide.LucideIcon | undefined>;
+  const icons = lucide as unknown as Record<
+    string,
+    lucide.LucideIcon | undefined
+  >;
   // A key this build does not know draws the fallback pin rather than nothing:
   // a row with no glyph reads as a broken row, and a NEWER server may name an
   // icon an older web build has never heard of (protocol §10.3 is additive).

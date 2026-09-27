@@ -52,7 +52,11 @@ export function ProgressBar({
       className={classes.progress}
       data-tone={tone}
       data-indeterminate={known == null}
-      style={known == null ? undefined : ({ "--progress": `${known}%` } as CSSProperties)}
+      style={
+        known == null
+          ? undefined
+          : ({ "--progress": `${known}%` } as CSSProperties)
+      }
     >
       <span className={classes.progressFill} />
     </div>
@@ -124,10 +128,20 @@ export function Toast({
 }) {
   const Icon = severity === "error" ? CircleAlert : CircleCheck;
   return (
-    <div className={classes.toast} role={severity === "error" ? "alert" : "status"}>
+    <div
+      className={classes.toast}
+      role={severity === "error" ? "alert" : "status"}
+    >
       <Icon size={16} aria-hidden className={classes.toastGlyph} />
       <span className={classes.toastText}>{message}</span>
-      <IconButton icon={X} label="Dismiss" tone="onFill" size={14} round onClick={onDismiss} />
+      <IconButton
+        icon={X}
+        label="Dismiss"
+        tone="onFill"
+        size={14}
+        round
+        onClick={onDismiss}
+      />
     </div>
   );
 }

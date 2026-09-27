@@ -57,14 +57,16 @@ export async function estimateExportSeconds(
   const actuals: JobActual[] = [];
   for (const row of recent) {
     if (!row.sourceTileCount || !row.startedAt || !row.completedAt) continue;
-    const wallSeconds = (row.completedAt.getTime() - row.startedAt.getTime()) / 1000;
+    const wallSeconds =
+      (row.completedAt.getTime() - row.startedAt.getTime()) / 1000;
     if (wallSeconds > 0) {
       actuals.push({ inputTileCount: row.sourceTileCount, wallSeconds });
     }
   }
 
   return estimateRuntimeSeconds(actuals, sourceTileCount, {
-    defaultSecondsPerInputTile: env.TOPO_EXPORT_ESTIMATE_DEFAULT_SECONDS_PER_TILE,
+    defaultSecondsPerInputTile:
+      env.TOPO_EXPORT_ESTIMATE_DEFAULT_SECONDS_PER_TILE,
     minSamples: env.TOPO_EXPORT_ESTIMATE_MIN_SAMPLES,
     overheadSeconds: EXPORT_OVERHEAD_SECONDS,
   });
@@ -75,9 +77,16 @@ export async function estimateExportSeconds(
  * config. Sized by native render-canvas megapixels (paper-independent — see
  * geoPdfNativeMegapixels), the only size signal known at submit time.
  */
-export async function estimateGeoPdfSeconds(config: GeoPdfConfig): Promise<number | null> {
-  const maxNativeZoom = GEOPDF_BASE_LAYER_CONFIG[config.baseLayer]?.maxNativeZoom ?? 18;
-  const megapixels = geoPdfNativeMegapixels(config.extent, config.scale, maxNativeZoom);
+export async function estimateGeoPdfSeconds(
+  config: GeoPdfConfig,
+): Promise<number | null> {
+  const maxNativeZoom =
+    GEOPDF_BASE_LAYER_CONFIG[config.baseLayer]?.maxNativeZoom ?? 18;
+  const megapixels = geoPdfNativeMegapixels(
+    config.extent,
+    config.scale,
+    maxNativeZoom,
+  );
 
   const recent = await prisma.geoPdfJob.findMany({
     where: {
@@ -97,7 +106,8 @@ export async function estimateGeoPdfSeconds(config: GeoPdfConfig): Promise<numbe
   const actuals: JobActual[] = [];
   for (const row of recent) {
     if (!row.startedAt || !row.completedAt) continue;
-    const wallSeconds = (row.completedAt.getTime() - row.startedAt.getTime()) / 1000;
+    const wallSeconds =
+      (row.completedAt.getTime() - row.startedAt.getTime()) / 1000;
     if (!(wallSeconds > 0)) continue;
     try {
       const rowConfig = row.config as unknown as GeoPdfConfig;
@@ -113,12 +123,16 @@ export async function estimateGeoPdfSeconds(config: GeoPdfConfig): Promise<numbe
     } catch (err) {
       // Malformed/legacy stored config (missing/non-numeric extent or scale) —
       // skip this row rather than let one bad historical row break the estimate.
-      logger.warn({ err: safeErrorForLog(err) }, "geo_pdf_estimate_history_row_skipped");
+      logger.warn(
+        { err: safeErrorForLog(err) },
+        "geo_pdf_estimate_history_row_skipped",
+      );
     }
   }
 
   return estimateRuntimeSeconds(actuals, megapixels, {
-    defaultSecondsPerInputTile: env.GEO_PDF_ESTIMATE_DEFAULT_SECONDS_PER_MEGAPIXEL,
+    defaultSecondsPerInputTile:
+      env.GEO_PDF_ESTIMATE_DEFAULT_SECONDS_PER_MEGAPIXEL,
     minSamples: env.GEO_PDF_ESTIMATE_MIN_SAMPLES,
     overheadSeconds: GEO_PDF_OVERHEAD_SECONDS,
   });

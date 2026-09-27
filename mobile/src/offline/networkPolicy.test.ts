@@ -95,12 +95,18 @@ describe("meteredness", () => {
   // say" must stay distinguishable from "it said no".
   it.each([
     ["no details at all", offline],
-    ["details without the property", { isConnected: true, type: "wifi", details: {} }],
-    ["a non-boolean value", {
-      isConnected: true,
-      type: "wifi",
-      details: { isConnectionExpensive: "yes" },
-    }],
+    [
+      "details without the property",
+      { isConnected: true, type: "wifi", details: {} },
+    ],
+    [
+      "a non-boolean value",
+      {
+        isConnected: true,
+        type: "wifi",
+        details: { isConnectionExpensive: "yes" },
+      },
+    ],
   ])("answers null on %s, where isExpensive answers false", (_label, state) => {
     expect(meteredness(state)).toBeNull();
     expect(isExpensive(state)).toBe(false);

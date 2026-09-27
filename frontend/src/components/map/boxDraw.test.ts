@@ -17,12 +17,14 @@ describe("boxOverlayRect", () => {
   it("gives the same rectangle dragging up-left", () => {
     // The corner the user anchored is not necessarily the top-left one — a box
     // drawn back towards the origin has to come out identical, not inverted.
-    expect(boxOverlayRect({ x: 110, y: 120 }, { x: 50, y: 120 }, RECT)).toEqual({
-      left: 10,
-      top: 20,
-      width: 100,
-      height: 100,
-    });
+    expect(boxOverlayRect({ x: 110, y: 120 }, { x: 50, y: 120 }, RECT)).toEqual(
+      {
+        left: 10,
+        top: 20,
+        width: 100,
+        height: 100,
+      },
+    );
   });
 
   it("offsets the cursor by the container, and the anchor not at all", () => {

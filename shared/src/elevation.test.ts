@@ -214,7 +214,9 @@ describe("elevationGainLoss", () => {
     // The whole reason the constant is separate: a 10 m rise is real terrain
     // to a DEM and noise to a GPS altimeter.
     expect(DEM_ELEVATION_HYSTERESIS_M).toBeLessThan(15);
-    expect(elevationGainLoss([100, 110, 100], DEM_ELEVATION_HYSTERESIS_M)).toEqual({
+    expect(
+      elevationGainLoss([100, 110, 100], DEM_ELEVATION_HYSTERESIS_M),
+    ).toEqual({
       gainM: 10,
       lossM: 10,
     });

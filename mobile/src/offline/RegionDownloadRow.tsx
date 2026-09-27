@@ -71,7 +71,8 @@ export function RegionDownloadRow({ job }: { job: RegionJob }) {
         ? `${formatBytes(progress.bytesDone)} of ${formatBytes(progress.bytesTotal)}`
         : "Starting…";
     }
-    const gaps = progress.tilesGap > 0 ? ` · ${progress.tilesGap} not available` : "";
+    const gaps =
+      progress.tilesGap > 0 ? ` · ${progress.tilesGap} not available` : "";
     return `${progress.tilesDone.toLocaleString()} of ${progress.tilesTotal.toLocaleString()} tiles${gaps}`;
   })();
 
@@ -111,11 +112,12 @@ export function RegionDownloadRow({ job }: { job: RegionJob }) {
                   onPress={() => pauseRegionDownload(spec.id)}
                 />
               ) : null
-            ) : state.kind === "failed" && !isRetryableFailure(state.code) ? (
-              // Retrying a rejected area, or an endpoint that is down, repeats
-              // the same failure; the row's sentence says what to do instead.
-              null
-            ) : (
+            ) : state.kind === "failed" &&
+              !isRetryableFailure(
+                state.code,
+              ) ? // Retrying a rejected area, or an endpoint that is down, repeats
+            // the same failure; the row's sentence says what to do instead.
+            null : (
               <Button
                 label="Resume"
                 variant="outlineAccent"

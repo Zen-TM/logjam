@@ -150,17 +150,16 @@ export function usePlacePicker({
             hue={theme.warning}
             disabled={busy}
             onPress={() =>
-              run(
-                () => onUnlink().then(onDone),
-                "Couldn't change the link.",
-              )
+              run(() => onUnlink().then(onDone), "Couldn't change the link.")
             }
           />
         ) : null}
 
         {matches.length === 0 ? (
           <Text style={styles.hint}>
-            {query ? "No place of yours matches that." : "You have no places yet."}
+            {query
+              ? "No place of yours matches that."
+              : "You have no places yet."}
           </Text>
         ) : (
           matches.map((place) => {

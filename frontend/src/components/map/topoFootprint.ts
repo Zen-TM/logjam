@@ -19,7 +19,9 @@ export function collectLngLatPairs(node: unknown): [number, number][] {
 }
 
 /** The box around a footprint, or null when it holds no usable position. */
-export function footprintBounds(footprint: GeoJsonPolygonal): RegionBbox | null {
+export function footprintBounds(
+  footprint: GeoJsonPolygonal,
+): RegionBbox | null {
   const pairs = collectLngLatPairs(footprint.coordinates).filter(
     ([lng, lat]) => Number.isFinite(lng) && Number.isFinite(lat),
   );
@@ -35,7 +37,15 @@ export function footprintBounds(footprint: GeoJsonPolygonal): RegionBbox | null 
 }
 
 /** Whether two boxes overlap (touching counts). A null box never does. */
-export function boundsIntersect(a: RegionBbox | null, b: RegionBbox | null): boolean {
+export function boundsIntersect(
+  a: RegionBbox | null,
+  b: RegionBbox | null,
+): boolean {
   if (!a || !b) return false;
-  return a.west <= b.east && b.west <= a.east && a.south <= b.north && b.south <= a.north;
+  return (
+    a.west <= b.east &&
+    b.west <= a.east &&
+    a.south <= b.north &&
+    b.south <= a.north
+  );
 }

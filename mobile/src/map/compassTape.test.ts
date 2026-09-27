@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { COMPASS_PX_PER_DEGREE, compassTicks, displayHeading } from "./compassTape";
+import {
+  COMPASS_PX_PER_DEGREE,
+  compassTicks,
+  displayHeading,
+} from "./compassTape";
 import { NSW_MAGNETIC_DECLINATION_DEG } from "./heading";
 
 const WIDTH = 260;
@@ -53,7 +57,9 @@ describe("displayHeading", () => {
   // walks off a plateau.
   it("subtracts the easterly declination for magnetic", () => {
     expect(displayHeading(100, "magnetic")).toBeCloseTo(87.5);
-    expect(displayHeading(NSW_MAGNETIC_DECLINATION_DEG, "magnetic")).toBeCloseTo(0);
+    expect(
+      displayHeading(NSW_MAGNETIC_DECLINATION_DEG, "magnetic"),
+    ).toBeCloseTo(0);
   });
 
   it("wraps below zero rather than going negative", () => {

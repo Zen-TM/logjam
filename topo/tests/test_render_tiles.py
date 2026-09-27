@@ -1,4 +1,5 @@
 """Per-layer tile rendering: numpy array → RGBA PIL image (pure, no GDAL)."""
+
 import os
 import sys
 import unittest
@@ -15,6 +16,7 @@ try:
         render_slope_tile,
         render_vegetation_tile,
     )
+
     _IMPORT_OK = True
 except Exception as _exc:  # noqa: BLE001
     _IMPORT_OK = False
@@ -36,7 +38,9 @@ class TestRenderHillshade(unittest.TestCase):
 
     def test_white_tint_is_identity_luminance(self):
         hs = np.full((TILE_SIZE, TILE_SIZE), 128.0)
-        out = np.array(render_hillshade_tile(hs, {"hillshade": {"colour": "#ffffffff"}}))
+        out = np.array(
+            render_hillshade_tile(hs, {"hillshade": {"colour": "#ffffffff"}})
+        )
         self.assertEqual(int(out[0, 0, 0]), 128)
         self.assertEqual(int(out[0, 0, 1]), 128)
         self.assertEqual(int(out[0, 0, 2]), 128)
@@ -45,7 +49,9 @@ class TestRenderHillshade(unittest.TestCase):
     def test_tint_colour_scales_channels(self):
         hs = np.full((TILE_SIZE, TILE_SIZE), 255.0)
         # Half-red tint, alpha 128.
-        out = np.array(render_hillshade_tile(hs, {"hillshade": {"colour": "#80000080"}}))
+        out = np.array(
+            render_hillshade_tile(hs, {"hillshade": {"colour": "#80000080"}})
+        )
         self.assertEqual(int(out[0, 0, 0]), 128)  # 255 * 0x80/255
         self.assertEqual(int(out[0, 0, 1]), 0)
         self.assertEqual(int(out[0, 0, 3]), 128)
@@ -53,7 +59,9 @@ class TestRenderHillshade(unittest.TestCase):
     def test_nan_pixels_are_transparent(self):
         hs = np.full((TILE_SIZE, TILE_SIZE), 200.0)
         hs[0, 0] = np.nan
-        out = np.array(render_hillshade_tile(hs, {"hillshade": {"colour": "#ffffffff"}}))
+        out = np.array(
+            render_hillshade_tile(hs, {"hillshade": {"colour": "#ffffffff"}})
+        )
         self.assertEqual(int(out[0, 0, 3]), 0)
         self.assertEqual(int(out[1, 1, 3]), 255)
 

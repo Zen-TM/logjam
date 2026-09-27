@@ -10,7 +10,10 @@ vi.mock("../services/prisma", () => ({
 
 // The definitions each type carries are rows; what is under test is the
 // DECISION taken over them, so they are supplied directly.
-const defsByType: Record<string, { key: string; label: string; type: string }[]> = {};
+const defsByType: Record<
+  string,
+  { key: string; label: string; type: string }[]
+> = {};
 vi.mock("./placeTypes", () => ({
   defsForPlaceType: vi.fn((_ownerId: string, typeId: string) =>
     Promise.resolve(defsByType[typeId] ?? []),
@@ -29,7 +32,9 @@ beforeEach(() => {
     { key: "v_grade", label: "V grade", type: "integer" },
     { key: "hours", label: "Hours", type: "float" },
   ];
-  defsByType[CAMPSITE] = [{ key: "capacity", label: "Capacity", type: "integer" }];
+  defsByType[CAMPSITE] = [
+    { key: "capacity", label: "Capacity", type: "integer" },
+  ];
 });
 
 describe("strandValuesOnTypeChange", () => {
@@ -42,7 +47,10 @@ describe("strandValuesOnTypeChange", () => {
       foreignFields: null,
     });
     expect(result.fieldValues).toEqual({});
-    expect(result.foreignFields.map((item) => item.key)).toEqual(["v_grade", "hours"]);
+    expect(result.foreignFields.map((item) => item.key)).toEqual([
+      "v_grade",
+      "hours",
+    ]);
     // Described by the OLD type's definition, so it can be rendered — and
     // matched back — without it.
     expect(result.foreignFields[0].label).toBe("V grade");
@@ -87,7 +95,10 @@ describe("strandValuesOnTypeChange", () => {
     // Nothing defines `gate_code` on either side, so it waits — with its label
     // intact, which is what makes an unlimited number of round trips safe.
     expect(back.foreignFields).toHaveLength(1);
-    expect(back.foreignFields[0]).toMatchObject({ key: "gate_code", label: "Gate code" });
+    expect(back.foreignFields[0]).toMatchObject({
+      key: "gate_code",
+      label: "Gate code",
+    });
   });
 
   it("refuses a value whose TYPE disagrees, rather than corrupting the field", async () => {
@@ -99,7 +110,9 @@ describe("strandValuesOnTypeChange", () => {
       // Parked as a string; the canyon's `v_grade` is an integer. A key match
       // alone would drop "4" into a numeric field, where every bound check and
       // every filter then reads a string.
-      foreignFields: [{ key: "v_grade", label: "V grade", type: "string", value: "4" }],
+      foreignFields: [
+        { key: "v_grade", label: "V grade", type: "string", value: "4" },
+      ],
     });
     expect(back.fieldValues).toEqual({});
     expect(back.foreignFields).toHaveLength(1);
@@ -111,7 +124,9 @@ describe("strandValuesOnTypeChange", () => {
       fromTypeId: CANYON,
       toTypeId: CAMPSITE,
       fieldValues: { v_grade: 5 },
-      foreignFields: [{ key: "v_grade", label: "V grade", type: "integer", value: 4 }],
+      foreignFields: [
+        { key: "v_grade", label: "V grade", type: "integer", value: 4 },
+      ],
     });
     // Two rows for one key would offer "decide what to do with this" twice and
     // only one of them would be right. The LIVE value wins: it is what the user
@@ -130,7 +145,9 @@ describe("strandValuesOnTypeChange", () => {
       // parking it would be this function inventing a schema decision nobody
       // asked for.
       fieldValues: { v_grade: 4, mystery: "kept" },
-      foreignFields: [{ key: "gate_code", label: "Gate code", type: "string", value: "x" }],
+      foreignFields: [
+        { key: "gate_code", label: "Gate code", type: "string", value: "x" },
+      ],
     });
     expect(result.fieldValues).toEqual({ v_grade: 4, mystery: "kept" });
     expect(result.foreignFields).toHaveLength(1);
@@ -160,7 +177,9 @@ describe("strandValuesOnTypeChange", () => {
       fromTypeId: CANYON,
       toTypeId: CANYON,
       fieldValues: { v_grade: 6 },
-      foreignFields: [{ key: "v_grade", label: "V grade", type: "integer", value: 4 }],
+      foreignFields: [
+        { key: "v_grade", label: "V grade", type: "integer", value: 4 },
+      ],
     });
     expect(result.fieldValues).toEqual({ v_grade: 6 });
     expect(result.foreignFields).toEqual([]);
@@ -174,6 +193,8 @@ describe("strandValuesOnTypeChange", () => {
       fieldValues: { _sources: [{ url: "https://example.test" }], v_grade: 4 },
       foreignFields: null,
     });
-    expect(result.fieldValues._sources).toEqual([{ url: "https://example.test" }]);
+    expect(result.fieldValues._sources).toEqual([
+      { url: "https://example.test" },
+    ]);
   });
 });

@@ -76,13 +76,13 @@ def _scrub_paths(message: str) -> str:
     return _PATH_RE.sub("<path>", message)
 
 
-AWS_REGION   = os.environ.get("AWS_REGION", "ap-southeast-2")
-BUCKET       = os.environ["S3_BUCKET_TOPO"]
+AWS_REGION = os.environ.get("AWS_REGION", "ap-southeast-2")
+BUCKET = os.environ["S3_BUCKET_TOPO"]
 DATABASE_URL = compose_database_url()
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "")
 EXPORT_JOB_ID = os.environ["EXPORT_JOB_ID"]
 
-s3  = boto3.client("s3",  region_name=AWS_REGION)
+s3 = boto3.client("s3", region_name=AWS_REGION)
 
 
 def db_connect():
@@ -109,8 +109,14 @@ def get_source_jobs(conn, source_job_ids: list[str]) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-def update_status(conn, export_job_id: str, status: str, storage_delta_bytes: int = 0,
-                  expected_status: Optional[str] = None, **kwargs) -> int:
+def update_status(
+    conn,
+    export_job_id: str,
+    status: str,
+    storage_delta_bytes: int = 0,
+    expected_status: Optional[str] = None,
+    **kwargs,
+) -> int:
     """Update the export row's status and optional extra columns. Returns rows
     updated.
 
@@ -170,7 +176,9 @@ def delete_s3_prefix_best_effort(prefix: str):
         log.warning(f"Best-effort cleanup of {prefix} failed: {e}")
 
 
-def send_completion_email(to_email: str, export_job_id: str, format_: str, ok: bool, error: Optional[str]):
+def send_completion_email(
+    to_email: str, export_job_id: str, format_: str, ok: bool, error: Optional[str]
+):
     if not FRONTEND_URL:
         return
     base = FRONTEND_URL.rstrip("/")
@@ -216,12 +224,18 @@ def main():
     # Guarded on `queued` (Design L1): if the export was reaped or deleted
     # while the task spun up, claim nothing and exit cleanly. started_at
     # anchors the reaper's running-timeout (mirrors topo_jobs.started_at).
-    claimed = update_status(conn, EXPORT_JOB_ID, "running",
-                            expected_status="queued",
-                            started_at=datetime.now(timezone.utc))
+    claimed = update_status(
+        conn,
+        EXPORT_JOB_ID,
+        "running",
+        expected_status="queued",
+        started_at=datetime.now(timezone.utc),
+    )
     if claimed == 0:
-        log.warning(f"Export {EXPORT_JOB_ID} is no longer queued (reaped or "
-                    "deleted) — exiting without rendering.")
+        log.warning(
+            f"Export {EXPORT_JOB_ID} is no longer queued (reaped or "
+            "deleted) — exiting without rendering."
+        )
         conn.close()
         return
 
@@ -282,7 +296,9 @@ def main():
                 raise RenderError(f"Unsupported export format: {fmt}")
 
             if not result_local.exists():
-                raise RenderError(f"Renderer reported success but {result_local} is missing")
+                raise RenderError(
+                    f"Renderer reported success but {result_local} is missing"
+                )
 
             result_key = f"exports/{EXPORT_JOB_ID}/{result_local.name}"
             log.info(f"Uploading result → s3://{BUCKET}/{result_key}")
@@ -291,8 +307,8 @@ def main():
 
     except RenderError as e:
         raw = str(e)
-        log.error(f"RenderError: {raw}")          # full detail stays in worker logs
-        error_msg = _scrub_paths(raw)             # path-free for DB notification + email
+        log.error(f"RenderError: {raw}")  # full detail stays in worker logs
+        error_msg = _scrub_paths(raw)  # path-free for DB notification + email
     except Exception as e:
         log.error(f"Unexpected failure: {e}", exc_info=True)
         # Keep raw exception out of the user-facing error message.
@@ -303,7 +319,9 @@ def main():
     # separate commit.
     if error_msg or result_key is None:
         updated = update_status(
-            conn, EXPORT_JOB_ID, "failed",
+            conn,
+            EXPORT_JOB_ID,
+            "failed",
             expected_status="running",
             error_message=error_msg or "Unknown failure",
             completed_at=datetime.now(timezone.utc),
@@ -311,7 +329,9 @@ def main():
         ok = False
     else:
         updated = update_status(
-            conn, EXPORT_JOB_ID, "completed",
+            conn,
+            EXPORT_JOB_ID,
+            "completed",
             expected_status="running",
             storage_delta_bytes=result_bytes,
             result_key=result_key,
@@ -324,8 +344,10 @@ def main():
         # Export was reaped or deleted mid-render: nothing references the
         # uploaded artefact and no storage was charged — self-clean and skip
         # notification/email. Exit 0 either way (the outcome is moot).
-        log.warning(f"Export {EXPORT_JOB_ID} was reaped or deleted mid-run — "
-                    "cleaning up and skipping notification/email.")
+        log.warning(
+            f"Export {EXPORT_JOB_ID} was reaped or deleted mid-run — "
+            "cleaning up and skipping notification/email."
+        )
         delete_s3_prefix_best_effort(f"exports/{EXPORT_JOB_ID}/")
         conn.close()
         return
@@ -335,7 +357,9 @@ def main():
     # notification tail must not kill the process or skip the email.
     try:
         create_notification(
-            conn, export_job["user_id"], "topo_export_complete",
+            conn,
+            export_job["user_id"],
+            "topo_export_complete",
             {
                 "exportJobId": EXPORT_JOB_ID,
                 "format": export_job["format"],
@@ -347,15 +371,21 @@ def main():
         # Push — generic title + opaque IDs only (format/status/error stay in
         # the in-app notification, never in a push).
         from push_send import send_push
-        send_push(conn, export_job["user_id"],
-                  {"type": "topo_export_complete", "exportId": EXPORT_JOB_ID})
+
+        send_push(
+            conn,
+            export_job["user_id"],
+            {"type": "topo_export_complete", "exportId": EXPORT_JOB_ID},
+        )
     except Exception as e:
         log.warning(f"Export {EXPORT_JOB_ID}: notification/push failed: {e}")
 
     try:
         email = get_user_email(conn, export_job["user_id"])
         if email and wants_email(conn, export_job["user_id"], "exportEmail"):
-            send_completion_email(email, EXPORT_JOB_ID, export_job["format"], ok, error_msg)
+            send_completion_email(
+                email, EXPORT_JOB_ID, export_job["format"], ok, error_msg
+            )
     except Exception as e:
         log.warning(f"Export {EXPORT_JOB_ID}: completion email failed: {e}")
     finally:

@@ -30,7 +30,9 @@ export async function readRouteDraft(): Promise<StoredRouteDraft | null> {
     pointsJson: string;
     anchorsJson: string;
     editingRouteId: string | null;
-  }>("SELECT pointsJson, anchorsJson, editingRouteId FROM route_draft WHERE id = 1");
+  }>(
+    "SELECT pointsJson, anchorsJson, editingRouteId FROM route_draft WHERE id = 1",
+  );
   if (!row) return null;
   try {
     const points = JSON.parse(row.pointsJson) as RoutePoint[];

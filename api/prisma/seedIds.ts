@@ -25,4 +25,18 @@ export const seedId = (prefix: string, n: number) =>
 export const cid = (n: number) => seedId("1", n);
 
 /** Every prefix the seed mints under — the list the guard test iterates. */
-export const SEED_ID_PREFIXES = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "c", "d", "e"] as const;
+export const SEED_ID_PREFIXES = [
+  "0",
+  "1",
+  "2",
+  "3",
+  "4",
+  "5",
+  "6",
+  "7",
+  "8",
+  "9",
+  "c",
+  "d",
+  "e",
+] as const;

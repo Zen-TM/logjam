@@ -26,7 +26,14 @@ import {
   type OsmPointFeatureKey,
   type VectorStyleSettings,
 } from "@logjam/shared";
-import { ColourField, LiveNumberField, RangeField, SheetSection, SideSheet, Toggle } from "../../../ui";
+import {
+  ColourField,
+  LiveNumberField,
+  RangeField,
+  SheetSection,
+  SideSheet,
+  Toggle,
+} from "../../../ui";
 import classes from "./MapsPanel.module.css";
 
 /** The fixed topographic icon each point feature is drawn with. */
@@ -89,12 +96,24 @@ export default function TopoStyleSheet({
   );
 }
 
-function StyleForm({ value, onChange }: { value: VectorStyleSettings; onChange: (next: VectorStyleSettings) => void }) {
+function StyleForm({
+  value,
+  onChange,
+}: {
+  value: VectorStyleSettings;
+  onChange: (next: VectorStyleSettings) => void;
+}) {
   const contours = value.contours;
   const setContours = (delta: Partial<VectorStyleSettings["contours"]>) =>
     onChange({ ...value, contours: { ...contours, ...delta } });
   const setFeature = (key: OsmFeatureKey, delta: Partial<OsmFeatureStyle>) =>
-    onChange({ ...value, features: { ...value.features, [key]: { ...value.features[key], ...delta } } });
+    onChange({
+      ...value,
+      features: {
+        ...value.features,
+        [key]: { ...value.features[key], ...delta },
+      },
+    });
 
   return (
     <>
@@ -128,7 +147,9 @@ function StyleForm({ value, onChange }: { value: VectorStyleSettings; onChange: 
                 label={`${name} width`}
                 value={toPixels(contours[widthKey])}
                 max={CONTOUR_WIDTH_MAX}
-                onChange={(pixels) => setContours({ [widthKey]: toStored(pixels) })}
+                onChange={(pixels) =>
+                  setContours({ [widthKey]: toStored(pixels) })
+                }
               />
             </StyleRow>
           ))}
@@ -189,7 +210,11 @@ function StyleForm({ value, onChange }: { value: VectorStyleSettings; onChange: 
               onEnabledChange={(enabled) => setFeature(key, { enabled })}
             >
               {/* Decorative: the row's own name says which feature this is. */}
-              <img src={`/topo-icons/${POINT_ICON[key]}`} alt="" className={classes.pointIcon} />
+              <img
+                src={`/topo-icons/${POINT_ICON[key]}`}
+                alt=""
+                className={classes.pointIcon}
+              />
             </StyleRow>
           ))}
         </div>
@@ -200,7 +225,13 @@ function StyleForm({ value, onChange }: { value: VectorStyleSettings; onChange: 
 
 /** The one line that says what the columns under it are. A width box with
  *  nothing over it is a number with no noun (operator, 2026-09-18). */
-function ColumnHeads({ columns, switched = false }: { columns: readonly string[]; switched?: boolean }) {
+function ColumnHeads({
+  columns,
+  switched = false,
+}: {
+  columns: readonly string[];
+  switched?: boolean;
+}) {
   return (
     <>
       <span />

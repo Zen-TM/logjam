@@ -67,30 +67,41 @@ def safe_error_message(e: Exception) -> str:
         return "Processing ran out of memory. Try a smaller LiDAR area."
     if isinstance(e, RuntimeError):
         if "tippecanoe" in msg:
-            return "Failed to build vector tiles. Contact support with job ID {}.".format(JOB_ID)
+            return (
+                "Failed to build vector tiles. Contact support with job ID {}.".format(
+                    JOB_ID
+                )
+            )
         if "pipeline.py" in msg:
-            return "The topo pipeline exited with an error. Contact support with job ID {}.".format(JOB_ID)
+            return "The topo pipeline exited with an error. Contact support with job ID {}.".format(
+                JOB_ID
+            )
     if isinstance(e, (OSError, IOError)):
-        return "Could not read input LiDAR data. Verify the ZIP contains Elvis DTM files."
+        return (
+            "Could not read input LiDAR data. Verify the ZIP contains Elvis DTM files."
+        )
     return f"Processing failed. Contact support with job ID {JOB_ID}."
 
-AWS_REGION   = os.environ.get("AWS_REGION", "ap-southeast-2")
-BUCKET       = os.environ["S3_BUCKET_TOPO"]
+
+AWS_REGION = os.environ.get("AWS_REGION", "ap-southeast-2")
+BUCKET = os.environ["S3_BUCKET_TOPO"]
 DATABASE_URL = compose_database_url()
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "")
-JOB_ID       = os.environ["JOB_ID"]
+JOB_ID = os.environ["JOB_ID"]
 
 # Python mirror of the canonical layer list — keep in sync with
 # shared/src/topoSettings.ts → TOPO_LAYERS (the TS side all derives from it;
 # this is the only remaining hand-synced copy, ARCH-010). Composite is
 # intentionally absent — Stage 2 builds it on demand in the export worker.
-ALL_LAYERS: frozenset[str] = frozenset({
-    "hillshade",
-    "vegetation",
-    "slope",
-    "contours",
-    "features",
-})
+ALL_LAYERS: frozenset[str] = frozenset(
+    {
+        "hillshade",
+        "vegetation",
+        "slope",
+        "contours",
+        "features",
+    }
+)
 
 RASTER_LAYERS: frozenset[str] = frozenset({"hillshade", "vegetation", "slope"})
 VECTOR_LAYERS: frozenset[str] = frozenset({"contours", "features"})
@@ -120,22 +131,22 @@ VECTOR_STYLE_DEFAULTS: dict = {
         "minorWidthM": 8,
     },
     "features": {
-        "waterway":  {"enabled": True,  "colour": "#2878dcdc", "widthZ18": 3},
-        "track":     {"enabled": True,  "colour": "#a0641edc", "widthZ18": 2},
-        "road":      {"enabled": True,  "colour": "#505050e6", "widthZ18": 4},
-        "building":  {"enabled": True,  "colour": "#a08c78c8", "widthZ18": 2},
-        "power":     {"enabled": True,  "colour": "#c8a000c8", "widthZ18": 1},
-        "campsite":  {"enabled": True,  "colour": "#00a050e6", "widthZ18": 14},
-        "peak":      {"enabled": True,  "colour": "#503214f0", "widthZ18": 12},
-        "spring":    {"enabled": True,  "colour": "#1e5ad2e6", "widthZ18": 8},
-        "gate":      {"enabled": True,  "colour": "#464646dc", "widthZ18": 10},
-        "cave":      {"enabled": True,  "colour": "#3c1e0ae6", "widthZ18": 10},
-        "bridge":    {"enabled": False, "colour": "#403028e6", "widthZ18": 3},
-        "ford":      {"enabled": False, "colour": "#1e90ffe6", "widthZ18": 8},
+        "waterway": {"enabled": True, "colour": "#2878dcdc", "widthZ18": 3},
+        "track": {"enabled": True, "colour": "#a0641edc", "widthZ18": 2},
+        "road": {"enabled": True, "colour": "#505050e6", "widthZ18": 4},
+        "building": {"enabled": True, "colour": "#a08c78c8", "widthZ18": 2},
+        "power": {"enabled": True, "colour": "#c8a000c8", "widthZ18": 1},
+        "campsite": {"enabled": True, "colour": "#00a050e6", "widthZ18": 14},
+        "peak": {"enabled": True, "colour": "#503214f0", "widthZ18": 12},
+        "spring": {"enabled": True, "colour": "#1e5ad2e6", "widthZ18": 8},
+        "gate": {"enabled": True, "colour": "#464646dc", "widthZ18": 10},
+        "cave": {"enabled": True, "colour": "#3c1e0ae6", "widthZ18": 10},
+        "bridge": {"enabled": False, "colour": "#403028e6", "widthZ18": 3},
+        "ford": {"enabled": False, "colour": "#1e90ffe6", "widthZ18": 8},
         "waterfall": {"enabled": False, "colour": "#1e6ad2f0", "widthZ18": 10},
         "trailhead": {"enabled": False, "colour": "#a04020e6", "widthZ18": 12},
         "viewpoint": {"enabled": False, "colour": "#806020e6", "widthZ18": 12},
-        "hut":       {"enabled": False, "colour": "#503820e6", "widthZ18": 12},
+        "hut": {"enabled": False, "colour": "#503820e6", "widthZ18": 12},
     },
     "labelScale": 1,
 }
@@ -159,8 +170,8 @@ def merge_settings(layer_options: Optional[dict], vector_style: Optional[dict]) 
     vec = vector_style or VECTOR_STYLE_DEFAULTS
 
     merged = {
-        "hillshade":  raster.get("hillshade"),
-        "slope":      raster.get("slope"),
+        "hillshade": raster.get("hillshade"),
+        "slope": raster.get("slope"),
         "vegetation": raster.get("vegetation"),
     }
     merged = {k: v for k, v in merged.items() if v is not None}
@@ -181,17 +192,25 @@ def merge_settings(layer_options: Optional[dict], vector_style: Optional[dict]) 
     merged["labelScale"] = vec.get("labelScale", VECTOR_STYLE_DEFAULTS["labelScale"])
     return merged
 
-s3  = boto3.client("s3",  region_name=AWS_REGION)
+
+s3 = boto3.client("s3", region_name=AWS_REGION)
 
 
 # ── Database helpers ──────────────────────────────────────────────────────────
+
 
 def db_connect():
     return psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
 
 
-def update_status(conn, job_id: str, status: str, storage_delta_bytes: int = 0,
-                  expected_status: Optional[str] = None, **kwargs) -> int:
+def update_status(
+    conn,
+    job_id: str,
+    status: str,
+    storage_delta_bytes: int = 0,
+    expected_status: Optional[str] = None,
+    **kwargs,
+) -> int:
     """Update a job's status and optional extra columns. Returns rows updated.
 
     If storage_delta_bytes is non-zero, the owner's storage_used_bytes is
@@ -235,8 +254,12 @@ def update_status(conn, job_id: str, status: str, storage_delta_bytes: int = 0,
     return updated
 
 
-def _heartbeat_loop(job_id: str, progress_path: Path, stop_event: "threading.Event",
-                    interval: float = 30.0):
+def _heartbeat_loop(
+    job_id: str,
+    progress_path: Path,
+    stop_event: "threading.Event",
+    interval: float = 30.0,
+):
     """Poll the pipeline's progress file and refresh the job's render-progress
     columns while it runs, so the reaper can tell a slow-but-alive job from a
     truly stalled one.
@@ -268,7 +291,9 @@ def _heartbeat_loop(job_id: str, progress_path: Path, stop_event: "threading.Eve
                 continue
             last_done = done
             update_status(
-                conn, job_id, "processing",
+                conn,
+                job_id,
+                "processing",
                 expected_status="processing",
                 render_tiles_done=done,
                 render_tiles_total=total,
@@ -317,8 +342,10 @@ def get_job(conn, job_id: str) -> dict:
 
 # ── Email ─────────────────────────────────────────────────────────────────────
 
-def send_completion_email(to_email: str, job_id: str, output_keys: list[dict],
-                          osm_failed: bool = False):
+
+def send_completion_email(
+    to_email: str, job_id: str, output_keys: list[dict], osm_failed: bool = False
+):
     if not FRONTEND_URL:
         log.warning("FRONTEND_URL not set — skipping completion email")
         return
@@ -330,33 +357,48 @@ def send_completion_email(to_email: str, job_id: str, output_keys: list[dict],
     open_url = f"{base}/?topoJob={job_id}"
 
     osm_warning_text = (
-        "\n\nThe features layer (tracks, waterways, peaks) couldn't be included. "
-        "The rest is complete. Re-run the job if you need that layer."
-    ) if osm_failed else ""
+        (
+            "\n\nThe features layer (tracks, waterways, peaks) couldn't be included. "
+            "The rest is complete. Re-run the job if you need that layer."
+        )
+        if osm_failed
+        else ""
+    )
     osm_warning_html = (
-        '<p style="color:#a06000">The features layer (tracks, waterways, '
-        "peaks) couldn't be included. The rest is complete. "
-        "Re-run the job if you need that layer.</p>"
-    ) if osm_failed else ""
+        (
+            '<p style="color:#a06000">The features layer (tracks, waterways, '
+            "peaks) couldn't be included. The rest is complete. "
+            "Re-run the job if you need that layer.</p>"
+        )
+        if osm_failed
+        else ""
+    )
 
-    text_body = "\n".join([
-        "Your topo map job is complete.",
-        "",
-        f"Open it in Logjam Web to download or export your map: {open_url}",
-    ]) + osm_warning_text
+    text_body = (
+        "\n".join(
+            [
+                "Your topo map job is complete.",
+                "",
+                f"Open it in Logjam Web to download or export your map: {open_url}",
+            ]
+        )
+        + osm_warning_text
+    )
 
-    html_body = "\n".join([
-        "<html>",
-        "  <body>",
-        '    <p style="margin:0 0 16px">'
-        f'<img src="{base}/email-logo-lockup.png" alt="Logjam" width="212" '
-        'style="display:block" /></p>',
-        "    <p>Your topo map job is complete.</p>",
-        f'    <p><a href="{open_url}">Open it in Logjam Web to download or export your map</a></p>',
-        f"    {osm_warning_html}",
-        "  </body>",
-        "</html>",
-    ])
+    html_body = "\n".join(
+        [
+            "<html>",
+            "  <body>",
+            '    <p style="margin:0 0 16px">'
+            f'<img src="{base}/email-logo-lockup.png" alt="Logjam" width="212" '
+            'style="display:block" /></p>',
+            "    <p>Your topo map job is complete.</p>",
+            f'    <p><a href="{open_url}">Open it in Logjam Web to download or export your map</a></p>',
+            f"    {osm_warning_html}",
+            "  </body>",
+            "</html>",
+        ]
+    )
     send_email(to_email, "Topo map ready — Logjam", text_body, html_body)
 
 
@@ -372,30 +414,35 @@ def send_failure_email(to_email: str, job_id: str, error_message: str):
     base = FRONTEND_URL.rstrip("/")
     open_url = f"{base}/?topoJob={job_id}"
 
-    text_body = "\n".join([
-        "Your topo map job failed.",
-        "",
-        error_message,
-        "",
-        f"Open it in Logjam Web: {open_url}",
-    ])
+    text_body = "\n".join(
+        [
+            "Your topo map job failed.",
+            "",
+            error_message,
+            "",
+            f"Open it in Logjam Web: {open_url}",
+        ]
+    )
 
-    html_body = "\n".join([
-        "<html>",
-        "  <body>",
-        '    <p style="margin:0 0 16px">'
-        f'<img src="{base}/email-logo-lockup.png" alt="Logjam" width="212" '
-        'style="display:block" /></p>',
-        "    <p>Your topo map job failed.</p>",
-        f"    <p><strong>{error_message}</strong></p>",
-        f'    <p><a href="{open_url}">Open it in Logjam Web</a></p>',
-        "  </body>",
-        "</html>",
-    ])
+    html_body = "\n".join(
+        [
+            "<html>",
+            "  <body>",
+            '    <p style="margin:0 0 16px">'
+            f'<img src="{base}/email-logo-lockup.png" alt="Logjam" width="212" '
+            'style="display:block" /></p>',
+            "    <p>Your topo map job failed.</p>",
+            f"    <p><strong>{error_message}</strong></p>",
+            f'    <p><a href="{open_url}">Open it in Logjam Web</a></p>',
+            "  </body>",
+            "</html>",
+        ]
+    )
     send_email(to_email, "Topo map failed — Logjam", text_body, html_body)
 
 
 # ── Vector tile generation ────────────────────────────────────────────────────
+
 
 def run_tippecanoe_contours(geojson_dir: str, out_dir: str) -> Path | None:
     """Convert contour GeoJSON files to a single vector MBTiles via tippecanoe."""
@@ -411,10 +458,16 @@ def run_tippecanoe_contours(geojson_dir: str, out_dir: str) -> Path | None:
     out_path = Path(out_dir) / "contours_vector.mbtiles"
     cmd = [
         "tippecanoe",
-        "-o", str(out_path),
-        "-z", "18", "-Z", "12",
-        "--no-feature-limit", "--no-tile-size-limit",
-        "-l", "contours",
+        "-o",
+        str(out_path),
+        "-z",
+        "18",
+        "-Z",
+        "12",
+        "--no-feature-limit",
+        "--no-tile-size-limit",
+        "-l",
+        "contours",
         "--force",
         *inputs,
     ]
@@ -446,16 +499,24 @@ def run_tippecanoe_features(geojson_dir: str, out_dir: str) -> Path | None:
         log.warning(f"Could not parse {input_path} ({e}) — skipping vector features.")
         return None
     if feature_count == 0:
-        log.warning("OSM features GeoJSON contains 0 features — skipping vector features.")
+        log.warning(
+            "OSM features GeoJSON contains 0 features — skipping vector features."
+        )
         return None
 
     out_path = Path(out_dir) / "features_vector.mbtiles"
     cmd = [
         "tippecanoe",
-        "-o", str(out_path),
-        "-z", "18", "-Z", "12",
-        "--no-feature-limit", "--no-tile-size-limit",
-        "-l", "features",
+        "-o",
+        str(out_path),
+        "-z",
+        "18",
+        "-Z",
+        "12",
+        "--no-feature-limit",
+        "--no-tile-size-limit",
+        "-l",
+        "features",
         "--force",
         str(input_path),
     ]
@@ -490,7 +551,10 @@ def run_tippecanoe_features(geojson_dir: str, out_dir: str) -> Path | None:
 
 # ── Core processing ───────────────────────────────────────────────────────────
 
-def process_job(job: dict, tmp: str) -> tuple[list[dict], Path, bool, int, Optional[dict]]:
+
+def process_job(
+    job: dict, tmp: str
+) -> tuple[list[dict], Path, bool, int, Optional[dict]]:
     """
     Download ZIP, run topo pipeline, convert to PMTiles, upload all to S3.
     Returns (output_keys, footprint_local, osm_failed, total_output_bytes,
@@ -500,7 +564,7 @@ def process_job(job: dict, tmp: str) -> tuple[list[dict], Path, bool, int, Optio
     parsed runtime metrics dict (or None if absent/unreadable).
     """
     s3_input_key = job["s3_input_key"]
-    job_id       = job["id"]
+    job_id = job["id"]
 
     # Download input ZIP from S3
     zip_path = Path(tmp) / "input.zip"
@@ -524,12 +588,18 @@ def process_job(job: dict, tmp: str) -> tuple[list[dict], Path, bool, int, Optio
         "python3",
         str(Path(__file__).parent / "pipeline.py"),
         str(zip_path),
-        "--output",  str(output_dir),
-        "--work-dir", str(pipeline_work_dir),
-        "--workers", str(os.cpu_count() or 4),
-        "--layers",  "all",
-        "--export-geojson",   str(geojson_dir),
-        "--export-footprint", str(geojson_dir),
+        "--output",
+        str(output_dir),
+        "--work-dir",
+        str(pipeline_work_dir),
+        "--workers",
+        str(os.cpu_count() or 4),
+        "--layers",
+        "all",
+        "--export-geojson",
+        str(geojson_dir),
+        "--export-footprint",
+        str(geojson_dir),
     ]
 
     layer_options = job.get("layer_options")
@@ -540,11 +610,16 @@ def process_job(job: dict, tmp: str) -> tuple[list[dict], Path, bool, int, Optio
         json.dump(merged_settings, f)
     metrics_path = Path(tmp) / "metrics.json"
     progress_path = Path(tmp) / "progress.json"
-    cmd.extend([
-        "--settings-json", str(settings_path),
-        "--metrics-json", str(metrics_path),
-        "--progress-file", str(progress_path),
-    ])
+    cmd.extend(
+        [
+            "--settings-json",
+            str(settings_path),
+            "--metrics-json",
+            str(metrics_path),
+            "--progress-file",
+            str(progress_path),
+        ]
+    )
     log.info(f"Merged render settings written to {settings_path}")
     log.info("Running pipeline …")
 
@@ -618,9 +693,12 @@ def process_job(job: dict, tmp: str) -> tuple[list[dict], Path, bool, int, Optio
     if os.environ.get("TOPO_KEEP_INTERMEDIATES") == "1":
         debug_prefix = f"jobs/{job_id}/debug"
         debug_files = [
-            "dtm_raw.tif", "dtm_filled.tif",
-            "scrub_low_count_raw.tif", "scrub_high_count_raw.tif",
-            "below_count_raw.tif", "all_count_raw.tif",
+            "dtm_raw.tif",
+            "dtm_filled.tif",
+            "scrub_low_count_raw.tif",
+            "scrub_high_count_raw.tif",
+            "below_count_raw.tif",
+            "all_count_raw.tif",
             "footprint.geojson",
         ]
         for fname in debug_files:
@@ -667,6 +745,7 @@ def process_job(job: dict, tmp: str) -> tuple[list[dict], Path, bool, int, Optio
             log.info(f"Converting {name}.mbtiles → COG …")
             try:
                 from osgeo import gdal as _gdal
+
                 _gdal.Translate(
                     str(local_cog),
                     str(styled_mbtiles),
@@ -694,7 +773,9 @@ def process_job(job: dict, tmp: str) -> tuple[list[dict], Path, bool, int, Optio
         # closing(): sqlite3's own context manager commits but does NOT close,
         # leaking an fd on a multi-hundred-MB MBTiles per layer (STP-009).
         with contextlib.closing(sqlite3.connect(str(pmtiles_source))) as _conn:
-            _row = _conn.execute("SELECT value FROM metadata WHERE name='maxzoom'").fetchone()
+            _row = _conn.execute(
+                "SELECT value FROM metadata WHERE name='maxzoom'"
+            ).fetchone()
             maxzoom = int(_row[0]) if _row else 18
             tile_count = _conn.execute("SELECT COUNT(*) FROM tiles").fetchone()[0]
 
@@ -703,39 +784,56 @@ def process_job(job: dict, tmp: str) -> tuple[list[dict], Path, bool, int, Optio
         else:
             pmtiles_path = output_dir / f"{name}.pmtiles"
             pmtiles_key = f"{output_prefix}/{name}.pmtiles"
-            log.info(f"Converting {name} → PMTiles ({tile_count} tiles, source={pmtiles_source.name}) …")
+            log.info(
+                f"Converting {name} → PMTiles ({tile_count} tiles, source={pmtiles_source.name}) …"
+            )
             mbtiles_to_pmtiles(str(pmtiles_source), str(pmtiles_path), maxzoom)
             log.info(f"Uploading {pmtiles_key} …")
             s3.upload_file(str(pmtiles_path), BUCKET, pmtiles_key)
             total_output_bytes += pmtiles_path.stat().st_size
 
-        output_keys.append({
-            "name":       name,
-            "cogKey":     cog_key,
-            "pmtilesKey": pmtiles_key,
-        })
+        output_keys.append(
+            {
+                "name": name,
+                "cogKey": cog_key,
+                "pmtilesKey": pmtiles_key,
+            }
+        )
 
-    return output_keys, footprint_local, osm_failed, total_output_bytes, pipeline_metrics
+    return (
+        output_keys,
+        footprint_local,
+        osm_failed,
+        total_output_bytes,
+        pipeline_metrics,
+    )
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
+
 
 def main():
     log.info(f"Worker started — job {JOB_ID}")
 
     conn = db_connect()
-    job  = get_job(conn, JOB_ID)
+    job = get_job(conn, JOB_ID)
     # started_at anchors the reaper's "processing" staleness timeout (ARCH-002):
     # it distinguishes a long-but-alive job from a dead one. NOW() rather than a
     # column passthrough so it reflects actual worker start.
     # Guarded on `pending` (Design L1): if the job was reaped or deleted while
     # the task spun up, claim nothing and exit cleanly without processing.
-    claimed = update_status(conn, JOB_ID, "processing",
-                            expected_status="pending",
-                            started_at=datetime.now(timezone.utc))
+    claimed = update_status(
+        conn,
+        JOB_ID,
+        "processing",
+        expected_status="pending",
+        started_at=datetime.now(timezone.utc),
+    )
     if claimed == 0:
-        log.warning(f"Job {JOB_ID} is no longer pending (reaped or deleted) — "
-                    "exiting without processing.")
+        log.warning(
+            f"Job {JOB_ID} is no longer pending (reaped or deleted) — "
+            "exiting without processing."
+        )
         conn.close()
         return
 
@@ -746,9 +844,18 @@ def main():
 
     try:
         with tempfile.TemporaryDirectory() as tmp:
-            output_keys, footprint_local, osm_failed, total_output_bytes, pipeline_metrics = process_job(job, tmp)
+            (
+                output_keys,
+                footprint_local,
+                osm_failed,
+                total_output_bytes,
+                pipeline_metrics,
+            ) = process_job(job, tmp)
 
-            extra: dict = {"s3_output_keys": output_keys, "output_bytes": total_output_bytes}
+            extra: dict = {
+                "s3_output_keys": output_keys,
+                "output_bytes": total_output_bytes,
+            }
             if footprint_local and footprint_local.exists():
                 with open(footprint_local) as f:
                     fp_fc = json.load(f)
@@ -774,30 +881,42 @@ def main():
         # inside update_status, and we self-clean the re-uploaded outputs and
         # skip notification/email instead of resurrecting a failed job.
         updated = update_status(
-            conn, JOB_ID, "complete",
+            conn,
+            JOB_ID,
+            "complete",
             expected_status="processing",
             storage_delta_bytes=total_output_bytes if total_output_bytes > 0 else 0,
             **extra,
         )
         if updated == 0:
-            log.warning(f"Job {JOB_ID} was reaped or deleted mid-run — "
-                        "cleaning up outputs and skipping notification/email.")
+            log.warning(
+                f"Job {JOB_ID} was reaped or deleted mid-run — "
+                "cleaning up outputs and skipping notification/email."
+            )
             delete_s3_prefix_best_effort(f"outputs/{JOB_ID}/")
             return
         completed = True
 
-        log.info(f"Job {JOB_ID} complete — {len(output_keys)} layer(s) uploaded"
-                 + (" (OSM features missing — Overpass failed)" if osm_failed else ""))
+        log.info(
+            f"Job {JOB_ID} complete — {len(output_keys)} layer(s) uploaded"
+            + (" (OSM features missing — Overpass failed)" if osm_failed else "")
+        )
 
-        create_notification(conn, job["user_id"], "topo_complete", {
-            "jobId": JOB_ID,
-            "jobName": job.get("name"),
-            "footprint": extra.get("footprint"),
-            "osmFailed": osm_failed,
-        })
+        create_notification(
+            conn,
+            job["user_id"],
+            "topo_complete",
+            {
+                "jobId": JOB_ID,
+                "jobName": job.get("name"),
+                "footprint": extra.get("footprint"),
+                "osmFailed": osm_failed,
+            },
+        )
         # Best-effort push — generic title + opaque IDs only (privacy rule:
         # job name/footprint stay in the in-app notification, never in a push).
         from push_send import send_push
+
         send_push(conn, job["user_id"], {"type": "topo_complete", "jobId": JOB_ID})
 
         email = get_user_email(conn, job["user_id"])
@@ -811,27 +930,41 @@ def main():
             # Never self-clean here: the guarded `failed` write below would
             # match 0 rows (status is `complete`, not `processing`) and the
             # 0-rowcount branch would delete the finished job's outputs.
-            log.error(f"Job {JOB_ID} completed but post-completion "
-                      f"notification failed: {e}", exc_info=True)
+            log.error(
+                f"Job {JOB_ID} completed but post-completion notification failed: {e}",
+                exc_info=True,
+            )
             return
         log.error(f"Job {JOB_ID} failed: {e}", exc_info=True)
         error_text = safe_error_message(e)
-        updated = update_status(conn, JOB_ID, "failed",
-                                expected_status="processing",
-                                error_message=error_text)
+        updated = update_status(
+            conn,
+            JOB_ID,
+            "failed",
+            expected_status="processing",
+            error_message=error_text,
+        )
         if updated == 0:
             # Already reaped/deleted — outcome is moot. Clean up any partial
             # uploads and exit 0 so ECS doesn't surface a duplicate failure.
-            log.warning(f"Job {JOB_ID} was reaped or deleted mid-run — "
-                        "skipping failure notification.")
+            log.warning(
+                f"Job {JOB_ID} was reaped or deleted mid-run — "
+                "skipping failure notification."
+            )
             delete_s3_prefix_best_effort(f"outputs/{JOB_ID}/")
             return
-        create_notification(conn, job["user_id"], "topo_failed", {
-            "jobId": JOB_ID,
-            "jobName": job.get("name"),
-        })
+        create_notification(
+            conn,
+            job["user_id"],
+            "topo_failed",
+            {
+                "jobId": JOB_ID,
+                "jobName": job.get("name"),
+            },
+        )
         # Best-effort push — generic title + opaque IDs only.
         from push_send import send_push
+
         send_push(conn, job["user_id"], {"type": "topo_failed", "jobId": JOB_ID})
 
         # Failure email (APIC-005), gated on the same `topoEmail` preference as

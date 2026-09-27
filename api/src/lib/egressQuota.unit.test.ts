@@ -110,8 +110,16 @@ describe("assertHasEgressQuota", () => {
 describe("exhaustedEgressOwnerIds", () => {
   it("returns only the owners at or over their allowance", async () => {
     users.user.findMany.mockResolvedValueOnce([
-      { id: "over", monthlyEgressUsedBytes: QUOTA, monthlyEgressQuotaBytes: QUOTA },
-      { id: "under", monthlyEgressUsedBytes: 5n, monthlyEgressQuotaBytes: QUOTA },
+      {
+        id: "over",
+        monthlyEgressUsedBytes: QUOTA,
+        monthlyEgressQuotaBytes: QUOTA,
+      },
+      {
+        id: "under",
+        monthlyEgressUsedBytes: 5n,
+        monthlyEgressQuotaBytes: QUOTA,
+      },
     ]);
     const exhausted = await exhaustedEgressOwnerIds(["over", "under"]);
     expect([...exhausted]).toEqual(["over"]);

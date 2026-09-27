@@ -19,7 +19,10 @@ import { useCallback, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 
-import { isCompassEnabled, setCompassEnabled } from "../../map/compassPreference";
+import {
+  isCompassEnabled,
+  setCompassEnabled,
+} from "../../map/compassPreference";
 import {
   currentDeclinationDeg,
   isDeclinationLearned,
@@ -71,7 +74,12 @@ import {
 } from "../../tracks/sensorLog";
 import { applyRecordingOptionsToActiveTrack } from "../../tracks/trackRecorder";
 import { radius, spacing, surface, theme, withAlpha } from "../../theme";
-import { ScreenScroll, SectionHeader, Toast, type ToastMessage } from "../../ui";
+import {
+  ScreenScroll,
+  SectionHeader,
+  Toast,
+  type ToastMessage,
+} from "../../ui";
 import { ChoiceGroup, PreferenceRow } from "./settingsKit";
 
 // The action key stays `waypoint` (it is a stored preference), the WORD does
@@ -92,7 +100,8 @@ const LONG_PRESS_LABELS: Record<LongPressAction, string> = {
  * the same screen disagree, and the user has to know which one moved.
  */
 const NORTH_REFERENCE_HINTS: Partial<Record<NorthReference, string>> = {
-  magnetic: "Applies only to the compass — the map is always oriented true north.",
+  magnetic:
+    "Applies only to the compass — the map is always oriented true north.",
 };
 
 /**
@@ -166,9 +175,12 @@ function accuracyLabel(limit: AccuracyLimitM): string {
 
 export function MapSettingsScreen() {
   const [toast, setToast] = useState<ToastMessage | null>(null);
-  const notify = useCallback((text: string, tone: ToastMessage["tone"] = "error") => {
-    setToast({ text, tone, nonce: Date.now() });
-  }, []);
+  const notify = useCallback(
+    (text: string, tone: ToastMessage["tone"] = "error") => {
+      setToast({ text, tone, nonce: Date.now() });
+    },
+    [],
+  );
   // Every write can fail (a full or unavailable store), and a switch that
   // silently reverts on the next launch is the failure this must not have.
   const stored = useCallback(
@@ -179,16 +191,21 @@ export function MapSettingsScreen() {
     [notify],
   );
 
-  const [controlSide, setControlSide] = useState<MapControlSide>(readMapControlSide);
-  const [markerColorId, setMarkerColorId] = useState<MarkerColorId>(readMarkerColorId);
+  const [controlSide, setControlSide] =
+    useState<MapControlSide>(readMapControlSide);
+  const [markerColorId, setMarkerColorId] =
+    useState<MarkerColorId>(readMarkerColorId);
   const [keepAwake, setKeepAwake] = useState<KeepAwakeMode>(readKeepAwakeMode);
   const [northUp, setNorthUp] = useState(isNorthUpLocked);
-  const [longPress, setLongPress] = useState<LongPressAction>(readLongPressAction);
+  const [longPress, setLongPress] =
+    useState<LongPressAction>(readLongPressAction);
   const [compassEnabled, setCompassEnabledState] = useState(isCompassEnabled);
-  const [northReference, setNorthReference] = useState<NorthReference>(readNorthReference);
+  const [northReference, setNorthReference] =
+    useState<NorthReference>(readNorthReference);
   const [scaleBar, setScaleBar] = useState(isScaleBarEnabled);
   const [speedElevation, setSpeedElevation] = useState(isSpeedElevationEnabled);
-  const [accuracyLimit, setAccuracyLimit] = useState<AccuracyLimitM>(readAccuracyLimitM);
+  const [accuracyLimit, setAccuracyLimit] =
+    useState<AccuracyLimitM>(readAccuracyLimitM);
   const [sensorLogging, setSensorLogging] = useState(readSensorLoggingEnabled);
   // Read once: the answer is a property of the handset AND of the build (a user
   // build has no logger compiled in at all), and neither can change while this
@@ -267,7 +284,6 @@ export function MapSettingsScreen() {
           ))}
         </View>
 
-
         <PreferenceRow
           icon="navigation"
           title="Keep the map north-up"
@@ -320,7 +336,11 @@ export function MapSettingsScreen() {
             { value: "magnetic", label: "Magnetic north" },
           ]}
           value={northReference}
-          hint={[NORTH_REFERENCE_HINTS[northReference], declinationHint(), compassHint()]
+          hint={[
+            NORTH_REFERENCE_HINTS[northReference],
+            declinationHint(),
+            compassHint(),
+          ]
             .filter(Boolean)
             .join(" ")}
           disabledReason={compassEnabled ? undefined : "Needs the compass"}
@@ -333,10 +353,12 @@ export function MapSettingsScreen() {
 
         <ChoiceGroup
           label="Press and hold the map to"
-          options={(Object.keys(LONG_PRESS_LABELS) as LongPressAction[]).map((action) => ({
-            value: action,
-            label: LONG_PRESS_LABELS[action],
-          }))}
+          options={(Object.keys(LONG_PRESS_LABELS) as LongPressAction[]).map(
+            (action) => ({
+              value: action,
+              label: LONG_PRESS_LABELS[action],
+            }),
+          )}
           value={longPress}
           onChange={(next) => {
             const action = next as LongPressAction;
@@ -347,10 +369,12 @@ export function MapSettingsScreen() {
 
         <ChoiceGroup
           label="Keep the screen on"
-          options={(Object.keys(KEEP_AWAKE_LABELS) as KeepAwakeMode[]).map((mode) => ({
-            value: mode,
-            label: KEEP_AWAKE_LABELS[mode],
-          }))}
+          options={(Object.keys(KEEP_AWAKE_LABELS) as KeepAwakeMode[]).map(
+            (mode) => ({
+              value: mode,
+              label: KEEP_AWAKE_LABELS[mode],
+            }),
+          )}
           value={keepAwake}
           onChange={(next) => {
             const mode = next as KeepAwakeMode;
@@ -526,7 +550,8 @@ function sensorLoggingSubtitle(
   const what = `${channels.join(", ")} to a file for later analysis — costs ${cost} of battery and about ${SENSOR_LOG_MB_PER_HOUR} MB an hour. No positions written.`;
   if (!enabled) return what;
   const status = sensorLogStatus();
-  if (status == null || !status.logging) return `${what} On from the next recording.`;
+  if (status == null || !status.logging)
+    return `${what} On from the next recording.`;
   const mb = (status.bytes / 1_000_000).toFixed(1);
   return `${what} Logging now — ${mb} MB.`;
 }

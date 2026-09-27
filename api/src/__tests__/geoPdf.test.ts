@@ -42,7 +42,9 @@ describe("geo-pdf route (fake auth)", () => {
     const missing = randomUUID();
     const getRes = await request(API_URL).get(`/geo-pdf/${missing}`).set(AUTH);
     expect(getRes.status).toBe(404);
-    const delRes = await request(API_URL).delete(`/geo-pdf/${missing}`).set(AUTH);
+    const delRes = await request(API_URL)
+      .delete(`/geo-pdf/${missing}`)
+      .set(AUTH);
     expect(delRes.status).toBe(404);
   });
 });

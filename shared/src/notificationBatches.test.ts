@@ -20,7 +20,10 @@ import {
 
 const BATCH = "11111111-1111-4111-8111-111111111111";
 
-function shared(id: string, opts: { batchId?: string; read?: boolean } = {}): TNotification {
+function shared(
+  id: string,
+  opts: { batchId?: string; read?: boolean } = {},
+): TNotification {
   return {
     id,
     type: "item_shared",
@@ -101,7 +104,10 @@ describe("findNotificationBatches", () => {
       sent("c", { batchId: BATCH }),
       sent("d", { batchId: BATCH }),
     ]);
-    expect([...batches.keys()].sort()).toEqual([`${BATCH}:files`, `${BATCH}:shares`]);
+    expect([...batches.keys()].sort()).toEqual([
+      `${BATCH}:files`,
+      `${BATCH}:shares`,
+    ]);
   });
 
   it("is not a batch at one member — a header over one row is worse than the row", () => {
@@ -248,9 +254,9 @@ describe("tallyNotifications", () => {
   });
 
   it("counts an unbatched list as itself", () => {
-    expect(tallyNotifications([shared("a"), sent("b"), shared("c", { read: true })])).toEqual(
-      { total: 3, unread: 2 },
-    );
+    expect(
+      tallyNotifications([shared("a"), sent("b"), shared("c", { read: true })]),
+    ).toEqual({ total: 3, unread: 2 });
   });
 
   it("counts a mixed action as the two rows it shows", () => {
@@ -279,7 +285,11 @@ describe("tallyNotifications", () => {
 
 describe("expandBatchSelection", () => {
   it("acts on every member a picked header stands for, and on each row once", () => {
-    const list = [shared("a", { batchId: BATCH }), shared("b", { batchId: BATCH }), shared("loner")];
+    const list = [
+      shared("a", { batchId: BATCH }),
+      shared("b", { batchId: BATCH }),
+      shared("loner"),
+    ];
     const batches = findNotificationBatches(list);
     const [header] = collapseBatches(list, batches, new Set());
     // An expanded batch lets its header AND a member be picked together.

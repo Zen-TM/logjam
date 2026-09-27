@@ -101,7 +101,9 @@ describe("assertSendableSize", () => {
   // (30 MB → 64 MB, when GeoPDFs became sendable) and a hardcoded copy here is
   // a second list that has to agree with the first.
   it("rejects an oversized file with 413 and accepts one exactly at the cap", () => {
-    expect(statusOf(() => assertSendableSize(FILE_SEND_MAX_BYTES + 1))).toBe(413);
+    expect(statusOf(() => assertSendableSize(FILE_SEND_MAX_BYTES + 1))).toBe(
+      413,
+    );
     expect(assertSendableSize(FILE_SEND_MAX_BYTES)).toBe(FILE_SEND_MAX_BYTES);
   });
 });
@@ -143,7 +145,9 @@ describe("canRecipientDownload", () => {
 
   it("refuses everyone once the send has expired", () => {
     const expired = { expiresAt: new Date("2026-08-01T12:00:00Z") };
-    expect(canRecipientDownload({ status: "pending" }, expired, NOW)).toBe(false);
+    expect(canRecipientDownload({ status: "pending" }, expired, NOW)).toBe(
+      false,
+    );
     expect(canRecipientDownload({ status: "accepted" }, expired, NOW)).toBe(
       false,
     );

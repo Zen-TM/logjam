@@ -33,11 +33,16 @@ export type TapSample = { x: number; y: number; timeMs: number };
  * to hold: two taps a second apart are two questions about two spots, and two
  * taps 200 px apart are as well.
  */
-export function isDoubleTap(previous: TapSample | null, next: TapSample): boolean {
+export function isDoubleTap(
+  previous: TapSample | null,
+  next: TapSample,
+): boolean {
   if (!previous) return false;
   const gap = next.timeMs - previous.timeMs;
   if (gap < 0 || gap > DOUBLE_TAP_MS) return false;
-  return Math.hypot(next.x - previous.x, next.y - previous.y) <= DOUBLE_TAP_SLOP_PX;
+  return (
+    Math.hypot(next.x - previous.x, next.y - previous.y) <= DOUBLE_TAP_SLOP_PX
+  );
 }
 
 /**

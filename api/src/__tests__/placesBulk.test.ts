@@ -2,7 +2,7 @@ import { describe, it, expect, afterAll } from "vitest";
 import request from "supertest";
 import { randomUUID } from "node:crypto";
 import prisma from "../services/prisma";
-import { BOB_ID, NONEXISTENT_ID, CANYON_TYPE_ID} from "./_actors";
+import { BOB_ID, NONEXISTENT_ID, CANYON_TYPE_ID } from "./_actors";
 
 // Requires `make dev` running with AUTH_MODE=fake (requests = seeded alice).
 // Tests that need a "foreign" place create one directly via Prisma owned by
@@ -12,10 +12,12 @@ const API_URL = process.env.API_URL ?? "http://localhost:8080";
 const AUTH = { Authorization: "Bearer fake-token" } as const;
 
 async function createPlace(name: string): Promise<string> {
-  const res = await request(API_URL)
-    .post("/places")
-    .set(AUTH)
-    .send({ placeTypeId: CANYON_TYPE_ID, name, latitude: -33.7, longitude: 150.3 });
+  const res = await request(API_URL).post("/places").set(AUTH).send({
+    placeTypeId: CANYON_TYPE_ID,
+    name,
+    latitude: -33.7,
+    longitude: 150.3,
+  });
   expect(res.status).toBe(201);
   return res.body.id as string;
 }
@@ -28,12 +30,30 @@ describe("POST /places/bulk — import contract (fake auth = alice)", () => {
       .post("/places/bulk")
       .set(AUTH)
       .send({
-        placeTypeId: CANYON_TYPE_ID, importBatchId: randomUUID(),
+        placeTypeId: CANYON_TYPE_ID,
+        importBatchId: randomUUID(),
         rows: [
-          { data: { name: goodName, latitude: -33.7, longitude: 150.3 }, resolution: { kind: "create" } },
-          { data: { name: "", latitude: -33.7, longitude: 150.3 }, resolution: { kind: "create" } },
-          { data: { name: `bad lat ${run}`, latitude: 999, longitude: 150.3 }, resolution: { kind: "create" } },
-          { data: { name: `bad grade ${run}`, latitude: -33.7, longitude: 150.3, fieldValues: { v_grade: 99 } }, resolution: { kind: "create" } },
+          {
+            data: { name: goodName, latitude: -33.7, longitude: 150.3 },
+            resolution: { kind: "create" },
+          },
+          {
+            data: { name: "", latitude: -33.7, longitude: 150.3 },
+            resolution: { kind: "create" },
+          },
+          {
+            data: { name: `bad lat ${run}`, latitude: 999, longitude: 150.3 },
+            resolution: { kind: "create" },
+          },
+          {
+            data: {
+              name: `bad grade ${run}`,
+              latitude: -33.7,
+              longitude: 150.3,
+              fieldValues: { v_grade: 99 },
+            },
+            resolution: { kind: "create" },
+          },
         ],
       });
     expect(res.status).toBe(200);
@@ -50,7 +70,9 @@ describe("POST /places/bulk — import contract (fake auth = alice)", () => {
     ]);
 
     const listRes = await request(API_URL).get("/places").set(AUTH);
-    const created = listRes.body.find((c: { name: string }) => c.name === goodName);
+    const created = listRes.body.find(
+      (c: { name: string }) => c.name === goodName,
+    );
     expect(created).toBeDefined();
 
     await request(API_URL).delete(`/places/${created.id}`).set(AUTH);
@@ -65,22 +87,29 @@ describe("POST /places/bulk — import contract (fake auth = alice)", () => {
     const res = await request(API_URL)
       .post("/places/bulk")
       .set(AUTH)
-      .send({ placeTypeId: CANYON_TYPE_ID, importBatchId: randomUUID(), rows: [dupRow, dupRow] });
+      .send({
+        placeTypeId: CANYON_TYPE_ID,
+        importBatchId: randomUUID(),
+        rows: [dupRow, dupRow],
+      });
     expect(res.status).toBe(200);
     expect(res.body.created).toBe(1);
     expect(res.body.errors).toEqual([]);
 
     const listRes = await request(API_URL).get("/places").set(AUTH);
-    const matches = listRes.body.filter((c: { name: string }) => c.name === name);
+    const matches = listRes.body.filter(
+      (c: { name: string }) => c.name === name,
+    );
     expect(matches).toHaveLength(1);
     await request(API_URL).delete(`/places/${matches[0].id}`).set(AUTH);
   });
 
   it("rejects an empty rows array with 400", async () => {
-    const res = await request(API_URL)
-      .post("/places/bulk")
-      .set(AUTH)
-      .send({ placeTypeId: CANYON_TYPE_ID, importBatchId: randomUUID(), rows: [] });
+    const res = await request(API_URL).post("/places/bulk").set(AUTH).send({
+      placeTypeId: CANYON_TYPE_ID,
+      importBatchId: randomUUID(),
+      rows: [],
+    });
     expect(res.status).toBe(400);
   });
 
@@ -91,10 +120,16 @@ describe("POST /places/bulk — import contract (fake auth = alice)", () => {
         .post("/places/bulk")
         .set(AUTH)
         .send({
-          placeTypeId: CANYON_TYPE_ID, importBatchId: randomUUID(),
+          placeTypeId: CANYON_TYPE_ID,
+          importBatchId: randomUUID(),
           rows: [
             {
-              data: { name: "ignored — name is immutable on merge", latitude: -33.8, longitude: 150.4, notes: "merged in" },
+              data: {
+                name: "ignored — name is immutable on merge",
+                latitude: -33.8,
+                longitude: 150.4,
+                notes: "merged in",
+              },
               resolution: { kind: "merge", placeId: id },
             },
           ],
@@ -114,10 +149,15 @@ describe("POST /places/bulk — import contract (fake auth = alice)", () => {
       .post("/places/bulk")
       .set(AUTH)
       .send({
-        placeTypeId: CANYON_TYPE_ID, importBatchId: randomUUID(),
+        placeTypeId: CANYON_TYPE_ID,
+        importBatchId: randomUUID(),
         rows: [
           {
-            data: { name: `CH-002 bulk nonexistent ${Date.now()}`, latitude: -33.7, longitude: 150.3 },
+            data: {
+              name: `CH-002 bulk nonexistent ${Date.now()}`,
+              latitude: -33.7,
+              longitude: 150.3,
+            },
             resolution: { kind: "merge", placeId: NONEXISTENT_ID },
           },
         ],
@@ -148,10 +188,16 @@ describe("POST /places/bulk — import contract (fake auth = alice)", () => {
         .post("/places/bulk")
         .set(AUTH)
         .send({
-          placeTypeId: CANYON_TYPE_ID, importBatchId: randomUUID(),
+          placeTypeId: CANYON_TYPE_ID,
+          importBatchId: randomUUID(),
           rows: [
             {
-              data: { name: "CH-002 hijacked", latitude: -33.7, longitude: 150.3, notes: "hijack" },
+              data: {
+                name: "CH-002 hijacked",
+                latitude: -33.7,
+                longitude: 150.3,
+                notes: "hijack",
+              },
               resolution: { kind: "merge", placeId: foreign.id },
             },
           ],
@@ -164,7 +210,9 @@ describe("POST /places/bulk — import contract (fake auth = alice)", () => {
       // Same message shape as the nonexistent-id case — must not leak ownership.
       expect(res.body.errors[0].message).toContain("target place not found");
 
-      const after = await prisma.place.findUnique({ where: { id: foreign.id } });
+      const after = await prisma.place.findUnique({
+        where: { id: foreign.id },
+      });
       expect(after?.notes).toBeNull();
     } finally {
       await prisma.place.delete({ where: { id: foreign.id } });
@@ -184,10 +232,22 @@ describe("POST /places/bulk — import contract (fake auth = alice)", () => {
         .post("/places/bulk")
         .set(AUTH)
         .send({
-          placeTypeId: CANYON_TYPE_ID, importBatchId: randomUUID(),
+          placeTypeId: CANYON_TYPE_ID,
+          importBatchId: randomUUID(),
           rows: [
-            { data: { name: shared, latitude: -33.7, longitude: 150.3 }, resolution: { kind: "create" } },
-            { data: { name: shared, latitude: -33.7, longitude: 150.3, notes: "merged" }, resolution: { kind: "merge", placeId: mergeTargetId } },
+            {
+              data: { name: shared, latitude: -33.7, longitude: 150.3 },
+              resolution: { kind: "create" },
+            },
+            {
+              data: {
+                name: shared,
+                latitude: -33.7,
+                longitude: 150.3,
+                notes: "merged",
+              },
+              resolution: { kind: "merge", placeId: mergeTargetId },
+            },
           ],
         });
       expect(res.status).toBe(200);
@@ -197,12 +257,16 @@ describe("POST /places/bulk — import contract (fake auth = alice)", () => {
 
       // The merge applied (null field filled) but did NOT steal the create's
       // importKey.
-      const merged = await prisma.place.findUnique({ where: { id: mergeTargetId } });
+      const merged = await prisma.place.findUnique({
+        where: { id: mergeTargetId },
+      });
       expect(merged?.notes).toBe("merged");
       expect(merged?.importKey).toBeNull();
 
       const listRes = await request(API_URL).get("/places").set(AUTH);
-      const createdRow = listRes.body.find((c: { name: string }) => c.name === shared);
+      const createdRow = listRes.body.find(
+        (c: { name: string }) => c.name === shared,
+      );
       expect(createdRow).toBeDefined();
       await request(API_URL).delete(`/places/${createdRow.id}`).set(AUTH);
     } finally {
@@ -231,10 +295,14 @@ describe("POST /places/bulk/delete (fake auth = alice)", () => {
       expect(res.status).toBe(200);
       expect(res.body.deletedIds).toEqual([ownedId]);
 
-      const ownedAfter = await request(API_URL).get(`/places/${ownedId}`).set(AUTH);
+      const ownedAfter = await request(API_URL)
+        .get(`/places/${ownedId}`)
+        .set(AUTH);
       expect(ownedAfter.status).toBe(404);
 
-      const foreignAfter = await prisma.place.findUnique({ where: { id: foreign.id } });
+      const foreignAfter = await prisma.place.findUnique({
+        where: { id: foreign.id },
+      });
       expect(foreignAfter).not.toBeNull();
     } finally {
       await prisma.place.deleteMany({ where: { id: foreign.id } });
@@ -259,7 +327,9 @@ describe("POST /places/bulk/delete (fake auth = alice)", () => {
       expect(res.status).toBe(200);
       expect(res.body.deletedIds).toEqual([]);
 
-      const foreignAfter = await prisma.place.findUnique({ where: { id: foreign.id } });
+      const foreignAfter = await prisma.place.findUnique({
+        where: { id: foreign.id },
+      });
       expect(foreignAfter).not.toBeNull();
     } finally {
       await prisma.place.deleteMany({ where: { id: foreign.id } });
@@ -304,7 +374,9 @@ describe("POST /places/bulk/delete (fake auth = alice)", () => {
       expect(res.status).toBe(200);
       expect(res.body.deletedIds.sort()).toEqual([placeAId, placeBId].sort());
 
-      const survivorRes = await request(API_URL).get(`/trips/${tripId}`).set(AUTH);
+      const survivorRes = await request(API_URL)
+        .get(`/trips/${tripId}`)
+        .set(AUTH);
       expect(survivorRes.status).toBe(200);
       expect(survivorRes.body.places).toEqual([]);
       // formatTripPlaceNames join, in the original join-position order.

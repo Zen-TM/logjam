@@ -25,7 +25,9 @@ describe("routeToGpx", () => {
     const result = parseVectorImport("route.gpx", routeToGpx("Approach", LINE));
     expect("error" in result).toBe(false);
     if ("error" in result) return;
-    const lines = result.features.filter((f) => f.geometry.type === "LineString");
+    const lines = result.features.filter(
+      (f) => f.geometry.type === "LineString",
+    );
     expect(lines).toHaveLength(1);
     expect(lines[0]!.geometry.coordinates).toHaveLength(3);
   });

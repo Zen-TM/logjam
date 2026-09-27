@@ -85,7 +85,9 @@ describe("assertHasCredits", () => {
     // A null estimate means "unknown", never "free" — the exhausted check must
     // still bite or a user with no job history could bypass the cap entirely.
     usageOf(1200);
-    await expect(assertHasCredits(user, "topo", null)).rejects.toThrow(AppError);
+    await expect(assertHasCredits(user, "topo", null)).rejects.toThrow(
+      AppError,
+    );
   });
 
   it("admits a user with headroom when the estimate is unknown", async () => {
@@ -100,7 +102,9 @@ describe("assertHasCredits", () => {
     // 4 minutes: geoPdf costs 4 credits, topo costs 32. At 1180 used, only the
     // small one fits — this is the whole point of weighting by vCPU.
     usageOf(1180);
-    await expect(assertHasCredits(user, "geoPdf", 240)).resolves.toBeUndefined();
+    await expect(
+      assertHasCredits(user, "geoPdf", 240),
+    ).resolves.toBeUndefined();
     usageOf(1180);
     await expect(assertHasCredits(user, "topo", 240)).rejects.toThrow(AppError);
   });
@@ -111,6 +115,8 @@ describe("assertHasCredits", () => {
     usageOf(1199);
     await expect(assertHasCredits(user, "geoPdf", 60)).resolves.toBeUndefined();
     usageOf(1200);
-    await expect(assertHasCredits(user, "geoPdf", 60)).rejects.toThrow(AppError);
+    await expect(assertHasCredits(user, "geoPdf", 60)).rejects.toThrow(
+      AppError,
+    );
   });
 });

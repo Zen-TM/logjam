@@ -32,7 +32,8 @@ export function notificationTapTarget(args: {
   routeEditing: boolean;
 }): NotificationTapTarget {
   if (args.routeEditing) return { kind: "blocked" };
-  const placeId = (args.data as { placeId?: unknown } | null | undefined)?.placeId;
+  const placeId = (args.data as { placeId?: unknown } | null | undefined)
+    ?.placeId;
   if (typeof placeId === "string") return { kind: "place", placeId };
   return { kind: "inbox" };
 }

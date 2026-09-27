@@ -25,6 +25,7 @@ The two sides are deliberately NOT required to be equal:
 
 Pure text parsing — no GDAL/PDAL, no worker import.
 """
+
 import ast
 import os
 import re
@@ -43,9 +44,7 @@ def _read(path):
 def _ts_titles():
     """`{ type_name: "Title" }` from push.ts's title map."""
     src = _read(_PUSH_TS)
-    block = re.search(
-        r"PUSH_TITLES[^=]*=\s*\{(.*?)\n\};", src, re.S
-    ) or re.search(
+    block = re.search(r"PUSH_TITLES[^=]*=\s*\{(.*?)\n\};", src, re.S) or re.search(
         r"const\s+\w*TITLES\w*[^=]*=\s*\{(.*?)\n\};", src, re.S
     )
     assert block, "no title map found in push.ts"

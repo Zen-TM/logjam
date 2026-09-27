@@ -25,7 +25,8 @@ describe("the storage counter has one pair of writers", () => {
     return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
       const full = join(dir, entry.name);
       if (entry.isDirectory()) return sourceFiles(full);
-      if (!entry.name.endsWith(".ts") || entry.name.includes(".test.")) return [];
+      if (!entry.name.endsWith(".ts") || entry.name.includes(".test."))
+        return [];
       return [full];
     });
   }

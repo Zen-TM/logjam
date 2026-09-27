@@ -25,7 +25,9 @@ describe("outboxMirrorTable", () => {
     // rolled it back, and left the Discard button with no visible effect.
     for (const entity of OUTBOX_ENTITIES) {
       const table = outboxMirrorTable(entity);
-      expect(table === null || (typeof table === "string" && table.length > 0)).toBe(true);
+      expect(
+        table === null || (typeof table === "string" && table.length > 0),
+      ).toBe(true);
     }
   });
 

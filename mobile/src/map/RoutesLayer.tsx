@@ -51,7 +51,9 @@ export const RoutesLayer = memo(function RoutesLayer({
     () => ({
       type: "FeatureCollection",
       features: routes
-        .filter((route) => route.id !== hiddenRouteId && route.points.length >= 2)
+        .filter(
+          (route) => route.id !== hiddenRouteId && route.points.length >= 2,
+        )
         .flatMap((route) => {
           const properties = {
             routeId: route.id,

@@ -232,7 +232,13 @@ export type SyncDeltaPlaceRow = {
    * syncRole is "shared". `foreignFields` is the same shape persisted at copy
    * time, which is why this is not a third field mechanism.
    */
-  fieldDefsSnapshot?: { key: string; label: string; type: string; min?: number | null; max?: number | null }[];
+  fieldDefsSnapshot?: {
+    key: string;
+    label: string;
+    type: string;
+    min?: number | null;
+    max?: number | null;
+  }[];
   /**
    * OWNER-PRIVATE — present only when syncRole is "owner". The server strips
    * it from every shared row, because it records what the SENDER's definitions
@@ -406,9 +412,7 @@ export type SyncDeltaTombstone = {
   id: string;
 };
 
-export function isKnownSyncEntityType(
-  value: string,
-): value is SyncEntityType {
+export function isKnownSyncEntityType(value: string): value is SyncEntityType {
   return (SYNC_ENTITY_TYPES as readonly string[]).includes(value);
 }
 
@@ -642,16 +646,28 @@ export function parseSyncDeltaPlaceRow(value: unknown): SyncDeltaPlaceRow {
   return parseRow<SyncDeltaPlaceRow>("place", value, PLACE_ROW_SPEC);
 }
 
-export function parseSyncDeltaPlaceTypeRow(value: unknown): SyncDeltaPlaceTypeRow {
-  return parseRow<SyncDeltaPlaceTypeRow>("placeType", value, PLACE_TYPE_ROW_SPEC);
+export function parseSyncDeltaPlaceTypeRow(
+  value: unknown,
+): SyncDeltaPlaceTypeRow {
+  return parseRow<SyncDeltaPlaceTypeRow>(
+    "placeType",
+    value,
+    PLACE_TYPE_ROW_SPEC,
+  );
 }
 
 export function parseSyncDeltaTripRow(value: unknown): SyncDeltaTripRow {
   return parseRow<SyncDeltaTripRow>("tripLog", value, TRIP_ROW_SPEC);
 }
 
-export function parseSyncDeltaPlaceLinkRow(value: unknown): SyncDeltaPlaceLinkRow {
-  return parseRow<SyncDeltaPlaceLinkRow>("placeLink", value, PLACE_LINK_ROW_SPEC);
+export function parseSyncDeltaPlaceLinkRow(
+  value: unknown,
+): SyncDeltaPlaceLinkRow {
+  return parseRow<SyncDeltaPlaceLinkRow>(
+    "placeLink",
+    value,
+    PLACE_LINK_ROW_SPEC,
+  );
 }
 
 export function parseSyncDeltaRouteRow(value: unknown): SyncDeltaRouteRow {

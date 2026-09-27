@@ -43,7 +43,15 @@ import {
   type SnapMode,
 } from "@logjam/shared";
 
-import { fontSize, fontWeight, hitSlop, radius, spacing, theme, withAlpha } from "../theme";
+import {
+  fontSize,
+  fontWeight,
+  hitSlop,
+  radius,
+  spacing,
+  theme,
+  withAlpha,
+} from "../theme";
 import { Button, IconButton } from "../ui";
 import { ElevationReadout } from "./ElevationReadout";
 import { SnapPicker } from "./SnapPicker";
@@ -132,7 +140,11 @@ export function DraftToolPanel({
         </Text>
       ) : null}
 
-      <SnapPicker mode={snapMode} onChange={onSnapModeChange} disabled={saving} />
+      <SnapPicker
+        mode={snapMode}
+        onChange={onSnapModeChange}
+        disabled={saving}
+      />
 
       {/* Two groups in one row: what you do to the line on the left, what the
           line is and how you leave it on the right. The picked point's delete
@@ -184,7 +196,10 @@ export function DraftToolPanel({
               ]}
             >
               <View
-                style={[styles.currentSwatch, { backgroundColor: color ?? theme.accent }]}
+                style={[
+                  styles.currentSwatch,
+                  { backgroundColor: color ?? theme.accent },
+                ]}
               />
             </Pressable>
           ) : null}
@@ -230,7 +245,9 @@ export function DraftToolPanel({
                 swatch === color ? styles.swatchSelected : null,
               ]}
             >
-              {swatch === color ? <Text style={styles.swatchTick}>✓</Text> : null}
+              {swatch === color ? (
+                <Text style={styles.swatchTick}>✓</Text>
+              ) : null}
             </Pressable>
           ))}
         </View>

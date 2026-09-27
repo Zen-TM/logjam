@@ -27,6 +27,8 @@ const FILES: Record<ProtomapsFlavor, GeneratedFile> = {
   dark: darkLayers as unknown as GeneratedFile,
 };
 
-export function protomapsLayerDefs(flavor: ProtomapsFlavor): ProtomapsLayerDef[] {
+export function protomapsLayerDefs(
+  flavor: ProtomapsFlavor,
+): ProtomapsLayerDef[] {
   return FILES[flavor].layers;
 }

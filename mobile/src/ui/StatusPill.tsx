@@ -1,7 +1,14 @@
 import { Feather } from "@expo/vector-icons";
 import { StyleSheet, Text, View } from "react-native";
 
-import { fontSize, fontWeight, radius, spacing, theme, withAlpha } from "../theme";
+import {
+  fontSize,
+  fontWeight,
+  radius,
+  spacing,
+  theme,
+  withAlpha,
+} from "../theme";
 
 // Small status chip. `accent` = filled (active/saved-for-offline), `outline` =
 // neutral bordered (Shared / Online), `warning` = attention (Update / error),
@@ -35,7 +42,11 @@ export function StatusPill({
       style={[
         styles.base,
         styles[`${tone}Box`],
-        hue != null && { borderWidth: 1, borderColor: withAlpha(hue, 0.6), backgroundColor: "transparent" },
+        hue != null && {
+          borderWidth: 1,
+          borderColor: withAlpha(hue, 0.6),
+          backgroundColor: "transparent",
+        },
       ]}
     >
       {icon ? <Feather name={icon} size={12} color={color} /> : null}
@@ -67,5 +78,9 @@ const styles = StyleSheet.create({
   accentBox: { backgroundColor: theme.accent },
   outlineBox: { borderWidth: 1, borderColor: theme.bonus1 },
   warningBox: { borderWidth: 1, borderColor: theme.warning },
-  mutedBox: { borderWidth: 1, borderColor: theme.bonus2, backgroundColor: theme.bonus2 },
+  mutedBox: {
+    borderWidth: 1,
+    borderColor: theme.bonus2,
+    backgroundColor: theme.bonus2,
+  },
 });

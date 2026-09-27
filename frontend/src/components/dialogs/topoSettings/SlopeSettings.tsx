@@ -8,7 +8,13 @@ import {
   type SlopeSettings as SlopeSettingsValue,
   type SlopeBand,
 } from "@logjam/shared";
-import { Button, ColourField, IconButton, InfoTip, LiveNumberField } from "../../../ui";
+import {
+  Button,
+  ColourField,
+  IconButton,
+  InfoTip,
+  LiveNumberField,
+} from "../../../ui";
 import { FieldError } from "../../feedback/FieldError";
 import type { NumericFieldConstraints } from "../../../numberInput";
 import styles from "./topoSettings.module.css";
@@ -42,7 +48,10 @@ const ANGLE_TOOLTIP =
  *  - interior: splits the shared boundary, taking the default width from the
  *    neighbour with more room while keeping every band ≥ 1°.
  */
-function computeInsert(bands: SlopeBand[], position: number): SlopeBand[] | null {
+function computeInsert(
+  bands: SlopeBand[],
+  position: number,
+): SlopeBand[] | null {
   if (bands.length >= MAX_BANDS) return null;
   const next = bands.map((b) => ({ ...b }));
 
@@ -68,7 +77,11 @@ function computeInsert(bands: SlopeBand[], position: number): SlopeBand[] | null
     if (width < 1) return null;
     const boundary = last.toDeg; // 90
     last.toDeg = boundary - width;
-    next.push({ fromDeg: boundary - width, toDeg: boundary, colour: NEW_BAND_COLOUR });
+    next.push({
+      fromDeg: boundary - width,
+      toDeg: boundary,
+      colour: NEW_BAND_COLOUR,
+    });
     return next;
   }
 
@@ -129,7 +142,10 @@ export default function SlopeSettings({ value, onChange }: Props) {
   // removals and boundary edits keep a clean fade (and new bands never keep the
   // NEW_BAND_COLOUR placeholder).
   const commitBands = (nextBands: SlopeBand[]) => {
-    onChange({ ...value, bands: applySlopeGradient(nextBands, scaleStart, scaleEnd) });
+    onChange({
+      ...value,
+      bands: applySlopeGradient(nextBands, scaleStart, scaleEnd),
+    });
   };
 
   const setScale = (start: string, end: string) => {
@@ -170,8 +186,12 @@ export default function SlopeSettings({ value, onChange }: Props) {
       <button
         type="button"
         className={styles.insertRow}
-        title={room ? "Add a band here" : "Eight bands is the most a topo can have"}
-        aria-label={room ? "Add a band here" : "Eight bands is the most a topo can have"}
+        title={
+          room ? "Add a band here" : "Eight bands is the most a topo can have"
+        }
+        aria-label={
+          room ? "Add a band here" : "Eight bands is the most a topo can have"
+        }
         disabled={!room}
         onClick={() => insertAt(position)}
       >
@@ -180,7 +200,10 @@ export default function SlopeSettings({ value, onChange }: Props) {
     );
   };
 
-  const boundaryConstraints = (min: number, max: number): NumericFieldConstraints => ({
+  const boundaryConstraints = (
+    min: number,
+    max: number,
+  ): NumericFieldConstraints => ({
     min,
     max,
     integer: true,
@@ -270,11 +293,19 @@ export default function SlopeSettings({ value, onChange }: Props) {
             >
               <span
                 className={styles.bandSwatchFill}
-                style={{ "--band-colour": rgbaCssFromHex(band.colour) } as CSSProperties}
+                style={
+                  {
+                    "--band-colour": rgbaCssFromHex(band.colour),
+                  } as CSSProperties
+                }
               />
             </span>
             {bands.length > 1 ? (
-              <IconButton icon={Trash2} label={`Remove band ${idx + 1}`} onClick={() => removeBand(idx)} />
+              <IconButton
+                icon={Trash2}
+                label={`Remove band ${idx + 1}`}
+                onClick={() => removeBand(idx)}
+              />
             ) : (
               <span />
             )}

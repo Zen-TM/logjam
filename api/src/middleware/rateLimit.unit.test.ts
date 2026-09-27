@@ -12,18 +12,31 @@ describe("globalLimitMax", () => {
 
   it("honours RATE_LIMIT_GLOBAL_MAX outside production", () => {
     expect(
-      globalLimitMax({ NODE_ENV: "development", RATE_LIMIT_GLOBAL_MAX: "100000" }),
+      globalLimitMax({
+        NODE_ENV: "development",
+        RATE_LIMIT_GLOBAL_MAX: "100000",
+      }),
     ).toBe(100000);
   });
 
   it("IGNORES the override in production", () => {
     expect(
-      globalLimitMax({ NODE_ENV: "production", RATE_LIMIT_GLOBAL_MAX: "100000" }),
+      globalLimitMax({
+        NODE_ENV: "production",
+        RATE_LIMIT_GLOBAL_MAX: "100000",
+      }),
     ).toBe(300);
   });
 
   it("ignores junk / non-positive / non-integer values", () => {
-    for (const RATE_LIMIT_GLOBAL_MAX of ["", "abc", "0", "-5", "1.5", "Infinity"]) {
+    for (const RATE_LIMIT_GLOBAL_MAX of [
+      "",
+      "abc",
+      "0",
+      "-5",
+      "1.5",
+      "Infinity",
+    ]) {
       expect(globalLimitMax({ RATE_LIMIT_GLOBAL_MAX })).toBe(300);
     }
   });
@@ -33,10 +46,16 @@ describe("userPatchLimitMax", () => {
   it("defaults to 30, takes the CI override, and ignores it in production", () => {
     expect(userPatchLimitMax({})).toBe(30);
     expect(
-      userPatchLimitMax({ NODE_ENV: "development", RATE_LIMIT_USER_PATCH_MAX: "100000" }),
+      userPatchLimitMax({
+        NODE_ENV: "development",
+        RATE_LIMIT_USER_PATCH_MAX: "100000",
+      }),
     ).toBe(100000);
     expect(
-      userPatchLimitMax({ NODE_ENV: "production", RATE_LIMIT_USER_PATCH_MAX: "100000" }),
+      userPatchLimitMax({
+        NODE_ENV: "production",
+        RATE_LIMIT_USER_PATCH_MAX: "100000",
+      }),
     ).toBe(30);
   });
 });

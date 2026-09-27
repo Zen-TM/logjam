@@ -32,7 +32,9 @@ export async function readLocalIdentity(): Promise<LocalIdentity | null> {
   return parsed as LocalIdentity;
 }
 
-export async function writeLocalIdentity(identity: LocalIdentity): Promise<void> {
+export async function writeLocalIdentity(
+  identity: LocalIdentity,
+): Promise<void> {
   await SecureStore.setItemAsync(IDENTITY_KEY, JSON.stringify(identity));
 }
 
@@ -63,6 +65,11 @@ export async function readPreviousIdentity(): Promise<PreviousIdentity> {
  * sign-in used to `.catch(() => null)` here, which turned a corrupt record into
  * a guest and skipped the wipe entirely.
  */
-export function signInNeedsWipe(previous: PreviousIdentity, sub: string): boolean {
-  return previous === "unreadable" || (previous !== null && previous.sub !== sub);
+export function signInNeedsWipe(
+  previous: PreviousIdentity,
+  sub: string,
+): boolean {
+  return (
+    previous === "unreadable" || (previous !== null && previous.sub !== sub)
+  );
 }

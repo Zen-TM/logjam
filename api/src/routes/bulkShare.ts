@@ -76,207 +76,212 @@ function parseCopyCount(value: unknown): number {
   return value;
 }
 
-router.post("/", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
-  const user = await resolveUser(req.user!.sub);
-  const body = req.body ?? {};
+router.post(
+  "/",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const user = await resolveUser(req.user!.sub);
+    const body = req.body ?? {};
 
-  const items = parseBulkShareItems(body.items);
-  const copyCount = parseCopyCount(body.copyCount);
-  if (items.length === 0 && copyCount === 0) {
-    throw new AppError(400, "A bulk share must contain something");
-  }
-  // REQUIRED, unlike the optional batchId on a file-send confirm: this endpoint
-  // exists to be the grouped action, and a batch of notifications with no key
-  // to group on is 23 separate rows in the recipient's inbox — the exact thing
-  // the feature is for. UUIDv4-shaped, like every other client-minted id
-  // (lib/clientSuppliedId.ts).
-  const batchId = parseClientSuppliedId(body.batchId, "batchId");
-  if (!batchId) throw new AppError(400, "batchId is required");
+    const items = parseBulkShareItems(body.items);
+    const copyCount = parseCopyCount(body.copyCount);
+    if (items.length === 0 && copyCount === 0) {
+      throw new AppError(400, "A bulk share must contain something");
+    }
+    // REQUIRED, unlike the optional batchId on a file-send confirm: this endpoint
+    // exists to be the grouped action, and a batch of notifications with no key
+    // to group on is 23 separate rows in the recipient's inbox — the exact thing
+    // the feature is for. UUIDv4-shaped, like every other client-minted id
+    // (lib/clientSuppliedId.ts).
+    const batchId = parseClientSuppliedId(body.batchId, "batchId");
+    if (!batchId) throw new AppError(400, "batchId is required");
 
-  const recipientIds = await parseFriendRecipientIds({
-    senderId: user.id,
-    value: body.recipientIds,
-    maxRecipients: MAX_RECIPIENTS,
-    tooManyMessage: `You can share with at most ${MAX_RECIPIENTS} friends at once`,
-    selfMessage: "You cannot share with yourself",
-    notFriendsMessage: "You can only share with friends",
-  });
+    const recipientIds = await parseFriendRecipientIds({
+      senderId: user.id,
+      value: body.recipientIds,
+      maxRecipients: MAX_RECIPIENTS,
+      tooManyMessage: `You can share with at most ${MAX_RECIPIENTS} friends at once`,
+      selfMessage: "You cannot share with yourself",
+      notFriendsMessage: "You can only share with friends",
+    });
 
-  // ── What is actually the sender's to give ──────────────────────────────
-  // Batched by type: five queries at most, whatever the list length. The owner
-  // rule itself stays in placeAccess/shareAccess — nothing here re-derives it
-  // (SEC-001), which is why those two grew a batch form rather than this file
-  // growing a `WHERE ownerId` of its own.
-  const idsByType = new Map<BulkShareItemType, string[]>();
-  for (const item of items) {
-    const list = idsByType.get(item.entityType) ?? [];
-    list.push(item.entityId);
-    idsByType.set(item.entityType, list);
-  }
-  const ownedIdsByType = new Map<BulkShareItemType, Set<string>>();
-  await Promise.all(
-    [...idsByType].map(async ([entityType, ids]) => {
-      const owned = isEntityType(entityType)
-        ? await filterOwnedEntityIds(user.id, entityType, ids)
-        : await filterOwnedPlaceIds(user.id, ids);
-      ownedIdsByType.set(entityType, owned);
-    }),
-  );
+    // ── What is actually the sender's to give ──────────────────────────────
+    // Batched by type: five queries at most, whatever the list length. The owner
+    // rule itself stays in placeAccess/shareAccess — nothing here re-derives it
+    // (SEC-001), which is why those two grew a batch form rather than this file
+    // growing a `WHERE ownerId` of its own.
+    const idsByType = new Map<BulkShareItemType, string[]>();
+    for (const item of items) {
+      const list = idsByType.get(item.entityType) ?? [];
+      list.push(item.entityId);
+      idsByType.set(item.entityType, list);
+    }
+    const ownedIdsByType = new Map<BulkShareItemType, Set<string>>();
+    await Promise.all(
+      [...idsByType].map(async ([entityType, ids]) => {
+        const owned = isEntityType(entityType)
+          ? await filterOwnedEntityIds(user.id, entityType, ids)
+          : await filterOwnedPlaceIds(user.id, ids);
+        ownedIdsByType.set(entityType, owned);
+      }),
+    );
 
-  // ── What the recipients already have ───────────────────────────────────
-  // Re-sharing is a no-op, never a 409: a bulk selection routinely overlaps
-  // what a friend was given last week, and failing the action over that would
-  // make the feature unusable. Read OUTSIDE the transaction and reconciled by
-  // `skipDuplicates` inside it — the read is for the COUNT the user is shown;
-  // the unique constraint is what actually keeps the rows honest.
-  const entityIdsByType = [...idsByType].filter(([entityType]) =>
-    isEntityType(entityType),
-  );
-  const placeIds = idsByType.get("place") ?? [];
-  const [existingShares, existingPlaceShares] = await Promise.all([
-    entityIdsByType.length > 0
-      ? prisma.share.findMany({
-          where: {
-            sharedWithId: { in: recipientIds },
-            OR: entityIdsByType.map(([entityType, ids]) => ({
-              entityType,
-              entityId: { in: ids },
-            })),
-          },
-          select: { entityType: true, entityId: true, sharedWithId: true },
-        })
-      : Promise.resolve([]),
-    placeIds.length > 0
-      ? prisma.placeShare.findMany({
-          where: {
-            placeId: { in: placeIds },
-            sharedWithId: { in: recipientIds },
-          },
-          select: { placeId: true, sharedWithId: true },
-        })
-      : Promise.resolve([]),
-  ]);
-  const existingPairKeys = new Set([
-    ...existingShares.map((row) =>
-      sharePairKey(
-        row.entityType as BulkShareItemType,
-        row.entityId,
-        row.sharedWithId,
+    // ── What the recipients already have ───────────────────────────────────
+    // Re-sharing is a no-op, never a 409: a bulk selection routinely overlaps
+    // what a friend was given last week, and failing the action over that would
+    // make the feature unusable. Read OUTSIDE the transaction and reconciled by
+    // `skipDuplicates` inside it — the read is for the COUNT the user is shown;
+    // the unique constraint is what actually keeps the rows honest.
+    const entityIdsByType = [...idsByType].filter(([entityType]) =>
+      isEntityType(entityType),
+    );
+    const placeIds = idsByType.get("place") ?? [];
+    const [existingShares, existingPlaceShares] = await Promise.all([
+      entityIdsByType.length > 0
+        ? prisma.share.findMany({
+            where: {
+              sharedWithId: { in: recipientIds },
+              OR: entityIdsByType.map(([entityType, ids]) => ({
+                entityType,
+                entityId: { in: ids },
+              })),
+            },
+            select: { entityType: true, entityId: true, sharedWithId: true },
+          })
+        : Promise.resolve([]),
+      placeIds.length > 0
+        ? prisma.placeShare.findMany({
+            where: {
+              placeId: { in: placeIds },
+              sharedWithId: { in: recipientIds },
+            },
+            select: { placeId: true, sharedWithId: true },
+          })
+        : Promise.resolve([]),
+    ]);
+    const existingPairKeys = new Set([
+      ...existingShares.map((row) =>
+        sharePairKey(
+          row.entityType as BulkShareItemType,
+          row.entityId,
+          row.sharedWithId,
+        ),
       ),
-    ),
-    ...existingPlaceShares.map((row) =>
-      sharePairKey("place", row.placeId, row.sharedWithId),
-    ),
-  ]);
+      ...existingPlaceShares.map((row) =>
+        sharePairKey("place", row.placeId, row.sharedWithId),
+      ),
+    ]);
 
-  const plan = planBulkShare({
-    items,
-    recipientIds,
-    ownedIdsByType,
-    existingPairKeys,
-  });
+    const plan = planBulkShare({
+      items,
+      recipientIds,
+      ownedIdsByType,
+      existingPairKeys,
+    });
 
-  // Who wants to hear about it. Same preference the single-item paths read.
-  const recipientPrefs = await prisma.user.findMany({
-    where: { id: { in: recipientIds } },
-    select: { id: true, uiPreferences: true },
-  });
-  const notifiable = new Set(
-    recipientPrefs
-      .filter(
-        (row) =>
-          normalizeUserUiPreferences(row.uiPreferences).notifications.shareInApp,
-      )
-      .map((row) => row.id),
-  );
+    // Who wants to hear about it. Same preference the single-item paths read.
+    const recipientPrefs = await prisma.user.findMany({
+      where: { id: { in: recipientIds } },
+      select: { id: true, uiPreferences: true },
+    });
+    const notifiable = new Set(
+      recipientPrefs
+        .filter(
+          (row) =>
+            normalizeUserUiPreferences(row.uiPreferences).notifications
+              .shareInApp,
+        )
+        .map((row) => row.id),
+    );
 
-  if (plan.grants.length > 0) {
-    await prisma.$transaction(async (tx) => {
-      const placeGrants = plan.grants.filter(
-        (grant) => grant.entityType === "place",
-      );
-      const entityGrants = plan.grants.filter(
-        (grant) => grant.entityType !== "place",
-      );
+    if (plan.grants.length > 0) {
+      await prisma.$transaction(async (tx) => {
+        const placeGrants = plan.grants.filter(
+          (grant) => grant.entityType === "place",
+        );
+        const entityGrants = plan.grants.filter(
+          (grant) => grant.entityType !== "place",
+        );
 
-      if (entityGrants.length > 0) {
-        await tx.share.createMany({
-          data: entityGrants.map((grant) => ({
-            entityType: grant.entityType,
-            entityId: grant.entityId,
-            sharedById: user.id,
-            sharedWithId: grant.sharedWithId,
-          })),
-          // A concurrent single-item share of the same pair loses the race
-          // rather than 500-ing the whole bulk. The read above is what the
-          // user's counts come from; this is what keeps the write safe.
-          skipDuplicates: true,
-        });
-      }
-      if (placeGrants.length > 0) {
-        await tx.placeShare.createMany({
-          data: placeGrants.map((grant) => ({
-            placeId: grant.entityId,
-            sharedById: user.id,
-            sharedWithId: grant.sharedWithId,
-          })),
-          skipDuplicates: true,
-        });
-      }
-
-      // Move the watermark, or delta sync never delivers what was just granted
-      // (the long note on `touchedIdsByType` in lib/bulkShare.ts). One
-      // `updateMany` per type, not one update per row.
-      const now = new Date();
-      for (const [entityType, ids] of plan.touchedIdsByType) {
-        if (entityType === "route") {
-          await tx.route.updateMany({
-            where: { id: { in: ids } },
-            data: { updatedAt: now },
-          });
-        } else if (entityType === "place") {
-          await tx.place.updateMany({
-            where: { id: { in: ids } },
-            data: { updatedAt: now },
+        if (entityGrants.length > 0) {
+          await tx.share.createMany({
+            data: entityGrants.map((grant) => ({
+              entityType: grant.entityType,
+              entityId: grant.entityId,
+              sharedById: user.id,
+              sharedWithId: grant.sharedWithId,
+            })),
+            // A concurrent single-item share of the same pair loses the race
+            // rather than 500-ing the whole bulk. The read above is what the
+            // user's counts come from; this is what keeps the write safe.
+            skipDuplicates: true,
           });
         }
-        // Topo and GeoPDF jobs are fetched through their own list endpoints and
-        // reconcile on the next fetch — they are not delta-synced at all.
-      }
+        if (placeGrants.length > 0) {
+          await tx.placeShare.createMany({
+            data: placeGrants.map((grant) => ({
+              placeId: grant.entityId,
+              sharedById: user.id,
+              sharedWithId: grant.sharedWithId,
+            })),
+            skipDuplicates: true,
+          });
+        }
 
-      // ONE ROW PER ITEM PER RECIPIENT, grouped by `batchId` on the way out.
-      //
-      // NOT one aggregate row per batch, which is the shape this obviously
-      // wants: the inbox row for a shared item is what the read-time resolver
-      // drops when the share is revoked (PRIV-001/003), and a single row
-      // holding 23 ids would have to partially resolve, recount its own label
-      // and delete itself at zero. Per-item rows keep that logic exactly as it
-      // is, and the client collapses them on `batchId` for display.
-      //
-      // Ids only, as ever (PRIV-005) — the display strings are resolved from
-      // the live rows in routes/notifications.ts.
-      const notifications = plan.grants
-        .filter((grant) => notifiable.has(grant.sharedWithId))
-        .map((grant) => notificationFor(grant, user.id, batchId));
-      if (notifications.length > 0) {
-        await tx.notification.createMany({ data: notifications });
-      }
-    });
-  }
+        // Move the watermark, or delta sync never delivers what was just granted
+        // (the long note on `touchedIdsByType` in lib/bulkShare.ts). One
+        // `updateMany` per type, not one update per row.
+        const now = new Date();
+        for (const [entityType, ids] of plan.touchedIdsByType) {
+          if (entityType === "route") {
+            await tx.route.updateMany({
+              where: { id: { in: ids } },
+              data: { updatedAt: now },
+            });
+          } else if (entityType === "place") {
+            await tx.place.updateMany({
+              where: { id: { in: ids } },
+              data: { updatedAt: now },
+            });
+          }
+          // Topo and GeoPDF jobs are fetched through their own list endpoints and
+          // reconcile on the next fetch — they are not delta-synced at all.
+        }
 
-  // ONE PUSH PER RECIPIENT for the whole action — the copies included, which is
-  // why the client calls this last. Best-effort after commit, generic title,
-  // opaque batch id only.
-  if (plan.result.granted > 0 || copyCount > 0) {
-    for (const recipientId of recipientIds) {
-      if (notifiable.has(recipientId)) {
-        void sendPushToUser(recipientId, { type: "bulk_shared", batchId });
+        // ONE ROW PER ITEM PER RECIPIENT, grouped by `batchId` on the way out.
+        //
+        // NOT one aggregate row per batch, which is the shape this obviously
+        // wants: the inbox row for a shared item is what the read-time resolver
+        // drops when the share is revoked (PRIV-001/003), and a single row
+        // holding 23 ids would have to partially resolve, recount its own label
+        // and delete itself at zero. Per-item rows keep that logic exactly as it
+        // is, and the client collapses them on `batchId` for display.
+        //
+        // Ids only, as ever (PRIV-005) — the display strings are resolved from
+        // the live rows in routes/notifications.ts.
+        const notifications = plan.grants
+          .filter((grant) => notifiable.has(grant.sharedWithId))
+          .map((grant) => notificationFor(grant, user.id, batchId));
+        if (notifications.length > 0) {
+          await tx.notification.createMany({ data: notifications });
+        }
+      });
+    }
+
+    // ONE PUSH PER RECIPIENT for the whole action — the copies included, which is
+    // why the client calls this last. Best-effort after commit, generic title,
+    // opaque batch id only.
+    if (plan.result.granted > 0 || copyCount > 0) {
+      for (const recipientId of recipientIds) {
+        if (notifiable.has(recipientId)) {
+          void sendPushToUser(recipientId, { type: "bulk_shared", batchId });
+        }
       }
     }
-  }
 
-  res.status(200).json(plan.result);
-});
+    res.status(200).json(plan.result);
+  },
+);
 
 /**
  * The notification for one grant. A place share and a direct share are

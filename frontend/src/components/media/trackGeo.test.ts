@@ -71,23 +71,23 @@ describe("parseTrackGeoJSON", () => {
   });
 
   it("throws on unparseable JSON rather than returning an empty collection", () => {
-    expect(() => parseTrackGeoJSON("{ not json", null, { mediaId: "m" })).toThrow(
-      /not valid GeoJSON/,
-    );
-    expect(() => parseTrackGeoJSON('{"type":"Nope"}', null, { mediaId: "m" })).toThrow(
-      /not valid GeoJSON/,
-    );
+    expect(() =>
+      parseTrackGeoJSON("{ not json", null, { mediaId: "m" }),
+    ).toThrow(/not valid GeoJSON/);
+    expect(() =>
+      parseTrackGeoJSON('{"type":"Nope"}', null, { mediaId: "m" }),
+    ).toThrow(/not valid GeoJSON/);
   });
 
   it("throws on JSON that is not GeoJSON at all", () => {
-    expect(() => parseTrackGeoJSON('{"hello":"world"}', null, { mediaId: "m" })).toThrow(
-      /not valid GeoJSON/,
-    );
+    expect(() =>
+      parseTrackGeoJSON('{"hello":"world"}', null, { mediaId: "m" }),
+    ).toThrow(/not valid GeoJSON/);
   });
 
   it("throws on an unrecognised root element", () => {
-    expect(() => parseTrackGeoJSON("<foo></foo>", null, { placeId: "c" })).toThrow(
-      /Unrecognised track format/,
-    );
+    expect(() =>
+      parseTrackGeoJSON("<foo></foo>", null, { placeId: "c" }),
+    ).toThrow(/Unrecognised track format/);
   });
 });

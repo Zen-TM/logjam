@@ -54,10 +54,7 @@ describe("toElevationLine", () => {
     // Strided across the flattened series, the 4-point segment wins at most one
     // slot in 200 and is then dropped as a break, silently removing its ground
     // from the sampled line.
-    const line = toElevationLine([
-      ...run(5000, 0, 150.2),
-      ...run(4, 1, 150.9),
-    ]);
+    const line = toElevationLine([...run(5000, 0, 150.2), ...run(4, 1, 150.9)]);
     expect(line).toHaveLength(2);
     expect(line[1]).toHaveLength(2);
     expect(line[1]![0]).toEqual([150.9, -33.6]);
@@ -72,7 +69,13 @@ describe("toElevationLine", () => {
     const total = line.reduce((count, segment) => count + segment.length, 0);
     expect(total).toBeLessThanOrEqual(MAX_ELEVATION_VERTICES);
     expect(line[0]![0]).toEqual([150.2, -33.6]);
-    expect(line[0]![line[0]!.length - 1]![0]).toBeCloseTo(150.2 + 4999 * 0.0001, 9);
-    expect(line[1]![line[1]!.length - 1]![0]).toBeCloseTo(150.9 + 4999 * 0.0001, 9);
+    expect(line[0]![line[0]!.length - 1]![0]).toBeCloseTo(
+      150.2 + 4999 * 0.0001,
+      9,
+    );
+    expect(line[1]![line[1]!.length - 1]![0]).toBeCloseTo(
+      150.9 + 4999 * 0.0001,
+      9,
+    );
   });
 });

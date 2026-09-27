@@ -62,7 +62,11 @@ const SPEED_ELEVATION_KEY = "mapSpeedElevation";
  * row). Same fallback-don't-throw posture as `theme.ts`: a bad string must not
  * take the map down with it.
  */
-function readEnum<T extends string>(key: string, valid: readonly T[], fallback: T): T {
+function readEnum<T extends string>(
+  key: string,
+  valid: readonly T[],
+  fallback: T,
+): T {
   const stored = readPref(key);
   return valid.includes(stored as T) ? (stored as T) : fallback;
 }

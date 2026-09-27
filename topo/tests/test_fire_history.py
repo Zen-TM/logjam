@@ -5,6 +5,7 @@ Pure stdlib logic — no GDAL/OGR — but build_fire_history.py imports osgeo at
 module top, so we stub it first (per topo/tests/_native_stub.py convention)
 to keep this suite runnable on a host without GDAL Python bindings.
 """
+
 import os
 import sys
 import unittest
@@ -40,13 +41,17 @@ class TestResolveFireYear(unittest.TestCase):
         self.assertIsNone(resolve_fire_year(date(1899, 12, 30), None, _CURRENT_YEAR))
 
     def test_sentinel_1899_end_date_rejected(self):
-        self.assertIsNone(resolve_fire_year(date(2007, 1, 1), date(1899, 12, 30), _CURRENT_YEAR))
+        self.assertIsNone(
+            resolve_fire_year(date(2007, 1, 1), date(1899, 12, 30), _CURRENT_YEAR)
+        )
 
     def test_bogus_1807_end_date_rejected_even_with_valid_start_date(self):
         # Real NPWS data quirk: StartDate=2007-07-18 but EndDate=1807-07-01.
         # EndDate is coalesced first, so the bogus year drops the feature
         # even though StartDate alone would have been valid.
-        self.assertIsNone(resolve_fire_year(date(2007, 7, 18), date(1807, 7, 1), _CURRENT_YEAR))
+        self.assertIsNone(
+            resolve_fire_year(date(2007, 7, 18), date(1807, 7, 1), _CURRENT_YEAR)
+        )
 
     def test_future_year_rejected(self):
         future = date(_CURRENT_YEAR + 2, 1, 1)

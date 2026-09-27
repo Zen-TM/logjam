@@ -2,7 +2,11 @@ import { useEffect, useId, useState } from "react";
 import { Download, LogOut, Mail, Pencil, Trash2 } from "lucide-react";
 import { formatCredits } from "@logjam/shared";
 
-import { updateUsername, exportUserData, type TUser } from "../../../placeUtils";
+import {
+  updateUsername,
+  exportUserData,
+  type TUser,
+} from "../../../placeUtils";
 import { useAuth } from "../../../useAuth";
 import DeleteAccountDialog from "../../dialogs/DeleteAccountDialog";
 import ChangeEmailDialog from "../../dialogs/ChangeEmailDialog";
@@ -25,7 +29,8 @@ import classes from "./AccountPanel.module.css";
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes < 1024 * 1024 * 1024)
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
@@ -88,7 +93,9 @@ function AccountPanel({
       URL.revokeObjectURL(url);
     } catch (err) {
       console.error(err);
-      toast.error(messageFromError(err, "Couldn't download your data. Please try again."));
+      toast.error(
+        messageFromError(err, "Couldn't download your data. Please try again."),
+      );
     } finally {
       setExporting(false);
     }
@@ -110,7 +117,11 @@ function AccountPanel({
         title={username ?? "Account"}
         actions={
           username !== null && (
-            <IconButton icon={Pencil} label="Change username" onClick={() => setRenameOpen(true)} />
+            <IconButton
+              icon={Pencil}
+              label="Change username"
+              onClick={() => setRenameOpen(true)}
+            />
           )
         }
       />
@@ -127,12 +138,18 @@ function AccountPanel({
             <SectionHeader title="Storage" />
             <ProgressBar
               label="Storage used"
-              value={percentUsed(currentUser.storageUsedBytes, currentUser.storageQuotaBytes)}
+              value={percentUsed(
+                currentUser.storageUsedBytes,
+                currentUser.storageQuotaBytes,
+              )}
             />
             <p className={classes.meterLabel}>
               {formatBytes(currentUser.storageUsedBytes)} of{" "}
               {formatBytes(currentUser.storageQuotaBytes)}
-              <span className={classes.meterHint}> · photos, videos and topos</span>
+              <span className={classes.meterHint}>
+                {" "}
+                · photos, videos and topos
+              </span>
             </p>
 
             <SectionHeader title="Processing credits this month" />
@@ -147,9 +164,15 @@ function AccountPanel({
               {formatCredits(currentUser.monthlyComputeUsage)} of{" "}
               {formatCredits(currentUser.monthlyComputeCredits)}
               {creditsResetLabel && (
-                <span className={classes.meterHint}> · resets {creditsResetLabel}</span>
+                <span className={classes.meterHint}>
+                  {" "}
+                  · resets {creditsResetLabel}
+                </span>
               )}
-              <span className={classes.meterHint}> · topos, exports and GeoPDFs</span>
+              <span className={classes.meterHint}>
+                {" "}
+                · topos, exports and GeoPDFs
+              </span>
             </p>
 
             <SectionHeader title="Sign-in" />

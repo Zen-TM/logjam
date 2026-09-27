@@ -132,7 +132,11 @@ export async function assertHasCredits(
   db: DbClient = prisma,
 ): Promise<void> {
   const projected = estimateCredits(kind, estimatedSeconds);
-  const usage = await getMonthlyCreditUsage(user.id, user.monthlyComputeCredits, db);
+  const usage = await getMonthlyCreditUsage(
+    user.id,
+    user.monthlyComputeCredits,
+    db,
+  );
 
   // Already spent: refuse regardless of what this job is expected to cost.
   // Also the only check available when there is no estimate.

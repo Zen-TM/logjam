@@ -10,7 +10,9 @@ import type { RegionBbox, RegionTilePlan } from "@logjam/shared";
 import { hashKey } from "../map/sourceResolver";
 
 /** Plan order: zoom ascending, then row-major within a level (stage4a §4.4). */
-export function regionTileSequence(plan: RegionTilePlan): [number, number, number][] {
+export function regionTileSequence(
+  plan: RegionTilePlan,
+): [number, number, number][] {
   const tiles: [number, number, number][] = [];
   for (const level of plan.perZoom) {
     for (let y = level.y0; y <= level.y1; y++) {

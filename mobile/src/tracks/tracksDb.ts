@@ -268,7 +268,11 @@ export async function updateTrack(
       patch.stats.elevationLossM,
     );
   }
-  await db.runAsync(`UPDATE track SET ${sets.join(", ")} WHERE id = ?`, ...args, id);
+  await db.runAsync(
+    `UPDATE track SET ${sets.join(", ")} WHERE id = ?`,
+    ...args,
+    id,
+  );
   notifyChanged();
 }
 

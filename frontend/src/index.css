@@ -115,7 +115,9 @@ body {
   color: var(--theme-text-primary);
   /* The reader's own OS font, which is what Logjam GPS shows too: neither app
      ships a typeface, so both look like the system they are running on. */
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-family:
+    system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    sans-serif;
   font-size: 1rem;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;

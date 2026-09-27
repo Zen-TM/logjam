@@ -14,7 +14,11 @@ import {
 
 import { fontSize, spacing, theme } from "../theme";
 import type { CustomFieldEntity } from "../api/queries";
-import { countFieldValues, removeFieldDef, saveFieldDefs } from "./fieldDefsStore";
+import {
+  countFieldValues,
+  removeFieldDef,
+  saveFieldDefs,
+} from "./fieldDefsStore";
 import { useMirrorPlaceTypes, useMirrorTrips } from "../sync/useSyncQueries";
 import { tripTypeLabel } from "../logs/tripTypeMeta";
 import {
@@ -56,11 +60,18 @@ import {
  */
 
 /** The only per-entity difference in this file: what to call the rows. */
-const ENTITY_NOUN: Record<CustomFieldEntity, { one: string; many: string; has: string; have: string }> = {
+const ENTITY_NOUN: Record<
+  CustomFieldEntity,
+  { one: string; many: string; has: string; have: string }
+> = {
   tripLog: { one: "trip", many: "trips", has: "trip has", have: "trips have" },
-  place: { one: "place", many: "places", has: "place has", have: "places have" },
+  place: {
+    one: "place",
+    many: "places",
+    has: "place has",
+    have: "places have",
+  },
 };
-
 
 export function CustomFieldList({
   entity,
@@ -85,8 +96,8 @@ export function CustomFieldList({
     <View style={styles.body}>
       {ordered.length === 0 ? (
         <Text style={styles.hint}>
-          Add your own {ATTRIBUTE_NOUN.one} to record on every {noun.one} — e.g. water
-          level or party size.
+          Add your own {ATTRIBUTE_NOUN.one} to record on every {noun.one} — e.g.
+          water level or party size.
         </Text>
       ) : (
         <>
@@ -202,7 +213,10 @@ export function useCustomFieldForm({
           ...typeIds,
           ...TRIP_TYPE_SUGGESTIONS,
           ...distinctTripTypes(trips.data ?? []),
-        ]).map((tripType) => ({ value: tripType, label: tripTypeLabel(tripType) }));
+        ]).map((tripType) => ({
+          value: tripType,
+          label: tripTypeLabel(tripType),
+        }));
   const allScopeValues = scopeOptions.map((option) => option.value);
 
   const [saving, setSaving] = useState(false);
@@ -247,8 +261,16 @@ export function useCustomFieldForm({
     const chosen = appliesToAll ? [] : typeIds;
     const scope =
       entity === "place"
-        ? { appliesToAllTypes: appliesToAll, placeTypeIds: chosen, tripTypes: [] }
-        : { appliesToAllTypes: appliesToAll, placeTypeIds: [], tripTypes: chosen };
+        ? {
+            appliesToAllTypes: appliesToAll,
+            placeTypeIds: chosen,
+            tripTypes: [],
+          }
+        : {
+            appliesToAllTypes: appliesToAll,
+            placeTypeIds: [],
+            tripTypes: chosen,
+          };
     // A rename keeps the original key so the values already stored on trips stay
     // attached to it.
     const next: ScopedCustomFieldDef[] = editing
@@ -333,7 +355,9 @@ export function useCustomFieldForm({
       })
       .catch((err: unknown) => {
         console.error(err);
-        setFormError(`Couldn't check which ${noun.many} use this ${ATTRIBUTE_NOUN.one}.`);
+        setFormError(
+          `Couldn't check which ${noun.many} use this ${ATTRIBUTE_NOUN.one}.`,
+        );
       });
   }, [defs, editing, entity, noun, onDone, onSaved]);
 
@@ -364,7 +388,9 @@ export function useCustomFieldForm({
           value={type}
           onChange={(next) => patch({ type: next })}
         />
-        {editing ? <Text style={styles.hint}>Existing values are kept.</Text> : null}
+        {editing ? (
+          <Text style={styles.hint}>Existing values are kept.</Text>
+        ) : null}
         {/* Range is offered only for numbers, because that is the only place it
             means anything — and it is what makes the web's range slider work,
             and the phone's stop rail. */}
@@ -374,7 +400,9 @@ export function useCustomFieldForm({
               icon="sliders"
               title="Limit to a range"
               subtitle={
-                bounded ? "Values must be between the min and max you set" : "Any number"
+                bounded
+                  ? "Values must be between the min and max you set"
+                  : "Any number"
               }
               right={
                 <Toggle
@@ -391,7 +419,9 @@ export function useCustomFieldForm({
                     label="Min"
                     value={min}
                     onChangeText={(next) => patch({ min: next })}
-                    keyboardType={type === "integer" ? "number-pad" : "decimal-pad"}
+                    keyboardType={
+                      type === "integer" ? "number-pad" : "decimal-pad"
+                    }
                   />
                 </View>
                 <View style={styles.bound}>
@@ -399,7 +429,9 @@ export function useCustomFieldForm({
                     label="Max"
                     value={max}
                     onChangeText={(next) => patch({ max: next })}
-                    keyboardType={type === "integer" ? "number-pad" : "decimal-pad"}
+                    keyboardType={
+                      type === "integer" ? "number-pad" : "decimal-pad"
+                    }
                   />
                 </View>
               </View>
@@ -426,7 +458,9 @@ export function useCustomFieldForm({
         <ChipPicker
           label={entity === "place" ? "Place types" : "Trip types"}
           options={[{ value: ALL_TYPES_CHIP, label: "All" }, ...scopeOptions]}
-          selected={appliesToAll ? [ALL_TYPES_CHIP, ...allScopeValues] : typeIds}
+          selected={
+            appliesToAll ? [ALL_TYPES_CHIP, ...allScopeValues] : typeIds
+          }
           disabledValues={appliesToAll ? new Set(allScopeValues) : undefined}
           error={scopeError}
           onToggle={(value) => {
@@ -449,12 +483,15 @@ export function useCustomFieldForm({
                   // API refuses case-variant duplicates.
                   const value =
                     allScopeValues.find(
-                      (existing) => existing.toLowerCase() === added.toLowerCase(),
+                      (existing) =>
+                        existing.toLowerCase() === added.toLowerCase(),
                     ) ?? added;
                   setScopeError(null);
                   patch({
                     appliesToAll: false,
-                    typeIds: typeIds.includes(value) ? typeIds : [...typeIds, value],
+                    typeIds: typeIds.includes(value)
+                      ? typeIds
+                      : [...typeIds, value],
                   });
                 }
           }
@@ -576,14 +613,17 @@ function fieldSummary(def: ScopedCustomFieldDef): string {
   // min-only field whose own title says "(0+)" — the same both-or-neither
   // assumption that has been fixed twice already, in the row reader and on the
   // push path.
-  if (def.min != null && def.max != null) return `${base} · ${def.min}–${def.max}`;
+  if (def.min != null && def.max != null)
+    return `${base} · ${def.min}–${def.max}`;
   if (def.min != null) return `${base} · ${def.min}+`;
   if (def.max != null) return `${base} · up to ${def.max}`;
   return base;
 }
 
 function typeLabel(type: TripLogCustomFieldType): string {
-  return CUSTOM_FIELD_TYPES.find((entry) => entry.value === type)?.label ?? type;
+  return (
+    CUSTOM_FIELD_TYPES.find((entry) => entry.value === type)?.label ?? type
+  );
 }
 
 const styles = StyleSheet.create({

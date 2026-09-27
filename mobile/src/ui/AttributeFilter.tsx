@@ -38,13 +38,16 @@ export function AttributeFilter({
   onChange: (next: CustomFieldFilter | null) => void;
 }) {
   if (def.type === "integer" || def.type === "float") {
-    const range = value?.kind === "numberRange" ? (value.range as NumberRange) : null;
+    const range =
+      value?.kind === "numberRange" ? (value.range as NumberRange) : null;
     return def.min != null && def.max != null ? (
       <RangePills
         label={def.label}
         bounds={[def.min, def.max]}
         value={range}
-        onChange={(next) => onChange(next == null ? null : { kind: "numberRange", range: next })}
+        onChange={(next) =>
+          onChange(next == null ? null : { kind: "numberRange", range: next })
+        }
       />
     ) : (
       <ThresholdFilter
@@ -81,7 +84,9 @@ export function AttributeFilter({
             // Tapping the active chip clears it: "either" is the third state
             // and it needs to be reachable without a Reset.
             onPress={() =>
-              onChange(current === option ? null : { kind: "boolean", value: option })
+              onChange(
+                current === option ? null : { kind: "boolean", value: option },
+              )
             }
           />
         ))}
@@ -133,7 +138,8 @@ export function ThresholdFilter({
   onChange: (next: PlaceThresholdFilter | null) => void;
 }) {
   const matchedPreset = presets.find(
-    (preset) => value != null && preset[0] === value[0] && preset[1] === value[1],
+    (preset) =>
+      value != null && preset[0] === value[0] && preset[1] === value[1],
   );
   const [customOpen, setCustomOpen] = useState(false);
   // Operator and number are held as a DRAFT while the custom control is open,
@@ -147,7 +153,11 @@ export function ThresholdFilter({
 
   const commit = (operator: PlaceThresholdFilter[0], text: string) => {
     const parsed = Number(text.trim());
-    onChange(text.trim() === "" || !Number.isFinite(parsed) ? null : [operator, parsed]);
+    onChange(
+      text.trim() === "" || !Number.isFinite(parsed)
+        ? null
+        : [operator, parsed],
+    );
   };
 
   const openCustom = () => {
@@ -166,7 +176,9 @@ export function ThresholdFilter({
     <View style={styles.block}>
       <View style={styles.blockHeader}>
         <Text style={styles.blockLabel}>{label}</Text>
-        <Text style={[styles.blockValue, value != null && styles.blockValueActive]}>
+        <Text
+          style={[styles.blockValue, value != null && styles.blockValueActive]}
+        >
           {value == null ? "Any" : formatThreshold(value, unit)}
         </Text>
       </View>

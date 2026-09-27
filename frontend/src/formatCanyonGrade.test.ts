@@ -12,15 +12,17 @@ function grades(
   return {
     ...(overrides.vGrade != null ? { v_grade: overrides.vGrade } : {}),
     ...(overrides.aGrade != null ? { a_grade: overrides.aGrade } : {}),
-    ...(overrides.commitment != null ? { commitment: overrides.commitment } : {}),
+    ...(overrides.commitment != null
+      ? { commitment: overrides.commitment }
+      : {}),
   };
 }
 
 describe("formatCanyonGrade — fully specified", () => {
   it("joins v, a and commitment", () => {
-    expect(formatCanyonGrade(grades({ vGrade: 3, aGrade: 4, commitment: 3 }))).toBe(
-      "v3a4 III",
-    );
+    expect(
+      formatCanyonGrade(grades({ vGrade: 3, aGrade: 4, commitment: 3 })),
+    ).toBe("v3a4 III");
   });
 
   it("renders v and a glued together with no commitment", () => {

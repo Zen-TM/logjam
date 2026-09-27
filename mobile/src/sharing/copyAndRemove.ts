@@ -68,7 +68,9 @@ export async function copyShared(
     return { skipped: 0, outOfSpace: false };
   }
   const result = await copySharedPlace(target.entityId, {
-    ...(options?.copyMedia === undefined ? {} : { copyMedia: options.copyMedia }),
+    ...(options?.copyMedia === undefined
+      ? {}
+      : { copyMedia: options.copyMedia }),
   });
   return {
     skipped: result.mediaSkipped ?? 0,

@@ -11,7 +11,9 @@ vi.mock("../../../placeUtils", () => ({
   updateCustomField: vi.fn(),
 }));
 vi.mock("../../dialogs/ConfirmDialog", () => ({ default: () => null }));
-vi.mock("../../dialogs/DeleteCustomFieldDialog", () => ({ default: () => null }));
+vi.mock("../../dialogs/DeleteCustomFieldDialog", () => ({
+  default: () => null,
+}));
 vi.mock("../../dialogs/AddCustomFieldForm", () => ({ default: () => null }));
 vi.mock("../../dialogs/useCustomFieldImpact", () => ({
   useCustomFieldImpact: () => ({ count: null, error: null }),
@@ -73,8 +75,12 @@ describe("a built-in attribute gets no verbs", () => {
 
   it("offers the actions menu only on the user's own definitions", () => {
     renderSection([SYSTEM_DEF, OWN_DEF]);
-    expect(screen.getAllByRole("button", { name: /^Actions for/ })).toHaveLength(1);
-    expect(screen.getByRole("button", { name: "Actions for Access beta" })).toBeTruthy();
+    expect(
+      screen.getAllByRole("button", { name: /^Actions for/ }),
+    ).toHaveLength(1);
+    expect(
+      screen.getByRole("button", { name: "Actions for Access beta" }),
+    ).toBeTruthy();
   });
 
   it("files a built-in under Built in, rather than leaving it looking editable", () => {
@@ -85,7 +91,9 @@ describe("a built-in attribute gets no verbs", () => {
 
   it("lists the user's own definitions before the built-ins", () => {
     renderSection([SYSTEM_DEF, OWN_DEF]);
-    const headings = screen.getAllByRole("heading").map((node) => node.textContent ?? "");
+    const headings = screen
+      .getAllByRole("heading")
+      .map((node) => node.textContent ?? "");
     expect(headings.findIndex((text) => text.includes("Yours"))).toBeLessThan(
       headings.findIndex((text) => text.includes("Built in")),
     );

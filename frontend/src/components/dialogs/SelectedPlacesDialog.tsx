@@ -89,7 +89,9 @@ function SelectedPlacesDialog({
   }, [open]);
 
   const busy = sharing || deleting;
-  const ownedPlaces = selectedPlaces.filter((place) => ownedPlaceIds.has(place.id));
+  const ownedPlaces = selectedPlaces.filter((place) =>
+    ownedPlaceIds.has(place.id),
+  );
   const sharedCount = selectedPlaces.length - ownedPlaces.length;
 
   const selectedIds = new Set(selectedPlaces.map((place) => place.id));
@@ -122,7 +124,9 @@ function SelectedPlacesDialog({
             await sharePlaceWith(place.id, friendId);
           } catch (err) {
             console.error(err);
-            toast.error(messageFromError(err, "Couldn't share one or more places."));
+            toast.error(
+              messageFromError(err, "Couldn't share one or more places."),
+            );
           }
         }
       }
@@ -130,7 +134,9 @@ function SelectedPlacesDialog({
       onClose();
     } catch (err) {
       console.error(err);
-      toast.error(messageFromError(err, "Couldn't share places. Please try again."));
+      toast.error(
+        messageFromError(err, "Couldn't share places. Please try again."),
+      );
     } finally {
       setSharing(false);
     }
@@ -161,7 +167,9 @@ function SelectedPlacesDialog({
       toast.success(`Deleted ${plural(ownedPlaces.length, "place")}.`);
     } catch (err) {
       console.error(err);
-      toast.error(messageFromError(err, "Couldn't delete places. Please try again."));
+      toast.error(
+        messageFromError(err, "Couldn't delete places. Please try again."),
+      );
     } finally {
       setDeleting(false);
     }
@@ -196,14 +204,11 @@ function SelectedPlacesDialog({
       >
         <div className={classes.body}>
           <section className={classes.group}>
-            <SectionHeader
-              title="These places"
-              count={selectedPlaces.length}
-            />
+            <SectionHeader title="These places" count={selectedPlaces.length} />
             {sharedCount > 0 && (
               <p className={classes.note}>
-                {plural(sharedCount, "place")} shared with you — those can be exported,
-                not shared on or deleted.
+                {plural(sharedCount, "place")} shared with you — those can be
+                exported, not shared on or deleted.
               </p>
             )}
             {selectedPlaces.map((place) => (
@@ -220,7 +225,9 @@ function SelectedPlacesDialog({
                   />
                 }
                 title={place.name}
-                subtitle={ownedPlaceIds.has(place.id) ? undefined : "Shared with you"}
+                subtitle={
+                  ownedPlaceIds.has(place.id) ? undefined : "Shared with you"
+                }
                 trailing={
                   <IconButton
                     icon={Minus}
@@ -251,7 +258,11 @@ function SelectedPlacesDialog({
                 key={place.id}
                 leading={<IconTile icon={Plus} hue="var(--theme-bonus-1)" />}
                 title={place.name}
-                subtitle={place.altNames.length > 0 ? place.altNames.join(", ") : undefined}
+                subtitle={
+                  place.altNames.length > 0
+                    ? place.altNames.join(", ")
+                    : undefined
+                }
                 description="Press to add it to the selection"
                 onOpen={() => {
                   onAddPlace(place.id);
@@ -268,7 +279,9 @@ function SelectedPlacesDialog({
                 label="Format"
                 className={classes.format}
                 value={exportFormat}
-                onChange={(event) => setExportFormat(event.target.value as TExportFormat)}
+                onChange={(event) =>
+                  setExportFormat(event.target.value as TExportFormat)
+                }
               >
                 {EXPORT_FORMATS.map((format) => (
                   <option key={format.value} value={format.value}>
@@ -290,7 +303,8 @@ function SelectedPlacesDialog({
               </p>
             ) : friends.length === 0 ? (
               <p className={classes.note}>
-                Sharing is between friends. Add one on the Friends page, then come back.
+                Sharing is between friends. Add one on the Friends page, then
+                come back.
               </p>
             ) : (
               <>
@@ -300,7 +314,8 @@ function SelectedPlacesDialog({
                     ? `Your ${plural(ownedPlaces.length, "place")} of these. `
                     : ""}
                   Recipients can copy or export them while the share is active.
-                  Unsharing won&rsquo;t remove copies they&rsquo;ve already made.
+                  Unsharing won&rsquo;t remove copies they&rsquo;ve already
+                  made.
                 </p>
                 {shareFriendIds.length > 0 && (
                   <>
@@ -318,7 +333,11 @@ function SelectedPlacesDialog({
                               label={`Don't share with ${friend.username}`}
                               disabled={busy}
                               onClick={() =>
-                                setShareFriendIds(shareFriendIds.filter((other) => other !== id))
+                                setShareFriendIds(
+                                  shareFriendIds.filter(
+                                    (other) => other !== id,
+                                  ),
+                                )
                               }
                             />
                           }
@@ -388,9 +407,10 @@ function SelectedPlacesDialog({
         title={`Delete ${plural(ownedPlaces.length, "place")}?`}
         message={
           <>
-            This permanently deletes {plural(ownedPlaces.length, "place")}, along with
-            their photos, tracks and shares. Your trip logs are kept — they&rsquo;ll be
-            unlinked from these places but stay in your logbook. This cannot be undone.
+            This permanently deletes {plural(ownedPlaces.length, "place")},
+            along with their photos, tracks and shares. Your trip logs are kept
+            — they&rsquo;ll be unlinked from these places but stay in your
+            logbook. This cannot be undone.
           </>
         }
         confirmLabel="Delete"

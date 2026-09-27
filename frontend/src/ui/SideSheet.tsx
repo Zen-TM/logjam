@@ -48,10 +48,21 @@ export function SideSheet({
     <section
       ref={sheetRef}
       aria-labelledby={titleId}
-      className={[classes.sheet, isNarrow ? classes.narrow : classes.docked, className].filter(Boolean).join(" ")}
+      className={[
+        classes.sheet,
+        isNarrow ? classes.narrow : classes.docked,
+        className,
+      ]
+        .filter(Boolean)
+        .join(" ")}
     >
       <header className={classes.head}>
-        <h2 id={titleId} ref={headingRef} tabIndex={-1} className={classes.title}>
+        <h2
+          id={titleId}
+          ref={headingRef}
+          tabIndex={-1}
+          className={classes.title}
+        >
           {title}
         </h2>
         <IconButton icon={X} label="Close" onClick={onClose} />
@@ -64,7 +75,13 @@ export function SideSheet({
 
 /** A titled group inside a sheet, popover or dialog: section title, then its
  *  controls. */
-export function SheetSection({ title, children }: { title: string; children: ReactNode }) {
+export function SheetSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
   const titleId = useId();
   return (
     <section aria-labelledby={titleId} className={classes.section}>
@@ -90,7 +107,10 @@ export function SectionHeader({
   className?: string;
 }) {
   return (
-    <h3 id={id} className={[classes.sectionTitle, className].filter(Boolean).join(" ")}>
+    <h3
+      id={id}
+      className={[classes.sectionTitle, className].filter(Boolean).join(" ")}
+    >
       <span>{title}</span>
       {count != null && <span>{count}</span>}
     </h3>

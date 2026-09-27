@@ -1,5 +1,12 @@
 import { useEffect, useState } from "react";
-import { Alert, AppState, Linking, Platform, StyleSheet, Text } from "react-native";
+import {
+  Alert,
+  AppState,
+  Linking,
+  Platform,
+  StyleSheet,
+  Text,
+} from "react-native";
 import Constants from "expo-constants";
 // SystemBars (react-native-edge-to-edge) rather than expo-status-bar: with
 // android.edgeToEdgeEnabled the app draws behind BOTH system bars, so the
@@ -55,7 +62,9 @@ export default function App() {
   // holds the user's offline maps and their in-progress track hostage to a Play
   // Store they may have no way to reach.
   const upgradeEnforcement =
-    minVersionGate.status === "upgradeRequired" ? minVersionGate.enforcement : "none";
+    minVersionGate.status === "upgradeRequired"
+      ? minVersionGate.enforcement
+      : "none";
   const openStore = storeUrl
     ? () => {
         void Linking.openURL(storeUrl).catch(console.error);
@@ -78,7 +87,10 @@ export default function App() {
   }, [upgradeEnforcement]);
 
   const warning = upgradeEnforcement === "warn";
-  if (minVersionGate.status === "upgradeRequired" && !(warning && warnDismissed)) {
+  if (
+    minVersionGate.status === "upgradeRequired" &&
+    !(warning && warnDismissed)
+  ) {
     return (
       <SafeAreaProvider>
         <SafeAreaView style={styles.blockingContainer}>
@@ -94,7 +106,11 @@ export default function App() {
               : `This version (${CLIENT_VERSION}) is no longer supported. Minimum supported version is ${minVersionGate.minVersion}. Please update the app to continue.`}
           </Text>
           {openStore ? (
-            <Button label="Open the Play Store" icon="external-link" onPress={openStore} />
+            <Button
+              label="Open the Play Store"
+              icon="external-link"
+              onPress={openStore}
+            />
           ) : null}
           {warning ? (
             <Button
@@ -113,64 +129,72 @@ export default function App() {
       <SystemBars style="light" />
       {/* App lock (Stage 4): active once offline map data exists on-device. */}
       <AppLockGate>
-      {auth.state === "loading" ? (
-        <LoadingState />
-      ) : mountsAppShell(auth.state) ? (
-        <>
-        {/* Asked once, on the first arrival INTO the app — guest or signed in.
+        {auth.state === "loading" ? (
+          <LoadingState />
+        ) : mountsAppShell(auth.state) ? (
+          <>
+            {/* Asked once, on the first arrival INTO the app — guest or signed in.
             It sits beside the shell rather than inside it so the question is
             not owned by any one screen. */}
-        <CrashReportConsent />
-        <AppShell
-          accountState={auth.accountState}
-          onLinkAccount={auth.linkAccount}
-          onSignOut={async () => {
-            // Sign-out wipes the sync mirror AND the outbox (stage8 §9), plus
-            // the offline registry and every downloaded file — unflushed local
-            // changes die with it, so block on a confirmation when any exist.
-            const unsynced = await countUnsyncedChanges();
-            if (unsynced > 0) {
-              const confirmed = await new Promise<boolean>((resolve) => {
-                Alert.alert(
-                  "Unsynced changes",
-                  `You have ${unsynced} unsynced change${unsynced === 1 ? "" : "s"} that will be lost. Sign out anyway?`,
-                  [
-                    { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
-                    { text: "Sign out", style: "destructive", onPress: () => resolve(true) },
-                  ],
-                  { cancelable: true, onDismiss: () => resolve(false) },
-                );
-              });
-              if (!confirmed) return;
-            }
-            // Unregister the push token BEFORE tokens are cleared (the DELETE
-            // needs an authenticated request); best-effort inside.
-            await unregisterPushNotifications();
-            const wiped = await wipeAllLocalData();
-            if (wiped.failed.length > 0) {
-              // The privacy line held only partly. Say so — the next person to
-              // use this phone would otherwise inherit the remains silently.
-              Alert.alert(
-                "Some data couldn't be removed",
-                `This phone kept your ${wiped.failed.join(" and ")}. Signing out anyway; clear the app's storage in Android settings to be sure.`,
-              );
-            }
-            await auth.signOut();
-          }}
-        />
-        </>
-      ) : auth.state === "chooser" || auth.state === "signIn" ? (
-        // One screen for both: the landing screen IS the sign-in screen, and
-        // the only thing the two states change is whether "continue without an
-        // account" is on offer.
-        <SafeAreaView style={styles.authSafeArea}>
-          <LandingScreen auth={auth} />
-        </SafeAreaView>
-      ) : (
-        <SafeAreaView style={styles.authSafeArea}>
-          <AuthFlow auth={auth} />
-        </SafeAreaView>
-      )}
+            <CrashReportConsent />
+            <AppShell
+              accountState={auth.accountState}
+              onLinkAccount={auth.linkAccount}
+              onSignOut={async () => {
+                // Sign-out wipes the sync mirror AND the outbox (stage8 §9), plus
+                // the offline registry and every downloaded file — unflushed local
+                // changes die with it, so block on a confirmation when any exist.
+                const unsynced = await countUnsyncedChanges();
+                if (unsynced > 0) {
+                  const confirmed = await new Promise<boolean>((resolve) => {
+                    Alert.alert(
+                      "Unsynced changes",
+                      `You have ${unsynced} unsynced change${unsynced === 1 ? "" : "s"} that will be lost. Sign out anyway?`,
+                      [
+                        {
+                          text: "Cancel",
+                          style: "cancel",
+                          onPress: () => resolve(false),
+                        },
+                        {
+                          text: "Sign out",
+                          style: "destructive",
+                          onPress: () => resolve(true),
+                        },
+                      ],
+                      { cancelable: true, onDismiss: () => resolve(false) },
+                    );
+                  });
+                  if (!confirmed) return;
+                }
+                // Unregister the push token BEFORE tokens are cleared (the DELETE
+                // needs an authenticated request); best-effort inside.
+                await unregisterPushNotifications();
+                const wiped = await wipeAllLocalData();
+                if (wiped.failed.length > 0) {
+                  // The privacy line held only partly. Say so — the next person to
+                  // use this phone would otherwise inherit the remains silently.
+                  Alert.alert(
+                    "Some data couldn't be removed",
+                    `This phone kept your ${wiped.failed.join(" and ")}. Signing out anyway; clear the app's storage in Android settings to be sure.`,
+                  );
+                }
+                await auth.signOut();
+              }}
+            />
+          </>
+        ) : auth.state === "chooser" || auth.state === "signIn" ? (
+          // One screen for both: the landing screen IS the sign-in screen, and
+          // the only thing the two states change is whether "continue without an
+          // account" is on offer.
+          <SafeAreaView style={styles.authSafeArea}>
+            <LandingScreen auth={auth} />
+          </SafeAreaView>
+        ) : (
+          <SafeAreaView style={styles.authSafeArea}>
+            <AuthFlow auth={auth} />
+          </SafeAreaView>
+        )}
       </AppLockGate>
     </SafeAreaProvider>
   );
@@ -185,7 +209,11 @@ const styles = StyleSheet.create({
     gap: spacing(1),
     backgroundColor: theme.primary,
   },
-  blockingTitle: { fontSize: fontSize.xl, fontWeight: "600", color: theme.textPrimary },
+  blockingTitle: {
+    fontSize: fontSize.xl,
+    fontWeight: "600",
+    color: theme.textPrimary,
+  },
   blockingLine: {
     fontSize: fontSize.sm,
     color: theme.textMuted,

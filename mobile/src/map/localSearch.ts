@@ -43,7 +43,11 @@ export function rankLocalMatches<T>(
   const needle = query.trim().toLowerCase();
   if (needle.length < LOCAL_QUERY_MIN_LENGTH) return [];
 
-  const scored: { candidate: LocalSearchCandidate<T>; rank: number; at: number }[] = [];
+  const scored: {
+    candidate: LocalSearchCandidate<T>;
+    rank: number;
+    at: number;
+  }[] = [];
   candidates.forEach((candidate, at) => {
     const title = candidate.title.toLowerCase();
     const titleAt = title.indexOf(needle);

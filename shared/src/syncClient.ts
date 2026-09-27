@@ -36,7 +36,9 @@ export type OutboxState =
  * mid-transfer — which is the most retryable failure there is.
  */
 export function isTransientSyncError(code: number): boolean {
-  return code === 0 || code === 401 || code === 408 || code === 429 || code >= 500;
+  return (
+    code === 0 || code === 401 || code === 408 || code === 429 || code >= 500
+  );
 }
 
 export type OutboxEntry = {
@@ -103,7 +105,10 @@ export function planOutboxEnqueue(
     // Otherwise the newest op is the whole truth — the superseded ones carry no
     // fields, so dropping them cannot lose anything, and one op per row keeps a
     // read/unread fiddle from filling the outbox.
-    return { dropSeqs: queuedReadOps.map((entry) => entry.seq), append: incoming };
+    return {
+      dropSeqs: queuedReadOps.map((entry) => entry.seq),
+      append: incoming,
+    };
   }
 
   if (incoming.op === "delete") {
@@ -124,7 +129,9 @@ export function planOutboxEnqueue(
   }
 
   if (incoming.op === "update") {
-    const queuedCreate = sameRowQueued.find((entry) => entry.op.op === "create");
+    const queuedCreate = sameRowQueued.find(
+      (entry) => entry.op.op === "create",
+    );
     if (queuedCreate) {
       return {
         dropSeqs: [],
@@ -193,7 +200,9 @@ export function selectFlushBatch(
     // A dependency on a blocked id defers the op — except a delete of the
     // blocked row itself, which is how the user discards a parked lineage.
     const dependsOnBlocked = pushOpDependencies(entry.op).some(
-      (dep) => blockedIds.has(dep) && !(entry.op.op === "delete" && dep === entry.op.id),
+      (dep) =>
+        blockedIds.has(dep) &&
+        !(entry.op.op === "delete" && dep === entry.op.id),
     );
     if (dependsOnBlocked) {
       deferred.push(entry);

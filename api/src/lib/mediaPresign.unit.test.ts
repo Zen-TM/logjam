@@ -2,13 +2,18 @@ import { describe, it, expect, vi, type Mock } from "vitest";
 
 // Return the command input as the "URL" so we can assert what was signed.
 vi.mock("@aws-sdk/s3-request-presigner", () => ({
-  getSignedUrl: vi.fn(async (_client: unknown, command: { input: unknown }) =>
-    `signed:${JSON.stringify(command.input)}`,
+  getSignedUrl: vi.fn(
+    async (_client: unknown, command: { input: unknown }) =>
+      `signed:${JSON.stringify(command.input)}`,
   ),
 }));
 
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { toMediaItem, mediaItemsByLinkedId, type MediaRow } from "./mediaPresign";
+import {
+  toMediaItem,
+  mediaItemsByLinkedId,
+  type MediaRow,
+} from "./mediaPresign";
 
 const signedMock = getSignedUrl as unknown as Mock;
 
@@ -138,7 +143,12 @@ describe("standalone files", () => {
   it("is skipped by linkedId grouping — it is nobody's attachment", async () => {
     const grouped = await mediaItemsByLinkedId([
       imageRow({ id: "a", linkedId: "place-1" }),
-      imageRow({ id: "b", linkedType: "none", linkedId: null, origin: "import" }),
+      imageRow({
+        id: "b",
+        linkedType: "none",
+        linkedId: null,
+        origin: "import",
+      }),
     ]);
     expect([...grouped.keys()]).toEqual(["place-1"]);
     expect(grouped.get("place-1")).toHaveLength(1);

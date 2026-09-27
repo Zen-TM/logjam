@@ -69,7 +69,8 @@ function assertValidPosition(position: ImportedPosition): void {
   // (`"coordinates": [150.1, -33.1]` on a LineString, or none at all) and
   // escaped as a raw `TypeError: position is not iterable` from positionsOf,
   // straight to the user. Errors out of this module are static IMPORT_ERRORS.
-  if (!Array.isArray(position)) throw new Error(IMPORT_ERRORS.invalidCoordinates);
+  if (!Array.isArray(position))
+    throw new Error(IMPORT_ERRORS.invalidCoordinates);
   const [lon, lat] = position;
   if (
     typeof lon !== "number" ||
@@ -362,9 +363,12 @@ function kmlGeometries(node: Record<string, unknown>): ImportedGeometry[] {
       );
       if (ring.length > 0) rings.push(ring);
     }
-    if (rings.length > 0) geometries.push({ type: "Polygon", coordinates: rings });
+    if (rings.length > 0)
+      geometries.push({ type: "Polygon", coordinates: rings });
   }
-  for (const multi of asArray(node.MultiGeometry as Record<string, unknown>[])) {
+  for (const multi of asArray(
+    node.MultiGeometry as Record<string, unknown>[],
+  )) {
     geometries.push(...kmlGeometries(multi));
   }
   return geometries;
@@ -374,7 +378,9 @@ function collectPlacemarks(
   node: Record<string, unknown>,
   features: ImportedFeature[],
 ): void {
-  for (const placemark of asArray(node.Placemark as Record<string, unknown>[])) {
+  for (const placemark of asArray(
+    node.Placemark as Record<string, unknown>[],
+  )) {
     const name = textOf(placemark.name);
     for (const geometry of kmlGeometries(placemark)) {
       features.push({

@@ -63,7 +63,9 @@ export function importedFeaturesToSeries(
     // parallel array would have to be nested, and no writer we read produces
     // one, so guessing at its shape would invent times rather than read them.
     const coordTimes =
-      geometry.type === "LineString" ? feature.properties.coordTimes : undefined;
+      geometry.type === "LineString"
+        ? feature.properties.coordTimes
+        : undefined;
     for (const line of lines) {
       for (let i = 0; i < line.length; i++) {
         const position = line[i]!;
@@ -73,9 +75,12 @@ export function importedFeaturesToSeries(
         series.push({
           lon: position[0]!,
           lat: position[1]!,
-          altitudeM: altitudeM != null && Number.isFinite(altitudeM) ? altitudeM : null,
+          altitudeM:
+            altitudeM != null && Number.isFinite(altitudeM) ? altitudeM : null,
           timestampMs:
-            timestampMs != null && Number.isFinite(timestampMs) ? timestampMs : null,
+            timestampMs != null && Number.isFinite(timestampMs)
+              ? timestampMs
+              : null,
           segment,
         });
       }

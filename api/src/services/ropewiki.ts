@@ -85,7 +85,9 @@ export const ROPE_WIKI_FIELD_KEYS: Record<RopeWikiOwnableField, string> = {
  * a stored null renders as an empty field and satisfies a "has a value"
  * filter, where an absent key correctly reads as "not recorded".
  */
-export function ropeWikiFieldValues(c: RopeWikiCanyon): Record<string, unknown> {
+export function ropeWikiFieldValues(
+  c: RopeWikiCanyon,
+): Record<string, unknown> {
   const values: Record<string, unknown> = {};
   for (const field of ROPE_WIKI_OWNABLE_FIELDS) {
     const value = c[field];
@@ -363,10 +365,7 @@ export async function fetchAndParseRopeWiki(): Promise<{
     // 502, not a bare Error: an upstream refusal is not an internal fault, and
     // errorHandler turns anything non-AppError into a generic 500 that tells
     // the user nothing (this is exactly how the Cloudflare block presented).
-    throw new AppError(
-      502,
-      `RopeWiki returned HTTP ${response.status}`,
-    );
+    throw new AppError(502, `RopeWiki returned HTTP ${response.status}`);
   }
 
   return parseRopeWikiCsv(await response.text());

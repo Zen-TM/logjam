@@ -1,6 +1,6 @@
-import { defineConfig, type Plugin } from 'vite'
-import react from '@vitejs/plugin-react'
-import path from 'path'
+import { defineConfig, type Plugin } from "vite";
+import react from "@vitejs/plugin-react";
+import path from "path";
 
 // CSP injected only on production build. Vite dev server uses inline scripts +
 // eval for HMR, both of which would be blocked by 'self' policies.
@@ -20,20 +20,20 @@ export const CSP_PROD = [
   "form-action 'self'",
   "object-src 'none'",
   "upgrade-insecure-requests",
-].join('; ')
+].join("; ");
 
 function cspMetaPlugin(): Plugin {
   return {
-    name: 'csp-meta',
-    apply: 'build',
+    name: "csp-meta",
+    apply: "build",
     transformIndexHtml(html) {
       const metaTags = [
         `<meta http-equiv="Content-Security-Policy" content="${CSP_PROD}">`,
         `<meta name="referrer" content="strict-origin-when-cross-origin">`,
-      ].join('\n    ')
-      return html.replace('<head>', `<head>\n    ${metaTags}`)
+      ].join("\n    ");
+      return html.replace("<head>", `<head>\n    ${metaTags}`);
     },
-  }
+  };
 }
 
 // https://vite.dev/config/
@@ -64,7 +64,7 @@ export default defineConfig({
   plugins: [react(), cspMetaPlugin()],
   resolve: {
     alias: {
-      '@styles': path.resolve(__dirname, 'src/styles'),
+      "@styles": path.resolve(__dirname, "src/styles"),
     },
   },
   optimizeDeps: {
@@ -72,4 +72,4 @@ export default defineConfig({
       target: "esnext",
     },
   },
-})
+});

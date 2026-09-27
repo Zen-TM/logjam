@@ -225,16 +225,25 @@ export function tripDateKey(isoDate: string): string {
   return new Date(isoDate).toISOString().slice(0, 10);
 }
 
-function inRange(key: string, from?: string | null, to?: string | null): boolean {
+function inRange(
+  key: string,
+  from?: string | null,
+  to?: string | null,
+): boolean {
   if (from && key < from) return false;
   if (to && key > to) return false;
   return true;
 }
 
-function tripMatchesActivity(trip: StatsTrip, activity: string | null): boolean {
+function tripMatchesActivity(
+  trip: StatsTrip,
+  activity: string | null,
+): boolean {
   if (!activity) return true;
   if (activity === UNTAGGED_ACTIVITY) return trip.types.length === 0;
-  return trip.types.some((type) => type.toLowerCase() === activity.toLowerCase());
+  return trip.types.some(
+    (type) => type.toLowerCase() === activity.toLowerCase(),
+  );
 }
 
 type FieldSample = { value: unknown; label: string };
@@ -349,8 +358,12 @@ export function computeLogbookStats(input: StatsInput): LogbookStats {
     .filter((trip) => inRange(tripDateKey(trip.date), input.from, input.to))
     .filter((trip) => tripMatchesActivity(trip, activity));
 
-  const dayKeys = [...new Set(selected.map((trip) => tripDateKey(trip.date)))].sort();
-  const placeIds = new Set(selected.flatMap((trip) => trip.places.map((p) => p.id)));
+  const dayKeys = [
+    ...new Set(selected.map((trip) => tripDateKey(trip.date))),
+  ].sort();
+  const placeIds = new Set(
+    selected.flatMap((trip) => trip.places.map((p) => p.id)),
+  );
 
   // Cadence. One pass over the distinct days, ascending.
   let longestGapDays: number | null = null;
@@ -389,7 +402,10 @@ export function computeLogbookStats(input: StatsInput): LogbookStats {
     const date = new Date(trip.date);
     const year = date.getUTCFullYear();
     const month = date.getUTCMonth();
-    monthlyMap.set(`${year}-${month}`, (monthlyMap.get(`${year}-${month}`) ?? 0) + 1);
+    monthlyMap.set(
+      `${year}-${month}`,
+      (monthlyMap.get(`${year}-${month}`) ?? 0) + 1,
+    );
     yearlyMap.set(year, (yearlyMap.get(year) ?? 0) + 1);
   }
   const monthly = [...monthlyMap.entries()]
@@ -412,14 +428,21 @@ export function computeLogbookStats(input: StatsInput): LogbookStats {
   for (const trip of inRangeTrips) {
     const keys = trip.types.length > 0 ? trip.types : [UNTAGGED_ACTIVITY];
     for (const key of keys) {
-      const tally = tallyMap.get(key) ?? { trips: 0, places: new Set<string>() };
+      const tally = tallyMap.get(key) ?? {
+        trips: 0,
+        places: new Set<string>(),
+      };
       tally.trips += 1;
       for (const link of trip.places) tally.places.add(link.id);
       tallyMap.set(key, tally);
     }
   }
   const activityTallies = [...tallyMap.entries()]
-    .map(([type, tally]) => ({ type, trips: tally.trips, places: tally.places.size }))
+    .map(([type, tally]) => ({
+      type,
+      trips: tally.trips,
+      places: tally.places.size,
+    }))
     // Untagged sorts last whatever its count: it is the absence of an answer,
     // not the most popular activity.
     .sort((a, b) => {
@@ -553,8 +576,9 @@ export function computeLogbookStats(input: StatsInput): LogbookStats {
     trips: selected.length,
     days: dayKeys.length,
     places: placeIds.size,
-    activities: activityTallies.filter((tally) => tally.type !== UNTAGGED_ACTIVITY)
-      .length,
+    activities: activityTallies.filter(
+      (tally) => tally.type !== UNTAGGED_ACTIVITY,
+    ).length,
     firstDate: dayKeys[0] ?? null,
     lastDate: dayKeys[dayKeys.length - 1] ?? null,
     averageGapDays,

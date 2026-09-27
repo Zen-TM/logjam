@@ -15,17 +15,20 @@ import {
 // high zoom / extreme latitude — previously untested.
 
 describe("tile index round-trips", () => {
-  it.each([8, 12, 16, 20])("a point falls inside the tile it maps to (z=%i)", (z) => {
-    const lon = 150.3123;
-    const x = lon2tileX(lon, z);
-    expect(tileX2lon(x, z)).toBeLessThanOrEqual(lon); // west edge <= lon
-    expect(tileX2lon(x + 1, z)).toBeGreaterThan(lon); // next tile's west edge > lon
+  it.each([8, 12, 16, 20])(
+    "a point falls inside the tile it maps to (z=%i)",
+    (z) => {
+      const lon = 150.3123;
+      const x = lon2tileX(lon, z);
+      expect(tileX2lon(x, z)).toBeLessThanOrEqual(lon); // west edge <= lon
+      expect(tileX2lon(x + 1, z)).toBeGreaterThan(lon); // next tile's west edge > lon
 
-    const lat = -33.6392;
-    const y = lat2tileY(lat, z);
-    expect(tileY2lat(y, z)).toBeGreaterThanOrEqual(lat); // north edge >= lat
-    expect(tileY2lat(y + 1, z)).toBeLessThan(lat); // next tile's north edge < lat
-  });
+      const lat = -33.6392;
+      const y = lat2tileY(lat, z);
+      expect(tileY2lat(y, z)).toBeGreaterThanOrEqual(lat); // north edge >= lat
+      expect(tileY2lat(y + 1, z)).toBeLessThan(lat); // next tile's north edge < lat
+    },
+  );
 });
 
 describe("latToMercY", () => {
@@ -44,7 +47,15 @@ describe("computeTileToMapTransform", () => {
       z = 14;
     const widthPx = 1000,
       heightPx = 1000;
-    const t = computeTileToMapTransform(z, north, south, east, west, widthPx, heightPx);
+    const t = computeTileToMapTransform(
+      z,
+      north,
+      south,
+      east,
+      west,
+      widthPx,
+      heightPx,
+    );
 
     const minTileX = lon2tileX(west, z);
     const maxTileX = lon2tileX(east, z);
@@ -68,7 +79,14 @@ describe("computeTileToMapTransform", () => {
     expect(t.scaleX).toBeCloseTo(widthPx / t.srcW, 10);
     expect(t.scaleY).toBeCloseTo(heightPx / t.srcH, 10);
 
-    for (const v of [t.offsetX, t.offsetY, t.srcW, t.srcH, t.scaleX, t.scaleY]) {
+    for (const v of [
+      t.offsetX,
+      t.offsetY,
+      t.srcW,
+      t.srcH,
+      t.scaleX,
+      t.scaleY,
+    ]) {
       expect(Number.isFinite(v)).toBe(true);
     }
   });
@@ -91,7 +109,15 @@ describe("computeTileToMapTransform", () => {
   });
 
   it("stays finite at extreme (high-magnitude) latitude", () => {
-    const t = computeTileToMapTransform(6, -79.0, -80.0, 150.5, 149.5, 800, 600);
+    const t = computeTileToMapTransform(
+      6,
+      -79.0,
+      -80.0,
+      150.5,
+      149.5,
+      800,
+      600,
+    );
     expect(t.srcH).toBeGreaterThan(0);
     expect(Number.isFinite(t.srcH)).toBe(true);
     expect(Number.isFinite(t.offsetY)).toBe(true);
@@ -125,7 +151,10 @@ describe("geoPdfNativeMegapixels", () => {
   it("is monotonically increasing in extent area at fixed scale/zoom", () => {
     const small = geoPdfNativeMegapixels(baseExtent, 25000, 18);
     const doubledLon = geoPdfNativeMegapixels(
-      { ...baseExtent, east: baseExtent.west + (baseExtent.east - baseExtent.west) * 2 },
+      {
+        ...baseExtent,
+        east: baseExtent.west + (baseExtent.east - baseExtent.west) * 2,
+      },
       25000,
       18,
     );

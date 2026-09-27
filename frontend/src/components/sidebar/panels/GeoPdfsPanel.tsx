@@ -13,7 +13,17 @@
 // list view carries no extent to centre the map on — and in a browser opening a
 // PDF is fetching it. Its ⋯ holds every verb, Download first (DESIGN.md §5).
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronDown, Download, EllipsisVertical, FileText, Pencil, Plus, Share2, Trash2, X } from "lucide-react";
+import {
+  ChevronDown,
+  Download,
+  EllipsisVertical,
+  FileText,
+  Pencil,
+  Plus,
+  Share2,
+  Trash2,
+  X,
+} from "lucide-react";
 import { removeShareConfirm } from "@logjam/shared";
 import {
   apiFetch,
@@ -28,8 +38,26 @@ import { messageFromError } from "../../../errors/messageFromError";
 import { useToast } from "../../feedback/ToastProvider";
 import ShareDialog from "../../dialogs/ShareDialog";
 import type { GeoPdfTemplate } from "../../dialogs/GeoPdfDialog";
-import { Button, ChipRail, EmptyState, Hero, IconButton, IconTile, Menu, Row, StatusPill, type MenuEntry } from "../../../ui";
-import { MAP_IDENTITY, downloadFile, fileSubtitle, geoPdfLabel, geoPdfsBeingMade, plural } from "./mapsModel";
+import {
+  Button,
+  ChipRail,
+  EmptyState,
+  Hero,
+  IconButton,
+  IconTile,
+  Menu,
+  Row,
+  StatusPill,
+  type MenuEntry,
+} from "../../../ui";
+import {
+  MAP_IDENTITY,
+  downloadFile,
+  fileSubtitle,
+  geoPdfLabel,
+  geoPdfsBeingMade,
+  plural,
+} from "./mapsModel";
 import { MakingFooter } from "./MapsParts";
 import { useConfirm } from "./useConfirm";
 import classes from "./MapsPanel.module.css";
@@ -67,8 +95,17 @@ export default function GeoPdfsPanel({
   const [templatesLoaded, setTemplatesLoaded] = useState(false);
   // Non-null = the GeoPDF whose share dialog is open, with the row's own words
   // so the dialog's title matches what was pressed.
-  const [shareJob, setShareJob] = useState<{ id: string; label: string } | null>(null);
-  const { jobs, total: jobsTotal, loaded: jobsLoaded, error: jobsError, refetch: refetchJobs } = useGeoPdfJobs(true);
+  const [shareJob, setShareJob] = useState<{
+    id: string;
+    label: string;
+  } | null>(null);
+  const {
+    jobs,
+    total: jobsTotal,
+    loaded: jobsLoaded,
+    error: jobsError,
+    refetch: refetchJobs,
+  } = useGeoPdfJobs(true);
 
   useEffect(() => {
     if (geoPdfJobsRefetch > 0) refetchJobs();
@@ -109,12 +146,22 @@ export default function GeoPdfsPanel({
   // `jobs` arrives newest first (GET /geo-pdf orders by createdAt desc), and
   // filtering keeps that order.
   const beingMade = useMemo(() => geoPdfsBeingMade(jobs), [jobs]);
-  const made = useMemo(() => jobs.filter((job) => job.status === "completed"), [jobs]);
+  const made = useMemo(
+    () => jobs.filter((job) => job.status === "completed"),
+    [jobs],
+  );
 
   const entriesFor = (job: (typeof made)[number]): MenuEntry[] => {
     const label = geoPdfLabel(job);
     const download: MenuEntry[] = job.downloadUrl
-      ? [{ id: "download", label: "Download", icon: Download, onSelect: () => downloadFile(job.downloadUrl!) }]
+      ? [
+          {
+            id: "download",
+            label: "Download",
+            icon: Download,
+            onSelect: () => downloadFile(job.downloadUrl!),
+          },
+        ]
       : [];
     // Owner-only: a GeoPDF shared with you is yours to read and download, not
     // to share on or delete, and the API answers both with 403 — so they are
@@ -122,7 +169,12 @@ export default function GeoPdfsPanel({
     if (job.syncRole === "owner") {
       return [
         ...download,
-        { id: "share", label: "Share…", icon: Share2, onSelect: () => setShareJob({ id: job.id, label }) },
+        {
+          id: "share",
+          label: "Share…",
+          icon: Share2,
+          onSelect: () => setShareJob({ id: job.id, label }),
+        },
         { id: "delete-sep", separator: true },
         {
           id: "delete",
@@ -143,7 +195,10 @@ export default function GeoPdfsPanel({
     // A GeoPDF has no place to inherit visibility from, so one that is not
     // yours always reached you on a share of its own, and that share is yours
     // to drop. NOT danger: the owner keeps the original.
-    const confirm = removeShareConfirm({ kindLabel: "GeoPDF", itemName: label });
+    const confirm = removeShareConfirm({
+      kindLabel: "GeoPDF",
+      itemName: label,
+    });
     return [
       ...download,
       { id: "remove-sep", separator: true },
@@ -164,7 +219,9 @@ export default function GeoPdfsPanel({
                 refetchJobs();
               } catch (err) {
                 console.error(err);
-                toast.error(messageFromError(err, "Couldn't remove that GeoPDF."));
+                toast.error(
+                  messageFromError(err, "Couldn't remove that GeoPDF."),
+                );
               }
             },
           }),
@@ -173,8 +230,18 @@ export default function GeoPdfsPanel({
   };
 
   const templateEntries = (template: GeoPdfTemplate): MenuEntry[] => [
-    { id: "make", label: "Make a GeoPDF with this", icon: FileText, onSelect: () => onOpenGeoPdfWithTemplate(template.id) },
-    { id: "edit", label: "Edit…", icon: Pencil, onSelect: () => onEditGeoPdfTemplate(template) },
+    {
+      id: "make",
+      label: "Make a GeoPDF with this",
+      icon: FileText,
+      onSelect: () => onOpenGeoPdfWithTemplate(template.id),
+    },
+    {
+      id: "edit",
+      label: "Edit…",
+      icon: Pencil,
+      onSelect: () => onEditGeoPdfTemplate(template),
+    },
     { id: "delete-sep", separator: true },
     {
       id: "delete",
@@ -184,15 +251,25 @@ export default function GeoPdfsPanel({
       onSelect: () =>
         ask({
           title: `Delete the template “${template.name}”?`,
-          message: "The template is deleted. GeoPDFs already made with it stay.",
+          message:
+            "The template is deleted. GeoPDFs already made with it stay.",
           confirmLabel: "Delete",
           run: async () => {
             try {
-              await apiFetch(`/geo-pdf-templates/${template.id}`, { method: "DELETE" });
-              setTemplates((previous) => previous.filter((each) => each.id !== template.id));
+              await apiFetch(`/geo-pdf-templates/${template.id}`, {
+                method: "DELETE",
+              });
+              setTemplates((previous) =>
+                previous.filter((each) => each.id !== template.id),
+              );
             } catch (err) {
               console.error(err);
-              toast.error(messageFromError(err, "Couldn't delete template. Please try again."));
+              toast.error(
+                messageFromError(
+                  err,
+                  "Couldn't delete template. Please try again.",
+                ),
+              );
             }
           },
         }),
@@ -201,17 +278,39 @@ export default function GeoPdfsPanel({
 
   const hero = (
     <Hero
-      title={!jobsLoaded ? "GeoPDFs" : made.length === 0 ? "No GeoPDFs yet" : plural(made.length, "GeoPDF")}
+      title={
+        !jobsLoaded
+          ? "GeoPDFs"
+          : made.length === 0
+            ? "No GeoPDFs yet"
+            : plural(made.length, "GeoPDF")
+      }
       actions={
         <Menu
           label="Make a GeoPDF"
           placement="bottom-end"
           entries={[
-            { id: "make", label: "Make a GeoPDF", icon: FileText, onSelect: onOpenGeoPdf },
-            { id: "template", label: "New template…", icon: Plus, onSelect: onCreateGeoPdfTemplate },
+            {
+              id: "make",
+              label: "Make a GeoPDF",
+              icon: FileText,
+              onSelect: onOpenGeoPdf,
+            },
+            {
+              id: "template",
+              label: "New template…",
+              icon: Plus,
+              onSelect: onCreateGeoPdfTemplate,
+            },
           ]}
           trigger={(props) => (
-            <Button {...props} compact variant="filled" icon={Plus} trailingIcon={ChevronDown}>
+            <Button
+              {...props}
+              compact
+              variant="filled"
+              icon={Plus}
+              trailingIcon={ChevronDown}
+            >
               Make
             </Button>
           )}
@@ -220,7 +319,11 @@ export default function GeoPdfsPanel({
     />
   );
 
-  const nothingYet = jobsLoaded && templatesLoaded && jobs.length === 0 && templates.length === 0;
+  const nothingYet =
+    jobsLoaded &&
+    templatesLoaded &&
+    jobs.length === 0 &&
+    templates.length === 0;
 
   const list = !jobsLoaded ? (
     <div className={classes.emptyArea} role="status">
@@ -233,7 +336,12 @@ export default function GeoPdfsPanel({
         title="No GeoPDFs yet"
         body="Frame an area on the map, and Logjam Web makes a map of it to print, or to load into Logjam GPS for the field."
         actions={
-          <Button compact variant="filled" icon={FileText} onClick={onOpenGeoPdf}>
+          <Button
+            compact
+            variant="filled"
+            icon={FileText}
+            onClick={onOpenGeoPdf}
+          >
             Make a GeoPDF
           </Button>
         }
@@ -242,90 +350,123 @@ export default function GeoPdfsPanel({
   ) : (
     <div className={classes.list}>
       {tab === "maps" && (
-      <section className={classes.section} aria-labelledby="maps-geopdfs">
-        {/* The tab is the heading: a chip that says "Maps 12" over a heading
+        <section className={classes.section} aria-labelledby="maps-geopdfs">
+          {/* The tab is the heading: a chip that says "Maps 12" over a heading
             that says "GEOPDFS 12" is the same line drawn twice. */}
-        <h3 id="maps-geopdfs" className="visually-hidden">
-          GeoPDFs
-        </h3>
-        {/* The reaper's `expireCompletedGeoPdfJobs`, on the same TTL as topo
+          <h3 id="maps-geopdfs" className="visually-hidden">
+            GeoPDFs
+          </h3>
+          {/* The reaper's `expireCompletedGeoPdfJobs`, on the same TTL as topo
             exports. The page never said so, and a GeoPDF quietly vanishing a
             week later reads as data loss. */}
-        <p className={classes.note}>
-          {made.length === 0 ? "None finished yet. " : ""}Kept for 7 days after they're made — download one to keep it.
-        </p>
-        {made.map((job) => {
-          const label = geoPdfLabel(job);
-          return (
-            <Row
-              key={job.id}
-              data-geopdf-id={job.id}
-              title={label}
-              subtitle={fileSubtitle({ bytes: job.resultBytes, createdAt: job.createdAt })}
-              description={MAP_IDENTITY.geoPdf.label}
-              leading={<IconTile icon={FileText} hue={MAP_IDENTITY.geoPdf.hue} label={MAP_IDENTITY.geoPdf.label} />}
-              onOpen={job.downloadUrl ? () => downloadFile(job.downloadUrl!) : undefined}
-              trailing={
-                <>
-                  {job.syncRole !== "owner" && <StatusPill label="Shared" tone="outline" />}
-                  <Menu
-                    label={`Actions for ${label}`}
-                    title={label}
-                    placement="right-start"
-                    entries={entriesFor(job)}
-                    trigger={(props) => <IconButton {...props} icon={EllipsisVertical} label={`Actions for ${label}`} />}
-                  />
-                </>
-              }
-            />
-          );
-        })}
-        {/* The server caps the list; say so rather than letting older GeoPDFs
-            quietly not exist (DESIGN.md §8). */}
-        {jobsTotal != null && jobsTotal > jobs.length && (
           <p className={classes.note}>
-            Showing your {jobs.length} most recent GeoPDFs of {jobsTotal}. Older ones aren’t loaded.
+            {made.length === 0 ? "None finished yet. " : ""}Kept for 7 days
+            after they're made — download one to keep it.
           </p>
-        )}
-      </section>
+          {made.map((job) => {
+            const label = geoPdfLabel(job);
+            return (
+              <Row
+                key={job.id}
+                data-geopdf-id={job.id}
+                title={label}
+                subtitle={fileSubtitle({
+                  bytes: job.resultBytes,
+                  createdAt: job.createdAt,
+                })}
+                description={MAP_IDENTITY.geoPdf.label}
+                leading={
+                  <IconTile
+                    icon={FileText}
+                    hue={MAP_IDENTITY.geoPdf.hue}
+                    label={MAP_IDENTITY.geoPdf.label}
+                  />
+                }
+                onOpen={
+                  job.downloadUrl
+                    ? () => downloadFile(job.downloadUrl!)
+                    : undefined
+                }
+                trailing={
+                  <>
+                    {job.syncRole !== "owner" && (
+                      <StatusPill label="Shared" tone="outline" />
+                    )}
+                    <Menu
+                      label={`Actions for ${label}`}
+                      title={label}
+                      placement="right-start"
+                      entries={entriesFor(job)}
+                      trigger={(props) => (
+                        <IconButton
+                          {...props}
+                          icon={EllipsisVertical}
+                          label={`Actions for ${label}`}
+                        />
+                      )}
+                    />
+                  </>
+                }
+              />
+            );
+          })}
+          {/* The server caps the list; say so rather than letting older GeoPDFs
+            quietly not exist (DESIGN.md §8). */}
+          {jobsTotal != null && jobsTotal > jobs.length && (
+            <p className={classes.note}>
+              Showing your {jobs.length} most recent GeoPDFs of {jobsTotal}.
+              Older ones aren’t loaded.
+            </p>
+          )}
+        </section>
       )}
 
       {tab === "templates" && (
-      <section className={classes.section} aria-labelledby="maps-geopdf-templates">
-        <h3 id="maps-geopdf-templates" className="visually-hidden">
-          Templates
-        </h3>
-        {templatesLoaded && templates.length === 0 && (
-          <p className={classes.note}>A template keeps paper, scale and layers to make the next GeoPDF with.</p>
-        )}
-        {templates.map((template) => (
-          <Row
-            key={template.id}
-            title={template.name}
-            description={MAP_IDENTITY.geoPdfTemplate.label}
-            leading={
-              <IconTile
-                icon={MAP_IDENTITY.geoPdfTemplate.icon}
-                hue={MAP_IDENTITY.geoPdfTemplate.hue}
-                label={MAP_IDENTITY.geoPdfTemplate.label}
-              />
-            }
-            // What a template is FOR: making a GeoPDF with it.
-            onOpen={() => onOpenGeoPdfWithTemplate(template.id)}
-            trailing={
-              <Menu
-                label={`Actions for ${template.name}`}
-                title={template.name}
-                placement="right-start"
-                entries={templateEntries(template)}
-                trigger={(props) => (
-                  <IconButton {...props} icon={EllipsisVertical} label={`Actions for ${template.name}`} />
-                )}
-              />
-            }
-          />
-        ))}
-      </section>
+        <section
+          className={classes.section}
+          aria-labelledby="maps-geopdf-templates"
+        >
+          <h3 id="maps-geopdf-templates" className="visually-hidden">
+            Templates
+          </h3>
+          {templatesLoaded && templates.length === 0 && (
+            <p className={classes.note}>
+              A template keeps paper, scale and layers to make the next GeoPDF
+              with.
+            </p>
+          )}
+          {templates.map((template) => (
+            <Row
+              key={template.id}
+              title={template.name}
+              description={MAP_IDENTITY.geoPdfTemplate.label}
+              leading={
+                <IconTile
+                  icon={MAP_IDENTITY.geoPdfTemplate.icon}
+                  hue={MAP_IDENTITY.geoPdfTemplate.hue}
+                  label={MAP_IDENTITY.geoPdfTemplate.label}
+                />
+              }
+              // What a template is FOR: making a GeoPDF with it.
+              onOpen={() => onOpenGeoPdfWithTemplate(template.id)}
+              trailing={
+                <Menu
+                  label={`Actions for ${template.name}`}
+                  title={template.name}
+                  placement="right-start"
+                  entries={templateEntries(template)}
+                  trigger={(props) => (
+                    <IconButton
+                      {...props}
+                      icon={EllipsisVertical}
+                      label={`Actions for ${template.name}`}
+                    />
+                  )}
+                />
+              }
+            />
+          ))}
+        </section>
       )}
     </div>
   );
@@ -340,7 +481,11 @@ export default function GeoPdfsPanel({
             label="GeoPDFs view"
             options={[
               { value: "maps", label: "Maps", count: made.length },
-              { value: "templates", label: "Templates", count: templatesLoaded ? templates.length : undefined },
+              {
+                value: "templates",
+                label: "Templates",
+                count: templatesLoaded ? templates.length : undefined,
+              },
             ]}
             value={tab}
             onChange={setTab}
@@ -360,7 +505,8 @@ export default function GeoPdfsPanel({
           title={`Share ${shareJob.label}`}
           blurb={
             <>
-              Recipients can view and download this GeoPDF. They cannot delete it, and you can unshare at any time.
+              Recipients can view and download this GeoPDF. They cannot delete
+              it, and you can unshare at any time.
             </>
           }
           friends={friends}
@@ -368,7 +514,9 @@ export default function GeoPdfsPanel({
           onClose={() => setShareJob(null)}
           listShares={() => getEntityShares("geoPdfJob", shareJob.id)}
           share={(userId) => shareEntityWith("geoPdfJob", shareJob.id, userId)}
-          unshare={(userId) => unshareEntityWith("geoPdfJob", shareJob.id, userId)}
+          unshare={(userId) =>
+            unshareEntityWith("geoPdfJob", shareJob.id, userId)
+          }
         />
       )}
 

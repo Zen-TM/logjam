@@ -192,7 +192,8 @@ export default function WayDetailPanel({
   const colour = route?.color ?? file?.color ?? way.color;
   const shownColour = pendingColour ?? colour;
   useEffect(() => {
-    if (pendingColour !== null && colour === pendingColour) setPendingColour(null);
+    if (pendingColour !== null && colour === pendingColour)
+      setPendingColour(null);
   }, [colour, pendingColour]);
 
   // The SAME densification the server profiled, so a sample index maps straight
@@ -205,7 +206,9 @@ export default function WayDetailPanel({
     (index: number | null) => {
       const position = index == null ? null : samplePositions[index];
       routeHover.set(
-        position ? { position: [position.lon, position.lat], color: shownColour } : null,
+        position
+          ? { position: [position.lon, position.lat], color: shownColour }
+          : null,
       );
     },
     [samplePositions, routeHover, shownColour],
@@ -229,7 +232,8 @@ export default function WayDetailPanel({
   /** The shared place this way arrived through, where it arrived through one.
    *  Whether it DID is `way.viaPlace`, decided once in `waysModel` — this is
    *  only how to name it. */
-  const sharingPlace = sharedPlaces.find((place) => place.id === placeId) ?? null;
+  const sharingPlace =
+    sharedPlaces.find((place) => place.id === placeId) ?? null;
   const ownerName = route ? ownerUsername(friends, route.ownerId) : null;
 
   const run = async (action: () => Promise<unknown>, failure: string) => {
@@ -253,24 +257,52 @@ export default function WayDetailPanel({
         // Distance takes the row and climb/descent pair beneath it: those two
         // are one fact about the line, and side by side is what makes them
         // comparable (operator, 2026-09-17).
-        { label: "Distance", value: formatDistanceM(routeLengthM(route.points)), span: true },
-        { label: "Climb", value: profile ? `↑ ${Math.round(profile.gainM)} m` : "—" },
-        { label: "Descent", value: profile ? `↓ ${Math.round(profile.lossM)} m` : "—" },
+        {
+          label: "Distance",
+          value: formatDistanceM(routeLengthM(route.points)),
+          span: true,
+        },
+        {
+          label: "Climb",
+          value: profile ? `↑ ${Math.round(profile.gainM)} m` : "—",
+        },
+        {
+          label: "Descent",
+          value: profile ? `↓ ${Math.round(profile.lossM)} m` : "—",
+        },
       ]
     : [
         ...(way.distanceM != null
-          ? [{ label: "Distance", value: formatDistanceM(way.distanceM), span: true }]
+          ? [
+              {
+                label: "Distance",
+                value: formatDistanceM(way.distanceM),
+                span: true,
+              },
+            ]
           : []),
         ...(file?.metadata.elevationGainM != null
-          ? [{ label: "Climb", value: `↑ ${Math.round(file.metadata.elevationGainM)} m` }]
+          ? [
+              {
+                label: "Climb",
+                value: `↑ ${Math.round(file.metadata.elevationGainM)} m`,
+              },
+            ]
           : []),
         ...(file?.metadata.elevationLossM != null
-          ? [{ label: "Descent", value: `↓ ${Math.round(file.metadata.elevationLossM)} m` }]
+          ? [
+              {
+                label: "Descent",
+                value: `↓ ${Math.round(file.metadata.elevationLossM)} m`,
+              },
+            ]
           : []),
         ...(file?.metadata.featureCount != null
           ? [{ label: "Features", value: String(file.metadata.featureCount) }]
           : []),
-        ...(file != null ? [{ label: "Size", value: formatBytes(file.fileSizeBytes) }] : []),
+        ...(file != null
+          ? [{ label: "Size", value: formatBytes(file.fileSizeBytes) }]
+          : []),
       ];
 
   // ── Verbs ─────────────────────────────────────────────────────────────
@@ -278,7 +310,9 @@ export default function WayDetailPanel({
     if (!route) return;
     downloadText(
       exportFilename(route.name, format),
-      format === "gpx" ? routeToGpx(route.name, route.points) : routeToKml(route.name, route.points),
+      format === "gpx"
+        ? routeToGpx(route.name, route.points)
+        : routeToKml(route.name, route.points),
       format === "gpx" ? GPX_MIME_TYPE : KML_MIME_TYPE,
     );
   };
@@ -398,23 +432,25 @@ export default function WayDetailPanel({
     onVerbConsumed();
   }, [initialVerb, onVerbConsumed]);
 
-  const entries: MenuEntry[] = wayVerbs(live, "detail").flatMap((verb, index, all) => {
-    const item: MenuEntry = {
-      id: verb.id,
-      label: verb.label,
-      ...(VERB_ICON[verb.id] ? { icon: VERB_ICON[verb.id] } : {}),
-      ...(verb.danger ? { danger: true } : {}),
-      disabled: busy,
-      onSelect: () => runVerb(verb.id),
-    };
-    // A rule sits above the verbs that end the user's relationship with the
-    // way, so the last step of parting with something is never adjacent to an
-    // ordinary one. Not keyed on `danger`: Remove belongs below the rule and
-    // destroys nothing (wayActions.ts).
-    return verb.separated && index > 0 && !all[index - 1].separated
-      ? [{ id: `${verb.id}-sep`, separator: true } as MenuEntry, item]
-      : [item];
-  });
+  const entries: MenuEntry[] = wayVerbs(live, "detail").flatMap(
+    (verb, index, all) => {
+      const item: MenuEntry = {
+        id: verb.id,
+        label: verb.label,
+        ...(VERB_ICON[verb.id] ? { icon: VERB_ICON[verb.id] } : {}),
+        ...(verb.danger ? { danger: true } : {}),
+        disabled: busy,
+        onSelect: () => runVerb(verb.id),
+      };
+      // A rule sits above the verbs that end the user's relationship with the
+      // way, so the last step of parting with something is never adjacent to an
+      // ordinary one. Not keyed on `danger`: Remove belongs below the rule and
+      // destroys nothing (wayActions.ts).
+      return verb.separated && index > 0 && !all[index - 1].separated
+        ? [{ id: `${verb.id}-sep`, separator: true } as MenuEntry, item]
+        : [item];
+    },
+  );
 
   const handleUnlink = () => {
     if (!route) return;
@@ -456,7 +492,9 @@ export default function WayDetailPanel({
     }
     setPendingLink({
       placeId: targetPlaceId,
-      placeName: ownedPlaces.find((place) => place.id === targetPlaceId)?.name ?? "That place",
+      placeName:
+        ownedPlaces.find((place) => place.id === targetPlaceId)?.name ??
+        "That place",
       incumbentName: incumbent.name,
     });
   };
@@ -491,7 +529,11 @@ export default function WayDetailPanel({
               placement="bottom-end"
               entries={entries}
               trigger={(props) => (
-                <IconButton {...props} icon={EllipsisVertical} label={`Actions for ${way.title}`} />
+                <IconButton
+                  {...props}
+                  icon={EllipsisVertical}
+                  label={`Actions for ${way.title}`}
+                />
               )}
             />
             <IconButton icon={X} label="Close panel" onClick={onClose} />
@@ -507,13 +549,16 @@ export default function WayDetailPanel({
             walked it — better than anything re-derived from a simplified line. */}
         {route && (
           <section className={classes.section}>
-            {profileLoading && <p className={classes.note}>Reading the terrain…</p>}
+            {profileLoading && (
+              <p className={classes.note}>Reading the terrain…</p>
+            )}
             {profileError && <p className={classes.note}>{profileError}</p>}
             {profile && (
               <>
                 {profile.minM != null && profile.maxM != null && (
                   <p className={classes.band}>
-                    {Math.round(profile.minM)}–{Math.round(profile.maxM)} m above sea level
+                    {Math.round(profile.minM)}–{Math.round(profile.maxM)} m
+                    above sea level
                   </p>
                 )}
                 {/* The chart's axes named: an unlabelled height profile reads as
@@ -564,7 +609,12 @@ export default function WayDetailPanel({
             <div className={classes.linkRow}>
               <span className={classes.linkName}>{linkedPlace.name}</span>
               {owned && route && (
-                <Button compact icon={Link2Off} disabled={busy} onClick={handleUnlink}>
+                <Button
+                  compact
+                  icon={Link2Off}
+                  disabled={busy}
+                  onClick={handleUnlink}
+                >
                   Unlink
                 </Button>
               )}
@@ -585,7 +635,11 @@ export default function WayDetailPanel({
             // way to stop seeing it — it carries no share row of its own.
             <div className={classes.linkRow}>
               <span className={classes.linkName}>{sharingPlace.name}</span>
-              <Button compact icon={MapPin} onClick={() => onOpenPlace(sharingPlace.id)}>
+              <Button
+                compact
+                icon={MapPin}
+                onClick={() => onOpenPlace(sharingPlace.id)}
+              >
                 Open
               </Button>
             </div>
@@ -633,7 +687,10 @@ export default function WayDetailPanel({
           busy={busy}
           onSave={(name) => {
             setRenaming(false);
-            void run(() => renameMedia(file.id, name), "Couldn't rename that file.");
+            void run(
+              () => renameMedia(file.id, name),
+              "Couldn't rename that file.",
+            );
           }}
           onClose={() => setRenaming(false)}
         />
@@ -663,8 +720,20 @@ export default function WayDetailPanel({
           makes) and the button is not the red one a delete uses. */}
       <ConfirmDialog
         open={ending === "remove"}
-        title={removeShareConfirm({ kindLabel: "route", itemName: way.title, ownerName }).title}
-        message={removeShareConfirm({ kindLabel: "route", itemName: way.title, ownerName }).body}
+        title={
+          removeShareConfirm({
+            kindLabel: "route",
+            itemName: way.title,
+            ownerName,
+          }).title
+        }
+        message={
+          removeShareConfirm({
+            kindLabel: "route",
+            itemName: way.title,
+            ownerName,
+          }).body
+        }
         confirmLabel="Remove"
         confirmColor="primary"
         busy={busy}
@@ -730,7 +799,12 @@ function RenameWayDialog({
           <Button onClick={onClose} disabled={busy}>
             Cancel
           </Button>
-          <Button variant="filled" busy={busy} disabled={!canSave} onClick={() => onSave(trimmed)}>
+          <Button
+            variant="filled"
+            busy={busy}
+            disabled={!canSave}
+            onClick={() => onSave(trimmed)}
+          >
             Save
           </Button>
         </>

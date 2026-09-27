@@ -50,10 +50,7 @@ describe("users routes (fake auth = alice)", () => {
   });
 
   it("PATCH /users/me rejects an empty update body", async () => {
-    const res = await request(API_URL)
-      .patch("/users/me")
-      .set(AUTH)
-      .send({});
+    const res = await request(API_URL).patch("/users/me").set(AUTH).send({});
     expect(res.status).toBe(400);
   });
 
@@ -159,7 +156,8 @@ describe("users routes (fake auth = alice)", () => {
     for (const job of res.body.topoJobs) {
       // footprint geometry round-trips; byte counts are plain numbers.
       expect(job).toHaveProperty("footprint");
-      if (job.outputBytes != null) expect(typeof job.outputBytes).toBe("number");
+      if (job.outputBytes != null)
+        expect(typeof job.outputBytes).toBe("number");
     }
     for (const exportJob of res.body.topoExportJobs) {
       if (exportJob.resultBytes != null)

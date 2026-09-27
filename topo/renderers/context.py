@@ -40,7 +40,7 @@ class RenderContext:
     work_dir: Path
     source_jobs: List[dict]
     layers: List[str]
-    bundling: str   # "composite" | "per-layer"
+    bundling: str  # "composite" | "per-layer"
     vector_style: Dict[str, Any]
 
     # Local caches populated lazily by ensure_* helpers.
@@ -71,7 +71,8 @@ class RenderContext:
         for layer in requested:
             if layer in RASTER_LAYERS:
                 match = next(
-                    (o for o in self.output_keys_for(job) if o.get("name") == layer), None
+                    (o for o in self.output_keys_for(job) if o.get("name") == layer),
+                    None,
                 )
                 if match and match.get("cogKey"):
                     available.append(layer)
@@ -97,7 +98,9 @@ class RenderContext:
         job = next((j for j in self.source_jobs if j["id"] == job_id), None)
         if job is None:
             raise RenderError(f"Source job {job_id} not in context")
-        match = next((o for o in self.output_keys_for(job) if o.get("name") == layer), None)
+        match = next(
+            (o for o in self.output_keys_for(job) if o.get("name") == layer), None
+        )
         if not match or not match.get("cogKey"):
             raise RenderError(f"Source job {job_id} has no {layer} COG")
 

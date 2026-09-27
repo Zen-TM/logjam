@@ -55,13 +55,17 @@ describe("inboxWhere", () => {
 // throttle", so the branch gets its own test.
 describe("isMissingObjectError", () => {
   it("treats a definitively absent object as gone", () => {
-    expect(isMissingObjectError({ $metadata: { httpStatusCode: 404 } })).toBe(true);
+    expect(isMissingObjectError({ $metadata: { httpStatusCode: 404 } })).toBe(
+      true,
+    );
     expect(isMissingObjectError({ name: "NotFound" })).toBe(true);
     expect(isMissingObjectError({ name: "NoSuchKey" })).toBe(true);
   });
 
   it("leaves a fault retryable rather than retiring the send", () => {
-    expect(isMissingObjectError({ $metadata: { httpStatusCode: 503 } })).toBe(false);
+    expect(isMissingObjectError({ $metadata: { httpStatusCode: 503 } })).toBe(
+      false,
+    );
     expect(isMissingObjectError({ name: "ThrottlingException" })).toBe(false);
     expect(isMissingObjectError({ name: "AccessDenied" })).toBe(false);
     expect(isMissingObjectError(new Error("socket hang up"))).toBe(false);

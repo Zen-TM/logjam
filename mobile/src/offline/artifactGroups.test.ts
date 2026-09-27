@@ -9,7 +9,9 @@ import {
 } from "./artifactGroups";
 import type { MapArtifact } from "../map/sourceResolver";
 
-function artifact(overrides: Partial<MapArtifact> & { id: string }): MapArtifact {
+function artifact(
+  overrides: Partial<MapArtifact> & { id: string },
+): MapArtifact {
   return {
     kind: "basemap-region",
     logicalKey: "six-topo",
@@ -27,14 +29,20 @@ function artifact(overrides: Partial<MapArtifact> & { id: string }): MapArtifact
 
 describe("group keys", () => {
   it("groups a run's rows together and leaves legacy rows standing alone", () => {
-    expect(regionGroupKey(artifact({ id: "a", groupId: "run-1" }))).toBe("run-1");
+    expect(regionGroupKey(artifact({ id: "a", groupId: "run-1" }))).toBe(
+      "run-1",
+    );
     expect(regionGroupKey(artifact({ id: "a" }))).toBe("a");
   });
 
   it("takes a topo overlay's job id off its logicalKey", () => {
-    expect(overlayJobId(artifact({ id: "a", logicalKey: "job-9/contours" }))).toBe("job-9");
+    expect(
+      overlayJobId(artifact({ id: "a", logicalKey: "job-9/contours" })),
+    ).toBe("job-9");
     // Defensive: a key with no layer suffix is its own job rather than a crash.
-    expect(overlayJobId(artifact({ id: "a", logicalKey: "job-9" }))).toBe("job-9");
+    expect(overlayJobId(artifact({ id: "a", logicalKey: "job-9" }))).toBe(
+      "job-9",
+    );
   });
 });
 
@@ -54,9 +62,21 @@ describe("groupArtifacts", () => {
   it("sums sizes, unions extents and keeps arrival order", () => {
     const groups = groupArtifacts(
       [
-        artifact({ id: "1", groupId: "run-1", groupLabel: "Blue Gum", sizeBytes: 10, bbox: [150, -34, 151, -33] }),
+        artifact({
+          id: "1",
+          groupId: "run-1",
+          groupLabel: "Blue Gum",
+          sizeBytes: 10,
+          bbox: [150, -34, 151, -33],
+        }),
         artifact({ id: "2", sizeBytes: 5 }),
-        artifact({ id: "3", groupId: "run-1", groupLabel: "Blue Gum", sizeBytes: 7, bbox: [149, -34, 150, -33] }),
+        artifact({
+          id: "3",
+          groupId: "run-1",
+          groupLabel: "Blue Gum",
+          sizeBytes: 7,
+          bbox: [149, -34, 150, -33],
+        }),
       ],
       regionGroupKey,
     );
@@ -69,11 +89,21 @@ describe("groupArtifacts", () => {
 
   it("prefers the group name over a single row's rename, and falls back to it", () => {
     const [named] = groupArtifacts(
-      [artifact({ id: "1", groupId: "r", label: "row name", groupLabel: "area name" })],
+      [
+        artifact({
+          id: "1",
+          groupId: "r",
+          label: "row name",
+          groupLabel: "area name",
+        }),
+      ],
       regionGroupKey,
     );
     expect(named.label).toBe("area name");
-    const [legacy] = groupArtifacts([artifact({ id: "1", label: "row name" })], regionGroupKey);
+    const [legacy] = groupArtifacts(
+      [artifact({ id: "1", label: "row name" })],
+      regionGroupKey,
+    );
     expect(legacy.label).toBe("row name");
     const [anonymous] = groupArtifacts([artifact({ id: "1" })], regionGroupKey);
     expect(anonymous.label).toBeNull();
@@ -113,7 +143,10 @@ describe("a resumed download rejoins its run", () => {
   });
 
   it("keeps a group-less legacy row on its own card", () => {
-    const groups = groupArtifacts([of("a", "G"), of("old", null)], regionGroupKey);
+    const groups = groupArtifacts(
+      [of("a", "G"), of("old", null)],
+      regionGroupKey,
+    );
     expect(groups).toHaveLength(2);
   });
 });

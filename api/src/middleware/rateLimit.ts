@@ -65,7 +65,9 @@ const USER_PATCH_MAX_DEFAULT = 30;
 // file (customFields, placeTypes) left it empty and the NEXT file's first
 // PATCH /users/me 429'd, failing as an assertion about users. The per-file
 // retry wrappers only protect the file that has them. Same fail-closed rule.
-export function userPatchLimitMax(env: NodeJS.ProcessEnv = process.env): number {
+export function userPatchLimitMax(
+  env: NodeJS.ProcessEnv = process.env,
+): number {
   return ciLimitMax("RATE_LIMIT_USER_PATCH_MAX", USER_PATCH_MAX_DEFAULT, env);
 }
 

@@ -23,7 +23,10 @@ describe("hand-minted seed ids", () => {
   // _actors.ts restates the seed's ids as literals for the integration suite;
   // a drift there is the same bug wearing a different hat.
   it("_actors.ts holds only UUIDv4 literals", () => {
-    const source = readFileSync(join(__dirname, "../__tests__/_actors.ts"), "utf8");
+    const source = readFileSync(
+      join(__dirname, "../__tests__/_actors.ts"),
+      "utf8",
+    );
     const literals =
       source.match(/"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}"/gi) ?? [];
     expect(literals.length).toBeGreaterThan(0);
@@ -34,7 +37,10 @@ describe("hand-minted seed ids", () => {
 
   // The seed itself must not reintroduce a raw literal that bypasses seedId.
   it("seed.ts hand-mints ids only through seedId", () => {
-    const source = readFileSync(join(__dirname, "../../prisma/seed.ts"), "utf8");
+    const source = readFileSync(
+      join(__dirname, "../../prisma/seed.ts"),
+      "utf8",
+    );
     const literals =
       source.match(/"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}"/gi) ?? [];
     expect(literals).toEqual([]);
@@ -46,7 +52,10 @@ describe("hand-minted seed ids", () => {
   // unchecked for UUIDv4 shape — which is the whole failure this file exists
   // to prevent.
   it("every prefix seed.ts mints under is declared", () => {
-    const source = readFileSync(join(__dirname, "../../prisma/seed.ts"), "utf8");
+    const source = readFileSync(
+      join(__dirname, "../../prisma/seed.ts"),
+      "utf8",
+    );
     const used = new Set(
       [...source.matchAll(/\bseedId\("([0-9a-f])"/gi)].map((m) => m[1]),
     );
@@ -62,13 +71,17 @@ describe("hand-minted seed ids", () => {
   // every create of a SYNC_ENTITY_TYPES model passes an id, in the call or in
   // the builder the call hands its data to (placeCreate).
   it("every seeded row of a synced entity is created with a pinned id", () => {
-    const source = readFileSync(join(__dirname, "../../prisma/seed.ts"), "utf8");
+    const source = readFileSync(
+      join(__dirname, "../../prisma/seed.ts"),
+      "utf8",
+    );
     // The text from an opening paren to its match.
     const argsAt = (open: number) => {
       let depth = 0;
       for (let i = open; i < source.length; i++) {
         if (source[i] === "(") depth++;
-        else if (source[i] === ")" && --depth === 0) return source.slice(open, i + 1);
+        else if (source[i] === ")" && --depth === 0)
+          return source.slice(open, i + 1);
       }
       throw new Error(`unbalanced call at ${open}`);
     };
@@ -78,16 +91,23 @@ describe("hand-minted seed ids", () => {
       const at = source.search(new RegExp(`\\nfunction ${name}\\(`));
       return at < 0 ? "" : source.slice(at, source.indexOf("\n}\n", at));
     };
-    const calls = [...source.matchAll(/prisma\.(\w+)\.(create|createMany)\(/g)]
-      .filter((m) => (SYNC_ENTITY_TYPES as readonly string[]).includes(m[1]));
+    const calls = [
+      ...source.matchAll(/prisma\.(\w+)\.(create|createMany)\(/g),
+    ].filter((m) => (SYNC_ENTITY_TYPES as readonly string[]).includes(m[1]));
     expect(calls.length).toBeGreaterThan(0);
     const withoutId = calls
       .filter((m) => {
         const args = argsAt(m.index! + m[0].length - 1);
         const builder = /data:\s*(\w+)\(/.exec(args)?.[1];
-        return !/\bid:/.test(args) && !(builder && /\bid:/.test(builderBody(builder)));
+        return (
+          !/\bid:/.test(args) &&
+          !(builder && /\bid:/.test(builderBody(builder)))
+        );
       })
-      .map((m) => `prisma.${m[1]}.${m[2]} at seed.ts:${source.slice(0, m.index).split("\n").length}`);
+      .map(
+        (m) =>
+          `prisma.${m[1]}.${m[2]} at seed.ts:${source.slice(0, m.index).split("\n").length}`,
+      );
     expect(
       withoutId,
       "synced rows created without an id: mint one with seedId under a declared prefix",

@@ -14,12 +14,20 @@ import { FieldError } from "../feedback/FieldError";
 import { TOPO_LAYERS } from "../../topoLayerTypes";
 import classes from "./topoSettings/topoSettings.module.css";
 
-const FORMAT_ORDER: ExportFormat[] = ["mbtiles", "geotiff", "gpkg", "geojson", "gpx"];
+const FORMAT_ORDER: ExportFormat[] = [
+  "mbtiles",
+  "geotiff",
+  "gpkg",
+  "geojson",
+  "gpx",
+];
 
-const FORMAT_OPTIONS: ChipOption<ExportFormat>[] = FORMAT_ORDER.map((format) => ({
-  value: format,
-  label: EXPORT_FORMAT_RULES[format].label,
-}));
+const FORMAT_OPTIONS: ChipOption<ExportFormat>[] = FORMAT_ORDER.map(
+  (format) => ({
+    value: format,
+    label: EXPORT_FORMAT_RULES[format].label,
+  }),
+);
 
 interface Props {
   value: ExportSelection;
@@ -41,7 +49,11 @@ interface Props {
  * description in a tooltip nobody hovered and left the disabled bundling
  * choices unexplained.
  */
-export default function TopoExportControls({ value, onChange, availableLayers }: Props) {
+export default function TopoExportControls({
+  value,
+  onChange,
+  availableLayers,
+}: Props) {
   const rule = EXPORT_FORMAT_RULES[value.format];
   const selected = useMemo(() => new Set(value.layers), [value.layers]);
 
@@ -60,12 +72,21 @@ export default function TopoExportControls({ value, onChange, availableLayers }:
   }, [value, availableLayers, selected, onChange]);
 
   const validation = useMemo(
-    () => validateExportRequest({ format: value.format, bundling: value.bundling, layers: value.layers }),
+    () =>
+      validateExportRequest({
+        format: value.format,
+        bundling: value.bundling,
+        layers: value.layers,
+      }),
     [value.format, value.bundling, value.layers],
   );
 
   const bundlingOptions: ChipOption<ExportBundling>[] = [
-    { value: "per-layer", label: "A file per layer", disabled: !rule.allowPerLayer },
+    {
+      value: "per-layer",
+      label: "A file per layer",
+      disabled: !rule.allowPerLayer,
+    },
     { value: "composite", label: "One file", disabled: !rule.allowComposite },
   ];
   const bundlingNote = !rule.allowPerLayer
@@ -106,7 +127,9 @@ export default function TopoExportControls({ value, onChange, availableLayers }:
       <SectionHeader title="Layers" count={layers.length} />
       <div className={classes.checkList}>
         {layers.length === 0 && (
-          <p className={classes.exportNote}>This topo didn't produce any layers to export.</p>
+          <p className={classes.exportNote}>
+            This topo didn't produce any layers to export.
+          </p>
         )}
         {layers.map((l) => {
           // Single legality source (TOPOEXP-1) — never re-derive
@@ -116,7 +139,9 @@ export default function TopoExportControls({ value, onChange, availableLayers }:
             <Checkbox
               key={l.name}
               label={l.label}
-              description={eligible ? undefined : `Can't be exported as a ${rule.label}`}
+              description={
+                eligible ? undefined : `Can't be exported as a ${rule.label}`
+              }
               checked={selected.has(l.name)}
               disabled={!eligible}
               onChange={() => toggleLayer(l.name)}

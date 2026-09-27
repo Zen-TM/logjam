@@ -50,7 +50,10 @@ router.post(
       throw new AppError(400, "trips array is required");
     }
     if (body.trips.length > BULK_IMPORT_LIMIT) {
-      throw new AppError(413, `Cannot import more than ${BULK_IMPORT_LIMIT} trip logs at once`);
+      throw new AppError(
+        413,
+        `Cannot import more than ${BULK_IMPORT_LIMIT} trip logs at once`,
+      );
     }
 
     // ---- Phase 1: Validate ALL rows before ANY write ----
@@ -64,14 +67,17 @@ router.post(
           .filter((id): id is string => id != null && id !== ""),
       ),
     );
-    const ownedPlaces = placeIds.length > 0
-      ? await prisma.place.findMany({
-          where: { id: { in: placeIds } },
-          select: { id: true, ownerId: true, placeTypeId: true },
-        })
-      : [];
+    const ownedPlaces =
+      placeIds.length > 0
+        ? await prisma.place.findMany({
+            where: { id: { in: placeIds } },
+            select: { id: true, ownerId: true, placeTypeId: true },
+          })
+        : [];
     const ownerById = new Map(ownedPlaces.map((c) => [c.id, c.ownerId]));
-    const placeTypeById = new Map(ownedPlaces.map((c) => [c.id, c.placeTypeId]));
+    const placeTypeById = new Map(
+      ownedPlaces.map((c) => [c.id, c.placeTypeId]),
+    );
 
     type ValidatedTrip = {
       index: number;
@@ -277,7 +283,10 @@ router.post(
       throw new AppError(400, "ids array is required");
     }
     if (ids.length > BULK_DELETE_LIMIT) {
-      throw new AppError(413, `Cannot delete more than ${BULK_DELETE_LIMIT} trip logs at once`);
+      throw new AppError(
+        413,
+        `Cannot delete more than ${BULK_DELETE_LIMIT} trip logs at once`,
+      );
     }
 
     const deletedIds = await deleteTripsCascade(user.id, ids as string[]);

@@ -9,7 +9,6 @@ import { listTrackPoints, type Track } from "./tracksDb";
 import { trackPointsToFeature } from "./trackGeoJson";
 import { stopSourcePress } from "../map/sourcePress";
 
-
 /** Where on the map a press landed — passed through so a caller can place a
  *  point there when a tool is armed (the layer swallowed the press first). */
 export type TrackPressCoordinates = { latitude: number; longitude: number };
@@ -124,9 +123,9 @@ export const TrackMapLayers = memo(function TrackMapLayers({
   // Point sets per visible track, reloaded whenever the tracks list changes
   // (appendTrackPoints bumps the track row, so live recording re-renders on
   // each written batch).
-  const [pointsById, setPointsById] = useState<Map<string, RecordedTrackPoint[]>>(
-    new Map(),
-  );
+  const [pointsById, setPointsById] = useState<
+    Map<string, RecordedTrackPoint[]>
+  >(new Map());
   const reloadKey = visibleTracks
     .map((track) => `${track.id}:${track.pointCount}`)
     .join("|");
@@ -154,7 +153,10 @@ export const TrackMapLayers = memo(function TrackMapLayers({
         if (from === 0) return [track.id, fresh] as const;
         // Identity matters: an unchanged track must hand TrackLine the SAME
         // array, or its memo (and the geometry inside it) rebuilds anyway.
-        return [track.id, fresh.length === 0 ? have : have.concat(fresh)] as const;
+        return [
+          track.id,
+          fresh.length === 0 ? have : have.concat(fresh),
+        ] as const;
       }),
     )
       .then((entries) => {
@@ -178,7 +180,6 @@ export const TrackMapLayers = memo(function TrackMapLayers({
           onPress={onTrackPress}
         />
       ))}
-
     </>
   );
 });

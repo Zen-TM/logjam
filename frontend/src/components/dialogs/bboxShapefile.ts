@@ -241,4 +241,3 @@ export function downloadBboxShapefile(bbox: TBbox) {
   link.click();
   URL.revokeObjectURL(url);
 }
-

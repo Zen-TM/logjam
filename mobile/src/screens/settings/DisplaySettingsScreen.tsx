@@ -67,9 +67,12 @@ export function DisplaySettingsScreen() {
     accountState !== "guest",
   );
   const [toast, setToast] = useState<ToastMessage | null>(null);
-  const notify = useCallback((text: string, tone: ToastMessage["tone"] = "info") => {
-    setToast({ text, tone, nonce: Date.now() });
-  }, []);
+  const notify = useCallback(
+    (text: string, tone: ToastMessage["tone"] = "info") => {
+      setToast({ text, tone, nonce: Date.now() });
+    },
+    [],
+  );
 
   const user = userQuery.data;
 
@@ -77,7 +80,8 @@ export function DisplaySettingsScreen() {
   // what this launch is painted in. They differ after a change here — and also
   // after a change made in the browser since this app last started — which is
   // exactly when the "next time you open Logjam" note is true.
-  const [chosenSchemeId, setChosenSchemeId] = useState<ThemeSchemeId>(activeThemeSchemeId);
+  const [chosenSchemeId, setChosenSchemeId] =
+    useState<ThemeSchemeId>(activeThemeSchemeId);
   useEffect(() => {
     const accountScheme = user?.uiPreferences?.themeSchemeId;
     if (isThemeSchemeId(accountScheme)) setChosenSchemeId(accountScheme);
@@ -96,13 +100,17 @@ export function DisplaySettingsScreen() {
       // is the one that paints the app. Attempting the PATCH would toast a
       // failure for a preference that in fact saved perfectly.
       if (accountState === "guest") return;
-      apiFetch<TUser>("/users/me", { method: "PATCH", body: { themeSchemeId: id } }).catch(
-        (err: unknown) => {
-          console.error(err);
-          // True, and specific: the phone kept it, the account didn't get it.
-          notify("Saved on this phone, but it didn't reach your account.", "error");
-        },
-      );
+      apiFetch<TUser>("/users/me", {
+        method: "PATCH",
+        body: { themeSchemeId: id },
+      }).catch((err: unknown) => {
+        console.error(err);
+        // True, and specific: the phone kept it, the account didn't get it.
+        notify(
+          "Saved on this phone, but it didn't reach your account.",
+          "error",
+        );
+      });
     },
     [notify, accountState],
   );
@@ -148,7 +156,9 @@ export function DisplaySettingsScreen() {
           // Only when there is something waiting: the same note the theme
           // above carries, for the same reason.
           hint={
-            textScale === chosenTextScale ? undefined : "Applies next time you open Logjam."
+            textScale === chosenTextScale
+              ? undefined
+              : "Applies next time you open Logjam."
           }
         />
       </ScreenScroll>
@@ -187,16 +197,23 @@ function SchemeCard({
       ]}
     >
       <View style={styles.swatches}>
-        {[scheme.tokens.primary, scheme.tokens.secondary, scheme.tokens.accent].map(
-          (color) => (
-            <View key={color} style={[styles.swatch, { backgroundColor: color }]} />
-          ),
-        )}
+        {[
+          scheme.tokens.primary,
+          scheme.tokens.secondary,
+          scheme.tokens.accent,
+        ].map((color) => (
+          <View
+            key={color}
+            style={[styles.swatch, { backgroundColor: color }]}
+          />
+        ))}
       </View>
       <Text style={styles.schemeName} numberOfLines={1}>
         {scheme.name}
       </Text>
-      {selected ? <Feather name="check" size={16} color={theme.accent} /> : null}
+      {selected ? (
+        <Feather name="check" size={16} color={theme.accent} />
+      ) : null}
     </Pressable>
   );
 }

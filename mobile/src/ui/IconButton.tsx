@@ -40,7 +40,11 @@ export function IconButton({
         disabled && styles.disabled,
       ]}
     >
-      <Feather name={icon} size={size} color={disabled ? theme.textMuted : color} />
+      <Feather
+        name={icon}
+        size={size}
+        color={disabled ? theme.textMuted : color}
+      />
     </Pressable>
   );
 }

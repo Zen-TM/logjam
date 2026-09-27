@@ -167,7 +167,9 @@ export async function startSensorLog(
       console.warn("sensor-log: not enough free space, logging skipped");
       return false;
     }
-    await FileSystem.makeDirectoryAsync(SENSOR_LOG_DIR, { intermediates: true });
+    await FileSystem.makeDirectoryAsync(SENSOR_LOG_DIR, {
+      intermediates: true,
+    });
     // One file per track, appended: a headless task relaunch mid-trip resumes
     // into the same file rather than orphaning what was written before it. The
     // native side writes a fresh wall-clock anchor row on every open, so each

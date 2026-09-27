@@ -13,7 +13,9 @@ import { AppError } from "../middleware/errorHandler";
  * first-request create / Cognito-rebind logic and must not 404 on a missing row.
  */
 export async function resolveUser(cognitoSub: string) {
-  const user = await prisma.user.findUnique({ where: { cognitoId: cognitoSub } });
+  const user = await prisma.user.findUnique({
+    where: { cognitoId: cognitoSub },
+  });
   if (!user) throw new AppError(404, "User not found");
   return user;
 }

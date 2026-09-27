@@ -18,12 +18,7 @@ describe("parseGpx", () => {
 
   it("maps wpt → Point, trkseg → LineString each, rte → LineString", () => {
     const types = result.features.map((f) => f.geometry.type);
-    expect(types).toEqual([
-      "Point",
-      "LineString",
-      "LineString",
-      "LineString",
-    ]);
+    expect(types).toEqual(["Point", "LineString", "LineString", "LineString"]);
     expect(result.stats).toEqual({
       points: 1,
       lines: 3,
@@ -187,7 +182,13 @@ describe("parseGeoJson", () => {
 
   it("accepts a bare geometry", () => {
     const result = parseGeoJson(
-      JSON.stringify({ type: "LineString", coordinates: [[150, -33], [151, -34]] }),
+      JSON.stringify({
+        type: "LineString",
+        coordinates: [
+          [150, -33],
+          [151, -34],
+        ],
+      }),
     );
     expect(result.features).toHaveLength(1);
     expect(result.bbox).toEqual([150, -34, 151, -33]);
@@ -216,9 +217,9 @@ describe("parseVectorImport dispatcher", () => {
     expect(
       parseVectorImport("Walk.GPX", fixture("sample-track.gpx")).stats.lines,
     ).toBe(3);
-    expect(
-      parseVectorImport("walk.kml", fixture("sample.kml")).name,
-    ).toBe("Sample walk via ridge");
+    expect(parseVectorImport("walk.kml", fixture("sample.kml")).name).toBe(
+      "Sample walk via ridge",
+    );
     expect(
       parseVectorImport(
         "area.geojson",
@@ -240,18 +241,20 @@ describe("parseVectorImport dispatcher", () => {
 describe("malformed input fails loudly", () => {
   it("rejects a GPX truncated mid-download instead of importing a short track", () => {
     const truncated =
-      '<gpx><trk><name>W</name><trkseg>' +
+      "<gpx><trk><name>W</name><trkseg>" +
       '<trkpt lat="-33.00" lon="150.00"/><trkpt lat="-33.01" lon="150.01"/>';
     expect(() => parseGpx(truncated)).toThrow(IMPORT_ERRORS.unparseable);
   });
 
   it("rejects crossed close tags and trailing garbage", () => {
     expect(() =>
-      parseGpx('<gpx><trk><trkseg><trkpt lat="-33" lon="150"/></trk></trkseg></gpx>'),
+      parseGpx(
+        '<gpx><trk><trkseg><trkpt lat="-33" lon="150"/></trk></trkseg></gpx>',
+      ),
     ).toThrow(IMPORT_ERRORS.unparseable);
-    expect(() =>
-      parseGpx('<gpx><wpt lat="-33" lon="150"/></gpx>JUNK'),
-    ).toThrow(IMPORT_ERRORS.unparseable);
+    expect(() => parseGpx('<gpx><wpt lat="-33" lon="150"/></gpx>JUNK')).toThrow(
+      IMPORT_ERRORS.unparseable,
+    );
   });
 
   it("rejects a KML whose geometry element carries no coordinates", () => {

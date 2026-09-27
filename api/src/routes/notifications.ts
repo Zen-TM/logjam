@@ -95,40 +95,41 @@ router.get(
     // read time. Nothing is persisted in the payload (PRIV-005), so a revoked
     // share, deleted place, or removed friendship simply has no row to resolve
     // and the notification is dropped below (PRIV-001/003).
-    const [existingFriendships, existingPlaces, sharerUsers] = await Promise.all([
-      friendshipIds.size > 0
-        ? prisma.friendship.findMany({
-            where: { id: { in: [...friendshipIds] } },
-            select: {
-              id: true,
-              requesterId: true,
-              addresseeId: true,
-              requester: { select: { id: true, username: true } },
-              addressee: { select: { id: true, username: true } },
-            },
-          })
-        : Promise.resolve(
-            [] as {
-              id: string;
-              requesterId: string;
-              addresseeId: string;
-              requester: { id: string; username: string };
-              addressee: { id: string; username: string };
-            }[],
-          ),
-      placeIds.size > 0
-        ? prisma.place.findMany({
-            where: { id: { in: [...placeIds] } },
-            select: { id: true, name: true },
-          })
-        : Promise.resolve([] as { id: string; name: string }[]),
-      sharerIds.size > 0
-        ? prisma.user.findMany({
-            where: { id: { in: [...sharerIds] } },
-            select: { id: true, username: true },
-          })
-        : Promise.resolve([] as { id: string; username: string }[]),
-    ]);
+    const [existingFriendships, existingPlaces, sharerUsers] =
+      await Promise.all([
+        friendshipIds.size > 0
+          ? prisma.friendship.findMany({
+              where: { id: { in: [...friendshipIds] } },
+              select: {
+                id: true,
+                requesterId: true,
+                addresseeId: true,
+                requester: { select: { id: true, username: true } },
+                addressee: { select: { id: true, username: true } },
+              },
+            })
+          : Promise.resolve(
+              [] as {
+                id: string;
+                requesterId: string;
+                addresseeId: string;
+                requester: { id: string; username: string };
+                addressee: { id: string; username: string };
+              }[],
+            ),
+        placeIds.size > 0
+          ? prisma.place.findMany({
+              where: { id: { in: [...placeIds] } },
+              select: { id: true, name: true },
+            })
+          : Promise.resolve([] as { id: string; name: string }[]),
+        sharerIds.size > 0
+          ? prisma.user.findMany({
+              where: { id: { in: [...sharerIds] } },
+              select: { id: true, username: true },
+            })
+          : Promise.resolve([] as { id: string; username: string }[]),
+      ]);
 
     const friendshipById = new Map(existingFriendships.map((f) => [f.id, f]));
     const placeById = new Map(existingPlaces.map((c) => [c.id, c]));
@@ -222,7 +223,10 @@ router.get(
         return [
           {
             ...n,
-            payload: { ...(n.payload as object), [usernameKey]: counterpart.username },
+            payload: {
+              ...(n.payload as object),
+              [usernameKey]: counterpart.username,
+            },
           },
         ];
       }
@@ -230,7 +234,9 @@ router.get(
         const id = payloadString(n.payload, "fileSendId");
         const recipientRow = id ? liveFileSendById.get(id) : undefined;
         const sentByIdEarly = payloadString(n.payload, "sentById");
-        const senderEarly = sentByIdEarly ? sharerById.get(sentByIdEarly) : undefined;
+        const senderEarly = sentByIdEarly
+          ? sharerById.get(sentByIdEarly)
+          : undefined;
         if (!recipientRow) {
           // NO ROW, BUT THE NOTIFICATION SURVIVED — and that combination means
           // exactly one thing: the reaper swept an expired send this user never
@@ -291,7 +297,8 @@ router.get(
         const entityType = payloadString(n.payload, "entityType");
         const entityId = payloadString(n.payload, "entityId");
         if (!entityType || !entityId) return [];
-        if (!liveShareKeys.has(`${entityType}:${entityId}:${user.id}`)) return [];
+        if (!liveShareKeys.has(`${entityType}:${entityId}:${user.id}`))
+          return [];
         const sharedById = payloadString(n.payload, "sharedById");
         const sharer = sharedById ? sharerById.get(sharedById) : undefined;
         return [

@@ -50,7 +50,12 @@ export function Chip({
     <button
       ref={ref}
       type={type}
-      className={[classes.chip, active && classes.active, dashed && classes.dashed, className]
+      className={[
+        classes.chip,
+        active && classes.active,
+        dashed && classes.dashed,
+        className,
+      ]
         .filter(Boolean)
         .join(" ")}
       style={hue ? ({ ...style, "--chip-hue": hue } as CSSProperties) : style}
@@ -61,7 +66,14 @@ export function Chip({
     >
       {Icon && <Icon size={14} aria-hidden className={classes.glyph} />}
       <span>{label}</span>
-      {starred && <Star size={12} aria-hidden fill="currentColor" className={classes.glyph} />}
+      {starred && (
+        <Star
+          size={12}
+          aria-hidden
+          fill="currentColor"
+          className={classes.glyph}
+        />
+      )}
       {count != null && (
         <span className={classes.count} aria-hidden>
           {count}
@@ -130,7 +142,10 @@ export function ChipPicker({
     <div
       role="group"
       aria-labelledby={legendId}
-      aria-describedby={[hint && hintId, error && errorId].filter(Boolean).join(" ") || undefined}
+      aria-describedby={
+        [hint && hintId, error && errorId].filter(Boolean).join(" ") ||
+        undefined
+      }
       className={classes.picker}
     >
       <span id={legendId} className={classes.pickerLabel}>
@@ -147,7 +162,11 @@ export function ChipPicker({
             aria-pressed={picked.has(option.value)}
             disabled={option.disabled || lockedValues?.has(option.value)}
             starred={option.value === primaryValue}
-            aria-label={option.value === primaryValue ? `${option.label}, starred` : undefined}
+            aria-label={
+              option.value === primaryValue
+                ? `${option.label}, starred`
+                : undefined
+            }
             onClick={() => onToggle(option.value)}
           />
         ))}
@@ -175,7 +194,13 @@ export function ChipPicker({
               onBlur={() => finish(true)}
             />
           ) : (
-            <Chip ref={addChipRef} label={addLabel} icon={Plus} dashed onClick={() => setAdding(true)} />
+            <Chip
+              ref={addChipRef}
+              label={addLabel}
+              icon={Plus}
+              dashed
+              onClick={() => setAdding(true)}
+            />
           ))}
       </div>
       {hint && (
@@ -242,8 +267,11 @@ export function ChipRail<T extends string>({
     const scroller = scrollerRef.current;
     if (!scroller) return;
     const start = scroller.scrollLeft > 1;
-    const end = scroller.scrollLeft + scroller.clientWidth < scroller.scrollWidth - 1;
-    setEdges((current) => (current.start === start && current.end === end ? current : { start, end }));
+    const end =
+      scroller.scrollLeft + scroller.clientWidth < scroller.scrollWidth - 1;
+    setEdges((current) =>
+      current.start === start && current.end === end ? current : { start, end },
+    );
   }, []);
 
   useLayoutEffect(() => {
@@ -264,8 +292,14 @@ export function ChipRail<T extends string>({
       if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
       const max = scroller.scrollWidth - scroller.clientWidth;
       // Firefox can report whole lines rather than pixels.
-      const pixels = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? event.deltaY * 16 : event.deltaY;
-      const next = Math.min(max, Math.max(0, scroller.scrollLeft + pixels * WHEEL_SPEED));
+      const pixels =
+        event.deltaMode === WheelEvent.DOM_DELTA_LINE
+          ? event.deltaY * 16
+          : event.deltaY;
+      const next = Math.min(
+        max,
+        Math.max(0, scroller.scrollLeft + pixels * WHEEL_SPEED),
+      );
       if (max <= 0 || next === scroller.scrollLeft) return;
       event.preventDefault();
       scroller.scrollLeft = next;
@@ -276,7 +310,10 @@ export function ChipRail<T extends string>({
 
   const selectedIndex = options.findIndex((option) => option.value === value);
   useEffect(() => {
-    chipRefs.current[selectedIndex]?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    chipRefs.current[selectedIndex]?.scrollIntoView({
+      block: "nearest",
+      inline: "nearest",
+    });
   }, [selectedIndex]);
 
   const tabStop =
@@ -285,7 +322,9 @@ export function ChipRail<T extends string>({
       : options.findIndex((option) => !option.disabled);
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    const from = chipRefs.current.findIndex((chip) => chip === document.activeElement);
+    const from = chipRefs.current.findIndex(
+      (chip) => chip === document.activeElement,
+    );
     if (from < 0) return;
     const to = nextEnabledIndex(
       options.map((option) => Boolean(option.disabled)),
@@ -304,7 +343,11 @@ export function ChipRail<T extends string>({
       data-fade-start={edges.start}
       data-fade-end={edges.end}
     >
-      <div ref={scrollerRef} className={classes.scroller} onScroll={updateEdges}>
+      <div
+        ref={scrollerRef}
+        className={classes.scroller}
+        onScroll={updateEdges}
+      >
         {/* tabIndex -1: the chips are the tab stop; the group only hears their keys. */}
         <div
           role="radiogroup"

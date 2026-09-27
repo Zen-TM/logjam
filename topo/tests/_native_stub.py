@@ -12,6 +12,7 @@ stub is never applied).
 
 Import this module BEFORE importing ``pipeline``.
 """
+
 import sys
 from unittest import mock
 

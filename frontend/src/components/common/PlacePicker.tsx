@@ -47,7 +47,9 @@ export default function PlacePicker({
     () =>
       trimmed === ""
         ? []
-        : places.filter((place) => placeMatchesSearch(place, trimmed)).slice(0, MAX_SUGGESTIONS),
+        : places
+            .filter((place) => placeMatchesSearch(place, trimmed))
+            .slice(0, MAX_SUGGESTIONS),
     [places, trimmed],
   );
 
@@ -72,7 +74,9 @@ export default function PlacePicker({
         aria-controls={listId}
         aria-autocomplete="list"
         aria-activedescendant={
-          open && activeIndex >= 0 ? `${listId}-${matches[activeIndex]?.id}` : undefined
+          open && activeIndex >= 0
+            ? `${listId}-${matches[activeIndex]?.id}`
+            : undefined
         }
         value={query}
         onFocus={() => setFocused(true)}
@@ -86,11 +90,15 @@ export default function PlacePicker({
             if (matches.length === 0) return;
             event.preventDefault();
             const step = event.key === "ArrowDown" ? 1 : -1;
-            setActiveIndex((current) => (current + step + matches.length) % matches.length);
+            setActiveIndex(
+              (current) => (current + step + matches.length) % matches.length,
+            );
           } else if (event.key === "Enter") {
             // One match and nothing highlighted is unambiguous, so Enter takes
             // it — the same shortcut the map's search box allows.
-            const place = matches[activeIndex] ?? (matches.length === 1 ? matches[0] : undefined);
+            const place =
+              matches[activeIndex] ??
+              (matches.length === 1 ? matches[0] : undefined);
             if (!place) return;
             event.preventDefault();
             choose(place);
@@ -104,7 +112,12 @@ export default function PlacePicker({
       />
       {open && (
         <div className={classes.results}>
-          <ul id={listId} role="listbox" aria-label={label} className={classes.list}>
+          <ul
+            id={listId}
+            role="listbox"
+            aria-label={label}
+            className={classes.list}
+          >
             {matches.map((place, index) => (
               <li
                 key={place.id}

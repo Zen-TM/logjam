@@ -116,7 +116,8 @@ function isStringArray(value: unknown): value is string[] {
 }
 
 function isStringRecord(value: unknown): value is Record<string, string> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  if (typeof value !== "object" || value === null || Array.isArray(value))
+    return false;
   return Object.values(value).every((v) => typeof v === "string");
 }
 
@@ -140,7 +141,10 @@ function parseCreating(value: unknown): TripDraftForm["creating"] | undefined {
  * one. Every field is checked — this input is persisted, so it survives across
  * builds and is writable by anything running on the origin.
  */
-export function parseTripDraft(raw: string | null, now: Date): TripDraft | null {
+export function parseTripDraft(
+  raw: string | null,
+  now: Date,
+): TripDraft | null {
   if (raw === null) return null;
   let parsed: unknown;
   try {
@@ -216,7 +220,10 @@ export function readTripDraft(now: Date): TripDraft | null {
  * a draft the user believes is saved but isn't is the exact failure this
  * feature exists to prevent, so the caller surfaces both failure modes.
  */
-export function writeTripDraft(form: TripDraftForm, savedAt: Date): TripDraftWriteResult {
+export function writeTripDraft(
+  form: TripDraftForm,
+  savedAt: Date,
+): TripDraftWriteResult {
   const serialized = serializeTripDraft(form, savedAt);
   if (serialized.status === "too-large") {
     return { status: "too-large", chars: serialized.chars };

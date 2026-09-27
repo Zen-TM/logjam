@@ -36,14 +36,25 @@ function placeScalarFields(): string[] {
   const fields: string[] = [];
   for (const line of body.split("\n")) {
     const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("//") || trimmed.startsWith("@@")) continue;
+    if (!trimmed || trimmed.startsWith("//") || trimmed.startsWith("@@"))
+      continue;
     const match = /^(\w+)\s+(\w+)(\[\])?\??/.exec(trimmed);
     if (!match) continue;
     const [, name, type] = match;
     // A relation field's type is a MODEL name (capitalised); a scalar's is a
     // Prisma primitive. `PlaceType`/`PlaceShare`/`Route` are relations even
     // though `placeTypeId` beside them is not.
-    const SCALARS = new Set(["String", "Int", "Float", "Boolean", "DateTime", "Json", "Bytes", "BigInt", "Decimal"]);
+    const SCALARS = new Set([
+      "String",
+      "Int",
+      "Float",
+      "Boolean",
+      "DateTime",
+      "Json",
+      "Bytes",
+      "BigInt",
+      "Decimal",
+    ]);
     if (!SCALARS.has(type)) continue;
     fields.push(name);
   }
@@ -61,8 +72,7 @@ describe("every Place column is classified for sharees", () => {
   it("classifies each column as sharee-visible or owner-private, with a reason", () => {
     const visible = new Set(SHAREE_VISIBLE_PLACE_FIELDS);
     const unclassified = placeScalarFields().filter(
-      (field) =>
-        !visible.has(field) && !(field in OWNER_PRIVATE_PLACE_FIELDS),
+      (field) => !visible.has(field) && !(field in OWNER_PRIVATE_PLACE_FIELDS),
     );
     // The message is the point: whoever added the column reads it.
     expect(
@@ -122,6 +132,8 @@ describe("serializeSharedPlace", () => {
   it("passes through a column it has never heard of", () => {
     // The default is VISIBLE, deliberately: a sharee is entitled to the record.
     // The completeness guard above is what stops that default being silent.
-    expect(serializeSharedPlace({ id: "p1", somethingNew: 7 }).somethingNew).toBe(7);
+    expect(
+      serializeSharedPlace({ id: "p1", somethingNew: 7 }).somethingNew,
+    ).toBe(7);
   });
 });

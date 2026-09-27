@@ -193,7 +193,10 @@ describe("nameTier", () => {
 describe("matchPlace — 19 positive corpus pairs (with coords)", () => {
   const cases: Array<{ input: string; candidates: MatchCandidate[] }> = [
     { input: "Ballrace", candidates: [candidate("c", "Ball Race Canyon")] },
-    { input: "Bell Creek Complete", candidates: [candidate("c", "Bell Creek")] },
+    {
+      input: "Bell Creek Complete",
+      candidates: [candidate("c", "Bell Creek")],
+    },
     {
       input: "Bowens Creek South Complete",
       candidates: [candidate("c", "Bowens Creek South")],
@@ -363,7 +366,9 @@ describe("defaultsToMergeOnImport", () => {
   }
 
   it("defaults to merge just inside the threshold", () => {
-    expect(defaultsToMergeOnImport(scored(MERGE_DEFAULT_DIST_M - 1))).toBe(true);
+    expect(defaultsToMergeOnImport(scored(MERGE_DEFAULT_DIST_M - 1))).toBe(
+      true,
+    );
   });
 
   it("defaults to merge exactly at the threshold (inclusive)", () => {
@@ -371,7 +376,9 @@ describe("defaultsToMergeOnImport", () => {
   });
 
   it("defaults to create-as-new just beyond the threshold", () => {
-    expect(defaultsToMergeOnImport(scored(MERGE_DEFAULT_DIST_M + 1))).toBe(false);
+    expect(defaultsToMergeOnImport(scored(MERGE_DEFAULT_DIST_M + 1))).toBe(
+      false,
+    );
   });
 
   // The reported harm: a name-similar place 1.8 km away arrived pre-checked to
@@ -382,7 +389,9 @@ describe("defaultsToMergeOnImport", () => {
   });
 
   it("defaults to create-as-new when the candidate is beyond the coarse bbox", () => {
-    expect(defaultsToMergeOnImport(scored(Number.POSITIVE_INFINITY))).toBe(false);
+    expect(defaultsToMergeOnImport(scored(Number.POSITIVE_INFINITY))).toBe(
+      false,
+    );
   });
 
   // No coords is not corroboration. Distance is never null on the place-import

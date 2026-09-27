@@ -29,7 +29,11 @@
 // emulator and on a physical device alike, so loopback is the one address that
 // needs no per-target `.env` edit — and editing `.env` has its own trap (see
 // the script, and mobile/CLAUDE.local.md).
-const { AndroidConfig, withAndroidManifest, withDangerousMod } = require("expo/config-plugins");
+const {
+  AndroidConfig,
+  withAndroidManifest,
+  withDangerousMod,
+} = require("expo/config-plugins");
 const fs = require("fs");
 const path = require("path");
 
@@ -64,7 +68,10 @@ module.exports = function withLocalApiCleartext(config) {
   config = withDangerousMod(config, [
     "android",
     (cfg) => {
-      const xmlDir = path.join(cfg.modRequest.platformProjectRoot, "app/src/main/res/xml");
+      const xmlDir = path.join(
+        cfg.modRequest.platformProjectRoot,
+        "app/src/main/res/xml",
+      );
       const xmlPath = path.join(xmlDir, `${CONFIG_RESOURCE}.xml`);
       if (enabled) {
         fs.mkdirSync(xmlDir, { recursive: true });
@@ -77,7 +84,9 @@ module.exports = function withLocalApiCleartext(config) {
   ]);
 
   return withAndroidManifest(config, (cfg) => {
-    const application = AndroidConfig.Manifest.getMainApplicationOrThrow(cfg.modResults);
+    const application = AndroidConfig.Manifest.getMainApplicationOrThrow(
+      cfg.modResults,
+    );
     const attribute = "android:networkSecurityConfig";
     const ours = `@xml/${CONFIG_RESOURCE}`;
     if (enabled) {

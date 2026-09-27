@@ -22,7 +22,9 @@ export default function Lightbox({
 
   useEffect(() => {
     triggerBeforeRef.current =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
     closeRef.current?.focus();
 
     const container = containerRef.current;

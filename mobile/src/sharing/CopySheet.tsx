@@ -23,7 +23,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { copyAndRemoveConfirm, messageFromError , copyConfirm } from "@logjam/shared";
+import {
+  copyAndRemoveConfirm,
+  messageFromError,
+  copyConfirm,
+} from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
 import { fetchCurrentUser, useApiQuery } from "../api/queries";
@@ -102,7 +106,11 @@ export function useCopyPanel({
   busy,
   online,
   onConfirm,
-}: CopyPanelArgs): { title: string; body: React.ReactNode; footer: React.ReactNode } {
+}: CopyPanelArgs): {
+  title: string;
+  body: React.ReactNode;
+  footer: React.ReactNode;
+} {
   const visible = active;
   const { accountState } = useAccountState();
   // Gated on `active` as well as on having an account: this hook now lives
@@ -210,15 +218,21 @@ export function useCopyPanel({
             share verb follows (`useShareRowProps`). */}
         {!online ? (
           <View style={styles.note}>
-            <Text style={styles.noteText}>Saving a copy needs a connection.</Text>
+            <Text style={styles.noteText}>
+              Saving a copy needs a connection.
+            </Text>
           </View>
         ) : null}
       </>
     ),
     footer: (
       <Button
-        label={mode === "copyAndRemove" ? "Save a copy and remove" : "Save a copy"}
-        onPress={() => onConfirm(media.count > 0 ? { copyMedia: withMedia } : {})}
+        label={
+          mode === "copyAndRemove" ? "Save a copy and remove" : "Save a copy"
+        }
+        onPress={() =>
+          onConfirm(media.count > 0 ? { copyMedia: withMedia } : {})
+        }
         disabled={busy || !online}
         loading={busy}
         grow

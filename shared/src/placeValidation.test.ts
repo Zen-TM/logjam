@@ -90,41 +90,35 @@ describe("constraintFromDef", () => {
 
 describe("numericConstraintError", () => {
   it("passes valid values", () => {
-    expect(
-      numericConstraintError(3, CONSTRAINT.quality),
-    ).toBeNull();
-    expect(
-      numericConstraintError(0, CONSTRAINT.numAbseils),
-    ).toBeNull();
-    expect(
-      numericConstraintError(4, CONSTRAINT.vGrade),
-    ).toBeNull();
+    expect(numericConstraintError(3, CONSTRAINT.quality)).toBeNull();
+    expect(numericConstraintError(0, CONSTRAINT.numAbseils)).toBeNull();
+    expect(numericConstraintError(4, CONSTRAINT.vGrade)).toBeNull();
   });
   it("rejects negatives on count/length/duration fields (PLACE-2)", () => {
-    expect(
-      numericConstraintError(-3, CONSTRAINT.numAbseils),
-    ).toBe("Pitches cannot be negative");
-    expect(
-      numericConstraintError(-1, CONSTRAINT.hours),
-    ).toBe("Hours cannot be negative");
+    expect(numericConstraintError(-3, CONSTRAINT.numAbseils)).toBe(
+      "Pitches cannot be negative",
+    );
+    expect(numericConstraintError(-1, CONSTRAINT.hours)).toBe(
+      "Hours cannot be negative",
+    );
   });
   it("rejects non-integers on integer fields", () => {
-    expect(
-      numericConstraintError(2.5, CONSTRAINT.numAbseils),
-    ).toBe("Pitches must be a whole number");
+    expect(numericConstraintError(2.5, CONSTRAINT.numAbseils)).toBe(
+      "Pitches must be a whole number",
+    );
   });
   it("enforces the quality scale (1-5)", () => {
-    expect(
-      numericConstraintError(0.5, CONSTRAINT.quality),
-    ).toBe("Quality must be between 1 and 5");
-    expect(
-      numericConstraintError(6, CONSTRAINT.quality),
-    ).toBe("Quality must be between 1 and 5");
+    expect(numericConstraintError(0.5, CONSTRAINT.quality)).toBe(
+      "Quality must be between 1 and 5",
+    );
+    expect(numericConstraintError(6, CONSTRAINT.quality)).toBe(
+      "Quality must be between 1 and 5",
+    );
   });
   it("rejects NaN", () => {
-    expect(
-      numericConstraintError(NaN, CONSTRAINT.hours),
-    ).toBe("Hours must be a number");
+    expect(numericConstraintError(NaN, CONSTRAINT.hours)).toBe(
+      "Hours must be a number",
+    );
   });
 });
 
@@ -235,9 +229,9 @@ describe("invalidPlaceFields", () => {
   it("says nothing about fields it has no constraint for", () => {
     // An empty list means "can't tell", never "everything is fine" — a
     // rejection for an unknown field or a server-side rule looks like this.
-    expect(invalidPlaceFields({ notes: "x", name: "y" }, SYSTEM_FIELD_DEFS)).toEqual(
-      [],
-    );
+    expect(
+      invalidPlaceFields({ notes: "x", name: "y" }, SYSTEM_FIELD_DEFS),
+    ).toEqual([]);
   });
 
   it("catches a coordinate, which is the one a create op carries", () => {
@@ -259,19 +253,20 @@ describe("invalidPlaceFields", () => {
   });
 });
 
-
 describe("validateFieldValues", () => {
   it("enforces a definition's bounds", () => {
-    expect(
-      validateFieldValues({ v_grade: 9 }, SYSTEM_FIELD_DEFS),
-    ).toBe("V grade must be between 1 and 7");
+    expect(validateFieldValues({ v_grade: 9 }, SYSTEM_FIELD_DEFS)).toBe(
+      "V grade must be between 1 and 7",
+    );
   });
 
   it("enforces a one-sided bound without inventing the other end", () => {
     expect(validateFieldValues({ num_abseils: -1 }, SYSTEM_FIELD_DEFS)).toBe(
       "Pitches cannot be negative",
     );
-    expect(validateFieldValues({ num_abseils: 900 }, SYSTEM_FIELD_DEFS)).toBeNull();
+    expect(
+      validateFieldValues({ num_abseils: 900 }, SYSTEM_FIELD_DEFS),
+    ).toBeNull();
   });
 
   it("type-checks non-numeric fields too", () => {
@@ -290,7 +285,9 @@ describe("validateFieldValues", () => {
   });
 
   it("ignores nulls, which mean 'unset' rather than a value", () => {
-    expect(validateFieldValues({ v_grade: null }, SYSTEM_FIELD_DEFS)).toBeNull();
+    expect(
+      validateFieldValues({ v_grade: null }, SYSTEM_FIELD_DEFS),
+    ).toBeNull();
   });
 });
 
@@ -299,8 +296,14 @@ describe("canonicalLinkPair", () => {
   // both ends agreeing is the whole requirement — it is what lets the unique
   // index enforce "stored once" instead of application code remembering to.
   it("orders a pair the same way whichever end asks", () => {
-    expect(canonicalLinkPair("a", "b")).toEqual({ aPlaceId: "a", bPlaceId: "b" });
-    expect(canonicalLinkPair("b", "a")).toEqual({ aPlaceId: "a", bPlaceId: "b" });
+    expect(canonicalLinkPair("a", "b")).toEqual({
+      aPlaceId: "a",
+      bPlaceId: "b",
+    });
+    expect(canonicalLinkPair("b", "a")).toEqual({
+      aPlaceId: "a",
+      bPlaceId: "b",
+    });
   });
 
   it("is stable for a pair of real uuids", () => {
@@ -316,7 +319,8 @@ describe("normalizeLinkedPlaceIds", () => {
       placeIds: ["a", "b"],
     });
     expect(
-      normalizeLinkedPlaceIds(Array.from({ length: 21 }, (_, i) => `p${i}`)).error,
+      normalizeLinkedPlaceIds(Array.from({ length: 21 }, (_, i) => `p${i}`))
+        .error,
     ).toMatch(/At most 20/);
   });
 });

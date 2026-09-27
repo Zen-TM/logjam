@@ -28,15 +28,17 @@ function tsxFilesUnder(dir: string): string[] {
 /** Style entries named for an error whose object sets `color: theme.warning`. */
 function handRolledErrorStyles(source: string): string[] {
   return [
-    ...source.matchAll(/(\w*(?:[Ee]rror|[Ii]nvalid)\w*)\s*:\s*\{[^}]*color:\s*theme\.warning\b/g),
+    ...source.matchAll(
+      /(\w*(?:[Ee]rror|[Ii]nvalid)\w*)\s*:\s*\{[^}]*color:\s*theme\.warning\b/g,
+    ),
   ].map((match) => match[1]);
 }
 
 describe("validation messages are drawn by the kit", () => {
   it("recognises the kit's own error style — a silent zero would pass forever", () => {
-    expect(handRolledErrorStyles(readFileSync(join(UI, "FieldError.tsx"), "utf8"))).toEqual([
-      "error",
-    ]);
+    expect(
+      handRolledErrorStyles(readFileSync(join(UI, "FieldError.tsx"), "utf8")),
+    ).toEqual(["error"]);
   });
 
   it("no screen hand-rolls one", () => {

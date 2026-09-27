@@ -13,7 +13,15 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { fontSize, fontWeight, radius, scrim, spacing, theme, withAlpha } from "../theme";
+import {
+  fontSize,
+  fontWeight,
+  radius,
+  scrim,
+  spacing,
+  theme,
+  withAlpha,
+} from "../theme";
 import { IconButton } from "./IconButton";
 
 // Slide-up modal sheet with a draggable handle + title, capped at 80% height
@@ -58,7 +66,9 @@ export const SheetScrollLock = createContext<{
  * How a `FieldError` that has just appeared asks the sheet to bring it into
  * view (DESIGN.md §8, "Form errors"). Null outside a sheet.
  */
-export const SheetErrorReveal = createContext<((target: View) => void) | null>(null);
+export const SheetErrorReveal = createContext<((target: View) => void) | null>(
+  null,
+);
 
 export function BottomSheet({
   visible,
@@ -146,7 +156,10 @@ export function BottomSheet({
           if (first == null) return;
           const { y, height: visible } = viewport.current;
           if (first.y >= y && first.y + first.height <= y + visible) return;
-          scrollRef.current?.scrollTo({ y: Math.max(0, first.y - visible / 2), animated: true });
+          scrollRef.current?.scrollTo({
+            y: Math.max(0, first.y - visible / 2),
+            animated: true,
+          });
         });
       });
     },
@@ -163,7 +176,9 @@ export function BottomSheet({
     const shown = Keyboard.addListener("keyboardDidShow", (event) =>
       setKeyboardHeight(event.endCoordinates.height),
     );
-    const hidden = Keyboard.addListener("keyboardDidHide", () => setKeyboardHeight(0));
+    const hidden = Keyboard.addListener("keyboardDidHide", () =>
+      setKeyboardHeight(0),
+    );
     return () => {
       shown.remove();
       hidden.remove();
@@ -199,8 +214,6 @@ export function BottomSheet({
     });
   }, [drag, progress, visible]);
 
-
-
   // The PanResponder is created once; route its release through a ref so it
   // always calls the current onClose.
   const onCloseRef = useRef(onClose);
@@ -234,7 +247,10 @@ export function BottomSheet({
   if (!mounted) return null;
 
   const translateY = Animated.add(
-    progress.interpolate({ inputRange: [0, 1], outputRange: [SHEET_TRAVEL, 0] }),
+    progress.interpolate({
+      inputRange: [0, 1],
+      outputRange: [SHEET_TRAVEL, 0],
+    }),
     drag,
   );
 
@@ -300,7 +316,11 @@ export function BottomSheet({
               on its own row looking like a stray control. */}
           {onBack ? (
             <View style={styles.titleRow}>
-              <IconButton icon="arrow-left" accessibilityLabel="Back" onPress={onBack} />
+              <IconButton
+                icon="arrow-left"
+                accessibilityLabel="Back"
+                onPress={onBack}
+              />
               <Text style={[styles.title, styles.titleInRow]}>{title}</Text>
             </View>
           ) : (
@@ -314,10 +334,16 @@ export function BottomSheet({
             <ScrollView
               ref={scrollRef}
               onLayout={(event) => {
-                viewport.current = { ...viewport.current, height: event.nativeEvent.layout.height };
+                viewport.current = {
+                  ...viewport.current,
+                  height: event.nativeEvent.layout.height,
+                };
               }}
               onScroll={(event) => {
-                viewport.current = { ...viewport.current, y: event.nativeEvent.contentOffset.y };
+                viewport.current = {
+                  ...viewport.current,
+                  y: event.nativeEvent.contentOffset.y,
+                };
               }}
               scrollEventThrottle={32}
               contentContainerStyle={styles.scrollContent}
@@ -341,7 +367,9 @@ export function BottomSheet({
                 </SheetErrorReveal.Provider>
               </SheetScrollLock.Provider>
             </ScrollView>
-            {overlay != null ? <View style={styles.overlay}>{overlay}</View> : null}
+            {overlay != null ? (
+              <View style={styles.overlay}>{overlay}</View>
+            ) : null}
           </View>
           {footer != null ? <View style={styles.footer}>{footer}</View> : null}
         </Animated.View>

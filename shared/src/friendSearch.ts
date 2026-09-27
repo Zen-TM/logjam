@@ -66,5 +66,7 @@ export const FRIEND_AVATAR_HUES = [
 
 /** The hue this username wears, on every screen of both clients. */
 export function friendAvatarHue(username: string): string {
-  return FRIEND_AVATAR_HUES[avatarHueIndex(username, FRIEND_AVATAR_HUES.length)];
+  return FRIEND_AVATAR_HUES[
+    avatarHueIndex(username, FRIEND_AVATAR_HUES.length)
+  ];
 }

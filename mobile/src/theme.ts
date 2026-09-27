@@ -106,7 +106,8 @@ function resolveTextScale(): number {
 function osFontScale(): number {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { PixelRatio } = require("react-native") as typeof import("react-native");
+    const { PixelRatio } =
+      require("react-native") as typeof import("react-native");
     return PixelRatio.getFontScale() || 1;
   } catch {
     return 1;
@@ -158,7 +159,11 @@ export const spacing = (n: number): number => n * 8;
 // Weight + line-height scales so type roles are consistent across screens
 // (page title = xl/bold, body = base/regular at body line-height). RN wants
 // weights as strings.
-export const fontWeight = { regular: "400", medium: "600", bold: "700" } as const;
+export const fontWeight = {
+  regular: "400",
+  medium: "600",
+  bold: "700",
+} as const;
 export const lineHeight = { body: scaled(22), tight: scaled(18) } as const;
 
 // Modal/sheet scrims — the only intentional black-alpha overlays. Everything
@@ -196,7 +201,8 @@ export function withAlpha(hex: string, alpha: number): string {
           .map((c) => c + c)
           .join("")
       : raw;
-  if (full.length !== 6) throw new Error(`withAlpha expects a hex colour, got "${hex}"`);
+  if (full.length !== 6)
+    throw new Error(`withAlpha expects a hex colour, got "${hex}"`);
   const r = parseInt(full.slice(0, 2), 16);
   const g = parseInt(full.slice(2, 4), 16);
   const b = parseInt(full.slice(4, 6), 16);

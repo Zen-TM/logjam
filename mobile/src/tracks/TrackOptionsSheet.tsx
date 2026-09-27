@@ -97,16 +97,21 @@ export function TrackOptionsSheet({
     visible && showingStats && track != null,
     track?.durationMs,
   );
-  const { profile: demProfile, loading: demLoading } = useElevationProfile(line, {
-    allowNetwork,
-  });
+  const { profile: demProfile, loading: demLoading } = useElevationProfile(
+    line,
+    {
+      allowNetwork,
+    },
+  );
 
   const shareRowProps = useShareRowProps(online);
   const actions = track ? trackActions(track) : null;
   // THE sharing panel, in its "send a copy" mode — the same component every
   // other surface renders, with the wording the one non-revocable verb needs.
   const share = useSharePanel({
-    target: actions?.sendCopy ? { kind: "copy", sendCopy: actions.sendCopy } : null,
+    target: actions?.sendCopy
+      ? { kind: "copy", sendCopy: actions.sendCopy }
+      : null,
     itemLabel: track?.name ?? "",
     online,
     active: sending,
@@ -124,7 +129,8 @@ export function TrackOptionsSheet({
     source: "track",
     active: attaching,
     attach: async (placeId, placeName) => {
-      if (!actions?.createRouteFrom) throw new Error("This track can't become a route.");
+      if (!actions?.createRouteFrom)
+        throw new Error("This track can't become a route.");
       // RDP always throws points away; saying how many survived is what stops
       // the user concluding the app lost their recording.
       const { name, pointCount } = await actions.createRouteFrom(placeId);
@@ -275,7 +281,12 @@ export function TrackOptionsSheet({
                 onPress={() => setPickingColor((open) => !open)}
                 style={styles.swatchButton}
               >
-                <View style={[styles.currentSwatch, { backgroundColor: track.color }]} />
+                <View
+                  style={[
+                    styles.currentSwatch,
+                    { backgroundColor: track.color },
+                  ]}
+                />
               </Pressable>
             }
             onPress={() => setPickingColor((open) => !open)}
@@ -292,7 +303,9 @@ export function TrackOptionsSheet({
                     setPickingColor(false);
                     actions.setColor?.(swatch).catch((err: unknown) => {
                       console.error(err);
-                      onError(messageFromError(err, "Couldn't update track colour."));
+                      onError(
+                        messageFromError(err, "Couldn't update track colour."),
+                      );
                     });
                   }}
                   style={[
@@ -301,7 +314,9 @@ export function TrackOptionsSheet({
                     swatch === track.color ? styles.swatchSelected : null,
                   ]}
                 >
-                  {swatch === track.color ? <Text style={styles.swatchTick}>✓</Text> : null}
+                  {swatch === track.color ? (
+                    <Text style={styles.swatchTick}>✓</Text>
+                  ) : null}
                 </Pressable>
               ))}
             </View>
@@ -340,12 +355,12 @@ export function TrackOptionsSheet({
                   // RDP always throws points away; saying how many survived is
                   // what stops the user concluding the app lost their track.
                   ({ name, pointCount }) =>
-                    onInfo(
-                      `Saved “${name}” — ${pointCount} points.`,
-                    ),
+                    onInfo(`Saved “${name}” — ${pointCount} points.`),
                   (err: unknown) => {
                     console.error(err);
-                    onError(messageFromError(err, "Couldn't make a route from that."));
+                    onError(
+                      messageFromError(err, "Couldn't make a route from that."),
+                    );
                   },
                 );
               }}

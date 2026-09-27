@@ -45,7 +45,10 @@ export function NotificationOptionsSheet({
   /** Follow the notification through to the thing it is about. */
   onOpen: (notification: TNotification) => void;
   /** Go to the tab its subject lives in, with that row pulsed on arrival. */
-  onView: (notification: TNotification, destination: NotificationDestination) => void;
+  onView: (
+    notification: TNotification,
+    destination: NotificationDestination,
+  ) => void;
   onSetRead: (notification: TNotification, read: boolean) => void;
   onDelete: (notification: TNotification) => void;
 }) {
@@ -65,14 +68,18 @@ export function NotificationOptionsSheet({
       // One notification, so the sentence is short — but it is still a dialog,
       // because a delete is not undoable and there is no trash to fish it out
       // of (DESIGN.md §7).
-      Alert.alert("Delete this notification?", "It goes from every device on your account. This can't be undone.", [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: () => onDelete(notification),
-        },
-      ]),
+      Alert.alert(
+        "Delete this notification?",
+        "It goes from every device on your account. This can't be undone.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Delete",
+            style: "destructive",
+            onPress: () => onDelete(notification),
+          },
+        ],
+      ),
     );
 
   return (

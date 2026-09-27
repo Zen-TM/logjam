@@ -6,11 +6,14 @@ import { buildPushMessages, pushTitleFor, tokensToPrune } from "./push";
 
 describe("buildPushMessages — privacy invariant", () => {
   it("builds one message per token with a static generic title", () => {
-    const messages = buildPushMessages(["ExponentPushToken[a]", "ExponentPushToken[b]"], {
-      type: "place_shared",
-      placeId: "c1",
-      notificationId: "n1",
-    });
+    const messages = buildPushMessages(
+      ["ExponentPushToken[a]", "ExponentPushToken[b]"],
+      {
+        type: "place_shared",
+        placeId: "c1",
+        notificationId: "n1",
+      },
+    );
     expect(messages).toHaveLength(2);
     expect(messages[0].title).toBe("A place was shared with you");
     expect(messages[0].data).toEqual({
@@ -48,7 +51,9 @@ describe("buildPushMessages — privacy invariant", () => {
   // no status field, so the type is the only thing that can carry the outcome.
   it("gives a failed GeoPDF its own title, distinct from the success one", () => {
     expect(pushTitleFor("geo_pdf_failed")).toBe("GeoPDF failed");
-    expect(pushTitleFor("geo_pdf_failed")).not.toBe(pushTitleFor("geo_pdf_complete"));
+    expect(pushTitleFor("geo_pdf_failed")).not.toBe(
+      pushTitleFor("geo_pdf_complete"),
+    );
     expect(pushTitleFor("geo_pdf_failed")).not.toBe("Logjam notification");
   });
 
@@ -70,7 +75,10 @@ describe("buildPushMessages — privacy invariant", () => {
   });
 
   it("has no body field — titles only, details fetched over the authed API", () => {
-    const [message] = buildPushMessages(["t"], { type: "topo_complete", jobId: "j1" });
+    const [message] = buildPushMessages(["t"], {
+      type: "topo_complete",
+      jobId: "j1",
+    });
     expect("body" in message).toBe(false);
   });
 });

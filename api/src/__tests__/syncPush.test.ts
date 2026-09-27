@@ -107,12 +107,9 @@ describe("sync push — FIFO batch lifecycle", () => {
 
     const first = await push(ALICE_SUB, ops);
     expect(first.status).toBe(200);
-    expect(first.body.results.map((r: { status: string }) => r.status)).toEqual([
-      "applied",
-      "applied",
-      "applied",
-      "applied",
-    ]);
+    expect(first.body.results.map((r: { status: string }) => r.status)).toEqual(
+      ["applied", "applied", "applied", "applied"],
+    );
     // The created trip carries the canyoning tag (validation parity with the
     // REST route, not a parallel dialect).
     const tripRow = first.body.results[1].row;
@@ -121,7 +118,9 @@ describe("sync push — FIFO batch lifecycle", () => {
 
     // Whole-batch replay (network drop after apply): everything idempotent.
     const replay = await push(ALICE_SUB, ops);
-    expect(replay.body.results.map((r: { status: string }) => r.status)).toEqual([
+    expect(
+      replay.body.results.map((r: { status: string }) => r.status),
+    ).toEqual([
       "alreadyApplied",
       "alreadyApplied",
       "alreadyApplied",
@@ -430,7 +429,12 @@ describe("sync push — route colour", () => {
     expect(unchanged.body.color).toBe("#e6194b");
 
     await push(ALICE_SUB, [
-      { opId: `color-d-${routeId}`, entity: "route", op: "delete", id: routeId },
+      {
+        opId: `color-d-${routeId}`,
+        entity: "route",
+        op: "delete",
+        id: routeId,
+      },
     ]);
   });
 });
@@ -453,7 +457,12 @@ describe("sync push — notification markRead", () => {
   // reported exactly as one that never existed.
   it("markUnread and delete on a purged/foreign notification are alreadyApplied", async () => {
     const res = await push(ALICE_SUB, [
-      { opId: "mu", entity: "notification", op: "markUnread", id: randomUUID() },
+      {
+        opId: "mu",
+        entity: "notification",
+        op: "markUnread",
+        id: randomUUID(),
+      },
       { opId: "nd", entity: "notification", op: "delete", id: randomUUID() },
     ]);
     expect(res.body.results.map((r: { status: string }) => r.status)).toEqual([
@@ -466,17 +475,28 @@ describe("sync push — notification markRead", () => {
     // Whatever alice's inbox already holds, flipped and put back — deliberately
     // NOT a delete: this suite runs against the seeded dev database, and a test
     // that eats a seeded row is one that thins the fixture every time it runs.
-    const inbox = await request(API_URL).get("/notifications").set(as(ALICE_SUB));
+    const inbox = await request(API_URL)
+      .get("/notifications")
+      .set(as(ALICE_SUB));
     const target = (inbox.body as { id: string; read: boolean }[])[0];
     if (!target) return; // Nothing seeded to act on — the case above still covers the vocabulary.
 
     const readOf = async (id: string) => {
-      const res = await request(API_URL).get("/notifications").set(as(ALICE_SUB));
-      return (res.body as { id: string; read: boolean }[]).find((n) => n.id === id)?.read;
+      const res = await request(API_URL)
+        .get("/notifications")
+        .set(as(ALICE_SUB));
+      return (res.body as { id: string; read: boolean }[]).find(
+        (n) => n.id === id,
+      )?.read;
     };
     const flip = (op: "markRead" | "markUnread") =>
       push(ALICE_SUB, [
-        { opId: `${op}-${target.id}-${Date.now()}`, entity: "notification", op, id: target.id },
+        {
+          opId: `${op}-${target.id}-${Date.now()}`,
+          entity: "notification",
+          op,
+          id: target.id,
+        },
       ]);
 
     const flipped = await flip(target.read ? "markUnread" : "markRead");
@@ -551,7 +571,12 @@ describe("sync push — route anchors", () => {
     expect(afterClear.body.anchors).toBeNull();
 
     await push(ALICE_SUB, [
-      { opId: `anchors-d-${routeId}`, entity: "route", op: "delete", id: routeId },
+      {
+        opId: `anchors-d-${routeId}`,
+        entity: "route",
+        op: "delete",
+        id: routeId,
+      },
     ]);
   });
 });
@@ -583,7 +608,11 @@ describe("sync push — direct-share delete cleanup", () => {
     const shareRes = await request(API_URL)
       .post("/shares")
       .set(as(ALICE_SUB))
-      .send({ entityType: "route", entityId: routeId, sharedWithUserId: BOB_ID });
+      .send({
+        entityType: "route",
+        entityId: routeId,
+        sharedWithUserId: BOB_ID,
+      });
     expect(shareRes.status).toBe(201);
 
     const before = await request(API_URL)
@@ -594,7 +623,12 @@ describe("sync push — direct-share delete cleanup", () => {
     const cursor = before.body.cursor;
 
     const del = await push(ALICE_SUB, [
-      { opId: `share-del-d-${routeId}`, entity: "route", op: "delete", id: routeId },
+      {
+        opId: `share-del-d-${routeId}`,
+        entity: "route",
+        op: "delete",
+        id: routeId,
+      },
     ]);
     expect(del.body.results[0].status).toBe("applied");
 
@@ -603,7 +637,10 @@ describe("sync push — direct-share delete cleanup", () => {
       .query({ cursor })
       .set(as(BOB_SUB))
       .set(CLIENT);
-    expect(after.body.tombstones).toContainEqual({ type: "route", id: routeId });
+    expect(after.body.tombstones).toContainEqual({
+      type: "route",
+      id: routeId,
+    });
   });
 });
 

@@ -139,9 +139,9 @@ let installed = false;
  */
 export function installFastStreamScan(): void {
   if (installed) return;
-  const objectParserProto = Object.getPrototypeOf(PDFParser.prototype) as
-    | Record<string, unknown>
-    | null;
+  const objectParserProto = Object.getPrototypeOf(
+    PDFParser.prototype,
+  ) as Record<string, unknown> | null;
   if (
     !objectParserProto ||
     typeof objectParserProto.findEndOfStreamFallback !== "function"

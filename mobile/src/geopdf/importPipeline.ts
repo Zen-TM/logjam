@@ -116,7 +116,8 @@ function assertRendererPageMatchesGeoref(
   // 90 and 270 swap them, but 180 does not — so a dimension comparison alone
   // waved through an upside-down page and fetched every tile from the
   // diagonally opposite corner of the sheet.
-  if (page.rotationDeg !== 0) throw new Error(GEOPDF_ERRORS.UNSUPPORTED_PAGE_BOX);
+  if (page.rotationDeg !== 0)
+    throw new Error(GEOPDF_ERRORS.UNSUPPORTED_PAGE_BOX);
   // Belt and braces: the box we rebased onto must be the one being rendered.
   // pdfium rounds to whole points; a point of slack costs 8.8 m at 1:25 000,
   // which is inside GPS noise, and anything real is off by tens of points.
@@ -257,7 +258,8 @@ export async function importGeoPdfFromPicker(
     copyToCacheDirectory: true,
     multiple: false,
   });
-  if (picked.canceled || picked.assets.length === 0) return { status: "cancelled" };
+  if (picked.canceled || picked.assets.length === 0)
+    return { status: "cancelled" };
   const asset = picked.assets[0];
   // Size is checked once, in the staging step every entry point goes through.
   return importGeoPdfFile(asset.name, asset.uri, onProgress, token);
@@ -286,7 +288,9 @@ export async function importGeoPdfFile(
     return await importStagedFile(displayName, staged.uri, onProgress, token);
   } finally {
     if (staged.scratch) {
-      await FileSystem.deleteAsync(staged.scratch, { idempotent: true }).catch(() => {});
+      await FileSystem.deleteAsync(staged.scratch, { idempotent: true }).catch(
+        () => {},
+      );
     }
   }
 }
@@ -301,11 +305,14 @@ async function importStagedFile(
   const sourceSizeBytes = incoming.size ?? 0;
   const label = displayName.replace(/\.[^.]+$/, "");
   onProgress({ phase: "hashing", fraction: 0, label });
-  const sha256 = await step("hash", () => LogjamPdfRenderer.sha256File(fileUri));
+  const sha256 = await step("hash", () =>
+    LogjamPdfRenderer.sha256File(fileUri),
+  );
 
   const existing = await findGeoPdfImportBySha256(sha256);
   if (existing) {
-    if (existing.state === "ready") return { status: "existing", record: existing };
+    if (existing.state === "ready")
+      return { status: "existing", record: existing };
     // Incomplete prior import of the same bytes: resume it.
     return resumeGeoPdfImport(existing.id, onProgress, token);
   }
@@ -379,7 +386,9 @@ export async function importGeoPdfFromUrl(
     }
     return await importGeoPdfFile(displayName, scratchUri, onProgress, token);
   } finally {
-    await FileSystem.deleteAsync(scratchUri, { idempotent: true }).catch(() => {});
+    await FileSystem.deleteAsync(scratchUri, { idempotent: true }).catch(
+      () => {},
+    );
   }
 }
 
@@ -496,7 +505,9 @@ async function buildArtifact(
       const startTile =
         resume?.phase === "rasterising" ? (resume.nextTileIndex ?? 0) : null;
       const startDownsampleZ =
-        resume?.phase === "overviews" ? (resume.downsampleZ ?? plan.zMax - 1) : null;
+        resume?.phase === "overviews"
+          ? (resume.downsampleZ ?? plan.zMax - 1)
+          : null;
 
       const rasterise = { renderMs: 0, encodeMs: 0, tiles: 0 };
       const rasteriseStartedAt = Date.now();
@@ -530,7 +541,10 @@ async function buildArtifact(
         // native rasteriseBatch.
         console.log(
           `[geopdf] rasterised ${rasterise.tiles} tiles: render ${rasterise.renderMs} ms, encode ${rasterise.encodeMs} ms, other ${
-            Date.now() - rasteriseStartedAt - rasterise.renderMs - rasterise.encodeMs
+            Date.now() -
+            rasteriseStartedAt -
+            rasterise.renderMs -
+            rasterise.encodeMs
           } ms`,
         );
       }
@@ -539,7 +553,10 @@ async function buildArtifact(
       const firstZ = startDownsampleZ ?? plan.zMax - 1;
       for (let z = firstZ; z >= plan.zMin; z--) {
         if (token.cancelled) return await pause(record);
-        report("overviews", (plan.zMax - 1 - z) / Math.max(1, plan.zMax - plan.zMin));
+        report(
+          "overviews",
+          (plan.zMax - 1 - z) / Math.max(1, plan.zMax - plan.zMin),
+        );
         const buildState: GeoPdfBuildState = {
           phase: "overviews",
           zMax: plan.zMax,

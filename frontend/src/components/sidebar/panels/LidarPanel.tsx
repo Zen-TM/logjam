@@ -32,7 +32,11 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { removeShareConfirm, type TopoExportJobView, type VectorStyleSettings } from "@logjam/shared";
+import {
+  removeShareConfirm,
+  type TopoExportJobView,
+  type VectorStyleSettings,
+} from "@logjam/shared";
 import {
   apiFetch,
   deleteTopoExport,
@@ -43,13 +47,28 @@ import {
 } from "../../../placeUtils";
 import { messageFromError } from "../../../errors/messageFromError";
 import { useToast } from "../../feedback/ToastProvider";
-import type { GeoJsonPolygonal, TopoJob, TopoTemplate } from "../../dialogs/TopoDialog";
+import type {
+  GeoJsonPolygonal,
+  TopoJob,
+  TopoTemplate,
+} from "../../dialogs/TopoDialog";
 import { fetchTopoTemplates } from "../../dialogs/topoTemplatesFetch";
 import type { CompletedTopoJob } from "../../../topoLayerTypes";
 import TopoTemplateEditDialog from "../../dialogs/TopoTemplateEditDialog";
 import TopoExportDialog from "../../dialogs/TopoExportDialog";
 import ShareDialog from "../../dialogs/ShareDialog";
-import { Button, ChipRail, EmptyState, Hero, IconButton, IconTile, Menu, Row, StatusPill, type MenuEntry } from "../../../ui";
+import {
+  Button,
+  ChipRail,
+  EmptyState,
+  Hero,
+  IconButton,
+  IconTile,
+  Menu,
+  Row,
+  StatusPill,
+  type MenuEntry,
+} from "../../../ui";
 import {
   MAP_IDENTITY,
   downloadFile,
@@ -108,7 +127,9 @@ export default function LidarPanel({
   onRefetchTopoExports: () => void;
   /** Only to forget a deleted topo's visibility; the switch itself is in Layers. */
   setLidarJobToggles: (
-    v: Record<string, boolean> | ((prev: Record<string, boolean>) => Record<string, boolean>),
+    v:
+      | Record<string, boolean>
+      | ((prev: Record<string, boolean>) => Record<string, boolean>),
   ) => void;
   onOpenTopo: () => void;
   onTopoFlyTarget: (footprint: GeoJsonPolygonal) => void;
@@ -125,7 +146,10 @@ export default function LidarPanel({
 }): React.JSX.Element {
   const toast = useToast();
   const { ask, dialog } = useConfirm();
-  const { sheetOpen, openSheet } = usePanelSheet({ onOpenChange: onSheetOpenChange, onExpandSheet });
+  const { sheetOpen, openSheet } = usePanelSheet({
+    onOpenChange: onSheetOpenChange,
+    onExpandSheet,
+  });
   const isNarrow = useIsMobile();
   // Which tab of the view is showing. Panel-local: which list you were reading
   // is not worth remembering past a page change.
@@ -133,11 +157,16 @@ export default function LidarPanel({
 
   const [templates, setTemplates] = useState<TopoTemplate[]>([]);
   // undefined = closed; null = a new template; a template = editing it.
-  const [editingTemplate, setEditingTemplate] = useState<TopoTemplate | null | undefined>(undefined);
+  const [editingTemplate, setEditingTemplate] = useState<
+    TopoTemplate | null | undefined
+  >(undefined);
   const [templateFetchCount, setTemplateFetchCount] = useState(0);
   const [exportJob, setExportJob] = useState<CompletedTopoJob | null>(null);
   // Non-null = the topo whose share dialog is open, named as its row names it.
-  const [shareJob, setShareJob] = useState<{ id: string; label: string } | null>(null);
+  const [shareJob, setShareJob] = useState<{
+    id: string;
+    label: string;
+  } | null>(null);
 
   const loadTemplates = useCallback(async () => {
     try {
@@ -155,12 +184,18 @@ export default function LidarPanel({
     void loadTemplates();
   }, [loadTemplates, templateFetchCount, templateRefetchTrigger]);
 
-  const topoNames = useMemo(() => topoNamesById(completedTopoJobs), [completedTopoJobs]);
+  const topoNames = useMemo(
+    () => topoNamesById(completedTopoJobs),
+    [completedTopoJobs],
+  );
   const beingMade = useMemo(
     () => topoWorkBeingMade(activeTopoJobs, topoExports, topoNames),
     [activeTopoJobs, topoExports, topoNames],
   );
-  const finishedExports = useMemo(() => topoExports.filter((each) => each.status === "completed"), [topoExports]);
+  const finishedExports = useMemo(
+    () => topoExports.filter((each) => each.status === "completed"),
+    [topoExports],
+  );
 
   const deleteExport = useCallback(
     async (id: string, failed: boolean) => {
@@ -171,7 +206,12 @@ export default function LidarPanel({
         if (!failed) onQuotaChanged();
       } catch (err) {
         console.error(err);
-        toast.error(messageFromError(err, failed ? "Couldn't dismiss export." : "Couldn't delete export."));
+        toast.error(
+          messageFromError(
+            err,
+            failed ? "Couldn't dismiss export." : "Couldn't delete export.",
+          ),
+        );
       }
     },
     [onRefetchTopoExports, onQuotaChanged, toast],
@@ -187,11 +227,21 @@ export default function LidarPanel({
     // Export is NOT owner-gated: a recipient can already see the overlay, and
     // POST /topo-exports accepts a shared source job, making the export under
     // the recipient's own account.
-    const exportEntry: MenuEntry = { id: "export", label: "Export…", icon: FileDown, onSelect: () => setExportJob(job) };
+    const exportEntry: MenuEntry = {
+      id: "export",
+      label: "Export…",
+      icon: FileDown,
+      onSelect: () => setExportJob(job),
+    };
     if (job.syncRole === "owner") {
       return [
         exportEntry,
-        { id: "share", label: "Share…", icon: Share2, onSelect: () => setShareJob({ id: job.jobId, label }) },
+        {
+          id: "share",
+          label: "Share…",
+          icon: Share2,
+          onSelect: () => setShareJob({ id: job.jobId, label }),
+        },
         { id: "delete-sep", separator: true },
         {
           id: "delete",
@@ -206,7 +256,9 @@ export default function LidarPanel({
               confirmLabel: "Delete",
               run: async () => {
                 try {
-                  await apiFetch(`/topo-jobs/${job.jobId}`, { method: "DELETE" });
+                  await apiFetch(`/topo-jobs/${job.jobId}`, {
+                    method: "DELETE",
+                  });
                   setLidarJobToggles((previous) => {
                     const next = { ...previous };
                     delete next[job.jobId];
@@ -216,7 +268,12 @@ export default function LidarPanel({
                   onQuotaChanged();
                 } catch (err) {
                   console.error(err);
-                  toast.error(messageFromError(err, "Couldn't delete LiDAR topo. Please try again."));
+                  toast.error(
+                    messageFromError(
+                      err,
+                      "Couldn't delete LiDAR topo. Please try again.",
+                    ),
+                  );
                 }
               },
             }),
@@ -246,7 +303,9 @@ export default function LidarPanel({
                 onRefetchCompletedTopoJobs();
               } catch (err) {
                 console.error(err);
-                toast.error(messageFromError(err, "Couldn't remove that topo."));
+                toast.error(
+                  messageFromError(err, "Couldn't remove that topo."),
+                );
               }
             },
           }),
@@ -254,9 +313,19 @@ export default function LidarPanel({
     ];
   };
 
-  const exportEntries = (exportJob: TopoExportJobView, label: string): MenuEntry[] => [
+  const exportEntries = (
+    exportJob: TopoExportJobView,
+    label: string,
+  ): MenuEntry[] => [
     ...(exportJob.downloadUrl
-      ? [{ id: "download", label: "Download", icon: Download, onSelect: () => downloadFile(exportJob.downloadUrl!) }]
+      ? [
+          {
+            id: "download",
+            label: "Download",
+            icon: Download,
+            onSelect: () => downloadFile(exportJob.downloadUrl!),
+          },
+        ]
       : []),
     { id: "delete-sep", separator: true },
     {
@@ -267,7 +336,8 @@ export default function LidarPanel({
       onSelect: () =>
         ask({
           title: `Delete the ${exportFormatLabel(exportJob.format)} export of ${label}?`,
-          message: "The exported file is deleted. The topo it was made from stays.",
+          message:
+            "The exported file is deleted. The topo it was made from stays.",
           confirmLabel: "Delete",
           run: () => deleteExport(exportJob.id, false),
         }),
@@ -275,12 +345,22 @@ export default function LidarPanel({
   ];
 
   const templateEntries = (template: TopoTemplate): MenuEntry[] => [
-    { id: "make", label: "Make a LiDAR topo with this", icon: Mountain, onSelect: () => onOpenTopoWithTemplate(template.id) },
+    {
+      id: "make",
+      label: "Make a LiDAR topo with this",
+      icon: Mountain,
+      onSelect: () => onOpenTopoWithTemplate(template.id),
+    },
     // The built-in Default is nobody's to change: absent, not disabled.
     ...(template.isSystem
       ? []
       : ([
-          { id: "edit", label: "Edit…", icon: Pencil, onSelect: () => setEditingTemplate(template) },
+          {
+            id: "edit",
+            label: "Edit…",
+            icon: Pencil,
+            onSelect: () => setEditingTemplate(template),
+          },
           { id: "delete-sep", separator: true },
           {
             id: "delete",
@@ -290,15 +370,25 @@ export default function LidarPanel({
             onSelect: () =>
               ask({
                 title: `Delete the template “${template.name}”?`,
-                message: "The template is deleted. Topos already made with it stay.",
+                message:
+                  "The template is deleted. Topos already made with it stay.",
                 confirmLabel: "Delete",
                 run: async () => {
                   try {
-                    await apiFetch(`/topo-templates/${template.id}`, { method: "DELETE" });
-                    setTemplates((previous) => previous.filter((each) => each.id !== template.id));
+                    await apiFetch(`/topo-templates/${template.id}`, {
+                      method: "DELETE",
+                    });
+                    setTemplates((previous) =>
+                      previous.filter((each) => each.id !== template.id),
+                    );
                   } catch (err) {
                     console.error(err);
-                    toast.error(messageFromError(err, "Couldn't delete template. Please try again."));
+                    toast.error(
+                      messageFromError(
+                        err,
+                        "Couldn't delete template. Please try again.",
+                      ),
+                    );
                   }
                 },
               }),
@@ -328,11 +418,27 @@ export default function LidarPanel({
             label="Make a LiDAR topo"
             placement="bottom-end"
             entries={[
-              { id: "make", label: "Make a LiDAR topo", icon: Mountain, onSelect: onOpenTopo },
-              { id: "template", label: "New template…", icon: Plus, onSelect: () => setEditingTemplate(null) },
+              {
+                id: "make",
+                label: "Make a LiDAR topo",
+                icon: Mountain,
+                onSelect: onOpenTopo,
+              },
+              {
+                id: "template",
+                label: "New template…",
+                icon: Plus,
+                onSelect: () => setEditingTemplate(null),
+              },
             ]}
             trigger={(props) => (
-              <Button {...props} compact variant="filled" icon={Plus} trailingIcon={ChevronDown}>
+              <Button
+                {...props}
+                compact
+                variant="filled"
+                icon={Plus}
+                trailingIcon={ChevronDown}
+              >
                 Make
               </Button>
             )}
@@ -343,7 +449,10 @@ export default function LidarPanel({
   );
 
   const nothingYet =
-    topoJobsLoaded && completedTopoJobs.length === 0 && beingMade.length === 0 && finishedExports.length === 0;
+    topoJobsLoaded &&
+    completedTopoJobs.length === 0 &&
+    beingMade.length === 0 &&
+    finishedExports.length === 0;
 
   const list = !topoJobsLoaded ? (
     <div className={classes.emptyArea} role="status">
@@ -365,128 +474,177 @@ export default function LidarPanel({
   ) : (
     <div className={classes.list}>
       {tab === "topos" && (
-      <section className={classes.section} aria-labelledby="maps-topos">
-        {/* The tab is the heading: a chip that says "Topos 6" over a heading
+        <section className={classes.section} aria-labelledby="maps-topos">
+          {/* The tab is the heading: a chip that says "Topos 6" over a heading
             that says "LIDAR TOPOS 6" is the same line drawn twice. */}
-        <h3 id="maps-topos" className="visually-hidden">
-          LiDAR topos
-        </h3>
-        {completedTopoJobs.length === 0 && <p className={classes.note}>None finished yet.</p>}
-        {completedTopoJobs.map((job) => {
-          const label = topoLabel(job);
-          return (
-            <Row
-              key={job.jobId}
-              data-topo-id={job.jobId}
-              title={label}
-              // A named topo keeps its date beneath; an unnamed one IS its date.
-              subtitle={job.name ? formatDay(job.createdAt) : undefined}
-              description={MAP_IDENTITY.topo.label}
-              leading={<IconTile icon={Mountain} hue={MAP_IDENTITY.topo.hue} label={MAP_IDENTITY.topo.label} />}
-              onOpen={job.footprint ? () => onTopoFlyTarget(job.footprint!) : undefined}
-              trailing={
-                <>
-                  {job.syncRole !== "owner" && <StatusPill label="Shared" tone="outline" />}
+          <h3 id="maps-topos" className="visually-hidden">
+            LiDAR topos
+          </h3>
+          {completedTopoJobs.length === 0 && (
+            <p className={classes.note}>None finished yet.</p>
+          )}
+          {completedTopoJobs.map((job) => {
+            const label = topoLabel(job);
+            return (
+              <Row
+                key={job.jobId}
+                data-topo-id={job.jobId}
+                title={label}
+                // A named topo keeps its date beneath; an unnamed one IS its date.
+                subtitle={job.name ? formatDay(job.createdAt) : undefined}
+                description={MAP_IDENTITY.topo.label}
+                leading={
+                  <IconTile
+                    icon={Mountain}
+                    hue={MAP_IDENTITY.topo.hue}
+                    label={MAP_IDENTITY.topo.label}
+                  />
+                }
+                onOpen={
+                  job.footprint
+                    ? () => onTopoFlyTarget(job.footprint!)
+                    : undefined
+                }
+                trailing={
+                  <>
+                    {job.syncRole !== "owner" && (
+                      <StatusPill label="Shared" tone="outline" />
+                    )}
+                    <Menu
+                      label={`Actions for ${label}`}
+                      title={label}
+                      placement="right-start"
+                      entries={topoEntries(job)}
+                      trigger={(props) => (
+                        <IconButton
+                          {...props}
+                          icon={EllipsisVertical}
+                          label={`Actions for ${label}`}
+                        />
+                      )}
+                    />
+                  </>
+                }
+              />
+            );
+          })}
+        </section>
+      )}
+
+      {tab === "exports" && (
+        <section className={classes.section} aria-labelledby="maps-exports">
+          <h3 id="maps-exports" className="visually-hidden">
+            Exports
+          </h3>
+          {/* The server's TOPO_EXPORT_TTL_MS sweep. */}
+          <p className={classes.note}>
+            {finishedExports.length === 0
+              ? "Export a topo as GeoTIFF, MBTiles and more from its menu. Exports are kept for 7 days."
+              : "Kept for 7 days after they're made."}
+          </p>
+          {finishedExports.map((exportJob) => {
+            const label = exportLabel(exportJob, topoNames);
+            return (
+              <Row
+                key={exportJob.id}
+                data-export-id={exportJob.id}
+                title={label}
+                subtitle={fileSubtitle({
+                  format: exportFormatLabel(exportJob.format),
+                  bytes: exportJob.resultBytes,
+                  createdAt: exportJob.createdAt,
+                })}
+                description={MAP_IDENTITY.export.label}
+                leading={
+                  <IconTile
+                    icon={FileDown}
+                    hue={MAP_IDENTITY.export.hue}
+                    label={MAP_IDENTITY.export.label}
+                  />
+                }
+                onOpen={
+                  exportJob.downloadUrl
+                    ? () => downloadFile(exportJob.downloadUrl!)
+                    : undefined
+                }
+                trailing={
                   <Menu
                     label={`Actions for ${label}`}
                     title={label}
                     placement="right-start"
-                    entries={topoEntries(job)}
-                    trigger={(props) => <IconButton {...props} icon={EllipsisVertical} label={`Actions for ${label}`} />}
+                    entries={exportEntries(exportJob, label)}
+                    trigger={(props) => (
+                      <IconButton
+                        {...props}
+                        icon={EllipsisVertical}
+                        label={`Actions for ${label}`}
+                      />
+                    )}
                   />
-                </>
-              }
-            />
-          );
-        })}
-      </section>
-      )}
-
-      {tab === "exports" && (
-      <section className={classes.section} aria-labelledby="maps-exports">
-        <h3 id="maps-exports" className="visually-hidden">
-          Exports
-        </h3>
-        {/* The server's TOPO_EXPORT_TTL_MS sweep. */}
-        <p className={classes.note}>
-          {finishedExports.length === 0
-            ? "Export a topo as GeoTIFF, MBTiles and more from its menu. Exports are kept for 7 days."
-            : "Kept for 7 days after they're made."}
-        </p>
-        {finishedExports.map((exportJob) => {
-          const label = exportLabel(exportJob, topoNames);
-          return (
-            <Row
-              key={exportJob.id}
-              data-export-id={exportJob.id}
-              title={label}
-              subtitle={fileSubtitle({
-                format: exportFormatLabel(exportJob.format),
-                bytes: exportJob.resultBytes,
-                createdAt: exportJob.createdAt,
-              })}
-              description={MAP_IDENTITY.export.label}
-              leading={<IconTile icon={FileDown} hue={MAP_IDENTITY.export.hue} label={MAP_IDENTITY.export.label} />}
-              onOpen={exportJob.downloadUrl ? () => downloadFile(exportJob.downloadUrl!) : undefined}
-              trailing={
-                <Menu
-                  label={`Actions for ${label}`}
-                  title={label}
-                  placement="right-start"
-                  entries={exportEntries(exportJob, label)}
-                  trigger={(props) => <IconButton {...props} icon={EllipsisVertical} label={`Actions for ${label}`} />}
-                />
-              }
-            />
-          );
-        })}
-        {topoExportsTotal != null && topoExportsTotal > topoExports.length && (
-          <p className={classes.note}>
-            Showing your {topoExports.length} most recent exports of {topoExportsTotal}. Older ones aren’t loaded.
-          </p>
-        )}
-      </section>
+                }
+              />
+            );
+          })}
+          {topoExportsTotal != null &&
+            topoExportsTotal > topoExports.length && (
+              <p className={classes.note}>
+                Showing your {topoExports.length} most recent exports of{" "}
+                {topoExportsTotal}. Older ones aren’t loaded.
+              </p>
+            )}
+        </section>
       )}
 
       {tab === "templates" && (
-      <section className={classes.section} aria-labelledby="maps-topo-templates">
-        <h3 id="maps-topo-templates" className="visually-hidden">
-          Templates
-        </h3>
-        {templates.map((template) => (
-          <Row
-            key={template.id}
-            title={template.name}
-            subtitle={template.isSystem ? "Built in" : undefined}
-            description={MAP_IDENTITY.topoTemplate.label}
-            leading={
-              <IconTile
-                icon={MAP_IDENTITY.topoTemplate.icon}
-                hue={MAP_IDENTITY.topoTemplate.hue}
-                label={MAP_IDENTITY.topoTemplate.label}
-              />
-            }
-            onOpen={() => onOpenTopoWithTemplate(template.id)}
-            trailing={
-              <Menu
-                label={`Actions for ${template.name}`}
-                title={template.name}
-                placement="right-start"
-                entries={templateEntries(template)}
-                trigger={(props) => (
-                  <IconButton {...props} icon={EllipsisVertical} label={`Actions for ${template.name}`} />
-                )}
-              />
-            }
-          />
-        ))}
-      </section>
+        <section
+          className={classes.section}
+          aria-labelledby="maps-topo-templates"
+        >
+          <h3 id="maps-topo-templates" className="visually-hidden">
+            Templates
+          </h3>
+          {templates.map((template) => (
+            <Row
+              key={template.id}
+              title={template.name}
+              subtitle={template.isSystem ? "Built in" : undefined}
+              description={MAP_IDENTITY.topoTemplate.label}
+              leading={
+                <IconTile
+                  icon={MAP_IDENTITY.topoTemplate.icon}
+                  hue={MAP_IDENTITY.topoTemplate.hue}
+                  label={MAP_IDENTITY.topoTemplate.label}
+                />
+              }
+              onOpen={() => onOpenTopoWithTemplate(template.id)}
+              trailing={
+                <Menu
+                  label={`Actions for ${template.name}`}
+                  title={template.name}
+                  placement="right-start"
+                  entries={templateEntries(template)}
+                  trigger={(props) => (
+                    <IconButton
+                      {...props}
+                      icon={EllipsisVertical}
+                      label={`Actions for ${template.name}`}
+                    />
+                  )}
+                />
+              }
+            />
+          ))}
+        </section>
       )}
     </div>
   );
 
   const sheet = sheetOpen && (
-    <TopoStyleSheet value={vectorStyle} onChange={onVectorStyleChange} onClose={() => openSheet(false)} />
+    <TopoStyleSheet
+      value={vectorStyle}
+      onChange={onVectorStyleChange}
+      onClose={() => openSheet(false)}
+    />
   );
 
   return (
@@ -505,9 +663,21 @@ export default function LidarPanel({
                 options={[
                   // The Templates chip counts the built-in Default too, so it
                   // can't say 0 over a list with something in it (TOPO-5).
-                  { value: "topos", label: "Topos", count: completedTopoJobs.length },
-                  { value: "exports", label: "Exports", count: finishedExports.length },
-                  { value: "templates", label: "Templates", count: templates.length },
+                  {
+                    value: "topos",
+                    label: "Topos",
+                    count: completedTopoJobs.length,
+                  },
+                  {
+                    value: "exports",
+                    label: "Exports",
+                    count: finishedExports.length,
+                  },
+                  {
+                    value: "templates",
+                    label: "Templates",
+                    count: templates.length,
+                  },
                 ]}
                 value={tab}
                 onChange={setTab}
@@ -549,7 +719,9 @@ export default function LidarPanel({
           onClose={() => setShareJob(null)}
           listShares={() => getEntityShares("topoJob", shareJob.id)}
           share={(userId) => shareEntityWith("topoJob", shareJob.id, userId)}
-          unshare={(userId) => unshareEntityWith("topoJob", shareJob.id, userId)}
+          unshare={(userId) =>
+            unshareEntityWith("topoJob", shareJob.id, userId)
+          }
         />
       )}
 

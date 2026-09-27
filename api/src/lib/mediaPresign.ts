@@ -66,7 +66,9 @@ export async function toMediaItem(row: MediaRow): Promise<MediaItem> {
     row.s3KeyDisplay,
     category === "track" ? { downloadFilename: row.filename } : undefined,
   );
-  const thumbnailUrl = row.s3KeyThumbnail ? await presignGet(row.s3KeyThumbnail) : null;
+  const thumbnailUrl = row.s3KeyThumbnail
+    ? await presignGet(row.s3KeyThumbnail)
+    : null;
   return {
     id: row.id,
     linkedType: row.linkedType as MediaLinkedType,

@@ -155,7 +155,9 @@ export function StatsScreen({
   // logbook with 123 trips in it, which is what the drill-down did.
   const reading = tripsQuery.data == null || placesQuery.data == null;
 
-  const title = activity ? logbookActivityLabel(activity) : `${pluralCount(stats.days, "day")} out`;
+  const title = activity
+    ? logbookActivityLabel(activity)
+    : `${pluralCount(stats.days, "day")} out`;
 
   return (
     <View style={styles.screen}>
@@ -186,7 +188,9 @@ export function StatsScreen({
 
       {stats.trips === 0 ? (
         <EmptyState
-          title={reading ? "Reading your logbook…" : "Nothing logged in here yet"}
+          title={
+            reading ? "Reading your logbook…" : "Nothing logged in here yet"
+          }
           hint={
             reading
               ? undefined
@@ -291,7 +295,9 @@ function Activities({
             hue={meta.hue}
             title={logbookActivityLabel(tally.type)}
             subtitle={activityTallySubtitle(tally)}
-            right={<Feather name="chevron-right" size={20} color={theme.textMuted} />}
+            right={
+              <Feather name="chevron-right" size={20} color={theme.textMuted} />
+            }
             onPress={() => onOpenActivity(tally.type)}
           />
         );
@@ -341,13 +347,16 @@ function PlacesVisited({ stats }: { stats: LogbookStats }) {
                   },
                 ]}
               />
-              <View style={{ flexGrow: Math.max(entry.total - entry.logged, 0) }} />
+              <View
+                style={{ flexGrow: Math.max(entry.total - entry.logged, 0) }}
+              />
             </View>
           </View>
         ))}
         {stats.mostReturned ? (
           <Text style={styles.cadence}>
-            most returned to · {stats.mostReturned.name} ×{stats.mostReturned.trips}
+            most returned to · {stats.mostReturned.name} ×
+            {stats.mostReturned.trips}
           </Text>
         ) : null}
       </Card>
@@ -368,7 +377,12 @@ function OnFoot({
   tracks,
   range,
 }: {
-  tracks: { startedAt: string; distanceM: number; durationMs: number; elevationGainM: number }[];
+  tracks: {
+    startedAt: string;
+    distanceM: number;
+    durationMs: number;
+    elevationGainM: number;
+  }[];
   range: LogbookRange;
 }) {
   // A recording with no distance has nothing to say — an armed-and-cancelled
@@ -492,7 +506,10 @@ function AttributeStat({ stat }: { stat: FieldStat }) {
       subtitle={display.subtitle}
       right={
         display.metric ? (
-          <RowMetric value={display.metric.value} suffix={display.metric.suffix} />
+          <RowMetric
+            value={display.metric.value}
+            suffix={display.metric.suffix}
+          />
         ) : undefined
       }
       footer={

@@ -63,7 +63,8 @@ vi.mock("./sensorLog", () => ({
 // — and none of which these tests are about. `trackBackup.test.ts` covers it.
 const backUpFinishedTrack = vi.fn(async () => "media-1");
 vi.mock("./trackBackup", () => ({
-  backUpFinishedTrack: (...args: unknown[]) => backUpFinishedTrack(...(args as [])),
+  backUpFinishedTrack: (...args: unknown[]) =>
+    backUpFinishedTrack(...(args as [])),
 }));
 
 vi.mock("./recordingPreferences", () => ({
@@ -108,8 +109,11 @@ const {
   setRecordingMapFocusBoost,
   startTrackRecording,
 } = await import("./trackRecorder");
-const { isRecordingWriteFailing, resetTrackWriteHealth, FAILING_WRITE_THRESHOLD } =
-  await import("./trackWriteQueue");
+const {
+  isRecordingWriteFailing,
+  resetTrackWriteHealth,
+  FAILING_WRITE_THRESHOLD,
+} = await import("./trackWriteQueue");
 
 /** A fix far enough from the previous one to survive the acceptance filter. */
 function fixAt(index: number) {
@@ -243,10 +247,9 @@ describe("the map boost", () => {
   // each client's minimum update interval to its own interval), so the recorder
   // is boosted explicitly while the map is looked at.
   function lastOptions() {
-    const [, options] = startLocationUpdatesAsync.mock.calls.at(-1) as unknown as [
-      string,
-      Record<string, unknown>,
-    ];
+    const [, options] = startLocationUpdatesAsync.mock.calls.at(
+      -1,
+    ) as unknown as [string, Record<string, unknown>];
     return options;
   }
 
@@ -292,7 +295,11 @@ describe("the map boost", () => {
     hasStartedLocationUpdatesAsync.mockResolvedValue(true);
     await setRecordingMapFocusBoost(true);
     await pauseTrackRecording("track-1");
-    const track = { ...recordingTrack(), state: "paused", pausedAt: new Date().toISOString() };
+    const track = {
+      ...recordingTrack(),
+      state: "paused",
+      pausedAt: new Date().toISOString(),
+    };
     await resumeTrackRecording(track as never);
     expect(lastOptions()).toMatchObject({ timeInterval: 3000 });
   });
@@ -390,8 +397,16 @@ describe("location batch write chain (MLIFE-001)", () => {
 describe("arming and marking (MLIFE-002)", () => {
   it("restores the pause when resume cannot arm the location task", async () => {
     const pausedAt = new Date(1_700_000_100_000).toISOString();
-    const track = { ...recordingTrack(), state: "paused", currentSegment: 2, pausedMs: 60_000, pausedAt };
-    startLocationUpdatesAsync.mockRejectedValueOnce(new Error("permission denied"));
+    const track = {
+      ...recordingTrack(),
+      state: "paused",
+      currentSegment: 2,
+      pausedMs: 60_000,
+      pausedAt,
+    };
+    startLocationUpdatesAsync.mockRejectedValueOnce(
+      new Error("permission denied"),
+    );
 
     await expect(resumeTrackRecording(track as never)).rejects.toThrow();
 
@@ -407,7 +422,12 @@ describe("arming and marking (MLIFE-002)", () => {
   });
 
   it("leaves the row recording when the task arms", async () => {
-    const track = { ...recordingTrack(), state: "paused", currentSegment: 2, pausedMs: 60_000 };
+    const track = {
+      ...recordingTrack(),
+      state: "paused",
+      currentSegment: 2,
+      pausedMs: 60_000,
+    };
     await resumeTrackRecording(track as never);
     expect(updateTrack).toHaveBeenCalledTimes(1);
     expect(updateTrack).toHaveBeenLastCalledWith("track-1", {
@@ -433,7 +453,9 @@ describe("arming and marking (MLIFE-002)", () => {
       pausedMs: 60_000,
       endedAt,
     };
-    startLocationUpdatesAsync.mockRejectedValueOnce(new Error("permission denied"));
+    startLocationUpdatesAsync.mockRejectedValueOnce(
+      new Error("permission denied"),
+    );
 
     await expect(continueTrackRecording(track as never)).rejects.toThrow();
 
@@ -496,7 +518,8 @@ describe("rejected fixes are kept, and cannot cost a recording", () => {
     await taskHandler!({ data: { locations: [fixAt(0), stillAt(1)] } });
 
     expect(appendRejectedFixes).toHaveBeenCalledTimes(1);
-    const [trackId, rejected] = appendRejectedFixes.mock.calls[0] as unknown as [
+    const [trackId, rejected] = appendRejectedFixes.mock
+      .calls[0] as unknown as [
       string,
       { reason: string; segment: number; lon: number }[],
     ];
@@ -523,7 +546,9 @@ describe("rejected fixes are kept, and cannot cost a recording", () => {
     activeTrack = recordingTrack();
     appendRejectedFixes.mockRejectedValueOnce(new Error("database is locked"));
 
-    await taskHandler!({ data: { locations: [fixAt(0), stillAt(1), fixAt(2)] } });
+    await taskHandler!({
+      data: { locations: [fixAt(0), stillAt(1), fixAt(2)] },
+    });
 
     expect(appendRejectedFixes).toHaveBeenCalledTimes(1);
     expect(appendTrackPoints).toHaveBeenCalledTimes(1);

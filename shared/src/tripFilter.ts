@@ -120,7 +120,12 @@ export function tripFilterFieldDefs(
       if (value != null) answered[key] = value;
     }
   }
-  const tags = type === NO_TYPE_FILTER_VALUE ? [] : type ? [type] : inScope.flatMap((trip) => trip.types);
+  const tags =
+    type === NO_TYPE_FILTER_VALUE
+      ? []
+      : type
+        ? [type]
+        : inScope.flatMap((trip) => trip.types);
   return tripFieldDefs(defs, tags, answered);
 }
 

@@ -18,7 +18,11 @@ import { Router, Response } from "express";
 import { randomUUID } from "crypto";
 import { Prisma } from "@prisma/client";
 
-import { HeadObjectCommand, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import {
+  HeadObjectCommand,
+  PutObjectCommand,
+  GetObjectCommand,
+} from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
@@ -476,7 +480,10 @@ router.post(
     // offer that always fails" into "the offer is withdrawn".
     try {
       await s3.send(
-        new HeadObjectCommand({ Bucket: MEDIA_BUCKET, Key: row.fileSend.s3Key }),
+        new HeadObjectCommand({
+          Bucket: MEDIA_BUCKET,
+          Key: row.fileSend.s3Key,
+        }),
       );
     } catch (err) {
       // Only a definitively ABSENT object retires the send. A throttle or a

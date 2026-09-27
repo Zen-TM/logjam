@@ -14,7 +14,10 @@ type ConfirmRequest = {
 };
 
 /** One confirm for a whole view, asked for by whichever verb needs it. */
-export function useConfirm(): { ask: (request: ConfirmRequest) => void; dialog: ReactNode } {
+export function useConfirm(): {
+  ask: (request: ConfirmRequest) => void;
+  dialog: ReactNode;
+} {
   const [pending, setPending] = useState<ConfirmRequest | null>(null);
   const [busy, setBusy] = useState(false);
 

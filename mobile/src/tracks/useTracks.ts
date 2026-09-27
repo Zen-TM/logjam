@@ -12,7 +12,10 @@ export type TracksState = {
 };
 
 export function useTracks(): TracksState {
-  const [state, setState] = useState<TracksState>({ tracks: [], loaded: false });
+  const [state, setState] = useState<TracksState>({
+    tracks: [],
+    loaded: false,
+  });
   const refresh = useCallback(() => {
     listTracks()
       .then((tracks) => setState({ tracks, loaded: true }))

@@ -115,7 +115,10 @@ export function RouteDrawPanel({
       setSettled(null);
       return;
     }
-    const timer = window.setTimeout(() => setSettled(points), PROFILE_SETTLE_MS);
+    const timer = window.setTimeout(
+      () => setSettled(points),
+      PROFILE_SETTLE_MS,
+    );
     return () => window.clearTimeout(timer);
   }, [points]);
   const { profile, loading: profileLoading } = useElevationProfile(settled);
@@ -139,7 +142,10 @@ export function RouteDrawPanel({
 
   // The SAME densification the server profiled, so a sample index maps straight
   // back to a coordinate on the line.
-  const samplePositions = useMemo(() => (settled ? densifyLine(settled) : []), [settled]);
+  const samplePositions = useMemo(
+    () => (settled ? densifyLine(settled) : []),
+    [settled],
+  );
   // Leaving mid-hover would otherwise strand the marker on the map.
   useEffect(() => () => routeHover.set(null), [routeHover]);
 
@@ -150,15 +156,28 @@ export function RouteDrawPanel({
       // The headline figure while drawing, with the pair beneath it.
       span: true,
     },
-    { label: "Climb", value: profile ? `↑ ${Math.round(profile.gainM)} m` : "—" },
-    { label: "Descent", value: profile ? `↓ ${Math.round(profile.lossM)} m` : "—" },
+    {
+      label: "Climb",
+      value: profile ? `↑ ${Math.round(profile.gainM)} m` : "—",
+    },
+    {
+      label: "Descent",
+      value: profile ? `↓ ${Math.round(profile.lossM)} m` : "—",
+    },
   ];
 
   return (
     <div className={classes.root}>
       <Hero
         title={editingName ? `Editing ${editingName}` : "New route"}
-        actions={<IconButton icon={X} label="Cancel drawing" onClick={onCancel} disabled={saving} />}
+        actions={
+          <IconButton
+            icon={X}
+            label="Cancel drawing"
+            onClick={onCancel}
+            disabled={saving}
+          />
+        }
       />
 
       <div className={classes.body}>
@@ -197,7 +216,8 @@ export function RouteDrawPanel({
               <>
                 {profile.minM != null && profile.maxM != null && (
                   <p className={classes.band}>
-                    {Math.round(profile.minM)}–{Math.round(profile.maxM)} m above sea level
+                    {Math.round(profile.minM)}–{Math.round(profile.maxM)} m
+                    above sea level
                   </p>
                 )}
                 <SectionHeader title="Elevation vs distance" />
@@ -207,9 +227,12 @@ export function RouteDrawPanel({
                   maxM={profile.maxM}
                   color={color ?? "currentColor"}
                   onHoverSampleChange={(index) => {
-                    const position = index == null ? null : samplePositions[index];
+                    const position =
+                      index == null ? null : samplePositions[index];
                     routeHover.set(
-                      position ? { position: [position.lon, position.lat], color } : null,
+                      position
+                        ? { position: [position.lon, position.lat], color }
+                        : null,
                     );
                   }}
                 />
@@ -217,7 +240,9 @@ export function RouteDrawPanel({
               </>
             ) : (
               <p className={classes.note}>
-                {profileLoading ? "Reading the terrain…" : "Pause to read the terrain under this line."}
+                {profileLoading
+                  ? "Reading the terrain…"
+                  : "Pause to read the terrain under this line."}
               </p>
             )}
           </section>
@@ -259,26 +284,38 @@ export function RouteDrawPanel({
         </Select>
 
         <div className={classes.buttons}>
-          <IconButton icon={Undo2} label="Undo" onClick={onUndo} disabled={!canUndo || saving} />
-        <IconButton
-          icon={ArrowLeftRight}
-          label="Reverse direction"
-          onClick={onReverse}
-          disabled={!hasLine || saving}
-        />
-        <IconButton
-          icon={Trash2}
-          label="Clear all points"
-          onClick={onClear}
-          disabled={points.length === 0 || saving}
-        />
-        <span className={classes.spacer} />
-        <Button compact onClick={onCancel} disabled={saving}>
-          Cancel
-        </Button>
-        <Button compact variant="filled" icon={Redo2} onClick={onSave} disabled={!canSave} busy={saving}>
-          Save
-        </Button>
+          <IconButton
+            icon={Undo2}
+            label="Undo"
+            onClick={onUndo}
+            disabled={!canUndo || saving}
+          />
+          <IconButton
+            icon={ArrowLeftRight}
+            label="Reverse direction"
+            onClick={onReverse}
+            disabled={!hasLine || saving}
+          />
+          <IconButton
+            icon={Trash2}
+            label="Clear all points"
+            onClick={onClear}
+            disabled={points.length === 0 || saving}
+          />
+          <span className={classes.spacer} />
+          <Button compact onClick={onCancel} disabled={saving}>
+            Cancel
+          </Button>
+          <Button
+            compact
+            variant="filled"
+            icon={Redo2}
+            onClick={onSave}
+            disabled={!canSave}
+            busy={saving}
+          >
+            Save
+          </Button>
         </div>
       </footer>
     </div>

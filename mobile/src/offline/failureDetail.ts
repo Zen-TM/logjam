@@ -22,4 +22,3 @@ export function failureDetail(err: unknown): string | undefined {
     .trim();
   return safe.length > 0 ? safe.slice(0, 120) : undefined;
 }
-

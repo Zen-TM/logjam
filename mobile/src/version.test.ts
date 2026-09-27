@@ -16,7 +16,7 @@ describe("parseSemver", () => {
     "throws on %j",
     (bad) => {
       expect(() => parseSemver(bad)).toThrow("Invalid semver");
-    }
+    },
   );
 });
 
@@ -55,8 +55,13 @@ describe("upgradeEnforcement", () => {
 describe("storeListingUrl", () => {
   it("links the Play listing for the id app.json declares", () => {
     expect(
-      storeListingUrl({ os: "android", androidPackage: "com.logjamnsw.mobile" }),
-    ).toBe("https://play.google.com/store/apps/details?id=com.logjamnsw.mobile");
+      storeListingUrl({
+        os: "android",
+        androidPackage: "com.logjamnsw.mobile",
+      }),
+    ).toBe(
+      "https://play.google.com/store/apps/details?id=com.logjamnsw.mobile",
+    );
   });
 
   it.each([

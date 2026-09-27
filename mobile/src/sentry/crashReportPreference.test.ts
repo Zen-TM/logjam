@@ -15,8 +15,12 @@ vi.mock("../prefsDb", () => ({
 // grandfatherCrashReports lives beside initSentry, which pulls the native SDK.
 vi.mock("@sentry/react-native", () => ({ init: vi.fn() }));
 
-const { areCrashReportsEnabled, needsCrashReportChoice, readCrashReportChoice, setCrashReportsEnabled } =
-  await import("./crashReportPreference");
+const {
+  areCrashReportsEnabled,
+  needsCrashReportChoice,
+  readCrashReportChoice,
+  setCrashReportsEnabled,
+} = await import("./crashReportPreference");
 const { grandfatherCrashReports } = await import("./initSentry");
 
 describe("crash report consent", () => {

@@ -18,7 +18,12 @@ const LATER = "2026-07-24T01:00:00.000Z";
 describe("conflictReceipts (§6 detection, arrival-order resolution)", () => {
   it("no baseUpdatedAt → blind write, no receipts", () => {
     expect(
-      conflictReceipts(undefined, new Date(LATER), { notes: "x" }, { notes: "y" }),
+      conflictReceipts(
+        undefined,
+        new Date(LATER),
+        { notes: "x" },
+        { notes: "y" },
+      ),
     ).toEqual([]);
   });
 
@@ -41,7 +46,12 @@ describe("conflictReceipts (§6 detection, arrival-order resolution)", () => {
 
   it("stale base but identical values → nothing was overwritten, no receipt", () => {
     expect(
-      conflictReceipts(BASE, new Date(LATER), { notes: "same" }, { notes: "same" }),
+      conflictReceipts(
+        BASE,
+        new Date(LATER),
+        { notes: "same" },
+        { notes: "same" },
+      ),
     ).toEqual([]);
   });
 
@@ -89,7 +99,9 @@ describe("parsePushOp", () => {
   });
 
   it("rejects unknown entity, invalid op-for-entity, bad id, bad baseUpdatedAt", () => {
-    expect(() => parsePushOp({ ...valid, entity: "media" }, 0)).toThrow(AppError);
+    expect(() => parsePushOp({ ...valid, entity: "media" }, 0)).toThrow(
+      AppError,
+    );
     expect(() => parsePushOp({ ...valid, entity: "placeShare" }, 0)).toThrow(
       AppError,
     );
@@ -97,9 +109,9 @@ describe("parsePushOp", () => {
       parsePushOp({ ...valid, entity: "notification", op: "update" }, 0),
     ).toThrow(AppError);
     expect(() => parsePushOp({ ...valid, id: "nope" }, 0)).toThrow(AppError);
-    expect(() => parsePushOp({ ...valid, baseUpdatedAt: "garbage" }, 0)).toThrow(
-      AppError,
-    );
+    expect(() =>
+      parsePushOp({ ...valid, baseUpdatedAt: "garbage" }, 0),
+    ).toThrow(AppError);
     expect(() => parsePushOp({ ...valid, fields: [] }, 0)).toThrow(AppError);
     expect(() => parsePushOp({ ...valid, opId: "" }, 0)).toThrow(AppError);
   });

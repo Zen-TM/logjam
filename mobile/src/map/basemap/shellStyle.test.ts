@@ -25,7 +25,9 @@ describe("buildShellStyle", () => {
   });
 
   it("selects the sprite flavor", () => {
-    expect(buildShellStyle(null, "dark").sprite).toMatch(/\/sprites\/v4\/dark$/);
+    expect(buildShellStyle(null, "dark").sprite).toMatch(
+      /\/sprites\/v4\/dark$/,
+    );
   });
 
   it("is a style OBJECT with a background layer (never an empty style)", () => {

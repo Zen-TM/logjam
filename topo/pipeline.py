@@ -67,6 +67,8 @@ def _load_icon(name: str) -> Image.Image:
     if name not in _ICON_CACHE:
         _ICON_CACHE[name] = Image.open(os.path.join(_ICON_DIR, name)).convert("RGBA")
     return _ICON_CACHE[name]
+
+
 from shapely.geometry import shape, mapping, Polygon, MultiPolygon, box as shapely_box
 from shapely.ops import unary_union
 from shapely.strtree import STRtree
@@ -107,8 +109,9 @@ def _write_progress(done: int, total: int, phase: str) -> None:
     try:
         tmp = f"{_PROGRESS_PATH}.tmp"
         with open(tmp, "w") as f:
-            json.dump({"done": done, "total": total, "phase": phase,
-                       "ts": time.time()}, f)
+            json.dump(
+                {"done": done, "total": total, "phase": phase, "ts": time.time()}, f
+            )
         os.replace(tmp, _PROGRESS_PATH)
     except Exception:
         pass
@@ -117,6 +120,7 @@ def _write_progress(done: int, total: int, phase: str) -> None:
 # ---------------------------------------------------------------------------
 # Benchmark timer
 # ---------------------------------------------------------------------------
+
 
 class Benchmark:
     """Accumulates per-step wall-clock timings.
@@ -129,8 +133,8 @@ class Benchmark:
 
     def __init__(self, enabled: bool = False):
         self.enabled = enabled
-        self._steps: List[Tuple[str, float]] = []   # (label, elapsed_seconds)
-        self._phases: Dict[str, float] = {}         # stable key → cumulative seconds
+        self._steps: List[Tuple[str, float]] = []  # (label, elapsed_seconds)
+        self._phases: Dict[str, float] = {}  # stable key → cumulative seconds
         self._wall_start: float = time.monotonic()
         self._input_tile_count: Optional[int] = None
         self._output_tile_count: Optional[int] = None
@@ -163,7 +167,9 @@ class Benchmark:
         self._zoom_min = zoom_min
         self._zoom_max = zoom_max
 
-    def set_fire_staleness(self, stale_fraction: Optional[float], capture_year: Optional[int]):
+    def set_fire_staleness(
+        self, stale_fraction: Optional[float], capture_year: Optional[int]
+    ):
         """Fold apply_fire_history's fire_stale_summary.json into the per-job
         metrics file, so the worker can surface "N% of this AOI burned since
         capture" on the job. No-op-shaped: both args stay None (and so do the
@@ -222,7 +228,9 @@ class Benchmark:
             bar_len = int(elapsed / max_t * bar_max)
             bar = "█" * bar_len + "░" * (bar_max - bar_len)
             pct = elapsed / total_wall * 100
-            lines.append(f"  {label:<{col}} {bar}  {_fmt_duration(elapsed):>10}  ({pct:4.1f}%)")
+            lines.append(
+                f"  {label:<{col}} {bar}  {_fmt_duration(elapsed):>10}  ({pct:4.1f}%)"
+            )
 
         lines += [
             "─" * (col + bar_max + 20),
@@ -242,10 +250,11 @@ def _fmt_duration(seconds: float) -> str:
     h, m = divmod(m, 60)
     return f"{h}h {m:02d}m {s:02d}s"
 
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-TILE_SIZE = 256          # pixels per tile edge
+TILE_SIZE = 256  # pixels per tile edge
 WEB_MERCATOR_EPSG = 3857
 WGS84_EPSG = 4326
 ZOOM_MIN = 12
@@ -282,20 +291,26 @@ LABEL_MIN_ZOOM = 14
 # is then density-normalized against an all-return count raster (see
 # SCRUB_DENSITY_REFERENCE_ALL_RETURNS) so the mask's selectivity stays roughly
 # constant across sparse (LID2) vs dense (LID1) LiDAR captures.
-SCRUB_DENSITY_FILTER_WINDOW_M = 9     # 9×9 m bilateral window (≈4.5 m radius)
-SCRUB_DENSITY_SIGMA_SPATIAL_M = 3.0   # spatial Gaussian σ (metres / cells, 1m grid)
-SCRUB_DENSITY_SIGMA_RANGE     = 0.15  # intensity Gaussian σ in NRD units
-SCRUB_DENSITY_MIN_PULSES      = 12    # min windowed near-ground pulse count for a valid cell, at reference density (see SCRUB_DENSITY_REFERENCE_ALL_RETURNS)
-SCRUB_DENSITY_MIN_RATIO       = 0.05  # below this → transparent (NRD runs lower than old ratio)
-SCRUB_DENSITY_MAX_RATIO       = 0.45  # at/above → fully opaque dark green
+SCRUB_DENSITY_FILTER_WINDOW_M = 9  # 9×9 m bilateral window (≈4.5 m radius)
+SCRUB_DENSITY_SIGMA_SPATIAL_M = 3.0  # spatial Gaussian σ (metres / cells, 1m grid)
+SCRUB_DENSITY_SIGMA_RANGE = 0.15  # intensity Gaussian σ in NRD units
+SCRUB_DENSITY_MIN_PULSES = 12  # min windowed near-ground pulse count for a valid cell, at reference density (see SCRUB_DENSITY_REFERENCE_ALL_RETURNS)
+SCRUB_DENSITY_MIN_RATIO = (
+    0.05  # below this → transparent (NRD runs lower than old ratio)
+)
+SCRUB_DENSITY_MAX_RATIO = 0.45  # at/above → fully opaque dark green
 
 # Scrub strata (push-through-weighted split of the old single scrub band).
 # HEURISTIC (uncalibrated, ordinal) — calibrate against ground truth (e.g.
 # trip-log pace through mapped scrub) when available.
-SCRUB_STRATUM_LOW_MAX_M   = 1.0  # grass/sedge/low-scrub ≤1 m HAG — more passable
-SCRUB_BAND_MAX_M          = 2.5  # raised from 2.0 m to catch head-high woody regrowth
-SCRUB_STRATUM_WEIGHT_LOW  = 0.5  # low stratum counts at half weight in the density combine
-SCRUB_STRATUM_WEIGHT_HIGH = 1.0  # high stratum (harder push-through) counts at full weight
+SCRUB_STRATUM_LOW_MAX_M = 1.0  # grass/sedge/low-scrub ≤1 m HAG — more passable
+SCRUB_BAND_MAX_M = 2.5  # raised from 2.0 m to catch head-high woody regrowth
+SCRUB_STRATUM_WEIGHT_LOW = (
+    0.5  # low stratum counts at half weight in the density combine
+)
+SCRUB_STRATUM_WEIGHT_HIGH = (
+    1.0  # high stratum (harder push-through) counts at full weight
+)
 
 # Density normalization reference (all-return count). LID1/LID2 ELVIS captures
 # differ substantially in point density, so a fixed SCRUB_DENSITY_MIN_PULSES
@@ -312,16 +327,16 @@ SCRUB_DENSITY_REFERENCE_ALL_RETURNS = 4.0
 # naturally sparse (~40% of cells carry a ground return), so the coarse mask must
 # be built by COVERAGE (any 1 m ground pixel in a coarse cell → valid), never by
 # nearest-neighbour sampling which erodes the sparse perimeter inward.
-FOOTPRINT_DOWNSAMPLE_SCALE      = 10    # coarse-mask cell size in metres (1 m grid → 10 m)
+FOOTPRINT_DOWNSAMPLE_SCALE = 10  # coarse-mask cell size in metres (1 m grid → 10 m)
 # Morphological-close radius in coarse cells. Bridges groundless voids (water,
 # dense canopy) up to 2*radius wide so the footprint matches what fill_nodata
 # reconstructs as interior data; close does not net-expand the outer edge.
 # 10 cells × 10 m = ~100 m → bridges ~200 m, matching fill_nodata's 100 px reach.
-FOOTPRINT_CLOSE_RADIUS_CELLS    = 10
+FOOTPRINT_CLOSE_RADIUS_CELLS = 10
 # Keep every connected component whose area is ≥ this fraction of the largest
 # component's area (drops stray-point noise without deleting valid data lobes).
 FOOTPRINT_MIN_COMPONENT_AREA_FRAC = 0.02
-FOOTPRINT_SIMPLIFY_TOL_M        = 20    # ring simplify tolerance (Web Mercator metres)
+FOOTPRINT_SIMPLIFY_TOL_M = 20  # ring simplify tolerance (Web Mercator metres)
 
 # PDAL noise/overlap classification codes per ASPRS LAS spec (dropped during count):
 #   7  = Low noise
@@ -383,38 +398,38 @@ else:
 # Formation index order must match build_svtm_formation.py exactly.
 # Index 0 is always "Not classified" (μ=1.0).
 SVTM_FORMATION_MU: Dict[str, float] = {
-    "Not classified":                                      1.0,
-    "Rainforests":                                         0.7,
-    "Wet Sclerophyll Forests (Grassy sub-formation)":      0.9,
-    "Wet Sclerophyll Forests (Shrubby sub-formation)":     1.2,
+    "Not classified": 1.0,
+    "Rainforests": 0.7,
+    "Wet Sclerophyll Forests (Grassy sub-formation)": 0.9,
+    "Wet Sclerophyll Forests (Shrubby sub-formation)": 1.2,
     "Dry Sclerophyll Forests (Shrub/grass sub-formation)": 1.2,
-    "Dry Sclerophyll Forests (Shrubby sub-formation)":     1.5,
-    "Grassy Woodlands":                                    0.7,
-    "Grasslands":                                          0.5,
-    "Heathlands":                                          1.8,
-    "Forested Wetlands":                                   1.1,
-    "Freshwater Wetlands":                                 1.3,
-    "Saline Wetlands":                                     1.0,
-    "Semi-arid Woodlands (Grassy sub-formation)":          0.9,
-    "Semi-arid Woodlands (Shrubby sub-formation)":         1.3,
-    "Arid Shrublands (Acacia sub-formation)":              1.4,
-    "Arid Shrublands (Chenopod sub-formation)":            1.0,
-    "Alpine Complex":                                      1.4,
+    "Dry Sclerophyll Forests (Shrubby sub-formation)": 1.5,
+    "Grassy Woodlands": 0.7,
+    "Grasslands": 0.5,
+    "Heathlands": 1.8,
+    "Forested Wetlands": 1.1,
+    "Freshwater Wetlands": 1.3,
+    "Saline Wetlands": 1.0,
+    "Semi-arid Woodlands (Grassy sub-formation)": 0.9,
+    "Semi-arid Woodlands (Shrubby sub-formation)": 1.3,
+    "Arid Shrublands (Acacia sub-formation)": 1.4,
+    "Arid Shrublands (Chenopod sub-formation)": 1.0,
+    "Alpine Complex": 1.4,
 }
 
 # Hillshade defaults (formerly inline in gdaldem hillshade calls).
 HILLSHADE_DEFAULTS = {
-    "colour":           "#ffffffff",   # tint applied to greyscale luminance (#RRGGBBAA)
-    "azimuth":          315,            # sun direction (NW)
-    "altitude":         45,             # sun elevation
-    "zFactor":          1.5,            # vertical exaggeration
-    "multidirectional": False,          # blend multiple sun angles
+    "colour": "#ffffffff",  # tint applied to greyscale luminance (#RRGGBBAA)
+    "azimuth": 315,  # sun direction (NW)
+    "altitude": 45,  # sun elevation
+    "zFactor": 1.5,  # vertical exaggeration
+    "multidirectional": False,  # blend multiple sun angles
 }
 
 # Vegetation render defaults (formerly inline in render_vegetation_tile).
 VEGETATION_DEFAULTS = {
     "sparseColour": "#90ee90ff",  # alpha ignored — alphaMin used
-    "denseColour":  "#006400ff",  # alpha ignored — alphaMax used
+    "denseColour": "#006400ff",  # alpha ignored — alphaMax used
     "alphaMin": 60,
     "alphaMax": 255,
 }
@@ -426,24 +441,24 @@ VEGETATION_DEFAULTS = {
 # density: a stale, currently-open-looking cell still gets flagged, since it
 # may have regrown since capture.
 FIRE_STALE_HATCH_COLOUR = (217, 119, 6)  # caution amber (RGB)
-FIRE_STALE_HATCH_ALPHA = 150             # semi-transparent — underlying veg colour still shows
-FIRE_STALE_HATCH_PERIOD_PX = 8           # diagonal stripe repeats every N px
-FIRE_STALE_HATCH_STRIPE_PX = 2           # stripe width (px) within each period
+FIRE_STALE_HATCH_ALPHA = 150  # semi-transparent — underlying veg colour still shows
+FIRE_STALE_HATCH_PERIOD_PX = 8  # diagonal stripe repeats every N px
+FIRE_STALE_HATCH_STRIPE_PX = 2  # stripe width (px) within each period
 
 # Slope thresholds (degrees) → RGBA colour. Defaults for the Default preset.
 SLOPE_DEFAULT_BANDS = [
-    (40, 50, (255, 255,   0, 140)),   # yellow
-    (50, 60, (255, 165,   0, 160)),   # orange
-    (60, 70, (220,  38,  38, 180)),   # red
-    (70, 90, (120,   0,   0, 200)),   # dark red
+    (40, 50, (255, 255, 0, 140)),  # yellow
+    (50, 60, (255, 165, 0, 160)),  # orange
+    (60, 70, (220, 38, 38, 180)),  # red
+    (70, 90, (120, 0, 0, 200)),  # dark red
 ]
 
 # Contour intervals visible at each zoom level
 # Format: (zoom_min_inclusive, zoom_max_inclusive, interval_metres, major_every_n)
 CONTOUR_ZOOM_INTERVALS_DEFAULT = [
-    (12, 15, 50,  1),
-    (15, 16, 10,  5),
-    (17, 18,  5, 10),
+    (12, 15, 50, 1),
+    (15, 16, 10, 5),
+    (17, 18, 5, 10),
 ]
 
 # Contour colour defaults (formerly inline in render_contours_tile).
@@ -479,50 +494,105 @@ CONTOUR_WIDTH_UNITS_PER_PX = 8
 # Sigma is in ground metres (converted to cells via the DTM pixel size), so the
 # knob is resolution-independent. Tunable — raise for smoother contours, lower to
 # keep more terrain detail.
-CONTOUR_SMOOTH_SIGMA_M = 3.0   # Gaussian smoothing sigma, ground metres
+CONTOUR_SMOOTH_SIGMA_M = 3.0  # Gaussian smoothing sigma, ground metres
 
 # OSM Overpass query tags for topo-relevant features.
 # Catalogue is fixed (user-supplied queries would be an injection vector).
 OSM_FEATURE_QUERIES = {
-    "waterway":  '["waterway"~"river|stream|creek|drain|canal|ditch"]',
-    "track":     '["highway"~"track|path|footway|bridleway|steps"]',
-    "road":      '["highway"~"primary|secondary|tertiary|unclassified|residential|service"]',
-    "building":  '["building"]',
-    "power":     '["power"~"line|minor_line|cable"]',
-    "campsite":  '["tourism"~"camp_site|caravan_site|wilderness_hut|alpine_hut"]',
-    "peak":      '["natural"="peak"]',
-    "spring":    '["natural"="spring"]',
-    "gate":      '["barrier"~"gate|lift_gate|cycle_barrier"]',
-    "cave":      '["natural"="cave_entrance"]',
-    "bridge":    '["bridge"="yes"]',
-    "ford":      '["ford"]',
+    "waterway": '["waterway"~"river|stream|creek|drain|canal|ditch"]',
+    "track": '["highway"~"track|path|footway|bridleway|steps"]',
+    "road": '["highway"~"primary|secondary|tertiary|unclassified|residential|service"]',
+    "building": '["building"]',
+    "power": '["power"~"line|minor_line|cable"]',
+    "campsite": '["tourism"~"camp_site|caravan_site|wilderness_hut|alpine_hut"]',
+    "peak": '["natural"="peak"]',
+    "spring": '["natural"="spring"]',
+    "gate": '["barrier"~"gate|lift_gate|cycle_barrier"]',
+    "cave": '["natural"="cave_entrance"]',
+    "bridge": '["bridge"="yes"]',
+    "ford": '["ford"]',
     "waterfall": '["waterway"="waterfall"]',
     "trailhead": '["highway"="trailhead"]',
     "viewpoint": '["tourism"="viewpoint"]',
-    "hut":       '["amenity"="shelter"]',
+    "hut": '["amenity"="shelter"]',
 }
 
 # Default per-feature render style metadata. Geometry kind (point vs line/poly),
 # symbol glyphs and dash patterns are intrinsic to the category and not exposed
 # in the per-job settings — those settings carry {enabled, colour, widthZ18}.
 OSM_STYLE_META = {
-    "waterway":  {"colour": (40, 120, 220, 220),  "width_z18": 3,  "dash": None},
-    "track":     {"colour": (160, 100,  30, 220),  "width_z18": 2,  "dash": (4, 2)},
-    "road":      {"colour": (80,   80,  80, 230),  "width_z18": 4,  "dash": None},
-    "building":  {"colour": (160, 140, 120, 200),  "width_z18": 2,  "dash": None, "fill": (160, 140, 120, 60)},
-    "power":     {"colour": (200, 160,   0, 200),  "width_z18": 1,  "dash": (3, 4)},
-    "campsite":  {"colour": (0,   160,  80, 230),  "point": True,   "icon": "campsite.png",  "size_z18": 20},
-    "peak":      {"colour": (80,   50,  20, 240),  "point": True,   "icon": "peak.png",      "size_z18": 18},
-    "spring":    {"colour": (30,   90, 210, 230),  "point": True,   "icon": "spring.png",    "size_z18": 18},
-    "gate":      {"colour": (70,   70,  70, 220),  "point": True,   "icon": "gate.png",      "size_z18": 18},
-    "cave":      {"colour": (60,   30,  10, 230),  "point": True,   "icon": "cave.png",      "size_z18": 18},
+    "waterway": {"colour": (40, 120, 220, 220), "width_z18": 3, "dash": None},
+    "track": {"colour": (160, 100, 30, 220), "width_z18": 2, "dash": (4, 2)},
+    "road": {"colour": (80, 80, 80, 230), "width_z18": 4, "dash": None},
+    "building": {
+        "colour": (160, 140, 120, 200),
+        "width_z18": 2,
+        "dash": None,
+        "fill": (160, 140, 120, 60),
+    },
+    "power": {"colour": (200, 160, 0, 200), "width_z18": 1, "dash": (3, 4)},
+    "campsite": {
+        "colour": (0, 160, 80, 230),
+        "point": True,
+        "icon": "campsite.png",
+        "size_z18": 20,
+    },
+    "peak": {
+        "colour": (80, 50, 20, 240),
+        "point": True,
+        "icon": "peak.png",
+        "size_z18": 18,
+    },
+    "spring": {
+        "colour": (30, 90, 210, 230),
+        "point": True,
+        "icon": "spring.png",
+        "size_z18": 18,
+    },
+    "gate": {
+        "colour": (70, 70, 70, 220),
+        "point": True,
+        "icon": "gate.png",
+        "size_z18": 18,
+    },
+    "cave": {
+        "colour": (60, 30, 10, 230),
+        "point": True,
+        "icon": "cave.png",
+        "size_z18": 18,
+    },
     # Newly added features (disabled by default).
-    "bridge":    {"colour": (64,  48,  40, 230),  "width_z18": 3,  "dash": None},
-    "ford":      {"colour": (30,  144, 255, 230), "point": True,   "icon": "ford.png",      "size_z18": 20},
-    "waterfall": {"colour": (30,  106, 210, 240), "point": True,   "icon": "waterfall.png", "size_z18": 20},
-    "trailhead": {"colour": (160, 64,  32, 230),  "point": True,   "icon": "trailhead.png", "size_z18": 20},
-    "viewpoint": {"colour": (128, 96,  32, 230),  "point": True,   "icon": "viewpoint.png", "size_z18": 20},
-    "hut":       {"colour": (80,  56,  32, 230),  "point": True,   "icon": "hut.png",       "size_z18": 20},
+    "bridge": {"colour": (64, 48, 40, 230), "width_z18": 3, "dash": None},
+    "ford": {
+        "colour": (30, 144, 255, 230),
+        "point": True,
+        "icon": "ford.png",
+        "size_z18": 20,
+    },
+    "waterfall": {
+        "colour": (30, 106, 210, 240),
+        "point": True,
+        "icon": "waterfall.png",
+        "size_z18": 20,
+    },
+    "trailhead": {
+        "colour": (160, 64, 32, 230),
+        "point": True,
+        "icon": "trailhead.png",
+        "size_z18": 20,
+    },
+    "viewpoint": {
+        "colour": (128, 96, 32, 230),
+        "point": True,
+        "icon": "viewpoint.png",
+        "size_z18": 20,
+    },
+    "hut": {
+        "colour": (80, 56, 32, 230),
+        "point": True,
+        "icon": "hut.png",
+        "size_z18": 20,
+    },
 }
 
 # ---------------------------------------------------------------------------
@@ -539,7 +609,7 @@ def _parse_rgba_hex(hex_str: str) -> Tuple[int, int, int, int]:
     if not isinstance(hex_str, str) or not _HEX_RGBA_RE.match(hex_str):
         raise ValueError(f"Invalid RGBA hex: {hex_str!r}")
     n = int(hex_str[1:], 16)
-    return ((n >> 24) & 0xff, (n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff)
+    return ((n >> 24) & 0xFF, (n >> 16) & 0xFF, (n >> 8) & 0xFF, n & 0xFF)
 
 
 def _default_render_settings() -> Dict[str, Any]:
@@ -551,20 +621,24 @@ def _default_render_settings() -> Dict[str, Any]:
     """
     slope_bands = []
     for lo, hi, (r, g, b, a) in SLOPE_DEFAULT_BANDS:
-        slope_bands.append({
-            "fromDeg": lo,
-            "toDeg": hi,
-            "colour": f"#{r:02x}{g:02x}{b:02x}{a:02x}",
-        })
+        slope_bands.append(
+            {
+                "fromDeg": lo,
+                "toDeg": hi,
+                "colour": f"#{r:02x}{g:02x}{b:02x}{a:02x}",
+            }
+        )
 
     zoom_bands = []
     for zmin, zmax, interval, major_n in CONTOUR_ZOOM_INTERVALS_DEFAULT:
-        zoom_bands.append({
-            "zoomMin": zmin,
-            "zoomMax": zmax,
-            "intervalM": interval,
-            "majorEveryN": major_n,
-        })
+        zoom_bands.append(
+            {
+                "zoomMin": zmin,
+                "zoomMax": zmax,
+                "intervalM": interval,
+                "majorEveryN": major_n,
+            }
+        )
 
     def _meta_hex(rgba: Tuple[int, int, int, int]) -> str:
         return f"#{rgba[0]:02x}{rgba[1]:02x}{rgba[2]:02x}{rgba[3]:02x}"
@@ -572,7 +646,14 @@ def _default_render_settings() -> Dict[str, Any]:
     features = {}
     for key in ALL_OSM_KEYS:
         meta = OSM_STYLE_META[key]
-        enabled = key not in {"bridge", "ford", "waterfall", "trailhead", "viewpoint", "hut"}
+        enabled = key not in {
+            "bridge",
+            "ford",
+            "waterfall",
+            "trailhead",
+            "viewpoint",
+            "hut",
+        }
         features[key] = {
             "enabled": enabled,
             "colour": _meta_hex(meta["colour"]),
@@ -587,7 +668,7 @@ def _default_render_settings() -> Dict[str, Any]:
             "minRatio": SCRUB_DENSITY_MIN_RATIO,
             "maxRatio": SCRUB_DENSITY_MAX_RATIO,
             "sparseColour": VEGETATION_DEFAULTS["sparseColour"],
-            "denseColour":  VEGETATION_DEFAULTS["denseColour"],
+            "denseColour": VEGETATION_DEFAULTS["denseColour"],
             "alphaMin": VEGETATION_DEFAULTS["alphaMin"],
             "alphaMax": VEGETATION_DEFAULTS["alphaMax"],
             "weightsEnabled": True,
@@ -659,7 +740,9 @@ def _validate_render_settings(settings: Dict[str, Any]) -> None:
     # Global label-size multiplier (LABEL_SCALE_MIN..MAX in shared). Absent on
     # pre-field settings — default to 1 rather than reject.
     label_scale = settings.get("labelScale", 1)
-    if not isinstance(label_scale, (int, float)) or not (0.5 <= float(label_scale) <= 2):
+    if not isinstance(label_scale, (int, float)) or not (
+        0.5 <= float(label_scale) <= 2
+    ):
         raise ValueError("labelScale must be 0.5..2")
 
 
@@ -674,7 +757,9 @@ def load_render_settings(path: Optional[str]) -> Dict[str, Any]:
     return raw
 
 
-def active_layers_from_settings(settings: Dict[str, Any], has_vegetation: bool) -> List[str]:
+def active_layers_from_settings(
+    settings: Dict[str, Any], has_vegetation: bool
+) -> List[str]:
     """Return ordered layer list filtered by settings.<layer>.enabled."""
     order = COMPOSITE_LAYER_ORDER
     out = []
@@ -690,17 +775,20 @@ def active_layers_from_settings(settings: Dict[str, Any], has_vegetation: bool) 
 # Tile maths
 # ---------------------------------------------------------------------------
 
+
 def lon_lat_to_tile(lon: float, lat: float, zoom: int) -> Tuple[int, int]:
-    n = 2 ** zoom
+    n = 2**zoom
     x = int((lon + 180.0) / 360.0 * n)
     lat_r = math.radians(lat)
-    y = int((1.0 - math.log(math.tan(lat_r) + 1.0 / math.cos(lat_r)) / math.pi) / 2.0 * n)
+    y = int(
+        (1.0 - math.log(math.tan(lat_r) + 1.0 / math.cos(lat_r)) / math.pi) / 2.0 * n
+    )
     return x, y
 
 
 def tile_to_bbox(x: int, y: int, zoom: int) -> Tuple[float, float, float, float]:
     """Return (lon_min, lat_min, lon_max, lat_max) for a tile."""
-    n = 2 ** zoom
+    n = 2**zoom
     lon_min = x / n * 360.0 - 180.0
     lon_max = (x + 1) / n * 360.0 - 180.0
     lat_max = math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * y / n))))
@@ -711,11 +799,13 @@ def tile_to_bbox(x: int, y: int, zoom: int) -> Tuple[float, float, float, float]
 def tile_bbox_mercator(x: int, y: int, zoom: int) -> Tuple[float, float, float, float]:
     """Return (xmin, ymin, xmax, ymax) in Web Mercator metres."""
     lon_min, lat_min, lon_max, lat_max = tile_to_bbox(x, y, zoom)
+
     def to_merc(lon, lat):
         R = 6378137.0
         mx = R * math.radians(lon)
         my = R * math.log(math.tan(math.pi / 4 + math.radians(lat) / 2))
         return mx, my
+
     xmin, ymax = to_merc(lon_min, lat_max)
     xmax, ymin = to_merc(lon_max, lat_min)
     return xmin, ymin, xmax, ymax
@@ -724,10 +814,12 @@ def tile_bbox_mercator(x: int, y: int, zoom: int) -> Tuple[float, float, float, 
 def ground_metres_per_pixel(zoom: int) -> float:
     """Approximate ground resolution at the equator for a given zoom level."""
     earth_circumference = 2 * math.pi * 6378137.0
-    return earth_circumference / (TILE_SIZE * 2 ** zoom)
+    return earth_circumference / (TILE_SIZE * 2**zoom)
 
 
-def tiles_for_bbox(lon_min, lat_min, lon_max, lat_max, zoom) -> Generator[Tuple[int,int], None, None]:
+def tiles_for_bbox(
+    lon_min, lat_min, lon_max, lat_max, zoom
+) -> Generator[Tuple[int, int], None, None]:
     x0, y0 = lon_lat_to_tile(lon_min, lat_max, zoom)
     x1, y1 = lon_lat_to_tile(lon_max, lat_min, zoom)
     for x in range(x0, x1 + 1):
@@ -740,10 +832,14 @@ def lonlat_to_world_px(lon: float, lat: float, zoom: int) -> Tuple[float, float]
     tile). The float counterpart of lon_lat_to_tile. Per-tile label placement
     uses this so every tile computes identical anchor positions for a line and
     they never disagree across tile boundaries."""
-    world = (2 ** zoom) * TILE_SIZE
+    world = (2**zoom) * TILE_SIZE
     x = (lon + 180.0) / 360.0 * world
     lat_r = math.radians(lat)
-    y = (1.0 - math.log(math.tan(lat_r) + 1.0 / math.cos(lat_r)) / math.pi) / 2.0 * world
+    y = (
+        (1.0 - math.log(math.tan(lat_r) + 1.0 / math.cos(lat_r)) / math.pi)
+        / 2.0
+        * world
+    )
     return x, y
 
 
@@ -760,7 +856,9 @@ def _point_at_distance(pts, seg_len, dist: float) -> Tuple[float, float]:
     return pts[-1]
 
 
-def line_label_anchors(coords, zoom: int, spacing_px: float) -> List[Tuple[float, float]]:
+def line_label_anchors(
+    coords, zoom: int, spacing_px: float
+) -> List[Tuple[float, float]]:
     """Anchor points (global world-pixel xy) spaced ~spacing_px apart along a
     polyline, measured in Web-Mercator pixels at `zoom`. Deterministic from the
     full line geometry, so adjacent tiles agree on the anchors and never
@@ -769,8 +867,7 @@ def line_label_anchors(coords, zoom: int, spacing_px: float) -> List[Tuple[float
     if len(coords) < 2:
         return []
     pts = [lonlat_to_world_px(c[0], c[1], zoom) for c in coords]
-    seg_len = [math.hypot(x1 - x0, y1 - y0)
-               for (x0, y0), (x1, y1) in zip(pts, pts[1:])]
+    seg_len = [math.hypot(x1 - x0, y1 - y0) for (x0, y0), (x1, y1) in zip(pts, pts[1:])]
     total = sum(seg_len)
     if total <= 0.0:
         return []
@@ -796,9 +893,16 @@ def label_font_size(zoom: int, scale: float = 1.0) -> int:
     """Baked label px from the web map's text-size ramp (interpolate linear zoom
     14→9px, 18→12px) × the user's global labelScale (default 1) × the export base
     bump. The 3× base makes baked tiles deliberately larger than the live overlay."""
-    return max(1, int(round(
-        (9 + (12 - 9) * (zoom - 14) / (18 - 14)) * scale * EXPORT_LABEL_BASE_SCALE
-    )))
+    return max(
+        1,
+        int(
+            round(
+                (9 + (12 - 9) * (zoom - 14) / (18 - 14))
+                * scale
+                * EXPORT_LABEL_BASE_SCALE
+            )
+        ),
+    )
 
 
 def draw_dashed_line(draw, pts, fill, width: int, dash) -> None:
@@ -828,8 +932,9 @@ def draw_dashed_line(draw, pts, fill, width: int, dash) -> None:
         pos += seg
 
 
-def tile_label_box(draw, world_xy, tile_x: int, tile_y: int,
-                   text: str, font) -> Optional[Tuple[float, float, float, float]]:
+def tile_label_box(
+    draw, world_xy, tile_x: int, tile_y: int, text: str, font
+) -> Optional[Tuple[float, float, float, float]]:
     """Tile-local placement box (tx, ty, w, h) for a label anchored at global
     world-pixel `world_xy`, or None if the anchor isn't owned by this tile.
     Ownership uses half-open bounds → exactly one tile owns each anchor, so a
@@ -852,7 +957,16 @@ def draw_label_box(draw, box, text: str, font, fill) -> None:
     """Draw `text` at a placement box from tile_label_box: white halo then
     coloured text on top."""
     tx, ty, _w, _h = box
-    for dx, dy in [(-1,-1),(1,-1),(-1,1),(1,1),(0,-1),(0,1),(-1,0),(1,0)]:
+    for dx, dy in [
+        (-1, -1),
+        (1, -1),
+        (-1, 1),
+        (1, 1),
+        (0, -1),
+        (0, 1),
+        (-1, 0),
+        (1, 0),
+    ]:
         draw.text((tx + dx, ty + dy), text, fill=(255, 255, 255, 200), font=font)
     draw.text((tx, ty), text, fill=fill, font=font)
 
@@ -867,18 +981,26 @@ def declutter_labels(items):
     kept_rects = []
     for box, payload in items:
         x0, y0, w, h = box
-        r = (x0 - LABEL_MIN_GAP_PX, y0 - LABEL_MIN_GAP_PX,
-             x0 + w + LABEL_MIN_GAP_PX, y0 + h + LABEL_MIN_GAP_PX)
-        if any(r[0] < k[2] and r[2] > k[0] and r[1] < k[3] and r[3] > k[1]
-               for k in kept_rects):
+        r = (
+            x0 - LABEL_MIN_GAP_PX,
+            y0 - LABEL_MIN_GAP_PX,
+            x0 + w + LABEL_MIN_GAP_PX,
+            y0 + h + LABEL_MIN_GAP_PX,
+        )
+        if any(
+            r[0] < k[2] and r[2] > k[0] and r[1] < k[3] and r[3] > k[1]
+            for k in kept_rects
+        ):
             continue
         kept_rects.append(r)
         kept.append(payload)
     return kept
 
+
 # ---------------------------------------------------------------------------
 # MBTiles helpers
 # ---------------------------------------------------------------------------
+
 
 def create_mbtiles(path: str, name: str, description: str = "") -> sqlite3.Connection:
     # Schema matches exactly what QGIS produces (confirmed working in Gaia):
@@ -899,13 +1021,13 @@ def create_mbtiles(path: str, name: str, description: str = "") -> sqlite3.Conne
             ON tiles (zoom_level, tile_column, tile_row);
     """)
     meta = [
-        ("name",        name),
-        ("type",        "overlay"),
-        ("version",     "1.1"),
+        ("name", name),
+        ("type", "overlay"),
+        ("version", "1.1"),
         ("description", description),
-        ("format",      "png"),
-        ("minzoom",     str(ZOOM_MIN)),
-        ("maxzoom",     str(ZOOM_MAX)),
+        ("format", "png"),
+        ("minzoom", str(ZOOM_MIN)),
+        ("maxzoom", str(ZOOM_MAX)),
     ]
     for k, v in meta:
         c.execute("INSERT OR REPLACE INTO metadata (name, value) VALUES (?,?)", (k, v))
@@ -915,7 +1037,7 @@ def create_mbtiles(path: str, name: str, description: str = "") -> sqlite3.Conne
 
 def insert_tile(conn: sqlite3.Connection, z: int, x: int, y: int, png_bytes: bytes):
     """Insert one tile. MBTiles Y axis is TMS (flipped from XYZ)."""
-    tms_y = (2 ** z - 1) - y
+    tms_y = (2**z - 1) - y
     conn.execute(
         "INSERT OR REPLACE INTO tiles VALUES (?,?,?,?)",
         (z, x, tms_y, sqlite3.Binary(png_bytes)),
@@ -929,13 +1051,14 @@ def finalise_bounds(conn: sqlite3.Connection, lon_min, lat_min, lon_max, lat_max
     lo_lat = round(lat_min, 6)
     hi_lon = round(lon_max, 6)
     hi_lat = round(lat_max, 6)
-    cx     = round((lo_lon + hi_lon) / 2, 6)
-    cy     = round((lo_lat + hi_lat) / 2, 6)
+    cx = round((lo_lon + hi_lon) / 2, 6)
+    cy = round((lo_lat + hi_lat) / 2, 6)
     bounds = f"{lo_lon},{lo_lat},{hi_lon},{hi_lat}"
     center = f"{cx},{cy},{(ZOOM_MIN + ZOOM_MAX) // 2}"
     conn.execute("INSERT OR REPLACE INTO metadata VALUES ('bounds',?)", (bounds,))
     conn.execute("INSERT OR REPLACE INTO metadata VALUES ('center',?)", (center,))
     conn.commit()
+
 
 # ---------------------------------------------------------------------------
 # Step 1 – Extract and inspect the ELVIS ZIP
@@ -943,15 +1066,16 @@ def finalise_bounds(conn: sqlite3.Connection, lon_min, lat_min, lon_max, lat_max
 
 # Pipeline mode constants. Mode B (DEM + LAZ) was removed: when a point cloud is
 # present we always run Mode C and ignore any bundled DEM ("LAZ wins").
-MODE_LAZ_ONLY  = "C"   # Full PDAL DTM + DSM (point cloud present — preferred)
-MODE_DEM_ONLY  = "A"   # Pre-built DEM only, no point cloud – no vegetation layer
+MODE_LAZ_ONLY = "C"  # Full PDAL DTM + DSM (point cloud present — preferred)
+MODE_DEM_ONLY = "A"  # Pre-built DEM only, no point cloud – no vegetation layer
+
 
 @dataclass
 class ElvisContents:
-    mode: str                        # MODE_* constant
-    las_files: List[Path]            # .laz/.las files (may be empty)
-    dem_files: List[Path]            # .tif DEM files (may be empty)
-    has_vegetation: bool             # whether CHM can be built
+    mode: str  # MODE_* constant
+    las_files: List[Path]  # .laz/.las files (may be empty)
+    dem_files: List[Path]  # .tif DEM files (may be empty)
+    has_vegetation: bool  # whether CHM can be built
 
     def describe(self) -> str:
         lines = ["  Pipeline mode : " + self.mode]
@@ -959,7 +1083,9 @@ class ElvisContents:
             lines.append(f"  DEM files     : {len(self.dem_files)} GeoTIFF(s)")
         if self.las_files:
             lines.append(f"  LAZ/LAS files : {len(self.las_files)} point cloud(s)")
-        lines.append(f"  Vegetation    : {'✓ available' if self.has_vegetation else '✗ not available (no LAZ/LAS for DSM)'}")
+        lines.append(
+            f"  Vegetation    : {'✓ available' if self.has_vegetation else '✗ not available (no LAZ/LAS for DSM)'}"
+        )
         return "\n".join(lines)
 
 
@@ -988,11 +1114,15 @@ def _safe_extract_zip(zip_path: str, work_dir: str) -> None:
             # Reject symlinks (Unix mode stored in the high 16 bits of external_attr).
             mode = info.external_attr >> 16
             if mode and stat.S_ISLNK(mode):
-                raise RuntimeError("ZIP contains a symlink entry, which is not allowed.")
+                raise RuntimeError(
+                    "ZIP contains a symlink entry, which is not allowed."
+                )
             # Final containment check on the resolved path.
             dest = os.path.realpath(os.path.join(work_root, name))
             if dest != work_root and not dest.startswith(work_root + os.sep):
-                raise RuntimeError("ZIP entry would extract outside the work directory.")
+                raise RuntimeError(
+                    "ZIP entry would extract outside the work directory."
+                )
         zf.extractall(work_dir)
 
 
@@ -1007,12 +1137,21 @@ def extract_elvis_zip(zip_path: str, work_dir: str) -> ElvisContents:
     log.info(f"Extracting {zip_path} …")
     _safe_extract_zip(zip_path, work_dir)
 
-    las_files = list(Path(work_dir).rglob("*.laz")) + list(Path(work_dir).rglob("*.las"))
-    all_tifs = list(Path(work_dir).rglob("*.tif")) + list(Path(work_dir).rglob("*.tiff"))
+    las_files = list(Path(work_dir).rglob("*.laz")) + list(
+        Path(work_dir).rglob("*.las")
+    )
+    all_tifs = list(Path(work_dir).rglob("*.tif")) + list(
+        Path(work_dir).rglob("*.tiff")
+    )
     # Exclude any derivative products that might be bundled in some ELVIS packages
-    dem_files = [t for t in all_tifs if not any(
-        kw in t.stem.lower() for kw in ("hillshade", "slope", "aspect", "colour", "color", "rgb")
-    )]
+    dem_files = [
+        t
+        for t in all_tifs
+        if not any(
+            kw in t.stem.lower()
+            for kw in ("hillshade", "slope", "aspect", "colour", "color", "rgb")
+        )
+    ]
 
     if not las_files and not dem_files:
         raise RuntimeError(
@@ -1063,14 +1202,21 @@ def extract_elvis_zip(zip_path: str, work_dir: str) -> ElvisContents:
 
     return contents
 
+
 # ---------------------------------------------------------------------------
 # Step 2 – Point cloud → DSM / DTM rasters via PDAL
 # ---------------------------------------------------------------------------
 
-def build_pipeline_full(las_files: List[str], out_dtm: str,
-                        out_scrub_low: str, out_scrub_high: str,
-                        out_below_count: str, out_all_count: str,
-                        resolution: float = 1.0) -> dict:
+
+def build_pipeline_full(
+    las_files: List[str],
+    out_dtm: str,
+    out_scrub_low: str,
+    out_scrub_high: str,
+    out_below_count: str,
+    out_all_count: str,
+    resolution: float = 1.0,
+) -> dict:
     """PDAL pipeline: LAZ → DTM (ground) + strata/below/all-return count rasters. Mode C.
 
     Uses filters.smrf for ground classification and filters.hag_nn to assign
@@ -1136,13 +1282,16 @@ def build_pipeline_full(las_files: List[str], out_dtm: str,
     )
     readers = [{"type": "readers.las", "filename": f} for f in las_files]
     return {
-        "pipeline": readers + [
+        "pipeline": readers
+        + [
             # No filters.reprojection — rasterize in the LAZ's native CRS; the
             # raster is warped to Web Mercator later (see module/function docs).
             # Drop ASPRS noise (7, 18) and overlap (12) points before smrf
             # touches Classification.
-            {"type": "filters.range",
-             "limits": "Classification![7:7],Classification![12:12],Classification![18:18]"},
+            {
+                "type": "filters.range",
+                "limits": "Classification![7:7],Classification![12:12],Classification![18:18]",
+            },
             {"type": "filters.assign", "assignment": "Classification[:]=0"},
             {"type": "filters.smrf"},
             {"type": "filters.hag_nn"},
@@ -1211,8 +1360,9 @@ def _distinct_raster_crs(paths: List[str]) -> set:
     return wkts
 
 
-def reproject_raster_to_web_mercator(src_path: str, dst_path: str,
-                                     nodata: float, resample: str = "cubic"):
+def reproject_raster_to_web_mercator(
+    src_path: str, dst_path: str, nodata: float, resample: str = "cubic"
+):
     """Warp a raster to EPSG:3857, turning out-of-footprint cells into clean nodata.
 
     INIT_DEST=NO_DATA stops resampling from averaging valid + nodata at the
@@ -1223,17 +1373,20 @@ def reproject_raster_to_web_mercator(src_path: str, dst_path: str,
     used to do inline.
     """
     gdal.Warp(
-        dst_path, src_path,
+        dst_path,
+        src_path,
         dstSRS=f"EPSG:{WEB_MERCATOR_EPSG}",
-        srcNodata=nodata, dstNodata=nodata,
+        srcNodata=nodata,
+        dstNodata=nodata,
         resampleAlg=resample,
         warpOptions=["INIT_DEST=NO_DATA"],
         creationOptions=["COMPRESS=LZW"],
     )
 
 
-def _merge_raster_tiles(tile_paths: List[str], out_path: str,
-                        nodata: float = -9999, resample: str = "cubic"):
+def _merge_raster_tiles(
+    tile_paths: List[str], out_path: str, nodata: float = -9999, resample: str = "cubic"
+):
     """Mosaic per-tile PDAL GeoTIFFs into one, preserving native CRS when possible.
 
     Tiles come out of PDAL in the LAZ's native CRS. When they all share one CRS
@@ -1247,8 +1400,10 @@ def _merge_raster_tiles(tile_paths: List[str], out_path: str,
         shutil.copy2(tile_paths[0], out_path)
         return
     if len(_distinct_raster_crs(tile_paths)) > 1:
-        log.warning("Input tiles span multiple CRSs — reprojecting each to Web "
-                    "Mercator before mosaic (edge wedges may appear).")
+        log.warning(
+            "Input tiles span multiple CRSs — reprojecting each to Web "
+            "Mercator before mosaic (edge wedges may appear)."
+        )
         merc_tiles = []
         for i, t in enumerate(tile_paths):
             m = out_path.replace(".tif", f"_merc_{i}.tif")
@@ -1266,19 +1421,26 @@ def run_pdal_pipeline(pipeline: dict, work_dir: str, label: str = "pipeline"):
         json.dump(pipeline, f)
     log.info("Running PDAL pipeline (this is the longest step) …")
     result = subprocess.run(
-        ["pdal", "pipeline", pipeline_path],
-        capture_output=True, text=True
+        ["pdal", "pipeline", pipeline_path], capture_output=True, text=True
     )
     if result.returncode != 0:
-        raise RuntimeError(f"PDAL failed:\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}")
+        raise RuntimeError(
+            f"PDAL failed:\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+        )
     log.info("PDAL pipeline complete.")
 
 
-def run_pdal_sequential_full(terrain_tiles: List[str], veg_tiles: List[str],
-                              out_dtm: str,
-                              out_scrub_low: str, out_scrub_high: str,
-                              out_below_count: str, out_all_count: str,
-                              work_dir: str, resolution: float = 1.0):
+def run_pdal_sequential_full(
+    terrain_tiles: List[str],
+    veg_tiles: List[str],
+    out_dtm: str,
+    out_scrub_low: str,
+    out_scrub_high: str,
+    out_below_count: str,
+    out_all_count: str,
+    work_dir: str,
+    resolution: float = 1.0,
+):
     """Process LAZ files one at a time (DTM + strata/below/all counts), then merge. Mode C.
 
     `terrain_tiles` and `veg_tiles` are the per-footprint survey selections
@@ -1294,30 +1456,35 @@ def run_pdal_sequential_full(terrain_tiles: List[str], veg_tiles: List[str],
     # laz path → its five per-tile GeoTIFF paths.
     grids: Dict[str, Dict[str, str]] = {}
     for i, laz in enumerate(union):
-        log.info(f"PDAL tile {i+1}/{len(union)}: {os.path.basename(laz)}")
+        log.info(f"PDAL tile {i + 1}/{len(union)}: {os.path.basename(laz)}")
         # Heartbeat: PDAL is the other long phase (≈48s/tile). Reporting before
         # each tile keeps last_progress_at fresh through the whole PDAL pass so
         # the stall-reaper doesn't false-kill a big job before render starts.
         _write_progress(i, len(union), "pdal")
         tile = {
-            "dtm":        os.path.join(work_dir, f"dtm_tile_{i}.tif"),
-            "scrub_low":  os.path.join(work_dir, f"scrub_low_tile_{i}.tif"),
+            "dtm": os.path.join(work_dir, f"dtm_tile_{i}.tif"),
+            "scrub_low": os.path.join(work_dir, f"scrub_low_tile_{i}.tif"),
             "scrub_high": os.path.join(work_dir, f"scrub_high_tile_{i}.tif"),
-            "below":      os.path.join(work_dir, f"below_tile_{i}.tif"),
-            "all":        os.path.join(work_dir, f"all_tile_{i}.tif"),
+            "below": os.path.join(work_dir, f"below_tile_{i}.tif"),
+            "all": os.path.join(work_dir, f"all_tile_{i}.tif"),
         }
         pipeline = build_pipeline_full(
-            [laz], tile["dtm"], tile["scrub_low"], tile["scrub_high"],
-            tile["below"], tile["all"], resolution,
+            [laz],
+            tile["dtm"],
+            tile["scrub_low"],
+            tile["scrub_high"],
+            tile["below"],
+            tile["all"],
+            resolution,
         )
         run_pdal_pipeline(pipeline, work_dir, label=f"pipeline_full_{i}")
         grids[laz] = tile
 
-    dtm_tiles        = [grids[t]["dtm"]        for t in terrain_tiles]
-    scrub_low_tiles  = [grids[t]["scrub_low"]  for t in veg_tiles]
+    dtm_tiles = [grids[t]["dtm"] for t in terrain_tiles]
+    scrub_low_tiles = [grids[t]["scrub_low"] for t in veg_tiles]
     scrub_high_tiles = [grids[t]["scrub_high"] for t in veg_tiles]
-    below_tiles      = [grids[t]["below"]      for t in veg_tiles]
-    all_tiles        = [grids[t]["all"]        for t in veg_tiles]
+    below_tiles = [grids[t]["below"] for t in veg_tiles]
+    all_tiles = [grids[t]["all"] for t in veg_tiles]
 
     log.info(f"Merging {len(dtm_tiles)} DTM tiles …")
     _merge_raster_tiles(dtm_tiles, out_dtm, nodata=-9999)
@@ -1348,7 +1515,9 @@ def fill_nodata(src_path: str, dst_path: str, max_distance: int = 100):
     driver = gdal.GetDriverByName("GTiff")
     out_ds = driver.CreateCopy(dst_path, ds, options=["COMPRESS=LZW"])
     band = out_ds.GetRasterBand(1)
-    gdal.FillNodata(band, maskBand=None, maxSearchDist=max_distance, smoothingIterations=2)
+    gdal.FillNodata(
+        band, maskBand=None, maxSearchDist=max_distance, smoothingIterations=2
+    )
     out_ds.FlushCache()
     out_ds = None
     ds = None
@@ -1369,17 +1538,17 @@ def _binary_close(mask: np.ndarray, radius: int = 5) -> np.ndarray:
 
     def dilate_once(a):
         out = a.copy()
-        out[1:, :]  |= a[:-1, :]
+        out[1:, :] |= a[:-1, :]
         out[:-1, :] |= a[1:, :]
-        out[:, 1:]  |= a[:, :-1]
+        out[:, 1:] |= a[:, :-1]
         out[:, :-1] |= a[:, 1:]
         return out
 
     def erode_once(a):
         out = a.copy()
-        out[1:, :]  &= a[:-1, :]
+        out[1:, :] &= a[:-1, :]
         out[:-1, :] &= a[1:, :]
-        out[:, 1:]  &= a[:, :-1]
+        out[:, 1:] &= a[:, :-1]
         out[:, :-1] &= a[:, 1:]
         return out
 
@@ -1509,9 +1678,13 @@ def compute_data_footprint(dtm_path: str, dst_geojson_path: str):
     in_ds = None
 
     if not polys:
-        log.warning("No valid pixels found — falling back to full raster bbox for footprint")
-        xmin = gt[0]; xmax = gt[0] + gt[1] * ds.RasterXSize
-        ymax = gt[3]; ymin = gt[3] + gt[5] * ds.RasterYSize
+        log.warning(
+            "No valid pixels found — falling back to full raster bbox for footprint"
+        )
+        xmin = gt[0]
+        xmax = gt[0] + gt[1] * ds.RasterXSize
+        ymax = gt[3]
+        ymin = gt[3] + gt[5] * ds.RasterYSize
         footprint_merc = shapely_box(xmin, ymin, xmax, ymax)
     else:
         merged = unary_union(polys)
@@ -1520,21 +1693,30 @@ def compute_data_footprint(dtm_path: str, dst_geojson_path: str):
         # largest used to erase entire valid lobes where ground returns were
         # locally sparse. Rebuild each kept component from its exterior ring to
         # drop interior holes.
-        components = list(merged.geoms) if merged.geom_type == "MultiPolygon" else [merged]
+        components = (
+            list(merged.geoms) if merged.geom_type == "MultiPolygon" else [merged]
+        )
         components = [g for g in components if g.geom_type == "Polygon" and g.area > 0]
         if not components:
-            xmin = gt[0]; xmax = gt[0] + gt[1] * ds.RasterXSize
-            ymax = gt[3]; ymin = gt[3] + gt[5] * ds.RasterYSize
+            xmin = gt[0]
+            xmax = gt[0] + gt[1] * ds.RasterXSize
+            ymax = gt[3]
+            ymin = gt[3] + gt[5] * ds.RasterYSize
             footprint_merc = shapely_box(xmin, ymin, xmax, ymax)
         else:
             max_area = max(g.area for g in components)
-            kept = [Polygon(g.exterior) for g in components
-                    if g.area >= FOOTPRINT_MIN_COMPONENT_AREA_FRAC * max_area]
+            kept = [
+                Polygon(g.exterior)
+                for g in components
+                if g.area >= FOOTPRINT_MIN_COMPONENT_AREA_FRAC * max_area
+            ]
             footprint_merc = unary_union(kept)
 
     # Simplify (Web Mercator metres). Kept tight so the ring doesn't pull inward
     # across convex corners and re-clip real data.
-    footprint_merc = footprint_merc.simplify(FOOTPRINT_SIMPLIFY_TOL_M, preserve_topology=True)
+    footprint_merc = footprint_merc.simplify(
+        FOOTPRINT_SIMPLIFY_TOL_M, preserve_topology=True
+    )
 
     # Reproject to WGS84 via OGR
     tgt_srs = osr.SpatialReference()
@@ -1549,9 +1731,19 @@ def compute_data_footprint(dtm_path: str, dst_geojson_path: str):
     footprint_wgs84 = shape(json.loads(geom_ogr.ExportToJson()))
 
     with open(dst_geojson_path, "w") as f:
-        json.dump({"type": "FeatureCollection", "features": [
-            {"type": "Feature", "geometry": mapping(footprint_wgs84), "properties": {}}
-        ]}, f)
+        json.dump(
+            {
+                "type": "FeatureCollection",
+                "features": [
+                    {
+                        "type": "Feature",
+                        "geometry": mapping(footprint_wgs84),
+                        "properties": {},
+                    }
+                ],
+            },
+            f,
+        )
 
     try:
         os.remove(tmp_path)
@@ -1585,7 +1777,9 @@ def clip_geojson_to_footprint(geojson_path: str, footprint_path: str, out_path: 
 
     with open(out_path, "w") as f:
         json.dump({"type": "FeatureCollection", "features": clipped}, f)
-    log.info(f"Clipped {len(gj.get('features', []))} → {len(clipped)} features to footprint")
+    log.info(
+        f"Clipped {len(gj.get('features', []))} → {len(clipped)} features to footprint"
+    )
 
 
 def align_raster_to_reference(src_path: str, ref_path: str, dst_path: str):
@@ -1637,14 +1831,16 @@ def _box_sum_2d(arr: np.ndarray, k: int) -> np.ndarray:
     sat[1:, 1:] = padded.cumsum(axis=0).cumsum(axis=1)
     h, w = arr.shape
     # Window [i:i+k, j:j+k] over `padded` corresponds to (i, j) in the original.
-    bottom_right = sat[k:k + h, k:k + w]
-    top_right    = sat[0:h,     k:k + w]
-    bottom_left  = sat[k:k + h, 0:w]
-    top_left     = sat[0:h,     0:w]
+    bottom_right = sat[k : k + h, k : k + w]
+    top_right = sat[0:h, k : k + w]
+    bottom_left = sat[k : k + h, 0:w]
+    top_left = sat[0:h, 0:w]
     return (bottom_right - top_right - bottom_left + top_left).astype(np.float32)
 
 
-def _build_svtm_mu_lookup(formation_weights: Optional[Dict[str, float]] = None) -> np.ndarray:
+def _build_svtm_mu_lookup(
+    formation_weights: Optional[Dict[str, float]] = None,
+) -> np.ndarray:
     """Build formation→μ lookup as a uint8-indexed float32 array.
 
     The formation raster pixel values are indices into the ordered formation
@@ -1698,7 +1894,9 @@ def apply_svtm_weighting(
         log.info("SVTM_FORMATION_S3_PATH not set — skipping vegetation weighting.")
         return density_arr
 
-    log.info(f"Warping SVTM formation raster onto DTM grid (source: {SVTM_FORMATION_RASTER}) …")
+    log.info(
+        f"Warping SVTM formation raster onto DTM grid (source: {SVTM_FORMATION_RASTER}) …"
+    )
     formation_aligned = os.path.join(work_dir, "svtm_formation_aligned.tif")
 
     try:
@@ -1725,7 +1923,9 @@ def apply_svtm_weighting(
         )
         ref_ds = None
     except Exception as e:
-        log.warning(f"SVTM formation raster unavailable ({e}) — skipping vegetation weighting.")
+        log.warning(
+            f"SVTM formation raster unavailable ({e}) — skipping vegetation weighting."
+        )
         return density_arr
 
     mu_lookup = _build_svtm_mu_lookup(formation_weights)
@@ -1736,7 +1936,9 @@ def apply_svtm_weighting(
     mu = mu_lookup[formation_arr]
     weighted = density_arr * mu
     # Preserve NaN nodata cells; clamp valid weighted values to [0, 1].
-    out = np.where(np.isfinite(density_arr), np.clip(weighted, 0.0, 1.0), np.nan).astype(np.float32)
+    out = np.where(
+        np.isfinite(density_arr), np.clip(weighted, 0.0, 1.0), np.nan
+    ).astype(np.float32)
     return out
 
 
@@ -1796,11 +1998,12 @@ _ELVIS_LID_MARKER_RE = re.compile(r"-LID\d", re.IGNORECASE)
 @dataclass(frozen=True)
 class TileInfo:
     """Parsed identity of one input point-cloud tile."""
+
     path: str
-    footprint: Optional[str]       # tile identity after "-AHD_"; None if non-ELVIS
+    footprint: Optional[str]  # tile identity after "-AHD_"; None if non-ELVIS
     capture_yyyymm: Optional[int]  # capture year-month as int, e.g. 201408
-    lid_category: Optional[int]    # LID<n> (1 = Category 1 dense, 2 = Category 2 sparse)
-    survey_label: Optional[str]    # "<Area><YYYYMM>-LID<n>", e.g. "Mudgee201408-LID1"
+    lid_category: Optional[int]  # LID<n> (1 = Category 1 dense, 2 = Category 2 sparse)
+    survey_label: Optional[str]  # "<Area><YYYYMM>-LID<n>", e.g. "Mudgee201408-LID1"
 
 
 def parse_elvis_filename(path: str) -> TileInfo:
@@ -1838,7 +2041,8 @@ def _measure_tile_density(laz_path: str) -> float:
     surveys by real captured density rather than the LID-category floor."""
     result = subprocess.run(
         ["pdal", "info", "--summary", laz_path],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     if result.returncode != 0:
         raise RuntimeError(
@@ -1867,6 +2071,7 @@ class SurveySelection:
     (numeric tile ids + area/date survey labels only, never place names/coords)
     folded into the job metrics.
     """
+
     terrain_tiles: List[str]
     veg_tiles: List[str]
     decisions: List[dict]
@@ -1920,20 +2125,22 @@ def select_surveys_by_layer(las_files: List[str]) -> SurveySelection:
         )
         terrain.append(terrain_win.path)
         veg.append(veg_win.path)
-        decisions.append({
-            "footprint": footprint,
-            "terrainSurvey": terrain_win.survey_label,
-            "terrainDensity": round(terrain_density, 3),
-            "vegSurvey": veg_win.survey_label,
-            "vegCapture": veg_win.capture_yyyymm,
-            # True when the density-winner and recency-winner are different
-            # surveys — the case where keeping BOTH matters (e.g. a dense older
-            # flight for terrain plus a newer post-fire flight for vegetation).
-            # Actual fire impact on the AOI is reported separately via
-            # fireStaleFraction (see apply_fire_history).
-            "divergentSurveys": terrain_win.path != veg_win.path,
-            "surveyCount": len(tiles),
-        })
+        decisions.append(
+            {
+                "footprint": footprint,
+                "terrainSurvey": terrain_win.survey_label,
+                "terrainDensity": round(terrain_density, 3),
+                "vegSurvey": veg_win.survey_label,
+                "vegCapture": veg_win.capture_yyyymm,
+                # True when the density-winner and recency-winner are different
+                # surveys — the case where keeping BOTH matters (e.g. a dense older
+                # flight for terrain plus a newer post-fire flight for vegetation).
+                # Actual fire impact on the AOI is reported separately via
+                # fireStaleFraction (see apply_fire_history).
+                "divergentSurveys": terrain_win.path != veg_win.path,
+                "surveyCount": len(tiles),
+            }
+        )
         log.info(
             f"Footprint {footprint}: {len(tiles)} surveys → "
             f"terrain={terrain_win.survey_label} ({terrain_density:.2f} pts/m²), "
@@ -1992,7 +2199,9 @@ def apply_fire_history(
         LocalStack) — the pipeline always degrades cleanly.
     """
     if not FIRE_HISTORY_RASTER:
-        log.info("FIRE_HISTORY_S3_PATH not set — skipping fire-history staleness check.")
+        log.info(
+            "FIRE_HISTORY_S3_PATH not set — skipping fire-history staleness check."
+        )
         return density_arr
     if capture_year is None:
         log.info(
@@ -2001,7 +2210,9 @@ def apply_fire_history(
         )
         return density_arr
 
-    log.info(f"Warping fire-history raster onto DTM grid (source: {FIRE_HISTORY_RASTER}) …")
+    log.info(
+        f"Warping fire-history raster onto DTM grid (source: {FIRE_HISTORY_RASTER}) …"
+    )
     fire_year_aligned = os.path.join(work_dir, "fire_history_aligned.tif")
 
     try:
@@ -2028,7 +2239,9 @@ def apply_fire_history(
         )
         ref_ds = None
     except Exception as e:
-        log.warning(f"Fire-history raster unavailable ({e}) — skipping fire-history staleness check.")
+        log.warning(
+            f"Fire-history raster unavailable ({e}) — skipping fire-history staleness check."
+        )
         return density_arr
 
     fire_ds = gdal.Open(fire_year_aligned)
@@ -2036,11 +2249,17 @@ def apply_fire_history(
     fire_ds = None
 
     valid_mask = np.isfinite(density_arr)
-    stale_mask, stale_fraction = _compute_stale_mask(fire_year_arr, capture_year, valid_mask)
+    stale_mask, stale_fraction = _compute_stale_mask(
+        fire_year_arr, capture_year, valid_mask
+    )
 
     burned_years_in_aoi = fire_year_arr[fire_year_arr != 0]
-    fire_years_min = int(burned_years_in_aoi.min()) if burned_years_in_aoi.size else None
-    fire_years_max = int(burned_years_in_aoi.max()) if burned_years_in_aoi.size else None
+    fire_years_min = (
+        int(burned_years_in_aoi.min()) if burned_years_in_aoi.size else None
+    )
+    fire_years_max = (
+        int(burned_years_in_aoi.max()) if burned_years_in_aoi.size else None
+    )
 
     # Write fire_stale.tif — aligned to the DTM grid, for a future render overlay.
     dtm_ds = gdal.Open(dtm_path)
@@ -2065,12 +2284,15 @@ def apply_fire_history(
 
     summary_path = os.path.join(work_dir, "fire_stale_summary.json")
     with open(summary_path, "w") as f:
-        json.dump({
-            "capture_year": capture_year,
-            "stale_fraction": stale_fraction,
-            "fire_years_min": fire_years_min,
-            "fire_years_max": fire_years_max,
-        }, f)
+        json.dump(
+            {
+                "capture_year": capture_year,
+                "stale_fraction": stale_fraction,
+                "fire_years_min": fire_years_min,
+                "fire_years_max": fire_years_max,
+            },
+            f,
+        )
 
     log.info(
         f"Fire-history: {stale_fraction * 100:.1f}% of AOI burned after LiDAR "
@@ -2107,15 +2329,15 @@ def _bilateral_filter_weighted(
 
     # Pad with `reflect` so border pixels still see a full window's worth of
     # neighbours (avoids edge artifacts at the raster boundary).
-    val_p = np.pad(value_arr,      half, mode="reflect")
+    val_p = np.pad(value_arr, half, mode="reflect")
     cnf_p = np.pad(confidence_arr, half, mode="reflect")
 
     h, w = value_arr.shape
-    num   = np.zeros((h, w), dtype=np.float64)
+    num = np.zeros((h, w), dtype=np.float64)
     denom = np.zeros((h, w), dtype=np.float64)
 
     inv_2_s2 = 1.0 / (2.0 * sigma_spatial * sigma_spatial)
-    inv_2_r2 = 1.0 / (2.0 * sigma_range   * sigma_range)
+    inv_2_r2 = 1.0 / (2.0 * sigma_range * sigma_range)
 
     for dy in range(-half, half + 1):
         for dx in range(-half, half + 1):
@@ -2127,7 +2349,7 @@ def _bilateral_filter_weighted(
             diff = value_arr - v_shift
             range_w = np.exp(-(diff * diff) * inv_2_r2)
             w_combined = spatial_w * range_w * c_shift
-            num   += w_combined * v_shift
+            num += w_combined * v_shift
             denom += w_combined
 
     out = np.zeros_like(value_arr, dtype=np.float32)
@@ -2137,13 +2359,17 @@ def _bilateral_filter_weighted(
     return out
 
 
-def _run_gdaldem_hillshade(out_path: str, dtm_path: str, settings: Dict[str, Any]) -> None:
+def _run_gdaldem_hillshade(
+    out_path: str, dtm_path: str, settings: Dict[str, Any]
+) -> None:
     """Centralised hillshade invocation. Honours per-job overrides."""
     hs = settings.get("hillshade", {})
     azimuth = float(hs.get("azimuth", HILLSHADE_DEFAULTS["azimuth"]))
     altitude = float(hs.get("altitude", HILLSHADE_DEFAULTS["altitude"]))
     z_factor = float(hs.get("zFactor", HILLSHADE_DEFAULTS["zFactor"]))
-    multidirectional = bool(hs.get("multidirectional", HILLSHADE_DEFAULTS["multidirectional"]))
+    multidirectional = bool(
+        hs.get("multidirectional", HILLSHADE_DEFAULTS["multidirectional"])
+    )
     kwargs = dict(
         zFactor=z_factor,
         creationOptions=["COMPRESS=LZW"],
@@ -2157,8 +2383,11 @@ def _run_gdaldem_hillshade(out_path: str, dtm_path: str, settings: Dict[str, Any
 
 
 def _combine_scrub_strata(
-    low_arr: np.ndarray, high_arr: np.ndarray, below_arr: np.ndarray,
-    weight_low: float, weight_high: float,
+    low_arr: np.ndarray,
+    high_arr: np.ndarray,
+    below_arr: np.ndarray,
+    weight_low: float,
+    weight_high: float,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Pure arithmetic core of the weighted-strata NRD combine (B.3).
 
@@ -2182,7 +2411,9 @@ def _combine_scrub_strata(
 
 
 def _density_normalized_min_pulses(
-    all_arr: np.ndarray, reference_all_returns: float, base_min_pulses: float,
+    all_arr: np.ndarray,
+    reference_all_returns: float,
+    base_min_pulses: float,
 ) -> Tuple[float, float, float]:
     """Pure arithmetic core of the B.2 density-normalized confidence-mask threshold.
 
@@ -2206,10 +2437,16 @@ def _density_normalized_min_pulses(
     return nominal_all, scale, min_pulses_eff
 
 
-def compute_rasters(dtm_path: str, scrub_low_path: str, scrub_high_path: str,
-                    below_count_path: str, all_count_path: str,
-                    work_dir: str, settings: Dict[str, Any],
-                    capture_year: Optional[int] = None) -> dict:
+def compute_rasters(
+    dtm_path: str,
+    scrub_low_path: str,
+    scrub_high_path: str,
+    below_count_path: str,
+    all_count_path: str,
+    work_dir: str,
+    settings: Dict[str, Any],
+    capture_year: Optional[int] = None,
+) -> dict:
     """
     From DTM + strata/below/all-return count rasters produce hillshade.tif,
     slope.tif, scrub_density.tif.
@@ -2263,7 +2500,9 @@ def compute_rasters(dtm_path: str, scrub_low_path: str, scrub_high_path: str,
     sl_path = os.path.join(work_dir, "slope.tif")
     log.info("Computing slope …")
     gdal.DEMProcessing(
-        sl_path, dtm_path, "slope",
+        sl_path,
+        dtm_path,
+        "slope",
         slopeFormat="degree",
         creationOptions=["COMPRESS=LZW"],
     )
@@ -2271,10 +2510,10 @@ def compute_rasters(dtm_path: str, scrub_low_path: str, scrub_high_path: str,
 
     # Scrub density: weighted-strata NRD + count-weighted bilateral filter.
     # Step 1: align count rasters onto the DTM grid
-    scrub_low_aligned  = os.path.join(work_dir, "scrub_low_count_aligned.tif")
+    scrub_low_aligned = os.path.join(work_dir, "scrub_low_count_aligned.tif")
     scrub_high_aligned = os.path.join(work_dir, "scrub_high_count_aligned.tif")
-    below_aligned      = os.path.join(work_dir, "below_count_aligned.tif")
-    all_aligned        = os.path.join(work_dir, "all_count_aligned.tif")
+    below_aligned = os.path.join(work_dir, "below_count_aligned.tif")
+    all_aligned = os.path.join(work_dir, "all_count_aligned.tif")
     log.info("Aligning count rasters to DTM grid …")
     align_raster_to_reference(scrub_low_path, dtm_path, scrub_low_aligned)
     align_raster_to_reference(scrub_high_path, dtm_path, scrub_high_aligned)
@@ -2286,11 +2525,11 @@ def compute_rasters(dtm_path: str, scrub_low_path: str, scrub_high_path: str,
         f"({SCRUB_DENSITY_FILTER_WINDOW_M}×{SCRUB_DENSITY_FILTER_WINDOW_M} m, "
         f"σ_s={SCRUB_DENSITY_SIGMA_SPATIAL_M} m, σ_r={SCRUB_DENSITY_SIGMA_RANGE}) …"
     )
-    dtm_ds        = gdal.Open(dtm_path)
-    scrub_low_ds  = gdal.Open(scrub_low_aligned)
+    dtm_ds = gdal.Open(dtm_path)
+    scrub_low_ds = gdal.Open(scrub_low_aligned)
     scrub_high_ds = gdal.Open(scrub_high_aligned)
-    below_ds      = gdal.Open(below_aligned)
-    all_ds        = gdal.Open(all_aligned)
+    below_ds = gdal.Open(below_aligned)
+    all_ds = gdal.Open(all_aligned)
 
     # PDAL writes count rasters with nodata=0; warp then injects -9999 sentinels
     # at non-overlap edges. For NRD purposes "no points" is a count of 0, not
@@ -2302,10 +2541,10 @@ def compute_rasters(dtm_path: str, scrub_low_path: str, scrub_high_path: str,
         a[a < 0] = 0.0
         return a
 
-    low_arr   = _read_count(scrub_low_ds)
-    high_arr  = _read_count(scrub_high_ds)
+    low_arr = _read_count(scrub_low_ds)
+    high_arr = _read_count(scrub_high_ds)
     below_arr = _read_count(below_ds)
-    all_arr   = _read_count(all_ds)
+    all_arr = _read_count(all_ds)
 
     # Shared, UNSPLIT confidence denominator (total_near) + weighted-strata
     # NRD combine — see _combine_scrub_strata for why confidence isn't split
@@ -2313,8 +2552,11 @@ def compute_rasters(dtm_path: str, scrub_low_path: str, scrub_high_path: str,
     # contribute 0 (smoothed away by the bilateral filter via their zero
     # confidence weight).
     total_near, raw_nrd = _combine_scrub_strata(
-        low_arr, high_arr, below_arr,
-        SCRUB_STRATUM_WEIGHT_LOW, SCRUB_STRATUM_WEIGHT_HIGH,
+        low_arr,
+        high_arr,
+        below_arr,
+        SCRUB_STRATUM_WEIGHT_LOW,
+        SCRUB_STRATUM_WEIGHT_HIGH,
     )
 
     # Bilateral filter, weighted by per-cell total-near-ground pulse count.
@@ -2332,7 +2574,9 @@ def compute_rasters(dtm_path: str, scrub_low_path: str, scrub_high_path: str,
     # all-return density compares to a fixed reference, clamped so an extreme
     # capture can't blow the threshold out entirely.
     nominal_all, scale, min_pulses_eff = _density_normalized_min_pulses(
-        all_arr, SCRUB_DENSITY_REFERENCE_ALL_RETURNS, SCRUB_DENSITY_MIN_PULSES,
+        all_arr,
+        SCRUB_DENSITY_REFERENCE_ALL_RETURNS,
+        SCRUB_DENSITY_MIN_PULSES,
     )
     log.info(
         f"All-return density normalization: nominal_all={nominal_all:.2f}, "
@@ -2353,7 +2597,9 @@ def compute_rasters(dtm_path: str, scrub_low_path: str, scrub_high_path: str,
     # preprocessed formation raster is absent or the user disabled weighting.
     veg_settings = settings.get("vegetation", {})
     density = apply_svtm_weighting(
-        density, dtm_path, work_dir,
+        density,
+        dtm_path,
+        work_dir,
         weights_enabled=bool(veg_settings.get("weightsEnabled", True)),
         formation_weights=veg_settings.get("formationWeights"),
     )
@@ -2398,7 +2644,9 @@ def compute_rasters(dtm_path: str, scrub_low_path: str, scrub_high_path: str,
     return paths
 
 
-def compute_rasters_no_veg(dtm_path: str, work_dir: str, settings: Dict[str, Any]) -> dict:
+def compute_rasters_no_veg(
+    dtm_path: str, work_dir: str, settings: Dict[str, Any]
+) -> dict:
     """Compute only hillshade and slope (no DSM/CHM available). Mode A."""
     paths = {}
 
@@ -2410,20 +2658,30 @@ def compute_rasters_no_veg(dtm_path: str, work_dir: str, settings: Dict[str, Any
     sl_path = os.path.join(work_dir, "slope.tif")
     log.info("Computing slope …")
     gdal.DEMProcessing(
-        sl_path, dtm_path, "slope",
+        sl_path,
+        dtm_path,
+        "slope",
         slopeFormat="degree",
         creationOptions=["COMPRESS=LZW"],
     )
     paths["slope"] = sl_path
     return paths
 
+
 # ---------------------------------------------------------------------------
 # Step 3 – Fetch OSM features
 # ---------------------------------------------------------------------------
 
-def fetch_osm_features(lon_min: float, lat_min: float, lon_max: float, lat_max: float,
-                       work_dir: str, footprint_path: Optional[str] = None,
-                       settings: Optional[Dict[str, Any]] = None) -> Optional[str]:
+
+def fetch_osm_features(
+    lon_min: float,
+    lat_min: float,
+    lon_max: float,
+    lat_max: float,
+    work_dir: str,
+    footprint_path: Optional[str] = None,
+    settings: Optional[Dict[str, Any]] = None,
+) -> Optional[str]:
     """Download OSM data via Overpass API, then clip to the data footprint. Returns path to GeoJSON.
 
     Queries ALL supported feature classes unconditionally. Per-category
@@ -2435,12 +2693,12 @@ def fetch_osm_features(lon_min: float, lat_min: float, lon_max: float, lat_max: 
     log.info("Fetching OSM features from Overpass API …")
     bbox = f"{lat_min},{lon_min},{lat_max},{lon_max}"
 
-    parts = [f'nwr{tag_filter}({bbox});' for tag_filter in OSM_FEATURE_QUERIES.values()]
+    parts = [f"nwr{tag_filter}({bbox});" for tag_filter in OSM_FEATURE_QUERIES.values()]
 
     query = f"""
     [out:json][timeout:120];
     (
-      {''.join(parts)}
+      {"".join(parts)}
     );
     out body geom;
     """
@@ -2459,6 +2717,7 @@ def fetch_osm_features(lon_min: float, lat_min: float, lon_max: float, lat_max: 
     }
 
     import time as _time
+
     raw: Optional[dict] = None
     last_err: Optional[str] = None
     attempts = 0
@@ -2466,8 +2725,9 @@ def fetch_osm_features(lon_min: float, lat_min: float, lon_max: float, lat_max: 
         for retry in range(2):
             attempts += 1
             try:
-                resp = requests.post(endpoint, data={"data": query},
-                                     headers=headers, timeout=180)
+                resp = requests.post(
+                    endpoint, data={"data": query}, headers=headers, timeout=180
+                )
                 resp.raise_for_status()
                 # Decoded INSIDE the retry loop (STP-003): a mirror answering
                 # 200 with an HTML interstitial is a mirror failure, not a job
@@ -2475,7 +2735,9 @@ def fetch_osm_features(lon_min: float, lat_min: float, lon_max: float, lat_max: 
                 # of a function whose contract is "degrade to an empty layer".
                 decoded = resp.json()
                 if not isinstance(decoded, dict):
-                    raise ValueError(f"expected a JSON object, got {type(decoded).__name__}")
+                    raise ValueError(
+                        f"expected a JSON object, got {type(decoded).__name__}"
+                    )
                 raw = decoded
                 break
             except Exception as e:
@@ -2487,8 +2749,10 @@ def fetch_osm_features(lon_min: float, lat_min: float, lon_max: float, lat_max: 
         if raw is not None:
             break
     if raw is None:
-        log.warning(f"Overpass API failed after {attempts} attempts across {len(endpoints)} endpoints. "
-                    f"Features layer will be empty. Last error: {last_err}")
+        log.warning(
+            f"Overpass API failed after {attempts} attempts across {len(endpoints)} endpoints. "
+            f"Features layer will be empty. Last error: {last_err}"
+        )
         return None
 
     geojson_path = os.path.join(work_dir, "osm_features.geojson")
@@ -2572,7 +2836,14 @@ def classify_osm_element(tags: dict) -> Optional[str]:
         return "waterway"
     if hw in ("track", "path", "footway", "bridleway", "steps"):
         return "track"
-    if hw in ("primary", "secondary", "tertiary", "unclassified", "residential", "service"):
+    if hw in (
+        "primary",
+        "secondary",
+        "tertiary",
+        "unclassified",
+        "residential",
+        "service",
+    ):
         return "road"
     if "building" in tags:
         return "building"
@@ -2590,9 +2861,11 @@ def classify_osm_element(tags: dict) -> Optional[str]:
         return "cave"
     return None
 
+
 # ---------------------------------------------------------------------------
 # Step 4 – Contour generation
 # ---------------------------------------------------------------------------
+
 
 def generate_contours(dtm_path: str, work_dir: str) -> dict:
     """Generate GeoJSON contour files for each interval."""
@@ -2603,13 +2876,15 @@ def generate_contours(dtm_path: str, work_dir: str) -> dict:
         ds = gdal.ContourGenerate(
             gdal.Open(dtm_path).GetRasterBand(1),
             intervals_needed,  # interval
-            0,                 # base
-            [],                # fixed levels
-            0, 0,              # nodata flag/value
-            ogr.GetDriverByName("GeoJSON").CreateDataSource(out_path)
-                .CreateLayer("contours", srs=_merc_srs(), geom_type=ogr.wkbLineString),
-            -1,                # id field
-            0,                 # elev field index
+            0,  # base
+            [],  # fixed levels
+            0,
+            0,  # nodata flag/value
+            ogr.GetDriverByName("GeoJSON")
+            .CreateDataSource(out_path)
+            .CreateLayer("contours", srs=_merc_srs(), geom_type=ogr.wkbLineString),
+            -1,  # id field
+            0,  # elev field index
         )
         paths[intervals_needed] = out_path
         log.info(f"  {intervals_needed}m contours → {out_path}")
@@ -2649,12 +2924,14 @@ def _gaussian_blur_2d(arr: np.ndarray, sigma_cells: float) -> np.ndarray:
         return a.copy()
     radius = max(1, int(round(3.0 * sigma_cells)))
     x = np.arange(-radius, radius + 1)
-    kernel = np.exp(-(x ** 2) / (2.0 * sigma_cells ** 2))
+    kernel = np.exp(-(x**2) / (2.0 * sigma_cells**2))
     kernel /= kernel.sum()
     return _blur_1d(_blur_1d(a, kernel, axis=1), kernel, axis=0)
 
 
-def _normalized_gaussian(values: np.ndarray, valid: np.ndarray, sigma_cells: float) -> np.ndarray:
+def _normalized_gaussian(
+    values: np.ndarray, valid: np.ndarray, sigma_cells: float
+) -> np.ndarray:
     """Nodata-aware Gaussian smoothing. Treats `valid==False` cells as missing and
     renormalises by the blurred validity mask, so nodata never bleeds its sentinel
     value into neighbouring terrain (a plain blur across a -9999 edge would carve
@@ -2698,7 +2975,11 @@ def smooth_dem_for_contours(
 
     driver = gdal.GetDriverByName("GTiff")
     out_ds = driver.Create(
-        out_path, ds.RasterXSize, ds.RasterYSize, 1, gdal.GDT_Float32,
+        out_path,
+        ds.RasterXSize,
+        ds.RasterYSize,
+        1,
+        gdal.GDT_Float32,
         options=["COMPRESS=LZW"],
     )
     out_ds.SetGeoTransform(ds.GetGeoTransform())
@@ -2738,17 +3019,24 @@ def generate_contours_gdal(
     for interval in sorted({float(i) for i in intervals}):
         # Format the interval for filenames — strip trailing ".0" so integer
         # intervals keep their familiar names (e.g. "contours_50m.geojson").
-        suffix = str(int(interval)) if interval == int(interval) else str(interval).replace(".", "p")
+        suffix = (
+            str(int(interval))
+            if interval == int(interval)
+            else str(interval).replace(".", "p")
+        )
         merc_path = os.path.join(work_dir, f"contours_{suffix}m_merc.geojson")
         reproj_path = os.path.join(work_dir, f"contours_{suffix}m_reproj.geojson")
-        out_path  = os.path.join(work_dir, f"contours_{suffix}m.geojson")
+        out_path = os.path.join(work_dir, f"contours_{suffix}m.geojson")
 
         # Step 1: generate contours in Web Mercator from the smoothed surface.
         cmd = [
             "gdal_contour",
-            "-a", "elev",
-            "-i", str(interval),
-            "-f", "GeoJSON",
+            "-a",
+            "elev",
+            "-i",
+            str(interval),
+            "-f",
+            "GeoJSON",
             smoothed_dtm,
             merc_path,
         ]
@@ -2759,8 +3047,10 @@ def generate_contours_gdal(
         # Step 2: reproject to WGS84
         cmd2 = [
             "ogr2ogr",
-            "-f", "GeoJSON",
-            "-t_srs", "EPSG:4326",
+            "-f",
+            "GeoJSON",
+            "-t_srs",
+            "EPSG:4326",
             reproj_path,
             merc_path,
         ]
@@ -2780,11 +3070,15 @@ def generate_contours_gdal(
     log.info("Contour generation complete.")
     return paths
 
+
 # ---------------------------------------------------------------------------
 # Step 5 – Tile rendering helpers
 # ---------------------------------------------------------------------------
 
-def read_raster_window(raster_path: str, bbox_merc: Tuple, out_size: int = TILE_SIZE) -> Optional[np.ndarray]:
+
+def read_raster_window(
+    raster_path: str, bbox_merc: Tuple, out_size: int = TILE_SIZE
+) -> Optional[np.ndarray]:
     """
     Read a window from a raster into a numpy array of shape (out_size, out_size).
     Returns None if the tile is entirely outside the raster extent.
@@ -2792,7 +3086,7 @@ def read_raster_window(raster_path: str, bbox_merc: Tuple, out_size: int = TILE_
     ds = gdal.Open(raster_path)
     if ds is None:
         return None
-    gt = ds.GetGeoTransform()   # (xmin, px_w, 0, ymax, 0, -px_h)
+    gt = ds.GetGeoTransform()  # (xmin, px_w, 0, ymax, 0, -px_h)
     xmin_r = gt[0]
     xmax_r = gt[0] + gt[1] * ds.RasterXSize
     ymax_r = gt[3]
@@ -2818,6 +3112,7 @@ def read_raster_window(raster_path: str, bbox_merc: Tuple, out_size: int = TILE_
         arr[arr == nodata] = np.nan
     return arr
 
+
 # ---------------------------------------------------------------------------
 # Per-layer tile renderers
 # ---------------------------------------------------------------------------
@@ -2825,6 +3120,7 @@ def read_raster_window(raster_path: str, bbox_merc: Tuple, out_size: int = TILE_
 _geojson_cache: Dict[str, dict] = {}
 _footprint_shape_cache: Dict[str, object] = {}
 _contour_index_cache: Dict[str, tuple] = {}
+
 
 def _load_geojson(path: str) -> dict:
     """Load and cache parsed GeoJSON. Each ProcessPoolExecutor worker gets its
@@ -2884,7 +3180,9 @@ def _load_footprint_shape(footprint_path: str):
     return _footprint_shape_cache[footprint_path]
 
 
-def footprint_tile_coords(fp_geom, zoom_min: int, zoom_max: int) -> List[Tuple[int, int, int]]:
+def footprint_tile_coords(
+    fp_geom, zoom_min: int, zoom_max: int
+) -> List[Tuple[int, int, int]]:
     """(z, x, y) tiles intersecting the footprint geometry across the zoom range.
 
     Enumerates candidate tiles per connected component (not over the union
@@ -2895,6 +3193,7 @@ def footprint_tile_coords(fp_geom, zoom_min: int, zoom_max: int) -> List[Tuple[i
     area. Mirrors the export-side prune in renderers/tile_compose.py
     (_composite_tile_coords); keep the two in sync."""
     from shapely.prepared import prep
+
     prepared = prep(fp_geom)
     parts = list(fp_geom.geoms) if hasattr(fp_geom, "geoms") else [fp_geom]
     parts = [p for p in parts if not p.is_empty]
@@ -2913,8 +3212,9 @@ def footprint_tile_coords(fp_geom, zoom_min: int, zoom_max: int) -> List[Tuple[i
     return coords
 
 
-def _apply_footprint_mask(img: Image.Image, footprint_path: str,
-                          bbox_wgs84: Tuple) -> Image.Image:
+def _apply_footprint_mask(
+    img: Image.Image, footprint_path: str, bbox_wgs84: Tuple
+) -> Image.Image:
     """Zero alpha where the footprint polygon is absent.
 
     Tiles entirely inside the footprint are returned unchanged.
@@ -2939,8 +3239,10 @@ def _apply_footprint_mask(img: Image.Image, footprint_path: str,
     tile_h = lat_max - lat_min
 
     def to_px(lon, lat):
-        return ((lon - lon_min) / tile_w * TILE_SIZE,
-                (lat_max - lat) / tile_h * TILE_SIZE)
+        return (
+            (lon - lon_min) / tile_w * TILE_SIZE,
+            (lat_max - lat) / tile_h * TILE_SIZE,
+        )
 
     def rasterize_poly(poly):
         pts = [to_px(c[0], c[1]) for c in poly.exterior.coords]
@@ -2961,7 +3263,9 @@ def _apply_footprint_mask(img: Image.Image, footprint_path: str,
     return Image.merge("RGBA", (r, g, b, new_a))
 
 
-def render_hillshade_tile(hs_arr: Optional[np.ndarray], settings: Dict[str, Any]) -> Image.Image:
+def render_hillshade_tile(
+    hs_arr: Optional[np.ndarray], settings: Dict[str, Any]
+) -> Image.Image:
     img = Image.new("RGBA", (TILE_SIZE, TILE_SIZE), (0, 0, 0, 0))
     if hs_arr is None:
         return img
@@ -3013,8 +3317,12 @@ def render_vegetation_tile(
     veg = settings.get("vegetation", {})
     min_ratio = float(veg.get("minRatio", SCRUB_DENSITY_MIN_RATIO))
     max_ratio = float(veg.get("maxRatio", SCRUB_DENSITY_MAX_RATIO))
-    sparse_r, sparse_g, sparse_b, _ = _parse_rgba_hex(veg.get("sparseColour", VEGETATION_DEFAULTS["sparseColour"]))
-    dense_r,  dense_g,  dense_b,  _ = _parse_rgba_hex(veg.get("denseColour",  VEGETATION_DEFAULTS["denseColour"]))
+    sparse_r, sparse_g, sparse_b, _ = _parse_rgba_hex(
+        veg.get("sparseColour", VEGETATION_DEFAULTS["sparseColour"])
+    )
+    dense_r, dense_g, dense_b, _ = _parse_rgba_hex(
+        veg.get("denseColour", VEGETATION_DEFAULTS["denseColour"])
+    )
     alpha_min = float(veg.get("alphaMin", VEGETATION_DEFAULTS["alphaMin"]))
     alpha_max = float(veg.get("alphaMax", VEGETATION_DEFAULTS["alphaMax"]))
 
@@ -3042,14 +3350,25 @@ def render_vegetation_tile(
     t = np.sqrt(np.clip((density_arr - min_ratio) / span, 0, 1))
 
     rgba = np.zeros((TILE_SIZE, TILE_SIZE, 4), dtype=np.uint8)
-    rgba[..., 0] = np.where(mask, (sparse_r + t * (dense_r - sparse_r)).astype(np.uint8), 0)
-    rgba[..., 1] = np.where(mask, (sparse_g + t * (dense_g - sparse_g)).astype(np.uint8), 0)
-    rgba[..., 2] = np.where(mask, (sparse_b + t * (dense_b - sparse_b)).astype(np.uint8), 0)
-    rgba[..., 3] = np.where(mask, (alpha_min + t * (alpha_max - alpha_min)).astype(np.uint8), 0)
+    rgba[..., 0] = np.where(
+        mask, (sparse_r + t * (dense_r - sparse_r)).astype(np.uint8), 0
+    )
+    rgba[..., 1] = np.where(
+        mask, (sparse_g + t * (dense_g - sparse_g)).astype(np.uint8), 0
+    )
+    rgba[..., 2] = np.where(
+        mask, (sparse_b + t * (dense_b - sparse_b)).astype(np.uint8), 0
+    )
+    rgba[..., 3] = np.where(
+        mask, (alpha_min + t * (alpha_max - alpha_min)).astype(np.uint8), 0
+    )
 
     if has_stale:
         row_idx, col_idx = np.indices((TILE_SIZE, TILE_SIZE))
-        hatch = ((row_idx + col_idx) % FIRE_STALE_HATCH_PERIOD_PX < FIRE_STALE_HATCH_STRIPE_PX) & stale_mask
+        hatch = (
+            (row_idx + col_idx) % FIRE_STALE_HATCH_PERIOD_PX
+            < FIRE_STALE_HATCH_STRIPE_PX
+        ) & stale_mask
         rgba[hatch, 0] = FIRE_STALE_HATCH_COLOUR[0]
         rgba[hatch, 1] = FIRE_STALE_HATCH_COLOUR[1]
         rgba[hatch, 2] = FIRE_STALE_HATCH_COLOUR[2]
@@ -3058,7 +3377,9 @@ def render_vegetation_tile(
     return Image.fromarray(rgba)
 
 
-def render_slope_tile(slope_arr: Optional[np.ndarray], settings: Dict[str, Any]) -> Image.Image:
+def render_slope_tile(
+    slope_arr: Optional[np.ndarray], settings: Dict[str, Any]
+) -> Image.Image:
     img = Image.new("RGBA", (TILE_SIZE, TILE_SIZE), (0, 0, 0, 0))
     if slope_arr is None:
         return img
@@ -3086,8 +3407,9 @@ def render_features_tile(
     lon_min, lat_min, lon_max, lat_max = bbox_wgs84
     scale = ground_metres_per_pixel(zoom)
     # This tile's index, used to claim line-label anchors (see draw_tile_label).
-    tile_x, tile_y = lon_lat_to_tile((lon_min + lon_max) / 2.0,
-                                     (lat_min + lat_max) / 2.0, zoom)
+    tile_x, tile_y = lon_lat_to_tile(
+        (lon_min + lon_max) / 2.0, (lat_min + lat_max) / 2.0, zoom
+    )
 
     try:
         gj = _load_geojson(geojson_path)
@@ -3134,7 +3456,9 @@ def render_features_tile(
                 if icon_name:
                     try:
                         icon = _load_icon(icon_name)
-                        target = max(12, int(style.get("size_z18", 20) * (zoom / 18) ** 0.5))
+                        target = max(
+                            12, int(style.get("size_z18", 20) * (zoom / 18) ** 0.5)
+                        )
                         if icon.size != (target, target):
                             icon = icon.resize((target, target), Image.LANCZOS)
                         ix = int(px) - target // 2
@@ -3147,7 +3471,10 @@ def render_features_tile(
                         dst_x = max(0, ix)
                         dst_y = max(0, iy)
                         if src_x1 > src_x0 and src_y1 > src_y0:
-                            img.alpha_composite(icon.crop((src_x0, src_y0, src_x1, src_y1)), (dst_x, dst_y))
+                            img.alpha_composite(
+                                icon.crop((src_x0, src_y0, src_x1, src_y1)),
+                                (dst_x, dst_y),
+                            )
                     except Exception as e:
                         log.warning(f"Icon render failed for '{icon_name}': {e}")
 
@@ -3156,8 +3483,8 @@ def render_features_tile(
             # Keep full line if any vertex is in/near tile (same fix as contours)
             pad = 0.005
             touches = any(
-                lon_min - pad <= c[0] <= lon_max + pad and
-                lat_min - pad <= c[1] <= lat_max + pad
+                lon_min - pad <= c[0] <= lon_max + pad
+                and lat_min - pad <= c[1] <= lat_max + pad
                 for c in coords
             )
             if not touches:
@@ -3181,14 +3508,19 @@ def render_features_tile(
                     label = tags.get("name") or tags.get("ref")
                     if label:
                         label_size = label_font_size(
-                            zoom, float(settings.get("labelScale", 1) or 1))
+                            zoom, float(settings.get("labelScale", 1) or 1)
+                        )
                         try:
                             lbl_font = ImageFont.truetype(
-                                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", label_size)
+                                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                                label_size,
+                            )
                         except Exception:
                             lbl_font = ImageFont.load_default()
                         lbl_colour = style["colour"][:3] + (230,)
-                        for anchor in line_label_anchors(coords, zoom, LABEL_SPACING_PX):
+                        for anchor in line_label_anchors(
+                            coords, zoom, LABEL_SPACING_PX
+                        ):
                             pending_labels.append((anchor, label, lbl_font, lbl_colour))
 
         elif gtype == "Polygon":
@@ -3226,8 +3558,9 @@ def render_contours_tile(
 
     lon_min, lat_min, lon_max, lat_max = bbox_wgs84
     # This tile's index, used to claim line-label anchors (see draw_tile_label).
-    tile_x, tile_y = lon_lat_to_tile((lon_min + lon_max) / 2.0,
-                                     (lat_min + lat_max) / 2.0, zoom)
+    tile_x, tile_y = lon_lat_to_tile(
+        (lon_min + lon_max) / 2.0, (lat_min + lat_max) / 2.0, zoom
+    )
 
     contour_settings = settings.get("contours", {})
     zoom_bands = contour_settings.get("zoomBands", [])
@@ -3251,8 +3584,12 @@ def render_contours_tile(
 
     major_colour = _parse_rgba_hex(contour_settings.get("majorColour", "#503c28dc"))
     minor_colour = _parse_rgba_hex(contour_settings.get("minorColour", "#785a3ca0"))
-    major_width_m = float(contour_settings.get("majorWidthM", CONTOUR_DEFAULTS["majorWidthM"]))
-    minor_width_m = float(contour_settings.get("minorWidthM", CONTOUR_DEFAULTS["minorWidthM"]))
+    major_width_m = float(
+        contour_settings.get("majorWidthM", CONTOUR_DEFAULTS["majorWidthM"])
+    )
+    minor_width_m = float(
+        contour_settings.get("minorWidthM", CONTOUR_DEFAULTS["minorWidthM"])
+    )
 
     def lonlat_to_px(lon, lat):
         px = (lon - lon_min) / (lon_max - lon_min) * TILE_SIZE
@@ -3260,8 +3597,10 @@ def render_contours_tile(
         return px, py
 
     try:
-        font_major = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-                                        label_font_size(zoom, float(settings.get("labelScale", 1) or 1)))
+        font_major = ImageFont.truetype(
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            label_font_size(zoom, float(settings.get("labelScale", 1) or 1)),
+        )
     except Exception:
         font_major = ImageFont.load_default()
 
@@ -3282,7 +3621,9 @@ def render_contours_tile(
         try:
             records, tree = _load_contour_index(path)
         except Exception as e:
-            log.warning(f"Contour geojson load failed for interval {interval} ({path}): {e}")
+            log.warning(
+                f"Contour geojson load failed for interval {interval} ({path}): {e}"
+            )
             continue
         if tree is None:
             continue
@@ -3298,8 +3639,9 @@ def render_contours_tile(
         # (keep features whose bbox intersects tile ± pad), at O(log n + hits)
         # per tile instead of scanning every feature in the job.
         pad = 0.05
-        query_box = shapely_box(lon_min - pad, lat_min - pad,
-                                lon_max + pad, lat_max + pad)
+        query_box = shapely_box(
+            lon_min - pad, lat_min - pad, lon_max + pad, lat_max + pad
+        )
         for idx in tree.query(query_box):
             feat, coords = records[int(idx)]
 
@@ -3327,7 +3669,9 @@ def render_contours_tile(
                 is_major = abs(m - round(m)) < 1e-3
 
             colour = major_colour if is_major else minor_colour
-            width_px_z18 = (major_width_m if is_major else minor_width_m) / CONTOUR_WIDTH_UNITS_PER_PX
+            width_px_z18 = (
+                major_width_m if is_major else minor_width_m
+            ) / CONTOUR_WIDTH_UNITS_PER_PX
             line_width = max(1, int(width_px_z18 * zoom / 18))
             draw.line(pts, fill=colour, width=line_width)
 
@@ -3350,9 +3694,11 @@ def render_contours_tile(
 
     return img
 
+
 # ---------------------------------------------------------------------------
 # Step 6 – Tile generation workers
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class RenderConfig:
@@ -3362,7 +3708,7 @@ class RenderConfig:
     osm_geojson: Optional[str]
     contour_paths: dict
     output_dir: str
-    layers: List[str]   # which individual layers to also save
+    layers: List[str]  # which individual layers to also save
     lon_min: float
     lat_min: float
     lon_max: float
@@ -3401,7 +3747,9 @@ def render_tile_job(args) -> Tuple[int, int, int, dict]:
         # cfg.stale_path is "" whenever fire-staleness detection was disabled/
         # unavailable for this job (see compute_rasters) — same optional-path
         # convention as cfg.density_path/footprint_path.
-        stale_arr = read_raster_window(cfg.stale_path, bbox_merc) if cfg.stale_path else None
+        stale_arr = (
+            read_raster_window(cfg.stale_path, bbox_merc) if cfg.stale_path else None
+        )
         veg_img = render_vegetation_tile(density_arr, cfg.settings, stale_arr)
 
     # --- Features ---
@@ -3428,8 +3776,9 @@ def render_tile_job(args) -> Tuple[int, int, int, dict]:
     def img_to_png(img: Image.Image):
         """Return PNG bytes, or None if fully transparent. Uses getextrema() — no numpy needed."""
         from io import BytesIO
+
         # getextrema() on the alpha band: (min, max). If max==0, fully transparent.
-        extrema = img.split()[3].getextrema()   # alpha channel min, max
+        extrema = img.split()[3].getextrema()  # alpha channel min, max
         if extrema[1] == 0:
             return None
         buf = BytesIO()
@@ -3437,11 +3786,11 @@ def render_tile_job(args) -> Tuple[int, int, int, dict]:
         return buf.getvalue()
 
     layer_imgs = {
-        "hillshade":  hs_img,
+        "hillshade": hs_img,
         "vegetation": veg_img,
-        "features":   feat_img,
-        "slope":      slope_img,
-        "contours":   contour_img,
+        "features": feat_img,
+        "slope": slope_img,
+        "contours": contour_img,
     }
 
     # Individual layers — composite is built on demand by the export worker
@@ -3488,21 +3837,30 @@ def generate_all_tiles(cfg: RenderConfig, workers: int):
         try:
             fp_geom = _load_footprint_shape(cfg.footprint_path)
         except Exception as e:
-            log.warning(f"Footprint load failed; rendering full bbox without prune: {e}")
+            log.warning(
+                f"Footprint load failed; rendering full bbox without prune: {e}"
+            )
             fp_geom = None
 
     if fp_geom is not None and not fp_geom.is_empty:
-        jobs = [(z, x, y, cfg_dict) for (z, x, y) in footprint_tile_coords(fp_geom, ZOOM_MIN, ZOOM_MAX)]
+        jobs = [
+            (z, x, y, cfg_dict)
+            for (z, x, y) in footprint_tile_coords(fp_geom, ZOOM_MIN, ZOOM_MAX)
+        ]
     else:
         jobs = [
             (z, x, y, cfg_dict)
             for z in range(ZOOM_MIN, ZOOM_MAX + 1)
-            for x, y in tiles_for_bbox(cfg.lon_min, cfg.lat_min, cfg.lon_max, cfg.lat_max, z)
+            for x, y in tiles_for_bbox(
+                cfg.lon_min, cfg.lat_min, cfg.lon_max, cfg.lat_max, z
+            )
         ]
 
     total = len(jobs)
-    log.info(f"Rendering {total} tiles across zoom levels {ZOOM_MIN}–{ZOOM_MAX} "
-             f"using {workers} worker(s) …")
+    log.info(
+        f"Rendering {total} tiles across zoom levels {ZOOM_MIN}–{ZOOM_MAX} "
+        f"using {workers} worker(s) …"
+    )
 
     done = 0
     failed = 0
@@ -3516,7 +3874,9 @@ def generate_all_tiles(cfg: RenderConfig, workers: int):
                     insert_tile(conns[name], z, x, y, png_bytes)
                 done += 1
                 if done % 100 == 0 or done == total:
-                    log.info(f"  Progress: {done}/{total} tiles ({100*done//total}%)")
+                    log.info(
+                        f"  Progress: {done}/{total} tiles ({100 * done // total}%)"
+                    )
                     _write_progress(done, total, "render")
             except Exception as e:
                 failed += 1
@@ -3543,9 +3903,11 @@ def generate_all_tiles(cfg: RenderConfig, workers: int):
     log.info("All tiles written.")
     return total
 
+
 # ---------------------------------------------------------------------------
 # Bounding box utility
 # ---------------------------------------------------------------------------
+
 
 def get_raster_bbox_wgs84(raster_path: str) -> Tuple[float, float, float, float]:
     ds = gdal.Open(raster_path)
@@ -3578,9 +3940,11 @@ def get_raster_bbox_wgs84(raster_path: str) -> Tuple[float, float, float, float]
 
     return lon_min, lat_min, lon_max, lat_max
 
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def merge_dem_tiles(dem_files: List[Path], out_path: str):
     """Mosaic multiple DEM GeoTIFFs into one, preserving their NATIVE CRS.
@@ -3601,8 +3965,10 @@ def merge_dem_tiles(dem_files: List[Path], out_path: str):
         src_nodata = -9999
 
     if len(_distinct_raster_crs(paths)) > 1:
-        log.warning("DEM tiles span multiple CRSs — reprojecting each to Web "
-                    "Mercator before mosaic (edge wedges may appear).")
+        log.warning(
+            "DEM tiles span multiple CRSs — reprojecting each to Web "
+            "Mercator before mosaic (edge wedges may appear)."
+        )
         merc = []
         for i, p in enumerate(paths):
             m = out_path.replace(".tif", f"_merc_{i}.tif")
@@ -3614,7 +3980,8 @@ def merge_dem_tiles(dem_files: List[Path], out_path: str):
     gdal.BuildVRT(vrt_path, paths, VRTNodata=src_nodata)
     # Identity mosaic (no reprojection); normalise nodata to -9999.
     gdal.Warp(
-        out_path, vrt_path,
+        out_path,
+        vrt_path,
         srcNodata=src_nodata,
         dstNodata=-9999,
         resampleAlg="cubic",
@@ -3628,66 +3995,105 @@ def main():
     parser = argparse.ArgumentParser(
         description=(
             "Convert an ELVIS LiDAR ZIP into topo MBTiles for Gaia GPS.\n\n"
-            "Auto-detects ZIP contents (\"LAZ wins\"):\n"
+            'Auto-detects ZIP contents ("LAZ wins"):\n'
             "  Mode C (point cloud present) – all layers; any bundled DEM ignored\n"
             "  Mode A (DEM only, no LAZ)    – terrain + contours, no vegetation"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("elvis_zip", help="Path to the ELVIS ZIP file")
-    parser.add_argument("--output", default="./output",
-                        help="Output directory (default: ./output)")
-    parser.add_argument("--workers", type=int,
-                        default=max(1, multiprocessing.cpu_count() - 1),
-                        help="Parallel tile-render workers (default: CPU count − 1)")
-    parser.add_argument("--work-dir", default=None,
-                        help="Intermediate file directory (default: auto temp dir)")
-    parser.add_argument("--keep-work", action="store_true",
-                        help="Keep intermediate working files after completion")
-    parser.add_argument("--skip-osm", action="store_true",
-                        help="Skip Overpass API download (offline / testing mode)")
-    parser.add_argument("--benchmark", action="store_true",
-                        help="Print per-step timing report at the end")
-    parser.add_argument("--export-geojson", default=None, metavar="DIR",
-                        help=(
-                            "Copy intermediate GeoJSON files (contours + OSM features) "
-                            "to DIR for external vector tile generation."
-                        ))
-    parser.add_argument("--export-footprint", default=None, metavar="DIR",
-                        help=(
-                            "Copy the computed data-coverage footprint GeoJSON "
-                            "to DIR (alongside --export-geojson outputs)."
-                        ))
-    parser.add_argument("--layers", default="all",
-                        help=(
-                            "Comma-separated list of layers to generate "
-                            "(hillshade, vegetation, features, slope, contours). "
-                            "Defaults to 'all'. Per-layer `enabled` flags in "
-                            "--settings-json also disable layers. As of Stage 2 "
-                            "composite is no longer produced at job time — the "
-                            "export worker builds it on demand."
-                        ))
-    parser.add_argument("--settings-json", default=None, metavar="PATH",
-                        help=(
-                            "Path to a JSON file with per-job render overrides "
-                            "(hillshade params, slope bands, vegetation colours, "
-                            "contour intervals, OSM feature toggles). Shape must "
-                            "match shared/src/topoSettings.ts TopoSettings. "
-                            "Omit to use the Default preset."
-                        ))
-    parser.add_argument("--metrics-json", default=None, metavar="PATH",
-                        help=(
-                            "Write a per-job runtime metrics JSON to PATH "
-                            "(phase timings + input/output tile counts). Consumed "
-                            "by the worker to persist TopoJob.pipeline_metrics. "
-                            "Omit for a no-op (CLI/host runs)."
-                        ))
-    parser.add_argument("--progress-file", default=None, metavar="PATH",
-                        help=(
-                            "Atomically write {done,total,ts} render/PDAL progress "
-                            "to PATH so the worker's heartbeat can report liveness. "
-                            "Omit for a no-op (CLI/host runs)."
-                        ))
+    parser.add_argument(
+        "--output", default="./output", help="Output directory (default: ./output)"
+    )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=max(1, multiprocessing.cpu_count() - 1),
+        help="Parallel tile-render workers (default: CPU count − 1)",
+    )
+    parser.add_argument(
+        "--work-dir",
+        default=None,
+        help="Intermediate file directory (default: auto temp dir)",
+    )
+    parser.add_argument(
+        "--keep-work",
+        action="store_true",
+        help="Keep intermediate working files after completion",
+    )
+    parser.add_argument(
+        "--skip-osm",
+        action="store_true",
+        help="Skip Overpass API download (offline / testing mode)",
+    )
+    parser.add_argument(
+        "--benchmark",
+        action="store_true",
+        help="Print per-step timing report at the end",
+    )
+    parser.add_argument(
+        "--export-geojson",
+        default=None,
+        metavar="DIR",
+        help=(
+            "Copy intermediate GeoJSON files (contours + OSM features) "
+            "to DIR for external vector tile generation."
+        ),
+    )
+    parser.add_argument(
+        "--export-footprint",
+        default=None,
+        metavar="DIR",
+        help=(
+            "Copy the computed data-coverage footprint GeoJSON "
+            "to DIR (alongside --export-geojson outputs)."
+        ),
+    )
+    parser.add_argument(
+        "--layers",
+        default="all",
+        help=(
+            "Comma-separated list of layers to generate "
+            "(hillshade, vegetation, features, slope, contours). "
+            "Defaults to 'all'. Per-layer `enabled` flags in "
+            "--settings-json also disable layers. As of Stage 2 "
+            "composite is no longer produced at job time — the "
+            "export worker builds it on demand."
+        ),
+    )
+    parser.add_argument(
+        "--settings-json",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Path to a JSON file with per-job render overrides "
+            "(hillshade params, slope bands, vegetation colours, "
+            "contour intervals, OSM feature toggles). Shape must "
+            "match shared/src/topoSettings.ts TopoSettings. "
+            "Omit to use the Default preset."
+        ),
+    )
+    parser.add_argument(
+        "--metrics-json",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Write a per-job runtime metrics JSON to PATH "
+            "(phase timings + input/output tile counts). Consumed "
+            "by the worker to persist TopoJob.pipeline_metrics. "
+            "Omit for a no-op (CLI/host runs)."
+        ),
+    )
+    parser.add_argument(
+        "--progress-file",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Atomically write {done,total,ts} render/PDAL progress "
+            "to PATH so the worker's heartbeat can report liveness. "
+            "Omit for a no-op (CLI/host runs)."
+        ),
+    )
     args = parser.parse_args()
 
     # Module-global progress sink (worker heartbeat reads this file). Set once;
@@ -3722,21 +4128,21 @@ def main():
         capture_year: Optional[int] = None
         survey_selection: Optional[SurveySelection] = None
         # Final Web-Mercator rasters fed to the derived-raster / tiling stage.
-        dtm_filled       = os.path.join(work_dir, "dtm_filled.tif")
-        scrub_low_raw    = os.path.join(work_dir, "scrub_low_count_raw.tif")
-        scrub_high_raw   = os.path.join(work_dir, "scrub_high_count_raw.tif")
-        below_count_raw  = os.path.join(work_dir, "below_count_raw.tif")
-        all_count_raw    = os.path.join(work_dir, "all_count_raw.tif")
+        dtm_filled = os.path.join(work_dir, "dtm_filled.tif")
+        scrub_low_raw = os.path.join(work_dir, "scrub_low_count_raw.tif")
+        scrub_high_raw = os.path.join(work_dir, "scrub_high_count_raw.tif")
+        below_count_raw = os.path.join(work_dir, "below_count_raw.tif")
+        all_count_raw = os.path.join(work_dir, "all_count_raw.tif")
         # Native-CRS intermediates. Rasters are built and the footprint computed
         # in the data's native MGA/UTM grid (axis-aligned → no rotation wedge),
         # then warped to Web Mercator as a raster (see
         # reproject_raster_to_web_mercator). This is what prevents fill_nodata
         # from fabricating "spaghetti" into the rotated edge gaps.
-        dtm_native          = os.path.join(work_dir, "dtm_native.tif")
-        scrub_low_native    = os.path.join(work_dir, "scrub_low_count_native.tif")
-        scrub_high_native   = os.path.join(work_dir, "scrub_high_count_native.tif")
-        below_count_native  = os.path.join(work_dir, "below_count_native.tif")
-        all_count_native    = os.path.join(work_dir, "all_count_native.tif")
+        dtm_native = os.path.join(work_dir, "dtm_native.tif")
+        scrub_low_native = os.path.join(work_dir, "scrub_low_count_native.tif")
+        scrub_high_native = os.path.join(work_dir, "scrub_high_count_native.tif")
+        below_count_native = os.path.join(work_dir, "below_count_native.tif")
+        all_count_native = os.path.join(work_dir, "all_count_native.tif")
 
         footprint_path = os.path.join(work_dir, "footprint.geojson")
 
@@ -3763,15 +4169,24 @@ def main():
             dtm_native_filled = os.path.join(work_dir, "dtm_native_filled.tif")
             # Resolve overlapping surveys per footprint: densest survey → terrain
             # (DTM/hillshade/slope/contours), most-recent survey → vegetation.
-            with bench.step("Select surveys per footprint (density vs recency)", key="survey_select"):
+            with bench.step(
+                "Select surveys per footprint (density vs recency)", key="survey_select"
+            ):
                 survey_selection = select_surveys_by_layer(contents.las_files)
             capture_year = _capture_year_from_las_files(survey_selection.veg_tiles)
-            with bench.step("PDAL: LAZ → DTM + NRD counts (ground classification)", key="pdal"):
+            with bench.step(
+                "PDAL: LAZ → DTM + NRD counts (ground classification)", key="pdal"
+            ):
                 run_pdal_sequential_full(
-                    survey_selection.terrain_tiles, survey_selection.veg_tiles,
-                    dtm_raw, scrub_low_native, scrub_high_native,
-                    below_count_native, all_count_native,
-                    work_dir, resolution=1.0,
+                    survey_selection.terrain_tiles,
+                    survey_selection.veg_tiles,
+                    dtm_raw,
+                    scrub_low_native,
+                    scrub_high_native,
+                    below_count_native,
+                    all_count_native,
+                    work_dir,
+                    resolution=1.0,
                 )
             with bench.step("Fill DTM nodata holes", key="fill"):
                 fill_nodata(dtm_raw, dtm_native_filled)
@@ -3781,24 +4196,47 @@ def main():
             with bench.step("Compute data footprint", key="footprint"):
                 compute_data_footprint(dtm_raw, footprint_path)
             with bench.step("Reproject DTM to Web Mercator", key="reproject"):
-                reproject_raster_to_web_mercator(dtm_native_filled, dtm_filled, -9999, "cubic")
+                reproject_raster_to_web_mercator(
+                    dtm_native_filled, dtm_filled, -9999, "cubic"
+                )
 
         # ── Step 2b: Warp NRD counts to Web Mercator (vegetation layer) ─────
         # Counts are produced in the native grid by the Mode C full PDAL pass;
         # warp them so they align with the 3857 DTM the derived rasters expect.
         if contents.has_vegetation:
-            with bench.step("Reproject NRD counts to Web Mercator", key="reproject_counts"):
-                reproject_raster_to_web_mercator(scrub_low_native, scrub_low_raw, 0, "bilinear")
-                reproject_raster_to_web_mercator(scrub_high_native, scrub_high_raw, 0, "bilinear")
-                reproject_raster_to_web_mercator(below_count_native, below_count_raw, 0, "bilinear")
-                reproject_raster_to_web_mercator(all_count_native, all_count_raw, 0, "bilinear")
+            with bench.step(
+                "Reproject NRD counts to Web Mercator", key="reproject_counts"
+            ):
+                reproject_raster_to_web_mercator(
+                    scrub_low_native, scrub_low_raw, 0, "bilinear"
+                )
+                reproject_raster_to_web_mercator(
+                    scrub_high_native, scrub_high_raw, 0, "bilinear"
+                )
+                reproject_raster_to_web_mercator(
+                    below_count_native, below_count_raw, 0, "bilinear"
+                )
+                reproject_raster_to_web_mercator(
+                    all_count_native, all_count_raw, 0, "bilinear"
+                )
 
         # ── Step 3: Derive rasters ───────────────────────────────────────────
-        with bench.step("Compute hillshade, slope" + (", scrub density (vegetation)" if contents.has_vegetation else ""), key="derivatives"):
+        with bench.step(
+            "Compute hillshade, slope"
+            + (", scrub density (vegetation)" if contents.has_vegetation else ""),
+            key="derivatives",
+        ):
             if contents.has_vegetation:
-                raster_paths = compute_rasters(dtm_filled, scrub_low_raw, scrub_high_raw,
-                                               below_count_raw, all_count_raw,
-                                               work_dir, settings, capture_year)
+                raster_paths = compute_rasters(
+                    dtm_filled,
+                    scrub_low_raw,
+                    scrub_high_raw,
+                    below_count_raw,
+                    all_count_raw,
+                    work_dir,
+                    settings,
+                    capture_year,
+                )
             else:
                 raster_paths = compute_rasters_no_veg(dtm_filled, work_dir, settings)
 
@@ -3818,7 +4256,9 @@ def main():
 
         # ── Step 4: Bounding box ─────────────────────────────────────────────
         lon_min, lat_min, lon_max, lat_max = get_raster_bbox_wgs84(dtm_filled)
-        log.info(f"Coverage: lon {lon_min:.4f}–{lon_max:.4f}, lat {lat_min:.4f}–{lat_max:.4f}")
+        log.info(
+            f"Coverage: lon {lon_min:.4f}–{lon_max:.4f}, lat {lat_min:.4f}–{lat_max:.4f}"
+        )
 
         # ── Step 5: OSM features ─────────────────────────────────────────────
         # OSM is always fetched (unless --skip-osm for offline tests). The
@@ -3828,23 +4268,40 @@ def main():
         osm_geojson = None
         if not args.skip_osm:
             with bench.step("Fetch OSM features (Overpass API)", key="osm"):
-                osm_geojson = fetch_osm_features(lon_min, lat_min, lon_max, lat_max, work_dir,
-                                                  footprint_path=fp, settings=settings)
+                osm_geojson = fetch_osm_features(
+                    lon_min,
+                    lat_min,
+                    lon_max,
+                    lat_max,
+                    work_dir,
+                    footprint_path=fp,
+                    settings=settings,
+                )
 
         # ── Step 6: Contours ─────────────────────────────────────────────────
         # 5 m is forced into the interval set so the GeoJSON export and the
         # vector contours PMTiles the frontend renders are always present,
         # independent of the template's per-zoom intervalM choices (which
         # drive only raster compositing).
-        contour_intervals = sorted({5.0} | {float(b["intervalM"])
-                                    for b in settings.get("contours", {}).get("zoomBands", [])})
-        contours_enabled = settings.get("contours", {}).get("enabled", True) and bool(contour_intervals)
+        contour_intervals = sorted(
+            {5.0}
+            | {
+                float(b["intervalM"])
+                for b in settings.get("contours", {}).get("zoomBands", [])
+            }
+        )
+        contours_enabled = settings.get("contours", {}).get("enabled", True) and bool(
+            contour_intervals
+        )
         contour_paths: Dict[float, str] = {}
         if contours_enabled:
-            with bench.step(f"Generate contours ({', '.join(str(i) + 'm' for i in contour_intervals)})", key="contours"):
-                contour_paths = generate_contours_gdal(dtm_filled, work_dir,
-                                                       intervals=contour_intervals,
-                                                       footprint_path=fp)
+            with bench.step(
+                f"Generate contours ({', '.join(str(i) + 'm' for i in contour_intervals)})",
+                key="contours",
+            ):
+                contour_paths = generate_contours_gdal(
+                    dtm_filled, work_dir, intervals=contour_intervals, footprint_path=fp
+                )
 
         # ── Step 6b: Export GeoJSON for external vector tile generation ─────
         if args.export_geojson or args.export_footprint:
@@ -3854,10 +4311,22 @@ def main():
             log.info(f"Exporting GeoJSON to {args.export_geojson} …")
             for interval, path in contour_paths.items():
                 if os.path.exists(path):
-                    pretty = int(interval) if float(interval).is_integer() else str(interval).replace(".", "p")
-                    shutil.copy2(path, os.path.join(args.export_geojson, f"contours_{pretty}m.geojson"))
+                    pretty = (
+                        int(interval)
+                        if float(interval).is_integer()
+                        else str(interval).replace(".", "p")
+                    )
+                    shutil.copy2(
+                        path,
+                        os.path.join(
+                            args.export_geojson, f"contours_{pretty}m.geojson"
+                        ),
+                    )
             if osm_geojson and os.path.exists(osm_geojson):
-                shutil.copy2(osm_geojson, os.path.join(args.export_geojson, "osm_features.geojson"))
+                shutil.copy2(
+                    osm_geojson,
+                    os.path.join(args.export_geojson, "osm_features.geojson"),
+                )
         if args.export_footprint and fp:
             fp_export_dir = args.export_footprint
             os.makedirs(fp_export_dir, exist_ok=True)
@@ -3871,8 +4340,10 @@ def main():
         if args.layers and args.layers.lower() != "all":
             requested = {l.strip().lower() for l in args.layers.split(",") if l.strip()}
             if "composite" in requested:
-                log.warning("--layers 'composite' is a no-op since Stage 2; "
-                            "composites are built on demand by the export worker. Ignoring.")
+                log.warning(
+                    "--layers 'composite' is a no-op since Stage 2; "
+                    "composites are built on demand by the export worker. Ignoring."
+                )
                 requested.discard("composite")
             active_layers = [l for l in active_layers if l in requested]
 
@@ -3893,16 +4364,21 @@ def main():
             footprint_path=fp,
         )
 
-        with bench.step(f"Render tiles z{ZOOM_MIN}–z{ZOOM_MAX} ({args.workers} workers)", key="render"):
+        with bench.step(
+            f"Render tiles z{ZOOM_MIN}–z{ZOOM_MAX} ({args.workers} workers)",
+            key="render",
+        ):
             output_tile_count = generate_all_tiles(cfg, workers=args.workers)
 
         # Record the size signals for the per-job metrics file (consumed by the
         # worker → TopoJob → adaptive runtime estimator). Input count is the
         # number of tiles actually GRIDDED (post survey-dedup union), since that
         # is what drives PDAL runtime — not the raw upload count.
-        gridded_count = (len(survey_selection.gridded_paths)
-                         if survey_selection is not None
-                         else len(contents.las_files))
+        gridded_count = (
+            len(survey_selection.gridded_paths)
+            if survey_selection is not None
+            else len(contents.las_files)
+        )
         bench.set_tile_counts(gridded_count, output_tile_count)
         bench.set_zoom(ZOOM_MIN, ZOOM_MAX)
         bench.set_survey_selection(

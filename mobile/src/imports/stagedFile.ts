@@ -50,7 +50,8 @@ export async function stageIncomingFile(params: {
   // parser's own guards are downstream of a bounded read either way, and a file
   // that measures 0 and is huge would have failed the old check too.
   if (size > params.maxBytes) throw new Error(params.tooLargeMessage);
-  if (params.uri.startsWith("file://")) return { uri: params.uri, scratch: null };
+  if (params.uri.startsWith("file://"))
+    return { uri: params.uri, scratch: null };
   const scratch = await scratchFileUri(params.scratchName);
   await FileSystem.copyAsync({ from: params.uri, to: scratch });
   return { uri: scratch, scratch };

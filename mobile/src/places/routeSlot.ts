@@ -80,7 +80,8 @@ export function routeSlotOccupant(
   ignoreRouteId?: string | null,
 ): RouteSlotOccupant {
   const route = routes.find(
-    (candidate) => candidate.placeId === placeId && candidate.id !== ignoreRouteId,
+    (candidate) =>
+      candidate.placeId === placeId && candidate.id !== ignoreRouteId,
   );
   if (route) return { kind: "route", id: route.id, name: route.name };
   const file = media.find(

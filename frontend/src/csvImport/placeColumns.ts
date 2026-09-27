@@ -26,10 +26,21 @@ export const GRADE_RANGES: Partial<Record<PlaceFieldRole, [number, number]>> = {
 };
 
 // Roles that map to integer fields on Place
-export const INT_ROLES = new Set<PlaceFieldRole>(["vGrade", "aGrade", "commitment", "numAbseils"]);
+export const INT_ROLES = new Set<PlaceFieldRole>([
+  "vGrade",
+  "aGrade",
+  "commitment",
+  "numAbseils",
+]);
 
 // Roles that map to float fields (quality is a decimal 1-5)
-export const FLOAT_ROLES = new Set<PlaceFieldRole>(["latitude", "longitude", "longestAbseil", "hours", "quality"]);
+export const FLOAT_ROLES = new Set<PlaceFieldRole>([
+  "latitude",
+  "longitude",
+  "longestAbseil",
+  "hours",
+  "quality",
+]);
 
 const ROLE_ALIASES: Record<string, PlaceFieldRole> = {};
 
@@ -55,19 +66,97 @@ export function normalize(s: string): string {
     .trim();
 }
 
-registerAliases("name", ["name", "place", "place name", "location", "place", "site"]);
+registerAliases("name", [
+  "name",
+  "place",
+  "place name",
+  "location",
+  "place",
+  "site",
+]);
 registerAliases("latitude", ["lat", "latitude", "y", "lat_dd", "latitude_dd"]);
-registerAliases("longitude", ["lng", "lon", "long", "longitude", "x", "lon_dd", "lng_dd", "longitude_dd"]);
-registerAliases("altNames", ["alt names", "alt name", "alternative names", "alternative name", "aka", "aliases", "other names"]);
-registerAliases("notes", ["notes", "comments", "comment", "description", "note", "details", "remarks", "info"]);
-registerAliases("numAbseils", ["raps", "abseils", "pitches", "num abseils", "number abseils", "num raps", "number of pitches", "number of abseils"]);
-registerAliases("longestAbseil", ["longest rap", "longest abseil", "longest pitch", "max rap", "max abseil", "longest abseil m", "longest rap m"]);
-registerAliases("hours", ["time", "duration", "hours", "trip time", "trip duration", "time hrs", "hours hrs"]);
-registerAliases("vGrade", ["v grade", "v", "vgrade", "vertical grade", "v_grade"]);
-registerAliases("aGrade", ["a grade", "a", "agrade", "aquatic grade", "a_grade", "water grade"]);
+registerAliases("longitude", [
+  "lng",
+  "lon",
+  "long",
+  "longitude",
+  "x",
+  "lon_dd",
+  "lng_dd",
+  "longitude_dd",
+]);
+registerAliases("altNames", [
+  "alt names",
+  "alt name",
+  "alternative names",
+  "alternative name",
+  "aka",
+  "aliases",
+  "other names",
+]);
+registerAliases("notes", [
+  "notes",
+  "comments",
+  "comment",
+  "description",
+  "note",
+  "details",
+  "remarks",
+  "info",
+]);
+registerAliases("numAbseils", [
+  "raps",
+  "abseils",
+  "pitches",
+  "num abseils",
+  "number abseils",
+  "num raps",
+  "number of pitches",
+  "number of abseils",
+]);
+registerAliases("longestAbseil", [
+  "longest rap",
+  "longest abseil",
+  "longest pitch",
+  "max rap",
+  "max abseil",
+  "longest abseil m",
+  "longest rap m",
+]);
+registerAliases("hours", [
+  "time",
+  "duration",
+  "hours",
+  "trip time",
+  "trip duration",
+  "time hrs",
+  "hours hrs",
+]);
+registerAliases("vGrade", [
+  "v grade",
+  "v",
+  "vgrade",
+  "vertical grade",
+  "v_grade",
+]);
+registerAliases("aGrade", [
+  "a grade",
+  "a",
+  "agrade",
+  "aquatic grade",
+  "a_grade",
+  "water grade",
+]);
 registerAliases("commitment", ["commitment", "commit"]);
 registerAliases("quality", ["quality", "stars", "rating", "qual"]);
-registerAliases("sources", ["sources", "source", "refs", "references", "links", "urls"]);
+registerAliases("sources", [
+  "sources",
+  "source",
+  "refs",
+  "references",
+  "links",
+  "urls",
+]);
 
 // An `attr:<key>` header is the convention the CSV exporter emits for a
 // place's custom-attribute values. Recognising it here lets an exported file
@@ -142,21 +231,32 @@ export const ROLE_LABELS: Record<string, string> = {
 
 /** STRUCTURAL roles — the ones every place has, whatever its type. */
 export const STRUCTURAL_ROLES: PlaceFieldRole[] = [
-  "name", "latitude", "longitude", "altNames", "notes",
+  "name",
+  "latitude",
+  "longitude",
+  "altNames",
+  "notes",
 ];
 
 /** The seven CANYON roles, which have bespoke parsing and ranges (a v-grade is
  *  1-7, a quality is a decimal 1-5). They are the Canyon type's system field
  *  definitions; a campsite import must not be offered them. */
 export const CANYON_ROLES: PlaceFieldRole[] = [
-  "numAbseils", "longestAbseil", "hours",
-  "vGrade", "aGrade", "commitment", "quality",
+  "numAbseils",
+  "longestAbseil",
+  "hours",
+  "vGrade",
+  "aGrade",
+  "commitment",
+  "quality",
 ];
 
 export const ALL_ASSIGNABLE_ROLES: PlaceFieldRole[] = [
   ...STRUCTURAL_ROLES,
   ...CANYON_ROLES,
-  "sources", "new-attr", "discard",
+  "sources",
+  "new-attr",
+  "discard",
 ];
 
 /**
@@ -198,4 +298,8 @@ const RESERVED_ATTR_ROLES = new Set<string>([
   "attr:longest_abseil",
 ]);
 
-export const REQUIRED_ROLES: PlaceFieldRole[] = ["name", "latitude", "longitude"];
+export const REQUIRED_ROLES: PlaceFieldRole[] = [
+  "name",
+  "latitude",
+  "longitude",
+];

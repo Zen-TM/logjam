@@ -86,7 +86,10 @@ import {
 /** The glyph and hue per kind — lucide's four, the same identity these kinds
  *  wear on Ways and Maps. Per client, because an icon key resolves in one
  *  client's set and not the other's (root CLAUDE.md). */
-const KIND_IDENTITY: Record<FriendShareRow["entityType"], { icon: LucideIcon; hue: string }> = {
+const KIND_IDENTITY: Record<
+  FriendShareRow["entityType"],
+  { icon: LucideIcon; hue: string }
+> = {
   place: { icon: MapPin, hue: "var(--hue-shared)" },
   route: { icon: PenLine, hue: "var(--hue-route)" },
   topoJob: { icon: Mountain, hue: "var(--hue-overlay)" },
@@ -134,7 +137,9 @@ function FriendSharingSection({
       .then(setShares)
       .catch((err) => {
         console.error(err);
-        setError(messageFromError(err, "Couldn't load sharing for this friend."));
+        setError(
+          messageFromError(err, "Couldn't load sharing for this friend."),
+        );
       });
   }, [friend.friendshipId]);
 
@@ -162,7 +167,10 @@ function FriendSharingSection({
   // unshare, received rows only where Remove would change anything (one that
   // also rides a shared place would come straight back).
   const selectableKeys = useMemo(
-    () => cards.filter((card) => direction === "theySee" || card.removable).map((card) => card.key),
+    () =>
+      cards
+        .filter((card) => direction === "theySee" || card.removable)
+        .map((card) => card.key),
     [cards, direction],
   );
   const selected = useMemo(() => {
@@ -189,7 +197,9 @@ function FriendSharingSection({
       setSelectedKeys((current) => [...new Set([...current, ...range])]);
     } else {
       setSelectedKeys((current) =>
-        current.includes(key) ? current.filter((other) => other !== key) : [...current, key],
+        current.includes(key)
+          ? current.filter((other) => other !== key)
+          : [...current, key],
       );
     }
     selectionAnchor.current = key;
@@ -205,7 +215,10 @@ function FriendSharingSection({
       if (event.key === "Escape") {
         event.preventDefault();
         clearSelection();
-      } else if (event.key.toLowerCase() === "a" && (event.ctrlKey || event.metaKey)) {
+      } else if (
+        event.key.toLowerCase() === "a" &&
+        (event.ctrlKey || event.metaKey)
+      ) {
         event.preventDefault();
         setSelectedKeys(selectableKeys);
       }
@@ -223,7 +236,11 @@ function FriendSharingSection({
       : unshareEntityWith(card.row.entityType, card.row.entityId, userId);
   }
 
-  async function run(action: () => Promise<unknown>, failure: string, success?: string) {
+  async function run(
+    action: () => Promise<unknown>,
+    failure: string,
+    success?: string,
+  ) {
     setBusy(true);
     try {
       await action();
@@ -245,16 +262,15 @@ function FriendSharingSection({
    *  a selection asked for. */
   async function unshareSelected() {
     const picked = selected;
-    await run(
-      async () => {
-        const { revokedCount } = await unshareAllWithFriend(
-          friend.friendshipId,
-          picked.map(shareCardItem),
-        );
-        toast.success(unshareOutcomeMessage({ revokedCount, friendName: friend.username }));
-      },
-      "Couldn't unshare those. Please try again.",
-    );
+    await run(async () => {
+      const { revokedCount } = await unshareAllWithFriend(
+        friend.friendshipId,
+        picked.map(shareCardItem),
+      );
+      toast.success(
+        unshareOutcomeMessage({ revokedCount, friendName: friend.username }),
+      );
+    }, "Couldn't unshare those. Please try again.");
   }
 
   /** The received bulk: no endpoint takes a list, so these go one at a time and
@@ -286,12 +302,21 @@ function FriendSharingSection({
 
   const directions: ChipOption<FriendShareDirection>[] = [
     { value: "theySee", label: "You share", count: theirs.length },
-    { value: "youSee", label: "They share", count: mine.length, hue: "var(--hue-shared)" },
+    {
+      value: "youSee",
+      label: "They share",
+      count: mine.length,
+      hue: "var(--hue-shared)",
+    },
   ];
 
   return (
     <div className={classes.root} ref={rootRef}>
-      <Hero title={friend.username} onBack={onBack} backLabel="Back to friends" />
+      <Hero
+        title={friend.username}
+        onBack={onBack}
+        backLabel="Back to friends"
+      />
 
       <div className={classes.rails}>
         {selecting ? (
@@ -385,7 +410,9 @@ function FriendSharingSection({
                       label={`Select ${card.title}`}
                       checked={isSelected}
                       selecting={selecting}
-                      onToggle={(extendRange) => toggleSelected(card.key, extendRange)}
+                      onToggle={(extendRange) =>
+                        toggleSelected(card.key, extendRange)
+                      }
                     />
                   ) : (
                     tile
@@ -440,14 +467,18 @@ function FriendSharingSection({
           unshareAllConfirm({
             count: selected.length,
             friendName: friend.username,
-            includesPlace: selected.some((card) => card.row.entityType === "place"),
+            includesPlace: selected.some(
+              (card) => card.row.entityType === "place",
+            ),
           }).title
         }
         message={
           unshareAllConfirm({
             count: selected.length,
             friendName: friend.username,
-            includesPlace: selected.some((card) => card.row.entityType === "place"),
+            includesPlace: selected.some(
+              (card) => card.row.entityType === "place",
+            ),
           }).body
         }
         confirmLabel={`Unshare ${selected.length}`}

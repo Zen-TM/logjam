@@ -31,23 +31,23 @@ gdal.UseExceptions()
 # NRD value to lift hard/thorny vegetation up and soften clear-floored forests.
 # Heuristic starting values — calibrate against ground truth when available.
 SVTM_FORMATION_MU: Dict[str, float] = {
-    "Rainforests":                                         0.7,
-    "Wet Sclerophyll Forests (Grassy sub-formation)":      0.9,
-    "Wet Sclerophyll Forests (Shrubby sub-formation)":     1.2,
+    "Rainforests": 0.7,
+    "Wet Sclerophyll Forests (Grassy sub-formation)": 0.9,
+    "Wet Sclerophyll Forests (Shrubby sub-formation)": 1.2,
     "Dry Sclerophyll Forests (Shrub/grass sub-formation)": 1.2,
-    "Dry Sclerophyll Forests (Shrubby sub-formation)":     1.5,
-    "Grassy Woodlands":                                    0.7,
-    "Grasslands":                                          0.5,
-    "Heathlands":                                          1.8,
-    "Forested Wetlands":                                   1.1,
-    "Freshwater Wetlands":                                 1.3,
-    "Saline Wetlands":                                     1.0,
-    "Semi-arid Woodlands (Grassy sub-formation)":          0.9,
-    "Semi-arid Woodlands (Shrubby sub-formation)":         1.3,
-    "Arid Shrublands (Acacia sub-formation)":              1.4,
-    "Arid Shrublands (Chenopod sub-formation)":            1.0,
-    "Alpine Complex":                                      1.4,
-    "Not classified":                                      1.0,
+    "Dry Sclerophyll Forests (Shrubby sub-formation)": 1.5,
+    "Grassy Woodlands": 0.7,
+    "Grasslands": 0.5,
+    "Heathlands": 1.8,
+    "Forested Wetlands": 1.1,
+    "Freshwater Wetlands": 1.3,
+    "Saline Wetlands": 1.0,
+    "Semi-arid Woodlands (Grassy sub-formation)": 0.9,
+    "Semi-arid Woodlands (Shrubby sub-formation)": 1.3,
+    "Arid Shrublands (Acacia sub-formation)": 1.4,
+    "Arid Shrublands (Chenopod sub-formation)": 1.0,
+    "Alpine Complex": 1.4,
+    "Not classified": 1.0,
 }
 
 
@@ -60,7 +60,7 @@ def read_vat_dbf(dbf_path: str) -> List[Dict[str, str]]:
     """
     with open(dbf_path, "rb") as f:
         header = f.read(32)
-        n_records  = struct.unpack("<L", header[4:8])[0]
+        n_records = struct.unpack("<L", header[4:8])[0]
         header_len = struct.unpack("<H", header[8:10])[0]
         record_len = struct.unpack("<H", header[10:12])[0]
 
@@ -77,18 +77,24 @@ def read_vat_dbf(dbf_path: str) -> List[Dict[str, str]]:
         rows = []
         for _ in range(n_records):
             rec = f.read(record_len)
-            if not rec or rec[0:1] == b"*":   # deleted flag
+            if not rec or rec[0:1] == b"*":  # deleted flag
                 continue
             offset = 1
             row = {}
             for name, flen in fields:
-                row[name] = rec[offset:offset + flen].decode("latin-1", errors="replace").strip()
+                row[name] = (
+                    rec[offset : offset + flen]
+                    .decode("latin-1", errors="replace")
+                    .strip()
+                )
                 offset += flen
             rows.append(row)
         return rows
 
 
-def build_formation_mapping(vat_rows: List[Dict[str, str]]) -> Tuple[np.ndarray, List[str]]:
+def build_formation_mapping(
+    vat_rows: List[Dict[str, str]],
+) -> Tuple[np.ndarray, List[str]]:
     """
     Return (value→formation_index lookup array, formation list).
 
@@ -126,18 +132,22 @@ def remap_pct_raster(src_path: str, lookup: np.ndarray, dst_path: str):
     src_ds = gdal.Open(src_path)
     src_band = src_ds.GetRasterBand(1)
     src_nodata = src_band.GetNoDataValue()
-    width  = src_ds.RasterXSize
+    width = src_ds.RasterXSize
     height = src_ds.RasterYSize
 
     driver = gdal.GetDriverByName("GTiff")
     dst_ds = driver.Create(
-        dst_path, width, height, 1, gdal.GDT_Byte,
+        dst_path,
+        width,
+        height,
+        1,
+        gdal.GDT_Byte,
         options=["COMPRESS=LZW", "PREDICTOR=2", "TILED=YES", "BIGTIFF=IF_SAFER"],
     )
     dst_ds.SetGeoTransform(src_ds.GetGeoTransform())
     dst_ds.SetProjection(src_ds.GetProjection())
     dst_band = dst_ds.GetRasterBand(1)
-    dst_band.SetNoDataValue(255)   # reserve 255 as "unmapped" formation
+    dst_band.SetNoDataValue(255)  # reserve 255 as "unmapped" formation
 
     block_x = 2048
     block_y = 2048
@@ -148,7 +158,7 @@ def remap_pct_raster(src_path: str, lookup: np.ndarray, dst_path: str):
             arr = src_band.ReadAsArray(xoff, yoff, cols, rows)
             # Clamp out-of-range or nodata values to "Not classified" (index 0)
             if src_nodata is not None:
-                nodata_mask = (arr == src_nodata)
+                nodata_mask = arr == src_nodata
             else:
                 nodata_mask = np.zeros_like(arr, dtype=bool)
             arr_clipped = np.where(arr < len(lookup), arr, 0)
@@ -163,7 +173,9 @@ def remap_pct_raster(src_path: str, lookup: np.ndarray, dst_path: str):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     here = Path(__file__).parent
     parser.add_argument(
         "--svtm-raster",

@@ -11,7 +11,7 @@ import {
   CAROL_ID,
   NONEXISTENT_ID,
   as,
-  CANYON_TYPE_ID
+  CANYON_TYPE_ID,
 } from "./_actors";
 
 // POST /bulk-share — "share these things with these friends", in one request.
@@ -34,10 +34,12 @@ import {
 // can exercise the recipient dimension of the cross product.
 
 async function createPlace(sub: string, name: string): Promise<string> {
-  const res = await request(API_URL)
-    .post("/places")
-    .set(as(sub))
-    .send({ placeTypeId: CANYON_TYPE_ID, name, latitude: -33.7, longitude: 150.3 });
+  const res = await request(API_URL).post("/places").set(as(sub)).send({
+    placeTypeId: CANYON_TYPE_ID,
+    name,
+    latitude: -33.7,
+    longitude: 150.3,
+  });
   expect(res.status).toBe(201);
   return res.body.id as string;
 }
@@ -46,10 +48,17 @@ async function deletePlace(sub: string, id: string): Promise<void> {
   await request(API_URL).delete(`/places/${id}`).set(as(sub));
 }
 
-async function shareRecipientIds(sub: string, placeId: string): Promise<string[]> {
-  const res = await request(API_URL).get(`/places/${placeId}/shares`).set(as(sub));
+async function shareRecipientIds(
+  sub: string,
+  placeId: string,
+): Promise<string[]> {
+  const res = await request(API_URL)
+    .get(`/places/${placeId}/shares`)
+    .set(as(sub));
   expect(res.status).toBe(200);
-  return res.body.map((row: { sharedWith: { id: string } }) => row.sharedWith.id);
+  return res.body.map(
+    (row: { sharedWith: { id: string } }) => row.sharedWith.id,
+  );
 }
 
 // The bob↔carol friendship is in the seed, but `shareBoundary.test.ts` clears
@@ -122,7 +131,11 @@ describe("POST /bulk-share", () => {
         .set(as(BOB_SUB))
         .send({ ...body, batchId: randomUUID() });
       expect(again.status).toBe(200);
-      expect(again.body).toEqual({ granted: 0, alreadyShared: 2, ineligible: 0 });
+      expect(again.body).toEqual({
+        granted: 0,
+        alreadyShared: 2,
+        ineligible: 0,
+      });
       // Still exactly two rows, not four.
       expect(await shareRecipientIds(BOB_SUB, placeId)).toHaveLength(2);
     } finally {
@@ -207,7 +220,9 @@ describe("POST /bulk-share", () => {
       expect(res.status).toBe(200);
       expect(res.body.granted).toBe(2);
 
-      const inbox = await request(API_URL).get("/notifications").set(as(BOB_SUB));
+      const inbox = await request(API_URL)
+        .get("/notifications")
+        .set(as(BOB_SUB));
       expect(inbox.status).toBe(200);
       const batched = inbox.body.filter(
         (n: { payload: { batchId?: string } }) => n.payload.batchId === batchId,
@@ -249,7 +264,10 @@ describe("POST /bulk-share", () => {
       const badType = await request(API_URL)
         .post("/bulk-share")
         .set(as(ALICE_SUB))
-        .send({ ...base, items: [{ entityType: "tripLog", entityId: placeId }] });
+        .send({
+          ...base,
+          items: [{ entityType: "tripLog", entityId: placeId }],
+        });
       expect(badType.status).toBe(400);
 
       // Nothing at all in the action.
@@ -315,7 +333,9 @@ describe("POST /bulk-share", () => {
         .set(as(ALICE_SUB));
       expect(shares.status).toBe(200);
       expect(
-        shares.body.map((row: { sharedWith: { id: string } }) => row.sharedWith.id),
+        shares.body.map(
+          (row: { sharedWith: { id: string } }) => row.sharedWith.id,
+        ),
       ).toEqual([BOB_ID]);
     } finally {
       await request(API_URL).delete(`/routes/${routeId}`).set(as(ALICE_SUB));
@@ -348,7 +368,11 @@ describe("POST /bulk-share", () => {
           batchId: randomUUID(),
         });
       expect(reshare.status).toBe(200);
-      expect(reshare.body).toEqual({ granted: 0, alreadyShared: 0, ineligible: 1 });
+      expect(reshare.body).toEqual({
+        granted: 0,
+        alreadyShared: 0,
+        ineligible: 1,
+      });
       expect(await shareRecipientIds(ALICE_SUB, placeId)).toEqual([BOB_ID]);
     } finally {
       await deletePlace(ALICE_SUB, placeId);

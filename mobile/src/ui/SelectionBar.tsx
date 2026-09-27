@@ -54,7 +54,11 @@ export function SelectionBar({
 }) {
   return (
     <View style={styles.bar}>
-      <IconButton icon="x" accessibilityLabel="Clear selection" onPress={onClear} />
+      <IconButton
+        icon="x"
+        accessibilityLabel="Clear selection"
+        onPress={onClear}
+      />
       <Text style={styles.count} numberOfLines={1}>
         {countLabel}
       </Text>

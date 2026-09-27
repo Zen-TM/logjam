@@ -27,10 +27,15 @@ export function FriendAvatar({
     <View
       style={[
         styles.disc,
-        { backgroundColor: withAlpha(hue, selected ? 0.28 : 0.18), borderColor: hue },
+        {
+          backgroundColor: withAlpha(hue, selected ? 0.28 : 0.18),
+          borderColor: hue,
+        },
       ]}
     >
-      <Text style={[styles.initials, { color: hue }]}>{avatarInitials(username)}</Text>
+      <Text style={[styles.initials, { color: hue }]}>
+        {avatarInitials(username)}
+      </Text>
     </View>
   );
 }

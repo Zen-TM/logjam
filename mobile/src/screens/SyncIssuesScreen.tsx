@@ -185,7 +185,11 @@ export function SyncIssuesScreen({
   }, [load]);
 
   const act = useCallback(
-    (run: Promise<unknown>, done: string, tone: ToastMessage["tone"] = "info") => {
+    (
+      run: Promise<unknown>,
+      done: string,
+      tone: ToastMessage["tone"] = "info",
+    ) => {
       setMenuIssue(null);
       void run
         .then(() => {
@@ -204,8 +208,12 @@ export function SyncIssuesScreen({
   // the reader's attention than one that already went.
   const items = useMemo<Issue[]>(
     () => [
-      ...parked.map((op): Issue => ({ kind: "stuck", key: `stuck:${op.seq}`, op })),
-      ...shelf.map((entry): Issue => ({ kind: "lost", key: `lost:${entry.id}`, entry })),
+      ...parked.map(
+        (op): Issue => ({ kind: "stuck", key: `stuck:${op.seq}`, op }),
+      ),
+      ...shelf.map(
+        (entry): Issue => ({ kind: "lost", key: `lost:${entry.id}`, entry }),
+      ),
     ],
     [parked, shelf],
   );
@@ -226,11 +234,15 @@ export function SyncIssuesScreen({
   });
 
   const selectedStuck = useMemo(
-    () => selectedItems.flatMap((item) => (item.kind === "stuck" ? [item.op] : [])),
+    () =>
+      selectedItems.flatMap((item) => (item.kind === "stuck" ? [item.op] : [])),
     [selectedItems],
   );
   const selectedLost = useMemo(
-    () => selectedItems.flatMap((item) => (item.kind === "lost" ? [item.entry] : [])),
+    () =>
+      selectedItems.flatMap((item) =>
+        item.kind === "lost" ? [item.entry] : [],
+      ),
     [selectedItems],
   );
   const retryable = useMemo(
@@ -262,7 +274,9 @@ export function SyncIssuesScreen({
     // user cannot read one value at a time — so it confirms, like the delete
     // beside it, and the body says what it costs.
     Alert.alert(
-      restorable.length === 1 ? "Restore this value?" : `Restore ${restorable.length} values?`,
+      restorable.length === 1
+        ? "Restore this value?"
+        : `Restore ${restorable.length} values?`,
       // A one-row selection gets the same quoted value the sheet's own confirm
       // gives it: the bar is a different route to the same irreversible write,
       // not a reason to say less about it.
@@ -277,7 +291,9 @@ export function SyncIssuesScreen({
         {
           text: "Restore",
           onPress: () => {
-            void Promise.all(restorable.map((entry) => restoreShelfValue(entry.id)))
+            void Promise.all(
+              restorable.map((entry) => restoreShelfValue(entry.id)),
+            )
               .then(() => {
                 notify(
                   restorable.length === 1
@@ -299,32 +315,40 @@ export function SyncIssuesScreen({
 
   /** The bulk delete: discard for stuck rows, forget for lost ones. */
   const discardSelected = useCallback(() => {
-    const uploadCount = selectedStuck.filter((op) => op.entity === "media").length;
+    const uploadCount = selectedStuck.filter(
+      (op) => op.entity === "media",
+    ).length;
     const body = bulkDiscardBody({
       editCount: selectedStuck.length - uploadCount,
       uploadCount,
       lostCount: selectedLost.length,
     });
     const total = selectedStuck.length + selectedLost.length;
-    Alert.alert(total === 1 ? "Discard this?" : `Discard ${total} entries?`, body, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Discard",
-        style: "destructive",
-        onPress: () => {
-          void Promise.all([
-            ...selectedStuck.map((op) => discardParkedOp(op.seq)),
-            ...selectedLost.map((entry) => dismissShelfEntry(entry.id)),
-          ])
-            .then(() => {
-              clearSelection();
-              notify(total === 1 ? "Discarded." : `${total} entries discarded.`);
-              load();
-            })
-            .catch((err: unknown) => console.error(err));
+    Alert.alert(
+      total === 1 ? "Discard this?" : `Discard ${total} entries?`,
+      body,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Discard",
+          style: "destructive",
+          onPress: () => {
+            void Promise.all([
+              ...selectedStuck.map((op) => discardParkedOp(op.seq)),
+              ...selectedLost.map((entry) => dismissShelfEntry(entry.id)),
+            ])
+              .then(() => {
+                clearSelection();
+                notify(
+                  total === 1 ? "Discarded." : `${total} entries discarded.`,
+                );
+                load();
+              })
+              .catch((err: unknown) => console.error(err));
+          },
         },
-      },
-    ]);
+      ],
+    );
   }, [clearSelection, load, notify, selectedLost, selectedStuck]);
 
   /**
@@ -539,7 +563,8 @@ export function SyncIssuesScreen({
           ) : (
             <View style={styles.railHint}>
               <Text style={styles.railHintText} numberOfLines={2}>
-                These changes aren&apos;t in your account. Tap one to see what it was.
+                These changes aren&apos;t in your account. Tap one to see what
+                it was.
               </Text>
             </View>
           )}
@@ -583,7 +608,9 @@ export function SyncIssuesScreen({
             onRetry={(op) =>
               act(
                 retryParkedOp(op.seq),
-                online ? "Sending it again…" : "Queued. It goes up when you have signal.",
+                online
+                  ? "Sending it again…"
+                  : "Queued. It goes up when you have signal.",
               )
             }
             onRecreate={(op) =>
@@ -603,7 +630,10 @@ export function SyncIssuesScreen({
             entry={menuIssue.entry}
             onRestore={confirmRestore}
             onKeepBoth={(entry) =>
-              act(keepBothShelfValue(entry.id), "Both kept — your text was added below.")
+              act(
+                keepBothShelfValue(entry.id),
+                "Both kept — your text was added below.",
+              )
             }
             onForget={confirmForget}
           />
@@ -646,7 +676,10 @@ function StuckMenu({
           {changes.map((change) => (
             <Text
               key={change.label}
-              style={[styles.menuValue, change.rejected && styles.menuValueRejected]}
+              style={[
+                styles.menuValue,
+                change.rejected && styles.menuValueRejected,
+              ]}
               selectable
             >
               {change.label}: {change.value}
@@ -677,7 +710,11 @@ function StuckMenu({
       {salvageable.length > 0 ? (
         <Row
           icon="send"
-          title={salvageable.length === 1 ? "Send the other change" : "Send the other changes"}
+          title={
+            salvageable.length === 1
+              ? "Send the other change"
+              : "Send the other changes"
+          }
           subtitle={`Saves ${listFields(salvageable)}, and drops ${listFields(rejectedFields(op))}.`}
           onPress={() => onSendRest(op)}
         />
@@ -687,7 +724,11 @@ function StuckMenu({
       {target && !advice.canRetry && op.state !== "deadRemote" ? (
         <Row
           icon="external-link"
-          title={target.kind === "place" ? "Open the place and fix it" : "Open the trip and fix it"}
+          title={
+            target.kind === "place"
+              ? "Open the place and fix it"
+              : "Open the trip and fix it"
+          }
           subtitle="Change it there, and it'll save."
           onPress={() => onOpen(op)}
         />
@@ -865,12 +906,24 @@ function EmptyPanel() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.primary },
-  rail: { paddingHorizontal: spacing(2), paddingTop: spacing(1.5), paddingBottom: spacing(1.5) },
+  rail: {
+    paddingHorizontal: spacing(2),
+    paddingTop: spacing(1.5),
+    paddingBottom: spacing(1.5),
+  },
   // Matches the SelectionBar it swaps with, so the list below cannot move.
   railHint: { height: SEGMENTED_CONTROL_HEIGHT, justifyContent: "center" },
-  railHintText: { color: theme.textMuted, fontSize: fontSize.sm, lineHeight: 17 },
+  railHintText: {
+    color: theme.textMuted,
+    fontSize: fontSize.sm,
+    lineHeight: 17,
+  },
   list: { flex: 1 },
-  listContent: { paddingHorizontal: spacing(2), gap: spacing(1), paddingBottom: spacing(4) },
+  listContent: {
+    paddingHorizontal: spacing(2),
+    gap: spacing(1),
+    paddingBottom: spacing(4),
+  },
   menuBody: { gap: spacing(1) },
   menuCause: { color: theme.textMuted, fontSize: fontSize.sm },
   valueBlock: { gap: spacing(0.25) },

@@ -20,7 +20,12 @@ export const COMPASS_MINOR_STEP = 10;
 /** Every third tick is labelled, so a label lands at each cardinal too. */
 export const COMPASS_LABEL_STEP = 30;
 
-const CARDINALS: Record<number, string> = { 0: "N", 90: "E", 180: "S", 270: "W" };
+const CARDINALS: Record<number, string> = {
+  0: "N",
+  90: "E",
+  180: "S",
+  270: "W",
+};
 
 export type CompassTick = {
   /** 0..360, the true-north bearing this tick marks. */
@@ -49,7 +54,11 @@ export function compassTicks(
   const first =
     Math.ceil((centre - halfSpanDeg) / COMPASS_MINOR_STEP) * COMPASS_MINOR_STEP;
   const ticks: CompassTick[] = [];
-  for (let raw = first; raw <= centre + halfSpanDeg; raw += COMPASS_MINOR_STEP) {
+  for (
+    let raw = first;
+    raw <= centre + halfSpanDeg;
+    raw += COMPASS_MINOR_STEP
+  ) {
     const bearing = ((raw % 360) + 360) % 360;
     const major = bearing % COMPASS_LABEL_STEP === 0;
     ticks.push({

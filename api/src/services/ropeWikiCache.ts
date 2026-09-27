@@ -55,7 +55,10 @@ let cache: CacheEntry | null = null;
 async function loadSnapshotFromS3(): Promise<RopeWikiData> {
   const bucket = getEnv().S3_BUCKET_MEDIA;
   if (!bucket) {
-    throw new AppError(503, "RopeWiki snapshot unavailable: no bucket configured");
+    throw new AppError(
+      503,
+      "RopeWiki snapshot unavailable: no bucket configured",
+    );
   }
 
   let body: string;
@@ -93,9 +96,7 @@ async function loadSnapshotFromS3(): Promise<RopeWikiData> {
  * the live RopeWiki fetch — kept wired up so that if RopeWiki ever allowlists
  * us the live path is one default away, rather than needing to be rebuilt.
  */
-export async function getRopeWikiCanyons(
-  fresh = false,
-): Promise<RopeWikiData> {
+export async function getRopeWikiCanyons(fresh = false): Promise<RopeWikiData> {
   if (!fresh && cache && Date.now() - cache.loadedAt < TTL_MS) {
     const { loadedAt: _loadedAt, ...data } = cache;
     return data;

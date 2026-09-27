@@ -74,7 +74,10 @@ describe("offlineCoverageMask", () => {
         const a = rects[i];
         const b = rects[j];
         const overlaps =
-          a.west < b.east && b.west < a.east && a.south < b.north && b.south < a.north;
+          a.west < b.east &&
+          b.west < a.east &&
+          a.south < b.north &&
+          b.south < a.north;
         expect(overlaps).toBe(false);
       }
     }

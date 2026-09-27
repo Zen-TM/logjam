@@ -34,7 +34,8 @@ const db = {
 vi.mock("./syncDb", () => ({
   getSyncDb: () => Promise.resolve(db),
   notifyMirrorChanged: () => {},
-  withSyncTransaction: async (_db: unknown, task: () => Promise<void>) => task(),
+  withSyncTransaction: async (_db: unknown, task: () => Promise<void>) =>
+    task(),
 }));
 
 vi.mock("./mediaSyncBridge", () => ({ scheduleMutationSync: () => {} }));
@@ -84,7 +85,9 @@ describe("place tombstone cascade", () => {
   beforeEach(() => {
     calls.length = 0;
     linkRows = [{ id: "link-1", a_place_id: DEAD, b_place_id: "other" }];
-    tripRows = [{ id: "trip-1", places_json: JSON.stringify([{ id: DEAD, name: "X" }]) }];
+    tripRows = [
+      { id: "trip-1", places_json: JSON.stringify([{ id: DEAD, name: "X" }]) },
+    ];
   });
 
   it("never writes a table the schema no longer declares", async () => {
@@ -95,7 +98,9 @@ describe("place tombstone cascade", () => {
   it("deletes the links touching it, from BOTH ends", async () => {
     await applyTombstone(db as never, { type: "place", id: DEAD });
     const del = calls.find((call) =>
-      call.sql.includes("DELETE FROM place_links WHERE a_place_id = ? OR b_place_id = ?"),
+      call.sql.includes(
+        "DELETE FROM place_links WHERE a_place_id = ? OR b_place_id = ?",
+      ),
     );
     expect(del).toBeDefined();
     // The place at the other end is NOT deleted — a link is not a container.
@@ -123,7 +128,9 @@ describe("place tombstone cascade", () => {
   it("drops a pending local delete and parks the other pending ops", async () => {
     await applyTombstone(db as never, { type: "place", id: DEAD });
     const text = sqlText();
-    expect(text).toContain("DELETE FROM outbox WHERE entity_id = ? AND op = 'delete'");
+    expect(text).toContain(
+      "DELETE FROM outbox WHERE entity_id = ? AND op = 'delete'",
+    );
     expect(text).toContain("UPDATE outbox SET state = 'deadRemote'");
   });
 });

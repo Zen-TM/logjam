@@ -21,12 +21,15 @@ function makeTx(opts: {
   const occupants = opts.occupants ?? {};
   const sharees = opts.sharees ?? {};
   const updates: { id: string; placeId: string | null }[] = [];
-  const tombstones: { userId: string; entityType: string; entityId: string }[] = [];
+  const tombstones: { userId: string; entityType: string; entityId: string }[] =
+    [];
 
   const tx = {
     placeShare: {
       findMany: async ({ where }: { where: { placeId: string } }) =>
-        (sharees[where.placeId] ?? []).map((sharedWithId) => ({ sharedWithId })),
+        (sharees[where.placeId] ?? []).map((sharedWithId) => ({
+          sharedWithId,
+        })),
     },
     route: {
       findUnique: async ({ where }: { where: { placeId: string } }) =>
@@ -79,7 +82,9 @@ describe("applyRoutePlaceLink", () => {
 
   it("displaces the incumbent by UNLINKING it, never deleting it", async () => {
     const { tx, updates } = makeTx({
-      occupants: { c1: { id: "r-old", name: "Original approach", ownerId: "alice" } },
+      occupants: {
+        c1: { id: "r-old", name: "Original approach", ownerId: "alice" },
+      },
     });
     const result = await applyRoutePlaceLink(tx, {
       routeId: "r-new",
@@ -87,7 +92,10 @@ describe("applyRoutePlaceLink", () => {
       currentPlaceId: null,
     });
     // The caller needs the name to warn the user which route moved.
-    expect(result.displacedRoute).toEqual({ id: "r-old", name: "Original approach" });
+    expect(result.displacedRoute).toEqual({
+      id: "r-old",
+      name: "Original approach",
+    });
     // The incumbent is unlinked (placeId → null), NOT removed.
     expect(updates).toEqual([
       { id: "r-old", placeId: null },

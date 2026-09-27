@@ -14,6 +14,7 @@ populated at ~40% ground density) and asserts the footprint:
 Runs a real GDAL/OGR stack, so it is skipped when osgeo is the host stub and
 runs for real inside the worker Docker image.
 """
+
 import os
 import sys
 import json
@@ -34,6 +35,7 @@ _REAL_FOOTPRINT_STACK = _REAL_GDAL and not _native_stub.is_stubbed("shapely")
 
 if _REAL_GDAL:
     from osgeo import gdal, ogr, osr  # noqa: E402
+
     gdal.UseExceptions()
     from pipeline import compute_data_footprint, raster_has_valid_pixels  # noqa: E402
 
@@ -46,14 +48,14 @@ _N = 700
 _ORIGIN_X = 16_000_000.0
 _ORIGIN_Y = -4_000_000.0
 _DISK_CX = _DISK_CY = _N / 2.0
-_DISK_R = 180.0          # true extent radius, metres (= pixels at 1 m)
-_GROUND_DENSITY = 0.40   # fraction of in-disk cells carrying a ground return
+_DISK_R = 180.0  # true extent radius, metres (= pixels at 1 m)
+_GROUND_DENSITY = 0.40  # fraction of in-disk cells carrying a ground return
 _NODATA = -9999.0
 
 
 def _true_disk_mask():
     yy, xx = np.mgrid[0:_N, 0:_N]
-    return ((xx + 0.5 - _DISK_CX) ** 2 + (yy + 0.5 - _DISK_CY) ** 2) <= _DISK_R ** 2
+    return ((xx + 0.5 - _DISK_CX) ** 2 + (yy + 0.5 - _DISK_CY) ** 2) <= _DISK_R**2
 
 
 def _write_synthetic_dtm(path):
@@ -65,7 +67,8 @@ def _write_synthetic_dtm(path):
     arr[sampled] = 100.0  # arbitrary elevation
     ds = gdal.GetDriverByName("GTiff").Create(path, _N, _N, 1, gdal.GDT_Float32)
     ds.SetGeoTransform((_ORIGIN_X, 1.0, 0, _ORIGIN_Y, 0, -1.0))
-    srs = osr.SpatialReference(); srs.ImportFromEPSG(3857)
+    srs = osr.SpatialReference()
+    srs.ImportFromEPSG(3857)
     ds.SetProjection(srs.ExportToWkt())
     band = ds.GetRasterBand(1)
     band.SetNoDataValue(_NODATA)
@@ -79,7 +82,8 @@ def _rasterize_footprint_to_grid(geojson_path):
     fp = ogr.Open(geojson_path)
     lyr = fp.GetLayer()
     src_srs = lyr.GetSpatialRef()
-    dst_srs = osr.SpatialReference(); dst_srs.ImportFromEPSG(3857)
+    dst_srs = osr.SpatialReference()
+    dst_srs.ImportFromEPSG(3857)
     src_srs.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
     dst_srs.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
     ct = osr.CoordinateTransformation(src_srs, dst_srs)
@@ -87,8 +91,11 @@ def _rasterize_footprint_to_grid(geojson_path):
     mem = ogr.GetDriverByName("Memory").CreateDataSource("m")
     mlyr = mem.CreateLayer("fp", dst_srs, ogr.wkbPolygon)
     for feat in lyr:
-        g = feat.GetGeometryRef().Clone(); g.Transform(ct)
-        f2 = ogr.Feature(mlyr.GetLayerDefn()); f2.SetGeometry(g); mlyr.CreateFeature(f2)
+        g = feat.GetGeometryRef().Clone()
+        g.Transform(ct)
+        f2 = ogr.Feature(mlyr.GetLayerDefn())
+        f2.SetGeometry(g)
+        mlyr.CreateFeature(f2)
 
     ras = gdal.GetDriverByName("MEM").Create("", _N, _N, 1, gdal.GDT_Byte)
     ras.SetGeoTransform((_ORIGIN_X, 1.0, 0, _ORIGIN_Y, 0, -1.0))
@@ -97,7 +104,9 @@ def _rasterize_footprint_to_grid(geojson_path):
     return ras.GetRasterBand(1).ReadAsArray().astype(bool)
 
 
-@unittest.skipUnless(_REAL_FOOTPRINT_STACK, "needs real GDAL/OGR + shapely (skipped under host stub)")
+@unittest.skipUnless(
+    _REAL_FOOTPRINT_STACK, "needs real GDAL/OGR + shapely (skipped under host stub)"
+)
 class TestFootprintCoverage(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
@@ -118,7 +127,8 @@ class TestFootprintCoverage(unittest.TestCase):
         covered = (true_mask & fp_mask).sum() / true_mask.sum()
         # The whole point of the fix: real (sparse) data must not be clipped.
         self.assertGreaterEqual(
-            covered, 0.95,
+            covered,
+            0.95,
             f"footprint covers only {covered:.1%} of true extent — clipping real data",
         )
 
@@ -128,7 +138,8 @@ class TestFootprintCoverage(unittest.TestCase):
         ratio = fp_mask.sum() / true_mask.sum()
         # Trimming the false fill-fringe must still work: no wild over-extension.
         self.assertLessEqual(
-            ratio, 1.15,
+            ratio,
+            1.15,
             f"footprint area is {ratio:.2f}× the true extent — over-extending",
         )
 
@@ -138,7 +149,8 @@ def _write_raster(path, arr, nodata=_NODATA, set_nodata=True):
     n_y, n_x = arr.shape
     ds = gdal.GetDriverByName("GTiff").Create(path, n_x, n_y, 1, gdal.GDT_Float32)
     ds.SetGeoTransform((_ORIGIN_X, 1.0, 0, _ORIGIN_Y, 0, -1.0))
-    srs = osr.SpatialReference(); srs.ImportFromEPSG(3857)
+    srs = osr.SpatialReference()
+    srs.ImportFromEPSG(3857)
     ds.SetProjection(srs.ExportToWkt())
     band = ds.GetRasterBand(1)
     if set_nodata:

@@ -27,7 +27,9 @@ describe("currentDbPassword", () => {
 
   it("throws when neither DB_SECRET_ID nor DB_PASSWORD is set", async () => {
     delete process.env.DB_PASSWORD;
-    await expect(currentDbPassword()).rejects.toThrow(/DB_SECRET_ID nor DB_PASSWORD/);
+    await expect(currentDbPassword()).rejects.toThrow(
+      /DB_SECRET_ID nor DB_PASSWORD/,
+    );
   });
 
   it("fetches the password from Secrets Manager when DB_SECRET_ID is set", async () => {

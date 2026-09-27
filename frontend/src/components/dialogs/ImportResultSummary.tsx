@@ -85,7 +85,9 @@ function ImportResultSummary({
   undoing,
 }: ImportResultSummaryProps): React.JSX.Element {
   const stats = headlineStats(headline);
-  const detailSections = (details ?? []).filter((section) => section.items.length > 0);
+  const detailSections = (details ?? []).filter(
+    (section) => section.items.length > 0,
+  );
   const hasErrors = errors !== undefined && errors.length > 0;
   const hasWarnings = warnings !== undefined && warnings.length > 0;
 

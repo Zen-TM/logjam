@@ -24,7 +24,10 @@ import { AppState } from "react-native";
 
 import { onTracksChanged } from "./tracksDb";
 
-export function useTrackChangeRefresh(refresh: () => void, enabled = true): void {
+export function useTrackChangeRefresh(
+  refresh: () => void,
+  enabled = true,
+): void {
   // The caller's closure changes on every render; re-subscribing on that would
   // tear the subscription down and rebuild it at render rate.
   const latest = useRef(refresh);

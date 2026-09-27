@@ -58,11 +58,16 @@ function hashLabel(label: string): number {
   return Math.abs(hash);
 }
 
-export function tripTypeIdentity(type: string | null | undefined): TripTypeIdentity {
+export function tripTypeIdentity(
+  type: string | null | undefined,
+): TripTypeIdentity {
   if (!type) return UNTYPED;
   const seeded = SEEDED[type.toLowerCase()];
   if (seeded) return seeded;
-  return { icon: "tag", hue: OPEN_HUES[hashLabel(type.toLowerCase()) % OPEN_HUES.length] };
+  return {
+    icon: "tag",
+    hue: OPEN_HUES[hashLabel(type.toLowerCase()) % OPEN_HUES.length],
+  };
 }
 
 /**

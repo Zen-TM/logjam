@@ -33,7 +33,8 @@ const db = {
 vi.mock("./syncDb", () => ({
   getSyncDb: () => Promise.resolve(db),
   notifyMirrorChanged: () => {},
-  withSyncTransaction: async (_db: unknown, task: () => Promise<void>) => task(),
+  withSyncTransaction: async (_db: unknown, task: () => Promise<void>) =>
+    task(),
 }));
 
 const { upsertRoute } = await import("./mirrorStore");

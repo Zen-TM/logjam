@@ -145,7 +145,9 @@ describe("404-not-403 anti-oracle", () => {
 // forgets this call leaves rows granting access to a dead id.
 describe("deleteSharesFor", () => {
   it("deletes every share row for the given entities", async () => {
-    const tx = { share: { deleteMany: vi.fn().mockResolvedValue({ count: 2 }) } };
+    const tx = {
+      share: { deleteMany: vi.fn().mockResolvedValue({ count: 2 }) },
+    };
     await deleteSharesFor(tx as never, "route", ["rt-1", "rt-2"]);
     expect(tx.share.deleteMany).toHaveBeenCalledWith({
       where: { entityType: "route", entityId: { in: ["rt-1", "rt-2"] } },

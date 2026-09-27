@@ -34,9 +34,18 @@ const EDGE_ALPHA = 191;
 
 /** Decodes the one PNG shape this generator emits: 8-bit RGBA, no interlace,
  *  filter 0 on every row. Enough to read the alpha channel back out. */
-function readAlpha(dataUri: string): { width: number; height: number; alpha: Uint8Array } {
-  const png = Buffer.from(dataUri.replace(/^data:image\/png;base64,/, ""), "base64");
-  expect([...png.subarray(0, 8)]).toEqual([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+function readAlpha(dataUri: string): {
+  width: number;
+  height: number;
+  alpha: Uint8Array;
+} {
+  const png = Buffer.from(
+    dataUri.replace(/^data:image\/png;base64,/, ""),
+    "base64",
+  );
+  expect([...png.subarray(0, 8)]).toEqual([
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+  ]);
 
   let at = 8;
   let width = 0;

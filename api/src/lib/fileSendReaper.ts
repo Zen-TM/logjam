@@ -133,7 +133,10 @@ export async function sweepExpiredFileSends(
     } catch (err) {
       // No filename, no recipient ids — a send's filename is user text and the
       // row id is enough to find it.
-      logger.error({ err: safeErrorForLog(err), id: row.id }, "file_send_expiry_failed");
+      logger.error(
+        { err: safeErrorForLog(err), id: row.id },
+        "file_send_expiry_failed",
+      );
     }
   }
   return swept;

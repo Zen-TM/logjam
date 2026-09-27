@@ -10,9 +10,11 @@ import {
 
 describe("redactTilePathPatterns", () => {
   it("strips URLs", () => {
-    expect(redactTilePathPatterns("failed to fetch https://example.com/tiles/12/2456/1578.png now")).toBe(
-      "failed to fetch [redacted-url] now",
-    );
+    expect(
+      redactTilePathPatterns(
+        "failed to fetch https://example.com/tiles/12/2456/1578.png now",
+      ),
+    ).toBe("failed to fetch [redacted-url] now");
   });
 
   it("strips bare z/x/y tile triples", () => {
@@ -22,7 +24,9 @@ describe("redactTilePathPatterns", () => {
   });
 
   it("leaves ordinary text alone", () => {
-    expect(redactTilePathPatterns("plain error message")).toBe("plain error message");
+    expect(redactTilePathPatterns("plain error message")).toBe(
+      "plain error message",
+    );
   });
 
   // The consent sheet promises reports are "scrubbed of place names and
@@ -45,13 +49,16 @@ describe("redactTilePathPatterns", () => {
   it("leaves low-precision number pairs alone", () => {
     // ~1 km at three decimals, and the false-positive cost on timings/ratios
     // is what buys the four-decimal floor.
-    expect(redactTilePathPatterns("took 1.25, 3.75 s")).toBe("took 1.25, 3.75 s");
+    expect(redactTilePathPatterns("took 1.25, 3.75 s")).toBe(
+      "took 1.25, 3.75 s",
+    );
   });
 });
 
 describe("stripArgsBlock", () => {
   it("drops a rendered args block", () => {
-    const msg = "Invalid invocation\n\n{ name: 'Secret Place', latitude: -33.7 }";
+    const msg =
+      "Invalid invocation\n\n{ name: 'Secret Place', latitude: -33.7 }";
     expect(stripArgsBlock(msg)).toBe("Invalid invocation\n[redacted-args]");
   });
 
@@ -67,7 +74,12 @@ describe("scrubStructure", () => {
       list: [{ notes: "private", other: 1 }],
     };
     expect(scrubStructure(input)).toEqual({
-      place: { name: "[redacted]", latitude: "[redacted]", longitude: "[redacted]", safe: "ok" },
+      place: {
+        name: "[redacted]",
+        latitude: "[redacted]",
+        longitude: "[redacted]",
+        safe: "ok",
+      },
       list: [{ notes: "[redacted]", other: 1 }],
     });
   });
@@ -99,7 +111,9 @@ describe("scrubStructure", () => {
   });
 
   it("scrubs URLs inside string values", () => {
-    expect(scrubStructure({ url: "https://api.logjamnsw.com/places/abc" })).toEqual({
+    expect(
+      scrubStructure({ url: "https://api.logjamnsw.com/places/abc" }),
+    ).toEqual({
       url: "[redacted-url]",
     });
   });
@@ -139,7 +153,9 @@ describe("scrubEvent", () => {
     };
     const scrubbed = scrubEvent(event);
     expect(scrubbed.message).toBe("fetch [redacted-url] failed");
-    expect(scrubbed.exception!.values![0].value).toBe("Invalid input\n[redacted-args]");
+    expect(scrubbed.exception!.values![0].value).toBe(
+      "Invalid input\n[redacted-args]",
+    );
     expect(scrubbed).not.toHaveProperty("request");
     expect(scrubbed).not.toHaveProperty("user");
     expect(scrubbed.extra).toEqual({ latitude: "[redacted]", harmless: true });
@@ -151,7 +167,10 @@ describe("scrubEvent", () => {
         {
           category: "fetch",
           message: "GET https://api.logjamnsw.com/places/xyz 200",
-          data: { url: "https://api.logjamnsw.com/places/xyz", status_code: 200 },
+          data: {
+            url: "https://api.logjamnsw.com/places/xyz",
+            status_code: 200,
+          },
         },
       ],
     };
@@ -173,7 +192,8 @@ describe("scrubEvent", () => {
             stacktrace: {
               frames: [
                 {
-                  filename: "http://10.0.2.2:8081/index.bundle?platform=android",
+                  filename:
+                    "http://10.0.2.2:8081/index.bundle?platform=android",
                   function: "recordFix",
                   context_line: "log(`fix at -33.56213, 150.40171`)",
                   vars: { name: "Hidden Place", latitude: -33.7, count: 2 },
@@ -184,7 +204,8 @@ describe("scrubEvent", () => {
         ],
       },
     };
-    const frame = scrubEvent(event).exception!.values![0].stacktrace!.frames![0];
+    const frame =
+      scrubEvent(event).exception!.values![0].stacktrace!.frames![0];
     expect(frame.filename).toBe("[redacted-url]");
     expect(frame.function).toBe("recordFix");
     expect(frame.context_line).toBe("log(`fix at [redacted-coords]`)");

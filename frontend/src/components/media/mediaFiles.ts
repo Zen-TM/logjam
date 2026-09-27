@@ -52,7 +52,10 @@ function drawScaled(
   sourceWidth: number,
   sourceHeight: number,
 ): HTMLCanvasElement {
-  const scale = Math.min(1, THUMBNAIL_MAX_PX / Math.max(sourceWidth, sourceHeight));
+  const scale = Math.min(
+    1,
+    THUMBNAIL_MAX_PX / Math.max(sourceWidth, sourceHeight),
+  );
   const canvas = document.createElement("canvas");
   canvas.width = Math.max(1, Math.round(sourceWidth * scale));
   canvas.height = Math.max(1, Math.round(sourceHeight * scale));
@@ -65,7 +68,8 @@ function drawScaled(
 function canvasToJpeg(canvas: HTMLCanvasElement): Promise<Blob> {
   return new Promise((resolve, reject) => {
     canvas.toBlob(
-      (blob) => (blob ? resolve(blob) : reject(new Error("Couldn't create thumbnail"))),
+      (blob) =>
+        blob ? resolve(blob) : reject(new Error("Couldn't create thumbnail")),
       "image/jpeg",
       THUMBNAIL_QUALITY,
     );

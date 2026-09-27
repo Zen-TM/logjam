@@ -49,7 +49,15 @@ import {
 import { config } from "../config";
 import { formatBytes, formatMinutes } from "../format";
 import { useAccountState } from "../auth/AccountStateContext";
-import { fontSize, fontWeight, radius, spacing, surface, theme, withAlpha } from "../theme";
+import {
+  fontSize,
+  fontWeight,
+  radius,
+  spacing,
+  surface,
+  theme,
+  withAlpha,
+} from "../theme";
 import {
   BottomSheet,
   Button,
@@ -251,9 +259,10 @@ export function RegionDownloadScreen({
   const [busy, setBusy] = useState(false);
   // The run being named. Non-null means the jobs are ALREADY enqueued and
   // running — this prompt is over the top of them, never in front of them.
-  const [naming, setNaming] = useState<{ groupId: string; name: string } | null>(
-    null,
-  );
+  const [naming, setNaming] = useState<{
+    groupId: string;
+    name: string;
+  } | null>(null);
   const nameInputRef = useRef<TextInput>(null);
 
   // "Region 3", numbered off what this phone already holds plus what is still
@@ -280,10 +289,10 @@ export function RegionDownloadScreen({
   // the map screen draws. A guest cannot have it (the clip is an authed API
   // call), so their default is the topo raster.
   const defaultPreview: SelectableId = isGuest ? "six-topo" : "protomaps";
-  const [preview, setPreview] = useState<SelectableId>(
-    () => (downloadable.includes(startBasemapId as SelectableId)
+  const [preview, setPreview] = useState<SelectableId>(() =>
+    downloadable.includes(startBasemapId as SelectableId)
       ? (startBasemapId as SelectableId)
-      : defaultPreview),
+      : defaultPreview,
   );
   const previewBasemap: BasemapId = selected.includes(preview)
     ? preview
@@ -296,7 +305,11 @@ export function RegionDownloadScreen({
         // whatever this phone already holds. `cdnBaseUrl` is what the vector
         // source's pmtiles:// URL is built from — empty, it resolved to an
         // unfetchable archive path, which is why the vector map never drew.
-        { connectivity: "online", artifacts: [], cdnBaseUrl: config.topoCdnBaseUrl },
+        {
+          connectivity: "online",
+          artifacts: [],
+          cdnBaseUrl: config.topoCdnBaseUrl,
+        },
       ),
     [previewBasemap],
   );
@@ -395,7 +408,8 @@ export function RegionDownloadScreen({
     job?.perSource
       .filter((source) => source.basemapId !== DEM_SOURCE_ID)
       .map((source) => source.zMax) ?? [];
-  const deepestZoom = rasterZooms.length > 0 ? Math.max(...rasterZooms) : detailZoom;
+  const deepestZoom =
+    rasterZooms.length > 0 ? Math.max(...rasterZooms) : detailZoom;
   const vectorOnly = selected.length > 0 && pyramidIds.length === 0;
 
   // ONE warning, over the map (DESIGN.md §7). The three cap reasons
@@ -406,36 +420,36 @@ export function RegionDownloadScreen({
 
   const startDownloads = useCallback(
     (groupId: string, groupLabel: string, allowCellular: boolean) => {
-    if (!bbox || !job) return;
-    enqueueRegionDownloads([
-      ...job.perSource.map((source) => ({
-        taskKind: "tile-pyramid" as const,
-        id: uuid(),
-        basemapId: source.basemapId,
-        label: regionLabelFor(source.basemapId),
-        groupId,
-        groupLabel,
-        bbox,
-        zMin: source.zMin,
-        zMax: source.zMax,
-        allowCellular,
-      })),
-      ...(includesVector
-        ? [
-            {
-              taskKind: "http-file" as const,
-              id: uuid(),
-              basemapId: "protomaps" as const,
-              label: regionLabelFor("protomaps"),
-              groupId,
-              groupLabel,
-              bbox,
-              zMax: Math.min(detailZoom, catalogMaxZoom("protomaps")),
-              allowCellular,
-            },
-          ]
-        : []),
-    ]);
+      if (!bbox || !job) return;
+      enqueueRegionDownloads([
+        ...job.perSource.map((source) => ({
+          taskKind: "tile-pyramid" as const,
+          id: uuid(),
+          basemapId: source.basemapId,
+          label: regionLabelFor(source.basemapId),
+          groupId,
+          groupLabel,
+          bbox,
+          zMin: source.zMin,
+          zMax: source.zMax,
+          allowCellular,
+        })),
+        ...(includesVector
+          ? [
+              {
+                taskKind: "http-file" as const,
+                id: uuid(),
+                basemapId: "protomaps" as const,
+                label: regionLabelFor("protomaps"),
+                groupId,
+                groupLabel,
+                bbox,
+                zMax: Math.min(detailZoom, catalogMaxZoom("protomaps")),
+                allowCellular,
+              },
+            ]
+          : []),
+      ]);
     },
     [bbox, detailZoom, includesVector, job],
   );
@@ -468,7 +482,11 @@ export function RegionDownloadScreen({
               "Use mobile data?",
               "This download will use your mobile data.",
               [
-                { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
+                {
+                  text: "Cancel",
+                  style: "cancel",
+                  onPress: () => resolve(false),
+                },
                 { text: "Download", onPress: () => resolve(true) },
               ],
               { cancelable: true, onDismiss: () => resolve(false) },
@@ -611,7 +629,11 @@ export function RegionDownloadScreen({
           )}
         </Map>
         {frame && size.width > 0 ? (
-          <SelectionFrame insets={frame} size={size} onChange={handleFrameChange} />
+          <SelectionFrame
+            insets={frame}
+            size={size}
+            onChange={handleFrameChange}
+          />
         ) : null}
         {/* The screen's ONLY warning, over the map rather than in the hero:
             the hero's band was vertical space the map wanted, and the three
@@ -668,39 +690,43 @@ export function RegionDownloadScreen({
         ) : null}
 
         <View style={styles.panelBody}>
-        <View style={styles.detailBlock}>
-          <View style={styles.detailHeader}>
-            <SectionHeader label="Detail" />
-            <Text style={styles.detailCaption}>
-              {/* Metres-per-pixel describes a RASTER pyramid: fixed images at
+          <View style={styles.detailBlock}>
+            <View style={styles.detailHeader}>
+              <SectionHeader label="Detail" />
+              <Text style={styles.detailCaption}>
+                {/* Metres-per-pixel describes a RASTER pyramid: fixed images at
                   fixed scales. A vector clip has no pixels — it redraws sharp
                   at any zoom, and the detail level only caps how much of the
                   archive comes with you. */}
-              {vectorOnly
-                ? `z${deepestZoom} · sharp at any zoom`
-                : `z${deepestZoom} · ≈ ${metresPerPixel(centreLat, deepestZoom).toFixed(1)} m per pixel`}
-            </Text>
+                {vectorOnly
+                  ? `z${deepestZoom} · sharp at any zoom`
+                  : `z${deepestZoom} · ≈ ${metresPerPixel(centreLat, deepestZoom).toFixed(1)} m per pixel`}
+              </Text>
+            </View>
+            <SegmentedControl
+              scroll
+              options={DETAIL_ZOOMS.map((zoom) => ({
+                value: String(zoom),
+                label: `z${zoom}`,
+              }))}
+              value={String(detailZoom)}
+              onChange={(next) => setDetailZoom(Number(next))}
+            />
           </View>
-          <SegmentedControl
-            scroll
-            options={DETAIL_ZOOMS.map((zoom) => ({
-              value: String(zoom),
-              label: `z${zoom}`,
-            }))}
-            value={String(detailZoom)}
-            onChange={(next) => setDetailZoom(Number(next))}
-          />
-        </View>
 
-        {/* Progress lives as cards in the Saved tab's Regions filter from
+          {/* Progress lives as cards in the Saved tab's Regions filter from
             here: the download outlives this screen, and a screen whose whole
             job is to be left is the wrong place to report from. */}
-        <Button
-          label={selected.length > 1 ? `Save ${selected.length} maps` : "Save this area"}
-          icon="download"
-          onPress={handleSave}
-          disabled={!canDownload || busy}
-        />
+          <Button
+            label={
+              selected.length > 1
+                ? `Save ${selected.length} maps`
+                : "Save this area"
+            }
+            icon="download"
+            onPress={handleSave}
+            disabled={!canDownload || busy}
+          />
         </View>
       </View>
 
@@ -724,7 +750,9 @@ export function RegionDownloadScreen({
             inputRef={nameInputRef}
             value={naming?.name ?? ""}
             onChangeText={(text) =>
-              setNaming((current) => (current ? { ...current, name: text } : current))
+              setNaming((current) =>
+                current ? { ...current, name: text } : current,
+              )
             }
             placeholder={defaultName}
             returnKeyType="done"

@@ -33,7 +33,11 @@ function ThemeChooser() {
           {schemes.map((scheme) => {
             const selected = scheme.id === schemeId;
             return (
-              <label key={scheme.id} className={classes.scheme} data-selected={selected || undefined}>
+              <label
+                key={scheme.id}
+                className={classes.scheme}
+                data-selected={selected || undefined}
+              >
                 <input
                   type="radio"
                   name="theme-scheme"
@@ -44,18 +48,22 @@ function ThemeChooser() {
                   onChange={() => setThemeScheme(scheme.id)}
                 />
                 <span className={classes.swatches} aria-hidden>
-                  {[scheme.tokens.primary, scheme.tokens.secondary, scheme.tokens.accent].map(
-                    (colour) => (
-                      <span
-                        key={colour}
-                        className={classes.swatch}
-                        style={{ backgroundColor: colour }}
-                      />
-                    ),
-                  )}
+                  {[
+                    scheme.tokens.primary,
+                    scheme.tokens.secondary,
+                    scheme.tokens.accent,
+                  ].map((colour) => (
+                    <span
+                      key={colour}
+                      className={classes.swatch}
+                      style={{ backgroundColor: colour }}
+                    />
+                  ))}
                 </span>
                 <span className={classes.name}>{scheme.name}</span>
-                {selected && <Check size={16} className={classes.tick} aria-hidden />}
+                {selected && (
+                  <Check size={16} className={classes.tick} aria-hidden />
+                )}
               </label>
             );
           })}

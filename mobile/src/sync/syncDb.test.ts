@@ -33,7 +33,9 @@ const nativeDb = {
   },
   withTransactionAsync: async (task: () => Promise<void>) => task(),
 };
-vi.mock("expo-sqlite", () => ({ openDatabaseAsync: () => Promise.resolve(nativeDb) }));
+vi.mock("expo-sqlite", () => ({
+  openDatabaseAsync: () => Promise.resolve(nativeDb),
+}));
 
 const { tableSchema } = await import("./mirrorSchema");
 const { getSyncDb, withSyncTransaction, wipeMirror } = await import("./syncDb");
@@ -121,7 +123,11 @@ describe("single-writer discipline", () => {
     // is a writer outside the lock, which is the whole bug back again.
     const offenders: string[] = [];
     for (const name of readdirSync(__dirname)) {
-      if (!name.endsWith(".ts") || name === "syncDb.ts" || name.endsWith(".test.ts")) {
+      if (
+        !name.endsWith(".ts") ||
+        name === "syncDb.ts" ||
+        name.endsWith(".test.ts")
+      ) {
         continue;
       }
       const source = readFileSync(join(__dirname, name), "utf8");
@@ -142,7 +148,9 @@ describe("wipeMirror", () => {
     await wipeMirror();
     // (the first sync_state delete of the run is applySchemaVersion's, on the
     // lazily-opened database — take the wipe's own, which is the last)
-    const stateDelete = wipeCalls.findLast((sql) => sql.includes("FROM sync_state"));
+    const stateDelete = wipeCalls.findLast((sql) =>
+      sql.includes("FROM sync_state"),
+    );
     expect(stateDelete).toContain("cursor");
     expect(stateDelete).toContain("applyFailedAt");
     expect(stateDelete).toContain("lastSyncAt");
@@ -155,7 +163,9 @@ describe("wipeMirror", () => {
     // offline nothing brought it back.
     wipeCalls.length = 0;
     await wipeMirror();
-    const places = wipeCalls.find((sql) => sql.startsWith("DELETE FROM places"));
+    const places = wipeCalls.find((sql) =>
+      sql.startsWith("DELETE FROM places"),
+    );
     expect(places).toContain(
       "id NOT IN (SELECT entity_id FROM outbox WHERE op = 'create')",
     );
@@ -180,14 +190,18 @@ describe("local-table migration", () => {
   it("adds a declared local column the database is missing", async () => {
     await getSyncDb();
     const alters = execCalls.filter((sql) => sql.startsWith("ALTER TABLE"));
-    expect(alters).toEqual(["ALTER TABLE conflict_shelf ADD COLUMN entity_name TEXT"]);
+    expect(alters).toEqual([
+      "ALTER TABLE conflict_shelf ADD COLUMN entity_name TEXT",
+    ]);
   });
 
   it("leaves the mirror tables to the version lever", async () => {
     // A mirror table is rebuildable, so it is dropped and recreated rather than
     // altered; altering it here would be a second, divergent migration path.
     await getSyncDb();
-    for (const sql of execCalls.filter((call) => call.startsWith("ALTER TABLE"))) {
+    for (const sql of execCalls.filter((call) =>
+      call.startsWith("ALTER TABLE"),
+    )) {
       expect(sql).toMatch(/^ALTER TABLE (outbox|conflict_shelf|sync_state) /);
     }
   });
@@ -210,7 +224,9 @@ describe("local-table migration", () => {
     expect(execCalls[0]).not.toContain("media(origin)");
 
     // ...and the mirror DDL is issued, later, in its own statement.
-    const mirrorDdl = execCalls.slice(1).find((sql) => sql.includes("media(origin)"));
+    const mirrorDdl = execCalls
+      .slice(1)
+      .find((sql) => sql.includes("media(origin)"));
     expect(mirrorDdl).toBeDefined();
     expect(mirrorDdl).toContain("CREATE TABLE IF NOT EXISTS media");
   });

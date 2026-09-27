@@ -16,7 +16,13 @@ import {
   type GeoPdfJobView,
   type TopoExportJobView,
 } from "@logjam/shared";
-import { FileDown, FileText, LayoutTemplate, Mountain, type LucideIcon } from "lucide-react";
+import {
+  FileDown,
+  FileText,
+  LayoutTemplate,
+  Mountain,
+  type LucideIcon,
+} from "lucide-react";
 import type { CompletedTopoJob } from "../../../topoLayerTypes";
 import type { TopoJob } from "../../dialogs/TopoDialog";
 
@@ -27,19 +33,35 @@ import type { TopoJob } from "../../dialogs/TopoDialog";
  * export is a file out of a topo, a template is the settings a map is made
  * with — so a row says both what it is and what it belongs to.
  */
-export const MAP_IDENTITY: Record<"geoPdf" | "topo" | "export" | "geoPdfTemplate" | "topoTemplate", {
-  icon: LucideIcon;
-  hue: string;
-  label: string;
-}> = {
+export const MAP_IDENTITY: Record<
+  "geoPdf" | "topo" | "export" | "geoPdfTemplate" | "topoTemplate",
+  {
+    icon: LucideIcon;
+    hue: string;
+    label: string;
+  }
+> = {
   geoPdf: { icon: FileText, hue: "var(--hue-geoPdf)", label: "GeoPDF" },
   topo: { icon: Mountain, hue: "var(--hue-overlay)", label: "LiDAR topo" },
-  export: { icon: FileDown, hue: "var(--hue-overlay)", label: "Export of a LiDAR topo" },
-  geoPdfTemplate: { icon: LayoutTemplate, hue: "var(--hue-geoPdf)", label: "GeoPDF template" },
-  topoTemplate: { icon: LayoutTemplate, hue: "var(--hue-overlay)", label: "LiDAR topo template" },
+  export: {
+    icon: FileDown,
+    hue: "var(--hue-overlay)",
+    label: "Export of a LiDAR topo",
+  },
+  geoPdfTemplate: {
+    icon: LayoutTemplate,
+    hue: "var(--hue-geoPdf)",
+    label: "GeoPDF template",
+  },
+  topoTemplate: {
+    icon: LayoutTemplate,
+    hue: "var(--hue-overlay)",
+    label: "LiDAR topo template",
+  },
 };
 
-export const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
+export const plural = (count: number, noun: string) =>
+  `${count} ${noun}${count === 1 ? "" : "s"}`;
 
 /**
  * Hand a finished file to the browser. The URL is presigned and short-lived,
@@ -66,7 +88,11 @@ export type MakingItem = {
 
 /** "8 Sept 2026". A true timestamp, so local time is right (frontend/CLAUDE.md). */
 export function formatDay(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+  return new Date(iso).toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 }
 
 /** "8 Sept 2026, 3:41 pm" — for a name made from a date, where two made the
@@ -82,12 +108,17 @@ function formatDayAndTime(iso: string): string {
 }
 
 /** A GeoPDF's name: its map title, or when it was made. */
-export function geoPdfLabel(job: Pick<GeoPdfJobView, "title" | "createdAt">): string {
+export function geoPdfLabel(
+  job: Pick<GeoPdfJobView, "title" | "createdAt">,
+): string {
   return job.title ?? `GeoPDF · ${formatDayAndTime(job.createdAt)}`;
 }
 
 /** A topo's name: what the user called it, or the day it was made. */
-export function topoLabel(job: { name: string | null; createdAt: string }): string {
+export function topoLabel(job: {
+  name: string | null;
+  createdAt: string;
+}): string {
   return job.name ?? formatDay(job.createdAt);
 }
 
@@ -105,13 +136,23 @@ export function exportLabel(
 }
 
 /** Every completed topo's name, by id, for naming the exports made from them. */
-export function topoNamesById(jobs: readonly CompletedTopoJob[]): Map<string, string> {
+export function topoNamesById(
+  jobs: readonly CompletedTopoJob[],
+): Map<string, string> {
   return new Map(jobs.map((job) => [job.jobId, topoLabel(job)]));
 }
 
 /** A finished file's line under its title: size, then the day it was made. */
-export function fileSubtitle(parts: { format?: string; bytes: number | null; createdAt: string }): string {
-  return [parts.format, parts.bytes != null ? formatBytes(parts.bytes) : null, formatDay(parts.createdAt)]
+export function fileSubtitle(parts: {
+  format?: string;
+  bytes: number | null;
+  createdAt: string;
+}): string {
+  return [
+    parts.format,
+    parts.bytes != null ? formatBytes(parts.bytes) : null,
+    formatDay(parts.createdAt),
+  ]
     .filter(Boolean)
     .join(" · ");
 }
@@ -121,7 +162,9 @@ const FAILED = "Couldn't be made";
 /** "Making · about 5 min", or the verb alone while no estimate exists (rows
  *  made before the estimator, or a zero). */
 function withEstimate(verb: string, estimatedSeconds: number | null): string {
-  return estimatedSeconds != null && estimatedSeconds > 0 ? `${verb} · ${formatMinutes(estimatedSeconds)}` : verb;
+  return estimatedSeconds != null && estimatedSeconds > 0
+    ? `${verb} · ${formatMinutes(estimatedSeconds)}`
+    : verb;
 }
 
 export function geoPdfsBeingMade(jobs: readonly GeoPdfJobView[]): MakingItem[] {
@@ -181,7 +224,10 @@ export function topoWorkBeingMade(
           exportJob.status === "queued"
             ? `Export as ${format} · Queued`
             : exportJob.status === "running"
-              ? withEstimate(`Exporting as ${format}`, exportJob.estimatedSeconds)
+              ? withEstimate(
+                  `Exporting as ${format}`,
+                  exportJob.estimatedSeconds,
+                )
               : (exportJob.errorMessage ?? FAILED),
         failed: exportJob.status === "failed",
         createdAt: exportJob.createdAt,
@@ -191,6 +237,10 @@ export function topoWorkBeingMade(
 }
 
 /** Newest first, and stable: two made in the same second keep their order. */
-export function newestFirst<T extends { createdAt: string }>(items: readonly T[]): T[] {
-  return [...items].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+export function newestFirst<T extends { createdAt: string }>(
+  items: readonly T[],
+): T[] {
+  return [...items].sort(
+    (a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt),
+  );
 }

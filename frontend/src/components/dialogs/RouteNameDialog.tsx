@@ -17,7 +17,10 @@ type RouteNameDialogProps = {
  * Deliberately a dialog, not a window.prompt: a native prompt carries neither
  * the theme nor the length validation that the API enforces.
  */
-export default function RouteNameDialog({ open, ...form }: RouteNameDialogProps): React.JSX.Element | null {
+export default function RouteNameDialog({
+  open,
+  ...form
+}: RouteNameDialogProps): React.JSX.Element | null {
   // The form mounts on open, so a reopened dialog starts from the route it is
   // naming now and never from the last one's typing.
   return open ? <RouteNameForm {...form} /> : null;
@@ -47,7 +50,13 @@ function RouteNameForm({
           <Button onClick={onClose} disabled={busy}>
             Cancel
           </Button>
-          <Button type="submit" form={formId} variant="filled" busy={busy} disabled={!canSave}>
+          <Button
+            type="submit"
+            form={formId}
+            variant="filled"
+            busy={busy}
+            disabled={!canSave}
+          >
             Save
           </Button>
         </>
@@ -66,7 +75,11 @@ function RouteNameForm({
           label="Route name"
           value={name}
           onChange={(event) => setName(event.target.value)}
-          error={tooLong ? `Must be at most ${ROUTE_NAME_MAX_LENGTH} characters` : null}
+          error={
+            tooLong
+              ? `Must be at most ${ROUTE_NAME_MAX_LENGTH} characters`
+              : null
+          }
           data-autofocus
         />
         {/* No colour here: it is a property of the DRAFT, chosen in the draw

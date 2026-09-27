@@ -31,7 +31,11 @@
 }
 
 .filled:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--theme-accent) 85%, var(--theme-text-primary));
+  background: color-mix(
+    in srgb,
+    var(--theme-accent) 85%,
+    var(--theme-text-primary)
+  );
 }
 
 /* Accent as the EDGE, the label in the text colour. Accent text clears 4.5:1
@@ -56,7 +60,11 @@
 }
 
 .destructive:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--theme-warning) 85%, var(--theme-text-primary));
+  background: color-mix(
+    in srgb,
+    var(--theme-warning) 85%,
+    var(--theme-text-primary)
+  );
 }
 
 .plain:hover:not(:disabled),

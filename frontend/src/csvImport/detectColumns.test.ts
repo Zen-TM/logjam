@@ -8,7 +8,10 @@ const customFields: TripLogCustomFieldDef[] = [
 
 describe("detectColumns", () => {
   it("maps name/date/notes aliases regardless of case and separators", () => {
-    const result = detectColumns(["Place Name", "Trip_Date", "  COMMENTS "], []);
+    const result = detectColumns(
+      ["Place Name", "Trip_Date", "  COMMENTS "],
+      [],
+    );
     expect(result["Place Name"]).toBe("name");
     expect(result["Trip_Date"]).toBe("date");
     expect(result["  COMMENTS "]).toBe("notes");
@@ -33,7 +36,10 @@ describe("detectColumns", () => {
 
   it("maps the app's own logbook template headers (name/date/type/notes)", () => {
     // frontend/public/templates/logbook-import-template.csv headers.
-    const result = detectColumns(["name", "date", "type", "notes", "Party"], []);
+    const result = detectColumns(
+      ["name", "date", "type", "notes", "Party"],
+      [],
+    );
     expect(result["name"]).toBe("name");
     expect(result["date"]).toBe("date");
     expect(result["type"]).toBe("type");

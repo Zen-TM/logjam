@@ -1,5 +1,8 @@
 import { useState, useEffect } from "react";
-import { getCustomFieldImpact, type CustomFieldEntityKind } from "../../placeUtils";
+import {
+  getCustomFieldImpact,
+  type CustomFieldEntityKind,
+} from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
 
 /**
@@ -36,7 +39,10 @@ export function useCustomFieldImpact(
         console.error(err);
         if (!cancelled)
           setError(
-            messageFromError(err, `Couldn't check how many ${noun} use this field.`),
+            messageFromError(
+              err,
+              `Couldn't check how many ${noun} use this field.`,
+            ),
           );
       });
     return () => {

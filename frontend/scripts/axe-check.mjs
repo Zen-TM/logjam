@@ -11,9 +11,13 @@ function summarize(label, results) {
   const serious = results.violations.filter((v) =>
     ["serious", "critical"].includes(v.impact),
   );
-  console.log(`\n=== ${label}: ${results.violations.length} violations (${serious.length} serious/critical) ===`);
+  console.log(
+    `\n=== ${label}: ${results.violations.length} violations (${serious.length} serious/critical) ===`,
+  );
   for (const v of results.violations) {
-    console.log(`  [${v.impact}] ${v.id}: ${v.help} (${v.nodes.length} node(s))`);
+    console.log(
+      `  [${v.impact}] ${v.id}: ${v.help} (${v.nodes.length} node(s))`,
+    );
   }
   return serious.length;
 }
@@ -25,17 +29,25 @@ let seriousTotal = 0;
 try {
   await page.goto(BASE, { waitUntil: "networkidle" });
   await page.waitForTimeout(1500);
-  seriousTotal += summarize("Map view (default scheme)", await new AxeBuilder({ page }).analyze());
+  seriousTotal += summarize(
+    "Map view (default scheme)",
+    await new AxeBuilder({ page }).analyze(),
+  );
 
   // Open the Canyons panel via its nav-rail button (aria-label set on NavRail items).
   const canyonsBtn = page.getByRole("button", { name: /canyon/i }).first();
   if (await canyonsBtn.count()) {
     await canyonsBtn.click();
     await page.waitForTimeout(600);
-    seriousTotal += summarize("Canyons panel open", await new AxeBuilder({ page }).analyze());
+    seriousTotal += summarize(
+      "Canyons panel open",
+      await new AxeBuilder({ page }).analyze(),
+    );
   }
 } finally {
   await browser.close();
 }
-console.log(`\n${seriousTotal === 0 ? "✓ no serious/critical violations" : `✗ ${seriousTotal} serious/critical`}`);
+console.log(
+  `\n${seriousTotal === 0 ? "✓ no serious/critical violations" : `✗ ${seriousTotal} serious/critical`}`,
+);
 process.exit(seriousTotal === 0 ? 0 : 1);

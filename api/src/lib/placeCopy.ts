@@ -20,7 +20,11 @@ import {
 
 import { AppError } from "../middleware/errorHandler";
 import prisma from "../services/prisma";
-import { createPlaceType, defsForPlaceType, visiblePlaceTypeWhere } from "./placeTypes";
+import {
+  createPlaceType,
+  defsForPlaceType,
+  visiblePlaceTypeWhere,
+} from "./placeTypes";
 
 export type CopyTypeResolution = {
   placeTypeId: string;
@@ -73,7 +77,8 @@ export async function resolveCopyPlaceType(
   // is a 500-shaped situation reported as one rather than papered over.
   if (!source) throw new AppError(500, "The place's type is missing");
 
-  if (source.ownerId === null) return { placeTypeId: source.id, created: false };
+  if (source.ownerId === null)
+    return { placeTypeId: source.id, created: false };
 
   const candidates = await prisma.placeType.findMany({
     where: visiblePlaceTypeWhere(recipientId),
@@ -110,10 +115,11 @@ export async function reconcileCopiedPlace(args: {
   fieldValues: Record<string, unknown>;
   foreignFields: ReturnType<typeof reconcileCopiedFieldValues>["foreignFields"];
 }> {
-  const [senderDefs, recipientDefs]: TripLogCustomFieldDef[][] = await Promise.all([
-    defsForPlaceType(args.sourceOwnerId, args.sourceTypeId),
-    defsForPlaceType(args.recipientId, args.targetTypeId),
-  ]);
+  const [senderDefs, recipientDefs]: TripLogCustomFieldDef[][] =
+    await Promise.all([
+      defsForPlaceType(args.sourceOwnerId, args.sourceTypeId),
+      defsForPlaceType(args.recipientId, args.targetTypeId),
+    ]);
   return reconcileCopiedFieldValues({
     fieldValues: args.fieldValues,
     senderDefs,
@@ -154,7 +160,10 @@ export async function strandValuesOnTypeChange(args: {
   toTypeId: string;
   fieldValues: unknown;
   foreignFields: unknown;
-}): Promise<{ fieldValues: Record<string, unknown>; foreignFields: ForeignFieldValue[] }> {
+}): Promise<{
+  fieldValues: Record<string, unknown>;
+  foreignFields: ForeignFieldValue[];
+}> {
   const parked = asForeignFields(args.foreignFields);
 
   // NOT A TYPE CHANGE. Nothing may be stranded by an ordinary edit — running
@@ -176,7 +185,9 @@ export async function strandValuesOnTypeChange(args: {
     }
     const toDefs = await defsForPlaceType(args.ownerId, args.toTypeId);
     const split = reconcileCopiedFieldValues({
-      fieldValues: Object.fromEntries(parked.map((item) => [item.key, item.value])),
+      fieldValues: Object.fromEntries(
+        parked.map((item) => [item.key, item.value]),
+      ),
       senderDefs: parked.map(parkedItemAsDef),
       recipientDefs: toDefs,
     });

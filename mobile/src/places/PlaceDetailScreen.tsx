@@ -69,7 +69,10 @@ import {
   deletePlaceLocal,
   updateRouteLocal,
 } from "../sync/outbox";
-import { resolveForeignField, type ForeignFieldAction } from "../api/foreignFields";
+import {
+  resolveForeignField,
+  type ForeignFieldAction,
+} from "../api/foreignFields";
 import { linkablePlaces, truncationHint } from "./linkablePlaces";
 import {
   useMirrorPlace,
@@ -114,10 +117,17 @@ function foreignValueText(value: unknown): string {
 
 /** Extent of a drawn route's points, for "show it on the map". Built at
  *  render time and never stored — a region of interest stays off the server. */
-function routeBbox(points: [number, number][]): [number, number, number, number] {
+function routeBbox(
+  points: [number, number][],
+): [number, number, number, number] {
   const lons = points.map(([lon]) => lon);
   const lats = points.map(([, lat]) => lat);
-  return [Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)];
+  return [
+    Math.min(...lons),
+    Math.min(...lats),
+    Math.max(...lons),
+    Math.max(...lats),
+  ];
 }
 
 export function PlaceDetailScreen({
@@ -194,7 +204,9 @@ export function PlaceDetailScreen({
     return <ErrorState message={query.error} onRetry={query.refresh} />;
   }
   if (!place) {
-    return <EmptyState title="Place not found" hint="It may have been deleted." />;
+    return (
+      <EmptyState title="Place not found" hint="It may have been deleted." />
+    );
   }
 
   const isOwner = place.syncRole === "owner";
@@ -221,7 +233,9 @@ export function PlaceDetailScreen({
   const linkedPlaceIds = new Set(
     (placeLinks.data ?? [])
       .filter((link) => link.aPlaceId === placeId || link.bPlaceId === placeId)
-      .map((link) => (link.aPlaceId === placeId ? link.bPlaceId : link.aPlaceId)),
+      .map((link) =>
+        link.aPlaceId === placeId ? link.bPlaceId : link.aPlaceId,
+      ),
   );
   const linkedPlaces = (placesQuery.data ?? [])
     .filter((row) => linkedPlaceIds.has(row.id))
@@ -233,7 +247,8 @@ export function PlaceDetailScreen({
    *  have (§2.6). Owner-private — the server never sends them on a shared row,
    *  so a sharee's place has none and this section does not render. */
   const foreignFields = place.foreignFields ?? [];
-  const foreignItem = foreignFields.find((item) => item.key === foreignKey) ?? null;
+  const foreignItem =
+    foreignFields.find((item) => item.key === foreignKey) ?? null;
   // Which of the two writers put them there. `forkedFromId` is set only by a
   // copy, so its absence means the other one — a type change.
   const isCopied = place.forkedFromId != null;
@@ -243,15 +258,16 @@ export function PlaceDetailScreen({
   // only way to find out was to tap it and be told no. Nothing is lost by the
   // refusal — a built-in comes home by itself when the place is put back on a
   // type that defines it (`strandValuesOnTypeChange`).
-  const foreignIsBuiltIn = foreignItem != null && isReservedFieldKey(foreignItem.key);
+  const foreignIsBuiltIn =
+    foreignItem != null && isReservedFieldKey(foreignItem.key);
 
   // The user-visible values, internal `_`-prefixed entries excluded. The
   // definitions that label them are the viewer's own — or, for a place shared
   // from a type they do not own, the snapshot the delta row carried, without
   // which they would see bare keys.
   const placeTypeName =
-    (placeTypes.data ?? []).find((type) => type.id === place.placeTypeId)?.name ??
-    "Place";
+    (placeTypes.data ?? []).find((type) => type.id === place.placeTypeId)
+      ?.name ?? "Place";
   const storedFields = userFieldValues(place.fieldValues);
   const labellingDefs = [...fieldDefs, ...(place.fieldDefsSnapshot ?? [])];
   const customFields = attributeRows(labellingDefs, storedFields);
@@ -276,7 +292,12 @@ export function PlaceDetailScreen({
     Clipboard.setString(position);
     notify("Coordinates copied.", "info");
   };
-  stats.push({ label: "Position", value: position, wide: true, onCopy: copyPosition });
+  stats.push({
+    label: "Position",
+    value: position,
+    wide: true,
+    onCopy: copyPosition,
+  });
 
   /**
    * One of the three actions on a parked value. The place is re-read from the
@@ -314,7 +335,10 @@ export function PlaceDetailScreen({
         ? `maps:0,0?q=${label}@${place.latitude},${place.longitude}`
         : `geo:${place.latitude},${place.longitude}?q=${place.latitude},${place.longitude}(${label})`;
     Linking.openURL(url).catch(() => {
-      Alert.alert("Couldn't open maps", "No maps app is available on this device.");
+      Alert.alert(
+        "Couldn't open maps",
+        "No maps app is available on this device.",
+      );
     });
   };
 
@@ -350,25 +374,21 @@ export function PlaceDetailScreen({
 
   const confirmDelete = () => {
     const confirm = placeDeleteConfirm(place.name, linkedTrips.length);
-    Alert.alert(
-      confirm.confirmTitle,
-      confirm.confirmBody,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: () => {
-            deletePlaceLocal(place.id)
-              .then(onDeleted)
-              .catch((err: unknown) => {
-                console.error(err);
-                notify("Couldn't delete this place.", "error");
-              });
-          },
+    Alert.alert(confirm.confirmTitle, confirm.confirmBody, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: () => {
+          deletePlaceLocal(place.id)
+            .then(onDeleted)
+            .catch((err: unknown) => {
+              console.error(err);
+              notify("Couldn't delete this place.", "error");
+            });
         },
-      ],
-    );
+      },
+    ]);
   };
 
   return (
@@ -396,12 +416,19 @@ export function PlaceDetailScreen({
               v/a ("v4a4 III") — upcasing it renders a grade nobody writes. */}
           {grade ? <StatusPill label={grade} tone="outline" /> : null}
           <StatusPill
-            label={status === "done" ? tickLabel(linkedTrips.length) : statusMeta.label}
+            label={
+              status === "done"
+                ? tickLabel(linkedTrips.length)
+                : statusMeta.label
+            }
             icon={statusMeta.icon}
             hue={statusMeta.hue}
           />
           {place.altNames.length > 0 ? (
-            <StatusPill label={`A.K.A. ${place.altNames.join(", ")}`} tone="outline" />
+            <StatusPill
+              label={`A.K.A. ${place.altNames.join(", ")}`}
+              tone="outline"
+            />
           ) : null}
         </View>
       </HeroHeader>
@@ -418,7 +445,11 @@ export function PlaceDetailScreen({
             />
           </View>
           <View style={styles.action}>
-            <Button label="Log a trip" icon="edit-3" onPress={() => setLogging(true)} />
+            <Button
+              label="Log a trip"
+              icon="edit-3"
+              onPress={() => setLogging(true)}
+            />
           </View>
         </View>
 
@@ -469,14 +500,24 @@ export function PlaceDetailScreen({
                 icon="help-circle"
                 title={item.label}
                 subtitle={foreignValueText(item.value)}
-                right={<Feather name="chevron-right" size={20} color={theme.textMuted} />}
+                right={
+                  <Feather
+                    name="chevron-right"
+                    size={20}
+                    color={theme.textMuted}
+                  />
+                }
                 onPress={() => setForeignKey(item.key)}
               />
             ))}
           </>
         ) : null}
 
-        <SectionHeader label={place.notes ? "Notes · visible to anyone you share with" : "Notes"} />
+        <SectionHeader
+          label={
+            place.notes ? "Notes · visible to anyone you share with" : "Notes"
+          }
+        />
         {place.notes ? (
           <Text style={styles.notes}>{place.notes}</Text>
         ) : (
@@ -484,7 +525,11 @@ export function PlaceDetailScreen({
         )}
 
         <SectionHeader
-          label={photoCount === 0 ? "Photos & videos" : `Photos & videos · ${photoCount}`}
+          label={
+            photoCount === 0
+              ? "Photos & videos"
+              : `Photos & videos · ${photoCount}`
+          }
         />
         <MediaStrip
           kind="media"
@@ -496,7 +541,9 @@ export function PlaceDetailScreen({
           onFailed={(text) => notify(text, "error")}
         />
 
-        <SectionHeader label={routeCount === 0 ? "Routes" : `Routes · ${routeCount}`} />
+        <SectionHeader
+          label={routeCount === 0 ? "Routes" : `Routes · ${routeCount}`}
+        />
         {/* One route per place — the API enforces it, so the UI has to as well
             (see `limit` in MediaStrip).
 
@@ -528,9 +575,7 @@ export function PlaceDetailScreen({
                 ) : undefined
               }
             />
-            <Text style={styles.muted}>
-              One route per place.
-            </Text>
+            <Text style={styles.muted}>One route per place.</Text>
           </>
         ) : (
           <MediaStrip
@@ -588,26 +633,26 @@ export function PlaceDetailScreen({
                   : `Linked places · ${linkedPlaces.length}`
               }
             />
-            {linkedPlaces.length === 0 ? null : (
-              linkedPlaces.map((linked) => (
-                <Row
-                  key={linked.id}
-                  icon="map-pin"
-                  title={linked.name}
-                  onPress={() => onShowPlaceOnMap?.(linked)}
-                  // The row's own action is "show me where that is"; the verb
-                  // that CHANGES something sits behind its own control, so a
-                  // thumb reaching for the map cannot unlink instead.
-                  right={
-                    <IconButton
-                      icon="more-vertical"
-                      accessibilityLabel={`Options for ${linked.name}`}
-                      onPress={() => setLinkMenuId(linked.id)}
-                    />
-                  }
-                />
-              ))
-            )}
+            {linkedPlaces.length === 0
+              ? null
+              : linkedPlaces.map((linked) => (
+                  <Row
+                    key={linked.id}
+                    icon="map-pin"
+                    title={linked.name}
+                    onPress={() => onShowPlaceOnMap?.(linked)}
+                    // The row's own action is "show me where that is"; the verb
+                    // that CHANGES something sits behind its own control, so a
+                    // thumb reaching for the map cannot unlink instead.
+                    right={
+                      <IconButton
+                        icon="more-vertical"
+                        accessibilityLabel={`Options for ${linked.name}`}
+                        onPress={() => setLinkMenuId(linked.id)}
+                      />
+                    }
+                  />
+                ))}
             <Row
               icon="link"
               title="Link a place"
@@ -632,7 +677,11 @@ export function PlaceDetailScreen({
             ever your own trips: another person's visits to a place they shared
             with you are theirs, and never reach this device. */}
         <SectionHeader
-          label={linkedTrips.length === 0 ? "Your trips" : `Your trips · ${linkedTrips.length}`}
+          label={
+            linkedTrips.length === 0
+              ? "Your trips"
+              : `Your trips · ${linkedTrips.length}`
+          }
         />
         {linkedTrips.length === 0 ? (
           <Text style={styles.muted}>
@@ -651,7 +700,13 @@ export function PlaceDetailScreen({
                 hue={theme.accent}
                 title={tripTitle(trip)}
                 subtitle={formatTripDate(trip.date)}
-                right={<Feather name="chevron-right" size={20} color={theme.textMuted} />}
+                right={
+                  <Feather
+                    name="chevron-right"
+                    size={20}
+                    color={theme.textMuted}
+                  />
+                }
                 onPress={() => onOpenTrip(trip)}
               />
             ))
@@ -732,7 +787,10 @@ export function PlaceDetailScreen({
             const candidates = (placesQuery.data ?? []).filter(
               (row) => row.id !== placeId && !linkedPlaceIds.has(row.id),
             );
-            const { visible, hiddenCount } = linkablePlaces(candidates, linkQuery);
+            const { visible, hiddenCount } = linkablePlaces(
+              candidates,
+              linkQuery,
+            );
             const hint = truncationHint(visible.length, hiddenCount);
             if (visible.length === 0) {
               return (
@@ -777,7 +835,8 @@ export function PlaceDetailScreen({
         visible={linkMenuId !== null}
         onClose={() => setLinkMenuId(null)}
         title={
-          linkedPlaces.find((row) => row.id === linkMenuId)?.name ?? "Linked place"
+          linkedPlaces.find((row) => row.id === linkMenuId)?.name ??
+          "Linked place"
         }
       >
         <View style={styles.sheetBody}>
@@ -823,7 +882,9 @@ export function PlaceDetailScreen({
         <View style={styles.sheetBody}>
           <View style={[styles.fieldRow, styles.fieldRowLast]}>
             <Text style={styles.fieldKey}>{foreignItem?.label}</Text>
-            <Text style={styles.fieldValue}>{foreignValueText(foreignItem?.value)}</Text>
+            <Text style={styles.fieldValue}>
+              {foreignValueText(foreignItem?.value)}
+            </Text>
           </View>
           {/* HIDDEN on a built-in key, not greyed out, and with no sentence
               standing in for it either. A reserved key cannot be adopted at all
@@ -912,7 +973,10 @@ export function PlaceDetailScreen({
                 .then(() => notify("Route unlinked.", "info"))
                 .catch((err: unknown) => {
                   console.error(err);
-                  notify(messageFromError(err, "Couldn't unlink that route."), "error");
+                  notify(
+                    messageFromError(err, "Couldn't unlink that route."),
+                    "error",
+                  );
                 });
             }}
           />
@@ -1032,11 +1096,23 @@ function tickLabel(trips: number): string {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: theme.primary },
   pillRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing(0.75) },
-  body: { paddingHorizontal: spacing(2), paddingBottom: spacing(4), gap: spacing(1) },
-  actionRow: { flexDirection: "row", gap: spacing(1), paddingTop: spacing(0.5) },
+  body: {
+    paddingHorizontal: spacing(2),
+    paddingBottom: spacing(4),
+    gap: spacing(1),
+  },
+  actionRow: {
+    flexDirection: "row",
+    gap: spacing(1),
+    paddingTop: spacing(0.5),
+  },
   action: { flex: 1 },
   muted: { color: theme.textMuted, fontSize: fontSize.sm },
-  notes: { color: theme.textPrimary, fontSize: fontSize.base, lineHeight: lineHeight.body },
+  notes: {
+    color: theme.textPrimary,
+    fontSize: fontSize.base,
+    lineHeight: lineHeight.body,
+  },
   spinner: { alignSelf: "flex-start" },
   sheetBody: { gap: spacing(1) },
   // A TABLE, NOT A CARD. The filled card read as a control — it had the

@@ -105,13 +105,19 @@ describe("nearestNode", () => {
     // Entry distance (60 m) is wider than the weld cell (12 m), so this only
     // works if the search ring widens.
     const graph = buildSnapGraph([eastward(2, 500)]);
-    const found = nearestNode(graph, [LON, LAT + 50 * M], SNAP_MAX_ENTRY_DISTANCE_M);
+    const found = nearestNode(
+      graph,
+      [LON, LAT + 50 * M],
+      SNAP_MAX_ENTRY_DISTANCE_M,
+    );
     expect(found).toBe(0);
   });
 
   it("returns null when everything is too far", () => {
     const graph = buildSnapGraph([eastward(2, 500)]);
-    expect(nearestNode(graph, [LON, LAT + 5000 * M], SNAP_MAX_ENTRY_DISTANCE_M)).toBeNull();
+    expect(
+      nearestNode(graph, [LON, LAT + 5000 * M], SNAP_MAX_ENTRY_DISTANCE_M),
+    ).toBeNull();
   });
 });
 
@@ -202,7 +208,11 @@ describe("snapSegment", () => {
         [LON + east(200), LAT],
       ],
     };
-    const snapped = snapSegment([detour, direct], [LON, LAT], [LON + east(200), LAT]);
+    const snapped = snapSegment(
+      [detour, direct],
+      [LON, LAT],
+      [LON + east(200), LAT],
+    );
     expect(snapped).not.toBeNull();
     expect(lengthOf(snapped!)).toBeLessThan(250);
   });

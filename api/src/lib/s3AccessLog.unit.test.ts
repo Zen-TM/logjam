@@ -62,7 +62,9 @@ describe("parseAccessLogLine", () => {
   it("ignores blank lines and truncated records", () => {
     expect(parseAccessLogLine("")).toBeNull();
     expect(parseAccessLogLine("   ")).toBeNull();
-    expect(parseAccessLogLine("owner bucket [01/Jan/2026:00:00:00 +0000]")).toBeNull();
+    expect(
+      parseAccessLogLine("owner bucket [01/Jan/2026:00:00:00 +0000]"),
+    ).toBeNull();
   });
 });
 

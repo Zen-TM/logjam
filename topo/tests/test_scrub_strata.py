@@ -11,6 +11,7 @@ Neither touches GDAL — pure numpy — but pipeline.py imports osgeo at module
 top, so we stub it first (per topo/tests/_native_stub.py convention) to keep
 this suite runnable on a host without GDAL Python bindings.
 """
+
 import os
 import sys
 import unittest
@@ -66,19 +67,29 @@ class TestCombineScrubStrata(unittest.TestCase):
         # the high (woody) stratum. The high-heavy cell should score higher
         # NRD given SCRUB_STRATUM_WEIGHT_HIGH > SCRUB_STRATUM_WEIGHT_LOW.
         low_heavy_low, low_heavy_high, low_heavy_below = (
-            np.array([18.0]), np.array([2.0]), np.array([0.0])
+            np.array([18.0]),
+            np.array([2.0]),
+            np.array([0.0]),
         )
         high_heavy_low, high_heavy_high, high_heavy_below = (
-            np.array([2.0]), np.array([18.0]), np.array([0.0])
+            np.array([2.0]),
+            np.array([18.0]),
+            np.array([0.0]),
         )
 
         _, low_heavy_nrd = _combine_scrub_strata(
-            low_heavy_low, low_heavy_high, low_heavy_below,
-            SCRUB_STRATUM_WEIGHT_LOW, SCRUB_STRATUM_WEIGHT_HIGH,
+            low_heavy_low,
+            low_heavy_high,
+            low_heavy_below,
+            SCRUB_STRATUM_WEIGHT_LOW,
+            SCRUB_STRATUM_WEIGHT_HIGH,
         )
         _, high_heavy_nrd = _combine_scrub_strata(
-            high_heavy_low, high_heavy_high, high_heavy_below,
-            SCRUB_STRATUM_WEIGHT_LOW, SCRUB_STRATUM_WEIGHT_HIGH,
+            high_heavy_low,
+            high_heavy_high,
+            high_heavy_below,
+            SCRUB_STRATUM_WEIGHT_LOW,
+            SCRUB_STRATUM_WEIGHT_HIGH,
         )
 
         self.assertGreater(high_heavy_nrd[0], low_heavy_nrd[0])
@@ -129,7 +140,9 @@ class TestDensityNormalizedMinPulses(unittest.TestCase):
         self.assertAlmostEqual(min_pulses_eff, SCRUB_DENSITY_MIN_PULSES * 2.0)
 
     def test_nominal_density_at_reference_yields_scale_one(self):
-        at_reference = np.full((10, 10), SCRUB_DENSITY_REFERENCE_ALL_RETURNS, dtype=np.float32)
+        at_reference = np.full(
+            (10, 10), SCRUB_DENSITY_REFERENCE_ALL_RETURNS, dtype=np.float32
+        )
         nominal_all, scale, min_pulses_eff = _density_normalized_min_pulses(
             at_reference, SCRUB_DENSITY_REFERENCE_ALL_RETURNS, SCRUB_DENSITY_MIN_PULSES
         )

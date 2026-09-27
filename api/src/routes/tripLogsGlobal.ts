@@ -197,7 +197,8 @@ router.get(
     // which already rejects unparseable dates.
     const parseDateParam = (value: unknown, name: string): Date | undefined => {
       if (value === undefined) return undefined;
-      if (typeof value !== "string") throw new AppError(400, `${name} must be a string`);
+      if (typeof value !== "string")
+        throw new AppError(400, `${name} must be a string`);
       const parsed = new Date(value);
       if (Number.isNaN(parsed.getTime()))
         throw new AppError(400, `${name} must be a valid date`);
@@ -313,7 +314,11 @@ router.post(
         include: tripPlacesInclude,
       });
       if (existing) {
-        assertClientIdReplayable(existing.userId, user.id, "Trip log not found");
+        assertClientIdReplayable(
+          existing.userId,
+          user.id,
+          "Trip log not found",
+        );
         res.status(200).json(serializeTrip(existing));
         return;
       }
@@ -385,7 +390,9 @@ router.patch(
       // link state whenever the request omits placeIds. Without this, a PATCH
       // of `types: []` on a canyon-linked trip would silently strip the tag.
       // Every link, not just the first: the rule asks whether ANY is a canyon.
-      include: { places: { select: { place: { select: { placeTypeId: true } } } } },
+      include: {
+        places: { select: { place: { select: { placeTypeId: true } } } },
+      },
     });
     // Owner-private resource — 404 (not 403) for non-owners (SEC-001).
     if (!trip || trip.userId !== user.id)
@@ -479,7 +486,10 @@ router.delete(
     const s3Keys = media.flatMap((m) =>
       [m.s3KeyDisplay, m.s3KeyThumbnail].filter((k): k is string => Boolean(k)),
     );
-    const totalBytes = media.reduce((sum, m) => sum + (m.fileSizeBytes ?? 0n), 0n);
+    const totalBytes = media.reduce(
+      (sum, m) => sum + (m.fileSizeBytes ?? 0n),
+      0n,
+    );
     await deleteS3Keys(MEDIA_BUCKET, s3Keys);
 
     await prisma.$transaction(async (tx) => {

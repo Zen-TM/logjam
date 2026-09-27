@@ -7,7 +7,9 @@ import classes from "./AddCustomFieldForm.module.css";
 
 /** What the user calls this shape — "Text", "Yes / No". */
 function customFieldTypeName(type: TripLogCustomFieldType): string {
-  return CUSTOM_FIELD_TYPES.find((option) => option.value === type)?.label ?? type;
+  return (
+    CUSTOM_FIELD_TYPES.find((option) => option.value === type)?.label ?? type
+  );
 }
 
 /**
@@ -136,12 +138,23 @@ function AddCustomFieldForm({
       )}
       {showBounds && (
         <div className={classes.boundsRow}>
-          <Checkbox label="Bounded" checked={bounds.bounded} onChange={bounds.onBoundedChange} />
+          <Checkbox
+            label="Bounded"
+            checked={bounds.bounded}
+            onChange={bounds.onBoundedChange}
+          />
           <TextField
             label="Min"
             className={classes.grow}
             value={bounds.min}
-            onChange={(event) => bounds.onMinChange(sanitizeNumericInput(event.target.value, type as "integer" | "float"))}
+            onChange={(event) =>
+              bounds.onMinChange(
+                sanitizeNumericInput(
+                  event.target.value,
+                  type as "integer" | "float",
+                ),
+              )
+            }
             onKeyDown={handleFieldKeyDown}
             disabled={!bounds.bounded}
             inputMode={type === "integer" ? "numeric" : "decimal"}
@@ -150,7 +163,14 @@ function AddCustomFieldForm({
             label="Max"
             className={classes.grow}
             value={bounds.max}
-            onChange={(event) => bounds.onMaxChange(sanitizeNumericInput(event.target.value, type as "integer" | "float"))}
+            onChange={(event) =>
+              bounds.onMaxChange(
+                sanitizeNumericInput(
+                  event.target.value,
+                  type as "integer" | "float",
+                ),
+              )
+            }
             onKeyDown={handleFieldKeyDown}
             disabled={!bounds.bounded}
             inputMode={type === "integer" ? "numeric" : "decimal"}
@@ -158,7 +178,11 @@ function AddCustomFieldForm({
         </div>
       )}
       {scope && (
-        <div role="group" aria-label="Where it appears" className={classes.scope}>
+        <div
+          role="group"
+          aria-label="Where it appears"
+          className={classes.scope}
+        >
           <span className={classes.groupLabel}>Where it appears</span>
           <Checkbox
             label="All types, including ones I add later"
@@ -175,7 +199,9 @@ function AddCustomFieldForm({
                   scope.onSelectedTypeIdsChange(
                     checked
                       ? [...scope.selectedTypeIds, placeType.id]
-                      : scope.selectedTypeIds.filter((id) => id !== placeType.id),
+                      : scope.selectedTypeIds.filter(
+                          (id) => id !== placeType.id,
+                        ),
                   )
                 }
               />
@@ -188,7 +214,13 @@ function AddCustomFieldForm({
           <Button compact onClick={onCancel} disabled={adding}>
             Cancel
           </Button>
-          <Button compact variant="filled" busy={adding} disabled={!label.trim()} onClick={onAdd}>
+          <Button
+            compact
+            variant="filled"
+            busy={adding}
+            disabled={!label.trim()}
+            onClick={onAdd}
+          >
             Add attribute
           </Button>
         </div>

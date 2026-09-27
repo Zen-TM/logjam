@@ -66,7 +66,10 @@ export const FocusPulse = memo(function FocusPulse({
       type: "Feature",
       properties: {},
       geometry: degenerate
-        ? { type: "Point", coordinates: [(west + east) / 2, (south + north) / 2] }
+        ? {
+            type: "Point",
+            coordinates: [(west + east) / 2, (south + north) / 2],
+          }
         : {
             type: "LineString",
             coordinates: [

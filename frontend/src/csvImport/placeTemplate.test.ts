@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { SYSTEM_PLACE_TYPE_IDS, type TripLogCustomFieldDef } from "@logjam/shared";
+import {
+  SYSTEM_PLACE_TYPE_IDS,
+  type TripLogCustomFieldDef,
+} from "@logjam/shared";
 
 import Papa from "papaparse";
 import { detectPlaceColumns } from "./placeColumns";
@@ -10,7 +13,10 @@ import {
 
 /** The template is a STRING; parse it the way a spreadsheet would. (The app's
  *  own `parseCsv` takes a File and is async — same papaparse underneath.) */
-function parse(csv: string): { headers: string[]; rows: Record<string, string>[] } {
+function parse(csv: string): {
+  headers: string[];
+  rows: Record<string, string>[];
+} {
   const result = Papa.parse<Record<string, string>>(csv, {
     header: true,
     skipEmptyLines: true,
@@ -56,7 +62,11 @@ describe("placeImportTemplateCsv", () => {
   // A template whose own headers the importer cannot place is a trap: the user
   // fills it in, imports it, and every type-specific column reads "discard".
   it("produces headers the column matcher recognises", () => {
-    const csv = placeImportTemplateCsv("Campsite", SYSTEM_PLACE_TYPE_IDS.campsite, campsiteDefs);
+    const csv = placeImportTemplateCsv(
+      "Campsite",
+      SYSTEM_PLACE_TYPE_IDS.campsite,
+      campsiteDefs,
+    );
     const { headers } = parse(csv);
     const roles = detectPlaceColumns(headers, campsiteDefs);
     expect(roles["name"]).toBe("name");
@@ -65,7 +75,11 @@ describe("placeImportTemplateCsv", () => {
   });
 
   it("keeps the canyon example values the static template shipped with", () => {
-    const csv = placeImportTemplateCsv("Canyon", SYSTEM_PLACE_TYPE_IDS.canyon, canyonDefs);
+    const csv = placeImportTemplateCsv(
+      "Canyon",
+      SYSTEM_PLACE_TYPE_IDS.canyon,
+      canyonDefs,
+    );
     const { rows } = parse(csv);
     expect(rows[0]["V Grade"]).toBe("4");
     expect(rows[0]["Quality"]).toBe("4");
@@ -100,7 +114,11 @@ describe("placeImportTemplateCsv", () => {
 
 describe("placeImportTemplateFilename", () => {
   it("names the file after the type, so three of them are tellable apart", () => {
-    expect(placeImportTemplateFilename("Campsite")).toBe("campsite-import-template.csv");
-    expect(placeImportTemplateFilename("Sea cave")).toBe("sea-cave-import-template.csv");
+    expect(placeImportTemplateFilename("Campsite")).toBe(
+      "campsite-import-template.csv",
+    );
+    expect(placeImportTemplateFilename("Sea cave")).toBe(
+      "sea-cave-import-template.csv",
+    );
   });
 });

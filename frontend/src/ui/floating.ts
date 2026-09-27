@@ -32,10 +32,15 @@ export function floatingPosition(
   placement: Placement,
   gap = 8,
 ): { top: number; left: number } {
-  const [side, align] = placement.split("-") as ["bottom" | "top" | "right" | "left", "start" | "end"];
-  const fitsBelow = anchor.bottom + gap + size.height <= viewport.height - VIEWPORT_MARGIN;
+  const [side, align] = placement.split("-") as [
+    "bottom" | "top" | "right" | "left",
+    "start" | "end",
+  ];
+  const fitsBelow =
+    anchor.bottom + gap + size.height <= viewport.height - VIEWPORT_MARGIN;
   const fitsAbove = anchor.top - gap - size.height >= VIEWPORT_MARGIN;
-  const fitsRight = anchor.right + gap + size.width <= viewport.width - VIEWPORT_MARGIN;
+  const fitsRight =
+    anchor.right + gap + size.width <= viewport.width - VIEWPORT_MARGIN;
   const fitsLeft = anchor.left - gap - size.width >= VIEWPORT_MARGIN;
 
   let top: number;
@@ -55,7 +60,10 @@ export function floatingPosition(
   }
 
   const clamp = (value: number, extent: number, limit: number) =>
-    Math.min(Math.max(value, VIEWPORT_MARGIN), Math.max(VIEWPORT_MARGIN, limit - extent - VIEWPORT_MARGIN));
+    Math.min(
+      Math.max(value, VIEWPORT_MARGIN),
+      Math.max(VIEWPORT_MARGIN, limit - extent - VIEWPORT_MARGIN),
+    );
   return {
     top: clamp(top, size.height, viewport.height),
     left: clamp(left, size.width, viewport.width),

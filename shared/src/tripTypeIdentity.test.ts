@@ -9,8 +9,14 @@ import {
 
 describe("tripTypeIdentity", () => {
   it("gives canyoning the scheme accent, whatever its casing", () => {
-    expect(tripTypeIdentity("canyoning")).toEqual({ icon: "droplet", hue: "accent" });
-    expect(tripTypeIdentity("Canyoning")).toEqual({ icon: "droplet", hue: "accent" });
+    expect(tripTypeIdentity("canyoning")).toEqual({
+      icon: "droplet",
+      hue: "accent",
+    });
+    expect(tripTypeIdentity("Canyoning")).toEqual({
+      icon: "droplet",
+      hue: "accent",
+    });
   });
 
   it("borrows the seeded activities' hues from the asset palette", () => {
@@ -19,7 +25,10 @@ describe("tripTypeIdentity", () => {
   });
 
   it("gives a trip with no type its own glyph and the untyped role", () => {
-    expect(tripTypeIdentity(null)).toEqual({ icon: "book-open", hue: "untyped" });
+    expect(tripTypeIdentity(null)).toEqual({
+      icon: "book-open",
+      hue: "untyped",
+    });
     expect(tripTypeIdentity("")).toEqual({ icon: "book-open", hue: "untyped" });
   });
 
@@ -31,7 +40,14 @@ describe("tripTypeIdentity", () => {
   });
 
   it("only ever answers with a declared glyph", () => {
-    for (const type of [null, "canyoning", "bushwalking", "bikepacking", "packrafting", "anything"]) {
+    for (const type of [
+      null,
+      "canyoning",
+      "bushwalking",
+      "bikepacking",
+      "packrafting",
+      "anything",
+    ]) {
       expect(TRIP_TYPE_ICON_KEYS).toContain(tripTypeIdentity(type).icon);
     }
   });
@@ -39,7 +55,9 @@ describe("tripTypeIdentity", () => {
 
 describe("primaryTripType and tripTypeLabel", () => {
   it("represents a trip by its first type", () => {
-    expect(primaryTripType(["abseil course", "canyoning"])).toBe("abseil course");
+    expect(primaryTripType(["abseil course", "canyoning"])).toBe(
+      "abseil course",
+    );
     expect(primaryTripType([])).toBeNull();
   });
 

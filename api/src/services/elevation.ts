@@ -129,9 +129,7 @@ export async function sampleElevations(
   // set is known before any network work starts.
   const resolved = resolveDemSamples(positions);
 
-  const uniqueKeys = [
-    ...new Set(resolved.map((r) => `${r.tileX}/${r.tileY}`)),
-  ];
+  const uniqueKeys = [...new Set(resolved.map((r) => `${r.tileX}/${r.tileY}`))];
   const tiles = new Map<string, Float32Array | null>();
   await Promise.all(
     uniqueKeys.map(async (key) => {

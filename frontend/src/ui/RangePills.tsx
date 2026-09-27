@@ -1,5 +1,10 @@
 import { useRef, type PointerEvent } from "react";
-import { formatRange, isFullRange, nextRange, type NumberRange } from "@logjam/shared";
+import {
+  formatRange,
+  isFullRange,
+  nextRange,
+  type NumberRange,
+} from "@logjam/shared";
 import { Chip } from "./Chip";
 import { FilterField } from "./FilterField";
 import classes from "./RangePills.module.css";
@@ -57,16 +62,25 @@ export function RangePills({
     const current = drag.current;
     if (!current || (stop === current.anchor && !current.moved)) return;
     current.moved = true;
-    const range: NumberRange = [Math.min(current.anchor, stop), Math.max(current.anchor, stop)];
+    const range: NumberRange = [
+      Math.min(current.anchor, stop),
+      Math.max(current.anchor, stop),
+    ];
     if (value && value[0] === range[0] && value[1] === range[1]) return;
     onChange(isFullRange(range, bounds) ? null : range);
   };
 
   return (
-    <FilterField label={label} summary={formatRange(value, bounds)} active={active} onClear={() => onChange(null)}>
+    <FilterField
+      label={label}
+      summary={formatRange(value, bounds)}
+      active={active}
+      onClear={() => onChange(null)}
+    >
       <div className={classes.pills}>
         {stops.map((stop) => {
-          const inRange = value !== null && stop >= value[0] && stop <= value[1];
+          const inRange =
+            value !== null && stop >= value[0] && stop <= value[1];
           return (
             <Chip
               key={stop}

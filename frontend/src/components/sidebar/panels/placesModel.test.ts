@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { EMPTY_PLACE_FILTERS, regionEdgesKm, type PlaceFilters } from "@logjam/shared";
+import {
+  EMPTY_PLACE_FILTERS,
+  regionEdgesKm,
+  type PlaceFilters,
+} from "@logjam/shared";
 import {
   bucketOf,
   clearSheetFilters,
@@ -26,7 +30,10 @@ describe("status buckets", () => {
 
   it("normalises a combination the rail cannot show, so no hidden axis narrows the list", () => {
     const legacy = filters({ ownership: "owned", completion: "any" });
-    expect(normaliseBucket(legacy)).toMatchObject({ ownership: "all", completion: "any" });
+    expect(normaliseBucket(legacy)).toMatchObject({
+      ownership: "all",
+      completion: "any",
+    });
     const shown = withBucket(filters(), "done");
     expect(normaliseBucket(shown)).toBe(shown);
   });
@@ -36,15 +43,27 @@ describe("the sheet's filters", () => {
   it("does not count what the rails show", () => {
     const railsOnly = withBucket(filters({ placeTypeId: "t" }), "todo");
     expect(sheetFilterCount(railsOnly)).toBe(0);
-    expect(sheetFilterCount({ ...railsOnly, ropewiki: "linked", shared_by_me: true })).toBe(2);
+    expect(
+      sheetFilterCount({
+        ...railsOnly,
+        ropewiki: "linked",
+        shared_by_me: true,
+      }),
+    ).toBe(2);
   });
 
   it("clears its own filters and keeps the rails", () => {
     const set = withBucket(
-      filters({ placeTypeId: "t", ropewiki: "linked", custom: { hours: { kind: "text", value: "x" } } }),
+      filters({
+        placeTypeId: "t",
+        ropewiki: "linked",
+        custom: { hours: { kind: "text", value: "x" } },
+      }),
       "shared",
     );
-    expect(clearSheetFilters(set)).toEqual(withBucket(filters({ placeTypeId: "t" }), "shared"));
+    expect(clearSheetFilters(set)).toEqual(
+      withBucket(filters({ placeTypeId: "t" }), "shared"),
+    );
   });
 });
 
@@ -54,7 +73,9 @@ describe("placesBounds", () => {
   });
 
   it("gives a single place a useful minimum area", () => {
-    const [width, height] = regionEdgesKm(placesBounds([{ latitude: -33.56, longitude: 150.4 }])!);
+    const [width, height] = regionEdgesKm(
+      placesBounds([{ latitude: -33.56, longitude: 150.4 }])!,
+    );
     expect(width).toBeCloseTo(2, 1);
     expect(height).toBeCloseTo(2, 1);
   });
@@ -100,7 +121,10 @@ describe("placeVerbs", () => {
     // What is left over each way is only the form-opening pair, which a menu
     // cannot hold and a row hands to the page by opening it.
     expect(row.filter((id) => !detail.includes(id))).toEqual(["open"]);
-    expect(detail.filter((id) => !row.includes(id))).toEqual(["edit", "logTrip"]);
+    expect(detail.filter((id) => !row.includes(id))).toEqual([
+      "edit",
+      "logTrip",
+    ]);
   });
 
   it("never offers to edit or delete a place someone shared with you", () => {
@@ -118,12 +142,13 @@ describe("placeVerbs", () => {
   // rather than neither, so the combined verb sits with the parting ones.
   it("puts the verbs that end the share below the rule, and marks only Delete destructive", () => {
     const shared = placeVerbs("detail", false);
-    expect(shared.filter((verb) => verb.separated).map((verb) => verb.id)).toEqual([
-      "copyAndRemove",
-      "remove",
-    ]);
+    expect(
+      shared.filter((verb) => verb.separated).map((verb) => verb.id),
+    ).toEqual(["copyAndRemove", "remove"]);
     expect(shared.some((verb) => verb.danger)).toBe(false);
     const owned = placeVerbs("detail", true);
-    expect(owned.filter((verb) => verb.danger).map((verb) => verb.id)).toEqual(["delete"]);
+    expect(owned.filter((verb) => verb.danger).map((verb) => verb.id)).toEqual([
+      "delete",
+    ]);
   });
 });

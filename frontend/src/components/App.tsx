@@ -20,11 +20,24 @@ import SelectedPlacesDialog from "./dialogs/SelectedPlacesDialog";
 import classes from "./App.module.css";
 import type { TBbox } from "./map/Map";
 import { createPlaceHighlight } from "./map/placeHighlight";
-import type { TFilters, TPlace, TPlaceType, GeoPdfJobView } from "../placeUtils";
+import type {
+  TFilters,
+  TPlace,
+  TPlaceType,
+  GeoPdfJobView,
+} from "../placeUtils";
 import type { ScopedCustomFieldDef, StandaloneFile } from "@logjam/shared";
-import { PANEL_TITLES, type LogsView, type MapsView, type PanelId } from "./sidebar/panels";
+import {
+  PANEL_TITLES,
+  type LogsView,
+  type MapsView,
+  type PanelId,
+} from "./sidebar/panels";
 import { TOPO_LAYERS } from "../topoLayerTypes";
-import type { CompletedTopoJob, CompletedOverlaysResponse } from "../topoLayerTypes";
+import type {
+  CompletedTopoJob,
+  CompletedOverlaysResponse,
+} from "../topoLayerTypes";
 import {
   usePlaces,
   usePlaceTracks,
@@ -78,7 +91,11 @@ import ConsentGate from "./ConsentGate";
 import { RouteDrawPanel } from "./routes/RouteDrawPanel";
 import RouteNameDialog from "./dialogs/RouteNameDialog";
 import WayDetailPanel from "./sidebar/panels/WayDetailPanel";
-import { buildWays, wayFromRoute, type WayItem } from "./sidebar/panels/waysModel";
+import {
+  buildWays,
+  wayFromRoute,
+  type WayItem,
+} from "./sidebar/panels/waysModel";
 import { createRouteHoverChannel } from "./map/routeHover";
 import type { WayVerbId } from "./sidebar/panels/wayActions";
 import ConfirmDialog from "./dialogs/ConfirmDialog";
@@ -132,16 +149,29 @@ function App() {
     [storedFilters, placeCustomFieldDefs],
   );
   const [openFiltersRequested, setOpenFiltersRequested] = useState(false);
-  const consumeOpenFilters = useCallback(() => setOpenFiltersRequested(false), []);
+  const consumeOpenFilters = useCallback(
+    () => setOpenFiltersRequested(false),
+    [],
+  );
   const [selectedPlaceID, setSelectedPlaceID] = useState<string | null>(null);
   // The trip whose page is open. A trip is READ on a page like a place and a
   // way (DESIGN.md §6), so it needs the same one piece of state.
-  const [selectedTripLogId, setSelectedTripLogId] = useState<string | null>(null);
+  const [selectedTripLogId, setSelectedTripLogId] = useState<string | null>(
+    null,
+  );
   const [activePanel, setActivePanel] = useState<PanelId | null>(null);
   // Which view the two-view pages open on — remembered for the session, so a
   // return to Logs lands where the user left it.
-  const [logsView, setLogsView] = useStoredState<LogsView>("logjam.logsView", "logs", sessionStorage);
-  const [mapsView, setMapsView] = useStoredState<MapsView>("logjam.mapsView", "geopdfs", sessionStorage);
+  const [logsView, setLogsView] = useStoredState<LogsView>(
+    "logjam.logsView",
+    "logs",
+    sessionStorage,
+  );
+  const [mapsView, setMapsView] = useStoredState<MapsView>(
+    "logjam.mapsView",
+    "geopdfs",
+    sessionStorage,
+  );
   // What is on the map is a popover over the map, not a page.
   const [layersOpen, setLayersOpen] = useState(false);
   const layersButtonRef = useRef<HTMLButtonElement>(null);
@@ -199,7 +229,9 @@ function App() {
   // A way's extent, for the map to fit. Consumed, not counted (DESIGN.md §9).
   // A tuple, as `WayItem.bounds` and MapLibre's `fitBounds` both are — not the
   // `RegionBbox` object the topo flows pass around.
-  const [flyToBounds, setFlyToBounds] = useState<[number, number, number, number] | null>(null);
+  const [flyToBounds, setFlyToBounds] = useState<
+    [number, number, number, number] | null
+  >(null);
   // Where along a line the elevation-profile cursor sits, so the chart and the
   // map point at the same place. NOT state: it changes many times a second, and
   // as state every move re-rendered App, the map and the panel before the dot
@@ -291,7 +323,9 @@ function App() {
     GeoPdfTemplate | null | undefined
   >(undefined);
   // ID to pre-select when opening GeoPdfDialog in normal mode
-  const [initialGeoPdfTemplateId, setInitialGeoPdfTemplateId] = useState<string | null>(null);
+  const [initialGeoPdfTemplateId, setInitialGeoPdfTemplateId] = useState<
+    string | null
+  >(null);
   // Bumped after template save/delete to trigger panel refetch
   const [geoPdfTemplateRefetch, setGeoPdfTemplateRefetch] = useState(0);
 
@@ -299,29 +333,40 @@ function App() {
   const [geoPdfJobsRefetch, setGeoPdfJobsRefetch] = useState(0);
 
   // Topo template: ID to pre-select when opening TopoDialog
-  const [initialTopoTemplateId, setInitialTopoTemplateId] = useState<string | null>(null);
+  const [initialTopoTemplateId, setInitialTopoTemplateId] = useState<
+    string | null
+  >(null);
 
   // Bumped when TopoDialog saves a template inline, so LidarPanel's template
   // list refreshes without waiting for an accordion re-open (TOPO-1)
   const [topoTemplateRefetch, setTopoTemplateRefetch] = useState(0);
 
   // Place fly-to target
-  const [flyToPlace, setFlyToPlace] = useState<{ lat: number; lng: number } | null>(null);
+  const [flyToPlace, setFlyToPlace] = useState<{
+    lat: number;
+    lng: number;
+  } | null>(null);
 
   // LiDAR topo panel state — lifted so it persists across panel open/close
-  const [lidarEnabled, setLidarEnabled] = useStoredState("logjam.lidarEnabled", false);
+  const [lidarEnabled, setLidarEnabled] = useStoredState(
+    "logjam.lidarEnabled",
+    false,
+  );
 
   const currentLayerNames: string[] = TOPO_LAYERS.map((l) => l.name);
-  const defaultLayerToggles = Object.fromEntries(currentLayerNames.map((n) => [n, true]));
-  const [rawLidarLayerToggles, setLidarLayerToggles] = useStoredState<Record<string, boolean>>(
-    "logjam.lidarLayerToggles",
-    defaultLayerToggles,
+  const defaultLayerToggles = Object.fromEntries(
+    currentLayerNames.map((n) => [n, true]),
   );
+  const [rawLidarLayerToggles, setLidarLayerToggles] = useStoredState<
+    Record<string, boolean>
+  >("logjam.lidarLayerToggles", defaultLayerToggles);
   // Drop unknown layers, add missing new layers as true
   const lidarLayerToggles: Record<string, boolean> = {
     ...defaultLayerToggles,
     ...Object.fromEntries(
-      Object.entries(rawLidarLayerToggles).filter(([k]) => currentLayerNames.includes(k)),
+      Object.entries(rawLidarLayerToggles).filter(([k]) =>
+        currentLayerNames.includes(k),
+      ),
     ),
   };
 
@@ -336,10 +381,9 @@ function App() {
   ];
 
   // Per-completed-job visibility. Newly fetched jobs default to true (visible).
-  const [lidarJobToggles, setLidarJobToggles] = useStoredState<Record<string, boolean>>(
-    "logjam.lidarJobToggles",
-    {},
-  );
+  const [lidarJobToggles, setLidarJobToggles] = useStoredState<
+    Record<string, boolean>
+  >("logjam.lidarJobToggles", {});
 
   // Compose all (job × layer) pairs into the flat list the Map consumes.
   // Z-order: outer loop = layer (per user-chosen order), inner loop = jobs
@@ -466,7 +510,9 @@ function App() {
 
   // Reflect the active panel in the document title (WCAG 2.4.2 Page Titled).
   useEffect(() => {
-    document.title = activePanel ? `${PANEL_TITLES[activePanel]} — Logjam Web` : "Logjam Web";
+    document.title = activePanel
+      ? `${PANEL_TITLES[activePanel]} — Logjam Web`
+      : "Logjam Web";
   }, [activePanel]);
 
   // Leaving a detail page via the NavRail drops what it was showing.
@@ -494,7 +540,12 @@ function App() {
   const auth = useAuth();
   const authenticated = auth.state === "authenticated";
   const { hydrateFromUser } = useThemePreferences();
-  const { currentUser, error: currentUserError, refetchCurrentUser, applyCurrentUser } = useCurrentUser(authenticated);
+  const {
+    currentUser,
+    error: currentUserError,
+    refetchCurrentUser,
+    applyCurrentUser,
+  } = useCurrentUser(authenticated);
   // FECO-005. `authenticated` is NOT enough to start fetching the user's data:
   // a user whose recorded consent is stale gets ConsentGate rendered instead of
   // the app, but rendering is all that used to stop — every hook and boot
@@ -511,9 +562,18 @@ function App() {
     localStorage.getItem(PENDING_CONSENT_STORAGE_KEY),
   );
   const loadsUserData = authenticated && consentSettled;
-  const { places, total: placesTotal, loaded: placesLoaded, error: placesError, refetch } = usePlaces(loadsUserData);
-  const { places: sharedPlaces, error: sharedError, refetch: refetchShared } =
-    useSharedPlaces(loadsUserData);
+  const {
+    places,
+    total: placesTotal,
+    loaded: placesLoaded,
+    error: placesError,
+    refetch,
+  } = usePlaces(loadsUserData);
+  const {
+    places: sharedPlaces,
+    error: sharedError,
+    refetch: refetchShared,
+  } = useSharedPlaces(loadsUserData);
   // Also fetched for the Routes panel, which lists the same track files.
   const {
     tracks: placeTracks,
@@ -565,7 +625,11 @@ function App() {
 
   // Routes load whenever the layer is on OR a draw/edit session is live (the
   // editor needs the row it is editing even with the layer toggled off).
-  const { routes, loaded: routesLoaded, refetch: refetchRoutes } = useRoutes(
+  const {
+    routes,
+    loaded: routesLoaded,
+    refetch: refetchRoutes,
+  } = useRoutes(
     loadsUserData && (showWays || drawingRoute || activePanel === "ways"),
   );
 
@@ -654,13 +718,27 @@ function App() {
   const [placeTypes, setPlaceTypes] = useState<TPlaceType[]>([]);
 
   // Surface background data-load errors as toasts
-  useEffect(() => { if (placesError) toast.error(placesError); }, [placesError, toast]);
-  useEffect(() => { if (currentUserError) toast.error(currentUserError); }, [currentUserError, toast]);
-  useEffect(() => { if (sharedError) toast.error(sharedError); }, [sharedError, toast]);
-  useEffect(() => { if (friendsError) toast.error(friendsError); }, [friendsError, toast]);
-  useEffect(() => { if (notificationsError) toast.error(notificationsError); }, [notificationsError, toast]);
-  useEffect(() => { if (tripLogsError) toast.error(tripLogsError); }, [tripLogsError, toast]);
-  useEffect(() => { if (vectorStyleSaveError) toast.error(vectorStyleSaveError); }, [vectorStyleSaveError, toast]);
+  useEffect(() => {
+    if (placesError) toast.error(placesError);
+  }, [placesError, toast]);
+  useEffect(() => {
+    if (currentUserError) toast.error(currentUserError);
+  }, [currentUserError, toast]);
+  useEffect(() => {
+    if (sharedError) toast.error(sharedError);
+  }, [sharedError, toast]);
+  useEffect(() => {
+    if (friendsError) toast.error(friendsError);
+  }, [friendsError, toast]);
+  useEffect(() => {
+    if (notificationsError) toast.error(notificationsError);
+  }, [notificationsError, toast]);
+  useEffect(() => {
+    if (tripLogsError) toast.error(tripLogsError);
+  }, [tripLogsError, toast]);
+  useEffect(() => {
+    if (vectorStyleSaveError) toast.error(vectorStyleSaveError);
+  }, [vectorStyleSaveError, toast]);
 
   useEffect(() => {
     if (!authenticated) return;
@@ -675,7 +753,6 @@ function App() {
     getPlaceTypes().then(setPlaceTypes).catch(console.error);
     fetchCurrentUser()
       .then((user) => {
-
         // Record the consent given on the sign-up form. Only a pending value
         // matching the current version is recordable (the server 400s any
         // other), and only while the user's stored version is actually stale —
@@ -692,13 +769,21 @@ function App() {
             })
             .catch((err) => {
               console.error(err);
-              toast.error(messageFromError(err, "Couldn't record your consent. It will be retried next time you sign in."));
+              toast.error(
+                messageFromError(
+                  err,
+                  "Couldn't record your consent. It will be retried next time you sign in.",
+                ),
+              );
             });
         } else if (pending) {
           localStorage.removeItem(PENDING_CONSENT_STORAGE_KEY);
         }
       })
-      .catch((err) => { console.error(err); toast.error(messageFromError(err, "Couldn't load your preferences.")); });
+      .catch((err) => {
+        console.error(err);
+        toast.error(messageFromError(err, "Couldn't load your preferences."));
+      });
   }, [authenticated, hydrateFromUser, toast, applyCurrentUser]);
 
   // Resume tracking any jobs that were pending/processing before page load
@@ -718,31 +803,39 @@ function App() {
       })
       // Best-effort: if this fails, in-progress jobs simply won't resume
       // polling until the next page load — non-critical background refresh.
-      .catch((err) => { console.error(err); });
+      .catch((err) => {
+        console.error(err);
+      });
   }, [loadsUserData]);
 
   // Fetch the user's completed topo jobs (with presigned PMTiles URLs) on
   // auth and whenever a job transitions to complete.
-  const [overlaysExpiresAt, setOverlaysExpiresAt] = useState<string | null>(null);
+  const [overlaysExpiresAt, setOverlaysExpiresAt] = useState<string | null>(
+    null,
+  );
   const refetchCompletedTopoJobs = useCallback(() => {
-    return apiFetch<CompletedOverlaysResponse>("/topo-jobs/completed-overlays")
-      .then(({ jobs, expiresAt }) => {
-        setCompletedTopoJobs(jobs);
-        setOverlaysExpiresAt(expiresAt);
-        setLidarJobToggles((prev) => {
-          // Default newly-seen jobs to visible; preserve prior toggle state
-          // for jobs we already knew about.
-          const next: Record<string, boolean> = { ...prev };
-          for (const j of jobs) {
-            if (next[j.jobId] === undefined) next[j.jobId] = true;
-          }
-          return next;
-        });
-      })
-      // Best-effort: called again on the next poll tick / job completion,
-      // so a transient failure here is non-critical.
-      .catch((err) => { console.error(err); })
-      .finally(() => setCompletedTopoJobsLoaded(true));
+    return (
+      apiFetch<CompletedOverlaysResponse>("/topo-jobs/completed-overlays")
+        .then(({ jobs, expiresAt }) => {
+          setCompletedTopoJobs(jobs);
+          setOverlaysExpiresAt(expiresAt);
+          setLidarJobToggles((prev) => {
+            // Default newly-seen jobs to visible; preserve prior toggle state
+            // for jobs we already knew about.
+            const next: Record<string, boolean> = { ...prev };
+            for (const j of jobs) {
+              if (next[j.jobId] === undefined) next[j.jobId] = true;
+            }
+            return next;
+          });
+        })
+        // Best-effort: called again on the next poll tick / job completion,
+        // so a transient failure here is non-critical.
+        .catch((err) => {
+          console.error(err);
+        })
+        .finally(() => setCompletedTopoJobsLoaded(true))
+    );
   }, []);
 
   useEffect(() => {
@@ -760,7 +853,9 @@ function App() {
       refetchCompletedTopoJobs();
       return;
     }
-    const timer = setTimeout(() => { refetchCompletedTopoJobs(); }, delay);
+    const timer = setTimeout(() => {
+      refetchCompletedTopoJobs();
+    }, delay);
     return () => clearTimeout(timer);
   }, [loadsUserData, overlaysExpiresAt, refetchCompletedTopoJobs]);
 
@@ -779,7 +874,8 @@ function App() {
   // GeoPDF jobs are also polled here (in addition to the sidebar panel) so
   // auto-download works even when the Generated PDFs panel is closed. The hook
   // self-throttles: it only polls while a job is queued/running.
-  const { jobs: geoPdfJobs, refetch: refetchGeoPdfJobs } = useGeoPdfJobs(loadsUserData);
+  const { jobs: geoPdfJobs, refetch: refetchGeoPdfJobs } =
+    useGeoPdfJobs(loadsUserData);
 
   // Auto-download exports that complete during this session. Snapshot the
   // exports already completed on first successful fetch so we never download a
@@ -809,7 +905,8 @@ function App() {
     if (!exportFetchResolved.current) return;
     if (!exportSnapshotTaken.current) {
       for (const ex of topoExports) {
-        if (ex.status === "completed") alreadyCompletedExportIds.current.add(ex.id);
+        if (ex.status === "completed")
+          alreadyCompletedExportIds.current.add(ex.id);
       }
       exportSnapshotTaken.current = true;
       return;
@@ -905,16 +1002,19 @@ function App() {
     [refetchCurrentUser, toast],
   );
 
-  const handleGeoPdfJobQueued = useCallback((job: GeoPdfJobView) => {
-    setGeoPdfJobsRefetch((n) => n + 1);
-    // Arm for auto-download if the user hasn't disabled it (default on).
-    if (currentUser?.uiPreferences?.autoDownloadGeoPdfs ?? true) {
-      armedGeoPdfJobIds.current.add(job.id);
-    }
-    // Kick the App-level poller so it picks up the freshly queued job and starts
-    // polling toward completion (the panel may be closed).
-    refetchGeoPdfJobs();
-  }, [currentUser, refetchGeoPdfJobs]);
+  const handleGeoPdfJobQueued = useCallback(
+    (job: GeoPdfJobView) => {
+      setGeoPdfJobsRefetch((n) => n + 1);
+      // Arm for auto-download if the user hasn't disabled it (default on).
+      if (currentUser?.uiPreferences?.autoDownloadGeoPdfs ?? true) {
+        armedGeoPdfJobIds.current.add(job.id);
+      }
+      // Kick the App-level poller so it picks up the freshly queued job and starts
+      // polling toward completion (the panel may be closed).
+      refetchGeoPdfJobs();
+    },
+    [currentUser, refetchGeoPdfJobs],
+  );
 
   // Capture completion-email deep links on mount (?topoJob / ?export /
   // ?geoPdfJob), stash in sessionStorage so they survive a Cognito sign-in
@@ -1003,7 +1103,9 @@ function App() {
         } else {
           setMapsView("lidar");
           setActivePanel("maps");
-          toast.error("Export download expired. Open it again from Maps, LiDAR topos.");
+          toast.error(
+            "Export download expired. Open it again from Maps, LiDAR topos.",
+          );
         }
       })
       .catch((err) => {
@@ -1079,7 +1181,9 @@ function App() {
     // to the way being edited, or to the list a new route came from. A save
     // calls this too and then opens the saved way, which wins.
     setActivePanel(
-      editingRouteId && selectedWay?.id === editingRouteId ? "way-detail" : "ways",
+      editingRouteId && selectedWay?.id === editingRouteId
+        ? "way-detail"
+        : "ways",
     );
   };
 
@@ -1099,7 +1203,8 @@ function App() {
     ? (routes.find((route) => route.id === editingRouteId) ?? null)
     : null;
   const draftChanged = editingOriginal
-    ? JSON.stringify(routeDraft.points) !== JSON.stringify(editingOriginal.points)
+    ? JSON.stringify(routeDraft.points) !==
+      JSON.stringify(editingOriginal.points)
     : routeDraft.points.length > 0;
 
   const cancelRouteGuard = useUnsavedChangesGuard(
@@ -1140,7 +1245,9 @@ function App() {
   }
 
   const selectedRoute =
-    selectedWay?.kind === "route" ? (routes.find((r) => r.id === selectedWay.id) ?? null) : null;
+    selectedWay?.kind === "route"
+      ? (routes.find((r) => r.id === selectedWay.id) ?? null)
+      : null;
 
   /**
    * Open a way's own page, and centre the map on it.
@@ -1187,7 +1294,11 @@ function App() {
     setDrawColor(route.color ?? pickNextTrackColor(routes.map((r) => r.color)));
     setDrawingRoute(true);
     // Editing centres it too: the points being edited must be on screen.
-    const bounds = wayFromRoute(route, currentUser?.id ?? null, sharedPlaceIds).bounds;
+    const bounds = wayFromRoute(
+      route,
+      currentUser?.id ?? null,
+      sharedPlaceIds,
+    ).bounds;
     if (bounds) setFlyToBounds(bounds);
     setActivePanel("way-draw");
   };
@@ -1225,11 +1336,12 @@ function App() {
   // Decided once, up beside the data hooks the same answer holds back
   // (`consentGate`), so the gate and the fetches can never disagree.
   if (consentBlocked) {
-    return <ConsentGate onAccepted={applyCurrentUser} onSignOut={auth.signOut} />;
+    return (
+      <ConsentGate onAccepted={applyCurrentUser} onSignOut={auth.signOut} />
+    );
   }
 
-  const dimUI =
-    pickingCoords || selectingFilterArea || selectingGeoPdfExtent;
+  const dimUI = pickingCoords || selectingFilterArea || selectingGeoPdfExtent;
 
   // A filter changes what the MAP shows too, so the map says so while the
   // Places page is closed or scrolled away.
@@ -1237,7 +1349,15 @@ function App() {
     filtersActive && !dimUI ? (
       <Notice
         icon={Filter}
-        action={<IconButton icon={X} label="Clear filters" size={14} round onClick={clearFilters} />}
+        action={
+          <IconButton
+            icon={X}
+            label="Clear filters"
+            size={14}
+            round
+            onClick={clearFilters}
+          />
+        }
       >
         Showing {filteredPlaces.length} of {allPlaces.length} places
       </Notice>
@@ -1265,8 +1385,18 @@ function App() {
   // Verbs that START on the map. Each opens an existing flow; there is no web
   // measure tool, so none is offered.
   const mapTools: MapTool[] = [
-    { id: "route", label: "Draw a route", icon: PenTool, onSelect: startDrawingRoute },
-    { id: "place", label: "Add a place", icon: MapPinPlus, onSelect: () => setShowAdd(true) },
+    {
+      id: "route",
+      label: "Draw a route",
+      icon: PenTool,
+      onSelect: startDrawingRoute,
+    },
+    {
+      id: "place",
+      label: "Add a place",
+      icon: MapPinPlus,
+      onSelect: () => setShowAdd(true),
+    },
     {
       id: "make-map",
       label: "Make a map of an area",
@@ -1394,7 +1524,10 @@ function App() {
               <WayDetailPanel
                 way={selectedWay}
                 route={selectedRoute}
-                file={standaloneFiles.find((each) => each.id === selectedWay.id) ?? null}
+                file={
+                  standaloneFiles.find((each) => each.id === selectedWay.id) ??
+                  null
+                }
                 initialVerb={pendingWayVerb}
                 onVerbConsumed={() => setPendingWayVerb(null)}
                 friends={friends}
@@ -1428,7 +1561,9 @@ function App() {
                 anchorCount={routeDraft.draft.anchors.length}
                 canUndo={routeDraft.canUndo}
                 atCap={routeDraft.atCap}
-                editingName={routes.find((r) => r.id === editingRouteId)?.name ?? null}
+                editingName={
+                  routes.find((r) => r.id === editingRouteId)?.name ?? null
+                }
                 color={drawColor}
                 onColorChange={setDrawColor}
                 onUndo={routeDraft.undo}
@@ -1551,108 +1686,111 @@ function App() {
         />
       </div>
       <main id="main-content" className={classes.main}>
-      <h1 className={classes.visuallyHidden}>Logjam place map</h1>
-      <Map
-        filters={filters}
-        places={places}
-        sharedPlaces={sharedPlaces}
-        showPlaces={showPlaces}
-        // One overlay for every line, so nothing has to be partitioned by
-        // ownership on the way to the map any more.
-        showWays={showWays}
-        placeTracks={placeTracks}
-        standaloneTracks={standaloneTracks}
-        routes={routes}
-        routeHover={routeHover}
-        selectRoute={(id) => {
-          const route = routes.find((r) => r.id === id);
-          if (route) openWay(wayFromRoute(route, currentUser?.id ?? null, sharedPlaceIds));
-        }}
-        drawingRoute={drawingRoute}
-        drawColor={drawColor ?? undefined}
-        drawPoints={routeDraft.points}
-        drawAnchorIndices={routeDraft.anchorIndices}
-        draft={routeDraft.draft}
-        editingRouteId={editingRouteId}
-        snapMode={snapMode}
-        onDrawPointAdd={routeDraft.addAnchor}
-        onDrawSnap={routeDraft.applySnap}
-        onDrawPointMove={routeDraft.moveAnchorAt}
-        onDrawPointDelete={routeDraft.deleteAnchorAt}
-        onDrawPointInsert={routeDraft.insertAnchorAt}
-        selectPlace={(id) => {
-          // A pin opens the place, wherever you pressed it from. It used to
-          // scroll to the row instead while the Places list was open, which
-          // made one gesture mean two things depending on a panel the user
-          // may not have been looking at (operator, 2026-09-19).
-          setSelectedPlaceID(id);
-          setActivePanel("place-detail");
-        }}
-        pickingCoords={pickingCoords}
-        onCoordsPicked={handleCoordsPicked}
-        onCancelPickCoords={cancelPickingCoords}
-        selectingFilterArea={selectingFilterArea}
-        onFilterAreaSelected={(bbox) => {
-          setSelectingFilterArea(false);
-          setFilters({ ...filters, area: bbox });
-          // Straight back to where the button was, with the filters open — the
-          // panel was closed to uncover the map, not dismissed.
-          setActivePanel("places");
-          setOpenFiltersRequested(true);
-        }}
-        onMapBoundsChange={(bounds) => {
-          mapBoundsRef.current = bounds;
-          setMapBounds(bounds);
-        }}
-        selectingBbox={selectingTopoBbox}
-        onBboxSelected={(bbox) => {
-          setPendingTopoBbox(bbox);
-          setSelectingTopoBbox(false);
-          setShowTopo(true);
-        }}
-        topoLayers={combinedTopoLayers}
-        vectorStyle={vectorStyle}
-        activeLayerId={activeLayerId}
-        selectingGeoPdfExtent={selectingGeoPdfExtent}
-        geoPdfPaperAspect={geoPdfPaperAspect}
-        geoPdfPaperDimensions={geoPdfPaperDimensions}
-        geoPdfInitialExtent={geoPdfInitialExtent}
-        geoPdfInitialScale={geoPdfInitialScale}
-        onGeoPdfExtentConfirmed={(extent, scale) => {
-          setPendingGeoPdfExtent(extent);
-          setPendingGeoPdfScale(scale);
-          setSelectingGeoPdfExtent(false);
-          setShowGeoPdf(true);
-        }}
-        onGeoPdfExtentCancelled={() => {
-          setSelectingGeoPdfExtent(false);
-          setShowGeoPdf(true);
-        }}
-        onMapViewChange={(view) => setMapCenter(view)}
-        initialView={mapCenter}
-        topoFlyTarget={topoFlyTarget}
-        onTopoFlyConsumed={() => setTopoFlyTarget(null)}
-        flyToPlace={flyToPlace}
-        onFlyToPlaceConsumed={() => setFlyToPlace(null)}
-        panelOpen={activePanel !== null}
-        sheetOpen={sidebarSheetOpen}
-        placeHighlight={placeHighlight}
-        placeTypes={placeTypes}
-        layersButton={
-          <MapButton
-            ref={layersButtonRef}
-            icon={Layers}
-            label="Layers"
-            expanded={layersOpen}
-            onClick={() => setLayersOpen((open) => !open)}
-          />
-        }
-        mapTools={mapTools}
-        notices={notices}
-        flyToBounds={flyToBounds}
-        onFlyToBoundsConsumed={() => setFlyToBounds(null)}
-        onTopoSourceUnavailable={handleTopoSourceUnavailable}
-      />
+        <h1 className={classes.visuallyHidden}>Logjam place map</h1>
+        <Map
+          filters={filters}
+          places={places}
+          sharedPlaces={sharedPlaces}
+          showPlaces={showPlaces}
+          // One overlay for every line, so nothing has to be partitioned by
+          // ownership on the way to the map any more.
+          showWays={showWays}
+          placeTracks={placeTracks}
+          standaloneTracks={standaloneTracks}
+          routes={routes}
+          routeHover={routeHover}
+          selectRoute={(id) => {
+            const route = routes.find((r) => r.id === id);
+            if (route)
+              openWay(
+                wayFromRoute(route, currentUser?.id ?? null, sharedPlaceIds),
+              );
+          }}
+          drawingRoute={drawingRoute}
+          drawColor={drawColor ?? undefined}
+          drawPoints={routeDraft.points}
+          drawAnchorIndices={routeDraft.anchorIndices}
+          draft={routeDraft.draft}
+          editingRouteId={editingRouteId}
+          snapMode={snapMode}
+          onDrawPointAdd={routeDraft.addAnchor}
+          onDrawSnap={routeDraft.applySnap}
+          onDrawPointMove={routeDraft.moveAnchorAt}
+          onDrawPointDelete={routeDraft.deleteAnchorAt}
+          onDrawPointInsert={routeDraft.insertAnchorAt}
+          selectPlace={(id) => {
+            // A pin opens the place, wherever you pressed it from. It used to
+            // scroll to the row instead while the Places list was open, which
+            // made one gesture mean two things depending on a panel the user
+            // may not have been looking at (operator, 2026-09-19).
+            setSelectedPlaceID(id);
+            setActivePanel("place-detail");
+          }}
+          pickingCoords={pickingCoords}
+          onCoordsPicked={handleCoordsPicked}
+          onCancelPickCoords={cancelPickingCoords}
+          selectingFilterArea={selectingFilterArea}
+          onFilterAreaSelected={(bbox) => {
+            setSelectingFilterArea(false);
+            setFilters({ ...filters, area: bbox });
+            // Straight back to where the button was, with the filters open — the
+            // panel was closed to uncover the map, not dismissed.
+            setActivePanel("places");
+            setOpenFiltersRequested(true);
+          }}
+          onMapBoundsChange={(bounds) => {
+            mapBoundsRef.current = bounds;
+            setMapBounds(bounds);
+          }}
+          selectingBbox={selectingTopoBbox}
+          onBboxSelected={(bbox) => {
+            setPendingTopoBbox(bbox);
+            setSelectingTopoBbox(false);
+            setShowTopo(true);
+          }}
+          topoLayers={combinedTopoLayers}
+          vectorStyle={vectorStyle}
+          activeLayerId={activeLayerId}
+          selectingGeoPdfExtent={selectingGeoPdfExtent}
+          geoPdfPaperAspect={geoPdfPaperAspect}
+          geoPdfPaperDimensions={geoPdfPaperDimensions}
+          geoPdfInitialExtent={geoPdfInitialExtent}
+          geoPdfInitialScale={geoPdfInitialScale}
+          onGeoPdfExtentConfirmed={(extent, scale) => {
+            setPendingGeoPdfExtent(extent);
+            setPendingGeoPdfScale(scale);
+            setSelectingGeoPdfExtent(false);
+            setShowGeoPdf(true);
+          }}
+          onGeoPdfExtentCancelled={() => {
+            setSelectingGeoPdfExtent(false);
+            setShowGeoPdf(true);
+          }}
+          onMapViewChange={(view) => setMapCenter(view)}
+          initialView={mapCenter}
+          topoFlyTarget={topoFlyTarget}
+          onTopoFlyConsumed={() => setTopoFlyTarget(null)}
+          flyToPlace={flyToPlace}
+          onFlyToPlaceConsumed={() => setFlyToPlace(null)}
+          panelOpen={activePanel !== null}
+          sheetOpen={sidebarSheetOpen}
+          placeHighlight={placeHighlight}
+          placeTypes={placeTypes}
+          layersButton={
+            <MapButton
+              ref={layersButtonRef}
+              icon={Layers}
+              label="Layers"
+              expanded={layersOpen}
+              onClick={() => setLayersOpen((open) => !open)}
+            />
+          }
+          mapTools={mapTools}
+          notices={notices}
+          flyToBounds={flyToBounds}
+          onFlyToBoundsConsumed={() => setFlyToBounds(null)}
+          onTopoSourceUnavailable={handleTopoSourceUnavailable}
+        />
       </main>
 
       <LayersPopover
@@ -1788,9 +1926,13 @@ function App() {
         onClose={() => setSelectedAreaPlaceIds([])}
         onDeleted={refetch}
         onQuotaChanged={refetchCurrentUser}
-        onRemovePlace={(id) => setSelectedAreaPlaceIds((ids) => ids.filter((x) => x !== id))}
+        onRemovePlace={(id) =>
+          setSelectedAreaPlaceIds((ids) => ids.filter((x) => x !== id))
+        }
         onAddPlace={(id) =>
-          setSelectedAreaPlaceIds((ids) => (ids.includes(id) ? ids : [...ids, id]))
+          setSelectedAreaPlaceIds((ids) =>
+            ids.includes(id) ? ids : [...ids, id],
+          )
         }
       />
     </div>

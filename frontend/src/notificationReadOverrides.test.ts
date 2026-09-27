@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { TNotification } from "@logjam/shared";
-import { settleReadOverrides, withReadOverrides } from "./notificationReadOverrides";
+import {
+  settleReadOverrides,
+  withReadOverrides,
+} from "./notificationReadOverrides";
 
 const row = (id: string, read: boolean): TNotification => ({
   id,
@@ -29,6 +32,8 @@ describe("settleReadOverrides", () => {
   });
 
   it("drops an override whose row the fetch no longer returns", () => {
-    expect(settleReadOverrides(new Map([["gone", true]]), [row("a", false)]).size).toBe(0);
+    expect(
+      settleReadOverrides(new Map([["gone", true]]), [row("a", false)]).size,
+    ).toBe(0);
   });
 });

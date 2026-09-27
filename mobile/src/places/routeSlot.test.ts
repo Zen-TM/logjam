@@ -40,7 +40,9 @@ const GPX = "application/gpx+xml";
 
 describe("routeSlotOccupant", () => {
   it("is null on an empty slot", () => {
-    expect(routeSlotOccupant("c1", [route("r1", "Elsewhere", "c2")], [])).toBeNull();
+    expect(
+      routeSlotOccupant("c1", [route("r1", "Elsewhere", "c2")], []),
+    ).toBeNull();
   });
 
   it("finds the drawn route linked to this place", () => {
@@ -51,15 +53,22 @@ describe("routeSlotOccupant", () => {
 
   it("finds the attached track file", () => {
     const file = media("m1", "c1", GPX, "claustral.gpx");
-    expect(routeSlotOccupant("c1", [], [file])).toEqual({ kind: "file", media: file });
+    expect(routeSlotOccupant("c1", [], [file])).toEqual({
+      kind: "file",
+      media: file,
+    });
   });
 
   it("ignores photos and other places' attachments", () => {
     expect(
-      routeSlotOccupant("c1", [], [
-        media("m1", "c1", "image/jpeg", "photo.jpg"),
-        media("m2", "c2", GPX, "other.gpx"),
-      ]),
+      routeSlotOccupant(
+        "c1",
+        [],
+        [
+          media("m1", "c1", "image/jpeg", "photo.jpg"),
+          media("m2", "c2", GPX, "other.gpx"),
+        ],
+      ),
     ).toBeNull();
   });
 
@@ -143,7 +152,10 @@ describe("waySourceWrites", () => {
 });
 
 describe("removeOccupantFirst", () => {
-  const file = { kind: "file", media: media("m1", "c1", GPX, "old.gpx") } as const;
+  const file = {
+    kind: "file",
+    media: media("m1", "c1", GPX, "old.gpx"),
+  } as const;
   const drawn = { kind: "route", id: "r1", name: "Old line" } as const;
 
   it("removes a file first when another file is going in — the API 409s otherwise", () => {

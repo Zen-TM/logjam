@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
-import { API_URL, as, BOB_SUB, CAROL_SUB, CANYON_TYPE_ID} from "./_actors";
+import { API_URL, as, BOB_SUB, CAROL_SUB, CANYON_TYPE_ID } from "./_actors";
 
 const CAROL = as(CAROL_SUB);
 
@@ -20,10 +20,12 @@ const TAG = `CH003-global-${Date.now()}`;
 const NONEXISTENT_ID = "99999999-9999-9999-9999-999999999999";
 
 async function createPlace(name: string, auth = AUTH): Promise<string> {
-  const res = await request(API_URL)
-    .post("/places")
-    .set(auth)
-    .send({ placeTypeId: CANYON_TYPE_ID, name, latitude: -33.7, longitude: 150.3 });
+  const res = await request(API_URL).post("/places").set(auth).send({
+    placeTypeId: CANYON_TYPE_ID,
+    name,
+    latitude: -33.7,
+    longitude: 150.3,
+  });
   expect(res.status).toBe(201);
   return res.body.id as string;
 }
@@ -95,7 +97,10 @@ describe("GET /trips (global trip list, fake auth = alice)", () => {
 
   it("search filter also matches by displayName (not just linked place name)", async () => {
     const uniqueName = `${TAG}-search-displayname`;
-    const trip = await createTrip({ date: "2024-03-17", displayName: uniqueName });
+    const trip = await createTrip({
+      date: "2024-03-17",
+      displayName: uniqueName,
+    });
     try {
       const res = await request(API_URL)
         .get("/trips")
@@ -119,7 +124,11 @@ describe("GET /trips (global trip list, fake auth = alice)", () => {
     try {
       const res = await request(API_URL)
         .get("/trips")
-        .query({ search: uniqueName, dateFrom: "2024-02-01", dateTo: "2024-02-28" })
+        .query({
+          search: uniqueName,
+          dateFrom: "2024-02-01",
+          dateTo: "2024-02-28",
+        })
         .set(AUTH);
       expect(res.status).toBe(200);
       expect(res.body.length).toBe(1);
@@ -172,7 +181,10 @@ describe("POST /trips (acting as carol — spreads the per-user rate-limit budge
     const a = await createPlace(`${TAG}-order-A`, CAROL);
     const b = await createPlace(`${TAG}-order-B`, CAROL);
     const c = await createPlace(`${TAG}-order-C`, CAROL);
-    const trip = await createTrip({ placeIds: [c, a, b], date: "2026-06-06" }, CAROL);
+    const trip = await createTrip(
+      { placeIds: [c, a, b], date: "2026-06-06" },
+      CAROL,
+    );
     try {
       expect(trip.places.map((x) => x.id)).toEqual([c, a, b]);
     } finally {
@@ -185,12 +197,15 @@ describe("POST /trips (acting as carol — spreads the per-user rate-limit budge
 
   it("displayName and placeIds coexist on one trip", async () => {
     const placeId = await createPlace(`${TAG}-coexist`, CAROL);
-    const trip = await createTrip({
-      placeIds: [placeId],
-      date: "2026-06-07",
-      displayName: "custom title",
-      types: ["canyoning"],
-    }, CAROL);
+    const trip = await createTrip(
+      {
+        placeIds: [placeId],
+        date: "2026-06-07",
+        displayName: "custom title",
+        types: ["canyoning"],
+      },
+      CAROL,
+    );
     try {
       expect(trip.displayName).toBe("custom title");
       expect(trip.types).toEqual(["canyoning"]);
@@ -230,7 +245,10 @@ describe("POST /trips (acting as carol — spreads the per-user rate-limit budge
     });
 
     it("more than 20 place ids are rejected with 400 (cap check runs before ownership lookup)", async () => {
-      const placeIds = Array.from({ length: 21 }, (_, i) => `not-a-real-id-${i}`);
+      const placeIds = Array.from(
+        { length: 21 },
+        (_, i) => `not-a-real-id-${i}`,
+      );
       const res = await request(API_URL)
         .post("/trips")
         .set(CAROL)
@@ -241,7 +259,10 @@ describe("POST /trips (acting as carol — spreads the per-user rate-limit budge
 
   describe("types validation", () => {
     it("sets types on create", async () => {
-      const trip = await createTrip({ date: "2026-06-11", types: ["bushwalking"] }, CAROL);
+      const trip = await createTrip(
+        { date: "2026-06-11", types: ["bushwalking"] },
+        CAROL,
+      );
       try {
         expect(trip.types).toEqual(["bushwalking"]);
       } finally {
@@ -259,7 +280,10 @@ describe("POST /trips (acting as carol — spreads the per-user rate-limit budge
 
     it("multi-type create round-trips ordered", async () => {
       const trip = await createTrip(
-        { date: "2026-06-21", types: ["canyoning", "bushwalking", "packrafting"] },
+        {
+          date: "2026-06-21",
+          types: ["canyoning", "bushwalking", "packrafting"],
+        },
         CAROL,
       );
       try {
@@ -292,14 +316,20 @@ describe("PATCH /trips/:id (acting as carol — spreads the per-user rate-limit 
   it("reordering placeIds changes the order of places[]", async () => {
     const a = await createPlace(`${TAG}-reorder-A`, CAROL);
     const b = await createPlace(`${TAG}-reorder-B`, CAROL);
-    const trip = await createTrip({ placeIds: [a, b], date: "2026-06-13" }, CAROL);
+    const trip = await createTrip(
+      { placeIds: [a, b], date: "2026-06-13" },
+      CAROL,
+    );
     try {
       const patchRes = await request(API_URL)
         .patch(`/trips/${trip.id}`)
         .set(CAROL)
         .send({ placeIds: [b, a] });
       expect(patchRes.status).toBe(200);
-      expect(patchRes.body.places.map((x: { id: string }) => x.id)).toEqual([b, a]);
+      expect(patchRes.body.places.map((x: { id: string }) => x.id)).toEqual([
+        b,
+        a,
+      ]);
     } finally {
       await deleteTrip(trip.id, CAROL);
       await deletePlace(a, CAROL);
@@ -317,7 +347,9 @@ describe("PATCH /trips/:id (acting as carol — spreads the per-user rate-limit 
         .set(CAROL)
         .send({ placeIds: [b] });
       expect(patchRes.status).toBe(200);
-      expect(patchRes.body.places).toEqual([{ id: b, name: `${TAG}-replace-B` }]);
+      expect(patchRes.body.places).toEqual([
+        { id: b, name: `${TAG}-replace-B` },
+      ]);
     } finally {
       await deleteTrip(trip.id, CAROL);
       await deletePlace(a, CAROL);
@@ -327,7 +359,10 @@ describe("PATCH /trips/:id (acting as carol — spreads the per-user rate-limit 
 
   it("placeIds: [] clears the linked places", async () => {
     const placeId = await createPlace(`${TAG}-clear-places`, CAROL);
-    const trip = await createTrip({ placeIds: [placeId], date: "2026-06-15" }, CAROL);
+    const trip = await createTrip(
+      { placeIds: [placeId], date: "2026-06-15" },
+      CAROL,
+    );
     try {
       const patchRes = await request(API_URL)
         .patch(`/trips/${trip.id}`)
@@ -342,7 +377,10 @@ describe("PATCH /trips/:id (acting as carol — spreads the per-user rate-limit 
   });
 
   it("explicit displayName: null clears a previously-set displayName", async () => {
-    const trip = await createTrip({ date: "2026-06-16", displayName: "will be cleared" }, CAROL);
+    const trip = await createTrip(
+      { date: "2026-06-16", displayName: "will be cleared" },
+      CAROL,
+    );
     try {
       expect(trip.displayName).toBe("will be cleared");
       const patchRes = await request(API_URL)
@@ -357,7 +395,10 @@ describe("PATCH /trips/:id (acting as carol — spreads the per-user rate-limit 
   });
 
   it("explicit types: null clears a previously-set types list", async () => {
-    const trip = await createTrip({ date: "2026-06-17", types: ["canyoning"] }, CAROL);
+    const trip = await createTrip(
+      { date: "2026-06-17", types: ["canyoning"] },
+      CAROL,
+    );
     try {
       const patchRes = await request(API_URL)
         .patch(`/trips/${trip.id}`)
@@ -373,7 +414,10 @@ describe("PATCH /trips/:id (acting as carol — spreads the per-user rate-limit 
   it("a foreign place id on PATCH is rejected with 400 and the existing link is untouched", async () => {
     const ownPlace = await createPlace(`${TAG}-patch-own`, CAROL);
     const bobPlaceId = await createPlace(`${TAG}-patch-bob`, as(BOB_SUB));
-    const trip = await createTrip({ placeIds: [ownPlace], date: "2026-06-18" }, CAROL);
+    const trip = await createTrip(
+      { placeIds: [ownPlace], date: "2026-06-18" },
+      CAROL,
+    );
     try {
       const patchRes = await request(API_URL)
         .patch(`/trips/${trip.id}`)
@@ -382,7 +426,9 @@ describe("PATCH /trips/:id (acting as carol — spreads the per-user rate-limit 
       expect(patchRes.status).toBe(400);
 
       const getRes = await request(API_URL).get(`/trips/${trip.id}`).set(CAROL);
-      expect(getRes.body.places).toEqual([{ id: ownPlace, name: `${TAG}-patch-own` }]);
+      expect(getRes.body.places).toEqual([
+        { id: ownPlace, name: `${TAG}-patch-own` },
+      ]);
     } finally {
       await deleteTrip(trip.id, CAROL);
       await deletePlace(ownPlace, CAROL);
@@ -413,9 +459,14 @@ describe("GET /trips/:id (acting as carol — spreads the per-user rate-limit bu
   });
 
   it("a non-owner (bob) gets 404, not the trip owner's data (SEC-001: no ID oracle)", async () => {
-    const trip = await createTrip({ date: "2026-06-20", notes: "owner-private" }, CAROL);
+    const trip = await createTrip(
+      { date: "2026-06-20", notes: "owner-private" },
+      CAROL,
+    );
     try {
-      const res = await request(API_URL).get(`/trips/${trip.id}`).set(as(BOB_SUB));
+      const res = await request(API_URL)
+        .get(`/trips/${trip.id}`)
+        .set(as(BOB_SUB));
       expect(res.status).toBe(404);
       expect(JSON.stringify(res.body)).not.toContain("owner-private");
     } finally {
@@ -424,7 +475,9 @@ describe("GET /trips/:id (acting as carol — spreads the per-user rate-limit bu
   });
 
   it("404s for a non-existent trip id", async () => {
-    const res = await request(API_URL).get(`/trips/${NONEXISTENT_ID}`).set(CAROL);
+    const res = await request(API_URL)
+      .get(`/trips/${NONEXISTENT_ID}`)
+      .set(CAROL);
     expect(res.status).toBe(404);
   });
 });
@@ -455,4 +508,3 @@ describe("GET /trips — query param validation", () => {
     expect(res.status).toBe(200);
   });
 });
-

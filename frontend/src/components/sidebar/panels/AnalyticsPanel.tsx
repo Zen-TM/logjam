@@ -44,11 +44,14 @@ function namedBuckets(spark: StatsSpark): SparkBucket[] {
     name:
       spark.axis === "year"
         ? `${spark.firstYear + index}`
-        : new Date(Date.UTC(spark.year, index, 1)).toLocaleDateString(undefined, {
-            month: "long",
-            year: "numeric",
-            timeZone: "UTC",
-          }),
+        : new Date(Date.UTC(spark.year, index, 1)).toLocaleDateString(
+            undefined,
+            {
+              month: "long",
+              year: "numeric",
+              timeZone: "UTC",
+            },
+          ),
   }));
 }
 
@@ -88,11 +91,18 @@ function AnalyticsPanel({
   const [activity, setActivity] = useState<string | null>(null);
   // Remembered like a preference, as on the phone: the window numbers are read
   // in should not reset every visit.
-  const [rangeLabel, setRangeLabel] = useStoredState("logjam.logbookStatsRange", "All time");
+  const [rangeLabel, setRangeLabel] = useStoredState(
+    "logjam.logbookStatsRange",
+    "All time",
+  );
   const rootRef = useRef<HTMLDivElement>(null);
 
-  const ranges = useMemo(() => logbookRanges(tripLogs.map((trip) => tripYear(trip.date))), [tripLogs]);
-  const range: LogbookRange = ranges.find((entry) => entry.label === rangeLabel) ?? ranges[0];
+  const ranges = useMemo(
+    () => logbookRanges(tripLogs.map((trip) => tripYear(trip.date))),
+    [tripLogs],
+  );
+  const range: LogbookRange =
+    ranges.find((entry) => entry.label === rangeLabel) ?? ranges[0];
 
   const stats = useMemo(
     () =>
@@ -112,26 +122,44 @@ function AnalyticsPanel({
         })),
         tripDefs: customFieldDefs,
         placeDefs: placeCustomFieldDefs,
-        placeTypes: placeTypes.map((type) => ({ id: type.id, name: type.name, color: type.color })),
+        placeTypes: placeTypes.map((type) => ({
+          id: type.id,
+          name: type.name,
+          color: type.color,
+        })),
         from: range.from,
         to: range.to,
         activity,
       }),
-    [tripLogs, places, customFieldDefs, placeCustomFieldDefs, placeTypes, range, activity],
+    [
+      tripLogs,
+      places,
+      customFieldDefs,
+      placeCustomFieldDefs,
+      placeTypes,
+      range,
+      activity,
+    ],
   );
 
   // Focus follows the step: into the activity, onto the back arrow; back out,
   // onto the row that was opened. Both are gone from the page otherwise.
   const openActivity = (type: string, index: number) => {
     setActivity(type);
-    requestAnimationFrame(() => rootRef.current?.querySelector<HTMLElement>("header button")?.focus());
+    requestAnimationFrame(() =>
+      rootRef.current?.querySelector<HTMLElement>("header button")?.focus(),
+    );
     lastOpened.current = index;
   };
   const lastOpened = useRef(0);
   const closeActivity = () => {
     setActivity(null);
     requestAnimationFrame(() =>
-      rootRef.current?.querySelector<HTMLElement>(`[data-activity-index="${lastOpened.current}"] button`)?.focus(),
+      rootRef.current
+        ?.querySelector<HTMLElement>(
+          `[data-activity-index="${lastOpened.current}"] button`,
+        )
+        ?.focus(),
     );
   };
 
@@ -161,11 +189,18 @@ function AnalyticsPanel({
     <div className={classes.list}>
       {tripLogsTotal != null && tripLogsTotal > tripLogs.length && (
         <p className={classes.caption}>
-          Counted over your {tripLogs.length} most recent trips of {tripLogsTotal}. Older ones aren&rsquo;t loaded.
+          Counted over your {tripLogs.length} most recent trips of{" "}
+          {tripLogsTotal}. Older ones aren&rsquo;t loaded.
         </p>
       )}
       <SparkBlock stats={stats} range={range} activity={activity} />
-      <StatGrid stats={statsHeadline(stats, activity, range.from != null || range.to != null)} />
+      <StatGrid
+        stats={statsHeadline(
+          stats,
+          activity,
+          range.from != null || range.to != null,
+        )}
+      />
       {activity ? (
         <AttributeSections stats={stats} />
       ) : (
@@ -180,13 +215,20 @@ function AnalyticsPanel({
 
   return (
     <div ref={rootRef} className={classes.root}>
-      <Hero title={title} onBack={activity ? closeActivity : undefined} backLabel="Back to every activity" />
+      <Hero
+        title={title}
+        onBack={activity ? closeActivity : undefined}
+        backLabel="Back to every activity"
+      />
       <div className={classes.rails}>
         {views}
         {tripLogs.length > 0 && (
           <ChipRail
             label="Period"
-            options={ranges.map((entry) => ({ value: entry.label, label: entry.label }))}
+            options={ranges.map((entry) => ({
+              value: entry.label,
+              label: entry.label,
+            }))}
             value={range.label}
             onChange={setRangeLabel}
           />
@@ -197,13 +239,25 @@ function AnalyticsPanel({
   );
 }
 
-function SparkBlock({ stats, range, activity }: { stats: LogbookStats; range: LogbookRange; activity: string | null }) {
+function SparkBlock({
+  stats,
+  range,
+  activity,
+}: {
+  stats: LogbookStats;
+  range: LogbookRange;
+  activity: string | null;
+}) {
   const spark = statsSpark(stats, range);
   const { busiest, lines } = statsCadence(stats, activity);
   return (
     <div className={classes.block}>
       <ActivitySpark
-        label={spark.axis === "year" ? "Trips per year" : `Trips per month in ${spark.year}`}
+        label={
+          spark.axis === "year"
+            ? "Trips per year"
+            : `Trips per month in ${spark.year}`
+        }
         buckets={namedBuckets(spark)}
         caption={busiest}
       />
@@ -216,13 +270,21 @@ function SparkBlock({ stats, range, activity }: { stats: LogbookStats; range: Lo
   );
 }
 
-function Activities({ stats, onOpen }: { stats: LogbookStats; onOpen: (type: string, index: number) => void }) {
+function Activities({
+  stats,
+  onOpen,
+}: {
+  stats: LogbookStats;
+  onOpen: (type: string, index: number) => void;
+}) {
   if (stats.activityTallies.length === 0) return null;
   return (
     <section className={classes.section}>
       <SectionHeader title="By activity" />
       {stats.activityTallies.map((tally, index) => {
-        const look = tripTypeLook(tally.type === UNTAGGED_ACTIVITY ? null : tally.type);
+        const look = tripTypeLook(
+          tally.type === UNTAGGED_ACTIVITY ? null : tally.type,
+        );
         return (
           <Row
             key={tally.type}
@@ -230,32 +292,53 @@ function Activities({ stats, onOpen }: { stats: LogbookStats; onOpen: (type: str
             title={logbookActivityLabel(tally.type)}
             subtitle={activityTallySubtitle(tally)}
             leading={<IconTile icon={look.icon} hue={look.hue} />}
-            trailing={<ChevronRight size={18} aria-hidden className={classes.chevron} />}
+            trailing={
+              <ChevronRight size={18} aria-hidden className={classes.chevron} />
+            }
             onOpen={() => onOpen(tally.type, index)}
           />
         );
       })}
       {/* Load-bearing: a trip tagged twice counts under both tags, so without
           this the rows out-sum the trip tile above and read as a bug. */}
-      {activityTalliesOverlap(stats) && <p className={classes.caption}>a trip with two tags counts under both</p>}
+      {activityTalliesOverlap(stats) && (
+        <p className={classes.caption}>
+          a trip with two tags counts under both
+        </p>
+      )}
     </section>
   );
 }
 
 /** How much of each kind of place the trips in range reached. The row says
  *  "29 of 31"; the bar under it is that fraction for the eye. */
-function PlacesVisited({ stats, placeTypes }: { stats: LogbookStats; placeTypes: TPlaceType[] }) {
+function PlacesVisited({
+  stats,
+  placeTypes,
+}: {
+  stats: LogbookStats;
+  placeTypes: TPlaceType[];
+}) {
   if (stats.completion.length === 0) return null;
   return (
     <section className={classes.section}>
       <SectionHeader title="Places visited" />
       {stats.completion.map((entry) => {
-        const type = placeTypes.find((candidate) => candidate.id === entry.typeId);
+        const type = placeTypes.find(
+          (candidate) => candidate.id === entry.typeId,
+        );
         return (
           <Row
             key={entry.typeId}
             title={entry.name}
-            leading={type ? <IconTile icon={placeTypeLucideIcon(type.iconKey)} hue={entry.color} /> : undefined}
+            leading={
+              type ? (
+                <IconTile
+                  icon={placeTypeLucideIcon(type.iconKey)}
+                  hue={entry.color}
+                />
+              ) : undefined
+            }
             trailing={
               <span className={classes.metric}>
                 <b>{entry.logged}</b> of {entry.total}
@@ -265,7 +348,9 @@ function PlacesVisited({ stats, placeTypes }: { stats: LogbookStats; placeTypes:
               <div className={classes.bar}>
                 <ProgressBar
                   label={`${entry.name}: ${entry.logged} of ${entry.total} visited`}
-                  value={entry.total === 0 ? 0 : (entry.logged / entry.total) * 100}
+                  value={
+                    entry.total === 0 ? 0 : (entry.logged / entry.total) * 100
+                  }
                 />
               </div>
             }
@@ -274,7 +359,8 @@ function PlacesVisited({ stats, placeTypes }: { stats: LogbookStats; placeTypes:
       })}
       {stats.mostReturned && (
         <p className={classes.caption}>
-          most returned to · {stats.mostReturned.name} ×{stats.mostReturned.trips}
+          most returned to · {stats.mostReturned.name} ×
+          {stats.mostReturned.trips}
         </p>
       )}
     </section>
@@ -287,7 +373,13 @@ function PlacesVisited({ stats, placeTypes }: { stats: LogbookStats; placeTypes:
  * to: a canyoning trip that also stopped at a campsite carries the campsite's
  * fields too, and the type heading is what labels that.
  */
-function AttributeSections({ stats, tripOnly = false }: { stats: LogbookStats; tripOnly?: boolean }) {
+function AttributeSections({
+  stats,
+  tripOnly = false,
+}: {
+  stats: LogbookStats;
+  tripOnly?: boolean;
+}) {
   const groups = tripOnly ? [] : stats.placeFieldStats;
   const underActivities = stats.tripFieldsUnderActivities;
   return (

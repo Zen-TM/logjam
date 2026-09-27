@@ -5,7 +5,14 @@
 // (App's frame), and everything else only matters once the worker renders it —
 // so the whole dialog is one form with a Make it at the end, unlike the topo
 // settings beside it (DESIGN.md §6).
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { SquareDashed } from "lucide-react";
 import type { TBbox } from "../map/Map";
 import { BASE_LAYERS } from "../map/Map";
@@ -120,7 +127,10 @@ const COORD_OPTIONS: ChipOption<CoordMode>[] = [
 // Raster only — the renderer fetches XYZ tiles, which a vector PMTiles archive
 // cannot provide.
 const BASE_LAYER_OPTIONS: ChipOption<string>[] = BASE_LAYERS.filter(
-  (layer) => layer.kind === "raster" && !layer.id.startsWith("osm") && layer.id !== "six-base",
+  (layer) =>
+    layer.kind === "raster" &&
+    !layer.id.startsWith("osm") &&
+    layer.id !== "six-base",
 ).map((layer) => ({ value: layer.id, label: layer.name }));
 
 const FALLBACK_BASE_LAYER = "six-topo";
@@ -137,10 +147,12 @@ function seedBaseLayer(activeLayerId: string): string {
     : FALLBACK_BASE_LAYER;
 }
 
-const LOCK_TOOLTIP = "Whichever one you lock stays as it is while you change the other.";
+const LOCK_TOOLTIP =
+  "Whichever one you lock stays as it is while you change the other.";
 const COORD_TOOLTIP =
   "Lat/Lon is what a GPS shows you. E/N is the MGA2020 grid, the one printed on NSW topo maps.";
-const PIVOT_TOOLTIP = "The part of the box that stays put while the rest of it moves.";
+const PIVOT_TOOLTIP =
+  "The part of the box that stays put while the rest of it moves.";
 const SCALE_TOOLTIP =
   "1:25 000 means 1 cm on the paper is 250 m on the ground. Most topo maps are 1:25 000 or 1:50 000.";
 
@@ -212,7 +224,9 @@ function GeoPdfDialog({
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
 
   // Layers
-  const [selectedBaseLayer, setSelectedBaseLayer] = useState(() => seedBaseLayer(activeLayerId));
+  const [selectedBaseLayer, setSelectedBaseLayer] = useState(() =>
+    seedBaseLayer(activeLayerId),
+  );
   const [selectedOverlays, setSelectedOverlays] = useState<Set<string>>(() => {
     return new Set(TOPO_LAYERS.map((l) => l.name));
   });
@@ -304,7 +318,11 @@ function GeoPdfDialog({
     // localStorage so the user's explicit choice carries across sessions.
     setError(null);
     setEditTemplateName("");
-    setRawN(""); setRawS(""); setRawE(""); setRawW(""); setRawScale("");
+    setRawN("");
+    setRawS("");
+    setRawE("");
+    setRawW("");
+    setRawScale("");
     setDirty(false);
   }, [open]);
 
@@ -354,18 +372,34 @@ function GeoPdfDialog({
             const c = t.config;
             setSelectedTemplateId(t.id);
             setExtentState((prev: ExtentState) => {
-              let updated = { ...prev, paperSize: c.paperSize, orientation: c.orientation, ...(c.customRatio ? { customRatio: c.customRatio } : {}) };
+              let updated = {
+                ...prev,
+                paperSize: c.paperSize,
+                orientation: c.orientation,
+                ...(c.customRatio ? { customRatio: c.customRatio } : {}),
+              };
               updated = applyPaperChange(updated, c.paperSize, c.customRatio);
-              if (c.scale !== undefined) updated = applyScaleChange(updated, c.scale);
+              if (c.scale !== undefined)
+                updated = applyScaleChange(updated, c.scale);
               return updated;
             });
             setSelectedBaseLayer(c.baseLayer);
             setSelectedOverlays(new Set(c.overlays));
-            if (c.elements.title !== undefined) { setTitleEnabled(true); setTitleText(c.elements.title); } else { setTitleEnabled(false); }
+            if (c.elements.title !== undefined) {
+              setTitleEnabled(true);
+              setTitleText(c.elements.title);
+            } else {
+              setTitleEnabled(false);
+            }
             setCompassEnabled(c.elements.compass);
             setScaleTextEnabled(c.elements.scaleText);
             setScaleBarEnabled(c.elements.scaleBar);
-            if (c.elements.gridLines !== undefined) { setGridLinesEnabled(true); setGridLinesMode(c.elements.gridLines); } else { setGridLinesEnabled(false); }
+            if (c.elements.gridLines !== undefined) {
+              setGridLinesEnabled(true);
+              setGridLinesMode(c.elements.gridLines);
+            } else {
+              setGridLinesEnabled(false);
+            }
           }
         }
       })
@@ -428,7 +462,10 @@ function GeoPdfDialog({
     if (withFp.length === 0) return true;
     return withFp.some((j) => {
       const fp = j.footprint!;
-      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      let minX = Infinity,
+        minY = Infinity,
+        maxX = -Infinity,
+        maxY = -Infinity;
       const visit = (pt: number[]) => {
         if (pt[0] < minX) minX = pt[0];
         if (pt[0] > maxX) maxX = pt[0];
@@ -622,7 +659,9 @@ function GeoPdfDialog({
       toast.success("Template saved.");
     } catch (err) {
       console.error(err);
-      setError(messageFromError(err, "Couldn't save template. Please try again."));
+      setError(
+        messageFromError(err, "Couldn't save template. Please try again."),
+      );
     }
   }, [templateName, buildTemplateConfig, toast]);
 
@@ -646,9 +685,17 @@ function GeoPdfDialog({
       onTemplateSaved?.();
     } catch (err) {
       console.error(err);
-      setError(messageFromError(err, "Couldn't save template. Please try again."));
+      setError(
+        messageFromError(err, "Couldn't save template. Please try again."),
+      );
     }
-  }, [editTemplateName, editingTemplate, buildTemplateConfig, onTemplateSaved, toast]);
+  }, [
+    editTemplateName,
+    editingTemplate,
+    buildTemplateConfig,
+    onTemplateSaved,
+    toast,
+  ]);
 
   const handleGenerate = useCallback(async () => {
     setGenerating(true);
@@ -691,16 +738,25 @@ function GeoPdfDialog({
     }
 
     try {
-      const job = await apiFetch<GeoPdfJobView>("/geo-pdf", { method: "POST", body: config });
-      toast.success("GeoPDF queued — download will appear in the GeoPDFs panel.");
+      const job = await apiFetch<GeoPdfJobView>("/geo-pdf", {
+        method: "POST",
+        body: config,
+      });
+      toast.success(
+        "GeoPDF queued — download will appear in the GeoPDFs panel.",
+      );
       onJobQueued?.(job);
       onClose();
     } catch (e) {
       console.error(e);
       if (e instanceof ApiError && (e.status === 429 || e.status === 503)) {
-        setError("You already have GeoPDFs generating. Please wait for one to finish before starting another.");
+        setError(
+          "You already have GeoPDFs generating. Please wait for one to finish before starting another.",
+        );
       } else {
-        setError(messageFromError(e, "Couldn't queue GeoPDF. Please try again."));
+        setError(
+          messageFromError(e, "Couldn't queue GeoPDF. Please try again."),
+        );
       }
     } finally {
       setGenerating(false);
@@ -842,7 +898,8 @@ function GeoPdfDialog({
                     className={classes.templateField}
                     value={selectedTemplateId ?? ""}
                     onChange={(event) => {
-                      if (event.target.value) handleTemplateSelect(event.target.value);
+                      if (event.target.value)
+                        handleTemplateSelect(event.target.value);
                       else setSelectedTemplateId(null);
                     }}
                   >
@@ -853,7 +910,11 @@ function GeoPdfDialog({
                       </option>
                     ))}
                   </Select>
-                  <Button compact variant="outline" onClick={() => setShowSaveTemplate(true)}>
+                  <Button
+                    compact
+                    variant="outline"
+                    onClick={() => setShowSaveTemplate(true)}
+                  >
                     Save as a template
                   </Button>
                 </>
@@ -912,20 +973,28 @@ function GeoPdfDialog({
                 }}
               />
             </SettingsRow>
-            <SettingsRow label="Orientation" disabled={extentState.paperSize === "custom"}>
+            <SettingsRow
+              label="Orientation"
+              disabled={extentState.paperSize === "custom"}
+            >
               <ChipRail
                 label="Orientation"
                 className={classes.railCell}
                 options={ORIENTATION_OPTIONS}
                 value={extentState.orientation}
                 onChange={(orientation) => {
-                  setExtentState(applyOrientationChange(extentState, orientation));
+                  setExtentState(
+                    applyOrientationChange(extentState, orientation),
+                  );
                   markDirty();
                 }}
               />
             </SettingsRow>
             {extentState.paperSize === "custom" && (
-              <SettingsRow label="Ratio" tooltip="Width against height, in whatever units. A4 is 210 by 297.">
+              <SettingsRow
+                label="Ratio"
+                tooltip="Width against height, in whatever units. A4 is 210 by 297."
+              >
                 <div className={classes.ratioRow}>
                   <TextField
                     label="Ratio width"
@@ -935,9 +1004,13 @@ function GeoPdfDialog({
                     inputMode="decimal"
                     value={String(extentState.customRatio?.w ?? 210)}
                     onChange={(event) => {
-                      const w = parseFloat(sanitizeDecimalInput(event.target.value)) || 1;
+                      const w =
+                        parseFloat(sanitizeDecimalInput(event.target.value)) ||
+                        1;
                       const h = extentState.customRatio?.h ?? 297;
-                      setExtentState(applyPaperChange(extentState, "custom", { w, h }));
+                      setExtentState(
+                        applyPaperChange(extentState, "custom", { w, h }),
+                      );
                       markDirty();
                     }}
                   />
@@ -950,9 +1023,13 @@ function GeoPdfDialog({
                     inputMode="decimal"
                     value={String(extentState.customRatio?.h ?? 297)}
                     onChange={(event) => {
-                      const h = parseFloat(sanitizeDecimalInput(event.target.value)) || 1;
+                      const h =
+                        parseFloat(sanitizeDecimalInput(event.target.value)) ||
+                        1;
                       const w = extentState.customRatio?.w ?? 210;
-                      setExtentState(applyPaperChange(extentState, "custom", { w, h }));
+                      setExtentState(
+                        applyPaperChange(extentState, "custom", { w, h }),
+                      );
                       markDirty();
                     }}
                   />
@@ -969,7 +1046,9 @@ function GeoPdfDialog({
                 className={classes.railCell}
                 options={LOCK_OPTIONS}
                 value={extentState.lockMode}
-                onChange={(lockMode) => setExtentState({ ...extentState, lockMode })}
+                onChange={(lockMode) =>
+                  setExtentState({ ...extentState, lockMode })
+                }
               />
             </SettingsRow>
             <SettingsRow label="Coordinates" tooltip={COORD_TOOLTIP}>
@@ -988,16 +1067,25 @@ function GeoPdfDialog({
                 point they move around in the middle of them. In template mode
                 there is no area yet — a template is the HOW, not the where —
                 so the box is inert. */}
-            <div className={classes.extentGrid} data-disabled={templateMode || undefined}>
+            <div
+              className={classes.extentGrid}
+              data-disabled={templateMode || undefined}
+            >
               <div className={classes.extentNorth}>
                 <ExtentField
                   which="n"
-                  label={extentState.coordMode === "latlon" ? "North" : "N (northing)"}
+                  label={
+                    extentState.coordMode === "latlon"
+                      ? "North"
+                      : "N (northing)"
+                  }
                   value={rawN}
                   error={templateMode ? null : extentInputErrors.n}
                   focusedField={focusedField}
                   onDraft={setRawN}
-                  onCommit={(deg) => setExtentState((s) => applyNorthChange(s, deg))}
+                  onCommit={(deg) =>
+                    setExtentState((s) => applyNorthChange(s, deg))
+                  }
                   parse={(raw) => parseExtentField("n", raw, extentState)}
                   valid={extentInputErrors.n === null}
                   markDirty={markDirty}
@@ -1006,12 +1094,16 @@ function GeoPdfDialog({
               <div className={classes.extentWest}>
                 <ExtentField
                   which="w"
-                  label={extentState.coordMode === "latlon" ? "West" : "W (easting)"}
+                  label={
+                    extentState.coordMode === "latlon" ? "West" : "W (easting)"
+                  }
                   value={rawW}
                   error={templateMode ? null : extentInputErrors.w}
                   focusedField={focusedField}
                   onDraft={setRawW}
-                  onCommit={(deg) => setExtentState((s) => applyWestChange(s, deg))}
+                  onCommit={(deg) =>
+                    setExtentState((s) => applyWestChange(s, deg))
+                  }
                   parse={(raw) => parseExtentField("w", raw, extentState)}
                   valid={extentInputErrors.w === null}
                   markDirty={markDirty}
@@ -1022,7 +1114,11 @@ function GeoPdfDialog({
                   Pivot
                   <InfoTip label="the pivot" content={PIVOT_TOOLTIP} />
                 </span>
-                <div className={classes.pivotGrid} role="radiogroup" aria-label="Pivot">
+                <div
+                  className={classes.pivotGrid}
+                  role="radiogroup"
+                  aria-label="Pivot"
+                >
                   {PIVOT_POINTS.map((point) => (
                     <button
                       key={point.value}
@@ -1035,7 +1131,11 @@ function GeoPdfDialog({
                           ? classes.pivotButtonActive
                           : classes.pivotButton
                       }
-                      onClick={() => setExtentState(applyPivotChange(extentState, point.value))}
+                      onClick={() =>
+                        setExtentState(
+                          applyPivotChange(extentState, point.value),
+                        )
+                      }
                     />
                   ))}
                 </div>
@@ -1043,12 +1143,16 @@ function GeoPdfDialog({
               <div className={classes.extentEast}>
                 <ExtentField
                   which="e"
-                  label={extentState.coordMode === "latlon" ? "East" : "E (easting)"}
+                  label={
+                    extentState.coordMode === "latlon" ? "East" : "E (easting)"
+                  }
                   value={rawE}
                   error={templateMode ? null : extentInputErrors.e}
                   focusedField={focusedField}
                   onDraft={setRawE}
-                  onCommit={(deg) => setExtentState((s) => applyEastChange(s, deg))}
+                  onCommit={(deg) =>
+                    setExtentState((s) => applyEastChange(s, deg))
+                  }
                   parse={(raw) => parseExtentField("e", raw, extentState)}
                   valid={extentInputErrors.e === null}
                   markDirty={markDirty}
@@ -1057,12 +1161,18 @@ function GeoPdfDialog({
               <div className={classes.extentSouth}>
                 <ExtentField
                   which="s"
-                  label={extentState.coordMode === "latlon" ? "South" : "S (northing)"}
+                  label={
+                    extentState.coordMode === "latlon"
+                      ? "South"
+                      : "S (northing)"
+                  }
                   value={rawS}
                   error={templateMode ? null : extentInputErrors.s}
                   focusedField={focusedField}
                   onDraft={setRawS}
-                  onCommit={(deg) => setExtentState((s) => applySouthChange(s, deg))}
+                  onCommit={(deg) =>
+                    setExtentState((s) => applySouthChange(s, deg))
+                  }
                   parse={(raw) => parseExtentField("s", raw, extentState)}
                   valid={extentInputErrors.s === null}
                   markDirty={markDirty}
@@ -1093,7 +1203,9 @@ function GeoPdfDialog({
                     focusedField.current = null;
                     const value = Number(rawScale);
                     if (scaleInputError === null && Number.isFinite(value))
-                      setExtentState((s: ExtentState) => applyScaleChange(s, value));
+                      setExtentState((s: ExtentState) =>
+                        applyScaleChange(s, value),
+                      );
                   }}
                   onKeyDown={(event) => {
                     if (event.key === "Enter") event.currentTarget.blur();
@@ -1105,7 +1217,12 @@ function GeoPdfDialog({
 
             {!templateMode && (
               <div className={classes.errandLine}>
-                <Button icon={SquareDashed} compact variant="outline" onClick={handleSelectOnMap}>
+                <Button
+                  icon={SquareDashed}
+                  compact
+                  variant="outline"
+                  onClick={handleSelectOnMap}
+                >
                   Draw the area on the map
                 </Button>
               </div>

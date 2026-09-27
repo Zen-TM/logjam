@@ -79,7 +79,10 @@ declare class LogjamPdfRendererModule extends NativeModule {
     outFileUri: string,
   ): Promise<void>;
 
-  createMbtiles(fileUri: string, metadata: Record<string, string>): Promise<void>;
+  createMbtiles(
+    fileUri: string,
+    metadata: Record<string, string>,
+  ): Promise<void>;
   rasteriseBatch(
     handle: number,
     options: RasteriseBatchOptions,
@@ -98,9 +101,14 @@ declare class LogjamPdfRendererModule extends NativeModule {
     buildState: string | null,
   ): Promise<{ written: number }>;
   /** Write final metadata, drop logjam:build_state, WAL → DELETE journal. */
-  finalizeMbtiles(fileUri: string, metadata: Record<string, string>): Promise<void>;
+  finalizeMbtiles(
+    fileUri: string,
+    metadata: Record<string, string>,
+  ): Promise<void>;
   /** Read one metadata value (null when absent) — resume reads build_state. */
   readMbtilesMetadata(fileUri: string, key: string): Promise<string | null>;
 }
 
-export default requireNativeModule<LogjamPdfRendererModule>("LogjamPdfRenderer");
+export default requireNativeModule<LogjamPdfRendererModule>(
+  "LogjamPdfRenderer",
+);
