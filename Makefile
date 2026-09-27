@@ -15,6 +15,8 @@ dev: shared build-workers
 	docker compose up -d postgres ministack
 	@$(MAKE) _wait-healthy
 	@$(MAKE) _ministack-tf
+	@echo "Generating Prisma client..."
+	cd api && npx prisma generate
 	@echo "Running migrations..."
 	cd api && DB_HOST=localhost DB_PORT=5432 DB_NAME=logjam DB_USER=logjam DB_PASSWORD=logjam npx prisma migrate deploy
 	@echo "Seeding fixtures..."
@@ -55,6 +57,7 @@ reset: shared build-workers
 	@$(MAKE) _wait-healthy
 	@rm -f $(LOCAL_TF)/terraform.tfstate $(LOCAL_TF)/terraform.tfstate.backup
 	@$(MAKE) _ministack-tf
+	cd api && npx prisma generate
 	cd api && DB_HOST=localhost DB_PORT=5432 DB_NAME=logjam DB_USER=logjam DB_PASSWORD=logjam npx prisma migrate deploy
 	cd api && DB_HOST=localhost DB_PORT=5432 DB_NAME=logjam DB_USER=logjam DB_PASSWORD=logjam npx prisma db seed
 	@echo "Reset complete."
