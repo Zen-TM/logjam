@@ -687,9 +687,9 @@ async function main() {
   // Friendships: alice<->bob accepted (invariant), carol->alice pending
   // (invariant), bob<->carol accepted (extra graph; does NOT make carol alice's
   // friend, so the share->carol 403 test still holds).
-  await prisma.friendship.create({ data: { requesterId: ALICE_ID, addresseeId: BOB_ID, status: "accepted" } });
-  const carolPending = await prisma.friendship.create({ data: { requesterId: CAROL_ID, addresseeId: ALICE_ID, status: "pending" } });
-  await prisma.friendship.create({ data: { requesterId: BOB_ID, addresseeId: CAROL_ID, status: "accepted" } });
+  await prisma.friendship.create({ data: { id: seedId("d", 1), requesterId: ALICE_ID, addresseeId: BOB_ID, status: "accepted" } });
+  const carolPending = await prisma.friendship.create({ data: { id: seedId("d", 2), requesterId: CAROL_ID, addresseeId: ALICE_ID, status: "pending" } });
+  await prisma.friendship.create({ data: { id: seedId("d", 3), requesterId: BOB_ID, addresseeId: CAROL_ID, status: "accepted" } });
 
   // Places. Forks reference an existing id, so insert non-forks first.
   for (const c of ALL_PLACES.filter((c) => !c.forkedFromId)) {
@@ -701,7 +701,8 @@ async function main() {
 
   // Shares: anchors 0 & 1 (invariant) + two more, all alice->bob. carol gets none.
   await prisma.placeShare.createMany({
-    data: [PLACE_IDS[0], PLACE_IDS[1], cid(6), cid(9)].map((placeId) => ({
+    data: [PLACE_IDS[0], PLACE_IDS[1], cid(6), cid(9)].map((placeId, i) => ({
+      id: seedId("e", i + 1),
       placeId,
       sharedById: ALICE_ID,
       sharedWithId: BOB_ID,
@@ -716,6 +717,7 @@ async function main() {
   // would sit next to alice's own copy of the same place and read as a bug.
   await prisma.placeShare.create({
     data: {
+      id: seedId("e", 5),
       placeId: BOB_SHARED_PLACE_ID,
       sharedById: BOB_ID,
       sharedWithId: ALICE_ID,

@@ -9,7 +9,7 @@
 // places, "2" bob's, "3" carol's, "4" media, "5" custom field definitions,
 // "6" marker places and the links between places (the old waypoint space —
 // phase 1c preserved waypoint ids as place ids), "7" routes, "8" direct (per-item) shares, "9" user-created
-// place types, "c" trip logs.
+// place types, "c" trip logs, "d" friendships, "e" place shares.
 //
 // "a" and "b" are NOT here and MUST NOT BE: they are the SYSTEM field
 // definitions' and SYSTEM place types' prefixes, pinned in
@@ -25,4 +25,4 @@ export const seedId = (prefix: string, n: number) =>
 export const cid = (n: number) => seedId("1", n);
 
 /** Every prefix the seed mints under — the list the guard test iterates. */
-export const SEED_ID_PREFIXES = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "c"] as const;
+export const SEED_ID_PREFIXES = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "c", "d", "e"] as const;
