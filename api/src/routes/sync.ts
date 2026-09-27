@@ -95,9 +95,27 @@ import {
 const router = Router();
 
 // `mobile/<semver>`-style client identification, required on /sync/* (§10.1)
-// so stale-fleet composition is observable before any breaking change. The
-// version string is the ONLY thing logged — never user data.
-const CLIENT_HEADER_REGEX = /^[a-z]+\/[0-9A-Za-z.\-+]+$/;
+// and logged on every request, so the versions in the field can be counted
+// before MIN_MOBILE_VERSION moves (docs/operations/queries.md,
+// docs/decisions/0022-mobile-builds-supported-three-months.md).
+// Only a value that matched this regex is logged; a rejected one is
+// unvalidated input, so its line carries the reason alone. The length caps
+// keep a matching value from being an arbitrarily long log string.
+const CLIENT_HEADER_REGEX = /^([a-z]{1,16})\/([0-9A-Za-z.\-+]{1,64})$/;
+
+// Compares major.minor.patch only: a prerelease or build suffix on the client
+// is ignored, and a version with no semver core is never "below".
+function isBelowMinVersion(version: string, min: string): boolean {
+  const have = /^(\d+)\.(\d+)\.(\d+)/.exec(version);
+  const want = /^(\d+)\.(\d+)\.(\d+)$/.exec(min);
+  if (!have || !want) return false;
+  for (let i = 1; i <= 3; i++) {
+    if (Number(have[i]) !== Number(want[i])) {
+      return Number(have[i]) < Number(want[i]);
+    }
+  }
+  return false;
+}
 
 export function requireClientHeader(
   req: AuthenticatedRequest,
@@ -105,9 +123,29 @@ export function requireClientHeader(
   next: NextFunction,
 ): void {
   const value = req.header("x-logjam-client");
-  if (!value || !CLIENT_HEADER_REGEX.test(value)) {
+  const match = value ? CLIENT_HEADER_REGEX.exec(value) : null;
+  if (!match) {
+    logger.warn(
+      { reason: value ? "malformed" : "missing" },
+      "sync_client_rejected",
+    );
     throw new AppError(400, "x-logjam-client header is required");
   }
+  const [, clientPlatform, clientVersion] = match;
+  // Not a rejection: enforcement is the client's gate (useMinVersionGate),
+  // which lets a below-minimum build keep syncing on a metered connection.
+  const belowMin = isBelowMinVersion(
+    clientVersion,
+    getEnv().MIN_MOBILE_VERSION,
+  );
+  logger.info(
+    {
+      client_platform: clientPlatform,
+      client_version: clientVersion,
+      ...(belowMin ? { reason: "below_min" } : {}),
+    },
+    "sync_client",
+  );
   next();
 }
 

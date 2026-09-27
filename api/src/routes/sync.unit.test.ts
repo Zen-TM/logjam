@@ -1,16 +1,26 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // The route module imports the Prisma singleton (and env) at load; mock them
 // so importing the pure helpers under test needs no DB/env.
 vi.mock("../services/prisma", () => ({ default: {} }));
-vi.mock("../lib/env", () => ({ getEnv: () => ({}) }));
+vi.mock("../lib/env", () => ({
+  getEnv: () => ({ MIN_MOBILE_VERSION: "0.2.0" }),
+}));
 vi.mock("../lib/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
   safeErrorForLog: (err: unknown) => err,
 }));
 
-import { conflictReceipts, opDependencies, parsePushOp } from "./sync";
+import {
+  conflictReceipts,
+  opDependencies,
+  parsePushOp,
+  requireClientHeader,
+} from "./sync";
 import { AppError } from "../middleware/errorHandler";
+import { logger } from "../lib/logger";
+import type { AuthenticatedRequest } from "../middleware/auth";
+import type { Response } from "express";
 
 const BASE = "2026-07-24T00:00:00.000Z";
 const LATER = "2026-07-24T01:00:00.000Z";
@@ -162,5 +172,79 @@ describe("opDependencies (§8.3 dependency closure)", () => {
         fields: { placeIds: [placeA] },
       }),
     ).toEqual([id, placeA]);
+  });
+});
+
+describe("requireClientHeader logging", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  function run(header: string | undefined) {
+    const req = {
+      header: (name: string) =>
+        name === "x-logjam-client" ? header : undefined,
+    } as unknown as AuthenticatedRequest;
+    const next = vi.fn();
+    let thrown: unknown;
+    try {
+      requireClientHeader(req, {} as Response, next);
+    } catch (err) {
+      thrown = err;
+    }
+    const logged = JSON.stringify([
+      vi.mocked(logger.info).mock.calls,
+      vi.mocked(logger.warn).mock.calls,
+    ]);
+    return { next, thrown, logged };
+  }
+
+  it("valid header → platform and version logged, request passes", () => {
+    const { next, thrown } = run("mobile/0.3.1");
+    expect(thrown).toBeUndefined();
+    expect(next).toHaveBeenCalledOnce();
+    expect(logger.info).toHaveBeenCalledWith(
+      { client_platform: "mobile", client_version: "0.3.1" },
+      "sync_client",
+    );
+  });
+
+  it("version below MIN_MOBILE_VERSION → logged with reason, still passes", () => {
+    const { next } = run("mobile/0.1.9-test");
+    expect(next).toHaveBeenCalledOnce();
+    expect(logger.info).toHaveBeenCalledWith(
+      {
+        client_platform: "mobile",
+        client_version: "0.1.9-test",
+        reason: "below_min",
+      },
+      "sync_client",
+    );
+  });
+
+  it("missing header → 400, reason only", () => {
+    const { next, thrown } = run(undefined);
+    expect(thrown).toBeInstanceOf(AppError);
+    expect(next).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      { reason: "missing" },
+      "sync_client_rejected",
+    );
+  });
+
+  // Mutation that turns this red: logging `value` (the raw header) on the
+  // rejection line.
+  it.each([
+    "mobile/0.1.0 CANARY",
+    "Mobile/CANARY",
+    "mobile/CANARY\nforged=1",
+    `mobile/${"CANARY".repeat(20)}`,
+  ])("malformed header %j → 400, reason only, raw value never logged", (h) => {
+    const { next, thrown, logged } = run(h);
+    expect(thrown).toBeInstanceOf(AppError);
+    expect(next).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      { reason: "malformed" },
+      "sync_client_rejected",
+    );
+    expect(logged).not.toContain("CANARY");
   });
 });
