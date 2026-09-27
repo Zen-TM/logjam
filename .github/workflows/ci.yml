@@ -36,7 +36,11 @@ jobs:
         run: |
           curl -sSL -o actionlint.tar.gz https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_linux_amd64.tar.gz
           tar -xzf actionlint.tar.gz actionlint
+      # ShellCheck warnings and errors fail the job; its info and style notes
+      # (quoting a value that never holds a space) do not.
       - name: Lint workflows
+        env:
+          SHELLCHECK_OPTS: --severity=warning
         run: ./actionlint
 
   # Biome is pinned in the root package.json; topo's Ruff check runs in the
@@ -244,7 +248,7 @@ jobs:
           echo $! > "$RUNNER_TEMP/api.pid"
       - name: Wait for API
         run: |
-          for i in $(seq 1 60); do
+          for _ in $(seq 1 60); do
             if ! kill -0 "$(cat "$RUNNER_TEMP/api.pid")" 2>/dev/null; then
               echo "API process exited during startup:"; cat "$RUNNER_TEMP/api.log"; exit 1
             fi
@@ -269,7 +273,7 @@ jobs:
         env:
           RUN_DB_IT: "1"
         run: |
-          pip install $(grep -iE '^psycopg2-binary' requirements.txt)
+          grep -iE '^psycopg2-binary' requirements.txt | xargs pip install
           python -m unittest tests.test_status_guard_db -v
       - name: Install frontend
         working-directory: frontend
@@ -465,7 +469,7 @@ jobs:
       # comments assume the Docker image, so it isn't installed wholesale).
       - name: Install pure-Python deps
         working-directory: topo
-        run: pip install $(grep -iE '^(numpy|Pillow|requests)' requirements.txt)
+        run: grep -iE '^(numpy|Pillow|requests)' requirements.txt | xargs pip install
       - name: Ruff lint and format check
         run: |
           pip install ruff==0.16.9
