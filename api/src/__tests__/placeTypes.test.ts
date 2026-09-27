@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
+import { describe, it, expect, afterAll, vi } from "vitest";
 import request from "supertest";
 
 import { throttleWrites } from "./_rateLimitGate";
@@ -21,7 +21,7 @@ import {
   SYSTEM_PLACE_TYPES,
 } from "@logjam/shared";
 
-import { API_URL, ALICE_SUB, BOB_SUB, as, CANYON_TYPE_ID } from "./_actors";
+import { API_URL, ALICE_SUB, BOB_SUB, as } from "./_actors";
 
 // Place types and the field definitions scoped to them — the mandatory guards
 // from the places-rework plan §7.4, §7.6 and §7.7.

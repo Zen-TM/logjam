@@ -1,0 +1,7 @@
+[tools]
+node = "20"
+python = "3.12"
+terraform = "1.13"
+aws-cli = "2"
+gitleaks = "8"
+actionlint = "1.7"

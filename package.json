@@ -1,0 +1,26 @@
+{
+  "name": "logjam",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "format": "biome format --write && ruff format topo",
+    "format:check": "biome format && ruff format --check topo",
+    "lint": "npm --prefix shared run lint && npm --prefix api run lint && npm --prefix frontend run lint && npm --prefix mobile run lint && ruff check topo",
+    "typecheck": "npm --prefix shared run build && npm --prefix api run typecheck && npm --prefix frontend run typecheck && npm --prefix mobile run typecheck",
+    "verify": "npm run format:check && npm run lint && npm run typecheck",
+    "prepare": "simple-git-hooks"
+  },
+  "simple-git-hooks": {
+    "pre-commit": "gitleaks protect --staged && npx lint-staged"
+  },
+  "lint-staged": {
+    "*.{js,ts,jsx,tsx,mjs,cjs,json,jsonc,css}": "biome format --no-errors-on-unmatched",
+    "*.py": "ruff format --check --force-exclude"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.14",
+    "@playwright/mcp": "0.0.82",
+    "lint-staged": "^15.4.3",
+    "simple-git-hooks": "^2.11.1"
+  }
+}

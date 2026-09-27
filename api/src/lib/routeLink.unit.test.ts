@@ -3,7 +3,7 @@
 // These tests pin both halves: the survival of the displaced route, and the
 // tombstone fan-out that revokes sharee visibility when a route leaves a
 // place (the leg with no delete behind it, so nothing else would catch it).
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 vi.mock("../services/prisma", () => ({ default: {} }));
 

@@ -1,0 +1,9 @@
+{
+  "recommendations": [
+    "biomejs.biome",
+    "charliermarsh.ruff",
+    "dbaeumer.vscode-eslint",
+    "editorconfig.editorconfig",
+    "prisma.prisma"
+  ]
+}

@@ -36,8 +36,6 @@ import {
  * infra/terraform/envs/prod/s3.tf. */
 const LOG_PREFIXES = ["media/", "topo-jobs/"] as const;
 
-type Attribution = { userId: string; bytes: number };
-
 /**
  * Resolve job-owned keys to their owners in three batched queries rather than
  * one per record — a single log object routinely holds thousands of lines.

@@ -28,10 +28,8 @@ GeoTIFF composite (`render_composite_to_geotiff`):
 
 from __future__ import annotations
 
-import json
 import logging
 import os
-import sqlite3
 import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
@@ -61,7 +59,7 @@ from pipeline import (  # noqa: E402
     render_features_tile,
 )
 
-from .context import RenderContext, RenderError, RASTER_LAYERS, VECTOR_LAYERS
+from .context import RenderContext, RenderError, RASTER_LAYERS
 
 log = logging.getLogger("export_worker.tile_compose")
 

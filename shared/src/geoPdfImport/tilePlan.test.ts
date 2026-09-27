@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { parseGeoPdfGeoref } from "./parseGeoref";
-import { buildGeoTransform, type GeoTransform, type XY } from "./transform";
+import { buildGeoTransform, type XY } from "./transform";
 import {
   GEOPDF_PARSER_VERSION,
   GEOPDF_SECONDS_PER_TILE,

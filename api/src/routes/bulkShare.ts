@@ -27,7 +27,6 @@ import { Router, Response } from "express";
 
 import { Prisma } from "@prisma/client";
 import {
-  MAX_BULK_SHARE_ITEMS,
   normalizeUserUiPreferences,
   type BulkShareItemType,
   type SharableEntityType,

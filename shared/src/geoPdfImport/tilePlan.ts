@@ -148,7 +148,6 @@ const TILE_SIZE = 512;
 const MESH_GRID = 4;
 /** Assumed source detail: 300 dpi print intent = 300/72 px per page pt. */
 const SRC_PX_PER_PT = 300 / 72;
-const EARTH_RADIUS = 6378137;
 const ORIGIN_SHIFT = 20037508.342789244;
 const Z_MAX_CLAMP = { min: 10, max: 18 } as const;
 const Z_MIN_FLOOR = 7;
@@ -162,13 +161,6 @@ function webMercatorRes(z: number, latDeg: number): number {
     2 ** z /
     (TILE_SIZE / 256)
   );
-}
-
-function lonLatToMercator(lon: number, lat: number): XY {
-  return {
-    x: (lon / 180) * ORIGIN_SHIFT,
-    y: Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360)) * EARTH_RADIUS,
-  };
 }
 
 /** XYZ tile → mercator bounds. */

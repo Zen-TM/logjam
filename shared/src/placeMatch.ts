@@ -9,11 +9,7 @@
 // qualifier extraction + relocation, number-word<->digit, edit-distance typo
 // tolerance) plus coordinate corroboration for confidence.
 
-import {
-  norm,
-  stripWaterwaySuffix,
-  WATERWAY_SUFFIXES,
-} from "./placeNameMatch.js";
+import { norm, WATERWAY_SUFFIXES } from "./placeNameMatch.js";
 import { haversineMeters, withinBbox } from "./placeGeo.js";
 
 // Distance thresholds (moved here from api/src/services/ropewikiDedupe.ts so

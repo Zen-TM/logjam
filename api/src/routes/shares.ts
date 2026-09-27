@@ -28,7 +28,6 @@ import {
   revokeDirectShares,
   touchSharedForDelta,
 } from "../lib/revokeDirectShares";
-import type { SharableEntityType } from "@logjam/shared";
 
 const router = Router();
 
