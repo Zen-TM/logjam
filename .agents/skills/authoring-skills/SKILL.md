@@ -13,7 +13,7 @@ Both cost context on every load, so every line must change what an agent does.
 
 | The guidance is… | It goes in |
 |---|---|
-| needed on every change of a kind (testing, errors, doc voice) | `AGENTS.md`: root for the rule, the package file for its mechanics |
+| something an agent gets wrong on essentially any task, or in one package | `AGENTS.md`: root, or that package's file |
 | needed only for one recurring task (allowlist a host, write an ADR) | a skill |
 | the reasoning behind a rule: context, alternatives, what broke | an ADR in `docs/decisions/`; the rule's one line links to it |
 | about one contributor's machine, aliases, accounts or access | a personal `.local` skill, never a committed file |
@@ -21,6 +21,16 @@ Both cost context on every load, so every line must change what an agent does.
 A nested `AGENTS.md` loads by path, which is more reliable than a description
 match. If you keep wanting a skill to "always" apply, it is an `AGENTS.md` rule.
 Editing an `AGENTS.md`? Read [references/agents-md.md](references/agents-md.md) first.
+
+## Before writing
+
+1. **Capture intent.** Write down the task the skill serves, requests that
+   should load it and near-misses that should not, and what a good run
+   produces. These become the cases in Test before committing.
+2. **Interview and research.** Ask whoever does the task what goes wrong and
+   what they would tell a newcomer. Read the code, ADRs, commits and past
+   transcripts it touches. Each line you write traces to a mistake found
+   here; a line that traces to none is a guess.
 
 ## Layout
 
@@ -123,6 +133,10 @@ Apply to every line, when writing and when editing:
 History ("we used to…", "found on…") fails test 1 unless it stops a repeat
 mistake; if it does, it is an ADR's Context, not skill text.
 
+Say why in a clause rather than in capitals. An agent that knows why a step
+matters applies it to cases the text did not foresee; one told MUST follows
+it where it does not fit.
+
 ## Committed skills are setup-neutral
 
 A committed skill is true for any contributor on any machine and OS. It never
@@ -135,17 +149,34 @@ maintainer's own setup follows the same rule.
 
 ## Test before committing
 
-1. **Trigger test.** From the repo root, in a fresh session:
-   - `claude -p "<a realistic request for the task>"` must name or use the skill.
-   - `claude -p "<a nearby but unrelated request>"` must not.
+1. **Trigger rate.** Write about five requests that should load the skill,
+   phrased the way someone would ask: with file names, an error message,
+   casual wording, some that never name the topic. Add about five near-misses
+   that share its words but need something else. From the repo root:
 
-   Paste both requests and outcomes in the PR. A miss means the description
-   names the topic instead of the task; rewrite it and rerun.
-2. **Setup check.** `git grep --untracked -il -e "$HOME" -e '/Users/[a-z]' .agents/skills` is empty,
+   ```
+   .agents/skills/authoring-skills/scripts/trigger-rate.sh <name> cases.tsv
+   ```
+
+   It runs each request 3 times in a fresh session. Every request that should
+   trigger does so at least 2 times in 3, and every near-miss 0 times. A missed
+   request means the description names the topic instead of the task; a
+   firing near-miss means it is too broad. Rewrite, rerun, and paste the
+   table in the PR. One-step requests an agent handles unaided rarely load
+   any skill, so test with substantive ones.
+2. **With and without.** Give 2–3 realistic tasks to `claude -p` with the
+   skill ("Use the <name> skill. …") and without it (`--disable-slash-commands`;
+   for an edit, the previous version), read-only, 3 runs each, invoked as
+   `trigger-rate.sh` invokes it (project settings only, stdin closed). Read the
+   transcripts, not just the answers. The skill earns its place when the
+   runs with it avoid a mistake or wasted steps that the runs without it
+   make; if they agree, cut what made no difference. If every run with it
+   writes the same helper, bundle that helper in `scripts/`.
+3. **Setup check.** `git grep --untracked -il -e "$HOME" -e '/Users/[a-z]' .agents/skills` is empty,
    and reread for machine, tool or account names.
-3. **Everything named exists.** Every command, file, test and ADR the skill
+4. **Everything named exists.** Every command, file, test and ADR the skill
    names is committed (in this change or before) or created by a committed
    command or setup step, and does what the skill says. Never cite one that is
    only planned, or that exists only on your machine. Run the cheap commands.
-4. **Self-check.** Every line of `SKILL.md` is needed on every run; the rest is
+5. **Self-check.** Every line of `SKILL.md` is needed on every run; the rest is
    in `references/` or gone.
