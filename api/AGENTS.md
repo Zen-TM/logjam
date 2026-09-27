@@ -14,7 +14,7 @@
   (`src/__tests__/friends.test.ts`).
 - **Errors are `AppError(status, message)`** from `middleware/errorHandler`,
   never `res.status(500)` or a bare `Error`: an upstream that refused is 502, a
-  dependency we own that is missing is 503. [0062](../docs/decisions/0062-upstream-failures-are-apperrors.md)
+  dependency we own that is missing is 503.
 - **An array in a request body is capped at both ends:** empty is 400, over
   its limit 413; the body-size cap is no substitute (`src/__tests__/placesBulk.test.ts`).
 
@@ -66,4 +66,4 @@
 - **Rate limits:** actors share the per-IP budget and `_rateLimitGate.ts` waits
   it out, but not the per-user `userPatchLimiter`: a write-heavy file uses the
   `write()` retry from `src/__tests__/placeTypes.test.ts` and a timeout over 61 s.
-- **Fixtures** are the source's real output, in `__fixtures__/` beside the test. [0063](../docs/decisions/0063-external-corpora-snapshot-and-real-fixtures.md)
+- **Fixtures** are the source's real output, in `__fixtures__/` beside the test.

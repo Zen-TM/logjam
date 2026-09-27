@@ -10,7 +10,7 @@
   `style` except to set a custom property the kit reads.
 - **A new foreground/background colour pair joins `scripts/wcag-contrast.mjs`**
   in the same change, measured on the surface it renders on; `KNOWN_FAILURES`
-  only shrinks. [0021](../docs/decisions/0021-design-system-and-contrast-gate.md)
+  only shrinks.
 - **A page owns its layout:** hero and rails pinned, only its list scrolls;
   never nest a second scroll container.
 - **One breakpoint, `max-width: 768px`:** `useIsMobile()` and every `@media`

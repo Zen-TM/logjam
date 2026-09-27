@@ -77,4 +77,4 @@ Each package's `AGENTS.md` says how its suites run.
   a test that the boundary holds.
 - A new guard test names the mutation that turns it red.
 - A rule that must hold gets an executable check; two lists that must agree
-  become one declaration plus a test. [0060](docs/decisions/0060-parallel-lists-and-invariants-need-a-test.md)
+  become one declaration plus a test.

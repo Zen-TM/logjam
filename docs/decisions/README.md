@@ -15,24 +15,14 @@ directory for the paths and symbols a change touches.
 | [0001](0001-place-share-visibility.md) | Place share visibility | 2026-07-04 | Accepted |
 | [0002](0002-foreign-fields.md) | foreignFields for values whose definition the recipient lacks | 2026-09-06 | Accepted |
 | [0003](0003-place-links-grant-no-visibility.md) | A PlaceLink grants no visibility | 2026-09-06 | Accepted |
-| [0010](0010-what-syncs.md) | What syncs | 2026-09-04 | Accepted |
-| [0011](0011-place-types-and-system-rows.md) | Place types and system rows | 2026-09-06 | Accepted |
-| [0012](0012-custom-field-definitions.md) | Custom field definitions | 2026-09-13 | Accepted |
-| [0013](0013-totals-need-a-declaration.md) | Totals need a declaration | 2026-09-13 | Accepted |
-| [0014](0014-client-compatibility-mechanism.md) | Client compatibility mechanism | 2026-07-23 | Accepted |
 | [0020](0020-pre-deploy-migrations-expand-contract.md) | Prod migrations run in a gated pre-deploy task; migrations are expand/contract | 2026-07-17 | Accepted |
-| [0021](0021-design-system-and-contrast-gate.md) | Design system placement and the WCAG contrast gate | 2026-09-13 | Accepted |
 | [0022](0022-share-the-decision-not-the-drawing.md) | Share the decision, not the drawing: shared declarations + parity tests, no generated cross-platform UI | 2026-09-25 | Accepted |
 | [0023](0023-agpl-and-dco.md) | AGPL-3.0 only; DCO sign-off, not a CLA | 2026-09-25 | Accepted |
-| [0030](0030-maplibre-vulkan-and-native-sdk-floor.md) | Run MapLibre on Vulkan on Android, with a native SDK floor of 13.3.0 | 2026-08-18 | Accepted |
 | [0031](0031-mlrn-11-map-interaction-rules.md) | MLRN 11 (Fabric): the map interaction rules that follow from it | 2026-08-18 | Accepted |
-| [0032](0032-line-symbol-glyphs-centred-in-advance-box.md) | A glyph on a line-placed symbol layer has its ink centred in its advance box | 2026-08-30 | Accepted |
 | [0033](0033-guest-mode-is-dont-sync-yet.md) | Guest mode is "don't sync yet", not a separate storage path | 2026-08-05 | Accepted |
 | [0034](0034-offline-region-downloads.md) | Offline region downloads: one queue, the file is the checkpoint | 2026-07-30 | Accepted |
 | [0035](0035-geopdf-import-by-file-uri.md) | GeoPDF import takes a file URI, never bytes | 2026-08-10 | Accepted |
 | [0036](0036-share-versus-send-a-copy.md) | Share and Send a copy are two verbs, answered in one panel and the inbox | 2026-08-22 | Accepted |
-| [0037](0037-mobile-places-types-and-attribute-forms.md) | Logjam GPS places: one type vocabulary, attribute forms built from scoped definitions | 2026-09-10 | Accepted |
-| [0038](0038-logbook-stats-computed-on-device.md) | Logbook stats are computed on device, from the mirror | 2026-09-13 | Accepted |
 | [0039](0039-inbox-edits-are-outbox-ops.md) | Inbox read state and deletion are outbox ops; a refetch replays the queue | 2026-08-30 | Accepted |
 | [0040](0040-map-sensors-only-while-focused.md) | Map sensors run only while the map is focused and foregrounded; the heading lives outside React state | 2026-08-17 | Accepted |
 | [0041](0041-compass-heading-pipeline.md) | Compass heading: gyro-fused source, one camera writer, a rate-tracking display | 2026-08-17 | Accepted |
@@ -42,11 +32,4 @@ directory for the paths and symbols a change touches.
 | [0045](0045-on-device-data-privacy.md) | On-device data privacy: app lock off by default, declared stores, one wipe path | 2026-08-04 | Accepted |
 | [0046](0046-mobile-sentry-and-scrubber.md) | Mobile crash reporting: Sentry behind a scrubber and a consent gate | 2026-07-23 | Accepted |
 | [0047](0047-signed-ota-updates.md) | OTA updates are code-signed, with the private key outside the repo | 2026-08-16 | Accepted |
-| [0060](0060-parallel-lists-and-invariants-need-a-test.md) | Two lists that must agree are one declaration plus a test; an invariant needs an executable check | 2026-08-13 | Accepted |
-| [0061](0061-format-assertions-run-against-the-seed.md) | A new format assertion on a request path is run against the seed and the fixtures, with a test | 2026-08-21 | Accepted |
-| [0062](0062-upstream-failures-are-apperrors.md) | An upstream or infra failure is thrown as an AppError whose status names the layer | 2026-08-30 | Accepted |
-| [0063](0063-external-corpora-snapshot-and-real-fixtures.md) | Slow-changing external corpora are held as an S3 snapshot; parser fixtures are the source's real output | 2026-08-30 | Accepted |
 | [0064](0064-rds-tls-via-bundled-ca.md) | The API image connects to RDS over verified TLS using a bundled CA | 2026-06-11 | Accepted |
-| [0065](0065-compact-controls-grow-their-hit-area.md) | A compact control grows its hit area, not its rendered box | 2026-07-16 | Accepted |
-| [0066](0066-place-type-rail-is-a-permanent-control.md) | On Logjam Web, the place-type rail is a permanent control and the attribute filters follow it | 2026-09-10 | Accepted |
-| [0067](0067-topo-worker-post-complete-never-self-cleans.md) | A topo worker never self-cleans after `complete`; the Dockerfile COPY list is derived | 2026-08-28 | Accepted |
