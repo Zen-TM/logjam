@@ -193,6 +193,10 @@ resource "aws_iam_role_policy" "gha_ecr_push" {
           "ecr:InitiateLayerUpload",
           "ecr:UploadLayerPart",
           "ecr:CompleteLayerUpload",
+          # rollback.yml checks the image it repins to still exists (ECR
+          # keeps 15). Also in ReadOnlyAccess; named so this policy stands on
+          # its own when that attachment narrows.
+          "ecr:DescribeImages",
         ]
         Resource = [
           aws_ecr_repository.api.arn,
@@ -273,6 +277,11 @@ resource "aws_iam_role_policy" "gha_plan_readonly_privacy_deny" {
 
 # ── Inline policy ──────────────────────────────────────────────────────────────
 
+# GetObject and GetInvalidation are also in ReadOnlyAccess; named here so this
+# policy stands on its own when that attachment narrows. The deploy guard
+# reads index.html's release-sha (HeadObject), rollback.yml copies
+# releases/<sha>/index.html over index.html (CopyObject reads its source) and
+# reads the release's file list, and both wait for their invalidation.
 resource "aws_iam_role_policy" "gha_frontend_deploy" {
   name = "logjam-frontend-deploy"
   role = aws_iam_role.github_actions.id
@@ -281,7 +290,7 @@ resource "aws_iam_role_policy" "gha_frontend_deploy" {
     Statement = [
       {
         Effect = "Allow"
-        Action = ["s3:PutObject", "s3:DeleteObject", "s3:ListBucket"]
+        Action = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:ListBucket"]
         Resource = [
           "arn:aws:s3:::logjam-frontend-620853681701-ap-southeast-2-an",
           "arn:aws:s3:::logjam-frontend-620853681701-ap-southeast-2-an/*",
@@ -289,7 +298,7 @@ resource "aws_iam_role_policy" "gha_frontend_deploy" {
       },
       {
         Effect   = "Allow"
-        Action   = "cloudfront:CreateInvalidation"
+        Action   = ["cloudfront:CreateInvalidation", "cloudfront:GetInvalidation"]
         Resource = "arn:aws:cloudfront::620853681701:distribution/E22J79PHZM2K"
       },
     ]

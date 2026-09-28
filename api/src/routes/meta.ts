@@ -18,10 +18,15 @@ router.get("/min-mobile-version", (_req: Request, res: Response) => {
 
 // GET /meta — capability document (Stage 8 §10.2). Same exposure class as
 // above: server-wide constants only, no user data. The sync block is what a
-// client checks on foreground before relying on /sync/*.
+// client checks on foreground before relying on /sync/*. `sha` is the commit
+// the running image was built from (null outside a CI-built image): the
+// deploy and rollback workflows' smoke step compares it with what they
+// shipped, and rollback-compat reads it to find the release prod runs.
+// Guard: meta.unit.test.ts.
 router.get("/", (_req: Request, res: Response) => {
   const env = getEnv();
   res.json({
+    sha: env.GIT_SHA || null,
     minMobileVersion: env.MIN_MOBILE_VERSION,
     sync: {
       protocols: [SYNC_PROTOCOL],

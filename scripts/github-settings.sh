@@ -7,6 +7,9 @@
 #   scripts/github-settings.sh --apply   write it (needs repo admin via `gh`)
 #
 # What it enforces, and why:
+#   - Repository variables the workflows read: PROD_API_URL and PROD_WEB_URL,
+#     the public URLs smoke.yml probes after a deploy or rollback, and that
+#     rollback-compat.yml asks for the live release.
 #   - `prod` Environment, deployable from main only. The AWS deploy role trusts
 #     only jobs in this Environment (infra/terraform/envs/prod/iam.tf), so a
 #     workflow pushed to any other branch cannot assume it.
@@ -25,6 +28,12 @@ APPLY=false
 [ "${1:-}" = "--apply" ] && APPLY=true
 
 REQUIRED_CHECKS='[{"context":"shared"},{"context":"api"},{"context":"frontend"},{"context":"topo"},{"context":"format"},{"context":"actionlint"}]'
+
+# name=value; public URLs, not secrets.
+VARIABLES=(
+  "PROD_API_URL=https://api.logjamnsw.com"
+  "PROD_WEB_URL=https://logjamnsw.com"
+)
 
 ENVIRONMENT_BODY='{"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true}}'
 
@@ -100,7 +109,18 @@ else
   run POST "repos/$REPO/rulesets" "$RULESET_BODY"
 fi
 
-# 3. retire the older mechanisms, only once the ruleset exists
+# 3. repository variables (create or update by name)
+for pair in "${VARIABLES[@]}"; do
+  name=${pair%%=*} value=${pair#*=}
+  body=$(jq -nc --arg name "$name" --arg value "$value" '{name: $name, value: $value}')
+  if gh api "repos/$REPO/actions/variables/$name" >/dev/null 2>&1; then
+    run PATCH "repos/$REPO/actions/variables/$name" "$body"
+  else
+    run POST "repos/$REPO/actions/variables" "$body"
+  fi
+done
+
+# 4. retire the older mechanisms, only once the ruleset exists
 if $APPLY; then
   gh api "repos/$REPO/rulesets" --jq ".[] | select(.name == \"$RULESET_NAME\") | .id" | grep -q . \
     || { echo "ruleset $RULESET_NAME missing after apply; leaving classic protection in place" >&2; exit 1; }

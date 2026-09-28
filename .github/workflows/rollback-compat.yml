@@ -1,0 +1,165 @@
+name: Rollback compat
+
+# Is it safe to roll the API back once this PR deploys? A rollback
+# (rollback.yml) swaps the code back and leaves the schema forward, and the
+# deploy itself runs the new migrations while the old release still serves.
+# So the release prod runs now must work on this PR's schema. This job
+# migrates a fresh database to this PR's head, then seeds it, boots the live
+# release's API and runs the live release's integration suite against it. A
+# migration that drops, renames or narrows something the live release uses
+# fails here, before merge, instead of in prod mid-swap. Expand/contract,
+# as a test: docs/decisions/0003-pre-deploy-migrations-expand-contract.md.
+#
+# The live release is built from source at its commit rather than pulled from
+# ECR: CI has no registry login, and the schema contract is in the code, not
+# in the image's system packages.
+#
+# Only on PRs that add or change a migration. A path-filtered workflow reports
+# no status when it does not run, so it cannot be a required check as is.
+
+on:
+  pull_request:
+    paths:
+      - "api/prisma/migrations/**"
+
+permissions:
+  contents: read
+
+jobs:
+  rollback-compat:
+    name: Live release on this schema
+    runs-on: ubuntu-latest
+    # Postgres, MiniStack and the env block mirror ci.yml's api-integration
+    # job, which is what the suite is known to pass against.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: logjam
+          POSTGRES_PASSWORD: logjam
+          POSTGRES_DB: logjam
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U logjam"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      ministack:
+        image: ministackorg/ministack
+        env:
+          SERVICES: s3
+          DEFAULT_REGION: ap-southeast-2
+          AWS_DEFAULT_REGION: ap-southeast-2
+        ports:
+          - 4566:4566
+    env:
+      # Public and unauthenticated: /meta's sha names the live release.
+      # Repository variable, declared in scripts/github-settings.sh; when it
+      # is unset the job falls back to origin/main.
+      PROD_API_URL: ${{ vars.PROD_API_URL }}
+      LIVE_DIR: ${{ github.workspace }}/../live-release
+      NODE_ENV: development
+      AUTH_MODE: fake
+      FAKE_USER_SUB: fake-alice-sub
+      PORT: 8080
+      API_URL: http://localhost:8080
+      MIN_MOBILE_VERSION: "0.1.0"
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_NAME: logjam
+      DB_USER: logjam
+      DB_PASSWORD: logjam
+      AWS_ENDPOINT_URL: http://localhost:4566
+      AWS_REGION: ap-southeast-2
+      AWS_DEFAULT_REGION: ap-southeast-2
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      S3_BUCKET_MEDIA: logjam-media-local
+      S3_BUCKET_TOPO: logjam-topo-local
+      TOPO_CDN_BASE_URL: http://localhost:4566/logjam-topo-local
+      CORS_ORIGIN: http://localhost:5173
+      ECS_SUBNETS: subnet-local
+      ECS_SECURITY_GROUPS: sg-local
+      RATE_LIMIT_GLOBAL_MAX: 1000000
+      RATE_LIMIT_USER_PATCH_MAX: 1000000
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          # The live release can be any commit on main.
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: api/package-lock.json
+
+      - name: Find the release prod runs
+        id: live
+        run: |
+          set -uo pipefail
+          LIVE=$(curl -sSf --max-time 15 "$PROD_API_URL/meta" | jq -r .sha) || LIVE=""
+          if ! [[ "$LIVE" =~ ^[0-9a-f]{40}$ ]] || ! git cat-file -e "$LIVE^{commit}" 2>/dev/null; then
+            # Before /meta reported a sha, or prod unreachable: main's head is
+            # what prod runs whenever its last deploy succeeded.
+            echo "::warning::prod's /meta gave no usable sha ('$LIVE'); testing origin/main instead"
+            LIVE=$(git rev-parse origin/main)
+          fi
+          echo "sha=$LIVE" >> "$GITHUB_OUTPUT"
+          echo "Live release: $LIVE"
+
+      - name: Migrate to this PR's schema
+        run: |
+          (cd shared && npm ci && npm run build)
+          cd api && npm ci && npx prisma migrate deploy
+
+      - name: Build the live release
+        env:
+          LIVE: ${{ steps.live.outputs.sha }}
+        run: |
+          git worktree add --detach "$LIVE_DIR" "$LIVE"
+          (cd "$LIVE_DIR/shared" && npm ci && npm run build)
+          cd "$LIVE_DIR/api" && npm ci && npx prisma generate && npm run build
+
+      # The live release's own seed: its writes must work on the new schema too.
+      - name: Seed with the live release
+        working-directory: ${{ env.LIVE_DIR }}/api
+        run: npx prisma db seed
+
+      - name: Wait for MiniStack and create buckets
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:4566/_localstack/health | grep -q '"s3": "available"'; then
+              echo "ministack ready"; break
+            fi
+            if [ "$i" = 60 ]; then echo "ministack never became ready"; exit 1; fi
+            sleep 2
+          done
+          aws --endpoint-url=http://localhost:4566 s3 mb "s3://$S3_BUCKET_MEDIA"
+          aws --endpoint-url=http://localhost:4566 s3 mb "s3://$S3_BUCKET_TOPO"
+
+      - name: Start the live release's API
+        working-directory: ${{ env.LIVE_DIR }}/api
+        run: |
+          node dist/index.js > "$RUNNER_TEMP/api.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/api.pid"
+      - name: Wait for API
+        run: |
+          for _ in $(seq 1 60); do
+            if ! kill -0 "$(cat "$RUNNER_TEMP/api.pid")" 2>/dev/null; then
+              echo "API process exited during startup:"; cat "$RUNNER_TEMP/api.log"; exit 1
+            fi
+            if curl -sf http://localhost:8080/health > /dev/null; then
+              echo "API ready"; exit 0
+            fi
+            sleep 1
+          done
+          echo "API never answered on :8080:"; cat "$RUNNER_TEMP/api.log"; exit 1
+
+      - name: The live release's integration suite
+        working-directory: ${{ env.LIVE_DIR }}/api
+        run: npm test
+
+      - name: API log (on failure)
+        if: failure()
+        run: cat "$RUNNER_TEMP/api.log"
