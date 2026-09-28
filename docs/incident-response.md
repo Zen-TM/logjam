@@ -68,5 +68,6 @@ Examples for Logjam:
 - [ ] Confirm operational-log scrubbing still keeps coords/names out of plaintext.
 - [ ] Confirm S3 buckets (`logjam-media`, `logjam-topo-jobs`) deny public access.
 - [ ] Confirm presigned URL TTLs are short.
-- [ ] Confirm CloudWatch log retention is bounded (policy states ≤90 days).
+- [ ] Confirm log retention is bounded: 14 days for operational logs, 365 for
+      the audit trail, as the privacy policy states.
 - [ ] Keep an up-to-date way to email all users (for mass notification).

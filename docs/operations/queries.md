@@ -38,11 +38,11 @@ Logs Insights shows no `msg` field, the lines carry a prefix: each query
 needs `parse @message` before the `filter`, and the `SyncRequests` metric
 below counts nothing, because its filter reads each line as JSON.
 
-### 7 days: Logs Insights
+### 14 days: Logs Insights
 
-The group keeps 7 days (`api/.ebextensions/cloudwatch-logs.config`, the figure
-`frontend/public/privacy.html` promises), so 7 days is the longest window
-these queries can see. Set the time range to the last 7 days.
+The group keeps 14 days (`api/.ebextensions/cloudwatch-logs.config`, the figure
+`frontend/public/privacy.html` promises), so 14 days is the longest window
+these queries can see. Set the time range to the last 14 days.
 
 Requests per version:
 
@@ -70,7 +70,7 @@ filter msg = "sync_client_rejected"
 
 ### 30 and 90 days: the `SyncRequests` metric
 
-Logs cannot answer these, and keeping API logs longer would break the 7-day
+Logs cannot answer these, and keeping API logs longer would break the 14-day
 retention promise. A CloudWatch metric filter on the `sync_client` line
 (`aws_cloudwatch_log_metric_filter.sync_client` in
 `infra/terraform/envs/prod/logging.tf`) counts each Logjam GPS request as

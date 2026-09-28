@@ -363,19 +363,18 @@
       you delete your account, and expire automatically:
     </p>
     <ul>
-      <li>API request and web-server logs (which include your IP address and
-          browser or device type): 7 days.</li>
-      <li>Logs from the service that sends account emails: 14 days.</li>
-      <li>Storage access logs, which record the IP address that fetched or
-          uploaded each file and are used to meter monthly download limits:
-          30 days.</li>
-      <li>Rendering-worker job logs: 90 days.</li>
-      <li>The operator-access audit logs described under &ldquo;Operator
-          access&rdquo;: 365 days, in storage that cannot be altered or deleted
-          before then. Besides operator activity, they record each upload and
-          download of your media and topo files, including the IP address and
-          the file&rsquo;s storage path, which contains your account&rsquo;s
-          internal ID.</li>
+      <li id="retention-operational">Operational logs: 14 days. These are
+          the API&rsquo;s request and web-server logs (which include your IP
+          address and browser or device type), the storage access logs (which
+          record the IP address that fetched or uploaded each file, and meter
+          monthly download limits), database logs, and the logs of the
+          rendering workers and of the service that sends account emails.</li>
+      <li id="retention-audit">The operator-access audit logs described under
+          &ldquo;Operator access&rdquo;: 365 days, in storage that cannot be
+          altered or deleted before then. Besides operator activity, they
+          record each upload and download of your media and topo files,
+          including the IP address and the file&rsquo;s storage path, which
+          contains your account&rsquo;s internal ID.</li>
     </ul>
     <p>
       Our application scrubs its operational logs so place names and
