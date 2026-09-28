@@ -11,6 +11,7 @@
     "prepare": "simple-git-hooks"
   },
   "simple-git-hooks": {
+    "prepare-commit-msg": "scripts/dco-signoff.sh \"$1\"",
     "pre-commit": "gitleaks protect --staged && npx lint-staged"
   },
   "lint-staged": {
