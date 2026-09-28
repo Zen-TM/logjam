@@ -87,7 +87,8 @@ cancelled run is grey, not red.
 
 If the smoke test fails, the deploy calls the Rollback workflow for the
 release that was live before it. If that rollback's own smoke test fails, it
-stops: nothing retries, and a person takes over from here. The deploy run is
+stops: nothing retries, and a person takes over from here. The alarms in
+[alarms.md](alarms.md) are what tell them. The deploy run is
 red either way.
 
 A smoke test whose every request returns 403 from the first attempt is most

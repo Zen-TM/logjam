@@ -34,8 +34,9 @@ The API's stdout (pino JSON) streams to the Elastic Beanstalk group:
 
 EB names it, not Terraform (`infra/terraform/envs/prod/logging.tf`), so list
 `/aws/elasticbeanstalk/logjam-api-prod/` in the console if it is not there. If
-Logs Insights shows no `msg` field, the lines carry a prefix and each query
-needs `parse @message` before the `filter`.
+Logs Insights shows no `msg` field, the lines carry a prefix: each query
+needs `parse @message` before the `filter`, and the `SyncRequests` metric
+below counts nothing, because its filter reads each line as JSON.
 
 ### 7 days: Logs Insights
 
@@ -67,16 +68,21 @@ filter msg = "sync_client_rejected"
 | stats count(*) as requests by reason
 ```
 
-### 30 and 90 days: not yet available
+### 30 and 90 days: the `SyncRequests` metric
 
 Logs cannot answer these, and keeping API logs longer would break the 7-day
-retention promise. The planned source is a CloudWatch metric filter on the
-`sync_client` line with `client_version` as its dimension: a metric keeps
-15 months and holds only a version string and a count. It is not built yet.
+retention promise. A CloudWatch metric filter on the `sync_client` line
+(`aws_cloudwatch_log_metric_filter.sync_client` in
+`infra/terraform/envs/prod/logging.tf`) counts each Logjam GPS request as
+metric `SyncRequests` in namespace `Logjam/Clients`, with `client_version` as
+its one dimension. A metric keeps 15 months and holds only a version string
+and a count.
 
-Once it exists as metric `SyncRequests` in namespace `Logjam/Clients`, the
-console query (CloudWatch → Metrics → Query, source tab) for each window is
-the one expression with a different period:
+It counts from the day the filter was applied, not before: for a window that
+starts earlier, the numbers are short by the days it did not exist.
+
+The console query (CloudWatch → Metrics → Query, source tab) for each window
+is the one expression with a different period:
 
 ```
 SEARCH('{Logjam/Clients,client_version} MetricName="SyncRequests"', 'Sum', 2592000)
@@ -84,4 +90,4 @@ SEARCH('{Logjam/Clients,client_version} MetricName="SyncRequests"', 'Sum', 25920
 
 Set the graph range to 30 days with period `2592000` (30 days) for one bar
 per version, or the range to 90 days with period `86400` for a daily line per
-version. Numbers start on the day the filter is deployed.
+version.
