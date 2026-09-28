@@ -3,7 +3,10 @@
 # domain and Gmail spam-binned every code; SES is unavailable — see cognito.tf).
 #
 # First Lambda and first KMS key in this root. The function source lives in
-# infra/lambda/cognito-email-sender; build it before applying:
+# infra/lambda/cognito-email-sender. terraform-plan.yml and terraform-apply.yml
+# build it the same way, and the plan fingerprint includes source_code_hash, so
+# the apply refuses a build that differs from the one the PR planned. For a
+# local plan, build it first:
 #   cd infra/lambda/cognito-email-sender && npm ci && npm run build
 # archive_file zips the prebuilt dist/ — a stale/missing build will surface as a
 # plan diff on source_code_hash.

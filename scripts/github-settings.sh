@@ -18,6 +18,11 @@
 #     an earlier approval. Only a bypass actor may update main at all ("update"
 #     rule), so only repository admins (the maintainer) can merge, and they
 #     always can: an approved PR does not let a collaborator merge it.
+#   - plan-prod (terraform-plan.yml) is a required check, and a PR must be up to
+#     date with main to merge: merge = apply (terraform-apply.yml), which refuses
+#     unless its plan matches the PR's, and that only holds when the PR was
+#     planned against the main it merges into. The apply role, like the deploy
+#     role, trusts only the `prod` Environment (envs/prod/iam_apply.tf).
 #   - The classic branch protection and the disabled "No Commits to main"
 #     ruleset are removed once the ruleset exists, leaving one source of truth.
 set -euo pipefail
@@ -27,7 +32,7 @@ RULESET_NAME="main"
 APPLY=false
 [ "${1:-}" = "--apply" ] && APPLY=true
 
-REQUIRED_CHECKS='[{"context":"shared"},{"context":"api"},{"context":"frontend"},{"context":"topo"},{"context":"format"},{"context":"actionlint"}]'
+REQUIRED_CHECKS='[{"context":"shared"},{"context":"api"},{"context":"frontend"},{"context":"topo"},{"context":"format"},{"context":"actionlint"},{"context":"plan-prod"}]'
 
 # name=value; public URLs, not secrets.
 VARIABLES=(
@@ -63,7 +68,7 @@ RULESET_BODY=$(cat <<JSON
     {
       "type": "required_status_checks",
       "parameters": {
-        "strict_required_status_checks_policy": false,
+        "strict_required_status_checks_policy": true,
         "required_status_checks": $REQUIRED_CHECKS
       }
     }
