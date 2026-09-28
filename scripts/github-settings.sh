@@ -23,6 +23,12 @@
 #     unless its plan matches the PR's, and that only holds when the PR was
 #     planned against the main it merges into. The apply role, like the deploy
 #     role, trusts only the `prod` Environment (envs/prod/iam_apply.tf).
+#   - Logjam GPS releases: a mobile-v* tag push releases (deploy-mobile.yml),
+#     and the workflow also accepts a tag on a release/mobile-v* branch. Only
+#     repository admins may create, move or delete either (rulesets
+#     mobile-release-tags and mobile-release-branches), and the
+#     `mobile-release` Environment, which holds EXPO_TOKEN, is deployable from
+#     mobile-v* tags only. The secret itself is set by hand.
 #   - The classic branch protection and the disabled "No Commits to main"
 #     ruleset are removed once the ruleset exists, leaving one source of truth.
 set -euo pipefail
@@ -41,6 +47,42 @@ VARIABLES=(
 )
 
 ENVIRONMENT_BODY='{"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true}}'
+
+# Environment=the one ref pattern allowed to deploy from it:its type.
+ENVIRONMENTS=(
+  "prod=main:branch"
+  "mobile-release=mobile-v*:tag"
+)
+
+RELEASE_TAGS_BODY=$(
+  cat <<'JSON'
+{
+  "name": "mobile-release-tags",
+  "target": "tag",
+  "enforcement": "active",
+  "conditions": { "ref_name": { "include": ["refs/tags/mobile-v*"], "exclude": [] } },
+  "bypass_actors": [
+    { "actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "always" }
+  ],
+  "rules": [{ "type": "creation" }, { "type": "update" }, { "type": "deletion" }]
+}
+JSON
+)
+
+RELEASE_BRANCHES_BODY=$(
+  cat <<'JSON'
+{
+  "name": "mobile-release-branches",
+  "target": "branch",
+  "enforcement": "active",
+  "conditions": { "ref_name": { "include": ["refs/heads/release/mobile-v*"], "exclude": [] } },
+  "bypass_actors": [
+    { "actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "always" }
+  ],
+  "rules": [{ "type": "creation" }, { "type": "update" }, { "type": "deletion" }]
+}
+JSON
+)
 
 RULESET_BODY=$(cat <<JSON
 {
@@ -93,27 +135,38 @@ run() {
   echo "done: $method $path"
 }
 
-# 1. prod Environment, main only
-run PUT "repos/$REPO/environments/prod" "$ENVIRONMENT_BODY"
-# (a missing Environment 404s here; gh prints the error body to stdout, so
-# only trust the output when the call succeeded)
-if policies=$(gh api "repos/$REPO/environments/prod/deployment-branch-policies" \
-    --jq '[.branch_policies[] | select(.name == "main")] | length' 2>/dev/null); then
-  has_main_policy=$policies
-else
-  has_main_policy=0
-fi
-if [ "$has_main_policy" = "0" ]; then
-  run POST "repos/$REPO/environments/prod/deployment-branch-policies" '{"name":"main","type":"branch"}'
-fi
+# 1. Environments, each deployable from one ref pattern only
+for entry in "${ENVIRONMENTS[@]}"; do
+  env=${entry%%=*} policy=${entry#*=}
+  pattern=${policy%:*} type=${policy##*:}
+  run PUT "repos/$REPO/environments/$env" "$ENVIRONMENT_BODY"
+  # (a missing Environment 404s here; gh prints the error body to stdout, so
+  # only trust the output when the call succeeded)
+  if policies=$(gh api "repos/$REPO/environments/$env/deployment-branch-policies" \
+      --jq "[.branch_policies[] | select(.name == \"$pattern\" and .type == \"$type\")] | length" 2>/dev/null); then
+    has_policy=$policies
+  else
+    has_policy=0
+  fi
+  if [ "$has_policy" = "0" ]; then
+    run POST "repos/$REPO/environments/$env/deployment-branch-policies" \
+      "$(jq -nc --arg name "$pattern" --arg type "$type" '{name: $name, type: $type}')"
+  fi
+done
 
-# 2. main ruleset (create or replace by name)
-ruleset_id=$(gh api "repos/$REPO/rulesets" --jq ".[] | select(.name == \"$RULESET_NAME\") | .id")
-if [ -n "$ruleset_id" ]; then
-  run PUT "repos/$REPO/rulesets/$ruleset_id" "$RULESET_BODY"
-else
-  run POST "repos/$REPO/rulesets" "$RULESET_BODY"
-fi
+# 2. rulesets (create or replace by name)
+upsert_ruleset() {
+  local name=$1 body=$2 id
+  id=$(gh api "repos/$REPO/rulesets" --jq ".[] | select(.name == \"$name\") | .id")
+  if [ -n "$id" ]; then
+    run PUT "repos/$REPO/rulesets/$id" "$body"
+  else
+    run POST "repos/$REPO/rulesets" "$body"
+  fi
+}
+upsert_ruleset "$RULESET_NAME" "$RULESET_BODY"
+upsert_ruleset mobile-release-tags "$RELEASE_TAGS_BODY"
+upsert_ruleset mobile-release-branches "$RELEASE_BRANCHES_BODY"
 
 # 3. repository variables (create or update by name)
 for pair in "${VARIABLES[@]}"; do

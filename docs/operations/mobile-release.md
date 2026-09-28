@@ -26,33 +26,32 @@ date of its release tag.
 
 Needed before the first release tag.
 
-1. **GitHub Environment `mobile-release`** (Settings → Environments):
-   deployment branches and tags → selected, add the tag pattern `mobile-v*`.
-   Its one secret is `EXPO_TOKEN`: a robot-user access token from expo.dev
+1. **GitHub settings:** `scripts/github-settings.sh --apply` creates the
+   `mobile-release` Environment (deployable from `mobile-v*` tags only) and
+   two rulesets that let only repository admins create, move or delete
+   `mobile-v*` tags and `release/mobile-v*` branches. A tag push is a release,
+   and the workflow accepts a tag on those branches, so these are the
+   permissions that matter.
+2. **`EXPO_TOKEN`**, the Environment's one secret, set by hand (Settings →
+   Environments → `mobile-release`): a robot-user access token from expo.dev
    for the `logjamnsw` account, with access to the `logjam-mobile` project.
-2. **Tag ruleset** for `refs/tags/mobile-v*`: restrict creations, updates and
-   deletions, with the maintainer as the only bypass. A tag push is a
-   release, so creating one is the permission that matters.
-3. **Branch ruleset** for `release/mobile-v*`: restrict creations to the
-   maintainer, for the same reason: the workflow accepts a tag on those
-   branches.
-4. **Play Console app** for `com.logjamnsw.mobile`. Google accepts the first
+3. **Play Console app** for `com.logjamnsw.mobile`. Google accepts the first
    bundle of a new app only by hand upload, so the first release tag's
    automatic submission fails. Download that build's `.aab` from its EAS build
    page and upload it to the internal testing track yourself. Later releases
    submit on their own.
-5. **Google Play service account** (Google Cloud → IAM → service account,
+4. **Google Play service account** (Google Cloud → IAM → service account,
    JSON key; Play Console → Users and permissions → invite it with release
    permissions for this app). Upload the key to EAS, not GitHub:
    `eas credentials --platform android` → Google Service Account. EAS uses it
    for `--auto-submit`.
-6. **EAS environments `preview` and `production`** carry the same variables
+5. **EAS environments `preview` and `production`** carry the same variables
    (`EXPO_PUBLIC_COGNITO_CLIENT_ID`, `EXPO_PUBLIC_COGNITO_USER_POOL_ID`,
    `EXPO_PUBLIC_SENTRY_DSN`, `GOOGLE_SERVICES_JSON`), and should carry the
    same values: both profiles talk to the production stack
    (`mobile/eas.json`). A different `GOOGLE_SERVICES_JSON` gives the two
    profiles different runtime versions (see [Runtime versions](#runtime-versions)).
-7. **Production access.** The Play developer account is a personal one, so
+6. **Production access.** The Play developer account is a personal one, so
    Google allows production releases only after a closed test with at least
    12 testers opted in for 14 continuous days, followed by an application in
    Play Console. Until then a release goes no further than internal or closed
