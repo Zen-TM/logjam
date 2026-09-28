@@ -16,12 +16,23 @@ on:
     types: [completed]
     branches: [main]
 
-# One API deploy or rollback at a time (rollback.yml takes the same group).
-# Not cancel-in-progress: a run cut off mid-migration or mid-swap is worse than
-# a wait. A newer run queued behind this one replaces an older queued one,
-# which is fine: the guard below deploys main's head, which includes it.
+# One API deploy or rollback at a time: rollback.yml, run by hand, takes
+# the same group. Not cancel-in-progress: a run cut off mid-migration or
+# mid-swap is worse than a wait.
+#
+# GitHub keeps ONE pending run per group and cancels it when another run
+# joins, whatever that run is. Two consequences:
+#   - Only a run that can deploy joins. Every CI completion (a red run, a PR's,
+#     a fork's from a branch named main) triggers this workflow; those get a
+#     group of their own, or they would cancel a real pending deploy and then
+#     skip.
+#   - A newer deploy may replace a pending one, which is fine: the guard
+#     deploys main's head, which includes it. But it also cancels a pending
+#     hand rollback, so rollback.yml refuses to start while a deploy of its
+#     target is queued or running. (`queue: max` would keep every pending run;
+#     the actionlint ci.yml pins, 1.7.7, rejects the key.)
 concurrency:
-  group: deploy-api
+  group: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' && 'deploy-api' || format('noop-{0}', github.run_id) }}
   cancel-in-progress: false
 
 env:
@@ -30,8 +41,9 @@ env:
   EB_ENVIRONMENT: ${{ secrets.EB_ENVIRONMENT_NAME }}
 
 jobs:
-  # Skips a commit that is no longer main's head, and reports the live
-  # release, which the rollback job below returns to.
+  # Skips a commit that is no longer main's head (or when that cannot be
+  # told), and reports the live release, which the rollback job below
+  # returns to.
   guard:
     if: >-
       github.event.workflow_run.conclusion == 'success' &&
@@ -56,8 +68,9 @@ jobs:
     needs: guard
     # Only deploy when the triggering CI run passed, was a push (not a PR run),
     # and targeted main. Belt-and-suspenders with the workflow_run `branches`
-    # filter above. `!cancelled()` so a failed guard deploys (it fails open)
-    # instead of skipping; only its explicit 'false' skips.
+    # filter above. `!cancelled()` so a guard that went red after deciding
+    # does not skip the deploy by itself; only its 'false' skips (stale, main
+    # unknown or missing config).
     if: >-
       !cancelled() &&
       github.event.workflow_run.conclusion == 'success' &&
@@ -109,11 +122,8 @@ jobs:
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
-        run: |
-          for family in logjam-api-migrate logjam-geo-pdf-worker; do
-            infra/scripts/pin-ecs-task-image.sh \
-              "$family" "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
-          done
+        # Every family that runs this image: infra/scripts/pin-release.sh.
+        run: infra/scripts/pin-release.sh "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
 
       # Gated pre-deploy migration (ARCH-001 half B). Run `prisma migrate deploy`
       # in a one-shot Fargate task on the sha-pinned revision registered above, and gate
@@ -240,6 +250,9 @@ jobs:
       target: api
       sha: ${{ needs.guard.outputs.deployed }}
     secrets: inherit
+    # actions: read is for rollback.yml's preflight job, skipped when called
+    # but still checked against what the caller grants.
     permissions:
+      actions: read
       id-token: write
       contents: read

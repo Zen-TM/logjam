@@ -4,20 +4,24 @@ name: Deploy guard
 # "should this run deploy?" and reports what is live now, which is the release
 # a failed smoke test rolls back to.
 #
-# Two reasons to skip:
-#   - Stale: the commit is no longer main's head. The deploy workflows share a
-#     concurrency group per target, so a newer run is queued or running; it
-#     deploys main's head, which includes this commit.
+# Three reasons to skip, each decided by infra/scripts/deploy-guard.sh (its
+# --self-test runs in ci.yml's infra-scripts job):
+#   - Stale: the commit is no longer main's head. The run for main's head
+#     deploys this commit too, once its CI is green; if main's CI is red,
+#     nothing deploys until it is fixed or re-run. FAILS CLOSED: when main's
+#     head cannot be read, skip, because deploying an old sha over a newer one
+#     does harm nothing afterwards undoes, while a skip loses nothing the run
+#     for main's head does not ship.
 #   - Nothing to deploy (frontend and worker only): nothing under the target's
 #     paths changed between the LIVE release and this commit. The range starts
-#     at what is live, not at this commit's parent, because stale runs skip and
-#     a queued run can be replaced by a newer one: comparing one commit alone
-#     would let a frontend change followed by a docs-only merge never deploy.
-#
-# FAIL OPEN, the design rule. A deploy that runs when it did not need to costs
-# a few minutes; one silently skipped leaves prod without a fix and tells
-# nobody. Only a successfully computed "no" skips. Any error, and this job
-# failing outright (an absent output), deploys.
+#     at what is live, not at this commit's parent, because stale runs skip:
+#     comparing one commit alone would let a frontend change followed by a
+#     docs-only merge never deploy. FAILS OPEN: a needless deploy costs
+#     minutes, a silently skipped one leaves prod without a fix. Only a
+#     successfully computed "nothing changed" skips.
+#   - Missing config: smoke.yml's URL variables are unset (api and frontend).
+#     Deploying would fail the smoke test and roll back a healthy release, so
+#     the guard fails instead, before anything touches prod.
 
 on:
   workflow_call:
@@ -32,7 +36,7 @@ on:
         required: true
     outputs:
       proceed:
-        description: "'false' only when it is certain this run should not deploy"
+        description: "'false' when this run must not deploy"
         value: ${{ jobs.guard.outputs.proceed }}
       deployed:
         description: The live release's commit sha, or empty when unknown
@@ -48,7 +52,10 @@ jobs:
       id-token: write
       contents: read
     outputs:
-      proceed: ${{ steps.scope.outputs.proceed }}
+      # Freshness and config win: anything but a computed "fresh" (the step
+      # skipped or died included) or missing URL variables means false. Only
+      # then does scope decide, and there an absent value deploys.
+      proceed: ${{ (steps.fresh.outputs.proceed != 'true' || steps.config.outputs.missing == 'true') && 'false' || steps.scope.outputs.proceed }}
       deployed: ${{ steps.live.outputs.sha }}
     env:
       TARGET: ${{ inputs.target }}
@@ -56,22 +63,24 @@ jobs:
       REPO: ${{ github.repository }}
       GH_TOKEN: ${{ github.token }}
     steps:
+      - name: Smoke URLs set?
+        id: config
+        env:
+          API_URL: ${{ vars.PROD_API_URL }}
+          WEB_URL: ${{ vars.PROD_WEB_URL }}
+        run: |
+          if [ "$TARGET" != worker ] && { [ -z "$API_URL" ] || [ -z "$WEB_URL" ]; }; then
+            echo "::error::repository variables PROD_API_URL and PROD_WEB_URL must be set before $TARGET can deploy (scripts/github-settings.sh --apply). Nothing was deployed."
+            echo "missing=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # For infra/scripts/.
+      - name: Checkout code
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
       - name: Is this commit still main's head?
         id: fresh
-        run: |
-          # No `set -e`: every exit path writes an explicit value.
-          set -uo pipefail
-          if ! MAIN=$(gh api "repos/$REPO/commits/main" --jq .sha 2>&1); then
-            echo "::warning::could not read main's head, deploying (fail open). API said: $MAIN"
-            echo "fresh=unknown" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          if [ "$MAIN" != "$SHA" ]; then
-            echo "::notice title=Skipped, stale::$SHA is no longer main's head ($MAIN). The run for main's head deploys instead."
-            echo "fresh=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "fresh=true" >> "$GITHUB_OUTPUT"
-          fi
+        run: infra/scripts/deploy-guard.sh fresh "$SHA"
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6
@@ -81,27 +90,28 @@ jobs:
 
       # Where each target records the commit it runs: the EB version label, the
       # index.html object's release-sha metadata (deploy-frontend.yml writes
-      # it), the topo task definition's image tag.
+      # it), the topo task definition's image tag. Never fails: a lookup error
+      # means "unknown", which deploys and rules out an automatic rollback.
       - name: What is live?
         id: live
         env:
           EB_ENVIRONMENT: ${{ secrets.EB_ENVIRONMENT_NAME }}
           FRONTEND_BUCKET: ${{ secrets.FRONTEND_S3_BUCKET }}
         run: |
-          set -uo pipefail
+          set +e
           case "$TARGET" in
             api)
               LIVE=$(aws elasticbeanstalk describe-environments --environment-names "$EB_ENVIRONMENT" \
-                --query 'Environments[0].VersionLabel' --output text) ;;
+                --query 'Environments[0].VersionLabel' --output text) || LIVE="" ;;
             frontend)
               LIVE=$(aws s3api head-object --bucket "$FRONTEND_BUCKET" --key index.html \
-                --query 'Metadata."release-sha"' --output text) ;;
+                --query 'Metadata."release-sha"' --output text) || LIVE="" ;;
             worker)
-              IMAGE=$(aws ecs describe-task-definition --task-definition logjam-topo-worker \
-                --query 'taskDefinition.containerDefinitions[0].image' --output text)
+              FAMILY=$(infra/scripts/pin-release.sh --families logjam-topo-worker | head -n1)
+              IMAGE=$(aws ecs describe-task-definition --task-definition "$FAMILY" \
+                --query 'taskDefinition.containerDefinitions[0].image' --output text) || IMAGE=""
               LIVE=${IMAGE##*:} ;;
-            *)
-              echo "::error::unknown target '$TARGET'"; exit 1 ;;
+            *) LIVE="" ;;
           esac
           # A lookup that failed, index.html from before release-sha existed,
           # or a task def Terraform reset to :latest all land here.
@@ -114,62 +124,11 @@ jobs:
 
       - name: Anything to deploy?
         id: scope
+        if: ${{ !cancelled() && steps.fresh.outputs.proceed == 'true' }}
         env:
-          FRESH: ${{ steps.fresh.outputs.fresh }}
           LIVE: ${{ steps.live.outputs.sha }}
-        run: |
-          set -uo pipefail
-          emit() {
-            echo "proceed=$1" >> "$GITHUB_OUTPUT"
-            echo "==> proceed=$1"
-            exit 0
-          }
+        run: infra/scripts/deploy-guard.sh scope "$TARGET" "$LIVE" "$SHA"
 
-          [ "$FRESH" = "false" ] && emit false
-
-          case "$TARGET" in
-            # The API rebuilds and deploys on every green push to main.
-            api) emit true ;;
-            # A change to the deploy machinery deploys too, so it runs once.
-            frontend) PATHS='^(frontend/|shared/|\.github/workflows/(deploy-frontend|deploy-guard|smoke|rollback)\.yml$)' ;;
-            worker) PATHS='^(topo/|\.github/workflows/(deploy-topo-worker|deploy-guard|rollback)\.yml$)' ;;
-          esac
-
-          if [ -z "$LIVE" ]; then
-            echo "::warning::live release unknown, deploying (fail open)"
-            emit unknown
-          fi
-
-          if ! OUT=$(gh api "repos/$REPO/compare/$LIVE...$SHA" --jq '.status, (.files[]?.filename)' 2>&1); then
-            echo "::warning::could not compare $LIVE...$SHA, deploying (fail open). API said: $OUT"
-            emit unknown
-          fi
-          STATUS=$(head -n1 <<<"$OUT")
-          FILES=$(tail -n +2 <<<"$OUT")
-
-          # identical: this commit is already live. ahead: a plain range to
-          # inspect. behind or diverged (live is not an ancestor, say after a
-          # hand-made change): deploy rather than reason about it.
-          [ "$STATUS" = "identical" ] && emit false
-          if [ "$STATUS" != "ahead" ]; then
-            echo "::warning::$LIVE...$SHA is '$STATUS', deploying (fail open)"
-            emit unknown
-          fi
-          if [ -z "$FILES" ]; then
-            echo "::warning::empty file list for $LIVE...$SHA, deploying (fail open)"
-            emit unknown
-          fi
-
-          echo "Files changed in $LIVE...$SHA:"
-          sed 's/^/  /' <<<"$FILES"
-
-          # The compare API lists at most 300 files; do not trust a negative
-          # answer from a list that may be cut short.
-          if [ "$(wc -l <<<"$FILES")" -ge 300 ]; then
-            echo "::warning::300+ files, list may be truncated, deploying (fail open)"
-            emit unknown
-          fi
-
-          grep -qE "$PATHS" <<<"$FILES" && emit true
-          echo "::notice title=Skipped, nothing to deploy::nothing under $TARGET's paths changed since the live release $LIVE"
-          emit false
+      - name: Fail on missing config
+        if: ${{ !cancelled() && steps.config.outputs.missing == 'true' }}
+        run: exit 1

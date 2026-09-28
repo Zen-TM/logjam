@@ -98,7 +98,7 @@ jobs:
         id: live
         run: |
           set -uo pipefail
-          LIVE=$(curl -sSf --max-time 15 "$PROD_API_URL/meta" | jq -r .sha)
+          LIVE=$(curl -sSf --max-time 15 "$PROD_API_URL/meta" | jq -r .sha) || LIVE=""
           if ! [[ "$LIVE" =~ ^[0-9a-f]{40}$ ]] || ! git cat-file -e "$LIVE^{commit}" 2>/dev/null; then
             # Before /meta reported a sha, or prod unreachable: main's head is
             # what prod runs whenever its last deploy succeeded.

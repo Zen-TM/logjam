@@ -40,7 +40,10 @@ jobs:
             echo "::error::repository variables PROD_API_URL and PROD_WEB_URL must be set (scripts/github-settings.sh --apply)"
             exit 1
           fi
-          get() { curl -sSf --max-time 15 "$@"; }
+          # Prints the status of every request: all 403s from the first attempt
+          # usually mean the edge WAF blocked this runner's IP
+          # (docs/operations/rollback.md).
+          get() { curl -sSf --max-time 15 -w '%{stderr}%{http_code} %{url_effective}\n' "$@"; }
 
           probe_api() {
             get -o /dev/null "$API_URL/health" || return 1
