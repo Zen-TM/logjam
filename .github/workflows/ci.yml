@@ -463,16 +463,16 @@ jobs:
         with:
           python-version: "3.12"
       # Pure-logic tests; tests/_native_stub.py stubs osgeo/psycopg2 etc when
-      # absent, so no GDAL/PDAL install is needed here. numpy/Pillow/requests
-      # are NOT stub-safe (the math tests need real numpy) — install just
-      # those, with the same version bounds as requirements.txt (whose GDAL
-      # comments assume the Docker image, so it isn't installed wholesale).
+      # absent, so no GDAL/PDAL install is needed here. requirements-test.txt
+      # is the part that is not stub-safe (requirements.txt's GDAL comments
+      # assume the Docker image, so it isn't installed wholesale).
       - name: Install pure-Python deps
         working-directory: topo
-        run: grep -iE '^(numpy|Pillow|requests)' requirements.txt | xargs pip install
+        run: pip install -r requirements-test.txt
       - name: Ruff lint and format check
+        # mise.toml holds the one ruff pin; an empty match fails pip loudly.
         run: |
-          pip install ruff==0.16.9
+          pip install "ruff==$(sed -n 's/^ruff *= *"\(.*\)"/\1/p' mise.toml)"
           ruff check topo
           ruff format --check topo
       - name: Unit tests

@@ -22,7 +22,10 @@ dev: shared build-workers
 	@echo "Running migrations..."
 	cd api && DB_HOST=localhost DB_PORT=5432 DB_NAME=logjam DB_USER=logjam DB_PASSWORD=logjam npx prisma migrate deploy
 	@echo "Seeding fixtures..."
-	cd api && DB_HOST=localhost DB_PORT=5432 DB_NAME=logjam DB_USER=logjam DB_PASSWORD=logjam npx prisma db seed
+	@# A sub-make, so the seed reads the .env.local that _ministack-tf just wrote:
+	@# this make parsed before it existed on a first run, and the seed then
+	@# skipped uploading media for want of S3_BUCKET_MEDIA.
+	@$(MAKE) seed
 	@echo ""
 	@echo "  Infra ready. Start app servers in separate terminals:"
 	@echo "    Terminal 1: cd api  && npm run dev"
@@ -61,7 +64,7 @@ reset: shared build-workers
 	@$(MAKE) _ministack-tf
 	cd api && npx prisma generate
 	cd api && DB_HOST=localhost DB_PORT=5432 DB_NAME=logjam DB_USER=logjam DB_PASSWORD=logjam npx prisma migrate deploy
-	cd api && DB_HOST=localhost DB_PORT=5432 DB_NAME=logjam DB_USER=logjam DB_PASSWORD=logjam npx prisma db seed
+	@$(MAKE) seed
 	@echo "Reset complete."
 
 ## Build the shared package — api + frontend import @logjam/shared via file:../shared
@@ -121,7 +124,7 @@ setup:
 	else \
 		echo "mise is not installed; skipping tool installation."; \
 		echo "Tools specified in mise.toml:"; \
-		sed -n '/^\[tools\]/,/^\[/p' mise.toml | grep -v '^\[' | grep -v '^[[:space:]]*$$' | sed 's/^/  /'; \
+		sed -n '/^\[tools\]/,/^\[/p' mise.toml | grep -v '^\[' | grep -v '^[[:space:]]*$$' | grep -v '^[[:space:]]*#' | sed 's/^/  /'; \
 	fi
 	@for pkg in $(PACKAGES); do \
 		echo "Installing dependencies in $$pkg..."; \
@@ -130,6 +133,10 @@ setup:
 	@$(MAKE) shared
 	@echo "Generating Prisma client..."
 	cd api && npx prisma generate
+	@if [ ! -f frontend/.env ]; then \
+		echo "Creating frontend/.env from frontend/.env.example (fake auth)..."; \
+		cp frontend/.env.example frontend/.env; \
+	fi
 	@if [ -f topo/requirements-test.txt ]; then \
 		echo "Installing topo test requirements..."; \
 		pip install -r topo/requirements-test.txt; \

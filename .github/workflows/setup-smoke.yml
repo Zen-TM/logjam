@@ -53,6 +53,4 @@ jobs:
 
       - name: Unit tests (topo)
         working-directory: topo
-        run: |
-          grep -iE '^(numpy|Pillow|requests)' requirements.txt | xargs pip install
-          python -m unittest discover -s tests
+        run: python -m unittest discover -s tests
