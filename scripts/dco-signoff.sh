@@ -2,6 +2,8 @@
 # Appends a Developer Certificate of Origin (DCO) Signed-off-by trailer for the
 # current git user to the commit message file if not already present.
 # Invoked by the prepare-commit-msg git hook with the message file path as $1.
+# interpret-trailers joins an existing trailer block (Co-authored-by, …) rather
+# than starting a new paragraph, which would stop GitHub reading those trailers.
 set -euo pipefail
 
 msg_file="${1:-}"
@@ -17,23 +19,5 @@ if [ -z "$name" ] || [ -z "$email" ]; then
   exit 1
 fi
 
-signoff="Signed-off-by: $name <$email>"
-
-# Avoid duplicate trailers when amending or if sign-off is already in the message
-if grep -qxF "$signoff" "$msg_file"; then
-  exit 0
-fi
-
-# Append trailer with a preceding blank line if the message has content
-if [ ! -s "$msg_file" ]; then
-  printf '%s\n' "$signoff" >> "$msg_file"
-else
-  if [ -n "$(tail -c 1 "$msg_file")" ]; then
-    printf '\n' >> "$msg_file"
-  fi
-  if [ -n "$(tail -n 1 "$msg_file")" ]; then
-    printf '\n%s\n' "$signoff" >> "$msg_file"
-  else
-    printf '%s\n' "$signoff" >> "$msg_file"
-  fi
-fi
+git interpret-trailers --in-place --if-exists addIfDifferent \
+  --trailer "Signed-off-by: $name <$email>" "$msg_file"
