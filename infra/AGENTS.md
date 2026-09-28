@@ -7,10 +7,12 @@ values) and for local dev's MiniStack resources and `.env.local`
 
 - **Prod applies only from `terraform-apply.yml`, never a laptop:** merging a PR
   applies the plan the maintainer read in its comment, and the workflow refuses
-  any other plan (`infra/scripts/plan-summary.mjs`). `terraform plan` is
-  read-only. The one exception is a change to the apply role or its boundary
-  (`terraform/envs/prod/iam_apply.tf`), which that role may not make: the
-  maintainer applies it from their machine.- **Change AWS only through Terraform,** never the console or the CLI: what is
+  any other plan (`infra/scripts/plan-summary.mjs`,
+  [0024](../docs/decisions/0024-prod-terraform-applies-on-merge-by-plan-fingerprint.md)).
+  `terraform plan` is read-only. The one exception is a change to the apply
+  role or its boundary (`terraform/envs/prod/iam_apply.tf`), which that role
+  may not make: the maintainer applies it from their machine.
+- **Change AWS only through Terraform,** never the console or the CLI: what is
   made by hand is drift the next plan undoes.
 - **CI owns deploy-time fields:** image revisions (`infra/scripts/pin-ecs-task-image.sh`),
   the EB environment's `setting`s and the frontend bucket's contents. Terraform
