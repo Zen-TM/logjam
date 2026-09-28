@@ -34,13 +34,14 @@ resource "aws_iam_role" "topo_worker" {
 # GitHub Actions OIDC roles (repo Zen-TM/logjam). The oidc-provider's ARN is
 # embedded as a literal, as before.
 #
-# Two roles, split by what may assume them. The OIDC `sub` claim names where a
+# Three roles, split by what may assume them. The OIDC `sub` claim names where a
 # workflow run came from, and it used to be matched with `repo:Zen-TM/logjam:*`
 # — any workflow on ANY branch could assume the deploy role, so anyone able to
 # push a branch could deploy to prod or run the migrate task without a PR.
 #   - deploy (this role, name kept so nothing else moves): only jobs running in
 #     the `prod` GitHub Environment, which only `main` may deploy to.
 #   - plan (below): read-only, for terraform plan on PRs and on main.
+#   - apply (iam_apply.tf): terraform apply on merge, `prod` Environment only.
 locals {
   github_oidc_provider_arn = "arn:aws:iam::620853681701:oidc-provider/token.actions.githubusercontent.com"
 }
@@ -254,8 +255,7 @@ resource "aws_iam_role_policy_attachment" "gha_eb" {
 # state bucket. Hand-listing those actions is brittle (every new resource type
 # breaks the plan with AccessDenied), so use the AWS-managed ReadOnlyAccess and
 # carve the sensitive surfaces back out with an explicit Deny below. Write
-# perms for TF apply stay off this role until Phase 3 (see
-# .claude/cicd-staging-plan.md guardrails).
+# perms for terraform apply live only on the apply role (iam_apply.tf).
 resource "aws_iam_role_policy_attachment" "gha_readonly" {
   role       = aws_iam_role.github_actions.name
   policy_arn = "arn:aws:iam::aws:policy/ReadOnlyAccess"

@@ -1,0 +1,132 @@
+name: terraform-apply
+
+# Merge = apply for envs/prod. The gate is the merge: the maintainer reads the
+# PR's plan comment (terraform-plan.yml) and merging applies it. This re-plans
+# with the state lock and applies only when that plan's fingerprint equals
+# the one in the merged PR's last plan comment (infra/scripts/plan-summary.mjs):
+# if main moved or AWS was changed by hand since, it refuses and says why.
+#
+# Runs as the apply role, which trusts only jobs in the `prod` Environment
+# (deployable from main only) and whose permission boundary denies user-data
+# reads, rds-db:connect, secret values and edits to itself
+# (infra/terraform/envs/prod/iam_apply.tf).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "infra/terraform/**"
+      - "infra/lambda/**"
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+# Never cancel: an apply stopped mid-way leaves AWS half-changed. A queued run
+# replaced by a newer one is safe: the newer plan then includes both changes,
+# its fingerprint differs from its PR's, and it refuses.
+concurrency:
+  group: terraform-apply
+  cancel-in-progress: false
+
+jobs:
+  apply-prod:
+    runs-on: ubuntu-latest
+    environment: prod
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Find the merged PR and its last plan comment
+        id: pr
+        run: |
+          pr=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" \
+            --jq "[.[] | select(.merged_at != null and .merge_commit_sha == \"$GITHUB_SHA\")][0].number // empty")
+          if [ -z "$pr" ]; then
+            echo "::error::$GITHUB_SHA reached main without a merged PR, so no one read its plan. Nothing applied; open a PR touching infra/terraform to plan and apply the current diff."
+            exit 1
+          fi
+          echo "number=$pr" >> "$GITHUB_OUTPUT"
+          echo "head=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$pr" --jq .head.sha)" >> "$GITHUB_OUTPUT"
+          id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$pr/comments" --paginate \
+            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | contains("<!-- terraform-plan-prod -->"))) | .id' \
+            | tail -n1)
+          : > "$RUNNER_TEMP/read.md"
+          if [ -n "$id" ]; then
+            gh api "repos/$GITHUB_REPOSITORY/issues/comments/$id" --jq .body > "$RUNNER_TEMP/read.md"
+          fi
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/logjam-github-actions-apply-role
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: "~> 1.13"
+          terraform_wrapper: false
+
+      # Same build as terraform-plan.yml: the fingerprint includes the
+      # Lambda's source_code_hash, so a build that differs from the PR's
+      # refuses rather than ships.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
+      - name: Build cognito-email-sender Lambda
+        working-directory: infra/lambda/cognito-email-sender
+        run: npm ci && npm run build
+
+      - name: terraform init
+        run: terraform -chdir=infra/terraform/envs/prod init -input=false
+
+      # Takes the state lock (no -lock=false), and the saved planfile is what
+      # apply runs, so nothing can slip in between the check and the apply.
+      - name: terraform plan
+        run: |
+          cd infra/terraform/envs/prod
+          terraform plan -input=false -no-color -out=prod.tfplan
+          terraform show -json prod.tfplan > "$RUNNER_TEMP/plan.json"
+
+      - name: Is this the plan the PR showed?
+        id: check
+        env:
+          HEAD_SHA: ${{ steps.pr.outputs.head }}
+        run: |
+          set -o pipefail
+          node infra/scripts/plan-summary.mjs check "$RUNNER_TEMP/plan.json" "$RUNNER_TEMP/read.md" "$HEAD_SHA" \
+            | tee "$RUNNER_TEMP/check.md"
+
+      - name: terraform apply
+        id: apply
+        run: terraform -chdir=infra/terraform/envs/prod apply -input=false -no-color prod.tfplan
+
+      - name: Comment the result on the merged PR
+        if: always() && steps.pr.outputs.number != ''
+        env:
+          PR: ${{ steps.pr.outputs.number }}
+          CHECK: ${{ steps.check.outcome }}
+          APPLY: ${{ steps.apply.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ "$APPLY" = success ]; then
+            status="✅ applied"
+          elif [ "$APPLY" = failure ]; then
+            status="❌ apply failed part-way: AWS may be partly changed. Read the run log, then fix forward with a PR"
+          elif [ "$CHECK" = failure ]; then
+            status="⛔ refused, nothing applied"
+          else
+            status="❌ failed before the check, nothing applied"
+          fi
+          {
+            echo "### Terraform apply — \`envs/prod\` at ${GITHUB_SHA:0:7}: $status"
+            echo
+            if [ -s "$RUNNER_TEMP/plan.json" ]; then
+              if [ "$CHECK" = failure ]; then cat "$RUNNER_TEMP/check.md"; else node infra/scripts/plan-summary.mjs header "$RUNNER_TEMP/plan.json"; fi
+              echo
+            fi
+            echo "[Run]($RUN_URL)"
+          } > "$RUNNER_TEMP/result.md"
+          gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -F body=@"$RUNNER_TEMP/result.md" > /dev/null

@@ -1,0 +1,32 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.13.1",
+  "resource_changes": [
+    {
+      "address": "aws_iam_policy.github_actions_apply_boundary",
+      "mode": "managed",
+      "type": "aws_iam_policy",
+      "name": "github_actions_apply_boundary",
+      "change": {
+        "actions": [
+          "update"
+        ],
+        "before": {},
+        "after": {}
+      }
+    },
+    {
+      "address": "aws_ecr_repository.api",
+      "mode": "managed",
+      "type": "aws_ecr_repository",
+      "name": "api",
+      "change": {
+        "actions": [
+          "update"
+        ],
+        "before": {},
+        "after": {}
+      }
+    }
+  ]
+}

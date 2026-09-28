@@ -1,0 +1,84 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.13.1",
+  "resource_changes": [
+    {
+      "address": "module.media.aws_s3_bucket.this",
+      "mode": "managed",
+      "type": "aws_s3_bucket",
+      "name": "this",
+      "change": {
+        "actions": [
+          "delete"
+        ],
+        "before": {},
+        "after": null
+      }
+    },
+    {
+      "address": "aws_cloudwatch_log_group.g0",
+      "mode": "managed",
+      "type": "aws_cloudwatch_log_group",
+      "name": "g0",
+      "change": {
+        "actions": [
+          "update"
+        ],
+        "before": {},
+        "after": {}
+      }
+    },
+    {
+      "address": "aws_cloudwatch_log_group.g1",
+      "mode": "managed",
+      "type": "aws_cloudwatch_log_group",
+      "name": "g1",
+      "change": {
+        "actions": [
+          "update"
+        ],
+        "before": {},
+        "after": {}
+      }
+    },
+    {
+      "address": "aws_cloudwatch_log_group.g2",
+      "mode": "managed",
+      "type": "aws_cloudwatch_log_group",
+      "name": "g2",
+      "change": {
+        "actions": [
+          "update"
+        ],
+        "before": {},
+        "after": {}
+      }
+    },
+    {
+      "address": "aws_cloudwatch_log_group.g3",
+      "mode": "managed",
+      "type": "aws_cloudwatch_log_group",
+      "name": "g3",
+      "change": {
+        "actions": [
+          "update"
+        ],
+        "before": {},
+        "after": {}
+      }
+    },
+    {
+      "address": "aws_cloudwatch_log_group.g4",
+      "mode": "managed",
+      "type": "aws_cloudwatch_log_group",
+      "name": "g4",
+      "change": {
+        "actions": [
+          "update"
+        ],
+        "before": {},
+        "after": {}
+      }
+    }
+  ]
+}

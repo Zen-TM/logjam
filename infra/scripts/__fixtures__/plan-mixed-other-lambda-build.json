@@ -1,0 +1,104 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.13.1",
+  "resource_changes": [
+    {
+      "address": "aws_iam_role.github_actions",
+      "mode": "managed",
+      "type": "aws_iam_role",
+      "name": "github_actions",
+      "change": {
+        "actions": [
+          "no-op"
+        ],
+        "before": {},
+        "after": {}
+      }
+    },
+    {
+      "address": "aws_lambda_function.cognito_email_sender",
+      "mode": "managed",
+      "type": "aws_lambda_function",
+      "name": "cognito_email_sender",
+      "change": {
+        "actions": [
+          "update"
+        ],
+        "before": {},
+        "after": {
+          "function_name": "logjam-cognito-email-sender",
+          "source_code_hash": "AAAAm1Bbx2yq3cQnLr0X9Z5x0Jq0Q9Xy2kY0v1c2d3e4="
+        }
+      }
+    },
+    {
+      "address": "aws_cloudwatch_log_group.api",
+      "mode": "managed",
+      "type": "aws_cloudwatch_log_group",
+      "name": "api",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": {},
+        "after": {}
+      }
+    },
+    {
+      "address": "aws_ecr_repository.api",
+      "mode": "managed",
+      "type": "aws_ecr_repository",
+      "name": "api",
+      "change": {
+        "actions": [
+          "update"
+        ],
+        "before": {},
+        "after": {}
+      }
+    },
+    {
+      "address": "aws_s3_bucket_versioning.media",
+      "mode": "managed",
+      "type": "aws_s3_bucket_versioning",
+      "name": "media",
+      "change": {
+        "actions": [
+          "delete",
+          "create"
+        ],
+        "before": {},
+        "after": {}
+      }
+    },
+    {
+      "address": "module.access_logs.aws_s3_bucket_lifecycle_configuration.this[0]",
+      "mode": "managed",
+      "type": "aws_s3_bucket_lifecycle_configuration",
+      "name": "this[0]",
+      "change": {
+        "actions": [
+          "delete"
+        ],
+        "before": {},
+        "after": null
+      }
+    },
+    {
+      "address": "aws_iam_role_policy.gha_frontend_deploy",
+      "mode": "managed",
+      "type": "aws_iam_role_policy",
+      "name": "gha_frontend_deploy",
+      "change": {
+        "actions": [
+          "no-op"
+        ],
+        "before": {},
+        "after": {},
+        "importing": {
+          "id": "logjam-frontend-deploy"
+        }
+      }
+    }
+  ]
+}
