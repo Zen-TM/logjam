@@ -40,6 +40,10 @@
   see the row, or phones keep it forever.
 - **A sync push op and its REST twin accept the same fields,** bounds
   included; a change to one is tested on both (`src/__tests__/syncPush.test.ts`).
+- **Never remove or narrow a `/sync/*` field, op or protocol that a
+  supported build still uses (until three months after its successor ships):**
+  it stays on phones, often offline, until its owner updates. No guard test.
+  [0022](../docs/decisions/0022-mobile-builds-supported-three-months.md)
 
 ## Migrations
 
