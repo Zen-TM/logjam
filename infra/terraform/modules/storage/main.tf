@@ -5,6 +5,16 @@
 
 resource "aws_s3_bucket" "this" {
   bucket = var.bucket_name
+
+  # A plan that would destroy a bucket fails instead. force_destroy stays off
+  # as well, so AWS refuses to delete a non-empty bucket; this stops the plan
+  # before an apply gets that far. Every bucket this module makes is kept on
+  # purpose: media and topo tiles are user data or costly to rebuild, and the
+  # frontend and access-log buckets back the live site and its audit trail.
+  # Versioning stays off: a file a user deletes is gone.
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_s3_bucket_versioning" "this" {
