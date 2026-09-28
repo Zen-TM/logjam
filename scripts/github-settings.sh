@@ -14,10 +14,10 @@
 #     only jobs in this Environment (infra/terraform/envs/prod/iam.tf), so a
 #     workflow pushed to any other branch cannot assume it.
 #   - main ruleset: no deletion or force-push; the existing required checks; a PR
-#     needs a CODEOWNERS approval (.github/CODEOWNERS) on its latest push, and a
-#     new push dismisses an earlier approval. A personal-account repo cannot
-#     restrict WHO merges, so the approval is the gate. Repository admins bypass
-#     it, which is how the maintainer lands their own PRs.
+#     needs a CODEOWNERS approval (.github/CODEOWNERS), and a new push dismisses
+#     an earlier approval. Only a bypass actor may update main at all ("update"
+#     rule), so only repository admins (the maintainer) can merge, and they
+#     always can: an approved PR does not let a collaborator merge it.
 #   - The classic branch protection and the disabled "No Commits to main"
 #     ruleset are removed once the ruleset exists, leaving one source of truth.
 set -euo pipefail
@@ -49,13 +49,14 @@ RULESET_BODY=$(cat <<JSON
   "rules": [
     { "type": "deletion" },
     { "type": "non_fast_forward" },
+    { "type": "update", "parameters": { "update_allows_fetch_and_merge": false } },
     {
       "type": "pull_request",
       "parameters": {
         "required_approving_review_count": 1,
         "require_code_owner_review": true,
         "dismiss_stale_reviews_on_push": true,
-        "require_last_push_approval": true,
+        "require_last_push_approval": false,
         "required_review_thread_resolution": false
       }
     },
