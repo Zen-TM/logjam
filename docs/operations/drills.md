@@ -57,6 +57,10 @@ note times and surprises. [rollback.md](rollback.md) has the commands.
       deploy of the same target is queued or running fails its preflight job
       and changes nothing. A deploy that starts while a rollback runs waits
       for it.
+- [ ] **Missing config fails closed:** unset the repository variable
+      `PROD_WEB_URL`, merge a change under `frontend/`. The guard goes red with
+      "must be set", the deploy job is skipped, nothing in the bucket changes.
+      Restore it with `scripts/github-settings.sh --apply`.
 - [ ] **No-op CI runs stay out of the group:** while a deploy runs and
       another waits, a PR's CI finishing starts a deploy run that skips
       without cancelling the waiting one.
