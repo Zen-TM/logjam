@@ -31,3 +31,24 @@ resource "aws_cloudwatch_log_group" "api_migrate" {
   name              = "/ecs/logjam-api-migrate"
   retention_in_days = 90
 }
+
+# Logjam GPS versions in the field, kept as a metric because the log group
+# keeps only 7 days (docs/operations/queries.md reads it). One dimension, the
+# version: every distinct string the API accepted (CLIENT_HEADER_REGEX in
+# api/src/routes/sync.ts, signed-in requests only) is one metric at about
+# $0.30 a month while it keeps syncing, and CloudWatch disables a filter that
+# emits too many distinct values, which bounds anyone sending made-up versions.
+resource "aws_cloudwatch_log_metric_filter" "sync_client" {
+  name           = "logjam-sync-client"
+  log_group_name = local.eb_api_stdout_log_group
+  pattern        = "{ $.msg = \"sync_client\" && $.client_platform = \"mobile\" }"
+
+  metric_transformation {
+    namespace = "Logjam/Clients"
+    name      = "SyncRequests"
+    value     = "1"
+    dimensions = {
+      client_version = "$.client_version"
+    }
+  }
+}
