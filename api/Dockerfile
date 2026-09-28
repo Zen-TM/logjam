@@ -83,9 +83,11 @@ ADD https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /app/rds-c
 
 EXPOSE 8080
 
-# The commit this image was built from, reported by GET /meta. Last, so a new
-# sha rebuilds no earlier layer. The deploy workflow passes it; a local build
-# without it bakes in "" and /meta reports null.
+# The commit this image was built from, reported by GET /meta. Baked into the
+# image, not set as an environment-level EB option, so rolling EB back to an
+# older version label reports the older sha, which the rollback smoke test
+# checks. Last, so a new sha rebuilds no earlier layer. The deploy workflow
+# passes it; a local build without it bakes in "" and /meta reports null.
 ARG GIT_SHA=""
 ENV GIT_SHA=$GIT_SHA
 

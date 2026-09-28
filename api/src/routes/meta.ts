@@ -22,6 +22,7 @@ router.get("/min-mobile-version", (_req: Request, res: Response) => {
 // the running image was built from (null outside a CI-built image): the
 // deploy and rollback workflows' smoke step compares it with what they
 // shipped, and rollback-compat reads it to find the release prod runs.
+// Guard: meta.unit.test.ts.
 router.get("/", (_req: Request, res: Response) => {
   const env = getEnv();
   res.json({

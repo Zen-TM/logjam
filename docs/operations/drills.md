@@ -3,7 +3,7 @@
 A drill proves the rollback mechanism works: the workflows, the AWS
 permissions, and how long each step takes. It does not prove a rollback is
 *safe* (that the older code works on the newer schema); `rollback-compat`
-checks that on every migration PR.
+checks that on every migration PR, for the release live at the time.
 
 **When:** after any change to a `deploy-*.yml`, `deploy-guard.yml`,
 `smoke.yml` or `rollback.yml` (a changed mechanism is an untested one),
@@ -53,8 +53,13 @@ note times and surprises. [rollback.md](rollback.md) has the commands.
       `logjam-topo-export-worker` carry the chosen tag. Times: ____ / ____
 - [ ] **Refusals change nothing:** a short sha fails the sha check; a sha
       with no ECR image (or no `releases/<sha>/`) fails before any swap.
-- [ ] **Serialized:** a rollback dispatched while a deploy of the same target
-      runs waits for it.
+- [ ] **Refused while a deploy is busy:** a rollback dispatched while a
+      deploy of the same target is queued or running fails its preflight job
+      and changes nothing. A deploy that starts while a rollback runs waits
+      for it.
+- [ ] **No-op CI runs stay out of the group:** while a deploy runs and
+      another waits, a PR's CI finishing starts a deploy run that skips
+      without cancelling the waiting one.
 
 ### Automatic rollback
 
@@ -90,5 +95,12 @@ note times and surprises. [rollback.md](rollback.md) has the commands.
 ## Records
 
 <!-- Newest first. Date, who, the change under test, times, surprises. -->
+
+None yet.
+
+## Real rollbacks
+
+<!-- Newest first. Date, who, target and shas, why, how long, what followed
+(the fix or revert on main). -->
 
 None yet.
