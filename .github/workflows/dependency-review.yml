@@ -1,0 +1,30 @@
+name: Dependency Review
+
+# Runs GitHub Dependency Review on pull requests that modify dependencies or
+# manifests. Requires the repository's Dependency graph to be enabled in
+# repository settings (it fails until enabled).
+
+on:
+  pull_request:
+    paths:
+      - 'package.json'
+      - 'package-lock.json'
+      - '**/package.json'
+      - '**/package-lock.json'
+      - '**/requirements*.txt'
+      - '**/pyproject.toml'
+      - '**/Dockerfile'
+      - '**/.terraform.lock.hcl'
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-review:
+    name: dependency-review
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Dependency Review
+        uses: actions/dependency-review-action@05fe45722df1fa8bc0093847e77a16f272a0f823 # v4
