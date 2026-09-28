@@ -62,7 +62,7 @@ git --version && make --version | head -1 && mise --version
 docker compose version && docker run --rm hello-world
 ```
 
-### 2. Clone and set up (about 5–10 minutes)
+### 2. Clone and set up (a few minutes)
 
 ```bash
 git clone https://github.com/Zen-TM/logjam.git
@@ -72,7 +72,7 @@ make setup
 cp frontend/.env.example frontend/.env
 ```
 
-- `mise trust` lets mise read the repo's `mise.toml`; it asks once per clone.
+- `mise trust` lets mise read the repo's `mise.toml`; you run it once per clone.
 - `make setup` installs the pinned tools, runs `npm ci` in every package,
   builds `shared/` and generates the Prisma client. Most of the time is the
   npm installs; the tool downloads are once per machine.
@@ -123,13 +123,18 @@ In a third:
 cd frontend && npm run dev
 ```
 
-**It worked if** `curl localhost:8080/health` answers `200` and Vite prints
-`Local: http://localhost:5173/`.
+**It worked if** `curl localhost:8080/health` prints `{"status":"ok",...}` and
+Vite prints `Local:   http://localhost:5173/`.
 
 ### 5. Sign in
 
 Open <http://localhost:5173>. There is no sign-in screen: with fake auth,
-every request is the seeded user **alice**, and you land on her places.
+every request is the seeded user **alice**, and Logjam Web opens on the map
+with its sidebar (Places, Logs, Friends and so on). Open **Places** to see her
+seeded places.
+
+**It worked if** `curl -H 'Authorization: Bearer x' localhost:8080/users/me`
+includes `"username":"alice"`.
 
 To be someone else, restart the API with a different seeded user
 (`fake-bob-sub` or `fake-carol-sub`):
@@ -147,8 +152,8 @@ The seeded users and the relationships the tests rely on are listed in
 make verify
 ```
 
-`make verify` checks formatting, lints and typechecks every package (about
-2–4 minutes). Then run the unit suites, which need no running stack:
+`make verify` checks formatting, lints and typechecks every package (a minute
+or two). Then run the unit suites, which need no running stack:
 
 ```bash
 (cd shared && npm test)
@@ -158,8 +163,13 @@ make verify
 (cd topo && python -m unittest discover -s tests)
 ```
 
+The topo suite needs the pure-Python part of `topo/requirements.txt`, once:
+`grep -iE '^(numpy|Pillow|requests)' topo/requirements.txt | xargs pip install`.
+Without them it runs against stubs and fails with `MagicMock` errors.
+
 If you changed the API, also run its integration suite against the running
-stack from steps 3–4: `cd api && npm test`. Each package's `AGENTS.md` says
+stack from steps 3–4: `cd api && npm test` (several minutes: it waits out
+the API's rate limits). Each package's `AGENTS.md` says
 what its suites need.
 
 **It worked if** every command exits 0. The same checks run in CI on your
@@ -351,6 +361,7 @@ Maestro UI flows and their prerequisites are in
 | A change in `shared/` does not show up in the API, Logjam Web or Logjam GPS | They read the built `shared/dist`, not the source: `make shared`, then restart the API (nodemon does not see it) and Metro. |
 | The API integration suite (`cd api && npm test`) fails with a refused connection, or 500s in tests your change does not touch | The dev database is not reachable: check `docker compose ps`, rerun `make dev`, restart the API. Not a regression. |
 | The stack runs on a different machine (or VM or container) from your editor and browser | Everything listens on that machine's `localhost` only. Forward the ports to where your browser and phone are, for example `ssh -L 5173:localhost:5173 -L 8080:localhost:8080 <host>`, and add `-L 8081:localhost:8081` for Metro. Your editor's remote-development feature can forward them for you. |
+| Uploads fail with `InvalidAccessKeyId` (the integration suite's media, track and file tests fail with `presigned PUT failed 403`) | Your shell exports real AWS credentials (`AWS_ACCESS_KEY_ID`, `AWS_PROFILE`), which win over the MiniStack ones the API reads from its env file. Start the API without them: `env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN -u AWS_PROFILE npm run dev`. |
 | Logjam GPS opens but has no data, or its edits never sync | `127.0.0.1` in `mobile/.env` means the phone: rerun `npm run dev:android` to restore the `adb reverse` tunnels. |
 
 More symptoms, with causes, for the stack and for Metro and devices are in the
