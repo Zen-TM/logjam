@@ -159,13 +159,14 @@ signing is [0009](../decisions/0009-signed-ota-updates.md).
    an update. Published anyway, it would reach no phone and say nothing.
 5. **Publish to `preview` and check it** on a release candidate of X.Y.Z, if
    one exists and has the same runtime version:
-   `npm run update:preview -- --environment preview --message "<what it fixes>"`.
-   `--environment` makes the bundle use the EAS environment's variables
-   instead of `mobile/.env`, which points at the local stack.
+   `npm run update:preview -- --message "<what it fixes>"`.
+   The script passes `--environment`, so the bundle uses the EAS
+   environment's variables, not `mobile/.env`, which points at the local
+   stack.
 6. **Promote the same update to `production`:**
    `eas update:republish --group <update group id> --destination-branch production --private-key-path keys/private-key.pem`.
    With no candidate to check it on, publish directly instead:
-   `npm run update:production -- --environment production --message "<what it fixes>"`.
+   `npm run update:production -- --message "<what it fixes>"`.
 7. **Watch Sentry** for the next launches. To undo:
    `eas update:rollback <group id> --private-key-path keys/private-key.pem`
    republishes the previous update, or tells phones to run the JavaScript
