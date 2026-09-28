@@ -11,7 +11,7 @@ works.
 
 **What you install yourself:** Docker (with Compose), `make`, [mise] and git.
 Everything else is either pinned in [`mise.toml`](../mise.toml) (Node, Python,
-Terraform, the AWS CLI and a couple of linters), installed by npm from the
+Terraform, the AWS CLI, ruff and a couple of other linters), installed by npm from the
 lockfiles, or runs in a container (Postgres, MiniStack and the worker images).
 You need no AWS account: local dev uses fake auth and MiniStack, a local AWS
 emulator, and never reaches AWS.
@@ -69,16 +69,14 @@ git clone https://github.com/Zen-TM/logjam.git
 cd logjam
 mise trust
 make setup
-cp frontend/.env.example frontend/.env
 ```
 
 - `mise trust` lets mise read the repo's `mise.toml`; you run it once per clone.
 - `make setup` installs the pinned tools, runs `npm ci` in every package,
-  builds `shared/` and generates the Prisma client. Most of the time is the
-  npm installs; the tool downloads are once per machine.
-- `frontend/.env` is Logjam Web's own config. The example's values
-  (`VITE_AUTH_MODE=fake`, API on `localhost:8080`) are the ones local dev
-  wants; without the file Logjam Web falls back to Cognito sign-in.
+  builds `shared/`, generates the Prisma client, installs the topo unit
+  tests' Python packages and creates Logjam Web's `frontend/.env` from its
+  example (fake auth, API on `localhost:8080`) if you have none. Most of the
+  time is the npm installs; the tool downloads are once per machine.
 
 **It worked if** `make setup` ends with Prisma's "Generated Prisma Client"
 line and no `npm ERR!`, and `node --version` inside the repo prints the major
@@ -162,10 +160,6 @@ or two). Then run the unit suites, which need no running stack:
 (cd mobile && npm test)
 (cd topo && python -m unittest discover -s tests)
 ```
-
-The topo suite needs the pure-Python part of `topo/requirements.txt`, once:
-`grep -iE '^(numpy|Pillow|requests)' topo/requirements.txt | xargs pip install`.
-Without them it runs against stubs and fails with `MagicMock` errors.
 
 If you changed the API, also run its integration suite against the running
 stack from steps 3–4: `cd api && npm test` (several minutes: it waits out
