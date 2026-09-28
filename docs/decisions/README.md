@@ -35,3 +35,4 @@ directory for the paths and symbols a change touches.
 | [0020](0020-share-the-decision-not-the-drawing.md) | Share the decision, not the drawing: shared declarations + parity tests, no generated cross-platform UI | 2026-09-25 | Accepted |
 | [0021](0021-agpl-and-dco.md) | AGPL-3.0 only; DCO sign-off, not a CLA | 2026-09-25 | Accepted |
 | [0022](0022-mobile-builds-supported-three-months.md) | A Logjam GPS build is supported until three months after its successor's release; SYNC_PROTOCOL keeps N−1 until then | 2026-09-28 | Accepted |
+| [0023](0023-ota-runtime-is-the-native-fingerprint.md) | An OTA update's runtime version is the native fingerprint, and a production update ships only from its release's branch | 2026-09-28 | Accepted |

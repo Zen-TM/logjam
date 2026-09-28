@@ -1,0 +1,117 @@
+name: Release Logjam GPS
+
+# A Logjam GPS release is a `mobile-vX.Y.Z` tag, not a merge: web and API
+# deploy on every merge to main, but a store build stays on phones for months,
+# so it ships only when someone decides to cut one. The procedure (version
+# bump, CHANGELOG, backports, what is checked on a device first) is
+# docs/operations/mobile-release.md.
+#
+# Two kinds of tag:
+#   mobile-vX.Y.Z        the release: EAS `production` profile (Play bundle),
+#                        submitted to the Play internal track as a draft.
+#   mobile-vX.Y.Z-rc.N   a release candidate: EAS `preview` profile (an APK
+#                        to install directly, `preview` channel), not
+#                        submitted. Also the way to dry-run this workflow.
+#
+# The build runs on EAS; --auto-submit has EAS submit when its build
+# finishes, so this job does not wait on it. The Play service account key
+# lives in EAS (submit credentials), not in this repo's secrets.
+
+on:
+  push:
+    tags: ["mobile-v*"]
+
+# Two tags pushed together must not race each other into the Play track.
+concurrency:
+  group: deploy-mobile
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Check tag, build and submit
+    # EXPO_TOKEN lives only in this Environment, whose deployment rule admits
+    # `mobile-v*` tags alone, so a workflow on any branch cannot read it.
+    environment: mobile-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout the tagged commit
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          # Full history and every branch: the tag check below asks which
+          # branches contain the tagged commit.
+          fetch-depth: 0
+
+      - name: Check the tag against the app version, CHANGELOG and branch
+        id: tag
+        run: |
+          set -euo pipefail
+          tag="$GITHUB_REF_NAME"
+          version=$(node -p 'require("./mobile/package.json").version')
+
+          if [[ "$tag" =~ ^mobile-v([0-9]+\.[0-9]+\.[0-9]+)(-rc\.[0-9]+)?$ ]]; then
+            tag_version="${BASH_REMATCH[1]}"
+            rc="${BASH_REMATCH[2]}"
+          else
+            echo "::error::tag $tag is neither mobile-vX.Y.Z nor mobile-vX.Y.Z-rc.N"
+            exit 1
+          fi
+
+          # package.json is the one declaration of the app version
+          # (mobile/src/versionAgreement.test.ts); the tag must name it, or the
+          # store build and the x-logjam-client header disagree with the tag
+          # that ADR 0022 dates the build by.
+          if [ "$tag_version" != "$version" ]; then
+            echo "::error::tag $tag does not match mobile/package.json version $version"
+            exit 1
+          fi
+
+          if ! grep -qF "## [$version]" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no '## [$version]' section"
+            exit 1
+          fi
+
+          # A release comes from main, or from a backport branch cut off an
+          # earlier tag. Anything else is an unreviewed commit.
+          sha=$(git rev-parse "$tag^{commit}")
+          if ! git branch -r --contains "$sha" --format='%(refname:short)' |
+            grep -qE '^origin/(main|release/mobile-v[0-9]+\.[0-9]+\.[0-9]+)$'; then
+            echo "::error::$sha is on neither main nor a release/mobile-vX.Y.Z branch"
+            exit 1
+          fi
+          echo "==> $tag is $sha, version $version"
+          if [ -n "$rc" ]; then
+            echo "profile=preview" >> "$GITHUB_OUTPUT"
+          else
+            echo "profile=production" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      # eas-cli evaluates app.config.ts and the runtime fingerprint here, which
+      # needs mobile's node_modules. The build itself runs on EAS, whose
+      # eas-build-post-install hook builds shared/.
+      - name: Install
+        working-directory: mobile
+        run: npm ci
+
+      - uses: expo/expo-github-action@eab7a230208c952974db8c3245cfd78402c7b385 # 9.0.0
+        with:
+          eas-version: 24.8.0
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Build on EAS (and submit a release to Google Play)
+        working-directory: mobile
+        env:
+          PROFILE: ${{ steps.tag.outputs.profile }}
+        run: |
+          set -euo pipefail
+          submit=()
+          if [ "$PROFILE" = production ]; then submit=(--auto-submit); fi
+          eas build --platform android --profile "$PROFILE" "${submit[@]}" \
+            --non-interactive --no-wait --message "$GITHUB_REF_NAME"

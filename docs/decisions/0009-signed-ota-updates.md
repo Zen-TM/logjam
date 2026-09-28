@@ -17,9 +17,9 @@ path, inside the app lock and on top of the place mirror.
 
 **OTA updates are code-signed, and the private key is not in this repo.**
 `certs/certificate.pem` IS committed — it ships inside every build and is what
-the client checks against. `keys/` is gitignored and holds the RSA private key;
-it must also live in an EAS secret (`EXPO_UPDATES_PRIVATE_KEY`) so
-`eas update --private-key-path` can sign.
+the client checks against. `keys/` is gitignored and holds the RSA private key,
+on the machine that publishes updates; `eas update --private-key-path` signs
+from it there.
 
 **Publish updates with `npm run update:preview` / `update:production`, not bare
 `eas update`.** `--private-key-path` defaults to `private-key.pem` *in the
