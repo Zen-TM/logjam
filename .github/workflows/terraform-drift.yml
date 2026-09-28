@@ -1,0 +1,83 @@
+name: terraform-drift
+
+# Nightly read-only plan of envs/prod against main. Any diff means AWS and
+# main disagree: a hand change in AWS, or a merged change terraform-apply.yml
+# refused. It opens one issue, or rewrites the open one's body rather than
+# commenting nightly. The plan text stays in the run log; the issue carries
+# counts and destroyed addresses only.
+
+on:
+  schedule:
+    - cron: "0 17 * * *" # 03:00 AEST
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+  issues: write
+
+concurrency:
+  group: terraform-drift
+  cancel-in-progress: false
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TITLE: "Terraform drift in envs/prod"
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      # A schedule run is on main, which the plan role trusts.
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/logjam-github-actions-plan-role
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: "~> 1.13"
+          terraform_wrapper: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
+      - name: Build cognito-email-sender Lambda
+        working-directory: infra/lambda/cognito-email-sender
+        run: npm ci && npm run build
+
+      - name: terraform init
+        run: terraform -chdir=infra/terraform/envs/prod init -input=false
+
+      # -detailed-exitcode: 0 no diff, 1 error, 2 diff.
+      - name: terraform plan
+        id: plan
+        run: |
+          cd infra/terraform/envs/prod
+          code=0
+          terraform plan -input=false -lock=false -no-color -detailed-exitcode -out=prod.tfplan || code=$?
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          [ "$code" != 1 ]
+
+      - name: Open or update the drift issue
+        if: steps.plan.outputs.code == '2'
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          terraform -chdir=infra/terraform/envs/prod show -json prod.tfplan > "$RUNNER_TEMP/plan.json"
+          {
+            echo "The nightly plan of \`main\` against AWS is not empty. Either AWS was changed outside Terraform, or a merged change was not applied. Fix it with a PR touching infra/terraform (its plan shows the whole diff), or undo the hand change."
+            echo
+            node infra/scripts/plan-summary.mjs header "$RUNNER_TEMP/plan.json"
+            echo
+            echo "[Plan run]($RUN_URL)"
+          } > "$RUNNER_TEMP/issue.md"
+          n=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "\"$TITLE\" in:title" \
+            --json number,title --jq ".[] | select(.title == \"$TITLE\") | .number" | head -n1)
+          if [ -n "$n" ]; then
+            gh issue edit "$n" -R "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/issue.md"
+          else
+            gh issue create -R "$GITHUB_REPOSITORY" --title "$TITLE" --body-file "$RUNNER_TEMP/issue.md"
+          fi
