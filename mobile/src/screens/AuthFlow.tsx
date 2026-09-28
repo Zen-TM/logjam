@@ -11,7 +11,6 @@ import { useState } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -20,7 +19,7 @@ import {
 
 import type { useAuth } from "../auth/useAuth";
 import { fontSize, fontWeight, spacing, theme } from "../theme";
-import { Button, ErrorBanner, TextField } from "../ui";
+import { Button, ErrorBanner, TextField, TextLink } from "../ui";
 
 type Auth = ReturnType<typeof useAuth>;
 
@@ -94,7 +93,7 @@ function SignUpForm({ auth }: { auth: Auth }) {
           the submit it belongs to — never at the top of the form (§8). */}
       {auth.error ? <ErrorBanner message={auth.error} /> : null}
       <Button label="Create account" onPress={submit} loading={submitting} />
-      <FooterLink label="Have an account? Sign in" onPress={auth.goToSignIn} />
+      <TextLink label="Have an account? Sign in" onPress={auth.goToSignIn} />
     </View>
   );
 }
@@ -143,7 +142,7 @@ function ConfirmSignUpForm({ auth }: { auth: Auth }) {
         onPress={submit}
         loading={submitting}
       />
-      <FooterLink label="Resend code" onPress={resend} />
+      <TextLink label="Resend code" onPress={resend} />
       {resendMessage ? <Text style={styles.hint}>{resendMessage}</Text> : null}
     </View>
   );
@@ -172,7 +171,7 @@ function ForgotPasswordForm({ auth }: { auth: Auth }) {
       />
       {auth.error ? <ErrorBanner message={auth.error} /> : null}
       <Button label="Send reset code" onPress={submit} loading={submitting} />
-      <FooterLink label="Back to sign in" onPress={auth.goToSignIn} />
+      <TextLink label="Back to sign in" onPress={auth.goToSignIn} />
     </View>
   );
 }
@@ -210,26 +209,8 @@ function ConfirmForgotPasswordForm({ auth }: { auth: Auth }) {
       />
       {auth.error ? <ErrorBanner message={auth.error} /> : null}
       <Button label="Reset password" onPress={submit} loading={submitting} />
-      <FooterLink label="Back to sign in" onPress={auth.goToSignIn} />
+      <TextLink label="Back to sign in" onPress={auth.goToSignIn} />
     </View>
-  );
-}
-
-function FooterLink({
-  label,
-  onPress,
-}: {
-  label: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="link"
-      style={styles.footerLink}
-    >
-      <Text style={styles.footerLinkText}>{label}</Text>
-    </Pressable>
   );
 }
 
@@ -255,6 +236,4 @@ const styles = StyleSheet.create({
     color: theme.textPrimary,
   },
   hint: { fontSize: fontSize.sm, color: theme.textMuted },
-  footerLink: { alignSelf: "center", padding: spacing(1) },
-  footerLinkText: { color: theme.accent, fontSize: fontSize.sm },
 });
