@@ -188,8 +188,9 @@ resource "aws_cloudwatch_metric_alarm" "api_environment_degraded" {
 
 # ── Workers ────────────────────────────────────────────────────────────────
 
-# Adopted as it was made by hand. The values below are a reading of its name,
-# to be replaced by the live ones the first plan comment shows.
+# Adopted as it was made by hand; the settings are the live ones. Despite the
+# name it watches the whole cluster: some task (any family) has been running in
+# every hour of the last six.
 import {
   to = aws_cloudwatch_metric_alarm.topo_stuck_task
   id = "logjam-topo-stuck-task"
@@ -197,20 +198,19 @@ import {
 
 resource "aws_cloudwatch_metric_alarm" "topo_stuck_task" {
   alarm_name        = "logjam-topo-stuck-task"
-  alarm_description = "A topo worker task has been running far longer than any job should. First: find the job it runs (the worker log group /ecs/logjam-topo-worker) and whether the reaper stopped it (api/src/lib/topoJobReaper.ts); stop the task by hand if not. ${local.alarms_doc}"
+  alarm_description = "Some task in the ECS cluster has been running in every hour of the last six, which no job should. First: find which (ECS console, cluster logjam-cluster, running tasks), its job in its log group, and whether the reaper stopped it (api/src/lib/topoJobReaper.ts); stop the task by hand if not. ${local.alarms_doc}"
 
   namespace   = "ECS/ContainerInsights"
-  metric_name = "TaskCount"
+  metric_name = "RunningTaskCount"
   dimensions = {
-    ClusterName          = aws_ecs_cluster.main.name
-    TaskDefinitionFamily = aws_ecs_task_definition.topo_worker.family
+    ClusterName = aws_ecs_cluster.main.name
   }
 
-  statistic           = "Minimum"
+  statistic           = "Maximum"
   period              = 3600
   evaluation_periods  = 6
-  comparison_operator = "GreaterThanOrEqualToThreshold"
-  threshold           = 1
+  comparison_operator = "GreaterThanThreshold"
+  threshold           = 0
   treat_missing_data  = "notBreaching"
 
   alarm_actions = [aws_sns_topic.alerts.arn]

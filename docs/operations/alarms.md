@@ -18,7 +18,7 @@ that goes wrong between deploys.
 | `logjam-api-5xx` | The API logged 10 or more 5xx responses in two of the last three 5-minute windows | Did a deploy just run? If its smoke test failed, check the automatic rollback finished. If a release is to blame, roll it back |
 | `logjam-api-environment-degraded` | Elastic Beanstalk reported the API environment Degraded or Severe in every minute for 10 minutes | Read the environment's health causes. If a deploy just ran, roll it back. Otherwise look for a crash loop in the API log |
 | `logjam-worker-failures` | Three or more worker tasks (topo, topo export, GeoPDF, pre-deploy migrate) stopped with a non-zero exit or failed to start within an hour | Read `/aws/events/logjam-worker-failures` for which task, its exit code and ECS's reason, then that worker's own log group |
-| `logjam-topo-stuck-task` | A topo worker task has been running far longer than any job should | Find the job, check whether the reaper stopped it, stop the task by hand if not |
+| `logjam-topo-stuck-task` | Some task in `logjam-cluster` (any family) has been running in every hour of the last six | Find the job, check whether the reaper stopped it, stop the task by hand if not |
 | `logjam-rds-free-storage-low` | The database has less than 4 GiB free | Storage autoscaling should grow it; check it did, and what is filling it |
 | `logjam-rds-cpu-high` | Database CPU above 90% for 15 minutes | Look for a slow or runaway query, and whether a recent release added it |
 | `logjam-pgaudit-delivery-stalled` | No database audit records reached the audit stream in 24 hours | Check the RDS log export and the subscription filter in `infra/terraform/envs/prod/audit.tf` |
@@ -87,12 +87,15 @@ meantime.
 
 ### `logjam-topo-stuck-task`
 
-Made by hand before Terraform owned monitoring and adopted as it was. The
-reaper (`api/src/lib/topoJobReaper.ts`) fails a job that runs too long and
-stops its task; this alarm is for a task it missed.
+Made by hand before Terraform owned monitoring and adopted as it was.
+Despite its name it watches the whole cluster: the most tasks running in each
+hour has been above zero for six hours in a row. The reaper
+(`api/src/lib/topoJobReaper.ts`) fails a job that runs too long and stops its
+task; this alarm is for a task it missed. It also fires if jobs simply run
+back to back for six hours.
 
-1. Find the running task in ECS (`logjam-cluster`, family
-   `logjam-topo-worker`) and the job it runs (the `JOB_ID` in its overrides).
+1. Find the running tasks in ECS (`logjam-cluster`), their families, and the
+   job each runs (the `JOB_ID` in its overrides).
 2. Check the reaper logged a sweep of that job in the API log.
 3. Stop the task by hand if it is still running:
    `aws ecs stop-task --cluster logjam-cluster --task <task arn> --reason "stuck"`.
