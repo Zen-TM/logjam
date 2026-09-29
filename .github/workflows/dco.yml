@@ -4,6 +4,9 @@ name: DCO
 # (Developer Certificate of Origin) Signed-off-by trailer matching the author's
 # email address. Commits created with the repo hooks installed receive this
 # trailer automatically via scripts/dco-signoff.sh.
+#
+# The check itself, including the Dependabot exemption (ADR 0021), is
+# scripts/dco-check.sh, which the first step self-tests.
 
 on:
   pull_request:
@@ -19,37 +22,11 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 0
+      - name: Self-test the check
+        run: scripts/dco-check.sh --self-test
       - name: Check DCO sign-off
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          RANGE="${RANGE:-${BASE_SHA}..${HEAD_SHA}}"
-          echo "Checking DCO sign-off for commit range: $RANGE"
-
-          offending=()
-          while IFS= read -r commit; do
-            [ -z "$commit" ] && continue
-            author_email="$(git log -1 --format="%ae" "$commit")"
-            matched=false
-            while IFS= read -r line; do
-              if [[ "${line,,}" == *"<${author_email,,}>"* ]] || [[ "${line,,}" == *" ${author_email,,}" ]]; then
-                matched=true
-                break
-              fi
-            done < <(git log -1 --format="%B" "$commit" | grep -i "^Signed-off-by:" || true)
-
-            if [ "$matched" = false ]; then
-              offending+=("$commit")
-            fi
-          done < <(git rev-list --no-merges "$RANGE")
-
-          if [ ${#offending[@]} -gt 0 ]; then
-            echo "::error::The following commit(s) are missing a Signed-off-by trailer matching their author email:" >&2
-            for commit in "${offending[@]}"; do
-              git log -1 --format="  commit %H%n  Author: %an <%ae>%n  Date:   %ad%n%n    %s%n" "$commit" >&2
-            done
-            exit 1
-          fi
-
-          echo "All commits in $RANGE have a valid Signed-off-by line."
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: scripts/dco-check.sh "${BASE_SHA}..${HEAD_SHA}"
