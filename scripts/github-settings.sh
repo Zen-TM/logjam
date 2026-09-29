@@ -7,13 +7,20 @@
 #   scripts/github-settings.sh --apply   write it (needs repo admin via `gh`)
 #
 # What it enforces, and why:
+#   - Repository settings: squash merges only (no merge commits, no rebase
+#     merges) and delete branch on merge. Squash keeps main linear and one commit
+#     per PR; merged branches are deleted so stale branches do not accumulate.
+#     The squash commit takes the PR title and the PR's commit messages, not
+#     the PR description: the commit messages carry each contributor's DCO
+#     Signed-off-by, and with PR_BODY main would lose every sign-off.
 #   - Repository variables the workflows read: PROD_API_URL and PROD_WEB_URL,
 #     the public URLs smoke.yml probes after a deploy or rollback, and that
 #     rollback-compat.yml asks for the live release.
 #   - `prod` Environment, deployable from main only. The AWS deploy role trusts
 #     only jobs in this Environment (infra/terraform/envs/prod/iam.tf), so a
 #     workflow pushed to any other branch cannot assume it.
-#   - main ruleset: no deletion or force-push; the existing required checks; a PR
+#   - main ruleset: no deletion or force-push; required linear history; merge
+#     methods restricted to squash; required status checks (including dco); a PR
 #     needs a CODEOWNERS approval (.github/CODEOWNERS), and a new push dismisses
 #     an earlier approval. Only a bypass actor may update main at all ("update"
 #     rule), so only repository admins (the maintainer) can merge, and they
@@ -40,7 +47,7 @@ RULESET_NAME="main"
 APPLY=false
 [ "${1:-}" = "--apply" ] && APPLY=true
 
-REQUIRED_CHECKS='[{"context":"shared"},{"context":"api"},{"context":"frontend"},{"context":"topo"},{"context":"format"},{"context":"actionlint"},{"context":"plan-prod"}]'
+REQUIRED_CHECKS='[{"context":"shared"},{"context":"api"},{"context":"frontend"},{"context":"topo"},{"context":"format"},{"context":"actionlint"},{"context":"plan-prod"},{"context":"dco"}]'
 
 # name|color|description
 LABELS=(
@@ -94,6 +101,8 @@ RELEASE_BRANCHES_BODY=$(
 JSON
 )
 
+REPO_SETTINGS_BODY='{"allow_squash_merge":true,"allow_merge_commit":false,"allow_rebase_merge":false,"delete_branch_on_merge":true,"squash_merge_commit_title":"PR_TITLE","squash_merge_commit_message":"COMMIT_MESSAGES"}'
+
 RULESET_BODY=$(cat <<JSON
 {
   "name": "$RULESET_NAME",
@@ -106,6 +115,7 @@ RULESET_BODY=$(cat <<JSON
   "rules": [
     { "type": "deletion" },
     { "type": "non_fast_forward" },
+    { "type": "required_linear_history" },
     { "type": "update", "parameters": { "update_allows_fetch_and_merge": false } },
     {
       "type": "pull_request",
@@ -114,7 +124,8 @@ RULESET_BODY=$(cat <<JSON
         "require_code_owner_review": true,
         "dismiss_stale_reviews_on_push": true,
         "require_last_push_approval": false,
-        "required_review_thread_resolution": false
+        "required_review_thread_resolution": false,
+        "allowed_merge_methods": ["squash"]
       }
     },
     {
@@ -201,7 +212,10 @@ for pair in "${VARIABLES[@]}"; do
   fi
 done
 
-# 4. retire the older mechanisms, only once the ruleset exists
+# 4. repository settings (squash-only merges and their message, auto-delete merged branches)
+run PATCH "repos/$REPO" "$REPO_SETTINGS_BODY"
+
+# 5. retire the older mechanisms, only once the ruleset exists
 if $APPLY; then
   gh api "repos/$REPO/rulesets" --jq ".[] | select(.name == \"$RULESET_NAME\") | .id" | grep -q . \
     || { echo "ruleset $RULESET_NAME missing after apply; leaving classic protection in place" >&2; exit 1; }

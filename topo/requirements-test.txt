@@ -1,0 +1,8 @@
+# What the topo unit tests need on a host without GDAL: tests/_native_stub.py
+# stubs the native libraries, but the math tests need real numpy, and Pillow
+# and requests are not stub-safe either. Version bounds come from
+# requirements.txt. Installed by `make setup` and CI.
+-c requirements.txt
+numpy
+Pillow
+requests

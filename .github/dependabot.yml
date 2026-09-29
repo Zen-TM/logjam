@@ -1,0 +1,132 @@
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    groups:
+      npm:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "npm"
+    directory: "/api"
+    schedule:
+      interval: "monthly"
+    groups:
+      npm:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "docker"
+    directory: "/api"
+    schedule:
+      interval: "monthly"
+    groups:
+      docker:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "monthly"
+    groups:
+      npm:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "npm"
+    directory: "/infra/lambda/cognito-email-sender"
+    schedule:
+      interval: "monthly"
+    groups:
+      npm:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "terraform"
+    directory: "/infra/terraform/bootstrap"
+    schedule:
+      interval: "monthly"
+    groups:
+      terraform:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "terraform"
+    directory: "/infra/terraform/envs/local"
+    schedule:
+      interval: "monthly"
+    groups:
+      terraform:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "terraform"
+    directory: "/infra/terraform/envs/prod"
+    schedule:
+      interval: "monthly"
+    groups:
+      terraform:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "npm"
+    directory: "/mobile"
+    schedule:
+      interval: "monthly"
+    groups:
+      npm:
+        patterns:
+          - "*"
+    ignore:
+      - dependency-name: "expo"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "expo-*"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: "npm"
+    directory: "/scripts/basemap"
+    schedule:
+      interval: "monthly"
+    groups:
+      npm:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "npm"
+    directory: "/shared"
+    schedule:
+      interval: "monthly"
+    groups:
+      npm:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "docker"
+    directory: "/topo"
+    schedule:
+      interval: "monthly"
+    groups:
+      docker:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "pip"
+    directory: "/topo"
+    schedule:
+      interval: "monthly"
+    groups:
+      pip:
+        patterns:
+          - "*"
