@@ -1,6 +1,6 @@
 ---
 name: writing-adrs
-description: Use when asked to write a new architecture decision record (ADR) in docs/decisions/, including one that supersedes an accepted ADR, or when someone accepts an offer to write one. Covers the number, title, status, each section of 0000-template.md, the index row and superseding. Not for deciding whether a change needs an ADR (root AGENTS.md → Decisions), nor for finding, reading, summarising or proofreading existing ADRs.
+description: Use when asked to write a new architecture decision record (ADR) in docs/decisions/, including one that supersedes an accepted ADR, or a dated update to one, or when someone accepts an offer to write one. Covers the number, title, status, each section of 0000-template.md, the index row and superseding. Not for deciding whether a change needs an ADR (root AGENTS.md → Decisions), nor for finding, reading, summarising or proofreading existing ADRs.
 ---
 
 # Writing an ADR
@@ -70,3 +70,14 @@ changes:
 3. Search for every citation of the old number or file
    (`git grep -n -e 'decisions/NNNN' -e '\[NNNN\]'`), in `AGENTS.md` lines,
    comments and guard-test messages, and point each one at the new ADR.
+
+## Updating an accepted ADR
+
+When the decision still stands and only an exception is added or a fact has
+gone stale, do not supersede. Add a bullet under Decision,
+`**Update YYYY-MM-DD: <what changes>.**`, that ends "Everything else above
+stands", or correct the stale line in place and mark it "(updated
+YYYY-MM-DD)". For an exception, list the option you rejected under
+Alternatives. Leave the title, status and index row alone. If the update would
+change what the decision chooses, or a reader would need both texts to know
+the rule, supersede instead.

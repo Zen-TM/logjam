@@ -4,7 +4,10 @@ One file per decision, `NNNN-kebab-title.md`, in the order they were made.
 Start a new one from [`0000-template.md`](0000-template.md); merging the PR
 that adds it accepts it. An accepted
 decision is never edited to say something else: write a new ADR that
-supersedes it, and mark the old one `Superseded by`.
+supersedes it, and mark the old one `Superseded by`. The one permitted edit is
+a dated `Update YYYY-MM-DD` line that adds a narrow exception or corrects a
+stale fact while everything else still stands. If an update would change what
+the decision chooses, supersede it instead.
 
 When a decision earns an ADR: root `AGENTS.md` → Decisions. A rule most
 sessions in a directory must follow is one line in that directory's

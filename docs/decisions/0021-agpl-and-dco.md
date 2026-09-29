@@ -17,7 +17,9 @@ contributors, so the terms a contribution is made under had to be settled.
   `prepare-commit-msg` hook installed with the repo's hooks (least friction; the
   contributor agrees to the DCO once, in `CONTRIBUTING.md`), and a CI check
   rejects unsigned commits.
-- Not yet built as of 2026-09-25: the hook and the CI check are planned work.
+- Built (updated 2026-09-29; planned when this was written): the hook is
+  `scripts/dco-signoff.sh`, run by the `prepare-commit-msg` entry in
+  `package.json`, and the check is `.github/workflows/dco.yml`.
 - **Update 2026-09-29: Dependabot is exempt.** The check skips a commit only
   when the pull request was opened by `dependabot[bot]` and the commit's author
   is Dependabot. A bot cannot certify the DCO, and the maintainer who reviews
