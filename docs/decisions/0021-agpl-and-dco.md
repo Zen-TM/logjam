@@ -24,7 +24,8 @@ contributors, so the terms a contribution is made under had to be settled.
   when the pull request was opened by `dependabot[bot]` and the commit's author
   is Dependabot. A bot cannot certify the DCO, and the maintainer who reviews
   and merges the update does. A person's commit on a Dependabot branch is still
-  checked. Everything else above stands.
+  checked. The check is `scripts/dco-check.sh`; its `--self-test`, run by the
+  DCO workflow, is the guard. Everything else above stands.
 
 ## Consequences
 
