@@ -21,7 +21,7 @@
   "devDependencies": {
     "@biomejs/biome": "2.5.14",
     "@playwright/mcp": "0.0.82",
-    "lint-staged": "^15.4.3",
+    "lint-staged": "^17.6.0",
     "simple-git-hooks": "^2.11.1"
   }
 }
