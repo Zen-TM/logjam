@@ -1,4 +1,4 @@
-FROM node:20-slim AS builder
+FROM node:26-slim AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
@@ -32,7 +32,7 @@ COPY api/src ./src/
 
 RUN npm run build
 
-FROM node:20-slim AS production
+FROM node:26-slim AS production
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libcairo2 \
