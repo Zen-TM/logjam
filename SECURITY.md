@@ -50,9 +50,13 @@ output or missing headers with no way to exploit them.
 
 ## What to expect
 
-- An acknowledgement within 3 days.
-- An assessment within a week: whether it is a vulnerability, how severe, and
-  the plan.
+Logjam has one maintainer, who is sometimes away or out of reception, so
+these are usual times, not promises:
+
+- An acknowledgement, usually within a few days.
+- An assessment, usually within two weeks: whether it is a vulnerability, how
+  severe, and the plan. If you have heard nothing after two weeks, a follow-up
+  email is welcome.
 - The fix is prepared in the private advisory, then deployed. The advisory is
   published once the fix is live, crediting you if you want the credit.
 - Please keep the details private until the advisory is published, or for 90

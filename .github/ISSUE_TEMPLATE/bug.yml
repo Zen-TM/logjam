@@ -1,0 +1,50 @@
+name: Bug report
+description: Something in Logjam Web, Logjam GPS or the API doesn't work as it should.
+title: "bug: "
+labels: [bug, triage]
+body:
+  - type: markdown
+    attributes:
+      value: >
+        Issues are public. Describe the bug with made-up data: never include
+        real coordinates, place names, map screenshots, GPX tracks or photos.
+        A security or privacy hole goes to
+        [SECURITY.md](https://github.com/Zen-TM/logjam/blob/main/SECURITY.md),
+        not here.
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where
+      options:
+        - Logjam Web
+        - Logjam GPS
+        - API
+        - Topo pipeline
+        - Self-hosting or local setup
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what you expected
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Sign in as the seeded user alice
+        2. ...
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The Logjam GPS build number, your browser, or the commit you run.
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy
+      options:
+        - label: This issue contains no real locations, place names, tracks or photos.
+          required: true

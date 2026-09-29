@@ -2,8 +2,8 @@
 
 Logjam is built and run by one maintainer and is open to contributors.
 Contributions are welcome: bug fixes, docs, and features agreed in an issue
-first. Bandwidth is one person's, so the schedule under
-[Review and merge](#review-and-merge) is what you can count on.
+first. Bandwidth is one person's; [Review and merge](#review-and-merge) says
+what to expect.
 
 This file covers how a change gets in, what you agree to by making one, and
 where the rules live.
@@ -26,9 +26,10 @@ and a pull request that weakens them is not merged. In practice:
 **Open an issue first** for a new feature or a change in what users see, a
 schema migration, a change to the API or sync format, an architectural or
 infrastructure change, or a change to a convention in an `AGENTS.md`. Use the
-feature proposal form. Wait for the maintainer to agree the approach in the
-issue, marked by the `accepted` label, before writing code: a pull request for
-a feature nobody agreed to may be closed unreviewed. Your pull request then links the issue.
+[feature proposal form](https://github.com/Zen-TM/logjam/issues/new?template=proposal.yml).
+Wait for the maintainer to agree the approach in the issue, marked by the
+`accepted` label, before writing code: a pull request for a feature nobody
+agreed to may be closed unreviewed. Your pull request then links the issue.
 
 **Open a pull request directly** for a typo, a docs fix, a lint or tooling
 fix, or a small bug fix that starts with a failing test.
@@ -36,14 +37,16 @@ fix, or a small bug fix that starts with a failing test.
 Unsure which? Open the issue. A short issue costs less than a pull request
 that gets turned down.
 
-To report a bug, use the bug form and describe it with made-up data.
+To report a bug, use the
+[bug report form](https://github.com/Zen-TM/logjam/issues/new?template=bug.yml)
+and describe it with made-up data.
 
 ## Review and merge
 
-- New issues get a first response within a week.
-- Pull requests get a first review within two weeks, and a full review as
-  time allows.
-- Security reports follow [`SECURITY.md`](SECURITY.md).
+Logjam is a hobby project with one maintainer, so response times vary. Most
+issues get a reply within a week or two and most pull requests a first review
+within a few weeks, but it can take longer when the maintainer is away.
+Security reports follow [`SECURITY.md`](SECURITY.md).
 
 - Only the maintainer merges. Every pull request needs the code owner's
   approval ([`.github/CODEOWNERS`](.github/CODEOWNERS)), a new push dismisses
@@ -100,16 +103,7 @@ native Windows clone breaks.
 
 Claude Code, Codex and Antigravity all read the `AGENTS.md` files (each
 `CLAUDE.md` is a one-line import of the `AGENTS.md` beside it) and the skills
-in [`.agents/skills/`](.agents/skills/). The skills load when their task comes
-up:
-
-- `local-testing`: running or debugging the local stack, the integration
-  suite, Playwright or an Android device.
-- `pr-review`: reviewing a pull request, a branch or your own changes before
-  opening one.
-- `writing-adrs`: writing an ADR once one is agreed.
-- `csp-hosts`: adding an external host the frontend fetches from.
-- `authoring-skills`: writing a skill or changing an `AGENTS.md` rule.
+in [`.agents/skills/`](.agents/skills/), which load when their task comes up.
 
 Your own skills go in `.agents/skills/<name>.local/`, and your own notes in
 `CLAUDE.local.md`; git ignores both. Keep machine names, paths and aliases
@@ -132,5 +126,5 @@ there, not in committed files.
   migration checks, the mobile export, the secret scan, and the Terraform
   checks and plan.
 - Keep a pull request to one concern, give it a title in Conventional Commit
-  form (`fix(api): ...`), and fill in the template.
+  form (`fix(api): ...`), and fill in the pull request template.
 - Never commit secrets, `.env` files or real user data.

@@ -1,0 +1,46 @@
+name: Feature proposal
+description: Propose a feature or a change that needs agreeing before anyone writes code.
+title: "proposal: "
+labels: [proposal, triage]
+body:
+  - type: markdown
+    attributes:
+      value: >
+        Issues are public: use made-up data in examples. Once the maintainer
+        agrees the approach, the issue gets the `accepted` label and a pull
+        request can follow
+        ([CONTRIBUTING.md](https://github.com/Zen-TM/logjam/blob/main/CONTRIBUTING.md)).
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What you are trying to do, and why Logjam falls short today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: The proposal
+      description: The change, as a user of Logjam Web or Logjam GPS would see it.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: checkboxes
+    id: touches
+    attributes:
+      label: What it touches
+      options:
+        - label: The database schema or a migration
+        - label: The API or the sync format
+        - label: A privacy or sharing boundary
+        - label: Infrastructure
+  - type: textarea
+    id: privacy
+    attributes:
+      label: Privacy impact
+      description: Who could see something they could not see before? "None" is a fine answer.
+    validations:
+      required: true
