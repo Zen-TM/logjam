@@ -62,6 +62,10 @@ self_test() {
   local fails=0 dir base
   dir=$(mktemp -d)
   trap 'rm -rf "$dir"' RETURN
+  # Own the git environment: a CI runner has no identity, and a developer's
+  # config (signing, hooks) must not change what the fixtures commit.
+  export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
+  export GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@x.io
   git init -q "$dir"
   cd "$dir" || return 1
   # commit <author email> <message...>
