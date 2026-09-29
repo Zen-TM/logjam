@@ -10,6 +10,9 @@
 #   - Repository settings: squash merges only (no merge commits, no rebase
 #     merges) and delete branch on merge. Squash keeps main linear and one commit
 #     per PR; merged branches are deleted so stale branches do not accumulate.
+#     The squash commit takes the PR title and the PR's commit messages, not
+#     the PR description: the commit messages carry each contributor's DCO
+#     Signed-off-by, and with PR_BODY main would lose every sign-off.
 #   - Repository variables the workflows read: PROD_API_URL and PROD_WEB_URL,
 #     the public URLs smoke.yml probes after a deploy or rollback, and that
 #     rollback-compat.yml asks for the live release.
@@ -88,7 +91,7 @@ RELEASE_BRANCHES_BODY=$(
 JSON
 )
 
-REPO_SETTINGS_BODY='{"allow_squash_merge":true,"allow_merge_commit":false,"allow_rebase_merge":false,"delete_branch_on_merge":true}'
+REPO_SETTINGS_BODY='{"allow_squash_merge":true,"allow_merge_commit":false,"allow_rebase_merge":false,"delete_branch_on_merge":true,"squash_merge_commit_title":"PR_TITLE","squash_merge_commit_message":"COMMIT_MESSAGES"}'
 
 RULESET_BODY=$(cat <<JSON
 {
@@ -187,7 +190,7 @@ for pair in "${VARIABLES[@]}"; do
   fi
 done
 
-# 4. repository settings (squash-only merges, auto-delete merged branches)
+# 4. repository settings (squash-only merges and their message, auto-delete merged branches)
 run PATCH "repos/$REPO" "$REPO_SETTINGS_BODY"
 
 # 5. retire the older mechanisms, only once the ruleset exists
