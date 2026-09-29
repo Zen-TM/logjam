@@ -1,8 +1,8 @@
 import classes from "./Footer.module.css";
 
-const BUG_MAILTO = "mailto:zentmarcos@gmail.com?subject=Logjam%20bug%20report";
-
 const SOURCE_URL = "https://github.com/Zen-TM/logjam";
+
+const BUG_REPORT_URL = `${SOURCE_URL}/issues/new?template=bug.yml`;
 
 function Footer() {
   return (
@@ -40,7 +40,12 @@ function Footer() {
       <span className={classes.sep} aria-hidden="true">
         ·
       </span>
-      <a className={classes.link} href={BUG_MAILTO}>
+      <a
+        className={classes.link}
+        href={BUG_REPORT_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+      >
         Report a bug
       </a>
     </footer>

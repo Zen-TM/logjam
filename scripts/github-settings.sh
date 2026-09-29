@@ -38,6 +38,8 @@
 #     mobile-v* tags only. The secret itself is set by hand.
 #   - The classic branch protection and the disabled "No Commits to main"
 #     ruleset are removed once the ruleset exists, leaving one source of truth.
+#   - Issue labels the issue forms (.github/ISSUE_TEMPLATE/) and
+#     CONTRIBUTING.md use; they must exist for the forms to apply them.
 set -euo pipefail
 
 REPO="Zen-TM/logjam"
@@ -46,6 +48,14 @@ APPLY=false
 [ "${1:-}" = "--apply" ] && APPLY=true
 
 REQUIRED_CHECKS='[{"context":"shared"},{"context":"api"},{"context":"frontend"},{"context":"topo"},{"context":"format"},{"context":"actionlint"},{"context":"plan-prod"},{"context":"dco"}]'
+
+# name|color|description
+LABELS=(
+  "bug|d73a4a|Something doesn't work as it should"
+  "proposal|a2eeef|A feature or change to agree before writing code"
+  "triage|fbca04|Not yet looked at by the maintainer"
+  "accepted|0e8a16|Approach agreed: a pull request can follow"
+)
 
 # name=value; public URLs, not secrets.
 VARIABLES=(
@@ -178,6 +188,18 @@ upsert_ruleset() {
 upsert_ruleset "$RULESET_NAME" "$RULESET_BODY"
 upsert_ruleset mobile-release-tags "$RELEASE_TAGS_BODY"
 upsert_ruleset mobile-release-branches "$RELEASE_BRANCHES_BODY"
+
+# issue labels (create or update by name)
+for entry in "${LABELS[@]}"; do
+  IFS='|' read -r name color description <<<"$entry"
+  body=$(jq -nc --arg name "$name" --arg color "$color" --arg description "$description" \
+    '{name: $name, color: $color, description: $description}')
+  if gh api "repos/$REPO/labels/$name" >/dev/null 2>&1; then
+    run PATCH "repos/$REPO/labels/$name" "$body"
+  else
+    run POST "repos/$REPO/labels" "$body"
+  fi
+done
 
 # 3. repository variables (create or update by name)
 for pair in "${VARIABLES[@]}"; do

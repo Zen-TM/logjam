@@ -1,84 +1,130 @@
 # Contributing to Logjam
 
-Thanks for your interest in Logjam.
+Logjam is built and run by one maintainer and is open to contributors.
+Contributions are welcome: bug fixes, docs, and features agreed in an issue
+first. Bandwidth is one person's; [Review and merge](#review-and-merge) says
+what to expect.
 
-## Status of this project
+This file covers how a change gets in, what you agree to by making one, and
+where the rules live.
 
-Logjam is primarily a **personal project** and a portfolio piece, developed and
-maintained by a single author. It is open source so others can read, learn from,
-and self-host it — not because it is run as a community project.
+## Privacy comes first
 
-Practically, that means:
+Logjam holds places its users have chosen not to publish, so privacy bounds
+every change. The rules are in the root [`AGENTS.md`](AGENTS.md) → Privacy,
+and a pull request that weakens them is not merged. In practice:
 
-- **Issues and pull requests may not be reviewed or responded to promptly**, if
-  at all. There is no SLA, and no commitment to accept contributions.
-- **Direction is set by the maintainer.** Features and design decisions follow
-  the project's goals (see `README.md` and `CLAUDE.md`), not feature requests.
-- Please **open an issue to discuss before** investing time in a non-trivial PR.
-  A change you spent days on may still be declined if it doesn't fit the project.
+- Never put real coordinates, place names, map screenshots, GPX tracks, photos
+  or field data in an issue, pull request, commit or test fixture. Use the
+  seeded dev data, which is made up.
+- A change to a privacy or security boundary ships a test that the boundary
+  holds.
+- A vulnerability goes to [`SECURITY.md`](SECURITY.md), never to an issue.
 
-If that's understood, contributions are welcome and appreciated.
+## How a change gets in
 
-## License of contributions
+**Open an issue first** for a new feature or a change in what users see, a
+schema migration, a change to the API or sync format, an architectural or
+infrastructure change, or a change to a convention in an `AGENTS.md`. Use the
+[feature proposal form](https://github.com/Zen-TM/logjam/issues/new?template=proposal.yml).
+Wait for the maintainer to agree the approach in the issue, marked by the
+`accepted` label, before writing code: a pull request for a feature nobody
+agreed to may be closed unreviewed. Your pull request then links the issue.
 
-Logjam is licensed under the **GNU Affero General Public License v3.0**
-(AGPL-3.0) — see [`LICENSE`](LICENSE). By submitting a contribution you agree it
-is licensed under the same terms. In particular, AGPL-3.0 requires that anyone
-running a modified version as a network service make their source available.
+**Open a pull request directly** for a typo, a docs fix, a lint or tooling
+fix, or a small bug fix that starts with a failing test.
 
-## Privacy is a hard constraint, not a feature
+Unsure which? Open the issue. A short issue costs less than a pull request
+that gets turned down.
 
-Logjam exists to **avoid** publicising sensitive wilderness canyon locations
-(see the NSW NPWS guidance quoted in `README.md`). Any contribution must respect
-the privacy rules enforced throughout the codebase:
+To report a bug, use the
+[bug report form](https://github.com/Zen-TM/logjam/issues/new?template=bug.yml)
+and describe it with made-up data.
 
-- No public or unauthenticated endpoints exposing user data.
-- No analytics or telemetry that leaves a user's account.
-- No share/export defaults that broaden visibility — sharing is explicit,
-  per-canyon, between authenticated users.
-- Logs and errors must never contain canyon coordinates or names in plain text.
+## Review and merge
 
-PRs that weaken these will not be accepted. See `CLAUDE.md` and `api/CLAUDE.md`
-for the canonical access-control and logging patterns.
+Logjam is a hobby project with one maintainer, so response times vary. Most
+issues get a reply within a week or two and most pull requests a first review
+within a few weeks, but it can take longer when the maintainer is away.
+Security reports follow [`SECURITY.md`](SECURITY.md).
 
-## Development setup
+- Only the maintainer merges. Every pull request needs the code owner's
+  approval ([`.github/CODEOWNERS`](.github/CODEOWNERS)), a new push dismisses
+  an earlier approval, and write access to the repository does not let you
+  merge.
+- CI must be green.
+- Merging ships. The API, Logjam Web and the topo worker deploy from `main`
+  once CI passes, and Terraform changes are applied on merge, exactly as the
+  plan comment on the pull request showed
+  ([ADR 0024](docs/decisions/0024-prod-terraform-applies-on-merge-by-plan-fingerprint.md)).
+  A migration must be safe to run while the previous version still serves
+  ([ADR 0003](docs/decisions/0003-pre-deploy-migrations-expand-contract.md)).
 
-See `README.md` for full setup. In brief:
+## Sign-off (DCO)
 
-```bash
-make dev      # local Postgres + MiniStack + API + frontend (AUTH_MODE=fake)
-make reset    # rebuild shared, reseed, restart
-```
+Logjam is licensed under AGPL-3.0 only ([`LICENSE`](LICENSE)), and so is
+every contribution. There is no CLA. Instead, each commit carries a
+`Signed-off-by:` line certifying the
+[Developer Certificate of Origin](https://developercertificate.org/): that
+you wrote the change, or otherwise have the right to submit it under the
+project's licence.
 
-Stack-specific rules live in the per-package guides: `frontend/CLAUDE.md`,
-`api/CLAUDE.md`, `topo/CLAUDE.md`, and the root `CLAUDE.md`.
+Running `npm ci` at the repository root installs the repo's git hooks, and
+one of them adds the `Signed-off-by:` line to every commit from your git
+`user.name` and `user.email`. **Committing with the hooks installed means you
+agree to the DCO for that commit.** CI rejects a pull request with an
+unsigned commit; to fix one, run `git rebase --signoff origin/main` and
+force-push.
 
-## Agent tooling
+If a coding agent wrote the commit, the sign-off is yours: you read the change
+and you certify it. The reasoning is in
+[ADR 0021](docs/decisions/0021-agpl-and-dco.md).
 
-Claude Code, Codex and Antigravity all pick up the `AGENTS.md` files (each
-`CLAUDE.md` is a one-line `@AGENTS.md` import) and the skills in
-`.agents/skills/`. Personal skills go in `.agents/skills/<name>.local/`, which
-is gitignored.
+## Setting up
 
-## Before opening a PR
+Run `make setup`, then follow `docs/dev-setup.md`, which covers Linux, macOS
+and Windows. On Windows, clone inside WSL2: the repo uses symlinks that a
+native Windows clone breaks.
 
-- Keep changes focused; one concern per PR.
-- Match existing conventions (the `CLAUDE.md` files document them).
-- CI runs automatically on every PR (`.github/workflows/ci.yml`): unit tests,
-  lint and typecheck for every package, plus the `api` integration suite
-  against a live stack. PRs must be green to merge.
-- Run the same checks locally first:
-  - `cd shared && npm test`
-  - `cd api && npm run test:unit`
-  - `cd frontend && npm test && npm run lint`
-  - `cd api && npm test` (integration — needs `make dev` running; CI runs it
-    too, but it's much faster to catch a failure locally)
-- PRs touching `infra/terraform/**` also get `fmt`/`validate` checks and a
-  read-only `terraform plan` posted as a PR comment. Applies are manual,
-  maintainer-only.
-- Don't commit secrets, real user data, or `.env*` files.
+## Where the rules live
 
-## Security
+- The root [`AGENTS.md`](AGENTS.md) holds the rules for the whole repository:
+  privacy, how we work, comments, testing and when a decision needs an ADR.
+  Each package has its own: [`api/`](api/AGENTS.md),
+  [`frontend/`](frontend/AGENTS.md), [`mobile/`](mobile/AGENTS.md),
+  [`shared/`](shared/AGENTS.md), [`topo/`](topo/AGENTS.md) and
+  [`infra/`](infra/AGENTS.md). They are written for people and coding agents
+  alike; read the ones your change touches.
+- [`docs/decisions/`](docs/decisions/README.md) holds the reasoning behind
+  choices someone might otherwise undo.
+- [`docs/architecture.md`](docs/architecture.md) is the map of the system.
 
-If you find a security or privacy vulnerability, **do not open a public issue.**
-Report it privately to the maintainer so it can be fixed before disclosure.
+## Coding agents
+
+Claude Code, Codex and Antigravity all read the `AGENTS.md` files (each
+`CLAUDE.md` is a one-line import of the `AGENTS.md` beside it) and the skills
+in [`.agents/skills/`](.agents/skills/), which load when their task comes up.
+
+Your own skills go in `.agents/skills/<name>.local/`, and your own notes in
+`CLAUDE.local.md`; git ignores both. Keep machine names, paths and aliases
+there, not in committed files.
+
+## Before you open a pull request
+
+- Run `make verify` (format check, lint and typecheck across the packages)
+  and the unit tests of each package you changed:
+
+  | Package | Command |
+  |---|---|
+  | `shared` | `cd shared && npm test` |
+  | `api` | `cd api && npm run test:unit` |
+  | `frontend` | `cd frontend && npm test` |
+  | `mobile` | `cd mobile && npm test` |
+  | `topo` | `cd topo && python -m unittest discover -s tests` |
+
+- CI runs the rest: the API integration suite against a live stack, the
+  migration checks, the mobile export, the secret scan, and the Terraform
+  checks and plan.
+- Keep a pull request to one concern, give it a title in Conventional Commit
+  form (`fix(api): ...`), and fill in the pull request template.
+- Never commit secrets, `.env` files or real user data.

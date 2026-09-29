@@ -336,4 +336,4 @@ Logjam is licensed under the **GNU Affero General Public License v3.0**
 a network service, AGPL-3.0 requires you to make your modified source available
 to its users.
 
-See [`CONTRIBUTING.md`](CONTRIBUTING.md) before opening issues or pull requests.
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) before opening issues or pull requests, and report vulnerabilities privately as [`SECURITY.md`](SECURITY.md) describes.
