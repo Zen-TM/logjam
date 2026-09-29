@@ -18,6 +18,11 @@ contributors, so the terms a contribution is made under had to be settled.
   contributor agrees to the DCO once, in `CONTRIBUTING.md`), and a CI check
   rejects unsigned commits.
 - Not yet built as of 2026-09-25: the hook and the CI check are planned work.
+- **Update 2026-09-29: Dependabot is exempt.** The check skips a commit only
+  when the pull request was opened by `dependabot[bot]` and the commit's author
+  is Dependabot. A bot cannot certify the DCO, and the maintainer who reviews
+  and merges the update does. A person's commit on a Dependabot branch is still
+  checked. Everything else above stands.
 
 ## Consequences
 
@@ -31,3 +36,7 @@ contributors, so the terms a contribution is made under had to be settled.
 
 - Contributor License Agreement (CLA): rejected in favour of DCO; DCO chosen,
   with AGPL-3.0 recorded in an ADR.
+- Accepting Dependabot's own `Signed-off-by: dependabot[bot] <support@github.com>`
+  trailer (2026-09-29 update): rejected. It certifies nothing, and matching it
+  would mean loosening the author-email rule for one address, which is the same
+  exemption with less honesty about it.

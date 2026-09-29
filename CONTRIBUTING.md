@@ -80,6 +80,11 @@ If a coding agent wrote the commit, the sign-off is yours: you read the change
 and you certify it. The reasoning is in
 [ADR 0021](docs/decisions/0021-agpl-and-dco.md).
 
+Dependabot's dependency-update pull requests are the one exception: a bot
+cannot certify the DCO, so CI skips commits Dependabot itself authored. The
+maintainer who reviews and merges the pull request takes responsibility for it.
+A commit a person adds to a Dependabot branch still needs a sign-off.
+
 ## Setting up
 
 Run `make setup`, then follow `docs/dev-setup.md`, which covers Linux, macOS
