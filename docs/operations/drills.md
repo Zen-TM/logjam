@@ -60,7 +60,8 @@ note times and surprises. [rollback.md](rollback.md) has the commands.
 - [ ] **Missing config fails closed:** unset the repository variable
       `PROD_WEB_URL`, merge a change under `frontend/`. The guard goes red with
       "must be set", the deploy job is skipped, nothing in the bucket changes.
-      Restore it with `scripts/github-settings.sh --apply`.
+      Restore it by hand with its value from `infra/terraform/envs/github`;
+      the next plan of that root then shows no change.
 - [ ] **No-op CI runs stay out of the group:** while a deploy runs and
       another waits, a PR's CI finishing starts a deploy run that skips
       without cancelling the waiting one.
@@ -71,8 +72,8 @@ note times and surprises. [rollback.md](rollback.md) has the commands.
       that 404s, then merge a change under `frontend/`. The deploy's smoke
       test fails, the rollback job returns to the previous release, its own
       smoke test fails the same way, and the run stops there: no further
-      rollback, no retry. Restore the variable (`scripts/github-settings.sh
-      --apply`) and roll forward with `rollback.yml`. Time from smoke failure
+      rollback, no retry. Restore the variable by hand as above and roll
+      forward with `rollback.yml`. Time from smoke failure
       to rolled back: ____
 - [ ] **API (optional, three cold restarts):** the same with the API probe.
 - [ ] Nothing pages yet on a failed rollback: until the CloudWatch 5xx and

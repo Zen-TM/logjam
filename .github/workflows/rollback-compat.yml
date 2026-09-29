@@ -55,7 +55,7 @@ jobs:
           - 4566:4566
     env:
       # Public and unauthenticated: /meta's sha names the live release.
-      # Repository variable, declared in scripts/github-settings.sh; when it
+      # Repository variable, declared in infra/terraform/envs/github; when it
       # is unset the job falls back to origin/main.
       PROD_API_URL: ${{ vars.PROD_API_URL }}
       LIVE_DIR: ${{ github.workspace }}/../live-release
