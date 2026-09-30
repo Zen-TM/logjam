@@ -9,6 +9,7 @@ import {
   isNotificationPreferences,
 } from "@logjam/shared";
 import { defsForUserResponse } from "../lib/customFieldDefs";
+import { EXPORT_SCHEMA_VERSION, loadExportSections } from "../lib/dataExport";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
 import { placeIdOfMedia } from "../lib/mediaLink";
@@ -466,8 +467,8 @@ router.patch(
   },
 );
 
-// GET /users/me/export — download all data owned by the current user as JSON.
-// Media file content (S3 blobs) is intentionally excluded; only metadata.
+// GET /users/me/export — download the current user's data as JSON. What it
+// covers, and the guard that keeps it covering new tables: lib/dataExport.ts.
 router.get(
   "/me/export",
   requireAuth,
@@ -475,62 +476,11 @@ router.get(
     const { sub } = req.user!;
     const user = await resolveUser(sub);
 
-    const [
-      places,
-      tripLogs,
-      geoPdfTemplates,
-      sharesGiven,
-      sharesReceived,
-      media,
-      topoJobs,
-      topoExportJobs,
-      topoTemplates,
-      notifications,
-    ] = await Promise.all([
-      prisma.place.findMany({ where: { ownerId: user.id } }),
-      prisma.tripLog.findMany({ where: { userId: user.id } }),
-      prisma.geoPdfTemplate.findMany({ where: { userId: user.id } }),
-      prisma.placeShare.findMany({
-        where: { sharedById: user.id },
-        include: { sharedWith: { select: { id: true, username: true } } },
-      }),
-      prisma.placeShare.findMany({
-        where: { sharedWithId: user.id },
-        include: { sharedBy: { select: { id: true, username: true } } },
-      }),
-      prisma.media.findMany({ where: { ownerId: user.id } }),
-      // PRIV-004: privacy.html promises a *complete* copy (APP 12). Topo jobs
-      // carry location-bearing personal information (footprint geometry,
-      // user-typed names) and must be included, along with export jobs,
-      // topo templates, and notifications (reference-IDs-only payloads).
-      prisma.topoJob.findMany({ where: { userId: user.id } }),
-      prisma.topoExportJob.findMany({ where: { userId: user.id } }),
-      prisma.topoTemplate.findMany({ where: { userId: user.id } }),
-      prisma.notification.findMany({ where: { userId: user.id } }),
-    ]);
-
     const payload = {
       exportedAt: new Date().toISOString(),
-      // v2: adds topoJobs, topoExportJobs, topoTemplates, notifications.
-      schemaVersion: 2,
+      schemaVersion: EXPORT_SCHEMA_VERSION,
       user: await serializeUserForResponse(user),
-      places,
-      tripLogs,
-      geoPdfTemplates,
-      sharesGiven,
-      sharesReceived,
-      // Media metadata only; file content not included. To download media bytes,
-      // request a presigned URL per item via GET /media/:id (future schemaVersion).
-      media: media.map((m) => ({
-        ...m,
-        fileSizeBytes: Number(m.fileSizeBytes),
-      })),
-      // Topo job records identify their tile outputs (S3 keys are job-UUID
-      // paths, no coordinates); tile files themselves are not included.
-      topoJobs,
-      topoExportJobs,
-      topoTemplates,
-      notifications,
+      ...(await loadExportSections(user.id)),
     };
 
     const filename = `logjam-export-${new Date().toISOString().slice(0, 10)}.json`;
