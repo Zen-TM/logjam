@@ -513,3 +513,12 @@ jobs:
         run: |
           pip install pyyaml==6.0.3
           infra/scripts/rollback-compat-mirrors-ci.py
+      # Every Dependabot `ignore` names an open tracking issue (see the header of
+      # .github/dependabot.yml). The self-test needs no network; the check asks
+      # GitHub for each issue's state, and only warns if it cannot.
+      - name: Dependabot ignores are tracked
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          infra/scripts/check-dependabot-ignores.py --self-test
+          infra/scripts/check-dependabot-ignores.py
