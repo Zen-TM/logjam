@@ -1,0 +1,79 @@
+name: Image build
+
+# Builds the API and topo worker Docker images without pushing them, so a change
+# to what an image is built from fails on the pull request instead of after
+# merge: merging deploys (deploy-api.yml, deploy-topo-worker.yml), and nothing
+# else builds either image first. The commands match the deploy builds.
+#
+# api-image and topo-image are required checks (scripts/github-settings.sh). A
+# required check whose workflow never starts leaves the pull request waiting
+# forever, so this workflow starts on every pull request, with no `paths:`
+# filter, and each job decides inside whether its image's inputs changed
+# (infra/scripts/image-build-scope.sh, which holds the list and tests it against
+# the Dockerfiles). A job with nothing to build passes in seconds.
+#
+# The weekly build of main catches what no diff can: an upstream that moved
+# under an unchanged Dockerfile, such as a base image tag or a PPA that adds or
+# drops a release. A red run of it emails whoever last edited the schedule.
+
+on:
+  pull_request:
+  schedule:
+    - cron: "17 19 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: image-build-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  api-image:
+    name: api-image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+      - name: Did the image's inputs change?
+        id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then
+            infra/scripts/image-build-scope.sh scope api "$BASE_SHA" "$HEAD_SHA"
+          else
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Build the API image
+        if: steps.scope.outputs.build == 'true'
+        run: docker build -f api/Dockerfile .
+
+  topo-image:
+    name: topo-image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+      - name: Did the image's inputs change?
+        id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then
+            infra/scripts/image-build-scope.sh scope worker "$BASE_SHA" "$HEAD_SHA"
+          else
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Build the topo worker image
+        if: steps.scope.outputs.build == 'true'
+        run: docker build ./topo
