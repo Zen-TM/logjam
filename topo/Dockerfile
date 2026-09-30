@@ -11,7 +11,7 @@
 # refreshed on purpose, ideally as its own commit:
 #     docker buildx imagetools inspect ubuntu:24.04
 # Digest below verified against the live registry as `ubuntu:24.04` 2026-08-29.
-FROM ubuntu:26.04@sha256:da6fc2be547864451aa253836dd926da33623312df4a9a243e35dc877c378a78
+FROM ubuntu:24.04@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517
 
 LABEL maintainer="pipeline"
 LABEL description="ELVIS LiDAR → Topo MBTiles for Gaia GPS"
@@ -26,6 +26,9 @@ ENV PYTHONUNBUFFERED=1
 #    UbuntuGIS also provides a more up-to-date GDAL build.
 #    ubuntugis-*unstable* is not a preference: ubuntugis-stable publishes no
 #    `noble` suite at all (its dists/noble 404s, while unstable's carries pdal).
+#    The base image cannot move to a newer Ubuntu until the PPA publishes that
+#    release's suite: on 26.04 (`resolute`) `apt-get update` fails with a 404 for
+#    the PPA's Release file (2026-09-30).
 #    Residual reproducibility risk accepted: apt has no digest pin, so a PPA
 #    package bump still changes a rebuild even with the pins below. Snapshot the
 #    PPA or vendor .debs if a bad upstream build ever needs bisecting.
