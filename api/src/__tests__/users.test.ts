@@ -129,7 +129,7 @@ describe("users routes (fake auth = alice)", () => {
   it("GET /users/me/export returns the caller's data with bigint fields as numbers", async () => {
     const res = await request(API_URL).get("/users/me/export").set(AUTH);
     expect(res.status).toBe(200);
-    expect(res.body.schemaVersion).toBe(2);
+    expect(res.body.schemaVersion).toBe(3);
     expect(res.body.user.username).toBe("alice");
     expect(Array.isArray(res.body.places)).toBe(true);
     expect(Array.isArray(res.body.tripLogs)).toBe(true);
@@ -148,7 +148,7 @@ describe("users routes (fake auth = alice)", () => {
   it("GET /users/me/export includes topo jobs, topo exports, topo templates, and notifications (schemaVersion 2)", async () => {
     const res = await request(API_URL).get("/users/me/export").set(AUTH);
     expect(res.status).toBe(200);
-    expect(res.body.schemaVersion).toBe(2);
+    expect(res.body.schemaVersion).toBe(3);
     expect(Array.isArray(res.body.topoJobs)).toBe(true);
     expect(Array.isArray(res.body.topoExportJobs)).toBe(true);
     expect(Array.isArray(res.body.topoTemplates)).toBe(true);
@@ -162,6 +162,32 @@ describe("users routes (fake auth = alice)", () => {
     for (const exportJob of res.body.topoExportJobs) {
       if (exportJob.resultBytes != null)
         expect(typeof exportJob.resultBytes).toBe("number");
+    }
+  });
+
+  // schemaVersion 3: every section in lib/dataExport.ts reaches the response,
+  // and another user appears by username only, never by email.
+  it("GET /users/me/export carries every v3 section, with no other user's email", async () => {
+    const res = await request(API_URL).get("/users/me/export").set(AUTH);
+    expect(res.status).toBe(200);
+    for (const section of [
+      "placeTypes",
+      "customFieldDefs",
+      "placeLinks",
+      "routes",
+      "friendships",
+      "itemSharesGiven",
+      "itemSharesReceived",
+      "fileSendsSent",
+      "fileSendsReceived",
+      "geoPdfJobs",
+      "devices",
+    ]) {
+      expect(Array.isArray(res.body[section]), section).toBe(true);
+    }
+    for (const friendship of res.body.friendships) {
+      expect(friendship.requester).not.toHaveProperty("email");
+      expect(friendship.addressee).not.toHaveProperty("email");
     }
   });
 });
