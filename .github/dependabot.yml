@@ -1,33 +1,60 @@
+# How updates arrive, and how they are held back.
+#
+# - Minor and patch updates are grouped into one pull request per directory. A
+#   major update is not in any group, so it gets a pull request of its own: one
+#   bad major cannot hold up the rest, and a major nobody has dealt with stays
+#   visible as an open pull request instead of vanishing. The open-pull-requests
+#   limit is raised so a few stuck majors do not block the next round (the
+#   default is 5 and counts every open pull request).
+# - An `ignore` rule is a deliberate hold, and Dependabot never reminds anyone
+#   about it. So every rule sits under a comment naming the open issue that
+#   tracks it (`Tracked in #NNN`). infra/scripts/check-dependabot-ignores.py
+#   fails CI when a rule has no such issue or its issue is closed: closing the
+#   issue means lifting the rule.
+
 version: 2
 updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "monthly"
+    open-pull-requests-limit: 20
     groups:
       github-actions:
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
       interval: "monthly"
+    open-pull-requests-limit: 20
     groups:
       npm:
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
   - package-ecosystem: "npm"
     directory: "/api"
     schedule:
       interval: "monthly"
+    open-pull-requests-limit: 20
     groups:
       npm:
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
     # TypeScript 7 does not install next to typescript-eslint, whose peer range
-    # stops below 6.1 (npm ci fails with ERESOLVE). Lift this when it supports 7.
+    # stops below 6.1 (npm ci fails with ERESOLVE). Tracked in #155; lift this
+    # when typescript-eslint supports 7.
     ignore:
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
@@ -45,16 +72,21 @@ updates:
     directory: "/frontend"
     schedule:
       interval: "monthly"
+    open-pull-requests-limit: 20
     groups:
       npm:
         patterns:
           - "*"
-    # TypeScript 7: see /api. eslint-plugin-react-hooks 7 turns on the React
-    # Compiler lint rules (set-state-in-effect, refs, ...), which flag about a
-    # hundred existing sites; adopt them as their own change, then lift this.
+        update-types:
+          - "minor"
+          - "patch"
     ignore:
+      # TypeScript 7: see /api. Tracked in #155.
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
+      # eslint-plugin-react-hooks 7 turns on the React Compiler lint rules
+      # (set-state-in-effect, refs, ...), which flag about a hundred existing
+      # sites. Tracked in #154, which adopts them and then lifts this.
       - dependency-name: "eslint-plugin-react-hooks"
         update-types: ["version-update:semver-major"]
 
@@ -62,56 +94,112 @@ updates:
     directory: "/infra/lambda/cognito-email-sender"
     schedule:
       interval: "monthly"
+    open-pull-requests-limit: 20
     groups:
       npm:
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
   - package-ecosystem: "terraform"
     directory: "/infra/terraform/bootstrap"
     schedule:
       interval: "monthly"
+    open-pull-requests-limit: 20
     groups:
       terraform:
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
   - package-ecosystem: "terraform"
     directory: "/infra/terraform/envs/local"
     schedule:
       interval: "monthly"
+    open-pull-requests-limit: 20
     groups:
       terraform:
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
   - package-ecosystem: "terraform"
     directory: "/infra/terraform/envs/prod"
     schedule:
       interval: "monthly"
+    open-pull-requests-limit: 20
     groups:
       terraform:
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
   - package-ecosystem: "npm"
     directory: "/mobile"
     schedule:
       interval: "monthly"
+    open-pull-requests-limit: 20
     groups:
       npm:
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    # Logjam GPS follows the Expo SDK: the SDK pins a set of packages that only
+    # work together, and the first round of pull requests moved them one by one
+    # (react-native 0.81 -> 0.87 alone broke the typecheck). Tracked in #156,
+    # which moves to the next SDK and lifts these. `npx expo install --check`
+    # lists the exact pins. Minor updates are held as well as major ones because
+    # react-native (0.x) and react move their minor with the SDK.
     ignore:
       - dependency-name: "expo"
         update-types: ["version-update:semver-major"]
       - dependency-name: "expo-*"
         update-types: ["version-update:semver-major"]
-      # eslint-config-expo's major follows the Expo SDK (~10 for SDK 54, which
-      # `expo` pins above), and it carries the react-hooks 7 rules noted under
-      # /frontend. Move it with the SDK. The SDK pins TypeScript too.
+      - dependency-name: "react"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
+      - dependency-name: "@types/react"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
+      - dependency-name: "react-native"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
+      - dependency-name: "react-native-edge-to-edge"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
+      - dependency-name: "react-native-safe-area-context"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
+      - dependency-name: "react-native-screens"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
+      - dependency-name: "@react-native-async-storage/async-storage"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@react-native-community/netinfo"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "babel-preset-expo"
+        update-types: ["version-update:semver-major"]
+      # eslint-config-expo's major follows the SDK (~10 for SDK 54), tracked in
+      # #156, and it carries the react-hooks 7 rules tracked in #154.
       - dependency-name: "eslint-config-expo"
         update-types: ["version-update:semver-major"]
+      # The SDK pins TypeScript too; TypeScript 7 is also tracked in #155.
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
 
@@ -119,20 +207,28 @@ updates:
     directory: "/scripts/basemap"
     schedule:
       interval: "monthly"
+    open-pull-requests-limit: 20
     groups:
       npm:
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
   - package-ecosystem: "npm"
     directory: "/shared"
     schedule:
       interval: "monthly"
+    open-pull-requests-limit: 20
     groups:
       npm:
         patterns:
           - "*"
-    # TypeScript 7: see /api.
+        update-types:
+          - "minor"
+          - "patch"
+    # TypeScript 7: tracked in #155 (see /api).
     ignore:
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
@@ -147,9 +243,9 @@ updates:
           - "*"
     # A new Ubuntu release is a migration, not a bump: the image gets PDAL and
     # GDAL from a PPA that must publish that release first (see topo/Dockerfile).
-    # Both majors (24.04 -> 26.04) and minors are ignored: 24.10, an interim
-    # release, reads as a minor bump of 24.04. Digest refreshes of the pinned
-    # 24.04 still arrive.
+    # Tracked in #157, which lifts this. Both majors (24.04 -> 26.04) and minors
+    # are ignored: 24.10, an interim release, reads as a minor bump of 24.04.
+    # Digest refreshes of the pinned 24.04 still arrive.
     ignore:
       - dependency-name: "ubuntu"
         update-types:
@@ -160,7 +256,11 @@ updates:
     directory: "/topo"
     schedule:
       interval: "monthly"
+    open-pull-requests-limit: 20
     groups:
       pip:
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
