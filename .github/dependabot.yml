@@ -121,6 +121,12 @@ updates:
       docker:
         patterns:
           - "*"
+    # A new Ubuntu release is a migration, not a bump: the image gets PDAL and
+    # GDAL from a PPA that must publish that release first (see topo/Dockerfile).
+    # Digest refreshes of the pinned 24.04 still arrive.
+    ignore:
+      - dependency-name: "ubuntu"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "pip"
     directory: "/topo"
