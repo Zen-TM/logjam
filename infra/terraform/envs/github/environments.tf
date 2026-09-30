@@ -10,11 +10,12 @@ locals {
     mobile-release = { branch_pattern = null, tag_pattern = "mobile-v*" }
   }
 
-  # GitHub does not show a deployment policy's ID to Terraform before import:
+  # For the import only: GitHub does not show a deployment policy's ID to
+  # Terraform before import, so these came from
   # `gh api repos/Zen-TM/logjam/environments/<env>/deployment-branch-policies`.
   deployment_policy_ids = {
-    prod           = "PENDING"
-    mobile-release = "PENDING"
+    prod           = "61014124"
+    mobile-release = "61260671"
   }
 }
 

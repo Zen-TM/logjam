@@ -1,7 +1,8 @@
 # Terraform
 
-Terraform describes all of prod AWS (`envs/prod`) and the local dev stack's
-MiniStack resources (`envs/local`). What it builds is described in
+Terraform describes all of prod AWS (`envs/prod`), this repository's GitHub
+settings (`envs/github`) and the local dev stack's MiniStack resources
+(`envs/local`). What it builds is described in
 [`docs/architecture.md`](../../docs/architecture.md). The rules for changing
 it are in [`infra/AGENTS.md`](../AGENTS.md). This page lists the commands.
 
@@ -9,6 +10,7 @@ it are in [`infra/AGENTS.md`](../AGENTS.md). This page lists the commands.
 bootstrap/         the S3 bucket that holds prod's state. Applied once; never re-run
 modules/storage/   one S3 bucket with encryption, public-access block, CORS, lifecycle
 envs/prod/         prod AWS, one file per concern; state in S3
+envs/github/       the repository's GitHub settings: rulesets, Environments, variables, labels (0025)
 envs/local/        MiniStack S3 and ECS task definitions, and the repo's .env.local
 templates/         env.local.tftpl, the shape of .env.local
 ```
@@ -25,12 +27,20 @@ terraform -chdir=infra/terraform/envs/prod init -backend=false -input=false
 terraform -chdir=infra/terraform/envs/prod validate
 ```
 
-To check `bootstrap` or `envs/local`, run the last two commands against that
-directory instead.
+To check `bootstrap`, `envs/local` or `envs/github`, run the last two
+commands against that directory instead. For `envs/github`, also run its
+guard test, offline against a mocked provider, as `test-github` does:
 
-The prod plan runs on your PR by itself (`terraform-plan.yml`) and is posted
-as a comment. Merging applies that plan
-([0024](../../docs/decisions/0024-prod-terraform-applies-on-merge-by-plan-fingerprint.md)).
+```sh
+terraform -chdir=infra/terraform/envs/github init -backend=false -input=false
+terraform -chdir=infra/terraform/envs/github test
+```
+
+The prod and GitHub-settings plans run on your PR by themselves
+(`terraform-plan.yml`, jobs `plan-prod` and `plan-github`) and are posted as
+comments. Merging applies those plans
+([0024](../../docs/decisions/0024-prod-terraform-applies-on-merge-by-plan-fingerprint.md),
+[0025](../../docs/decisions/0025-github-settings-in-terraform.md)).
 
 ## Read prod (maintainer's AWS access)
 
@@ -55,6 +65,22 @@ terraform -chdir=infra/terraform/envs/prod plan -lock=false
 Never apply prod from a laptop. The one exception is a change to
 `envs/prod/iam_apply.tf`, which the maintainer applies from their own machine
 (`infra/AGENTS.md`).
+
+## Plan the GitHub settings (maintainer's AWS and GitHub access)
+
+`envs/github` keeps its state in the prod state bucket, so a local plan needs
+the same AWS access as reading prod, plus a GitHub token that can see the
+repository's merge settings: a repository admin's, such as `gh auth token`.
+The plan is read-only; `-lock=false` again keeps it off the apply's lock:
+
+```sh
+terraform -chdir=infra/terraform/envs/github init -input=false
+GITHUB_TOKEN=$(gh auth token) terraform -chdir=infra/terraform/envs/github plan -lock=false
+```
+
+A contributor without that access relies on the PR's `plan-github` comment.
+Never apply it from a laptop: only `terraform-apply.yml` applies it, as the
+apply App.
 
 ## Local
 

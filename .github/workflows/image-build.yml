@@ -8,8 +8,8 @@ name: Image build
 # api-image and topo-image are required checks
 # (infra/terraform/envs/github/rulesets.tf). A required check whose workflow
 # never starts leaves the pull request waiting forever, so this workflow
-# starts on every pull request, with no `paths:`
-# filter, and each job decides inside whether its image's inputs changed
+# starts on every pull request, with no `paths:` filter, and each job decides
+# inside whether its image's inputs changed
 # (infra/scripts/image-build-scope.sh, which holds the list and tests it against
 # the Dockerfiles). A job with nothing to build passes in seconds.
 #
