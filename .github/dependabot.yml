@@ -123,10 +123,14 @@ updates:
           - "*"
     # A new Ubuntu release is a migration, not a bump: the image gets PDAL and
     # GDAL from a PPA that must publish that release first (see topo/Dockerfile).
-    # Digest refreshes of the pinned 24.04 still arrive.
+    # Both majors (24.04 -> 26.04) and minors are ignored: 24.10, an interim
+    # release, reads as a minor bump of 24.04. Digest refreshes of the pinned
+    # 24.04 still arrive.
     ignore:
       - dependency-name: "ubuntu"
-        update-types: ["version-update:semver-major"]
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
 
   - package-ecosystem: "pip"
     directory: "/topo"
