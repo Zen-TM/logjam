@@ -229,7 +229,7 @@ resource "aws_cloudwatch_metric_alarm" "topo_stuck_task" {
 # task logs nothing.
 resource "aws_cloudwatch_log_group" "worker_failures" {
   name              = "/aws/events/logjam-worker-failures"
-  retention_in_days = 90
+  retention_in_days = local.operational_log_retention_days
 }
 
 resource "aws_cloudwatch_event_rule" "worker_failures" {

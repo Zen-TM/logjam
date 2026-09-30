@@ -8,8 +8,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CURRENT_CONSENT_VERSION, messageFromError } from "@logjam/shared";
 
 import { updateConsent } from "../api/queries";
+import {
+  PRIVACY_POLICY_URL,
+  TERMS_URL,
+  openLegalDocument,
+} from "../legalLinks";
 import { fontSize, fontWeight, lineHeight, spacing, theme } from "../theme";
-import { Button, ErrorBanner } from "../ui";
+import { Button, ErrorBanner, TextLink } from "../ui";
 
 export function ConsentGate({
   onConsented,
@@ -55,9 +60,18 @@ export function ConsentGate({
     >
       <Text style={styles.title}>Terms & privacy</Text>
       <Text style={styles.body}>
-        Logjam&apos;s terms or privacy policy changed. Review them on Logjam Web
-        to continue.
+        Logjam&apos;s Terms of Use and Privacy Policy have changed (last updated{" "}
+        {CURRENT_CONSENT_VERSION}). Please review them and confirm your
+        agreement to keep using Logjam.
       </Text>
+      <TextLink
+        label="Read the Terms of Use"
+        onPress={() => openLegalDocument(TERMS_URL)}
+      />
+      <TextLink
+        label="Read the Privacy Policy"
+        onPress={() => openLegalDocument(PRIVACY_POLICY_URL)}
+      />
       {error ? <ErrorBanner message={error} onRetry={agree} /> : null}
       <Button label="Agree and continue" onPress={agree} loading={submitting} />
       <Button label="Sign out" variant="ghost" onPress={onSignOut} />
