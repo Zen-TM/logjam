@@ -11,7 +11,7 @@
 # refreshed on purpose, ideally as its own commit:
 #     docker buildx imagetools inspect ubuntu:24.04
 # Digest below verified against the live registry as `ubuntu:24.04` 2026-08-29.
-FROM ubuntu:24.04@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517
+FROM ubuntu:24.04@sha256:008173c23f95b170204355c12626cb5a965d779a7e1283b09e9cffbb1bf33ca3
 
 LABEL maintainer="pipeline"
 LABEL description="ELVIS LiDAR → Topo MBTiles for Gaia GPS"
