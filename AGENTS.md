@@ -58,7 +58,8 @@ when a change does all three:
 - leaves the reason invisible in the code and its tests.
 
 A bug fix, a refactor, or work that follows an existing ADR never qualifies.
-Changing an accepted ADR takes a new one that supersedes it
+A changed decision takes a new ADR that supersedes the old one; a moved path,
+a stale fact or a lapsed reason is updated in place
 (`docs/decisions/README.md`).
 
 ## Comments

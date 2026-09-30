@@ -73,11 +73,15 @@ changes:
 
 ## Updating an accepted ADR
 
-When the decision still stands and only an exception is added or a fact has
-gone stale, do not supersede. Add a bullet under Decision,
-`**Update YYYY-MM-DD: <what changes>.**`, that ends "Everything else above
-stands", or correct the stale line in place and mark it "(updated
-YYYY-MM-DD)". For an exception, list the option you rejected under
-Alternatives. Leave the title, status and index row alone. If the update would
+When the decision still stands, do not supersede:
+
+- A path or symbol it cites moved: correct it in place, unmarked.
+  `shared/src/adrReferences.test.ts` fails until you do.
+- A fact or figure went stale: correct the line in place and mark it
+  "(updated YYYY-MM-DD)".
+- An exception is added, or one of its reasons no longer holds: add a bullet
+  under Decision, `**Update YYYY-MM-DD: <what changes>.**`, that says what
+  still holds the decision up and ends "Everything else above stands". For an
+  exception, list the option you rejected under Alternatives. Leave the title, status and index row alone. If the update would
 change what the decision chooses, or a reader would need both texts to know
 the rule, supersede instead.
