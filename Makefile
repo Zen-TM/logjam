@@ -77,10 +77,12 @@ shared:
 ## local ECS task defs (infra/terraform/envs/local/ecs.tf) reference these tags;
 ## rebuild after changing worker code (local analogue of CI's ECR push). Docker
 ## layer caching keeps this fast when nothing changed.
+## Pinned to linux/amd64 because prod's ECS tasks run X86_64 and api/Dockerfile
+## fetches an x86-64 pmtiles binary, so an arm64 build (Apple Silicon) fails.
 build-workers:
 	@echo "Building worker images (logjam-topo-worker, logjam-api)..."
-	docker build -t logjam-topo-worker:latest topo
-	docker build -t logjam-api:latest -f api/Dockerfile .
+	docker build --platform linux/amd64 -t logjam-topo-worker:latest topo
+	docker build --platform linux/amd64 -t logjam-api:latest -f api/Dockerfile .
 
 ## Re-run seed without wiping volumes
 seed:
