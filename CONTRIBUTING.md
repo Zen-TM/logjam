@@ -128,8 +128,9 @@ there, not in committed files.
   | `topo` | `cd topo && python -m unittest discover -s tests` |
 
 - CI runs the rest: the API integration suite against a live stack, the
-  migration checks, the mobile export, the secret scan, and the Terraform
-  checks and plan.
+  migration checks, the mobile export, the secret scan, the Terraform checks
+  and plan, and a build of the API or topo worker Docker image when a change
+  touches what it is built from.
 - Keep a pull request to one concern, give it a title in Conventional Commit
   form (`fix(api): ...`), and fill in the pull request template.
 - Never commit secrets, `.env` files or real user data.

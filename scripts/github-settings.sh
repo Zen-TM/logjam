@@ -36,6 +36,10 @@
 #     mobile-release-tags and mobile-release-branches), and the
 #     `mobile-release` Environment, which holds EXPO_TOKEN, is deployable from
 #     mobile-v* tags only. The secret itself is set by hand.
+#   - api-image and topo-image (image-build.yml) are required checks: they build
+#     the two Docker images on a PR that changes what they are built from, and
+#     pass at once otherwise. Apply this only after image-build.yml is on main,
+#     or every PR waits for checks that never report.
 #   - The classic branch protection and the disabled "No Commits to main"
 #     ruleset are removed once the ruleset exists, leaving one source of truth.
 #   - Issue labels the issue forms (.github/ISSUE_TEMPLATE/) and
@@ -47,7 +51,7 @@ RULESET_NAME="main"
 APPLY=false
 [ "${1:-}" = "--apply" ] && APPLY=true
 
-REQUIRED_CHECKS='[{"context":"shared"},{"context":"api"},{"context":"frontend"},{"context":"topo"},{"context":"format"},{"context":"actionlint"},{"context":"plan-prod"},{"context":"dco"}]'
+REQUIRED_CHECKS='[{"context":"shared"},{"context":"api"},{"context":"frontend"},{"context":"topo"},{"context":"format"},{"context":"actionlint"},{"context":"plan-prod"},{"context":"dco"},{"context":"api-image"},{"context":"topo-image"}]'
 
 # name|color|description
 LABELS=(

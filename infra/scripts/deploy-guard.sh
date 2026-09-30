@@ -126,15 +126,18 @@ self_test() {
   return $fails
 }
 
-case "${1:-}" in
-  --self-test) self_test ;;
-  fresh)
-    MAIN=$(gh api "repos/$REPO/commits/main" --jq .sha 2>&1)
-    decide_fresh "${2:?sha}" "$?" "$MAIN"
-    ;;
-  scope)
-    OUT=$(gh api "repos/$REPO/compare/${3:-none}...${4:?sha}" --jq '.status, (.files[]?.filename)' 2>&1)
-    decide_scope "${2:?target}" "$3" "$4" "$?" "$OUT"
-    ;;
-  *) echo "usage: $0 fresh <sha> | scope <target> <live> <sha> | --self-test" >&2; exit 2 ;;
-esac
+# Sourced (image-build-scope.sh reads paths_for), the functions load and nothing runs.
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  case "${1:-}" in
+    --self-test) self_test ;;
+    fresh)
+      MAIN=$(gh api "repos/$REPO/commits/main" --jq .sha 2>&1)
+      decide_fresh "${2:?sha}" "$?" "$MAIN"
+      ;;
+    scope)
+      OUT=$(gh api "repos/$REPO/compare/${3:-none}...${4:?sha}" --jq '.status, (.files[]?.filename)' 2>&1)
+      decide_scope "${2:?target}" "$3" "$4" "$?" "$OUT"
+      ;;
+    *) echo "usage: $0 fresh <sha> | scope <target> <live> <sha> | --self-test" >&2; exit 2 ;;
+  esac
+fi
