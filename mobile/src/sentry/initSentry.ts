@@ -22,6 +22,15 @@ import {
 } from "./crashReportPreference";
 import { scrubBreadcrumb, scrubEvent } from "./scrubEvent";
 
+// The native iOS SDK records its own breadcrumb for every HTTP request, and
+// those never pass the JS `beforeBreadcrumb`. A native crash report is built
+// and sent by the native layer, so `beforeSend` does not see it either. The
+// raster basemaps fetch `z/x/y` tile URLs, which localise to ~150 m, so this
+// stays off; JS fetch/XHR breadcrumbs remain and are scrubbed. Not in the
+// 7.2.0 option types, hence the spread; options are forwarded to the native
+// SDK as given. Guard: initSentry.test.ts.
+const NATIVE_OPTIONS = { enableNetworkBreadcrumbs: false } as object;
+
 export function initSentry(): void {
   const dsn = process.env.EXPO_PUBLIC_SENTRY_DSN;
   if (!dsn) return; // reporter absent until the operator provisions a DSN
@@ -37,6 +46,7 @@ export function initSentry(): void {
     // Crash-only posture for now: no performance tracing, no session replay —
     // each would add request/URL telemetry that widens the scrub surface.
     tracesSampleRate: 0,
+    ...NATIVE_OPTIONS,
   });
 }
 
