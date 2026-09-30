@@ -26,6 +26,11 @@ updates:
       npm:
         patterns:
           - "*"
+    # TypeScript 7 does not install next to typescript-eslint, whose peer range
+    # stops below 6.1 (npm ci fails with ERESOLVE). Lift this when it supports 7.
+    ignore:
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "docker"
     directory: "/api"
@@ -44,6 +49,14 @@ updates:
       npm:
         patterns:
           - "*"
+    # TypeScript 7: see /api. eslint-plugin-react-hooks 7 turns on the React
+    # Compiler lint rules (set-state-in-effect, refs, ...), which flag about a
+    # hundred existing sites; adopt them as their own change, then lift this.
+    ignore:
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "eslint-plugin-react-hooks"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "npm"
     directory: "/infra/lambda/cognito-email-sender"
@@ -94,6 +107,13 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "expo-*"
         update-types: ["version-update:semver-major"]
+      # eslint-config-expo's major follows the Expo SDK (~10 for SDK 54, which
+      # `expo` pins above), and it carries the react-hooks 7 rules noted under
+      # /frontend. Move it with the SDK. The SDK pins TypeScript too.
+      - dependency-name: "eslint-config-expo"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "npm"
     directory: "/scripts/basemap"
@@ -112,6 +132,10 @@ updates:
       npm:
         patterns:
           - "*"
+    # TypeScript 7: see /api.
+    ignore:
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "docker"
     directory: "/topo"
