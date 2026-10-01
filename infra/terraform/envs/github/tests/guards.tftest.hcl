@@ -137,3 +137,26 @@ run "squash_commits_keep_sign_offs" {
     error_message = "Squash commits must take the PR's commit messages, which carry the DCO sign-offs."
   }
 }
+
+run "security_alerts_stay_on" {
+  command = plan
+
+  # Mutation: setting either status to "disabled", or deleting the
+  # security_and_analysis block, lets a committed secret go unflagged or a
+  # push that adds one through.
+  assert {
+    condition = (
+      github_repository.logjam.security_and_analysis[0].secret_scanning[0].status == "enabled" &&
+      github_repository.logjam.security_and_analysis[0].secret_scanning_push_protection[0].status == "enabled"
+    )
+    error_message = "Secret scanning and push protection must stay enabled."
+  }
+
+  # Mutation: enabled = false stops Dependabot alerting on vulnerable
+  # dependencies; deleting the resource fails this run on the missing
+  # reference.
+  assert {
+    condition     = github_repository_vulnerability_alerts.logjam.enabled
+    error_message = "Dependabot alerts must stay enabled."
+  }
+}

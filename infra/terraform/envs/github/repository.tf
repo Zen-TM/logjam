@@ -27,7 +27,32 @@ resource "github_repository" "logjam" {
   delete_branch_on_merge      = true
   web_commit_signoff_required = false
 
+  # advanced_security is left out: GitHub rejects it on a public repository,
+  # where these two are free.
+  security_and_analysis {
+    secret_scanning {
+      status = "enabled"
+    }
+    secret_scanning_push_protection {
+      status = "enabled"
+    }
+  }
+
   archive_on_destroy = true
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+# Dependabot alerts. github_repository's own vulnerability_alerts is
+# deprecated; leave it unset there, or the two resources toggle one switch.
+# Referencing github_repository.logjam's name orders this after that
+# resource's update, whose read would otherwise see the switch flip mid-apply.
+# Destroying this resource turns the alerts off.
+resource "github_repository_vulnerability_alerts" "logjam" {
+  repository = github_repository.logjam.name
+  enabled    = true
 
   lifecycle {
     prevent_destroy = true
