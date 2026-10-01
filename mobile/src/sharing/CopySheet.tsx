@@ -147,10 +147,13 @@ export function useCopyPanel({
   // default the server would apply, so it never shows a position that is a lie.
   const remembered = userQuery.data?.uiPreferences?.copyPlaceMedia ?? true;
   const [copyMedia, setCopyMedia] = useState<boolean | null>(null);
-  useEffect(() => {
-    if (!visible) return;
-    setCopyMedia(remembered);
-  }, [visible, remembered]);
+  // Re-seeded on each open, and when the account's answer lands while open.
+  const seedKey = visible ? remembered : null;
+  const [seededFor, setSeededFor] = useState<boolean | null>(null);
+  if (seedKey !== seededFor) {
+    setSeededFor(seedKey);
+    if (seedKey !== null) setCopyMedia(seedKey);
+  }
 
   /** Flipping the switch also moves the remembered default — that IS the memory. */
   const toggleMedia = useCallback(() => {

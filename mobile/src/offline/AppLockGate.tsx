@@ -90,11 +90,9 @@ export function AppLockGate({ children }: { children: React.ReactNode }) {
   // preference so a cold start with the lock already on is gated normally.
   const [lockDeferred, setLockDeferred] = useState(() => !isAppLockEnabled());
   // Turning it back OFF re-arms the deferral, so switching off and on again
-  // doesn't prompt mid-session either. Safe as an effect: with lockRequired
-  // false nothing is gated in that commit anyway.
-  useEffect(() => {
-    if (!lockRequired) setLockDeferred(true);
-  }, [lockRequired]);
+  // doesn't prompt mid-session either. Adjusted during render: with
+  // lockRequired false nothing is gated in this render anyway.
+  if (!lockRequired && !lockDeferred) setLockDeferred(true);
 
   /** The gate is actually shut: asked for, not yet satisfied, not deferred. */
   const locked = lockRequired && !unlocked && !lockDeferred;

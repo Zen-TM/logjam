@@ -95,15 +95,18 @@ export function useSharing({
   const canShare = shareStatus.status === "available";
 
   const load = useCallback(async () => {
-    try {
-      setRecipients(await calls.load());
-      setLoadFailed(false);
-    } catch (err) {
-      // Degrade to a note rather than a hard error: the surface around this
-      // renders offline, and sharing being unreachable must not block a read.
-      console.error(err);
-      setLoadFailed(true);
-    }
+    await calls
+      .load()
+      .then((next) => {
+        setRecipients(next);
+        setLoadFailed(false);
+      })
+      .catch((err: unknown) => {
+        // Degrade to a note rather than a hard error: the surface around this
+        // renders offline, and sharing being unreachable must not block a read.
+        console.error(err);
+        setLoadFailed(true);
+      });
     // Depends on `calls`, which is memoised on the item's ids — so switching
     // items reloads and nothing else does. It used to capture the FIRST
     // render's calls and never look again, which was invisible while every

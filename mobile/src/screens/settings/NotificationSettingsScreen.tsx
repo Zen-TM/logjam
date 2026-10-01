@@ -97,12 +97,15 @@ export function NotificationSettingsScreen() {
         ...(user.uiPreferences?.notifications ?? {}),
       })
     : null;
-  useEffect(() => {
-    if (!serverNotificationsKey) return;
-    setNotifications(
-      JSON.parse(serverNotificationsKey) as NotificationPreferences,
-    );
-  }, [serverNotificationsKey]);
+  const [seededFor, setSeededFor] = useState<string | null>(null);
+  if (serverNotificationsKey !== seededFor) {
+    setSeededFor(serverNotificationsKey);
+    if (serverNotificationsKey) {
+      setNotifications(
+        JSON.parse(serverNotificationsKey) as NotificationPreferences,
+      );
+    }
+  }
 
   const toggleNotification = useCallback(
     (key: keyof NotificationPreferences) => {

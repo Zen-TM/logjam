@@ -114,20 +114,18 @@ export function FriendsScreen({
 
   const load = useCallback(async () => {
     if (guestBlock) return;
-    try {
-      const [nextFriends, nextRequests] = await Promise.all([
-        getFriends(),
-        getFriendRequests(),
-      ]);
-      setFriends(nextFriends);
-      setRequests(nextRequests);
-      setLoadError(null);
-    } catch (err) {
-      console.error(err);
-      // Only surface a full-screen error when nothing has loaded yet; a later
-      // refresh failure keeps the last-good lists on screen.
-      setLoadError(messageFromError(err, "Couldn't load friends."));
-    }
+    await Promise.all([getFriends(), getFriendRequests()])
+      .then(([nextFriends, nextRequests]) => {
+        setFriends(nextFriends);
+        setRequests(nextRequests);
+        setLoadError(null);
+      })
+      .catch((err: unknown) => {
+        console.error(err);
+        // Only surface a full-screen error when nothing has loaded yet; a later
+        // refresh failure keeps the last-good lists on screen.
+        setLoadError(messageFromError(err, "Couldn't load friends."));
+      });
   }, [guestBlock]);
 
   useEffect(() => {
@@ -469,18 +467,19 @@ function AddFriendBody({
   // on a failed send, so this is a banner, never the toast a closed form gets.
   const [sendError, setSendError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const trimmed = query.trim();
+  const changeQuery = (next: string) => {
+    setQuery(next);
     // A fresh search supersedes whichever row's send just failed.
     setSendError(null);
-    if (trimmed.length < SEARCH_MIN_CHARS) {
-      setResults([]);
-      setSearchError(null);
-      return;
-    }
-    let cancelled = false;
-    setSearching(true);
     setSearchError(null);
+    if (next.trim().length < SEARCH_MIN_CHARS) setResults([]);
+    else setSearching(true);
+  };
+
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (trimmed.length < SEARCH_MIN_CHARS) return;
+    let cancelled = false;
     const timer = setTimeout(() => {
       searchUsers(trimmed)
         .then((users) => {
@@ -525,7 +524,7 @@ function AddFriendBody({
       <TextField
         label="Search by username"
         value={query}
-        onChangeText={setQuery}
+        onChangeText={changeQuery}
         autoCapitalize="none"
         error={searchError}
       />

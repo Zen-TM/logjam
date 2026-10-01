@@ -123,6 +123,9 @@ export function SyncIssuesScreen({
   // which stops every incoming change until it is resolved. It has no Retry —
   // retrying re-fetches the same page — so it gets its own affordance.
   const [applyFailedAt, setApplyFailedAt] = useState<string | null>(null);
+  // The rows' "x ago" is measured from the load that fetched them, so a render
+  // stays pure and every reload refreshes it.
+  const [loadedAt, setLoadedAt] = useState(() => Date.now());
   const [menuIssue, setMenuIssue] = useState<Issue | null>(null);
   // ONE toast channel for every outcome (DESIGN.md §6). A row leaving the list
   // is the only feedback most of these actions have, and "it vanished" is not
@@ -154,6 +157,7 @@ export function SyncIssuesScreen({
         setParked(parkedOps);
         setShelf(shelfEntries);
         setApplyFailedAt(failedAt);
+        setLoadedAt(Date.now());
       })
       .catch((err: unknown) => console.error(err));
   }, []);
@@ -499,13 +503,14 @@ export function SyncIssuesScreen({
     ({ item }: { item: Issue }) => (
       <IssueRow
         item={item}
+        now={loadedAt}
         onMenu={openMenu}
         onToggle={selectItem}
         selecting={selecting}
         selected={selectedKeys.includes(item.key)}
       />
     ),
-    [openMenu, selectItem, selectedKeys, selecting],
+    [loadedAt, openMenu, selectItem, selectedKeys, selecting],
   );
 
   const total = parked.length + shelf.length + (applyFailedAt ? 1 : 0);
@@ -838,18 +843,19 @@ function issueTitle(issue: Issue): string {
 // DESIGN.md §9.
 const IssueRow = memo(function IssueRow({
   item,
+  now,
   onMenu,
   onToggle,
   selecting,
   selected,
 }: {
   item: Issue;
+  now: number;
   onMenu: (item: Issue) => void;
   onToggle: (item: Issue) => void;
   selecting: boolean;
   selected: boolean;
 }) {
-  const now = Date.now();
   const openOrToggle = () => (selecting ? onToggle(item) : onMenu(item));
   // The ⋯ and the checkbox share one 40pt box, so entering the mode cannot
   // resize a row and shift the list under the finger that started it (§7).

@@ -284,11 +284,13 @@ export function useSharePanel({
 
   // A different item is a different pick. Without this, backing out of one
   // send and opening another arrives with the first one's ticks in place.
-  useEffect(() => {
+  const [pickedFor, setPickedFor] = useState(targetKey);
+  if (targetKey !== pickedFor) {
+    setPickedFor(targetKey);
     setSelected(EMPTY_SELECTION);
     setSendError(null);
     setQuery("");
-  }, [targetKey]);
+  }
 
   const sendCopy = target?.kind === "copy" ? target.sendCopy : null;
   const send = useCallback(async () => {

@@ -34,7 +34,7 @@
 // titles, topo job names), and sizes/dates only. "Show on map" passes a bbox
 // through navigation params to MapScreen's camera; in memory only, never
 // logged, never persisted.
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
   Animated,
@@ -496,11 +496,15 @@ export function SavedScreen({
   const [filter, setFilter] = useState<Category | "all">(
     initialFilter?.category ?? "all",
   );
+  // One search field for every tab (item 8).
+  const [searchQuery, setSearchQuery] = useState("");
   // A later arrival re-selects, even for the same category — this tab stays
   // mounted, so the pointer has to work every time it is followed.
-  useEffect(() => {
+  const [arrivedWith, setArrivedWith] = useState(initialFilter);
+  if (initialFilter !== arrivedWith) {
+    setArrivedWith(initialFilter);
     if (initialFilter) setFilter(initialFilter.category);
-  }, [initialFilter?.nonce, initialFilter]);
+  }
   // --- Arrival highlight, part 1: the state the rows read --------------------
   // The rest of it (when to blink, and what to load first) is below the lists
   // it has to wait for — see "Arrival highlight, part 2".
@@ -837,8 +841,6 @@ export function SavedScreen({
   // Who shared each incoming place with this user — the name on a received
   // row's pill. Mirror-backed, so it reads the same with no signal.
   const shareOwners = useMirrorIncomingShareOwners();
-  // One search field for every tab (item 8).
-  const [searchQuery, setSearchQuery] = useState("");
 
   // --- Vector imports (GPX/KML/GeoJSON) ---
   const { imports } = useVectorImports();
@@ -908,22 +910,29 @@ export function SavedScreen({
   const [accountJobs, setAccountJobs] = useState<GeoPdfJobView[] | null>(null);
   const [accountJobsLoading, setAccountJobsLoading] = useState(false);
 
-  const loadAccountGeoPdfs = useCallback(async () => {
-    try {
-      setAccountJobsLoading(true);
-      const jobs = await listGeoPdfJobs();
-      const completed = jobs.filter((job) => job.status === "completed");
-      setAccountJobs(completed);
-      setFilter("geoPdf");
-      if (completed.length === 0)
-        info("No generated GeoPDFs on your account yet.");
-    } catch (err) {
-      console.error(err);
-      fail(messageFromError(err, "Couldn't load your GeoPDFs."));
-    } finally {
-      setAccountJobsLoading(false);
-    }
-  }, [fail, info]);
+  // The caller raises `accountJobsLoading` first: the tap below, or the render
+  // that sees a notification's arrival (see "An arrival that NAMES a row").
+  const fetchAccountGeoPdfs = useCallback(
+    () =>
+      listGeoPdfJobs()
+        .then((jobs) => {
+          const completed = jobs.filter((job) => job.status === "completed");
+          setAccountJobs(completed);
+          setFilter("geoPdf");
+          if (completed.length === 0)
+            info("No generated GeoPDFs on your account yet.");
+        })
+        .catch((err: unknown) => {
+          console.error(err);
+          fail(messageFromError(err, "Couldn't load your GeoPDFs."));
+        })
+        .finally(() => setAccountJobsLoading(false)),
+    [fail, info],
+  );
+  const loadAccountGeoPdfs = useCallback(() => {
+    setAccountJobsLoading(true);
+    void fetchAccountGeoPdfs();
+  }, [fetchAccountGeoPdfs]);
 
   const handleImportAccountGeoPdf = useCallback((job: GeoPdfJobView) => {
     const label = job.title ?? "GeoPDF";
@@ -949,7 +958,10 @@ export function SavedScreen({
   const remoteTracks = useStandaloneTrackMedia();
 
   // --- Unified on-device item list ---
-  const items = useMemo<SavedItem[]>(() => {
+  // Not memoised, nor is anything derived from it below: most of its inputs
+  // (the artifact filters, the merged overlay jobs, the done tracks) are
+  // rebuilt every render, so a memo here never hit.
+  const items = ((): SavedItem[] => {
     const rows: SavedItem[] = [];
 
     // ONE card per saved AREA, not per basemap: a "Save maps offline" run
@@ -1238,51 +1250,29 @@ export function SavedScreen({
         !pendingCreates.has(entityId);
       return backedUp ? { ...row, backedUp } : row;
     });
-  }, [
-    artifacts,
-    geoPdfBusy,
-    importRun?.importId,
-    routes.data,
-    shareOwners.data,
-    geoPdfImports,
-    handleResumeGeoPdf,
-    imports,
-    mergedOverlays,
-    savedOverlayArtifacts,
-    regionArtifacts,
-    savedTracks,
-    remoteTracks,
-    pendingCreates,
-  ]);
+  })();
 
-  const counts = useMemo(() => {
-    const byCategory = {
-      region: 0,
-      overlay: 0,
-      geoPdf: 0,
-      route: 0,
-      import: 0,
-      track: 0,
+  const counts = {
+    region: 0,
+    overlay: 0,
+    geoPdf: 0,
+    route: 0,
+    import: 0,
+    track: 0,
+  };
+  for (const item of items) counts[item.category] += 1;
+
+  const segments: CapacitySegment[] = CATEGORY_ORDER.map((category) => {
+    const bytes = items
+      .filter((item) => item.category === category)
+      .reduce((sum, item) => sum + item.sizeBytes, 0);
+    return {
+      label: CATEGORY_META[category].plural,
+      value: bytes,
+      color: assetHue[category],
+      display: formatBytes(bytes),
     };
-    for (const item of items) byCategory[item.category] += 1;
-    return byCategory;
-  }, [items]);
-
-  const segments = useMemo<CapacitySegment[]>(
-    () =>
-      CATEGORY_ORDER.map((category) => {
-        const bytes = items
-          .filter((item) => item.category === category)
-          .reduce((sum, item) => sum + item.sizeBytes, 0);
-        return {
-          label: CATEGORY_META[category].plural,
-          value: bytes,
-          color: assetHue[category],
-          display: formatBytes(bytes),
-        };
-      }),
-    [items],
-  );
+  });
 
   const usedBytes = segments.reduce((sum, segment) => sum + segment.value, 0);
 
@@ -1402,19 +1392,26 @@ export function SavedScreen({
   // An arrival that NAMES a row is the tap the lazy account list was waiting
   // for. Without this the GeoPDF a notification points at is behind an "Import
   // a GeoPDF" button, on a tab whose empty state says there is nothing here.
+  const autoLoadKey =
+    highlightKey && filter === "geoPdf" && accountJobs == null
+      ? `${highlightNonce}:${highlightKey}`
+      : null;
+  const [autoLoadedFor, setAutoLoadedFor] = useState<string | null>(null);
+  if (autoLoadKey !== autoLoadedFor) {
+    setAutoLoadedFor(autoLoadKey);
+    if (autoLoadKey !== null) setAccountJobsLoading(true);
+  }
   useEffect(() => {
-    if (!highlightKey || filter !== "geoPdf" || accountJobs != null) return;
-    void loadAccountGeoPdfs();
-  }, [accountJobs, filter, highlightKey, highlightNonce, loadAccountGeoPdfs]);
+    if (autoLoadKey !== null) void fetchAccountGeoPdfs();
+  }, [autoLoadKey, fetchAccountGeoPdfs]);
   // The search field itself follows the same "nothing to search" rule the tag
   // rail already did: hidden when the active tab holds no rows, so an empty
   // panel gets the whole screen body.
   const activeCategoryCount = filter === "all" ? items.length : counts[filter];
 
   // Everything picked that is still in the list, in list order.
-  const selectedItems = useMemo(
-    () => visibleItems.filter((item) => selectedKeys.includes(item.key)),
-    [selectedKeys, visibleItems],
+  const selectedItems = visibleItems.filter((item) =>
+    selectedKeys.includes(item.key),
   );
   const selecting = selectedItems.length > 0;
   const selectedBytes = selectedItems.reduce(
@@ -1425,7 +1422,7 @@ export function SavedScreen({
 
   /** One confirm for the whole batch; the sentence itself is
    *  `bulkDeleteConfirmBody`, which owns every count/kind combination. */
-  const deleteSelected = useCallback(() => {
+  const deleteSelected = () => {
     const targets = selectedItems;
     const syncedCount = targets.filter(
       (item) => item.category === "route",
@@ -1467,14 +1464,7 @@ export function SavedScreen({
         },
       },
     ]);
-  }, [
-    clearSelection,
-    fail,
-    info,
-    refreshFreeSpace,
-    selectedBytes,
-    selectedItems,
-  ]);
+  };
 
   const deleteItem = useCallback(
     (item: SavedItem) => {
@@ -1641,16 +1631,12 @@ export function SavedScreen({
   // (neither) and a route shared WITH this user, all picked in one gesture —
   // which is why the mechanism is never the user's choice and why the panel
   // says which rows went which way before it runs.
-  const shareCandidates = useMemo(
-    () =>
-      selectedItems.map((item) => ({
-        key: item.key,
-        ...(item.sharedWithYou ? { sharedWithYou: item.sharedWithYou } : {}),
-        ...(item.share ? { share: item.share } : {}),
-        ...(item.sendCopy ? { sendCopy: item.sendCopy } : {}),
-      })),
-    [selectedItems],
-  );
+  const shareCandidates = selectedItems.map((item) => ({
+    key: item.key,
+    ...(item.sharedWithYou ? { sharedWithYou: item.sharedWithYou } : {}),
+    ...(item.share ? { share: item.share } : {}),
+    ...(item.sendCopy ? { sendCopy: item.sendCopy } : {}),
+  }));
 
   return (
     <View style={styles.screen}>

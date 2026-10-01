@@ -14,7 +14,7 @@
 //
 // `onShowOnMap` is the ONE row that is Saved-only: on the map you are already
 // looking at the file you tapped.
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Alert, StyleSheet, View } from "react-native";
 import { messageFromError } from "@logjam/shared";
 
@@ -70,14 +70,12 @@ export function ImportOptionsSheet({
   // set means the NEXT open lands inside it instead of on the verb list. That
   // shipped twice: the route sheet opened straight into its share panel, and
   // the options list became unreachable.
-  useEffect(() => {
-    if (!visible) {
-      setRenaming(false);
-      setSending(false);
-      setShowingStats(false);
-      setAttaching(false);
-    }
-  }, [visible]);
+  if (!visible && (renaming || sending || showingStats || attaching)) {
+    setRenaming(false);
+    setSending(false);
+    setShowingStats(false);
+    setAttaching(false);
+  }
 
   // Reading the stored GeoJSON back is the expensive part, so it runs only
   // while that sub-mode is actually open.
