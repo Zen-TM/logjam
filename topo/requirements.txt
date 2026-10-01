@@ -5,7 +5,7 @@
 numpy>=2.5.3,<3.0
 Pillow>=12.3.0,<13.0
 requests>=2.34.2,<3.0
-boto3>=1.43.103,<2.0
+boto3>=1.43.104,<2.0
 psycopg2-binary>=2.9.13,<3.0
 pmtiles>=3.8.1,<4.0
 shapely>=2.1.2,<3.0
