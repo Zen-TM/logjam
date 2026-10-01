@@ -12,7 +12,8 @@ name: terraform-plan
 # required check pending forever. A PR that changes nothing a root's plan
 # sees passes that job without planning (plan-summary.mjs scope, which the
 # apply asks too). Fork PRs get no id-token and no secrets: one touching infra
-# fails here and can't merge until the maintainer pushes the branch in-repo.
+# fails here with a message saying so, and can't merge until the maintainer
+# re-opens it from a branch in this repository.
 # Dependabot PRs are the same case: its runs get no secrets and a read-only
 # token, and the restriction follows whoever triggered the run, so "Update
 # branch" by a person lifts it.
@@ -62,6 +63,14 @@ jobs:
         if: steps.scope.outputs.run == 'true' && github.actor == 'dependabot[bot]'
         run: |
           echo "::error::Dependabot-triggered runs get no AWS secrets, so this plan cannot run. Click 'Update branch' on the PR (or push to it): a run a person triggers has the secrets."
+          exit 1
+
+      # A fork's runs get neither secrets nor an OIDC token, so the steps
+      # below would fail on a malformed role or an empty App key.
+      - name: Explain a pull request from a fork
+        if: steps.scope.outputs.run == 'true' && github.event.pull_request.head.repo.full_name != github.repository
+        run: |
+          echo "::error::This pull request comes from a fork, and GitHub doesn't give fork pull requests the credentials this plan needs, so it can't run here. Nothing to fix on your side: the maintainer will review the change and re-open it from a branch in this repository."
           exit 1
 
       - name: Configure AWS credentials
@@ -153,6 +162,14 @@ jobs:
         if: steps.scope.outputs.run == 'true' && github.actor == 'dependabot[bot]'
         run: |
           echo "::error::Dependabot-triggered runs get no secrets, so this plan cannot run. Click 'Update branch' on the PR (or push to it): a run a person triggers has the secrets."
+          exit 1
+
+      # A fork's runs get neither secrets nor an OIDC token, so the steps
+      # below would fail on a malformed role or an empty App key.
+      - name: Explain a pull request from a fork
+        if: steps.scope.outputs.run == 'true' && github.event.pull_request.head.repo.full_name != github.repository
+        run: |
+          echo "::error::This pull request comes from a fork, and GitHub doesn't give fork pull requests the credentials this plan needs, so it can't run here. Nothing to fix on your side: the maintainer will review the change and re-open it from a branch in this repository."
           exit 1
 
       # Only for the state, which lives in the prod state bucket.

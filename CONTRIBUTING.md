@@ -48,11 +48,17 @@ issues get a reply within a week or two and most pull requests a first review
 within a few weeks, but it can take longer when the maintainer is away.
 Security reports follow [`SECURITY.md`](SECURITY.md).
 
-- Only the maintainer merges. Every pull request needs the code owner's
-  approval ([`.github/CODEOWNERS`](.github/CODEOWNERS)), a new push dismisses
-  an earlier approval, and write access to the repository does not let you
-  merge.
-- CI must be green.
+- Every pull request needs the code owner's approval
+  ([`.github/CODEOWNERS`](.github/CODEOWNERS)), and a new push dismisses an
+  earlier approval. Once it is approved and green, anyone with write access
+  may squash-merge it. The maintainer's own pull requests merge without that
+  approval, since GitHub never lets an author approve their own.
+- CI must be green. Nobody, the maintainer included, can merge past a failing
+  required check.
+- A pull request from a fork that changes `infra/terraform/` or
+  `infra/lambda/` can't be planned here: GitHub gives fork pull requests none
+  of the credentials the plan needs. The maintainer re-opens it from a branch
+  in this repository.
 - Merging ships. The API, Logjam Web and the topo worker deploy from `main`
   once CI passes, and Terraform changes are applied on merge, exactly as the
   plan comment on the pull request showed

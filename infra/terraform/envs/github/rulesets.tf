@@ -1,19 +1,19 @@
 locals {
-  # Repository admins (the maintainer) bypass every ruleset: they alone merge
-  # to main and cut Logjam GPS releases. Guard: tests/guards.tftest.hcl.
+  # Repository admins (the maintainer) may bypass the review ruleset, so
+  # their own PRs merge without the approval GitHub never lets an author give
+  # themselves, and they alone cut Logjam GPS releases. They may not bypass
+  # the main ruleset: nobody merges red. Guard: tests/guards.tftest.hcl.
   admin_bypass = {
     actor_id    = 5 # the built-in admin repository role
     actor_type  = "RepositoryRole"
     bypass_mode = "always"
   }
 
-  # plan-prod is the gate for merge = apply (terraform-plan.yml); a PR must be
-  # up to date with main so its plan was made against the main it merges
-  # into. api-image and topo-image (image-build.yml) build the Docker images
-  # on a PR that changes what they are built from, and pass at once
-  # otherwise. The list is the one live when this root took the settings
-  # over, so that first plan imports and changes nothing; plan-github joins
-  # it in a later change.
+  # plan-prod and plan-github are the gates for merge = apply
+  # (terraform-plan.yml); a PR must be up to date with main so its plan was
+  # made against the main it merges into. api-image and topo-image
+  # (image-build.yml) build the Docker images on a PR that changes what they
+  # are built from, and pass at once otherwise.
   required_checks = [
     "shared",
     "api",
@@ -22,6 +22,7 @@ locals {
     "format",
     "actionlint",
     "plan-prod",
+    "plan-github",
     "dco",
     "api-image",
     "topo-image",
@@ -33,12 +34,61 @@ import {
   id = "logjam:23995449"
 }
 
-# A PR needs a CODEOWNERS approval (.github/CODEOWNERS), and a new push
-# dismisses an earlier one. Only a bypass actor may update main at all (the
-# update rule), so only the maintainer merges, and an approved PR does not let
-# a collaborator merge it.
+# What every change to main must pass, with no bypass for anyone: it arrives
+# by PR, squashed, green and up to date, and main is never rewritten or
+# deleted. Approval lives in a separate ruleset (main_review below) because a
+# bypass skips every rule of the ruleset it is on: with approval here, the
+# maintainer's own PRs could only merge by also skipping the required checks.
+# There is no update rule, so whoever may merge a PR (write access) can merge
+# one that is approved and green.
 resource "github_repository_ruleset" "main" {
   name        = "main"
+  repository  = github_repository.logjam.name
+  target      = "branch"
+  enforcement = "active"
+
+  conditions {
+    ref_name {
+      include = ["~DEFAULT_BRANCH"]
+      exclude = []
+    }
+  }
+
+  rules {
+    deletion                = true
+    non_fast_forward        = true
+    required_linear_history = true
+
+    pull_request {
+      required_approving_review_count   = 0
+      require_code_owner_review         = false
+      dismiss_stale_reviews_on_push     = false
+      require_last_push_approval        = false
+      required_review_thread_resolution = false
+      allowed_merge_methods             = ["squash"]
+    }
+
+    required_status_checks {
+      strict_required_status_checks_policy = true
+
+      dynamic "required_check" {
+        for_each = local.required_checks
+        content {
+          context = required_check.value
+        }
+      }
+    }
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+# A PR needs a code owner's approval (.github/CODEOWNERS), and a push after
+# it dismisses it. Admins may bypass this ruleset alone.
+resource "github_repository_ruleset" "main_review" {
+  name        = "main-review"
   repository  = github_repository.logjam.name
   target      = "branch"
   enforcement = "active"
@@ -57,12 +107,6 @@ resource "github_repository_ruleset" "main" {
   }
 
   rules {
-    deletion                      = true
-    non_fast_forward              = true
-    required_linear_history       = true
-    update                        = true
-    update_allows_fetch_and_merge = false
-
     pull_request {
       required_approving_review_count   = 1
       require_code_owner_review         = true
@@ -70,17 +114,6 @@ resource "github_repository_ruleset" "main" {
       require_last_push_approval        = false
       required_review_thread_resolution = false
       allowed_merge_methods             = ["squash"]
-    }
-
-    required_status_checks {
-      strict_required_status_checks_policy = true
-
-      dynamic "required_check" {
-        for_each = local.required_checks
-        content {
-          context = required_check.value
-        }
-      }
     }
   }
 
