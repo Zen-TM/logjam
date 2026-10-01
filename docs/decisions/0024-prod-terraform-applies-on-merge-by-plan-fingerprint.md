@@ -39,7 +39,7 @@ by anyone. `terraform show -json` prints sensitive values in clear.
   address. A truncated comment keeps that header and the end of the plan
   text. If the header alone won't fit, the comment carries no fingerprint.
 - `plan-prod` is a required check, and a PR must be up to date with `main` to
-  merge (`scripts/github-settings.sh`). The plan runs on every PR and passes
+  merge (`infra/terraform/envs/github/rulesets.tf`). The plan runs on every PR and passes
   without planning when nothing under `infra/terraform/` or `infra/lambda/`
   changed.
 - The apply runs as `logjam-github-actions-apply-role`

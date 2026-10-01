@@ -29,9 +29,14 @@ const ROOTS = [
   "infra/terraform/envs/prod/",
 ];
 
-// Paths an ADR names BECAUSE they are gone, and why.
+// Paths an ADR names BECAUSE they are gone, or that are not repo paths (a
+// Terraform state key).
 const NAMED_AS_DELETED: Record<string, string[]> = {
   "0016-share-versus-send-a-copy.md": ["screens/ReceivedFilesScreen.tsx"],
+  "0025-github-settings-in-terraform.md": [
+    "scripts/github-settings.sh",
+    "github/terraform.tfstate",
+  ],
 };
 
 // A backticked token with a slash that ends in an extension or a slash. Globs
