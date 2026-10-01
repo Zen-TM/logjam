@@ -65,7 +65,7 @@ run "main_admits_only_green_squashed_prs" {
   # off strict lets a PR merge against a main it was not planned on.
   assert {
     condition = alltrue([
-      for c in ["shared", "api", "frontend", "topo", "format", "actionlint", "plan-prod", "plan-github", "dco", "api-image", "topo-image"] :
+      for c in ["shared", "api", "frontend", "topo", "format", "actionlint", "plan-prod", "plan-github", "dco", "api-image", "topo-image", "gitleaks"] :
       contains([for r in github_repository_ruleset.main.rules[0].required_status_checks[0].required_check : r.context], c)
     ]) && github_repository_ruleset.main.rules[0].required_status_checks[0].strict_required_status_checks_policy
     error_message = "A required check left the main ruleset, or branches no longer need to be up to date. Add checks freely; removing one needs this test changed too."
