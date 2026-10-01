@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@aws-crypto/client-node": "^4.0.0",
+    "@aws-crypto/client-node": "^5.0.2",
     "resend": "^6.30.0"
   },
   "devDependencies": {
