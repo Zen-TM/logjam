@@ -218,7 +218,7 @@ export function RegionDownloadScreen({
   // Read once: `initialViewState` below is only honoured on the first render,
   // and re-reading a module store mid-session would move the frame the user is
   // already dragging.
-  const lastCamera = useRef(readLastMapCamera()).current;
+  const [lastCamera] = useState(() => readLastMapCamera());
   const startBasemapId: BasemapId =
     initialBasemapId ?? lastCamera?.basemapId ?? "six-topo";
   const startCenter = initialCenter ?? lastCamera?.center ?? DEFAULT_CENTER;

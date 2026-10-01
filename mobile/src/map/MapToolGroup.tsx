@@ -11,7 +11,7 @@
 // The group closes as soon as a tool arms: the HUD in the top notice stack is
 // then the thing telling the user what mode they are in, and leaving an open
 // tray behind it would be two answers to the same question.
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Animated, Easing, Pressable, StyleSheet, View } from "react-native";
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 
@@ -83,7 +83,7 @@ export function MapToolGroup({
   // cover, so px/ms is constant across tools) — each one just stops the
   // moment it reaches behind the +, independently, rather than all landing
   // together on a delay.
-  const values = useRef(TOOLS.map(() => new Animated.Value(0))).current;
+  const [values] = useState(() => TOOLS.map(() => new Animated.Value(0)));
   const dir = side === "right" ? 1 : -1;
   useEffect(() => {
     const anims = TOOLS.map((_, k) =>

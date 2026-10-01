@@ -118,7 +118,7 @@ export function MapSearchBar({
   // the expanded state. Width can't run on the native driver, so neither does
   // the opacity — keeping them on one value is what stops the text appearing
   // before there is room for it.
-  const grow = useRef(new Animated.Value(0)).current;
+  const [grow] = useState(() => new Animated.Value(0));
   useEffect(() => {
     Animated.timing(grow, {
       toValue: expanded ? 1 : 0,

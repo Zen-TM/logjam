@@ -235,7 +235,7 @@ export function DatePicker({
  */
 function usePager() {
   const [width, setWidth] = useState(0);
-  const pan = useRef(new Animated.Value(0)).current;
+  const [pan] = useState(() => new Animated.Value(0));
   const paging = useRef(false);
   const widthRef = useRef(0);
   widthRef.current = width;

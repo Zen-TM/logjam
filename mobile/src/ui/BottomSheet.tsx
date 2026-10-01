@@ -189,8 +189,8 @@ export function BottomSheet({
   const [mounted, setMounted] = useState(visible);
   const onClosedRef = useRef(onClosed);
   onClosedRef.current = onClosed;
-  const progress = useRef(new Animated.Value(0)).current;
-  const drag = useRef(new Animated.Value(0)).current;
+  const [progress] = useState(() => new Animated.Value(0));
+  const [drag] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
     if (visible) {

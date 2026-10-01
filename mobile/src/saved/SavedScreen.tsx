@@ -511,7 +511,7 @@ export function SavedScreen({
   const highlightKey = initialHighlight?.key ?? null;
   const highlightNonce = initialHighlight?.nonce ?? 0;
   const [pulsingKey, setPulsingKey] = useState<string | null>(null);
-  const pulse = useRef(new Animated.Value(1)).current;
+  const [pulse] = useState(() => new Animated.Value(1));
   const scrollRef = useRef<ScrollView>(null);
   /** One scroll per arrival — `onLayout` fires again on every relayout. */
   const scrolledForNonce = useRef<number | null>(null);
