@@ -13,7 +13,7 @@
     "resend": "^6.30.0"
   },
   "devDependencies": {
-    "@aws-sdk/client-secrets-manager": "^3.1141.0",
+    "@aws-sdk/client-secrets-manager": "^3.1142.0",
     "@types/aws-lambda": "^8.10.163",
     "@types/node": "^20.14.0",
     "esbuild": "^0.28.2",
