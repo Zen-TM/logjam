@@ -117,6 +117,19 @@ updates:
           - "patch"
 
   - package-ecosystem: "terraform"
+    directory: "/infra/terraform/envs/github"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 20
+    groups:
+      terraform:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  - package-ecosystem: "terraform"
     directory: "/infra/terraform/envs/local"
     schedule:
       interval: "monthly"

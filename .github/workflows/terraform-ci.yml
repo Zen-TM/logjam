@@ -41,7 +41,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        root: [bootstrap, envs/prod, envs/local]
+        root: [bootstrap, envs/prod, envs/local, envs/github]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
@@ -53,3 +53,18 @@ jobs:
         run: terraform -chdir=infra/terraform/${{ matrix.root }} init -backend=false -input=false
       - name: terraform validate
         run: terraform -chdir=infra/terraform/${{ matrix.root }} validate
+
+  # The guards on the settings the security model stands on (nobody merges
+  # red or unreviewed, admin-only releases, prod deployable from main only):
+  # envs/github/tests/guards.tftest.hcl, offline against a mocked provider.
+  test-github:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: "~> 1.13"
+      - name: terraform init (no backend)
+        run: terraform -chdir=infra/terraform/envs/github init -backend=false -input=false
+      - name: terraform test
+        run: terraform -chdir=infra/terraform/envs/github test

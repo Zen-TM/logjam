@@ -31,13 +31,13 @@ jobs:
         env:
           TARGET: ${{ inputs.target }}
           SHA: ${{ inputs.sha }}
-          # Repository variables, declared in scripts/github-settings.sh.
+          # Repository variables, declared in infra/terraform/envs/github.
           API_URL: ${{ vars.PROD_API_URL }}
           WEB_URL: ${{ vars.PROD_WEB_URL }}
         run: |
           set -uo pipefail
           if [ -z "$API_URL" ] || [ -z "$WEB_URL" ]; then
-            echo "::error::repository variables PROD_API_URL and PROD_WEB_URL must be set (scripts/github-settings.sh --apply)"
+            echo "::error::repository variables PROD_API_URL and PROD_WEB_URL must be set (declared in infra/terraform/envs/github)"
             exit 1
           fi
           # Prints the status of every request: all 403s from the first attempt

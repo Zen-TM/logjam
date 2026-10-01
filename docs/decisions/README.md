@@ -120,3 +120,4 @@ supersede instead.
 | [0022](0022-mobile-builds-supported-three-months.md) | A Logjam GPS build is supported until three months after its successor's release; SYNC_PROTOCOL keeps N−1 until then | 2026-09-28 | Accepted |
 | [0023](0023-ota-runtime-is-the-native-fingerprint.md) | An OTA update's runtime version is the native fingerprint, and a production update ships only from its release's branch | 2026-09-28 | Accepted |
 | [0024](0024-prod-terraform-applies-on-merge-by-plan-fingerprint.md) | Prod Terraform applies on merge, and only the plan the PR showed | 2026-09-28 | Accepted |
+| [0025](0025-github-settings-in-terraform.md) | The repository's GitHub settings are Terraform, applied on merge like prod | 2026-09-29 | Accepted |

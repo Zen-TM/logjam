@@ -26,7 +26,7 @@ date of its release tag.
 
 Needed before the first release tag.
 
-1. **GitHub settings:** `scripts/github-settings.sh --apply` creates the
+1. **GitHub settings:** `infra/terraform/envs/github` declares the
    `mobile-release` Environment (deployable from `mobile-v*` tags only) and
    two rulesets that let only repository admins create, move or delete
    `mobile-v*` tags and `release/mobile-v*` branches. A tag push is a release,

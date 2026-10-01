@@ -12,9 +12,9 @@
 # in the address: keep that in every resource name here).
 #
 # Trust: jobs in the `prod` GitHub Environment, which only main may deploy to
-# (scripts/github-settings.sh). The deploy role trusts the same subject; a
-# separate Environment would not separate them, since any workflow on main
-# can name any Environment.
+# (infra/terraform/envs/github/environments.tf). The deploy role trusts the
+# same subject; a separate Environment would not separate them, since any
+# workflow on main can name any Environment.
 locals {
   github_actions_apply_role     = "logjam-github-actions-apply-role"
   github_actions_apply_boundary = "logjam-github-actions-apply-boundary"
