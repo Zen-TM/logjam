@@ -431,7 +431,7 @@ resource "aws_iam_role_policy" "eb_instance_s3_scoped" {
       {
         # READ-ONLY, and deliberately so: the egress sweeper (lib/egressMeter.ts)
         # only ever lists and reads access-log objects to sum bytes_sent. It has
-        # no reason to write or delete here, and the 30-day lifecycle rule —
+        # no reason to write or delete here, and the lifecycle rule —
         # not the API — is what reclaims the space.
         Sid    = "AccessLogsRead"
         Effect = "Allow"

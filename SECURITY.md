@@ -41,8 +41,7 @@ output or missing headers with no way to exploit them.
 ## Testing
 
 - Test against your own accounts. To test sharing, make two. Better still, run
-  Logjam locally, which comes with seeded users (`README.md` → Local
-  Development).
+  Logjam locally, which comes with seeded users ([`docs/dev-setup.md`](docs/dev-setup.md)).
 - Never read, change or keep another user's data on the live service. If you
   reach some by accident, stop, keep no copy, and say so in your report.
 - No load testing, no mass topo or export jobs (each one costs real money),
