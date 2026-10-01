@@ -347,19 +347,24 @@ function AddFriendDialog({
   const [sendingId, setSendingId] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
+  // Closing clears the search, during render.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
     if (!open) {
       setQuery("");
       setResults([]);
       setSentIds(new Set());
     }
-  }, [open]);
+  }
+
+  // Too short a query (or a closed dialog) shows no results, also during
+  // render; the effect's cleanup drops any response still on its way.
+  const searches = open && query.trim().length >= SEARCH_MIN_CHARS;
+  if (!searches && results.length > 0) setResults([]);
 
   useEffect(() => {
-    if (!open || query.trim().length < SEARCH_MIN_CHARS) {
-      setResults([]);
-      return;
-    }
+    if (!searches) return;
     if (timerRef.current) clearTimeout(timerRef.current);
     // FEUI-008: guards a stale response landing after a newer query's already
     // replaced it (type "abel" then "abelin" — if "abel"'s GET resolves last,
@@ -381,7 +386,7 @@ function AddFriendDialog({
       cancelled = true;
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [open, query, toast]);
+  }, [searches, query, toast]);
 
   async function handleSend(user: TSearchUser) {
     setSendingId(user.id);

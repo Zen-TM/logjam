@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { applyRopeWikiImport } from "../../placeUtils";
 import type {
   RopeWikiApplyDecision,
@@ -97,11 +97,15 @@ function RopeWikiReviewDialog({
       : null,
   ].filter(Boolean);
 
-  useEffect(() => {
-    if (!open) return;
-    setItems(review.map(toReviewItem));
-    setError(null);
-  }, [open, review]);
+  // Each open, and each new review while open, starts the decisions afresh.
+  const [reviewShown, setReviewShown] = useState({ open, review });
+  if (open !== reviewShown.open || review !== reviewShown.review) {
+    setReviewShown({ open, review });
+    if (open) {
+      setItems(review.map(toReviewItem));
+      setError(null);
+    }
+  }
 
   const handleChange = useCallback(
     (index: number, decision: ReviewDecision) => {
