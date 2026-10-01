@@ -83,8 +83,9 @@ fails a change that gives the `main` ruleset a bypass actor or drops any of
 its rules, required checks, up-to-date branches or squash-only merging,
 removes code-owner approval or dismiss-stale from `main-review`, disables
 or retargets either ruleset (updated 2026-10-01), lets `prod` deploy from
-anything but `main`, opens the release rulesets or Environment, or changes
-the squash message from `COMMIT_MESSAGES`. `infra/scripts/plan-summary.test.mjs`
+anything but `main`, opens the release rulesets or Environment, changes
+the squash message from `COMMIT_MESSAGES`, or turns off secret scanning,
+push protection or Dependabot alerts (added 2026-10-01). `infra/scripts/plan-summary.test.mjs`
 covers the per-root scope and that one root's comment never passes another's
 check.
 
