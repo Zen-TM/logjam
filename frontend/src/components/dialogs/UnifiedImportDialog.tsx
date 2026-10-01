@@ -474,17 +474,17 @@ function UnifiedImportDialog({
   // Changing the type re-detects the columns, because the mapping is against
   // THAT type's fields — leaving the old assignments would keep a canyon's
   // grade columns selected on a campsite import, where they cannot be saved.
-  useEffect(() => {
+  // (Loading a file detects them itself.)
+  function changeImportPlaceType(placeTypeId: string) {
+    setImportPlaceTypeId(placeTypeId);
     if (!placeFile) return;
     setPlaceAssignments(
       detectPlaceColumns(
         placeFile.headers,
-        defsForType(placeCustomFieldDefs, importPlaceTypeId),
+        defsForType(placeCustomFieldDefs, placeTypeId),
       ),
     );
-    // placeFile is re-parsed on load, which sets assignments itself.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [importPlaceTypeId]);
+  }
 
   const placeRoleOptions = useMemo(
     () =>
@@ -1687,7 +1687,7 @@ function UnifiedImportDialog({
               label="Place type"
               hint="Every place in this file lands in this type, and the columns below map onto its fields."
               value={importPlaceTypeId}
-              onChange={(event) => setImportPlaceTypeId(event.target.value)}
+              onChange={(event) => changeImportPlaceType(event.target.value)}
             >
               {placeTypes.map((type) => (
                 <option key={type.id} value={type.id}>
