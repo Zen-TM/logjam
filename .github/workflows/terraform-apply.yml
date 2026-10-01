@@ -1,15 +1,20 @@
 name: terraform-apply
 
-# Merge = apply for envs/prod. The gate is the merge: the maintainer reads the
-# PR's plan comment (terraform-plan.yml) and merging applies it. This re-plans
-# with the state lock and applies only when that plan's fingerprint equals
-# the one in the merged PR's last plan comment (infra/scripts/plan-summary.mjs):
-# if main moved or AWS was changed by hand since, it refuses and says why.
+# Merge = apply for envs/prod (AWS) and envs/github (this repository's
+# settings). The gate is the merge: the maintainer reads the PR's plan comment
+# for each root (terraform-plan.yml) and merging applies it. Each job re-plans
+# with the state lock and applies only when that plan's fingerprint equals the
+# one in the merged PR's last plan comment for that root
+# (infra/scripts/plan-summary.mjs): if main moved or the target was changed by
+# hand since, it refuses and says why. A root the PR's plan did not cover
+# (plan-summary.mjs scope) is not applied.
 #
-# Runs as the apply role, which trusts only jobs in the `prod` Environment
-# (deployable from main only) and whose permission boundary denies user-data
-# reads, rds-db:connect, secret values and edits to itself
-# (infra/terraform/envs/prod/iam_apply.tf).
+# envs/prod runs as the AWS apply role, which trusts only jobs in the `prod`
+# Environment (deployable from main only) and whose permission boundary denies
+# user-data reads, rds-db:connect, secret values and edits to itself
+# (infra/terraform/envs/prod/iam_apply.tf). envs/github runs as the GitHub
+# apply App, whose key is a secret of the same Environment
+# (docs/decisions/0025-github-settings-in-terraform.md).
 
 on:
   push:
@@ -18,6 +23,7 @@ on:
       - "infra/terraform/envs/prod/**"
       - "infra/terraform/modules/**"
       - "infra/terraform/templates/**"
+      - "infra/terraform/envs/github/**"
       - "infra/lambda/**"
 
 permissions:
@@ -33,15 +39,22 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  apply-prod:
+  merged-pr:
     runs-on: ubuntu-latest
-    environment: prod
     env:
       GH_TOKEN: ${{ github.token }}
+    outputs:
+      number: ${{ steps.pr.outputs.number }}
+      head: ${{ steps.pr.outputs.head }}
+      prod: ${{ steps.scope.outputs.prod }}
+      github: ${{ steps.scope.outputs.github }}
     steps:
+      # Squash-only merges keep main linear: HEAD^1..HEAD is the merged PR.
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 2
 
-      - name: Find the merged PR and its last plan comment
+      - name: Find the merged PR
         id: pr
         run: |
           pr=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" \
@@ -52,7 +65,35 @@ jobs:
           fi
           echo "number=$pr" >> "$GITHUB_OUTPUT"
           echo "head=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$pr" --jq .head.sha)" >> "$GITHUB_OUTPUT"
-          id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$pr/comments" --paginate \
+
+      # The same question terraform-plan.yml asked of the PR, so a root is
+      # applied only if the PR has its plan comment.
+      - name: Which roots did the PR plan?
+        id: scope
+        run: |
+          git diff --name-only HEAD^1 HEAD > "$RUNNER_TEMP/changed.txt"
+          for root in prod github; do
+            if node infra/scripts/plan-summary.mjs scope "$root" < "$RUNNER_TEMP/changed.txt"; then
+              echo "$root=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "$root=false" >> "$GITHUB_OUTPUT"
+            fi
+          done
+
+  apply-prod:
+    needs: merged-pr
+    if: needs.merged-pr.outputs.prod == 'true'
+    runs-on: ubuntu-latest
+    environment: prod
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR: ${{ needs.merged-pr.outputs.number }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Find the PR's last plan comment
+        run: |
+          id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
             --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | contains("<!-- terraform-plan-prod -->"))) | .id' \
             | tail -n1)
           : > "$RUNNER_TEMP/read.md"
@@ -95,10 +136,10 @@ jobs:
       - name: Is this the plan the PR showed?
         id: check
         env:
-          HEAD_SHA: ${{ steps.pr.outputs.head }}
+          HEAD_SHA: ${{ needs.merged-pr.outputs.head }}
         run: |
           set -o pipefail
-          node infra/scripts/plan-summary.mjs check "$RUNNER_TEMP/plan.json" "$RUNNER_TEMP/read.md" "$HEAD_SHA" \
+          node infra/scripts/plan-summary.mjs check prod "$RUNNER_TEMP/plan.json" "$RUNNER_TEMP/read.md" "$HEAD_SHA" \
             | tee "$RUNNER_TEMP/check.md"
 
       - name: terraform apply
@@ -106,9 +147,8 @@ jobs:
         run: terraform -chdir=infra/terraform/envs/prod apply -input=false -no-color prod.tfplan
 
       - name: Comment the result on the merged PR
-        if: always() && steps.pr.outputs.number != ''
+        if: always()
         env:
-          PR: ${{ steps.pr.outputs.number }}
           CHECK: ${{ steps.check.outcome }}
           APPLY: ${{ steps.apply.outcome }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -126,7 +166,102 @@ jobs:
             echo "### Terraform apply — \`envs/prod\` at ${GITHUB_SHA:0:7}: $status"
             echo
             if [ -s "$RUNNER_TEMP/plan.json" ]; then
-              if [ "$CHECK" = failure ]; then cat "$RUNNER_TEMP/check.md"; else node infra/scripts/plan-summary.mjs header "$RUNNER_TEMP/plan.json"; fi
+              if [ "$CHECK" = failure ]; then cat "$RUNNER_TEMP/check.md"; else node infra/scripts/plan-summary.mjs header prod "$RUNNER_TEMP/plan.json"; fi
+              echo
+            fi
+            echo "[Run]($RUN_URL)"
+          } > "$RUNNER_TEMP/result.md"
+          gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -F body=@"$RUNNER_TEMP/result.md" > /dev/null
+
+  apply-github:
+    needs: merged-pr
+    if: needs.merged-pr.outputs.github == 'true'
+    runs-on: ubuntu-latest
+    environment: prod
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR: ${{ needs.merged-pr.outputs.number }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Find the PR's last plan comment
+        run: |
+          id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | contains("<!-- terraform-plan-github -->"))) | .id' \
+            | tail -n1)
+          : > "$RUNNER_TEMP/read.md"
+          if [ -n "$id" ]; then
+            gh api "repos/$GITHUB_REPOSITORY/issues/comments/$id" --jq .body > "$RUNNER_TEMP/read.md"
+          fi
+
+      # Only for the state, which lives in the prod state bucket.
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/logjam-github-actions-apply-role
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      # The apply App: admin on this repository's settings. Its key is a
+      # secret of the `prod` Environment, so only a job on main can mint it.
+      - name: GitHub token for the apply
+        id: app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.SETTINGS_APPLY_APP_CLIENT_ID }}
+          private-key: ${{ secrets.SETTINGS_APPLY_APP_KEY }}
+
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: "~> 1.13"
+          terraform_wrapper: false
+
+      - name: terraform init
+        run: terraform -chdir=infra/terraform/envs/github init -input=false
+
+      - name: terraform plan
+        env:
+          GITHUB_TOKEN: ${{ steps.app.outputs.token }}
+        run: |
+          cd infra/terraform/envs/github
+          terraform plan -input=false -no-color -out=github.tfplan
+          terraform show -json github.tfplan > "$RUNNER_TEMP/plan.json"
+
+      - name: Is this the plan the PR showed?
+        id: check
+        env:
+          HEAD_SHA: ${{ needs.merged-pr.outputs.head }}
+        run: |
+          set -o pipefail
+          node infra/scripts/plan-summary.mjs check github "$RUNNER_TEMP/plan.json" "$RUNNER_TEMP/read.md" "$HEAD_SHA" \
+            | tee "$RUNNER_TEMP/check.md"
+
+      - name: terraform apply
+        id: apply
+        env:
+          GITHUB_TOKEN: ${{ steps.app.outputs.token }}
+        run: terraform -chdir=infra/terraform/envs/github apply -input=false -no-color github.tfplan
+
+      - name: Comment the result on the merged PR
+        if: always()
+        env:
+          CHECK: ${{ steps.check.outcome }}
+          APPLY: ${{ steps.apply.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ "$APPLY" = success ]; then
+            status="✅ applied"
+          elif [ "$APPLY" = failure ]; then
+            status="❌ apply failed part-way: the settings may be partly changed. Read the run log, then fix forward with a PR"
+          elif [ "$CHECK" = failure ]; then
+            status="⛔ refused, nothing applied"
+          else
+            status="❌ failed before the check, nothing applied"
+          fi
+          {
+            echo "### Terraform apply — \`envs/github\` at ${GITHUB_SHA:0:7}: $status"
+            echo
+            if [ -s "$RUNNER_TEMP/plan.json" ]; then
+              if [ "$CHECK" = failure ]; then cat "$RUNNER_TEMP/check.md"; else node infra/scripts/plan-summary.mjs header github "$RUNNER_TEMP/plan.json"; fi
               echo
             fi
             echo "[Run]($RUN_URL)"

@@ -70,7 +70,7 @@ jobs:
           WEB_URL: ${{ vars.PROD_WEB_URL }}
         run: |
           if [ "$TARGET" != worker ] && { [ -z "$API_URL" ] || [ -z "$WEB_URL" ]; }; then
-            echo "::error::repository variables PROD_API_URL and PROD_WEB_URL must be set before $TARGET can deploy (scripts/github-settings.sh --apply). Nothing was deployed."
+            echo "::error::repository variables PROD_API_URL and PROD_WEB_URL must be set before $TARGET can deploy (declared in infra/terraform/envs/github). Nothing was deployed."
             echo "missing=true" >> "$GITHUB_OUTPUT"
           fi
 

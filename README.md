@@ -241,8 +241,9 @@ GitHub Actions (`.github/workflows/`):
 | Workflow | Trigger | Does |
 |---|---|---|
 | `ci.yml` | every PR + push to `main` | unit tests, lint, typecheck for `shared`/`api`/`frontend`/`topo` (integration tests stay local — they need `make dev`) |
-| `terraform-ci.yml` | PRs touching `infra/terraform/**` | `terraform fmt -check` + `validate` (no AWS access) |
-| `terraform-plan.yml` | PRs touching `infra/terraform/{envs/prod,modules,templates}/` | read-only `terraform plan` against prod, posted as a PR comment; applies stay manual |
+| `terraform-ci.yml` | PRs touching `infra/terraform/**` | `terraform fmt -check` + `validate`, and `envs/github`'s guard test (no AWS access) |
+| `terraform-plan.yml` | PRs touching `infra/terraform/{envs/prod,modules,templates}/` (`plan-prod`) or `infra/terraform/envs/github/` (`plan-github`) | read-only `terraform plan` of prod AWS or of this repository's GitHub settings, posted as a PR comment |
+| `terraform-apply.yml` | push to `main` (path-filtered) | applies each plan the merged PR showed, and refuses any other ([0024](docs/decisions/0024-prod-terraform-applies-on-merge-by-plan-fingerprint.md), [0025](docs/decisions/0025-github-settings-in-terraform.md)) |
 | `deploy-api.yml` / `deploy-frontend.yml` / `deploy-topo-worker.yml` | push to `main` (path-filtered) | build + deploy to ECR/EB, S3+CloudFront, ECR respectively |
 
 ### Troubleshooting
