@@ -176,20 +176,41 @@ function PlaceDialog({
   const committedRef = useRef(false);
   const draftPromiseRef = useRef<Promise<string> | null>(null);
 
-  const pickingRef = useRef(false);
+  // Tracks a pick-on-map cycle, so returning from it doesn't reset the form.
+  const [picking, setPicking] = useState(false);
 
-  // Snapshot of the form fields as populated below, taken in the same effect
+  // Snapshot of the form fields as populated below, taken in the same step
   // that sets them — used by the unsaved-changes guard to tell a real edit
   // apart from "the dialog is open" (PLACE-3). Sources/fieldValues are
   // compared by JSON value, not identity.
-  const initialFormSnapshotRef = useRef<string | null>(null);
+  const [initialFormSnapshot, setInitialFormSnapshot] = useState<string | null>(
+    null,
+  );
+  // Bumped by each populate, so the refs that track one open of the form start
+  // over with it (the effect after this block).
+  const [formSession, setFormSession] = useState(0);
 
-  useEffect(() => {
-    if (!open) return;
-    if (pickingRef.current) {
-      pickingRef.current = false;
-      return;
+  // Populate the form when the dialog opens or is handed another place, during
+  // render rather than in an effect so the opening render already holds it.
+  const [populatedFor, setPopulatedFor] = useState({ open: false, place });
+  if (open !== populatedFor.open || place !== populatedFor.place) {
+    setPopulatedFor({ open, place });
+    if (open) {
+      if (picking) setPicking(false);
+      else populateForm();
     }
+  }
+
+  // An existing place's media is refetched on each open (fresh presigned
+  // URLs); the media effect below does the fetch.
+  const mediaFor = open && place ? place.id : null;
+  const [mediaLoadingFor, setMediaLoadingFor] = useState<string | null>(null);
+  if (mediaFor !== mediaLoadingFor) {
+    setMediaLoadingFor(mediaFor);
+    if (mediaFor !== null) setMediaLoading(true);
+  }
+
+  function populateForm() {
     let initialName: string;
     let initialAltNames: string;
     let initialLatitude: string;
@@ -242,16 +263,18 @@ function PlaceDialog({
     setSources(initialSources);
     setFieldValues(initialFieldValues);
     setPlaceTypeId(initialPlaceTypeId);
-    initialFormSnapshotRef.current = JSON.stringify({
-      name: initialName,
-      altNames: initialAltNames,
-      latitude: initialLatitude,
-      longitude: initialLongitude,
-      notes: initialNotes,
-      sources: initialSources,
-      fieldValues: initialFieldValues,
-      placeTypeId: initialPlaceTypeId,
-    });
+    setInitialFormSnapshot(
+      JSON.stringify({
+        name: initialName,
+        altNames: initialAltNames,
+        latitude: initialLatitude,
+        longitude: initialLongitude,
+        notes: initialNotes,
+        sources: initialSources,
+        fieldValues: initialFieldValues,
+        placeTypeId: initialPlaceTypeId,
+      }),
+    );
     setError(null);
     setInvalidField(null);
     setShowFieldErrors(false);
@@ -265,11 +288,15 @@ function PlaceDialog({
     // Reset media/draft tracking each time the dialog opens.
     setMedia([]);
     setDraftPlaceId(null);
-    committedRef.current = false;
-    draftPromiseRef.current = null;
+    setFormSession((session) => session + 1);
     // Focus is the kit Dialog's: it moves to `data-autofocus` (the name field)
     // when the dialog is shown, and back to the opener on close.
-  }, [open, place]); // eslint-disable-line react-hooks/exhaustive-deps
+  }
+
+  useEffect(() => {
+    committedRef.current = false;
+    draftPromiseRef.current = null;
+  }, [formSession]);
 
   // Real dirty-check: current form fields vs. the snapshot taken when the
   // dialog was (re)populated — not just "the dialog is open" (PLACE-3).
@@ -278,7 +305,7 @@ function PlaceDialog({
   // they're never "unsaved" by the time a close is attempted.
   const isDirty =
     open &&
-    initialFormSnapshotRef.current !== null &&
+    initialFormSnapshot !== null &&
     JSON.stringify({
       name,
       altNames,
@@ -288,18 +315,12 @@ function PlaceDialog({
       sources,
       fieldValues,
       placeTypeId,
-    }) !== initialFormSnapshotRef.current;
-
-  const guard = useUnsavedChangesGuard(
-    isDirty,
-    () => void handleRequestClose(),
-  );
+    }) !== initialFormSnapshot;
 
   // In edit mode, fetch the place's existing media (fresh presigned URLs).
   useEffect(() => {
     if (!open || !place) return;
     const { id } = place;
-    setMediaLoading(true);
     getPlaceDetail(id)
       .then((detail) => setMedia(detail.media))
       .catch((err) => {
@@ -389,8 +410,13 @@ function PlaceDialog({
     onClose();
   }
 
+  const guard = useUnsavedChangesGuard(
+    isDirty,
+    () => void handleRequestClose(),
+  );
+
   function handlePickCoords() {
-    pickingRef.current = true;
+    setPicking(true);
     onPickCoords((lat, lng) => {
       setLatitude(String(lat));
       setLongitude(String(lng));

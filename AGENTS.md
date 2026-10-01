@@ -58,8 +58,8 @@ when a change does all three:
 - leaves the reason invisible in the code and its tests.
 
 A bug fix, a refactor, or work that follows an existing ADR never qualifies.
-Changing an accepted ADR takes a new one that supersedes it
-(`docs/decisions/README.md`).
+Before writing, superseding or updating an ADR, read `docs/decisions/README.md`
+down to its index: it holds the rules for all three.
 
 ## Comments
 

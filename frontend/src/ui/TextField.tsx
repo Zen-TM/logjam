@@ -1,5 +1,4 @@
 import {
-  useEffect,
   useId,
   useState,
   type ComponentProps,
@@ -178,13 +177,18 @@ export function LiveNumberField({
   constraints: NumericFieldConstraints;
 }) {
   const [draft, setDraft] = useState(() => String(value));
-  useEffect(() => {
+  // A new value from outside replaces the draft, during render, unless the
+  // draft already reads as it ("45." for 45). Object.is, as effect deps
+  // compare: NaN equals itself here.
+  const [shownValue, setShownValue] = useState(value);
+  if (!Object.is(value, shownValue)) {
+    setShownValue(value);
     setDraft((current) =>
       current.trim() !== "" && Number(current) === value
         ? current
         : String(value),
     );
-  }, [value]);
+  }
 
   return (
     <NumberField

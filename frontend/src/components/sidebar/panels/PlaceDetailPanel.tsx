@@ -353,10 +353,12 @@ function PlaceDetailPanel({
 
   // Owner-only "shared with" list. Refetches when the share dialog closes so a
   // just-made share/unshare reflects immediately.
+  // Not an owned place, no "shared with" line: emptied during render. (A late
+  // response can't refill it: the fetch below drops one whose key moved on.)
+  if ((!place || !isOwnedPlace) && placeShares.length > 0) setPlaceShares([]);
   useEffect(() => {
     if (!place || !isOwnedPlace) {
       sharesFetchKeyRef.current = null;
-      setPlaceShares([]);
       return;
     }
     const fetchKey = `${place.id}:${showShareDialog}`;
@@ -376,17 +378,27 @@ function PlaceDetailPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [place?.id, isOwnedPlace, showShareDialog]);
 
+  // Another place shows its trips loading, and no place empties them, during
+  // render; the effect below fetches.
+  const placeId = place?.id ?? null;
+  const [detailFor, setDetailFor] = useState<string | null>(null);
+  if (placeId !== detailFor) {
+    setDetailFor(placeId);
+    if (placeId === null) {
+      setTripLogs([]);
+      setPlaceMedia([]);
+    } else {
+      setLoadingTrips(true);
+    }
+  }
   useEffect(() => {
     if (!place) {
       detailFetchKeyRef.current = null;
-      setTripLogs([]);
-      setPlaceMedia([]);
       return;
     }
     if (detailFetchKeyRef.current === place.id) return;
     detailFetchKeyRef.current = place.id;
     const requestedId = place.id;
-    setLoadingTrips(true);
     // One fetch yields place-level media plus (for owners) the trip logs.
     getPlaceDetail(requestedId)
       .then((detail) => {
@@ -733,6 +745,9 @@ function PlaceDetailPanel({
             className={classes.identity}
             style={{ "--tile-hue": placeType?.color } as CSSProperties}
           >
+            {/* A lookup in lucide's static exports, not a component made in
+                render: the same key is the same component every time. */}
+            {/* eslint-disable-next-line react-hooks/static-components */}
             <TypeGlyph size={16} aria-hidden className={classes.typeGlyph} />
             {placeType?.name ?? "Unknown type"}
           </p>

@@ -43,6 +43,9 @@ export function PlaceTypeIcon({
 }) {
   const Icon = placeTypeLucideIcon(iconKey);
   return (
+    // A lookup in lucide's static exports, not a component made in render: the
+    // same key is the same component every time.
+    // eslint-disable-next-line react-hooks/static-components
     <Icon
       size={size}
       color={color}
