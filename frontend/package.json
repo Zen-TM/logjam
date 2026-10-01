@@ -44,7 +44,7 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.7",
     "globals": "^16.0.0",
-    "jsdom": "^29.1.1",
+    "jsdom": "^30.1.1",
     "ts-node": "^10.9.2",
     "tsx": "^4.23.15",
     "typescript": "^5.8.3",
