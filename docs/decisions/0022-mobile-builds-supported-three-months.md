@@ -63,6 +63,14 @@ bump PR quotes is guarded by the `requireClientHeader logging` tests in
 `api/src/routes/sync.unit.test.ts`, including that a rejected header is never
 logged.
 
+- **Update 2026-10-01: the `SyncRequests` metric exists.** A CloudWatch
+  metric filter on the `sync_client` line records it
+  (`infra/terraform/envs/prod/logging.tf`), counting from the day it was
+  applied, so a bump PR can quote 30- and 90-day counts. That removes the
+  traffic threshold's second reason for rejection under Alternatives; its
+  first, that the counts are requests rather than people, still holds.
+  Everything else above stands.
+
 ## Consequences
 
 - **Positive:** a bump is a lookup of release dates, which needs no prod

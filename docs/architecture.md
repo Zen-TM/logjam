@@ -322,8 +322,8 @@ roles, all in `envs/prod/iam.tf` and `envs/prod/iam_apply.tf`:
 | Role | Used by | Trusted when |
 |---|---|---|
 | deploy (`github_actions_deploy_role_arn`) | the deploy, deploy-guard and rollback workflows | the job runs in the `prod` GitHub Environment, which only `main` can deploy to |
-| apply (`github_actions_apply_role_arn`) | `terraform-apply.yml`: `apply-prod`, and `apply-github` only to write its state | the job runs in the `prod` Environment; a permission boundary denies it user data, the database, secrets and changes to itself |
-| plan (`github_actions_plan_role_arn`) | `terraform-plan.yml`, `terraform-drift.yml`; for `envs/github`, only to read its state | a pull request, or `main`; read-only, and denied user data and secret values |
+| apply (`github_actions_apply_role_arn`) | `terraform-apply.yml`: `apply-prod`, and `apply-github` only to write its state; the `envs/github` drift run only to read it | the job runs in the `prod` Environment; a permission boundary denies it user data, the database, secrets and changes to itself |
+| plan (`github_actions_plan_role_arn`) | `terraform-plan.yml` and the `envs/prod` drift run; for `plan-github`, only to read its state | a pull request, or `main`; read-only, and denied user data and secret values |
 
 Logjam GPS releases use a separate `mobile-release` Environment and never
 touch AWS.
@@ -335,8 +335,8 @@ client ID is a repository variable; its private key is a secret:
 
 | App | Used by | Key |
 |---|---|---|
-| plan (reads the settings) | `plan-github`, and the `envs/github` drift run | repository secret `SETTINGS_PLAN_APP_KEY`, client ID `SETTINGS_PLAN_APP_CLIENT_ID` |
-| apply (admin on the settings) | `apply-github` | secret `SETTINGS_APPLY_APP_KEY` of the `prod` Environment only, so only a job on `main` can mint a token; client ID `SETTINGS_APPLY_APP_CLIENT_ID` |
+| plan (reads the settings, except rulesets' bypass actors) | `plan-github` | repository secret `SETTINGS_PLAN_APP_KEY`, client ID `SETTINGS_PLAN_APP_CLIENT_ID` |
+| apply (admin on the settings) | `apply-github`, and the `envs/github` drift run, which needs to see bypass actors | secret `SETTINGS_APPLY_APP_KEY` of the `prod` Environment only, so only a job on `main` can mint a token; client ID `SETTINGS_APPLY_APP_CLIENT_ID` |
 
 ## Core invariants
 

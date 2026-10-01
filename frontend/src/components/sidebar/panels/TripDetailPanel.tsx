@@ -83,13 +83,18 @@ function TripDetailPanel({
 
   // The trip's media, with fresh presigned URLs: the row this page was opened
   // from comes from a list that does not carry any.
+  // Another trip shows its files loading, and no trip empties them, during
+  // render; the effect fetches.
+  const tripLogId = tripLog?.id ?? null;
+  const [mediaFor, setMediaFor] = useState<string | null>(null);
+  if (tripLogId !== mediaFor) {
+    setMediaFor(tripLogId);
+    if (tripLogId === null) setMedia([]);
+    else setMediaLoading(true);
+  }
   useEffect(() => {
-    if (!tripLog) {
-      setMedia([]);
-      return;
-    }
+    if (!tripLog) return;
     const { id } = tripLog;
-    setMediaLoading(true);
     getTripLog(id)
       .then((full) => setMedia(full.media ?? []))
       .catch((err) => {
