@@ -13,7 +13,9 @@ locals {
   # (terraform-plan.yml); a PR must be up to date with main so its plan was
   # made against the main it merges into. api-image and topo-image
   # (image-build.yml) build the Docker images on a PR that changes what they
-  # are built from, and pass at once otherwise.
+  # are built from, and pass at once otherwise. gitleaks (ci.yml) catches
+  # what push protection cannot: it knows only providers' key formats, while
+  # gitleaks also flags generic high-entropy secrets.
   required_checks = [
     "shared",
     "api",
@@ -26,6 +28,7 @@ locals {
     "dco",
     "api-image",
     "topo-image",
+    "gitleaks",
   ]
 }
 
