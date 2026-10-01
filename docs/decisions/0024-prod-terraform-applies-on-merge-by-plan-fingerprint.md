@@ -66,6 +66,14 @@ plan text still appears in the header, that fingerprints ignore order and
 change with actions or with the Lambda build, and that `check` refuses stale,
 missing and apply-role plans.
 
+- **Update 2026-09-30: the scope is the prod root and what it reads.** The
+  apply's path filter and the plan's scope check are `infra/terraform/envs/prod/`,
+  `modules/`, `templates/` and `infra/lambda/`, not all of `infra/terraform/`.
+  `bootstrap` and `envs/local` are separate roots that `envs/prod` does not
+  read, so a change there cannot alter the prod plan, and a Dependabot bump of
+  their providers no longer needs the AWS secrets that Dependabot runs lack.
+  Everything else above stands.
+
 ## Consequences
 
 - **Positive:** a merged infra change is applied within minutes, exactly as

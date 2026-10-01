@@ -242,7 +242,7 @@ GitHub Actions (`.github/workflows/`):
 |---|---|---|
 | `ci.yml` | every PR + push to `main` | unit tests, lint, typecheck for `shared`/`api`/`frontend`/`topo` (integration tests stay local — they need `make dev`) |
 | `terraform-ci.yml` | PRs touching `infra/terraform/**` | `terraform fmt -check` + `validate` (no AWS access) |
-| `terraform-plan.yml` | PRs touching `infra/terraform/**` | read-only `terraform plan` against prod, posted as a PR comment; applies stay manual |
+| `terraform-plan.yml` | PRs touching `infra/terraform/{envs/prod,modules,templates}/` | read-only `terraform plan` against prod, posted as a PR comment; applies stay manual |
 | `deploy-api.yml` / `deploy-frontend.yml` / `deploy-topo-worker.yml` | push to `main` (path-filtered) | build + deploy to ECR/EB, S3+CloudFront, ECR respectively |
 
 ### Troubleshooting
