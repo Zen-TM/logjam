@@ -285,7 +285,7 @@ jobs:
         run: npx playwright test e2e/smoke.spec.ts
       - name: Upload Playwright artifacts
         if: failure()
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
         with:
           name: playwright-artifacts
           path: |
