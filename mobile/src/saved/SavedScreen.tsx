@@ -2634,7 +2634,7 @@ const styles = StyleSheet.create({
   // Matches `Row`'s own card radius, so the tint stops where the card does
   // rather than squaring off its corners.
   pulseWash: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: theme.accent,
     borderRadius: radius.lg,
   },

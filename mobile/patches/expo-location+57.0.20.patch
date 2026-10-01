@@ -1,8 +1,8 @@
 diff --git a/node_modules/expo-location/android/src/main/java/expo/modules/location/LocationModule.kt b/node_modules/expo-location/android/src/main/java/expo/modules/location/LocationModule.kt
-index 46e2ec5..4a35761 100644
+index b286ea2..a904fa8 100644
 --- a/node_modules/expo-location/android/src/main/java/expo/modules/location/LocationModule.kt
 +++ b/node_modules/expo-location/android/src/main/java/expo/modules/location/LocationModule.kt
-@@ -255,7 +255,14 @@ class LocationModule : Module(), LifecycleEventListener, SensorEventListener, Ac
+@@ -323,7 +323,14 @@ class LocationModule : Module(), SensorEventListener, ActivityEventListener {
        if (!shouldUseForegroundService && isMissingBackgroundPermissions()) {
          throw LocationBackgroundUnauthorizedException()
        }

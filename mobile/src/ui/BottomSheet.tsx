@@ -382,8 +382,8 @@ const styles = StyleSheet.create({
   header: { paddingBottom: spacing(1) },
   scrollArea: { flexShrink: 1 },
   // Opaque, so the list it covers doesn't ghost through.
-  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: theme.primary },
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: scrim.light },
+  overlay: { ...StyleSheet.absoluteFill, backgroundColor: theme.primary },
+  backdrop: { ...StyleSheet.absoluteFill, backgroundColor: scrim.light },
   backdropPress: { flex: 1 },
   dock: { flex: 1, justifyContent: "flex-end" },
   sheet: {

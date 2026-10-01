@@ -336,5 +336,5 @@ const styles = StyleSheet.create({
     marginLeft: -1,
     backgroundColor: theme.textPrimary,
   },
-  fade: { ...StyleSheet.absoluteFillObject, top: "55%" },
+  fade: { ...StyleSheet.absoluteFill, top: "55%" },
 });
