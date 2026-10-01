@@ -1,5 +1,5 @@
 import { Feather } from "@expo/vector-icons";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Animated,
   PanResponder,
@@ -77,7 +77,7 @@ export function DatePicker({
     yearBlockStart(currentYear, YEARS_PER_PAGE),
   );
 
-  const { width, onLayout, pan, page, pagingRef } = usePager();
+  const { onLayout, pan, page, pagingRef, widthRef } = usePager();
 
   const changeMonth = (delta: number) =>
     page(delta, () => setVisibleMonth((current) => addMonths(current, delta)));
@@ -89,7 +89,14 @@ export function DatePicker({
       setYearPageStart((current) => current + delta * YEARS_PER_PAGE),
     );
 
-  const swipe = useRef(
+  // The responder is built once, so reach current values through refs.
+  const forwardRef = useRef(changeMonth);
+  useEffect(() => {
+    forwardRef.current = pickingYear ? changeYearPage : changeMonth;
+  });
+
+  // eslint-disable-next-line react-hooks/refs -- create() only stores the handlers; they read refs on touch, never during render
+  const [swipe] = useState(() =>
     PanResponder.create({
       // CAPTURE, not bubble. A disabled cell still swallows the touch on the way
       // down, so a bubbling responder never sees a swipe that starts over one —
@@ -130,12 +137,7 @@ export function DatePicker({
         }
       },
     }),
-  ).current;
-  // The responder is built once, so reach current values through refs.
-  const widthRef = useRef(width);
-  widthRef.current = width;
-  const forwardRef = useRef(changeMonth);
-  forwardRef.current = pickingYear ? changeYearPage : changeMonth;
+  );
 
   const years = Array.from(
     { length: YEARS_PER_PAGE },
@@ -238,7 +240,9 @@ function usePager() {
   const [pan] = useState(() => new Animated.Value(0));
   const paging = useRef(false);
   const widthRef = useRef(0);
-  widthRef.current = width;
+  useEffect(() => {
+    widthRef.current = width;
+  }, [width]);
 
   const page = (delta: number, commit: () => void) => {
     if (paging.current) return;
@@ -270,10 +274,10 @@ function usePager() {
   };
 
   return {
-    width,
     pan,
     page,
     pagingRef: paging,
+    widthRef,
     onLayout: (event: { nativeEvent: { layout: { width: number } } }) =>
       setWidth(event.nativeEvent.layout.width),
   };

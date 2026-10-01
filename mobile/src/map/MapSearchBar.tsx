@@ -108,9 +108,19 @@ export function MapSearchBar({
 }) {
   const [expanded, setExpanded] = useState(false);
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<GeocodeResult[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // Tagged with the query it answers, so a short or still-pending query reads
+  // as "no answer" without being cleared from an effect.
+  const [search, setSearch] = useState<{
+    query: string;
+    results: GeocodeResult[];
+    error: string | null;
+  } | null>(null);
+  const trimmed = query.trim();
+  const searchable = expanded && trimmed.length >= MIN_QUERY_LENGTH;
+  const answer = searchable && search?.query === trimmed ? search : null;
+  const loading = searchable && answer === null;
+  const results = answer?.results ?? [];
+  const error = answer?.error ?? null;
   const inputRef = useRef<TextInput>(null);
   const { width: windowWidth } = useWindowDimensions();
 
@@ -129,37 +139,28 @@ export function MapSearchBar({
   }, [expanded, grow]);
 
   useEffect(() => {
-    if (!expanded) return;
-    const trimmed = query.trim();
-    if (trimmed.length < MIN_QUERY_LENGTH) {
-      setResults([]);
-      setError(null);
-      setLoading(false);
-      return;
-    }
+    if (!searchable) return;
     const controller = new AbortController();
-    setLoading(true);
     const timer = setTimeout(() => {
       geocode(trimmed, controller.signal)
         .then((found) => {
-          setResults(found);
-          setError(null);
+          setSearch({ query: trimmed, results: found, error: null });
         })
         .catch((err) => {
           if (controller.signal.aborted) return;
           console.error(err);
-          setError(messageFromError(err, "Couldn't search for that place."));
-          setResults([]);
-        })
-        .finally(() => {
-          if (!controller.signal.aborted) setLoading(false);
+          setSearch({
+            query: trimmed,
+            results: [],
+            error: messageFromError(err, "Couldn't search for that place."),
+          });
         });
     }, DEBOUNCE_MS);
     return () => {
       controller.abort();
       clearTimeout(timer);
     };
-  }, [query, expanded]);
+  }, [searchable, trimmed]);
 
   // Focus AFTER the expansion has committed, not from the tap handler: the
   // field is `editable={expanded}`, and a focus() that lands on the frame
@@ -175,9 +176,7 @@ export function MapSearchBar({
     Keyboard.dismiss();
     setExpanded(false);
     setQuery("");
-    setResults([]);
-    setError(null);
-    setLoading(false);
+    setSearch(null);
   };
 
   // NOT debounced and not memoised on the query: it is a substring scan over
