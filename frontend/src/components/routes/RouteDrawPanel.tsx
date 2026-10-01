@@ -110,11 +110,11 @@ export function RouteDrawPanel({
   const [settled, setSettled] = useState<[number, number][] | null>(() =>
     points.length >= 2 ? points : null,
   );
+  // No line, nothing to profile: dropped during render, not after a pause.
+  // (A pending timer for the last line is cleared by the effect's cleanup.)
+  if (points.length < 2 && settled !== null) setSettled(null);
   useEffect(() => {
-    if (points.length < 2) {
-      setSettled(null);
-      return;
-    }
+    if (points.length < 2) return;
     const timer = window.setTimeout(
       () => setSettled(points),
       PROFILE_SETTLE_MS,

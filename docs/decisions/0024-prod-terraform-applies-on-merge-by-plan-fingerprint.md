@@ -39,7 +39,7 @@ by anyone. `terraform show -json` prints sensitive values in clear.
   address. A truncated comment keeps that header and the end of the plan
   text. If the header alone won't fit, the comment carries no fingerprint.
 - `plan-prod` is a required check, and a PR must be up to date with `main` to
-  merge (`scripts/github-settings.sh`). The plan runs on every PR and passes
+  merge (`infra/terraform/envs/github/rulesets.tf`). The plan runs on every PR and passes
   without planning when nothing under `infra/terraform/` or `infra/lambda/`
   changed.
 - The apply runs as `logjam-github-actions-apply-role`
@@ -73,6 +73,18 @@ missing and apply-role plans.
   read, so a change there cannot alter the prod plan, and a Dependabot bump of
   their providers no longer needs the AWS secrets that Dependabot runs lack.
   Everything else above stands.
+- **Update 2026-10-01: attributes the plan cannot read.** A root may declare
+  attributes its PR-plan credentials cannot read (`unreadable` in
+  `ROOTS` in `infra/scripts/plan-summary.mjs`). For those resource types, an
+  update that changes nothing else counts as no change, and the fingerprint
+  adds a sha256 of each such attribute's configured value instead, which both
+  plans read from the same code. Only `envs/github` declares one, the
+  rulesets' `bypass_actors` ([0025](0025-github-settings-in-terraform.md));
+  `envs/prod` fingerprints are computed exactly as before. Guard:
+  `plan-summary.test.mjs` checks that the plan and apply views of a ruleset
+  agree, that a configured change still changes the fingerprint, and that a
+  real change beside the hidden one stays an update. Everything else above
+  stands.
 
 ## Consequences
 

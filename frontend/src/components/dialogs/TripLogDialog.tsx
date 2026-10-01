@@ -201,8 +201,8 @@ function TripLogDialog({
   // force-tags `canyoning` on save. Mirror that in the selection itself (rather
   // than only in the rendered chips) so the tag is visible before the user hits
   // Save instead of appearing afterwards, and so the cap checks below count it
-  // exactly as storage does. enforceCanyoningTag returns its input unchanged
-  // when there's nothing to add, so this settles immediately.
+  // exactly as storage does. Applied during render when `linkedCanyon` flips,
+  // as an effect would, but without painting the untagged selection first.
   //
   // A CANYON, not any place: a campsite or a marker tags nothing
   // (`linksCanyon`). An inline pending create is a canyon (see `creating`).
@@ -215,9 +215,11 @@ function TripLogDialog({
     ...placeTypeIdsFor(selectedPlaceIds),
     ...(creating ? [SYSTEM_PLACE_TYPE_IDS.canyon] : []),
   ]);
-  useEffect(() => {
+  const [prevLinkedCanyon, setPrevLinkedCanyon] = useState(linkedCanyon);
+  if (linkedCanyon !== prevLinkedCanyon) {
+    setPrevLinkedCanyon(linkedCanyon);
     setSelectedTypes((prev) => enforceCanyoningTag(prev, linkedCanyon));
-  }, [linkedCanyon]);
+  }
 
   // Media. In edit mode the trip already exists; in create mode we lazily
   // materialise a draft trip on first upload so files have something to link to.
@@ -229,7 +231,9 @@ function TripLogDialog({
   // De-dupes concurrent draft creation when several files upload at once.
   const draftPromiseRef = useRef<Promise<string> | null>(null);
   // Tracks pick-on-map cycle so the reset useEffect skips when returning.
-  const pickingRef = useRef(false);
+  // State, not a ref: the render that reopens the dialog reads it too
+  // (`focusDateOnOpen`).
+  const [picking, setPicking] = useState(false);
   // The places field, which takes focus back when the picker closes.
   const placesFieldRef = useRef<HTMLDivElement>(null);
 
@@ -285,42 +289,59 @@ function TripLogDialog({
   // that sets them — used by the unsaved-changes guard to tell a real edit
   // apart from "the dialog is open" (TRIP-3). Moves when the form is
   // re-populated, which includes restoring a draft.
-  const initialFormSnapshotRef = useRef<string | null>(null);
+  const [initialFormSnapshot, setInitialFormSnapshot] = useState<string | null>(
+    null,
+  );
   // Snapshot of a *fresh* form, taken only on open and never re-taken. The two
   // baselines answer different questions and must not be merged:
   //   initialFormSnapshot → "would closing lose work done since the form was
   //     populated?" (the guard's question — a just-restored draft answers no)
   //   pristineFormSnapshot → "is there anything here worth persisting?"
   //     (the draft's question — a just-restored draft answers yes)
-  const pristineFormSnapshotRef = useRef<string | null>(null);
+  const [pristineFormSnapshot, setPristineFormSnapshot] = useState<
+    string | null
+  >(null);
   // A restorable draft found on open, awaiting the user's restore/discard
   // answer. Non-null suppresses autosave, so ignoring the offer and typing
   // can't overwrite the very draft being offered. Create mode only.
   const [restorableDraft, setRestorableDraft] = useState<TripDraft | null>(
     null,
   );
-  // The same fact as `restorableDraft`, in a ref, because the autosave effect
-  // needs it *synchronously*. Both effects run in one commit and this one is
-  // declared second, so on the pass that opens the dialog it would still read
-  // `restorableDraft === null` from state and arm a timer against last
-  // session's un-flushed form values — which could clear the draft it is about
-  // to offer. The re-render normally cancels that timer long before it fires,
-  // but "normally" is a race, and losing the draft is the failure this whole
-  // module exists to prevent. The ref is set before the timer is ever armed.
-  const draftOfferPendingRef = useRef(false);
   // One autosave-failure toast per open, not one per keystroke.
   const draftWarnedRef = useRef(false);
+  // Whether the Dialog moves focus into the date field as it opens; settled by
+  // the populate below, which knows whether a draft is offered (see
+  // `focusDateOnOpen`).
+  const [focusDateWhenOpened, setFocusDateWhenOpened] = useState(false);
+  // Bumped by each populate, so the refs that track one open of the form start
+  // over with it (the effect after this block).
+  const [formSession, setFormSession] = useState(0);
 
-  // Populate form when opening for edit (or reset on create).
-  // We intentionally exclude customFieldDefs from deps — field defs shouldn't
+  // Populate form when opening for edit (or reset on create). During render,
+  // not in an effect, so the render that opens the Dialog already holds the
+  // fresh form and the draft offer: the autosave effect never sees last
+  // session's values, and the Dialog's focus-on-open sees the offer.
+  // customFieldDefs is deliberately not part of the key — field defs shouldn't
   // reset the form values just because a new field was added mid-session.
-  useEffect(() => {
-    if (!open) return;
-    // Returning from a pick-on-map cycle — don't reset form state.
-    if (pickingRef.current) {
-      pickingRef.current = false;
-      return;
+  const openKey = open ? (tripLog?.id ?? "") : null;
+  const [populatedFor, setPopulatedFor] = useState<string | null>(null);
+  if (openKey !== populatedFor) {
+    setPopulatedFor(openKey);
+    if (openKey !== null) {
+      // Each open (re)loads an existing trip's media, the return from picking
+      // too; see the media effect below.
+      setMediaLoading(!!tripLog);
+      if (picking) {
+        // Returning from a pick-on-map cycle — don't reset form state.
+        setPicking(false);
+        setFocusDateWhenOpened(false);
+      } else {
+        populateForm();
+      }
     }
+  }
+
+  function populateForm() {
     let initialDate: string;
     let initialNotes: string;
     let initialSelectedPlaceIds: string[];
@@ -386,17 +407,16 @@ function TripLogDialog({
       fieldValues: initialFieldValues,
       creating: null,
     });
-    initialFormSnapshotRef.current = initialFingerprint;
-    pristineFormSnapshotRef.current = initialFingerprint;
+    setInitialFormSnapshot(initialFingerprint);
+    setPristineFormSnapshot(initialFingerprint);
     // Offer any autosaved draft rather than restoring it silently: someone who
     // opened this to log today's trip would otherwise find last Tuesday's text
     // already typed and have to work out where it came from. Edit mode never
     // reads the draft — it holds a create form, and pouring it into an existing
     // trip would overwrite a saved one (tripDraft.ts re-checks `mode` too).
     const foundDraft = tripLog ? null : readTripDraft(new Date());
-    draftOfferPendingRef.current = foundDraft !== null;
     setRestorableDraft(foundDraft);
-    draftWarnedRef.current = false;
+    setFocusDateWhenOpened(foundDraft === null);
     setError(null);
     setShowFieldErrors(false);
     setShowAddField(false);
@@ -405,17 +425,14 @@ function TripLogDialog({
     // Reset media/draft tracking each time the dialog opens.
     setMedia([]);
     setDraftTripId(null);
+    setFormSession((session) => session + 1);
+  }
+
+  useEffect(() => {
     committedRef.current = false;
     draftPromiseRef.current = null;
-  }, [open, tripLog?.id]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Whether a draft will be offered, known in the render that opens the dialog
-  // — the state above only lands a render later, after the Dialog has already
-  // placed focus. Decides where focus goes on open (below).
-  const draftOnOpen = useMemo(
-    () => (open && !tripLog ? readTripDraft(new Date()) : null),
-    [open, tripLog?.id], // eslint-disable-line react-hooks/exhaustive-deps
-  );
+    draftWarnedRef.current = false;
+  }, [formSession]);
 
   // Open ready to type: the Dialog focuses the date field (`data-autofocus`).
   // Three deliberate opt-outs, which leave focus on the title:
@@ -426,8 +443,7 @@ function TripLogDialog({
   //    the user has decided to type, hiding the fields they came to fill in.
   //  - the return from picking a point on the map: the date is not what the
   //    user was doing.
-  const focusDateOnOpen =
-    !isMobile && draftOnOpen === null && !pickingRef.current;
+  const focusDateOnOpen = !isMobile && focusDateWhenOpened;
 
   // The form as the draft stores it — one object feeding both the dirty-check
   // and the autosave, so the two can't disagree about what "the form" is.
@@ -463,8 +479,8 @@ function TripLogDialog({
   // attempted.
   const isDirty =
     open &&
-    initialFormSnapshotRef.current !== null &&
-    currentFingerprint !== initialFormSnapshotRef.current;
+    initialFormSnapshot !== null &&
+    currentFingerprint !== initialFormSnapshot;
 
   // Whether there's anything in the form worth keeping. Measured against the
   // pristine baseline, so a restored draft still counts as worth keeping even
@@ -472,13 +488,8 @@ function TripLogDialog({
   const draftWorthKeeping =
     open &&
     !tripLog &&
-    pristineFormSnapshotRef.current !== null &&
-    currentFingerprint !== pristineFormSnapshotRef.current;
-
-  const guard = useUnsavedChangesGuard(
-    isDirty,
-    () => void handleRequestClose(),
-  );
+    pristineFormSnapshot !== null &&
+    currentFingerprint !== pristineFormSnapshot;
 
   // Autosave the create form so a phone call, a tab eviction or a flat battery
   // doesn't take it — the exits `useUnsavedChangesGuard` structurally cannot
@@ -488,12 +499,10 @@ function TripLogDialog({
     // Don't overwrite the draft we're currently offering to restore.
     if (restorableDraft) return;
     const timer = setTimeout(() => {
-      // Both checked at fire time, not effect time: a save that resolves while
-      // this timer is pending would otherwise be followed by the timer
-      // re-writing a draft for the trip that was just saved, and an offer made
-      // on this same commit isn't visible in state yet.
+      // Checked at fire time, not effect time: a save that resolves while this
+      // timer is pending would otherwise be followed by the timer re-writing a
+      // draft for the trip that was just saved.
       if (committedRef.current) return;
-      if (draftOfferPendingRef.current) return;
       if (!draftWorthKeeping) {
         // Back to a fresh form — the user emptied it, so the draft goes too.
         clearTripDraft();
@@ -545,16 +554,14 @@ function TripLogDialog({
     // from the draft, so "dirty" means changed *since* the restore. Closing
     // straight after restoring shouldn't prompt to discard changes the user
     // just asked to keep — and the draft stays on disk regardless.
-    initialFormSnapshotRef.current = tripFormFingerprint(form);
-    // pristineFormSnapshotRef deliberately does NOT move — the restored form is
+    setInitialFormSnapshot(tripFormFingerprint(form));
+    // pristineFormSnapshot deliberately does NOT move — the restored form is
     // still worth autosaving, so it survives a second eviction.
-    draftOfferPendingRef.current = false;
     setRestorableDraft(null);
   }
 
   function handleDiscardDraft() {
     clearTripDraft();
-    draftOfferPendingRef.current = false;
     setRestorableDraft(null);
   }
 
@@ -562,7 +569,6 @@ function TripLogDialog({
   useEffect(() => {
     if (!open || !tripLog) return;
     const { id } = tripLog;
-    setMediaLoading(true);
     getTripLog(id)
       .then((full) => setMedia(full.media ?? []))
       .catch((err) => {
@@ -665,6 +671,11 @@ function TripLogDialog({
     onClose();
   }
 
+  const guard = useUnsavedChangesGuard(
+    isDirty,
+    () => void handleRequestClose(),
+  );
+
   function getFieldValue(key: string): string {
     return fieldValues[key] ?? "";
   }
@@ -685,7 +696,7 @@ function TripLogDialog({
 
   function handlePickCoords() {
     if (!onPickCoords) return;
-    pickingRef.current = true;
+    setPicking(true);
     onPickCoords((lat, lng) => {
       setCreating((prev) =>
         prev

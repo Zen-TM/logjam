@@ -32,17 +32,17 @@ test("header lists counts, then every delete and replace", () => {
 });
 
 test("fingerprint ignores resource order", () => {
-  assert.equal(fingerprint(fixture("plan-mixed")), fingerprint(fixture("plan-mixed-reordered")));
+  assert.equal(fingerprint(fixture("plan-mixed"), "prod"), fingerprint(fixture("plan-mixed-reordered"), "prod"));
 });
 
 test("fingerprint changes when one resource's actions change", () => {
   // Mutation: hashing addresses only turns this red.
-  assert.notEqual(fingerprint(fixture("plan-mixed")), fingerprint(fixture("plan-mixed-one-action-differs")));
+  assert.notEqual(fingerprint(fixture("plan-mixed"), "prod"), fingerprint(fixture("plan-mixed-one-action-differs"), "prod"));
 });
 
 test("fingerprint changes when the Lambda build differs", () => {
   // Both plans say "update" on the Lambda; only the artifact hash differs.
-  assert.notEqual(fingerprint(fixture("plan-mixed")), fingerprint(fixture("plan-mixed-other-lambda-build")));
+  assert.notEqual(fingerprint(fixture("plan-mixed"), "prod"), fingerprint(fixture("plan-mixed-other-lambda-build"), "prod"));
 });
 
 test("a failed plan posts no fingerprint", () => {
@@ -96,24 +96,102 @@ test("the apply-role guard is envs/prod's alone", () => {
   assert.doesNotMatch(header(plan, "github"), /Changes the apply role itself/);
 });
 
+// [path, in envs/prod's plan, in envs/github's plan]
+const SCOPE_CASES = [
+  ["infra/terraform/envs/prod/s3.tf", true, false],
+  ["infra/terraform/modules/storage/main.tf", true, false],
+  ["infra/terraform/templates/env.local.tftpl", true, false],
+  ["infra/terraform/bootstrap/main.tf", false, false],
+  ["infra/terraform/envs/local/main.tf", false, false],
+  ["infra/lambda/cognito-email-sender/src/index.ts", true, false],
+  ["infra/terraform/envs/github/rulesets.tf", false, true],
+  ["infra/scripts/plan-summary.mjs", true, true],
+  ["infra/scripts/plan-summary.test.mjs", true, true],
+  [".github/workflows/terraform-apply.yml", true, true],
+  [".github/workflows/terraform-plan.yml", true, true],
+  ["frontend/src/App.tsx", false, false],
+];
+
 test("each root plans and applies exactly its own changes", () => {
   // The plan and apply workflows both ask inScope(): a root applied without
   // having been planned refuses, so the two must agree. Mutation: widening
   // prod's scope to all of infra/terraform/ turns this red.
-  const cases = [
-    ["infra/terraform/envs/prod/s3.tf", true, false],
-    ["infra/terraform/modules/storage/main.tf", true, false],
-    ["infra/terraform/templates/env.local.tftpl", true, false],
-    ["infra/terraform/bootstrap/main.tf", false, false],
-    ["infra/terraform/envs/local/main.tf", false, false],
-    ["infra/lambda/cognito-email-sender/src/index.ts", true, false],
-    ["infra/terraform/envs/github/rulesets.tf", false, true],
-    ["infra/scripts/plan-summary.mjs", true, true],
-    [".github/workflows/terraform-apply.yml", true, true],
-    ["frontend/src/App.tsx", false, false],
-  ];
-  for (const [path, prod, github] of cases) {
+  for (const [path, prod, github] of SCOPE_CASES) {
     assert.equal(inScope("prod", [path]), prod, `prod: ${path}`);
     assert.equal(inScope("github", [path]), github, `github: ${path}`);
   }
+});
+
+test("terraform-apply.yml starts for every change a root plans", () => {
+  // inScope() only runs once the workflow has started, and its `paths:`
+  // filter decides that. #201 changed only the pipeline, was planned, and
+  // was never applied because the filter lacked it. Mutation: dropping any
+  // path from that filter (or adding bootstrap/) turns this red.
+  const yml = readFileSync(new URL("../../.github/workflows/terraform-apply.yml", import.meta.url), "utf8");
+  const block = /\n {4}paths:\n((?: {6}- .+\n)+)/.exec(yml);
+  assert.ok(block, "terraform-apply.yml's push trigger has a paths: list");
+  const globs = [...block[1].matchAll(/- "([^"]+)"/g)].map(([, g]) => {
+    const re = g
+      .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+      .replace(/\*\*/g, "\u0000")
+      .replace(/\*/g, "[^/]*")
+      .replace(/\u0000/g, ".*");
+    return new RegExp(`^${re}$`);
+  });
+  for (const [path, prod, github] of SCOPE_CASES) {
+    const triggers = globs.some((g) => g.test(path));
+    assert.equal(triggers, prod || github, `terraform-apply.yml ${triggers ? "starts" : "does not start"} for ${path}`);
+  }
+});
+
+// What #143's merge saw: the same ruleset, read by the plan App (no
+// bypass_actors) and by the apply App (the live admin bypass).
+const ADMIN = [{ actor_id: 5, actor_type: "RepositoryRole", bypass_mode: "always" }];
+const ruleset = (address, before, after, actions = ["update"]) => ({
+  address,
+  type: "github_repository_ruleset",
+  change: { actions, before, after, after_unknown: {}, importing: { id: "x" } },
+});
+const live = { name: "mobile-release-tags", etag: "W/1", rules: [{ creation: true }] };
+const asPlanApp = (after = { ...live, bypass_actors: ADMIN }) => ({
+  resource_changes: [ruleset("github_repository_ruleset.tags", { ...live, bypass_actors: [] }, after)],
+});
+const asApplyApp = (after = { ...live, bypass_actors: ADMIN }) => ({
+  resource_changes: [
+    ruleset("github_repository_ruleset.tags", { ...live, bypass_actors: ADMIN }, after, ["no-op"]),
+  ],
+});
+
+test("bypass_actors the plan App cannot read do not split the plan from the apply", () => {
+  // Mutation: dropping github's `unreadable` (or the no-op rule in kind())
+  // makes the plan App's view an update and the apply's a no-op: red.
+  assert.equal(fingerprint(asPlanApp(), "github"), fingerprint(asApplyApp(), "github"));
+  const read = comment({ root: "github", planText: "plan", status: "success", plan: asPlanApp(), sha: SHA }).body;
+  assert.equal(check("github", asApplyApp(), read, SHA).ok, true);
+  assert.match(header(asPlanApp(), "github"), /\*\*Plan:\*\* 1 to import/);
+  assert.match(header(asPlanApp(), "github"), /Counted as no change \(1\)[^]*`bypass_actors`[^]*github_repository_ruleset\.tags/);
+});
+
+test("a configured bypass_actors change still changes the fingerprint", () => {
+  // Mutation: leaving the configured values out of the fingerprint lets an
+  // apply add a bypass actor the PR's plan never had: red.
+  const wider = { ...live, bypass_actors: [...ADMIN, { actor_id: 1, actor_type: "Team", bypass_mode: "always" }] };
+  assert.notEqual(fingerprint(asPlanApp(), "github"), fingerprint(asPlanApp(wider), "github"));
+  const read = comment({ root: "github", planText: "plan", status: "success", plan: asPlanApp(), sha: SHA }).body;
+  assert.equal(check("github", asApplyApp(wider), read, SHA).ok, false);
+});
+
+test("a real rule change beside the hidden bypass stays an update", () => {
+  // Mutation: stripping more than the unreadable attributes hides it: red.
+  const changed = { ...live, rules: [{ creation: false }], bypass_actors: ADMIN };
+  const h = header(asPlanApp(changed), "github");
+  assert.match(h, /1 to update/);
+  assert.doesNotMatch(h, /Counted as no change/);
+});
+
+test("envs/prod has no unreadable attributes", () => {
+  // The same shape in envs/prod is a plain update, and prod fingerprints
+  // keep the hash input they had before envs/github existed.
+  assert.match(header(asPlanApp(), "prod"), /1 to update/);
+  assert.notEqual(fingerprint(asPlanApp(), "prod"), fingerprint(asApplyApp(), "prod"));
 });

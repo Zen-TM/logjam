@@ -54,8 +54,8 @@ jobs:
       - name: terraform validate
         run: terraform -chdir=infra/terraform/${{ matrix.root }} validate
 
-  # The guards on the settings the security model stands on (admin-only
-  # merges and releases, prod deployable from main only, required plans):
+  # The guards on the settings the security model stands on (nobody merges
+  # red or unreviewed, admin-only releases, prod deployable from main only):
   # envs/github/tests/guards.tftest.hcl, offline against a mocked provider.
   test-github:
     runs-on: ubuntu-latest

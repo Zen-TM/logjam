@@ -1,10 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import { useIsMobile } from "../../useIsMobile";
 import BottomSheet from "./BottomSheet";
 import type { SheetSnap } from "./BottomSheet";
@@ -288,36 +282,32 @@ function SidebarPanel({
   const isMobile = useIsMobile();
   const [sheetSnap, setSheetSnap] = useState<SheetSnap>("half");
   // Remember the snap to restore to once a map-pick flow ends.
-  const snapBeforePeek = useRef<SheetSnap>("half");
-  const snapRef = useRef<SheetSnap>(sheetSnap);
-  snapRef.current = sheetSnap;
-  const collapseToPeekRef = useRef(collapseToPeek);
-  collapseToPeekRef.current = collapseToPeek;
-
-  useEffect(() => {
+  const [snapBeforePeek, setSnapBeforePeek] = useState<SheetSnap>("half");
+  // Follows collapseToPeek, during render: collapsing remembers the snap and
+  // drops to peek; releasing restores it.
+  const [collapsedToPeek, setCollapsedToPeek] = useState(false);
+  if (collapseToPeek !== collapsedToPeek) {
+    setCollapsedToPeek(collapseToPeek);
     if (collapseToPeek) {
-      snapBeforePeek.current = snapRef.current;
+      setSnapBeforePeek(sheetSnap);
       setSheetSnap("peek");
     } else {
-      setSheetSnap(snapBeforePeek.current);
+      setSheetSnap(snapBeforePeek);
     }
-    // Intentionally only reacts to collapseToPeek; snap is read via ref.
-  }, [collapseToPeek]);
+  }
 
   // Switching panels (a tab tap) while the sheet is at peek would otherwise
   // swap the panel content behind an almost-fully-collapsed sheet — the new
   // panel is effectively invisible (MOBILE-9). Raise to "half" on any panel
   // change, unless a map-pick flow is the one driving the sheet to peek (that
   // collapse is intentional — leave it alone).
-  const prevActivePanelRef = useRef(activePanel);
-  useEffect(() => {
-    if (activePanel !== prevActivePanelRef.current) {
-      prevActivePanelRef.current = activePanel;
-      if (!collapseToPeekRef.current) {
-        setSheetSnap((current) => (current === "peek" ? "half" : current));
-      }
+  const [shownPanel, setShownPanel] = useState(activePanel);
+  if (activePanel !== shownPanel) {
+    setShownPanel(activePanel);
+    if (!collapseToPeek) {
+      setSheetSnap((current) => (current === "peek" ? "half" : current));
     }
-  }, [activePanel]);
+  }
 
   // Let a panel request the sheet expand to full (e.g. PlacesPanel when its
   // filters open). Stable so the panel's effect only fires on the actual open,

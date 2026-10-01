@@ -6,12 +6,12 @@
 
 ## Context
 
-The settings the security model stands on live in GitHub, not AWS: the `main`
-ruleset (admin-only merges, required checks including `plan-prod`, squash
-only), the release rulesets, the `prod` Environment that both AWS CI roles
-trust (`infra/terraform/envs/prod/iam.tf`, `iam_apply.tf`), the squash commit
-message that carries DCO sign-offs onto main
-([0021](0021-agpl-and-dco.md)), Actions variables and issue labels.
+The settings the security model stands on live in GitHub, not AWS: the
+rulesets on `main` (who may merge, required checks including `plan-prod`,
+squash only; updated 2026-10-01), the release rulesets, the `prod`
+Environment that both AWS CI roles trust (`infra/terraform/envs/prod/iam.tf`,
+`iam_apply.tf`), the squash commit message that carries DCO sign-offs onto
+main ([0021](0021-agpl-and-dco.md)), Actions variables and issue labels.
 
 Until this change they were declared in `scripts/github-settings.sh`, which
 the maintainer ran by hand with `--apply` after merging. Its dry run printed
@@ -54,14 +54,38 @@ behind main until someone remembered to run it (#128 and #129 both ended in
 - Set by hand, outside Terraform: secret values, the two Apps and their
   keys and client IDs, and private vulnerability reporting (the provider has
   no resource for it).
+- **Update 2026-10-01: the plan App cannot see bypass actors.** GitHub returns
+  a ruleset's `bypass_actors` only to a token that may edit the ruleset. The
+  plan App's plans therefore show every bypass actor as being added, and the
+  apply App's show nothing, so #143's first apply refused. The comparison now
+  leaves `bypass_actors` out when deciding a ruleset's action and hashes the
+  configured value instead ([0024](0024-prod-terraform-applies-on-merge-by-plan-fingerprint.md)'s
+  update of the same date). The PR comment says which updates it counted as no
+  change; a bypass-actor change is reviewed in the code diff and the guard
+  test, not in the plan text. The nightly `envs/github` drift plan runs as the
+  apply App in the `prod` Environment, with the AWS apply role for its state
+  and `-lock=false`, so a bypass actor added by hand shows as drift.
+  Everything else above stands.
+- **Update 2026-10-01: who can merge.** Two rulesets guard `main`. The
+  `main` ruleset has no bypass actors: every change arrives by PR,
+  squash-merged, up to date and green on the required checks (`plan-github`
+  among them now), and `main` is never deleted or force-pushed. The
+  `main-review` ruleset requires a code owner's approval, dismissed by a later
+  push, and repository admins may bypass it. There is no `update` rule. So a
+  collaborator's PR merges once the maintainer approves it and it is green;
+  the maintainer's own PRs, which GitHub never lets them approve, bypass only
+  the approval; and nobody merges red. The cost: anyone with write access can
+  merge a PR the maintainer has approved. Everything else above stands.
 
 Guards: `infra/terraform/envs/github/tests/guards.tftest.hcl` (run by
 `terraform-ci.yml`'s `test-github`, offline against a mocked provider)
-fails a change that drops the admin bypass or the update, deletion or
-force-push rules on `main`, removes `plan-prod` from the required checks or
-turns off up-to-date branches, lets `prod` deploy from anything but `main`,
-opens the release rulesets or Environment, or changes the squash message
-from `COMMIT_MESSAGES`. `infra/scripts/plan-summary.test.mjs`
+fails a change that gives the `main` ruleset a bypass actor or drops any of
+its rules, required checks, up-to-date branches or squash-only merging,
+removes code-owner approval or dismiss-stale from `main-review`, disables
+or retargets either ruleset (updated 2026-10-01), lets `prod` deploy from
+anything but `main`, opens the release rulesets or Environment, changes
+the squash message from `COMMIT_MESSAGES`, or turns off secret scanning,
+push protection or Dependabot alerts (added 2026-10-01). `infra/scripts/plan-summary.test.mjs`
 covers the per-root scope and that one root's comment never passes another's
 check.
 
@@ -86,6 +110,19 @@ check.
   adds the plan App's key as a Dependabot secret.
 
 ## Alternatives considered
+
+- **Give the plan App Administration: write so it sees bypass actors**
+  (rejected 2026-10-01). Its key is reachable by anyone who can push a
+  branch, who could then edit the rulesets that protect `main`.
+- **Stop managing `bypass_actors` (`ignore_changes`)** (rejected 2026-10-01).
+  Terraform could then never remove a bypass actor, which is what the
+  rulesets' design depends on.
+- **One `main` ruleset with an `update` rule and an admin bypass** (the
+  design until 2026-10-01). Only the maintainer could merge at all, but a
+  bypass skips every rule of its ruleset, so every merge, even of an
+  approved PR, was a bypass that also skipped the required checks. Nothing
+  stopped a red merge, and the maintainer's own PRs, which they can never
+  approve, had no other way in.
 
 - **Run `scripts/github-settings.sh --apply` from a workflow on merge.** The
   obvious step from where it was, but the script has no plan: the PR would
