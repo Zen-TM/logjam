@@ -13,8 +13,10 @@
 # No logging config on this bucket itself — delivery writes here would be
 # logged here, which does not terminate.
 #
-# 30-day expiry: the meter only ever reads the current and previous month's
-# partial data, and raw access logs are high-volume and low-value once summed.
+# Operational retention (logging.tf): the sweeper reads each log object once, on
+# the reaper's next tick, and resumes from a cursor, so the logs are summed
+# long before they expire. An outage longer than this loses records, which
+# under-counts egress: the safe direction for a limit that refuses service.
 module "access_logs" {
   source        = "../../modules/storage"
   bucket_name   = "logjam-access-logs-620853681701"
@@ -30,7 +32,7 @@ module "access_logs" {
   lifecycle_rules = [{
     id              = "expire-access-logs"
     prefix          = ""
-    expiration_days = 30
+    expiration_days = local.operational_log_retention_days
   }]
 }
 
