@@ -43,6 +43,21 @@ export default tseslint.config(
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
+      // eslint-plugin-react-hooks 7 adds the React Compiler rules at "error".
+      // They stay warnings while the existing findings are fixed, then this
+      // block goes (#154).
+      "react-hooks/static-components": "warn",
+      "react-hooks/use-memo": "warn",
+      "react-hooks/preserve-manual-memoization": "warn",
+      "react-hooks/immutability": "warn",
+      "react-hooks/globals": "warn",
+      "react-hooks/refs": "warn",
+      "react-hooks/set-state-in-effect": "warn",
+      "react-hooks/error-boundaries": "warn",
+      "react-hooks/purity": "warn",
+      "react-hooks/set-state-in-render": "warn",
+      "react-hooks/config": "warn",
+      "react-hooks/gating": "warn",
       ...jsxA11y.flatConfigs.recommended.rules,
       // Crashes under ESLint 9 + minimatch v10 (plugin uses the removed default
       // export). Our inputs are labelled via aria-label, so we lose little here.
