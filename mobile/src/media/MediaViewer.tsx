@@ -246,7 +246,7 @@ function VideoPage({ uri, active }: { uri: string; active: boolean }) {
     <VideoView
       style={styles.image}
       player={player}
-      allowsFullscreen
+      fullscreenOptions={{ enable: true }}
       contentFit="contain"
       nativeControls
     />
