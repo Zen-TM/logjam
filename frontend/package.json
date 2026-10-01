@@ -19,7 +19,7 @@
     "@protomaps/basemaps": "5.7.2",
     "@tmcw/togeojson": "^7.1.2",
     "@types/papaparse": "^5.5.2",
-    "aws-amplify": "^6.22.0",
+    "aws-amplify": "^6.22.1",
     "lucide-react": "^1.48.0",
     "maplibre-gl": "^5.20.2",
     "papaparse": "^5.7.0",
