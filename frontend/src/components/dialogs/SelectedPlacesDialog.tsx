@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Check, MapPin, Minus, Plus, Trash2, Users } from "lucide-react";
 import type { TripLogCustomFieldDef } from "@logjam/shared";
 import type { TPlace, TFriend } from "../../placeUtils";
@@ -80,13 +80,16 @@ function SelectedPlacesDialog({
   const [placeSearch, setPlaceSearch] = useState("");
   const toast = useToast();
 
-  useEffect(() => {
+  // Closing clears the searches and the share picks.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
     if (!open) {
       setPlaceSearch("");
       setShareSearch("");
       setShareFriendIds([]);
     }
-  }, [open]);
+  }
 
   const busy = sharing || deleting;
   const ownedPlaces = selectedPlaces.filter((place) =>

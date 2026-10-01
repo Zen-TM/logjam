@@ -77,9 +77,14 @@ function ShareDialog({
   // Whose row is mid-request: that row alone shows it, and the rest stay live.
   const [busyId, setBusyId] = useState<string | null>(null);
 
+  // Each open starts with an empty search and a fresh list of shares.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) setQuery("");
+  }
   useEffect(() => {
     if (!open) return;
-    setQuery("");
     listShares()
       .then(setShares)
       .catch((err) => {
