@@ -115,20 +115,15 @@ export default function GeoPdfsPanel({
     if (jobsError) toast.error(jobsError);
   }, [jobsError, toast]);
 
-  const loadTemplates = useCallback(async () => {
-    try {
-      setTemplates(await apiFetch<GeoPdfTemplate[]>("/geo-pdf-templates"));
-    } catch (err) {
-      console.error(err);
-      toast.error(messageFromError(err, "Couldn't load GeoPDF templates."));
-    } finally {
-      setTemplatesLoaded(true);
-    }
-  }, [toast]);
-
   useEffect(() => {
-    void loadTemplates();
-  }, [loadTemplates, refetchTrigger]);
+    apiFetch<GeoPdfTemplate[]>("/geo-pdf-templates")
+      .then(setTemplates)
+      .catch((err) => {
+        console.error(err);
+        toast.error(messageFromError(err, "Couldn't load GeoPDF templates."));
+      })
+      .finally(() => setTemplatesLoaded(true));
+  }, [toast, refetchTrigger]);
 
   const deleteJob = useCallback(
     async (id: string) => {

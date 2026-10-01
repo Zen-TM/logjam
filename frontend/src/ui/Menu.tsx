@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useEffectEvent,
   useId,
   useLayoutEffect,
   useRef,
@@ -61,14 +62,13 @@ function useOutsidePress(
   refs: RefObject<HTMLElement | null>[],
   onOutside: () => void,
 ) {
-  const onOutsideRef = useRef(onOutside);
-  onOutsideRef.current = onOutside;
+  const handleOutside = useEffectEvent(onOutside);
   useEffect(() => {
     if (!open) return;
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node;
       if (refs.some((ref) => ref.current?.contains(target))) return;
-      onOutsideRef.current();
+      handleOutside();
     };
     document.addEventListener("pointerdown", onPointerDown, true);
     return () =>
@@ -145,7 +145,6 @@ export function Menu({
     itemRefs.current[to]?.focus();
   }
 
-  let itemIndex = -1;
   return (
     <>
       {trigger({
@@ -179,8 +178,7 @@ export function Menu({
                 className={classes.separator}
               />
             );
-          itemIndex += 1;
-          const index = itemIndex;
+          const index = items.indexOf(entry);
           const Icon = entry.icon;
           return (
             <button

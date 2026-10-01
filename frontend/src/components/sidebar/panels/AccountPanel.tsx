@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { useId, useState } from "react";
 import { Download, LogOut, Mail, Pencil, Trash2 } from "lucide-react";
 import { formatCredits } from "@logjam/shared";
 
@@ -73,11 +73,17 @@ function AccountPanel({
   const [changeEmailOpen, setChangeEmailOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
 
-  useEffect(() => {
-    if (!currentUser) return;
-    setUsername(currentUser.username);
-    setEmail(currentUser.email);
-  }, [currentUser?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Seeded from the signed-in user, during render, each time that changes.
+  // `null` until the first render has done so.
+  const userId = currentUser?.id;
+  const [seededFor, setSeededFor] = useState<string | undefined | null>(null);
+  if (userId !== seededFor) {
+    setSeededFor(userId);
+    if (currentUser) {
+      setUsername(currentUser.username);
+      setEmail(currentUser.email);
+    }
+  }
 
   async function handleExport() {
     setExporting(true);

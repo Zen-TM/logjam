@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { ChevronRight, Layers, Tag } from "lucide-react";
 import {
   ATTRIBUTE_NOUN,
@@ -89,16 +89,22 @@ function SettingsPanel({
   >(null);
   const [autoDownloadSaving, setAutoDownloadSaving] = useState(false);
 
-  useEffect(() => {
-    if (!currentUser) return;
-    setNotifPrefs({
-      ...DEFAULT_NOTIFICATION_PREFERENCES,
-      ...(currentUser.uiPreferences?.notifications ?? {}),
-    });
-    setAutoDownloadGeoPdfs(
-      currentUser.uiPreferences?.autoDownloadGeoPdfs ?? true,
-    );
-  }, [currentUser?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Seeded from the signed-in user, during render, each time that changes.
+  // `null` until the first render has done so.
+  const userId = currentUser?.id;
+  const [seededFor, setSeededFor] = useState<string | undefined | null>(null);
+  if (userId !== seededFor) {
+    setSeededFor(userId);
+    if (currentUser) {
+      setNotifPrefs({
+        ...DEFAULT_NOTIFICATION_PREFERENCES,
+        ...(currentUser.uiPreferences?.notifications ?? {}),
+      });
+      setAutoDownloadGeoPdfs(
+        currentUser.uiPreferences?.autoDownloadGeoPdfs ?? true,
+      );
+    }
+  }
 
   /** Optimistic, and put back on failure: a switch is the kind of control whose
    *  whole point is that it answers the press. */
