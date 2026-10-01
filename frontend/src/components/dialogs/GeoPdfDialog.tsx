@@ -8,6 +8,7 @@
 import {
   useCallback,
   useEffect,
+  useEffectEvent,
   useId,
   useMemo,
   useRef,
@@ -268,24 +269,17 @@ function GeoPdfDialog({
   // Template mode name
   const [editTemplateName, setEditTemplateName] = useState("");
 
-  // Tracks when dialog is reopening after "Select on map" — tells the
-  // reset-on-close effect this close is a round trip, so it preserves state
-  // and the per-session init guards instead of resetting them.
-  const returningFromMapSelect = useRef(false);
+  // Set when the dialog closes for "Select on map": that close is a round trip,
+  // so the close keeps state and the per-session init guards instead of
+  // resetting them. Cleared when the dialog reopens.
+  const [returningFromMapSelect, setReturningFromMapSelect] = useState(false);
 
   // Per-session init guards. A template (and the map-view seed) auto-fills the
   // dialog ONCE per genuine open; after that the user is free to edit fields and
   // those edits must survive (e.g. across a "Select on map" round trip) until the
   // dialog is genuinely closed. Reset only in the genuine-close branch below.
-  const seededViewRef = useRef(false);
-  const appliedTemplateRef = useRef(false);
-
-  // Latest props read at open time without making them effect triggers — these
-  // change reference on map move / topo-job polling and must not re-run init.
-  const mapCenterRef = useRef(mapCenter);
-  mapCenterRef.current = mapCenter;
-  const activeLayerIdRef = useRef(activeLayerId);
-  activeLayerIdRef.current = activeLayerId;
+  const [seededView, setSeededView] = useState(false);
+  const [appliedTemplate, setAppliedTemplate] = useState(false);
 
   // Raw string state for extent/scale inputs (deferred recalculation)
   const focusedField = useRef<"n" | "s" | "e" | "w" | "scale" | null>(null);
@@ -295,67 +289,168 @@ function GeoPdfDialog({
   const [rawW, setRawW] = useState("");
   const [rawScale, setRawScale] = useState("");
 
+  // A template's settings, applied over the form: the launch template (once
+  // per genuine open) and the template being edited in template mode.
+  function applyTemplateConfig(c: GeoPdfTemplate["config"]) {
+    setExtentState((prev: ExtentState) => {
+      let updated = {
+        ...prev,
+        paperSize: c.paperSize,
+        orientation: c.orientation,
+        ...(c.customRatio ? { customRatio: c.customRatio } : {}),
+      };
+      updated = applyPaperChange(updated, c.paperSize, c.customRatio);
+      if (c.scale !== undefined) updated = applyScaleChange(updated, c.scale);
+      return updated;
+    });
+    setSelectedBaseLayer(c.baseLayer);
+    setSelectedOverlays(new Set(c.overlays));
+    if (c.elements.title !== undefined) {
+      setTitleEnabled(true);
+      setTitleText(c.elements.title);
+    } else {
+      setTitleEnabled(false);
+    }
+    setCompassEnabled(c.elements.compass);
+    setScaleTextEnabled(c.elements.scaleText);
+    setScaleBarEnabled(c.elements.scaleBar);
+    if (c.elements.gridLines !== undefined) {
+      setGridLinesEnabled(true);
+      setGridLinesMode(c.elements.gridLines);
+    } else {
+      setGridLinesEnabled(false);
+    }
+  }
+
+  // ── Open and close ───────────────────────────────────────────────────────
+  // Three steps that follow props, run during render in this order (the
+  // order the effects they replaced ran in): the open/close transition, the
+  // template being edited, then a confirmed map pick.
+
+  // On a genuine close, reset everything; the map round-trip close keeps it.
+  // On open, seed layers + extent from the current map view, once per genuine
+  // open: the seededView gate skips re-seeding on the map round trip, so user
+  // edits survive. mapCenter and activeLayerId are read here, at open time,
+  // and are not triggers: they change reference on map move and topo-job
+  // polling.
+  const [wasOpen, setWasOpen] = useState(false);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) {
+      setReturningFromMapSelect(false);
+      if (!seededView) {
+        setSeededView(true);
+        setSelectedBaseLayer(seedBaseLayer(activeLayerId));
+        setSelectedOverlays(new Set(TOPO_LAYERS.map((l) => l.name)));
+        const center = mapCenter;
+        if (center) {
+          setExtentState((prev) => {
+            const paper = getPaperDimensions(prev);
+            const mapW = paper.w - 2 * GEOPDF_PADDING_MM;
+            const mapH = paper.h - 2 * GEOPDF_PADDING_MM;
+            const widthM = prev.scale * (mapW / 1000);
+            const heightM = prev.scale * (mapH / 1000);
+            const bounds = extentFromCentreAndSize(
+              center.lat,
+              center.lng,
+              widthM,
+              heightM,
+            );
+            return { ...prev, ...bounds };
+          });
+        }
+      }
+    } else if (!returningFromMapSelect) {
+      setSeededView(false);
+      setAppliedTemplate(false);
+      setExtentState(DEFAULT_EXTENT_STATE);
+      setSelectedTemplateId(null);
+      setTemplateName("");
+      setShowSaveTemplate(false);
+      setTitleEnabled(false);
+      setTitleText("");
+      setCompassEnabled(true);
+      setScaleTextEnabled(true);
+      setScaleBarEnabled(true);
+      setGridLinesEnabled(false);
+      setGridLinesMode("latlon");
+      // Place-marker toggles are deliberately NOT reset — they persist via
+      // localStorage so the user's explicit choice carries across sessions.
+      setError(null);
+      setEditTemplateName("");
+      setRawN("");
+      setRawS("");
+      setRawE("");
+      setRawW("");
+      setRawScale("");
+      setDirty(false);
+    }
+  }
+
+  // Populate fields from editingTemplate when entering template mode
+  const [templatePopulatedFor, setTemplatePopulatedFor] = useState({
+    open: false,
+    templateMode,
+    editingTemplate,
+  });
+  if (
+    open !== templatePopulatedFor.open ||
+    templateMode !== templatePopulatedFor.templateMode ||
+    editingTemplate !== templatePopulatedFor.editingTemplate
+  ) {
+    setTemplatePopulatedFor({ open, templateMode, editingTemplate });
+    if (open && templateMode) {
+      if (editingTemplate) {
+        setEditTemplateName(editingTemplate.name);
+        applyTemplateConfig(editingTemplate.config);
+      } else {
+        // New template — reset to defaults
+        setEditTemplateName("");
+      }
+    }
+  }
+
+  // Populate extent from map selection — always receives both extent and scale.
+  // This fires only when the user actually confirms a pick on the map (App
+  // only sets these props from onGeoPdfExtentConfirmed), so — unlike the
+  // open-time seed and template-apply steps — it represents real user work
+  // and must mark the form dirty.
+  const [pendingAppliedFor, setPendingAppliedFor] = useState({
+    pendingExtent: null as TBbox | null,
+    pendingScale: null as number | null,
+  });
+  if (
+    pendingExtent !== pendingAppliedFor.pendingExtent ||
+    !Object.is(pendingScale, pendingAppliedFor.pendingScale)
+  ) {
+    setPendingAppliedFor({ pendingExtent, pendingScale });
+    if (pendingExtent && pendingScale) {
+      setExtentState((prev: ExtentState) => ({
+        ...prev,
+        north: pendingExtent.north,
+        south: pendingExtent.south,
+        east: pendingExtent.east,
+        west: pendingExtent.west,
+        scale: pendingScale,
+      }));
+      setDirty(true);
+    }
+  }
+
   // ── Effects ──────────────────────────────────────────────────────────────
 
-  // Reset all state on close (but not on the map round-trip close).
-  useEffect(() => {
-    if (open) return;
-    if (returningFromMapSelect.current) return;
-    seededViewRef.current = false;
-    appliedTemplateRef.current = false;
-    setExtentState(DEFAULT_EXTENT_STATE);
-    setSelectedTemplateId(null);
-    setTemplateName("");
-    setShowSaveTemplate(false);
-    setTitleEnabled(false);
-    setTitleText("");
-    setCompassEnabled(true);
-    setScaleTextEnabled(true);
-    setScaleBarEnabled(true);
-    setGridLinesEnabled(false);
-    setGridLinesMode("latlon");
-    // Place-marker toggles are deliberately NOT reset — they persist via
-    // localStorage so the user's explicit choice carries across sessions.
-    setError(null);
-    setEditTemplateName("");
-    setRawN("");
-    setRawS("");
-    setRawE("");
-    setRawW("");
-    setRawScale("");
-    setDirty(false);
-  }, [open]);
-
-  // Seed layers + extent from the current map view, once per genuine open.
-  // The returningFromMapSelect flag is cleared here (the close it described has
-  // happened); the seededViewRef gate skips re-seeding on the map round trip and
-  // on prop-reference churn, so user edits survive.
-  useEffect(() => {
-    if (!open) return;
-    returningFromMapSelect.current = false;
-    if (seededViewRef.current) return;
-    seededViewRef.current = true;
-
-    setSelectedBaseLayer(seedBaseLayer(activeLayerIdRef.current));
-    setSelectedOverlays(new Set(TOPO_LAYERS.map((l) => l.name)));
-
-    const center = mapCenterRef.current;
-    if (!center) return;
-    setExtentState((prev) => {
-      const paper = getPaperDimensions(prev);
-      const mapW = paper.w - 2 * GEOPDF_PADDING_MM;
-      const mapH = paper.h - 2 * GEOPDF_PADDING_MM;
-      const widthM = prev.scale * (mapW / 1000);
-      const heightM = prev.scale * (mapH / 1000);
-      const bounds = extentFromCentreAndSize(
-        center.lat,
-        center.lng,
-        widthM,
-        heightM,
-      );
-      return { ...prev, ...bounds };
-    });
-  }, [open]);
+  // Apply the launch template once per genuine open. On the map round-trip
+  // reopen appliedTemplate is still set, so the user's edits are not
+  // overwritten. An effect event, so the fetch reads the gate as it is when
+  // the list arrives without refetching when it flips.
+  const applyLaunchTemplate = useEffectEvent((list: GeoPdfTemplate[]) => {
+    if (!initialTemplateId || appliedTemplate) return;
+    const t = list.find((x) => x.id === initialTemplateId);
+    if (!t) return;
+    setAppliedTemplate(true);
+    setSelectedTemplateId(t.id);
+    applyTemplateConfig(t.config);
+  });
 
   // Fetch templates on open (only in normal mode)
   useEffect(() => {
@@ -363,93 +458,13 @@ function GeoPdfDialog({
     apiFetch<GeoPdfTemplate[]>("/geo-pdf-templates")
       .then((list) => {
         setTemplates(list);
-        // Apply the launch template once per genuine open. On the map round-trip
-        // reopen this ref is still set, so the user's edits are not overwritten.
-        if (initialTemplateId && !appliedTemplateRef.current) {
-          const t = list.find((x) => x.id === initialTemplateId);
-          if (t) {
-            appliedTemplateRef.current = true;
-            const c = t.config;
-            setSelectedTemplateId(t.id);
-            setExtentState((prev: ExtentState) => {
-              let updated = {
-                ...prev,
-                paperSize: c.paperSize,
-                orientation: c.orientation,
-                ...(c.customRatio ? { customRatio: c.customRatio } : {}),
-              };
-              updated = applyPaperChange(updated, c.paperSize, c.customRatio);
-              if (c.scale !== undefined)
-                updated = applyScaleChange(updated, c.scale);
-              return updated;
-            });
-            setSelectedBaseLayer(c.baseLayer);
-            setSelectedOverlays(new Set(c.overlays));
-            if (c.elements.title !== undefined) {
-              setTitleEnabled(true);
-              setTitleText(c.elements.title);
-            } else {
-              setTitleEnabled(false);
-            }
-            setCompassEnabled(c.elements.compass);
-            setScaleTextEnabled(c.elements.scaleText);
-            setScaleBarEnabled(c.elements.scaleBar);
-            if (c.elements.gridLines !== undefined) {
-              setGridLinesEnabled(true);
-              setGridLinesMode(c.elements.gridLines);
-            } else {
-              setGridLinesEnabled(false);
-            }
-          }
-        }
+        applyLaunchTemplate(list);
       })
       .catch((err) => {
         console.error(err);
         toast.error(messageFromError(err, "Couldn't load GeoPDF templates."));
       });
   }, [open, templateMode, initialTemplateId, toast]);
-
-  // Populate fields from editingTemplate when entering template mode
-  useEffect(() => {
-    if (!open || !templateMode) return;
-    if (editingTemplate) {
-      setEditTemplateName(editingTemplate.name);
-      const c = editingTemplate.config;
-      setExtentState((prev: ExtentState) => {
-        let updated = {
-          ...prev,
-          paperSize: c.paperSize,
-          orientation: c.orientation,
-          ...(c.customRatio ? { customRatio: c.customRatio } : {}),
-        };
-        updated = applyPaperChange(updated, c.paperSize, c.customRatio);
-        if (c.scale !== undefined) {
-          updated = applyScaleChange(updated, c.scale);
-        }
-        return updated;
-      });
-      setSelectedBaseLayer(c.baseLayer);
-      setSelectedOverlays(new Set(c.overlays));
-      if (c.elements.title !== undefined) {
-        setTitleEnabled(true);
-        setTitleText(c.elements.title);
-      } else {
-        setTitleEnabled(false);
-      }
-      setCompassEnabled(c.elements.compass);
-      setScaleTextEnabled(c.elements.scaleText);
-      setScaleBarEnabled(c.elements.scaleBar);
-      if (c.elements.gridLines !== undefined) {
-        setGridLinesEnabled(true);
-        setGridLinesMode(c.elements.gridLines);
-      } else {
-        setGridLinesEnabled(false);
-      }
-    } else {
-      // New template — reset to defaults
-      setEditTemplateName("");
-    }
-  }, [open, templateMode, editingTemplate]);
 
   // True when any of the user's completed-job footprints overlaps the current
   // export extent. Falls back to true when no footprints are stored or the
@@ -488,25 +503,6 @@ function GeoPdfDialog({
       );
     });
   }, [completedTopoJobs, extentState, templateMode]);
-
-  // Populate extent from map selection — always receives both extent and scale.
-  // This fires only when the user actually confirms a pick on the map (App
-  // only sets these props from onGeoPdfExtentConfirmed), so — unlike the
-  // open-time seed and template-apply effects — it represents real user work
-  // and must mark the form dirty.
-  useEffect(() => {
-    if (pendingExtent && pendingScale) {
-      setExtentState((prev: ExtentState) => ({
-        ...prev,
-        north: pendingExtent.north,
-        south: pendingExtent.south,
-        east: pendingExtent.east,
-        west: pendingExtent.west,
-        scale: pendingScale,
-      }));
-      setDirty(true);
-    }
-  }, [pendingExtent, pendingScale]);
 
   // Display helpers for coord mode
   const formatCoord = useCallback(
@@ -549,7 +545,7 @@ function GeoPdfDialog({
       extentState.west !== 0 &&
       extentState.north > extentState.south &&
       extentState.east > extentState.west;
-    returningFromMapSelect.current = true;
+    setReturningFromMapSelect(true);
     onSelectOnMap(
       aspectRatio,
       { w: mapW, h: mapH },
@@ -1081,7 +1077,7 @@ function GeoPdfDialog({
                   }
                   value={rawN}
                   error={templateMode ? null : extentInputErrors.n}
-                  focusedField={focusedField}
+                  focusedFieldRef={focusedField}
                   onDraft={setRawN}
                   onCommit={(deg) =>
                     setExtentState((s) => applyNorthChange(s, deg))
@@ -1099,7 +1095,7 @@ function GeoPdfDialog({
                   }
                   value={rawW}
                   error={templateMode ? null : extentInputErrors.w}
-                  focusedField={focusedField}
+                  focusedFieldRef={focusedField}
                   onDraft={setRawW}
                   onCommit={(deg) =>
                     setExtentState((s) => applyWestChange(s, deg))
@@ -1148,7 +1144,7 @@ function GeoPdfDialog({
                   }
                   value={rawE}
                   error={templateMode ? null : extentInputErrors.e}
-                  focusedField={focusedField}
+                  focusedFieldRef={focusedField}
                   onDraft={setRawE}
                   onCommit={(deg) =>
                     setExtentState((s) => applyEastChange(s, deg))
@@ -1168,7 +1164,7 @@ function GeoPdfDialog({
                   }
                   value={rawS}
                   error={templateMode ? null : extentInputErrors.s}
-                  focusedField={focusedField}
+                  focusedFieldRef={focusedField}
                   onDraft={setRawS}
                   onCommit={(deg) =>
                     setExtentState((s) => applySouthChange(s, deg))
@@ -1380,7 +1376,7 @@ function ExtentField({
   label,
   value,
   error,
-  focusedField,
+  focusedFieldRef,
   onDraft,
   onCommit,
   parse,
@@ -1391,7 +1387,7 @@ function ExtentField({
   label: string;
   value: string;
   error: string | null;
-  focusedField: React.RefObject<"n" | "s" | "e" | "w" | "scale" | null>;
+  focusedFieldRef: React.RefObject<"n" | "s" | "e" | "w" | "scale" | null>;
   onDraft: (next: string) => void;
   onCommit: (degrees: number) => void;
   parse: (raw: string) => number | null;
@@ -1407,14 +1403,14 @@ function ExtentField({
       value={value}
       error={error}
       onFocus={() => {
-        focusedField.current = which;
+        focusedFieldRef.current = which;
       }}
       onChange={(event) => {
         onDraft(sanitizeDecimalInput(event.target.value));
         markDirty();
       }}
       onBlur={() => {
-        focusedField.current = null;
+        focusedFieldRef.current = null;
         const degrees = parse(value);
         if (degrees !== null && valid) onCommit(degrees);
       }}

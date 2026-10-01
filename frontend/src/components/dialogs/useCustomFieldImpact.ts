@@ -25,9 +25,16 @@ export function useCustomFieldImpact(
   const [count, setCount] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  // Another field (or none) clears the last count during render; the effect
+  // fetches the new one.
+  const [countedFor, setCountedFor] = useState({ entity, fieldKey });
+  if (entity !== countedFor.entity || fieldKey !== countedFor.fieldKey) {
+    setCountedFor({ entity, fieldKey });
     setCount(null);
     setError(null);
+  }
+
+  useEffect(() => {
     if (!fieldKey) return;
     let cancelled = false;
     const noun = entity === "place" ? "places" : "trips";
