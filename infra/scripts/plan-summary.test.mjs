@@ -96,25 +96,51 @@ test("the apply-role guard is envs/prod's alone", () => {
   assert.doesNotMatch(header(plan, "github"), /Changes the apply role itself/);
 });
 
+// [path, in envs/prod's plan, in envs/github's plan]
+const SCOPE_CASES = [
+  ["infra/terraform/envs/prod/s3.tf", true, false],
+  ["infra/terraform/modules/storage/main.tf", true, false],
+  ["infra/terraform/templates/env.local.tftpl", true, false],
+  ["infra/terraform/bootstrap/main.tf", false, false],
+  ["infra/terraform/envs/local/main.tf", false, false],
+  ["infra/lambda/cognito-email-sender/src/index.ts", true, false],
+  ["infra/terraform/envs/github/rulesets.tf", false, true],
+  ["infra/scripts/plan-summary.mjs", true, true],
+  ["infra/scripts/plan-summary.test.mjs", true, true],
+  [".github/workflows/terraform-apply.yml", true, true],
+  [".github/workflows/terraform-plan.yml", true, true],
+  ["frontend/src/App.tsx", false, false],
+];
+
 test("each root plans and applies exactly its own changes", () => {
   // The plan and apply workflows both ask inScope(): a root applied without
   // having been planned refuses, so the two must agree. Mutation: widening
   // prod's scope to all of infra/terraform/ turns this red.
-  const cases = [
-    ["infra/terraform/envs/prod/s3.tf", true, false],
-    ["infra/terraform/modules/storage/main.tf", true, false],
-    ["infra/terraform/templates/env.local.tftpl", true, false],
-    ["infra/terraform/bootstrap/main.tf", false, false],
-    ["infra/terraform/envs/local/main.tf", false, false],
-    ["infra/lambda/cognito-email-sender/src/index.ts", true, false],
-    ["infra/terraform/envs/github/rulesets.tf", false, true],
-    ["infra/scripts/plan-summary.mjs", true, true],
-    [".github/workflows/terraform-apply.yml", true, true],
-    ["frontend/src/App.tsx", false, false],
-  ];
-  for (const [path, prod, github] of cases) {
+  for (const [path, prod, github] of SCOPE_CASES) {
     assert.equal(inScope("prod", [path]), prod, `prod: ${path}`);
     assert.equal(inScope("github", [path]), github, `github: ${path}`);
+  }
+});
+
+test("terraform-apply.yml starts for every change a root plans", () => {
+  // inScope() only runs once the workflow has started, and its `paths:`
+  // filter decides that. #201 changed only the pipeline, was planned, and
+  // was never applied because the filter lacked it. Mutation: dropping any
+  // path from that filter (or adding bootstrap/) turns this red.
+  const yml = readFileSync(new URL("../../.github/workflows/terraform-apply.yml", import.meta.url), "utf8");
+  const block = /\n {4}paths:\n((?: {6}- .+\n)+)/.exec(yml);
+  assert.ok(block, "terraform-apply.yml's push trigger has a paths: list");
+  const globs = [...block[1].matchAll(/- "([^"]+)"/g)].map(([, g]) => {
+    const re = g
+      .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+      .replace(/\*\*/g, "\u0000")
+      .replace(/\*/g, "[^/]*")
+      .replace(/\u0000/g, ".*");
+    return new RegExp(`^${re}$`);
+  });
+  for (const [path, prod, github] of SCOPE_CASES) {
+    const triggers = globs.some((g) => g.test(path));
+    assert.equal(triggers, prod || github, `terraform-apply.yml ${triggers ? "starts" : "does not start"} for ${path}`);
   }
 });
 
