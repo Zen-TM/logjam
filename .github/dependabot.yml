@@ -167,7 +167,7 @@ updates:
     # next one is a new native build (docs/decisions/0022, 0023).
     ignore:
       # SDK 57 still pins async-storage 2.2.0; 3.x is outside the SDK's set.
-      # Tracked in #TBD (issue to be opened; replace this before merge).
+      # Tracked in #226.
       - dependency-name: "@react-native-async-storage/async-storage"
         update-types: ["version-update:semver-major"]
       # The SDK pins TypeScript too (6.0 for SDK 57); TypeScript 7 is tracked
