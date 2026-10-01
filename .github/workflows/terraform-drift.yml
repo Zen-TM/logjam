@@ -6,6 +6,12 @@ name: terraform-drift
 # Each root opens one issue, or rewrites the open one's body rather than
 # commenting nightly. The plan text stays in the run log; the issue carries
 # counts and destroyed addresses only.
+#
+# envs/github plans as the apply App, not the read-only plan App: only a
+# token that may edit a ruleset sees its bypass_actors, and a bypass actor
+# added by hand is the drift that matters most there. It runs main's code in
+# the `prod` Environment, as terraform-apply.yml does, and never applies
+# (docs/decisions/0025-github-settings-in-terraform.md).
 
 on:
   schedule:
@@ -85,25 +91,27 @@ jobs:
 
   drift-github:
     runs-on: ubuntu-latest
+    environment: prod
     env:
       GH_TOKEN: ${{ github.token }}
       TITLE: "Terraform drift in envs/github"
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
-      # For the state only; a schedule run is on main, which the plan role trusts.
+      # For the state only. A job in the `prod` Environment is trusted by the
+      # apply role, not the plan role; -lock=false below keeps it read-only.
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
         with:
-          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/logjam-github-actions-plan-role
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/logjam-github-actions-apply-role
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: GitHub token for the plan
+      - name: GitHub token that can see bypass actors
         id: app
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
-          client-id: ${{ vars.SETTINGS_PLAN_APP_CLIENT_ID }}
-          private-key: ${{ secrets.SETTINGS_PLAN_APP_KEY }}
+          client-id: ${{ vars.SETTINGS_APPLY_APP_CLIENT_ID }}
+          private-key: ${{ secrets.SETTINGS_APPLY_APP_KEY }}
 
       - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
         with:

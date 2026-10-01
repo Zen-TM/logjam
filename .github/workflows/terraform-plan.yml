@@ -166,7 +166,9 @@ jobs:
       # The plan App: read-only on settings. Its key is a repository secret,
       # so anyone who can push a branch here can reach it; it grants nothing
       # such a collaborator does not already have
-      # (docs/decisions/0025-github-settings-in-terraform.md).
+      # (docs/decisions/0025-github-settings-in-terraform.md). Being read-only,
+      # it cannot see rulesets' bypass_actors; plan-summary.mjs counts an
+      # update to those alone as no change (ROOTS.github.unreadable).
       - name: GitHub token for the plan
         id: app
         if: steps.scope.outputs.run == 'true'

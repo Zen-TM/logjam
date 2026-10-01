@@ -10,7 +10,10 @@
 //
 // The fingerprint hashes the (address, actions) list from `terraform show
 // -json`, plus each code artifact's hash, never attribute values: plan JSON
-// carries sensitive values in clear, and the comment is public.
+// carries sensitive values in clear, and the comment is public. A root may
+// name attributes its plan credentials cannot read (`unreadable`): those are
+// left out when deciding a resource's action, and their configured values
+// are hashed instead, since both plans take those from the same code.
 // Tests: plan-summary.test.mjs, over __fixtures__/.
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -40,6 +43,12 @@ export const ROOTS = {
   github: {
     scope: new RegExp(String.raw`^(infra/terraform/envs/github/|${PIPELINE})`),
     self: null,
+    // GitHub returns a ruleset's bypass_actors only to a token that may edit
+    // it. The PR's plan runs as the read-only plan App, so it sees none and
+    // plans to add them; the apply's plan, as the apply App, sees them and
+    // plans nothing. Without this, every apply touching such a ruleset would
+    // refuse (docs/decisions/0025-github-settings-in-terraform.md).
+    unreadable: { github_repository_ruleset: ["bypass_actors"] },
     changedOutside: "a GitHub setting changed outside Terraform",
     handChange: "If a GitHub setting was changed by hand",
     touch: "infra/terraform/envs/github",
@@ -60,41 +69,86 @@ export function inScope(name, paths) {
 
 function selfChanges(name, plan) {
   const self = root(name).self;
-  return self ? changes(plan).filter((c) => self.test(c.rc.address)) : [];
+  return self ? changes(plan, name).filter((c) => self.test(c.rc.address)) : [];
 }
 
-function kind(actions) {
-  const a = actions.join(",");
+// JSON with sorted keys, so equal values compare equal.
+function canonical(v) {
+  if (Array.isArray(v)) return `[${v.map(canonical).join(",")}]`;
+  if (v && typeof v === "object") {
+    return `{${Object.keys(v)
+      .sort()
+      .map((k) => `${JSON.stringify(k)}:${canonical(v[k])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(v ?? null);
+}
+
+// An update that changes nothing but attributes the plan cannot read, or
+// values only known after apply, is no change.
+function onlyUnreadable(rc, hidden) {
+  const unknown = rc.change.after_unknown ?? {};
+  const strip = (v) =>
+    Object.fromEntries(Object.entries(v ?? {}).filter(([k]) => !hidden.includes(k) && unknown[k] !== true));
+  return canonical(strip(rc.change.before)) === canonical(strip(rc.change.after));
+}
+
+function kind(rc, name) {
+  const a = rc.change.actions.join(",");
   if (a === "delete,create" || a === "create,delete") return "replace";
+  const hidden = root(name).unreadable?.[rc.type];
+  if (a === "update" && hidden && onlyUnreadable(rc, hidden)) return "no-op";
   return a; // create, update, delete, read, forget, no-op
 }
 
-function changes(plan) {
+function changes(plan, name) {
   return (plan.resource_changes ?? [])
     .map((rc) => ({
       address: rc.deposed ? `${rc.address} (deposed ${rc.deposed})` : rc.address,
-      kind: kind(rc.change.actions),
+      kind: kind(rc, name),
       importing: Boolean(rc.change.importing),
       rc,
     }))
     .filter((c) => c.kind !== "no-op" || c.importing);
 }
 
-export function fingerprint(plan) {
-  const list = changes(plan)
+// Updates counted as no change because they touch only unreadable attributes.
+function unreadableOnly(plan, name) {
+  return (plan.resource_changes ?? []).filter(
+    (rc) => rc.change.actions.join(",") === "update" && kind(rc, name) === "no-op",
+  );
+}
+
+const byAddress = ([a], [b]) => (a < b ? -1 : a > b ? 1 : 0);
+
+export function fingerprint(plan, name) {
+  const list = changes(plan, name)
     .map((c) => [c.address, c.kind + (c.importing ? "+import" : "")])
-    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    .sort(byAddress);
   // A Lambda whose code changed is "update" on both sides; its hash is what
   // tells the PR's build from the apply's.
   const artifacts = (plan.resource_changes ?? [])
     .filter((rc) => rc.change.after?.source_code_hash)
     .map((rc) => [rc.address, rc.change.after.source_code_hash])
-    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-  return createHash("sha256").update(JSON.stringify({ list, artifacts })).digest("hex");
+    .sort(byAddress);
+  const unreadable = root(name).unreadable;
+  if (!unreadable) return createHash("sha256").update(JSON.stringify({ list, artifacts })).digest("hex");
+  // What the code sets an unreadable attribute to is the same in both plans,
+  // so a change to it still changes the fingerprint. A hash, never the value.
+  const configured = (plan.resource_changes ?? [])
+    .filter((rc) => unreadable[rc.type] && rc.change.after)
+    .flatMap((rc) =>
+      unreadable[rc.type].map((attr) => [
+        `${rc.address}.${attr}`,
+        createHash("sha256").update(canonical(rc.change.after[attr])).digest("hex"),
+      ]),
+    )
+    .sort(byAddress);
+  return createHash("sha256").update(JSON.stringify({ list, artifacts, configured })).digest("hex");
 }
 
 export function header(plan, name) {
-  const all = changes(plan);
+  const all = changes(plan, name);
   const count = (k) => all.filter((c) => c.kind === k).length;
   const imports = all.filter((c) => c.importing).length;
   const parts = [
@@ -111,6 +165,15 @@ export function header(plan, name) {
     lines.push("", `**Destroys (${destroys.length}):**`);
     for (const c of destroys) lines.push(`- \`${c.address}\` — ${c.kind}`);
   }
+  const hidden = unreadableOnly(plan, name);
+  if (hidden.length) {
+    const attrs = [...new Set(hidden.flatMap((rc) => root(name).unreadable[rc.type]))].map((a) => `\`${a}\``);
+    lines.push(
+      "",
+      `**Counted as no change (${hidden.length}):** the plan below shows these updating ${attrs.join(", ")}, which the plan's credentials cannot read. Review those in the code diff; the apply sets them as configured.`,
+    );
+    for (const rc of hidden) lines.push(`- \`${rc.address}\``);
+  }
   const self = selfChanges(name, plan);
   if (self.length) {
     lines.push("", "**Changes the apply role itself** — the workflow will refuse; the maintainer applies this one (infra/AGENTS.md):");
@@ -125,7 +188,7 @@ export function comment({ root: name, planText, status, plan, sha, max = MAX_COM
   const top = [marker(name)];
   let fp = "";
   if (ok) {
-    fp = fingerprint(plan);
+    fp = fingerprint(plan, name);
     top.push(`<!-- plan-fingerprint: ${fp} sha: ${sha} -->`);
   }
   top.push(`${title} ${ok ? "✅" : "❌ failed"}`, "");
@@ -166,7 +229,7 @@ export function check(name, plan, commentBody, headSha) {
       reason: `The last plan comment is for ${read.sha}, but the PR merged at ${headSha}: the plan for the final commit never posted. Nothing applied; open a PR touching ${r.touch} to plan and apply the current diff.`,
     };
   }
-  const now = fingerprint(plan);
+  const now = fingerprint(plan, name);
   if (now !== read.fingerprint) {
     return {
       ok: false,

@@ -32,17 +32,17 @@ test("header lists counts, then every delete and replace", () => {
 });
 
 test("fingerprint ignores resource order", () => {
-  assert.equal(fingerprint(fixture("plan-mixed")), fingerprint(fixture("plan-mixed-reordered")));
+  assert.equal(fingerprint(fixture("plan-mixed"), "prod"), fingerprint(fixture("plan-mixed-reordered"), "prod"));
 });
 
 test("fingerprint changes when one resource's actions change", () => {
   // Mutation: hashing addresses only turns this red.
-  assert.notEqual(fingerprint(fixture("plan-mixed")), fingerprint(fixture("plan-mixed-one-action-differs")));
+  assert.notEqual(fingerprint(fixture("plan-mixed"), "prod"), fingerprint(fixture("plan-mixed-one-action-differs"), "prod"));
 });
 
 test("fingerprint changes when the Lambda build differs", () => {
   // Both plans say "update" on the Lambda; only the artifact hash differs.
-  assert.notEqual(fingerprint(fixture("plan-mixed")), fingerprint(fixture("plan-mixed-other-lambda-build")));
+  assert.notEqual(fingerprint(fixture("plan-mixed"), "prod"), fingerprint(fixture("plan-mixed-other-lambda-build"), "prod"));
 });
 
 test("a failed plan posts no fingerprint", () => {
@@ -116,4 +116,56 @@ test("each root plans and applies exactly its own changes", () => {
     assert.equal(inScope("prod", [path]), prod, `prod: ${path}`);
     assert.equal(inScope("github", [path]), github, `github: ${path}`);
   }
+});
+
+// What #143's merge saw: the same ruleset, read by the plan App (no
+// bypass_actors) and by the apply App (the live admin bypass).
+const ADMIN = [{ actor_id: 5, actor_type: "RepositoryRole", bypass_mode: "always" }];
+const ruleset = (address, before, after, actions = ["update"]) => ({
+  address,
+  type: "github_repository_ruleset",
+  change: { actions, before, after, after_unknown: {}, importing: { id: "x" } },
+});
+const live = { name: "mobile-release-tags", etag: "W/1", rules: [{ creation: true }] };
+const asPlanApp = (after = { ...live, bypass_actors: ADMIN }) => ({
+  resource_changes: [ruleset("github_repository_ruleset.tags", { ...live, bypass_actors: [] }, after)],
+});
+const asApplyApp = (after = { ...live, bypass_actors: ADMIN }) => ({
+  resource_changes: [
+    ruleset("github_repository_ruleset.tags", { ...live, bypass_actors: ADMIN }, after, ["no-op"]),
+  ],
+});
+
+test("bypass_actors the plan App cannot read do not split the plan from the apply", () => {
+  // Mutation: dropping github's `unreadable` (or the no-op rule in kind())
+  // makes the plan App's view an update and the apply's a no-op: red.
+  assert.equal(fingerprint(asPlanApp(), "github"), fingerprint(asApplyApp(), "github"));
+  const read = comment({ root: "github", planText: "plan", status: "success", plan: asPlanApp(), sha: SHA }).body;
+  assert.equal(check("github", asApplyApp(), read, SHA).ok, true);
+  assert.match(header(asPlanApp(), "github"), /\*\*Plan:\*\* 1 to import/);
+  assert.match(header(asPlanApp(), "github"), /Counted as no change \(1\)[^]*`bypass_actors`[^]*github_repository_ruleset\.tags/);
+});
+
+test("a configured bypass_actors change still changes the fingerprint", () => {
+  // Mutation: leaving the configured values out of the fingerprint lets an
+  // apply add a bypass actor the PR's plan never had: red.
+  const wider = { ...live, bypass_actors: [...ADMIN, { actor_id: 1, actor_type: "Team", bypass_mode: "always" }] };
+  assert.notEqual(fingerprint(asPlanApp(), "github"), fingerprint(asPlanApp(wider), "github"));
+  const read = comment({ root: "github", planText: "plan", status: "success", plan: asPlanApp(), sha: SHA }).body;
+  assert.equal(check("github", asApplyApp(wider), read, SHA).ok, false);
+});
+
+test("a real rule change beside the hidden bypass stays an update", () => {
+  // Mutation: stripping more than the unreadable attributes hides it: red.
+  const changed = { ...live, rules: [{ creation: false }], bypass_actors: ADMIN };
+  const h = header(asPlanApp(changed), "github");
+  assert.match(h, /1 to update/);
+  assert.doesNotMatch(h, /Counted as no change/);
+});
+
+test("envs/prod has no unreadable attributes", () => {
+  // The same shape in envs/prod is a plain update, and prod fingerprints
+  // keep the hash input they had before envs/github existed.
+  assert.match(header(asPlanApp(), "prod"), /1 to update/);
+  assert.notEqual(fingerprint(asPlanApp(), "prod"), fingerprint(asApplyApp(), "prod"));
 });

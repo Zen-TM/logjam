@@ -54,6 +54,18 @@ behind main until someone remembered to run it (#128 and #129 both ended in
 - Set by hand, outside Terraform: secret values, the two Apps and their
   keys and client IDs, and private vulnerability reporting (the provider has
   no resource for it).
+- **Update 2026-10-01: the plan App cannot see bypass actors.** GitHub returns
+  a ruleset's `bypass_actors` only to a token that may edit the ruleset. The
+  plan App's plans therefore show every bypass actor as being added, and the
+  apply App's show nothing, so #143's first apply refused. The comparison now
+  leaves `bypass_actors` out when deciding a ruleset's action and hashes the
+  configured value instead ([0024](0024-prod-terraform-applies-on-merge-by-plan-fingerprint.md)'s
+  update of the same date). The PR comment says which updates it counted as no
+  change; a bypass-actor change is reviewed in the code diff and the guard
+  test, not in the plan text. The nightly `envs/github` drift plan runs as the
+  apply App in the `prod` Environment, with the AWS apply role for its state
+  and `-lock=false`, so a bypass actor added by hand shows as drift.
+  Everything else above stands.
 
 Guards: `infra/terraform/envs/github/tests/guards.tftest.hcl` (run by
 `terraform-ci.yml`'s `test-github`, offline against a mocked provider)
@@ -86,6 +98,13 @@ check.
   adds the plan App's key as a Dependabot secret.
 
 ## Alternatives considered
+
+- **Give the plan App Administration: write so it sees bypass actors**
+  (rejected 2026-10-01). Its key is reachable by anyone who can push a
+  branch, who could then edit the rulesets that protect `main`.
+- **Stop managing `bypass_actors` (`ignore_changes`)** (rejected 2026-10-01).
+  Terraform could then never remove a bypass actor, which is what the
+  rulesets' design depends on.
 
 - **Run `scripts/github-settings.sh --apply` from a workflow on merge.** The
   obvious step from where it was, but the script has no plan: the PR would
