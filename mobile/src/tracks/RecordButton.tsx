@@ -14,7 +14,7 @@
 // The long press is not a shortcut, it is the ONLY one-gesture way to stop —
 // finishing must not need the panel found first. Wet hands, cold hands, and
 // nothing in this app is worse than a recording that will not stop.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Animated, Easing, Pressable, StyleSheet, View } from "react-native";
 
 import { SEARCH_SIZE } from "../map/mapChrome";

@@ -11,7 +11,7 @@
 // The group closes as soon as a tool arms: the HUD in the top notice stack is
 // then the thing telling the user what mode they are in, and leaving an open
 // tray behind it would be two answers to the same question.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Animated, Easing, Pressable, StyleSheet, View } from "react-native";
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 
