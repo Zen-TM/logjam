@@ -168,21 +168,17 @@ export default function LidarPanel({
     label: string;
   } | null>(null);
 
-  const loadTemplates = useCallback(async () => {
-    try {
-      // Concurrent-duplicate-safe fetch shared with TopoDialog (TOPO-6).
-      setTemplates(await fetchTopoTemplates());
-    } catch (err) {
-      console.error(err);
-      toast.error(messageFromError(err, "Couldn't load topo templates."));
-    }
-  }, [toast]);
-
   // A template saved from TopoDialog's "Save as template" bumps
   // `templateRefetchTrigger`, so the list is never a reload behind (TOPO-1).
   useEffect(() => {
-    void loadTemplates();
-  }, [loadTemplates, templateFetchCount, templateRefetchTrigger]);
+    // Concurrent-duplicate-safe fetch shared with TopoDialog (TOPO-6).
+    fetchTopoTemplates()
+      .then(setTemplates)
+      .catch((err) => {
+        console.error(err);
+        toast.error(messageFromError(err, "Couldn't load topo templates."));
+      });
+  }, [toast, templateFetchCount, templateRefetchTrigger]);
 
   const topoNames = useMemo(
     () => topoNamesById(completedTopoJobs),

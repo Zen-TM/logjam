@@ -544,28 +544,37 @@ export function useElevationProfile(points: [number, number][] | null) {
   >(() => (geometryKey ? cachedProfile(geometryKey) : null));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The geometry the network is asked about: set with the rest when a line
+  // turns up that the cache doesn't know, and read by the effect below.
+  const [fetchKey, setFetchKey] = useState<string | null>(null);
 
-  useEffect(() => {
+  // Each new geometry settles from the cache, or starts loading, during
+  // render. `undefined` until the first render has done so.
+  const [profiledKey, setProfiledKey] = useState<string | null | undefined>(
+    undefined,
+  );
+  if (geometryKey !== profiledKey) {
+    setProfiledKey(geometryKey);
+    const known = geometryKey ? cachedProfile(geometryKey) : null;
+    setFetchKey(geometryKey && !known ? geometryKey : null);
     if (!geometryKey) {
       setProfile(null);
-      return;
-    }
-    const known = cachedProfile(geometryKey);
-    if (known) {
-      setProfile(known);
-      setLoading(false);
+    } else {
+      if (known) setProfile(known);
+      setLoading(!known);
       setError(null);
-      return;
     }
+  }
+
+  useEffect(() => {
+    if (!fetchKey) return;
     // A late response from a previous line must not overwrite this one's.
     let current = true;
-    setLoading(true);
-    setError(null);
-    getElevationProfile(JSON.parse(geometryKey) as [number, number][])
+    getElevationProfile(JSON.parse(fetchKey) as [number, number][])
       .then((result) => {
         // Cached even if this hook has moved on: the answer is about the
         // geometry, not about who asked.
-        cacheProfile(geometryKey, result);
+        cacheProfile(fetchKey, result);
         if (current) setProfile(result);
       })
       .catch((err) => {
@@ -579,7 +588,7 @@ export function useElevationProfile(points: [number, number][] | null) {
     return () => {
       current = false;
     };
-  }, [geometryKey]);
+  }, [fetchKey]);
 
   return { profile, loading, error };
 }
@@ -628,9 +637,17 @@ export function usePlaces(enabled: boolean) {
   const [loaded, setLoaded] = useState(false);
   const [fetchCount, setFetchCount] = useState(0);
 
+  // A new request (the gate opening, or a refetch) shows loading from the
+  // render that asks for it; the effect fetches and lowers it.
+  const request = enabled ? fetchCount : null;
+  const [requested, setRequested] = useState<number | null>(null);
+  if (request !== requested) {
+    setRequested(request);
+    if (request !== null) setLoading(true);
+  }
+
   useEffect(() => {
     if (!enabled) return;
-    setLoading(true);
     // Guards a stale in-flight response landing after a newer one (FECO-001).
     let cancelled = false;
     apiFetchWithTotal<TPlace[]>("/places")
@@ -665,9 +682,17 @@ export function useSharedPlaces(enabled: boolean) {
   const [error, setError] = useState<string | null>(null);
   const [fetchCount, setFetchCount] = useState(0);
 
+  // A new request (the gate opening, or a refetch) shows loading from the
+  // render that asks for it; the effect fetches and lowers it.
+  const request = enabled ? fetchCount : null;
+  const [requested, setRequested] = useState<number | null>(null);
+  if (request !== requested) {
+    setRequested(request);
+    if (request !== null) setLoading(true);
+  }
+
   useEffect(() => {
     if (!enabled) return;
-    setLoading(true);
     // Guards a stale in-flight response landing after a newer one (FECO-001).
     let cancelled = false;
     apiFetch<TPlace[]>("/places/shared")
@@ -1226,9 +1251,17 @@ export function useTripLogs(enabled: boolean) {
   const [error, setError] = useState<string | null>(null);
   const [fetchCount, setFetchCount] = useState(0);
 
+  // A new request (the gate opening, or a refetch) shows loading from the
+  // render that asks for it; the effect fetches and lowers it.
+  const request = enabled ? fetchCount : null;
+  const [requested, setRequested] = useState<number | null>(null);
+  if (request !== requested) {
+    setRequested(request);
+    if (request !== null) setLoading(true);
+  }
+
   useEffect(() => {
     if (!enabled) return;
-    setLoading(true);
     // Guards a stale in-flight response landing after a newer one (FECO-001).
     let cancelled = false;
     apiFetchWithTotal<TTripLog[]>("/trips")
@@ -1436,14 +1469,18 @@ export function useStandaloneTracks(
   const [tracks, setTracks] = useState<StandaloneTrack[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  // Nothing shown, nothing drawn: the last answer is dropped during render.
+  // (No request is in flight to overwrite it: the effect cancels its own.)
+  const showsAny = files.some(
+    (file) => file.linkedPlaceId === null && shownIds.includes(file.id),
+  );
+  if (!showsAny && tracks.length > 0) setTracks([]);
+
   useEffect(() => {
     const shown = files.filter(
       (file) => file.linkedPlaceId === null && shownIds.includes(file.id),
     );
-    if (shown.length === 0) {
-      setTracks([]);
-      return;
-    }
+    if (shown.length === 0) return;
     let cancelled = false;
     getMediaDownloadUrls(shown.map((file) => file.id))
       .then(({ items }) => {
@@ -1861,10 +1898,18 @@ export function useTopoExports(enabled: boolean, pollMs: number = 5000) {
   const [error, setError] = useState<string | null>(null);
   const [fetchCount, setFetchCount] = useState(0);
 
+  // A new request (the gate opening, or a refetch) shows loading from the
+  // render that asks for it; the effect fetches and lowers it.
+  const request = enabled ? fetchCount : null;
+  const [requested, setRequested] = useState<number | null>(null);
+  if (request !== requested) {
+    setRequested(request);
+    if (request !== null) setLoading(true);
+  }
+
   useEffect(() => {
     if (!enabled) return;
     let cancelled = false;
-    setLoading(true);
     apiFetchWithTotal<{ exports: TopoExportJobView[] }>("/topo-exports")
       .then(({ data, total }) => {
         if (!cancelled) {
@@ -1925,10 +1970,18 @@ export function useGeoPdfJobs(enabled: boolean, pollMs: number = 5000) {
   const [error, setError] = useState<string | null>(null);
   const [fetchCount, setFetchCount] = useState(0);
 
+  // A new request (the gate opening, or a refetch) shows loading from the
+  // render that asks for it; the effect fetches and lowers it.
+  const request = enabled ? fetchCount : null;
+  const [requested, setRequested] = useState<number | null>(null);
+  if (request !== requested) {
+    setRequested(request);
+    if (request !== null) setLoading(true);
+  }
+
   useEffect(() => {
     if (!enabled) return;
     let cancelled = false;
-    setLoading(true);
     apiFetchWithTotal<{ jobs: GeoPdfJobView[] }>("/geo-pdf")
       .then(({ data, total }) => {
         if (!cancelled) {
@@ -1982,9 +2035,17 @@ export function useVectorStyle(enabled: boolean) {
   const [error, setError] = useState<string | null>(null);
   const [fetchCount, setFetchCount] = useState(0);
 
+  // A new request (the gate opening, or a refetch) shows loading from the
+  // render that asks for it; the effect fetches and lowers it.
+  const request = enabled ? fetchCount : null;
+  const [requested, setRequested] = useState<number | null>(null);
+  if (request !== requested) {
+    setRequested(request);
+    if (request !== null) setLoading(true);
+  }
+
   useEffect(() => {
     if (!enabled) return;
-    setLoading(true);
     apiFetch<VectorStyleSettings>("/vector-style")
       .then((v) => {
         setVectorStyle(v);
@@ -2038,9 +2099,7 @@ export function useLiveVectorStyle(enabled: boolean): {
 
   // Seed the live style once from the server value; never clobber an in-flight
   // edit on a later server refetch (the saved value already equals the draft).
-  useEffect(() => {
-    if (serverStyle && liveStyle === null) setLiveStyle(serverStyle);
-  }, [serverStyle, liveStyle]);
+  if (serverStyle && liveStyle === null) setLiveStyle(serverStyle);
 
   const setVectorStyle = useCallback(
     (next: VectorStyleSettings) => {

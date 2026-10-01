@@ -1,4 +1,10 @@
-import { useId, useLayoutEffect, useRef, type ReactNode } from "react";
+import {
+  useEffectEvent,
+  useId,
+  useLayoutEffect,
+  useRef,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { IconButton } from "./Button";
@@ -61,8 +67,12 @@ function OpenDialog({
   const headingRef = useRef<HTMLHeadingElement>(null);
   const titleId = useId();
   const bodyId = useId();
-  const latest = useRef({ onClose, dismissible });
-  latest.current = { onClose, dismissible };
+  // Closes unless a request is in flight, and says whether it did. An effect
+  // event, so the listeners below see the latest props without re-binding.
+  const closeIfDismissible = useEffectEvent(() => {
+    if (dismissible) onClose();
+    return dismissible;
+  });
 
   useLayoutEffect(() => {
     const dialog = dialogRef.current;
@@ -75,7 +85,7 @@ function OpenDialog({
     )?.focus();
 
     const requestClose = () => {
-      if (latest.current.dismissible) latest.current.onClose();
+      closeIfDismissible();
     };
     // On the dialog itself, before the key bubbles on. A menu inside that
     // consumed its own Escape has already prevented it.
@@ -104,8 +114,7 @@ function OpenDialog({
     // remount (StrictMode does one) has shown the dialog again: ignore it then.
     const onNativeClose = () => {
       if (dialog.open) return;
-      if (latest.current.dismissible) latest.current.onClose();
-      else dialog.showModal();
+      if (!closeIfDismissible()) dialog.showModal();
     };
     // A press on the backdrop targets the dialog element itself; its content
     // fills it edge to edge, so nothing inside does.

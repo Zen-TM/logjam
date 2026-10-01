@@ -131,8 +131,14 @@ function FriendSharingSection({
   const selectionAnchor = useRef<string | null>(null);
   const [pendingBulk, setPendingBulk] = useState<PendingBulk>(null);
 
-  const load = useCallback(() => {
+  // Another friend starts without the last one's error, during render.
+  const [loadedFor, setLoadedFor] = useState(friend.friendshipId);
+  if (friend.friendshipId !== loadedFor) {
+    setLoadedFor(friend.friendshipId);
     setError(null);
+  }
+
+  const fetchShares = useCallback(() => {
     getFriendShares(friend.friendshipId)
       .then(setShares)
       .catch((err) => {
@@ -143,7 +149,13 @@ function FriendSharingSection({
       });
   }, [friend.friendshipId]);
 
-  useEffect(load, [load]);
+  useEffect(fetchShares, [fetchShares]);
+
+  /** A reload the user (or a change they made) asked for. */
+  const load = useCallback(() => {
+    setError(null);
+    fetchShares();
+  }, [fetchShares]);
 
   const theirs = useMemo(
     () =>
