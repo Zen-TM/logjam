@@ -65,7 +65,7 @@ run "main_admits_only_green_squashed_prs" {
   # off strict lets a PR merge against a main it was not planned on.
   assert {
     condition = alltrue([
-      for c in ["shared", "api", "frontend", "topo", "format", "actionlint", "plan-prod", "plan-github", "dco", "api-image", "topo-image"] :
+      for c in ["shared", "api", "frontend", "topo", "format", "actionlint", "plan-prod", "plan-github", "dco", "api-image", "topo-image", "gitleaks"] :
       contains([for r in github_repository_ruleset.main.rules[0].required_status_checks[0].required_check : r.context], c)
     ]) && github_repository_ruleset.main.rules[0].required_status_checks[0].strict_required_status_checks_policy
     error_message = "A required check left the main ruleset, or branches no longer need to be up to date. Add checks freely; removing one needs this test changed too."
@@ -135,5 +135,28 @@ run "squash_commits_keep_sign_offs" {
   assert {
     condition     = github_repository.logjam.squash_merge_commit_message == "COMMIT_MESSAGES"
     error_message = "Squash commits must take the PR's commit messages, which carry the DCO sign-offs."
+  }
+}
+
+run "security_alerts_stay_on" {
+  command = plan
+
+  # Mutation: setting either status to "disabled", or deleting the
+  # security_and_analysis block, lets a committed secret go unflagged or a
+  # push that adds one through.
+  assert {
+    condition = (
+      github_repository.logjam.security_and_analysis[0].secret_scanning[0].status == "enabled" &&
+      github_repository.logjam.security_and_analysis[0].secret_scanning_push_protection[0].status == "enabled"
+    )
+    error_message = "Secret scanning and push protection must stay enabled."
+  }
+
+  # Mutation: enabled = false stops Dependabot alerting on vulnerable
+  # dependencies; deleting the resource fails this run on the missing
+  # reference.
+  assert {
+    condition     = github_repository_vulnerability_alerts.logjam.enabled
+    error_message = "Dependabot alerts must stay enabled."
   }
 }

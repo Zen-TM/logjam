@@ -1,18 +1,98 @@
 # Architecture decision records
 
-One file per decision, `NNNN-kebab-title.md`, in the order they were made.
-Start a new one from [`0000-template.md`](0000-template.md); merging the PR
-that adds it accepts it. An accepted
-decision is never edited to say something else: write a new ADR that
-supersedes it, and mark the old one `Superseded by`. The one permitted edit is
-a dated `Update YYYY-MM-DD` line that adds a narrow exception or corrects a
-stale fact while everything else still stands. If an update would change what
-the decision chooses, supersede it instead.
+An ADR keeps the reasoning for a choice someone could later undo without
+knowing why. One file per decision, `NNNN-kebab-title.md`, in the order they
+were made. Whether a change earns one: root `AGENTS.md` → Decisions.
 
-When a decision earns an ADR: root `AGENTS.md` → Decisions. A rule most
-sessions in a directory must follow is one line in that directory's
-`AGENTS.md`, linking back here; the rest are found by searching this
-directory for the paths and symbols a change touches.
+This page is how to write one, supersede one and keep one current. The
+[index](#index) is at the end.
+
+## Writing an ADR
+
+Start from [`0000-template.md`](0000-template.md). An ADR ships in the same PR
+as the change it explains, so a reviewer reads the reasoning beside the diff.
+Merging that PR accepts it.
+
+### Number, title, status
+
+- **Number:** the highest in this directory plus one. Never reuse or fill a
+  number. If another branch takes the same number first, renumber yours when
+  you rebase, and fix every link to it.
+- **Title and filename:** the title states the decision, so the index reads
+  as a list of rules: "A PlaceLink grants no visibility", not "Place links".
+  The filename is `NNNN-` plus a short kebab-case form of the title.
+- **Date:** the day the decision was made.
+- **Status:** `Accepted`. Merging the PR accepts it, so `Draft` is not used.
+
+### The sections
+
+Whoever finds this ADR later is changing code and searches this directory for
+the paths and symbols involved. Name them in the ADR, or it is never found.
+
+- **Context:** what forced the choice: the constraint or the failure, with
+  the paths, symbols, dates and incident that pin it down. Leave out how the
+  bug was found and anything that belongs under Alternatives. Keep history
+  only when it stops someone repeating it.
+- **Decision:** a rule that a later change could break and a reviewer could
+  check. A description of the feature or an account of the fix is not a
+  decision. Name the guard test that enforces it. If there is none, say so.
+- **Consequences:** always name the cost. A choice between real alternatives
+  gives something up, usually what the rejected option had going for it. Also
+  name the work it leaves for later: 0009's key must be backed up, and
+  rotating it needs a new build.
+- **Alternatives considered:** each option that was really rejected and why.
+  The first to list is the obvious one the next contributor would reach for.
+  If you know an option was built and then removed, say so, so it is not
+  built again.
+
+Never write "Not recorded" in a new ADR, and never invent an alternative or a
+consequence to fill a section. If you cannot name a real rejected option, the
+change probably fails the first Decisions criterion in root `AGENTS.md`: stop
+and say so rather than write the ADR. The template's "Not recorded" is only
+for backfilling a decision made long ago, whose date comes from `git log`.
+
+### Index and links
+
+- Add a row to the [index](#index): number, title as in the H1, date, status.
+- If most sessions in a directory must follow the rule, it also gets one line
+  in that directory's `AGENTS.md`, linking the ADR. If a guard test fails
+  loudly on the mistake, put the pointer in its assertion message instead.
+  Before adding either, read
+  [`.agents/skills/authoring-skills/references/agents-md.md`](../../.agents/skills/authoring-skills/references/agents-md.md).
+
+## When a decision changes: supersede it
+
+An accepted ADR's decision is never edited to say something else.
+
+1. Write a new ADR that states the whole current decision, so a reader never
+   has to merge two files. Set its `Supersedes` to the old one, and say in
+   Context what changed.
+2. In the old ADR, change only the status line, to `Superseded by [NNNN](…)`.
+   Update its index row to match.
+3. Search for every citation of the old number or file
+   (`git grep -n -e 'decisions/NNNN' -e '\[NNNN\]'`), in `AGENTS.md` lines,
+   comments and guard-test messages, and point each one at the new ADR.
+
+## While a decision stands: keep it current
+
+An accepted ADR changes in three ways only:
+
+- **A moved path or renamed symbol** is corrected in place, unmarked, in the
+  change that moved it: this directory is found by searching for the paths a
+  change touches. Guard: `shared/src/adrReferences.test.ts`.
+- **A stale fact or figure** is corrected in place and marked
+  "(updated YYYY-MM-DD)".
+- **A narrow exception, or a reason that no longer holds,** is a bullet under
+  Decision, `**Update YYYY-MM-DD: <what changes>.**`, that says what still
+  holds the decision up and ends "Everything else above stands". For an
+  exception, list the option you rejected under Alternatives. When no reason
+  is left holding the decision up, supersede it.
+
+Leave the title, status and index row alone. If the change would alter what
+the decision chooses, or a reader would need both texts to know the rule,
+supersede instead.
+
+## Index
 
 | # | Decision | Date | Status |
 |---|---|---|---|
