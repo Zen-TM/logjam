@@ -79,3 +79,36 @@ output "ecr_topo_worker_repository_url" {
 output "eb_environment_cname" {
   value = aws_elastic_beanstalk_environment.api.cname
 }
+
+output "s3_bucket_access_logs" {
+  description = "S3 server access logs for the media and topo-jobs buckets (read by the egress meter)."
+  value       = module.access_logs.bucket_id
+}
+
+output "eb_environment_name" {
+  value = aws_elastic_beanstalk_environment.api.name
+}
+
+output "cognito_email_sender_function_name" {
+  value = aws_lambda_function.cognito_email_sender.function_name
+}
+
+output "alerts_topic_arn" {
+  description = "SNS topic every CloudWatch alarm publishes to (docs/operations/alarms.md)."
+  value       = aws_sns_topic.alerts.arn
+}
+
+output "github_actions_deploy_role_arn" {
+  description = "Assumed by the deploy and rollback workflows; trusts only the prod GitHub Environment."
+  value       = aws_iam_role.github_actions.arn
+}
+
+output "github_actions_plan_role_arn" {
+  description = "Read-only terraform plan role for PRs and main."
+  value       = aws_iam_role.github_actions_plan.arn
+}
+
+output "github_actions_apply_role_arn" {
+  description = "terraform-apply.yml's role; trusts only the prod GitHub Environment (iam_apply.tf)."
+  value       = aws_iam_role.github_actions_apply.arn
+}
