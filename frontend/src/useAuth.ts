@@ -31,17 +31,18 @@ export type AuthState =
   | "authenticated";
 
 export function useAuth() {
-  const [state, setState] = useState<AuthState>("loading");
+  // Fake auth (local dev, e2e) is signed in from the first render; a real
+  // session is checked on mount below.
+  const [state, setState] = useState<AuthState>(() =>
+    import.meta.env.VITE_AUTH_MODE === "fake" ? "authenticated" : "loading",
+  );
   const [error, setError] = useState<string | null>(null);
   // Username is stored between sign-up and confirmation steps
   const [pendingUsername, setPendingUsername] = useState("");
 
   // On mount, check if there's an existing valid session in localStorage.
   useEffect(() => {
-    if (import.meta.env.VITE_AUTH_MODE === "fake") {
-      setState("authenticated");
-      return;
-    }
+    if (import.meta.env.VITE_AUTH_MODE === "fake") return;
     fetchAuthSession()
       .then((session) => {
         if (session.tokens?.idToken) {
