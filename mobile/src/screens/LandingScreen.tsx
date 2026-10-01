@@ -27,7 +27,6 @@ import {
   Image,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -43,7 +42,7 @@ import {
   spacing,
   theme,
 } from "../theme";
-import { Button, ErrorBanner, TextField } from "../ui";
+import { Button, ErrorBanner, TextField, TextLink } from "../ui";
 
 type Auth = ReturnType<typeof useAuth>;
 
@@ -140,7 +139,7 @@ function SignInPanel({
           screen — never at the top of the form (§8). */}
       {auth.error ? <ErrorBanner message={auth.error} /> : null}
       <Button label="Sign in" onPress={submit} loading={submitting} />
-      <FooterLink label="Forgot password?" onPress={auth.goToForgotPassword} />
+      <TextLink label="Forgot password?" onPress={auth.goToForgotPassword} />
 
       {/* Everything below the rule is deliberately quieter than Sign in. */}
       <View style={styles.secondary}>
@@ -207,24 +206,6 @@ function GuestExplainer({
   );
 }
 
-function FooterLink({
-  label,
-  onPress,
-}: {
-  label: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="link"
-      style={styles.footerLink}
-    >
-      <Text style={styles.footerLinkText}>{label}</Text>
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.primary },
   scroll: {
@@ -273,6 +254,4 @@ const styles = StyleSheet.create({
     lineHeight: lineHeight.body,
   },
   secondary: { gap: spacing(0.5) },
-  footerLink: { alignSelf: "center", padding: spacing(0.5) },
-  footerLinkText: { color: theme.accent, fontSize: fontSize.sm },
 });

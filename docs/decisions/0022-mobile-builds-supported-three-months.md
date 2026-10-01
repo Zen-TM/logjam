@@ -28,9 +28,10 @@ the `x-logjam-client` header (`requireClientHeader` in
 `api/src/routes/sync.ts`) and logged nothing, though a comment claimed it did.
 It now logs a `sync_client` line per request with `client_platform` and
 `client_version`, which `docs/operations/queries.md` aggregates. The API's
-log group keeps 7 days (`api/.ebextensions/cloudwatch-logs.config`, the
-figure `frontend/public/privacy.html` promises), so longer windows need a
-metric, not logs.
+log group keeps 14 days (updated 2026-10-01;
+`api/.ebextensions/cloudwatch-logs.config`, the figure
+`frontend/public/privacy.html` promises), so longer windows need a metric,
+not logs.
 
 ## Decision
 
@@ -80,8 +81,8 @@ logged.
   so the first protocol bump must add a way for the client to name it (a
   parameter, or the version in `x-logjam-client`). The 30- and 90-day counts
   need a CloudWatch metric filter on the `sync_client` line, not built yet;
-  until then the PR quotes the 7-day counts. Feature-flag governance is left
-  until a flag system exists.
+  until then the PR quotes the 14-day counts (updated 2026-10-01).
+  Feature-flag governance is left until a flag system exists.
 
 ## Alternatives considered
 
@@ -106,7 +107,7 @@ logged.
   a below-minimum build keep syncing on a metered connection; a 400 there
   would strand its unsynced edits on a phone in the field.
 - **Keeping API logs for 90 days** to answer the long windows from Logs
-  Insights: rejected, as it breaks the 7-day retention promise in
-  `frontend/public/privacy.html`.
+  Insights: rejected, as it breaks the 14-day retention promise (updated
+  2026-10-01) in `frontend/public/privacy.html`.
 - **A fixed transition period for protocol N−1:** rejected for a second
   number that could disagree with rule 2.

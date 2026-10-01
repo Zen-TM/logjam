@@ -22,6 +22,7 @@ import { apiFetch } from "../api/apiFetch";
 import { fetchCurrentUser, useApiQuery } from "../api/queries";
 import type { TUser } from "../api/types";
 import { useAccountState } from "../auth/AccountStateContext";
+import { deleteAccountEverywhere } from "../auth/deleteAccount";
 import { capabilityRowProps } from "../auth/capabilities";
 import { CLIENT_VERSION } from "../config";
 import { formatBytes } from "../format";
@@ -142,10 +143,6 @@ function GuestAccountScreen({ onBack }: { onBack: () => void }) {
 
 function updateUsername(username: string): Promise<TUser> {
   return apiFetch<TUser>("/users/me", { method: "PATCH", body: { username } });
-}
-
-function deleteAccount(): Promise<void> {
-  return apiFetch<void>("/users/me", { method: "DELETE" });
 }
 
 type SheetMode = "closed" | "username" | "email" | "delete";
@@ -553,7 +550,7 @@ function DeleteAccountForm({
     setBusy(true);
     setError(null);
     try {
-      await deleteAccount();
+      await deleteAccountEverywhere();
       // Sign-out is also what wipes this device's mirror and outbox.
       onDeleted();
     } catch (err) {
@@ -567,8 +564,9 @@ function DeleteAccountForm({
     <View style={styles.form}>
       <Text style={styles.danger}>This can&apos;t be undone.</Text>
       <Text style={styles.formHint}>
-        Your places, trips, notes, photos and shares are deleted from the server
-        and from this phone. Places other people copied from you stay theirs.
+        Your sign-in, places, trips, notes, photos and shares are deleted from
+        the server and from this phone. Places other people copied from you stay
+        theirs.
       </Text>
       <TextField
         label={`Type ${username} to confirm`}

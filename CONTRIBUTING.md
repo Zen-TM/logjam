@@ -87,9 +87,8 @@ A commit a person adds to a Dependabot branch still needs a sign-off.
 
 ## Setting up
 
-Run `make setup`, then follow `docs/dev-setup.md`, which covers Linux, macOS
-and Windows. On Windows, clone inside WSL2: the repo uses symlinks that a
-native Windows clone breaks.
+Follow [`docs/dev-setup.md`](docs/dev-setup.md), from a fresh clone to a
+running stack on Linux, macOS or Windows (inside WSL2).
 
 ## Where the rules live
 

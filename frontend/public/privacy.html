@@ -15,13 +15,15 @@
   </head>
   <body>
     <h1>Logjam — Privacy Policy</h1>
-    <p class="updated">Last updated: 2026-07-17</p>
+    <p class="updated">Last updated: 2026-09-28</p>
 
     <p>
       Logjam is built as a <strong>private</strong> tool. Privacy is a design
       constraint, not a feature, because exposing place locations causes real
       environmental harm and can compromise rescue and access agreements. This
       policy explains what we store, why, and what we deliberately do not do.
+      It covers both ways of using Logjam: <strong>Logjam Web</strong> in your
+      browser and <strong>Logjam GPS</strong>, the phone app.
     </p>
     <p>
       Logjam is intended for users in Australia. It is a personal,
@@ -34,45 +36,83 @@
     <h2>What we store</h2>
     <ul>
       <li><strong>Account data:</strong> username, email, sign-in credentials
-          (via AWS Cognito), theme and UI preferences, storage usage.</li>
+          (via AWS Cognito), theme and UI preferences, storage and monthly
+          usage, and which version of these terms and this policy you agreed
+          to and when.</li>
       <li><strong>Place data:</strong> name, coordinates, grades, notes,
-          attributes, and any media you upload.</li>
+          attributes, place types, the custom fields you define, links
+          between places, and any media you upload.</li>
+      <li><strong>Routes and tracks:</strong> routes you draw or import, and
+          GPS tracks you record in Logjam GPS. A finished recording is uploaded
+          to your account as a GPX file while you are signed in.</li>
       <li><strong>Trip logs:</strong> dates, notes, custom fields, and media
           attached to your own trips.</li>
-      <li><strong>Sharing:</strong> which of your friends each place is
-          shared with.</li>
-      <li><strong>Topo jobs:</strong> LiDAR inputs you upload and the rendered
-          map tiles produced from them.</li>
-      <li><strong>Operational logs:</strong> request error logs and worker
-          job state. These are scrubbed so place names and coordinates do not
-          appear in plain text.</li>
+      <li><strong>Friends and sharing:</strong> your friends list, what you
+          have shared with whom, and files you send to friends.</li>
+      <li><strong>Topo and GeoPDF jobs:</strong> the area each job covers, the
+          LiDAR inputs you upload, and the map tiles and PDFs produced from
+          them.</li>
+      <li><strong>Devices:</strong> for each Logjam GPS install that allows
+          notifications, a push token (an address for sending notifications to
+          that phone) and its platform.</li>
+      <li><strong>Operational logs:</strong> request logs, error logs and
+          worker job state. Our application scrubs these so place names and
+          coordinates do not appear in plain text.</li>
+      <li><strong>Access and audit logs:</strong> records of requests to our
+          servers and storage, including your IP address and, for web-server
+          logs, your browser or device type and the address requested. See
+          &ldquo;Retention&rdquo; for how long each is kept.</li>
     </ul>
+
+    <h2>Logjam GPS on your phone</h2>
+    <p>
+      Logjam GPS keeps a copy of your data on the phone so it works without
+      signal, along with any map regions you download for offline use. Your
+      location is used on the phone to show where you are and to record tracks
+      you start; it is not sent to us except as places, routes and tracks you
+      save. You can use Logjam GPS without an account: that data stays on the
+      phone and is not sent to us until you sign in and link it to an account.
+    </p>
 
     <h2>What we do not do</h2>
     <ul>
-      <li>No third-party analytics, advertising, or telemetry leaving your
-          account. (Map tiles are fetched from third-party providers so the
-          map can render — see &ldquo;Third-party map services&rdquo; below
-          for exactly what they receive.)</li>
+      <li>No third-party analytics or advertising. The only telemetry is
+          crash reporting in Logjam GPS, which is off until you turn it on
+          (see &ldquo;Crash reports&rdquo; below). Map tiles are fetched from
+          third-party providers so the map can render &mdash; see
+          &ldquo;Third-party map services&rdquo; below for exactly what they
+          receive.</li>
       <li>No public or unauthenticated endpoints on user data — every API
-          route requires authentication.</li>
-      <li>No default public sharing. Sharing is explicit, per-place, between
-          authenticated users you have a friendship with.</li>
+          route that serves user data requires you to be signed in.</li>
+      <li>No default public sharing. Sharing is explicit, one item at a time,
+          between signed-in users you are friends with.</li>
       <li>No selling, renting, or monetising your data.</li>
     </ul>
 
     <h2>How sharing works</h2>
     <p>
-      When you share a place with another Logjam user, that user can see the
-      place record including its name, coordinates, place-level notes and
-      place-level media. Per-trip notes, per-trip media, and your trip-log
-      history remain private to you.
+      You can share only with Logjam users you are friends with (one of you
+      sends a friend request and the other accepts it), and only what you
+      choose, one item at a time.
     </p>
     <p>
-      While a place is shared with someone, they can copy it into their own
+      When you share a place with a friend, they can see the place record
+      including its name, coordinates, place-level notes and place-level media,
+      and the route linked to it. Per-trip notes, per-trip media, and your
+      trip-log history remain private to you. You can also share a route, a
+      topo map or a GeoPDF on its own.
+    </p>
+    <p>
+      While something is shared with someone, they can copy it into their own
       account or export it to a file on their device. Revoking a share stops
       future access through Logjam, but it does not retract copies or exports
       the recipient has already made.
+    </p>
+    <p>
+      <strong>Sending a copy</strong> of a file (an imported GPX, KML or
+      GeoJSON file, or a recorded track) is different from sharing: a friend
+      who accepts it gets their own copy, which you cannot take back. The file
+      is held for them for 7 days and then deleted from our storage.
     </p>
 
     <h2>Where data is hosted</h2>
@@ -80,9 +120,10 @@
       Logjam runs on AWS in the <code>ap-southeast-2</code> (Sydney) region.
       Photos, topo input, and rendered tiles are stored in S3. The database is
       RDS PostgreSQL. Authentication is handled by Amazon Cognito within the
-      same Australian region. The account verification, password-reset, and
-      email-change messages are delivered through Resend in the United States
-      (see &ldquo;Overseas disclosure&rdquo; below).
+      same Australian region. Deleting a stored file is final: our storage
+      keeps no earlier versions to restore. Email, push notifications, app
+      updates and crash reports go through providers outside Australia (see
+      &ldquo;Overseas disclosure&rdquo; below).
     </p>
 
     <h2>Overseas disclosure</h2>
@@ -107,16 +148,65 @@
     <p>
       Neither kind of email contains place names or coordinates. Sending them
       is a cross-border disclosure of your email address, and — for account
-      emails — of a short-lived authentication code. We take reasonable steps to
-      ensure overseas recipients handle your information consistently with the
-      Australian Privacy Principles.
+      emails — of a short-lived authentication code.
+    </p>
+    <p>
+      Logjam GPS also relies on these services outside Australia:
+    </p>
+    <ul>
+      <li>
+        <strong>Push notifications:</strong> sent through
+        <strong>Expo</strong> (United States), which passes them to
+        <strong>Google Firebase Cloud Messaging</strong> for delivery to your
+        phone. They receive the phone&rsquo;s push token and each
+        notification, which carries a fixed title (such as &ldquo;A place was
+        shared with you&rdquo;), its type and reference IDs &mdash; never a
+        place name, coordinates, username or any text you wrote. Logjam GPS
+        registers for notifications only if you allow them.
+      </li>
+      <li>
+        <strong>App updates:</strong> when it starts, Logjam GPS asks
+        <strong>Expo</strong> (<code>u.expo.dev</code>, United States) whether
+        a newer version of the app is available. Expo receives your IP address,
+        the installed app version and platform, and a random identifier for the
+        install &mdash; not your account or any of your data.
+      </li>
+      <li>
+        <strong>Crash reports</strong> (only if you turn them on): sent to
+        <strong>Sentry</strong> (United States). See &ldquo;Crash
+        reports&rdquo; below.
+      </li>
+    </ul>
+    <p>
+      We take reasonable steps to ensure overseas recipients handle your
+      information consistently with the Australian Privacy Principles.
     </p>
     <p>
       The service is delivered through Amazon CloudFront, a global
       content-delivery network. Authenticated requests may transit CloudFront
       edge locations outside Australia while in transit, but they are not cached
       there, and all of your data is stored and processed in Australia
-      (<code>ap-southeast-2</code>).
+      (<code>ap-southeast-2</code>), apart from what this section and
+      &ldquo;Third-party map services&rdquo; describe.
+    </p>
+
+    <h2>Crash reports</h2>
+    <p>
+      Logjam GPS asks once whether to send crash reports, and they stay off
+      unless you say yes. You can change your answer at any time in Settings
+      &rarr; Privacy and security. Logjam Web and our servers do not send crash
+      reports to anyone.
+    </p>
+    <p>
+      A crash report goes to <strong>Sentry</strong> (Functional Software,
+      Inc., United States). It contains the error and where in the app it
+      happened, recent app activity leading up to it, and technical details
+      such as the app version, phone model and operating system. It does not
+      contain your account identity. Before a report leaves your phone, Logjam
+      GPS removes web addresses, coordinate pairs and map-tile references from
+      its text, and removes any field named for a location, a name, notes,
+      field values or tags. Like any server, Sentry sees your phone&rsquo;s IP
+      address when a report arrives.
     </p>
 
     <h2>Operator access</h2>
@@ -137,8 +227,9 @@
       operator read and every database connection &mdash; which account connected
       and from where &mdash; is logged, so administrative access cannot quietly
       hide among normal app activity. We keep as little as possible: no
-      third-party analytics or telemetry, short retention on topo data, and you
-      can export or permanently delete your data yourself at any time.
+      third-party analytics, crash reports only if you turn them on, short
+      retention on logs and exported files, and you can export or permanently
+      delete your data yourself at any time.
     </p>
     <p>
       To be clear, this describes what is technically <em>possible</em>, not what
@@ -156,19 +247,39 @@
     <h2>Third-party map services</h2>
     <p>
       Rendering maps requires fetching tiles and map data from third-party
-      providers. None of these requests carry your account identity, but they
-      do carry location information about the map areas involved:
+      providers. None of these requests carry your account identity, but most
+      carry location information about the map areas involved:
     </p>
     <ul>
-      <li><strong>Basemap tiles in your browser:</strong> when you pan or zoom
-          the map, your browser requests tiles directly from the operator of
-          the selected base layer &mdash; the OpenStreetMap Foundation
-          (<code>tile.openstreetmap.org</code>), OpenTopoMap, CyclOSM
+      <li><strong>Basemap tiles:</strong> when you pan or zoom the map in
+          Logjam Web or Logjam GPS, or download a region for offline use in
+          Logjam GPS, your browser or phone requests tiles directly from the
+          operator of the selected base layer &mdash; OpenTopoMap, CyclOSM
           (<code>openstreetmap.fr</code>), or NSW Spatial Services / DCS SIX
           Maps (<code>maps.six.nsw.gov.au</code> &mdash; the topographic, base,
           and imagery layers). The operator receives your IP address and the
           tile coordinates of the areas you view, which at high zoom indicate
-          the locations you are looking at.</li>
+          the locations you are looking at. The default vector basemap is
+          served by Logjam itself.</li>
+      <li><strong>Terrain and elevation:</strong> the 3D terrain in Logjam Web,
+          and offline region downloads in Logjam GPS, fetch elevation tiles
+          from the AWS Open Data terrain tile set
+          (<code>s3.amazonaws.com</code>, hosted in the United States). As with
+          basemap tiles, the host receives your IP address and the tile
+          coordinates of the area. Elevation profiles are normally worked out
+          on our servers, which fetch the same tiles without your IP address;
+          Logjam GPS fetches them itself only when our servers can&rsquo;t
+          answer or you are using it without an account.</li>
+      <li><strong>Map fonts and symbols:</strong> Logjam Web loads the vector
+          basemap&rsquo;s fonts and icons from Protomaps&rsquo; assets on
+          GitHub Pages (<code>protomaps.github.io</code>, United States), and
+          Logjam GPS does so on first launch until it has its own copy. These
+          requests carry your IP address but no location.</li>
+      <li><strong>Place search:</strong> when you search the map for a place
+          name in Logjam Web or Logjam GPS, the text you type is sent to the OpenStreetMap Foundation&rsquo;s
+          Nominatim service (<code>nominatim.openstreetmap.org</code>) along
+          with your IP address. Nothing else about you or your places is
+          sent.</li>
       <li><strong>Server-side GeoPDF rendering:</strong> when you generate a
           GeoPDF, our servers fetch the same providers&rsquo; tiles for the
           export area. The providers see our server&rsquo;s requests &mdash;
@@ -190,26 +301,32 @@
       We email you only for:
     </p>
     <ul>
-      <li>Account verification and password reset codes.</li>
-      <li>Notification when a topo job you started has finished.</li>
+      <li>Account verification, password reset and email-change codes.</li>
+      <li>Notification when a topo job, export or GeoPDF you started has
+          finished.</li>
     </ul>
     <p>No marketing email is ever sent.</p>
 
     <h2>Your controls</h2>
     <ul>
-      <li><strong>Export &amp; access:</strong> the Account panel has a
-          "Download my data" button that produces a complete machine-readable
-          JSON copy of the personal information we hold about you &mdash;
-          places, trip logs, GeoPDF and topo templates, topo job records
-          (including their map footprints), shares, notifications, and media
-          metadata. No request to us is required; the export is generated on
-          demand in the app. (Media file contents are not included in the
-          JSON; the metadata identifies each item. Topo tile files are not
-          included; the job records identify them.)</li>
-      <li><strong>Delete:</strong> the Account panel has a "Delete account"
-          button that permanently removes every record we hold for you,
-          including places, trip logs, media, friendships, shares, and
-          notifications.</li>
+      <li><strong>Export &amp; access:</strong> the Account panel in Logjam Web
+          has a "Download my data" button that produces a machine-readable
+          JSON copy of the account data we hold about you &mdash; your
+          account details, places, place types, custom fields, links, routes,
+          trip logs, media metadata, friends, shares, sent and received files,
+          topo and GeoPDF jobs and templates (including their map footprints),
+          notifications, and registered devices. No request to us is required;
+          the export is generated on demand. (Media file contents are not
+          included in the JSON; the metadata identifies each item. Topo tiles
+          and PDFs are not included; the job records identify them. Access and
+          audit logs are not included; ask us if you want what they hold about
+          you.)</li>
+      <li><strong>Delete:</strong> "Delete account" (the Account panel in
+          Logjam Web, or Account in Logjam GPS) permanently removes your sign-in
+          and every account record we hold for you, including places, routes,
+          trip logs, media, friendships, shares, and notifications. Log records
+          are not removed by account deletion; they expire as described under
+          &ldquo;Retention&rdquo;.</li>
       <li><strong>Correct:</strong> you can edit your username, email, place
           records, and trip logs at any time, and can ask us to correct any
           other personal information that is inaccurate.</li>
@@ -231,14 +348,37 @@
       (OAIC) at <a href="https://www.oaic.gov.au/">oaic.gov.au</a>.
     </p>
 
-    <h2>Retention</h2>
+    <h2 id="retention">Retention</h2>
     <p>
-      Data is retained until you delete it or the account. Operational logs
-      are retained in AWS CloudWatch after the originating record is removed:
-      API request logs expire automatically within 7 days; rendering-worker
-      job logs have a 90-day automatic expiry. All
-      operational logs are scrubbed so place names and coordinates do not
-      appear in plain text.
+      Data is retained until you delete it or the account, with these
+      exceptions, which expire automatically:
+    </p>
+    <ul>
+      <li>Files sent to friends as a copy: 7 days.</li>
+      <li>Topo export and GeoPDF files: 7 days after they are produced (the
+          job records stay until you delete them).</li>
+    </ul>
+    <p>
+      Logs are kept after the record they relate to is removed, including after
+      you delete your account, and expire automatically:
+    </p>
+    <ul>
+      <li id="retention-operational">Operational logs: 14 days. These are
+          the API&rsquo;s request and web-server logs (which include your IP
+          address and browser or device type), the storage access logs (which
+          record the IP address that fetched or uploaded each file, and meter
+          monthly download limits), database logs, and the logs of the
+          rendering workers and of the service that sends account emails.</li>
+      <li id="retention-audit">The operator-access audit logs described under
+          &ldquo;Operator access&rdquo;: 365 days, in storage that cannot be
+          altered or deleted before then. Besides operator activity, they
+          record each upload and download of your media and topo files,
+          including the IP address and the file&rsquo;s storage path, which
+          contains your account&rsquo;s internal ID.</li>
+    </ul>
+    <p>
+      Our application scrubs its operational logs so place names and
+      coordinates do not appear in plain text.
     </p>
 
     <h2>Children</h2>
@@ -250,7 +390,8 @@
     <h2>Changes to this policy</h2>
     <p>
       When this policy materially changes, the "Last updated" date above will
-      change and you will be asked to re-consent on next sign-in.
+      change and you will be asked to agree again the next time you use Logjam
+      Web or Logjam GPS while signed in.
     </p>
 
     <h2>Open source and self-hosting</h2>
