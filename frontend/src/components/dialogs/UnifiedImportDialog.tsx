@@ -1,4 +1,11 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import {
+  useState,
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useMemo,
+  useCallback,
+} from "react";
 import { useIsMobile } from "../../useIsMobile";
 import { Check, ChevronRight, MapPin, Upload } from "lucide-react";
 import {
@@ -551,6 +558,28 @@ function UnifiedImportDialog({
   const [mergePolicy, setMergePolicy] = useState<PlaceMergePolicy>(() =>
     defaultPlaceMergePolicy(mergeableFieldsForDefs([])),
   );
+  // Layer the stored policy over the defaults rather than replacing them: a
+  // policy saved before a field joined MERGEABLE_FIELDS has no entry for it,
+  // and an incomplete policy is rejected wholesale by the server's
+  // re-validation — which would silently drop every OTHER choice the user had
+  // saved. Missing entry -> that field's default; stored entries still win.
+  function storedMergePolicy(user: TUser | null): PlaceMergePolicy {
+    return {
+      ...defaultPlaceMergePolicy(mergeableFields),
+      ...(user?.uiPreferences?.importMergePolicy ?? {}),
+    };
+  }
+  // Opening reads the user as it is then; the user is not a trigger.
+  const seedMergePolicy = useEffectEvent(() =>
+    setMergePolicy(storedMergePolicy(currentUser)),
+  );
+  // The user can land after the dialog has opened (a slow first load): seed
+  // the policy then. A refetched copy of the same user leaves the form alone.
+  const [userLoaded, setUserLoaded] = useState(currentUser !== null);
+  if ((currentUser !== null) !== userLoaded) {
+    setUserLoaded(currentUser !== null);
+    if (currentUser) setMergePolicy(storedMergePolicy(currentUser));
+  }
 
   // Map-pick bookkeeping: which surfaced trip name is awaiting a picked coord.
   const pickingRef = useRef(false);
@@ -568,7 +597,10 @@ function UnifiedImportDialog({
   }
 
   // Reset everything whenever the dialog (re)opens — unless we are returning
-  // from a map-pick (the dialog is hidden during picking, then reopens).
+  // from a map-pick (the dialog is hidden during picking, then reopens). Only
+  // opening: a new currentUser object while open (a refetch) used to land here
+  // too and threw away the file, the column map and the review
+  // (UnifiedImportDialog.render.test.tsx).
   useEffect(() => {
     if (!open) return;
     if (pickingRef.current) {
@@ -610,16 +642,8 @@ function UnifiedImportDialog({
       displayName: {},
       autoMergeId: {},
     });
-    // Layer the stored policy over the defaults rather than replacing them: a
-    // policy saved before a field joined MERGEABLE_FIELDS has no entry for it,
-    // and an incomplete policy is rejected wholesale by the server's
-    // re-validation — which would silently drop every OTHER choice the user had
-    // saved. Missing entry -> that field's default; stored entries still win.
-    setMergePolicy({
-      ...defaultPlaceMergePolicy(mergeableFields),
-      ...(currentUser?.uiPreferences?.importMergePolicy ?? {}),
-    });
-  }, [open, currentUser]);
+    seedMergePolicy();
+  }, [open]);
 
   const noPlacesYet = places.length === 0;
 
