@@ -740,14 +740,18 @@ function Map({
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
-  const geolocateRef = useRef<maplibregl.GeolocateControl | null>(null);
-  const [mapLoaded, setMapLoaded] = useState(false);
   /**
-   * The map, once it is safe to attach handlers to — null before load, so the
-   * box-draw hook can key its effect on the map itself rather than on a
-   * separate `mapLoaded` flag every call site would have to remember to pass.
+   * The map and its locate control, once it is safe to attach handlers to —
+   * null before load, so the box-draw hook can key its effect on the map
+   * itself rather than on a separate `mapLoaded` flag every call site would
+   * have to remember to pass. State, not mapRef, because render reads it.
    */
-  const drawableMap = mapLoaded ? mapRef.current : null;
+  const [loaded, setLoaded] = useState<{
+    map: maplibregl.Map;
+    geolocate: maplibregl.GeolocateControl;
+  } | null>(null);
+  const mapLoaded = loaded !== null;
+  const drawableMap = loaded?.map ?? null;
   const [is3D, setIs3D] = useState(false);
   const toast = useToast();
   // Touch/stylus input (coarse pointer) vs mouse — drives "Tap" vs "Click"
@@ -956,7 +960,6 @@ function Map({
       showUserLocation: true,
     });
     map.addControl(geolocate, "top-right");
-    geolocateRef.current = geolocate;
     // Compact: it collapses to an (i) once the map is moved, which OSMF's
     // attribution guideline allows while the credit stays one press away.
     map.addControl(
@@ -1460,17 +1463,16 @@ function Map({
         },
       );
 
-      setMapLoaded(true);
+      setLoaded({ map, geolocate });
     });
 
     mapRef.current = map;
     return () => {
       map.remove();
       mapRef.current = null;
-      geolocateRef.current = null;
       // Reset mapLoaded so the place update effect re-runs when the map
       // reinitialises (required in React Strict Mode, which mounts twice).
-      setMapLoaded(false);
+      setLoaded(null);
     };
   }, []);
 
@@ -2207,37 +2209,20 @@ function Map({
     });
   }, [activeLayerId, mapLoaded]);
 
-  // Topo bbox selection mode (rubber-band draw -> returns a lat/lng bbox)
-  const onBboxSelectedRef = useRef(onBboxSelected);
-  useEffect(() => {
-    onBboxSelectedRef.current = onBboxSelected;
-  }, [onBboxSelected]);
-
-  const handleTopoBox = useCallback((bbox: RegionBbox) => {
-    onBboxSelectedRef.current?.(bbox);
-  }, []);
-
+  // Topo bbox selection mode (rubber-band draw -> returns a lat/lng bbox).
+  // useBoxDraw keeps the latest onBox itself, so an inline arrow is fine.
   useBoxDraw({
     map: drawableMap,
     enabled: selectingBbox ?? false,
-    onBox: handleTopoBox,
+    onBox: (bbox) => onBboxSelected?.(bbox),
   });
 
   // The Places filter's area. Same gesture, same helper; it differs from the
   // topo picker only in who receives the box.
-  const onFilterAreaSelectedRef = useRef(onFilterAreaSelected);
-  useEffect(() => {
-    onFilterAreaSelectedRef.current = onFilterAreaSelected;
-  }, [onFilterAreaSelected]);
-
-  const handleFilterAreaBox = useCallback((bbox: RegionBbox) => {
-    onFilterAreaSelectedRef.current?.(bbox);
-  }, []);
-
   useBoxDraw({
     map: drawableMap,
     enabled: selectingFilterArea ?? false,
-    onBox: handleFilterAreaBox,
+    onBox: (bbox) => onFilterAreaSelected?.(bbox),
   });
 
   // Lazily register point-feature icons. MapLibre fires `styleimagemissing`
@@ -3071,7 +3056,7 @@ function Map({
       <div ref={containerRef} style={{ height: "100%", width: "100%" }} />
       <MapChrome
         map={drawableMap}
-        geolocate={mapLoaded ? geolocateRef.current : null}
+        geolocate={loaded?.geolocate ?? null}
         is3D={is3D}
         onToggle3D={toggleTerrain}
         layersButton={layersButton}

@@ -14,7 +14,13 @@
 //
 // Which verbs appear, and which controls are inline rather than in the ⋯, is
 // `wayActions.ts` — not this file's judgement.
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useState,
+} from "react";
 import {
   CopyPlus,
   Download,
@@ -190,11 +196,9 @@ export default function WayDetailPanel({
   // instant (operator, 2026-09-17). Cleared once the refetched route agrees.
   const [pendingColour, setPendingColour] = useState<string | null>(null);
   const colour = route?.color ?? file?.color ?? way.color;
+  if (pendingColour !== null && colour === pendingColour)
+    setPendingColour(null);
   const shownColour = pendingColour ?? colour;
-  useEffect(() => {
-    if (pendingColour !== null && colour === pendingColour)
-      setPendingColour(null);
-  }, [colour, pendingColour]);
 
   // The SAME densification the server profiled, so a sample index maps straight
   // back to a coordinate on the line — no second interpolation to drift.
@@ -422,13 +426,16 @@ export default function WayDetailPanel({
     }
   };
 
-  // Run what the row asked for, once. `runVerb` is read through a ref so the
+  // Run what the row asked for, once. `runVerb` is an effect event so the
   // effect depends on the REQUEST and not on every render's new closure.
-  const runVerbRef = useRef(runVerb);
-  runVerbRef.current = runVerb;
+  const runRequestedVerb = useEffectEvent(runVerb);
   useEffect(() => {
     if (!initialVerb) return;
-    runVerbRef.current(initialVerb);
+    // The verb was asked for before this page mounted, and most verbs act
+    // outside React (clipboard, download, the parent's navigation), so it runs
+    // here rather than in render; some of them open a dialog, which is state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    runRequestedVerb(initialVerb);
     onVerbConsumed();
   }, [initialVerb, onVerbConsumed]);
 
