@@ -37,7 +37,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout the tagged commit
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Full history and every branch: the tag check below asks which
           # branches contain the tagged commit.
