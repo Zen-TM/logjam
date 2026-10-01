@@ -194,7 +194,8 @@ function App() {
   // True when the unified importer was opened from the onboarding wizard, so its
   // Back/close returns to the welcome hub instead of dropping into an empty app.
   const [importedFromOnboarding, setImportedFromOnboarding] = useState(false);
-  const importChecked = useRef(false);
+  // Whether the first-login onboarding check has run (once, below).
+  const [importChecked, setImportChecked] = useState(false);
 
   // What is drawn on the map. TWO overlays over the user's own data, divided by
   // what a thing IS — a pin is a place, a line is a way — so nothing belongs to
@@ -236,7 +237,7 @@ function App() {
   // map point at the same place. NOT state: it changes many times a second, and
   // as state every move re-rendered App, the map and the panel before the dot
   // could move (DESIGN.md §9 — `map/routeHover.ts` carries the full reasoning).
-  const routeHover = useMemo(createRouteHoverChannel, []);
+  const routeHover = useMemo(() => createRouteHoverChannel(), []);
 
   // Coordinate picking mode for PlaceDialog
   const [pickingCoords, setPickingCoords] = useState(false);
@@ -1122,8 +1123,11 @@ function App() {
     const geoPdfJobId = sessionStorage.getItem("pendingGeoPdfJobId");
     if (!geoPdfJobId) return;
     sessionStorage.removeItem("pendingGeoPdfJobId");
-    setMapsView("geopdfs");
+    // Not derivable in render: the id is read from, and consumed in,
+    // sessionStorage, once, when user data starts loading.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setActivePanel("maps");
+    setMapsView("geopdfs");
     setGeoPdfJobsRefetch((n) => n + 1);
   }, [loadsUserData, setMapsView]);
 
@@ -1140,14 +1144,13 @@ function App() {
   // needs a load that SUCCEEDED and came back empty. (Found 2026-09-19 as the
   // a11y suite's fourteenth case failing behind an onboarding dialog it never
   // asked for; the suite is what pushes the dev limiter hard enough to see it.)
-  useEffect(() => {
-    if (placesLoaded && !importChecked.current) {
-      importChecked.current = true;
-      if (!placesError && places.length === 0) {
-        setShowOnboarding(true);
-      }
+  // Checked during render, the first time the places have loaded.
+  if (placesLoaded && !importChecked) {
+    setImportChecked(true);
+    if (!placesError && places.length === 0) {
+      setShowOnboarding(true);
     }
-  }, [placesLoaded, placesError, places.length]);
+  }
 
   // Derived values
   const allPlaces = [...places, ...sharedPlaces];

@@ -66,8 +66,6 @@ export default function MapSearchBox({
   useEffect(() => {
     if (locationQuery == null) return;
     const controller = new AbortController();
-    setLoading(true);
-    setError(null);
     geocode(locationQuery, controller.signal)
       .then(setLocations)
       .catch((err) => {
@@ -128,7 +126,11 @@ export default function MapSearchBox({
 
   const choose = (option: Option) => {
     if (option.kind === "askLocations") {
+      // Offered only while the results are for another query, so this always
+      // starts the search effect.
       setLocationQuery(trimmed);
+      setLoading(true);
+      setError(null);
       return;
     }
     if (option.kind === "place") onSelectPlace(option.place);
