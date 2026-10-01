@@ -39,6 +39,11 @@ platform: privacy constrains every feature. Each package has its own
 - Committed files are setup-neutral: no personal machine, host, alias or path.
   Those go in `CLAUDE.local.md`, a `*.local` skill or `.git/info/exclude`.
 - Human-facing docs are written for a reader new to the repo.
+- A directory gets a `README.md` only when a person goes there to do a task
+  (run, regenerate, release, look something up) that needs commands its
+  `AGENTS.md` and `docs/` don't give, and every command in it runs as written
+  on main. The repo root always has one. Agent-only rules go in `AGENTS.md`,
+  reasoning in an ADR; link anything documented elsewhere instead of copying it.
 
 ## Decisions
 
