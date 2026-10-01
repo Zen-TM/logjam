@@ -211,9 +211,16 @@ export default function TopoDialog({
   // own close never goes through the guard. `awaitingBbox` is the difference
   // between the two, and it is App's to tell us: it is false again whether the
   // box was drawn or the pick was abandoned, so a genuinely abandoned dialog
-  // still empties.
-  useEffect(() => {
-    if (open || awaitingBbox) return;
+  // still empties. Done during render, when the dialog becomes genuinely
+  // closed. (The file input needs no clearing: the closed Dialog unmounts it.)
+  const closedForGood = !open && !awaitingBbox;
+  const [wasClosedForGood, setWasClosedForGood] = useState(closedForGood);
+  if (closedForGood !== wasClosedForGood) {
+    setWasClosedForGood(closedForGood);
+    if (closedForGood) resetForm();
+  }
+
+  function resetForm() {
     setFile(null);
     setPhase("form");
     setMode("form");
@@ -233,8 +240,7 @@ export default function TopoDialog({
     setSaveAsName("");
     setShowSaveAs(false);
     setSettingsTab("hillshade");
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  }, [open, awaitingBbox]);
+  }
 
   const refreshTemplates = useCallback(async () => {
     try {
@@ -249,17 +255,20 @@ export default function TopoDialog({
 
   useEffect(() => {
     if (!open) return;
-    refreshTemplates().then((list) => {
-      if (initialTemplateId) {
-        const t = list.find((x) => x.id === initialTemplateId);
-        if (t) {
-          setSelectedTemplateId(t.id);
-          setSettings(cloneRasterTemplateSettings(t.config));
-          setAutoExport(cloneAutoExport(t.autoExport));
+    fetchTopoTemplates()
+      .then((list) => {
+        setTemplates(list);
+        if (initialTemplateId) {
+          const t = list.find((x) => x.id === initialTemplateId);
+          if (t) {
+            setSelectedTemplateId(t.id);
+            setSettings(cloneRasterTemplateSettings(t.config));
+            setAutoExport(cloneAutoExport(t.autoExport));
+          }
         }
-      }
-    });
-  }, [open, refreshTemplates, initialTemplateId]);
+      })
+      .catch((e) => console.error(e));
+  }, [open, initialTemplateId]);
 
   function selectTemplate(id: string) {
     setSelectedTemplateId(id);
@@ -305,13 +314,21 @@ export default function TopoDialog({
   // Credits are not derivable client-side: the tiles-to-seconds rate is fitted
   // server-side from recent real runtimes, so the projection has to be asked
   // for. Cheap (two DB reads, nothing written) and re-asked whenever the tile
-  // count changes.
-  useEffect(() => {
+  // count changes. No count (or a closed dialog) clears the projection, during
+  // render when either changes.
+  const [estimateKey, setEstimateKey] = useState({ open, activeTileCount });
+  if (
+    open !== estimateKey.open ||
+    !Object.is(activeTileCount, estimateKey.activeTileCount)
+  ) {
+    setEstimateKey({ open, activeTileCount });
     if (!open || !activeTileCount) {
       setJobCredits(null);
       setJobWouldExceed(false);
-      return;
     }
+  }
+  useEffect(() => {
+    if (!open || !activeTileCount) return;
     let cancelled = false;
     fetchComputeEstimate({ kind: "topo", tileCount: activeTileCount })
       .then((estimate) => {
@@ -350,16 +367,18 @@ export default function TopoDialog({
       .catch((err) => console.error(err));
   }, [open]);
 
-  useEffect(() => {
-    if (!file) {
-      setStats(null);
-      setValidationError(null);
-      return;
-    }
-    let cancelled = false;
-    setValidating(true);
+  // A new file (or none) clears the last one's verdict, during render; the
+  // effect reads the new one.
+  const [validatedFile, setValidatedFile] = useState(file);
+  if (file !== validatedFile) {
+    setValidatedFile(file);
     setStats(null);
     setValidationError(null);
+    if (file) setValidating(true);
+  }
+  useEffect(() => {
+    if (!file) return;
+    let cancelled = false;
     (async () => {
       try {
         const tailSize = Math.min(65536, file.size);
@@ -391,12 +410,15 @@ export default function TopoDialog({
 
   // Prefill the topo name from the survey region once a ZIP is parsed, unless
   // the user has already typed one. Re-fills on a new upload only while
-  // untouched.
-  useEffect(() => {
-    if (!stats || topoNameTouched) return;
-    const region = regionNameFromSurvey(stats.surveyNames[0] ?? "");
-    if (region) setTopoName(nextTopoName(region, existingTopoNames));
-  }, [stats, topoNameTouched, existingTopoNames]);
+  // untouched. Adjusted during render: it follows stats and the name list.
+  const region =
+    stats && !topoNameTouched
+      ? regionNameFromSurvey(stats.surveyNames[0] ?? "")
+      : null;
+  const prefilledName = region ? nextTopoName(region, existingTopoNames) : null;
+  if (prefilledName !== null && prefilledName !== topoName) {
+    setTopoName(prefilledName);
+  }
 
   function onFilePicked(picked: File) {
     if (!picked.name.toLowerCase().endsWith(".zip")) {
