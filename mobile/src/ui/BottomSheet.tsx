@@ -1,4 +1,11 @@
-import { createContext, useEffect, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   Animated,
   Dimensions,
@@ -187,14 +194,13 @@ export function BottomSheet({
   const keyboardUp = keyboardHeight > 0;
   // Kept mounted through the close animation, then torn down.
   const [mounted, setMounted] = useState(visible);
-  const onClosedRef = useRef(onClosed);
-  onClosedRef.current = onClosed;
+  if (visible && !mounted) setMounted(true);
+  const notifyClosed = useEffectEvent(() => onClosed?.());
   const [progress] = useState(() => new Animated.Value(0));
   const [drag] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
     if (visible) {
-      setMounted(true);
       drag.setValue(0);
       Animated.timing(progress, {
         toValue: 1,
@@ -210,16 +216,19 @@ export function BottomSheet({
     }).start(({ finished }) => {
       if (!finished) return;
       setMounted(false);
-      onClosedRef.current?.();
+      notifyClosed();
     });
   }, [drag, progress, visible]);
 
   // The PanResponder is created once; route its release through a ref so it
   // always calls the current onClose.
   const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
 
-  const handlePan = useRef(
+  // eslint-disable-next-line react-hooks/refs -- onCloseRef is read only on release, never in render
+  const [handlePan] = useState(() =>
     PanResponder.create({
       // Claim on touch-down: the handle has nothing else to do with a touch,
       // and waiting for a move lets a fast flick start before we own the
@@ -242,7 +251,7 @@ export function BottomSheet({
         }).start();
       },
     }),
-  ).current;
+  );
 
   if (!mounted) return null;
 

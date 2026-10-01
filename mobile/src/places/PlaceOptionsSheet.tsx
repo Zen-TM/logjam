@@ -20,7 +20,7 @@
 // single gate here — a place shared WITH this user shows the read-only hint
 // and no Edit, Share or Delete, on BOTH surfaces, because the gate lives in
 // this component rather than in its callers.
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Alert, StyleSheet, View } from "react-native";
 
 import {
@@ -83,14 +83,6 @@ export function PlaceOptionsSheet({
   const online = useConnectivity() === "online";
   const trips = useMirrorTrips();
 
-  // The sub-mode resets when the sheet closes. This component stays mounted
-  // between openings — `visible` is a prop, not a remount — so a sub-mode left
-  // set means the NEXT open lands inside it instead of on the verb list. That
-  // has shipped twice on the sibling sheets.
-  useEffect(() => {
-    if (!visible) setSharing(false);
-  }, [visible]);
-
   const isOwner = place?.syncRole === "owner";
   // The place's own id: one added in the field is not on the server until the
   // outbox flushes, and the live-share verb dims with the reason until it is.
@@ -123,9 +115,19 @@ export function PlaceOptionsSheet({
     null,
   );
   const [copyBusy, setCopyBusy] = useState(false);
-  useEffect(() => {
-    if (!visible) setCopyMode(null);
-  }, [visible]);
+
+  // The sub-modes reset when the sheet closes. This component stays mounted
+  // between openings — `visible` is a prop, not a remount — so a sub-mode left
+  // set means the NEXT open lands inside it instead of on the verb list. That
+  // has shipped twice on the sibling sheets.
+  const [wasVisible, setWasVisible] = useState(visible);
+  if (visible !== wasVisible) {
+    setWasVisible(visible);
+    if (!visible) {
+      setSharing(false);
+      setCopyMode(null);
+    }
+  }
 
   const copyTargets = useMemo<CopyAndRemoveTarget[]>(
     () =>

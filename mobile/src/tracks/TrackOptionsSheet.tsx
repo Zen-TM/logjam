@@ -11,7 +11,7 @@
 //
 // `onShowOnMap` is the ONE row that is Saved-only: on the map you are already
 // looking at the line you tapped.
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { messageFromError, TRACK_COLORS, trackColorName } from "@logjam/shared";
 
@@ -79,7 +79,9 @@ export function TrackOptionsSheet({
   // set means the NEXT open lands inside it instead of on the verb list. That
   // shipped: the route sheet opened straight into its share panel, and the
   // options list became unreachable.
-  useEffect(() => {
+  const [wasVisible, setWasVisible] = useState(visible);
+  if (visible !== wasVisible) {
+    setWasVisible(visible);
     if (!visible) {
       setRenaming(false);
       setSending(false);
@@ -87,7 +89,7 @@ export function TrackOptionsSheet({
       setAttaching(false);
       setPickingColor(false);
     }
-  }, [visible]);
+  }
 
   // The stats read the whole series back, so they run only while that sub-mode
   // is actually open — the same `enabled` gate `useTrackDetail` exists for

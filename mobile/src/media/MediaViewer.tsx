@@ -169,11 +169,17 @@ function MediaPage({ item, active }: { item: MirrorMedia; active: boolean }) {
     item.localDisplayPath ? "idle" : "loading",
   );
   const category = mediaCategory(item.mediaType);
+  // Another item with no file yet starts loading again, as the fetch below
+  // re-runs for it.
+  const [itemId, setItemId] = useState(item.id);
+  if (item.id !== itemId) {
+    setItemId(item.id);
+    if (uri === null) setState("loading");
+  }
 
   useEffect(() => {
     if (uri !== null) return;
     let cancelled = false;
-    setState("loading");
     ensureDisplayCached(item.id)
       .then((cached) => {
         if (cancelled) return;

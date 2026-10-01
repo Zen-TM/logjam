@@ -74,20 +74,34 @@ export function useTrackDetail(
     enabled && trackId != null,
   );
 
-  useEffect(() => {
+  const readKey = { trackId, enabled, readNonce };
+  const [readFor, setReadFor] = useState<typeof readKey | null>(null);
+  if (
+    readFor === null ||
+    readFor.trackId !== trackId ||
+    readFor.enabled !== enabled ||
+    readFor.readNonce !== readNonce
+  ) {
+    setReadFor(readKey);
     if (!enabled || trackId == null) {
       // Dropping the last panel's numbers matters: reopening on another track
       // would otherwise show the previous one's stats for a frame, which is
       // indistinguishable from this track's.
       setPoints([]);
       setLine([]);
-      linePointCount.current = 0;
       setLoading(false);
+    } else {
+      setLoading(true);
+    }
+  }
+
+  useEffect(() => {
+    if (!enabled || trackId == null) {
+      linePointCount.current = 0;
       return;
     }
 
     let current = true;
-    setLoading(true);
     const read = () => {
       listTrackPoints(trackId)
         .then((points) => {

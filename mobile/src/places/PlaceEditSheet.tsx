@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import {
@@ -101,7 +101,7 @@ export function PlaceEditSheet({
    * — and re-opening otherwise reseeds every field from the place, which would
    * throw away the name and grades the user typed before going to look up where
    * the thing is. The component stays mounted throughout, so its state is
-   * intact; this flag is only what stops the seed effect from wiping it.
+   * intact; this flag is only what stops the seed from wiping it.
    */
   resuming?: boolean;
   onSaved: (message: string) => void;
@@ -137,16 +137,26 @@ export function PlaceEditSheet({
     null,
   );
 
-  // Read through a ref so it is NOT a dependency: `resuming` and `visible` flip
-  // in the same commit, and listing it would re-run the seed the moment the
-  // parent cleared the flag afterwards — which is the wipe this exists to stop.
-  const resumingRef = useRef(resuming);
-  resumingRef.current = resuming;
-
   // Seed each time the sheet opens, so a cancelled edit never leaks into the
-  // next one.
-  useEffect(() => {
-    if (!visible || resumingRef.current) return;
+  // next one. Keyed on the place's ID, not the object: a detail screen hands
+  // this a fresh object on every mirror change (a sync pull, an upload tick),
+  // and re-seeding on that wiped whatever the user was halfway through typing.
+  // `resuming` is NOT in the key: it and `visible` flip in the same commit, and
+  // keying on it would re-run the seed the moment the parent cleared the flag
+  // afterwards — which is the wipe this exists to stop.
+  const seedKey = { placeId: place?.id, initialCoords, visible };
+  const [seededFor, setSeededFor] = useState<typeof seedKey | null>(null);
+  if (
+    seededFor === null ||
+    seededFor.placeId !== seedKey.placeId ||
+    seededFor.initialCoords !== seedKey.initialCoords ||
+    seededFor.visible !== seedKey.visible
+  ) {
+    setSeededFor(seedKey);
+    if (visible && !resuming) seed();
+  }
+
+  function seed() {
     setNameError(null);
     setLatitudeError(null);
     setLongitudeError(null);
@@ -173,23 +183,22 @@ export function PlaceEditSheet({
     setEditingField(null);
     setDateFieldKey(null);
     setFieldValues(fieldValueStrings(userFieldValues(place?.fieldValues)));
-    // Keyed on the place's ID, not the object: a detail screen hands this a
-    // fresh object on every mirror change (a sync pull, an upload tick), and
-    // re-seeding on that wiped whatever the user was halfway through typing.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [place?.id, initialCoords, visible]);
+  }
 
   // A point back from the picker touches the two coordinate fields and nothing
   // else — everything else on this form is what the user was in the middle of
   // typing. Trimmed like any freshly picked point: a map tap carries fifteen
   // meaningless decimals.
-  useEffect(() => {
-    if (!pickedCoords) return;
-    setLatitude(seedCoord(pickedCoords.latitude));
-    setLongitude(seedCoord(pickedCoords.longitude));
-    setLatitudeError(null);
-    setLongitudeError(null);
-  }, [pickedCoords]);
+  const [appliedPick, setAppliedPick] = useState<typeof pickedCoords>(null);
+  if (pickedCoords !== appliedPick) {
+    setAppliedPick(pickedCoords);
+    if (pickedCoords) {
+      setLatitude(seedCoord(pickedCoords.latitude));
+      setLongitude(seedCoord(pickedCoords.longitude));
+      setLatitudeError(null);
+      setLongitudeError(null);
+    }
+  }
 
   /** Every type is offered here, including the empty ones — the list hides a
    *  type with no places, but you have to be able to make the first one. */

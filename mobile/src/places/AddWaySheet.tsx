@@ -101,12 +101,14 @@ export function AddWaySheet({
   // Sub-modes reset on the OPEN edge, not only in this sheet's own close: the
   // place screen drops it from outside (a delete, a navigation), and none of
   // those run `close()`. Without this the next open lands in the last list.
-  useEffect(() => {
+  const [wasVisible, setWasVisible] = useState(visible);
+  if (visible !== wasVisible) {
+    setWasVisible(visible);
     if (visible) {
       setMode("sources");
       setQuery("");
     }
-  }, [visible]);
+  }
 
   // Loaded when their list opens, not on mount — this sheet is mounted for the
   // whole life of the place screen and most visits never add a way.

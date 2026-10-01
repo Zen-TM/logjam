@@ -20,7 +20,7 @@
 // the user could not see while deciding. Edit now opens the map's draw tool on
 // this route, and reverse and colour are controls in the tool's own panel,
 // acting on the draft (DraftToolPanel.tsx).
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Alert, StyleSheet, View } from "react-native";
 import {
   messageFromError,
@@ -101,7 +101,9 @@ export function RouteOptionsSheet({
   // set means the NEXT open lands inside it. That is exactly what shipped:
   // after sharing once, tapping a route's ⋯ went straight to the share panel
   // and the verb list could not be reached again.
-  useEffect(() => {
+  const [wasVisible, setWasVisible] = useState(visible);
+  if (visible !== wasVisible) {
+    setWasVisible(visible);
     if (!visible) {
       setSharing(false);
       setRenaming(false);
@@ -109,7 +111,7 @@ export function RouteOptionsSheet({
       setLinking(false);
       setCopyMode(null);
     }
-  }, [visible]);
+  }
   const online = useConnectivity() === "online";
 
   // The places this phone can see, so a shared route can tell a share of its
