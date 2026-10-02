@@ -96,7 +96,7 @@ jobs:
       - name: Build cognito-email-sender Lambda
         if: steps.scope.outputs.run == 'true'
         working-directory: infra/lambda/cognito-email-sender
-        run: npm ci && npm run build
+        run: npm ci && npm run build && npm test
 
       - name: terraform init
         if: steps.scope.outputs.run == 'true'
