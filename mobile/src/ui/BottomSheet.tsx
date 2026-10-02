@@ -17,6 +17,8 @@ import {
   StyleSheet,
   Text,
   View,
+  type ScrollViewInstance,
+  type HostInstance,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -73,9 +75,9 @@ export const SheetScrollLock = createContext<{
  * How a `FieldError` that has just appeared asks the sheet to bring it into
  * view (DESIGN.md §8, "Form errors"). Null outside a sheet.
  */
-export const SheetErrorReveal = createContext<((target: View) => void) | null>(
-  null,
-);
+export const SheetErrorReveal = createContext<
+  ((target: HostInstance) => void) | null
+>(null);
 
 export function BottomSheet({
   visible,
@@ -142,12 +144,12 @@ export function BottomSheet({
   // topmost of the frame wins, and the sheet scrolls only when THAT one is out
   // of view — so a live limit appearing under the field being typed in never
   // moves the sheet.
-  const scrollRef = useRef<ScrollView>(null);
-  const contentRef = useRef<View>(null);
+  const scrollRef = useRef<ScrollViewInstance>(null);
+  const contentRef = useRef<HostInstance>(null);
   const viewport = useRef({ y: 0, height: 0 });
   const pendingReveal = useRef<{ y: number; height: number } | null>(null);
   const revealError = useMemo(
-    () => (target: View) => {
+    () => (target: HostInstance) => {
       const content = contentRef.current;
       if (content == null) return;
       target.measureLayout(content, (_left, top, _width, height) => {

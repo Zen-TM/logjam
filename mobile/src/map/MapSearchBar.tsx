@@ -32,6 +32,7 @@ import {
   TextInput,
   View,
   useWindowDimensions,
+  type TextInputInstance,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { geocode, messageFromError, type GeocodeResult } from "@logjam/shared";
@@ -121,7 +122,7 @@ export function MapSearchBar({
   const loading = searchable && answer === null;
   const results = answer?.results ?? [];
   const error = answer?.error ?? null;
-  const inputRef = useRef<TextInput>(null);
+  const inputRef = useRef<TextInputInstance>(null);
   const { width: windowWidth } = useWindowDimensions();
 
   // One driver for width and for the fade of everything that only exists in

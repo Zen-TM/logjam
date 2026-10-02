@@ -13,7 +13,7 @@ import {
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import * as ImagePicker from "expo-image-picker";
-import * as MediaLibrary from "expo-media-library";
+import * as MediaLibrary from "expo-media-library/legacy";
 import {
   categoryHasThumbnail,
   mediaCategory,
