@@ -176,7 +176,7 @@ updates:
     # next one is a new native build (docs/decisions/0022, 0023). The SDK's
     # own set is held below; minor updates are held as well as major ones
     # because react-native (0.x) and react move their minor with the SDK.
-    # Tracked in #244, which moves to the next SDK and points these at the
+    # Tracked in #248, which moves to the next SDK and points these at the
     # issue after it.
     ignore:
       - dependency-name: "expo"
@@ -223,12 +223,11 @@ updates:
         update-types:
           - "version-update:semver-major"
           - "version-update:semver-minor"
-      # SDK 57 still pins async-storage 2.2.0; 3.x is outside the SDK's set.
+      # SDK 58 still pins async-storage 2.2.0; 3.x is outside the SDK's set.
       # Tracked in #226.
       - dependency-name: "@react-native-async-storage/async-storage"
         update-types: ["version-update:semver-major"]
-      # The SDK pins TypeScript too (6.0 for SDK 57); TypeScript 7 is tracked
-      # in #155.
+      # Logjam GPS is on TypeScript 6.0; TypeScript 7 is tracked in #155.
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
       # @types/node must not run ahead of the Node the tooling runs on.
