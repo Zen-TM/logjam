@@ -8,8 +8,9 @@ description: Use when running or debugging something against the local dev stack
 How each suite runs is in its package `AGENTS.md`. This skill is what goes
 wrong when a local run misbehaves in a way the error does not explain.
 
-- **A worktree has none of the gitignored files.** No `node_modules`: `npm ci`
-  in each package you run, then `make shared`. No `.env.local`: copy it from
+- **A worktree has none of the gitignored files.** `make setup` installs
+  every package, builds `shared/`, generates the Prisma client and writes
+  `frontend/.env`. No `.env.local`: copy it from
   the checkout that ran `make dev` (the API exits at boot on env validation
   without it). Mobile's extra files are listed in `mobile/AGENTS.md`.
 - **Suspect the environment before your change** when failures land in code
