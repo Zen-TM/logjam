@@ -60,6 +60,7 @@ export default function AutoExportSettings({
       <div
         className={styles.dependent}
         data-disabled={value.enabled ? undefined : true}
+        inert={!value.enabled}
       >
         <TopoExportControls
           value={selection}
