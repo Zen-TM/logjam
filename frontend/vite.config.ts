@@ -1,5 +1,6 @@
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
+import fs from "fs";
 import path from "path";
 
 // CSP injected only on production build. Vite dev server uses inline scripts +
@@ -36,6 +37,28 @@ function cspMetaPlugin(): Plugin {
   };
 }
 
+// The maplibre-gl 6 worker imports "./maplibre-gl-shared.mjs" by name, but
+// importing the worker with ?url emits only the worker, under a hashed name.
+// Ship the shared chunk beside it (src/components/map/Map.tsx).
+function maplibreWorkerSharedPlugin(): Plugin {
+  return {
+    name: "maplibre-worker-shared",
+    apply: "build",
+    generateBundle() {
+      this.emitFile({
+        type: "asset",
+        fileName: "assets/maplibre-gl-shared.mjs",
+        source: fs.readFileSync(
+          path.resolve(
+            import.meta.dirname,
+            "node_modules/maplibre-gl/dist/maplibre-gl-shared.mjs",
+          ),
+        ),
+      });
+    },
+  };
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   // Pin the dev port. strictPort makes Vite fail loudly if 5173 is taken
@@ -61,7 +84,7 @@ export default defineConfig({
       },
     },
   },
-  plugins: [react(), cspMetaPlugin()],
+  plugins: [react(), cspMetaPlugin(), maplibreWorkerSharedPlugin()],
   resolve: {
     alias: {
       "@styles": path.resolve(import.meta.dirname, "src/styles"),

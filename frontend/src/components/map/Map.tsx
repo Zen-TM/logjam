@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import maplibregl, { setWorkerUrl } from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
+import { setWorkerUrl } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-csp-worker?url";
+import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 
-// Use the pre-built CSP worker instead of the default inline blob worker.
-// Vite's production minification can corrupt the blob worker code, causing
-// "on is not defined" errors and breaking GeoJSON source processing.
+// maplibre-gl 6 finds its worker beside the library file via import.meta.url,
+// which Vite's bundling breaks. Hand it the emitted worker asset instead.
 setWorkerUrl(maplibreWorkerUrl);
 import { Protocol } from "pmtiles";
 import type { RegionBbox } from "@logjam/shared";
@@ -413,10 +413,15 @@ function applyVectorPaint(
 ): void {
   const setPaint = (
     lid: string,
-    prop: string,
+    prop:
+      | "line-color"
+      | "line-width"
+      | "fill-color"
+      | "fill-outline-color"
+      | "text-color",
     value: string | number | maplibregl.ExpressionSpecification,
   ): void => {
-    if (map.getLayer(lid)) map.setPaintProperty(lid, prop, value);
+    if (map.getLayer(lid)) map.setPaintProperty(lid, prop, value as never);
   };
   // text-size is a layout property, not paint. setLayoutProperty triggers a
   // relayout (cheap for the handful of label layers) and never recreates them.

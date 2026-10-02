@@ -21,7 +21,7 @@
     "@types/papaparse": "^5.5.2",
     "aws-amplify": "^6.22.1",
     "lucide-react": "^1.48.0",
-    "maplibre-gl": "^5.20.2",
+    "maplibre-gl": "^6.11.2",
     "papaparse": "^5.7.0",
     "pmtiles": "^4.4.0",
     "react": "^19.3.0",
