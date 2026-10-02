@@ -1070,6 +1070,7 @@ function GeoPdfDialog({
             <div
               className={classes.extentGrid}
               data-disabled={templateMode || undefined}
+              inert={templateMode}
             >
               <div className={classes.extentNorth}>
                 <ExtentField
