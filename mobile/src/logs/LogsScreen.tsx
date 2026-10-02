@@ -12,7 +12,7 @@
 // already holds on this device. None of it is logged, and the failure paths
 // here print our own copy rather than an error string that might embed a
 // place name.
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Keyboard,
@@ -190,11 +190,13 @@ export function LogsScreen({
 
   // A filter whose definition was deleted, or retyped under it, would narrow
   // the list with no control left in the sheet to say so or undo it.
-  useEffect(() => {
-    setCustomFilters((current) =>
-      reconcileCustomFieldFilters(current, filterableDefs),
+  const [reconciledDefs, setReconciledDefs] = useState(filterableDefs);
+  if (reconciledDefs !== filterableDefs) {
+    setReconciledDefs(filterableDefs);
+    setCustomFilters(
+      reconcileCustomFieldFilters(customFilters, filterableDefs),
     );
-  }, [filterableDefs]);
+  }
 
   // --- Multi-select ---------------------------------------------------------
   // Press and hold a row to start; the rail's type chips become the

@@ -218,7 +218,7 @@ export function RegionDownloadScreen({
   // Read once: `initialViewState` below is only honoured on the first render,
   // and re-reading a module store mid-session would move the frame the user is
   // already dragging.
-  const lastCamera = useRef(readLastMapCamera()).current;
+  const [lastCamera] = useState(() => readLastMapCamera());
   const startBasemapId: BasemapId =
     initialBasemapId ?? lastCamera?.basemapId ?? "six-topo";
   const startCenter = initialCenter ?? lastCamera?.center ?? DEFAULT_CENTER;
@@ -380,16 +380,10 @@ export function RegionDownloadScreen({
 
   const pyramidIds = selected.filter(isRasterPyramid);
   const includesVector = selected.includes("protomaps");
-  const job = useMemo(
-    () =>
-      bbox
-        ? planRegionForBasemaps(bbox, pyramidIds, detailZoom, catalogMaxZoom)
-        : null,
-    // `pyramidIds` is derived from `selected` each render; keying on the ids
-    // themselves keeps the plan from being rebuilt on every unrelated render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [bbox, pyramidIds.join(","), detailZoom],
-  );
+  // Not memoised: `bbox` is a fresh object every render, so no key could hold.
+  const job = bbox
+    ? planRegionForBasemaps(bbox, pyramidIds, detailZoom, catalogMaxZoom)
+    : null;
   const caps =
     bbox && job ? checkRegionCaps(bbox, job.totalTiles, includesVector) : null;
   const canDownload =

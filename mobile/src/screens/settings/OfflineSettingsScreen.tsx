@@ -30,7 +30,7 @@
 // it cannot be changed offline.
 //
 // PRIVACY: six booleans. No place names, no regions named.
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import {
@@ -152,10 +152,11 @@ export function OfflineSettingsScreen({
   const serverCopyMedia = userQuery.data
     ? (userQuery.data.uiPreferences?.copyPlaceMedia ?? true)
     : null;
-  useEffect(() => {
-    if (serverCopyMedia === null) return;
-    setCopyMedia(serverCopyMedia);
-  }, [serverCopyMedia]);
+  const [seededFor, setSeededFor] = useState<boolean | null>(null);
+  if (serverCopyMedia !== seededFor) {
+    setSeededFor(serverCopyMedia);
+    if (serverCopyMedia !== null) setCopyMedia(serverCopyMedia);
+  }
 
   const toggleCopyMedia = useCallback(() => {
     setCopyMedia((current) => {

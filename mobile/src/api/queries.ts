@@ -148,11 +148,21 @@ export function useApiQuery<T>(
   const [error, setError] = useState<string | null>(null);
   const [fetchCount, setFetchCount] = useState(0);
 
+  // Each fetch the effect below starts raises loading and clears the last
+  // error, in the render that starts it.
+  const requestKey = enabled ? fetchCount : null;
+  const [startedKey, setStartedKey] = useState<number | null>(null);
+  if (requestKey !== startedKey) {
+    setStartedKey(requestKey);
+    if (requestKey !== null) {
+      setLoading(true);
+      setError(null);
+    }
+  }
+
   useEffect(() => {
     if (!enabled) return;
     let cancelled = false;
-    setLoading(true);
-    setError(null);
     fetcher()
       .then((result) => {
         if (!cancelled) setData(result);

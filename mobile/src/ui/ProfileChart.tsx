@@ -145,8 +145,10 @@ export function ProfileChart({
     () => (columnCount > 0 ? toColumns(series.points, columnCount) : []),
     [columnCount, series.points],
   );
-  columnsRef.current = columns.length;
-  widthRef.current = width;
+  useEffect(() => {
+    columnsRef.current = columns.length;
+    widthRef.current = width;
+  }, [columns.length, width]);
 
   // The chart lives inside a sheet's ScrollView, and the two gestures it must
   // tell apart share a finger: ACROSS is a scrub, UP/DOWN is the user trying to
@@ -182,7 +184,16 @@ export function ProfileChart({
   // leave the scroll frozen for the next thing rendered into it.
   useEffect(() => () => scrollLock?.setLocked(false), [scrollLock]);
 
-  const responder = useRef(
+  function track(x: number) {
+    const count = columnsRef.current;
+    const chartWidth = widthRef.current;
+    if (count === 0 || chartWidth <= 0) return;
+    const fraction = Math.min(1, Math.max(0, x / chartWidth));
+    setScrubIndex(Math.min(count - 1, Math.round(fraction * (count - 1))));
+  }
+
+  // eslint-disable-next-line react-hooks/refs -- create() only stores the handlers; they read refs on touch, never during render
+  const [responder] = useState(() =>
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: (_event, gesture) => isScrub(gesture),
@@ -213,15 +224,7 @@ export function ProfileChart({
       onPanResponderRelease: releaseGesture,
       onPanResponderTerminate: releaseGesture,
     }),
-  ).current;
-
-  function track(x: number) {
-    const count = columnsRef.current;
-    const chartWidth = widthRef.current;
-    if (count === 0 || chartWidth <= 0) return;
-    const fraction = Math.min(1, Math.max(0, x / chartWidth));
-    setScrubIndex(Math.min(count - 1, Math.round(fraction * (count - 1))));
-  }
+  );
 
   // No coverage anywhere means there is no chart to draw — the stats above it
   // already say the data had nothing here.
@@ -336,5 +339,5 @@ const styles = StyleSheet.create({
     marginLeft: -1,
     backgroundColor: theme.textPrimary,
   },
-  fade: { ...StyleSheet.absoluteFillObject, top: "55%" },
+  fade: { ...StyleSheet.absoluteFill, top: "55%" },
 });

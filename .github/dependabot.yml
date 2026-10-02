@@ -84,6 +84,10 @@ updates:
       # TypeScript 7: see /api. Tracked in #155.
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
+      # @types/node must not run ahead of the Node the tooling runs on (22).
+      # Tracked in #229.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "npm"
     directory: "/infra/lambda/cognito-email-sender"
@@ -97,6 +101,11 @@ updates:
         update-types:
           - "minor"
           - "patch"
+    # @types/node must not run ahead of the Lambda's nodejs22.x runtime.
+    # Tracked in #229.
+    ignore:
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "terraform"
     directory: "/infra/terraform/bootstrap"
@@ -162,21 +171,26 @@ updates:
         update-types:
           - "minor"
           - "patch"
-    # Logjam GPS follows the Expo SDK: the SDK pins a set of packages that only
-    # work together, and the first round of pull requests moved them one by one
-    # (react-native 0.81 -> 0.87 alone broke the typecheck). Tracked in #156,
-    # which moves to the next SDK and lifts these. `npx expo install --check`
-    # lists the exact pins. Minor updates are held as well as major ones because
-    # react-native (0.x) and react move their minor with the SDK.
+    # The SDK pins a set of packages that only work together (`npx expo install
+    # --check` lists them), so an Expo SDK is a deliberate move, not a bump: the
+    # next one is a new native build (docs/decisions/0022, 0023). The SDK's
+    # own set is held below; minor updates are held as well as major ones
+    # because react-native (0.x) and react move their minor with the SDK.
+    # Tracked in #244, which moves to the next SDK and points these at the
+    # issue after it.
     ignore:
       - dependency-name: "expo"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "expo-*"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "react"
         update-types:
           - "version-update:semver-major"
           - "version-update:semver-minor"
+      - dependency-name: "expo-*"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
+      # react must match the renderer react-native bundles exactly, so the
+      # SDK pins its patch too (expo-doctor fails on a patch mismatch): hold
+      # every update. Tracked in #244.
+      - dependency-name: "react"
       - dependency-name: "@types/react"
         update-types:
           - "version-update:semver-major"
@@ -197,18 +211,29 @@ updates:
         update-types:
           - "version-update:semver-major"
           - "version-update:semver-minor"
+      - dependency-name: "@react-native-community/netinfo"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
+      - dependency-name: "babel-preset-expo"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
+      - dependency-name: "eslint-config-expo"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
+      # SDK 57 still pins async-storage 2.2.0; 3.x is outside the SDK's set.
+      # Tracked in #226.
       - dependency-name: "@react-native-async-storage/async-storage"
         update-types: ["version-update:semver-major"]
-      - dependency-name: "@react-native-community/netinfo"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "babel-preset-expo"
-        update-types: ["version-update:semver-major"]
-      # eslint-config-expo's major follows the SDK (~10 for SDK 54), and it
-      # carries the react-hooks 7 rules, adopted with that SDK. Tracked in #156.
-      - dependency-name: "eslint-config-expo"
-        update-types: ["version-update:semver-major"]
-      # The SDK pins TypeScript too; TypeScript 7 is also tracked in #155.
+      # The SDK pins TypeScript too (6.0 for SDK 57); TypeScript 7 is tracked
+      # in #155.
       - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      # @types/node must not run ahead of the Node the tooling runs on.
+      # Tracked in #229.
+      - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "npm"

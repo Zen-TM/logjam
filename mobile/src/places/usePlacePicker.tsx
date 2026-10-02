@@ -15,7 +15,7 @@
 //
 // What varies by kind is only the promise sentence and what `attach` does; the
 // displacement decision is `routeSlot.ts`'s and nobody else's.
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { TRACK_MIME_TYPES, messageFromError } from "@logjam/shared";
 
@@ -77,9 +77,11 @@ export function usePlacePicker({
 
   // A closed picker forgets its search: reopening on the next item must not
   // land on a list narrowed by what the last one was looking for.
-  useEffect(() => {
+  const [wasActive, setWasActive] = useState(active);
+  if (active !== wasActive) {
+    setWasActive(active);
     if (!active) setQuery("");
-  }, [active]);
+  }
 
   const matches = useMemo(() => {
     const needle = query.trim().toLowerCase();

@@ -12,7 +12,7 @@
 // I read THIS screen in THIS light", which is not a fact about the user.
 //
 // PRIVACY: nothing here touches user data.
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import {
@@ -82,10 +82,13 @@ export function DisplaySettingsScreen() {
   // exactly when the "next time you open Logjam" note is true.
   const [chosenSchemeId, setChosenSchemeId] =
     useState<ThemeSchemeId>(activeThemeSchemeId);
-  useEffect(() => {
-    const accountScheme = user?.uiPreferences?.themeSchemeId;
+  const accountScheme = user?.uiPreferences?.themeSchemeId;
+  const accountSchemeKey = JSON.stringify([user?.id, accountScheme]);
+  const [seededFor, setSeededFor] = useState<string | null>(null);
+  if (accountSchemeKey !== seededFor) {
+    setSeededFor(accountSchemeKey);
     if (isThemeSchemeId(accountScheme)) setChosenSchemeId(accountScheme);
-  }, [user?.id, user?.uiPreferences?.themeSchemeId]);
+  }
 
   const chooseScheme = useCallback(
     (id: ThemeSchemeId) => {

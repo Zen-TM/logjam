@@ -11,7 +11,7 @@
 // answer to its own question and the user asked for this place by name. It
 // stays here — never on a list row (DESIGN.md §11). Sharing is owner-only and
 // username-only; recipients never see this section at all.
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   Alert,
   Clipboard,
@@ -177,10 +177,8 @@ export function PlaceDetailScreen({
   const [removing, setRemoving] = useState(false);
   const [shareOpenRequest, setShareOpenRequest] = useState(0);
   const [toast, setToast] = useState<ToastMessage | null>(null);
-  const toastNonce = useRef(0);
   const notify = useCallback((text: string, tone: "info" | "error") => {
-    toastNonce.current += 1;
-    setToast({ text, tone, nonce: toastNonce.current });
+    setToast((prev) => ({ text, tone, nonce: (prev?.nonce ?? 0) + 1 }));
   }, []);
 
   // Above the early returns — hooks cannot be conditional.
@@ -1043,15 +1041,12 @@ function PlaceSharingSection({
     active: pickerOpen,
   });
 
-  const openPicker = useCallback(() => {
-    setPickerOpen(true);
-  }, []);
-
   // openRequest starts at 0; only act once the caller has bumped it.
-  useEffect(() => {
-    if (openRequest > 0) openPicker();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openRequest]);
+  const [seenRequest, setSeenRequest] = useState(0);
+  if (openRequest !== seenRequest) {
+    setSeenRequest(openRequest);
+    if (openRequest > 0) setPickerOpen(true);
+  }
 
   return (
     <>

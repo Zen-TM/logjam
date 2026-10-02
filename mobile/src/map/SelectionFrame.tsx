@@ -13,7 +13,7 @@
 // subtle — the panels went a long time swallowing every touch outside the
 // selection, which left the map draggable only through the bright rectangle and
 // read as the screen being half frozen.
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { PanResponder, PixelRatio, StyleSheet, View } from "react-native";
 
 import { radius, theme, withAlpha } from "../theme";
@@ -40,7 +40,6 @@ export function SelectionFrame({
   // there, so a slow drag can't accumulate rounding drift.
   const dragStart = useRef<FrameInsets>(insets);
   const latest = useRef<FrameInsets>(insets);
-  latest.current = insets;
 
   // `onChange` goes through a ref, and the responders are memoised on the
   // SIZE alone.
@@ -53,7 +52,10 @@ export function SelectionFrame({
   // would rebuild them on every single frame of the gesture and the handles
   // would be impossible to drag. Which is exactly what happened.
   const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
+  useEffect(() => {
+    latest.current = insets;
+    onChangeRef.current = onChange;
+  });
 
   const responders = useMemo(() => {
     const make = (edge: FrameEdge, axis: "x" | "y") =>
@@ -74,12 +76,14 @@ export function SelectionFrame({
           );
         },
       });
+    /* eslint-disable react-hooks/refs -- create() only stores the handlers; they read refs on touch, never during render */
     return {
       top: make("top", "y"),
       bottom: make("bottom", "y"),
       left: make("left", "x"),
       right: make("right", "x"),
     };
+    /* eslint-enable react-hooks/refs */
   }, [width, height]);
 
   // Snap every edge to a whole DEVICE pixel before anything is laid out from

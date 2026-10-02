@@ -17,7 +17,7 @@
 //
 // PRIVACY: the box exists in the DOM and in the caller's state. Nothing logs.
 import { useEffect, useRef } from "react";
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import type { RegionBbox } from "@logjam/shared";
 
 import { boxOverlayRect, cornersToBbox } from "./boxDraw";
