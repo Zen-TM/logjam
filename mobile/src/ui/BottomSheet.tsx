@@ -20,15 +20,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import {
-  fontSize,
-  fontWeight,
-  radius,
-  scrim,
-  spacing,
-  theme,
-  withAlpha,
-} from "../theme";
+import { fontSize, fontWeight, radius, scrim, spacing, theme } from "../theme";
 import { IconButton } from "./IconButton";
 
 // Slide-up modal sheet with a draggable handle + title, capped at 80% height
@@ -391,12 +383,12 @@ const styles = StyleSheet.create({
   header: { paddingBottom: spacing(1) },
   scrollArea: { flexShrink: 1 },
   // Opaque, so the list it covers doesn't ghost through.
-  overlay: { ...StyleSheet.absoluteFill, backgroundColor: theme.primary },
+  overlay: { ...StyleSheet.absoluteFill, backgroundColor: theme.page },
   backdrop: { ...StyleSheet.absoluteFill, backgroundColor: scrim.light },
   backdropPress: { flex: 1 },
   dock: { flex: 1, justifyContent: "flex-end" },
   sheet: {
-    backgroundColor: theme.primary,
+    backgroundColor: theme.page,
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,
     paddingHorizontal: spacing(2),
@@ -406,7 +398,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 5,
     borderRadius: radius.pill,
-    backgroundColor: theme.bonus1,
+    backgroundColor: theme.lineStrong,
     opacity: 0.5,
   },
   titleRow: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
@@ -416,7 +408,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: fontSize.lg,
     fontWeight: fontWeight.bold,
-    color: theme.textPrimary,
+    color: theme.text,
     marginBottom: spacing(1),
   },
   scrollContent: { paddingBottom: spacing(2) },
@@ -425,6 +417,6 @@ const styles = StyleSheet.create({
   footer: {
     paddingTop: spacing(1.5),
     borderTopWidth: 1,
-    borderTopColor: withAlpha(theme.bonus1, 0.2),
+    borderTopColor: theme.line,
   },
 });

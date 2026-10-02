@@ -1,14 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import { StyleSheet, Text, View } from "react-native";
 
-import {
-  fontSize,
-  fontWeight,
-  radius,
-  spacing,
-  theme,
-  withAlpha,
-} from "../theme";
+import { fontSize, fontWeight, radius, spacing, theme } from "../theme";
 
 // Small status chip. `accent` = filled (active/saved-for-offline), `outline` =
 // neutral bordered (Shared / Online), `warning` = attention (Update / error),
@@ -30,13 +23,15 @@ export function StatusPill({
   tone?: PillTone;
   icon?: React.ComponentProps<typeof Feather>["name"];
   /**
-   * Identity colour override — outlines and letters the pill in `hue` instead
-   * of the tone's colour. For a pill that says *what a thing is* (a trip type)
-   * rather than how it is going; the four tones stay the vocabulary for state.
+   * Identity colour override — fills the pill with `hue` under the `onFill`
+   * ink. For a pill that says *what a thing is* (a trip type) rather than how
+   * it is going; the four tones stay the vocabulary for state. A hue is a
+   * fill, never letters on a surface (it fails 3:1 on the light page).
    */
   hue?: string;
 }) {
-  const color = hue ?? TONE_TEXT[tone];
+  const color = hue != null ? theme.onFill : TONE_TEXT[tone];
+  const glyph = hue != null ? theme.onFill : TONE_GLYPH[tone];
   return (
     <View
       style={[
@@ -44,12 +39,12 @@ export function StatusPill({
         styles[`${tone}Box`],
         hue != null && {
           borderWidth: 1,
-          borderColor: withAlpha(hue, 0.6),
-          backgroundColor: "transparent",
+          borderColor: hue,
+          backgroundColor: hue,
         },
       ]}
     >
-      {icon ? <Feather name={icon} size={12} color={color} /> : null}
+      {icon ? <Feather name={icon} size={12} color={glyph} /> : null}
       <Text style={[styles.label, { color }]} numberOfLines={1}>
         {label}
       </Text>
@@ -57,11 +52,18 @@ export function StatusPill({
   );
 }
 
+// Words are `text` or `textMuted`, never an intent colour (as on Logjam Web):
+// a warning pill says so with its edge and glyph.
 const TONE_TEXT: Record<PillTone, string> = {
-  accent: theme.primary,
-  outline: theme.bonus1,
-  warning: theme.warning,
+  accent: theme.onFill,
+  outline: theme.textMuted,
+  warning: theme.text,
   muted: theme.textMuted,
+};
+
+const TONE_GLYPH: Record<PillTone, string> = {
+  ...TONE_TEXT,
+  warning: theme.warning,
 };
 
 const styles = StyleSheet.create({
@@ -76,11 +78,9 @@ const styles = StyleSheet.create({
   },
   label: { fontSize: fontSize.xs, fontWeight: fontWeight.medium },
   accentBox: { backgroundColor: theme.accent },
-  outlineBox: { borderWidth: 1, borderColor: theme.bonus1 },
+  outlineBox: { borderWidth: 1, borderColor: theme.textMuted },
   warningBox: { borderWidth: 1, borderColor: theme.warning },
-  mutedBox: {
-    borderWidth: 1,
-    borderColor: theme.bonus2,
-    backgroundColor: theme.bonus2,
-  },
+  // Quiet is the absence of the outline. The old fill under the muted label
+  // fell under 4.5:1 in Sandstone.
+  mutedBox: { borderWidth: 1, borderColor: "transparent" },
 });

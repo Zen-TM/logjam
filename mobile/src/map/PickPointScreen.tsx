@@ -350,7 +350,7 @@ function noop() {}
 const EMPTY_ROUTES: never[] = [];
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: theme.primary },
+  root: { flex: 1, backgroundColor: theme.page },
   basemaps: {
     position: "absolute",
     right: spacing(2),
@@ -375,7 +375,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing(1),
   },
   hintText: {
-    color: theme.textPrimary,
+    color: theme.text,
     fontSize: fontSize.sm,
     fontWeight: fontWeight.medium,
   },
@@ -388,7 +388,7 @@ const styles = StyleSheet.create({
     gap: spacing(1.5),
     paddingHorizontal: spacing(2),
     paddingVertical: spacing(1.5),
-    backgroundColor: theme.primary,
+    backgroundColor: theme.page,
   },
   action: { flex: 1 },
 });

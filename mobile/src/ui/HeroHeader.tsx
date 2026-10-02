@@ -1,14 +1,7 @@
 import { StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import {
-  fontSize,
-  fontWeight,
-  radius,
-  spacing,
-  theme,
-  withAlpha,
-} from "../theme";
+import { fontSize, fontWeight, spacing, theme } from "../theme";
 import { IconButton } from "./IconButton";
 
 /**
@@ -62,7 +55,7 @@ export function HeroHeader({
           <IconButton
             icon="chevron-left"
             accessibilityLabel="Back"
-            color={theme.textPrimary}
+            color={theme.text}
             onPress={onBack}
           />
           {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
@@ -91,13 +84,11 @@ export function HeroHeader({
 
 const styles = StyleSheet.create({
   hero: {
-    // One step lighter than the card surface, so the stack reads
-    // hero > card > page and the header lifts off the list below it.
-    backgroundColor: theme.bonus2,
-    borderBottomLeftRadius: radius.xl,
-    borderBottomRightRadius: radius.xl,
+    // No fill: it sits on the page and a hairline separates it from the list,
+    // as Logjam Web's hero does. Its old fill, a step lighter than the card,
+    // failed AA under its own text in Sandstone and Ironbark.
     borderBottomWidth: 1,
-    borderBottomColor: withAlpha(theme.accent, 0.25),
+    borderBottomColor: theme.line,
     paddingHorizontal: spacing(2),
     paddingBottom: spacing(2),
     gap: spacing(1),
@@ -119,7 +110,7 @@ const styles = StyleSheet.create({
   titleRow: { flexDirection: "row", alignItems: "center", gap: spacing(1.5) },
   title: {
     flex: 1,
-    color: theme.textPrimary,
+    color: theme.text,
     fontSize: fontSize.xl,
     fontWeight: fontWeight.bold,
   },
@@ -127,7 +118,7 @@ const styles = StyleSheet.create({
   // step above body text, not a billboard. `fontSize.display` is reserved for
   // a screen whose whole purpose IS the number.
   value: {
-    color: theme.textPrimary,
+    color: theme.text,
     fontSize: fontSize.lg,
     fontWeight: fontWeight.medium,
   },

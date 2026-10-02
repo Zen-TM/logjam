@@ -22,6 +22,7 @@ import {
   moveAnchor,
   type RouteDraft,
   type RoutePoint,
+  MAP_INK,
 } from "@logjam/shared";
 
 import { dragIsTap } from "./anchorHit";
@@ -259,8 +260,8 @@ export function RouteDraftLayer({
                 "start",
                 color,
                 "end",
-                theme.primary,
-                theme.textPrimary,
+                MAP_INK.casing,
+                MAP_INK.label,
               ],
             ],
             circleStrokeWidth: ["case", ["get", "selected"], 3, 2],
@@ -270,7 +271,7 @@ export function RouteDraftLayer({
             circleStrokeColor: [
               "case",
               ["get", "selected"],
-              theme.textPrimary,
+              MAP_INK.label,
               color,
             ],
           }}

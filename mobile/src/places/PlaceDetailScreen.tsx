@@ -59,7 +59,6 @@ import {
   fontWeight,
   lineHeight,
   spacing,
-  surface,
   theme,
 } from "../theme";
 import type { MirrorPlace, MirrorTrip } from "../sync/mirrorStore";
@@ -1089,7 +1088,7 @@ function tickLabel(trips: number): string {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: theme.primary },
+  screen: { flex: 1, backgroundColor: theme.page },
   pillRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing(0.75) },
   body: {
     paddingHorizontal: spacing(2),
@@ -1104,7 +1103,7 @@ const styles = StyleSheet.create({
   action: { flex: 1 },
   muted: { color: theme.textMuted, fontSize: fontSize.sm },
   notes: {
-    color: theme.textPrimary,
+    color: theme.text,
     fontSize: fontSize.base,
     lineHeight: lineHeight.body,
   },
@@ -1123,12 +1122,12 @@ const styles = StyleSheet.create({
     gap: spacing(2),
     paddingVertical: spacing(0.875),
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: surface.border,
+    borderBottomColor: theme.line,
   },
   fieldRowLast: { borderBottomWidth: 0 },
   fieldKey: { color: theme.textMuted, fontSize: fontSize.sm, flexShrink: 1 },
   fieldValue: {
-    color: theme.textPrimary,
+    color: theme.text,
     fontSize: fontSize.sm,
     fontWeight: fontWeight.medium,
     textAlign: "right",

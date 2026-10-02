@@ -47,11 +47,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     padding: spacing(3),
     gap: spacing(2),
-    backgroundColor: theme.primary,
+    backgroundColor: theme.page,
   },
   title: {
     fontSize: fontSize.base,
-    color: theme.textPrimary,
+    color: theme.text,
     textAlign: "center",
   },
   hint: { fontSize: fontSize.sm, color: theme.textMuted, textAlign: "center" },

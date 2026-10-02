@@ -16,9 +16,8 @@
 import { memo, useEffect, useState } from "react";
 import * as FileSystem from "expo-file-system/legacy";
 import { GeoJSONSource, Layer } from "@maplibre/maplibre-react-native";
-import { TRACK_MIME_TYPES, parseVectorImport } from "@logjam/shared";
+import { TRACK_MIME_TYPES, parseVectorImport, MAP_INK } from "@logjam/shared";
 
-import { theme } from "../theme";
 import { ensureDisplayCached } from "../sync/mediaCache";
 import { useMirrorPlaceTracks } from "../sync/useSyncQueries";
 
@@ -101,7 +100,7 @@ export const PlaceRoutesLayer = memo(function PlaceRoutesLayer({
         type="line"
         id="place-routes-casing"
         style={{
-          lineColor: theme.primary,
+          lineColor: MAP_INK.casing,
           lineWidth: 5,
           lineOpacity: 0.6,
           lineCap: "round",
@@ -129,7 +128,7 @@ export const PlaceRoutesLayer = memo(function PlaceRoutesLayer({
           circleRadius: 3.5,
           circleColor: ["get", "routeColor"] as unknown as string,
           circleStrokeWidth: 1,
-          circleStrokeColor: theme.primary,
+          circleStrokeColor: MAP_INK.casing,
         }}
       />
     </GeoJSONSource>

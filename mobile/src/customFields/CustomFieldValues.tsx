@@ -22,7 +22,7 @@ import {
   type TripLogCustomFieldDef,
 } from "@logjam/shared";
 
-import { fontSize, fontWeight, spacing, surface, theme } from "../theme";
+import { fontSize, fontWeight, spacing, theme } from "../theme";
 import {
   IconButton,
   Row,
@@ -239,12 +239,12 @@ const styles = StyleSheet.create({
     gap: spacing(2),
     paddingVertical: spacing(0.875),
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: surface.border,
+    borderBottomColor: theme.line,
   },
   tableRowLast: { borderBottomWidth: 0 },
   tableKey: { color: theme.textMuted, fontSize: fontSize.sm, flexShrink: 1 },
   tableValue: {
-    color: theme.textPrimary,
+    color: theme.text,
     fontSize: fontSize.sm,
     fontWeight: fontWeight.medium,
     textAlign: "right",

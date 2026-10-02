@@ -173,8 +173,8 @@ function EdgeFade({ side }: { side: "start" | "end" }) {
       pointerEvents="none"
       colors={
         solid
-          ? [withAlpha(theme.primary, 0), theme.primary]
-          : [theme.primary, withAlpha(theme.primary, 0)]
+          ? [withAlpha(theme.page, 0), theme.page]
+          : [theme.page, withAlpha(theme.page, 0)]
       }
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 0 }}
