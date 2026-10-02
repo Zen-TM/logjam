@@ -76,7 +76,12 @@ resource "aws_iam_role" "github_actions_plan" {
       Condition = {
         StringEquals = {
           "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
+          # pull_request goes once terraform-plan.yml's plan jobs run in the
+          # terraform-plan Environment (infra/terraform/envs/github/environments.tf),
+          # whose runs wait for the maintainer's approval. Guard:
+          # tests/guards.tftest.hcl.
           "token.actions.githubusercontent.com:sub" = [
+            "repo:Zen-TM/logjam:environment:terraform-plan",
             "repo:Zen-TM/logjam:pull_request",
             "repo:Zen-TM/logjam:ref:refs/heads/main",
           ]

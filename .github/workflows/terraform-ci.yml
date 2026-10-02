@@ -68,3 +68,17 @@ jobs:
         run: terraform -chdir=infra/terraform/envs/github init -backend=false -input=false
       - name: terraform test
         run: terraform -chdir=infra/terraform/envs/github test
+
+  # The guards on who may assume the CI roles and on what the prod plan reads
+  # back: envs/prod/tests/guards.tftest.hcl, offline against mocked providers.
+  test-prod:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: "~> 1.13"
+      - name: terraform init (no backend)
+        run: terraform -chdir=infra/terraform/envs/prod init -backend=false -input=false
+      - name: terraform test
+        run: terraform -chdir=infra/terraform/envs/prod test
