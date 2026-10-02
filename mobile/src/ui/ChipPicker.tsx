@@ -1,5 +1,10 @@
 import { useRef, useState } from "react";
-import { Text, TextInput, View } from "react-native";
+import {
+  Text,
+  TextInput,
+  View,
+  type TextInputInstance,
+} from "react-native";
 
 import {
   formRhythm,
@@ -61,7 +66,7 @@ export function ChipPicker({
 
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState("");
-  const inputRef = useRef<TextInput>(null);
+  const inputRef = useRef<TextInputInstance>(null);
 
   const commit = () => {
     const trimmed = draft.trim();
