@@ -71,7 +71,7 @@
     "expo-video": "~57.0.5",
     "expo-video-thumbnails": "~57.0.2",
     "fflate": "^0.8.3",
-    "react": "19.2.3",
+    "react": "19.2.8",
     "react-native": "0.86.3",
     "react-native-edge-to-edge": "1.6.2",
     "react-native-get-random-values": "^2.0.0",
