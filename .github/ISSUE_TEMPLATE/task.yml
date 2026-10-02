@@ -1,0 +1,31 @@
+name: Task
+description: Work with no change users see, such as an upgrade, a cleanup or a follow-up.
+title: "task: "
+labels: [task, triage]
+body:
+  - type: markdown
+    attributes:
+      value: >
+        Issues are public: use made-up data in examples. A change users would
+        see is a [feature proposal](https://github.com/Zen-TM/logjam/issues/new?template=proposal.yml)
+        instead.
+  - type: textarea
+    id: what
+    attributes:
+      label: What needs doing
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why
+      description: What goes wrong, or stays stuck, until it is done.
+    validations:
+      required: true
+  - type: textarea
+    id: waiting
+    attributes:
+      label: Waiting on
+      description: >
+        Anything outside this repo it waits on (an upstream release, another
+        project), and what would unblock it. Leave empty if nothing.
