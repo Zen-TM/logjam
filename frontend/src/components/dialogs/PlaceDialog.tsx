@@ -192,9 +192,12 @@ function PlaceDialog({
 
   // Populate the form when the dialog opens or is handed another place, during
   // render rather than in an effect so the opening render already holds it.
-  const [populatedFor, setPopulatedFor] = useState({ open: false, place });
-  if (open !== populatedFor.open || place !== populatedFor.place) {
-    setPopulatedFor({ open, place });
+  // Keyed on the place's id, not the object: a refetch hands over a new object
+  // for the same place and must not replace what the user has typed.
+  const placeId = place?.id ?? null;
+  const [populatedFor, setPopulatedFor] = useState({ open: false, placeId });
+  if (open !== populatedFor.open || placeId !== populatedFor.placeId) {
+    setPopulatedFor({ open, placeId });
     if (open) {
       if (picking) setPicking(false);
       else populateForm();
