@@ -80,7 +80,7 @@
     "react-native-url-polyfill": "^4.0.0"
   },
   "devDependencies": {
-    "@types/node": "^24.19.0",
+    "@types/node": "^26.6.3",
     "@types/react": "~19.2.10",
     "babel-preset-expo": "~57.0.0",
     "eslint": "^9.0.0",
