@@ -9,6 +9,11 @@ import path from "path";
 //
 // Source of truth for the policy string: CSP_PROD below (the string actually shipped).
 // scripts/csp-policy.json mirrors it, guarded by frontend/src/cspAgreement.test.ts.
+//
+// A new external host goes in img-src for images and tiles, connect-src for
+// anything fetched, and in csp-policy.json's cspAllowlist. Check it with
+// `npm run build && npx vite preview`: a missing host is a "Refused to ..."
+// console error there and in production, never in `npm run dev`.
 export const CSP_PROD = [
   "default-src 'self'",
   "script-src 'self'",

@@ -58,3 +58,12 @@ resource "github_repository_vulnerability_alerts" "logjam" {
     prevent_destroy = true
   }
 }
+
+# Dependabot security updates: a pull request for each alert as it lands,
+# outside the monthly version-update schedule. They honour the ignores in
+# .github/dependabot.yml, so the Expo SDK holds still apply. Needs the alerts
+# above, hence the reference.
+resource "github_repository_dependabot_security_updates" "logjam" {
+  repository = github_repository_vulnerability_alerts.logjam.repository
+  enabled    = true
+}
