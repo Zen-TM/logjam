@@ -24,7 +24,11 @@ afterAll(async () => {
   const left = [...seededDrift(base, now), ...extraRows(base, now)];
   if (left.length) {
     throw new Error(
-      `The database differs from the seed after this file's cleanup:\n${describeDrift(left)}`,
+      "The database differs from the seed after this file's cleanup. Usually " +
+        "something the test started was still writing after the sweep (a " +
+        "worker or async job: await it), or a seeded row changed in a way " +
+        "the writeback can't restore. How the sweep works and what it " +
+        `skips: src/__tests__/_seedBaseline.ts.\n${describeDrift(left)}`,
     );
   }
 }, 60_000);

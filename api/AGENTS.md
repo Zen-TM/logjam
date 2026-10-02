@@ -70,9 +70,4 @@
 - **Rate limits:** actors share the per-IP budget and `_rateLimitGate.ts` waits
   it out, but not the per-user `userPatchLimiter`: a write-heavy file uses the
   `write()` retry from `src/__tests__/placeTypes.test.ts` and a timeout over 61 s.
-- **Cleanup is automatic:** after each file `_cleanup.ts` deletes every row
-  the file created, in any table, and writes back any seeded row it changed
-  (`_seedBaseline.ts`), then fails the file if the database still differs from
-  the seed. Create freely; prefer your own rows to editing seeded ones. S3
-  objects are not removed.
 - **Fixtures** are the source's real output, in `__fixtures__/` beside the test.
