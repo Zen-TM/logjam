@@ -173,8 +173,56 @@ updates:
           - "patch"
     # The SDK pins a set of packages that only work together (`npx expo install
     # --check` lists them), so an Expo SDK is a deliberate move, not a bump: the
-    # next one is a new native build (docs/decisions/0022, 0023).
+    # next one is a new native build (docs/decisions/0022, 0023). The SDK's
+    # own set is held below; minor updates are held as well as major ones
+    # because react-native (0.x) and react move their minor with the SDK.
+    # Tracked in #244, which moves to the next SDK and points these at the
+    # issue after it.
     ignore:
+      - dependency-name: "expo"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
+      - dependency-name: "expo-*"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
+      - dependency-name: "react"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
+      - dependency-name: "@types/react"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
+      - dependency-name: "react-native"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
+      - dependency-name: "react-native-edge-to-edge"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
+      - dependency-name: "react-native-safe-area-context"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
+      - dependency-name: "react-native-screens"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
+      - dependency-name: "@react-native-community/netinfo"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
+      - dependency-name: "babel-preset-expo"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
+      - dependency-name: "eslint-config-expo"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
       # SDK 57 still pins async-storage 2.2.0; 3.x is outside the SDK's set.
       # Tracked in #226.
       - dependency-name: "@react-native-async-storage/async-storage"
@@ -182,6 +230,10 @@ updates:
       # The SDK pins TypeScript too (6.0 for SDK 57); TypeScript 7 is tracked
       # in #155.
       - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      # @types/node must not run ahead of the Node the tooling runs on.
+      # Tracked in #229.
+      - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "npm"
