@@ -15,7 +15,7 @@
   "dependencies": {
     "@cantoo/pdf-lib": "^2.11.1",
     "@mapbox/vector-tile": "^3.0.0",
-    "fast-xml-parser": "^5.11.1",
+    "fast-xml-parser": "^5.11.2",
     "luxon": "^3.7.2",
     "pbf": "^5.1.2",
     "pmtiles": "^4.5.0",
