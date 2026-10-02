@@ -14,8 +14,8 @@
     "resend": "^6.30.0"
   },
   "devDependencies": {
-    "@aws-sdk/client-secrets-manager": "^3.1141.0",
-    "@types/aws-lambda": "^8.10.163",
+    "@aws-sdk/client-secrets-manager": "^3.1142.0",
+    "@types/aws-lambda": "^8.10.164",
     "@types/node": "^22.20.5",
     "esbuild": "^0.28.2",
     "typescript": "^7.0.2"
