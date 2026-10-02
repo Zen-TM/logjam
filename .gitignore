@@ -39,3 +39,4 @@ CLAUDE.local.md
 
 # Scratch space: everything under private/ stays on your machine (see
 # private/.gitignore). Machine-specific ignores belong in .git/info/exclude.
+.test-out/
