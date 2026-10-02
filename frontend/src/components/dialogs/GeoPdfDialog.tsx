@@ -387,19 +387,23 @@ function GeoPdfDialog({
     }
   }
 
-  // Populate fields from editingTemplate when entering template mode
+  // Populate fields from editingTemplate when entering template mode. Keyed on
+  // the template's id, not the object (a refetch hands over a fresh copy of the
+  // same template), and skipped on the reopen after "Select on map", which is a
+  // round trip, not a new open: the edits made before the pick must survive it.
+  const editingTemplateId = editingTemplate?.id ?? null;
   const [templatePopulatedFor, setTemplatePopulatedFor] = useState({
     open: false,
     templateMode,
-    editingTemplate,
+    editingTemplateId,
   });
   if (
     open !== templatePopulatedFor.open ||
     templateMode !== templatePopulatedFor.templateMode ||
-    editingTemplate !== templatePopulatedFor.editingTemplate
+    editingTemplateId !== templatePopulatedFor.editingTemplateId
   ) {
-    setTemplatePopulatedFor({ open, templateMode, editingTemplate });
-    if (open && templateMode) {
+    setTemplatePopulatedFor({ open, templateMode, editingTemplateId });
+    if (open && templateMode && !returningFromMapSelect) {
       if (editingTemplate) {
         setEditTemplateName(editingTemplate.name);
         applyTemplateConfig(editingTemplate.config);
