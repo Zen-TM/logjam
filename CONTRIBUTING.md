@@ -39,7 +39,9 @@ that gets turned down.
 
 To report a bug, use the
 [bug report form](https://github.com/Zen-TM/logjam/issues/new?template=bug.yml)
-and describe it with made-up data.
+and describe it with made-up data. Work with no change users see, such as an
+upgrade, a cleanup or a follow-up, uses the
+[task form](https://github.com/Zen-TM/logjam/issues/new?template=task.yml).
 
 ## Review and merge
 

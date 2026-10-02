@@ -129,6 +129,7 @@ export default function VegetationSettings({ value, onChange }: Props) {
       <div
         className={styles.dependent}
         data-disabled={value.weightsEnabled ? undefined : true}
+        inert={!value.weightsEnabled}
       >
         <div className={styles.resetLine}>
           <div>
