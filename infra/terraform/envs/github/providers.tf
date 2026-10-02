@@ -12,4 +12,7 @@ provider "github" {
 
 locals {
   repository = "logjam"
+
+  # Zen-TM, the repository's admin and code owner (.github/CODEOWNERS).
+  maintainer_user_id = 86338167
 }
