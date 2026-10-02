@@ -101,7 +101,7 @@ updates:
         update-types:
           - "minor"
           - "patch"
-    # @types/node must not run ahead of the Lambda's nodejs20.x runtime.
+    # @types/node must not run ahead of the Lambda's nodejs22.x runtime.
     # Tracked in #229.
     ignore:
       - dependency-name: "@types/node"
