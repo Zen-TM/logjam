@@ -22,6 +22,10 @@ export default defineConfig({
     // let the per-file gate (_rateLimitGate.ts) sleep to the window reset when
     // the remaining budget is too low — see that file for details.
     fileParallelism: false,
-    setupFiles: ["src/__tests__/_rateLimitGate.ts"],
+    setupFiles: [
+      "src/__tests__/_rateLimitGate.ts",
+      "src/__tests__/_cleanup.ts",
+    ],
+    globalSetup: ["src/__tests__/_globalSetup.ts"],
   },
 });
