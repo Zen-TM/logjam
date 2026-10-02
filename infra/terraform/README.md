@@ -25,11 +25,14 @@ These are the checks `terraform-ci.yml` runs on a PR:
 terraform fmt -check -recursive infra/terraform
 terraform -chdir=infra/terraform/envs/prod init -backend=false -input=false
 terraform -chdir=infra/terraform/envs/prod validate
+terraform -chdir=infra/terraform/envs/prod test
 ```
 
-To check `bootstrap`, `envs/local` or `envs/github`, run the last two
-commands against that directory instead. For `envs/github`, also run its
-guard test, offline against a mocked provider, as `test-github` does:
+The last one is the prod guard test, offline against mocked providers, as
+`test-prod` runs it. To check `bootstrap`, `envs/local` or `envs/github`, run
+the init and validate commands against that directory instead. For
+`envs/github`, also run its guard test, offline against a mocked provider, as
+`test-github` does:
 
 ```sh
 terraform -chdir=infra/terraform/envs/github init -backend=false -input=false
