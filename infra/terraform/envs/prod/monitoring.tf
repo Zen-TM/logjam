@@ -17,11 +17,6 @@ import {
 
 resource "aws_sns_topic" "alerts" {
   name = "logjam-alerts"
-
-  # Apply-refusal drill (docs/operations/drills.md); removed after it.
-  tags = {
-    drill = "apply-refusal"
-  }
 }
 
 # RDS is a db.t3.micro on 20 GB gp2. Storage autoscaling IS enabled
