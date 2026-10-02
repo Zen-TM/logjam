@@ -168,3 +168,19 @@ run "security_alerts_stay_on" {
     error_message = "Dependabot security updates must stay enabled."
   }
 }
+
+run "pr_plans_wait_for_the_maintainer" {
+  command = plan
+
+  # Mutation: removing the reviewers block, emptying it, or adding another
+  # user or a team lets a PR's plan run get the AWS plan role and the plan
+  # App's key without the maintainer's approval, or with someone else's.
+  assert {
+    condition = (
+      length(github_repository_environment.terraform_plan.reviewers) == 1 &&
+      github_repository_environment.terraform_plan.reviewers[0].users == toset([86338167]) &&
+      length(coalesce(github_repository_environment.terraform_plan.reviewers[0].teams, toset([]))) == 0
+    )
+    error_message = "The terraform-plan Environment must require the maintainer's approval, and only theirs."
+  }
+}
