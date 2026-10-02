@@ -33,17 +33,6 @@
 // and no notes. Nothing here is logged.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  EyeOff,
-  FileText,
-  ListChecks,
-  MapPin,
-  Mountain,
-  PenLine,
-  UserMinus,
-  Users,
-  type LucideIcon,
-} from "lucide-react";
-import {
   buildShareCards,
   removeAllConfirm,
   removeOutcomeMessage,
@@ -73,6 +62,7 @@ import {
   SelectionBar,
   TileCheckbox,
   type ChipOption,
+  type Glyph,
 } from "../../../ui";
 import { idRange } from "./placesModel";
 import type { TFriend, TFriendShares } from "../../../placeUtils";
@@ -88,12 +78,12 @@ import {
  *  client's set and not the other's (root CLAUDE.md). */
 const KIND_IDENTITY: Record<
   FriendShareRow["entityType"],
-  { icon: LucideIcon; hue: string }
+  { icon: Glyph; hue: string }
 > = {
-  place: { icon: MapPin, hue: "var(--hue-shared)" },
-  route: { icon: PenLine, hue: "var(--hue-route)" },
-  topoJob: { icon: Mountain, hue: "var(--hue-overlay)" },
-  geoPdfJob: { icon: FileText, hue: "var(--hue-geoPdf)" },
+  place: { icon: "place", hue: "var(--hue-shared)" },
+  route: { icon: "route", hue: "var(--hue-route)" },
+  topoJob: { icon: "lidar", hue: "var(--hue-overlay)" },
+  geoPdfJob: { icon: "geoPdf", hue: "var(--hue-geoPdf)" },
 };
 
 /* CONFIRMATION SCALES WITH BLAST RADIUS × COST OF RECOVERY, which is why the
@@ -338,7 +328,7 @@ function FriendSharingSection({
           >
             {selected.length < selectableKeys.length && (
               <IconButton
-                icon={ListChecks}
+                icon="multiSelect"
                 label={`Select all ${selectableKeys.length}`}
                 onClick={() => setSelectedKeys(selectableKeys)}
               />
@@ -348,14 +338,14 @@ function FriendSharingSection({
                 stop seeing it" — the same two glyphs Logjam GPS uses here. */}
             {direction === "theySee" ? (
               <IconButton
-                icon={UserMinus}
+                icon="unshare"
                 label={`Unshare ${selected.length} from ${friend.username}`}
                 disabled={busy}
                 onClick={() => setPendingBulk("unshare")}
               />
             ) : (
               <IconButton
-                icon={EyeOff}
+                icon="hide"
                 label={`Remove ${selected.filter((card) => card.removable).length} from your account`}
                 disabled={busy}
                 onClick={() => setPendingBulk("remove")}
@@ -392,7 +382,7 @@ function FriendSharingSection({
       ) : cards.length === 0 ? (
         <div className={classes.emptyArea}>
           <EmptyState
-            icon={Users}
+            icon="friends"
             title={
               direction === "theySee"
                 ? `You haven't shared anything with ${friend.username}`

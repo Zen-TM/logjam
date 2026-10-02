@@ -26,6 +26,8 @@ export type GpsGlyph = string;
 export const ICONS = {
   // — verbs: what a control does —
   add: { web: "plus", gps: "plus" },
+  addPlace: { web: "map-pin-plus", gps: "mci:map-marker-plus" },
+  remove: { web: "minus", gps: "minus" }, // take out of a selection
   close: { web: "x", gps: "x" }, // close a surface, clear a field, cancel a job
   back: { web: "arrow-left", gps: "arrow-left" },
   forward: { web: "arrow-right", gps: "arrow-right" },

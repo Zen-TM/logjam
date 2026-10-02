@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Check, MapPin, Minus, Plus, Trash2, Users } from "lucide-react";
 import type { TripLogCustomFieldDef } from "@logjam/shared";
 import type { TPlace, TFriend } from "../../placeUtils";
 import { bulkDeletePlaces, sharePlaceWith } from "../../placeUtils";
@@ -18,6 +17,7 @@ import {
   SearchField,
   SectionHeader,
   Select,
+  Icon,
 } from "../../ui";
 import classes from "./SelectedPlacesDialog.module.css";
 
@@ -191,7 +191,7 @@ function SelectedPlacesDialog({
             {ownedPlaces.length > 0 && (
               <Button
                 variant="danger"
-                icon={Trash2}
+                icon="delete"
                 className={classes.deleteVerb}
                 disabled={busy}
                 onClick={() => setShowDeleteConfirm(true)}
@@ -219,7 +219,7 @@ function SelectedPlacesDialog({
                 key={place.id}
                 leading={
                   <IconTile
-                    icon={MapPin}
+                    icon="place"
                     hue={
                       ownedPlaceIds.has(place.id)
                         ? "var(--theme-accent)"
@@ -233,7 +233,7 @@ function SelectedPlacesDialog({
                 }
                 trailing={
                   <IconButton
-                    icon={Minus}
+                    icon="remove"
                     label={`Take ${place.name} out of the selection`}
                     onClick={() => onRemovePlace(place.id)}
                   />
@@ -259,7 +259,7 @@ function SelectedPlacesDialog({
             {placeSearchResults.map((place) => (
               <Row
                 key={place.id}
-                leading={<IconTile icon={Plus} hue="var(--theme-bonus-1)" />}
+                leading={<IconTile icon="add" hue="var(--theme-bonus-1)" />}
                 title={place.name}
                 subtitle={
                   place.altNames.length > 0
@@ -332,7 +332,7 @@ function SelectedPlacesDialog({
                           title={friend.username}
                           trailing={
                             <IconButton
-                              icon={Minus}
+                              icon="unshare"
                               label={`Don't share with ${friend.username}`}
                               disabled={busy}
                               onClick={() =>
@@ -375,7 +375,7 @@ function SelectedPlacesDialog({
                       }}
                       trailing={
                         <span className={classes.addMark} data-mark aria-hidden>
-                          <Plus size={16} />
+                          <Icon idea="add" size={16} />
                         </span>
                       }
                     />
@@ -383,7 +383,7 @@ function SelectedPlacesDialog({
                 )}
                 <Button
                   variant="filled"
-                  icon={Check}
+                  icon="done"
                   className={classes.shareVerb}
                   busy={sharing}
                   disabled={busy || shareFriendIds.length === 0}
@@ -399,7 +399,8 @@ function SelectedPlacesDialog({
 
           {friends.length === 0 && ownedPlaces.length > 0 && (
             <p className={classes.note} role="note">
-              <Users size={14} aria-hidden /> Sharing needs a friend.
+              <Icon idea="friends" size={14} aria-hidden /> Sharing needs a
+              friend.
             </p>
           )}
         </div>

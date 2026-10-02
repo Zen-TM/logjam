@@ -1,5 +1,4 @@
 import { useId, useState } from "react";
-import { Download, LogOut, Mail, Pencil, Trash2 } from "lucide-react";
 import { formatCredits } from "@logjam/shared";
 
 import {
@@ -124,7 +123,7 @@ function AccountPanel({
         actions={
           username !== null && (
             <IconButton
-              icon={Pencil}
+              icon="edit"
               label="Change username"
               onClick={() => setRenameOpen(true)}
             />
@@ -187,12 +186,12 @@ function AccountPanel({
                 in place. The same verb, the same glyph and the same position
                 as the username's, two rows above it. */}
             <Row
-              leading={<IconTile icon={Mail} hue="var(--theme-accent)" />}
+              leading={<IconTile icon="email" hue="var(--theme-accent)" />}
               title="Email"
               subtitle={email ?? undefined}
               trailing={
                 <IconButton
-                  icon={Pencil}
+                  icon="edit"
                   label="Change email address"
                   onClick={() => setChangeEmailOpen(true)}
                 />
@@ -202,7 +201,7 @@ function AccountPanel({
             <SectionHeader title="Your data" />
             <Button
               variant="outline"
-              icon={Download}
+              icon="export"
               busy={exporting}
               onClick={handleExport}
             >
@@ -210,11 +209,11 @@ function AccountPanel({
             </Button>
 
             <SectionHeader title="Leaving" />
-            <Button variant="outline" icon={LogOut} onClick={signOut}>
+            <Button variant="outline" icon="signOut" onClick={signOut}>
               Sign out
             </Button>
             <Row
-              leading={<IconTile icon={Trash2} hue="var(--theme-warning)" />}
+              leading={<IconTile icon="delete" hue="var(--theme-warning)" />}
               title="Delete account"
               onOpen={() => setDeleteAccountOpen(true)}
             />

@@ -22,19 +22,6 @@ import {
   useState,
 } from "react";
 import {
-  CopyPlus,
-  Download,
-  EllipsisVertical,
-  Link2Off,
-  MapPin,
-  Pencil,
-  Send,
-  Share2,
-  Trash2,
-  X,
-  type LucideIcon,
-} from "lucide-react";
-import {
   removeShareConfirm,
   densifyLine,
   formatBytes,
@@ -86,25 +73,26 @@ import {
   Dialog,
   type MenuEntry,
   type Stat,
+  type Glyph,
 } from "../../../ui";
 import { wayProperties, wayVerbs, type WayVerbId } from "./wayActions";
 import type { WayItem } from "./waysModel";
 import classes from "./WayDetailPanel.module.css";
 
-const VERB_ICON: Partial<Record<WayVerbId, LucideIcon>> = {
-  openPlace: MapPin,
-  edit: Pencil,
-  copy: CopyPlus,
-  copyAndRemove: CopyPlus,
-  share: Share2,
-  sendCopy: Send,
-  exportGpx: Download,
-  exportKml: Download,
-  download: Download,
-  rename: Pencil,
+const VERB_ICON: Partial<Record<WayVerbId, Glyph>> = {
+  openPlace: "place",
+  edit: "edit",
+  copy: "copy",
+  copyAndRemove: "moveCopy",
+  share: "shareFriend",
+  sendCopy: "send",
+  exportGpx: "export",
+  exportKml: "export",
+  download: "download",
+  rename: "edit",
   // Not a bin: this drops the caller's own share and the owner keeps their row.
-  removeShare: X,
-  delete: Trash2,
+  removeShare: "close",
+  delete: "delete",
 };
 
 /** Export never touches the server — a route's geometry is already here. */
@@ -546,12 +534,12 @@ export default function WayDetailPanel({
               trigger={(props) => (
                 <IconButton
                   {...props}
-                  icon={EllipsisVertical}
+                  icon="overflow"
                   label={`Actions for ${way.title}`}
                 />
               )}
             />
-            <IconButton icon={X} label="Close panel" onClick={onClose} />
+            <IconButton icon="close" label="Close panel" onClick={onClose} />
           </>
         }
       />
@@ -626,7 +614,7 @@ export default function WayDetailPanel({
               {owned && route && (
                 <Button
                   compact
-                  icon={Link2Off}
+                  icon="unlink"
                   disabled={busy}
                   onClick={handleUnlink}
                 >
@@ -652,7 +640,7 @@ export default function WayDetailPanel({
               <span className={classes.linkName}>{sharingPlace.name}</span>
               <Button
                 compact
-                icon={MapPin}
+                icon="place"
                 onClick={() => onOpenPlace(sharingPlace.id)}
               >
                 Open

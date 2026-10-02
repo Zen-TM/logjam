@@ -1,6 +1,5 @@
-import { Check } from "lucide-react";
 import { useThemePreferences } from "../../../themePreferences";
-import { SectionHeader } from "../../../ui";
+import { SectionHeader, Icon } from "../../../ui";
 import { ErrorBanner } from "../../feedback/ErrorBanner";
 import classes from "./ThemeChooser.module.css";
 
@@ -62,7 +61,12 @@ function ThemeChooser() {
                 </span>
                 <span className={classes.name}>{scheme.name}</span>
                 {selected && (
-                  <Check size={16} className={classes.tick} aria-hidden />
+                  <Icon
+                    idea="done"
+                    size={16}
+                    className={classes.tick}
+                    aria-hidden
+                  />
                 )}
               </label>
             );

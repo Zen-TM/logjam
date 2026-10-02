@@ -5253,7 +5253,7 @@ export function MapScreen({
             }}
           />
           <Row
-            icon="add"
+            icon="addPlace"
             title="Add a place"
             subtitle="With this position filled in"
             onPress={() => {

@@ -20,19 +20,6 @@
 // (`TopoStyleSheet`), so the map stays in view while it changes.
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ChevronDown,
-  Download,
-  EllipsisVertical,
-  FileDown,
-  Mountain,
-  Paintbrush,
-  Pencil,
-  Plus,
-  Share2,
-  Trash2,
-  X,
-} from "lucide-react";
-import {
   removeShareConfirm,
   type TopoExportJobView,
   type VectorStyleSettings,
@@ -226,7 +213,7 @@ export default function LidarPanel({
     const exportEntry: MenuEntry = {
       id: "export",
       label: "Export…",
-      icon: FileDown,
+      icon: "export",
       onSelect: () => setExportJob(job),
     };
     if (job.syncRole === "owner") {
@@ -235,14 +222,14 @@ export default function LidarPanel({
         {
           id: "share",
           label: "Share…",
-          icon: Share2,
+          icon: "shareFriend",
           onSelect: () => setShareJob({ id: job.jobId, label }),
         },
         { id: "delete-sep", separator: true },
         {
           id: "delete",
           label: "Delete",
-          icon: Trash2,
+          icon: "delete",
           danger: true,
           onSelect: () =>
             ask({
@@ -285,7 +272,7 @@ export default function LidarPanel({
       {
         id: "removeShare",
         label: "Remove",
-        icon: X,
+        icon: "close",
         onSelect: () =>
           ask({
             title: confirm.title,
@@ -318,7 +305,7 @@ export default function LidarPanel({
           {
             id: "download",
             label: "Download",
-            icon: Download,
+            icon: "download" as const,
             onSelect: () => downloadFile(exportJob.downloadUrl!),
           },
         ]
@@ -327,7 +314,7 @@ export default function LidarPanel({
     {
       id: "delete",
       label: "Delete",
-      icon: Trash2,
+      icon: "delete",
       danger: true,
       onSelect: () =>
         ask({
@@ -344,7 +331,7 @@ export default function LidarPanel({
     {
       id: "make",
       label: "Make a LiDAR topo with this",
-      icon: Mountain,
+      icon: "lidar",
       onSelect: () => onOpenTopoWithTemplate(template.id),
     },
     // The built-in Default is nobody's to change: absent, not disabled.
@@ -354,14 +341,14 @@ export default function LidarPanel({
           {
             id: "edit",
             label: "Edit…",
-            icon: Pencil,
+            icon: "edit",
             onSelect: () => setEditingTemplate(template),
           },
           { id: "delete-sep", separator: true },
           {
             id: "delete",
             label: "Delete",
-            icon: Trash2,
+            icon: "delete",
             danger: true,
             onSelect: () =>
               ask({
@@ -404,7 +391,7 @@ export default function LidarPanel({
       actions={
         <>
           <IconButton
-            icon={Paintbrush}
+            icon="colour"
             label="Topo style"
             tone={sheetOpen ? "filled" : "default"}
             aria-expanded={sheetOpen}
@@ -417,13 +404,13 @@ export default function LidarPanel({
               {
                 id: "make",
                 label: "Make a LiDAR topo",
-                icon: Mountain,
+                icon: "lidar",
                 onSelect: onOpenTopo,
               },
               {
                 id: "template",
                 label: "New template…",
-                icon: Plus,
+                icon: "add",
                 onSelect: () => setEditingTemplate(null),
               },
             ]}
@@ -432,8 +419,8 @@ export default function LidarPanel({
                 {...props}
                 compact
                 variant="filled"
-                icon={Plus}
-                trailingIcon={ChevronDown}
+                icon="add"
+                trailingIcon="expand"
               >
                 Make
               </Button>
@@ -457,11 +444,11 @@ export default function LidarPanel({
   ) : nothingYet ? (
     <div className={classes.emptyArea}>
       <EmptyState
-        icon={Mountain}
+        icon="lidar"
         title="No LiDAR topos yet"
         body="Pick an area and Logjam Web builds contours, slope, hillshade and vegetation from the government's LiDAR survey. Save one to Logjam GPS for the field."
         actions={
-          <Button compact variant="filled" icon={Mountain} onClick={onOpenTopo}>
+          <Button compact variant="filled" icon="lidar" onClick={onOpenTopo}>
             Make a LiDAR topo
           </Button>
         }
@@ -491,7 +478,7 @@ export default function LidarPanel({
                 description={MAP_IDENTITY.topo.label}
                 leading={
                   <IconTile
-                    icon={Mountain}
+                    icon="lidar"
                     hue={MAP_IDENTITY.topo.hue}
                     label={MAP_IDENTITY.topo.label}
                   />
@@ -514,7 +501,7 @@ export default function LidarPanel({
                       trigger={(props) => (
                         <IconButton
                           {...props}
-                          icon={EllipsisVertical}
+                          icon="overflow"
                           label={`Actions for ${label}`}
                         />
                       )}
@@ -553,7 +540,7 @@ export default function LidarPanel({
                 description={MAP_IDENTITY.export.label}
                 leading={
                   <IconTile
-                    icon={FileDown}
+                    icon="export"
                     hue={MAP_IDENTITY.export.hue}
                     label={MAP_IDENTITY.export.label}
                   />
@@ -572,7 +559,7 @@ export default function LidarPanel({
                     trigger={(props) => (
                       <IconButton
                         {...props}
-                        icon={EllipsisVertical}
+                        icon="overflow"
                         label={`Actions for ${label}`}
                       />
                     )}
@@ -622,7 +609,7 @@ export default function LidarPanel({
                   trigger={(props) => (
                     <IconButton
                       {...props}
-                      icon={EllipsisVertical}
+                      icon="overflow"
                       label={`Actions for ${template.name}`}
                     />
                   )}

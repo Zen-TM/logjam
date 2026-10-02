@@ -1,10 +1,10 @@
 import {
   Anchor,
-  BookOpen,
+  Bookmark,
   Droplet,
-  Navigation,
-  Tag,
-  TrendingUp,
+  Hash,
+  Package,
+  Sun,
   type LucideIcon,
 } from "lucide-react";
 import { tripTypeIdentity, type TripTypeIconKey } from "@logjam/shared";
@@ -13,11 +13,11 @@ import { tripTypeIdentity, type TripTypeIconKey } from "@logjam/shared";
 // until it is drawn.
 const TRIP_TYPE_ICONS: Record<TripTypeIconKey, LucideIcon> = {
   droplet: Droplet,
-  "trending-up": TrendingUp,
-  navigation: Navigation,
+  sun: Sun,
+  package: Package,
   anchor: Anchor,
-  tag: Tag,
-  "book-open": BookOpen,
+  hash: Hash,
+  bookmark: Bookmark,
 };
 
 /** A trip type's glyph and hue on Logjam Web: `tripTypeIdentity` in

@@ -7,7 +7,6 @@
 // 2026-09-19, which meant the only way to READ a trip put the whole app behind
 // a modal, and opening the place it linked had to close the trip first.
 import { useEffect, useState } from "react";
-import { EllipsisVertical, MapPin, Pencil, Trash2, X } from "lucide-react";
 import {
   attributeRows,
   formatFieldValue,
@@ -137,12 +136,12 @@ function TripDetailPanel({
           onBack={onBack}
           backLabel="Back to Logs"
           actions={
-            <IconButton icon={X} label="Close panel" onClick={onClose} />
+            <IconButton icon="close" label="Close panel" onClick={onClose} />
           }
         />
         <div className={classes.body}>
           <EmptyState
-            icon={Pencil}
+            icon="edit"
             title="No trip selected"
             body="Pick one from Logs, or from the place it visited."
           />
@@ -165,7 +164,7 @@ function TripDetailPanel({
     {
       id: "edit",
       label: "Edit trip",
-      icon: Pencil,
+      icon: "edit",
       disabled: deleting,
       onSelect: () => setEditing(true),
     },
@@ -173,7 +172,7 @@ function TripDetailPanel({
     {
       id: "delete",
       label: "Delete",
-      icon: Trash2,
+      icon: "delete",
       danger: true,
       disabled: deleting,
       onSelect: () => setConfirmingDelete(true),
@@ -197,12 +196,12 @@ function TripDetailPanel({
                 trigger={(props) => (
                   <IconButton
                     {...props}
-                    icon={EllipsisVertical}
+                    icon="overflow"
                     label={`Actions for ${title}`}
                   />
                 )}
               />
-              <IconButton icon={X} label="Close panel" onClick={onClose} />
+              <IconButton icon="close" label="Close panel" onClick={onClose} />
             </>
           }
         />
@@ -243,7 +242,7 @@ function TripDetailPanel({
                 <Row
                   key={place.id}
                   title={place.name}
-                  leading={<IconTile icon={MapPin} hue="var(--theme-accent)" />}
+                  leading={<IconTile icon="place" hue="var(--theme-accent)" />}
                   onOpen={() => onOpenPlace(place.id)}
                 />
               ))

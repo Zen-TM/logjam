@@ -5,19 +5,6 @@ import {
   type KeyboardEvent,
   type RefObject,
 } from "react";
-import {
-  ArrowLeft,
-  ChevronRight,
-  GripVertical,
-  Info,
-  Map as MapIcon,
-  MapPin,
-  Mountain,
-  Route,
-  Scan,
-  Search,
-  X,
-} from "lucide-react";
 import type { RegionBbox } from "@logjam/shared";
 import { TOPO_LAYERS, type CompletedTopoJob } from "../../topoLayerTypes";
 import { PROTOMAPS_SWATCH } from "../../basemapSwatch";
@@ -33,6 +20,8 @@ import {
   Row,
   SearchField,
   Toggle,
+  Icon,
+  type Glyph,
 } from "../../ui";
 import classes from "./LayersPopover.module.css";
 
@@ -202,13 +191,13 @@ export default function LayersPopover({
               label="Layers view"
               className={classes.grow}
               options={[
-                { value: "basemap", label: "Basemap", icon: MapIcon },
+                { value: "basemap", label: "Basemap", icon: "map" },
                 { value: "overlays", label: "Overlays", count: overlaysOn },
               ]}
               value={view}
               onChange={setView}
             />
-            <IconButton icon={X} label="Close" onClick={close} />
+            <IconButton icon="close" label="Close" onClick={close} />
           </div>
           {view === "overlays" ? (
             <div className={classes.body}>
@@ -228,7 +217,7 @@ export default function LayersPopover({
                   (root CLAUDE.md), and every list marks a shared row. A legend
                   says what kind; the pin says whose (operator, 2026-09-17). */}
               <OverlayRow
-                icon={MapPin}
+                icon="place"
                 hue="var(--owned-place-color)"
                 title="Places"
                 subtitle={countOf(placeCount, "place")}
@@ -241,7 +230,7 @@ export default function LayersPopover({
                   per-item switch buried on each one's detail page, which is a
                   control you had to open a page to find. */}
               <OverlayRow
-                icon={Route}
+                icon="route"
                 hue="var(--hue-route)"
                 title="Ways"
                 subtitle={
@@ -254,15 +243,13 @@ export default function LayersPopover({
               />
               {completedTopoJobs.length === 0 ? (
                 <Row
-                  leading={
-                    <IconTile icon={Mountain} hue="var(--hue-overlay)" />
-                  }
+                  leading={<IconTile icon="lidar" hue="var(--hue-overlay)" />}
                   title="LiDAR topos"
                   subtitle="None yet. Make one from Maps."
                 />
               ) : (
                 <OverlayRow
-                  icon={Mountain}
+                  icon="lidar"
                   hue="var(--hue-overlay)"
                   title="LiDAR topos"
                   subtitle={[
@@ -300,7 +287,7 @@ function OverlayRow({
   onOpen,
   openLabel,
 }: {
-  icon: typeof MapPin;
+  icon: Glyph;
   hue: string;
   title: string;
   subtitle: string;
@@ -318,7 +305,7 @@ function OverlayRow({
         <>
           {onOpen && (
             <IconButton
-              icon={ChevronRight}
+              icon="disclosure"
               label={openLabel ?? title}
               onClick={onOpen}
             />
@@ -465,11 +452,7 @@ function ToposView({
   return (
     <>
       <div className={classes.head}>
-        <IconButton
-          icon={ArrowLeft}
-          label="Back to overlays"
-          onClick={onBack}
-        />
+        <IconButton icon="back" label="Back to overlays" onClick={onBack} />
         <div className={classes.titleBlock}>
           <span className={classes.title}>LiDAR topos</span>
           <span className={classes.subtitle}>
@@ -481,7 +464,7 @@ function ToposView({
           onChange={setLidarEnabled}
           label="Show LiDAR topos"
         />
-        <IconButton icon={X} label="Close" onClick={onClose} />
+        <IconButton icon="close" label="Close" onClick={onClose} />
       </div>
       <div className={classes.body}>
         <ChipRail
@@ -518,7 +501,7 @@ function ToposView({
                       value: "view",
                       label: "In this view",
                       count: inView.length,
-                      icon: Scan,
+                      icon: "scan",
                     },
                     { value: "all", label: "All", count: jobs.length },
                   ]}
@@ -527,7 +510,7 @@ function ToposView({
                 />
               )}
               <IconButton
-                icon={searching ? X : Search}
+                icon={searching ? "close" : "search"}
                 label={searching ? "Close search" : "Search topos"}
                 tone={query ? "filled" : "default"}
                 onClick={() => {
@@ -673,7 +656,7 @@ function LayerOrder({
                   }
                 }}
               >
-                <GripVertical size={16} aria-hidden />
+                <Icon idea="dragHandle" size={16} aria-hidden />
               </button>
               <span className={classes.titleBlock}>
                 <span className={classes.listName}>
@@ -685,7 +668,7 @@ function LayerOrder({
                       role="img"
                       aria-label={description}
                     >
-                      <Info size={14} aria-hidden />
+                      <Icon idea="info" size={14} aria-hidden />
                     </span>
                   )}
                 </span>

@@ -72,16 +72,6 @@ import type { MapTool } from "./map/MapChrome";
 import type { MapKind } from "./sidebar/panels/PlacesPanel";
 import { Button, IconButton, MapButton, Notice } from "../ui";
 import {
-  FileText,
-  Filter,
-  Layers,
-  MapPinPlus,
-  Mountain,
-  PenTool,
-  SquareDashed,
-  X,
-} from "lucide-react";
-import {
   CURRENT_CONSENT_VERSION,
   PENDING_CONSENT_STORAGE_KEY,
   consentGate,
@@ -1350,10 +1340,10 @@ function App() {
   const notices =
     filtersActive && !dimUI ? (
       <Notice
-        icon={Filter}
+        icon="filter"
         action={
           <IconButton
-            icon={X}
+            icon="close"
             label="Clear filters"
             size={14}
             round
@@ -1390,24 +1380,24 @@ function App() {
     {
       id: "route",
       label: "Draw a route",
-      icon: PenTool,
+      icon: "draw",
       onSelect: startDrawingRoute,
     },
     {
       id: "place",
       label: "Add a place",
-      icon: MapPinPlus,
+      icon: "addPlace",
       onSelect: () => setShowAdd(true),
     },
     {
       id: "make-map",
       label: "Make a map of an area",
-      icon: SquareDashed,
+      icon: "pickArea",
       menu: [
         {
           id: "topo",
           label: "LiDAR topo",
-          icon: Mountain,
+          icon: "lidar",
           onSelect: () => {
             setActivePanel(null);
             setSelectingTopoBbox(true);
@@ -1416,7 +1406,7 @@ function App() {
         {
           id: "geopdf",
           label: "GeoPDF",
-          icon: FileText,
+          icon: "geoPdf",
           onSelect: () => {
             setEditingGeoPdfTemplate(undefined);
             setInitialGeoPdfTemplateId(null);
@@ -1781,7 +1771,7 @@ function App() {
           layersButton={
             <MapButton
               ref={layersButtonRef}
-              icon={Layers}
+              icon="layers"
               label="Layers"
               expanded={layersOpen}
               onClick={() => setLayersOpen((open) => !open)}
