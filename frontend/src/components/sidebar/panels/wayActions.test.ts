@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { WAY_SHARE_VERB } from "@logjam/shared";
 import { wayProperties, wayVerbs, type WaySurface } from "./wayActions";
 import type { WayItem } from "./waysModel";
 
@@ -118,11 +119,44 @@ describe("wayVerbs", () => {
 
   // `POST /shares` admits route, topoJob and geoPdfJob (`SHARABLE_ENTITY_TYPES`),
   // so a file has nothing to share: Share… on one opened no dialog. Mutation:
-  // drop the `way.kind === "route"` test from the share verb in `wayVerbs`.
+  // drop the `WAY_SHARE_VERB` test from the share verb in `wayVerbs`.
   it("offers Share… on a route and on no kind of file", () => {
     expect(ids(route())).toContain("share");
     for (const kind of ["track", "import"] as const) {
       expect(ids(importFile({ kind }))).not.toContain("share");
+    }
+  });
+
+  // A file is handed over as a copy instead, and a route never is: it is a
+  // synced row, not a file. Mutation: drop the `WAY_SHARE_VERB` test from the
+  // sendCopy verb in `wayVerbs`.
+  it("offers Send a copy on an owned file and never on a route", () => {
+    expect(ids(route())).not.toContain("sendCopy");
+    for (const kind of ["track", "import"] as const) {
+      expect(ids(importFile({ kind }))).toContain("sendCopy");
+    }
+  });
+
+  // A track on a friend's place is visible, not theirs to hand on; the API
+  // refuses it (`POST /file-sends/from-media` is owner only).
+  it("withholds Send a copy on a file reached through someone's place", () => {
+    expect(
+      ids(importFile({ shared: true, viaPlace: true, placeId: "p1" })),
+    ).not.toContain("sendCopy");
+  });
+
+  // Parity with Logjam GPS, whose assetActions.test.ts checks the same
+  // declaration. Mutation: offer sendCopy on every owned way in `wayVerbs`,
+  // ignoring WAY_SHARE_VERB.
+  it("agrees with WAY_SHARE_VERB, the rule both clients share", () => {
+    for (const kind of ["route", "track", "import"] as const) {
+      const verbs = ids({ ...importFile(), kind });
+      expect(verbs.includes("share"), kind).toBe(
+        WAY_SHARE_VERB[kind] === "share",
+      );
+      expect(verbs.includes("sendCopy"), kind).toBe(
+        WAY_SHARE_VERB[kind] === "sendCopy",
+      );
     }
   });
 

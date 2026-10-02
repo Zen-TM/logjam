@@ -29,6 +29,18 @@ share / send-a-copy verb matrix"). A descriptor withholds a verb rather than a
 screen hiding it — `share` is absent on a row shared WITH you, `sendCopy` is
 absent on an import with no retained original and on an empty recording.
 
+- **Update 2026-10-02: Logjam Web offers Send a copy too, so the kind→verb
+  rule is a shared declaration.** `WAY_SHARE_VERB` (`shared/src/sharing.ts`)
+  says route → Share, track and import → Send a copy; Logjam GPS's descriptors
+  and Logjam Web's `wayVerbs` (`frontend/src/components/sidebar/panels/wayActions.ts`)
+  are each checked against it ("agrees with WAY_SHARE_VERB" in both test
+  files). Whether a verb shows on a given row still reads each client's own
+  state, and on Logjam GPS that is still `assetActions.ts` alone. Logjam Web
+  holds no file to upload, so it sends one the account already keeps with
+  `POST /file-sends/from-media`, an S3 copy limited to the caller's own
+  standalone files (guard: `api/src/__tests__/fileSends.test.ts`, "send a copy
+  of a file the account holds"). Everything else above stands.
+
 **Every surface renders ONE panel** — `useSharePanel` in `src/sharing/
 SharePanel.tsx`, for both verbs and every kind, places included. It returns
 `{ title, body, footer }` (plus the `sharing` state the place screen's

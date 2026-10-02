@@ -53,6 +53,23 @@ export const FILE_SEND_SOURCE_KINDS = ["import", "track"] as const;
 export type FileSendSourceKind = (typeof FILE_SEND_SOURCE_KINDS)[number];
 
 /**
+ * WHICH VERB a way the user owns gets, on both clients: a route is a synced
+ * row and is Shared, a recording or an import is a file and is sent as a copy.
+ * Never both on one kind, and neither on a way shared with the user.
+ *
+ * The rule only. Whether the verb is offered on a given row also reads the
+ * client's own state (Logjam GPS withholds a copy whose bytes are not on the
+ * phone), which stays with each client. Parity: Logjam GPS's
+ * `assetActions.test.ts` and Logjam Web's `wayActions.test.ts` both check
+ * their descriptors against this.
+ */
+export const WAY_SHARE_VERB = {
+  route: "share",
+  track: "sendCopy",
+  import: "sendCopy",
+} as const satisfies Record<"route" | FileSendSourceKind, string>;
+
+/**
  * Per-recipient state of one send.
  *
  * The download gate reads THIS, never the S3 object's existence: one object

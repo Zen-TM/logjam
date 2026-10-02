@@ -19,6 +19,7 @@ import { randomUUID } from "crypto";
 import { Prisma } from "@prisma/client";
 
 import {
+  CopyObjectCommand,
   HeadObjectCommand,
   PutObjectCommand,
   GetObjectCommand,
@@ -56,6 +57,8 @@ import {
 import {
   FILE_SEND_MAX_BYTES,
   FILE_SEND_SOURCE_KINDS,
+  MEDIA_ORIGINS,
+  exportFilename,
   normalizeUserUiPreferences,
   type FileSendSourceKind,
 } from "@logjam/shared";
@@ -188,113 +191,17 @@ router.post(
       throw new AppError(413, `A sent file must be under ${limitMb} MB`);
     }
 
-    const totalBytes = BigInt(sizeBytes);
-    const expiresAt = fileSendExpiresAt();
-
-    const recipientPrefs = await prisma.user.findMany({
-      where: { id: { in: recipientIds } },
-      select: { id: true, uiPreferences: true },
+    const recorded = await recordSend({
+      senderId: user.id,
+      fileSendId,
+      sourceKind,
+      filename,
+      key,
+      sizeBytes: BigInt(sizeBytes),
+      recipientIds,
+      batchId,
     });
-    const notifiable = new Set(
-      recipientPrefs
-        .filter(
-          (row) =>
-            normalizeUserUiPreferences(row.uiPreferences).notifications
-              .shareInApp,
-        )
-        .map((row) => row.id),
-    );
-
-    let send;
-    try {
-      send = await prisma.$transaction(async (tx) => {
-        // Charge, then verify — an over-quota throw rolls the charge back
-        // rather than needing a manual decrement (the pattern media confirm
-        // uses).
-        await incrementStorageUsed(user.id, totalBytes, tx);
-        const { used, quota } = await getStorageUsage(user.id, tx);
-        if (used > quota) {
-          throw new AppError(507, "Storage quota exceeded", {
-            used: used.toString(),
-            quota: quota.toString(),
-          });
-        }
-        const created = await tx.fileSend.create({
-          data: {
-            id: fileSendId,
-            senderId: user.id,
-            sourceKind,
-            filename,
-            s3Key: key,
-            sizeBytes: totalBytes,
-            expiresAt,
-            recipients: {
-              create: recipientIds.map((userId) => ({ userId })),
-            },
-          },
-          include: { recipients: { select: { userId: true, status: true } } },
-        });
-        // IDs ONLY in the payload — never the filename, which is user text and
-        // routinely names a place (PRIV-005). The sender's username AND the
-        // filename are both resolved from the live rows at read time in
-        // notifications.ts, which is also what makes them vanish when the send
-        // is declined or expires.
-        await tx.notification.createMany({
-          data: recipientIds
-            .filter((id) => notifiable.has(id))
-            .map((id) => ({
-              userId: id,
-              type: "file_sent",
-              payload: {
-                fileSendId,
-                sentById: user.id,
-                ...(batchId ? { batchId } : {}),
-              },
-            })),
-        });
-        return created;
-      });
-    } catch (err) {
-      if (
-        err instanceof Prisma.PrismaClientKnownRequestError &&
-        err.code === "P2002"
-      ) {
-        // A concurrent duplicate confirm won the race: this transaction rolled
-        // back (nothing double-charged) — return the winner's row, as the
-        // idempotent path above does. Without this the loser 500s on a send
-        // that succeeded.
-        const winner = await prisma.fileSend.findUnique({
-          where: { id: fileSendId },
-          include: { recipients: { select: { userId: true, status: true } } },
-        });
-        if (winner && winner.senderId === user.id) {
-          res.status(200).json(toSentView(winner));
-          return;
-        }
-      }
-      if (err instanceof AppError && err.statusCode === 507) {
-        await deleteS3KeysBestEffort(MEDIA_BUCKET, [key]);
-      }
-      throw err;
-    }
-
-    // ONE PUSH PER BULK ACTION, NOT PER FILE. Inside a batch this confirm stays
-    // silent and POST /bulk-share fires a single push per recipient once the
-    // whole action lands — the client calls it LAST, after every upload, so the
-    // buzz arrives when the files actually have. Ten files in one go used to be
-    // ten buzzes on the recipient's phone, which is where bulk sharing actually
-    // hurts them; the ten inbox ROWS are fine, and are what keeps each file
-    // individually answerable.
-    if (!batchId) {
-      for (const id of recipientIds) {
-        if (notifiable.has(id)) {
-          // Best-effort push after commit; generic title + opaque id only.
-          void sendPushToUser(id, { type: "file_sent", fileSendId });
-        }
-      }
-    }
-
-    res.status(201).json(toSentView(send));
+    res.status(recorded.created ? 201 : 200).json(toSentView(recorded.send));
   },
 );
 
@@ -320,6 +227,210 @@ function toSentView(send: SendRow) {
     recipients: send.recipients,
   };
 }
+
+/**
+ * The bytes are at `key`: charge the sender once, create the send and its
+ * recipient rows, notify. Shared by both ways a send's bytes arrive — the
+ * client's upload (confirm) and a server-side copy of a file the account
+ * already holds (from-media) — so the quota charge and the notification rules
+ * cannot drift between them.
+ *
+ * `created` is false when a concurrent duplicate won the insert race; the
+ * winner's row comes back and nothing is charged or pushed twice.
+ */
+async function recordSend(args: {
+  senderId: string;
+  fileSendId: string;
+  sourceKind: FileSendSourceKind;
+  filename: string;
+  key: string;
+  sizeBytes: bigint;
+  recipientIds: string[];
+  batchId: string | null | undefined;
+}): Promise<{ send: SendRow; created: boolean }> {
+  const { senderId, fileSendId, recipientIds, batchId, key } = args;
+  const expiresAt = fileSendExpiresAt();
+
+  const recipientPrefs = await prisma.user.findMany({
+    where: { id: { in: recipientIds } },
+    select: { id: true, uiPreferences: true },
+  });
+  const notifiable = new Set(
+    recipientPrefs
+      .filter(
+        (row) =>
+          normalizeUserUiPreferences(row.uiPreferences).notifications
+            .shareInApp,
+      )
+      .map((row) => row.id),
+  );
+
+  let send;
+  try {
+    send = await prisma.$transaction(async (tx) => {
+      // Charge, then verify — an over-quota throw rolls the charge back
+      // rather than needing a manual decrement (the pattern media confirm
+      // uses).
+      await incrementStorageUsed(senderId, args.sizeBytes, tx);
+      const { used, quota } = await getStorageUsage(senderId, tx);
+      if (used > quota) {
+        throw new AppError(507, "Storage quota exceeded", {
+          used: used.toString(),
+          quota: quota.toString(),
+        });
+      }
+      const created = await tx.fileSend.create({
+        data: {
+          id: fileSendId,
+          senderId,
+          sourceKind: args.sourceKind,
+          filename: args.filename,
+          s3Key: key,
+          sizeBytes: args.sizeBytes,
+          expiresAt,
+          recipients: {
+            create: recipientIds.map((userId) => ({ userId })),
+          },
+        },
+        include: { recipients: { select: { userId: true, status: true } } },
+      });
+      // IDs ONLY in the payload — never the filename, which is user text and
+      // routinely names a place (PRIV-005). The sender's username AND the
+      // filename are both resolved from the live rows at read time in
+      // notifications.ts, which is also what makes them vanish when the send
+      // is declined or expires.
+      await tx.notification.createMany({
+        data: recipientIds
+          .filter((id) => notifiable.has(id))
+          .map((id) => ({
+            userId: id,
+            type: "file_sent",
+            payload: {
+              fileSendId,
+              sentById: senderId,
+              ...(batchId ? { batchId } : {}),
+            },
+          })),
+      });
+      return created;
+    });
+  } catch (err) {
+    if (
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === "P2002"
+    ) {
+      // A concurrent duplicate confirm won the race: this transaction rolled
+      // back (nothing double-charged) — return the winner's row, as the
+      // idempotent path in confirm does. Without this the loser 500s on a
+      // send that succeeded.
+      const winner = await prisma.fileSend.findUnique({
+        where: { id: fileSendId },
+        include: { recipients: { select: { userId: true, status: true } } },
+      });
+      if (winner && winner.senderId === senderId) {
+        return { send: winner, created: false };
+      }
+    }
+    if (err instanceof AppError && err.statusCode === 507) {
+      await deleteS3KeysBestEffort(MEDIA_BUCKET, [key]);
+    }
+    throw err;
+  }
+
+  // ONE PUSH PER BULK ACTION, NOT PER FILE. Inside a batch this confirm stays
+  // silent and POST /bulk-share fires a single push per recipient once the
+  // whole action lands — the client calls it LAST, after every upload, so the
+  // buzz arrives when the files actually have. Ten files in one go used to be
+  // ten buzzes on the recipient's phone, which is where bulk sharing actually
+  // hurts them; the ten inbox ROWS are fine, and are what keeps each file
+  // individually answerable.
+  if (!batchId) {
+    for (const id of recipientIds) {
+      if (notifiable.has(id)) {
+        // Best-effort push after commit; generic title + opaque id only.
+        void sendPushToUser(id, { type: "file_sent", fileSendId });
+      }
+    }
+  }
+  return { send, created: true };
+}
+
+// ── POST /file-sends/from-media ───────────────────────────────
+// Send a copy of a file the account ALREADY HOLDS — an import's original or a
+// recording's GPX — by copying it inside S3. Logjam Web's path: it has no file
+// on disk to upload, and the bytes it would download and re-upload are the
+// same bytes already sitting in the bucket.
+//
+// The owner's own STANDALONE files only (`origin` set). That excludes a photo
+// on a place, and a track on a place a friend shared, which the caller can see
+// but which is not theirs to hand on. Anything else is 404, never 403: the id
+// came from a client (anti-oracle, as confirm). Guard:
+// `__tests__/fileSends.test.ts`, "send a copy of a file the account holds".
+router.post(
+  "/from-media",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const user = await resolveUser(req.user!.sub);
+    const body = req.body ?? {};
+    if (typeof body.mediaId !== "string") {
+      throw new AppError(400, "mediaId is required");
+    }
+    const recipientIds = await parseRecipientIds(user.id, body.recipientIds);
+
+    const media = await prisma.media.findFirst({
+      where: {
+        id: body.mediaId,
+        ownerId: user.id,
+        origin: { in: [...MEDIA_ORIGINS] },
+      },
+    });
+    if (!media) throw new AppError(404, "File not found");
+    const sourceKind = parseSourceKind(media.origin);
+
+    const extension = sendableExtension(media.filename);
+    // What the recipient sees: the file's label where it has one, as Logjam
+    // GPS names the same send (saved/assetActions.ts), else its own filename,
+    // which already ends in the extension.
+    const label = media.displayName?.trim();
+    const filename = sanitizeSendFilename(
+      label ? exportFilename(label, extension, sourceKind) : media.filename,
+    );
+    if (media.fileSizeBytes > BigInt(FILE_SEND_MAX_BYTES)) {
+      const limitMb = Math.round(FILE_SEND_MAX_BYTES / 1024 / 1024);
+      throw new AppError(413, `A sent file must be under ${limitMb} MB`);
+    }
+    await assertHasStorageQuota(user.id, media.fileSizeBytes);
+
+    const fileSendId = randomUUID();
+    const key = fileSendKey(user.id, fileSendId, extension);
+    try {
+      await s3.send(
+        new CopyObjectCommand({
+          Bucket: MEDIA_BUCKET,
+          // Same bucket: a server-side copy, so no egress is charged.
+          CopySource: `${MEDIA_BUCKET}/${encodeURIComponent(media.s3KeyDisplay).replace(/%2F/g, "/")}`,
+          Key: key,
+        }),
+      );
+    } catch (err) {
+      if (isMissingObjectError(err)) throw new AppError(404, "File not found");
+      throw err;
+    }
+
+    const { send } = await recordSend({
+      senderId: user.id,
+      fileSendId,
+      sourceKind,
+      filename,
+      key,
+      // The media row's size was read from S3 at its own confirm.
+      sizeBytes: media.fileSizeBytes,
+      recipientIds,
+      batchId: undefined,
+    });
+    res.status(201).json(toSentView(send));
+  },
+);
 
 // ── GET /file-sends/inbox ─────────────────────────────────────
 // Files friends have sent me and I have not yet turned down. Expired sends are

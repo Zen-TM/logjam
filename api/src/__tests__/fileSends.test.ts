@@ -9,6 +9,7 @@ import {
   BOB_ID,
   CAROL_ID,
   as,
+  SHARED_PLACE_ID,
 } from "./_actors";
 import prisma from "../services/prisma";
 
@@ -524,6 +525,142 @@ describe("file sends — the actionable notification", () => {
       (row) => row.payload.fileSendStatus !== "expired",
     )) {
       expect(inboxIds).toContain(n.payload.fileSendId);
+    }
+  });
+});
+
+// Logjam Web's path: no file on disk, so the bytes are copied from the media
+// row the account already holds (POST /file-sends/from-media). The boundary is
+// WHOSE file: a track on a friend's shared place is visible to the caller and
+// must still not be theirs to hand on.
+describe("file sends — send a copy of a file the account holds", () => {
+  const GPX_BYTES = Buffer.from(GPX, "utf8");
+
+  /** Upload one file through the ordinary media flow; returns its id. */
+  async function uploadMedia(
+    sub: string,
+    link:
+      | { linkedType: "none"; origin: "import" }
+      | {
+          linkedType: "place";
+          linkedId: string;
+        },
+    displayName?: string,
+  ): Promise<string> {
+    const body = {
+      ...link,
+      filename: `media-${Date.now()}.gpx`,
+      mediaType: "application/gpx+xml",
+      ...(link.linkedType === "none"
+        ? {
+            metadata: {
+              bbox: [150.1, -33.2, 150.2, -33.1],
+              featureCount: 1,
+              positionCount: 2,
+            },
+          }
+        : {}),
+      ...(displayName ? { displayName } : {}),
+    };
+    const presign = await request(API_URL)
+      .post("/media/presign")
+      .set(as(sub))
+      .send({ ...body, sizeBytes: GPX_BYTES.byteLength });
+    expect(presign.status).toBe(201);
+    const put = await fetch(presign.body.displayUploadUrl, {
+      method: "PUT",
+      headers: { "Content-Type": "application/gpx+xml" },
+      body: GPX_BYTES,
+    });
+    expect(put.ok).toBe(true);
+    const confirm = await request(API_URL)
+      .post(`/media/${presign.body.mediaId}/confirm`)
+      .set(as(sub))
+      .send(body);
+    expect(confirm.status).toBe(201);
+    return presign.body.mediaId as string;
+  }
+
+  const sendFromMedia = (
+    sub: string,
+    mediaId: string,
+    recipientIds: string[],
+  ) =>
+    request(API_URL)
+      .post("/file-sends/from-media")
+      .set(as(sub))
+      .set(CLIENT)
+      .send({ mediaId, recipientIds });
+
+  it("hands a friend the file's own bytes, under its label", async () => {
+    const mediaId = await uploadMedia(
+      ALICE_SUB,
+      { linkedType: "none", origin: "import" },
+      "Synthetic line",
+    );
+    try {
+      const sent = await sendFromMedia(ALICE_SUB, mediaId, [BOB_ID]);
+      expect(sent.status).toBe(201);
+      expect(sent.body.filename).toBe("Synthetic line.gpx");
+      expect(sent.body.sourceKind).toBe("import");
+
+      const accepted = await request(API_URL)
+        .post(`/file-sends/${sent.body.id}/accept`)
+        .set(as(BOB_SUB))
+        .set(CLIENT);
+      expect(accepted.status).toBe(200);
+      const download = await fetch(accepted.body.downloadUrl);
+      expect(await download.text()).toBe(GPX);
+    } finally {
+      await request(API_URL).delete(`/media/${mediaId}`).set(as(ALICE_SUB));
+    }
+  });
+
+  // Mutation: drop `ownerId: user.id` from the from-media lookup → 201.
+  it("404s a file the caller can see but does not own", async () => {
+    // Unique per run, so a send leaked by an earlier red run cannot match.
+    const label = `Not bob's ${Date.now()}`;
+    const mediaId = await uploadMedia(
+      ALICE_SUB,
+      { linkedType: "none", origin: "import" },
+      label,
+    );
+    try {
+      // Linked to alice's place shared with bob: bob can see this file.
+      const link = await request(API_URL)
+        .patch(`/media/${mediaId}/link`)
+        .set(as(ALICE_SUB))
+        .send({ linkedType: "place", linkedId: SHARED_PLACE_ID });
+      expect(link.status).toBe(200);
+      const seen = await request(API_URL)
+        .get(`/places/${SHARED_PLACE_ID}`)
+        .set(as(BOB_SUB));
+      expect(
+        seen.body.media.some((m: { id: string }) => m.id === mediaId),
+      ).toBe(true);
+
+      await ensureFriends(BOB_SUB, CAROL_ID, CAROL_SUB);
+      const sent = await sendFromMedia(BOB_SUB, mediaId, [CAROL_ID]);
+      expect(sent.status).toBe(404);
+      expect(
+        (await inbox(CAROL_SUB)).some((row) => row.filename.startsWith(label)),
+      ).toBe(false);
+    } finally {
+      await request(API_URL).delete(`/media/${mediaId}`).set(as(ALICE_SUB));
+    }
+  });
+
+  // Mutation: drop the `origin` filter from the from-media lookup → 201.
+  it("404s a place attachment, which is not a standalone file", async () => {
+    const mediaId = await uploadMedia(ALICE_SUB, {
+      linkedType: "place",
+      linkedId: SHARED_PLACE_ID,
+    });
+    try {
+      const sent = await sendFromMedia(ALICE_SUB, mediaId, [BOB_ID]);
+      expect(sent.status).toBe(404);
+    } finally {
+      await request(API_URL).delete(`/media/${mediaId}`).set(as(ALICE_SUB));
     }
   });
 });

@@ -461,6 +461,23 @@ test.describe("desktop", () => {
     await expectNoViolations(page, "[role='menu']");
     await page.keyboard.press("Escape");
 
+    // A file is sent as a copy: a friend picker that waits for its button.
+    // Opened and closed only — nothing is sent.
+    await aside
+      .locator("[data-way-kind='track']")
+      .first()
+      .getByRole("button", { name: /^Actions for/ })
+      .click();
+    await page.getByRole("menuitem", { name: "Send a copy…" }).click();
+    const sendDialog = page.locator("dialog[open]");
+    await expect(
+      sendDialog.getByRole("button", { name: "Send a copy" }),
+    ).toBeDisabled({ timeout: 15_000 });
+    await expectNoViolations(page, "dialog");
+    await page.keyboard.press("Escape");
+    await expect(sendDialog).toHaveCount(0);
+    await aside.getByRole("button", { name: /^Back/ }).click();
+
     // A route's own page: its stats, its colour picker and its place link.
     // Opened through the row's own menu: `Row`'s stretched open button is named
     // after the row's title, which is a route name we cannot know here.

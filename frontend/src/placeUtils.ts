@@ -1666,8 +1666,21 @@ export function ownerUsername(
 // A file a friend handed over. Accepting downloads it and it is then THEIRS —
 // there is no revoking a copy, so nothing here may be worded as if there were.
 // Web has no vector-import feature, so accepting means a browser download, not
-// an import. There is no sender side on web: nothing here holds a local file to
-// send.
+// an import.
+//
+// The sender side holds no local file either: it sends one the account already
+// keeps (an import's original, a recording's GPX), copied inside S3.
+
+/** Send friends a copy of one of the user's own files. Not revocable. */
+export function sendCopyOfMedia(
+  mediaId: string,
+  recipientIds: string[],
+): Promise<{ filename: string }> {
+  return apiFetch<{ filename: string }>("/file-sends/from-media", {
+    method: "POST",
+    body: { mediaId, recipientIds },
+  });
+}
 
 // NO `GET /file-sends/inbox` HELPER. The Inbox draws every send from the
 // notification each one writes, and answers it there; the Friends page held a
