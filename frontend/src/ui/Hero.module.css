@@ -1,17 +1,17 @@
 .hero {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-0-5);
   /* ONE height on every page and every view of a page, so swapping Logs | Stats
      moves neither the rail under it nor the list under that. A hero carrying
      actions is as tall as a --control-md button; a title-only one is its text,
      which is shorter — measured 57 vs 55 (operator, 2026-09-16). Stated on the
      border box: the two addends are this rule's own padding and its border. */
-  min-height: calc(var(--control-md) + 2 * 12px + 1px);
+  min-height: calc(var(--control-md) + 2 * var(--space-1-5) + 1px);
   box-sizing: border-box;
-  padding: 12px var(--gutter);
+  padding: var(--space-1-5) var(--gutter);
   border-bottom: 1px solid
-    color-mix(in srgb, var(--theme-accent) 25%, transparent);
+    color-mix(in srgb, var(--color-accent) 25%, transparent);
 }
 
 /* The back arrow's button box carries its own whitespace, so it sits on the
@@ -26,7 +26,7 @@
   margin: 0;
   font-size: var(--font-xl);
   font-weight: 700;
-  color: var(--theme-text-primary);
+  color: var(--color-text);
 }
 
 .meter {
@@ -34,7 +34,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--space-1);
 }
 
 .track {
@@ -43,7 +43,7 @@
   gap: 2px;
   border-radius: var(--radius-pill);
   overflow: hidden;
-  background: color-mix(in srgb, var(--theme-text-primary) 10%, transparent);
+  background: color-mix(in srgb, var(--color-text) 10%, transparent);
 }
 
 .segment {
@@ -53,7 +53,7 @@
 .legend {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px 14px;
+  gap: var(--space-0-5) var(--space-1-5);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -62,13 +62,13 @@
 .legendItem {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-0-5);
   font-size: var(--font-xs);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 .legendItem b {
-  color: var(--theme-text-primary);
+  color: var(--color-text);
   font-weight: 600;
 }
 

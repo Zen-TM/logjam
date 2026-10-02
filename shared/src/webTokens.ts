@@ -28,13 +28,15 @@ export function kebab(name: string): string {
 }
 
 const px = (n: number) => `${n}px`;
+// Lower case, as the repo's CSS formatter writes hex colours.
+const hexCss = (hex: string) => hex.toLowerCase();
 const rem = (n: number) => `${n / 16}rem`;
 
 /** The scheme-independent custom properties, in emission order. */
 export function webScaleProperties(): [string, string][] {
   return [
     ...Object.entries({ ...ASSET_HUES, ...PLACE_STATUS_HUES }).map(
-      ([name, hex]): [string, string] => [`--hue-${kebab(name)}`, hex],
+      ([name, hex]): [string, string] => [`--hue-${kebab(name)}`, hexCss(hex)],
     ),
     // Sorted by size: an object's integer-like keys ("1", "2") enumerate
     // before "0.5" and "1.5" otherwise.
@@ -74,7 +76,7 @@ export function webSchemeProperties(scheme: ThemeScheme): [string, string][] {
     ["color-scheme", scheme.mode],
     ...Object.entries(scheme.tokens).map(([role, hex]): [string, string] => [
       `--color-${kebab(role)}`,
-      hex,
+      hexCss(hex),
     ]),
   ];
 }

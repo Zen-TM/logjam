@@ -8,8 +8,8 @@
   padding: 0;
   border: var(--hairline);
   border-radius: var(--radius-xl);
-  background: var(--theme-primary);
-  color: var(--theme-text-primary);
+  background: var(--color-page);
+  color: var(--color-text);
   box-shadow: var(--shadow-modal);
 }
 
@@ -42,7 +42,7 @@
 @media (prefers-reduced-motion: no-preference) {
   .dialog[open],
   .dialog[open]::backdrop {
-    transition: opacity var(--transition-med);
+    transition: opacity var(--motion-med);
   }
 
   @starting-style {
@@ -56,8 +56,8 @@
 .head {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 8px 2px var(--gutter);
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-1) 2px var(--gutter);
 }
 
 .title {
@@ -78,8 +78,8 @@
   flex: none;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 8px var(--gutter) 10px;
+  gap: var(--space-1-5);
+  padding: var(--space-1) var(--gutter) var(--space-1);
   border-bottom: var(--hairline);
 }
 
@@ -93,7 +93,7 @@
      the dialog and gave it a second scrollbar that moved the pinned header. */
   position: relative;
   overflow-y: auto;
-  padding: 14px var(--gutter);
+  padding: var(--space-1-5) var(--gutter);
   font-size: var(--font-sm);
   line-height: 1.45;
 }
@@ -106,6 +106,6 @@
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 8px;
-  padding: 4px var(--gutter) 14px;
+  gap: var(--space-1);
+  padding: var(--space-0-5) var(--gutter) var(--space-1-5);
 }

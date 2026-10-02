@@ -14,7 +14,7 @@
   padding: 6px;
   border: var(--hairline);
   border-radius: var(--radius-lg);
-  background: var(--theme-primary);
+  background: var(--color-page);
   box-shadow: var(--shadow-float);
 }
 
@@ -33,26 +33,26 @@
   min-height: var(--control-lg);
   padding: 0 10px;
   border-radius: var(--radius-md);
-  color: var(--theme-text-primary);
+  color: var(--color-text);
   font-size: var(--font-sm);
   cursor: pointer;
 }
 
 .option:hover,
 .option[aria-selected="true"] {
-  background: color-mix(in srgb, var(--theme-text-primary) 10%, transparent);
+  background: color-mix(in srgb, var(--color-text) 10%, transparent);
 }
 
 /* The highlighted option is marked by more than the wash behind it, so the
    keyboard position survives a colour it cannot be told apart from. */
 .option[aria-selected="true"] {
-  outline: 2px solid var(--theme-text-primary);
+  outline: 2px solid var(--color-text);
   outline-offset: -2px;
 }
 
 .glyph {
   flex: none;
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 .name {
@@ -67,5 +67,5 @@
   margin: 0;
   padding: 8px 10px;
   font-size: var(--font-sm);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }

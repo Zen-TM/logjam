@@ -29,7 +29,7 @@ describe("webTokensCss", () => {
       const props = blockOf(css, `[data-scheme="${id}"]`);
       expect(props.get("color-scheme")).toBe(scheme.mode);
       for (const [role, hex] of Object.entries(scheme.tokens)) {
-        expect(props.get(`--color-${kebab(role)}`)).toBe(hex);
+        expect(props.get(`--color-${kebab(role)}`)).toBe(hex.toLowerCase());
       }
     }
     expect(blockOf(css, '[data-scheme="daylight"]').get("color-scheme")).toBe(
@@ -39,8 +39,10 @@ describe("webTokensCss", () => {
 
   it("paints the default scheme on :root, so the first paint needs no script", () => {
     const root = blockOf(css, ":root");
-    expect(root.get("--color-page")).toBe(THEME_SCHEMES.sandstone.tokens.page);
-    expect(root.get("--color-on-fill")).toBe(INK);
+    expect(root.get("--color-page")).toBe(
+      THEME_SCHEMES.sandstone.tokens.page.toLowerCase(),
+    );
+    expect(root.get("--color-on-fill")).toBe(INK.toLowerCase());
     expect(root.get("--space-1-5")).toBe("12px");
     expect(root.get("--font-sm")).toBe("0.8125rem");
     expect(root.get("--control-lg")).toBe("36px");

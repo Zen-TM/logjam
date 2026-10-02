@@ -24,6 +24,19 @@ import { SHARED_PLACE_COLOR } from "./placeTypes.js";
 export const INK = "#1E1B18";
 
 /**
+ * What is drawn ON THE MAP in a dark of its own — a place's name label, the
+ * halo behind it, the casing under a line — is drawn on the BASEMAP, not on
+ * the page, so it never follows the scheme: a light scheme's dark text on a
+ * light halo would vanish into a satellite image. Sandstone's values, fixed.
+ */
+export const MAP_INK = {
+  /** A label drawn on the map. */
+  label: "#F7F3EC",
+  /** The halo behind a map label, and the casing that sets a line off any basemap. */
+  casing: "#4E4944",
+} as const;
+
+/**
  * Per-kind identity hues for map material and the things you draw on it.
  * Mid-light and muted, drawn from the NSW place palette (rock, scrub, water,
  * heath) — never a saturated web primary. Downloaded basemap REGIONS take the
