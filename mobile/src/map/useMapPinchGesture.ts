@@ -36,13 +36,13 @@ export const PAN_SLOP_DP = 8;
 
 type Touch = { pageX: number; pageY: number };
 
-export function touchSeparation(touches: Touch[]): number {
+export function touchSeparation(touches: readonly Touch[]): number {
   const [a, b] = touches;
   return Math.hypot(a.pageX - b.pageX, a.pageY - b.pageY);
 }
 
 /** Angle of the line between the two fingers, degrees, clockwise-positive. */
-export function touchAngleDeg(touches: Touch[]): number {
+export function touchAngleDeg(touches: readonly Touch[]): number {
   const [a, b] = touches;
   return (Math.atan2(b.pageY - a.pageY, b.pageX - a.pageX) * 180) / Math.PI;
 }

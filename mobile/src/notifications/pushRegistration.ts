@@ -7,6 +7,9 @@
 // generic titles + opaque IDs only (enforced server-side in services/push.ts).
 import { Platform } from "react-native";
 import * as Notifications from "expo-notifications";
+// Named, not `Notifications.AndroidImportance`: eslint import/namespace cannot
+// see the enum through the package's `export *`.
+import { AndroidImportance } from "expo-notifications";
 import * as SecureStore from "expo-secure-store";
 import Constants from "expo-constants";
 
@@ -51,7 +54,7 @@ async function registerGrantedDevice(): Promise<void> {
     if (Platform.OS === "android") {
       await Notifications.setNotificationChannelAsync("default", {
         name: "Updates",
-        importance: Notifications.AndroidImportance.DEFAULT,
+        importance: AndroidImportance.DEFAULT,
       });
     }
 

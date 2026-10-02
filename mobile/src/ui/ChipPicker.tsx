@@ -1,5 +1,10 @@
 import { useRef, useState } from "react";
-import { StyleSheet, TextInput, View } from "react-native";
+import {
+  StyleSheet,
+  TextInput,
+  View,
+  type TextInputInstance,
+} from "react-native";
 
 import { fontSize, radius, spacing, surface, theme } from "../theme";
 import { Chip } from "./Chip";
@@ -54,7 +59,7 @@ export function ChipPicker({
 }) {
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState("");
-  const inputRef = useRef<TextInput>(null);
+  const inputRef = useRef<TextInputInstance>(null);
 
   const commit = () => {
     const trimmed = draft.trim();

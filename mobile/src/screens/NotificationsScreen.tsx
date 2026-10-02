@@ -998,7 +998,7 @@ export function NotificationsScreen({
             <Text style={styles.truncation}>
               {`Showing the ${query.notifications.length} most recent of ${query.total}. Older ones aren't listed.`}
             </Text>
-          ) : null
+          ) : undefined
         }
       />
 

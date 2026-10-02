@@ -11,7 +11,7 @@
 // the map. A waypoint also carries notes, so the field is opt-in — pass
 // `initialNotes` (even as "") to show it, omit it for a name-only rename.
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { TextInput } from "react-native";
+import type { TextInputInstance } from "react-native";
 
 import { Button } from "./Button";
 import { TextField } from "./TextField";
@@ -36,7 +36,7 @@ export function RenameForm({
   // Requirement shows on SUBMIT, not while typing (DESIGN.md §8); clears the
   // moment the field is edited.
   const [showEmptyError, setShowEmptyError] = useState(false);
-  const inputRef = useRef<TextInput>(null);
+  const inputRef = useRef<TextInputInstance>(null);
   const showNotes = initialNotes !== undefined;
 
   useEffect(() => {

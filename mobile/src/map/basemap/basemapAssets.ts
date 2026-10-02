@@ -56,10 +56,10 @@ async function installBasemapAssets(): Promise<string> {
     if (!dir.exists) dir.create({ intermediates: true });
   }
   for (const p of filePaths) {
-    new File(root, p).write(entries[p]);
+    new File(root, p).writeSync(entries[p]);
   }
 
-  marker.write(BASEMAP_ASSETS_COMMIT);
+  marker.writeSync(BASEMAP_ASSETS_COMMIT);
   return root.uri;
 }
 
