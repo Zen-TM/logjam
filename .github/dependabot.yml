@@ -84,6 +84,10 @@ updates:
       # TypeScript 7: see /api. Tracked in #155.
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
+      # @types/node must not run ahead of the Node the tooling runs on (22).
+      # Tracked in #229.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "npm"
     directory: "/infra/lambda/cognito-email-sender"
@@ -97,6 +101,11 @@ updates:
         update-types:
           - "minor"
           - "patch"
+    # @types/node must not run ahead of the Lambda's nodejs20.x runtime.
+    # Tracked in #229.
+    ignore:
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "terraform"
     directory: "/infra/terraform/bootstrap"
