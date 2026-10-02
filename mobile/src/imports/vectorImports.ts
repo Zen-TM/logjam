@@ -1,11 +1,12 @@
-// Vector file import flow (Stage 5): document picker → shared parser →
-// GeoJSON file in app-private storage → vector_import row. The map renders
-// rows as GeoJSON sources; everything works offline from the moment of import.
+// Vector file import flow: document picker → shared parser → a GeoJSON file
+// in app-private storage for the map, plus the ORIGINAL file, kept beside it as
+// a standalone media row (origin "import") that uploads to the user's own
+// account like any other media (sync/mediaUpload.ts). The map works offline
+// from the moment of import; the upload follows when the account syncs.
 //
-// PRIVACY: importing a file must never implicitly upload coordinates
-// anywhere — the whole flow is device-local (account sync is Stage 8, opt-in
-// there). Errors surfaced to the UI are the shared parser's static strings or
-// generic transport messages; never file content.
+// PRIVACY: the original goes to the user's own account and nowhere else;
+// nothing here shares it. Errors surfaced to the UI are the shared parser's
+// static strings or generic transport messages; never file content.
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import { File } from "expo-file-system";

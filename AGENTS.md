@@ -28,7 +28,10 @@ platform: privacy constrains every feature. Each package has its own
 
 ## How we work
 
-- Branch from `origin/main` in a new worktree, never from the current checkout.
+- Branch from `origin/main` in a new worktree, never from the current checkout,
+  and run `make setup` in it first: every package's dependencies, the
+  `shared/` build, the Prisma client and `frontend/.env`. Without it the
+  typecheck fails far from the cause.
 - A non-trivial feature, schema migration or convention change needs an issue
   or the maintainer's sign-off on the approach; the PR says which. Small fixes
   land directly.
