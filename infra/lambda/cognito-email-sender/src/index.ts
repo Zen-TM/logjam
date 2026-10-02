@@ -24,7 +24,9 @@ import { SecretsManager } from "@aws-sdk/client-secrets-manager";
 import type { CustomEmailSenderTriggerEvent } from "aws-lambda";
 import { Resend } from "resend";
 
-const { decrypt } = buildClient(
+// ALLOW_DECRYPT: Cognito's encrypt side picks the algorithm suite, and we must
+// accept whatever it sends. Guarded by decrypt.test.ts.
+export const { decrypt } = buildClient(
   CommitmentPolicy.REQUIRE_ENCRYPT_ALLOW_DECRYPT,
 );
 
