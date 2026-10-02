@@ -95,9 +95,9 @@ resource "aws_iam_policy" "github_actions_apply_boundary" {
           Resource = "*"
         },
       ],
-      # The CI privacy Deny (iam.tf): user-data and audit objects, secret
-      # values except origin_verify (the plan refreshes its version), the
-      # Cognito CMK, DB log events. Its one Allow is for the read-only roles.
+      # The CI privacy Deny (iam.tf): user data, logs and audit objects,
+      # every secret value, the Cognito CMK. It holds only Denies; the filter
+      # keeps any Allow added there for the read-only roles out of here.
       [for s in jsondecode(local.ci_readonly_privacy_deny).Statement : s if s.Effect == "Deny"],
     )
   })
