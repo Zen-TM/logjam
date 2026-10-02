@@ -64,7 +64,7 @@ Security reports follow [`SECURITY.md`](SECURITY.md).
 - Merging ships. The API, Logjam Web and the topo worker deploy from `main`
   once CI passes, and Terraform changes are applied on merge, exactly as the
   plan comment on the pull request showed
-  ([ADR 0024](docs/decisions/0024-prod-terraform-applies-on-merge-by-plan-fingerprint.md)).
+  ([ADR 0026](docs/decisions/0026-plan-fingerprint-covers-planned-values.md)).
   A migration must be safe to run while the previous version still serves
   ([ADR 0003](docs/decisions/0003-pre-deploy-migrations-expand-contract.md)).
 

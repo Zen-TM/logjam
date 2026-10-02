@@ -5,7 +5,17 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { check, comment, fingerprint, header, inScope, MAX_COMMENT, readFingerprint } from "./plan-summary.mjs";
+import {
+  check,
+  comment,
+  fingerprint,
+  header,
+  inScope,
+  MAX_COMMENT,
+  readFingerprint,
+  readValues,
+  valueFingerprints,
+} from "./plan-summary.mjs";
 
 const fixture = (name) => JSON.parse(readFileSync(new URL(`./__fixtures__/${name}.json`, import.meta.url), "utf8"));
 const SHA = "0123456789abcdef0123456789abcdef01234567";
@@ -194,4 +204,129 @@ test("envs/prod has no unreadable attributes", () => {
   // keep the hash input they had before envs/github existed.
   assert.match(header(asPlanApp(), "prod"), /1 to update/);
   assert.notEqual(fingerprint(asPlanApp(), "prod"), fingerprint(asApplyApp(), "prod"));
+});
+
+// The value check: an HMAC of what each changed resource is planned to be, so
+// a hand edit to a resource the PR also updates is seen
+// (docs/decisions/0026-plan-fingerprint-covers-planned-values.md).
+const KEY = "k".repeat(32);
+const topic = (after, extra = {}) => ({
+  resource_changes: [
+    {
+      address: "aws_sns_topic.alerts",
+      type: "aws_sns_topic",
+      change: { actions: ["update"], before: {}, after, after_unknown: {}, after_sensitive: {}, ...extra },
+    },
+  ],
+});
+const tags = (env) => ({ name: "alerts", tags: { env }, secret: "hunter2-in-clear" });
+const SENSITIVE = { secret: true };
+
+test("a changed value on an updated resource changes its value fingerprint", () => {
+  // Mutation: valueFingerprints() hashing only the address and actions turns
+  // this red: that is the hole the apply-refusal drill found.
+  const a = valueFingerprints(topic(tags("prod")), "prod", KEY);
+  const b = valueFingerprints(topic(tags("drill")), "prod", KEY);
+  assert.deepEqual(Object.keys(a), ["aws_sns_topic.alerts"]);
+  assert.notEqual(a["aws_sns_topic.alerts"], b["aws_sns_topic.alerts"]);
+  assert.equal(a["aws_sns_topic.alerts"], valueFingerprints(topic(tags("prod")), "prod", KEY)["aws_sns_topic.alerts"]);
+});
+
+test("a sensitive value is neither in the comment nor in the fingerprint", () => {
+  // Mutation: not stripping after_sensitive puts the secret into the HMAC
+  // (the second assert goes red) and, if posted raw, into the comment.
+  const one = topic({ ...tags("prod"), secret: "s3cr3t-one" }, { after_sensitive: SENSITIVE });
+  const two = topic({ ...tags("prod"), secret: "s3cr3t-two" }, { after_sensitive: SENSITIVE });
+  assert.deepEqual(valueFingerprints(one, "prod", KEY), valueFingerprints(two, "prod", KEY));
+  const body = comment({ root: "prod", planText: "plan", status: "success", plan: one, sha: SHA, key: KEY }).body;
+  assert.match(body, /plan-values: \{"aws_sns_topic\.alerts":"[0-9a-f]{16}"\}/);
+  assert.doesNotMatch(body, /s3cr3t|hunter2/);
+});
+
+test("a sensitive value nested in a list is left out too", () => {
+  const nested = (v) => topic({ rules: [{ user: "a", password: v }] }, { after_sensitive: { rules: [{ password: true }] } });
+  assert.deepEqual(valueFingerprints(nested("x"), "prod", KEY), valueFingerprints(nested("y"), "prod", KEY));
+});
+
+test("a value only known after apply is ignored", () => {
+  // Mutation: not stripping after_unknown makes a null placeholder differ
+  // from the value the apply's plan resolved, so every apply would mismatch.
+  const planned = topic({ name: "alerts", arn: null }, { after_unknown: { arn: true } });
+  const resolved = topic({ name: "alerts", arn: "arn:aws:sns:x" }, { after_unknown: { arn: true } });
+  assert.deepEqual(valueFingerprints(planned, "prod", KEY), valueFingerprints(resolved, "prod", KEY));
+});
+
+test("a different key gives a different fingerprint", () => {
+  // Mutation: replacing createHmac with a plain sha256 ignores the key: red.
+  const plan = topic(tags("prod"));
+  assert.notEqual(
+    valueFingerprints(plan, "prod", KEY)["aws_sns_topic.alerts"],
+    valueFingerprints(plan, "prod", "z".repeat(32))["aws_sns_topic.alerts"],
+  );
+});
+
+test("no key, no value fingerprints, and no unkeyed hash in the comment", () => {
+  // Mutation: falling back to an unkeyed hash when the key is missing posts
+  // a brute-forceable hash of the values: red.
+  const plan = topic(tags("prod"));
+  for (const key of [undefined, ""]) {
+    assert.equal(valueFingerprints(plan, "prod", key), null);
+    const body = comment({ root: "prod", planText: "plan", status: "success", plan, sha: SHA, key }).body;
+    assert.equal(readValues(body), null);
+    assert.doesNotMatch(body, /plan-values/);
+  }
+});
+
+test("a delete carries no value fingerprint", () => {
+  const plan = { resource_changes: [{ address: "aws_x.y", type: "aws_x", change: { actions: ["delete"], before: { a: 1 }, after: null } }] };
+  assert.deepEqual(valueFingerprints(plan, "prod", KEY), {});
+});
+
+const planned = (env, key = KEY) =>
+  comment({ root: "prod", planText: "plan", status: "success", plan: topic(tags(env)), sha: SHA, key }).body;
+
+test("report mode names the drifted resource and still applies", () => {
+  // Mutation: report mode returning ok: false makes the trial block applies.
+  const out = check("prod", topic(tags("drill")), planned("prod"), SHA, { key: KEY, mode: "report" });
+  assert.equal(out.ok, true);
+  assert.match(out.notice, /report only[^]*`aws_sns_topic\.alerts`/);
+  assert.doesNotMatch(out.notice, /drill/);
+  assert.equal(check("prod", topic(tags("drill")), planned("prod"), SHA, { key: KEY }).ok, true, "the default is report");
+  assert.equal(check("prod", topic(tags("drill")), planned("prod"), SHA, { key: KEY, mode: "enfroce" }).ok, true);
+});
+
+test("enforce mode refuses a plan whose values differ, without showing them", () => {
+  // Mutation: enforce not refusing on a mismatch leaves the drill's hole open.
+  const out = check("prod", topic(tags("drill")), planned("prod"), SHA, { key: KEY, mode: "enforce" });
+  assert.equal(out.ok, false);
+  assert.match(out.reason, /different values on 1 resource[^]*`aws_sns_topic\.alerts`[^]*Nothing applied/);
+  assert.doesNotMatch(out.reason, /drill|hunter2/);
+});
+
+test("matching values apply in either mode", () => {
+  for (const mode of ["report", "enforce"]) {
+    const out = check("prod", topic(tags("prod")), planned("prod"), SHA, { key: KEY, mode });
+    assert.equal(out.ok, true, mode);
+    assert.equal(out.notice, undefined, mode);
+  }
+});
+
+test("enforce mode fails closed when values cannot be compared", () => {
+  // Mutation: treating "cannot compare" as a match lets an enforced check be
+  // skipped by dropping the key or the comment's line.
+  const plan = topic(tags("prod"));
+  assert.equal(check("prod", plan, planned("prod"), SHA, { mode: "enforce" }).ok, false, "no key at apply");
+  assert.equal(check("prod", plan, planned("prod", ""), SHA, { key: KEY, mode: "enforce" }).ok, false, "none in the comment");
+  const out = check("prod", plan, planned("prod", ""), SHA, { key: KEY, mode: "report" });
+  assert.equal(out.ok, true);
+  assert.match(out.notice, /not run/);
+});
+
+test("the address and actions refusal is unchanged by the value check", () => {
+  // Mutation: running the value check before the fingerprint check would
+  // replace this reason with the value one.
+  const read = planned("prod");
+  const out = check("prod", { resource_changes: [] }, read, SHA, { key: KEY, mode: "enforce" });
+  assert.equal(out.ok, false);
+  assert.match(out.reason, /is not the plan on the PR/);
 });

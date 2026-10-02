@@ -306,7 +306,7 @@ releases Logjam GPS.
 | `api/` | `deploy-api.yml`, after CI passes on `main` | Build and push the API image. Pin the API-image task definitions to it. Run the migrate task and stop if it fails. Swap Elastic Beanstalk to the new version. Smoke-test it, and roll back automatically if the smoke test fails. |
 | `frontend/` | `deploy-frontend.yml`, after CI passes on `main` | Build, upload to the frontend bucket, switch `index.html`, invalidate the CloudFront cache. Smoke-test, and roll back automatically if it fails. |
 | `topo/` | `deploy-topo-worker.yml`, after CI passes on `main` | Build and push the worker image, then pin the topo task definitions to it. The next job runs it. |
-| `infra/terraform/envs/prod/` (and `modules/`), `infra/lambda/` | `terraform-plan.yml` (`plan-prod`) on the PR, `terraform-apply.yml` (`apply-prod`) on merge | The PR gets a read-only plan as a comment. Merging applies that plan and refuses anything different ([0024](decisions/0024-prod-terraform-applies-on-merge-by-plan-fingerprint.md)). |
+| `infra/terraform/envs/prod/` (and `modules/`), `infra/lambda/` | `terraform-plan.yml` (`plan-prod`) on the PR, `terraform-apply.yml` (`apply-prod`) on merge | The PR gets a read-only plan as a comment. Merging applies that plan and refuses anything different ([0026](decisions/0026-plan-fingerprint-covers-planned-values.md)). |
 | `infra/terraform/envs/github/` | `terraform-plan.yml` (`plan-github`) on the PR, `terraform-apply.yml` (`apply-github`) on merge | The repository's own GitHub settings: rulesets, Environments, Actions variables, labels. The PR gets a read-only plan as a comment. Merging applies that plan and refuses anything different ([0025](decisions/0025-github-settings-in-terraform.md)). |
 | Logjam GPS | `deploy-mobile.yml`, on a `mobile-v*` tag the maintainer pushes | EAS builds it; a release tag also submits a draft to Google Play. OTA updates are signed and published by hand. See [`operations/mobile-release.md`](operations/mobile-release.md). |
 
@@ -358,7 +358,7 @@ repeat it.
   [0018](decisions/0018-foreign-fields.md).
 - **Prod, and this repository's GitHub settings, change only through a
   merged PR**:
-  [0024](decisions/0024-prod-terraform-applies-on-merge-by-plan-fingerprint.md),
+  [0026](decisions/0026-plan-fingerprint-covers-planned-values.md),
   [0025](decisions/0025-github-settings-in-terraform.md), and the privacy
   rules in the root [`AGENTS.md`](../AGENTS.md#privacy).
 
