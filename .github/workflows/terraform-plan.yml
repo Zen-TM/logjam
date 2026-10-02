@@ -81,7 +81,7 @@ jobs:
           aws-region: ${{ secrets.AWS_REGION }}
 
       - if: steps.scope.outputs.run == 'true'
-        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
         with:
           terraform_version: "~> 1.13"
           terraform_wrapper: false
@@ -90,7 +90,7 @@ jobs:
       # in terraform-apply.yml the same way, so the source_code_hash in both
       # plans (and in the fingerprint) comes from the same bytes.
       - if: steps.scope.outputs.run == 'true'
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 20
       - name: Build cognito-email-sender Lambda
@@ -195,7 +195,7 @@ jobs:
           private-key: ${{ secrets.SETTINGS_PLAN_APP_KEY }}
 
       - if: steps.scope.outputs.run == 'true'
-        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
         with:
           terraform_version: "~> 1.13"
           terraform_wrapper: false

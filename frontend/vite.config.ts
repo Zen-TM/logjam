@@ -64,12 +64,7 @@ export default defineConfig({
   plugins: [react(), cspMetaPlugin()],
   resolve: {
     alias: {
-      "@styles": path.resolve(__dirname, "src/styles"),
-    },
-  },
-  optimizeDeps: {
-    esbuildOptions: {
-      target: "esnext",
+      "@styles": path.resolve(import.meta.dirname, "src/styles"),
     },
   },
 });
