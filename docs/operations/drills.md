@@ -134,7 +134,30 @@ Time: ____ Surprises: ____
 
 <!-- Newest first. Date, who, the change under test, times, surprises. -->
 
-None yet.
+### 2026-10-02: maintainer and Lead (Claude), first full drill
+
+**Change under test:** the whole mechanism (Phase 3: deploy guards, `rollback.yml`, smoke, auto-rollback, `rollback-compat`, the plan fingerprint).
+
+**Rollback workflow** (dispatch to green):
+
+| Target | Back | Forward |
+|---|---|---|
+| API (a0b59ddb ↔ 6eb9ea77) | 116 s | 109 s |
+| Frontend (eb0f9634 ↔ 1e6bf7fb) | 98 s | 64 s |
+| Worker (d745267f ↔ 7b304a9e) | 41 s | 37 s |
+
+- The API rollback repinned `logjam-api-migrate` and `logjam-geo-pdf-worker` with EB; the topo task definitions were untouched. The worker rollback repinned both topo task definitions.
+- **Refusals:** a short sha ("must be a full 40-character commit sha"), a worker sha with no ECR image, and a frontend sha with no `releases/<sha>/` all failed before any change.
+- **Busy:** a frontend rollback dispatched while #274's frontend deploy was queued failed its preflight ("has a run queued or in progress") and changed nothing.
+- **Missing config:** with `PROD_WEB_URL` deleted, merging #272 turned the guard red ("must be set … Nothing was deployed"); the bucket was unchanged. Restored by hand; #271's `plan-github` then showed no variable change.
+- **Automatic rollback (frontend):** with `PROD_WEB_URL` pointing at a 404, re-running #272's deploy deployed 767d364e, the smoke test failed after its retries (3 min 14 s), and the rollback restored eb0f9634 42 s later. No retry, no loop. **Surprise:** the rollback's own smoke test was *skipped*, not failed: its plain `if:` took GitHub's implicit `success()`, and the skipped preflight skipped it. Nothing checked the restored release. Fixed in #274. Rolled forward with `rollback.yml` (64 s, smoke ran).
+- **Manual fallback:** frontend back (40 s) and forward (39 s) with the CLI block in [rollback.md](rollback.md), with the maintainer's credentials. **Surprise:** the file check sorted in the reader's locale while `files.txt` is in C order, so `comm` reported a file missing that was present. Fixed in #275 (`LC_ALL=C`).
+- **rollback-compat:** #273 (drop `users.vector_style`) turned "Live release on this schema" red (the live release's integration suite got 500s). Closed unmerged.
+- **Deploy guards:** "nothing to deploy" held on every docs- or infra-only merge (#264, #267, #275: frontend and worker skipped, API deployed). **Not exercised:** "stale" and "scope against live". Main requires an up-to-date branch, so a second merge waits for its own CI, and the first merge's deploy (about 3 minutes after merge) had already run. "No-op CI runs" was not observed either.
+- **Failure email** for the failed auto-rollback run: maintainer to confirm it arrived.
+- **After:** API on main's head (04dcf7d6); frontend and worker on f754e913, the last commit touching their paths.
+
+**Apply refusal** (before the section above existed): #268 added a tag to `aws_sns_topic.alerts` and a tag was added to the same topic by hand before merge. The apply **applied** and reverted the hand tag: the fingerprint then covered only addresses and actions. That led to [0026](../decisions/0026-plan-fingerprint-covers-planned-values.md) (#271, report mode). #270 repeated it with the hand tag on the web CloudFront distribution, which the PR did not touch: the apply refused ("not the plan on the PR … Nothing applied"); after removing the hand tag, a re-run applied exactly the PR's change.
 
 ## Real rollbacks
 
