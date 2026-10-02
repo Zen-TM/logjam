@@ -201,7 +201,11 @@ jobs:
 
   smoke:
     needs: rollback
-    if: inputs.target != 'worker'
+    # !cancelled(), as on rollback: a deploy's automatic rollback skips
+    # preflight, and without it the implicit success() skipped this smoke
+    # test too, so nothing checked the restored release (found in the
+    # 2026-10-02 drill).
+    if: ${{ !cancelled() && needs.rollback.result == 'success' && inputs.target != 'worker' }}
     uses: ./.github/workflows/smoke.yml
     with:
       target: ${{ inputs.target }}
