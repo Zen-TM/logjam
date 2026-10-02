@@ -187,10 +187,10 @@ updates:
         update-types:
           - "version-update:semver-major"
           - "version-update:semver-minor"
+      # react must match the renderer react-native bundles exactly, so the
+      # SDK pins its patch too (expo-doctor fails on a patch mismatch): hold
+      # every update. Tracked in #244.
       - dependency-name: "react"
-        update-types:
-          - "version-update:semver-major"
-          - "version-update:semver-minor"
       - dependency-name: "@types/react"
         update-types:
           - "version-update:semver-major"
