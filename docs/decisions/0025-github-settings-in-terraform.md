@@ -76,6 +76,17 @@ behind main until someone remembered to run it (#128 and #129 both ended in
   the maintainer's own PRs, which GitHub never lets them approve, bypass only
   the approval; and nobody merges red. The cost: anyone with write access can
   merge a PR the maintainer has approved. Everything else above stands.
+- **Update 2026-10-03: PR plans need the maintainer's approval.**
+  `plan-github` runs in the `terraform-plan` Environment
+  ([0027](0027-pr-plans-run-after-the-maintainer-approves.md)), and
+  `SETTINGS_PLAN_APP_KEY` is a secret of that Environment, not of the
+  repository. `terraform-plan.yml`'s `scope` job fails if it, or
+  `SETTINGS_APPLY_APP_KEY`, is a repository secret. Only a run the maintainer
+  approved can read the plan App's key, so the Negative consequence that
+  anyone who can push a branch reaches it no longer applies. The Environment
+  is in `environments.tf`, outside `local.environments` because it has no
+  branch policy; the guard test fails if its reviewer changes. Everything else
+  above stands.
 
 Guards: `infra/terraform/envs/github/tests/guards.tftest.hcl` (run by
 `terraform-ci.yml`'s `test-github`, offline against a mocked provider)
