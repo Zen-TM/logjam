@@ -116,6 +116,16 @@ describe("wayVerbs", () => {
     expect(ids(importFile())).not.toContain("edit");
   });
 
+  // `POST /shares` admits route, topoJob and geoPdfJob (`SHARABLE_ENTITY_TYPES`),
+  // so a file has nothing to share: Share… on one opened no dialog. Mutation:
+  // drop the `way.kind === "route"` test from the share verb in `wayVerbs`.
+  it("offers Share… on a route and on no kind of file", () => {
+    expect(ids(route())).toContain("share");
+    for (const kind of ["track", "import"] as const) {
+      expect(ids(importFile({ kind }))).not.toContain("share");
+    }
+  });
+
   // A file's bytes are in S3 and this page has not downloaded them.
   it("offers export only where the geometry is already here", () => {
     expect(ids(importFile())).not.toContain("exportGpx");

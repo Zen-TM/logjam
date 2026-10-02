@@ -136,7 +136,9 @@ export function wayVerbs(
   // export it and import it back. Routes only: a file on a shared place is
   // media, and no copy endpoint takes one.
   if (direct && way.kind === "route") verbs.push(verb("copy"));
-  if (owned) verbs.push(verb("share"));
+  // Routes only: `POST /shares` takes a route, a topo or a GeoPDF, never a file
+  // (`SHARABLE_ENTITY_TYPES`). A file is handed over as a copy instead.
+  if (owned && way.kind === "route") verbs.push(verb("share"));
   if (EXPORTABLE_KINDS.includes(way.kind)) {
     verbs.push(verb("exportGpx"), verb("exportKml"));
   }
