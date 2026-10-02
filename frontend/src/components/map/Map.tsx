@@ -2,10 +2,11 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import * as maplibregl from "maplibre-gl";
 import { setWorkerUrl } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
+import maplibreWorkerUrl from "virtual:maplibre-worker-url";
 
 // maplibre-gl 6 finds its worker beside the library file via import.meta.url,
-// which Vite's bundling breaks. Hand it the emitted worker asset instead.
+// which Vite's bundling breaks. vite.config.ts emits the worker and the shared
+// chunk it imports under a content-hashed path and exposes its URL here.
 setWorkerUrl(maplibreWorkerUrl);
 import { Protocol } from "pmtiles";
 import type { RegionBbox } from "@logjam/shared";
