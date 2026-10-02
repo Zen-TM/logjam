@@ -19,7 +19,7 @@
 // cold launch and leave the map blank until something else happened. Fail
 // open, the same direction MapScreen's `appActive` and syncEngine's retry gate
 // chose.
-import { useEffect, useRef } from "react";
+import { useEffect, useEffectEvent } from "react";
 import { AppState } from "react-native";
 
 import { onTracksChanged } from "./tracksDb";
@@ -30,13 +30,11 @@ export function useTrackChangeRefresh(
 ): void {
   // The caller's closure changes on every render; re-subscribing on that would
   // tear the subscription down and rebuild it at render rate.
-  const latest = useRef(refresh);
-  latest.current = refresh;
+  const run = useEffectEvent(refresh);
 
   useEffect(() => {
     if (!enabled) return;
     let missed = false;
-    const run = () => latest.current();
     run();
     const unsubscribe = onTracksChanged(() => {
       if (AppState.currentState === "background") {

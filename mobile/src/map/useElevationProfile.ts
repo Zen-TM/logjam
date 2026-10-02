@@ -116,13 +116,15 @@ export function useElevationProfile(
   // screen.
   const latestKey = useRef<string | null>(null);
 
+  // No line, no profile: cleared during render rather than from the effect.
+  if (!geometryKey && (profile !== null || loading)) {
+    setProfile(null);
+    setLoading(false);
+  }
+
   useEffect(() => {
     latestKey.current = geometryKey;
-    if (!geometryKey) {
-      setProfile(null);
-      setLoading(false);
-      return;
-    }
+    if (!geometryKey) return;
 
     const timer = setTimeout(() => {
       setLoading(true);

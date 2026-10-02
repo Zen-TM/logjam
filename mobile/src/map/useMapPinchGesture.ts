@@ -153,7 +153,9 @@ export function useMapPinchGesture(params: {
     zoomRef,
     headingRef,
     northUpLockedRef,
-    userMovedCamera,
+    // The Ref suffix is what tells the react-hooks rules this is a ref they may
+    // see written in a handler.
+    userMovedCamera: userMovedCameraRef,
     setCameraStop,
   } = params;
 
@@ -225,7 +227,7 @@ export function useMapPinchGesture(params: {
           // event arrives long before the commit.
           followModeRef.current = "off";
           setFollowMode("off");
-          userMovedCamera.current = true;
+          userMovedCameraRef.current = true;
         }
       }
       if (!shouldDrivePinch(touches.length)) return false;
@@ -249,7 +251,7 @@ export function useMapPinchGesture(params: {
       headingRef,
       setFollowMode,
       shouldDrivePinch,
-      userMovedCamera,
+      userMovedCameraRef,
       zoomRef,
     ],
   );

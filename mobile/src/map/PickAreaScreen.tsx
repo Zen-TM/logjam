@@ -110,7 +110,7 @@ export function PickAreaScreen({
   // Read once: `initialViewState` is honoured on the first render only, and
   // re-reading the module store mid-session would move a map the user is
   // already panning. Same rule as PickPointScreen and RegionDownloadScreen.
-  const lastCamera = useRef(readLastMapCamera()).current;
+  const [lastCamera] = useState(() => readLastMapCamera());
   // Fixed for the life of the screen: the basemap the user was last looking at,
   // with no way to change it here (see the header for why there is no rail).
   const basemapId: BasemapId = lastCamera?.basemapId ?? readBasemapPreference();

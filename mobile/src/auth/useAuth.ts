@@ -96,7 +96,24 @@ export function mountsAppShell(state: AuthState): boolean {
 }
 
 export function useAuth() {
-  const [state, setState] = useState<AuthState>("loading");
+  // The fake-auth and guest outcomes are synchronous reads, so they are the
+  // first render's state rather than a "loading" frame an effect replaces.
+  const [state, setState] = useState<AuthState>(() => {
+    // Fake auth has no session to restore, but a recorded guest choice is
+    // still this device's answer. Ignoring it made guest mode UNREACHABLE in
+    // local dev — the one environment it can be exercised in — and would have
+    // thrown a guest into an account on their next cold start. Nothing
+    // recorded still means "straight in", so the dev entry flow is unchanged
+    // for everyone who never asked for guest mode.
+    if (config.authMode === "fake") {
+      return readEntryChoice() === "guest" ? "guest" : "authenticated";
+    }
+    // A recorded guest choice short-circuits every network and Keychain call
+    // in the restore effect: a guest has no session to restore, and asking
+    // Cognito about one would put a timeout between them and their own local
+    // data.
+    return readEntryChoice() === "guest" ? "guest" : "loading";
+  });
   const [error, setError] = useState<string | null>(null);
   // Username held between sign-up and confirmation steps
   const [pendingUsername, setPendingUsername] = useState("");
@@ -105,24 +122,9 @@ export function useAuth() {
   // lands in "authenticated" — an expired token is irrelevant until a request
   // needs it (offline-first rule).
   useEffect(() => {
-    if (config.authMode === "fake") {
-      // Fake auth has no session to restore, but a recorded guest choice is
-      // still this device's answer. Ignoring it made guest mode UNREACHABLE in
-      // local dev — the one environment it can be exercised in — and would have
-      // thrown a guest into an account on their next cold start. Nothing
-      // recorded still means "straight in", so the dev entry flow is unchanged
-      // for everyone who never asked for guest mode.
-      setState(readEntryChoice() === "guest" ? "guest" : "authenticated");
-      return;
-    }
-    // A recorded guest choice short-circuits every network and Keychain call
-    // below: a guest has no session to restore, and asking Cognito about one
-    // would put a timeout between them and their own local data.
+    if (config.authMode === "fake") return;
     const entryChoice = readEntryChoice();
-    if (entryChoice === "guest") {
-      setState("guest");
-      return;
-    }
+    if (entryChoice === "guest") return;
     // Fresh install with nothing chosen — offer the choice before the sign-in
     // form, which is otherwise a wall in front of an app that mostly doesn't
     // need an account.

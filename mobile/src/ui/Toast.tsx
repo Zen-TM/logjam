@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 import { Animated, StyleSheet, Text, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 
@@ -38,10 +38,9 @@ export function Toast({
   message: ToastMessage | null;
   onDismissed: () => void;
 }) {
-  const opacity = useRef(new Animated.Value(0)).current;
-  const lift = useRef(new Animated.Value(12)).current;
-  const onDismissedRef = useRef(onDismissed);
-  onDismissedRef.current = onDismissed;
+  const [opacity] = useState(() => new Animated.Value(0));
+  const [lift] = useState(() => new Animated.Value(12));
+  const dismissed = useEffectEvent(onDismissed);
 
   useEffect(() => {
     if (!message) return;
@@ -66,7 +65,7 @@ export function Toast({
         duration: 220,
         useNativeDriver: true,
       }).start(({ finished }) => {
-        if (finished) onDismissedRef.current();
+        if (finished) dismissed();
       });
     }, VISIBLE_MS[message.tone]);
     return () => {

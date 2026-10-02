@@ -701,7 +701,7 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.medium,
   },
   tileLoading: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: scrim.light,

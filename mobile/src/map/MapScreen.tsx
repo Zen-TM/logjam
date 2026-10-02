@@ -16,6 +16,7 @@ import {
   useCallback,
   useDeferredValue,
   useEffect,
+  useEffectEvent,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -827,7 +828,9 @@ export function MapScreen({
   const connectivity = useConnectivity(offlineOnly);
   /** Mirror for `noteReadoutFix`, memoised once — see `dotWantedRef`. */
   const offlineOnlyRef = useRef(offlineOnly);
-  offlineOnlyRef.current = offlineOnly;
+  useLayoutEffect(() => {
+    offlineOnlyRef.current = offlineOnly;
+  });
   const { artifacts } = useMapArtifacts();
   // Bundled glyph/sprite install (§8.3). Map render is gated below until it
   // resolves — swapping the style's glyphs URL after mount rebuilds the whole
@@ -921,9 +924,11 @@ export function MapScreen({
    *  an insert, switching tools. Dropping it on any count change is one rule
    *  instead of six, and a drag (which never changes the count) keeps it. */
   const anchorCount = activeDraft?.anchors.length ?? 0;
-  useEffect(() => {
+  const [selectionAnchorCount, setSelectionAnchorCount] = useState(anchorCount);
+  if (selectionAnchorCount !== anchorCount) {
+    setSelectionAnchorCount(anchorCount);
     setSelectedAnchor(null);
-  }, [anchorCount]);
+  }
   const routes = useMirrorRoutes();
   // The user's own drawn routes, on by default: they are few, they are theirs,
   // and the map is where they are for. The switch lives in the layers sheet.
@@ -1023,7 +1028,9 @@ export function MapScreen({
    * a ref rather than a dep so `setCameraStop` stays stable.
    */
   const mapHeight = useRef(windowHeight);
-  mapHeight.current = windowHeight;
+  useLayoutEffect(() => {
+    mapHeight.current = windowHeight;
+  });
   // What new segments follow. Device-scoped and persisted, read once so the
   // tool is armed correctly on its first frame.
   const [snapMode, setSnapMode] = useState<SnapMode>(readSnapMode);
@@ -1063,7 +1070,9 @@ export function MapScreen({
   // Mirror, for the gesture callbacks: they are memoised once and would
   // otherwise close over the value this screen had when it mounted.
   const northUpLockedRef = useRef(northUpLocked);
-  northUpLockedRef.current = northUpLocked;
+  useLayoutEffect(() => {
+    northUpLockedRef.current = northUpLocked;
+  });
   const [longPressAction, setLongPressAction] =
     useState<LongPressAction>(readLongPressAction);
   const [northReference, setNorthReference] =
@@ -1074,7 +1083,9 @@ export function MapScreen({
   );
   /** Mirror for `noteReadoutFix`, memoised once — see `dotWantedRef`. */
   const speedElevationEnabledRef = useRef(speedElevationEnabled);
-  speedElevationEnabledRef.current = speedElevationEnabled;
+  useLayoutEffect(() => {
+    speedElevationEnabledRef.current = speedElevationEnabled;
+  });
   useFocusEffect(
     useCallback(() => {
       setCompassEnabled(isCompassEnabled());
@@ -1118,6 +1129,17 @@ export function MapScreen({
       return next;
     });
   }, []);
+  // Stage 7 follow modes: follow recenters on each fix (north-up); course-up
+  // additionally rotates the map to the direction of travel. The locate
+  // button cycles off → follow → course-up → off.
+  const [followMode, setFollowMode] = useState<FollowMode>("off");
+  const followModeRef = useRef(followMode);
+  useLayoutEffect(() => {
+    followModeRef.current = followMode;
+  });
+  /** Live zoom and heading, so a pinch starts from what is actually on screen. */
+  const zoomRef = useRef(DEFAULT_ZOOM);
+  const headingRef = useRef(0);
   const cameraRef = useRef<React.ComponentRef<typeof Camera>>(null);
   // MLRN's native camera KEEPS the last stop handed to it imperatively, and
   // under the new architecture the legacy-interop layer re-sends that view's
@@ -1217,15 +1239,6 @@ export function MapScreen({
     },
     [],
   );
-  // Stage 7 follow modes: follow recenters on each fix (north-up); course-up
-  // additionally rotates the map to the direction of travel. The locate
-  // button cycles off → follow → course-up → off.
-  const [followMode, setFollowMode] = useState<FollowMode>("off");
-  const followModeRef = useRef(followMode);
-  followModeRef.current = followMode;
-  /** Live zoom and heading, so a pinch starts from what is actually on screen. */
-  const zoomRef = useRef(DEFAULT_ZOOM);
-  const headingRef = useRef(0);
   const [userCoord, setUserCoord] = useState<[number, number] | null>(null);
   // The heading itself is NOT state here: it is published to heading.ts and
   // read by the two components that draw it (see `publishHeading`). Keeping it
@@ -1441,14 +1454,14 @@ export function MapScreen({
   // where the next band (vector imports) starts.
   const overlayRenderPlan = useMemo(() => {
     let next = overlayBaseIndex;
-    const plans = overlayRefs.map((ref) => {
-      const start = next;
+    const plans: { ref: (typeof overlayRefs)[number]; start: number }[] = [];
+    for (const ref of overlayRefs) {
+      plans.push({ ref, start: next });
       next +=
         ref.format === "vector"
           ? buildTopoVectorLayerDefs(overlayKind(ref), vectorStyle).length
           : 1;
-      return { ref, start };
-    });
+    }
     return { plans, nextIndex: next };
   }, [overlayRefs, overlayBaseIndex, vectorStyle]);
 
@@ -2026,6 +2039,8 @@ export function MapScreen({
     [addToolPoint, anchorDeleteSideFor, collectingPoints, pressedAnchorIndex],
   );
 
+  /** One place's verbs, from its pin. */
+  const [optionsPlaceId, setOptionsPlaceId] = useState<string | null>(null);
   const handlePlacePress = useCallback(
     (event: NativeSyntheticEvent<PressEventWithFeatures>) => {
       stopSourcePress(event);
@@ -2048,8 +2063,6 @@ export function MapScreen({
     [addToolPoint, collectingPoints],
   );
 
-  /** One place's verbs, from its pin. */
-  const [optionsPlaceId, setOptionsPlaceId] = useState<string | null>(null);
   const optionsPlace =
     (places.data ?? []).find((row) => row.id === optionsPlaceId) ?? null;
   /** The two verbs that need a FORM. Each is a sheet of its own, so the
@@ -2063,6 +2076,12 @@ export function MapScreen({
    *  re-renders it rather than showing the copy the line was tapped with. */
   const [optionsTrackId, setOptionsTrackId] = useState<string | null>(null);
   const [recordingSheetOpen, setRecordingSheetOpen] = useState(false);
+  /**
+   * An imported file's own verbs, from the map. Held as an id for the same
+   * reason a track's is: the row comes from `useVectorImports`, so a rename or
+   * a visibility flip made inside the sheet re-renders it.
+   */
+  const [optionsImportId, setOptionsImportId] = useState<string | null>(null);
   const handleTrackPress = useCallback(
     (track: Track, coordinates?: { latitude: number; longitude: number }) => {
       // Same rule as a place pin: the line swallows the press before the map
@@ -2503,12 +2522,11 @@ export function MapScreen({
     },
     [imports.length, fitCameraToBbox],
   );
-  const handleIncomingUrlRef = useRef(handleIncomingUrl);
-  handleIncomingUrlRef.current = handleIncomingUrl;
+  const onIncomingUrl = useEffectEvent(handleIncomingUrl);
   useEffect(() => {
-    Linking.getInitialURL().then((url) => handleIncomingUrlRef.current(url));
+    Linking.getInitialURL().then((url) => onIncomingUrl(url));
     const sub = Linking.addEventListener("url", (event) =>
-      handleIncomingUrlRef.current(event.url),
+      onIncomingUrl(event.url),
     );
     return () => sub.remove();
   }, []);
@@ -2598,6 +2616,7 @@ export function MapScreen({
     handledFocusNonce.current = focus.nonce;
     // Basemap first, camera second: they commit in the same render either way,
     // and the ordering says which one is the correction.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- a navigation param consumed once by nonce; the same pass writes the DB and flies the camera, which need the committed map
     if (focus.basemapId) chooseBasemap(focus.basemapId);
     // Make the asset's layer visible before flying to it, or the camera lands
     // on an empty patch. A region's "layer" IS the basemap (handled above);
@@ -2671,12 +2690,14 @@ export function MapScreen({
   ]);
 
   // Frame a draft restored from a killed session, once the map can take a
-  // camera stop. Cleared after one use — the user's own panning owns the
+  // camera stop. Once per restored draft — the user's own panning owns the
   // camera from then on.
+  const fittedDraft = useRef<Bbox | null>(null);
   useEffect(() => {
     if (!pendingDraftFit || !mapReady) return;
+    if (fittedDraft.current === pendingDraftFit) return;
+    fittedDraft.current = pendingDraftFit;
     fitCameraToBbox(pendingDraftFit);
-    setPendingDraftFit(null);
   }, [fitCameraToBbox, mapReady, pendingDraftFit]);
 
   /** "Edit points" arrival from Saved: arm the draw tool on a saved route and
@@ -3003,6 +3024,35 @@ export function MapScreen({
   }, []);
 
   /**
+   * Whether the marker is shown. ALWAYS TRUE once the map exists.
+   *
+   * It used to start false and be raised by the locate button or by starting a
+   * recording, which meant a marker that came and went for reasons the user
+   * could not see — most visibly across an app restart, where the recording
+   * survived (the record button reads the database) and this did not. "Where
+   * am I" is not a mode a map should make you ask for.
+   *
+   * The cost is the position watcher running whenever the map tab is focused
+   * AND foregrounded — never with the screen off, and never on another tab.
+   * Measured against the same field session: the watcher bills ~7.9 mAh/hour
+   * while the map is open, and the SCREEN that has to be on for the map to be
+   * looked at bills ~49 mAh/hour. Six times more, for the privilege of seeing
+   * the map at all. This is not where a field day is lost.
+   *
+   * Kept as state rather than deleted outright because `handleLocateMe` and
+   * `applyFix` still branch on it, and the follow-mode cycle needs the
+   * distinction between "showing you" and "chasing you".
+   */
+  const [dotWanted, setDotWanted] = useState(true);
+  /** Mirror for `applyFix`, which is memoised once and must not be rebuilt on
+   *  every change of this — every rebuild tears the GPS watcher down and
+   *  starts a new one. */
+  const dotWantedRef = useRef(dotWanted);
+  useLayoutEffect(() => {
+    dotWantedRef.current = dotWanted;
+  });
+
+  /**
    * Fold one fix into the dot and, in a follow mode, into the camera.
    */
   const applyFix = useCallback(
@@ -3211,33 +3261,6 @@ export function MapScreen({
       setRecordingMapFocusBoost(false).catch(console.error);
     };
   }, [sensorsActive]);
-
-  /**
-   * Whether the marker is shown. ALWAYS TRUE once the map exists.
-   *
-   * It used to start false and be raised by the locate button or by starting a
-   * recording, which meant a marker that came and went for reasons the user
-   * could not see — most visibly across an app restart, where the recording
-   * survived (the record button reads the database) and this did not. "Where
-   * am I" is not a mode a map should make you ask for.
-   *
-   * The cost is the position watcher running whenever the map tab is focused
-   * AND foregrounded — never with the screen off, and never on another tab.
-   * Measured against the same field session: the watcher bills ~7.9 mAh/hour
-   * while the map is open, and the SCREEN that has to be on for the map to be
-   * looked at bills ~49 mAh/hour. Six times more, for the privilege of seeing
-   * the map at all. This is not where a field day is lost.
-   *
-   * Kept as state rather than deleted outright because `handleLocateMe` and
-   * `applyFix` still branch on it, and the follow-mode cycle needs the
-   * distinction between "showing you" and "chasing you".
-   */
-  const [dotWanted, setDotWanted] = useState(true);
-  /** Mirror for `applyFix`, which is memoised once and must not be rebuilt on
-   *  every change of this — every rebuild tears the GPS watcher down and
-   *  starts a new one. */
-  const dotWantedRef = useRef(dotWanted);
-  dotWantedRef.current = dotWanted;
 
   /**
    * Whether the arrow is still telling the truth (`gpsSignal.ts` owns the rule).
@@ -3992,6 +4015,7 @@ export function MapScreen({
     );
     if (!target) return;
     handledNavigateNonce.current = navigatePlace.nonce;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- a navigation param consumed once by nonce, and only once the mirror has the place; it may also raise the location prompt
     startNavigatingTo(target);
   }, [places.data, navigatePlace, navigatePlaceNonce, startNavigatingTo]);
 
@@ -4006,12 +4030,7 @@ export function MapScreen({
     void handleStartRecording();
   }, [handleStartRecording, startRecordingNonce]);
 
-  /**
-   * An imported file's own verbs, from the map. Held as an id for the same
-   * reason a track's is: the row comes from `useVectorImports`, so a rename or
-   * a visibility flip made inside the sheet re-renders it.
-   */
-  const [optionsImportId, setOptionsImportId] = useState<string | null>(null);
+  /** A tap on an imported file's line opens its verbs (`optionsImportId`). */
   const handleImportPress = useCallback(
     (importId: string, event: NativeSyntheticEvent<PressEvent>) => {
       // FIRST, before any early return — MLRN 11 bubbles a source press to the

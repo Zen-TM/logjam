@@ -11,6 +11,8 @@ import { messageFromError, type TrackDetail } from "@logjam/shared";
 import type { VectorImport } from "./importsDb";
 import { readImportedTrackDetail } from "./importedTrackSeries";
 
+const NO_LINE: [number, number][][] = [];
+
 export function useImportedTrackDetail(
   imported: VectorImport | null,
   enabled: boolean,
@@ -21,53 +23,58 @@ export function useImportedTrackDetail(
   /** The imported lines, coarsened for sampling the DEM along. */
   line: [number, number][][];
 } {
-  const [detail, setDetail] = useState<TrackDetail | null>(null);
-  const [line, setLine] = useState<[number, number][][]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // The last read, tagged with the import it was for: anything else showing is
+  // derived from whether a read is due and whether this one has landed.
+  const [settled, setSettled] = useState<{
+    imported: VectorImport;
+    detail: TrackDetail | null;
+    line: [number, number][][];
+    error: string | null;
+  } | null>(null);
+
+  // No bytes on this phone yet — the row synced ahead of its file. Not an
+  // error: nothing to read until the user downloads it.
+  const path = enabled && imported != null ? imported.path : null;
 
   useEffect(() => {
-    if (!enabled || imported == null) {
-      setDetail(null);
-      setLine([]);
-      setError(null);
-      setLoading(false);
-      return;
-    }
-    // No bytes on this phone yet — the row synced ahead of its file. Not an
-    // error: nothing to read until the user downloads it.
-    if (imported.path === null) {
-      setDetail(null);
-      setLine([]);
-      setError(null);
-      setLoading(false);
-      return;
-    }
+    if (path === null || imported == null) return;
     let current = true;
-    setLoading(true);
-    setError(null);
     readImportedTrackDetail({
-      path: imported.path,
+      path,
       positionCount: imported.positionCount,
     })
       .then((next) => {
         if (!current) return;
-        setDetail(next.detail);
-        setLine(next.line);
-        setLoading(false);
+        setSettled({
+          imported,
+          detail: next.detail,
+          line: next.line,
+          error: null,
+        });
       })
       .catch((err: unknown) => {
         console.error(err);
         if (!current) return;
         // The over-large refusal carries its own sentence; anything else is a
         // read that failed, and the file's contents never reach this string.
-        setError(messageFromError(err, "Couldn't read that file."));
-        setLoading(false);
+        setSettled({
+          imported,
+          detail: null,
+          line: NO_LINE,
+          error: messageFromError(err, "Couldn't read that file."),
+        });
       });
     return () => {
       current = false;
     };
-  }, [imported, enabled]);
+  }, [imported, path]);
+
+  const result =
+    path !== null && settled?.imported === imported ? settled : null;
+  const detail = result?.detail ?? null;
+  const line = result?.line ?? NO_LINE;
+  const error = result?.error ?? null;
+  const loading = path !== null && result == null;
 
   return { detail, loading, error, line };
 }

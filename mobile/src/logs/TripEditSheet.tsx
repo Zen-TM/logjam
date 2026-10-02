@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import {
@@ -150,7 +150,7 @@ export function TripEditSheet({
   // live row: a sync landing mid-edit must neither reset the form nor make a
   // field the user never touched look changed (and so get pushed over the
   // newer value).
-  const openedWith = useRef<MirrorTrip | null>(null);
+  const [openedWith, setOpenedWith] = useState<MirrorTrip | null>(null);
 
   /**
    * THE FIELDS THIS TRIP IS ASKED FOR — the ones scoped to the trip's own TYPES
@@ -192,10 +192,19 @@ export function TripEditSheet({
   }, []);
 
   // Seed from the trip being edited (or today's blank form) each time the sheet
-  // opens, so a cancelled edit never leaks into the next one.
-  useEffect(() => {
-    if (!visible) return;
-    openedWith.current = trip ?? null;
+  // opens, so a cancelled edit never leaks into the next one. Done during
+  // render, so the opening frame is already the seeded form.
+  //
+  // Deliberately keyed on the sheet OPENING — the trip's ID, not the object.
+  // A detail screen hands this a fresh object on every mirror change (a sync
+  // pull, an upload tick, an inbox refresh), and re-seeding on that wiped
+  // whatever the user was halfway through typing. `initialPlaces` is left out
+  // for the same reason: callers build that array inline.
+  const openKey = visible ? (trip?.id ?? "new") : null;
+  const [seededFor, setSeededFor] = useState<string | null>(null);
+  if (openKey !== seededFor) setSeededFor(openKey);
+  if (openKey !== null && openKey !== seededFor) {
+    setOpenedWith(trip ?? null);
     setMode("form");
     setPlaceSearch("");
     setCustomTypes([]);
@@ -219,13 +228,7 @@ export function TripEditSheet({
     );
     setPlacesError(null);
     setSaveError(null);
-    // Deliberately keyed on the sheet OPENING — the trip's ID, not the object.
-    // A detail screen hands this a fresh object on every mirror change (a sync
-    // pull, an upload tick, an inbox refresh), and re-seeding on that wiped
-    // whatever the user was halfway through typing. `initialPlaces` is left out
-    // for the same reason: callers build that array inline.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trip?.id, visible]);
+  }
 
   // Linking a CANYON means "I did that canyon", so the API force-tags
   // `canyoning` on save. Mirror that into the selection so the chip reads
@@ -241,15 +244,15 @@ export function TripEditSheet({
       .map((link) => places.find((place) => place.id === link.id)?.placeTypeId)
       .filter((typeId): typeId is string => !!typeId),
   );
-  useEffect(() => {
+  const [taggedFor, setTaggedFor] = useState<boolean | null>(null);
+  if (linkedCanyon !== taggedFor) {
+    setTaggedFor(linkedCanyon);
     setTypes((prev) => enforceCanyoningTag(prev, linkedCanyon));
-  }, [linkedCanyon]);
+  }
 
   // The place-cap error belongs to the picker mode; leaving it clears it, same
   // as any other field's error clearing when the user moves on.
-  useEffect(() => {
-    if (mode !== "places") setPlacesError(null);
-  }, [mode]);
+  if (mode !== "places" && placesError !== null) setPlacesError(null);
 
   const typeOptions: ChipOption[] = useMemo(() => {
     const vocabulary = [
@@ -339,7 +342,7 @@ export function TripEditSheet({
     const effectiveCustomFields = withoutClearedFields(
       coerceCustomFields(fieldValues, visibleFieldDefs),
     );
-    const base = openedWith.current ?? trip;
+    const base = openedWith ?? trip;
     try {
       if (trip && base) {
         // Field-scoped: push only what the user changed since the sheet opened,
@@ -402,6 +405,7 @@ export function TripEditSheet({
     linkedCanyon,
     notes,
     onClose,
+    openedWith,
     onSaved,
     selected,
     trip,

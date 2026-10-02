@@ -129,7 +129,7 @@ const styles = StyleSheet.create({
     // rest of the map.
     overflow: "hidden",
   },
-  tape: { ...StyleSheet.absoluteFillObject },
+  tape: { ...StyleSheet.absoluteFill },
   // Each tick is its own centred column: top mark, label, bottom mark. Shifted
   // half its width left so the column is centred ON the tick's x, not right of it.
   tick: {

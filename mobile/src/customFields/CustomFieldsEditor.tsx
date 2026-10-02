@@ -311,6 +311,7 @@ export function useCustomFieldForm({
     numeric,
     onDone,
     onSaved,
+    setScopeError,
     type,
     typeIds,
   ]);

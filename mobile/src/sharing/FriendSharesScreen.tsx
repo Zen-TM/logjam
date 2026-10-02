@@ -157,16 +157,21 @@ export function FriendSharesScreen({
 
   const load = useCallback(async () => {
     if (guestBlock) return;
-    try {
-      setShares(await getFriendShares(friendshipId));
-      setLoadError(null);
-    } catch (err) {
-      console.error(err);
-      // Our own copy, never the error's: it may carry an item name.
-      setLoadError(
-        messageFromError(err, "Couldn't load what's shared with this friend."),
-      );
-    }
+    await getFriendShares(friendshipId)
+      .then((next) => {
+        setShares(next);
+        setLoadError(null);
+      })
+      .catch((err: unknown) => {
+        console.error(err);
+        // Our own copy, never the error's: it may carry an item name.
+        setLoadError(
+          messageFromError(
+            err,
+            "Couldn't load what's shared with this friend.",
+          ),
+        );
+      });
   }, [friendshipId, guestBlock]);
 
   useEffect(() => {
