@@ -2,7 +2,7 @@
   "name": "cognito-email-sender",
   "version": "1.0.0",
   "private": true,
-  "description": "Cognito CustomEmailSender Lambda \u2014 sends verification codes via Resend",
+  "description": "Cognito CustomEmailSender Lambda — sends verification codes via Resend",
   "type": "module",
   "scripts": {
     "build": "node build.mjs",
@@ -16,7 +16,7 @@
   "devDependencies": {
     "@aws-sdk/client-secrets-manager": "^3.1141.0",
     "@types/aws-lambda": "^8.10.163",
-    "@types/node": "^20.14.0",
+    "@types/node": "^22.20.5",
     "esbuild": "^0.28.2",
     "typescript": "^7.0.2"
   }
