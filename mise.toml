@@ -1,7 +1,7 @@
 [tools]
 # 22, not 20: Logjam GPS's tests and lint need node:sqlite (Node 22.5+), and
-# `make verify` lints mobile from the repo root. CI's mobile job runs 22; the
-# api and frontend jobs and api/Dockerfile stay on 20.
+# `make verify` lints mobile from the repo root. CI's mobile and frontend
+# jobs run 22 (jsdom 30 needs 22.22+); the api jobs and api/Dockerfile stay on 20.
 node = "22"
 python = "3.12"
 terraform = "1.13"
