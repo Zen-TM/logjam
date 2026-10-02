@@ -34,6 +34,7 @@
 //   * VISIBILITY was a per-file switch on a detail page, which is a control the
 //     user had to open a page to find. The Layers overlays draw these files
 //     now, so the switch has nowhere left to be and nothing left to do.
+import { WAY_SHARE_VERB } from "@logjam/shared";
 import type { WayItem, WayKind } from "./waysModel";
 
 export type WayVerbId =
@@ -43,6 +44,7 @@ export type WayVerbId =
   | "copy"
   | "copyAndRemove"
   | "share"
+  | "sendCopy"
   | "exportGpx"
   | "exportKml"
   | "download"
@@ -83,6 +85,9 @@ const LABELS: Record<WayVerbId, string> = {
   // to do it as two steps and guess whether the first survives the second.
   copyAndRemove: "Save to my Ways and remove",
   share: "Share…",
+  // Logjam GPS's words for the other verb, and never Share's: the friend keeps
+  // the file and it cannot be taken back (shared/src/sharing.ts).
+  sendCopy: "Send a copy…",
   exportGpx: "Export as GPX",
   exportKml: "Export as KML",
   // Not "Export": this hands back the FILE the user brought or recorded, byte
@@ -136,9 +141,13 @@ export function wayVerbs(
   // export it and import it back. Routes only: a file on a shared place is
   // media, and no copy endpoint takes one.
   if (direct && way.kind === "route") verbs.push(verb("copy"));
-  // Routes only: `POST /shares` takes a route, a topo or a GeoPDF, never a file
-  // (`SHARABLE_ENTITY_TYPES`). A file is handed over as a copy instead.
-  if (owned && way.kind === "route") verbs.push(verb("share"));
+  // Which of the two, per kind, is WAY_SHARE_VERB's and Logjam GPS's alike: a
+  // route is a row `POST /shares` can grant, a file is not and is handed over
+  // as a copy instead (`POST /file-sends/from-media`, owner only).
+  if (owned && WAY_SHARE_VERB[way.kind] === "share") verbs.push(verb("share"));
+  if (owned && WAY_SHARE_VERB[way.kind] === "sendCopy") {
+    verbs.push(verb("sendCopy"));
+  }
   if (EXPORTABLE_KINDS.includes(way.kind)) {
     verbs.push(verb("exportGpx"), verb("exportKml"));
   }

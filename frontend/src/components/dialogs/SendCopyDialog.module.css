@@ -1,0 +1,36 @@
+/* Who gets a copy. Layout only — every control is the kit's (DESIGN.md §6). */
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* What Send will do, said before anything is ticked. Warning as the EDGE and
+   the glyph with the text in the text colour, as the warning StatusPill does:
+   this one does not come back. */
+.promise {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 0 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--theme-warning);
+  border-left-width: 3px;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-sm);
+  line-height: 1.45;
+}
+
+.glyph {
+  flex: none;
+  margin-top: 2px;
+  color: var(--theme-warning);
+}
+
+/* Nobody matching the search. */
+.note {
+  margin: 2px 0;
+  font-size: var(--font-sm);
+  color: var(--theme-text-muted);
+}

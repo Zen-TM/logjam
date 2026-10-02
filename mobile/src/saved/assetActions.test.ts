@@ -7,6 +7,7 @@ import {
   trackActions,
   vectorImportActions,
 } from "./assetActions";
+import { WAY_SHARE_VERB } from "@logjam/shared";
 import type { Track } from "../tracks/tracksDb";
 import type { MirrorRoute } from "../sync/mirrorStore";
 import type { VectorImport } from "../imports/importsDb";
@@ -210,6 +211,21 @@ describe("the share / send-a-copy verb matrix", () => {
       expect(descriptor.share != null && descriptor.sendCopy != null).toBe(
         false,
       );
+    }
+  });
+
+  // Parity with Logjam Web, which reads the same declaration in wayActions.ts.
+  // Mutation: set `track: "share"` in WAY_SHARE_VERB → red here and on Web.
+  it("agrees with WAY_SHARE_VERB, the rule both clients share", () => {
+    const descriptors = {
+      route: routeActions(route("owner")),
+      track: trackActions(track(3)),
+      import: vectorImportActions(importRow()),
+    };
+    for (const [kind, actions] of Object.entries(descriptors)) {
+      const verb = WAY_SHARE_VERB[kind as keyof typeof WAY_SHARE_VERB];
+      expect(actions.share != null, kind).toBe(verb === "share");
+      expect(actions.sendCopy != null, kind).toBe(verb === "sendCopy");
     }
   });
 

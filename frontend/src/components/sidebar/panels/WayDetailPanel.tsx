@@ -28,6 +28,7 @@ import {
   Link2Off,
   MapPin,
   Pencil,
+  Send,
   Share2,
   Trash2,
   X,
@@ -60,6 +61,7 @@ import {
   shareEntityWith,
   unshareEntityWith,
   renameMedia,
+  sendCopyOfMedia,
   type TRoute,
   type TPlace,
   type TFriend,
@@ -68,6 +70,7 @@ import { messageFromError } from "../../../errors/messageFromError";
 import { useToast } from "../../feedback/ToastProvider";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
 import ShareDialog from "../../dialogs/ShareDialog";
+import SendCopyDialog from "../../dialogs/SendCopyDialog";
 import PlacePicker from "../../common/PlacePicker";
 import ElevationProfile from "../../routes/ElevationProfile";
 import type { RouteHoverChannel } from "../../map/routeHover";
@@ -94,6 +97,7 @@ const VERB_ICON: Partial<Record<WayVerbId, LucideIcon>> = {
   copy: CopyPlus,
   copyAndRemove: CopyPlus,
   share: Share2,
+  sendCopy: Send,
   exportGpx: Download,
   exportKml: Download,
   download: Download,
@@ -173,6 +177,7 @@ export default function WayDetailPanel({
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [showShare, setShowShare] = useState(false);
+  const [showSendCopy, setShowSendCopy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [renaming, setRenaming] = useState(false);
   /** Which share-ending verb is waiting on its confirmation, if any. */
@@ -405,6 +410,9 @@ export default function WayDetailPanel({
         return;
       case "share":
         setShowShare(true);
+        return;
+      case "sendCopy":
+        setShowSendCopy(true);
         return;
       case "exportGpx":
         exportRoute("gpx");
@@ -685,6 +693,23 @@ export default function WayDetailPanel({
           listShares={() => getEntityShares("route", route.id)}
           share={(userId) => shareEntityWith("route", route.id, userId)}
           unshare={(userId) => unshareEntityWith("route", route.id, userId)}
+        />
+      )}
+      {file && (
+        <SendCopyDialog
+          title={`Send a copy of ${way.title}`}
+          friends={friends}
+          open={showSendCopy}
+          onClose={() => setShowSendCopy(false)}
+          send={async (recipientIds) => {
+            const { filename } = await sendCopyOfMedia(file.id, recipientIds);
+            setShowSendCopy(false);
+            toast.success(
+              recipientIds.length === 1
+                ? `Sent ${filename}.`
+                : `Sent ${filename} to ${recipientIds.length} friends.`,
+            );
+          }}
         />
       )}
 
