@@ -154,8 +154,10 @@ Never run a migration as part of an API rollback.
 ```sh
 # 1. The release and every file it shipped must still be in the bucket.
 aws s3 cp "s3://$BUCKET/releases/$SHA/files.txt" /tmp/files.txt
-aws s3api list-objects-v2 --bucket "$BUCKET" --output json | jq -r '.Contents[].Key' | sort > /tmp/present.txt
-sort /tmp/files.txt | comm -23 - /tmp/present.txt   # must print nothing
+# LC_ALL=C: the deploy wrote files.txt in C order, and comm needs both sides
+# in one order; a locale sort reports files missing that are there.
+aws s3api list-objects-v2 --bucket "$BUCKET" --output json | jq -r '.Contents[].Key' | LC_ALL=C sort > /tmp/present.txt
+LC_ALL=C sort /tmp/files.txt | LC_ALL=C comm -23 - /tmp/present.txt   # must print nothing
 
 # 2. Put its index.html back. REPLACE drops the source's headers, so restate them.
 aws s3 cp "s3://$BUCKET/releases/$SHA/index.html" "s3://$BUCKET/index.html" \

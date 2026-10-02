@@ -153,14 +153,16 @@ make verify
 ```
 
 `make verify` checks formatting, lints and typechecks every package (a minute
-or two). Then run the unit suites, which need no running stack:
+or two). Then run the unit suites, which need no running stack. The topo
+suite runs on the Python `make setup` installed its packages into, so it goes
+through `mise exec` even in an activated shell:
 
 ```bash
 (cd shared && npm test)
 (cd api && npm run test:unit)
 (cd frontend && npm test)
 (cd mobile && npm test)
-(cd topo && python -m unittest discover -s tests)
+(cd topo && mise exec -- python -m unittest discover -s tests)
 ```
 
 If you changed the API, also run its integration suite against the running
