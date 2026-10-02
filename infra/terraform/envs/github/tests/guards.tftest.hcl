@@ -159,4 +159,11 @@ run "security_alerts_stay_on" {
     condition     = github_repository_vulnerability_alerts.logjam.enabled
     error_message = "Dependabot alerts must stay enabled."
   }
+
+  # Mutation: enabled = false leaves alerts piling up with no fix pull
+  # requests; deleting the resource fails this run on the missing reference.
+  assert {
+    condition     = github_repository_dependabot_security_updates.logjam.enabled
+    error_message = "Dependabot security updates must stay enabled."
+  }
 }
