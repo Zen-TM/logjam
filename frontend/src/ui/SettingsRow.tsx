@@ -23,12 +23,17 @@ export function SettingsRow({
 }: {
   label: string;
   tooltip?: string;
-  /** Dimmed and inert: another setting here has taken this one over. */
+  /** Dimmed and `inert` (out of the tab order and the a11y tree, so axe does not
+   *  grade its dimmed colours): another setting here has taken this one over. */
   disabled?: boolean;
   children: ReactNode;
 }) {
   return (
-    <div className={classes.row} data-disabled={disabled || undefined}>
+    <div
+      className={classes.row}
+      data-disabled={disabled || undefined}
+      inert={disabled}
+    >
       <span className={classes.rowLabel}>
         {label}
         {tooltip && <InfoTip label={label} content={tooltip} />}
