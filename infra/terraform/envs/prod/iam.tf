@@ -342,35 +342,37 @@ locals {
           "arn:aws:s3:::logjam-topo-jobs/*",
           # WORM audit sink: pgaudit query text can embed canyon names/coords.
           "arn:aws:s3:::logjam-audit-620853681701/*",
+          # CloudFront and S3 access logs: viewers' IPs and request paths.
+          "arn:aws:s3:::logjam-access-logs-620853681701/*",
+          # The API instance's rotated logs, which EB uploads here. The
+          # deploy role's app versions live elsewhere in this bucket.
+          "arn:aws:s3:::elasticbeanstalk-ap-southeast-2-620853681701/resources/environments/logs/*",
         ]
       },
-      # origin_verify is carved out: terraform refresh of its
-      # aws_secretsmanager_secret_version reads the value, and that value
-      # already lives in the TF state the CI role must read — denying the
-      # API call protects nothing and breaks the plan.
+      # No exception: the origin-verify secret version is write-only
+      # (origin_verify.tf), so no plan or apply reads a secret value.
       {
-        Sid         = "DenySecretValues"
-        Effect      = "Deny"
-        Action      = "secretsmanager:GetSecretValue"
-        NotResource = aws_secretsmanager_secret.origin_verify.arn
+        Sid      = "DenySecretValues"
+        Effect   = "Deny"
+        Action   = ["secretsmanager:GetSecretValue", "secretsmanager:BatchGetSecretValue"]
+        Resource = "*"
       },
-      # ...and explicitly allowed: ReadOnlyAccess doesn't include
-      # GetSecretValue, so the carve-out alone still fails with "no
-      # identity-based policy allows".
-      {
-        Sid      = "AllowOriginVerifyRead"
-        Effect   = "Allow"
-        Action   = "secretsmanager:GetSecretValue"
-        Resource = aws_secretsmanager_secret.origin_verify.arn
-      },
-      # Scoped to the Cognito email CMK (the only customer-managed key):
-      # a blanket kms:Decrypt deny would also hit the AWS-managed
-      # aws/secretsmanager key used by the origin_verify read above.
+      # Scoped to the Cognito email CMK (the only customer-managed key): a
+      # blanket kms:Decrypt deny would also hit AWS-managed keys that
+      # terraform refresh reads through.
       {
         Sid      = "DenyCmkDecrypt"
         Effect   = "Deny"
         Action   = "kms:Decrypt"
         Resource = aws_kms_key.cognito_email.arn
+      },
+      # Users' emails and attributes. Terraform reads the pool and its client
+      # (DescribeUserPool*), never its users.
+      {
+        Sid      = "DenyUserDirectory"
+        Effect   = "Deny"
+        Action   = ["cognito-idp:ListUsers", "cognito-idp:ListUsersInGroup", "cognito-idp:AdminGet*", "cognito-idp:AdminList*"]
+        Resource = "*"
       },
       # Postgres log export carries pgaudit query text (same sensitivity as
       # the audit bucket). Deny reading log *events*; DescribeLogGroups stays
@@ -378,11 +380,28 @@ locals {
       {
         Sid    = "DenyDbLogEvents"
         Effect = "Deny"
-        Action = ["logs:GetLogEvents", "logs:FilterLogEvents", "logs:StartQuery", "logs:GetQueryResults"]
+        Action = ["logs:GetLogEvents", "logs:FilterLogEvents", "logs:StartQuery", "logs:GetQueryResults", "logs:StartLiveTail"]
         Resource = [
           "arn:aws:logs:ap-southeast-2:620853681701:log-group:/aws/rds/*",
           "arn:aws:logs:ap-southeast-2:620853681701:log-group:/aws/rds/*:*",
         ]
+      },
+      # The same logs by other routes: RDS's own log files, a single record
+      # by pointer (no resource-level permission, hence "*"), and the EB
+      # instance's log tail. Nothing in CI reads any of them.
+      {
+        Sid      = "DenyLogsByOtherRoutes"
+        Effect   = "Deny"
+        Action   = ["rds:DownloadDBLogFilePortion", "rds:DownloadCompleteDBLogFile", "logs:GetLogRecord", "elasticbeanstalk:RequestEnvironmentInfo", "elasticbeanstalk:RetrieveEnvironmentInfo"]
+        Resource = "*"
+      },
+      # Message bodies and parameter values: ReadOnlyAccess allows both, and
+      # receiving a message also hides it from its real consumer.
+      {
+        Sid      = "DenyMessagesAndParameters"
+        Effect   = "Deny"
+        Action   = ["sqs:ReceiveMessage", "ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath", "ssm:GetParameterHistory"]
+        Resource = "*"
       },
     ]
   })

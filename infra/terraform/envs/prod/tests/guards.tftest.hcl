@@ -51,3 +51,60 @@ run "origin_verify_is_never_read_back" {
     error_message = "The origin-verify secret version must be write-only (secret_string_wo): no CI role may read secret values."
   }
 }
+
+run "ci_reads_no_secret_or_user_data" {
+  command = plan
+  plan_options {
+    target = [
+      aws_iam_role_policy.gha_plan_readonly_privacy_deny,
+      aws_iam_role_policy.gha_readonly_privacy_deny,
+      aws_iam_policy.github_actions_apply_boundary,
+    ]
+  }
+
+  # The Deny names the Cognito CMK, whose mocked ARN is otherwise unknown.
+  override_resource {
+    target          = aws_kms_key.cognito_email
+    values          = { arn = "arn:aws:kms:ap-southeast-2:620853681701:key/mock" }
+    override_during = plan
+  }
+
+  # Mutation: an Allow or a NotResource exception for one secret, or a
+  # Resource narrower than "*", lets a CI role read that secret's value.
+  assert {
+    condition = alltrue([
+      for p in [
+        aws_iam_role_policy.gha_plan_readonly_privacy_deny.policy,
+        aws_iam_role_policy.gha_readonly_privacy_deny.policy,
+        aws_iam_policy.github_actions_apply_boundary.policy,
+        ] : (
+        anytrue([
+          for st in jsondecode(p).Statement :
+          st.Effect == "Deny" && try(st.Resource, null) == "*" && contains(flatten([st.Action]), "secretsmanager:GetSecretValue")
+        ]) &&
+        !anytrue([for st in jsondecode(p).Statement : st.Effect == "Allow" && strcontains(jsonencode(st.Action), "secretsmanager")]) &&
+        !anytrue([for st in jsondecode(p).Statement : can(st.NotResource)])
+      )
+    ])
+    error_message = "Every CI role and the apply boundary must deny GetSecretValue on every secret, with no exception (infra/AGENTS.md)."
+  }
+
+  # Mutation: dropping any of these from the Deny gives the plan and deploy
+  # roles (through ReadOnlyAccess) a read of users' emails, the Postgres
+  # logs with query text, the instance logs, or queued messages.
+  assert {
+    condition = alltrue([
+      for a in [
+        "cognito-idp:ListUsers", "cognito-idp:AdminGet*", "cognito-idp:AdminList*",
+        "rds:DownloadDBLogFilePortion", "rds:DownloadCompleteDBLogFile",
+        "logs:StartLiveTail", "logs:GetLogRecord", "logs:GetLogEvents",
+        "elasticbeanstalk:RetrieveEnvironmentInfo",
+        "sqs:ReceiveMessage", "ssm:GetParameter",
+        ] : anytrue([
+          for st in jsondecode(aws_iam_role_policy.gha_plan_readonly_privacy_deny.policy).Statement :
+          st.Effect == "Deny" && contains(flatten([st.Action]), a)
+      ])
+    ])
+    error_message = "The CI privacy Deny lost a statement that keeps user data and logs out of CI (local.ci_readonly_privacy_deny)."
+  }
+}
