@@ -49,6 +49,14 @@ JavaScript to reach a build whose native code it does not match:
    target build's (`eas build:view`). A mismatch means the update would reach
    no one, or the fix changed native code and needs a store build.
 
+- **Update 2026-10-02: `google-services.json` is left out of the
+  fingerprint** (`mobile/.fingerprintignore`: the file, and EAS's
+  `eas-environment-secrets/` path it lands at). The release workflow's runner
+  never has the file (an EAS file-type secret), so it computed a different
+  fingerprint from EAS and EAS's runtime-version check failed the first dry run.
+  An FCM config change cannot break JavaScript, so nothing is lost. Guard:
+  `mobile/src/runtimeVersion.test.ts`. Everything else above stands.
+
 Rules 2 and 3 have no executable check; `docs/operations/mobile-release.md`
 walks through them, and they are checked when an update is published.
 
@@ -60,11 +68,10 @@ walks through them, and they are checked when an update is published.
   enforces.
 - **Negative:** the hash covers more than native code, so harmless edits also
   split the runtime: all of `mobile/eas.json`, `mobile/.gitignore`, the npm
-  `scripts` in `mobile/package.json`, the app icons, and the contents of
-  `google-services.json`, which `mobile/app.config.ts` adds only when
-  `GOOGLE_SERVICES_JSON` is set. An update published from a checkout without
-  that file, or after such an edit, reaches no build and says nothing, which
-  is why rule 3 exists. The runtime version is a 40-character hash, not a
+  `scripts` in `mobile/package.json` and the app icons (`google-services.json`
+  no longer: see the update above; updated 2026-10-02). An update published
+  after such an edit reaches no build and says nothing, which is why rule 3
+  exists. The runtime version is a 40-character hash, not a
   version a person can read. Builds already installed with runtime `0.1.0`
   receive no further updates.
 - **Neutral:** three config plugins change the native build from environment
