@@ -67,7 +67,7 @@
     "expo-sqlite": "~57.0.3",
     "expo-status-bar": "~57.0.1",
     "expo-task-manager": "~57.0.21",
-    "expo-updates": "~57.0.24",
+    "expo-updates": "~58.0.10",
     "expo-video": "~57.0.5",
     "expo-video-thumbnails": "~57.0.2",
     "fflate": "^0.8.3",
