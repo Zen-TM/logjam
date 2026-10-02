@@ -81,3 +81,17 @@ describe("CSP allowlist agreement", () => {
     expect(viteHosts).toEqual(jsonHosts);
   });
 });
+
+// maplibre-gl 6 loads its worker from a same-origin file
+// (assets/maplibre-<hash>/), so nothing needs blob: workers. A blob: worker
+// source would let any script that can build a Blob run code off the main
+// thread outside script-src. Mutation that turns it red: add blob: (or any
+// host) to worker-src in CSP_PROD.
+describe("CSP worker-src", () => {
+  it("allows workers only from the app's own origin", () => {
+    const workerSrc = CSP_PROD.split(";")
+      .map((directive) => directive.trim())
+      .find((directive) => directive.startsWith("worker-src "));
+    expect(workerSrc).toBe("worker-src 'self'");
+  });
+});
