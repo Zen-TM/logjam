@@ -58,8 +58,10 @@ resource "github_repository_environment_deployment_policy" "this" {
 # each run waits for the maintainer's approval before it gets the AWS plan
 # role or the plan App's key. Approving runs the PR's code with both: read
 # its workflows, Terraform and infra/lambda first. Any branch may use it,
-# since PR branches vary; the reviewer is the gate. Not in local.environments,
-# which all carry a branch policy. Guard: tests/guards.tftest.hcl.
+# since PR branches vary; the reviewer is the gate
+# (docs/decisions/0027-pr-plans-run-after-the-maintainer-approves.md). Not in
+# local.environments, which all carry a branch policy. Guard:
+# tests/guards.tftest.hcl.
 resource "github_repository_environment" "terraform_plan" {
   repository  = github_repository.logjam.name
   environment = "terraform-plan"
