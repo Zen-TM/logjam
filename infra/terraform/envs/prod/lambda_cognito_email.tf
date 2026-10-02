@@ -119,7 +119,7 @@ resource "aws_cloudwatch_log_group" "cognito_email_sender" {
 resource "aws_lambda_function" "cognito_email_sender" {
   function_name    = "logjam-cognito-email-sender"
   role             = aws_iam_role.cognito_email_sender.arn
-  runtime          = "nodejs20.x"
+  runtime          = "nodejs22.x"
   handler          = "index.handler"
   filename         = data.archive_file.cognito_email_sender.output_path
   source_code_hash = data.archive_file.cognito_email_sender.output_base64sha256
