@@ -1,5 +1,7 @@
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
+import { createHash } from "node:crypto";
+import fs from "fs";
 import path from "path";
 
 // CSP injected only on production build. Vite dev server uses inline scripts +
@@ -36,6 +38,59 @@ function cspMetaPlugin(): Plugin {
   };
 }
 
+// maplibre-gl 6's worker imports "./maplibre-gl-shared.mjs" by name, so the two
+// files must sit side by side under their original names. deploy-frontend.yml
+// serves every asset `immutable` and keeps old releases' files, so the pair goes
+// in a directory named by a hash of both files: a fixed path would let a browser
+// or CloudFront pair one release's worker with another's cached shared chunk.
+// Test: src/maplibreWorkerPlugin.test.ts.
+const MAPLIBRE_WORKER_URL_MODULE = "virtual:maplibre-worker-url";
+const MAPLIBRE_WORKER_FILES = [
+  "maplibre-gl-worker.mjs",
+  "maplibre-gl-shared.mjs",
+] as const;
+
+export function maplibreWorkerPlugin(
+  distDir = path.resolve(import.meta.dirname, "node_modules/maplibre-gl/dist"),
+): Plugin {
+  let base = "/";
+  let isBuild = false;
+  const read = () =>
+    MAPLIBRE_WORKER_FILES.map(
+      (name) => [name, fs.readFileSync(path.join(distDir, name))] as const,
+    );
+  const hashedDir = (files: ReturnType<typeof read>) => {
+    const hash = createHash("sha256");
+    for (const [name, source] of files) hash.update(name).update(source);
+    return `assets/maplibre-${hash.digest("hex").slice(0, 10)}`;
+  };
+  return {
+    name: "maplibre-worker",
+    configResolved(config) {
+      base = config.base;
+      isBuild = config.command === "build";
+    },
+    resolveId(id) {
+      if (id === MAPLIBRE_WORKER_URL_MODULE) return `\0${id}`;
+    },
+    load(id) {
+      if (id !== `\0${MAPLIBRE_WORKER_URL_MODULE}`) return;
+      // Dev serves node_modules as-is, so the worker finds its sibling there.
+      const url = isBuild
+        ? `${base}${hashedDir(read())}/${MAPLIBRE_WORKER_FILES[0]}`
+        : `/node_modules/maplibre-gl/dist/${MAPLIBRE_WORKER_FILES[0]}`;
+      return `export default ${JSON.stringify(url)};`;
+    },
+    generateBundle() {
+      const files = read();
+      const dir = hashedDir(files);
+      for (const [name, source] of files) {
+        this.emitFile({ type: "asset", fileName: `${dir}/${name}`, source });
+      }
+    },
+  };
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   // Pin the dev port. strictPort makes Vite fail loudly if 5173 is taken
@@ -61,7 +116,7 @@ export default defineConfig({
       },
     },
   },
-  plugins: [react(), cspMetaPlugin()],
+  plugins: [react(), cspMetaPlugin(), maplibreWorkerPlugin()],
   resolve: {
     alias: {
       "@styles": path.resolve(import.meta.dirname, "src/styles"),
