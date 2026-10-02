@@ -7,10 +7,10 @@ import {
   type NativeSyntheticEvent,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import type { Feather } from "@expo/vector-icons";
 
 import { spacing, theme, withAlpha } from "../theme";
 import { Chip, CHIP_HEIGHT } from "./Chip";
+import { type Glyph } from "./Icon";
 
 // A single-line (`scroll`) control is exactly one chip tall — re-exported so
 // a bar replacing it in the same slot (Saved's multi-select bar, item A) can
@@ -26,7 +26,7 @@ export type SegmentOption<T extends string> = {
   /** Optional identity hue — tints the chip's border/label when active. */
   hue?: string;
   /** Optional leading glyph, for a rail whose options have a kind. */
-  icon?: React.ComponentProps<typeof Feather>["name"];
+  icon?: Glyph;
 };
 
 // Chip group for a single-select choice (basemap picker, filters, category

@@ -213,10 +213,18 @@ export function SyncIssuesScreen({
   const items = useMemo<Issue[]>(
     () => [
       ...parked.map(
-        (op): Issue => ({ kind: "stuck", key: `stuck:${op.seq}`, op }),
+        (op): Issue => ({
+          kind: "stuck",
+          key: `stuck:${op.seq}`,
+          op,
+        }),
       ),
       ...shelf.map(
-        (entry): Issue => ({ kind: "lost", key: `lost:${entry.id}`, entry }),
+        (entry): Issue => ({
+          kind: "lost",
+          key: `lost:${entry.id}`,
+          entry,
+        }),
       ),
     ],
     [parked, shelf],
@@ -541,7 +549,7 @@ export function SyncIssuesScreen({
                 <>
                   {retryable.length > 0 ? (
                     <IconButton
-                      icon="refresh-cw"
+                      icon="refresh"
                       accessibilityLabel={
                         online
                           ? `Try ${retryable.length} selected changes again`
@@ -553,7 +561,7 @@ export function SyncIssuesScreen({
                   ) : null}
                   {restorable.length > 0 ? (
                     <IconButton
-                      icon="corner-up-left"
+                      icon="undo"
                       accessibilityLabel={`Restore ${restorable.length} selected values`}
                       color={theme.accent}
                       onPress={confirmBulkRestore}
@@ -579,7 +587,7 @@ export function SyncIssuesScreen({
       {applyFailedAt ? (
         <View style={styles.rail}>
           <Row
-            icon="alert-octagon"
+            icon="warning"
             hue={theme.warning}
             title="This phone couldn't apply an update"
             subtitle="Nothing new is arriving. Download a fresh copy to fix it."
@@ -699,7 +707,7 @@ function StuckMenu({
           "recreated" while deleting the change is the worst row on the page. */}
       {canRecreate(op) ? (
         <Row
-          icon="rotate-ccw"
+          icon="retry"
           title={op.entity === "place" ? "Recreate place" : "Recreate waypoint"}
           subtitle={
             op.entity === "place"
@@ -728,7 +736,7 @@ function StuckMenu({
           field, and this is the screen the user has to fix it on. */}
       {target && !advice.canRetry && op.state !== "deadRemote" ? (
         <Row
-          icon="external-link"
+          icon="openExternal"
           title={
             target.kind === "place"
               ? "Open the place and fix it"
@@ -741,14 +749,14 @@ function StuckMenu({
       {/* Absent, not dimmed, when a retry could only fail the same way. */}
       {advice.canRetry ? (
         <Row
-          icon="refresh-cw"
+          icon="refresh"
           title={online ? "Try again" : "Queue it again"}
           subtitle={online ? undefined : "It goes up when you have signal."}
           onPress={() => onRetry(op)}
         />
       ) : null}
       <Row
-        icon="trash-2"
+        icon="delete"
         hue={theme.warning}
         title="Discard this change"
         onPress={() => onDiscard(op)}
@@ -801,7 +809,7 @@ function LostMenu({
           nothing, so it goes above the one that does. */}
       {entry.canKeepBoth ? (
         <Row
-          icon="git-merge"
+          icon="merge"
           title="Keep both"
           subtitle="Appends the discarded text to what's there now."
           onPress={() => onKeepBoth(entry)}
@@ -809,7 +817,7 @@ function LostMenu({
       ) : null}
       {entry.restoreBlock === null ? (
         <Row
-          icon="corner-up-left"
+          icon="undo"
           title="Restore the discarded value"
           subtitle={restoreSubtitle(entry)}
           onPress={() => onRestore(entry)}
@@ -818,7 +826,7 @@ function LostMenu({
         <Text style={styles.menuCause}>{restoreBlockReason(entry)}</Text>
       )}
       <Row
-        icon="trash-2"
+        icon="delete"
         hue={theme.warning}
         title="Discard this value"
         onPress={() => onForget(entry)}
@@ -863,7 +871,7 @@ const IssueRow = memo(function IssueRow({
     <SelectionMark selected={selected} />
   ) : (
     <IconButton
-      icon="more-horizontal"
+      icon="overflow"
       accessibilityLabel="What can I do about this?"
       onPress={() => onMenu(item)}
     />
@@ -872,7 +880,7 @@ const IssueRow = memo(function IssueRow({
     const advice = opAdvice(item.op);
     return (
       <Row
-        icon="alert-triangle"
+        icon="warning"
         hue={theme.warning}
         title={opTitle(item.op)}
         subtitle={`${advice.line} · ${relativeTime(item.op.createdAt, now)}`}
@@ -886,7 +894,7 @@ const IssueRow = memo(function IssueRow({
   }
   return (
     <Row
-      icon="alert-triangle"
+      icon="warning"
       hue={theme.warning}
       title={shelfTitle(item.entry)}
       subtitle={shelfSubtitle(item.entry, now)}

@@ -19,7 +19,6 @@
 // off the title). Where there is no state to report, there is no subtitle — §7.
 //
 // PRIVACY: counts, a username, a storage figure. No place names, no coordinates.
-import { Feather } from "@expo/vector-icons";
 import { StyleSheet, Text, View } from "react-native";
 
 import { fetchCurrentUser, useApiQuery } from "../api/queries";
@@ -34,19 +33,24 @@ import {
 } from "../sync/useSyncQueries";
 import { requestSync } from "../sync/syncEngine";
 import { fontSize, fontWeight, spacing, theme } from "../theme";
-import { Button, HeroHeader, Row, ScreenScroll, StatusPill } from "../ui";
+import {
+  Button,
+  HeroHeader,
+  Row,
+  ScreenScroll,
+  StatusPill,
+  Icon,
+  type Glyph,
+} from "../ui";
 import { syncHealth, type SyncTone } from "./syncHealth";
 
 // Tone → the glyph and colour the headline wears. `warning` is the scheme's own
 // warning token; "pending" borrows the muted text colour rather than inventing a
 // third state hue, because waiting is not a problem.
-const TONE_STYLE: Record<
-  SyncTone,
-  { icon: React.ComponentProps<typeof Feather>["name"]; color: string }
-> = {
-  ok: { icon: "check-circle", color: theme.accent },
-  pending: { icon: "clock", color: theme.textMuted },
-  problem: { icon: "alert-triangle", color: theme.warning },
+const TONE_STYLE: Record<SyncTone, { icon: Glyph; color: string }> = {
+  ok: { icon: "success", color: theme.accent },
+  pending: { icon: "pending", color: theme.textMuted },
+  problem: { icon: "warning", color: theme.warning },
 };
 
 export function MoreScreen({
@@ -105,7 +109,7 @@ export function MoreScreen({
           isGuest ? (
             <Button
               label="Create account"
-              icon="user-plus"
+              icon="addFriend"
               variant="outlineAccent"
               compact
               onPress={linkAccount}
@@ -113,7 +117,7 @@ export function MoreScreen({
           ) : (
             <Button
               label="Sync now"
-              icon="refresh-cw"
+              icon="refresh"
               variant="outlineAccent"
               compact
               loading={syncStatus.state === "syncing"}
@@ -127,7 +131,7 @@ export function MoreScreen({
         }
       >
         <View style={styles.health}>
-          <Feather name={tone.icon} size={18} color={tone.color} />
+          <Icon idea={tone.icon} size={18} color={tone.color} />
           <View style={styles.healthText}>
             <Text style={[styles.headline, { color: tone.color }]}>
               {health.headline}
@@ -142,7 +146,7 @@ export function MoreScreen({
             used to have a row of their own here; they are answered inline in
             the inbox now, so their waiting count is part of this one. */}
         <Row
-          icon="inbox"
+          icon="notifications"
           title="Inbox"
           subtitle={unreadCount ? `${unreadCount} unread` : "Nothing new"}
           onPress={onOpenInbox}
@@ -158,7 +162,7 @@ export function MoreScreen({
           }
         />
         <Row
-          icon="users"
+          icon="friends"
           title="Friends"
           // Managing friendships needs an account and a connection; say which
           // in place of a subtitle rather than letting the screen fail after
@@ -170,7 +174,7 @@ export function MoreScreen({
         {/* Sync issues can only exist once something has tried to sync. */}
         {isGuest ? null : (
           <Row
-            icon="alert-triangle"
+            icon="warning"
             hue={issueCount > 0 ? theme.warning : undefined}
             title="Account sync issues"
             subtitle={
@@ -199,7 +203,7 @@ export function MoreScreen({
           right={<Trailing />}
         />
         <Row
-          icon="user"
+          icon="account"
           // The Account row stays live for a guest: it is the way IN to an
           // account, so disabling it with "Needs an account" would be a joke at
           // the user's expense.
@@ -224,7 +228,7 @@ function Trailing({ badge }: { badge?: React.ReactNode }) {
   return (
     <View style={styles.trailing}>
       {badge}
-      <Feather name="chevron-right" size={20} color={theme.textMuted} />
+      <Icon idea="disclosure" size={20} color={theme.textMuted} />
     </View>
   );
 }

@@ -153,7 +153,7 @@ export function DraftToolPanel({
       <View style={styles.actions}>
         <View style={styles.group}>
           <IconButton
-            icon="corner-up-left"
+            icon="undo"
             accessibilityLabel="Undo the last change"
             disabled={!canUndo || saving}
             onPress={onUndo}
@@ -169,7 +169,7 @@ export function DraftToolPanel({
         <View style={styles.group}>
           {onReverse ? (
             <IconButton
-              icon="repeat"
+              icon="reverse"
               accessibilityLabel="Reverse the direction of this route"
               disabled={!hasLine || saving}
               onPress={onReverse}
@@ -204,7 +204,7 @@ export function DraftToolPanel({
             </Pressable>
           ) : null}
           <IconButton
-            icon="trash-2"
+            icon="delete"
             color={theme.warning}
             accessibilityLabel={
               tool === "measure"
@@ -217,7 +217,7 @@ export function DraftToolPanel({
           {onSave ? (
             <Button
               label={saving ? "Saving…" : "Save"}
-              icon="check"
+              icon="done"
               compact
               disabled={!hasLine || saving}
               onPress={onSave}

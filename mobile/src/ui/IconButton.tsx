@@ -1,7 +1,7 @@
-import { Feather } from "@expo/vector-icons";
 import { Pressable, StyleSheet } from "react-native";
 
 import { hitSlop, radius, theme, withAlpha } from "../theme";
+import { Icon, type Glyph } from "./Icon";
 
 // Single-glyph tappable — row overflow menus, sheet dismiss, inline delete.
 // 40pt square (comfortably over the 44pt target with `hitSlop`), with an
@@ -17,7 +17,7 @@ export function IconButton({
   filled = false,
   size = 20,
 }: {
-  icon: React.ComponentProps<typeof Feather>["name"];
+  icon: Glyph;
   onPress: () => void;
   accessibilityLabel: string;
   color?: string;
@@ -40,8 +40,8 @@ export function IconButton({
         disabled && styles.disabled,
       ]}
     >
-      <Feather
-        name={icon}
+      <Icon
+        idea={icon}
         size={size}
         color={disabled ? theme.textMuted : color}
       />

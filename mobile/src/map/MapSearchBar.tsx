@@ -33,7 +33,6 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
-import { Feather } from "@expo/vector-icons";
 import { geocode, messageFromError, type GeocodeResult } from "@logjam/shared";
 
 import {
@@ -47,6 +46,7 @@ import {
 import { rankLocalMatches, type LocalSearchCandidate } from "./localSearch";
 import { CHROME_GAP, SEARCH_SIZE } from "./mapChrome";
 import type { Bbox } from "../saved/bboxOfPoints";
+import { Icon, type Glyph } from "../ui";
 
 const DEBOUNCE_MS = 350;
 const MIN_QUERY_LENGTH = 3;
@@ -68,7 +68,7 @@ const MAX_LOCAL_RESULTS = 6;
  */
 export type SavedSearchItem = {
   key: string;
-  icon: React.ComponentProps<typeof Feather>["name"];
+  icon: Glyph;
   hue: string;
   title: string;
   /** What kind of thing it is — "Place", "Waypoint". The row's only subtitle. */
@@ -223,8 +223,8 @@ export function MapSearchBar({
       <Animated.View
         style={[styles.pill, side === "right" && styles.pillRight, { width }]}
       >
-        <Feather
-          name="search"
+        <Icon
+          idea="search"
           size={GLYPH}
           color={expanded ? theme.textMuted : theme.textPrimary}
           style={side === "right" ? styles.glyphRight : styles.glyph}
@@ -254,7 +254,7 @@ export function MapSearchBar({
             hitSlop={hitSlop}
             onPress={() => (query ? setQuery("") : collapse())}
           >
-            <Feather name="x" size={GLYPH} color={theme.textPrimary} />
+            <Icon idea="close" size={GLYPH} color={theme.textPrimary} />
           </Pressable>
         </Animated.View>
         {/* Collapsed, the whole circle is the button; expanded it must not
@@ -291,7 +291,7 @@ export function MapSearchBar({
                   collapse();
                 }}
               >
-                <Feather name={item.icon} size={16} color={item.hue} />
+                <Icon idea={item.icon} size={16} color={item.hue} />
                 <View style={styles.savedText}>
                   <Text style={styles.resultText} numberOfLines={1}>
                     {item.title}

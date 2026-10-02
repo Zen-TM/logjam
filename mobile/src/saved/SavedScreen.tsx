@@ -44,7 +44,6 @@ import {
   View,
 } from "react-native";
 import NetInfo from "@react-native-community/netinfo";
-import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import * as FileSystem from "expo-file-system/legacy";
 
@@ -56,6 +55,7 @@ import {
   routeLengthM,
   messageFromError,
   removeShareConfirm,
+  type IconIdea,
   type SharableEntityType,
   type TopoLayerFormat,
   type TopoLayerName,
@@ -109,6 +109,7 @@ import {
   type CapacitySegment,
   type SegmentOption,
   type ToastMessage,
+  Icon,
 } from "../ui";
 import {
   GEOPDF_ERRORS,
@@ -233,25 +234,18 @@ const CATEGORY_META: Record<
   {
     label: string;
     plural: string;
-    icon:
-      | "map"
-      | "layers"
-      | "file-text"
-      | "file-plus"
-      | "activity"
-      | "edit-3"
-      | "flag";
+    icon: IconIdea;
   }
 > = {
   region: { label: "Region", plural: "Regions", icon: "map" },
-  overlay: { label: "LiDAR topo", plural: "LiDAR Topos", icon: "layers" },
-  geoPdf: { label: "GeoPDF", plural: "GeoPDFs", icon: "file-text" },
+  overlay: { label: "LiDAR topo", plural: "LiDAR Topos", icon: "lidar" },
+  geoPdf: { label: "GeoPDF", plural: "GeoPDFs", icon: "geoPdf" },
   // Routes you drew, as opposed to files you brought in. Kept a separate
   // category rather than folded into "import": a route is editable in place and
   // an import is an opaque file, and a list that mixes them would need to
   // explain which rows can be edited. (Both sync now — that used to be the
   // other half of the distinction, and is not any more.)
-  route: { label: "Route", plural: "Routes", icon: "edit-3" },
+  route: { label: "Route", plural: "Routes", icon: "route" },
   // Marked points. Like routes they are records rather than files, and they are
   // the one kind here that can be SEARCHED and filtered by tag — see the
   // waypoint filter rail below.
@@ -260,8 +254,8 @@ const CATEGORY_META: Record<
   // points and polygons as readily as lines. "Files" alone was rejected as too
   // vague — everything in this tab is a file — so the distinguishing word is
   // the one that survives.
-  import: { label: "Import", plural: "Imports", icon: "file-plus" },
-  track: { label: "Track", plural: "Tracks", icon: "activity" },
+  import: { label: "Import", plural: "Imports", icon: "importedFile" },
+  track: { label: "Track", plural: "Tracks", icon: "track" },
 };
 
 // Reading order for the filter rail, the capacity meter and the "add to this
@@ -316,7 +310,7 @@ type SavedItem = {
    */
   syncEntityId?: string | null;
   /** Recovery/primary inline action shown left of the overflow button. */
-  inlineAction?: { icon: "refresh-cw"; label: string; onPress: () => void };
+  inlineAction?: { icon: "refresh"; label: string; onPress: () => void };
   /** False when the asset has no geographic extent to fly to. */
   locatable: boolean;
   /**
@@ -1122,7 +1116,7 @@ export function SavedScreen({
         ...(geoPdf.state !== "ready" && !geoPdfBusy
           ? {
               inlineAction: {
-                icon: "refresh-cw" as const,
+                icon: "refresh" as const,
                 label: "Resume this import",
                 onPress: () => handleResumeGeoPdf(geoPdf.id, geoPdf.label),
               },
@@ -1650,7 +1644,7 @@ export function SavedScreen({
         action={
           <Button
             label="Add"
-            icon="plus"
+            icon="add"
             compact
             onPress={() => setAddSheetOpen(true)}
           />
@@ -1743,7 +1737,7 @@ export function SavedScreen({
                 ? `${Math.round(activeOp.fraction * 100)}%`
                 : "Working…"
             }
-            icon="download-cloud"
+            icon="saveOffline"
             hue={assetHue[activeOp.category]}
             progress={activeOp.fraction ?? 0}
           />
@@ -1770,12 +1764,12 @@ export function SavedScreen({
             ]
               .filter(Boolean)
               .join(" · ")}
-            icon="file-text"
+            icon="geoPdf"
             hue={assetHue.geoPdf}
             progress={importRun.fraction ?? 0}
             right={
               <IconButton
-                icon="x"
+                icon="close"
                 // Honest about which half of the run this reaches: the token is
                 // read between rasteriser batches, so during the front phases
                 // there is nothing yet for it to interrupt.
@@ -1802,18 +1796,18 @@ export function SavedScreen({
                     ? `${countOf(group.unfinished, "map")} didn't finish`
                     : `${group.ready} of ${countOf(group.mapCount, "map")} saved`
                 }
-                icon="download-cloud"
+                icon="saveOffline"
                 hue={group.settled ? theme.warning : assetHue.region}
                 progress={group.fraction}
                 right={
                   <View style={styles.rowActions}>
                     <IconButton
-                      icon="x"
+                      icon="close"
                       accessibilityLabel="Stop saving these maps"
                       onPress={() => confirmStopGroup(group)}
                     />
                     <IconButton
-                      icon="more-vertical"
+                      icon="overflow"
                       accessibilityLabel={`Maps in ${group.label || "this download"}`}
                       onPress={() => setDownloadSheetId(group.groupId)}
                     />
@@ -1834,7 +1828,7 @@ export function SavedScreen({
                 key={region.id}
                 title={region.groupLabel ?? region.label}
                 subtitle={`Didn't finish · ${region.tilesStored.toLocaleString()} tiles already saved`}
-                icon="download-cloud"
+                icon="saveOffline"
                 hue={theme.warning}
                 right={
                   <View style={styles.rowActions}>
@@ -1845,7 +1839,7 @@ export function SavedScreen({
                       onPress={() => resumeOrphan(region)}
                     />
                     <IconButton
-                      icon="trash-2"
+                      icon="delete"
                       color={theme.warning}
                       accessibilityLabel={`Discard the unfinished download ${region.label}`}
                       onPress={() => discardOrphan(region)}
@@ -1938,13 +1932,11 @@ export function SavedScreen({
                     screen-reader label and on the sharing sheet behind ⋯.
                     Muted, not accent: this is information, not a state to fix. */}
                     {item.sharedWithCount ? (
-                      <Feather
-                        name="users"
+                      <Icon
+                        idea="friends"
                         size={15}
                         color={theme.textMuted}
-                        accessibilityLabel={sharedWithLabel(
-                          item.sharedWithCount,
-                        )}
+                        label={sharedWithLabel(item.sharedWithCount)}
                       />
                     ) : null}
                     {/* Backed up. A glyph rather than a pill: it is on most rows
@@ -1955,11 +1947,11 @@ export function SavedScreen({
                     glyphs, so the column it sits in is the same on every row;
                     the share glyph appearing on some rows must not push it. */}
                     {item.backedUp ? (
-                      <Feather
-                        name="cloud"
+                      <Icon
+                        idea="sync"
                         size={15}
                         color={theme.success}
-                        accessibilityLabel="Backed up to your account"
+                        label="Backed up to your account"
                       />
                     ) : null}
                     {item.inlineAction ? (
@@ -1985,7 +1977,7 @@ export function SavedScreen({
                       />
                     ) : (
                       <IconButton
-                        icon="more-vertical"
+                        icon="overflow"
                         accessibilityLabel={`Actions for ${item.title}`}
                         onPress={() => openItemSheet(item.key)}
                       />
@@ -2003,11 +1995,11 @@ export function SavedScreen({
           <Row
             title="Couldn't reach the server"
             subtitle="Your saved overlays still work offline."
-            icon="cloud-off"
+            icon="offline"
             hue={theme.warning}
             right={
               <IconButton
-                icon="refresh-cw"
+                icon="refresh"
                 accessibilityLabel="Try loading your overlays again"
                 color={theme.accent}
                 onPress={overlaysQuery.refetch}
@@ -2041,11 +2033,11 @@ export function SavedScreen({
                       ? countOf(job.missing.length, "layer")
                       : "Connect to download"
                   }
-                  icon="layers"
+                  icon="lidar"
                   hue={assetHue.overlay}
                   right={
                     <IconButton
-                      icon="download"
+                      icon="saveOffline"
                       accessibilityLabel={`Save ${job.label} for offline use`}
                       color={theme.accent}
                       disabled={!lidarReady || overlayBusyKey != null}
@@ -2081,7 +2073,7 @@ export function SavedScreen({
                       ? formatBytes(job.resultBytes)
                       : undefined
                   }
-                  icon="file-text"
+                  icon="geoPdf"
                   hue={assetHue.geoPdf}
                   right={
                     <IconButton
@@ -2137,7 +2129,7 @@ export function SavedScreen({
           />
           <Row
             title="Import a GeoPDF file"
-            icon="file-text"
+            icon="geoPdf"
             hue={assetHue.geoPdf}
             onPress={() => {
               setAddSheetOpen(false);
@@ -2150,7 +2142,7 @@ export function SavedScreen({
                 ? "Loading your GeoPDFs…"
                 : "GeoPDFs from my account"
             }
-            icon="cloud"
+            icon="sync"
             hue={assetHue.geoPdf}
             {...capabilityRowProps("accountGeoPdf", accountState, online)}
             onPress={
@@ -2168,7 +2160,7 @@ export function SavedScreen({
               basemap download. */}
           <Row
             title="LiDAR topos from my account"
-            icon="layers"
+            icon="lidar"
             hue={assetHue.overlay}
             {...capabilityRowProps("lidarOverlays", accountState, online)}
             onPress={
@@ -2188,7 +2180,7 @@ export function SavedScreen({
               raised from an open sheet (DESIGN.md §7). */}
           <Row
             title="Record a track"
-            icon="activity"
+            icon="track"
             hue={assetHue.track}
             onPress={() => {
               setAddSheetOpen(false);
@@ -2197,7 +2189,7 @@ export function SavedScreen({
           />
           <Row
             title="Draw a route"
-            icon="edit-3"
+            icon="draw"
             hue={assetHue.route}
             onPress={() => {
               setAddSheetOpen(false);
@@ -2206,7 +2198,7 @@ export function SavedScreen({
           />
           <Row
             title="Import GPX, KML or GeoJSON"
-            icon="file-plus"
+            icon="importedFile"
             hue={assetHue.import}
             onPress={
               importBusy
@@ -2272,7 +2264,7 @@ export function SavedScreen({
               {menuItem.locatable ? (
                 <Row
                   title="Show on map"
-                  icon="map-pin"
+                  icon="place"
                   hue={assetHue[menuItem.category]}
                   onPress={() => {
                     const target = menuItem;
@@ -2288,7 +2280,7 @@ export function SavedScreen({
               {menuItem.share ? (
                 <Row
                   title="Share"
-                  icon="share-2"
+                  icon="shareFriend"
                   hue={theme.bonus1}
                   {...shareRowProps}
                   onPress={() => setMenuMode("share")}
@@ -2315,7 +2307,7 @@ export function SavedScreen({
               {menuItem.rename ? (
                 <Row
                   title="Rename"
-                  icon="edit-2"
+                  icon="edit"
                   hue={theme.bonus1}
                   onPress={() => setMenuMode("rename")}
                 />
@@ -2331,7 +2323,7 @@ export function SavedScreen({
                       ? "Delete all from device"
                       : "Delete from device"
                   }
-                  icon="trash-2"
+                  icon="delete"
                   hue={theme.warning}
                   onPress={() => {
                     const target = menuItem;
@@ -2350,7 +2342,7 @@ export function SavedScreen({
               {menuItem.removeShare ? (
                 <Row
                   title="Remove from my account"
-                  icon="x-circle"
+                  icon="unshare"
                   hue={theme.warning}
                   {...shareRowProps}
                   onPress={() => {
@@ -2378,7 +2370,7 @@ export function SavedScreen({
                             {formatBytes(member.sizeBytes)}
                           </Text>
                           <IconButton
-                            icon="trash-2"
+                            icon="delete"
                             accessibilityLabel={`Delete ${member.title} from device`}
                             color={theme.warning}
                             onPress={() => {
@@ -2546,7 +2538,7 @@ function EmptyPanel({
       {action ? (
         <Button
           label={action.label}
-          icon="plus"
+          icon="add"
           compact
           onPress={action.onPress}
         />

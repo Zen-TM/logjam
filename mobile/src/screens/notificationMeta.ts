@@ -8,15 +8,15 @@
 // in Saved, and a place-share wears the same heath a shared place wears on the
 // Places screen. The inbox is where you first hear about a thing — recognising
 // it again where it lives is the point.
-import type { Feather } from "@expo/vector-icons";
 import { notificationKind, type NotificationKind } from "@logjam/shared";
 
 import type { TNotification } from "../api/types";
 import { notificationHue } from "../theme";
+import { type Glyph } from "../ui";
 
 export type NotificationMeta = {
   kind: NotificationKind;
-  icon: React.ComponentProps<typeof Feather>["name"];
+  icon: Glyph;
   hue: string;
 };
 
@@ -24,13 +24,13 @@ const KIND_META: Record<
   NotificationKind,
   { icon: NotificationMeta["icon"]; hue: string }
 > = {
-  share: { icon: "share-2", hue: notificationHue.share },
-  file: { icon: "file-plus", hue: notificationHue.file },
-  people: { icon: "users", hue: notificationHue.people },
-  topo: { icon: "layers", hue: notificationHue.topo },
-  export: { icon: "download", hue: notificationHue.export },
-  geoPdf: { icon: "file-text", hue: notificationHue.geoPdf },
-  problem: { icon: "alert-triangle", hue: notificationHue.problem },
+  share: { icon: "shareFriend", hue: notificationHue.share },
+  file: { icon: "importedFile", hue: notificationHue.file },
+  people: { icon: "friends", hue: notificationHue.people },
+  topo: { icon: "lidar", hue: notificationHue.topo },
+  export: { icon: "export", hue: notificationHue.export },
+  geoPdf: { icon: "geoPdf", hue: notificationHue.geoPdf },
+  problem: { icon: "warning", hue: notificationHue.problem },
 };
 
 export function notificationMeta(n: TNotification): NotificationMeta {

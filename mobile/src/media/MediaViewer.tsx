@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -27,7 +26,7 @@ import {
 } from "../theme";
 import { ensureDisplayCached } from "../sync/mediaCache";
 import type { MirrorMedia } from "../sync/mirrorStore";
-import { IconButton } from "../ui";
+import { IconButton, Icon } from "../ui";
 
 /**
  * Full-screen viewer for a trip's or place's attachments.
@@ -109,7 +108,7 @@ export function MediaViewer({
             {items.length > 1 ? `${index + 1} / ${items.length}` : ""}
           </Text>
           <IconButton
-            icon="x"
+            icon="close"
             accessibilityLabel="Close"
             color={theme.textPrimary}
             onPress={onClose}
@@ -125,7 +124,7 @@ export function MediaViewer({
             <View style={styles.arrowSlot}>
               {index > 0 ? (
                 <IconButton
-                  icon="chevron-left"
+                  icon="back"
                   accessibilityLabel="Previous attachment"
                   color={theme.textPrimary}
                   filled
@@ -136,7 +135,7 @@ export function MediaViewer({
             <View style={styles.arrowSlot}>
               {index < items.length - 1 ? (
                 <IconButton
-                  icon="chevron-right"
+                  icon="forward"
                   accessibilityLabel="Next attachment"
                   color={theme.textPrimary}
                   filled
@@ -210,7 +209,7 @@ function MediaPage({ item, active }: { item: MirrorMedia; active: boolean }) {
   if (state === "missing" || uri === null) {
     return (
       <View style={styles.page}>
-        <Feather name="cloud-off" size={28} color={theme.textMuted} />
+        <Icon idea="offline" size={28} color={theme.textMuted} />
         <Text style={styles.notice}>
           Not downloaded to this phone yet. It will appear once you have signal.
         </Text>
@@ -223,7 +222,7 @@ function MediaPage({ item, active }: { item: MirrorMedia; active: boolean }) {
   if (category === "track") {
     return (
       <View style={styles.page}>
-        <Feather name="map" size={28} color={theme.textMuted} />
+        <Icon idea="map" size={28} color={theme.textMuted} />
         <Text style={styles.notice}>{item.filename ?? "Route file"}</Text>
         <Text style={styles.noticeMuted}>Routes open on the map.</Text>
       </View>

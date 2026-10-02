@@ -50,7 +50,7 @@ export function BulkShareButton({
   const { disabled } = useShareRowProps(online);
   return (
     <IconButton
-      icon="share-2"
+      icon="shareFriend"
       accessibilityLabel="Share the selected items"
       color={disabled ? theme.textMuted : theme.accent}
       onPress={onPress}

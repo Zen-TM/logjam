@@ -60,7 +60,7 @@ export function HeroHeader({
       {onBack ? (
         <View style={styles.backRow}>
           <IconButton
-            icon="chevron-left"
+            icon="back"
             accessibilityLabel="Back"
             color={theme.textPrimary}
             onPress={onBack}

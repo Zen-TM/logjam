@@ -29,7 +29,6 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   activePlaceFilterCount,
@@ -86,6 +85,7 @@ import {
   type CapacitySegment,
   type SegmentOption,
   type ToastMessage,
+  Icon,
 } from "../ui";
 import { deletePlaceLocal } from "../sync/outbox";
 import { TripEditSheet } from "../logs/TripEditSheet";
@@ -102,7 +102,7 @@ import {
   usePlaceMapFilter,
 } from "./placeMapFilter";
 import { PLACE_STATUS_META } from "./placeMeta";
-import { placeTypeFeatherIcon } from "./placeTypeIcon";
+import { placeTypeGlyph } from "./placeTypeIcon";
 
 type Bucket = "all" | PlaceStatus;
 
@@ -481,7 +481,7 @@ export function PlacesScreen({
         .map((type) => ({
           value: type.id,
           label: type.name,
-          icon: placeTypeFeatherIcon(type.iconKey),
+          icon: placeTypeGlyph(type.iconKey),
           hue: type.color,
           count: typeCounts.get(type.id) ?? 0,
           disabled:
@@ -508,10 +508,7 @@ export function PlacesScreen({
    * does, not by looking different).
    */
   const railOptions: SegmentOption<string>[] = useMemo(
-    () => [
-      ...typeOptions,
-      { value: NEW_TYPE, label: "New type", icon: "plus" },
-    ],
+    () => [...typeOptions, { value: NEW_TYPE, label: "New type", icon: "add" }],
     [typeOptions],
   );
 
@@ -692,7 +689,7 @@ export function PlacesScreen({
             />
             <Button
               label="Add place"
-              icon="plus"
+              icon="add"
               compact
               onPress={() => startEditing(null)}
             />
@@ -705,7 +702,7 @@ export function PlacesScreen({
         {findOpen ? (
           <View style={styles.findRow}>
             <View style={styles.searchWrap}>
-              <Feather name="search" size={16} color={theme.textMuted} />
+              <Icon idea="search" size={16} color={theme.textMuted} />
               <TextInput
                 style={styles.searchInput}
                 value={search}
@@ -719,7 +716,7 @@ export function PlacesScreen({
               />
             </View>
             <IconButton
-              icon="sliders"
+              icon="filter"
               accessibilityLabel="Sort and filter"
               color={hiddenFilterCount > 0 ? theme.accent : theme.textMuted}
               filled={hiddenFilterCount > 0}
@@ -732,7 +729,7 @@ export function PlacesScreen({
               }}
             />
             <IconButton
-              icon="x"
+              icon="close"
               accessibilityLabel="Clear search"
               onPress={clearFind}
             />
@@ -743,7 +740,7 @@ export function PlacesScreen({
               <CapacityBar segments={heroSegments} />
             </View>
             <IconButton
-              icon="sliders"
+              icon="filter"
               accessibilityLabel="Sort and filter"
               color={hiddenFilterCount > 0 ? theme.accent : theme.textMuted}
               filled={hiddenFilterCount > 0}
@@ -822,7 +819,7 @@ export function PlacesScreen({
               : ` · ${placeSortLabel(sort)}`}
           </Text>
           <IconButton
-            icon="x"
+            icon="close"
             size={16}
             accessibilityLabel={
               hiddenFilterCount === 0
@@ -1028,7 +1025,7 @@ const PlaceRow = memo(function PlaceRow({
           {quality ? <Text style={styles.quality}>{quality}</Text> : null}
           {sharedWith > 0 ? (
             <View style={styles.badge}>
-              <Feather name="users" size={12} color={theme.textMuted} />
+              <Icon idea="friends" size={12} color={theme.textMuted} />
               <Text style={styles.badgeText}>{sharedWith}</Text>
             </View>
           ) : null}
@@ -1037,8 +1034,8 @@ const PlaceRow = memo(function PlaceRow({
             // shared place (an empty checkbox promises a tap that does nothing).
             <View style={styles.selectBox}>
               {deletable ? (
-                <Feather
-                  name={selected ? "check-circle" : "circle"}
+                <Icon
+                  idea={selected ? "success" : "unselected"}
                   size={22}
                   color={selected ? theme.accent : theme.textMuted}
                 />
@@ -1046,7 +1043,7 @@ const PlaceRow = memo(function PlaceRow({
             </View>
           ) : (
             <IconButton
-              icon="more-vertical"
+              icon="overflow"
               accessibilityLabel={`Actions for ${place.name}`}
               onPress={() => onMenu(place)}
             />
@@ -1080,24 +1077,24 @@ function EmptyPanel({
       }
     : bucket === "done"
       ? {
-          icon: "check-circle" as const,
+          icon: "success" as const,
           title: "Nothing ticked off yet",
           body: "Log a trip at a place and it moves here.",
         }
       : bucket === "shared"
         ? {
-            icon: "users" as const,
+            icon: "friends" as const,
             title: "Nothing shared with you",
             body: "Places a friend shares appear here with notes and photos. Share your own from a place's page.",
           }
         : bucket === "todo"
           ? {
-              icon: "map-pin" as const,
+              icon: "place" as const,
               title: "Your list is clear",
               body: "You've logged a trip for every place. Add a new place and it appears here.",
             }
           : {
-              icon: "map-pin" as const,
+              icon: "place" as const,
               title: "No places yet",
               // Without an account there is no web list to import from and
               // nothing will ever sync — promising both would be the first
@@ -1108,11 +1105,7 @@ function EmptyPanel({
             };
   return (
     <View style={styles.empty}>
-      <Feather
-        name={copy.icon}
-        size={28}
-        color={withAlpha(theme.accent, 0.8)}
-      />
+      <Icon idea={copy.icon} size={28} color={withAlpha(theme.accent, 0.8)} />
       <Text style={styles.emptyTitle}>{copy.title}</Text>
       <Text style={styles.emptyBody}>{copy.body}</Text>
       {filtering ? (
@@ -1122,7 +1115,7 @@ function EmptyPanel({
           onPress={onClear}
         />
       ) : bucket === "all" || bucket === "todo" ? (
-        <Button label="Add a place" icon="plus" onPress={onAdd} />
+        <Button label="Add a place" icon="add" onPress={onAdd} />
       ) : null}
     </View>
   );

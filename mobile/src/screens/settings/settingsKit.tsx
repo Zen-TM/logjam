@@ -3,7 +3,6 @@
 // these are compositions of `Row`, `Toggle` and `SegmentedControl` that only
 // mean anything on a preferences page (DESIGN.md §9 — add a kit file for a new
 // SHAPE, not for a recurring arrangement of existing ones).
-import { Feather } from "@expo/vector-icons";
 import { StyleSheet, Text } from "react-native";
 
 import { fontSize, spacing, theme } from "../../theme";
@@ -13,6 +12,7 @@ import {
   SegmentedControl,
   Toggle,
   type SegmentOption,
+  type Glyph,
 } from "../../ui";
 
 /**
@@ -34,7 +34,7 @@ export function PreferenceRow({
    * GeoPDF is ready" is not an object — takes no glyph, because one there is
    * decoration.
    */
-  icon?: React.ComponentProps<typeof Feather>["name"];
+  icon?: Glyph;
   title: string;
   subtitle?: string;
   subtitleNumberOfLines?: number;

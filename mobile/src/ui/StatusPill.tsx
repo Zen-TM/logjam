@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import { StyleSheet, Text, View } from "react-native";
 
 import {
@@ -9,6 +8,7 @@ import {
   theme,
   withAlpha,
 } from "../theme";
+import { Icon, type Glyph } from "./Icon";
 
 // Small status chip. `accent` = filled (active/saved-for-offline), `outline` =
 // neutral bordered (Shared / Online), `warning` = attention (Update / error),
@@ -28,7 +28,7 @@ export function StatusPill({
 }: {
   label: string;
   tone?: PillTone;
-  icon?: React.ComponentProps<typeof Feather>["name"];
+  icon?: Glyph;
   /**
    * Identity colour override — outlines and letters the pill in `hue` instead
    * of the tone's colour. For a pill that says *what a thing is* (a trip type)
@@ -49,7 +49,7 @@ export function StatusPill({
         },
       ]}
     >
-      {icon ? <Feather name={icon} size={12} color={color} /> : null}
+      {icon ? <Icon idea={icon} size={12} color={color} /> : null}
       <Text style={[styles.label, { color }]} numberOfLines={1}>
         {label}
       </Text>

@@ -15,7 +15,7 @@ export function SelectionBar({
   onClear,
   onSelectAll,
   onDelete,
-  deleteIcon = "trash-2",
+  deleteIcon = "delete",
   deleteLabel = "Delete the selected items",
 }: {
   /** The words between the close and the buttons — "3 places selected". */
@@ -47,7 +47,7 @@ export function SelectionBar({
    * Naming it delete there would have promised to destroy the place.
    */
   onDelete: () => void;
-  /** Glyph for that slot. Feather; `trash-2` unless the verb is not deletion. */
+  /** Glyph for that slot: `delete` unless the verb is not deletion. */
   deleteIcon?: React.ComponentProps<typeof IconButton>["icon"];
   /** Screen-reader label for it — REQUIRED to change with the icon. */
   deleteLabel?: string;
@@ -55,7 +55,7 @@ export function SelectionBar({
   return (
     <View style={styles.bar}>
       <IconButton
-        icon="x"
+        icon="close"
         accessibilityLabel="Clear selection"
         onPress={onClear}
       />
@@ -64,7 +64,7 @@ export function SelectionBar({
       </Text>
       {showSelectAll ? (
         <IconButton
-          icon="check-square"
+          icon="selectAll"
           accessibilityLabel="Select everything in this list"
           onPress={onSelectAll}
         />

@@ -1123,7 +1123,7 @@ const NotificationRow = memo(function NotificationRow({
             <SelectionMark selected={selected} />
           ) : (
             <IconButton
-              icon="more-vertical"
+              icon="overflow"
               accessibilityLabel="Notification actions"
               onPress={() => onMenu(item)}
             />
@@ -1262,7 +1262,7 @@ const BatchRow = memo(function BatchRow({
             <SelectionMark selected={selected} />
           ) : (
             <IconButton
-              icon={expanded ? "chevron-up" : "chevron-down"}
+              icon={expanded ? "collapse" : "expand"}
               accessibilityLabel={
                 expanded ? "Collapse this group" : "Show each one"
               }

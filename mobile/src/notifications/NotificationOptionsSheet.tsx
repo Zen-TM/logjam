@@ -87,7 +87,7 @@ export function NotificationOptionsSheet({
       <View style={styles.body}>
         {openable ? (
           <Row
-            icon="external-link"
+            icon="openExternal"
             title="Open"
             onPress={() => act(() => onOpen(notification))}
           />
@@ -95,18 +95,18 @@ export function NotificationOptionsSheet({
         {destination ? (
           <Row
             // The tab's own glyph, so the row looks like where it goes.
-            icon={destination.tab === "friends" ? "users" : "download"}
+            icon={destination.tab === "friends" ? "friends" : "saved"}
             title={destination.label}
             onPress={() => act(() => onView(notification, destination))}
           />
         ) : null}
         <Row
-          icon={notification.read ? "eye-off" : "eye"}
+          icon={notification.read ? "hide" : "show"}
           title={notification.read ? "Mark as unread" : "Mark as read"}
           onPress={() => act(() => onSetRead(notification, !notification.read))}
         />
         <Row
-          icon="trash-2"
+          icon="delete"
           hue={theme.warning}
           title="Delete notification"
           onPress={confirmDelete}

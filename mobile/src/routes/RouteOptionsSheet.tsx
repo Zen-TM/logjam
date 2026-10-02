@@ -370,7 +370,7 @@ export function RouteOptionsSheet({
           {onShowOnMap && actions.locatable ? (
             <Row
               title="Show on map"
-              icon="map-pin"
+              icon="map"
               hue={assetHue.route}
               disabled={busy}
               onPress={onShowOnMap}
@@ -378,7 +378,7 @@ export function RouteOptionsSheet({
           ) : null}
           <Row
             title="View stats"
-            icon="bar-chart-2"
+            icon="stats"
             hue={assetHue.route}
             disabled={busy}
             onPress={() => setShowingStats(true)}
@@ -389,7 +389,7 @@ export function RouteOptionsSheet({
               // tool on the map, where the points, the direction and the colour
               // are all in reach of the line they change.
               title="Edit"
-              icon="edit-3"
+              icon="edit"
               hue={assetHue.route}
               disabled={busy}
               onPress={onEdit}
@@ -408,14 +408,14 @@ export function RouteOptionsSheet({
           ) : null}
           <Row
             title="Save as GPX"
-            icon="download"
+            icon="export"
             hue={theme.bonus1}
             disabled={busy}
             onPress={() => save("gpx")}
           />
           <Row
             title="Save as KML"
-            icon="download"
+            icon="export"
             hue={theme.bonus1}
             disabled={busy}
             onPress={() => save("kml")}
@@ -427,7 +427,7 @@ export function RouteOptionsSheet({
           {actions.rename ? (
             <Row
               title="Rename"
-              icon="edit-2"
+              icon="edit"
               hue={theme.bonus1}
               disabled={busy}
               onPress={() => setRenaming(true)}
@@ -439,7 +439,7 @@ export function RouteOptionsSheet({
           {actions.share ? (
             <Row
               title="Share"
-              icon="share-2"
+              icon="shareFriend"
               hue={theme.bonus1}
               {...shareRowProps}
               disabled={busy || shareRowProps.disabled}
@@ -454,7 +454,7 @@ export function RouteOptionsSheet({
           {actions.delete ? (
             <Row
               title="Delete route"
-              icon="trash-2"
+              icon="delete"
               hue={theme.warning}
               disabled={busy}
               onPress={confirmDelete}
@@ -479,7 +479,7 @@ export function RouteOptionsSheet({
           {actions.sharedWithYou && actions.removeShare ? (
             <Row
               title="Save a copy and remove"
-              icon="archive"
+              icon="moveCopy"
               {...shareRowProps}
               disabled={busy || shareRowProps.disabled}
               onPress={() => setCopyMode("copyAndRemove")}
@@ -491,7 +491,7 @@ export function RouteOptionsSheet({
           {actions.removeShare ? (
             <Row
               title="Remove from my account"
-              icon="x-circle"
+              icon="unshare"
               hue={theme.warning}
               {...shareRowProps}
               disabled={busy || shareRowProps.disabled}
@@ -506,7 +506,7 @@ export function RouteOptionsSheet({
                   key={place.id}
                   title={`Open ${place.name}`}
                   subtitle="This route came with that shared place — remove it there."
-                  icon="map-pin"
+                  icon="place"
                   hue={placeHue.shared}
                   disabled={busy}
                   onPress={() => {

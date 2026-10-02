@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import {
   Pressable,
   StyleSheet,
@@ -17,6 +16,7 @@ import {
   theme,
   withAlpha,
 } from "../theme";
+import { Icon, type Glyph } from "./Icon";
 
 // Canonical list row — one warm card laid out horizontally: a leading node
 // (icon tile / dot / thumbnail), a title + optional subtitle, and an optional
@@ -61,7 +61,7 @@ export function Row({
   title: string;
   subtitle?: string;
   leading?: React.ReactNode;
-  icon?: React.ComponentProps<typeof Feather>["name"];
+  icon?: Glyph;
   hue?: string;
   right?: React.ReactNode;
   /**
@@ -101,7 +101,7 @@ export function Row({
       <View
         style={[styles.iconTile, { backgroundColor: withAlpha(tint, 0.16) }]}
       >
-        <Feather name={icon} size={20} color={tint} />
+        <Icon idea={icon} size={20} color={tint} />
       </View>
     ) : null);
 

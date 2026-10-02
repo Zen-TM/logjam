@@ -24,7 +24,6 @@
 // broaden visibility by default.
 import { useCallback, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
-import { Feather } from "@expo/vector-icons";
 import {
   activityTalliesOverlap,
   activityTallySubtitle,
@@ -64,6 +63,7 @@ import {
   ScreenScroll,
   SectionHeader,
   StatGrid,
+  Icon,
 } from "../ui";
 import { tripTypeMeta } from "./tripTypeMeta";
 
@@ -295,9 +295,7 @@ function Activities({
             hue={meta.hue}
             title={logbookActivityLabel(tally.type)}
             subtitle={activityTallySubtitle(tally)}
-            right={
-              <Feather name="chevron-right" size={20} color={theme.textMuted} />
-            }
+            right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
             onPress={() => onOpenActivity(tally.type)}
           />
         );

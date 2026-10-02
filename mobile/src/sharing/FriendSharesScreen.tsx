@@ -56,6 +56,7 @@ import {
   type FriendShareDirection,
   type FriendShareRow,
   type FriendShares,
+  type IconIdea,
 } from "@logjam/shared";
 
 import { getFriendShares, unshareWithFriend } from "../api/friends";
@@ -91,19 +92,15 @@ import {
 import { removeSharedPlace, removeSharedEntity } from "./removeShare";
 
 /**
- * The glyph per kind. Feather names, spelled as literals rather than imported
- * from `@expo/vector-icons` — and per client rather than shared, because an
- * icon key resolves in one client's set and not the other's (root CLAUDE.md;
- * Logjam Web draws the same four kinds in lucide). The same four glyphs the
- * rest of this app already uses: `map-pin` a place, `edit-3` a route, `layers`
- * a LiDAR topo, `file-text` a GeoPDF.
+ * The idea per kind: a place, a route, a LiDAR topo, a GeoPDF — the same four
+ * the rest of the app draws for them.
  */
 const SHARE_KIND_ICON = {
-  place: "map-pin",
-  route: "edit-3",
-  topoJob: "layers",
-  geoPdfJob: "file-text",
-} as const satisfies Record<FriendShareRow["entityType"], string>;
+  place: "place",
+  route: "route",
+  topoJob: "lidar",
+  geoPdfJob: "geoPdf",
+} as const satisfies Record<FriendShareRow["entityType"], IconIdea>;
 
 const cardKey = (card: FriendShareCard) => card.key;
 
@@ -503,7 +500,7 @@ export function FriendSharesScreen({
             // The bar's destructive slot, renamed per direction: these end a
             // GRANT, not a record, and a trash can here would promise to
             // destroy the place.
-            deleteIcon={direction === "theySee" ? "user-minus" : "eye-off"}
+            deleteIcon={direction === "theySee" ? "unshare" : "hide"}
             deleteLabel={
               direction === "theySee"
                 ? `Unshare ${selectedItems.length} selected items from ${username}`
@@ -697,7 +694,7 @@ function ShareCardRow({
           <SelectionMark selected={selected} selectable={selectable} />
         ) : (
           <IconButton
-            icon="more-horizontal"
+            icon="overflow"
             accessibilityLabel="What can I do with this?"
             onPress={() => onOpen(card)}
           />
@@ -740,7 +737,7 @@ function ShareCardMenu({
     <View style={styles.menuBody}>
       {card.row.entityType === "place" ? (
         <Row
-          icon="map-pin"
+          icon="place"
           title="Open place"
           onPress={() => onOpenPlace(card.row.entityId)}
         />
@@ -748,7 +745,7 @@ function ShareCardMenu({
 
       {direction === "theySee" ? (
         <Row
-          icon="user-minus"
+          icon="unshare"
           hue={theme.warning}
           title={`Unshare from ${username}`}
           subtitle={
@@ -790,7 +787,7 @@ function ShareCardMenu({
           promise: keep it in your own things, take it off the active list. */}
       {card.copyable && card.removable ? (
         <Row
-          icon="archive"
+          icon="moveCopy"
           title="Save a copy and remove"
           subtitle={
             online
@@ -805,7 +802,7 @@ function ShareCardMenu({
 
       {direction === "youSee" && card.removable ? (
         <Row
-          icon="eye-off"
+          icon="hide"
           hue={theme.warning}
           title="Remove"
           subtitle={

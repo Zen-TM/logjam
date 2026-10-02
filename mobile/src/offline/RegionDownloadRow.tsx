@@ -87,7 +87,7 @@ export function RegionDownloadRow({ job }: { job: RegionJob }) {
 
   return (
     <Row
-      icon={state.kind === "ready" ? "check-circle" : "download"}
+      icon={state.kind === "ready" ? "success" : "saveOffline"}
       hue={state.kind === "failed" ? theme.warning : assetHue.region}
       title={spec.label}
       subtitle={subtitle}
@@ -113,11 +113,7 @@ export function RegionDownloadRow({ job }: { job: RegionJob }) {
                 />
               ) : null
             ) : state.kind === "failed" &&
-              !isRetryableFailure(
-                state.code,
-              ) ? // Retrying a rejected area, or an endpoint that is down, repeats
-            // the same failure; the row's sentence says what to do instead.
-            null : (
+              !isRetryableFailure(state.code) ? null : ( // the same failure; the row's sentence says what to do instead. // Retrying a rejected area, or an endpoint that is down, repeats
               <Button
                 label="Resume"
                 variant="outlineAccent"

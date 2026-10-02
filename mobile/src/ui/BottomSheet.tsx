@@ -326,7 +326,7 @@ export function BottomSheet({
           {onBack ? (
             <View style={styles.titleRow}>
               <IconButton
-                icon="arrow-left"
+                icon="back"
                 accessibilityLabel="Back"
                 onPress={onBack}
               />

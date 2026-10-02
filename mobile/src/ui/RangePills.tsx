@@ -48,7 +48,7 @@ export function RangePills({
           </Text>
           {active ? (
             <IconButton
-              icon="x"
+              icon="close"
               size={14}
               accessibilityLabel={`Clear the ${label} filter`}
               onPress={() => onChange(null)}

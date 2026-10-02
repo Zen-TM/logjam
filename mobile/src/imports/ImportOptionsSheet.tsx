@@ -232,7 +232,7 @@ export function ImportOptionsSheet({
           {onShowOnMap && actions.locatable ? (
             <Row
               title="Show on map"
-              icon="map-pin"
+              icon="map"
               hue={assetHue.import}
               disabled={busy}
               onPress={() => {
@@ -249,7 +249,7 @@ export function ImportOptionsSheet({
           <Row
             title="View stats"
             subtitle="Distance, climb, pace and profiles"
-            icon="bar-chart-2"
+            icon="stats"
             hue={assetHue.import}
             disabled={busy}
             onPress={() => setShowingStats(true)}
@@ -271,7 +271,7 @@ export function ImportOptionsSheet({
             <Row
               key={option.title}
               title={option.title}
-              icon="download"
+              icon="export"
               hue={theme.bonus1}
               disabled={busy}
               onPress={() => save(option)}
@@ -293,7 +293,7 @@ export function ImportOptionsSheet({
           {actions.rename ? (
             <Row
               title="Rename"
-              icon="edit-2"
+              icon="edit"
               hue={theme.bonus1}
               disabled={busy}
               onPress={() => setRenaming(true)}
@@ -304,7 +304,7 @@ export function ImportOptionsSheet({
           {actions.delete ? (
             <Row
               title="Delete from device"
-              icon="trash-2"
+              icon="delete"
               hue={theme.warning}
               disabled={busy}
               onPress={() => {

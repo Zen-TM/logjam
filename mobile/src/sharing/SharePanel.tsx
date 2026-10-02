@@ -40,7 +40,6 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { Feather } from "@expo/vector-icons";
 
 import {
   friendMatches,
@@ -66,7 +65,7 @@ import {
 import { getShares, shareItem, unshareItem } from "../api/shares";
 import { sendFileCopy } from "../api/fileSends";
 import type { AssetActions } from "../saved/assetActions";
-import { Button, ErrorBanner, SectionHeader, Row } from "../ui";
+import { Button, ErrorBanner, SectionHeader, Row, Icon } from "../ui";
 import {
   fontSize,
   lineHeight,
@@ -454,7 +453,7 @@ export function useSharePanel({
               still dims it and refuses taps. */}
           <Button
             label={bulkShareButtonLabel(plan, selected.size, bulkProgress)}
-            icon="share-2"
+            icon="shareFriend"
             onPress={confirmBulk}
             disabled={
               selected.size === 0 || sending || plan.actionableCount === 0
@@ -732,13 +731,13 @@ function FriendRows({
                 // In select mode the tick IS the state of the row; in grant
                 // mode a tap is the whole interaction, and a checkbox there
                 // would imply a pending one.
-                <Feather
-                  name={
+                <Icon
+                  idea={
                     mode === "select"
                       ? selected
-                        ? "check-circle"
-                        : "circle"
-                      : "plus-circle"
+                        ? "success"
+                        : "unselected"
+                      : "add"
                   }
                   size={20}
                   color={selected ? theme.accent : theme.textMuted}
@@ -775,8 +774,8 @@ function PromiseBanner({
         },
       ]}
     >
-      <Feather
-        name={tone === "copy" ? "alert-triangle" : "eye"}
+      <Icon
+        idea={tone === "copy" ? "warning" : "show"}
         size={18}
         color={hue}
         style={styles.promiseIcon}
@@ -802,7 +801,7 @@ function SearchField({
 }) {
   return (
     <View style={styles.search}>
-      <Feather name="search" size={18} color={theme.textMuted} />
+      <Icon idea="search" size={18} color={theme.textMuted} />
       <TextInput
         style={styles.searchInput}
         value={value}
@@ -821,7 +820,7 @@ function SearchField({
           accessibilityLabel="Clear search"
           onPress={() => onChangeText("")}
         >
-          <Feather name="x" size={18} color={theme.textMuted} />
+          <Icon idea="close" size={18} color={theme.textMuted} />
         </Pressable>
       ) : null}
     </View>

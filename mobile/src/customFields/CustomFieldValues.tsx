@@ -11,7 +11,6 @@
 // type an ISO string, which is why `onPickDate` is a callback: the picker is a
 // MODE of the host sheet (DESIGN.md §6 — never a second modal), and only the
 // host knows how to enter it.
-import { Feather } from "@expo/vector-icons";
 import { StyleSheet, Text, View } from "react-native";
 import {
   customFieldDisplayLabel,
@@ -29,6 +28,7 @@ import {
   SegmentedControl,
   TextField,
   type SegmentOption,
+  Icon,
 } from "../ui";
 
 /**
@@ -76,7 +76,7 @@ export function CustomFieldValueInputs({
           trailing={
             onRemove ? (
               <IconButton
-                icon="x"
+                icon="close"
                 accessibilityLabel={`Remove ${def.label}`}
                 onPress={() => onRemove(def.key)}
               />
@@ -168,12 +168,10 @@ function CustomFieldValueInput({
     return (
       <Beside trailing={trailing}>
         <Row
-          icon="calendar"
+          icon="date"
           title={value ? formatDateKey(`${value}T00:00:00.000Z`) : "Not set"}
           subtitle={label}
-          right={
-            <Feather name="chevron-right" size={20} color={theme.textMuted} />
-          }
+          right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
           onPress={onPickDate}
         />
       </Beside>
