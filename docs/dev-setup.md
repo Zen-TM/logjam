@@ -51,9 +51,11 @@ sudo apt-get install -y git make curl
 
   For zsh or fish, use the line from
   [mise's activation guide](https://mise.jdx.dev/getting-started.html) instead.
-  Activation is what puts the pinned Node and Terraform on your `PATH` inside
-  the repo; without it `make setup` falls back to whatever Node you already
-  have.
+  Activation puts the pinned Node, Python and Terraform on your `PATH` inside
+  the repo, in every interactive shell. A shell that doesn't read
+  `~/.bashrc` (an IDE task, a script, a coding agent) isn't activated: the
+  `make` targets still use the pinned tools, and for anything else prefix the
+  command with `mise exec --`.
 
 **It worked if** each of these prints a version and no error:
 
@@ -78,9 +80,9 @@ make setup
   example (fake auth, API on `localhost:8080`) if you have none. Most of the
   time is the npm installs; the tool downloads are once per machine.
 
-**It worked if** `make setup` ends with Prisma's "Generated Prisma Client"
-line and no `npm ERR!`, and `node --version` inside the repo prints the major
-version `mise.toml` pins.
+**It worked if** `make setup` exits without an error (its output includes
+Prisma's "Generated Prisma Client" line), and `mise exec -- node --version`
+inside the repo prints the major version `mise.toml` pins.
 
 ### 3. Start the local stack with `make dev` (first run 10–20 minutes, then about a minute)
 
@@ -151,14 +153,16 @@ make verify
 ```
 
 `make verify` checks formatting, lints and typechecks every package (a minute
-or two). Then run the unit suites, which need no running stack:
+or two). Then run the unit suites, which need no running stack. The topo
+suite runs on the Python `make setup` installed its packages into, so it goes
+through `mise exec` even in an activated shell:
 
 ```bash
 (cd shared && npm test)
 (cd api && npm run test:unit)
 (cd frontend && npm test)
 (cd mobile && npm test)
-(cd topo && python -m unittest discover -s tests)
+(cd topo && mise exec -- python -m unittest discover -s tests)
 ```
 
 If you changed the API, also run its integration suite against the running

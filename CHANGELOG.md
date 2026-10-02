@@ -11,6 +11,8 @@ cut: [docs/operations/mobile-release.md](docs/operations/mobile-release.md).
 
 ## [Unreleased]
 
+## [0.1.0]
+
 The first release. Before it, Logjam GPS was installed only as test builds.
 
 ### Added

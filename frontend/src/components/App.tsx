@@ -1159,7 +1159,6 @@ function App() {
       ...places.filter((c) => passesFilters(c, filters, true)),
       ...sharedPlaces.filter((c) => passesFilters(c, filters, false)),
     ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [places, sharedPlaces, filters],
   );
   const filtersActive = hasActiveFilters(filters);

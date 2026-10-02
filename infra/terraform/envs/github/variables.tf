@@ -20,3 +20,14 @@ resource "github_actions_variable" "this" {
   variable_name = each.key
   value         = each.value
 }
+
+# Not imported: created by the first apply. `report` or `enforce`: whether the
+# apply refuses a plan whose values differ from the PR's, or only says so
+# (docs/decisions/0026-plan-fingerprint-covers-planned-values.md). Flipping it is a
+# reviewed PR. The key for those value fingerprints, PLAN_FINGERPRINT_KEY, is a
+# secret set by hand (infra/AGENTS.md).
+resource "github_actions_variable" "plan_value_check" {
+  repository    = github_repository.logjam.name
+  variable_name = "PLAN_VALUE_CHECK"
+  value         = "report"
+}

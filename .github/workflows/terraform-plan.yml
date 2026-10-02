@@ -3,7 +3,10 @@ name: terraform-plan
 # Plan-on-PR for envs/prod (AWS) and envs/github (this repository's settings).
 # Merge = apply (terraform-apply.yml), so each root's comment is the gate: the
 # maintainer reads it, and the apply refuses any plan whose fingerprint differs
-# from the one embedded here (infra/scripts/plan-summary.mjs). Read-only: the
+# from the one embedded here (infra/scripts/plan-summary.mjs). With the
+# PLAN_FINGERPRINT_KEY secret set, it also carries an HMAC of each changed
+# resource's planned values, which the apply compares
+# (docs/decisions/0026-plan-fingerprint-covers-planned-values.md). Read-only: the
 # AWS plan role has ReadOnlyAccess minus the privacy Deny, the GitHub plan App
 # has no write permission beyond Contents, and -lock=false never writes state.
 #
@@ -122,6 +125,7 @@ jobs:
         env:
           OUTCOME: ${{ steps.plan.outcome }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PLAN_FINGERPRINT_KEY: ${{ secrets.PLAN_FINGERPRINT_KEY }}
         run: |
           rendered=0
           node infra/scripts/plan-summary.mjs comment prod "$RUNNER_TEMP/plan.txt" "$OUTCOME" \
@@ -222,6 +226,7 @@ jobs:
         env:
           OUTCOME: ${{ steps.plan.outcome }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PLAN_FINGERPRINT_KEY: ${{ secrets.PLAN_FINGERPRINT_KEY }}
         run: |
           rendered=0
           node infra/scripts/plan-summary.mjs comment github "$RUNNER_TEMP/plan.txt" "$OUTCOME" \

@@ -1,7 +1,7 @@
 # 0024. Prod Terraform applies on merge, and only the plan the PR showed
 
 - **Date:** 2026-09-28
-- **Status:** Accepted
+- **Status:** Superseded by [0026](0026-plan-fingerprint-covers-planned-values.md)
 - **Supersedes:** —
 
 ## Context

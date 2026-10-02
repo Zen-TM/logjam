@@ -49,8 +49,7 @@ Needed before the first release tag.
    (`EXPO_PUBLIC_COGNITO_CLIENT_ID`, `EXPO_PUBLIC_COGNITO_USER_POOL_ID`,
    `EXPO_PUBLIC_SENTRY_DSN`, `GOOGLE_SERVICES_JSON`), and should carry the
    same values: both profiles talk to the production stack
-   (`mobile/eas.json`). A different `GOOGLE_SERVICES_JSON` gives the two
-   profiles different runtime versions (see [Runtime versions](#runtime-versions)).
+   (`mobile/eas.json`).
 6. **Production access.** The Play developer account is a personal one, so
    Google allows production releases only after a closed test with at least
    12 testers opted in for 14 continuous days, followed by an application in
@@ -152,8 +151,8 @@ signing is [0009](../decisions/0009-signed-ota-updates.md).
      node -p 'JSON.parse(require("fs").readFileSync(0)).map(b => `${b.appVersion} ${b.buildProfile} ${b.runtimeVersion}`).join("\n")'
    ```
 
-   If they differ, stop. Either the checkout differs (a missing or different
-   `google-services.json`) or the fix changed something native (a dependency,
+   If they differ, stop. Either the checkout differs (another commit, or
+   `node_modules` out of step with the lockfile) or the fix changed something native (a dependency,
    a plugin, `patches/`, `eas.json`, npm scripts), and it needs a release, not
    an update. Published anyway, it would reach no phone and say nothing.
 5. **Publish to `preview` and check it** on a release candidate of X.Y.Z, if
@@ -203,8 +202,10 @@ any of these change in `mobile/`:
   own runtime;
 - a config plugin (`plugins/`, or one a dependency ships), a local module
   (`modules/*/android`), or `patches/`;
-- `eas.json`, `.gitignore`, the npm `scripts` in `package.json`, the app icons;
-- the contents of `google-services.json`, or whether it is present.
+- `eas.json`, `.gitignore`, the npm `scripts` in `package.json`, the app icons.
+
+`google-services.json` is left out of the hash (`mobile/.fingerprintignore`),
+so its contents, or its absence, do not change the runtime version.
 
 It does not change for a change to the app's own JavaScript or TypeScript,
 `shared/`, or assets the bundle imports: that is what an update can carry.

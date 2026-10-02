@@ -6,7 +6,10 @@ name: terraform-apply
 # with the state lock and applies only when that plan's fingerprint equals the
 # one in the merged PR's last plan comment for that root
 # (infra/scripts/plan-summary.mjs): if main moved or the target was changed by
-# hand since, it refuses and says why. A root the PR's plan did not cover
+# hand since, it refuses and says why. It also compares an HMAC of the planned
+# values of each changed resource, and reports a difference on the merged PR
+# without refusing unless the repository variable PLAN_VALUE_CHECK is `enforce`
+# (docs/decisions/0026-plan-fingerprint-covers-planned-values.md). A root the PR's plan did not cover
 # (plan-summary.mjs scope) is not applied.
 #
 # envs/prod runs as the AWS apply role, which trusts only jobs in the `prod`
@@ -144,9 +147,11 @@ jobs:
         id: check
         env:
           HEAD_SHA: ${{ needs.merged-pr.outputs.head }}
+          PLAN_FINGERPRINT_KEY: ${{ secrets.PLAN_FINGERPRINT_KEY }}
+          PLAN_VALUE_CHECK: ${{ vars.PLAN_VALUE_CHECK }}
         run: |
           set -o pipefail
-          node infra/scripts/plan-summary.mjs check prod "$RUNNER_TEMP/plan.json" "$RUNNER_TEMP/read.md" "$HEAD_SHA" \
+          node infra/scripts/plan-summary.mjs check prod "$RUNNER_TEMP/plan.json" "$RUNNER_TEMP/read.md" "$HEAD_SHA" "$RUNNER_TEMP/notice.md" \
             | tee "$RUNNER_TEMP/check.md"
 
       - name: terraform apply
@@ -175,6 +180,7 @@ jobs:
             if [ -s "$RUNNER_TEMP/plan.json" ]; then
               if [ "$CHECK" = failure ]; then cat "$RUNNER_TEMP/check.md"; else node infra/scripts/plan-summary.mjs header prod "$RUNNER_TEMP/plan.json"; fi
               echo
+              if [ -s "$RUNNER_TEMP/notice.md" ]; then cat "$RUNNER_TEMP/notice.md"; echo; fi
             fi
             echo "[Run]($RUN_URL)"
           } > "$RUNNER_TEMP/result.md"
@@ -237,9 +243,11 @@ jobs:
         id: check
         env:
           HEAD_SHA: ${{ needs.merged-pr.outputs.head }}
+          PLAN_FINGERPRINT_KEY: ${{ secrets.PLAN_FINGERPRINT_KEY }}
+          PLAN_VALUE_CHECK: ${{ vars.PLAN_VALUE_CHECK }}
         run: |
           set -o pipefail
-          node infra/scripts/plan-summary.mjs check github "$RUNNER_TEMP/plan.json" "$RUNNER_TEMP/read.md" "$HEAD_SHA" \
+          node infra/scripts/plan-summary.mjs check github "$RUNNER_TEMP/plan.json" "$RUNNER_TEMP/read.md" "$HEAD_SHA" "$RUNNER_TEMP/notice.md" \
             | tee "$RUNNER_TEMP/check.md"
 
       - name: terraform apply
@@ -270,6 +278,7 @@ jobs:
             if [ -s "$RUNNER_TEMP/plan.json" ]; then
               if [ "$CHECK" = failure ]; then cat "$RUNNER_TEMP/check.md"; else node infra/scripts/plan-summary.mjs header github "$RUNNER_TEMP/plan.json"; fi
               echo
+              if [ -s "$RUNNER_TEMP/notice.md" ]; then cat "$RUNNER_TEMP/notice.md"; echo; fi
             fi
             echo "[Run]($RUN_URL)"
           } > "$RUNNER_TEMP/result.md"
