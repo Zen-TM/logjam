@@ -16,6 +16,7 @@ override_resource { target = github_repository_ruleset.mobile_release_branches }
 override_resource { target = github_repository_environment.this }
 override_resource { target = github_repository_environment_deployment_policy.this }
 override_resource { target = github_actions_variable.this }
+override_resource { target = github_actions_variable.plan_value_check }
 override_resource { target = github_issue_label.this }
 
 run "main_admits_only_green_squashed_prs" {

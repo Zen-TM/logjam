@@ -97,6 +97,39 @@ note times and surprises. [rollback.md](rollback.md) has the commands.
 - [ ] Every target is back on `main`'s head.
 - [ ] Surprises are fixed, or filed as issues, and listed below.
 
+## Apply refusal
+
+Proves `terraform-apply.yml` refuses a plan other than the one the PR showed,
+for both kinds of hand change ([0026](../decisions/0026-plan-fingerprint-covers-planned-values.md)).
+**When:** after a change to `infra/scripts/plan-summary.mjs`, `terraform-plan.yml`
+or `terraform-apply.yml`, and before flipping the repository variable
+`PLAN_VALUE_CHECK` from `report` to `enforce`. The key is the repository
+secret `PLAN_FINGERPRINT_KEY`. Use a harmless one-tag change in
+`infra/terraform/envs/prod` as the PR, and undo every hand edit afterwards.
+
+- [ ] **Drift on a resource the PR does not touch** (refuses now, in either
+      mode). After the PR's plan comment posts, add a tag by hand to a
+      resource the PR does not change, then merge. The apply refuses with
+      "is not the plan on the PR" and applies nothing. This works only if the
+      hand edit shows up in the plan at merge, so pick a resource with that
+      attribute in Terraform.
+- [ ] **Drift on a resource the PR updates** (the case #268 found). After the
+      plan comment posts, add a tag by hand to the resource the PR is
+      updating, then merge.
+  - With `PLAN_VALUE_CHECK` = `report`: the apply goes ahead, and the result
+    comment and the run's job summary say "Value check (report only)" and
+    name that resource, without its values. The hand tag is reverted by the
+    apply: re-add it afterwards.
+  - With `enforce`: the apply refuses with "different values on 1
+    resource(s)", names the resource, shows no values, and applies nothing.
+- [ ] **No key fails closed in enforce:** with `enforce`, a run whose secret
+      is unset refuses ("cannot be compared"); under `report` it applies and
+      says the check did not run.
+- [ ] The plan comment carries a `plan-values` line of `address → 16 hex` and
+      nothing else about values. Confirm no value, tag or name appears in it.
+
+Time: ____ Surprises: ____
+
 ## Records
 
 <!-- Newest first. Date, who, the change under test, times, surprises. -->

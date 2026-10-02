@@ -39,7 +39,7 @@ terraform -chdir=infra/terraform/envs/github test
 The prod and GitHub-settings plans run on your PR by themselves
 (`terraform-plan.yml`, jobs `plan-prod` and `plan-github`) and are posted as
 comments. Merging applies those plans
-([0024](../../docs/decisions/0024-prod-terraform-applies-on-merge-by-plan-fingerprint.md),
+([0026](../docs/decisions/0026-plan-fingerprint-covers-planned-values.md),
 [0025](../../docs/decisions/0025-github-settings-in-terraform.md)).
 
 ## Read prod (maintainer's AWS access)

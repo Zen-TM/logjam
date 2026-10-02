@@ -6,7 +6,10 @@
 //   plan-summary.mjs scope <root> < changed-paths      exit 0 if the change is in the root's plan
 //   plan-summary.mjs comment <root> <plan.txt> <status> [plan.json <sha>]   PR comment body on stdout
 //   plan-summary.mjs header <root> <plan.json>                             counts + destroys, markdown
-//   plan-summary.mjs check <root> <plan.json> <comment.md> <pr-head-sha>   exit 0 only if safe to apply
+//   plan-summary.mjs check <root> <plan.json> <comment.md> <pr-head-sha> [notice.md]   exit 0 only if safe to apply
+//
+// PLAN_FINGERPRINT_KEY (a secret) turns on the value check below; PLAN_VALUE_CHECK
+// is `enforce` to refuse on a mismatch, anything else only reports one.
 //
 // The fingerprint hashes the (address, actions) list from `terraform show
 // -json`, plus each code artifact's hash, never attribute values: plan JSON
@@ -14,9 +17,14 @@
 // name attributes its plan credentials cannot read (`unreadable`): those are
 // left out when deciding a resource's action, and their configured values
 // are hashed instead, since both plans take those from the same code.
+// Beside it, each created, updated or replaced resource gets an HMAC of its
+// planned values, so a hand edit to a resource the PR also changes shows up
+// (docs/decisions/0026-plan-fingerprint-covers-planned-values.md). Sensitive and
+// unknown values are left out before hashing, the key is never in the repo,
+// and no key means no value check, never an unkeyed hash.
 // Tests: plan-summary.test.mjs, over __fixtures__/.
-import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { createHash, createHmac } from "node:crypto";
+import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
 // GitHub rejects a comment over 65536 chars.
@@ -147,6 +155,47 @@ export function fingerprint(plan, name) {
   return createHash("sha256").update(JSON.stringify({ list, artifacts, configured })).digest("hex");
 }
 
+// `after` without what `sensitive` marks (true, or a tree shaped like it)
+// and what `unknown` marks as only known after apply.
+function strip(after, sensitive, unknown) {
+  if (sensitive === true || unknown === true) return undefined;
+  if (Array.isArray(after)) return after.map((v, i) => strip(v, sensitive?.[i], unknown?.[i]));
+  if (after && typeof after === "object") {
+    return Object.fromEntries(Object.entries(after).map(([k, v]) => [k, strip(v, sensitive?.[k], unknown?.[k])]));
+  }
+  return after;
+}
+
+// address -> 16 hex of an HMAC over what the plan sets that resource to.
+// null without a key. Never the values, and never an unkeyed hash of them.
+export function valueFingerprints(plan, name, key) {
+  if (!key) return null;
+  const out = {};
+  for (const c of changes(plan, name)) {
+    if (!["create", "update", "replace"].includes(c.kind)) continue;
+    const { after, after_sensitive, after_unknown } = c.rc.change;
+    out[c.address] = createHmac("sha256", key)
+      .update(canonical({ address: c.address, after: strip(after, after_sensitive, after_unknown) }))
+      .digest("hex")
+      .slice(0, 16);
+  }
+  return out;
+}
+
+// One HTML comment line; < and > are escaped so an address cannot end it.
+const encodeValues = (v) => JSON.stringify(v).replace(/</g, "\\u003c").replace(/>/g, "\\u003e");
+
+export function readValues(body) {
+  const m = /^<!-- plan-values: (\{.*\}) -->$/m.exec(body ?? "");
+  try {
+    return m ? JSON.parse(m[1]) : null;
+  } catch {
+    return null;
+  }
+}
+
+export const valueMode = (v) => (v === "enforce" ? "enforce" : "report");
+
 export function header(plan, name) {
   const all = changes(plan, name);
   const count = (k) => all.filter((c) => c.kind === k).length;
@@ -182,7 +231,7 @@ export function header(plan, name) {
   return lines.join("\n");
 }
 
-export function comment({ root: name, planText, status, plan, sha, max = MAX_COMMENT }) {
+export function comment({ root: name, planText, status, plan, sha, key, max = MAX_COMMENT }) {
   const ok = status === "success" && Boolean(plan);
   const title = `### Terraform plan — \`envs/${name}\``;
   const top = [marker(name)];
@@ -190,6 +239,8 @@ export function comment({ root: name, planText, status, plan, sha, max = MAX_COM
   if (ok) {
     fp = fingerprint(plan, name);
     top.push(`<!-- plan-fingerprint: ${fp} sha: ${sha} -->`);
+    const values = valueFingerprints(plan, name, key);
+    if (values) top.push(`<!-- plan-values: ${encodeValues(values)} -->`);
   }
   top.push(`${title} ${ok ? "✅" : "❌ failed"}`, "");
   if (ok) top.push(header(plan, name), "", `Fingerprint \`${fp.slice(0, 12)}\` at ${sha}`, "");
@@ -214,8 +265,19 @@ export function readFingerprint(body) {
   return m ? { fingerprint: m[1], sha: m[2] } : null;
 }
 
+// Resources whose planned values now differ from the PR's, or null if the
+// two cannot be compared (no key here, or none when the PR was planned).
+function valueMismatches(name, plan, commentBody, key) {
+  const was = readValues(commentBody);
+  const now = valueFingerprints(plan, name, key);
+  if (!was || !now) return null;
+  return [...new Set([...Object.keys(was), ...Object.keys(now)])].filter((a) => was[a] !== now[a]).sort();
+}
+
 // Each refusal says what to do next: the workflow posts it on the merged PR.
-export function check(name, plan, commentBody, headSha) {
+// `values` is { key, mode } for the value check; a mismatch refuses only in
+// enforce mode, otherwise it comes back as `notice` for the workflow to post.
+export function check(name, plan, commentBody, headSha, values = {}) {
   const r = root(name);
   // The fingerprint of an empty plan is the same for every root: only the
   // marker tells this root's comment from another's.
@@ -244,6 +306,39 @@ export function check(name, plan, commentBody, headSha) {
       ].join("\n"),
     };
   }
+  const enforce = valueMode(values.mode) === "enforce";
+  const differ = valueMismatches(name, plan, commentBody, values.key);
+  let notice;
+  if (differ?.length) {
+    const list = differ.map((a) => `- \`${a}\``).join("\n");
+    if (enforce) {
+      return {
+        ok: false,
+        reason: [
+          `The plan at merge sets different values on ${differ.length} resource(s) the PR's plan also changes:`,
+          "",
+          list,
+          "",
+          `${r.changedOutside} since the PR's plan, or main moved. The values are not shown. Nothing applied.`,
+          "",
+          `${r.handChange}, undo that and re-run this workflow; otherwise open a PR touching ${r.touch}, whose plan shows the whole current diff.`,
+        ].join("\n"),
+      };
+    }
+    notice = [
+      `**Value check (report only):** the plan at merge sets different values than the PR's plan on ${differ.length} resource(s). Once \`PLAN_VALUE_CHECK\` is \`enforce\` this refuses. The values are not shown.`,
+      "",
+      list,
+    ].join("\n");
+  } else if (differ === null) {
+    if (enforce) {
+      return {
+        ok: false,
+        reason: "The plan's values cannot be compared: this run has no `PLAN_FINGERPRINT_KEY`, or the PR's plan comment carries no value fingerprints. Nothing applied; open a PR touching " + r.touch + " to plan and apply the current diff.",
+      };
+    }
+    notice = "**Value check (report only):** not run, because this run has no `PLAN_FINGERPRINT_KEY` or the PR's plan comment has no value fingerprints.";
+  }
   const self = selfChanges(name, plan);
   if (self.length) {
     return {
@@ -251,7 +346,7 @@ export function check(name, plan, commentBody, headSha) {
       reason: `This plan changes the apply role or its boundary (${self.map((c) => c.address).join(", ")}), which that role may not do. Nothing applied; the maintainer applies it from their machine (infra/AGENTS.md).`,
     };
   }
-  return { ok: true, reason: "The plan at merge matches the plan on the PR." };
+  return { ok: true, reason: "The plan at merge matches the plan on the PR.", notice };
 }
 
 function main([cmd, name, ...args]) {
@@ -263,7 +358,8 @@ function main([cmd, name, ...args]) {
   if (cmd === "comment") {
     const [txt, status, planJson, sha] = args;
     const plan = status === "success" && planJson ? json(planJson) : null;
-    const out = comment({ root: name, planText: readFileSync(txt, "utf8"), status, plan, sha });
+    const key = process.env.PLAN_FINGERPRINT_KEY;
+    const out = comment({ root: name, planText: readFileSync(txt, "utf8"), status, plan, sha, key });
     process.stdout.write(out.body + "\n");
     return out.ok ? 0 : 1;
   }
@@ -272,9 +368,15 @@ function main([cmd, name, ...args]) {
     return 0;
   }
   if (cmd === "check") {
-    const [planJson, commentFile, sha] = args;
-    const out = check(name, json(planJson), readFileSync(commentFile, "utf8"), sha);
+    const [planJson, commentFile, sha, noticeFile] = args;
+    const values = { key: process.env.PLAN_FINGERPRINT_KEY, mode: process.env.PLAN_VALUE_CHECK };
+    const out = check(name, json(planJson), readFileSync(commentFile, "utf8"), sha, values);
     process.stdout.write(out.reason + "\n");
+    if (out.notice) {
+      process.stdout.write(out.notice + "\n");
+      if (noticeFile) writeFileSync(noticeFile, out.notice + "\n");
+      if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, out.notice + "\n");
+    }
     return out.ok ? 0 : 1;
   }
   process.stderr.write("usage: plan-summary.mjs scope|comment|header|check <root> …\n");
