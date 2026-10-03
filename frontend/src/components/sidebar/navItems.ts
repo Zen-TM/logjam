@@ -1,15 +1,5 @@
-import {
-  Bell,
-  BookOpen,
-  CircleUser,
-  Map,
-  MapPin,
-  Route,
-  Settings,
-  Users,
-  type LucideIcon,
-} from "lucide-react";
 import type { PanelId } from "./panels";
+import { type Glyph } from "../../ui";
 
 /** Panels reachable from the nav. `place-detail` and `route-detail` are opened
  *  programmatically (from the map / a list), never from a nav item. */
@@ -18,7 +8,7 @@ export type NavItemId = Exclude<PanelId, "place-detail" | "route-detail">;
 export type NavItem = {
   id: NavItemId;
   label: string;
-  Icon: LucideIcon;
+  icon: Glyph;
 };
 
 /** Unread/attention counts keyed by the item they belong to. A count of 0 or an
@@ -27,20 +17,20 @@ export type NavBadgeCounts = Partial<Record<NavItemId, number>>;
 
 /** The pages — the rail's top group. */
 const PAGE_ITEMS: NavItem[] = [
-  { id: "places", label: "Places", Icon: MapPin },
-  { id: "logs", label: "Logs", Icon: BookOpen },
+  { id: "places", label: "Places", icon: "place" },
+  { id: "logs", label: "Logs", icon: "trip" },
   // The umbrella for routes, recorded tracks and imports. "Routes" would name
   // one of its own three kinds.
-  { id: "ways", label: "Ways", Icon: Route },
-  { id: "maps", label: "Maps", Icon: Map },
-  { id: "friends", label: "Friends", Icon: Users },
+  { id: "ways", label: "Ways", icon: "route" },
+  { id: "maps", label: "Maps", icon: "map" },
+  { id: "friends", label: "Friends", icon: "friends" },
 ];
 
 /** Personal and status pages — the rail's bottom group, below the spacer. */
 const PERSONAL_ITEMS: NavItem[] = [
-  { id: "inbox", label: "Inbox", Icon: Bell },
-  { id: "account", label: "Account", Icon: CircleUser },
-  { id: "settings", label: "Settings", Icon: Settings },
+  { id: "inbox", label: "Inbox", icon: "notifications" },
+  { id: "account", label: "Account", icon: "account" },
+  { id: "settings", label: "Settings", icon: "settings" },
 ];
 
 const ALL_ITEMS: NavItem[] = [...PAGE_ITEMS, ...PERSONAL_ITEMS];

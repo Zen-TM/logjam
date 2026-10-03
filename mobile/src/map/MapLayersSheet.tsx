@@ -36,7 +36,6 @@
 // disclosure, and sits LAST because it is the only row that opens.
 import { useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { Feather } from "@expo/vector-icons";
 import { BASEMAP_CATALOG } from "@logjam/shared";
 
 import { assetHue, fontSize, fontWeight, spacing, theme } from "../theme";
@@ -46,6 +45,8 @@ import {
   SectionHeader,
   SegmentedControl,
   Toggle,
+  Icon,
+  type Glyph,
 } from "../ui";
 import { BasemapThumb } from "./BasemapThumb";
 import { MOBILE_BASEMAPS } from "./basemapMeta";
@@ -63,7 +64,7 @@ type Tab = "basemap" | "layers" | "offline";
  */
 export type LayerToggleEntry = {
   key: string;
-  icon: React.ComponentProps<typeof Feather>["name"];
+  icon: Glyph;
   hue: string;
   title: string;
   /** How many of this kind exist — NOT how many are visible. */
@@ -245,7 +246,7 @@ function BasemapTab({
             // basemap of which one small area is on the phone.
             right={
               active ? (
-                <Feather name="check-circle" size={22} color={theme.accent} />
+                <Icon idea="success" size={22} color={theme.accent} />
               ) : null
             }
             selected={active}
@@ -283,8 +284,8 @@ function LayerRow({ entry }: { entry: LayerToggleEntry }) {
                 onValueChange={entry.onChange}
                 accessibilityLabel={`Show ${entry.title}`}
               />
-              <Feather
-                name={expanded ? "chevron-up" : "chevron-down"}
+              <Icon
+                idea={expanded ? "collapse" : "expand"}
                 size={20}
                 color={theme.textMuted}
               />
@@ -378,7 +379,7 @@ function LayersTab({
           them is the map itself rather than an inventory question. */}
       <View style={styles.group}>
         <Row
-          icon="layers"
+          icon="lidar"
           hue={assetHue.overlay}
           title="Topo overlays"
           onPress={
@@ -394,8 +395,8 @@ function LayersTab({
                 accessibilityLabel="Show topo overlays"
               />
               {expandable ? (
-                <Feather
-                  name={expanded ? "chevron-up" : "chevron-down"}
+                <Icon
+                  idea={expanded ? "collapse" : "expand"}
                   size={20}
                   color={theme.textMuted}
                 />
@@ -579,7 +580,7 @@ function OfflineTab({
   return (
     <View style={styles.body}>
       <Row
-        icon="download-cloud"
+        icon="saveOffline"
         hue={assetHue.region}
         title="Save maps for offline use"
         subtitle={online ? "Pick an area and the maps" : "Needs a connection"}
@@ -587,7 +588,7 @@ function OfflineTab({
         onPress={onSaveArea}
       />
       <Row
-        icon="cloud-off"
+        icon="offline"
         hue={assetHue.region}
         title="Offline maps only"
         subtitle="Use only saved maps, even with signal"
@@ -603,7 +604,7 @@ function OfflineTab({
 
       <SectionHeader label="On this phone" />
       <Row
-        icon="hard-drive"
+        icon="device"
         hue={assetHue.region}
         title={
           savedRegions.length === 1
@@ -618,9 +619,7 @@ function OfflineTab({
         // Lands on Saved's Regions filter, not its everything-list: a pointer
         // that makes the user find the thing again is not a pointer.
         onPress={() => onOpenSaved("region")}
-        right={
-          <Feather name="chevron-right" size={20} color={theme.textMuted} />
-        }
+        right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
       />
     </View>
   );

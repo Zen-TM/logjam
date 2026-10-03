@@ -77,7 +77,6 @@ import { useMapArtifacts } from "../offline/useMapArtifacts";
 import { useBasemapAssets } from "./basemap/basemapAssets";
 import { ProtomapsLayers } from "./basemap/ProtomapsLayers";
 import { buildShellStyle } from "./basemap/shellStyle";
-import { BASEMAP_META } from "./basemapMeta";
 import { readLastMapCamera } from "./lastCamera";
 import { DEFAULT_CENTER, DEFAULT_ZOOM } from "./mapChrome";
 import { nextRegionName } from "./regionName";
@@ -658,7 +657,7 @@ export function RegionDownloadScreen({
               <Chip
                 key={id}
                 label={DOWNLOAD_CHIP_LABEL[id]}
-                icon={BASEMAP_META[id as BasemapId].icon}
+                icon="map"
                 active={active}
                 onPress={() => {
                   setSelected((current) =>
@@ -716,7 +715,7 @@ export function RegionDownloadScreen({
                 ? `Save ${selected.length} maps`
                 : "Save this area"
             }
-            icon="download"
+            icon="saveOffline"
             onPress={handleSave}
             disabled={!canDownload || busy}
           />
@@ -735,7 +734,7 @@ export function RegionDownloadScreen({
           onStarted();
         }}
         title="Name this area"
-        footer={<Button label="Done" icon="check" onPress={closeNaming} />}
+        footer={<Button label="Done" icon="done" onPress={closeNaming} />}
       >
         <View style={styles.namingBody}>
           <TextField

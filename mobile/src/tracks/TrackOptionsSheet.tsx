@@ -257,7 +257,7 @@ export function TrackOptionsSheet({
           {onShowOnMap && actions.locatable ? (
             <Row
               title="Show on map"
-              icon="map-pin"
+              icon="map"
               hue={assetHue.track}
               disabled={busy}
               onPress={() => {
@@ -273,7 +273,7 @@ export function TrackOptionsSheet({
           ) : null}
           <Row
             title="Colour"
-            icon="droplet"
+            icon="colour"
             hue={assetHue.track}
             right={
               <Pressable
@@ -328,7 +328,7 @@ export function TrackOptionsSheet({
           <Row
             title="View stats"
             subtitle="Distance, climb, pace and profiles"
-            icon="bar-chart-2"
+            icon="stats"
             hue={assetHue.track}
             disabled={busy}
             onPress={() => setShowingStats(true)}
@@ -337,7 +337,7 @@ export function TrackOptionsSheet({
               what it is showing. */}
           <Row
             title="Continue recording"
-            icon="play-circle"
+            icon="play"
             hue={assetHue.track}
             disabled={busy}
             onPress={() => {
@@ -348,7 +348,7 @@ export function TrackOptionsSheet({
           {actions.createRouteFrom ? (
             <Row
               title="Create route from this"
-              icon="pen-tool"
+              icon="draw"
               hue={assetHue.route}
               disabled={busy}
               onPress={() => {
@@ -385,7 +385,7 @@ export function TrackOptionsSheet({
             <Row
               key={option.title}
               title={option.title}
-              icon="download"
+              icon="export"
               hue={theme.neutral}
               disabled={busy}
               onPress={() => save(option)}
@@ -406,14 +406,14 @@ export function TrackOptionsSheet({
           ) : null}
           <Row
             title="Rename"
-            icon="edit-2"
+            icon="edit"
             hue={theme.neutral}
             disabled={busy}
             onPress={() => setRenaming(true)}
           />
           <Row
             title="Delete track"
-            icon="trash-2"
+            icon="delete"
             hue={theme.warning}
             disabled={busy}
             onPress={() => {

@@ -274,7 +274,7 @@ export function PlaceOptionsSheet({
       ) : (
         <View style={styles.body}>
           <Row
-            icon="book-open"
+            icon="place"
             title="Open place"
             onPress={() => {
               close();
@@ -293,7 +293,7 @@ export function PlaceOptionsSheet({
             />
           ) : null}
           <Row
-            icon="edit-3"
+            icon="trip"
             title="Log a trip here"
             onPress={() => {
               close();
@@ -303,7 +303,7 @@ export function PlaceOptionsSheet({
           {isOwner ? (
             <>
               <Row
-                icon="edit-2"
+                icon="edit"
                 title="Edit place"
                 onPress={() => {
                   close();
@@ -311,13 +311,13 @@ export function PlaceOptionsSheet({
                 }}
               />
               <Row
-                icon="share-2"
+                icon="shareFriend"
                 title="Share"
                 {...shareRowProps}
                 onPress={() => setSharing(true)}
               />
               <Row
-                icon="trash-2"
+                icon="delete"
                 hue={theme.warning}
                 title="Delete place"
                 onPress={confirmDelete}
@@ -343,13 +343,13 @@ export function PlaceOptionsSheet({
                 onPress={() => setCopyMode("copy")}
               />
               <Row
-                icon="archive"
+                icon="moveCopy"
                 title="Save a copy and remove"
                 {...shareRowProps}
                 onPress={() => setCopyMode("copyAndRemove")}
               />
               <Row
-                icon="x-circle"
+                icon="unshare"
                 hue={theme.warning}
                 title="Remove from my account"
                 {...shareRowProps}

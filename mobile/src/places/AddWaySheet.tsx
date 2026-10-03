@@ -303,7 +303,7 @@ export function AddWaySheet({
               already in Saved, the other opens the system picker — so they
               have to stay plainly distinct. */}
           <Row
-            icon="edit-3"
+            icon="route"
             hue={assetHue.route}
             title="Choose a route you drew"
             subtitle="One of your saved routes"
@@ -312,7 +312,7 @@ export function AddWaySheet({
           />
           {onDrawRoute ? (
             <Row
-              icon="pen-tool"
+              icon="draw"
               hue={assetHue.route}
               title="Draw a route on the map"
               subtitle="Opens the map to draw a route"
@@ -324,7 +324,7 @@ export function AddWaySheet({
             />
           ) : null}
           <Row
-            icon="activity"
+            icon="track"
             hue={assetHue.track}
             title="Use a recorded track"
             subtitle="A track you recorded in Logjam"
@@ -332,7 +332,7 @@ export function AddWaySheet({
             onPress={() => setMode("tracks")}
           />
           <Row
-            icon="file-plus"
+            icon="importedFile"
             hue={assetHue.import}
             title="Use an imported file"
             subtitle="A GPX or KML already in Saved"
@@ -340,7 +340,7 @@ export function AddWaySheet({
             onPress={() => setMode("imports")}
           />
           <Row
-            icon="file-plus"
+            icon="importedFile"
             hue={assetHue.import}
             title="Import a new file"
             subtitle="A .gpx or .kml from this phone"
@@ -371,7 +371,7 @@ export function AddWaySheet({
                       ? "Already this place's route"
                       : formatDistanceM(routeLengthM(route.points))
                   }
-                  icon={here ? "check" : "edit-3"}
+                  icon={here ? "done" : "route"}
                   hue={here ? theme.accent : assetHue.route}
                   disabled={busy || here}
                   onPress={() =>
@@ -401,7 +401,7 @@ export function AddWaySheet({
             attachableImports.map((row) => (
               <Row
                 key={row.id}
-                icon="file-plus"
+                icon="importedFile"
                 hue={row.color}
                 title={row.name}
                 disabled={busy}
@@ -433,7 +433,7 @@ export function AddWaySheet({
               {convertibleTracks.map((track) => (
                 <Row
                   key={track.id}
-                  icon="activity"
+                  icon="track"
                   hue={track.color}
                   title={track.name}
                   subtitle={trackSummary(track)}

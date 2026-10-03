@@ -7,21 +7,6 @@ import {
   useState,
 } from "react";
 import {
-  AlignLeft,
-  ArrowRight,
-  BookOpen,
-  ChevronDown,
-  EllipsisVertical,
-  Filter,
-  Pencil,
-  Plus,
-  Search,
-  SlidersHorizontal,
-  Trash2,
-  Upload,
-  X,
-} from "lucide-react";
-import {
   activeTripFilterCount,
   dateRangeLabel,
   datePresets,
@@ -73,6 +58,7 @@ import {
   TextField,
   TileCheckbox,
   type MenuEntry,
+  Icon,
 } from "../../../ui";
 import { usePanelSheet } from "./usePanelSheet";
 import { idRange } from "./placesModel";
@@ -364,20 +350,20 @@ function TripLogsPanel({
     {
       id: "open",
       label: "Open trip",
-      icon: ArrowRight,
+      icon: "forward",
       onSelect: () => onOpenTrip(trip.id),
     },
     {
       id: "edit",
       label: "Edit trip",
-      icon: Pencil,
+      icon: "edit",
       onSelect: () => setEditingTripLog(trip),
     },
     { id: "sep", separator: true },
     {
       id: "delete",
       label: "Delete",
-      icon: Trash2,
+      icon: "delete",
       danger: true,
       onSelect: () => setPendingDelete([trip.id]),
     },
@@ -442,7 +428,7 @@ function TripLogsPanel({
   const rangeText = dateRangeLabel(dateFrom || null, dateTo || null);
   const dateButton = (
     <IconButton
-      icon={SlidersHorizontal}
+      icon="filter"
       label={
         sheetFilterCount > 0
           ? `Sort and filter, ${plural(sheetFilterCount, "filter")} active`
@@ -464,12 +450,16 @@ function TripLogsPanel({
         searchOpen ? (
           <>
             {dateButton}
-            <IconButton icon={X} label="Close search" onClick={closeSearch} />
+            <IconButton
+              icon="close"
+              label="Close search"
+              onClick={closeSearch}
+            />
           </>
         ) : (
           <>
             <IconButton
-              icon={Search}
+              icon="search"
               label="Search trips"
               tone={search ? "filled" : "default"}
               aria-expanded={false}
@@ -483,13 +473,13 @@ function TripLogsPanel({
                 {
                   id: "log",
                   label: "Log a trip",
-                  icon: Plus,
+                  icon: "add",
                   onSelect: () => setCreatingTrip(true),
                 },
                 {
                   id: "file",
                   label: "Import from file",
-                  icon: Upload,
+                  icon: "upload",
                   onSelect: onOpenUnifiedImport,
                 },
               ]}
@@ -498,8 +488,8 @@ function TripLogsPanel({
                   {...props}
                   compact
                   variant="filled"
-                  icon={Plus}
-                  trailingIcon={ChevronDown}
+                  icon="add"
+                  trailingIcon="expand"
                 >
                   Add
                 </Button>
@@ -537,7 +527,7 @@ function TripLogsPanel({
           onClear={clearSelection}
         >
           <IconButton
-            icon={Trash2}
+            icon="delete"
             label="Delete"
             tone="danger"
             onClick={() => setPendingDelete(selected.map((trip) => trip.id))}
@@ -596,7 +586,7 @@ function TripLogsPanel({
                 aria-label="Has notes"
                 title="Has notes"
               >
-                <AlignLeft size={14} aria-hidden />
+                <Icon idea="notes" size={14} aria-hidden />
               </span>
             )}
             {!selecting && (
@@ -608,7 +598,7 @@ function TripLogsPanel({
                 trigger={(props) => (
                   <IconButton
                     {...props}
-                    icon={EllipsisVertical}
+                    icon="overflow"
                     label={`Actions for ${title}`}
                   />
                 )}
@@ -627,7 +617,7 @@ function TripLogsPanel({
   ) : tripLogs.length === 0 ? (
     <div className={classes.emptyArea}>
       <EmptyState
-        icon={BookOpen}
+        icon="trip"
         title="Your logbook is empty"
         body="Log a trip and it lands here, and on Logjam GPS too."
         actions={
@@ -635,7 +625,7 @@ function TripLogsPanel({
             <Button
               compact
               variant="filled"
-              icon={Plus}
+              icon="add"
               onClick={() => setCreatingTrip(true)}
             >
               Log a trip
@@ -643,7 +633,7 @@ function TripLogsPanel({
             <Button
               compact
               variant="outline"
-              icon={Upload}
+              icon="upload"
               onClick={onOpenUnifiedImport}
             >
               Import
@@ -655,7 +645,7 @@ function TripLogsPanel({
   ) : visible.length === 0 ? (
     <div className={classes.emptyArea}>
       <EmptyState
-        icon={Filter}
+        icon="filter"
         title="No trips match"
         body="Nothing matches your search and filters. Clear them to see the rest."
         actions={
@@ -832,7 +822,7 @@ function TripLogsPanel({
                   ` · ${plural(sheetFilterCount - 1, "more filter")}`}
               </span>
               <IconButton
-                icon={X}
+                icon="close"
                 size={14}
                 round
                 label="Clear filters"

@@ -9,7 +9,7 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import type { LucideIcon } from "lucide-react";
+import { Icon, type Glyph } from "./Icon";
 import { useAnchoredPosition, type Placement } from "./floating";
 import { nextEnabledIndex } from "./rovingFocus";
 import { useEscape } from "./useEscape";
@@ -18,7 +18,7 @@ import classes from "./Menu.module.css";
 export type MenuItem = {
   id: string;
   label: string;
-  icon?: LucideIcon;
+  icon?: Glyph;
   onSelect: () => void;
   danger?: boolean;
   /** A keyboard shortcut, shown right-aligned. */
@@ -179,7 +179,6 @@ export function Menu({
               />
             );
           const index = items.indexOf(entry);
-          const Icon = entry.icon;
           return (
             <button
               key={entry.id}
@@ -199,7 +198,9 @@ export function Menu({
                 entry.onSelect();
               }}
             >
-              {Icon && <Icon size={16} aria-hidden className={classes.glyph} />}
+              {entry.icon && (
+                <Icon idea={entry.icon} size={16} className={classes.glyph} />
+              )}
               <span className={classes.label}>{entry.label}</span>
               {entry.hint && <kbd className={classes.hint}>{entry.hint}</kbd>}
               {entry.badge != null && entry.badge > 0 && (

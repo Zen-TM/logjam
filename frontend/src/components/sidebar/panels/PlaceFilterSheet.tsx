@@ -1,4 +1,3 @@
-import { Check, Scan, SquareDashed } from "lucide-react";
 import {
   dateSummary,
   defsForType,
@@ -115,7 +114,7 @@ export default function PlaceFilterSheet({
               Reset
             </Button>
           )}
-          <Button compact variant="filled" icon={Check} onClick={onClose}>
+          <Button compact variant="filled" icon="done" onClick={onClose}>
             Done
           </Button>
         </>
@@ -158,7 +157,7 @@ export default function PlaceFilterSheet({
             <>
               <Chip
                 label={`${Math.round(area[0])} × ${Math.round(area[1])} km`}
-                icon={SquareDashed}
+                icon="pickArea"
                 active
                 aria-label={`Area set, ${Math.round(area[0])} by ${Math.round(area[1])} kilometres. Draw it again`}
                 onClick={onDrawArea}
@@ -167,12 +166,8 @@ export default function PlaceFilterSheet({
             </>
           ) : (
             <>
-              <Chip
-                label="Draw on map"
-                icon={SquareDashed}
-                onClick={onDrawArea}
-              />
-              <Chip label="This view" icon={Scan} onClick={onAreaToView} />
+              <Chip label="Draw on map" icon="pickArea" onClick={onDrawArea} />
+              <Chip label="This view" icon="scan" onClick={onAreaToView} />
             </>
           )}
         </div>

@@ -1,7 +1,7 @@
 import { useId, useRef, useState, type CSSProperties } from "react";
-import { Check } from "lucide-react";
 import { Popover } from "./Menu";
 import classes from "./Choice.module.css";
+import { Icon } from "./Icon";
 
 /**
  * A checkbox with its label beside it, for an item in a set (which types a
@@ -34,7 +34,13 @@ export function Checkbox({
           aria-describedby={description ? descriptionId : undefined}
           onChange={(event) => onChange(event.target.checked)}
         />
-        <Check size={12} strokeWidth={3} aria-hidden className={classes.tick} />
+        <Icon
+          idea="done"
+          size={12}
+          strokeWidth={3}
+          aria-hidden
+          className={classes.tick}
+        />
       </span>
       <span className={classes.text}>
         <span className={classes.title}>{label}</span>

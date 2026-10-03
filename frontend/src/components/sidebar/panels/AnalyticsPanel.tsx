@@ -1,5 +1,4 @@
 import { useMemo, useRef, useState, type ReactNode } from "react";
-import { BarChart3, ChevronRight } from "lucide-react";
 import {
   activityTalliesOverlap,
   activityTallySubtitle,
@@ -32,6 +31,7 @@ import {
   SectionHeader,
   StatGrid,
   type SparkBucket,
+  Icon,
 } from "../../../ui";
 import { placeTypeLucideIcon } from "./placeTypeIcon";
 import { tripTypeLook } from "./tripTypeIcon";
@@ -176,7 +176,7 @@ function AnalyticsPanel({
   ) : stats.trips === 0 ? (
     <div className={classes.emptyArea}>
       <EmptyState
-        icon={BarChart3}
+        icon="stats"
         title="Nothing logged in here yet"
         body={
           activity
@@ -293,7 +293,12 @@ function Activities({
             subtitle={activityTallySubtitle(tally)}
             leading={<IconTile icon={look.icon} hue={look.hue} />}
             trailing={
-              <ChevronRight size={18} aria-hidden className={classes.chevron} />
+              <Icon
+                idea="disclosure"
+                size={18}
+                aria-hidden
+                className={classes.chevron}
+              />
             }
             onOpen={() => onOpen(tally.type, index)}
           />

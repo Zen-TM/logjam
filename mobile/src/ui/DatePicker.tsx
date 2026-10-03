@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import { useEffect, useRef, useState } from "react";
 import {
   Animated,
@@ -28,6 +27,7 @@ import {
   yearBlockStart,
   type YearMonth,
 } from "./monthGrid";
+import { Icon } from "./Icon";
 
 /**
  * Month-grid date picker, rendered inline (inside a sheet) rather than as an
@@ -424,7 +424,7 @@ function Header({
         onPress={onPrev}
         style={({ pressed }) => [styles.nav, pressed && styles.pressed]}
       >
-        <Feather name="chevron-left" size={20} color={theme.text} />
+        <Icon idea="back" size={20} color={theme.text} />
       </Pressable>
       <Pressable
         accessibilityRole="button"
@@ -435,8 +435,8 @@ function Header({
         style={({ pressed }) => [styles.labelButton, pressed && styles.pressed]}
       >
         <Text style={styles.label}>{label}</Text>
-        <Feather
-          name={expanded ? "chevron-up" : "chevron-down"}
+        <Icon
+          idea={expanded ? "collapse" : "expand"}
           size={14}
           color={theme.textMuted}
         />
@@ -454,7 +454,7 @@ function Header({
           nextDisabled && styles.disabledNav,
         ]}
       >
-        <Feather name="chevron-right" size={20} color={theme.text} />
+        <Icon idea="forward" size={20} color={theme.text} />
       </Pressable>
     </View>
   );
