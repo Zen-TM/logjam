@@ -401,13 +401,16 @@ rules keep it honest: neither rail may vanish mid-gesture (both stay mounted,
 dimmed and inert, while a multi-select is running — see §7 item 15), and only
 one of them may say "All" (the type rail's is "Any type").
 
-**Presets are the shortcut, not the ceiling.** A mobile filter that only offers
-"under 30 m" is friendlier than the desktop's operator + number, and strictly
-less capable — which is a downgrade, not a simplification. Lead with the three
-or four answers people actually pick, and put the full control one tap behind a
-`Custom` chip (see `ThresholdFilter` in `PlaceFilterSheet`). The draft rule
-matters: opening Custom must NOT commit a value, or "under 0" applies the
-instant you tap it and the list empties for no reason the user can see.
+**Places is drawn from its screen contracts** (`shared/src/contracts/`): the
+list's sections and their order, the filter sheet's sections and a place's
+verbs, with every word they use. `PlacesScreen`, `PlaceFilterSheet` and
+`PlaceOptionsSheet` iterate them, and Logjam Web renders from the same
+declarations; `places/placesContracts.test.ts` fails when this client draws a
+section the contract lacks or omits one it names. Every attribute in the filter
+sheet is drawn by its definition's shape (`attributeFilterShape`), a canyon's
+grades included: no presets, no bespoke axes. An unbounded number's operator
+is a DRAFT until there is a value, or "under 0" applies the instant it is
+tapped and the list empties for no reason the user can see.
 
 An active hidden filter must announce itself: the reveal button renders
 `filled`, and a set date range gets a dismissible summary strip above the list.
@@ -1220,7 +1223,7 @@ which subsystem is talking.
 - **The confirm copy for an entity is written ONCE, as a
   `{ confirmTitle, confirmBody }` descriptor, and every surface offering the verb
   reads it from there.** `saved/assetActions.ts` holds it for the saved kinds,
-  `places/placeDeleteConfirm.ts` for a place (it takes the linked-trip count,
+  `placeDeleteConfirm` in `@logjam/shared` for a place (it takes the linked-trip count,
   because that sentence is per-instance). This is the enforcement of the rule
   above it: the place copy was duplicated byte-for-byte across the list and the
   detail screen, and the map's waypoint sheet had *drifted* — it said only
