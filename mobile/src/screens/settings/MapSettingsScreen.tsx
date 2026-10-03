@@ -73,7 +73,7 @@ import {
   writeSensorLoggingEnabled,
 } from "../../tracks/sensorLog";
 import { applyRecordingOptionsToActiveTrack } from "../../tracks/trackRecorder";
-import { radius, spacing, surface, theme, withAlpha } from "../../theme";
+import { radius, spacing, theme, withAlpha } from "../../theme";
 import {
   ScreenScroll,
   SectionHeader,
@@ -512,7 +512,7 @@ const styles = StyleSheet.create({
     borderColor: "transparent",
   },
   swatchSelected: { borderColor: theme.accent },
-  swatchPressed: { backgroundColor: surface.cardPressed },
+  swatchPressed: { backgroundColor: theme.cardPressed },
   swatch: {
     width: 40,
     height: 40,
@@ -520,7 +520,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: withAlpha(theme.textPrimary, 0.2),
+    borderColor: withAlpha(theme.text, 0.2),
   },
 });
 

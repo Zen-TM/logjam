@@ -19,7 +19,7 @@
 .note {
   margin: 0;
   font-size: var(--font-xs);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 .banner {
@@ -51,5 +51,5 @@
   margin: 0;
   text-align: center;
   font-size: var(--font-sm);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }

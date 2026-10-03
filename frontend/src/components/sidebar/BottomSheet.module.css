@@ -19,8 +19,8 @@
   /* Sit above the bottom nav strip so panel switching stays reachable. */
   bottom: var(--bottom-nav-height);
   height: calc(100dvh - var(--bottom-nav-height));
-  background-color: var(--theme-primary);
-  color: var(--theme-text-primary);
+  background-color: var(--color-page);
+  color: var(--color-text);
   z-index: 4;
   display: flex;
   flex-direction: column;
@@ -28,7 +28,7 @@
   border-top-right-radius: var(--radius-lg);
   box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.3);
   /* Snap animation. Suppressed mid-drag via inline style. */
-  transition: transform var(--transition-med) ease-out;
+  transition: transform var(--motion-med) ease-out;
   touch-action: none;
 }
 
@@ -53,7 +53,7 @@
 }
 
 .handle:focus-visible .grip {
-  outline: 2px solid var(--theme-text-primary);
+  outline: 2px solid var(--color-text);
   outline-offset: 4px;
 }
 
@@ -66,11 +66,7 @@
   height: 4px;
   /* A pill, not an ellipse: `--radius-full` is 50% and this box is 9:1. */
   border-radius: var(--radius-pill);
-  background-color: color-mix(
-    in srgb,
-    var(--theme-text-primary) 30%,
-    transparent
-  );
+  background-color: color-mix(in srgb, var(--color-text) 30%, transparent);
 }
 
 /* Sheet content is sized (inline height) to the *visible* portion of the sheet

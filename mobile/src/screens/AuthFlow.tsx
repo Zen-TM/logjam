@@ -215,7 +215,7 @@ function ConfirmForgotPasswordForm({ auth }: { auth: Auth }) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: theme.primary },
+  root: { flex: 1, backgroundColor: theme.page },
   scroll: {
     flexGrow: 1,
     justifyContent: "center",
@@ -225,7 +225,7 @@ const styles = StyleSheet.create({
   appTitle: {
     fontSize: fontSize.xl,
     fontWeight: fontWeight.bold,
-    color: theme.textPrimary,
+    color: theme.text,
     textAlign: "center",
     marginBottom: spacing(2),
   },
@@ -233,7 +233,7 @@ const styles = StyleSheet.create({
   heading: {
     fontSize: fontSize.lg,
     fontWeight: fontWeight.medium,
-    color: theme.textPrimary,
+    color: theme.text,
   },
   hint: { fontSize: fontSize.sm, color: theme.textMuted },
 });

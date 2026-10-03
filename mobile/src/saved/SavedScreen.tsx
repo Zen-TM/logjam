@@ -2289,7 +2289,7 @@ export function SavedScreen({
                 <Row
                   title="Share"
                   icon="share-2"
-                  hue={theme.bonus1}
+                  hue={theme.neutral}
                   {...shareRowProps}
                   onPress={() => setMenuMode("share")}
                 />
@@ -2304,7 +2304,7 @@ export function SavedScreen({
                 <Row
                   title="Send a copy"
                   icon="send"
-                  hue={theme.bonus1}
+                  hue={theme.neutral}
                   {...shareRowProps}
                   onPress={() => setMenuMode("sendCopy")}
                 />
@@ -2316,7 +2316,7 @@ export function SavedScreen({
                 <Row
                   title="Rename"
                   icon="edit-2"
-                  hue={theme.bonus1}
+                  hue={theme.neutral}
                   onPress={() => setMenuMode("rename")}
                 />
               ) : null}
@@ -2624,7 +2624,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.accent,
     borderRadius: radius.lg,
   },
-  screen: { flex: 1, backgroundColor: theme.primary },
+  screen: { flex: 1, backgroundColor: theme.page },
   // Breathing room on both seams: category chips/selection bar → search
   // label, and search input → tag chips. Without it the controls read as one
   // dense block.
@@ -2672,7 +2672,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing(2),
   },
   emptyTitle: {
-    color: theme.textPrimary,
+    color: theme.text,
     fontSize: fontSize.base,
     fontWeight: fontWeight.medium,
   },

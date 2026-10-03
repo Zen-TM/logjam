@@ -741,6 +741,65 @@ test.describe("desktop", () => {
   });
 });
 
+/**
+ * Daylight, the one light scheme, on the surfaces most used outdoors. It is
+ * reached the way a user's choice is: `/users/me` says so (rewriting only the
+ * field the decision reads), and the generated `[data-scheme]` block repaints.
+ * Its text pairs are held to 7:1 by `scripts/wcag-contrast.mjs`; this is what
+ * catches a surface drawing a pair that script never heard of.
+ */
+test.describe("daylight", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.route("**/users/me", async (route) => {
+      if (route.request().method() !== "GET") return route.continue();
+      const response = await route.fetch();
+      const user = await response.json();
+      await route.fulfill({
+        response,
+        json: {
+          ...user,
+          uiPreferences: { ...user.uiPreferences, themeSchemeId: "daylight" },
+        },
+      });
+    });
+  });
+
+  test("Places, a place, Settings and the Inbox", async ({ page }) => {
+    await openApp(page);
+    await expect(page.locator("html")).toHaveAttribute(
+      "data-scheme",
+      "daylight",
+    );
+    const aside = page.locator("aside");
+
+    await page.getByRole("button", { name: "Places", exact: true }).click();
+    await expect(aside.locator("[data-place-id]").first()).toBeVisible({
+      timeout: 15_000,
+    });
+    await expectNoViolations(page, "aside");
+
+    await aside
+      .getByRole("button", { name: "Claustral Canyon", exact: true })
+      .click();
+    await expect(
+      aside.getByRole("heading", { level: 2, name: "Claustral Canyon" }),
+    ).toBeVisible();
+    await expectNoViolations(page, "aside");
+
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    const theme = aside.getByRole("radiogroup", { name: "Theme" });
+    await expect(theme.getByRole("radio")).toHaveCount(5);
+    await expect(theme.getByRole("radio", { name: "Daylight" })).toBeChecked();
+    await expectNoViolations(page, "aside");
+
+    await page.getByRole("button", { name: /^Inbox/ }).click();
+    await expect(aside.getByRole("checkbox").first()).toBeVisible({
+      timeout: 15_000,
+    });
+    await expectNoViolations(page, "aside");
+  });
+});
+
 test.describe("narrow web", () => {
   test.use({ viewport: { width: 390, height: 844 } });
 

@@ -16,7 +16,7 @@
   gap: 6px;
   margin: 0;
   font-size: var(--font-sm);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 /* The format and its verb read as one line: pick, then take it. */
@@ -45,5 +45,5 @@
 
 .addMark {
   display: flex;
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }

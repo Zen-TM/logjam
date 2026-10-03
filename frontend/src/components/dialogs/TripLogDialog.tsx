@@ -1074,7 +1074,7 @@ function TripLogDialog({
                     subtitle={`${index + 1} of ${selectedCount}`}
                     description="On this trip. Press to take it off."
                     leading={
-                      <IconTile icon={Check} hue="var(--theme-accent)" />
+                      <IconTile icon={Check} hue="var(--color-accent)" />
                     }
                     onOpen={() => togglePlace(place.id)}
                   />
@@ -1086,7 +1086,7 @@ function TripLogDialog({
                     subtitle={`${selectedCount} of ${selectedCount} · made when the trip is saved`}
                     description="A new place. Press to take it off."
                     leading={
-                      <IconTile icon={MapPinPlus} hue="var(--theme-accent)" />
+                      <IconTile icon={MapPinPlus} hue="var(--color-accent)" />
                     }
                     onOpen={() => setCreating(null)}
                   />
@@ -1104,7 +1104,7 @@ function TripLogDialog({
                   title={`Create “${placeSearch.trim()}”`}
                   subtitle="A new canyon, made when the trip is saved"
                   leading={
-                    <IconTile icon={MapPinPlus} hue="var(--theme-bonus-1)" />
+                    <IconTile icon={MapPinPlus} hue="var(--color-neutral)" />
                   }
                   onOpen={() => startCreate(placeSearch.trim())}
                 />
@@ -1123,7 +1123,7 @@ function TripLogDialog({
                     title={place.name}
                     description="Press to add it to this trip."
                     leading={
-                      <IconTile icon={Plus} hue="var(--theme-bonus-1)" />
+                      <IconTile icon={Plus} hue="var(--color-neutral)" />
                     }
                     onOpen={() => togglePlace(place.id)}
                   />
@@ -1192,7 +1192,7 @@ function TripLogDialog({
                 selectedCount === 1 ? "1 place" : `${selectedCount} places`
               }
               description="Places on this trip. Press to choose."
-              leading={<IconTile icon={MapPin} hue="var(--theme-accent)" />}
+              leading={<IconTile icon={MapPin} hue="var(--color-accent)" />}
               trailing={
                 <ChevronRight
                   size={18}
@@ -1363,7 +1363,7 @@ function TripLogDialog({
                 <Row
                   key={def.key}
                   leading={
-                    <IconTile icon={CircleHelp} hue="var(--theme-accent)" />
+                    <IconTile icon={CircleHelp} hue="var(--color-accent)" />
                   }
                   title={def.label}
                   subtitle={formatFieldValue(

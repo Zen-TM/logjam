@@ -92,7 +92,7 @@ const styles = StyleSheet.create({
   },
   count: {
     flex: 1,
-    color: theme.textPrimary,
+    color: theme.text,
     fontSize: fontSize.sm,
     fontWeight: fontWeight.medium,
   },

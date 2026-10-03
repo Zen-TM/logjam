@@ -14,13 +14,16 @@
   flex: none;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px 10px;
+  gap: var(--space-0-5) var(--space-1);
   min-height: 48px;
-  padding: 7px 4px 7px 8px;
+  /* A step in from the card's edge, its 1px hairline included, so a 32px tile
+     makes the row exactly 48. */
+  padding: calc(var(--space-1) - 1px) var(--space-0-5)
+    calc(var(--space-1) - 1px) var(--space-1);
   box-sizing: border-box;
   border-radius: var(--radius-lg);
   border: var(--hairline);
-  background: var(--theme-secondary);
+  background: var(--color-card);
   box-shadow: var(--edge), var(--outline);
 }
 
@@ -30,24 +33,20 @@
    nothing (operator, 2026-09-16). */
 .row:has(.open):hover,
 .row:has(.pick):hover {
-  border-color: color-mix(
-    in srgb,
-    var(--theme-accent) 70%,
-    var(--theme-bonus-2)
-  );
+  border-color: color-mix(in srgb, var(--color-accent) 70%, var(--color-line));
 }
 
 .row[data-selected="true"] {
-  --outline: inset 0 0 0 1px var(--theme-accent);
-  border-color: var(--theme-accent);
+  --outline: inset 0 0 0 1px var(--color-accent);
+  border-color: var(--color-accent);
 }
 
 .row[data-accent-edge="true"] {
-  --edge: inset 3px 0 0 var(--theme-accent);
+  --edge: inset 3px 0 0 var(--color-accent);
 }
 
 /* Its own line under the text, lined up with the title rather than the tile
-   (the tile's 32px and the row's 10px gap), and above the stretched button so
+   (the tile's 32px and the row's gap), and above the stretched button so
    its controls stay their own. */
 .footer {
   position: relative;
@@ -55,12 +54,12 @@
   flex-basis: 100%;
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--space-1);
   padding-bottom: 1px;
 }
 
 .leading ~ .footer {
-  padding-left: calc(32px + 10px);
+  padding-left: calc(32px + var(--space-1));
 }
 
 .row[data-disabled="true"] {
@@ -69,7 +68,7 @@
 
 /* The focus ring belongs to the card the stretched button covers. */
 .row:has(.open:focus-visible) {
-  outline: 2px solid var(--theme-text-primary);
+  outline: 2px solid var(--color-text);
   outline-offset: 2px;
 }
 
@@ -83,8 +82,8 @@
 }
 
 .trailing {
-  gap: 4px;
-  color: var(--theme-text-muted);
+  gap: var(--space-0-5);
+  color: var(--color-text-muted);
   font-size: var(--font-xs);
 }
 
@@ -95,7 +94,7 @@
    share surfaces until this covered it too (operator, 2026-09-19). */
 .trailing > [role="switch"]:last-child,
 .trailing > [data-mark]:last-child {
-  margin-right: 8px;
+  margin-right: var(--space-1);
 }
 
 /* A MARK IS DECORATION, SO IT IS NOT A TARGET — and neither is the group
@@ -149,12 +148,12 @@
   overflow-wrap: anywhere;
   font-size: var(--font-base);
   font-weight: 600;
-  color: var(--theme-text-primary);
+  color: var(--color-text);
 }
 
 .subtitle {
   font-size: var(--font-sm);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 .tile {
@@ -169,7 +168,7 @@
      on a card that pair cannot reach 3:1 for the clay and waratah hues at any
      wash, and misses it for most hues under Sandstone (scripts/wcag-contrast.mjs). */
   background: var(--tile-hue);
-  color: var(--ink);
+  color: var(--color-on-fill);
 }
 
 /* A person's tile: the same fill and box, initials instead of a glyph. */
@@ -188,7 +187,7 @@
   border: none;
   border-radius: var(--radius-md);
   background: transparent;
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
   cursor: pointer;
 }
 
@@ -206,7 +205,7 @@
 }
 
 .pick[aria-checked="true"] .pickMark {
-  color: var(--theme-accent);
+  color: var(--color-accent);
 }
 
 .row:hover .pickTile,

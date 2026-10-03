@@ -41,7 +41,7 @@ export const MAP_IDENTITY: Record<
     label: string;
   }
 > = {
-  geoPdf: { icon: FileText, hue: "var(--hue-geoPdf)", label: "GeoPDF" },
+  geoPdf: { icon: FileText, hue: "var(--hue-geo-pdf)", label: "GeoPDF" },
   topo: { icon: Mountain, hue: "var(--hue-overlay)", label: "LiDAR topo" },
   export: {
     icon: FileDown,
@@ -50,7 +50,7 @@ export const MAP_IDENTITY: Record<
   },
   geoPdfTemplate: {
     icon: LayoutTemplate,
-    hue: "var(--hue-geoPdf)",
+    hue: "var(--hue-geo-pdf)",
     label: "GeoPDF template",
   },
   topoTemplate: {

@@ -13,7 +13,6 @@ import {
   hitSlop,
   radius,
   spacing,
-  surface,
   theme,
   withAlpha,
 } from "../theme";
@@ -24,7 +23,8 @@ import {
 // Non-pressable when `onPress` is omitted.
 //
 // Pass `icon` + `hue` for the standard identity tile: a 40pt rounded square
-// tinted with the hue at 16% behind a hue-coloured glyph. That tile is how a
+// filled SOLID with the hue under an `onFill` glyph, as on Logjam Web (a hue
+// glyph on a wash of itself failed 3:1 on dark cards). That tile is how a
 // list of mixed kinds stays scannable — colour and glyph say *what* a row is
 // before the text is read — so prefer it over a bare `leading` node whenever
 // the row has a kind. `progress` (0-1) draws a hue-coloured determinate bar
@@ -98,10 +98,8 @@ export function Row({
   const lead =
     leading ??
     (icon ? (
-      <View
-        style={[styles.iconTile, { backgroundColor: withAlpha(tint, 0.16) }]}
-      >
-        <Feather name={icon} size={20} color={tint} />
+      <View style={[styles.iconTile, { backgroundColor: tint }]}>
+        <Feather name={icon} size={20} color={theme.onFill} />
       </View>
     ) : null);
 
@@ -182,9 +180,9 @@ const styles = StyleSheet.create({
     // flex-row card did (one full-width child, vertically centred when the
     // 56pt floor bites).
     justifyContent: "center",
-    backgroundColor: surface.card,
+    backgroundColor: theme.card,
     borderWidth: 1,
-    borderColor: surface.border,
+    borderColor: theme.line,
     borderRadius: radius.lg,
     padding: spacing(1.5),
     minHeight: 56,
@@ -192,7 +190,7 @@ const styles = StyleSheet.create({
   },
   line: { flexDirection: "row", alignItems: "center", gap: spacing(1.5) },
   footer: { paddingTop: spacing(1.25) },
-  pressed: { backgroundColor: surface.cardPressed },
+  pressed: { backgroundColor: theme.cardPressed },
   selected: {
     borderColor: theme.accent,
     backgroundColor: withAlpha(theme.accent, 0.12),
@@ -213,7 +211,7 @@ const styles = StyleSheet.create({
     gap: spacing(0.5),
   },
   title: {
-    color: theme.textPrimary,
+    color: theme.text,
     fontSize: fontSize.base,
     fontWeight: fontWeight.medium,
   },
@@ -224,7 +222,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     height: 3,
-    backgroundColor: withAlpha(theme.textPrimary, 0.1),
+    backgroundColor: withAlpha(theme.text, 0.1),
   },
   progressFill: { height: 3, borderRadius: radius.pill },
 });

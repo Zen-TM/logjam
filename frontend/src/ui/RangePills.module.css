@@ -3,7 +3,7 @@
 .pills {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: var(--space-0-5);
   touch-action: pan-y;
   user-select: none;
 }

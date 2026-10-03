@@ -18,7 +18,7 @@ import {
   Search,
   X,
 } from "lucide-react";
-import type { RegionBbox } from "@logjam/shared";
+import { PLACE_TYPE_COLORS, type RegionBbox } from "@logjam/shared";
 import { TOPO_LAYERS, type CompletedTopoJob } from "../../topoLayerTypes";
 import { PROTOMAPS_SWATCH } from "../../basemapSwatch";
 import { previewUrlFor, type TileLayer } from "../sidebar/panels/tilePreview";
@@ -229,7 +229,7 @@ export default function LayersPopover({
                   says what kind; the pin says whose (operator, 2026-09-17). */}
               <OverlayRow
                 icon={MapPin}
-                hue="var(--owned-place-color)"
+                hue={PLACE_TYPE_COLORS[0]}
                 title="Places"
                 subtitle={countOf(placeCount, "place")}
                 checked={showPlaces}

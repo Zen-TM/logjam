@@ -588,10 +588,10 @@ function DeleteAccountForm({
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: theme.primary },
+  root: { flex: 1, backgroundColor: theme.page },
   email: { color: theme.textMuted, fontSize: fontSize.sm },
   body: { padding: spacing(2), gap: spacing(1), paddingBottom: spacing(4) },
-  meterLabel: { color: theme.textPrimary, fontSize: fontSize.sm },
+  meterLabel: { color: theme.text, fontSize: fontSize.sm },
   meterHint: { color: theme.textMuted },
   form: { gap: spacing(1.5) },
   formHint: { color: theme.textMuted, fontSize: fontSize.sm },

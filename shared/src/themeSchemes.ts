@@ -1,36 +1,73 @@
+import { INK } from "./designTokens.js";
 import {
   isTripLogCustomFieldDef,
   type TripLogCustomFieldDef,
 } from "./tripLogFields.js";
 
-export type ThemeSchemeId = "sandstone" | "basalt" | "scribblyGum" | "ironbark";
+export type ThemeSchemeId =
+  | "sandstone"
+  | "basalt"
+  | "scribblyGum"
+  | "ironbark"
+  | "daylight";
 
+/**
+ * A scheme's colours, named for the ROLE each plays — never its rank — and
+ * identical on both clients (Logjam Web reads them as `--color-<kebab-role>`).
+ * Every scheme declares every role explicitly, with no colour arithmetic at
+ * runtime, so `scripts/wcag-contrast.mjs` measures the values that render.
+ *
+ * Intent colours (`accent`, `warning`, `success`) are fills, edges and glyphs,
+ * never the colour of words; words are `text` or `textMuted`. Anything drawn
+ * on a fill is `onFill`.
+ */
 export type ThemeTokens = {
-  primary: string;
-  secondary: string;
-  accent: string;
-  textPrimary: string;
+  /** The page, and every surface laid on it: panels, sheets, popovers, menus. */
+  page: string;
+  /** A surface you can press: an openable row, a pressable tile. */
+  card: string;
+  /** A card under a finger or a pointer. */
+  cardPressed: string;
+  /** A text input's well. */
+  field: string;
+  /** A decorative hairline: separates, need not be seen to be used. */
+  line: string;
+  /** An edge that must be SEEN (a field, an outline control): ≥3:1 on page, card and field. */
+  lineStrong: string;
+  /** Body text and glyphs. */
+  text: string;
+  /** Secondary text. */
   textMuted: string;
+  /** The scheme's one colour: a fill, an edge, a glyph. */
+  accent: string;
+  /** Something needs the user, or is destructive. */
   warning: string;
   /**
-   * Something is in a good state — the counterpart to `warning`, and the only
-   * green in the palette that means "fine" rather than "this kind of thing".
+   * An ordinary good state — the counterpart to `warning`, and the only green
+   * in the palette that means "fine" rather than "this kind of thing".
    *
    * Deliberately muted in every scheme: it marks the ORDINARY case (a file that
    * is backed up, which is most of them), so it has to be readable at a glance
-   * and invisible when scanned past. A saturated green would pull the eye to
-   * every row that is working.
+   * and invisible when scanned past.
    */
   success: string;
-  bonus1: string;
-  bonus2: string;
-  bonus3: string;
+  /** The hue of a thing with no kind: an untyped trip, an "Add" tile. */
+  neutral: string;
+  /** The one inverted surface: a toast, a tooltip. */
+  inverse: string;
+  /** Text and glyphs on `inverse`. */
+  onInverse: string;
+  /** Text and glyphs on any fill: the accent, an intent colour, an identity hue. */
+  onFill: string;
 };
 
 export type ThemeScheme = {
   id: ThemeSchemeId;
   name: string;
   description?: string;
+  /** Whether the page is dark or light: decides the platform chrome (status
+   *  bar, form controls, scrollbars) and the scheme's contrast floor. */
+  mode: "dark" | "light";
   tokens: ThemeTokens;
 };
 
@@ -130,73 +167,128 @@ function normalizeNotificationPreferences(
 
 export const DEFAULT_THEME_SCHEME_ID: ThemeSchemeId = "sandstone";
 
+// The four dark schemes keep the values they had under the old rank names:
+// `field` is the old web `color-mix(in srgb, black 12%, page)` worked out to a
+// hex, `lineStrong` the muted text colour. `cardPressed` is the card a step
+// darker in Sandstone and Ironbark, where the old `bonus2` it replaced was
+// lighter than the card and muted text failed on it.
 export const THEME_SCHEMES: Record<ThemeSchemeId, ThemeScheme> = {
   sandstone: {
     id: "sandstone",
     name: "Sandstone",
     description: "Warm weathered sandstone with iron-rich accents.",
+    mode: "dark",
     tokens: {
-      primary: "#4E4944",
-      secondary: "#61553F",
-      accent: "#DEB188",
-      textPrimary: "#F7F3EC",
+      page: "#4E4944",
+      card: "#61553F",
+      cardPressed: "#524836",
+      field: "#45403C",
+      line: "#6B5F4B",
+      lineStrong: "#D8CCB9",
+      text: "#F7F3EC",
       textMuted: "#D8CCB9",
+      accent: "#DEB188",
       warning: "#F5A693",
       success: "#93B183",
-      bonus1: "#D9CBB8",
-      bonus2: "#6B5F4B",
-      bonus3: "#9C5A2E",
+      neutral: "#D9CBB8",
+      inverse: "#F7F3EC",
+      onInverse: INK,
+      onFill: INK,
     },
   },
   basalt: {
     id: "basalt",
     name: "Basalt",
     description: "Cool plunge-water blues against dark gorge rock.",
+    mode: "dark",
     tokens: {
-      primary: "#2B3F52",
-      secondary: "#5F432F",
-      accent: "#4BB4D9",
-      textPrimary: "#EAF1F6",
+      page: "#2B3F52",
+      card: "#5F432F",
+      cardPressed: "#16232D",
+      field: "#263748",
+      line: "#16232D",
+      lineStrong: "#A7BBC9",
+      text: "#EAF1F6",
       textMuted: "#A7BBC9",
+      accent: "#4BB4D9",
       warning: "#EB8D99",
       success: "#74C295",
-      bonus1: "#97AAB8",
-      bonus2: "#16232D",
-      bonus3: "#E4AA61",
+      neutral: "#97AAB8",
+      inverse: "#EAF1F6",
+      onInverse: INK,
+      onFill: INK,
     },
   },
   scribblyGum: {
     id: "scribblyGum",
     name: "Scribbly Gum",
     description: "Bushland greens and fog-softened neutrals.",
+    mode: "dark",
     tokens: {
-      primary: "#2F4F3E",
-      secondary: "#3F5547",
-      accent: "#DAB084",
-      textPrimary: "#EAF2EC",
+      page: "#2F4F3E",
+      card: "#3F5547",
+      cardPressed: "#22372B",
+      field: "#294637",
+      line: "#22372B",
+      lineStrong: "#B4C8BC",
+      text: "#EAF2EC",
       textMuted: "#B4C8BC",
+      accent: "#DAB084",
       warning: "#E6AAA3",
       success: "#8FBE86",
-      bonus1: "#A8C4A1",
-      bonus2: "#22372B",
-      bonus3: "#DCE7DA",
+      neutral: "#A8C4A1",
+      inverse: "#EAF2EC",
+      onInverse: INK,
+      onFill: INK,
     },
   },
   ironbark: {
     id: "ironbark",
     name: "Ironbark",
     description: "Topographic ink tones with native vegetation highlights.",
+    mode: "dark",
     tokens: {
-      primary: "#2B3A3F",
-      secondary: "#364B45",
-      accent: "#CD9482",
-      textPrimary: "#ECF2EF",
+      page: "#2B3A3F",
+      card: "#364B45",
+      cardPressed: "#2E403B",
+      field: "#263337",
+      line: "#7FA48F",
+      lineStrong: "#A7B8B2",
+      text: "#ECF2EF",
       textMuted: "#A7B8B2",
+      accent: "#CD9482",
       warning: "#F18B77",
       success: "#8CB79A",
-      bonus1: "#CAD7CF",
-      bonus2: "#7FA48F",
-      bonus3: "#B9C99D",
+      neutral: "#CAD7CF",
+      inverse: "#ECF2EF",
+      onInverse: INK,
+      onFill: INK,
+    },
+  },
+  // The one light scheme, for reading in full sun: its text pairs clear AAA
+  // (7:1), not AA. Its intent colours sit in the narrow luminance band where
+  // they clear 4.5:1 under the dark `onFill` AND 3:1 on the paper page.
+  daylight: {
+    id: "daylight",
+    name: "Daylight",
+    description: "Paper and ink, for reading in full sun.",
+    mode: "light",
+    tokens: {
+      page: "#F5F1EA",
+      card: "#FFFFFF",
+      cardPressed: "#EEE8DE",
+      field: "#FFFFFF",
+      line: "#E0D8CB",
+      lineStrong: "#8A7D6C",
+      text: "#1E1B18",
+      textMuted: "#55493D",
+      accent: "#BA7941",
+      warning: "#D66752",
+      success: "#5B9653",
+      neutral: "#B8AB98",
+      inverse: "#2E2924",
+      onInverse: "#F5F1EA",
+      onFill: INK,
     },
   },
 };
@@ -206,6 +298,7 @@ export const THEME_SCHEME_ORDER: ThemeSchemeId[] = [
   "basalt",
   "scribblyGum",
   "ironbark",
+  "daylight",
 ];
 
 export function isThemeSchemeId(value: unknown): value is ThemeSchemeId {
