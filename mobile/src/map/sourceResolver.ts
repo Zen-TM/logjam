@@ -3,7 +3,7 @@
 // through here, so later stages (offline downloads, imports) change *data*
 // (the artifacts registry), never the map screen.
 //
-// Policy (§5):
+// Policy (DESIGN.md §5):
 //  - Full-coverage artifacts (topo overlays, imports): local-first ALWAYS once
 //    downloaded — connectivity flaps never remount a mid-place overlay.
 //  - Subset-coverage artifacts (basemap regions): remote online, local

@@ -22,7 +22,7 @@
 //
 // It is a HOOK returning `{ title, body, footer }` rather than a plain
 // component because a sheet's primary action belongs in `BottomSheet`'s pinned
-// `footer` (DESIGN.md §6) — a Send button that scrolls away behind a long
+// `footer` (DESIGN.md §4) — a Send button that scrolls away behind a long
 // friend list leaves the drag handle as the only exit, and the handle means
 // discard. Callers spread the three pieces onto the sheet they already own;
 // nothing opens a second sheet.
@@ -143,7 +143,7 @@ const PLACE_SHARE_BLURB =
  * Both verbs need the network — a grant is not an outbox operation and a send
  * is an upload — so offline the row is dimmed and says "Needs a connection"
  * rather than disappearing or opening a panel that can only apologise
- * (DESIGN.md §10). Sharing is also the FIRST thing on most saved items that
+ * (DESIGN.md §8). Sharing is also the FIRST thing on most saved items that
  * needs a connection at all, which is why the row has to say so itself.
  *
  * One helper rather than six call sites reaching for `capabilityRowProps`,
@@ -441,7 +441,7 @@ export function useSharePanel({
       ),
       footer: (
         // The send failure reports directly above the button it failed under
-        // (DESIGN.md §8) — the form is still open, so this is not a toast.
+        // (docs/ux-principles.md §11) — the form is still open, so this is not a toast.
         <View style={styles.footerStack}>
           {sendError ? <ErrorBanner message={sendError} /> : null}
           {/* No `loading`: `Button` replaces the label with a spinner, and the
@@ -464,7 +464,7 @@ export function useSharePanel({
 
   if (target.kind === "copy") {
     // The closed door names itself rather than the panel vanishing
-    // (DESIGN.md §10) — a feature that comes and goes is worse than one that
+    // (DESIGN.md §8) — a feature that comes and goes is worse than one that
     // says why. Sharing's capability covers this: a guest has no friends and
     // no endpoint that would answer, and offline it cannot work at all.
     if (friends.status.status === "unavailable") {
@@ -781,7 +781,7 @@ function PromiseBanner({
   );
 }
 
-/** The reason, in place of the panel. DESIGN.md §10 — never a blank space. */
+/** The reason, in place of the panel. DESIGN.md §8 — never a blank space. */
 function ClosedDoor({ text }: { text: string }) {
   return <Text style={styles.muted}>{text}</Text>;
 }

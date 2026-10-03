@@ -132,7 +132,7 @@ export function LogsScreen({
   const [editing, setEditing] = useState<{ trip: MirrorTrip | null } | null>(
     null,
   );
-  // One toast channel for every async outcome on the screen (DESIGN.md §6).
+  // One toast channel for every async outcome on the screen (DESIGN.md §4).
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const toastNonce = useRef(0);
   const info = useCallback((text: string) => {
@@ -145,7 +145,7 @@ export function LogsScreen({
   }, []);
 
   // Sheets don't outlive the tab: coming back to a half-open editor is a stale
-  // prompt, not a resumed task (DESIGN.md §7).
+  // prompt, not a resumed task (DESIGN.md §5).
   const closeSheets = useCallback(() => {
     setMenuTripId(null);
     setEditing(null);
@@ -215,7 +215,7 @@ export function LogsScreen({
     isDeletable: () => true,
   });
   // A selection is a transient mode over rows you can see; a pending "delete
-  // these five" you no longer remember making is a stale prompt (DESIGN.md §7).
+  // these five" you no longer remember making is a stale prompt (DESIGN.md §5).
   useFocusEffect(
     useCallback(() => {
       clearSelection();
@@ -422,7 +422,7 @@ export function LogsScreen({
             {/* The retrospective lives one tap away rather than on this screen:
                 Logs answers "what have I done?", stats answers "am I getting
                 out, and is it going anywhere?" — two questions, so two screens
-                (DESIGN.md §1). It sits beside search because both are ways of
+                (docs/ux-principles.md §2). It sits beside search because both are ways of
                 asking the logbook something, rather than adding to it. */}
             <IconButton
               icon="stats"

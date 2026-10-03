@@ -224,7 +224,7 @@ export function useCustomFieldForm({
   const [scopeError, setScopeError] = useState<string | null>(null);
   // A save the local write refused, or a failed delete — this form stays open
   // either way, so it reports in its own banner above the footer's buttons
-  // rather than a toast (DESIGN.md §8).
+  // rather than a toast (docs/ux-principles.md §11).
   const [formError, setFormError] = useState<string | null>(null);
   // Bounds are only meaningful on a number, and the API rejects them elsewhere.
   const numeric = type === "integer" || type === "float";
@@ -508,7 +508,7 @@ export function useCustomFieldForm({
 
   // Cancel LEFT, commit RIGHT, half the width each: the destination of a tap
   // should not depend on how long the label happens to be. The banner sits
-  // above that row, never at the top of the form (DESIGN.md §8).
+  // above that row, never at the top of the form (docs/ux-principles.md §11).
   const footer = (
     <View style={styles.footerStack}>
       {formError ? <ErrorBanner message={formError} /> : null}

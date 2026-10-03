@@ -420,7 +420,7 @@ export function SavedScreen({
   /**
    * Pick a finished recording back up. Handed to the MAP rather than done here:
    * arming the recorder needs the location prompt, which cannot be raised from
-   * an open sheet (DESIGN.md §7), and the map is what has to end up in
+   * an open sheet (DESIGN.md §5), and the map is what has to end up in
    * recording mode.
    */
   onContinueRecording: (trackId: string) => void;
@@ -1023,7 +1023,7 @@ export function SavedScreen({
         // no `syncRole`, which is the normal state on a cold offline launch,
         // and hiding the verb there made sharing the one thing that vanished
         // when the signal did. It is present and DIMMED instead, with the
-        // reason in its subtitle (DESIGN.md §10).
+        // reason in its subtitle (DESIGN.md §8).
         ...(job?.syncRole === "shared"
           ? {
               sharedWithYou: true as const,
@@ -1563,7 +1563,7 @@ export function SavedScreen({
 
   const menuItem = items.find((item) => item.key === menuItemKey) ?? null;
   // A route's overflow is the SAME sheet the map shows, so the two surfaces
-  // cannot offer different verbs for the same object (DESIGN.md §7) — rename,
+  // cannot offer different verbs for the same object (DESIGN.md §5) — rename,
   // sharing and the stats are all sub-modes of that sheet, so there is nothing
   // left for this screen to hand back to.
   const menuRoute =
@@ -1573,7 +1573,7 @@ export function SavedScreen({
   const showRouteSheet = menuRoute !== null;
   // A recorded track and an imported file each open the SAME sheet the map
   // opens when their line is tapped, so the two surfaces cannot offer different
-  // verbs for one object (DESIGN.md §7). Only the kinds with no map tap surface
+  // verbs for one object (DESIGN.md §5). Only the kinds with no map tap surface
   // at all — regions, LiDAR overlays, GeoPDFs, waypoints — still go through the
   // generic sheet below.
   const menuTrack =
@@ -1891,7 +1891,7 @@ export function SavedScreen({
                 // Press and hold starts a selection anywhere; once one is running a
                 // plain tap toggles. Outside the mode a row still has no onPress —
                 // its verbs live in the ⋯ sheet, and a whole-row tap that did one
-                // of them would be a mis-tap waiting to happen (DESIGN.md §7).
+                // of them would be a mis-tap waiting to happen (DESIGN.md §5).
                 onLongPress={() => selectItem(item)}
                 onPress={selecting ? () => selectItem(item) : undefined}
                 /* ONE trailing slot for both modes, and every child of it keeps its
@@ -2177,7 +2177,7 @@ export function SavedScreen({
               onto this device", and a user who has never drawn a route has no
               reason to know the pen lives on the map. Both hand over to the
               map: arming either needs the location prompt, which cannot be
-              raised from an open sheet (DESIGN.md §7). */}
+              raised from an open sheet (DESIGN.md §5). */}
           <Row
             title="Record a track"
             icon="track"
@@ -2237,7 +2237,7 @@ export function SavedScreen({
             : undefined
         }
         // The send button is pinned rather than sitting under the friend list
-        // (DESIGN.md §6): a confirm that scrolls away leaves the drag handle as
+        // (DESIGN.md §4): a confirm that scrolls away leaves the drag handle as
         // the only exit, and the handle means discard.
         footer={menuMode === "sendCopy" ? sharePanel.footer : undefined}
       >
@@ -2391,7 +2391,7 @@ export function SavedScreen({
 
       {/* Tracks and imports open the SAME sheet the map opens on their line —
           one verb list per kind, and the only row this surface adds is "Show on
-          map" (DESIGN.md §7). Both hand their bbox straight to `onOpenMap` with
+          map" (DESIGN.md §5). Both hand their bbox straight to `onOpenMap` with
           this row's reveal, rather than going back through `showOnMap`, which
           would resolve the same extent a second time. */}
       <TrackOptionsSheet
@@ -2550,7 +2550,7 @@ function EmptyPanel({
 /**
  * The Share sub-mode of the per-item sheet: who has this item, and who else
  * could. Sits beside the place detail screen's Shared-with section on the same
- * `useSharing` hook, so "what does unsharing mean" is worded once (DESIGN.md §7).
+ * `useSharing` hook, so "what does unsharing mean" is worded once (DESIGN.md §5).
  *
  * Mounted only while the sub-mode is open, which is what makes the hook's load
  * fire on open rather than for every row in the list.

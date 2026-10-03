@@ -80,7 +80,7 @@ function CustomFieldInput({
 }) {
   const label = customFieldDisplayLabel(def);
   // What the label cannot say — the scale, what it is measured between. Only a
-  // built-in carries one; a user wrote their own label (DESIGN.md §9: a hint
+  // built-in carries one; a user wrote their own label (DESIGN.md §6: a hint
   // is visible and read with the control, where a tooltip is neither).
   const hint = systemFieldDef(def.key)?.hint;
 
