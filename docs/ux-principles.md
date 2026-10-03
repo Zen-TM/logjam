@@ -10,7 +10,7 @@ rule (a sheet or a dialog, a tap or a click, `hitSlop` or a CSS hit area) is in
 its own design file: [`frontend/DESIGN.md`](../frontend/DESIGN.md) for Logjam
 Web and [`mobile/DESIGN.md`](../mobile/DESIGN.md) for Logjam GPS. A decision
 both clients make is declared once in `@logjam/shared` and read by both
-(§12); the reasoning is in
+(§14); the reasoning is in
 [ADR 0020](decisions/0020-share-the-decision-not-the-drawing.md).
 
 Each rule is a sentence you can check a screen against. Where a test enforces
@@ -57,6 +57,9 @@ it, the rule names the test.
   and put the count on the tab.
 - **A section header belongs to what follows it**: the space above a heading
   is bigger than the gap between the rows it groups.
+- **Centred means centred.** A pill, badge or notice centres its text in
+  itself, not only itself on the screen; a row's text lines up with the rows
+  around it.
 - **A heading divides a list from something.** "Yours" earns a line only when
   "Built in" is opposite it.
 
@@ -93,7 +96,7 @@ it, the rule names the test.
 - **Things that look alike behave alike.** Two rows drawn the same way open
   the same way; two chips drawn the same way filter the same way. If something
   behaves differently, it looks different. This is why the kit exists: one
-  component per look (§12).
+  component per look (§14).
 - **A pressable thing answers the press at once**, with a pressed (touch) or
   hover (pointer) state. Nothing that is not pressable answers a pointer: a
   chart, a read-only row and a mark beside a title stay still.
@@ -278,6 +281,9 @@ it, the rule names the test.
 - **Say what is true, not what is hopeful.** A queued upload offline says
   "Waiting", not "Uploading…". A layer that draws part of the picture says
   which part is missing.
+- **What you frame is what you get.** A step that previews a result shows it
+  as it will be made: framing a map's area shows the basemap the map will be
+  printed from, and goes back to the user's own map afterwards.
 - **Work the user pays for in time or storage is priced before they commit**,
   and the price updates as they change it.
 - **Progress stays in view while it is watched**: a job being made is pinned
@@ -343,6 +349,10 @@ it, the rule names the test.
   (`designTokens.ts`, `themeSchemes.ts`), the icon for each idea, the kit's
   component list, each shared screen's contract (its sections, order, copy and
   empty states), and the words, verbs and predicates behind them.
+- **A feature on one client exists on the other**, with the same verbs and
+  words, unless the medium rules it out, and then that client's DESIGN.md says
+  why. A tap on the map that tells you about a spot, a pin that opens its
+  verbs: a user should not have to remember which client can do what.
 - **The kit is the only way to draw a shared shape.** A screen composes its
   client's kit; a screen that needs a shape the kit lacks adds it to the kit,
   on both clients when both need it, under the same name.
