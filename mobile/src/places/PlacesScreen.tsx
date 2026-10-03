@@ -57,6 +57,7 @@ import {
   placeDeleteConfirm,
   placesCountLabel,
   placesEmptyKind,
+  listSelectionLabel,
   placesEmptyState,
   placesFilterNote,
   placesHeroTitle,
@@ -813,7 +814,7 @@ export function PlacesScreen({
       <View style={styles.rail}>
         {selecting ? (
           <SelectionBar
-            countLabel={`${placesCountLabel(selectedItems.length)} selected`}
+            countLabel={listSelectionLabel(selectedItems.length)}
             showSelectAll={selectedItems.length < selectableItems.length}
             extra={
               <BulkShareButton

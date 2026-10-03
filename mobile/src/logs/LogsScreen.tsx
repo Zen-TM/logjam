@@ -12,7 +12,15 @@
 // already holds on this device. None of it is logged, and the failure paths
 // here print our own copy rather than an error string that might embed a
 // place name.
-import { memo, useCallback, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  memo,
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   Alert,
   Keyboard,
@@ -28,21 +36,30 @@ import {
   activeTripFilterCount,
   countTripsInLastMonths,
   dateRangeLabel,
-  datePresets,
   distinctPlaceCount,
   distinctTripTypes,
   filterTrips,
-  formatDateKey,
   formatTripDate,
   groupTripsByYear,
+  contractSectionKeys,
   hasActiveTripFilter,
+  listSelectionLabel,
   monthlyTripCounts,
   NO_TYPE_FILTER_VALUE,
   reconcileCustomFieldFilters,
   sortTrips,
-  TRIP_SORT_OPTIONS,
+  tripDeleteConfirm,
+  tripsEmptyKind,
+  tripsEmptyState,
+  tripsFilterNote,
+  tripsHeroTitle,
+  TRIPS_ADD,
+  TRIPS_ADD_ICON,
+  TRIPS_FILTER_SHEET,
+  TRIPS_LIST,
   tripFilterFieldDefs,
   type CustomFieldFilter,
+  type SectionKeysOn,
   type TripSortKey,
 } from "@logjam/shared";
 
@@ -57,6 +74,7 @@ import {
 } from "../theme";
 import type { MirrorTrip } from "../sync/mirrorStore";
 import { deleteTripLocal } from "../sync/outbox";
+import { useAccountState } from "../auth/AccountStateContext";
 import { useConnectivity } from "../map/connectivity";
 import {
   useMirrorPlaces,
@@ -67,17 +85,12 @@ import {
 } from "../sync/useSyncQueries";
 import {
   ActivitySpark,
-  AttributeFilter,
-  BottomSheet,
   Button,
-  Chip,
-  DatePicker,
   ErrorState,
   Hero,
   IconButton,
   LoadingState,
   Row,
-  SectionHeader,
   ChipRail,
   SelectionBar,
   SyncStatusPills,
@@ -86,11 +99,12 @@ import {
   type ChipOption,
   type ToastMessage,
   Icon,
-  SwitchRow,
 } from "../ui";
 import { useFieldDefs } from "../customFields/useFieldDefs";
 import { primaryTripType, tripTypeLabel, tripTypeMeta } from "./tripTypeMeta";
 import { TripEditSheet } from "./TripEditSheet";
+import { LogsFilterSheet } from "./LogsFilterSheet";
+import { TripOptionsSheet } from "./TripOptionsSheet";
 
 const ALL_TYPES = "";
 
@@ -103,6 +117,7 @@ export function LogsScreen({
 }) {
   const connectivity = useConnectivity();
   const online = connectivity === "online";
+  const guest = useAccountState().accountState === "guest";
   const pendingCount = usePendingSyncCount();
   const query = useMirrorTrips();
   const placesQuery = useMirrorPlaces();
@@ -116,9 +131,7 @@ export function LogsScreen({
   const [search, setSearch] = useState("");
   const [dateFrom, setDateFrom] = useState<string | null>(null);
   const [dateTo, setDateTo] = useState<string | null>(null);
-  const [dateMode, setDateMode] = useState<"presets" | "from" | "to" | null>(
-    null,
-  );
+  const [sheetOpen, setSheetOpen] = useState(false);
   // Attribute filters and the sort live and die with the screen, like every
   // other filter here: the state never leaves the device and is never
   // persisted, so a month-old filter can't greet the user as missing trips.
@@ -149,7 +162,7 @@ export function LogsScreen({
   const closeSheets = useCallback(() => {
     setMenuTripId(null);
     setEditing(null);
-    setDateMode(null);
+    setSheetOpen(false);
   }, []);
   useFocusEffect(closeSheets);
 
@@ -168,7 +181,7 @@ export function LogsScreen({
     () => sortTrips(filterTrips(trips, criteria), sort),
     [criteria, trips, sort],
   );
-  const sections = useMemo(
+  const yearSections = useMemo(
     () =>
       // The year headings run the way the trips inside them do, or "Oldest
       // first" reads bottom-to-top.
@@ -225,34 +238,31 @@ export function LogsScreen({
   const deleteSelected = useCallback(() => {
     const targets = selectedItems;
     const count = targets.length;
-    Alert.alert(
-      count === 1 ? "Delete this trip?" : `Delete ${count} trips?`,
-      "The log entries and their photos are removed from this device and from your account. This can't be undone.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: () => {
-            void (async () => {
-              let failures = 0;
-              for (const trip of targets) {
-                try {
-                  await deleteTripLocal(trip.id);
-                } catch (err) {
-                  console.error(err);
-                  failures += 1;
-                }
+    const confirm = tripDeleteConfirm(count);
+    Alert.alert(confirm.confirmTitle, confirm.confirmBody, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: () => {
+          void (async () => {
+            let failures = 0;
+            for (const trip of targets) {
+              try {
+                await deleteTripLocal(trip.id);
+              } catch (err) {
+                console.error(err);
+                failures += 1;
               }
-              clearSelection();
-              if (failures === 0)
-                info(`Deleted ${count} ${count === 1 ? "trip" : "trips"}.`);
-              else fail(`${failures} of ${count} couldn't be deleted.`);
-            })();
-          },
+            }
+            clearSelection();
+            if (failures === 0)
+              info(`Deleted ${count} ${count === 1 ? "trip" : "trips"}.`);
+            else fail(`${failures} of ${count} couldn't be deleted.`);
+          })();
         },
-      ],
-    );
+      },
+    ]);
   }, [selectedItems, clearSelection, fail, info]);
 
   // Tallies come from the OTHER axes only, so a chip's count answers "how many
@@ -354,9 +364,7 @@ export function LogsScreen({
     ({ section }: { section: { title: string; count: number } }) => (
       <View style={styles.yearHeader}>
         <Text style={styles.yearLabel}>{section.title}</Text>
-        <Text style={styles.yearCount}>
-          {section.count === 1 ? "1 trip" : `${section.count} trips`}
-        </Text>
+        <Text style={styles.yearCount}>{section.count}</Text>
       </View>
     ),
     [],
@@ -381,42 +389,31 @@ export function LogsScreen({
     setIncludeUnknowns(false);
   }, []);
 
-  const confirmDelete = useCallback(
-    (trip: MirrorTrip) => {
-      setMenuTripId(null);
-      Alert.alert(
-        "Delete this trip?",
-        "Deletes the log entry and its photos from this device and your account. Can't be undone.",
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Delete",
-            style: "destructive",
-            onPress: () => {
-              deleteTripLocal(trip.id)
-                .then(() => info("Trip deleted."))
-                .catch((err) => {
-                  console.error(err);
-                  fail("Couldn't delete this trip.");
-                });
-            },
-          },
-        ],
-      );
-    },
-    [fail, info],
-  );
-
-  if (query.loading && trips.length === 0) return <LoadingState />;
+  if (query.loading && trips.length === 0)
+    return <LoadingState label={TRIPS_LIST.copy.loading} />;
   if (query.error && trips.length === 0) {
     return <ErrorState message={query.error} onRetry={query.refresh} />;
   }
 
-  return (
-    <View style={styles.screen}>
+  const copy = TRIPS_LIST.copy;
+  const note = tripsFilterNote({
+    rangeLabel: rangeSet ? dateRangeLabel(dateFrom, dateTo) : null,
+    sheetFilterCount,
+    sort,
+  });
+  const emptyState = tripsEmptyState(tripsEmptyKind({ total: trips.length }), {
+    platform: "gps",
+    guest,
+  });
+
+  // The page, section by section, in the order its contract gives. Exhaustive
+  // by type: a section the contract names cannot be left out, and one it does
+  // not name cannot be drawn.
+  const sections: Record<SectionKeysOn<typeof TRIPS_LIST, "gps">, ReactNode> = {
+    hero: (
       <Hero
         eyebrow="Logbook"
-        title={trips.length === 1 ? "1 trip" : `${trips.length} trips`}
+        title={tripsHeroTitle(trips.length)}
         actions={
           <View style={styles.heroActions}>
             {/* The retrospective lives one tap away rather than on this screen:
@@ -432,14 +429,16 @@ export function LogsScreen({
             />
             <IconButton
               icon="search"
-              accessibilityLabel={findOpen ? "Hide search" : "Search trips"}
+              accessibilityLabel={findOpen ? copy.closeSearch : copy.search}
               color={filtering ? theme.accent : theme.textMuted}
               filled={filtering}
               onPress={() => (findOpen ? clearFind() : setFindOpen(true))}
             />
+            {/* One way in, so a button: Logjam Web's menu holds this and an
+                import (`TRIPS_ADD`). */}
             <Button
-              label="Log trip"
-              icon="add"
+              label={TRIPS_ADD.copy.add}
+              icon={TRIPS_ADD_ICON.add}
               compact
               onPress={() => setEditing({ trip: null })}
             />
@@ -457,9 +456,9 @@ export function LogsScreen({
                 style={styles.searchInput}
                 value={search}
                 onChangeText={setSearch}
-                placeholder="Place or trip name"
+                placeholder={copy.searchPlaceholder}
                 placeholderTextColor={theme.textMuted}
-                accessibilityLabel="Search by place or trip name"
+                accessibilityLabel={copy.searchField}
                 autoCapitalize="none"
                 autoFocus
                 returnKeyType="search"
@@ -467,7 +466,7 @@ export function LogsScreen({
             </View>
             <IconButton
               icon="filter"
-              accessibilityLabel="Sort and filter trips"
+              accessibilityLabel={TRIPS_FILTER_SHEET.title}
               color={sheetFilterCount > 0 ? theme.accent : theme.textMuted}
               filled={sheetFilterCount > 0}
               onPress={() => {
@@ -476,12 +475,12 @@ export function LogsScreen({
                 // and stops short of the bottom edge, leaving a stripe of the
                 // tab bar showing under it.
                 Keyboard.dismiss();
-                setDateMode("presets");
+                setSheetOpen(true);
               }}
             />
             <IconButton
               icon="close"
-              accessibilityLabel="Clear filters and close search"
+              accessibilityLabel={copy.closeSearch}
               onPress={clearFind}
             />
           </View>
@@ -499,13 +498,13 @@ export function LogsScreen({
             it is paired with what is waiting rather than with a warning. */}
         <SyncStatusPills online={online} pendingCount={pendingCount} />
       </Hero>
+    ),
 
+    typeRail: (
       <View style={styles.rail}>
         {selecting ? (
           <SelectionBar
-            countLabel={`${selectedItems.length} ${
-              selectedItems.length === 1 ? "trip" : "trips"
-            } selected`}
+            countLabel={listSelectionLabel(selectedItems.length)}
             showSelectAll={selectedItems.length < selectableItems.length}
             onClear={clearSelection}
             onSelectAll={selectAll}
@@ -520,28 +519,33 @@ export function LogsScreen({
           />
         )}
       </View>
+    ),
 
-      {rangeSet ? (
+    // The hidden filters, said out loud: the rail and the search box show
+    // their own state where they stand, so this speaks only for what the
+    // closed sheet is doing (DESIGN.md §2).
+    filterNote:
+      note != null && !selecting ? (
         <View style={styles.rangeNote}>
           <Text style={styles.rangeText} numberOfLines={1}>
-            {dateRangeLabel(dateFrom, dateTo)}
+            {note}
           </Text>
-          <IconButton
-            icon="close"
-            size={16}
-            accessibilityLabel="Clear the date range"
-            onPress={() => {
-              setDateFrom(null);
-              setDateTo(null);
-            }}
-          />
+          {sheetFilterCount > 0 ? (
+            <IconButton
+              icon="close"
+              size={16}
+              accessibilityLabel={copy.clearFilters}
+              onPress={clearSheetFilters}
+            />
+          ) : null}
         </View>
-      ) : null}
+      ) : null,
 
+    list: (
       <SectionList
         style={styles.list}
         contentContainerStyle={styles.listContent}
-        sections={sections}
+        sections={yearSections}
         keyExtractor={keyExtractor}
         // A logbook is append-only and long. The defaults keep roughly 21
         // screens of rows mounted, which for a few hundred trips means EVERY
@@ -567,7 +571,8 @@ export function LogsScreen({
         }
         ListEmptyComponent={
           <EmptyPanel
-            filtering={filtering || typeFilter !== ALL_TYPES}
+            state={emptyState}
+            filtering={filtering}
             onLogTrip={() => setEditing({ trip: null })}
             onClear={() => {
               clearFind();
@@ -578,191 +583,53 @@ export function LogsScreen({
         renderSectionHeader={renderSectionHeader}
         renderItem={renderItem}
       />
+    ),
+  };
 
-      {/* Per-trip actions, titled with the trip so a mis-tap can't destroy the
-          wrong one. */}
-      <BottomSheet
-        visible={menuTrip !== null}
+  return (
+    <View style={styles.screen}>
+      {contractSectionKeys(TRIPS_LIST, "gps").map((key) => (
+        <Fragment key={key}>{sections[key]}</Fragment>
+      ))}
+
+      <TripOptionsSheet
+        trip={menuTrip}
+        surface="row"
         onClose={() => setMenuTripId(null)}
-        title={menuTrip ? tripTitle(menuTrip) : ""}
-      >
-        {menuTrip ? (
-          <View style={styles.sheetBody}>
-            <Row
-              icon="trip"
-              title="Open trip"
-              onPress={() => {
-                const trip = menuTrip;
-                setMenuTripId(null);
-                onOpenTrip(trip);
-              }}
-            />
-            <Row
-              icon="edit"
-              title="Edit trip"
-              onPress={() => {
-                const trip = menuTrip;
-                setMenuTripId(null);
-                setEditing({ trip });
-              }}
-            />
-            <Row
-              icon="delete"
-              hue={theme.warning}
-              title="Delete trip"
-              onPress={() => confirmDelete(menuTrip)}
-            />
-          </View>
-        ) : null}
-      </BottomSheet>
+        onOpen={onOpenTrip}
+        onEdit={(trip) => setEditing({ trip })}
+        onInfo={info}
+        onError={fail}
+      />
 
-      {/* Date range: presets first (what people actually pick), with the
-          calendar as a mode of this same sheet rather than a second one. */}
-      <BottomSheet
-        visible={dateMode !== null}
-        // A calendar mode backs out to the presets, not out of the sheet.
-        onClose={() => setDateMode(dateMode === "presets" ? null : "presets")}
-        title={
-          dateMode === "from"
-            ? "From"
-            : dateMode === "to"
-              ? "To"
-              : "Sort and filter"
+      <LogsFilterSheet
+        visible={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+        sort={sort}
+        onChangeSort={setSort}
+        filterableDefs={filterableDefs}
+        customFilters={customFilters}
+        onChangeCustom={(key, next) =>
+          setCustomFilters((current) => {
+            const custom = { ...current };
+            // Absent rather than present-at-its-default, so "is this axis
+            // filtering" stays `key in custom` for every kind.
+            if (next == null) delete custom[key];
+            else custom[key] = next;
+            return custom;
+          })
         }
-        footer={
-          dateMode === "presets" ? (
-            <Button
-              label="Done"
-              icon="done"
-              onPress={() => setDateMode(null)}
-            />
-          ) : (
-            <Button
-              label="Clear this bound"
-              variant="outlineAccent"
-              onPress={() => {
-                if (dateMode === "from") setDateFrom(null);
-                else setDateTo(null);
-                setDateMode("presets");
-              }}
-            />
-          )
-        }
-      >
-        {dateMode === "presets" ? (
-          <View style={styles.sheetBody}>
-            <SectionHeader title="Sort" />
-            <View style={styles.presets}>
-              {TRIP_SORT_OPTIONS.map((option) => (
-                <Chip
-                  key={option.key}
-                  label={option.label}
-                  active={sort === option.key}
-                  onPress={() => setSort(option.key)}
-                />
-              ))}
-            </View>
-
-            {filterableDefs.length > 0 ? (
-              <>
-                {/* "Attributes", not "Fields": a field is the box, not the
-                    thing it records. Same control Places uses, drawn by the
-                    definition's SHAPE — a trip's "Rope length, 0-120" and a
-                    canyon's grade are the same question asked the same way. */}
-                <SectionHeader title="Attributes" />
-                {filterableDefs.map((def) => (
-                  <AttributeFilter
-                    key={def.key}
-                    def={def}
-                    value={customFilters[def.key] ?? null}
-                    onChange={(next) =>
-                      setCustomFilters((current) => {
-                        const custom = { ...current };
-                        // Absent rather than present-at-its-default, so "is this
-                        // axis filtering" stays `key in custom` for every kind.
-                        if (next == null) delete custom[def.key];
-                        else custom[def.key] = next;
-                        return custom;
-                      })
-                    }
-                  />
-                ))}
-                <SwitchRow
-                  title="Include trips missing this info"
-                  // It sits WITH the attributes because it only affects them:
-                  // most trips answer most fields not at all, so without the
-                  // choice one attribute filter empties the logbook and nothing
-                  // on screen says why.
-                  description="Most trips don't record every attribute, so filters would hide them."
-                  descriptionNumberOfLines={2}
-                  checked={includeUnknowns}
-                  onChange={setIncludeUnknowns}
-                />
-              </>
-            ) : null}
-
-            <SectionHeader title="Date range" />
-            <View style={styles.presets}>
-              {datePresets().map((preset) => (
-                <Chip
-                  key={preset.label}
-                  label={preset.label}
-                  active={dateFrom === preset.from && dateTo === preset.to}
-                  onPress={() => {
-                    setDateFrom(preset.from);
-                    setDateTo(preset.to);
-                  }}
-                />
-              ))}
-            </View>
-            <SectionHeader title="Exact range" />
-            <Row
-              icon="date"
-              title={
-                dateFrom
-                  ? formatDateKey(`${dateFrom}T00:00:00.000Z`)
-                  : "Any time"
-              }
-              subtitle="From"
-              onPress={() => setDateMode("from")}
-            />
-            <Row
-              icon="date"
-              title={
-                dateTo ? formatDateKey(`${dateTo}T00:00:00.000Z`) : "Today"
-              }
-              subtitle="To"
-              onPress={() => setDateMode("to")}
-            />
-
-            {sheetFilterCount > 0 ? (
-              <Button
-                label="Reset filters"
-                variant="outlineAccent"
-                onPress={clearSheetFilters}
-              />
-            ) : null}
-          </View>
-        ) : null}
-        {dateMode === "from" || dateMode === "to" ? (
-          <DatePicker
-            value={dateMode === "from" ? dateFrom : dateTo}
-            onChange={(key) => {
-              // Bounds are set independently, so `from` could be dragged
-              // past `to` — after which the predicate matches nothing and the
-              // list is empty with no explanation. Push the other bound along.
-              if (dateMode === "from") {
-                setDateFrom(key);
-                if (dateTo != null && key > dateTo) setDateTo(key);
-              } else {
-                setDateTo(key);
-                if (dateFrom != null && key < dateFrom) setDateFrom(key);
-              }
-              setDateMode("presets");
-            }}
-          />
-        ) : null}
-      </BottomSheet>
+        includeUnknowns={includeUnknowns}
+        onChangeIncludeUnknowns={setIncludeUnknowns}
+        dateFrom={dateFrom}
+        dateTo={dateTo}
+        onChangeDates={(from, to) => {
+          setDateFrom(from);
+          setDateTo(to);
+        }}
+        onReset={clearSheetFilters}
+        activeCount={sheetFilterCount}
+      />
 
       <TripEditSheet
         online={online}
@@ -858,40 +725,37 @@ const TripRow = memo(function TripRow({
 });
 
 /** Per-state empty panel: nothing logged yet is a different problem from a
- * filter that excludes everything, and each has its own way out. */
+ * filter that excludes everything, and each has its own way out. What each
+ * says is `tripsEmptyState` in `@logjam/shared`. */
 function EmptyPanel({
+  state,
   filtering,
   onLogTrip,
   onClear,
 }: {
+  state: ReturnType<typeof tripsEmptyState>;
   filtering: boolean;
   onLogTrip: () => void;
   onClear: () => void;
 }) {
   return (
     <View style={styles.empty}>
-      <Icon
-        idea={filtering ? "filter" : "trip"}
-        size={28}
-        color={withAlpha(theme.accent, 0.8)}
-      />
-      <Text style={styles.emptyTitle}>
-        {filtering ? "No trips match" : "Your logbook is empty"}
-      </Text>
-      <Text style={styles.emptyBody}>
-        {filtering
-          ? "Nothing matches these filters. Widen or clear them to see the rest."
-          : "Log a trip and it lands here. Readable offline."}
-      </Text>
-      {filtering ? (
+      <Icon idea={state.icon} size={28} color={withAlpha(theme.accent, 0.8)} />
+      <Text style={styles.emptyTitle}>{state.title}</Text>
+      <Text style={styles.emptyBody}>{state.body}</Text>
+      {state.action === "add" ? (
         <Button
-          label="Clear filters"
+          label={TRIPS_ADD.copy.add}
+          icon={TRIPS_ADD_ICON.add}
+          onPress={onLogTrip}
+        />
+      ) : filtering || state.action === "clear" ? (
+        <Button
+          label={TRIPS_LIST.copy.clearFilters}
           variant="outlineAccent"
           onPress={onClear}
         />
-      ) : (
-        <Button label="Log your first trip" icon="add" onPress={onLogTrip} />
-      )}
+      ) : null}
     </View>
   );
 }

@@ -19,7 +19,12 @@ import {
   placeVerbIds,
   placeVerbs,
   SCREEN_CONTRACTS,
+  listSelectionLabel,
   tripDeleteConfirm,
+  tripsEmptyKind,
+  tripsEmptyState,
+  tripsFilterNote,
+  tripsHeroTitle,
   tripVerbs,
 } from "./index.js";
 
@@ -305,5 +310,43 @@ describe("a trip's verbs", () => {
       confirmBody:
         "Their photos, videos and tracks go too. The places they link to stay. This can't be undone.",
     });
+  });
+});
+
+describe("the logbook", () => {
+  it("answers the hero's question with the logbook's size", () => {
+    expect(tripsHeroTitle(0)).toBe("No trips yet");
+    expect(tripsHeroTitle(1)).toBe("1 trip");
+    expect(tripsHeroTitle(127)).toBe("127 trips");
+  });
+
+  it("announces a range, other hidden filters, then a sort that is not the default", () => {
+    const note = (
+      rangeLabel: string | null,
+      sheetFilterCount: number,
+      sort: "newest" | "oldest",
+    ) => tripsFilterNote({ rangeLabel, sheetFilterCount, sort });
+    expect(note(null, 0, "newest")).toBeNull();
+    expect(note("This year", 1, "newest")).toBe("This year");
+    expect(note("This year", 3, "newest")).toBe("This year · 2 filters active");
+    expect(note(null, 1, "oldest")).toBe("1 filter active · Oldest first");
+    expect(note(null, 0, "oldest")).toBe("Oldest first");
+  });
+
+  it("tells an empty logbook from a tight filter, and never promises a guest an import", () => {
+    expect(tripsEmptyKind({ total: 0 })).toBe("firstRun");
+    expect(tripsEmptyKind({ total: 5 })).toBe("filtered");
+    const guest = tripsEmptyState("firstRun", { platform: "gps", guest: true });
+    expect(guest.body).not.toMatch(/import|sync/i);
+    expect(tripsEmptyState("firstRun", { platform: "web" }).body).toContain(
+      "Logjam GPS",
+    );
+    expect(tripsEmptyState("filtered", { platform: "gps" }).action).toBe(
+      "clear",
+    );
+  });
+
+  it("counts a selection the same on every list", () => {
+    expect(listSelectionLabel(3)).toBe("3 selected");
   });
 });
