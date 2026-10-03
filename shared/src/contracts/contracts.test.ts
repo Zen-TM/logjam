@@ -19,6 +19,8 @@ import {
   placeVerbIds,
   placeVerbs,
   SCREEN_CONTRACTS,
+  tripDeleteConfirm,
+  tripVerbs,
 } from "./index.js";
 
 describe("every screen contract", () => {
@@ -272,5 +274,36 @@ describe("a place's page", () => {
     expect(placeStatusLabel("done", 1)).toBe("Visited · 1 trip");
     expect(placeStatusLabel("done", 3)).toBe("Visited · 3 trips");
     expect(placeStatusLabel("shared", 0)).toBe("Shared");
+  });
+});
+
+describe("a trip's verbs", () => {
+  // Red when a surface withholds a verb: a trip in the logbook is not a lesser
+  // object than one opened on its page.
+  it("gives the row and the page the same verbs, bar Open", () => {
+    const row = tripVerbs("row").map((verb) => verb.id);
+    expect(row[0]).toBe("open");
+    expect(tripVerbs("page").map((verb) => verb.id)).toEqual(row.slice(1));
+  });
+
+  it("marks only Delete destructive, below the rule", () => {
+    const verbs = tripVerbs("row");
+    expect(verbs.filter((verb) => verb.danger).map((verb) => verb.id)).toEqual([
+      "delete",
+    ]);
+    expect(verbs.find((verb) => verb.id === "delete")?.separated).toBe(true);
+  });
+
+  it("says what goes and what stays, for one trip or many", () => {
+    expect(tripDeleteConfirm(1)).toEqual({
+      confirmTitle: "Delete this trip?",
+      confirmBody:
+        "Its photos, videos and tracks go too. The places it links to stay. This can't be undone.",
+    });
+    expect(tripDeleteConfirm(3)).toEqual({
+      confirmTitle: "Delete 3 trips?",
+      confirmBody:
+        "Their photos, videos and tracks go too. The places they link to stay. This can't be undone.",
+    });
   });
 });
