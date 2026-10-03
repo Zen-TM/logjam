@@ -132,7 +132,7 @@ export function DisplaySettingsScreen() {
   return (
     <>
       <ScreenScroll>
-        <SectionHeader label="Theme" />
+        <SectionHeader title="Theme" />
         <View style={styles.schemes}>
           {THEME_SCHEME_ORDER.map((id) => (
             <SchemeCard

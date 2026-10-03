@@ -39,10 +39,10 @@ import {
 import {
   BottomSheet,
   Button,
-  CapacityBar,
+  Meter,
   ErrorBanner,
   ErrorState,
-  HeroHeader,
+  Hero,
   IconButton,
   LoadingState,
   Row,
@@ -98,16 +98,16 @@ function GuestAccountScreen({ onBack }: { onBack: () => void }) {
 
   return (
     <View style={styles.root}>
-      <HeroHeader eyebrow="Account" title="No account" onBack={onBack}>
+      <Hero eyebrow="Account" title="No account" onBack={onBack}>
         <Text style={styles.email}>
           {summary
             ? `${summary} on this phone`
             : "Everything you record stays on this phone"}
         </Text>
-      </HeroHeader>
+      </Hero>
 
       <ScreenScroll padded={false} contentStyle={styles.body}>
-        <SectionHeader label="With an account" />
+        <SectionHeader title="With an account" />
         <Row
           icon="sync"
           title="Backed up"
@@ -124,7 +124,7 @@ function GuestAccountScreen({ onBack }: { onBack: () => void }) {
           subtitle="Import topos from Logjam Web"
         />
 
-        <SectionHeader label="Get an account" />
+        <SectionHeader title="Get an account" />
         <Button
           label="Sign in or create an account"
           icon="addFriend"
@@ -216,11 +216,11 @@ function LinkedAccountScreen({
 
   return (
     <View style={styles.root}>
-      <HeroHeader
+      <Hero
         eyebrow="Account"
         title={user.username}
         onBack={onBack}
-        action={
+        actions={
           <IconButton
             icon="edit"
             accessibilityLabel="Change username"
@@ -231,18 +231,18 @@ function LinkedAccountScreen({
         }
       >
         <Text style={styles.email}>{user.email}</Text>
-      </HeroHeader>
+      </Hero>
 
       <ScreenScroll padded={false} contentStyle={styles.body}>
         {/* Two quotas, same shape. `total` on a one-segment bar is exactly the
-            "used vs capacity" case CapacityBar's remainder track is for. */}
-        <SectionHeader label="Storage" />
-        <CapacityBar
+            "used vs capacity" case Meter's remainder track is for. */}
+        <SectionHeader title="Storage" />
+        <Meter
           segments={[
             {
               label: "Used",
               value: user.storageUsedBytes,
-              color: theme.accent,
+              hue: theme.accent,
               display: formatBytes(user.storageUsedBytes),
             },
           ]}
@@ -258,13 +258,13 @@ function LinkedAccountScreen({
           </Text>
         </Text>
 
-        <SectionHeader label="Processing credits this month" />
-        <CapacityBar
+        <SectionHeader title="Processing credits this month" />
+        <Meter
           segments={[
             {
               label: "Used",
               value: user.monthlyComputeUsage,
-              color: assetHue.overlay,
+              hue: assetHue.overlay,
               display: formatCredits(user.monthlyComputeUsage),
             },
           ]}
@@ -280,7 +280,7 @@ function LinkedAccountScreen({
           <Text style={styles.meterHint}> · topo, exports and GeoPDFs</Text>
         </Text>
 
-        <SectionHeader label="Sign-in" />
+        <SectionHeader title="Sign-in" />
         <Row
           icon="email"
           title="Email"
@@ -297,7 +297,7 @@ function LinkedAccountScreen({
           right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
         />
 
-        <SectionHeader label="Leaving" />
+        <SectionHeader title="Leaving" />
         <Button
           label="Sign out"
           variant="outlineAccent"

@@ -70,16 +70,16 @@ import {
   EmptyState,
   ErrorBanner,
   ErrorState,
-  HeroHeader,
+  Hero,
   IconButton,
   LoadingState,
   Row,
-  SegmentedControl,
+  ChipRail,
   SelectionBar,
   SelectionMark,
   Toast,
   useBulkSelection,
-  type SegmentOption,
+  type ChipOption,
   type ToastMessage,
 } from "../ui";
 import { BulkShareButton, BulkShareSheet } from "./BulkShareSheet";
@@ -435,7 +435,7 @@ export function FriendSharesScreen({
   if (guestBlock) {
     return (
       <View style={styles.root}>
-        <HeroHeader eyebrow="Sharing" title={username} onBack={onBack} />
+        <Hero eyebrow="Sharing" title={username} onBack={onBack} />
         <EmptyState title={guestBlock.title} hint={guestBlock.hint} />
       </View>
     );
@@ -447,7 +447,7 @@ export function FriendSharesScreen({
 
   const theirCount = shares.sharedWithThem.length;
   const yourCount = shares.sharedWithYou.length;
-  const directions: SegmentOption<FriendShareDirection>[] = [
+  const directions: ChipOption<FriendShareDirection>[] = [
     { value: "theySee", label: "You share", count: theirCount },
     {
       value: "youSee",
@@ -459,7 +459,7 @@ export function FriendSharesScreen({
 
   return (
     <View style={styles.root}>
-      <HeroHeader
+      <Hero
         eyebrow="Sharing"
         title={username}
         onBack={onBack}
@@ -526,7 +526,7 @@ export function FriendSharesScreen({
             }}
           />
         ) : (
-          <SegmentedControl
+          <ChipRail
             options={directions}
             value={direction}
             onChange={changeDirection}
@@ -828,7 +828,7 @@ function ShareCardMenu({
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.page },
-  // Both children are SEGMENTED_CONTROL_HEIGHT tall by construction, which is
+  // Both children are CHIP_RAIL_HEIGHT tall by construction, which is
   // what keeps the list still when the bar swaps in (DESIGN.md §7).
   rail: {
     paddingHorizontal: spacing(2),

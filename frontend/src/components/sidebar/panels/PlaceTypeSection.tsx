@@ -14,7 +14,6 @@ import {
 } from "../../../placeUtils";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
 import { messageFromError } from "../../../errors/messageFromError";
-import { ErrorBanner } from "../../feedback/ErrorBanner";
 import {
   Button,
   Dialog,
@@ -27,6 +26,8 @@ import {
   Select,
   SwatchPicker,
   TextField,
+  ErrorBanner,
+  LoadingState,
 } from "../../../ui";
 import classes from "./ListPage.module.css";
 import { placeTypeLucideIcon } from "./placeTypeIcon";
@@ -137,7 +138,7 @@ function PlaceTypeSection({
 
       <div className={classes.list}>
         {loading ? (
-          <p className={classes.state}>Loading…</p>
+          <LoadingState />
         ) : (
           <>
             {own.length > 0 && (

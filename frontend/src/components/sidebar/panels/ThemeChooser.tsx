@@ -1,6 +1,5 @@
 import { useThemePreferences } from "../../../themePreferences";
-import { SectionHeader, Icon } from "../../../ui";
-import { ErrorBanner } from "../../feedback/ErrorBanner";
+import { SectionHeader, Icon, ErrorBanner, LoadingState } from "../../../ui";
 import classes from "./ThemeChooser.module.css";
 
 /**
@@ -26,7 +25,7 @@ function ThemeChooser() {
       <SectionHeader title="Theme" />
       {error && <ErrorBanner message={error} />}
       {isHydrating ? (
-        <p className={classes.state}>Loading your saved theme…</p>
+        <LoadingState label="Loading your saved theme…" />
       ) : (
         <div className={classes.group} role="radiogroup" aria-label="Theme">
           {schemes.map((scheme) => {

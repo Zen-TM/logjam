@@ -5,7 +5,7 @@
 // full display/management split.
 //
 // LAYOUT (the reference implementation of mobile/DESIGN.md):
-//   HeroHeader — storage headline + a CapacityBar breaking it down by asset
+//   Hero — storage headline + a Meter breaking it down by asset
 //     kind. One "Add" affordance opens the acquisition sheet, so the screen
 //     body is purely what is already here.
 //   Filter rail — categories with tallies; "All" is a flat size-descending
@@ -93,21 +93,21 @@ import {
 import {
   BottomSheet,
   Button,
-  CapacityBar,
-  HeroHeader,
+  Meter,
+  Hero,
   IconButton,
   RenameForm,
   Row,
   SectionHeader,
-  SegmentedControl,
+  ChipRail,
   SelectionBar,
   SelectionMark,
   StatusPill,
   SyncStatusPills,
   TextField,
   Toast,
-  type CapacitySegment,
-  type SegmentOption,
+  type MeterSegment,
+  type ChipOption,
   type ToastMessage,
   Icon,
 } from "../ui";
@@ -1256,21 +1256,21 @@ export function SavedScreen({
   };
   for (const item of items) counts[item.category] += 1;
 
-  const segments: CapacitySegment[] = CATEGORY_ORDER.map((category) => {
+  const segments: MeterSegment[] = CATEGORY_ORDER.map((category) => {
     const bytes = items
       .filter((item) => item.category === category)
       .reduce((sum, item) => sum + item.sizeBytes, 0);
     return {
       label: CATEGORY_META[category].plural,
       value: bytes,
-      color: assetHue[category],
+      hue: assetHue[category],
       display: formatBytes(bytes),
     };
   });
 
   const usedBytes = segments.reduce((sum, segment) => sum + segment.value, 0);
 
-  const filterOptions: SegmentOption<Category | "all">[] = [
+  const filterOptions: ChipOption<Category | "all">[] = [
     { value: "all", label: "All", count: items.length },
     ...CATEGORY_ORDER.map((category) => ({
       value: category,
@@ -1634,14 +1634,14 @@ export function SavedScreen({
 
   return (
     <View style={styles.screen}>
-      <HeroHeader
+      <Hero
         eyebrow="Saved for offline use"
         title="On this device"
         value={formatBytes(usedBytes)}
         valueSuffix={
           freeBytes != null ? `used · ${formatBytes(freeBytes)} free` : "used"
         }
-        action={
+        actions={
           <Button
             label="Add"
             icon="add"
@@ -1650,12 +1650,12 @@ export function SavedScreen({
           />
         }
       >
-        <CapacityBar segments={segments} />
+        <Meter segments={segments} />
         {/* Offline is a normal state here — everything already on the device
             still works — so it sits beside what is still waiting to leave
             rather than reading as an error. */}
         <SyncStatusPills online={online} pendingCount={pendingCount} />
-      </HeroHeader>
+      </Hero>
 
       {/* While picking, the contextual bar TAKES ONLY THE SEGMENTED CONTROL'S
           slot (item 15) — it used to replace the whole rail, search field and
@@ -1687,7 +1687,7 @@ export function SavedScreen({
             onDelete={deleteSelected}
           />
         ) : (
-          <SegmentedControl
+          <ChipRail
             options={filterOptions}
             value={filter}
             onChange={selectFilter}
@@ -2013,7 +2013,7 @@ export function SavedScreen({
             stays an inventory of what is actually here. */}
         {filter === "overlay" && downloadableJobs.length > 0 ? (
           <>
-            <SectionHeader label="Available to download" />
+            <SectionHeader title="Available to download" />
             {downloadableJobs.map((job) => (
               // The same key a downloaded topo's row carries, so a "LiDAR map
               // ready" notification points at the job whichever side of the
@@ -2054,7 +2054,7 @@ export function SavedScreen({
         accountJobs != null &&
         accountJobs.length > 0 ? (
           <>
-            <SectionHeader label="In your Logjam account" />
+            <SectionHeader title="In your Logjam account" />
             {accountJobs.map((job) => (
               // Keyed by the JOB id, which is what a "GeoPDF ready"
               // notification carries. Once imported the row is a local import
@@ -2357,7 +2357,7 @@ export function SavedScreen({
                   delete, so one map can go without losing the rest. */}
               {menuItem.members && menuItem.members.length > 1 ? (
                 <>
-                  <SectionHeader label="Includes" />
+                  <SectionHeader title="Includes" />
                   {menuItem.members.map((member) => (
                     <Row
                       key={member.id}

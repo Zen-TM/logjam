@@ -83,3 +83,19 @@
   flex: none;
   color: var(--color-accent);
 }
+
+.notice[data-tone="warning"] {
+  box-shadow:
+    var(--shadow-float),
+    inset 0 0 0 1px var(--color-warning);
+}
+
+.notice[data-tone="warning"] .noticeGlyph {
+  color: var(--color-warning);
+}
+
+/* Centred means centred: a notice that wraps keeps its words in the middle of
+   itself, not only itself in the middle of the screen. */
+.noticeText {
+  text-align: center;
+}

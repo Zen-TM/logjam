@@ -53,15 +53,15 @@ import {
   EmptyState,
   ErrorBanner,
   ErrorState,
-  HeroHeader,
+  Hero,
   IconButton,
   LoadingState,
   Row,
-  SegmentedControl,
+  ChipRail,
   StatusPill,
   TextField,
   Toast,
-  type SegmentOption,
+  type ChipOption,
   type ToastMessage,
 } from "../ui";
 
@@ -241,7 +241,7 @@ export function FriendsScreen({
   if (guestBlock) {
     return (
       <View style={styles.root}>
-        <HeroHeader eyebrow="Friends" title="Friends" onBack={onBack} />
+        <Hero eyebrow="Friends" title="Friends" onBack={onBack} />
         <EmptyState title={guestBlock.title} hint={guestBlock.hint} />
       </View>
     );
@@ -251,7 +251,7 @@ export function FriendsScreen({
   }
   if (friends === null) return <LoadingState />;
 
-  const buckets: SegmentOption<Bucket>[] = [
+  const buckets: ChipOption<Bucket>[] = [
     { value: "all", label: "All", count: friends.length + requests.length },
     {
       value: "friends",
@@ -270,13 +270,13 @@ export function FriendsScreen({
 
   return (
     <View style={styles.root}>
-      <HeroHeader
+      <Hero
         eyebrow="Friends"
         title={requests.length > 0 ? "Someone's waiting" : "Your people"}
         onBack={onBack}
         value={String(friends.length)}
         valueSuffix={friends.length === 1 ? "friend" : "friends"}
-        action={
+        actions={
           <Button
             label="Add"
             icon="addFriend"
@@ -288,7 +288,7 @@ export function FriendsScreen({
       />
 
       <View style={styles.rail}>
-        <SegmentedControl
+        <ChipRail
           options={buckets}
           value={bucket}
           onChange={setBucket}

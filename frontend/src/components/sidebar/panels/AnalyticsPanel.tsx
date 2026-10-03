@@ -32,6 +32,7 @@ import {
   StatGrid,
   type SparkBucket,
   Icon,
+  LoadingState,
 } from "../../../ui";
 import { placeTypeLucideIcon } from "./placeTypeIcon";
 import { tripTypeLook } from "./tripTypeIcon";
@@ -171,7 +172,7 @@ function AnalyticsPanel({
 
   const content = !loaded ? (
     <div className={classes.emptyArea} role="status">
-      <p className={classes.loading}>Reading your logbook…</p>
+      <LoadingState label="Reading your logbook…" />
     </div>
   ) : stats.trips === 0 ? (
     <div className={classes.emptyArea}>
