@@ -258,7 +258,7 @@ export function DraftToolPanel({
 
 const styles = StyleSheet.create({
   bar: {
-    backgroundColor: withAlpha(theme.primary, 0.94),
+    backgroundColor: withAlpha(theme.page, 0.94),
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: withAlpha(theme.accent, 0.4),
@@ -268,7 +268,7 @@ const styles = StyleSheet.create({
   },
   readoutRow: { flexDirection: "row", alignItems: "baseline", gap: spacing(1) },
   distance: {
-    color: theme.textPrimary,
+    color: theme.text,
     fontSize: fontSize.lg,
     fontWeight: fontWeight.bold,
     fontVariant: ["tabular-nums"],
@@ -298,7 +298,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  swatchSelected: { borderWidth: 2, borderColor: theme.textPrimary },
+  swatchSelected: { borderWidth: 2, borderColor: theme.text },
   // An IconButton's box, so the swatch sits on the same baseline as the
   // buttons beside it and keeps a full-size tap target around a small square.
   colorButton: {
@@ -316,7 +316,7 @@ const styles = StyleSheet.create({
     height: 22,
     borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: withAlpha(theme.textPrimary, 0.35),
+    borderColor: withAlpha(theme.text, 0.35),
   },
-  swatchTick: { color: theme.primary, fontWeight: "700" },
+  swatchTick: { color: theme.onFill, fontWeight: "700" },
 });

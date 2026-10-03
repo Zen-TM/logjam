@@ -575,7 +575,7 @@ function AttachmentTile({
 }) {
   const category = mediaCategory(item.mediaType);
   const hasThumb = category !== null && categoryHasThumbnail(category);
-  const tint = item.color ?? theme.bonus1;
+  const tint = item.color ?? theme.neutral;
   return (
     <Pressable
       accessibilityRole="imagebutton"
@@ -605,7 +605,7 @@ function AttachmentTile({
       )}
       {category === "video" ? (
         <View style={styles.playBadge}>
-          <Icon idea="play" size={12} color={theme.textPrimary} />
+          <Icon idea="play" size={12} color={theme.text} />
         </View>
       ) : null}
       {item.syncState === "pendingUpload" ? (
@@ -647,7 +647,7 @@ const styles = StyleSheet.create({
     width: TILE_SIZE,
     height: TILE_SIZE,
     borderRadius: radius.lg,
-    backgroundColor: theme.bonus2,
+    backgroundColor: theme.cardPressed,
   },
   glyphTile: {
     alignItems: "center",
@@ -679,7 +679,7 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: radius.lg,
   },
   pendingBadgeText: {
-    color: theme.textPrimary,
+    color: theme.text,
     fontSize: fontSize.xs,
     textAlign: "center",
   },

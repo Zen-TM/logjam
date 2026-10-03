@@ -1,6 +1,6 @@
 import { StyleSheet, View, type ViewStyle } from "react-native";
 
-import { radius, spacing, surface } from "../theme";
+import { radius, spacing, theme } from "../theme";
 
 // Rounded warm surface for grouped content — place/list rows, layer-sheet
 // rows, stat panels. One card look so every screen matches.
@@ -16,9 +16,9 @@ export function Card({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: surface.card,
+    backgroundColor: theme.card,
     borderWidth: 1,
-    borderColor: surface.border,
+    borderColor: theme.line,
     borderRadius: radius.md,
     padding: spacing(1.5),
   },

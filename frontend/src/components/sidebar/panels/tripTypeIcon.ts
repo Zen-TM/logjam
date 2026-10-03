@@ -31,9 +31,9 @@ export function tripTypeLook(type: string | null | undefined): {
     icon: TRIP_TYPE_ICONS[icon],
     hue:
       hue === "accent"
-        ? "var(--theme-accent)"
+        ? "var(--color-accent)"
         : hue === "untyped"
-          ? "var(--theme-bonus-1)"
+          ? "var(--color-neutral)"
           : hue,
   };
 }

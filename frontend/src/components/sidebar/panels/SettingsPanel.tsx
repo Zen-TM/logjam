@@ -214,7 +214,7 @@ function SettingsPanel({
           downwards meets the categories, then what each one records. */}
       <SectionHeader title="Your own categories" />
       <Row
-        leading={<IconTile icon="place" hue="var(--theme-accent)" />}
+        leading={<IconTile icon="place" hue="var(--color-accent)" />}
         title="Place types"
         subtitle={ownTypeCountLabel(placeTypes)}
         trailing={<Icon idea="disclosure" size={18} aria-hidden />}
@@ -223,14 +223,14 @@ function SettingsPanel({
 
       <SectionHeader title={`Your own ${ATTRIBUTE_NOUN.many}`} />
       <Row
-        leading={<IconTile icon="tag" hue="var(--theme-accent)" />}
+        leading={<IconTile icon="tag" hue="var(--color-accent)" />}
         title="Trip attributes"
         subtitle={attributeCountLabel(customFieldDefs)}
         trailing={<Icon idea="disclosure" size={18} aria-hidden />}
         onOpen={() => setPage("tripAttributes")}
       />
       <Row
-        leading={<IconTile icon="tag" hue="var(--theme-accent)" />}
+        leading={<IconTile icon="tag" hue="var(--color-accent)" />}
         title="Place attributes"
         subtitle={attributeCountLabel(placeCustomFieldDefs)}
         trailing={<Icon idea="disclosure" size={18} aria-hidden />}

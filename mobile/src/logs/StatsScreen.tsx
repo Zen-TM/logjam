@@ -538,7 +538,7 @@ function RowMetric({ value, suffix }: { value: string; suffix: string }) {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: theme.primary },
+  screen: { flex: 1, backgroundColor: theme.page },
   // `ScreenScroll` gaps its own direct children; a section wrapping several
   // rows has to repeat that or its rows sit flush against each other.
   section: { gap: spacing(1) },
@@ -557,7 +557,7 @@ const styles = StyleSheet.create({
     marginTop: spacing(0.25),
   },
   rowValue: {
-    color: theme.textPrimary,
+    color: theme.text,
     fontSize: fontSize.base,
     fontWeight: fontWeight.medium,
   },
@@ -568,14 +568,14 @@ const styles = StyleSheet.create({
     alignItems: "baseline",
     marginBottom: spacing(0.5),
   },
-  meterName: { color: theme.textPrimary, fontSize: fontSize.sm },
+  meterName: { color: theme.text, fontSize: fontSize.sm },
   meterValue: { color: theme.textMuted, fontSize: fontSize.xs },
   meterTrack: {
     flexDirection: "row",
     height: 8,
     borderRadius: 4,
     overflow: "hidden",
-    backgroundColor: withAlpha(theme.textPrimary, 0.08),
+    backgroundColor: withAlpha(theme.text, 0.08),
   },
   meterFill: { borderRadius: 4 },
 });

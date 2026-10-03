@@ -186,7 +186,7 @@ function AccountPanel({
                 in place. The same verb, the same glyph and the same position
                 as the username's, two rows above it. */}
             <Row
-              leading={<IconTile icon="email" hue="var(--theme-accent)" />}
+              leading={<IconTile icon="email" hue="var(--color-accent)" />}
               title="Email"
               subtitle={email ?? undefined}
               trailing={
@@ -213,7 +213,7 @@ function AccountPanel({
               Sign out
             </Button>
             <Row
-              leading={<IconTile icon="delete" hue="var(--theme-warning)" />}
+              leading={<IconTile icon="delete" hue="var(--color-warning)" />}
               title="Delete account"
               onOpen={() => setDeleteAccountOpen(true)}
             />

@@ -21,17 +21,17 @@
 .meterLabel {
   margin: 0;
   font-size: var(--font-sm);
-  color: var(--theme-text-primary);
+  color: var(--color-text);
 }
 
 .meterHint {
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 .state {
   margin: 0;
   font-size: var(--font-sm);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 .form {

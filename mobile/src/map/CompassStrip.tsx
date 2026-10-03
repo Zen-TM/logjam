@@ -121,7 +121,7 @@ export function CompassStrip({
 
 const styles = StyleSheet.create({
   frame: {
-    backgroundColor: withAlpha(theme.primary, 0.92),
+    backgroundColor: withAlpha(theme.page, 0.92),
     borderWidth: 1,
     borderColor: withAlpha(theme.accent, 0.7),
     borderRadius: radius.md,
@@ -142,14 +142,14 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingVertical: spacing(0.375),
   },
-  markMajor: { width: 1.5, height: 6, backgroundColor: theme.textPrimary },
+  markMajor: { width: 1.5, height: 6, backgroundColor: theme.text },
   markMinor: {
     width: 1,
     height: 3,
-    backgroundColor: withAlpha(theme.textPrimary, 0.6),
+    backgroundColor: withAlpha(theme.text, 0.6),
   },
   label: {
-    color: theme.textPrimary,
+    color: theme.text,
     fontSize: fontSize.xs,
     fontWeight: fontWeight.medium,
     fontVariant: ["tabular-nums"],
@@ -158,7 +158,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: spacing(0.5),
     bottom: spacing(0.25),
-    color: withAlpha(theme.textPrimary, 0.7),
+    color: withAlpha(theme.text, 0.7),
     fontSize: fontSize.xs,
     fontWeight: fontWeight.medium,
   },

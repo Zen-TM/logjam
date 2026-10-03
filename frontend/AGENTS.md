@@ -5,9 +5,15 @@
 - **Read `DESIGN.md` before building or reshaping a screen,** and compose the
   `src/ui` kit; a screen that needs something the kit lacks adds it to the kit.
   `components/sidebar/panels/PlacesPanel.tsx` is the reference page.
-- **Every colour, size, radius, transition and text size is a custom property
-  in `src/index.css`,** never a hex or px literal. CSS Modules only; no inline
-  `style` except to set a custom property the kit reads.
+- **Every colour, space, size, radius, transition and text size is a custom
+  property,** never a hex or px literal. The tokens are generated from
+  `@logjam/shared` into `src/tokens.generated.css` (`npm run tokens`; never
+  edit it); Logjam Web's own layout values are in `src/index.css`. A px literal
+  is allowed only for a 1–2px border or offset, the 768px breakpoint, and an
+  intrinsic size marked `/* intrinsic … */` (a 36×4 grab handle).
+  `src/pxBudget.test.ts` holds the screens to a budget that only shrinks.
+  CSS Modules only; no inline `style` except to set a custom property the kit
+  reads.
 - **A new foreground/background colour pair joins `scripts/wcag-contrast.mjs`**
   in the same change, measured on the surface it renders on; `KNOWN_FAILURES`
   only shrinks.

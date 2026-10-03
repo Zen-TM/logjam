@@ -13,6 +13,7 @@
 // subtle — the panels went a long time swallowing every touch outside the
 // selection, which left the map draggable only through the bright rectangle and
 // read as the screen being half frozen.
+import { MAP_INK } from "@logjam/shared";
 import { useEffect, useMemo, useRef } from "react";
 import { PanResponder, PixelRatio, StyleSheet, View } from "react-native";
 
@@ -274,7 +275,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     backgroundColor: theme.accent,
     borderWidth: 1,
-    borderColor: withAlpha(theme.textPrimary, 0.6),
+    borderColor: withAlpha(MAP_INK.label, 0.6),
   },
   barV: {
     width: BAR_THICKNESS,
@@ -282,6 +283,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     backgroundColor: theme.accent,
     borderWidth: 1,
-    borderColor: withAlpha(theme.textPrimary, 0.6),
+    borderColor: withAlpha(MAP_INK.label, 0.6),
   },
 });

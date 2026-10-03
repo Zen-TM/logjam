@@ -1,6 +1,6 @@
 /* The north half of the map's compass needle, filled. Warning is the scheme's
    red, measured on the map button's `primary` as text (scripts/wcag-contrast.mjs). */
 .needleNorth {
-  fill: var(--theme-warning);
-  stroke: var(--theme-warning);
+  fill: var(--color-warning);
+  stroke: var(--color-warning);
 }

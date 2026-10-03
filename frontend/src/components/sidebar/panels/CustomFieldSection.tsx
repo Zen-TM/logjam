@@ -131,7 +131,7 @@ function CustomFieldSection({
             {own.map((def) => (
               <Row
                 key={def.key}
-                leading={<IconTile icon="tag" hue="var(--theme-accent)" />}
+                leading={<IconTile icon="tag" hue="var(--color-accent)" />}
                 title={customFieldDisplayLabel(def)}
                 subtitle={rowSubtitle(def, placeTypes)}
                 description={`Opens this ${ATTRIBUTE_NOUN.one} for editing`}
@@ -181,7 +181,7 @@ function CustomFieldSection({
                   <Row
                     key={def.key}
                     leading={
-                      <IconTile icon="private" hue="var(--theme-bonus-2)" />
+                      <IconTile icon="private" hue="var(--color-neutral)" />
                     }
                     title={customFieldDisplayLabel(def)}
                     subtitle={rowSubtitle(def, placeTypes)}

@@ -592,7 +592,7 @@ function EmptyPanel({ bucket, onAdd }: { bucket: Bucket; onAdd: () => void }) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: theme.primary },
+  root: { flex: 1, backgroundColor: theme.page },
   rail: {
     paddingHorizontal: spacing(2),
     paddingTop: spacing(1.5),
@@ -614,7 +614,7 @@ const styles = StyleSheet.create({
     gap: spacing(1.5),
     paddingVertical: spacing(6),
   },
-  emptyTitle: { color: theme.textPrimary, fontSize: fontSize.base },
+  emptyTitle: { color: theme.text, fontSize: fontSize.base },
   emptyHint: {
     color: theme.textMuted,
     fontSize: fontSize.sm,

@@ -24,7 +24,7 @@
     linear-gradient(var(--swatch), var(--swatch)),
     repeating-conic-gradient(#888 0% 25%, #ccc 0% 50%) 0 0 / 8px 8px;
   box-shadow: inset 0 0 0 1.5px
-    color-mix(in srgb, var(--theme-text-muted) 60%, transparent);
+    color-mix(in srgb, var(--color-text-muted) 60%, transparent);
 }
 
 .trigger:disabled {
@@ -35,13 +35,13 @@
 /* Sized to the picker, not to the Layers list the kit's Popover is sized for. */
 .popover {
   width: max-content;
-  padding: 12px;
+  padding: var(--space-1-5);
 }
 
 .picker {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--space-1);
   width: 200px;
 }
 
@@ -88,7 +88,7 @@
 
 .plane:focus-visible,
 .strip:focus-visible {
-  outline: 2px solid var(--theme-text-primary);
+  outline: 2px solid var(--color-text);
   outline-offset: 2px;
 }
 

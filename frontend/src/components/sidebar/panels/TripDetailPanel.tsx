@@ -242,7 +242,7 @@ function TripDetailPanel({
                 <Row
                   key={place.id}
                   title={place.name}
-                  leading={<IconTile icon="place" hue="var(--theme-accent)" />}
+                  leading={<IconTile icon="place" hue="var(--color-accent)" />}
                   onOpen={() => onOpenPlace(place.id)}
                 />
               ))

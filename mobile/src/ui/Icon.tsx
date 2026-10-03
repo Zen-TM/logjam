@@ -37,7 +37,7 @@ export type Glyph = IconIdea | { picked: FeatherName };
 export function Icon({
   idea,
   size = 20,
-  color = theme.textPrimary,
+  color = theme.text,
   label,
   style,
 }: {

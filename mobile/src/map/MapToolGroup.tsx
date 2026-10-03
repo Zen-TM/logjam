@@ -132,7 +132,7 @@ export function MapToolGroup({
             ]}
             onPress={() => onPickTool(tool.id)}
           >
-            <Icon idea={tool.icon} size={FAB_ICON} color={theme.textPrimary} />
+            <Icon idea={tool.icon} size={FAB_ICON} color={theme.text} />
           </Pressable>
         </Animated.View>
       ))}
@@ -151,7 +151,7 @@ export function MapToolGroup({
         <Icon
           idea={open ? "close" : "add"}
           size={FAB_ICON}
-          color={theme.textPrimary}
+          color={theme.text}
         />
       </Pressable>
     </View>
@@ -190,7 +190,7 @@ const styles = StyleSheet.create({
     width: FAB_SIZE,
     height: FAB_SIZE,
     borderRadius: FAB_SIZE / 2,
-    backgroundColor: theme.secondary,
+    backgroundColor: theme.card,
     alignItems: "center",
     justifyContent: "center",
   },

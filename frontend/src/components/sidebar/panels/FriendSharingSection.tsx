@@ -83,7 +83,7 @@ const KIND_IDENTITY: Record<
   place: { icon: "place", hue: "var(--hue-shared)" },
   route: { icon: "route", hue: "var(--hue-route)" },
   topoJob: { icon: "lidar", hue: "var(--hue-overlay)" },
-  geoPdfJob: { icon: "geoPdf", hue: "var(--hue-geoPdf)" },
+  geoPdfJob: { icon: "geoPdf", hue: "var(--hue-geo-pdf)" },
 };
 
 /* CONFIRMATION SCALES WITH BLAST RADIUS × COST OF RECOVERY, which is why the

@@ -222,7 +222,7 @@ function SelectedPlacesDialog({
                     icon="place"
                     hue={
                       ownedPlaceIds.has(place.id)
-                        ? "var(--theme-accent)"
+                        ? "var(--color-accent)"
                         : "var(--hue-shared)"
                     }
                   />
@@ -259,7 +259,7 @@ function SelectedPlacesDialog({
             {placeSearchResults.map((place) => (
               <Row
                 key={place.id}
-                leading={<IconTile icon="add" hue="var(--theme-bonus-1)" />}
+                leading={<IconTile icon="add" hue="var(--color-neutral)" />}
                 title={place.name}
                 subtitle={
                   place.altNames.length > 0

@@ -1,7 +1,19 @@
 import { ActivityIndicator, Pressable, StyleSheet, Text } from "react-native";
 
-import { fontSize, fontWeight, radius, spacing, theme } from "../theme";
+import {
+  controlSize,
+  fontSize,
+  fontWeight,
+  radius,
+  spacing,
+  theme,
+  touchTargetMin,
+} from "../theme";
 import { Icon, type Glyph } from "./Icon";
+
+// A compact button is drawn at `controlSize.md`; the slop takes its target to
+// the 48pt minimum.
+const COMPACT_SLOP = (touchTargetMin - controlSize.md) / 2;
 
 type ButtonVariant = "filledAccent" | "outlineAccent" | "ghost";
 
@@ -37,12 +49,15 @@ export function Button({
   grow = false,
 }: ButtonProps) {
   const inactive = disabled || loading;
-  const tint = variant === "filledAccent" ? theme.primary : theme.accent;
+  // Words are never an intent colour: an outline button's label is the text
+  // colour and its EDGE is the accent, as on Logjam Web.
+  const tint = variant === "filledAccent" ? theme.onFill : theme.text;
   return (
     <Pressable
       accessibilityRole="button"
       onPress={onPress}
       disabled={inactive}
+      hitSlop={compact ? COMPACT_SLOP : undefined}
       style={({ pressed }) => [
         styles.base,
         compact && styles.compact,
@@ -83,12 +98,12 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     paddingVertical: spacing(1.5),
     paddingHorizontal: spacing(2),
-    minHeight: 44,
+    minHeight: controlSize.lg,
   },
   compact: {
     paddingVertical: spacing(0.75),
     paddingHorizontal: spacing(1.5),
-    minHeight: 36,
+    minHeight: controlSize.md,
   },
   grow: { flex: 1 },
   filledAccent: { backgroundColor: theme.accent },

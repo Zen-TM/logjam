@@ -52,7 +52,6 @@ import {
   fontWeight,
   radius,
   spacing,
-  surface,
   theme,
   withAlpha,
 } from "../theme";
@@ -903,7 +902,7 @@ function EmptyPanel({
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: theme.primary },
+  screen: { flex: 1, backgroundColor: theme.page },
   heroActions: {
     flexDirection: "row",
     alignItems: "center",
@@ -918,13 +917,13 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: withAlpha(theme.accent, 0.4),
-    backgroundColor: withAlpha(theme.primary, 0.5),
+    backgroundColor: withAlpha(theme.page, 0.5),
     paddingHorizontal: spacing(1.5),
     minHeight: 40,
   },
   searchInput: {
     flex: 1,
-    color: theme.textPrimary,
+    color: theme.text,
     fontSize: fontSize.base,
     fontWeight: fontWeight.regular,
   },
@@ -945,7 +944,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     backgroundColor: withAlpha(theme.accent, 0.12),
   },
-  rangeText: { flex: 1, color: theme.textPrimary, fontSize: fontSize.sm },
+  rangeText: { flex: 1, color: theme.text, fontSize: fontSize.sm },
   list: { flex: 1 },
   listContent: {
     paddingHorizontal: spacing(2),
@@ -958,12 +957,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "baseline",
     justifyContent: "space-between",
-    backgroundColor: theme.primary,
+    backgroundColor: theme.page,
     paddingTop: spacing(1),
     paddingBottom: spacing(0.75),
   },
   yearLabel: {
-    color: theme.textPrimary,
+    color: theme.text,
     fontSize: fontSize.lg,
     fontWeight: fontWeight.bold,
   },
@@ -990,13 +989,13 @@ const styles = StyleSheet.create({
     gap: spacing(1),
     paddingVertical: spacing(5),
     paddingHorizontal: spacing(2),
-    backgroundColor: surface.card,
+    backgroundColor: theme.card,
     borderWidth: 1,
-    borderColor: surface.border,
+    borderColor: theme.line,
     borderRadius: radius.lg,
   },
   emptyTitle: {
-    color: theme.textPrimary,
+    color: theme.text,
     fontSize: fontSize.base,
     fontWeight: fontWeight.medium,
   },

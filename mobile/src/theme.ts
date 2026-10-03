@@ -3,16 +3,22 @@
 //
 // The user's scheme (`uiPreferences.themeSchemeId`) is resolved HERE, at module
 // evaluation, from a synchronous on-device preference — because everything
-// derived from it (`surface`, `assetHue`, `placeHue`, and the ~45 files whose
+// derived from it (`assetHue`, `placeHue`, and the ~45 files whose
 // `StyleSheet.create` reads these tokens) is a module constant snapshotted at
 // import time. That is also why a change applies at the next launch rather
 // than repainting the running app: see `persistThemeSchemeId` and DESIGN.md §12.
 import {
   ASSET_HUES,
+  CONTROL,
   DEFAULT_THEME_SCHEME_ID,
+  FONT,
+  FONT_WEIGHT,
   isThemeSchemeId,
   PLACE_STATUS_HUES,
+  RADIUS,
+  SPACE_UNIT,
   THEME_SCHEMES,
+  TOUCH_TARGET_MIN,
   type ThemeSchemeId,
   type ThemeTokens,
 } from "@logjam/shared";
@@ -32,7 +38,16 @@ function resolveSchemeId(): ThemeSchemeId {
 /** The scheme this launch is painted in. */
 export const activeThemeSchemeId: ThemeSchemeId = resolveSchemeId();
 
+/** The active scheme's colours, by role (`ThemeTokens` in `@logjam/shared`). */
 export const theme: ThemeTokens = THEME_SCHEMES[activeThemeSchemeId].tokens;
+
+/** Whether this launch's page is dark or light. The platform chrome follows it:
+ *  the system bars' icons, the navigation theme. */
+export const themeMode = THEME_SCHEMES[activeThemeSchemeId].mode;
+
+/** System-bar icon style for a page in this launch's scheme: light icons on a
+ *  dark page, dark icons on a light one. */
+export const systemBarStyle = themeMode === "dark" ? "light" : "dark";
 
 /**
  * Record the scheme for the NEXT launch. Returns false when the device refused
@@ -138,31 +153,38 @@ export function persistTextScale(scale: TextScale): boolean {
 // beside a 13.8 px icon lands on a different subpixel on every device.
 const scaled = (px: number): number => Math.round(px * textScale);
 
-// Spacing/radius/type scale mirroring the web tokens (frontend/src/index.css).
-// `pill` is the fully-rounded end of the scale (chips, meters, badges).
+// Spacing, radius and type read the shared scales (`@logjam/shared`
+// designTokens.ts), the same names Logjam Web's tokens are generated from.
 //
 // SPACING AND RADIUS DO NOT SCALE. Only type does: growing the padding with it
 // would push a row's content off the right edge instead of making its words
 // bigger, and the icon tiles are sized against `spacing`, not against text.
-export const radius = { sm: 4, md: 8, lg: 12, xl: 16, pill: 999 } as const;
+export const radius = RADIUS;
 export const fontSize = {
-  xs: scaled(12),
-  sm: scaled(14),
-  base: scaled(16),
-  lg: scaled(20),
-  xl: scaled(24),
+  xs: scaled(FONT.gps.xs),
+  sm: scaled(FONT.gps.sm),
+  base: scaled(FONT.gps.base),
+  lg: scaled(FONT.gps.lg),
+  xl: scaled(FONT.gps.xl),
   /** Hero metric — one per screen, never body copy. */
-  display: scaled(34),
+  display: scaled(FONT.gps.display),
 } as const;
-export const spacing = (n: number): number => n * 8;
+/** n steps of the shared unit: `spacing(1.5)` is the web's `--space-1-5`. */
+export const spacing = (n: number): number => n * SPACE_UNIT;
+
+/** Control heights: a phone is a touch screen, so it takes the touch set. */
+export const controlSize = CONTROL.touch;
+/** Every pressable's hit area, visual size plus `hitSlop`. */
+export const touchTargetMin = TOUCH_TARGET_MIN;
 
 // Weight + line-height scales so type roles are consistent across screens
 // (page title = xl/bold, body = base/regular at body line-height). RN wants
 // weights as strings.
+const weight = <W extends number>(w: W) => String(w) as `${W}`;
 export const fontWeight = {
-  regular: "400",
-  medium: "600",
-  bold: "700",
+  regular: weight(FONT_WEIGHT.regular),
+  medium: weight(FONT_WEIGHT.medium),
+  bold: weight(FONT_WEIGHT.bold),
 } as const;
 export const lineHeight = { body: scaled(22), tight: scaled(18) } as const;
 
@@ -178,16 +200,6 @@ export const scrim = {
 
 // Default touch-target padding for small text/icon actions.
 export const hitSlop = 8;
-
-// Surface tokens for cards/sheets layered above the primary background. Derived
-// from the active scheme (not white-alpha overlays) so all four themes stay
-// warm and coherent: `card` sits one step lighter than `primary`, `border` a
-// hair lighter again for a subtle edge.
-export const surface = {
-  card: theme.secondary,
-  cardPressed: theme.bonus2,
-  border: theme.bonus2,
-} as const;
 
 // Hex + alpha → rgba(). Lets a category hue tint a surface (icon tile, meter
 // track, chip fill) without adding a second colour token per hue. Hex only
@@ -215,9 +227,10 @@ export function withAlpha(hex: string, alpha: number): string {
  * Deliberately scheme-INDEPENDENT: these encode *what a thing is* (a region vs
  * a track), which does not change when the user picks a different theme, and
  * they must stay mutually distinguishable — a per-scheme remap would collapse
- * them into each scheme's narrow hue range. All four schemes have a dark
- * background (#4E4944 / #2B3F52 / #2F4F3E / #2B3A3F), so mid-light hues
- * (~65-80% lightness, moderate saturation) carry enough contrast on every one.
+ * them into each scheme's narrow hue range. A hue is only ever a FILL under
+ * the `onFill` ink (a tile, an active chip, a swatch, a map mark), never a
+ * glyph on a surface, which is what lets one set of hues serve the light
+ * scheme too.
  *
  * `region` reuses the active scheme's accent, so the largest, most common
  * asset class always feels native to the chosen theme.

@@ -386,7 +386,7 @@ export function TrackOptionsSheet({
               key={option.title}
               title={option.title}
               icon="export"
-              hue={theme.bonus1}
+              hue={theme.neutral}
               disabled={busy}
               onPress={() => save(option)}
             />
@@ -398,7 +398,7 @@ export function TrackOptionsSheet({
             <Row
               title="Send a copy"
               icon="send"
-              hue={theme.bonus1}
+              hue={theme.neutral}
               {...shareRowProps}
               disabled={busy || shareRowProps.disabled}
               onPress={() => setSending((open) => !open)}
@@ -407,7 +407,7 @@ export function TrackOptionsSheet({
           <Row
             title="Rename"
             icon="edit"
-            hue={theme.bonus1}
+            hue={theme.neutral}
             disabled={busy}
             onPress={() => setRenaming(true)}
           />
@@ -453,7 +453,7 @@ const styles = StyleSheet.create({
     height: 22,
     borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: withAlpha(theme.textPrimary, 0.35),
+    borderColor: withAlpha(theme.text, 0.35),
   },
   palette: {
     flexDirection: "row",
@@ -471,7 +471,7 @@ const styles = StyleSheet.create({
   },
   swatchSelected: {
     borderWidth: 2,
-    borderColor: theme.textPrimary,
+    borderColor: theme.text,
   },
   swatchTick: {
     color: "#ffffff",

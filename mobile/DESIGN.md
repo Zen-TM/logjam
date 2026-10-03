@@ -516,8 +516,10 @@ means a new kind is one object literal, not a design decision.
 
 `assetHue` (in `src/theme.ts`) is deliberately **scheme-independent** — a kind
 is what it is regardless of the user's theme, and remapping the hues per scheme
-would collapse them into that scheme's narrow range. All four schemes are dark,
-so mid-light muted hues work on every one. New hues: mid-light, muted, drawn
+would collapse them into that scheme's narrow range. A hue is only ever a FILL
+under `theme.onFill` (a solid row tile, an active chip, a swatch, a map mark),
+never a glyph or text on a surface, so one set serves the light Daylight scheme
+too. New hues: mid-light, muted, drawn
 from the NSW canyon palette (rock, scrub, water, heath). Never a saturated web
 primary.
 
@@ -564,8 +566,8 @@ vocabularies at once, and each owns the surface it reads best on:
 
 That is why `PLACE_TYPE_COLORS` is a curated, mid-light, muted palette rather
 than a free picker: a chip fills itself with the hue and writes a label on it,
-so every entry has to clear 4.5:1 against the scheme's `primary` AND 3:1 as a
-marker. `scripts/wcag-contrast.mjs` asserts both, under every scheme. One hue is
+so every entry has to clear 4.5:1 under `onFill`. `scripts/wcag-contrast.mjs`
+asserts it, under every scheme. One hue is
 RESERVED and never a type colour: `SHARED_PLACE_COLOR`, the heath the whole app
 uses for "someone shared this" — the ring on a pin, the layer row, the rail
 chip. Colour says one thing at a time.
@@ -635,28 +637,35 @@ from the other axes.
 | Row subtitle, hint, legend | `fontSize.sm` (`xs` for legend/size chips) / `textMuted` |
 
 **Radius:** `md` (8) for icon tiles and inline surfaces · `lg` (12) for content
-cards and rows · `xl` (16) for sheets and the hero's bottom corners · `pill`
+cards and rows · `xl` (16) for sheets · `pill`
 for everything text-shaped that isn't a card — buttons, chips, status pills,
 meters, badges. Do not introduce a fourth card radius. `sm` (4) exists for small
 DECORATIVE chips only — colour swatches and preview squares in Settings — and
 never for a content surface; a row, card or sheet reaching for it is the fourth
 card radius arriving under another name.
 
-**Depth (no shadows, no white-alpha overlays — everything from scheme tokens):**
+**Depth (no shadows, no white-alpha overlays — everything from the colour
+roles, `ThemeTokens` in `shared/src/themeSchemes.ts`, identical on Logjam Web):**
 
 ```
-theme.bonus2     hero, toasts    lightest
-theme.secondary  cards / rows    surface.card
-theme.primary    page, sheets    darkest
+theme.inverse / onInverse   toasts              the one inverted surface
+theme.card / cardPressed    cards / rows        a surface you can press
+theme.page                  page, sheets, hero  (the hero has no fill: a `line` hairline)
+theme.field                 text inputs
+theme.line / lineStrong     hairlines / edges that must be seen (≥3:1)
 ```
 
-A sheet uses the **page** colour, not a lighter one: rows inside it are
-`surface.card`, which must stay lighter than what they sit on. It also means a
-sheet reads as the page sliding up rather than a foreign panel.
+A sheet uses the **page** colour, not a card: it reads as the page sliding up
+rather than a foreign panel. Words are `theme.text` or `theme.textMuted`, never
+`accent`/`warning`/`success` (those are fills under `theme.onFill`, edges and
+glyphs). `themeMode` (`dark` | `light`) drives the platform chrome (system bars,
+navigation theme). What the map draws on the basemap — labels, halos, line
+casings — is `MAP_INK`, never a scheme colour.
 
-Tints come from `withAlpha(hex, a)` on a scheme token or asset hue — icon tile
-at `0.16`, meter track and badge at `0.10-0.12`, hero hairline at `0.25`.
-Never hardcode `rgba(255,255,255,…)`.
+Tints come from `withAlpha(hex, a)` on a scheme token — meter track and badge at
+`0.10-0.12`. Never hardcode `rgba(255,255,255,…)`. `spacing(n)` (n × 8),
+`radius`, `fontSize`, `fontWeight` and `controlSize` (48 / 40 / 32) read the
+shared scales in `designTokens.ts`.
 
 ## 5. Rows
 
@@ -1501,7 +1510,7 @@ sluggishness: tapping the search icon re-rendered 115 rows to change one chip.
 
 A rail cues its own scrollability: **either** edge dissolves into the page
 colour when there is content past it (`SegmentedControl`'s `EdgeFade`, an
-`expo-linear-gradient` fade to `theme.primary`, `spacing(6)` wide). Both sides,
+`expo-linear-gradient` fade to `theme.page`, `spacing(6)` wide). Both sides,
 driven by scroll offset — a fade on only one end still leaves a hard-sliced chip
 at the other, and a fade shown at rest dims a chip with nothing behind it. Use a
 real gradient for any fade; stacked alpha steps band visibly.
@@ -1756,7 +1765,8 @@ for no benefit.
 
 ## 12. Theme: chosen at any time, applied at launch
 
-The four schemes live in `shared/src/themeSchemes.ts` and are picked in
+The five schemes (four dark, and **Daylight**, a light one for reading in full
+sun, whose text clears 7:1) live in `shared/src/themeSchemes.ts` and are picked in
 Settings → Display. The mobile app applies a change **at the next launch**, and
 says so. The TEXT SIZE multiplier on the same page works the same way and for the
 same reason (`fontSize` is snapshotted by the same `StyleSheet.create` calls).
@@ -1782,8 +1792,8 @@ What the implementation must keep true:
   value; the "applies next time you open Logjam" note appears exactly when the
   choice and `activeThemeSchemeId` disagree. That covers a change made here AND a
   change made in a browser since this app started.
-- **Swatches carry a hairline border.** Sandstone's `secondary` IS the card colour
-  they sit on, so without an edge that swatch vanishes and the scheme looks like it
+- **Swatches carry a hairline border.** The scheme in force's `card` IS the card
+  colour they sit on, so without an edge that swatch vanishes and the scheme looks like it
   has two colours.
 - A device that refuses the write says so (`persistThemeSchemeId` returns false →
   toast). A selection that silently reverts on the next launch is the one failure

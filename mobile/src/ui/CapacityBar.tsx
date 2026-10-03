@@ -84,7 +84,7 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: radius.pill,
     overflow: "hidden",
-    backgroundColor: withAlpha(theme.textPrimary, 0.1),
+    backgroundColor: withAlpha(theme.text, 0.1),
     gap: 2,
   },
   legend: {
@@ -97,7 +97,7 @@ const styles = StyleSheet.create({
   dot: { width: 8, height: 8, borderRadius: radius.pill },
   legendLabel: { color: theme.textMuted, fontSize: fontSize.xs },
   legendValue: {
-    color: theme.textPrimary,
+    color: theme.text,
     fontSize: fontSize.xs,
     fontWeight: fontWeight.medium,
   },

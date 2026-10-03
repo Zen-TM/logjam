@@ -21,6 +21,6 @@ export function tripTypeMeta(type: string | null | undefined): TripTypeMeta {
   return {
     icon: { picked: icon },
     hue:
-      hue === "accent" ? theme.accent : hue === "untyped" ? theme.bonus1 : hue,
+      hue === "accent" ? theme.accent : hue === "untyped" ? theme.neutral : hue,
   };
 }

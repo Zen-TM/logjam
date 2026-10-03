@@ -911,7 +911,7 @@ function EmptyPanel() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: theme.primary },
+  root: { flex: 1, backgroundColor: theme.page },
   rail: {
     paddingHorizontal: spacing(2),
     paddingTop: spacing(1.5),
@@ -934,12 +934,12 @@ const styles = StyleSheet.create({
   menuCause: { color: theme.textMuted, fontSize: fontSize.sm },
   valueBlock: { gap: spacing(0.25) },
   menuLabel: { color: theme.textMuted, fontSize: fontSize.xs },
-  menuValue: { color: theme.textPrimary, fontSize: fontSize.base },
+  menuValue: { color: theme.text, fontSize: fontSize.base },
   // The line the rejection is about, so two changes over one complaint stop
   // being a guessing game.
   menuValueRejected: { color: theme.warning },
   empty: { alignItems: "center", gap: spacing(1), paddingVertical: spacing(6) },
-  emptyTitle: { color: theme.textPrimary, fontSize: fontSize.base },
+  emptyTitle: { color: theme.text, fontSize: fontSize.base },
   emptyHint: {
     color: theme.textMuted,
     fontSize: fontSize.sm,

@@ -4,7 +4,7 @@ import { ErrorBanner } from "../../feedback/ErrorBanner";
 import classes from "./ThemeChooser.module.css";
 
 /**
- * The four schemes, as a radio group of swatch cards — the same shape as Logjam
+ * The schemes, as a radio group of swatch cards — the same shape as Logjam
  * GPS's Display screen, and local to this page on both clients rather than in
  * the kit: a card that shows three of a scheme's tokens means nothing anywhere
  * else.
@@ -48,8 +48,8 @@ function ThemeChooser() {
                 />
                 <span className={classes.swatches} aria-hidden>
                   {[
-                    scheme.tokens.primary,
-                    scheme.tokens.secondary,
+                    scheme.tokens.page,
+                    scheme.tokens.card,
                     scheme.tokens.accent,
                   ].map((colour) => (
                     <span

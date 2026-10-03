@@ -41,7 +41,7 @@ import {
   type PlaceTypeIconKey,
 } from "@logjam/shared";
 
-import { fontSize, radius, spacing, surface, theme } from "../theme";
+import { fontSize, radius, spacing, theme } from "../theme";
 import type { MirrorPlaceType } from "../sync/mirrorStore";
 import { listMirrorPlaces } from "../sync/mirrorStore";
 import {
@@ -272,9 +272,7 @@ export function usePlaceTypeForm({
                 <Icon
                   idea={placeTypeGlyph(iconKey)}
                   size={20}
-                  color={
-                    draft.iconKey === iconKey ? theme.accent : theme.textPrimary
-                  }
+                  color={draft.iconKey === iconKey ? theme.accent : theme.text}
                 />
               </Pressable>
             ))}
@@ -302,7 +300,7 @@ export function usePlaceTypeForm({
                 {draft.color === color ? (
                   // Dark ink on a light swatch: the palette is light precisely so a
                   // mark on top of it stays legible.
-                  <Icon idea="done" size={16} color={theme.primary} />
+                  <Icon idea="done" size={16} color={theme.onFill} />
                 ) : null}
               </Pressable>
             ))}
@@ -408,7 +406,7 @@ const styles = StyleSheet.create({
   cell: {
     borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: surface.border,
+    borderColor: theme.line,
     alignItems: "center",
     justifyContent: "center",
   },

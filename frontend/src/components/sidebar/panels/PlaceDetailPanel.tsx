@@ -742,7 +742,7 @@ function PlaceDetailPanel({
           {/* WHERE IT IS, as the thing people actually do with it: copy the
               coordinates into whatever they are navigating with. */}
           <Row
-            leading={<IconTile icon="place" hue="var(--theme-accent)" />}
+            leading={<IconTile icon="place" hue="var(--color-accent)" />}
             title={coordinates}
             subtitle="Latitude, longitude"
             trailing={
@@ -794,7 +794,7 @@ function PlaceDetailPanel({
                     leading={
                       <IconTile
                         icon={linkable ? "openExternal" : "link"}
-                        hue="var(--theme-bonus-1)"
+                        hue="var(--color-neutral)"
                       />
                     }
                     title={label}
@@ -855,7 +855,7 @@ function PlaceDetailPanel({
                       hue={
                         placeTypes.find(
                           (type) => type.id === linked.placeTypeId,
-                        )?.color ?? "var(--theme-accent)"
+                        )?.color ?? "var(--color-accent)"
                       }
                     />
                   }
@@ -891,7 +891,7 @@ function PlaceDetailPanel({
               {foreignFields.map((item) => (
                 <Row
                   key={item.key}
-                  leading={<IconTile icon="help" hue="var(--theme-accent)" />}
+                  leading={<IconTile icon="help" hue="var(--color-accent)" />}
                   title={item.label}
                   subtitle={foreignValueText(item)}
                   trailing={<Icon idea="disclosure" size={18} aria-hidden />}
@@ -970,20 +970,20 @@ function PlaceDetailPanel({
                 unavailable, it is one that does not exist for this value. */}
             {!isReservedFieldKey(foreignItem.key) && (
               <Row
-                leading={<IconTile icon="add" hue="var(--theme-accent)" />}
+                leading={<IconTile icon="add" hue="var(--color-accent)" />}
                 title="Create a new attribute for this place type"
                 onOpen={() => runForeignFieldAction("adopt")}
                 disabled={foreignFieldBusy}
               />
             )}
             <Row
-              leading={<IconTile icon="notes" hue="var(--theme-accent)" />}
+              leading={<IconTile icon="notes" hue="var(--color-accent)" />}
               title="Add to notes as text"
               onOpen={() => runForeignFieldAction("notes")}
               disabled={foreignFieldBusy}
             />
             <Row
-              leading={<IconTile icon="delete" hue="var(--theme-accent)" />}
+              leading={<IconTile icon="delete" hue="var(--color-accent)" />}
               title="Discard"
               onOpen={() => setConfirmDiscard(true)}
               disabled={foreignFieldBusy}

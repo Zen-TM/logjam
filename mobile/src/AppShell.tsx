@@ -12,6 +12,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, View } from "react-native";
 import {
   DarkTheme,
+  DefaultTheme,
   NavigationContainer,
   type NavigationContainerRef,
 } from "@react-navigation/native";
@@ -37,6 +38,7 @@ import {
   persistThemeSchemeId,
   spacing,
   theme,
+  themeMode,
   withAlpha,
 } from "./theme";
 import { MapScreen } from "./map/MapScreen";
@@ -86,15 +88,16 @@ function alertFinishRouteFirst(): void {
   );
 }
 
+const baseNavigationTheme = themeMode === "dark" ? DarkTheme : DefaultTheme;
 const navigationTheme = {
-  ...DarkTheme,
+  ...baseNavigationTheme,
   colors: {
-    ...DarkTheme.colors,
+    ...baseNavigationTheme.colors,
     primary: theme.accent,
-    background: theme.primary,
-    card: theme.secondary,
-    text: theme.textPrimary,
-    border: theme.secondary,
+    background: theme.page,
+    card: theme.card,
+    text: theme.text,
+    border: theme.line,
     notification: theme.accent,
   },
 };
@@ -271,9 +274,9 @@ function placeFocus(place: { latitude: number; longitude: number }) {
 }
 
 const stackScreenOptions = {
-  headerStyle: { backgroundColor: theme.secondary },
-  headerTintColor: theme.textPrimary,
-  contentStyle: { backgroundColor: theme.primary },
+  headerStyle: { backgroundColor: theme.card },
+  headerTintColor: theme.text,
+  contentStyle: { backgroundColor: theme.page },
 } as const;
 
 function MapStackNav() {
@@ -952,8 +955,8 @@ export function AppShell({
             screenOptions={{
               headerShown: false,
               tabBarStyle: {
-                backgroundColor: theme.secondary,
-                borderTopColor: withAlpha(theme.textPrimary, 0.25),
+                backgroundColor: theme.card,
+                borderTopColor: withAlpha(theme.text, 0.25),
                 borderTopWidth: 1,
                 // Breathing room between the border and the icons. The library's
                 // bar is iOS-sized (49pt plus the bottom inset) and sits the icons

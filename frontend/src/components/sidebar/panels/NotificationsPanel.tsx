@@ -89,11 +89,11 @@ const KIND_GLYPH: Record<NotificationKind, Glyph> = {
 const KIND_HUE: Record<NotificationKind, string> = {
   share: "var(--hue-shared)",
   file: "var(--hue-import)",
-  people: "var(--theme-accent)",
+  people: "var(--color-accent)",
   topo: "var(--hue-overlay)",
   export: "var(--hue-import)",
-  geoPdf: "var(--hue-geoPdf)",
-  problem: "var(--theme-warning)",
+  geoPdf: "var(--hue-geo-pdf)",
+  problem: "var(--color-warning)",
 };
 
 type Bucket = "all" | "unread" | "read";

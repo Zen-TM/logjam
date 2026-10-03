@@ -409,14 +409,14 @@ export function RouteOptionsSheet({
           <Row
             title="Save as GPX"
             icon="export"
-            hue={theme.bonus1}
+            hue={theme.neutral}
             disabled={busy}
             onPress={() => save("gpx")}
           />
           <Row
             title="Save as KML"
             icon="export"
-            hue={theme.bonus1}
+            hue={theme.neutral}
             disabled={busy}
             onPress={() => save("kml")}
           />
@@ -428,7 +428,7 @@ export function RouteOptionsSheet({
             <Row
               title="Rename"
               icon="edit"
-              hue={theme.bonus1}
+              hue={theme.neutral}
               disabled={busy}
               onPress={() => setRenaming(true)}
             />
@@ -440,7 +440,7 @@ export function RouteOptionsSheet({
             <Row
               title="Share"
               icon="shareFriend"
-              hue={theme.bonus1}
+              hue={theme.neutral}
               {...shareRowProps}
               disabled={busy || shareRowProps.disabled}
               onPress={() => setSharing((open) => !open)}
