@@ -67,7 +67,7 @@ const BUDGET: Record<string, number> = {
   "components/sidebar/panels/NotificationsPanel.module.css": 7,
   "components/sidebar/panels/PlaceDetailPanel.module.css": 7,
   "components/sidebar/panels/PlaceFilterSheet.module.css": 2,
-  "components/sidebar/panels/PlacesPanel.module.css": 12,
+  "components/sidebar/panels/PlacesPanel.module.css": 9,
   "components/sidebar/panels/RoutesPanel.module.css": 6,
   "components/sidebar/panels/SettingsPanel.module.css": 2,
   "components/sidebar/panels/ThemeChooser.module.css": 5,

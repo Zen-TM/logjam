@@ -34,7 +34,7 @@
 // device. The framed box is returned in memory (`pickedArea.ts`) and reaches
 // nothing but the filter state on the screen that asked.
 import { useCallback, useMemo, useRef, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import type { LayoutChangeEvent } from "react-native";
 import {
   Camera,
@@ -47,8 +47,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { RegionBbox } from "@logjam/shared";
 
 import { config } from "../config";
-import { fontSize, fontWeight, radius, scrim, spacing, theme } from "../theme";
-import { Button } from "../ui";
+import { spacing, theme } from "../theme";
+import { Button, Notice } from "../ui";
 import { useMirrorPlaces, useMirrorPlaceTypes } from "../sync/useSyncQueries";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
 import { useConnectivity } from "./connectivity";
@@ -303,9 +303,7 @@ export function PickAreaScreen({
         style={[styles.hint, { top: insets.top + spacing(2) }]}
         pointerEvents="none"
       >
-        <Text style={styles.hintText}>
-          Move the map, drag the edges to frame an area
-        </Text>
+        <Notice>Move the map, drag the edges to frame an area</Notice>
       </View>
 
       {/* NO `insets.bottom`: this screen is pushed inside a tab stack, so the
@@ -331,20 +329,9 @@ export function PickAreaScreen({
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.page },
-  hint: {
-    position: "absolute",
-    left: spacing(2),
-    right: spacing(2),
-    backgroundColor: scrim.heavy,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing(2),
-    paddingVertical: spacing(1),
-  },
-  hintText: {
-    color: theme.text,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
-  },
+  // Where the notice sits; the kit `Notice` draws it (a scrim under `text`
+  // was dark on dark in Daylight).
+  hint: { position: "absolute", left: spacing(2), right: spacing(2) },
   actions: {
     position: "absolute",
     left: 0,

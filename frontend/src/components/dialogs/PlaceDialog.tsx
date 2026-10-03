@@ -71,7 +71,7 @@ const LNG_CONSTRAINTS: NumericFieldConstraints = {
  * A place: what it is, where it is, and what this type of place records.
  *
  * EVERY ATTRIBUTE IS DRAWN FROM ITS DEFINITION. The seven canyon grades were
- * seven hand-written controls keyed to `CANYON_FORM_FIELD_KEYS` — two selects
+ * seven hand-written controls keyed to a list of their keys — two selects
  * of literal 1-7, a roman-numeral one, four number boxes and their tooltips —
  * and the rest of the type's fields rendered generically underneath, with the
  * seven subtracted so they were not asked twice. They are ordinary field
