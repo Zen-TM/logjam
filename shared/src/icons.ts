@@ -26,7 +26,7 @@ export type GpsGlyph = string;
 export const ICONS = {
   // — verbs: what a control does —
   add: { web: "plus", gps: "plus" },
-  addPlace: { web: "map-pin-plus", gps: "mci:map-marker-plus" },
+  addPlace: { web: "map-pin-plus", gps: "mci:map-marker-plus-outline" },
   remove: { web: "minus", gps: "minus" }, // take out of a selection
   close: { web: "x", gps: "x" }, // close a surface, clear a field, cancel a job
   back: { web: "arrow-left", gps: "arrow-left" },
@@ -95,7 +95,7 @@ export const ICONS = {
   offline: { web: "cloud-off", gps: "cloud-off" },
   sync: { web: "cloud", gps: "cloud" },
   uploading: { web: "cloud-upload", gps: "upload-cloud" },
-  missingMedia: { web: "image-off", gps: "mci:image-off" },
+  missingMedia: { web: "image-off", gps: "mci:image-off-outline" },
   favourite: { web: "star", gps: "star" },
   private: { web: "lock", gps: "lock" },
 
@@ -104,12 +104,12 @@ export const ICONS = {
   place: { web: "map-pin", gps: "map-pin" },
   trip: { web: "book-open", gps: "book-open" },
   saved: { web: "folder", gps: "folder" }, // Saved: everything kept on this phone
-  route: { web: "route", gps: "mci:vector-polyline" },
+  route: { web: "route", gps: "mci:map-marker-path" },
   track: { web: "activity", gps: "activity" },
   waypoint: { web: "git-commit", gps: "git-commit" },
   importedFile: { web: "file-plus", gps: "file-plus" },
   geoPdf: { web: "file-text", gps: "file-text" },
-  lidar: { web: "mountain", gps: "mci:terrain" },
+  lidar: { web: "mountain", gps: "mci:image-filter-hdr-outline" },
   layers: { web: "layers", gps: "layers" }, // the layer picker
   template: { web: "layout-template", gps: "layout" },
   notes: { web: "align-left", gps: "align-left" },
@@ -129,10 +129,10 @@ export const ICONS = {
   device: { web: "hard-drive", gps: "hard-drive" }, // local storage
   phone: { web: "smartphone", gps: "smartphone" },
   typography: { web: "type", gps: "type" },
-  colour: { web: "palette", gps: "mci:palette" },
+  colour: { web: "palette", gps: "mci:palette-outline" },
   sensors: { web: "cpu", gps: "cpu" },
   elevation: { web: "trending-up", gps: "trending-up" },
-  scaleBar: { web: "ruler-dimension-line", gps: "mci:ruler-square" },
+  scaleBar: { web: "ruler-dimension-line", gps: "mci:ruler-square-compass" },
 } as const satisfies Record<string, { web: LucideKebabName; gps: GpsGlyph }>;
 
 export type IconIdea = keyof typeof ICONS;
