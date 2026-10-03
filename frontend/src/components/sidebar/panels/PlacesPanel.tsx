@@ -1,12 +1,31 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   comparePlaces,
+  contractSectionKeys,
   EMPTY_PLACE_FILTERS,
   numericFieldValue,
   passesPlaceFilters,
   PLACE_STATUS_LABELS,
   PLACE_STATUS_ORDER,
+  PLACES_ADD,
+  PLACES_ADD_ICON,
+  PLACES_FILTER_SHEET,
+  PLACES_LIST,
+  placeDeleteConfirm,
   placeMatchesSearch,
+  placesCountLabel,
+  placesEmptyKind,
+  placesEmptyState,
+  placesFilterNote,
+  placesHeroTitle,
   placeSortLabel,
   placeStatus,
   placeSummary,
@@ -15,6 +34,7 @@ import {
   type PlaceStatus,
   type RegionBbox,
   type ScopedCustomFieldDef,
+  type SectionKeysOn,
 } from "@logjam/shared";
 import type {
   TFilters,
@@ -37,17 +57,17 @@ import {
   ChipRail,
   EmptyState,
   Hero,
+  Icon,
   IconButton,
   IconTile,
+  LoadingState,
   Menu,
   Row,
   SearchField,
   SelectionBar,
   TileCheckbox,
-  type MenuEntry,
-  Icon,
   type Glyph,
-  LoadingState,
+  type MenuEntry,
 } from "../../../ui";
 import { placeTypeLucideIcon } from "./placeTypeIcon";
 import PlaceFilterSheet from "./PlaceFilterSheet";
@@ -62,7 +82,10 @@ import {
   withBucket,
   type StatusBucket,
 } from "./placesModel";
+import { placeVerbEntries, type WebPlaceVerbId } from "./placeVerbMenu";
 import classes from "./PlacesPanel.module.css";
+
+const { copy } = PLACES_LIST;
 
 export type MapKind = "topo" | "geopdf";
 
@@ -124,6 +147,7 @@ function PlacesPanel({
   onHoverPlace,
   onMakeMap,
   onSharePlaces,
+  onPlaceVerb,
   onExpandSheet,
 }: {
   places: TPlace[];
@@ -158,6 +182,9 @@ function PlacesPanel({
   /** A pin was pressed while this list is open: scroll to its row. */
   onMakeMap: (bounds: RegionBbox, kind: MapKind) => void;
   onSharePlaces: (ids: string[]) => void;
+  /** A row's verb that needs the place's page (a form, a confirm): the row
+   *  opens the page and the page runs it. */
+  onPlaceVerb: (id: WebPlaceVerbId) => void;
   /** Narrow web: grow the bottom sheet to full. */
   onExpandSheet?: () => void;
 }) {
@@ -379,44 +406,35 @@ function PlacesPanel({
       },
     }));
 
-  const rowEntries = ({ place, owned }: Listed): MenuEntry[] => [
-    {
-      id: "open",
-      label: "Open place",
-      icon: "forward",
-      onSelect: () => openPlace(place),
-    },
-    {
-      id: "show",
-      label: "Show on map",
-      icon: "map",
-      onSelect: () => onFlyToPlace(place.latitude, place.longitude),
-    },
-    ...makeMapEntries([place]).map((entry) =>
-      "separator" in entry
-        ? entry
-        : { ...entry, label: `Make a ${entry.label} here` },
-    ),
-    ...(owned
-      ? ([
-          { id: "sep", separator: true },
-          {
-            id: "share",
-            label: "Share or export…",
-            icon: "shareFriend",
-            onSelect: () => onSharePlaces([place.id]),
-          },
-          { id: "sep2", separator: true },
-          {
-            id: "delete",
-            label: "Delete",
-            icon: "delete",
-            danger: true,
-            onSelect: () => setPendingDelete([place.id]),
-          },
-        ] satisfies MenuEntry[])
-      : []),
-  ];
+  // A place's verbs are one declaration (`PLACE_VERBS`); the row runs what it
+  // can and hands the ones that need a form or a confirm to the place's page.
+  const rowEntries = ({ place, owned }: Listed): MenuEntry[] => {
+    const onPage = () => {
+      openPlace(place);
+    };
+    const handOff = (id: WebPlaceVerbId) => () => {
+      openPlace(place);
+      onPlaceVerb(id);
+    };
+    const makeMap = (kind: MapKind) => () => {
+      const bounds = placesBounds([place]);
+      if (bounds) onMakeMap(bounds, kind);
+    };
+    const run: Record<WebPlaceVerbId, () => void> = {
+      open: onPage,
+      show: () => onFlyToPlace(place.latitude, place.longitude),
+      logTrip: handOff("logTrip"),
+      edit: handOff("edit"),
+      makeTopo: makeMap("topo"),
+      makeGeoPdf: makeMap("geopdf"),
+      share: () => onSharePlaces([place.id]),
+      copy: handOff("copy"),
+      copyAndRemove: handOff("copyAndRemove"),
+      remove: handOff("remove"),
+      delete: () => setPendingDelete([place.id]),
+    };
+    return placeVerbEntries("row", owned, (id) => run[id]());
+  };
 
   async function confirmDelete() {
     if (!pendingDelete) return;
@@ -424,7 +442,7 @@ function PlacesPanel({
     setDeleting(true);
     try {
       await bulkDeletePlaces(pendingDelete);
-      toast.success(`Deleted ${plural(count, "place")}.`);
+      toast.success(`Deleted ${placesCountLabel(count)}.`);
       setPendingDelete(null);
       clearSelection();
       onQuotaChanged();
@@ -497,8 +515,8 @@ function PlacesPanel({
       icon="filter"
       label={
         sheetCount > 0
-          ? `Sort and filter, ${plural(sheetCount, "filter")} on`
-          : "Sort and filter"
+          ? `${PLACES_FILTER_SHEET.title}, ${plural(sheetCount, "filter")} on`
+          : PLACES_FILTER_SHEET.title
       }
       tone={sheetCount > 0 || sheetOpen ? "filled" : "default"}
       aria-expanded={sheetOpen}
@@ -511,24 +529,36 @@ function PlacesPanel({
     setSearchOpen(false);
   };
 
+  const addEntries: Record<
+    SectionKeysOn<typeof PLACES_ADD, "web">,
+    { label: string; onSelect: () => void; disabled?: boolean }
+  > = {
+    add: { label: PLACES_ADD.copy.add, onSelect: onAddPlace },
+    importFile: {
+      label: PLACES_ADD.copy.importFile,
+      onSelect: onOpenUnifiedImport,
+    },
+    importRopewiki: {
+      label: refreshing
+        ? PLACES_ADD.copy.importingRopewiki
+        : PLACES_ADD.copy.importRopewiki,
+      disabled: refreshing,
+      onSelect: () => setConfirmRefresh(true),
+    },
+  };
+
   // No meter: the status rail's counts already say how many are visited, not
   // visited and shared, and the bar beside them was the same numbers again.
   const hero = (
     <Hero
-      title={
-        !placesLoaded
-          ? "Places"
-          : collection.length === 0
-            ? "No places yet"
-            : plural(collection.length, "place")
-      }
+      title={!placesLoaded ? "Places" : placesHeroTitle(collection.length)}
       actions={
         searchOpen ? (
           <>
             {filterButton}
             <IconButton
               icon="close"
-              label="Close search"
+              label={copy.closeSearch}
               onClick={closeSearch}
             />
           </>
@@ -536,38 +566,20 @@ function PlacesPanel({
           <>
             <IconButton
               icon="search"
-              label="Search places"
+              label={copy.search}
               tone={query ? "filled" : "default"}
               aria-expanded={false}
               onClick={() => setSearchOpen(true)}
             />
             {filterButton}
             <Menu
-              label="Add places"
+              label={PLACES_ADD.copy.menu}
               placement="bottom-end"
-              entries={[
-                {
-                  id: "add",
-                  label: "Add a place",
-                  icon: "addPlace",
-                  onSelect: onAddPlace,
-                },
-                {
-                  id: "file",
-                  label: "Import from file",
-                  icon: "upload",
-                  onSelect: onOpenUnifiedImport,
-                },
-                {
-                  id: "ropewiki",
-                  label: refreshing
-                    ? "Importing from RopeWiki…"
-                    : "Import from RopeWiki",
-                  icon: "saveOffline",
-                  disabled: refreshing,
-                  onSelect: () => setConfirmRefresh(true),
-                },
-              ]}
+              entries={contractSectionKeys(PLACES_ADD, "web").map((key) => ({
+                id: key,
+                icon: PLACES_ADD_ICON[key],
+                ...addEntries[key],
+              }))}
               trigger={(props) => (
                 <Button
                   {...props}
@@ -576,7 +588,7 @@ function PlacesPanel({
                   icon="add"
                   trailingIcon="expand"
                 >
-                  Add
+                  {PLACES_ADD.title}
                 </Button>
               )}
             />
@@ -587,7 +599,7 @@ function PlacesPanel({
       {/* The search box takes the title's place on the same line, so opening it moves nothing. */}
       {searchOpen && (
         <SearchField
-          label="Search by name or alternative name"
+          label={copy.searchField}
           value={query}
           autoFocus
           onChange={(event) => setQuery(event.target.value)}
@@ -601,14 +613,13 @@ function PlacesPanel({
     </Hero>
   );
 
-  const rails = (
-    <div className={classes.rails}>
+  const typeRail = (
+    <div className={classes.typeRail}>
       <div className={selecting ? classes.inert : undefined} inert={selecting}>
         <ChipRail
-          label="Place type"
+          label={copy.typeRail}
           options={[
-            // "Any type", not "All": the status rail below has its own "All".
-            { value: ANY_TYPE, label: "Any type", count: typeCounts.any },
+            { value: ANY_TYPE, label: copy.anyType, count: typeCounts.any },
             ...typesWithPlaces.map((type) => {
               const count = typeCounts.byType.get(type.id) ?? 0;
               return {
@@ -630,7 +641,7 @@ function PlacesPanel({
           }
           trailing={
             <Chip
-              label="New type"
+              label={copy.newType}
               icon="add"
               dashed
               onClick={() => setActivePanel("settings")}
@@ -638,6 +649,11 @@ function PlacesPanel({
           }
         />
       </div>
+    </div>
+  );
+
+  const statusRail = (
+    <div className={classes.statusRail}>
       {selecting ? (
         <SelectionBar
           countLabel={`${selected.length} selected`}
@@ -674,9 +690,9 @@ function PlacesPanel({
         </SelectionBar>
       ) : (
         <ChipRail
-          label="Status"
+          label={copy.statusRail}
           options={[
-            { value: "all", label: "All", count: statusCounts.all },
+            { value: "all", label: copy.allStatuses, count: statusCounts.all },
             ...PLACE_STATUS_ORDER.map((status) => ({
               value: status,
               label: PLACE_STATUS_LABELS[status],
@@ -693,43 +709,48 @@ function PlacesPanel({
     </div>
   );
 
+  const empty =
+    placesLoaded && visible.length === 0
+      ? placesEmptyKind({
+          total: collection.length,
+          filtering: query.trim() !== "" || sheetCount > 0,
+          bucket,
+        })
+      : null;
+  const emptyState = empty && placesEmptyState(empty, { platform: "web" });
+
   const list = !placesLoaded ? (
     <div className={classes.emptyArea} role="status">
-      <LoadingState label="Loading your places…" />
+      <LoadingState label={copy.loading} />
     </div>
-  ) : collection.length === 0 ? (
+  ) : empty && emptyState ? (
     <div className={classes.emptyArea}>
       <EmptyState
-        icon="place"
-        title="No places yet"
-        body="Add a place on the map, or bring your list in from a file or RopeWiki. Places you add here reach Logjam GPS for offline use."
+        icon={emptyState.icon}
+        title={emptyState.title}
+        body={emptyState.body}
         actions={
-          <>
-            <Button compact variant="filled" icon="add" onClick={onAddPlace}>
-              Add a place
+          emptyState.action === "clear" ? (
+            <Button compact variant="outline" onClick={clearEverything}>
+              {copy.clearFilters}
             </Button>
-            <Button
-              compact
-              variant="outline"
-              icon="upload"
-              onClick={onOpenUnifiedImport}
-            >
-              Import
-            </Button>
-          </>
-        }
-      />
-    </div>
-  ) : visible.length === 0 ? (
-    <div className={classes.emptyArea}>
-      <EmptyState
-        icon="filter"
-        title="No places match"
-        body="Nothing matches your search and filters. Clear them to see the rest."
-        actions={
-          <Button compact variant="outline" onClick={clearEverything}>
-            Clear filters
-          </Button>
+          ) : emptyState.action === "add" ? (
+            <>
+              <Button compact variant="filled" icon="add" onClick={onAddPlace}>
+                {PLACES_ADD.copy.add}
+              </Button>
+              {empty === "firstRun" && (
+                <Button
+                  compact
+                  variant="outline"
+                  icon={PLACES_ADD_ICON.importFile}
+                  onClick={onOpenUnifiedImport}
+                >
+                  {PLACES_ADD.copy.importFile}
+                </Button>
+              )}
+            </>
+          ) : undefined
         }
       />
     </div>
@@ -843,60 +864,70 @@ function PlacesPanel({
     />
   );
 
+  const note = placesFilterNote(sheetCount, sort);
+
+  // The page, section by section, in the order its contract gives. Exhaustive
+  // by type: a section the contract names cannot be left out, and one it does
+  // not name cannot be drawn.
+  const sections: Record<
+    SectionKeysOn<typeof PLACES_LIST, "web">,
+    ReactNode
+  > = {
+    hero,
+    typeRail,
+    statusRail,
+    filterNote: sheetCount > 0 && !sheetOpen && !selecting && (
+      <div className={classes.strip}>
+        <span className={classes.stripText}>{note}</span>
+        <IconButton
+          icon="close"
+          size={14}
+          round
+          label={copy.clearFilters}
+          onClick={() => onChangeFilters(clearSheetFilters(filters))}
+        />
+      </div>
+    ),
+    listHead: collection.length > 0 && (
+      <div className={classes.listHead}>
+        <span>
+          {selecting
+            ? "Shift-click to select a range · Ctrl+A selects all"
+            : `Sorted by ${placeSortLabel(sort).toLowerCase()}`}
+        </span>
+        <span>{visible.length}</span>
+      </div>
+    ),
+    // The server caps the owned list; say when this is a truncated view so
+    // the oldest places aren't silently missing.
+    truncated: placesTotal != null && placesTotal > places.length && (
+      <p className={classes.note}>
+        Showing your {places.length} most recent places of {placesTotal}. Older
+        ones aren&rsquo;t loaded.
+      </p>
+    ),
+    list,
+  };
+
+  const deleteCopy = placeDeleteConfirm({ count: pendingDelete?.length ?? 0 });
+
   return (
     <div ref={rootRef} className={classes.root}>
       {isNarrow && sheet ? (
         sheet
       ) : (
         <>
-          {hero}
-          {rails}
-          {sheetCount > 0 && !sheetOpen && !selecting && (
-            <div className={classes.strip}>
-              <span className={classes.stripText}>
-                {plural(sheetCount, "filter")} active
-                {sort !== "name" ? ` · ${placeSortLabel(sort)}` : ""}
-              </span>
-              <IconButton
-                icon="close"
-                size={14}
-                round
-                label="Clear filters"
-                onClick={() => onChangeFilters(clearSheetFilters(filters))}
-              />
-            </div>
-          )}
-          {collection.length > 0 && (
-            <div className={classes.listHead}>
-              <span>
-                {selecting
-                  ? "Shift-click to select a range · Ctrl+A selects all"
-                  : `Sorted by ${placeSortLabel(sort).toLowerCase()}`}
-              </span>
-              <span>{visible.length}</span>
-            </div>
-          )}
-          {/* The server caps the owned list; say when this is a truncated view so
-              the oldest places aren't silently missing (UX-001). */}
-          {placesTotal != null && placesTotal > places.length && (
-            <p className={classes.note}>
-              Showing your {places.length} most recent places of {placesTotal}.
-              Older ones aren&rsquo;t loaded.
-            </p>
-          )}
-          {list}
+          {contractSectionKeys(PLACES_LIST, "web").map((key) => (
+            <Fragment key={key}>{sections[key]}</Fragment>
+          ))}
           {!isNarrow && sheet}
         </>
       )}
 
       <ConfirmDialog
         open={pendingDelete != null}
-        title={
-          pendingDelete?.length === 1
-            ? "Delete this place?"
-            : `Delete ${pendingDelete?.length ?? 0} places?`
-        }
-        message="Their photos, tracks and shares go too. Trips that link to them stay in your logbook, unlinked. This can't be undone."
+        title={deleteCopy.confirmTitle}
+        message={deleteCopy.confirmBody}
         confirmLabel="Delete"
         confirmColor="error"
         busy={deleting}
