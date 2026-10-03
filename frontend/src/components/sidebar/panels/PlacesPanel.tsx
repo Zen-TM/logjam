@@ -11,6 +11,7 @@ import {
   comparePlaces,
   contractSectionKeys,
   EMPTY_PLACE_FILTERS,
+  listSelectionLabel,
   numericFieldValue,
   passesPlaceFilters,
   PLACE_STATUS_LABELS,
@@ -656,7 +657,7 @@ function PlacesPanel({
     <div className={classes.statusRail}>
       {selecting ? (
         <SelectionBar
-          countLabel={`${selected.length} selected`}
+          countLabel={listSelectionLabel(selected.length)}
           onClear={clearSelection}
         >
           {/* An icon like its siblings: as a labelled filled button the bar ran

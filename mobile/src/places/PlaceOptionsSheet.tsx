@@ -62,6 +62,7 @@ export function PlaceOptionsSheet({
   surface,
   visible,
   onClose,
+  onGone,
   onOpenPlace,
   onShowOnMap,
   onLogTrip,
@@ -70,10 +71,14 @@ export function PlaceOptionsSheet({
   onError,
 }: {
   place: MirrorPlace | null;
-  /** Where the sheet was opened from: a row in the list, or a pin on the map. */
-  surface: "row" | "pin";
+  /** Where the sheet was opened from: a row in the list, a pin on the map, or
+   *  the place's own page. */
+  surface: "row" | "pin" | "page";
   visible: boolean;
   onClose: () => void;
+  /** The place is no longer this account's (deleted, or removed from the
+   *  share): the page showing it must leave. */
+  onGone?: () => void;
   /** Its detail page — the first row, because it is what tapping a pin did. */
   onOpenPlace: (place: MirrorPlace) => void;
   /** Fly the map to this place. The list's; the pin's verbs leave it out. */
@@ -167,6 +172,7 @@ export function PlaceOptionsSheet({
           const outcome = await runCopyAndRemove([target], options);
           const report = copyAndRemoveOutcomeMessage(outcome);
           (report.tone === "error" ? onError : onInfo)(report.text);
+          if (outcome.done.length > 0) onGone?.();
         } else {
           try {
             const media = await copyShared(target, options);
@@ -216,7 +222,10 @@ export function PlaceOptionsSheet({
         text: "Remove",
         onPress: () => {
           removeSharedPlace(place.id)
-            .then(() => onInfo("Removed."))
+            .then(() => {
+              onInfo("Removed.");
+              onGone?.();
+            })
             .catch((err: unknown) => {
               // Our own copy, never the error's: it may carry the name.
               console.error(err);
@@ -244,7 +253,10 @@ export function PlaceOptionsSheet({
         style: "destructive",
         onPress: () => {
           deletePlaceLocal(place.id)
-            .then(() => onInfo("Place deleted."))
+            .then(() => {
+              onInfo("Place deleted.");
+              onGone?.();
+            })
             .catch((err: unknown) => {
               // Our own copy, never the error's: it may carry the name.
               console.error(err);
