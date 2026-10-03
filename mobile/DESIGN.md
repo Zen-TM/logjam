@@ -310,11 +310,9 @@ BottomSheet(s)      acquisition + per-item actions
   floor — at a low zoom a route is a few pixels of line and arrows are noise.
   The FIRST and LAST anchors carry a quiet variation of the handle (filled and
   hollow); a hint you read up close, not a badge competing at a glance.
-- **Feather is the icon family; a second family is allowed only for a glyph it
-  lacks.** Feather has no ruler in its 286 glyphs and the near misses read as
-  "resize" or "commit", so measure uses MaterialCommunityIcons `ruler` (already
-  inside `@expo/vector-icons` — no new dependency) while route draw uses Feather
-  `pen-tool`. Reach for the second family only after checking Feather first.
+- **Icons are ideas: draw `<Icon idea=…>` from `src/ui`,** never a Feather or
+  MaterialCommunityIcons name. The registry is `shared/src/icons.ts`; a lint rule
+  stops a screen importing the icon fonts.
 - **Map chrome offsets live in ONE module** (`mapChrome.ts`), and `CHROME_BOTTOM`
   is a CONSTANT. It used to grow by the recording HUD's measured height so the
   columns could lift out of the way; `onLayout` never fires on the way out, so the

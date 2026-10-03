@@ -213,18 +213,10 @@ export function SyncIssuesScreen({
   const items = useMemo<Issue[]>(
     () => [
       ...parked.map(
-        (op): Issue => ({
-          kind: "stuck",
-          key: `stuck:${op.seq}`,
-          op,
-        }),
+        (op): Issue => ({ kind: "stuck", key: `stuck:${op.seq}`, op }),
       ),
       ...shelf.map(
-        (entry): Issue => ({
-          kind: "lost",
-          key: `lost:${entry.id}`,
-          entry,
-        }),
+        (entry): Issue => ({ kind: "lost", key: `lost:${entry.id}`, entry }),
       ),
     ],
     [parked, shelf],
