@@ -115,7 +115,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: theme.accent,
-    backgroundColor: theme.card,
+    backgroundColor: theme.field,
     paddingHorizontal: spacing(1.5),
     paddingVertical: spacing(0.5),
     color: theme.text,

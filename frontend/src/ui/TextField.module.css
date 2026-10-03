@@ -16,7 +16,7 @@
   box-sizing: border-box;
   padding: 0 var(--space-1);
   border-radius: var(--radius-md);
-  border: 1px solid var(--color-text-muted);
+  border: 1px solid var(--color-line-strong);
   background: var(--color-field);
   color: var(--color-text);
   font: inherit;

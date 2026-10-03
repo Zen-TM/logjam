@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   StyleSheet,
   Text,
@@ -59,12 +60,17 @@ export function TextField({
   // (dim, don't hide). Undeclared `editable` (the common case) stays full
   // opacity.
   const disabled = inputProps.editable === false;
+  // The edge is `lineStrong` at rest and the accent while the field has the
+  // keyboard, as on Logjam Web: the field's own well (`field`) is what says
+  // "type here".
+  const [focused, setFocused] = useState(false);
   const input = (
     <TextInput
       ref={inputRef}
       style={[
         styles.input,
         multiline && styles.multiline,
+        focused && styles.inputFocused,
         error ? styles.inputError : null,
         accessory != null && styles.grow,
       ]}
@@ -75,6 +81,8 @@ export function TextField({
       accessibilityState={{ disabled }}
       multiline={multiline}
       {...inputProps}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
     />
   );
   return (
@@ -106,7 +114,8 @@ const styles = StyleSheet.create({
   },
   input: {
     borderWidth: 1,
-    borderColor: theme.accent,
+    borderColor: theme.lineStrong,
+    backgroundColor: theme.field,
     borderRadius: radius.md,
     paddingVertical: spacing(1.25),
     paddingHorizontal: spacing(1.5),
@@ -116,6 +125,7 @@ const styles = StyleSheet.create({
   inputRow: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
   grow: { flex: 1 },
   multiline: { minHeight: 96, textAlignVertical: "top" },
+  inputFocused: { borderColor: theme.accent },
   // Findable while scrolling a long form, not only once the line under it is read.
   inputError: { borderColor: theme.warning },
 });
