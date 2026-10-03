@@ -18,6 +18,9 @@ export type ContractSection<K extends string = string> = {
   key: K;
   on?: ContractPlatform;
   reason?: string;
+  /** Drawn only on something the viewer owns: a page of a shared item has no
+   *  such section, on either client. Not a platform difference, so no reason. */
+  ownerOnly?: true;
 };
 
 export type ScreenContract<
@@ -40,6 +43,20 @@ export type SectionKeysOn<
   C extends { sections: readonly ContractSection[] },
   P extends ContractPlatform,
 > = Exclude<C["sections"][number], { on: Exclude<ContractPlatform, P> }>["key"];
+
+/** A client's sections for one viewer: `ownerOnly` ones only when `owned`. */
+export function contractSectionsFor<
+  C extends { sections: readonly ContractSection[] },
+  P extends ContractPlatform,
+>(contract: C, platform: P, owned: boolean): SectionKeysOn<C, P>[] {
+  return contract.sections
+    .filter(
+      (section) =>
+        (section.on == null || section.on === platform) &&
+        (owned || !section.ownerOnly),
+    )
+    .map((section) => section.key) as SectionKeysOn<C, P>[];
+}
 
 /** A client's sections, in the contract's order. */
 export function contractSectionKeys<

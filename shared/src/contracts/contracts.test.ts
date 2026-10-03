@@ -3,6 +3,11 @@ import { SYSTEM_FIELD_DEFS } from "../placeTypes.js";
 import {
   attributeFilterShape,
   contractSectionKeys,
+  contractSectionsFor,
+  PLACE_PAGE,
+  PLACE_PAGE_PRIMARY_VERBS,
+  placeAttributesTitle,
+  placeStatusLabel,
   PLACE_VERBS,
   placeDeleteConfirm,
   PLACES_ADD,
@@ -14,6 +19,13 @@ import {
   placeVerbIds,
   placeVerbs,
   SCREEN_CONTRACTS,
+  listSelectionLabel,
+  tripDeleteConfirm,
+  tripsEmptyKind,
+  tripsEmptyState,
+  tripsFilterNote,
+  tripsHeroTitle,
+  tripVerbs,
 } from "./index.js";
 
 describe("every screen contract", () => {
@@ -236,5 +248,105 @@ describe("placeDeleteConfirm", () => {
     expect(placeDeleteConfirm({ count: 3 }).confirmBody).toBe(
       "Their notes, photos, tracks and shares go too. Trips that link to them stay in your logbook, unlinked. This can't be undone.",
     );
+  });
+});
+
+describe("a place's page", () => {
+  it("keeps the owner's sections off a place someone shared", () => {
+    const shared = contractSectionsFor(PLACE_PAGE, "web", false);
+    for (const key of ["doesntFit", "linkedPlaces", "sharedWith"])
+      expect(shared).not.toContain(key);
+    expect(contractSectionsFor(PLACE_PAGE, "web", true)).toContain(
+      "sharedWith",
+    );
+    expect(contractSectionsFor(PLACE_PAGE, "web", true)).not.toContain(
+      "navigate",
+    );
+    expect(contractSectionsFor(PLACE_PAGE, "gps", true)).toContain("navigate");
+  });
+
+  // Red when a primary verb is dropped from the page's verbs: the buttons and
+  // the ⋯ must never disagree about what a place can do.
+  it("draws as buttons only verbs the page offers", () => {
+    const page = placeVerbs("gps", "page", true).map((verb) => verb.id);
+    for (const id of PLACE_PAGE_PRIMARY_VERBS) expect(page).toContain(id);
+  });
+
+  it("names the attributes for the kind, and the status with its tally", () => {
+    expect(placeAttributesTitle("Canyon")).toBe("Canyon attributes");
+    expect(placeAttributesTitle(null)).toBe("Place attributes");
+    expect(placeStatusLabel("todo", 0)).toBe("Not visited");
+    expect(placeStatusLabel("done", 1)).toBe("Visited · 1 trip");
+    expect(placeStatusLabel("done", 3)).toBe("Visited · 3 trips");
+    expect(placeStatusLabel("shared", 0)).toBe("Shared");
+  });
+});
+
+describe("a trip's verbs", () => {
+  // Red when a surface withholds a verb: a trip in the logbook is not a lesser
+  // object than one opened on its page.
+  it("gives the row and the page the same verbs, bar Open", () => {
+    const row = tripVerbs("row").map((verb) => verb.id);
+    expect(row[0]).toBe("open");
+    expect(tripVerbs("page").map((verb) => verb.id)).toEqual(row.slice(1));
+  });
+
+  it("marks only Delete destructive, below the rule", () => {
+    const verbs = tripVerbs("row");
+    expect(verbs.filter((verb) => verb.danger).map((verb) => verb.id)).toEqual([
+      "delete",
+    ]);
+    expect(verbs.find((verb) => verb.id === "delete")?.separated).toBe(true);
+  });
+
+  it("says what goes and what stays, for one trip or many", () => {
+    expect(tripDeleteConfirm(1)).toEqual({
+      confirmTitle: "Delete this trip?",
+      confirmBody:
+        "Its photos, videos and tracks go too. The places it links to stay. This can't be undone.",
+    });
+    expect(tripDeleteConfirm(3)).toEqual({
+      confirmTitle: "Delete 3 trips?",
+      confirmBody:
+        "Their photos, videos and tracks go too. The places they link to stay. This can't be undone.",
+    });
+  });
+});
+
+describe("the logbook", () => {
+  it("answers the hero's question with the logbook's size", () => {
+    expect(tripsHeroTitle(0)).toBe("No trips yet");
+    expect(tripsHeroTitle(1)).toBe("1 trip");
+    expect(tripsHeroTitle(127)).toBe("127 trips");
+  });
+
+  it("announces a range, other hidden filters, then a sort that is not the default", () => {
+    const note = (
+      rangeLabel: string | null,
+      sheetFilterCount: number,
+      sort: "newest" | "oldest",
+    ) => tripsFilterNote({ rangeLabel, sheetFilterCount, sort });
+    expect(note(null, 0, "newest")).toBeNull();
+    expect(note("This year", 1, "newest")).toBe("This year");
+    expect(note("This year", 3, "newest")).toBe("This year · 2 filters active");
+    expect(note(null, 1, "oldest")).toBe("1 filter active · Oldest first");
+    expect(note(null, 0, "oldest")).toBe("Oldest first");
+  });
+
+  it("tells an empty logbook from a tight filter, and never promises a guest an import", () => {
+    expect(tripsEmptyKind({ total: 0 })).toBe("firstRun");
+    expect(tripsEmptyKind({ total: 5 })).toBe("filtered");
+    const guest = tripsEmptyState("firstRun", { platform: "gps", guest: true });
+    expect(guest.body).not.toMatch(/import|sync/i);
+    expect(tripsEmptyState("firstRun", { platform: "web" }).body).toContain(
+      "Logjam GPS",
+    );
+    expect(tripsEmptyState("filtered", { platform: "gps" }).action).toBe(
+      "clear",
+    );
+  });
+
+  it("counts a selection the same on every list", () => {
+    expect(listSelectionLabel(3)).toBe("3 selected");
   });
 });
