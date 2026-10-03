@@ -16,8 +16,10 @@ is particular to a phone in the field: touch, sheets, no signal, a native map.
 
 A screen Logjam Web also has is drawn from its **screen contract**
 (`shared/src/contracts/`): its sections, their order, its verbs and every
-word. Render from it, as `PlacesScreen`, `PlaceFilterSheet` and
-`PlaceOptionsSheet` do, and change the contract, not the component.
+word. Render from it, as `PlacesScreen`, `PlaceDetailScreen`,
+`TripDetailScreen`, `LogsScreen`, their filter sheets and the verb sheets
+(`PlaceOptionsSheet`, `TripOptionsSheet`) do, and change the contract, not the
+component.
 
 Change a convention, change this file in the same commit.
 

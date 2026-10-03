@@ -6,15 +6,21 @@
 // form that edits it is the dialog this page raises. It was a dialog until
 // 2026-09-19, which meant the only way to READ a trip put the whole app behind
 // a modal, and opening the place it linked had to close the trip first.
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
 import {
   attributeRows,
+  contractSectionKeys,
   formatFieldValue,
   formatTripDate,
   mediaCategory,
+  TRIP_PAGE,
+  tripDeleteConfirm,
   tripTypeLabel,
+  tripVerbs,
   type MediaItem,
   type ScopedCustomFieldDef,
+  type SectionKeysOn,
+  type TripVerbId,
 } from "@logjam/shared";
 import type { TPlace, TTripLog } from "../../../placeUtils";
 import { deleteTripLog, getTripLog, tripTitle } from "../../../placeUtils";
@@ -158,26 +164,140 @@ function TripDetailPanel({
   const attributes = attributeRows(customFieldDefs, trip.customFields);
   const title = tripTitle(trip);
 
-  // A VERB is in the ⋯ (DESIGN.md §5). Edit raises the form this page is the
-  // read of; Delete sits below the rule with the verbs that end things.
-  const entries: MenuEntry[] = [
-    {
-      id: "edit",
-      label: "Edit trip",
-      icon: "edit",
+  // A VERB is in the ⋯ (DESIGN.md §5), and which verbs, in what order and
+  // under what words is `TRIP_VERBS`, the declaration the logbook's rows and
+  // Logjam GPS draw from too. Edit raises the form this page is the read of.
+  const verbRunners: Record<TripVerbId, () => void> = {
+    open: () => {}, // A row's verb; this page is what it opens.
+    edit: () => setEditing(true),
+    delete: () => setConfirmingDelete(true),
+  };
+  const entries: MenuEntry[] = tripVerbs("page").flatMap((verb) => {
+    const item: MenuEntry = {
+      id: verb.id,
+      label: verb.label,
+      icon: verb.icon,
+      ...(verb.danger ? { danger: true } : {}),
       disabled: deleting,
-      onSelect: () => setEditing(true),
-    },
-    { id: "sep", separator: true },
-    {
-      id: "delete",
-      label: "Delete",
-      icon: "delete",
-      danger: true,
-      disabled: deleting,
-      onSelect: () => setConfirmingDelete(true),
-    },
-  ];
+      onSelect: verbRunners[verb.id],
+    };
+    return verb.separated
+      ? [{ id: `${verb.id}-sep`, separator: true }, item]
+      : [item];
+  });
+  const copy = TRIP_PAGE.copy;
+  const deleteCopy = tripDeleteConfirm(1);
+
+  // Exhaustive by type: a section the contract names and this page does not
+  // draw, or the reverse, fails `tsc` (`TRIP_PAGE`, shared/src/contracts).
+  const sections: Record<
+    SectionKeysOn<typeof TRIP_PAGE, "web">,
+    () => ReactNode
+  > = {
+    hero: () => (
+      <div className={classes.summary}>
+        <p className={classes.date}>{formatTripDate(trip.date)}</p>
+        <div className={classes.pills}>
+          {trip.types.length > 0 ? (
+            trip.types.map((type) => (
+              <StatusPill
+                key={type}
+                label={tripTypeLabel(type)}
+                icon={tripTypeLook(type).icon}
+              />
+            ))
+          ) : (
+            <StatusPill
+              label={copy.noType}
+              tone="muted"
+              icon={tripTypeLook(null).icon}
+            />
+          )}
+        </div>
+      </div>
+    ),
+
+    places: () => (
+      <section className={classes.section}>
+        <SectionHeader
+          title={copy.places}
+          count={trip.places.length || undefined}
+        />
+        {trip.places.length === 0 ? (
+          <p className={classes.muted}>{copy.placesEmpty}</p>
+        ) : (
+          trip.places.map((place) => (
+            <Row
+              key={place.id}
+              title={place.name}
+              leading={<IconTile icon="place" hue="var(--color-accent)" />}
+              onOpen={() => onOpenPlace(place.id)}
+            />
+          ))
+        )}
+      </section>
+    ),
+
+    photos: () => (
+      <section className={classes.section}>
+        <SectionHeader title={copy.photos} count={photoCount || undefined} />
+        {mediaLoading ? (
+          <p className={classes.muted} role="status">
+            Loading files…
+          </p>
+        ) : (
+          <MediaGallery
+            media={media}
+            variant="visual"
+            canDelete={canManageMedia}
+            onDeleted={handleMediaDeleted}
+            emptyText={copy.photosEmpty}
+          />
+        )}
+      </section>
+    ),
+
+    routes: () => (
+      <section className={classes.section}>
+        <SectionHeader title={copy.routes} count={trackCount || undefined} />
+        {!mediaLoading && (
+          <MediaGallery
+            media={media}
+            variant="tracks"
+            canDelete={canManageMedia}
+            onDeleted={handleMediaDeleted}
+            emptyText={copy.routesEmpty}
+          />
+        )}
+      </section>
+    ),
+
+    notes: () => (
+      <section className={classes.section}>
+        <SectionHeader title={copy.notes} />
+        {trip.notes ? (
+          <p className={classes.notes}>{trip.notes}</p>
+        ) : (
+          <p className={classes.muted}>{copy.notesEmpty}</p>
+        )}
+      </section>
+    ),
+
+    attributes: () =>
+      attributes.length > 0 ? (
+        <section className={classes.section}>
+          <SectionHeader title={copy.attributes} />
+          <dl className={classes.attributes}>
+            {attributes.map(([key, label, value, type]) => (
+              <div key={key} className={classes.attribute}>
+                <dt>{label}</dt>
+                <dd>{formatFieldValue(value, type)}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      ) : null,
+  };
 
   return (
     <>
@@ -207,103 +327,9 @@ function TripDetailPanel({
         />
 
         <div className={classes.body}>
-          <div className={classes.summary}>
-            <p className={classes.date}>{formatTripDate(trip.date)}</p>
-            <div className={classes.pills}>
-              {trip.types.length > 0 ? (
-                trip.types.map((type) => (
-                  <StatusPill
-                    key={type}
-                    label={tripTypeLabel(type)}
-                    icon={tripTypeLook(type).icon}
-                  />
-                ))
-              ) : (
-                <StatusPill
-                  label="No type set"
-                  tone="muted"
-                  icon={tripTypeLook(null).icon}
-                />
-              )}
-            </div>
-          </div>
-
-          <section className={classes.section}>
-            <SectionHeader
-              title="Places"
-              count={trip.places.length || undefined}
-            />
-            {trip.places.length === 0 ? (
-              <p className={classes.muted}>
-                No places linked. Edit the trip to add one.
-              </p>
-            ) : (
-              trip.places.map((place) => (
-                <Row
-                  key={place.id}
-                  title={place.name}
-                  leading={<IconTile icon="place" hue="var(--color-accent)" />}
-                  onOpen={() => onOpenPlace(place.id)}
-                />
-              ))
-            )}
-          </section>
-
-          <section className={classes.section}>
-            <SectionHeader
-              title="Photos & videos"
-              count={photoCount || undefined}
-            />
-            {mediaLoading ? (
-              <p className={classes.muted} role="status">
-                Loading files…
-              </p>
-            ) : (
-              <MediaGallery
-                media={media}
-                variant="visual"
-                canDelete={canManageMedia}
-                onDeleted={handleMediaDeleted}
-                emptyText="No photos or videos yet."
-              />
-            )}
-          </section>
-
-          <section className={classes.section}>
-            <SectionHeader title="Tracks" count={trackCount || undefined} />
-            {!mediaLoading && (
-              <MediaGallery
-                media={media}
-                variant="tracks"
-                canDelete={canManageMedia}
-                onDeleted={handleMediaDeleted}
-                emptyText="No tracks yet."
-              />
-            )}
-          </section>
-
-          <section className={classes.section}>
-            <SectionHeader title="Notes" />
-            {trip.notes ? (
-              <p className={classes.notes}>{trip.notes}</p>
-            ) : (
-              <p className={classes.muted}>No notes</p>
-            )}
-          </section>
-
-          {attributes.length > 0 && (
-            <section className={classes.section}>
-              <SectionHeader title="Trip attributes" />
-              <dl className={classes.attributes}>
-                {attributes.map(([key, label, value, type]) => (
-                  <div key={key} className={classes.attribute}>
-                    <dt>{label}</dt>
-                    <dd>{formatFieldValue(value, type)}</dd>
-                  </div>
-                ))}
-              </dl>
-            </section>
-          )}
+          {contractSectionKeys(TRIP_PAGE, "web").map((key) => (
+            <Fragment key={key}>{sections[key]()}</Fragment>
+          ))}
         </div>
       </div>
 
@@ -329,8 +355,8 @@ function TripDetailPanel({
 
       <ConfirmDialog
         open={confirmingDelete}
-        title="Delete this trip?"
-        message="Its photos, videos and tracks go too. The places it links to stay. This can't be undone."
+        title={deleteCopy.confirmTitle}
+        message={deleteCopy.confirmBody}
         busy={deleting}
         onConfirm={() => void handleDelete()}
         onClose={() => setConfirmingDelete(false)}
