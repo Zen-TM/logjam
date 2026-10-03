@@ -81,7 +81,7 @@ export function Row({
   footer?: React.ReactNode;
   progress?: number | null;
   onPress?: () => void;
-  /** Press-and-hold — the way a multi-select starts (DESIGN.md §7). */
+  /** Press-and-hold — the way a multi-select starts (DESIGN.md §5). */
   onLongPress?: () => void;
   /**
    * The row IS a switch (`SwitchRow`): pressing anywhere on it flips it, and a

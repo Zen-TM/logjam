@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 // ONE VISUAL FOR A VALIDATION MESSAGE, AND IT LIVES IN THE KIT.
 //
-// DESIGN.md §8, "Form errors": a problem with one control is drawn under it by
+// docs/ux-principles.md §11, "Form errors": a problem with one control is drawn under it by
 // `FieldError` (directly, or through `TextField`'s / `ChipPicker`'s `error`).
 // Before that rule, the same warning-coloured line was restyled by hand in the
 // forms that needed it — `CustomFieldsEditor` drew its place-type error with a

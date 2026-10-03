@@ -68,7 +68,7 @@ export type ParkedOp = {
    * rebuilt from the phone's own copy plus the pending edit, but only while
    * that copy is still here — the next delta pull applies the tombstone and
    * takes it. Resolved on the LIST so the verb is absent rather than failing
-   * at the tap (§7).
+   * at the tap (DESIGN.md §5).
    */
   hasLocalRow: boolean;
 };
@@ -205,7 +205,7 @@ export async function listShelfEntries(): Promise<ShelfEntry[]> {
     const entity = row.entity;
     const field = row.field;
     // Resolved on the LIST, not at the tap: a verb that cannot act has to be
-    // ABSENT (§7), and the bulk bar's "N restore" tally has to be true before
+    // ABSENT (DESIGN.md §5), and the bulk bar's "N restore" tally has to be true before
     // anyone presses anything. Shelf tables are tens of rows, not thousands.
     const target = await shelfTarget(entity, row.entity_id, field);
     const shelvedValue = row.shelved_json ? JSON.parse(row.shelved_json) : null;
@@ -525,7 +525,7 @@ export async function retryWithoutFields(
 }
 
 /**
- * Recreate from a deadRemote op (§6): the server deleted the row, but the
+ * Recreate from a deadRemote op (DESIGN.md §4): the server deleted the row, but the
  * user's edits are still here — one tap re-creates the entity with a FRESH id
  * and then discards the dead op.
  *

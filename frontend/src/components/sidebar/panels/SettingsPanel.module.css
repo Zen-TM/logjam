@@ -1,4 +1,4 @@
-/* Settings has no hero (DESIGN.md §1), so the page IS the scroller: the list of
+/* Settings has no hero (docs/ux-principles.md §2), so the page IS the scroller: the list of
    preferences and the three lists the user keeps. */
 .root {
   flex: 1;

@@ -9,7 +9,7 @@
 //
 // A date field opens the sheet's own date picker rather than asking the user to
 // type an ISO string, which is why `onPickDate` is a callback: the picker is a
-// MODE of the host sheet (DESIGN.md §6 — never a second modal), and only the
+// MODE of the host sheet (DESIGN.md §4 — never a second modal), and only the
 // host knows how to enter it.
 import { StyleSheet, Text, View } from "react-native";
 import {

@@ -15,7 +15,7 @@
 //
 // A verb is ABSENT when it cannot exist for this way (a file has no direction
 // to reverse), never present-and-refused — the API answers 403 or 404 for the
-// ones the user may not have, so offering them would be a lie (DESIGN.md §7).
+// ones the user may not have, so offering them would be a lie (DESIGN.md §5).
 //
 // A verb that ENDS the user's relationship with the way sits below a rule
 // (`separated`), whether or not it destroys anything. There are three, and only

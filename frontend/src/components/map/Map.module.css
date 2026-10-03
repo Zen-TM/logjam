@@ -2,7 +2,7 @@
    a thing that moves every frame must not touch the canvas: `setData` on a
    GeoJSON source invalidates it and MapLibre repaints the whole map, measured
    at 72ms per pointer move against 16ms for the same drag without it — the
-   cost of dragging over dead panel (DESIGN.md §9).
+   cost of dragging over dead panel (DESIGN.md §6).
 
    The line's OWN colour inside a white ring: on this map colour is what says
    which line you are looking at, so a dot in the accent would be the one colour

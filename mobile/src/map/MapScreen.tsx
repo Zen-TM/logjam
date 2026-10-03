@@ -850,7 +850,7 @@ export function MapScreen({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [attributionOpen, setAttributionOpen] = useState(false);
   // Press-and-hold target, and the point handed to the place form once that
-  // sheet has actually closed (never two sheets at once — DESIGN.md §6).
+  // sheet has actually closed (never two sheets at once — DESIGN.md §4).
   const [longPressPoint, setLongPressPoint] = useState<MapPoint | null>(null);
   /** Where the user last tapped — the point panel's subject, and its dot. */
   const [tappedPoint, setTappedPoint] = useState<MapPoint | null>(null);
@@ -860,7 +860,7 @@ export function MapScreen({
   const toastNonce = useRef(0);
   // Both point tools run the SAME draft model — same anchors, same drag,
   // delete and snapping. What differs is the exit (measure discards silently,
-  // route draw confirms and saves) and the ink (DESIGN.md §8).
+  // route draw confirms and saves) and the ink (docs/ux-principles.md §11).
   const measureDraft = useRouteDraft();
   const routeDraft = useRouteDraft();
   const measuring = measureDraft.active;
@@ -933,7 +933,7 @@ export function MapScreen({
   // tracks — the layer sheet's Tracks switch drives this directly.
   const [showTracks, setShowTracks] = useState(true);
   // Tapping a route opens its OPTIONS — the same panel Saved's ⋯ opens, with
-  // the stats a sub-mode one row in (DESIGN.md §7: the same object offers the
+  // the stats a sub-mode one row in (DESIGN.md §5: the same object offers the
   // same panel wherever it is tapped). Two sheets, one at a time, each holding
   // the id rather than the row — the row comes from the mirror so it stays
   // current if a sync lands while a sheet is open.
@@ -1893,7 +1893,7 @@ export function MapScreen({
       // whichever tool won the race.
       if (tool === "measure") {
         // Leaving measure bins its points without asking — a measurement is a
-        // question you asked once, not an asset (DESIGN.md §8).
+        // question you asked once, not an asset (docs/ux-principles.md §11).
         if (measureDraft.active) {
           measureDraft.close();
           return;
@@ -2051,7 +2051,7 @@ export function MapScreen({
       const props = event.nativeEvent.features[0]?.properties;
       // The OPTIONS sheet, not the detail screen: the same six verbs the
       // Places list offers, with "Open place" first because that is what this
-      // tap used to do (DESIGN.md §7). Held as an id so an edit made from
+      // tap used to do (DESIGN.md §5). Held as an id so an edit made from
       // inside the sheet re-renders it rather than showing a stale copy.
       if (props && typeof props.id === "string") setOptionsPlaceId(props.id);
     },
@@ -2061,11 +2061,11 @@ export function MapScreen({
   const optionsPlace =
     (places.data ?? []).find((row) => row.id === optionsPlaceId) ?? null;
   /** The two verbs that need a FORM. Each is a sheet of its own, so the
-   *  options sheet closes before one opens (DESIGN.md §6). */
+   *  options sheet closes before one opens (DESIGN.md §4). */
   const [editingPlace, setEditingPlace] = useState<MirrorPlace | null>(null);
   const [loggingPlace, setLoggingPlace] = useState<MirrorPlace | null>(null);
 
-  /** A recorded line's own verbs, from the map (DESIGN.md §7: the same object
+  /** A recorded line's own verbs, from the map (DESIGN.md §5: the same object
    *  wherever it is listed) — what a TAP on the line opens, with the stats a
    *  sub-mode one row in. Held as an id, so an edit made inside the sheet
    *  re-renders it rather than showing the copy the line was tapped with. */
@@ -2423,7 +2423,7 @@ export function MapScreen({
 
   // A press-and-hold is "something goes here". A sheet rather than an Alert —
   // Android's Alert drops buttons past three, and these entries carry glyphs
-  // and a subtitle (DESIGN.md §6).
+  // and a subtitle (DESIGN.md §4).
   const notify = useCallback((text: string, tone: "info" | "error") => {
     toastNonce.current += 1;
     setToast({ text, tone, nonce: toastNonce.current });
@@ -3843,7 +3843,7 @@ export function MapScreen({
   /**
    * Start measuring from a spot. Same shape as `startRouteDrawAt` — and the
    * same seeding reason — differing only in which of the two point tools opens,
-   * because they are one implementation (DESIGN.md §2).
+   * because they are one implementation (DESIGN.md §3).
    */
   const startMeasureAt = useCallback(
     (point: { latitude: number; longitude: number }) => {
@@ -3901,7 +3901,7 @@ export function MapScreen({
         case "place":
           // Straight to the form: with no sheet open there is no Modal to
           // collide with, so this is the one branch that skips the park-and-
-          // reopen dance the sheet needs (DESIGN.md §6).
+          // reopen dance the sheet needs (DESIGN.md §4).
           setAddPlaceAt(point);
           return;
         default:
@@ -4202,7 +4202,7 @@ export function MapScreen({
       count: placeRouteCount + placeLinkedRoutes.length,
       // The layer's own report of what it could not draw. Present only while
       // it is on AND something is missing — a map drawing less than it says
-      // has to say so (DESIGN.md §8), and the rest of the time there is
+      // has to say so (docs/ux-principles.md §11), and the rest of the time there is
       // nothing to report.
       note:
         showPlaceRoutes && routesStatus && routesStatus.unavailable > 0
@@ -5248,7 +5248,7 @@ export function MapScreen({
         </View>
       </BottomSheet>
 
-      {/* ONE form for both modes (DESIGN.md §7): a long-press drops a new
+      {/* ONE form for both modes (DESIGN.md §5): a long-press drops a new
           place here, and "Edit place" in the pin's options sheet reopens the
           same fields on an existing one. The two states are mutually exclusive
           — each entry point clears the other. */}
@@ -5300,7 +5300,7 @@ export function MapScreen({
       />
 
       {/* Tapping a route line opens its VERBS; the stats are a sub-mode one tap
-          in (DESIGN.md §7). No "Show on map" row here — the user is looking at
+          in (DESIGN.md §5). No "Show on map" row here — the user is looking at
           the line they just tapped. */}
       <RouteOptionsSheet
         route={optionsRoute}
@@ -5406,7 +5406,7 @@ function RouteNameForm({
   onSubmit: (name: string) => void;
 }) {
   const [draft, setDraft] = useState(initialName);
-  // Empty-name requirement shows on SUBMIT, not while typing (DESIGN.md §8);
+  // Empty-name requirement shows on SUBMIT, not while typing (docs/ux-principles.md §11);
   // clears as soon as the field is edited.
   const [showEmptyError, setShowEmptyError] = useState(false);
   const inputRef = useRef<TextInput>(null);

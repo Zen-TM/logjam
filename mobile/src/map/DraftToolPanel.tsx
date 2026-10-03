@@ -2,7 +2,7 @@
 //
 // ONE panel, because the two tools are one interaction: the same anchors, the
 // same drag/delete handles, the same snapping. They differ at the EXIT and in
-// the ink (DESIGN.md §8) — measure has no Save and draws dotted — and a second
+// the ink (docs/ux-principles.md §11) — measure has no Save and draws dotted — and a second
 // component would have been a second place for the shared 90 % to rot.
 //
 // A TOOLBAR, not a card. While a tool is armed it takes the SEARCH PILL'S SLOT

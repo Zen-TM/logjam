@@ -4,14 +4,14 @@
 // Both switches are device-scoped and both work as a guest with no signal. The
 // asymmetry on the app lock is the load-bearing part: turning it OFF goes
 // through the device authenticator and a cancelled prompt springs the switch
-// back on (DESIGN.md §7, `appLockPreference.ts`, fail-closed). Without that,
+// back on (DESIGN.md §5, `appLockPreference.ts`, fail-closed). Without that,
 // the switch is a one-tap bypass of the thing it controls.
 //
 // The closing section is not a setting — it is an answer. "What of mine is on
 // this device, and what protects it?" is a fair question to have about an
 // offline app, and leaving it unanswered doesn't make the answer better. It
 // states WHAT KINDS of data are held and names no place and no coordinate
-// (§11).
+// (docs/ux-principles.md §13).
 import { useCallback, useState } from "react";
 import { StyleSheet, Text } from "react-native";
 

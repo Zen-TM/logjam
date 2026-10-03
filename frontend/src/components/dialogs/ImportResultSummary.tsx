@@ -5,7 +5,7 @@
 // figure in this app is read, and the comma sentence it replaces ("3 created,
 // 26 merged, 2 skipped.") made the reader parse prose to find one number.
 // Nothing is behind a disclosure: the merge list used to sit in a closed
-// accordion, which is the shape DESIGN.md §6 rules out twice over — the answer
+// accordion, which is the shape DESIGN.md §4 rules out twice over — the answer
 // the reader came for cannot be a click away.
 import { Button, SectionHeader, StatGrid, type Stat } from "../../ui";
 import classes from "./ImportResultSummary.module.css";
@@ -148,7 +148,7 @@ function ImportResultSummary({
       )}
 
       {/* Absent when nothing was created or merged — there is no import to take
-          back, and a button that would do nothing invites the press (§7). */}
+          back, and a button that would do nothing invites the press (DESIGN.md §5). */}
       {onUndo && stats.length > 0 && (
         <Button
           variant="danger"
