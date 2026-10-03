@@ -17,7 +17,9 @@ import {
   useEffect,
   useMemo,
   useRef,
+  Fragment,
   type CSSProperties,
+  type ReactNode,
 } from "react";
 import {
   asForeignFields,
@@ -31,8 +33,16 @@ import {
   primaryTripType,
   placeDeleteConfirm,
   removeShareConfirm,
-  SOURCES_FIELD_KEY,
+  contractSectionsFor,
+  PLACE_PAGE,
+  PLACE_PAGE_PRIMARY_VERBS,
+  placeAttributesTitle,
+  placeSources,
+  placeStatus,
+  placeStatusLabel,
+  placeVerbs,
   systemFieldDef,
+  type SectionKeysOn,
   type MediaItem,
   type ScopedCustomFieldDef,
   type TripLogCustomFieldDef,
@@ -62,7 +72,6 @@ import {
   getTripLogs,
   getPlaceDetail,
   getPlaceShares,
-  isHttpUrl,
   ownerUsername,
 } from "../../../placeUtils";
 import PlaceSlideshow from "../../media/PlaceSlideshow";
@@ -70,6 +79,7 @@ import { placeTypeLucideIcon } from "./placeTypeIcon";
 import { tripTypeLook } from "./tripTypeIcon";
 import { placeVerbEntries, type WebPlaceVerbId } from "./placeVerbMenu";
 import {
+  Button,
   Dialog,
   EmptyState,
   Hero,
@@ -79,7 +89,9 @@ import {
   Menu,
   Row,
   SectionHeader,
+  StatusPill,
 } from "../../../ui";
+import { formatCanyonGrade } from "../../../placeUtils";
 
 /**
  * Runs a verb pressed on the place's ROW that needs this page's forms and
@@ -145,29 +157,11 @@ function foreignValueText(item: { value: unknown; type: string }): string {
   return formatFieldValue(item.value, item.type);
 }
 
-/** The site a source points at, for the row's second line. A URL the parser
- *  refuses is not shown rather than guessed at. */
-function hostOf(url: string): string | undefined {
-  try {
-    return new URL(url).host;
-  } catch {
-    return undefined;
-  }
-}
-
 // Grammatical list: "a", "a and b", "a, b, and c".
 function joinWithAnd(names: string[]): string {
   if (names.length === 1) return names[0];
   if (names.length === 2) return `${names[0]} and ${names[1]}`;
   return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
-}
-
-/** The place's source links, or none. Lived at `attributes.sources` before the
- *  rework; it is a reserved `_`-prefixed key in `fieldValues` now, which no
- *  user-authored key can collide with. */
-function placeSources(place: { fieldValues?: unknown }): [string, string][] {
-  const stored = fieldValue(place.fieldValues, SOURCES_FIELD_KEY);
-  return Array.isArray(stored) ? (stored as [string, string][]) : [];
 }
 
 function PlaceDetailPanel({
@@ -285,7 +279,6 @@ function PlaceDetailPanel({
     foreignFields.find((item) => item.key === foreignKey) ?? null;
   const placeType = placeTypes.find((type) => type.id === place?.placeTypeId);
   const TypeGlyph = placeTypeLucideIcon(placeType?.iconKey ?? "map-pin");
-  const placeTypeName = placeType?.name ?? "this type";
 
   /** What this KIND of place records, and what this one answered. Only the
    *  answered ones: a form asks every question, a page reports the answers. */
@@ -661,6 +654,303 @@ function PlaceDetailPanel({
   const track =
     placeMedia.find((m) => mediaCategory(m.mediaType) === "track") ?? null;
 
+  const copy = PLACE_PAGE.copy;
+  const sources = placeSources(current.fieldValues);
+  const placeStatusKey = isOwnedPlace
+    ? loadingTrips
+      ? null
+      : placeStatus({ syncRole: "owner" }, tripLogs.length)
+    : placeStatus({ syncRole: "shared" }, 0);
+  const grade = formatCanyonGrade(current.fieldValues);
+  const primaryVerbs = placeVerbs("web", "page", isOwnedPlace).filter((verb) =>
+    (PLACE_PAGE_PRIMARY_VERBS as readonly string[]).includes(verb.id),
+  );
+
+  // Exhaustive by type: a section the contract names and this page does not
+  // draw, or the reverse, fails `tsc` (`PLACE_PAGE`, shared/src/contracts).
+  const sections: Record<
+    SectionKeysOn<typeof PLACE_PAGE, "web">,
+    () => ReactNode
+  > = {
+    hero: () => (
+      <div className={classes.section}>
+        {/* WHAT IT IS, in the type's own glyph and colour, then where it
+            stands: a fact, not a field, so a line and pills rather than a row
+            in a table. The hue goes in as a custom property the stylesheet
+            reads, never as an inline colour (DESIGN.md §9). */}
+        <p
+          className={classes.identity}
+          style={{ "--tile-hue": placeType?.color } as CSSProperties}
+        >
+          {/* A lookup in lucide's static exports, not a component made in
+              render: the same key is the same component every time. */}
+          <TypeGlyph size={16} aria-hidden className={classes.typeGlyph} />
+          {placeType?.name ?? "Unknown type"}
+        </p>
+        <div className={classes.pills}>
+          {grade ? <StatusPill label={grade} tone="outline" /> : null}
+          {placeStatusKey ? (
+            <StatusPill
+              label={placeStatusLabel(placeStatusKey, tripLogs.length)}
+              tone={placeStatusKey === "done" ? "accent" : "outline"}
+            />
+          ) : null}
+        </div>
+        {current.altNames.length > 0 && (
+          <p className={classes.meta}>
+            {copy.alsoKnownAs} {current.altNames.join(", ")}
+          </p>
+        )}
+      </div>
+    ),
+
+    verbs: () =>
+      primaryVerbs.length > 0 ? (
+        <div className={classes.verbs}>
+          {primaryVerbs.map((verb, index) => (
+            <Button
+              key={verb.id}
+              variant={index === primaryVerbs.length - 1 ? "filled" : "outline"}
+              icon={verb.icon}
+              disabled={busy}
+              onClick={() => verbRunners[verb.id]()}
+            >
+              {verb.label}
+            </Button>
+          ))}
+        </div>
+      ) : null,
+
+    // WHERE IT IS, as the thing people actually do with it: copy the
+    // coordinates into whatever they are navigating with.
+    position: () => (
+      <section className={classes.section}>
+        <SectionHeader title={copy.position} />
+        <Row
+          leading={<IconTile icon="place" hue="var(--color-accent)" />}
+          title={coordinates}
+          trailing={
+            <IconButton
+              icon={copied ? "done" : "copy"}
+              label={`Copy the coordinates of ${current.name}`}
+              onClick={() => void handleCopyCoordinates()}
+            />
+          }
+        />
+      </section>
+    ),
+
+    attributes: () =>
+      attributes.length > 0 ? (
+        <section className={classes.section}>
+          <SectionHeader
+            title={placeAttributesTitle(placeType?.name ?? null)}
+          />
+          <dl className={classes.table}>
+            {attributes.map(({ def, text }) => (
+              <div key={def.key} className={classes.tableRow}>
+                <dt>{def.label}</dt>
+                <dd className={classes.figure}>{text}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      ) : null,
+
+    // PARKED VALUES (§2.6). Named for the CONDITION: a type change strands
+    // what the new type has no field for, and a copy carries values keyed by
+    // the sender's fields. Owner-only, and structurally so: the server never
+    // sends `foreignFields` on a row a sharee can reach.
+    doesntFit: () =>
+      foreignFields.length > 0 ? (
+        <section className={classes.section}>
+          <SectionHeader title={copy.doesntFit} count={foreignFields.length} />
+          <p className={classes.muted}>
+            {current.forkedFromId
+              ? copy.doesntFitCopied
+              : copy.doesntFitTypeChange}
+          </p>
+          {/* A CARD PER ROW: every row here is a decision, and the three verbs
+              live in the dialog it opens. */}
+          {foreignFields.map((item) => (
+            <Row
+              key={item.key}
+              leading={<IconTile icon="help" hue="var(--color-accent)" />}
+              title={item.label}
+              subtitle={foreignValueText(item)}
+              trailing={<Icon idea="disclosure" size={18} aria-hidden />}
+              onOpen={() => setForeignKey(item.key)}
+            />
+          ))}
+        </section>
+      ) : null,
+
+    notes: () => {
+      const hasNotes = Boolean(current.notes && current.notes.trim());
+      return (
+        <section className={classes.section}>
+          <SectionHeader
+            title={hasNotes && isOwnedPlace ? copy.notesVisible : copy.notes}
+          />
+          <p className={hasNotes ? classes.notes : classes.muted}>
+            {hasNotes ? current.notes : copy.notesEmpty}
+          </p>
+        </section>
+      );
+    },
+
+    sources: () =>
+      sources.length > 0 ? (
+        <section className={classes.section}>
+          <SectionHeader title={copy.sources} count={sources.length} />
+          {sources.map((source, index) => (
+            <Row
+              key={index}
+              leading={
+                <IconTile
+                  icon={source.linkable ? "openExternal" : "link"}
+                  hue="var(--color-neutral)"
+                />
+              }
+              title={source.label}
+              subtitle={source.linkable ? source.host : undefined}
+              href={source.linkable ? source.url : undefined}
+              external={source.linkable}
+            />
+          ))}
+        </section>
+      ) : null,
+
+    photos: () => (
+      <section className={classes.section}>
+        <SectionHeader
+          title={copy.photos}
+          count={visualMedia.length > 0 ? visualMedia.length : undefined}
+        />
+        {visualMedia.length > 0 ? (
+          <PlaceSlideshow media={visualMedia} />
+        ) : (
+          <p className={classes.muted}>{copy.photosEmpty}</p>
+        )}
+      </section>
+    ),
+
+    // One route per place (the API enforces it): a FILE, so the row is a real
+    // link (middle-click, save as), wearing the glyph and hue a track wears on
+    // Ways. Sources are not a section: they are an attribute, and sit with the
+    // others.
+    route: () => (
+      <section className={classes.section}>
+        <SectionHeader title={copy.route} />
+        {track ? (
+          <Row
+            leading={<IconTile icon="track" hue="var(--hue-track)" />}
+            title={track.filename}
+            subtitle="Click to download"
+            href={track.displayUrl}
+            download={track.filename}
+            trailing={
+              isOwnedPlace ? (
+                <IconButton
+                  icon="delete"
+                  label={`Delete the track ${track.filename}`}
+                  tone="danger"
+                  onClick={() => setTrackToDelete(track)}
+                />
+              ) : undefined
+            }
+          />
+        ) : (
+          <p className={classes.muted}>{copy.routeEmpty}</p>
+        )}
+      </section>
+    ),
+
+    // NAVIGATIONAL ONLY: a link grants no visibility (§2.5), so this is the
+    // owner's own filing and a recipient is sent no links at all.
+    linkedPlaces: () => (
+      <section className={classes.section}>
+        <SectionHeader
+          title={copy.linkedPlaces}
+          count={linkedPlaces.length > 0 ? linkedPlaces.length : undefined}
+        />
+        {linkedPlaces.length === 0 ? (
+          <p className={classes.muted}>{copy.linkedPlacesEmpty}</p>
+        ) : (
+          linkedPlaces.map((linked) => {
+            const linkedType = placeTypes.find(
+              (type) => type.id === linked.placeTypeId,
+            );
+            return (
+              <Row
+                key={linked.id}
+                leading={
+                  <IconTile
+                    icon={placeTypeLucideIcon(linkedType?.iconKey ?? "map-pin")}
+                    hue={linkedType?.color ?? "var(--color-accent)"}
+                  />
+                }
+                title={linked.name}
+                onOpen={() => setSelectedPlaceID(linked.id)}
+              />
+            );
+          })
+        )}
+      </section>
+    ),
+
+    trips: () => (
+      <section className={classes.section}>
+        <SectionHeader
+          title={copy.trips}
+          count={tripLogs.length > 0 ? tripLogs.length : undefined}
+        />
+        {loadingTrips ? (
+          <p className={classes.muted} role="status">
+            Loading trips…
+          </p>
+        ) : tripLogs.length === 0 ? (
+          <p className={classes.muted}>
+            {isOwnedPlace ? copy.tripsEmpty : copy.tripsShared}
+          </p>
+        ) : (
+          tripLogs.map((trip) => (
+            <Row
+              key={trip.id}
+              leading={
+                <IconTile
+                  icon={tripTypeLook(primaryTripType(trip.types)).icon}
+                  hue={tripTypeLook(primaryTripType(trip.types)).hue}
+                />
+              }
+              title={formatDateKey(trip.date)}
+              subtitle={trip.notes ?? undefined}
+              onOpen={() => onOpenTrip(trip.id)}
+            />
+          ))
+        )}
+      </section>
+    ),
+
+    sharedWith: () => (
+      <section className={classes.section}>
+        <SectionHeader
+          title={copy.sharedWith}
+          count={sharedNames.length > 0 ? sharedNames.length : undefined}
+        />
+        <p className={sharedNames.length > 0 ? classes.notes : classes.muted}>
+          {sharedWithNode ?? copy.sharedWithEmpty}
+        </p>
+        <Row
+          leading={<IconTile icon="shareFriend" hue="var(--color-accent)" />}
+          title={copy.shareWithFriend}
+          onOpen={() => onSharePlace(current.id)}
+        />
+      </section>
+    ),
+  };
+  const sectionKeys = contractSectionsFor(PLACE_PAGE, "web", isOwnedPlace);
+
   return (
     <>
       <RunVerbRequest
@@ -694,224 +984,9 @@ function PlaceDetailPanel({
         />
 
         <div className={classes.body}>
-          {visualMedia.length > 0 && <PlaceSlideshow media={visualMedia} />}
-
-          {/* WHAT IT IS, in the type's own glyph and colour — a fact, not a
-              field, so it is a line of text rather than a row in a table with
-              the word "Type" beside it (operator, 2026-09-19). The alternative
-              names and who it is shared with read the same way. */}
-          {/* The hue goes in as a custom property the stylesheet reads, never
-              as an inline colour (DESIGN.md §9). */}
-          <p
-            className={classes.identity}
-            style={{ "--tile-hue": placeType?.color } as CSSProperties}
-          >
-            {/* A lookup in lucide's static exports, not a component made in
-                render: the same key is the same component every time. */}
-            {/* eslint-disable-next-line react-hooks/static-components */}
-            <TypeGlyph size={16} aria-hidden className={classes.typeGlyph} />
-            {placeType?.name ?? "Unknown type"}
-          </p>
-          {current.altNames.length > 0 && (
-            <p className={classes.meta}>
-              Also known as {current.altNames.join(", ")}
-            </p>
-          )}
-          {sharedWithNode != null && (
-            <p className={classes.meta}>Shared with {sharedWithNode}</p>
-          )}
-
-          {/* WHERE IT IS, as the thing people actually do with it: copy the
-              coordinates into whatever they are navigating with. */}
-          <Row
-            leading={<IconTile icon="place" hue="var(--color-accent)" />}
-            title={coordinates}
-            subtitle="Latitude, longitude"
-            trailing={
-              <IconButton
-                icon={copied ? "done" : "copy"}
-                label={`Copy the coordinates of ${current.name}`}
-                onClick={() => void handleCopyCoordinates()}
-              />
-            }
-          />
-
-          {attributes.length > 0 && (
-            <section className={classes.section}>
-              <SectionHeader
-                title={`This ${placeTypeName.toLowerCase()}\u2019s attributes`}
-              />
-              <dl className={classes.table}>
-                {attributes.map(({ def, text }) => (
-                  <div key={def.key} className={classes.tableRow}>
-                    <dt>{def.label}</dt>
-                    <dd className={classes.figure}>{text}</dd>
-                  </div>
-                ))}
-              </dl>
-            </section>
-          )}
-
-          {current.notes && current.notes.trim().length > 0 && (
-            <section className={classes.section}>
-              <SectionHeader title="Notes" />
-              <p className={classes.notes}>{current.notes}</p>
-            </section>
-          )}
-
-          {placeSources(current).length > 0 && (
-            <section className={classes.section}>
-              <SectionHeader
-                title="Sources"
-                count={placeSources(current).length}
-              />
-              {placeSources(current).map(([label, url], index) => {
-                // FEUI-012: only http(s) becomes a link — a non-http scheme
-                // (from data saved before the save-time check existed) is a
-                // row that says what it says and goes nowhere.
-                const linkable = Boolean(url) && isHttpUrl(url);
-                return (
-                  <Row
-                    key={index}
-                    leading={
-                      <IconTile
-                        icon={linkable ? "openExternal" : "link"}
-                        hue="var(--color-neutral)"
-                      />
-                    }
-                    title={label}
-                    subtitle={linkable ? hostOf(url) : undefined}
-                    description={linkable ? "Opens in a new tab" : undefined}
-                    href={linkable ? url : undefined}
-                    external={linkable}
-                  />
-                );
-              })}
-            </section>
-          )}
-
-          {track && (
-            <section className={classes.section}>
-              <SectionHeader title="Track" />
-              {/* A FILE, so the row is a real link (middle-click, save as) —
-                  wearing the same glyph and hue a track wears on Ways. */}
-              <Row
-                leading={<IconTile icon="track" hue="var(--hue-track)" />}
-                title={track.filename}
-                subtitle="Click to download"
-                href={track.displayUrl}
-                download={track.filename}
-                trailing={
-                  isOwnedPlace ? (
-                    <IconButton
-                      icon="delete"
-                      label={`Delete the track ${track.filename}`}
-                      tone="danger"
-                      onClick={() => setTrackToDelete(track)}
-                    />
-                  ) : undefined
-                }
-              />
-            </section>
-          )}
-
-          {/* LINKED PLACES — navigational only. A link grants no visibility
-              (§2.5), so this is the owner's own filing and a recipient is
-              sent no links at all; the list is simply absent for them. */}
-          {isOwnedPlace && linkedPlaces.length > 0 && (
-            <section className={classes.section}>
-              <SectionHeader
-                title="Linked places"
-                count={linkedPlaces.length}
-              />
-              {linkedPlaces.map((linked) => (
-                <Row
-                  key={linked.id}
-                  leading={
-                    <IconTile
-                      icon={placeTypeLucideIcon(
-                        placeTypes.find(
-                          (type) => type.id === linked.placeTypeId,
-                        )?.iconKey ?? "map-pin",
-                      )}
-                      hue={
-                        placeTypes.find(
-                          (type) => type.id === linked.placeTypeId,
-                        )?.color ?? "var(--color-accent)"
-                      }
-                    />
-                  }
-                  title={linked.name}
-                  onOpen={() => setSelectedPlaceID(linked.id)}
-                />
-              ))}
-            </section>
-          )}
-
-          {/* PARKED VALUES (§2.6). Named for the CONDITION, the way Logjam GPS
-              names it: a type change strands what the new type has no field
-              for, and a copy carries values keyed by the sender's fields.
-              Read-only, in their own section, with the decision per item.
-
-              Owner-only, and structurally so — the server never sends
-              `foreignFields` on a row a sharee can reach. */}
-          {isOwnedPlace && foreignFields.length > 0 && (
-            <section className={classes.section}>
-              <SectionHeader
-                title="Doesn't fit this type"
-                count={foreignFields.length}
-              />
-              <p className={classes.muted}>
-                {current.forkedFromId
-                  ? "These came across when you copied this place. Click one to decide what to do with it."
-                  : "These are left over from when you changed this place\u2019s type. Click one to decide what to do with it."}
-              </p>
-              {/* A CARD PER ROW, like Logjam GPS: every row here is a decision,
-                  so it wears the same row as every other thing that opens, and
-                  the three verbs live in the dialog it opens rather than
-                  wrapping under each value. */}
-              {foreignFields.map((item) => (
-                <Row
-                  key={item.key}
-                  leading={<IconTile icon="help" hue="var(--color-accent)" />}
-                  title={item.label}
-                  subtitle={foreignValueText(item)}
-                  trailing={<Icon idea="disclosure" size={18} aria-hidden />}
-                  onOpen={() => setForeignKey(item.key)}
-                />
-              ))}
-            </section>
-          )}
-
-          <section className={classes.section}>
-            <SectionHeader title="Trips" count={tripLogs.length} />
-            {loadingTrips ? (
-              <p className={classes.muted} role="status">
-                Loading trips…
-              </p>
-            ) : tripLogs.length === 0 ? (
-              <p className={classes.muted}>
-                {isOwnedPlace
-                  ? "No trips logged here yet."
-                  : "Trip logs are private to the place's owner."}
-              </p>
-            ) : (
-              tripLogs.map((trip) => (
-                <Row
-                  key={trip.id}
-                  leading={
-                    <IconTile
-                      icon={tripTypeLook(primaryTripType(trip.types)).icon}
-                      hue={tripTypeLook(primaryTripType(trip.types)).hue}
-                    />
-                  }
-                  title={formatDateKey(trip.date)}
-                  subtitle={trip.notes ?? undefined}
-                  onOpen={() => onOpenTrip(trip.id)}
-                />
-              ))
-            )}
-          </section>
+          {sectionKeys.map((key) => (
+            <Fragment key={key}>{sections[key]()}</Fragment>
+          ))}
         </div>
       </div>
 

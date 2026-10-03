@@ -3,6 +3,11 @@ import { SYSTEM_FIELD_DEFS } from "../placeTypes.js";
 import {
   attributeFilterShape,
   contractSectionKeys,
+  contractSectionsFor,
+  PLACE_PAGE,
+  PLACE_PAGE_PRIMARY_VERBS,
+  placeAttributesTitle,
+  placeStatusLabel,
   PLACE_VERBS,
   placeDeleteConfirm,
   PLACES_ADD,
@@ -236,5 +241,36 @@ describe("placeDeleteConfirm", () => {
     expect(placeDeleteConfirm({ count: 3 }).confirmBody).toBe(
       "Their notes, photos, tracks and shares go too. Trips that link to them stay in your logbook, unlinked. This can't be undone.",
     );
+  });
+});
+
+describe("a place's page", () => {
+  it("keeps the owner's sections off a place someone shared", () => {
+    const shared = contractSectionsFor(PLACE_PAGE, "web", false);
+    for (const key of ["doesntFit", "linkedPlaces", "sharedWith"])
+      expect(shared).not.toContain(key);
+    expect(contractSectionsFor(PLACE_PAGE, "web", true)).toContain(
+      "sharedWith",
+    );
+    expect(contractSectionsFor(PLACE_PAGE, "web", true)).not.toContain(
+      "navigate",
+    );
+    expect(contractSectionsFor(PLACE_PAGE, "gps", true)).toContain("navigate");
+  });
+
+  // Red when a primary verb is dropped from the page's verbs: the buttons and
+  // the ⋯ must never disagree about what a place can do.
+  it("draws as buttons only verbs the page offers", () => {
+    const page = placeVerbs("gps", "page", true).map((verb) => verb.id);
+    for (const id of PLACE_PAGE_PRIMARY_VERBS) expect(page).toContain(id);
+  });
+
+  it("names the attributes for the kind, and the status with its tally", () => {
+    expect(placeAttributesTitle("Canyon")).toBe("Canyon attributes");
+    expect(placeAttributesTitle(null)).toBe("Place attributes");
+    expect(placeStatusLabel("todo", 0)).toBe("Not visited");
+    expect(placeStatusLabel("done", 1)).toBe("Visited · 1 trip");
+    expect(placeStatusLabel("done", 3)).toBe("Visited · 3 trips");
+    expect(placeStatusLabel("shared", 0)).toBe("Shared");
   });
 });
