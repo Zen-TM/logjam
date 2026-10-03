@@ -55,7 +55,7 @@ function ChangeEmailForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // The address is this one field's problem, so it is reported under it
-  // (DESIGN.md §8) — before Cognito is called at all.
+  // (docs/ux-principles.md §11) — before Cognito is called at all.
   const [emailError, setEmailError] = useState<string | null>(null);
   // Captured when the code is sent, so the verify step can name the address it
   // went to even while the field is being retyped.

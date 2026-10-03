@@ -10,13 +10,24 @@ name: terraform-plan
 # AWS plan role has ReadOnlyAccess minus the privacy Deny, the GitHub plan App
 # has no write permission beyond Contents, and -lock=false never writes state.
 #
-# Runs on every PR because `plan-prod` is a required check (as `plan-github`
-# is meant to be), and a path-filtered workflow that never starts leaves a
+# The plan jobs run in the terraform-plan Environment, so each run waits for
+# the maintainer's approval ("Review deployments" on the PR) before it gets
+# the AWS plan role, the plan App's key or PLAN_FINGERPRINT_KEY: the plan
+# role trusts only that Environment and main, and both keys are secrets of
+# that Environment. Approving runs this PR's code with them (its workflows,
+# Terraform and infra/lambda), so read those first
+# (docs/decisions/0027-pr-plans-run-after-the-maintainer-approves.md). The
+# scope job has no Environment and no credentials, so a PR that changes no
+# infra needs no approval.
+#
+# Runs on every PR because `plan-prod` is a required check and so is
+# `plan-github`, and a path-filtered workflow that never starts leaves a
 # required check pending forever. A PR that changes nothing a root's plan
-# sees passes that job without planning (plan-summary.mjs scope, which the
-# apply asks too). Fork PRs get no id-token and no secrets: one touching infra
-# fails here with a message saying so, and can't merge until the maintainer
-# re-opens it from a branch in this repository.
+# sees skips that job, which a required check counts as passing
+# (plan-summary.mjs scope, which the apply asks too). Fork PRs get no
+# id-token and no secrets: one touching infra fails here with a message
+# saying so, and can't merge until the maintainer re-opens it from a branch
+# in this repository.
 # Dependabot PRs are the same case: its runs get no secrets and a read-only
 # token, and the restriction follows whoever triggered the run, so "Update
 # branch" by a person lifts it.
@@ -38,11 +49,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  plan-prod:
+  # No Environment and no credentials. If it fails, the plan jobs still start
+  # and fail, so a required check never passes on a skipped plan.
+  scope:
     runs-on: ubuntu-latest
-    env:
-      GH_TOKEN: ${{ github.token }}
-      PR: ${{ github.event.pull_request.number }}
+    outputs:
+      prod: ${{ steps.scope.outputs.prod }}
+      github: ${{ steps.scope.outputs.github }}
     steps:
       # The pull_request checkout is the merge of the PR into its base; its
       # first parent is the base, so HEAD^1..HEAD is exactly the PR's change.
@@ -50,20 +63,57 @@ jobs:
         with:
           fetch-depth: 2
 
-      - name: Does this PR change what the plan sees?
+      # This job is in no Environment, so it sees repository secrets only, as
+      # every PR's workflow does. None of these keys may be one.
+      - name: The plan and apply keys are Environment secrets
+        env:
+          PLAN_FINGERPRINT_KEY: ${{ secrets.PLAN_FINGERPRINT_KEY }}
+          SETTINGS_PLAN_APP_KEY: ${{ secrets.SETTINGS_PLAN_APP_KEY }}
+          SETTINGS_APPLY_APP_KEY: ${{ secrets.SETTINGS_APPLY_APP_KEY }}
+        run: |
+          found=""
+          for name in PLAN_FINGERPRINT_KEY SETTINGS_PLAN_APP_KEY SETTINGS_APPLY_APP_KEY; do
+            if [ -n "${!name}" ]; then found="$found $name"; fi
+          done
+          if [ -n "$found" ]; then
+            echo "::error::Repository secrets that must be Environment secrets:$found. Any pull request's workflow can read a repository secret. Set each in its Environment (PLAN_FINGERPRINT_KEY in terraform-plan and prod, SETTINGS_PLAN_APP_KEY in terraform-plan, SETTINGS_APPLY_APP_KEY in prod), then delete the repository copy."
+            exit 1
+          fi
+
+      - name: Which roots does this PR change?
         id: scope
         run: |
-          if git diff --name-only HEAD^1 HEAD | node infra/scripts/plan-summary.mjs scope prod; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "No change the prod plan sees (envs/prod, modules, templates, lambda): nothing to plan."
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          fi
+          git diff --name-only HEAD^1 HEAD > "$RUNNER_TEMP/changed.txt"
+          for root in prod github; do
+            if node infra/scripts/plan-summary.mjs scope "$root" < "$RUNNER_TEMP/changed.txt"; then
+              echo "$root=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "No change the $root plan sees: nothing to plan."
+              echo "$root=false" >> "$GITHUB_OUTPUT"
+            fi
+          done
+
+  plan-prod:
+    needs: scope
+    if: ${{ !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.prod == 'true') }}
+    runs-on: ubuntu-latest
+    environment: terraform-plan
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR: ${{ github.event.pull_request.number }}
+    steps:
+      - name: Stop if the scope job failed
+        if: needs.scope.result != 'success'
+        run: |
+          echo "::error::The scope job failed, so this plan cannot run. Fix what it reports and push again."
+          exit 1
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Dependabot's runs have no secrets, so the role ARN below would be
       # malformed and fail with an OIDC error that names neither cause nor fix.
       - name: Explain a run that has no AWS secrets
-        if: steps.scope.outputs.run == 'true' && github.actor == 'dependabot[bot]'
+        if: github.actor == 'dependabot[bot]'
         run: |
           echo "::error::Dependabot-triggered runs get no AWS secrets, so this plan cannot run. Click 'Update branch' on the PR (or push to it): a run a person triggers has the secrets."
           exit 1
@@ -71,20 +121,18 @@ jobs:
       # A fork's runs get neither secrets nor an OIDC token, so the steps
       # below would fail on a malformed role or an empty App key.
       - name: Explain a pull request from a fork
-        if: steps.scope.outputs.run == 'true' && github.event.pull_request.head.repo.full_name != github.repository
+        if: github.event.pull_request.head.repo.full_name != github.repository
         run: |
           echo "::error::This pull request comes from a fork, and GitHub doesn't give fork pull requests the credentials this plan needs, so it can't run here. Nothing to fix on your side: the maintainer will review the change and re-open it from a branch in this repository."
           exit 1
 
       - name: Configure AWS credentials
-        if: steps.scope.outputs.run == 'true'
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
         with:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/logjam-github-actions-plan-role
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - if: steps.scope.outputs.run == 'true'
-        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
         with:
           terraform_version: "~> 1.13"
           terraform_wrapper: false
@@ -92,17 +140,14 @@ jobs:
       # The prod root's archive_file zips this Lambda's dist/. Built here and
       # in terraform-apply.yml the same way, so the source_code_hash in both
       # plans (and in the fingerprint) comes from the same bytes.
-      - if: steps.scope.outputs.run == 'true'
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 20
       - name: Build cognito-email-sender Lambda
-        if: steps.scope.outputs.run == 'true'
         working-directory: infra/lambda/cognito-email-sender
         run: npm ci && npm run build && npm test
 
       - name: terraform init
-        if: steps.scope.outputs.run == 'true'
         run: terraform -chdir=infra/terraform/envs/prod init -input=false
 
       # -lock=false: read-only plan must not take the state lock (the plan
@@ -111,7 +156,6 @@ jobs:
       # values, and artifacts on a public repo are public.
       - name: terraform plan
         id: plan
-        if: steps.scope.outputs.run == 'true'
         continue-on-error: true
         run: |
           set -o pipefail
@@ -121,7 +165,6 @@ jobs:
 
       - name: Comment plan on PR
         id: comment
-        if: steps.scope.outputs.run == 'true'
         env:
           OUTCOME: ${{ steps.plan.outcome }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -141,29 +184,26 @@ jobs:
           exit "$rendered"
 
   plan-github:
+    needs: scope
+    if: ${{ !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.github == 'true') }}
     runs-on: ubuntu-latest
+    environment: terraform-plan
     env:
       GH_TOKEN: ${{ github.token }}
       PR: ${{ github.event.pull_request.number }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 2
-
-      - name: Does this PR change what the plan sees?
-        id: scope
+      - name: Stop if the scope job failed
+        if: needs.scope.result != 'success'
         run: |
-          if git diff --name-only HEAD^1 HEAD | node infra/scripts/plan-summary.mjs scope github; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "No change the GitHub-settings plan sees (envs/github): nothing to plan."
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          fi
+          echo "::error::The scope job failed, so this plan cannot run. Fix what it reports and push again."
+          exit 1
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # As in plan-prod: a Dependabot run has neither the AWS secrets nor the
       # plan App's key.
       - name: Explain a run that has no secrets
-        if: steps.scope.outputs.run == 'true' && github.actor == 'dependabot[bot]'
+        if: github.actor == 'dependabot[bot]'
         run: |
           echo "::error::Dependabot-triggered runs get no secrets, so this plan cannot run. Click 'Update branch' on the PR (or push to it): a run a person triggers has the secrets."
           exit 1
@@ -171,14 +211,13 @@ jobs:
       # A fork's runs get neither secrets nor an OIDC token, so the steps
       # below would fail on a malformed role or an empty App key.
       - name: Explain a pull request from a fork
-        if: steps.scope.outputs.run == 'true' && github.event.pull_request.head.repo.full_name != github.repository
+        if: github.event.pull_request.head.repo.full_name != github.repository
         run: |
           echo "::error::This pull request comes from a fork, and GitHub doesn't give fork pull requests the credentials this plan needs, so it can't run here. Nothing to fix on your side: the maintainer will review the change and re-open it from a branch in this repository."
           exit 1
 
       # Only for the state, which lives in the prod state bucket.
       - name: Configure AWS credentials
-        if: steps.scope.outputs.run == 'true'
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
         with:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/logjam-github-actions-plan-role
@@ -192,26 +231,22 @@ jobs:
       # update to those alone as no change (ROOTS.github.unreadable).
       - name: GitHub token for the plan
         id: app
-        if: steps.scope.outputs.run == 'true'
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
           client-id: ${{ vars.SETTINGS_PLAN_APP_CLIENT_ID }}
           private-key: ${{ secrets.SETTINGS_PLAN_APP_KEY }}
 
-      - if: steps.scope.outputs.run == 'true'
-        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
         with:
           terraform_version: "~> 1.13"
           terraform_wrapper: false
 
       - name: terraform init
-        if: steps.scope.outputs.run == 'true'
         run: terraform -chdir=infra/terraform/envs/github init -input=false
 
       # -lock=false and a planfile kept on the runner, as for envs/prod.
       - name: terraform plan
         id: plan
-        if: steps.scope.outputs.run == 'true'
         continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ steps.app.outputs.token }}
@@ -222,7 +257,6 @@ jobs:
           terraform show -json github.tfplan > "$RUNNER_TEMP/plan.json"
 
       - name: Comment plan on PR
-        if: steps.scope.outputs.run == 'true'
         env:
           OUTCOME: ${{ steps.plan.outcome }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}

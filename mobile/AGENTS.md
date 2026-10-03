@@ -19,20 +19,14 @@ Expo with a dev client and EAS Build, not Expo Go: it has native modules.
 
 ## Rules
 
-- **Read `mobile/DESIGN.md` before building or reshaping a screen;** extend the
-  `src/ui` primitives, and update `DESIGN.md` with a convention change.
-- **A new foreground/background colour pair joins `scripts/wcag-contrast.mjs`**
-  in the same change; `KNOWN_FAILURES` only shrinks.
+- **UI work loads the `design-system` skill**: a screen, sheet, kit
+  component, icon, colour or user-facing string.
 - **Map code follows the MLRN 11 rules:** read [0015](../docs/decisions/0015-mlrn-11-map-interaction-rules.md)
   before changing a layer, a press handler or a camera write.
 - **A guest syncs nothing yet:** gate a new server call through
   `auth/capabilities.ts` so a guest makes none, and never add a guest-only
   write path. [0007](../docs/decisions/0007-guest-mode-is-dont-sync-yet.md)
-- **A screen reached after the first sync shows its empty state on `data == null`,**
-  never on `MirrorQueryState.loading`.
 - **An aggregate of the user's own data filters out `syncRole === "shared"`.**
-- **A card's border width never changes with state** (Fabric drops the children
-  of a rounded `overflow: hidden` card); change its colour. [0017](../docs/decisions/0017-inbox-edits-are-outbox-ops.md)
 
 ## Privacy and battery
 

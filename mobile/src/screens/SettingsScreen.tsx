@@ -154,7 +154,7 @@ export function SettingsScreen({
             icon={icon}
             title={title}
             // Notifications and Offline & Storage are account-backed pages, so
-            // they say so on the way in rather than after the tap (§10). The
+            // they say so on the way in rather than after the tap (DESIGN.md §8). The
             // offline tab's switches all govern account-backed downloads or
             // sync, none of which a guest has.
             {...(page === "notifications"

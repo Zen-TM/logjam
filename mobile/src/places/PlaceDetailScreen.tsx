@@ -1,4 +1,4 @@
-// Place detail — "what am I walking into?" (DESIGN.md §1). The grade, the
+// Place detail — "what am I walking into?" (docs/ux-principles.md §2). The grade, the
 // numbers that decide the day, and the notes come first; sharing and admin sit
 // below them, because you read this screen at a trailhead and manage it at home.
 //
@@ -9,7 +9,7 @@
 //
 // PRIVACY: this is the one screen that does show a coordinate, because it is the
 // answer to its own question and the user asked for this place by name. It
-// stays here — never on a list row (DESIGN.md §11). Sharing is owner-only and
+// stays here — never on a list row (docs/ux-principles.md §13). Sharing is owner-only and
 // username-only; recipients never see this section at all.
 import { Fragment, useCallback, useState, type ReactNode } from "react";
 import {
@@ -1022,7 +1022,7 @@ function PlaceSharingSection({
       ) : null}
 
       {/* Offline this door is closed WITH THE REASON in place of its subtitle
-          (DESIGN.md §10) rather than hidden, so the feature doesn't appear to
+          (DESIGN.md §8) rather than hidden, so the feature doesn't appear to
           come and go. */}
       <Row
         icon="shareFriend"

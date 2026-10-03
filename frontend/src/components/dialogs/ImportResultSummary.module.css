@@ -69,7 +69,7 @@
 }
 
 /* The verb sits at the start of its own line, not stretched across the dialog:
-   it is the quiet way out, not the primary (§7). */
+   it is the quiet way out, not the primary (DESIGN.md §5). */
 .undo {
   align-self: flex-start;
 }

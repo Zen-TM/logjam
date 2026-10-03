@@ -6,7 +6,7 @@
 //
 // The two ways in are ROWS, not a stack of buttons: each is a thing to choose
 // with a sentence saying what it gets you, which is what a row carries and a
-// button does not (§5). The recommended one is the accent tile.
+// button does not (DESIGN.md §3). The recommended one is the accent tile.
 import { useState } from "react";
 import { importFromRopeWiki } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
@@ -103,7 +103,7 @@ function OnboardingChoiceDialog({
             />
           }
           // Absent, not disabled, once it has run: there is nothing left to
-          // press, and the subtitle says what arrived (§7).
+          // press, and the subtitle says what arrived (DESIGN.md §5).
           onOpen={loaded || loading ? undefined : handleLoadRopeWiki}
         />
         {loading && <ProgressBar label="Loading the RopeWiki database" />}

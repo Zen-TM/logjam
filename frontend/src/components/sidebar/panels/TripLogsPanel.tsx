@@ -125,7 +125,7 @@ function TripLogsPanel({
   onQuotaChanged: () => void;
   onRefetchPlaces: () => void;
   onOpenUnifiedImport: () => void;
-  /** A trip is READ on its own page (DESIGN.md §6), not in a dialog. */
+  /** A trip is READ on its own page (DESIGN.md §4), not in a dialog. */
   onOpenTrip: (tripLogId: string) => void;
   /** The date sheet is open beside the panel, so the map's chrome slides clear. */
   onFiltersOpenChange: (open: boolean) => void;

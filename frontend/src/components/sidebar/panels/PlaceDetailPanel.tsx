@@ -207,7 +207,7 @@ function PlaceDetailPanel({
   onClose: () => void;
   /** Centre the map on this place — the same verb its row and its pin offer. */
   onFlyToPlace: (latitude: number, longitude: number) => void;
-  /** A trip is READ on its own page (DESIGN.md §6), not in a dialog over this one. */
+  /** A trip is READ on its own page (DESIGN.md §4), not in a dialog over this one. */
   onOpenTrip: (tripLogId: string) => void;
   /** Start a map over this place; the menu names the two kinds. */
   onMakeMap: (place: TPlace, kind: "topo" | "geopdf") => void;
@@ -677,7 +677,7 @@ function PlaceDetailPanel({
         {/* WHAT IT IS, in the type's own glyph and colour, then where it
             stands: a fact, not a field, so a line and pills rather than a row
             in a table. The hue goes in as a custom property the stylesheet
-            reads, never as an inline colour (DESIGN.md §9). */}
+            reads, never as an inline colour (DESIGN.md §6). */}
         <p
           className={classes.identity}
           style={{ "--tile-hue": placeType?.color } as CSSProperties}

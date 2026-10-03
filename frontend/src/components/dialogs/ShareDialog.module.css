@@ -1,5 +1,5 @@
 /* Who can see this, and how to take it back. Layout only — every control is
-   the kit's (DESIGN.md §6, §9). */
+   the kit's (DESIGN.md §4, §9). */
 
 .body {
   display: flex;
@@ -35,7 +35,7 @@
 }
 
 /* The + at the end of a grantable row. Decoration, not a control — the whole
-   card is the button (DESIGN.md §7), and a second target here would put two
+   card is the button (DESIGN.md §5), and a second target here would put two
    ways to do one thing on one line. */
 .grantMark {
   display: flex;

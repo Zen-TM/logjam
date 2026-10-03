@@ -39,7 +39,7 @@
 /* Required credit, so it stays — but it is provenance, not a figure the user
    reads. Recessive by SIZE and style only, never by opacity: fading
    `--color-text-muted` put it under 4.5:1, which axe caught the moment Ways
-   joined e2e/a11y.spec.ts (DESIGN.md §10). */
+   joined e2e/a11y.spec.ts (DESIGN.md §7). */
 .attribution {
   margin: 0;
   color: var(--color-text-muted);

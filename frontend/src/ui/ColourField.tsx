@@ -31,7 +31,7 @@ import classes from "./ColourField.module.css";
  * Inside: a saturation/brightness plane, a hue strip and an opacity strip, each a
  * `role="slider"` the arrow keys move (Shift for bigger steps), and the value as
  * text for pasting one in. Changes apply as they are made — this is for styling
- * something live on the map — and a press outside closes it (DESIGN.md §6).
+ * something live on the map — and a press outside closes it (DESIGN.md §4).
  */
 export function ColourField({
   label,

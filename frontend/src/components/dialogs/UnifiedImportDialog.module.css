@@ -56,7 +56,7 @@
   color: var(--color-text-muted);
 }
 
-/* A link INSIDE a sentence: the one shape an anchor keeps in this app (§5). */
+/* A link INSIDE a sentence: the one shape an anchor keeps in this app (DESIGN.md §3). */
 .inlineLink {
   padding: 0;
   border: none;
