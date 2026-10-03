@@ -6,9 +6,8 @@ import {
 } from "@logjam/shared";
 import { apiFetch } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
-import { ErrorBanner } from "../feedback/ErrorBanner";
 import { type CompletedTopoJob } from "../../topoLayerTypes";
-import { Button, Dialog } from "../../ui";
+import { Button, Dialog, ErrorBanner } from "../../ui";
 import TopoExportControls from "./TopoExportControls";
 import classes from "./topoSettings/topoSettings.module.css";
 

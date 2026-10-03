@@ -60,6 +60,7 @@ import {
   Icon,
   IconButton,
   IconTile,
+  LoadingState,
   Menu,
   Row,
   SearchField,
@@ -720,7 +721,7 @@ function PlacesPanel({
 
   const list = !placesLoaded ? (
     <div className={classes.emptyArea} role="status">
-      <p className={classes.loading}>{copy.loading}</p>
+      <LoadingState label={copy.loading} />
     </div>
   ) : empty && emptyState ? (
     <div className={classes.emptyArea}>

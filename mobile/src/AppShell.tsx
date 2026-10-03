@@ -363,7 +363,7 @@ function MapStackNav() {
           />
         )}
       </MapStack.Screen>
-      {/* Place and trip detail both carry their own HeroHeader, which owns the
+      {/* Place and trip detail both carry their own Hero, which owns the
           back affordance (DESIGN.md §2). */}
       <MapStack.Screen name="MapPlaceDetail" options={{ headerShown: false }}>
         {({ navigation, route }) => (
@@ -422,7 +422,7 @@ function MapStackNav() {
 function SavedStackNav() {
   return (
     <SavedStack.Navigator screenOptions={stackScreenOptions}>
-      {/* No native header: SavedScreen leads with its own HeroHeader. */}
+      {/* No native header: SavedScreen leads with its own Hero. */}
       <SavedStack.Screen name="SavedHome" options={{ headerShown: false }}>
         {({ navigation, route }) => (
           <SavedScreen
@@ -538,7 +538,7 @@ function PlacesStackNav() {
   return (
     <PlacesStack.Navigator screenOptions={stackScreenOptions}>
       {/* No native header on any of these: each screen leads with its own
-          HeroHeader (DESIGN.md §2). */}
+          Hero (DESIGN.md §2). */}
       <PlacesStack.Screen name="PlaceList" options={{ headerShown: false }}>
         {({ navigation }) => (
           <PlacesScreen
@@ -659,7 +659,7 @@ function PlacesStackNav() {
 function TripsStackNav() {
   return (
     <TripsStack.Navigator screenOptions={stackScreenOptions}>
-      {/* Logs and trip detail both carry their own HeroHeader, so the native
+      {/* Logs and trip detail both carry their own Hero, so the native
           header is off and the hero owns the back affordance (DESIGN.md §2). */}
       <TripsStack.Screen name="TripList" options={{ headerShown: false }}>
         {({ navigation }) => (
@@ -1021,7 +1021,7 @@ export function AppShell({
               {() => (
                 <MoreStack.Navigator screenOptions={stackScreenOptions}>
                   {/* Every screen here except Settings leads with its own
-                  HeroHeader, which owns the back affordance (DESIGN.md §2).
+                  Hero, which owns the back affordance (DESIGN.md §2).
                   Settings is a plain settings list, so it keeps the native
                   header — the rule that a bare-label hero is the pattern being
                   replaced cuts both ways. */}

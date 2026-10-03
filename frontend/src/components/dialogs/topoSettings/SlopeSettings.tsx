@@ -14,8 +14,8 @@ import {
   InfoTip,
   LiveNumberField,
   Icon,
+  FieldError,
 } from "../../../ui";
-import { FieldError } from "../../feedback/FieldError";
 import type { NumericFieldConstraints } from "../../../numberInput";
 import styles from "./topoSettings.module.css";
 

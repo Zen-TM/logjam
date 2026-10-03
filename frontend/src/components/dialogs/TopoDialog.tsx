@@ -15,7 +15,6 @@ import {
   putToPresignedUrl,
 } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
-import { ErrorBanner } from "../feedback/ErrorBanner";
 import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
 import ConfirmDialog from "./ConfirmDialog";
 import type { TBbox } from "../map/Map";
@@ -45,6 +44,7 @@ import {
   StatusPill,
   TextField,
   Icon,
+  ErrorBanner,
 } from "../../ui";
 import AdvancedSettings from "./topoSettings/AdvancedSettings";
 import { SETTINGS_TABS, type SettingsTab } from "./topoSettings/settingsTabs";

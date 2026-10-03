@@ -45,7 +45,6 @@ const BUDGET: Record<string, number> = {
   "components/dialogs/TripLogDialog.module.css": 14,
   "components/dialogs/UnifiedImportDialog.module.css": 16,
   "components/dialogs/topoSettings/topoSettings.module.css": 15,
-  "components/feedback/ErrorBanner.module.css": 6,
   "components/feedback/RootErrorBoundary.module.css": 10,
   "components/feedback/ToastProvider.module.css": 4,
   "components/map/LayersPopover.module.css": 28,

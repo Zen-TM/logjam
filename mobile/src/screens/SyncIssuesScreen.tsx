@@ -48,10 +48,10 @@ import { useConnectivity } from "../map/connectivity";
 import { fontSize, spacing, theme } from "../theme";
 import {
   BottomSheet,
-  HeroHeader,
+  Hero,
   IconButton,
   Row,
-  SEGMENTED_CONTROL_HEIGHT,
+  CHIP_RAIL_HEIGHT,
   SelectionBar,
   SelectionMark,
   StatusPill,
@@ -213,10 +213,18 @@ export function SyncIssuesScreen({
   const items = useMemo<Issue[]>(
     () => [
       ...parked.map(
-        (op): Issue => ({ kind: "stuck", key: `stuck:${op.seq}`, op }),
+        (op): Issue => ({
+          kind: "stuck",
+          key: `stuck:${op.seq}`,
+          op,
+        }),
       ),
       ...shelf.map(
-        (entry): Issue => ({ kind: "lost", key: `lost:${entry.id}`, entry }),
+        (entry): Issue => ({
+          kind: "lost",
+          key: `lost:${entry.id}`,
+          entry,
+        }),
       ),
     ],
     [parked, shelf],
@@ -517,7 +525,7 @@ export function SyncIssuesScreen({
 
   return (
     <View style={styles.root}>
-      <HeroHeader
+      <Hero
         eyebrow="Account sync issues"
         title={total > 0 ? "Some changes need you" : "Everything's synced"}
         onBack={onBack}
@@ -918,7 +926,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing(1.5),
   },
   // Matches the SelectionBar it swaps with, so the list below cannot move.
-  railHint: { height: SEGMENTED_CONTROL_HEIGHT, justifyContent: "center" },
+  railHint: { height: CHIP_RAIL_HEIGHT, justifyContent: "center" },
   railHintText: {
     color: theme.textMuted,
     fontSize: fontSize.sm,

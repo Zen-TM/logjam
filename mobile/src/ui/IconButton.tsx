@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet } from "react-native";
 
-import { hitSlop, radius, theme, withAlpha } from "../theme";
+import { hitSlop, opacity, radius, theme, withAlpha } from "../theme";
 import { Icon, type Glyph } from "./Icon";
 
 // An intent colour as a glyph on a wash of itself falls under 3:1 on
@@ -69,5 +69,5 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   pressed: { opacity: 0.6 },
-  disabled: { opacity: 0.4 },
+  disabled: { opacity: opacity.disabled },
 });

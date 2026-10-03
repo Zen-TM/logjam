@@ -4,6 +4,7 @@ import {
   controlSize,
   fontSize,
   fontWeight,
+  opacity,
   radius,
   spacing,
   theme,
@@ -22,6 +23,12 @@ type ButtonProps = {
   onPress: () => void;
   variant?: ButtonVariant;
   disabled?: boolean;
+  /**
+   * Why it is disabled (UX §5): "Needs a connection", "Needs an account".
+   * Read by a screen reader as the hint, and what to show beside it. The button
+   * does not draw it — the screen puts the words where there is room.
+   */
+  disabledReason?: string;
   loading?: boolean;
   /** Optional leading glyph, tinted with the label. */
   icon?: Glyph;
@@ -43,6 +50,7 @@ export function Button({
   onPress,
   variant = "filledAccent",
   disabled = false,
+  disabledReason,
   loading = false,
   icon,
   compact = false,
@@ -55,6 +63,9 @@ export function Button({
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityHint={disabled ? disabledReason : undefined}
+      accessibilityState={{ disabled: inactive, busy: loading }}
       onPress={onPress}
       disabled={inactive}
       hitSlop={compact ? COMPACT_SLOP : undefined}
@@ -64,7 +75,9 @@ export function Button({
         grow && styles.grow,
         styles[variant],
         pressed && styles.pressed,
-        inactive && styles.disabled,
+        // A button that is loading is working, not unavailable: it keeps its
+        // colour, as on Logjam Web.
+        disabled && styles.disabled,
       ]}
     >
       {loading ? (
@@ -110,7 +123,7 @@ const styles = StyleSheet.create({
   outlineAccent: { borderWidth: 1, borderColor: theme.accent },
   ghost: {},
   pressed: { opacity: 0.75 },
-  disabled: { opacity: 0.45 },
+  disabled: { opacity: opacity.disabled },
   label: { fontSize: fontSize.base, fontWeight: fontWeight.medium },
   labelCompact: { fontSize: fontSize.sm },
 });

@@ -91,20 +91,20 @@ import {
 import {
   BottomSheet,
   Button,
-  CapacityBar,
-  HeroHeader,
+  Meter,
+  Hero,
   Icon,
   IconButton,
   LoadingState,
   ErrorState,
   Row,
-  SegmentedControl,
+  ChipRail,
   SelectionBar,
   SyncStatusPills,
   Toast,
   useBulkSelection,
-  type CapacitySegment,
-  type SegmentOption,
+  type MeterSegment,
+  type ChipOption,
   type ToastMessage,
 } from "../ui";
 import { deletePlaceLocal } from "../sync/outbox";
@@ -129,7 +129,7 @@ const { copy } = PLACES_LIST;
 type Bucket = "all" | PlaceStatus;
 
 /** The type rail's "every type" chip. A sentinel rather than `null`, because
- *  `SegmentedControl` keys its chips by value. No place type can collide with
+ *  `ChipRail` keys its chips by value. No place type can collide with
  *  it — an id is a UUID. */
 const ALL_TYPES = "all";
 /** The rail's trailing ACTION chip. Not a type id and cannot collide with one:
@@ -488,7 +488,7 @@ export function PlacesScreen({
     return counts;
   }, [withoutType]);
 
-  const typeOptions: SegmentOption<string>[] = useMemo(
+  const typeOptions: ChipOption<string>[] = useMemo(
     () => [
       { value: ALL_TYPES, label: copy.anyType, count: withoutType.length },
       ...placeTypes
@@ -522,7 +522,7 @@ export function PlacesScreen({
    * intercepts it (DESIGN.md §5: a control that changes mode says so by what it
    * does, not by looking different).
    */
-  const railOptions: SegmentOption<string>[] = useMemo(
+  const railOptions: ChipOption<string>[] = useMemo(
     () => [
       ...typeOptions,
       { value: NEW_TYPE, label: copy.newType, icon: "add" },
@@ -559,7 +559,7 @@ export function PlacesScreen({
     onDone: () => setSheet(null),
   });
 
-  const bucketOptions: SegmentOption<Bucket>[] = useMemo(
+  const bucketOptions: ChipOption<Bucket>[] = useMemo(
     () => [
       { value: "all", label: copy.allStatuses, count: withoutBucket.length },
       ...PLACE_STATUS_ORDER.map((status) => ({
@@ -577,24 +577,24 @@ export function PlacesScreen({
     [bucket, bucketCounts, withoutBucket.length],
   );
 
-  const heroSegments: CapacitySegment[] = useMemo(
+  const heroSegments: MeterSegment[] = useMemo(
     () => [
       {
         label: "Visited",
         value: totals.done,
-        color: placeHue.done,
+        hue: placeHue.done,
         display: String(totals.done),
       },
       {
         label: "Not visited",
         value: totals.todo,
-        color: placeHue.todo,
+        hue: placeHue.todo,
         display: String(totals.todo),
       },
       {
         label: "Shared",
         value: totals.shared,
-        color: placeHue.shared,
+        hue: placeHue.shared,
         display: String(totals.shared),
       },
     ],
@@ -716,10 +716,10 @@ export function PlacesScreen({
     ReactNode
   > = {
     hero: (
-      <HeroHeader
+      <Hero
         eyebrow="Places"
         title={placesHeroTitle(places.length)}
-        action={
+        actions={
           <View style={styles.heroActions}>
             <IconButton
               icon="search"
@@ -770,14 +770,14 @@ export function PlacesScreen({
         ) : (
           <View style={styles.meterRow}>
             <View style={styles.meter}>
-              <CapacityBar segments={heroSegments} />
+              <Meter segments={heroSegments} />
             </View>
             {filterButton}
           </View>
         )}
 
         <SyncStatusPills online={online} pendingCount={pendingCount} />
-      </HeroHeader>
+      </Hero>
     ),
 
     typeRail: (
@@ -799,7 +799,7 @@ export function PlacesScreen({
           style={[styles.typeRail, selecting && styles.railInert]}
           pointerEvents={selecting ? "none" : "auto"}
         >
-          <SegmentedControl
+          <ChipRail
             scroll
             options={railOptions}
             value={filters.placeTypeId ?? ALL_TYPES}
@@ -826,7 +826,7 @@ export function PlacesScreen({
             onDelete={deleteSelected}
           />
         ) : (
-          <SegmentedControl
+          <ChipRail
             scroll
             options={bucketOptions}
             value={bucket}

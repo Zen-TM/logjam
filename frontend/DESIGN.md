@@ -251,6 +251,11 @@ line / line-strong    hairlines / edges that must be seen (≥3:1)
 
 ## 9. Kit rules
 
+- **The component list is `KIT_COMPONENTS` in `shared/src/kit.ts`**, the one list both clients' barrels are held to (`src/ui/kit.test.ts`): which components Logjam GPS has too, and why each one it has not is not shared. A component starts there; a helper (a hook, a constant) does not belong in the barrel.
+- **A card fill means "press me" (UX §4).** `Row` and `StatGrid` wear the `card` colour only when they do something: a row with `onOpen`, `href` or a pick, a stat with `onCopy`. A read-only one has no fill and no hover but the same box, so its tile and title line up with its neighbours. A row with only trailing controls is not pressable. A `SwitchRow` makes the whole row the switch's target: one `role="switch"`, named by the title, which stays the keyboard path.
+- **A disabled control dims by `--opacity-disabled`, does not answer a press and says why** where there is room: a `Row`'s subtitle, a `Button`'s `disabledReason` (a tooltip on hover and focus, and its description). A button with a reason stays focusable (`aria-disabled`), because a disabled one can be neither tabbed to nor hovered.
+- **Every surface carries its way out.** `Dialog`, `SideSheet` and `Popover` have a × at the top right (`Popover closeButton={false}` only where its own header ends in one); `Hero onBack` draws the arrow at the top left.
+- **A load is `LoadingState`, a failed load `ErrorState`, a failed submit `ErrorBanner`, a failed field `FieldError`**: kit components, in `src/ui` beside the rest. Their words are `text`; the warning is a glyph.
 - **Compose `src/ui`.** A screen that needs something the kit lacks adds it to the kit, generically, with the smallest API that covers the case. Screen CSS modules do layout; the kit does look.
 - **Form controls are native elements in one field's clothes.** `TextField`, `NumberField` and `Select` share an anatomy: a sentence-case label, the control, an optional `hint` (visible and read with the control, where a tooltip is neither) and `FieldError`.
   - `NumberField` types as text and sanitises each keystroke (`numberInput.ts`); the caller blocks Save with the same `numericFieldError`.

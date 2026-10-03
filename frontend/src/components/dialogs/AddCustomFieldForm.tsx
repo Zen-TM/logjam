@@ -1,8 +1,14 @@
 import type { TripLogCustomFieldType } from "@logjam/shared";
 import { CUSTOM_FIELD_TYPES } from "@logjam/shared";
 import { sanitizeNumericInput } from "../../numberInput";
-import { ErrorBanner } from "../feedback/ErrorBanner";
-import { Button, Checkbox, ChipRail, SectionHeader, TextField } from "../../ui";
+import {
+  Button,
+  Checkbox,
+  ChipRail,
+  SectionHeader,
+  TextField,
+  ErrorBanner,
+} from "../../ui";
 import classes from "./AddCustomFieldForm.module.css";
 
 /** What the user calls this shape — "Text", "Yes / No". */

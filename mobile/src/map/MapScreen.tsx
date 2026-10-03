@@ -105,16 +105,7 @@ import {
   useMirrorRoutes,
 } from "../sync/useSyncQueries";
 import { config } from "../config";
-import {
-  assetHue,
-  fontSize,
-  fontWeight,
-  radius,
-  scrim,
-  spacing,
-  theme,
-  withAlpha,
-} from "../theme";
+import { assetHue, fontSize, fontWeight, spacing, theme } from "../theme";
 import { MapSearchBar, type SavedSearchItem } from "./MapSearchBar";
 import {
   PlacePinsLayer,
@@ -220,13 +211,17 @@ import { ROUTE_ARROW_SDF_URI } from "@logjam/shared";
 import { ROUTE_ARROW_IMAGE } from "./routeArrowStyle";
 import type { MirrorPlace, MirrorRoute } from "../sync/mirrorStore";
 import { RouteOptionsSheet } from "../routes/RouteOptionsSheet";
-import { BottomSheet } from "../ui/BottomSheet";
-import { Button } from "../ui/Button";
-import { TextField } from "../ui/TextField";
-import { Icon } from "../ui/Icon";
-import { IconButton } from "../ui/IconButton";
-import { Row } from "../ui/Row";
-import { Toast, type ToastMessage } from "../ui/Toast";
+import {
+  BottomSheet,
+  Button,
+  Icon,
+  IconButton,
+  Notice,
+  Row,
+  TextField,
+  Toast,
+  type ToastMessage,
+} from "../ui";
 import { BASEMAP_THUMB_CREDIT } from "./BasemapThumb";
 import { PlaceRoutesLayer, type PlaceRoutesStatus } from "./PlaceRoutesLayer";
 import { MapLayersSheet, type LayerToggleEntry } from "./MapLayersSheet";
@@ -4883,12 +4878,10 @@ export function MapScreen({
             without being asked (MLIFE-001). Everything else about a running
             recording is a tap away; this is the exception. */}
         {activeTrack && recordingWriteFailing ? (
-          <View style={styles.notice}>
-            <Text style={styles.noticeText}>
-              Points aren&apos;t being saved — finish the recording and check
-              free space.
-            </Text>
-          </View>
+          <Notice icon="warning" tone="warning">
+            Points aren&apos;t being saved — finish the recording and check free
+            space.
+          </Notice>
         ) : null}
 
         {/* Measure HUD — the same panel as route draw, minus Save. */}
@@ -4957,18 +4950,10 @@ export function MapScreen({
             Deliberately worded as SIMULATING: the phone is not offline, we are
             pretending, and the user is the one who asked us to. */}
         {offlineOnly ? (
-          <View style={styles.notice}>
-            <Text style={styles.noticeText}>
-              Offline mode — using only saved maps
-            </Text>
-          </View>
+          <Notice icon="offline">Offline mode — using only saved maps</Notice>
         ) : null}
 
-        {noticeText ? (
-          <View style={styles.notice}>
-            <Text style={styles.noticeText}>{noticeText}</Text>
-          </View>
-        ) : null}
+        {noticeText ? <Notice icon="offline">{noticeText}</Notice> : null}
 
         {/* The compass is confidently wrong and nothing else on screen would
             say so — every app on the phone reads the same miscalibrated
@@ -4977,44 +4962,39 @@ export function MapScreen({
             is why this sits with the map's own notices rather than next to any
             one of them. Clears itself on the next probe that reads clean. */}
         {headingWanted && magneticInterference(fieldWindow) ? (
-          <View style={styles.notice}>
-            <Text style={styles.noticeText}>
-              Magnetic interference — move the phone away from metal
-            </Text>
-          </View>
+          <Notice icon="warning" tone="warning">
+            Magnetic interference — move the phone away from metal
+          </Notice>
         ) : headingWanted && compassCalibration.warning ? (
-          <View style={styles.notice}>
-            <Text style={styles.noticeText}>
-              Compass needs calibrating — wave the phone in a figure 8
-            </Text>
-          </View>
+          <Notice icon="warning" tone="warning">
+            Compass needs calibrating — wave the phone in a figure 8
+          </Notice>
         ) : null}
 
         {/* Error surfaces: background failures, non-blocking. */}
         {places.error ? (
-          <View style={styles.notice}>
-            <Text style={styles.noticeText}>{places.error}</Text>
-          </View>
+          <Notice icon="warning" tone="warning">
+            {places.error}
+          </Notice>
         ) : null}
 
         {/* A map that quietly hides pins is a map you can't trust. Says how many
             are missing, and the dismiss IS the way out — clearing it turns the
             Places screen's "show only these" option back off. */}
         {withholdingPlaces ? (
-          <View style={styles.filterBadge}>
-            <Icon idea="filter" size={14} color={theme.accent} />
-            {/* Two lines: this sentence grows with the user's text size, and a
-                badge that says "Showing 5 of 2…" is a warning nobody can act on. */}
-            <Text style={styles.filterBadgeText} numberOfLines={2}>
-              {`Showing ${mapFilter.visibleIds?.length ?? 0} of ${mapFilter.totalCount} places`}
-            </Text>
-            <IconButton
-              icon="close"
-              size={16}
-              accessibilityLabel="Show all places again"
-              onPress={() => setPlaceMapFilterEnabled(false)}
-            />
-          </View>
+          <Notice
+            icon="filter"
+            action={
+              <IconButton
+                icon="close"
+                size={16}
+                accessibilityLabel="Show all places again"
+                onPress={() => setPlaceMapFilterEnabled(false)}
+              />
+            }
+          >
+            {`Showing ${mapFilter.visibleIds?.length ?? 0} of ${mapFilter.totalCount} places`}
+          </Notice>
         ) : null}
 
         {/* A download keeps running while the user walks around the map, so it
@@ -5027,9 +5007,7 @@ export function MapScreen({
             map notices; it used to be an accent-outlined pill that matched
             nothing else on the screen. */}
         {downloadProgress ? (
-          <View style={styles.notice}>
-            <Text style={styles.noticeText}>{downloadProgress}</Text>
-          </View>
+          <Notice icon="saveOffline">{downloadProgress}</Notice>
         ) : null}
       </View>
 
@@ -5119,25 +5097,31 @@ export function MapScreen({
       {/* Navigate-to-waypoint readout: live distance + bearing from the
           latest fix. Static labels only — coordinates never rendered. */}
       {navTarget ? (
-        <View style={[styles.navChip, { top: noticeTop }]}>
+        <View
+          style={[styles.navDock, { top: noticeTop }]}
+          pointerEvents="box-none"
+        >
           {/* The distance and bearing live at the end of this line, so a
               one-line cap cuts off the half that changes. */}
-          <Text style={styles.noticeText} numberOfLines={2}>
-            {navTarget.name}
-            {navDistanceM != null && navBearingDeg != null
-              ? ` · ${formatDistanceM(navDistanceM)} · ${compassPointFor(
-                  navBearingDeg,
-                )} ${Math.round(navBearingDeg)}°`
-              : " · waiting for GPS…"}
-          </Text>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Stop navigating"
-            onPress={() => setNavTarget(null)}
-            hitSlop={8}
+          <Notice
+            icon="navigateTo"
+            action={
+              <IconButton
+                icon="close"
+                size={16}
+                accessibilityLabel="Stop navigating"
+                onPress={() => setNavTarget(null)}
+              />
+            }
           >
-            <Text style={styles.deleteText}>✕</Text>
-          </Pressable>
+            {`${navTarget.name}${
+              navDistanceM != null && navBearingDeg != null
+                ? ` · ${formatDistanceM(navDistanceM)} · ${compassPointFor(
+                    navBearingDeg,
+                  )} ${Math.round(navBearingDeg)}°`
+                : " · waiting for GPS…"
+            }`}
+          </Notice>
         </View>
       ) : null}
 
@@ -5515,24 +5499,6 @@ const styles = StyleSheet.create({
     right: spacing(2),
     gap: spacing(1),
   },
-  notice: {
-    alignSelf: "center",
-    backgroundColor: scrim.heavy,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing(2),
-    paddingVertical: spacing(1),
-  },
-  // Centred, because the banner is centre-anchored (`alignSelf`) and grows
-  // around its own midline — left-aligned text in a box that moves under it
-  // reads as drifting, and these wrap to two lines at large text sizes.
-  noticeText: {
-    color: theme.text,
-    fontSize: fontSize.sm,
-    textAlign: "center",
-  },
-  // Takes the slack so the dismiss sits at the pill's right edge rather than
-  // floating next to the text.
-  filterBadgeText: { flex: 1, color: theme.text, fontSize: fontSize.sm },
   sheetBody: { gap: spacing(1) },
   controls: {
     position: "absolute",
@@ -5562,18 +5528,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   controlActive: { backgroundColor: theme.accent },
-  // Pill shape for "something is being done to this map" notices.
-  filterBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing(1),
-    paddingLeft: spacing(1.5),
-    paddingRight: spacing(0.5),
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: withAlpha(theme.accent, 0.5),
-    backgroundColor: withAlpha(theme.page, 0.92),
-  },
   instruments: {
     position: "absolute",
     left: CHROME_GAP,
@@ -5581,25 +5535,12 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     gap: INSTRUMENT_GAP,
   },
-  navChip: {
-    position: "absolute",
-    alignSelf: "center",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing(1.5),
-    backgroundColor: "rgba(0,0,0,0.7)",
-    borderRadius: radius.md,
-    paddingHorizontal: spacing(2),
-    paddingVertical: spacing(1),
-  },
+  // Where the navigation readout sits: a Notice, centred, in the notice stack's
+  // column.
+  navDock: { position: "absolute", left: spacing(2), right: spacing(2) },
   attributionText: {
     color: theme.textMuted,
     fontSize: fontSize.sm,
     fontWeight: fontWeight.regular,
-  },
-  deleteText: {
-    color: theme.warning,
-    fontSize: fontSize.sm,
-    fontWeight: "600",
   },
 });

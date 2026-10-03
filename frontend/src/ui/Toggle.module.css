@@ -35,14 +35,38 @@
 }
 
 .toggle:disabled {
-  opacity: 0.45;
+  opacity: var(--opacity-disabled);
   cursor: default;
 }
 
+/* A SwitchRow is pressable end to end, so it sits on the card colour, as an
+   openable Row does. */
 .row {
   display: flex;
   align-items: center;
   gap: var(--space-1-5);
+  /* A Row's 48: a control-sized tile and the space around it. */
+  min-height: calc(var(--control-md) + 2 * var(--space-1));
+  box-sizing: border-box;
+  padding: calc(var(--space-1) - 1px) var(--space-1);
+  border: var(--hairline);
+  border-radius: var(--radius-lg);
+  background: var(--color-card);
+  cursor: pointer;
+}
+
+.row:hover:not([data-disabled]) {
+  border-color: color-mix(in srgb, var(--color-accent) 70%, var(--color-line));
+}
+
+.row:has(.toggle:focus-visible) {
+  outline: 2px solid var(--color-text);
+  outline-offset: 2px;
+}
+
+.row[data-disabled] {
+  opacity: var(--opacity-disabled);
+  cursor: default;
 }
 
 .text {

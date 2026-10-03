@@ -10,8 +10,8 @@
   min-height: calc(var(--control-md) + 2 * var(--space-1-5) + 1px);
   box-sizing: border-box;
   padding: var(--space-1-5) var(--gutter);
-  border-bottom: 1px solid
-    color-mix(in srgb, var(--color-accent) 25%, transparent);
+  /* A hairline is decoration: the `line` colour, as Logjam GPS's hero. */
+  border-bottom: 1px solid var(--color-line);
 }
 
 /* The back arrow's button box carries its own whitespace, so it sits on the

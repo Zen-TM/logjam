@@ -27,9 +27,9 @@ import {
   ErrorBanner,
   Row,
   SectionHeader,
-  SegmentedControl,
+  ChipRail,
   TextField,
-  Toggle,
+  SwitchRow,
 } from "../ui";
 
 /**
@@ -102,7 +102,7 @@ export function CustomFieldList({
       ) : (
         <>
           <SectionHeader
-            label={`${ordered.length} ${ordered.length === 1 ? ATTRIBUTE_NOUN.one : ATTRIBUTE_NOUN.many}`}
+            title={`${ordered.length} ${ordered.length === 1 ? ATTRIBUTE_NOUN.one : ATTRIBUTE_NOUN.many}`}
           />
           {ordered.map((def) =>
             // A BUILT-IN gets no verbs, the same way a system place type does:
@@ -380,8 +380,8 @@ export function useCustomFieldForm({
           under a heading of their own put them next to the place-type picker,
           which is the other thing on this screen called a "type". */}
       <View style={styles.typeBlock}>
-        <SectionHeader label={`What it holds`} />
-        <SegmentedControl
+        <SectionHeader title={`What it holds`} />
+        <ChipRail
           options={CUSTOM_FIELD_TYPES.map((entry) => ({
             value: entry.value,
             label: entry.label,
@@ -397,21 +397,16 @@ export function useCustomFieldForm({
             and the phone's stop rail. */}
         {numeric ? (
           <>
-            <Row
+            <SwitchRow
               icon="filter"
               title="Limit to a range"
-              subtitle={
+              description={
                 bounded
                   ? "Values must be between the min and max you set"
                   : "Any number"
               }
-              right={
-                <Toggle
-                  value={bounded}
-                  onValueChange={(next) => patch({ bounded: next })}
-                  accessibilityLabel="Limit to a range"
-                />
-              }
+              checked={bounded}
+              onChange={(next) => patch({ bounded: next })}
             />
             {bounded ? (
               <View style={styles.boundsRow}>

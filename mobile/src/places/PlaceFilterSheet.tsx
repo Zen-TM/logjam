@@ -24,9 +24,8 @@ import {
   Chip,
   DatePicker,
   DateRangeFilter,
-  Row,
   SectionHeader,
-  Toggle,
+  SwitchRow,
 } from "../ui";
 import { useFieldDefs } from "../customFields/useFieldDefs";
 
@@ -141,7 +140,7 @@ export const FILTER_SHEET_SECTIONS: Record<
 > = {
   sort: ({ sort, onChangeSort }) => (
     <>
-      <SectionHeader label={copy.sort} />
+      <SectionHeader title={copy.sort} />
       <View style={styles.chipRow}>
         {SORTS.map((option) => (
           <Chip
@@ -158,7 +157,7 @@ export const FILTER_SHEET_SECTIONS: Record<
   attributes: ({ typeDefs, filters, patch, pickDate }) =>
     typeDefs.length > 0 ? (
       <>
-        <SectionHeader label={copy.attributes} />
+        <SectionHeader title={copy.attributes} />
         {typeDefs.map((def) => (
           <AttributeFilter
             key={def.key}
@@ -169,16 +168,11 @@ export const FILTER_SHEET_SECTIONS: Record<
           />
         ))}
         {/* With the attributes because it widens only them. */}
-        <Row
+        <SwitchRow
           icon="help"
           title={copy.includeMissing}
-          right={
-            <Toggle
-              value={filters.include_unknowns}
-              accessibilityLabel={copy.includeMissing}
-              onValueChange={(next) => patch({ include_unknowns: next })}
-            />
-          }
+          checked={filters.include_unknowns}
+          onChange={(next) => patch({ include_unknowns: next })}
         />
       </>
     ) : null,
@@ -187,7 +181,7 @@ export const FILTER_SHEET_SECTIONS: Record<
   // answered by tapping it: the picker opens on the box, over the map.
   location: ({ filters, patch, onPickArea }) => (
     <>
-      <SectionHeader label={copy.location} />
+      <SectionHeader title={copy.location} />
       <View style={styles.chipRow}>
         <Chip
           label={filters.area ? areaSizeLabel(filters.area) : copy.drawArea}
@@ -203,7 +197,7 @@ export const FILTER_SHEET_SECTIONS: Record<
 
   source: ({ filters, patch }) => (
     <>
-      <SectionHeader label={copy.source} />
+      <SectionHeader title={copy.source} />
       <View style={styles.chipRow}>
         {ROPEWIKI.map((option) => (
           <Chip
@@ -214,23 +208,18 @@ export const FILTER_SHEET_SECTIONS: Record<
           />
         ))}
       </View>
-      <Row
+      <SwitchRow
         icon="shareFriend"
         title={copy.sharedByMe}
-        right={
-          <Toggle
-            value={filters.shared_by_me}
-            accessibilityLabel={copy.sharedByMe}
-            onValueChange={(next) => patch({ shared_by_me: next })}
-          />
-        }
+        checked={filters.shared_by_me}
+        onChange={(next) => patch({ shared_by_me: next })}
       />
     </>
   ),
 
   dates: ({ filters, patch, pickDate }) => (
     <>
-      <SectionHeader label={copy.dates} />
+      <SectionHeader title={copy.dates} />
       {(["created_at", "updated_at"] as const).map((field) => (
         <DateRangeFilter
           key={field}
@@ -253,22 +242,17 @@ export const FILTER_SHEET_SECTIONS: Record<
     totalCount,
   }) => (
     <>
-      <SectionHeader label={copy.onMap} />
-      <Row
+      <SectionHeader title={copy.onMap} />
+      <SwitchRow
         icon="map"
         title={copy.showOnMap}
-        subtitle={placesOnMapSummary(
+        description={placesOnMapSummary(
           showFilteredOnMap,
           filteredCount,
           totalCount,
         )}
-        right={
-          <Toggle
-            value={showFilteredOnMap}
-            accessibilityLabel={copy.showOnMap}
-            onValueChange={onChangeShowFilteredOnMap}
-          />
-        }
+        checked={showFilteredOnMap}
+        onChange={onChangeShowFilteredOnMap}
       />
     </>
   ),
