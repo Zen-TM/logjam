@@ -25,7 +25,7 @@ import { describe, expect, it } from "vitest";
  *   shared token changes and nobody regenerated);
  * - the file declares exactly the shared token set, under the kebab-case names
  *   the declaration implies (turns red when the generator drops or invents one:
- *   delete the `--color-*` line from `webSchemeProperties` and run this).
+ *   filter `line` out of `webSchemeProperties`, `make shared`, `npm run tokens`).
  */
 const committed = readFileSync(
   join(dirname(fileURLToPath(import.meta.url)), "tokens.generated.css"),
