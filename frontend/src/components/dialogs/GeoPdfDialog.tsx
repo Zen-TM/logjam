@@ -4,7 +4,7 @@
 // Nothing here is live — the paper is drawn on the map while you pick an area
 // (App's frame), and everything else only matters once the worker renders it —
 // so the whole dialog is one form with a Make it at the end, unlike the topo
-// settings beside it (DESIGN.md §6).
+// settings beside it (DESIGN.md §4).
 import {
   useCallback,
   useEffect,
@@ -91,7 +91,7 @@ export type GeoPdfTemplate = {
 const PAPER_SIZES: PaperSize[] = ["A2", "A3", "A4", "A5", "custom"];
 // The pivot's nine points, in reading order, with the name a reader hears:
 // the grid SHOWS which corner is anchored, so the words are the control's
-// accessible name rather than a caption under it (DESIGN.md §9).
+// accessible name rather than a caption under it (DESIGN.md §6).
 const PIVOT_POINTS: { value: PivotPoint; label: string }[] = [
   { value: "tl", label: "Top left" },
   { value: "tc", label: "Top centre" },
@@ -834,7 +834,7 @@ function GeoPdfDialog({
         onClose={guard.requestClose}
         // Pinned: which template this form came from, and the button that turns
         // the whole form into one, both act on everything below rather than on
-        // the section on screen (DESIGN.md §6). In template mode the NAME is
+        // the section on screen (DESIGN.md §4). In template mode the NAME is
         // what the dialog is about, so it sits here for the same reason.
         toolbar={
           templateMode ? (

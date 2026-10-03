@@ -96,7 +96,7 @@ export type CopyPanelArgs = {
  * sheet cannot open a second sheet over itself, so a verb whose panel needs
  * room is rendered as a sub-mode of the sheet that offers the verb. The footer
  * is separate because a sheet's primary action belongs in `BottomSheet`'s
- * pinned `footer` slot (DESIGN.md §6).
+ * pinned `footer` slot (DESIGN.md §4).
  */
 export function useCopyPanel({
   active,
