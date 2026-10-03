@@ -70,19 +70,19 @@ import {
 import {
   BottomSheet,
   Button,
-  CapacityBar,
-  HeroHeader,
+  Meter,
+  Hero,
   IconButton,
   LoadingState,
   ErrorState,
   Row,
-  SegmentedControl,
+  ChipRail,
   SelectionBar,
   SyncStatusPills,
   Toast,
   useBulkSelection,
-  type CapacitySegment,
-  type SegmentOption,
+  type MeterSegment,
+  type ChipOption,
   type ToastMessage,
   Icon,
 } from "../ui";
@@ -106,7 +106,7 @@ import { placeTypeGlyph } from "./placeTypeIcon";
 type Bucket = "all" | PlaceStatus;
 
 /** The type rail's "every type" chip. A sentinel rather than `null`, because
- *  `SegmentedControl` keys its chips by value. No place type can collide with
+ *  `ChipRail` keys its chips by value. No place type can collide with
  *  it — an id is a UUID. */
 const ALL_TYPES = "all";
 /** The rail's trailing ACTION chip. Not a type id and cannot collide with one:
@@ -469,7 +469,7 @@ export function PlacesScreen({
     return counts;
   }, [withoutType]);
 
-  const typeOptions: SegmentOption<string>[] = useMemo(
+  const typeOptions: ChipOption<string>[] = useMemo(
     () => [
       // "Any type", not "All": the bucket rail directly below has its own
       // "All" chip, and two identical words with the same number stacked six
@@ -506,7 +506,7 @@ export function PlacesScreen({
    * intercepts it (DESIGN.md §5: a control that changes mode says so by what it
    * does, not by looking different).
    */
-  const railOptions: SegmentOption<string>[] = useMemo(
+  const railOptions: ChipOption<string>[] = useMemo(
     () => [...typeOptions, { value: NEW_TYPE, label: "New type", icon: "add" }],
     [typeOptions],
   );
@@ -540,7 +540,7 @@ export function PlacesScreen({
     onDone: () => setSheet(null),
   });
 
-  const bucketOptions: SegmentOption<Bucket>[] = useMemo(
+  const bucketOptions: ChipOption<Bucket>[] = useMemo(
     () => [
       { value: "all", label: "All", count: withoutBucket.length },
       ...(["todo", "done", "shared"] as PlaceStatus[]).map((status) => ({
@@ -558,24 +558,24 @@ export function PlacesScreen({
     [bucket, bucketCounts, withoutBucket.length],
   );
 
-  const heroSegments: CapacitySegment[] = useMemo(
+  const heroSegments: MeterSegment[] = useMemo(
     () => [
       {
         label: "Visited",
         value: totals.done,
-        color: placeHue.done,
+        hue: placeHue.done,
         display: String(totals.done),
       },
       {
         label: "Not visited",
         value: totals.todo,
-        color: placeHue.todo,
+        hue: placeHue.todo,
         display: String(totals.todo),
       },
       {
         label: "Shared",
         value: totals.shared,
-        color: placeHue.shared,
+        hue: placeHue.shared,
         display: String(totals.shared),
       },
     ],
@@ -674,10 +674,10 @@ export function PlacesScreen({
 
   return (
     <View style={styles.screen}>
-      <HeroHeader
+      <Hero
         eyebrow="Places"
         title={places.length === 1 ? "1 place" : `${places.length} places`}
-        action={
+        actions={
           <View style={styles.heroActions}>
             <IconButton
               icon="search"
@@ -736,7 +736,7 @@ export function PlacesScreen({
         ) : (
           <View style={styles.meterRow}>
             <View style={styles.meter}>
-              <CapacityBar segments={heroSegments} />
+              <Meter segments={heroSegments} />
             </View>
             <IconButton
               icon="filter"
@@ -749,7 +749,7 @@ export function PlacesScreen({
         )}
 
         <SyncStatusPills online={online} pendingCount={pendingCount} />
-      </HeroHeader>
+      </Hero>
 
       {/* Two rails, and they answer different questions: WHAT kind of place
           (the user's own vocabulary) and WHERE it is in the tick list. Only the
@@ -768,7 +768,7 @@ export function PlacesScreen({
         style={[styles.typeRail, selecting && styles.railInert]}
         pointerEvents={selecting ? "none" : "auto"}
       >
-        <SegmentedControl
+        <ChipRail
           scroll
           options={railOptions}
           value={filters.placeTypeId ?? ALL_TYPES}
@@ -794,7 +794,7 @@ export function PlacesScreen({
             onDelete={deleteSelected}
           />
         ) : (
-          <SegmentedControl
+          <ChipRail
             scroll
             options={bucketOptions}
             value={bucket}

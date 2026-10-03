@@ -64,14 +64,53 @@
   grid-column: 1 / -1;
 }
 
+/* A read-out sits on the page: no fill, but the same box as a pressable one, so
+   a grid of both lines up. */
 .cell {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 2px;
   padding: var(--space-1) var(--space-1-5);
-  border: var(--hairline);
+  border: 1px solid transparent;
   border-radius: var(--radius-md);
+}
+
+/* A copyable cell does something, so it wears the card fill. */
+.cell:has(.copy) {
+  border-color: var(--color-line);
   background: var(--color-card);
+}
+
+.cell:has(.copy):hover {
+  border-color: color-mix(in srgb, var(--color-accent) 70%, var(--color-line));
+}
+
+.cell:has(.copy:active) {
+  background: var(--color-card-pressed);
+}
+
+.cell:has(.copy:focus-visible) {
+  outline: 2px solid var(--color-text);
+  outline-offset: 2px;
+}
+
+/* The button's hit area is the whole cell. */
+.copy {
+  all: unset;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-1);
+  width: 100%;
+  cursor: pointer;
+}
+
+.copy::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-md);
 }
 
 .statLabel {

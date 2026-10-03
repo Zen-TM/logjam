@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
-import { IconButton } from "./Button";
+import { Button, IconButton } from "./Button";
 import classes from "./Feedback.module.css";
 import { Icon, type Glyph } from "./Icon";
 
@@ -85,6 +85,46 @@ export function EmptyState({
       <p className={classes.emptyTitle}>{title}</p>
       {body && <p className={classes.emptyBody}>{body}</p>}
       {actions && <div className={classes.emptyActions}>{actions}</div>}
+    </div>
+  );
+}
+
+/**
+ * A load in flight (UX §11: loading is not empty). A spinner and a line saying
+ * what is loading ("Loading your places…"), centred and muted; Logjam GPS's
+ * `LoadingState` is the same. It is a status, so a screen reader hears it.
+ */
+export function LoadingState({ label = "Loading…" }: { label?: string }) {
+  return (
+    <p className={classes.state} role="status">
+      <Icon idea="loading" size={16} className={classes.spinner} />
+      {label}
+    </p>
+  );
+}
+
+/**
+ * A load that failed (UX §11: neither empty nor loading). Says it failed, in
+ * our words, with Try again where trying again can help.
+ */
+export function ErrorState({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry?: () => void;
+}) {
+  return (
+    <div className={classes.errorState} role="alert">
+      <p className={classes.state}>
+        <Icon idea="warning" size={16} className={classes.errorGlyph} />
+        {message}
+      </p>
+      {onRetry && (
+        <Button variant="outline" compact onClick={onRetry}>
+          Try again
+        </Button>
+      )}
     </div>
   );
 }

@@ -48,7 +48,6 @@ import {
 import classes from "./FriendSharingSection.module.css";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
 import RemoveSharedButton from "../../common/RemoveSharedButton";
-import { ErrorBanner } from "../../feedback/ErrorBanner";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
 import {
@@ -63,6 +62,8 @@ import {
   TileCheckbox,
   type ChipOption,
   type Glyph,
+  ErrorBanner,
+  LoadingState,
 } from "../../../ui";
 import { idRange } from "./placesModel";
 import type { TFriend, TFriendShares } from "../../../placeUtils";
@@ -378,7 +379,7 @@ function FriendSharingSection({
       )}
 
       {!shares && !error ? (
-        <p className={classes.loading}>Loading sharing…</p>
+        <LoadingState label="Loading sharing…" />
       ) : cards.length === 0 ? (
         <div className={classes.emptyArea}>
           <EmptyState

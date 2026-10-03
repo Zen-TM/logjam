@@ -47,6 +47,7 @@ import {
   type MenuEntry,
   Icon,
   type Glyph,
+  LoadingState,
 } from "../../../ui";
 import { placeTypeLucideIcon } from "./placeTypeIcon";
 import PlaceFilterSheet from "./PlaceFilterSheet";
@@ -694,7 +695,7 @@ function PlacesPanel({
 
   const list = !placesLoaded ? (
     <div className={classes.emptyArea} role="status">
-      <p className={classes.loading}>Loading your places…</p>
+      <LoadingState label="Loading your places…" />
     </div>
   ) : collection.length === 0 ? (
     <div className={classes.emptyArea}>

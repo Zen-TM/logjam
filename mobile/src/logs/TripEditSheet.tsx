@@ -629,7 +629,7 @@ export function TripEditSheet({
           {keptOnlyFieldDefs.length > 0 ? (
             <>
               <SectionHeader
-                label={`Leftover ${ATTRIBUTE_NOUN.many} · ${keptOnlyFieldDefs.length}`}
+                title={`Leftover ${ATTRIBUTE_NOUN.many} · ${keptOnlyFieldDefs.length}`}
               />
               <Text style={styles.hint}>
                 These {ATTRIBUTE_NOUN.many} are left over from when this trip
@@ -714,7 +714,7 @@ function PlacePicker({
 
       {pinned.length > 0 ? (
         <>
-          <SectionHeader label={`On this trip · ${pinned.length}`} />
+          <SectionHeader title={`On this trip · ${pinned.length}`} />
           {pinned.map((place, index) => (
             <Row
               key={place.id}
@@ -729,7 +729,7 @@ function PlacePicker({
         </>
       ) : null}
 
-      <SectionHeader label={query ? "Matches" : "Your places"} />
+      <SectionHeader title={query ? "Matches" : "Your places"} />
       {matches.length === 0 ? (
         <Text style={styles.hint}>
           {places.length === 0

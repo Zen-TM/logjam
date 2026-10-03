@@ -2,8 +2,7 @@ import { useId, useState } from "react";
 import { deleteUser } from "aws-amplify/auth";
 import { deleteAccount } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
-import { ErrorBanner } from "../feedback/ErrorBanner";
-import { Button, Dialog, TextField } from "../../ui";
+import { Button, Dialog, TextField, ErrorBanner } from "../../ui";
 import classes from "./DeleteAccountDialog.module.css";
 
 /**
