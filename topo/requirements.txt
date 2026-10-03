@@ -11,7 +11,7 @@ boto3>=1.43.104,<2.0
 psycopg2-binary>=2.9.13,<3.0
 pmtiles>=3.8.1,<4.0
 shapely>=2.1.2,<3.0
-resend>=2.48.0,<3.0
+resend>=2.49.0,<3.0
 
 # GDAL Python bindings are installed dynamically in the Dockerfile.
 # If running outside Docker, install manually:
