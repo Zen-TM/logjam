@@ -5,17 +5,17 @@
   gap: 6px;
   padding: 12px 16px;
   font-size: var(--font-xs);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 .link {
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
   text-decoration: none;
-  transition: color var(--transition-fast);
+  transition: color var(--motion-fast);
 }
 
 .link:hover {
-  color: var(--theme-accent);
+  color: var(--color-accent);
 }
 
 .sep {

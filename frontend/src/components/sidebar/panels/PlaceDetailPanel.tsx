@@ -763,7 +763,7 @@ function PlaceDetailPanel({
           {/* WHERE IT IS, as the thing people actually do with it: copy the
               coordinates into whatever they are navigating with. */}
           <Row
-            leading={<IconTile icon={MapPin} hue="var(--theme-accent)" />}
+            leading={<IconTile icon={MapPin} hue="var(--color-accent)" />}
             title={coordinates}
             subtitle="Latitude, longitude"
             trailing={
@@ -815,7 +815,7 @@ function PlaceDetailPanel({
                     leading={
                       <IconTile
                         icon={linkable ? ExternalLink : LinkIcon}
-                        hue="var(--theme-bonus-1)"
+                        hue="var(--color-neutral)"
                       />
                     }
                     title={label}
@@ -876,7 +876,7 @@ function PlaceDetailPanel({
                       hue={
                         placeTypes.find(
                           (type) => type.id === linked.placeTypeId,
-                        )?.color ?? "var(--theme-accent)"
+                        )?.color ?? "var(--color-accent)"
                       }
                     />
                   }
@@ -913,7 +913,7 @@ function PlaceDetailPanel({
                 <Row
                   key={item.key}
                   leading={
-                    <IconTile icon={CircleHelp} hue="var(--theme-accent)" />
+                    <IconTile icon={CircleHelp} hue="var(--color-accent)" />
                   }
                   title={item.label}
                   subtitle={foreignValueText(item)}
@@ -994,7 +994,7 @@ function PlaceDetailPanel({
             {!isReservedFieldKey(foreignItem.key) && (
               <Row
                 leading={
-                  <IconTile icon={CirclePlus} hue="var(--theme-accent)" />
+                  <IconTile icon={CirclePlus} hue="var(--color-accent)" />
                 }
                 title="Create a new attribute for this place type"
                 onOpen={() => runForeignFieldAction("adopt")}
@@ -1002,13 +1002,13 @@ function PlaceDetailPanel({
               />
             )}
             <Row
-              leading={<IconTile icon={FileText} hue="var(--theme-accent)" />}
+              leading={<IconTile icon={FileText} hue="var(--color-accent)" />}
               title="Add to notes as text"
               onOpen={() => runForeignFieldAction("notes")}
               disabled={foreignFieldBusy}
             />
             <Row
-              leading={<IconTile icon={Trash2} hue="var(--theme-accent)" />}
+              leading={<IconTile icon={Trash2} hue="var(--color-accent)" />}
               title="Discard"
               onOpen={() => setConfirmDiscard(true)}
               disabled={foreignFieldBusy}

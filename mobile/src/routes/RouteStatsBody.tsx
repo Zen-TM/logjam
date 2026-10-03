@@ -107,7 +107,7 @@ const styles = StyleSheet.create({
   statRow: { flexDirection: "row", gap: spacing(2) },
   stat: { gap: spacing(0.25) },
   statValue: {
-    color: theme.textPrimary,
+    color: theme.text,
     fontSize: fontSize.lg,
     fontWeight: fontWeight.bold,
     fontVariant: ["tabular-nums"],

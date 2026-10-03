@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // WCAG 2.1 contrast checker for the Logjam theme schemes.
-// Verifies every *rendered* foreground/background pair (mapped to real CSS usage in
-// shared.module.css / index.css) meets AA: text >= 4.5:1, large-text/UI >= 3:1.
+// Verifies every *rendered* foreground/background pair, named by its colour
+// roles (`ThemeTokens`) and measured on the surface it renders on, under every
+// scheme: text >= 4.5:1 (7:1 in a light scheme, which exists for full sun),
+// muted text >= 4.5:1, an edge, glyph or fill a user must see >= 3:1.
 //
 // Usage:
 //   node scripts/wcag-contrast.mjs            # check committed shared/src/themeSchemes.ts
@@ -105,35 +107,34 @@ function ratio(fgHex, bgHex) {
 }
 
 // ─── Parse THEME_SCHEMES tokens from the TS source ──────────────────────────
-function parseSchemes(src) {
+// Each scheme is `<key>: { id: "...", ..., mode: "...", tokens: { role: "#hex" | INK, ... } }`.
+function parseSchemes(src, ink) {
   const schemes = {};
-  // Match each `id: "...", name: "...", ... tokens: { ... }` block loosely by id + token body.
-  const idRe = /(\w+):\s*\{\s*id:\s*"(\w+)",[\s\S]*?tokens:\s*\{([\s\S]*?)\}\s*,?\s*\}/g;
+  const idRe = /(\w+):\s*\{\s*id:\s*"(\w+)",[\s\S]*?mode:\s*"(dark|light)",\s*tokens:\s*\{([\s\S]*?)\}\s*,?\s*\}/g;
   let m;
   while ((m = idRe.exec(src))) {
-    const key = m[2];
-    const body = m[3];
     const tokens = {};
-    const tokRe = /(\w+):\s*"(#[0-9A-Fa-f]+)"/g;
-    let t;
-    while ((t = tokRe.exec(body))) tokens[t[1]] = t[2];
-    schemes[key] = tokens;
+    for (const t of m[4].matchAll(/(\w+):\s*(?:"(#[0-9A-Fa-f]{6})"|(INK))/g)) {
+      tokens[t[1]] = t[2] ?? ink;
+    }
+    schemes[m[2]] = { mode: m[3], tokens };
   }
+  if (Object.keys(schemes).length === 0) throw new Error("no schemes parsed from themeSchemes.ts");
   return schemes;
 }
 
-// Hardcoded markers (live in index.css / Map.tsx, not the schemes file).
-// Read from the shared declaration rather than restated: these two ARE palette
-// entries, and a copy here would be the list that drifts.
 const PLACE_TYPE_COLORS = parsePaletteColors();
-const OWNED_MARKER = PLACE_TYPE_COLORS[0];
 // Read from the declaration, not restated: it is reserved precisely so it is
 // never a type colour, and a copy here is the half that would drift.
 const SHARED_MARKER = parseSharedPlaceColor();
 const FRIEND_AVATAR_HUES = parseFriendAvatarHues();
 const { ink: INK, assetHues: ASSET_HUES, statusHues: STATUS_HUES, tripTypeHues: TRIP_TYPE_HUES } = parseDesignTokens();
-// Every hue that fills a chip, tile or badge with a label on it.
-const LABELLED_FILLS = [
+// Every identity hue. An identity hue is only ever a FILL — a tile with an
+// `onFill` glyph, an active chip with an `onFill` label, a swatch, a mark on
+// the map — never a glyph, line or text on a theme surface, so the label on it
+// is the only pair it has. Mid-light hues fail 3:1 as glyphs on a light page,
+// and some did on dark cards (Logjam GPS's old wash tile).
+const IDENTITY_FILLS = [
   ...PLACE_TYPE_COLORS.map((color) => [`place-type ${color}`, color]),
   ["shared heath", SHARED_MARKER],
   ...ASSET_HUES.map(([name, color]) => [`asset hue ${name}`, color]),
@@ -143,35 +144,14 @@ const LABELLED_FILLS = [
   ...FRIEND_AVATAR_HUES.map((color) => [`friend avatar ${color}`, color]),
 ];
 
-/** Logjam GPS `Row` tile: hue glyph on `withAlpha(hue, 0.16)` over the card. */
-function worstTilePair(t) {
-  const pairs = [["done", t.accent], ...STATUS_HUES, ...ASSET_HUES].map(([name, color]) => ({
-    hue: name,
-    fg: color,
-    bg: tint(color, 0.16, t.secondary),
-  }));
-  const worst = pairs.reduce((a, b) => (ratio(a.fg, a.bg) <= ratio(b.fg, b.bg) ? a : b));
-  return { name: "hue glyph on its 16% wash over a card (Logjam GPS Row tile, worst hue)", fg: worst.fg, bg: worst.bg, min: 3 };
-}
-
 /**
  * Pairs that fail today and are KNOWN to, each with where it renders. They are
  * printed but do not fail the run — and a known failure that starts PASSING
  * does fail it, so this list can only shrink: fix the pair, delete its line.
  * Adding to it is a decision to ship an inaccessible pair, and needs saying.
  */
-const KNOWN_FAILURES = new Map([
-  // Logjam GPS HeroHeader fills with bonus2 (found 2026-09-13). Fails in
-  // Sandstone (muted 3.94:1) and Ironbark (bonus2 is a LIGHT green there).
-  ["textPrimary on bonus2 (Logjam GPS hero fill)", "mobile/src/ui/HeroHeader.tsx"],
-  ["textMuted on bonus2 (Logjam GPS hero fill)", "mobile/src/ui/HeroHeader.tsx"],
-  // Found 2026-09-13 building the web kit, which fills its tiles instead.
-  ["hue glyph on its 16% wash over a card (Logjam GPS Row tile, worst hue)", "mobile/src/ui/Row.tsx"],
-]);
+const KNOWN_FAILURES = new Map([]);
 
-// ─── Rendered pairs → actual CSS usage. `min` is the WCAG threshold. ────────
-// Filled-accent buttons use the scheme's dark `primary` as their label colour
-// (.btnFilledAccent / MUI primary.contrastText), so the label pair is primary-on-accent.
 /** The one hue reserved for "shared", read from the same declaration. */
 function parseSharedPlaceColor() {
   const src = readFileSync(placeTypesPath, "utf8");
@@ -180,133 +160,79 @@ function parseSharedPlaceColor() {
   return match[1];
 }
 
-function pairsFor(t) {
-  const onAccent = t.primary;
+// ─── Rendered pairs, by role. `min` is the WCAG threshold. ──────────────────
+function pairsFor({ mode, tokens: t }) {
+  // A light scheme exists for full sun, where AA is not enough: its text
+  // clears AAA. Muted text keeps the AA floor in every scheme.
+  const textMin = mode === "light" ? 7 : 4.5;
+  const surfaces = [
+    ["page", t.page],
+    ["card", t.card],
+    ["cardPressed", t.cardPressed],
+    ["field", t.field],
+  ];
   return [
-    // text on backgrounds
-    { name: "textPrimary on primary (body text)", fg: t.textPrimary, bg: t.primary, min: 4.5 },
-    { name: "textPrimary on secondary (filled-neutral btn, search dropdown, cards)", fg: t.textPrimary, bg: t.secondary, min: 4.5 },
-    { name: "textMuted on primary (captions/labels)", fg: t.textMuted, bg: t.primary, min: 4.5 },
-    { name: "textMuted on secondary (captions on cards)", fg: t.textMuted, bg: t.secondary, min: 4.5 },
-    // accent usages
-    { name: "accent text on primary (outline-accent btn, links)", fg: t.accent, bg: t.primary, min: 4.5 },
-    { name: "accent border on primary (input/outline border, UI)", fg: t.accent, bg: t.primary, min: 3 },
-    { name: "onAccent on accent (filled-accent btn label)", fg: onAccent, bg: t.accent, min: 4.5 },
-    // warning usages
-    { name: "warning text on primary (outline-warning btn)", fg: t.warning, bg: t.primary, min: 4.5 },
-    // bonus usages (bonus1 = outline-bonus1 btn text)
-    { name: "bonus1 text on primary (outline-bonus1 btn)", fg: t.bonus1, bg: t.primary, min: 4.5 },
-    // map markers (non-text UI, 1.4.11)
-    { name: "owned-place marker on primary (UI)", fg: OWNED_MARKER, bg: t.primary, min: 3 },
-    { name: "shared-place marker on primary (UI)", fg: SHARED_MARKER, bg: t.primary, min: 3 },
-    // A PLACE TYPE'S COLOUR IS A MARKER COLOUR, so every entry of the curated
-    // palette has to clear the same bar under every scheme. This is why the
-    // palette is curated at all: a free hex picker would not fail this check,
-    // it would delete it — there would be nothing fixed left to assert.
-    ...PLACE_TYPE_COLORS.map((color) => ({
-      name: `place-type palette ${color} on primary (UI)`,
-      fg: color,
-      bg: t.primary,
+    // Words: only ever `text` or `textMuted`, on every surface they sit on.
+    ...surfaces.map(([name, bg]) => ({ name: `text on ${name}`, fg: t.text, bg, min: textMin })),
+    ...surfaces.map(([name, bg]) => ({ name: `textMuted on ${name}`, fg: t.textMuted, bg, min: 4.5 })),
+    { name: "onInverse on inverse (toast, tooltip)", fg: t.onInverse, bg: t.inverse, min: textMin },
+    // An edge that must be seen: a field's outline, an outline control.
+    ...["page", "card", "field"].map((name) => ({
+      name: `lineStrong on ${name} (field and outline-control edge)`,
+      fg: t.lineStrong,
+      bg: t[name],
       min: 3,
     })),
-    // AND THE CHIP, which is a TEXT pair and therefore a different bar.
-    // A type's colour FILLS its chip on the Places rail and in the create
-    // form, with the scheme's dark `primary` as the label — the same shape as
-    // a filled-accent button. Checking only the marker pair above and reading
-    // it as proof the chip was legible is the "guard whose two sides share one
-    // assumption" failure: it passed while ten of twelve colours failed AA on
-    // the label. This is the pair the user actually reads.
-    ...PLACE_TYPE_COLORS.map((color) => ({
-      name: `place-type chip label on ${color} (text)`,
-      fg: onAccent,
+    // Intent colours are fills, edges and glyphs, never words: the `onFill`
+    // label on each as a fill, and each as an edge or glyph on page and card.
+    ...["accent", "warning", "success"].flatMap((intent) => [
+      { name: `onFill on ${intent} (filled button, active chip, badge)`, fg: t.onFill, bg: t[intent], min: 4.5 },
+      { name: `${intent} on page (edge, glyph)`, fg: t[intent], bg: t.page, min: 3 },
+      { name: `${intent} on card (edge, glyph)`, fg: t[intent], bg: t.card, min: 3 },
+    ]),
+    // A thing with no kind wears `neutral` the way a kind wears its hue.
+    { name: "onFill on neutral (untyped trip tile, Add tile)", fg: t.onFill, bg: t.neutral, min: 4.5 },
+    ...IDENTITY_FILLS.map(([label, color]) => ({
+      name: `onFill on ${label} (tile, active chip, avatar)`,
+      fg: t.onFill,
       bg: color,
       min: 4.5,
     })),
-    // THE INK. Every label or glyph drawn on a fill — an active chip, a filled
-    // button, a hue tile — uses the one fixed dark ink on both clients, because
-    // `primary` fails on the heath and on the GeoPDF clay.
-    { name: "ink on accent (filled button / active chip label)", fg: INK, bg: t.accent, min: 4.5 },
-    ...LABELLED_FILLS.map(([label, color]) => ({
-      name: `ink label on ${label} ${color} (text)`,
-      fg: INK,
-      bg: color,
-      min: 4.5,
-    })),
-    // A hue as a GLYPH on the page colour (a row's type/status tile, a legend
-    // swatch): non-text, so 3:1.
-    ...[...ASSET_HUES, ...STATUS_HUES].map(([name, color]) => ({
-      name: `${name} hue glyph on primary (UI)`,
-      fg: color,
-      bg: t.primary,
-      min: 3,
-    })),
-    // ── Logjam Web kit (frontend/src/ui) ──
-    { name: "ink on textPrimary (toast, tooltip)", fg: INK, bg: t.textPrimary, min: 4.5 },
-    { name: "ink on warning (nav badge)", fg: INK, bg: t.warning, min: 4.5 },
+    // ── Washes: a tint of a role laid over a surface ──
+    // An "on" icon button wears the same wash with a `text` glyph: an accent
+    // glyph on a wash of itself fell to 2.7:1 on the light page.
     {
-      name: "textPrimary on accent-tinted strip (filters-active strip)",
-      fg: t.textPrimary,
-      bg: tint(t.accent, 0.12, t.primary),
-      min: 4.5,
+      name: "text on accent wash over page (filters-active strip, active icon button)",
+      fg: t.text,
+      bg: tint(t.accent, 0.12, t.page),
+      min: textMin,
     },
-    // The sign-in success banner: the same idea over a CARD rather than the
-    // page, at 15%. Accent as its text under it was 2.96:1 — a wash does not
-    // carry the ratio the flat page colour does, which is the whole reason this
-    // pair exists separately. Found 2026-09-19 by the a11y spec's new sign-in
-    // case, the only thing that renders the surface at all.
+    // The sign-in success banner: the same idea over a CARD at 15%. A wash
+    // does not carry the ratio the flat surface does, which is why this pair
+    // exists separately (found 2026-09-19 by the a11y spec's sign-in case).
     {
-      name: "textPrimary on the sign-in success banner's accent wash over a card",
-      fg: t.textPrimary,
-      bg: tint(t.accent, 0.15, t.secondary),
-      min: 4.5,
+      name: "text on accent wash over card (sign-in success banner)",
+      fg: t.text,
+      bg: tint(t.accent, 0.15, t.card),
+      min: textMin,
     },
-    { name: "accent edge on secondary (selected row, toggle on a card)", fg: t.accent, bg: t.secondary, min: 3 },
-    {
-      name: "accent glyph on its own tint (filled icon button)",
-      fg: t.accent,
-      bg: tint(t.accent, 0.16, t.primary),
-      min: 3,
-    },
-    // StatusPill: `accent` is ink on accent, `outline` and `muted` are textMuted,
-    // and a `warning` label is textPrimary, all measured above. Warning as TEXT
-    // on a card failed (3.8:1, Basalt), so it is the pill's edge and glyph.
-    { name: "warning edge and glyph on secondary (warning StatusPill on a card)", fg: t.warning, bg: t.secondary, min: 3 },
-    // ProgressBar: the fill against its track, a wash of the text colour.
-    { name: "accent fill on its track (ProgressBar)", fg: t.accent, bg: tint(t.textPrimary, 0.12, t.primary), min: 3 },
-    { name: "warning fill on its track (failed ProgressBar)", fg: t.warning, bg: tint(t.textPrimary, 0.12, t.primary), min: 3 },
-    // A web row's identity tile is a solid hue with an ink glyph — covered by
-    // the ink-on-fill pairs above. Logjam GPS's tile is the hue glyph on a 16%
-    // wash of itself on a card; measured at its worst hue, because it fails for
-    // several and one line per hue would bury the rest of the report.
-    worstTilePair(t),
-    // A trip with no type, and a place not yet on a trip in the trip form's
-    // picker: the scheme's bonus1 as a tile fill under the ink glyph.
-    { name: "ink on bonus1 (untyped trip tile, trip form place picker)", fg: INK, bg: t.bonus1, min: 3 },
-    { name: "bonus1 chip glyph on secondary (No type chip)", fg: t.bonus1, bg: t.secondary, min: 3 },
-    // A chip's leading glyph, inactive: the hue on the chip's card colour.
-    ...[
-      ...PLACE_TYPE_COLORS.map((color) => [`place-type ${color}`, color]),
-      ...STATUS_HUES,
-      ...TRIP_TYPE_HUES,
-      ...ASSET_HUES.filter(([name]) => ["overlay", "geoPdf", "import"].includes(name)),
-    ].map(
-      ([name, color]) => ({ name: `${name} chip glyph on secondary (UI)`, fg: color, bg: t.secondary, min: 3 }),
-    ),
-    { name: "textPrimary on bonus2 (Logjam GPS hero fill)", fg: t.textPrimary, bg: t.bonus2, min: 4.5 },
-    { name: "textMuted on bonus2 (Logjam GPS hero fill)", fg: t.textMuted, bg: t.bonus2, min: 4.5 },
+    // ProgressBar: the fill in its `field` track. A wash of the text colour
+    // darkened the light page's track until the fill fell to 2.5:1.
+    { name: "accent on field (ProgressBar fill in its track)", fg: t.accent, bg: t.field, min: 3 },
+    { name: "warning on field (failed ProgressBar fill in its track)", fg: t.warning, bg: t.field, min: 3 },
   ];
 }
 
 // ─── Run ────────────────────────────────────────────────────────────────────
 const src = readFileSync(schemesPath, "utf8");
-const schemes = parseSchemes(src);
+const schemes = parseSchemes(src, INK);
 const failuresOnly = process.argv.includes("--failures");
 
 let totalFail = 0;
 const knownPassing = new Set();
 const knownFailing = new Set();
-for (const [id, tokens] of Object.entries(schemes)) {
-  const rows = pairsFor(tokens).map((p) => {
+for (const [id, scheme] of Object.entries(schemes)) {
+  const rows = pairsFor(scheme).map((p) => {
     const r = ratio(p.fg, p.bg);
     return { ...p, ratio: r, pass: r >= p.min, known: KNOWN_FAILURES.has(p.name) };
   });
@@ -315,7 +241,7 @@ for (const [id, tokens] of Object.entries(schemes)) {
   for (const r of rows) if (r.pass && r.known) knownPassing.add(r.name);
   for (const r of rows) if (!r.pass && r.known) knownFailing.add(r.name);
   if (failuresOnly && fails.length === 0) continue;
-  console.log(`\n=== ${id} ${fails.length ? `(${fails.length} FAIL)` : "(all pass)"} ===`);
+  console.log(`\n=== ${id} (${scheme.mode}) ${fails.length ? `(${fails.length} FAIL)` : "(all pass)"} ===`);
   for (const r of failuresOnly ? rows.filter((row) => !row.pass) : rows) {
     const tag = r.pass ? "PASS" : r.known ? "KNOWN" : "FAIL";
     console.log(

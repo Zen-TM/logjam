@@ -35,7 +35,6 @@ import {
   persistThemeSchemeId,
   radius,
   spacing,
-  surface,
   theme,
   withAlpha,
   type TextScale,
@@ -200,16 +199,14 @@ function SchemeCard({
       ]}
     >
       <View style={styles.swatches}>
-        {[
-          scheme.tokens.primary,
-          scheme.tokens.secondary,
-          scheme.tokens.accent,
-        ].map((color) => (
-          <View
-            key={color}
-            style={[styles.swatch, { backgroundColor: color }]}
-          />
-        ))}
+        {[scheme.tokens.page, scheme.tokens.card, scheme.tokens.accent].map(
+          (color) => (
+            <View
+              key={color}
+              style={[styles.swatch, { backgroundColor: color }]}
+            />
+          ),
+        )}
       </View>
       <Text style={styles.schemeName} numberOfLines={1}>
         {scheme.name}
@@ -227,9 +224,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: spacing(1.5),
-    backgroundColor: surface.card,
+    backgroundColor: theme.card,
     borderWidth: 1,
-    borderColor: surface.border,
+    borderColor: theme.line,
     borderRadius: radius.lg,
     padding: spacing(1.5),
     minHeight: 56,
@@ -238,21 +235,21 @@ const styles = StyleSheet.create({
     borderColor: theme.accent,
     backgroundColor: withAlpha(theme.accent, 0.1),
   },
-  schemePressed: { backgroundColor: surface.cardPressed },
+  schemePressed: { backgroundColor: theme.cardPressed },
   swatches: { flexDirection: "row", gap: 3 },
-  // The hairline is load-bearing, not decoration: Sandstone's `secondary` IS the
-  // card colour these sit on, so without an edge that swatch simply vanishes and
+  // The hairline is load-bearing, not decoration: a scheme's `card` IS the
+  // card colour these sit on when it is the scheme in force, so without an edge that swatch simply vanishes and
   // the scheme looks like it has two colours.
   swatch: {
     width: 18,
     height: 32,
     borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: withAlpha(theme.textPrimary, 0.2),
+    borderColor: withAlpha(theme.text, 0.2),
   },
   schemeName: {
     flex: 1,
-    color: theme.textPrimary,
+    color: theme.text,
     fontSize: fontSize.base,
     fontWeight: fontWeight.medium,
   },

@@ -7,15 +7,15 @@
   margin: 0;
   box-sizing: border-box;
   border: var(--hairline);
-  background: var(--theme-primary);
-  color: var(--theme-text-primary);
+  background: var(--color-page);
+  color: var(--color-text);
   box-shadow: var(--shadow-float);
 }
 
 .menu {
   width: 256px;
   max-width: calc(100vw - 16px);
-  padding: 4px;
+  padding: var(--space-0-5);
   border-radius: var(--radius-lg);
   flex-direction: column;
 }
@@ -29,12 +29,12 @@
 }
 
 .title {
-  padding: 6px 8px 4px;
+  padding: var(--space-0-5) var(--space-1) var(--space-0-5);
   font-size: var(--font-xs);
   font-weight: 600;
   letter-spacing: 1px;
   text-transform: uppercase;
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -43,13 +43,13 @@
 .item {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-1);
   min-height: var(--control-md);
-  padding: 0 8px;
+  padding: 0 var(--space-1);
   border: none;
   border-radius: var(--radius-md);
   background: transparent;
-  color: var(--theme-text-primary);
+  color: var(--color-text);
   font: inherit;
   font-size: var(--font-sm);
   text-align: left;
@@ -58,12 +58,12 @@
 
 .item:hover:not(:disabled),
 .item:focus-visible {
-  background: color-mix(in srgb, var(--theme-text-primary) 10%, transparent);
+  background: color-mix(in srgb, var(--color-text) 10%, transparent);
 }
 
 /* Inside a menu the highlight IS the focus indicator. */
 .item:focus-visible {
-  outline: 2px solid var(--theme-text-primary);
+  outline: 2px solid var(--color-text);
   outline-offset: -2px;
 }
 
@@ -74,7 +74,7 @@
 
 .glyph {
   flex: none;
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 .label {
@@ -83,34 +83,34 @@
 
 .danger,
 .danger .glyph {
-  color: var(--theme-warning);
+  color: var(--color-warning);
 }
 
 .hint {
   font: inherit;
   font-size: var(--font-xs);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 .badge {
   min-width: 18px;
   height: 18px;
   box-sizing: border-box;
-  padding: 0 5px;
+  padding: 0 var(--space-0-5);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-pill);
-  background: var(--theme-warning);
-  color: var(--ink);
+  background: var(--color-warning);
+  color: var(--color-on-fill);
   font-size: 11px;
   font-weight: 700;
 }
 
 .separator {
   height: 1px;
-  margin: 4px;
-  background: var(--theme-bonus-2);
+  margin: var(--space-0-5);
+  background: var(--color-line);
 }
 
 .popover {

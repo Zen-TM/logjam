@@ -1,14 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import {
-  fontSize,
-  fontWeight,
-  radius,
-  spacing,
-  surface,
-  theme,
-} from "../theme";
+import { fontSize, fontWeight, radius, spacing, theme } from "../theme";
 
 export type Stat = {
   label: string;
@@ -82,15 +75,15 @@ const styles = StyleSheet.create({
   cell: {
     flexGrow: 1,
     flexBasis: "47%",
-    backgroundColor: surface.card,
+    backgroundColor: theme.card,
     borderWidth: 1,
-    borderColor: surface.border,
+    borderColor: theme.line,
     borderRadius: radius.md,
     padding: spacing(1.5),
     gap: spacing(0.25),
   },
   wide: { flexBasis: "100%" },
-  pressed: { backgroundColor: surface.cardPressed },
+  pressed: { backgroundColor: theme.cardPressed },
   label: {
     color: theme.textMuted,
     fontSize: fontSize.xs,
@@ -101,7 +94,7 @@ const styles = StyleSheet.create({
   valueRow: { flexDirection: "row", alignItems: "flex-end", gap: spacing(1) },
   value: {
     flexShrink: 1,
-    color: theme.textPrimary,
+    color: theme.text,
     fontSize: fontSize.lg,
     fontWeight: fontWeight.bold,
   },

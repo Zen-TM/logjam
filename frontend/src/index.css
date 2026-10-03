@@ -1,25 +1,10 @@
+/* Every colour, space, radius, type size, control size, duration and opacity
+   token is generated from @logjam/shared into tokens.generated.css (one :root
+   block, then one [data-scheme] block per scheme). What stays here is Logjam
+   Web's own layout and composites built from those tokens. */
+@import "./tokens.generated.css";
+
 :root {
-  color-scheme: dark;
-
-  /* Colours */
-  --theme-primary: #4e4944;
-  --theme-secondary: #61553f;
-  --theme-accent: #deb188;
-  --theme-text-primary: #f7f3ec;
-  --theme-text-muted: #d8ccb9;
-  --theme-warning: #f5a693;
-  --theme-bonus-1: #d9cbb8;
-  --theme-bonus-2: #6b5f4b;
-  --theme-bonus-3: #9c5a2e;
-
-  /* A place's own colour is its TYPE's now; these two are the fallback for a
-     place whose type has not loaded, and the reserved "shared" hue. Both are
-     read from shared/src/placeTypes.ts — keep them in step (the contrast guard
-     checks the declaration, not this file). */
-  --owned-place-color: #e4c5aa;
-  --shared-place-color: #b79ec0;
-  --completed-place-color: #22c55e; /* owned place with a logged trip */
-
   /* Layout */
   --nav-rail-width: 84px;
   --panel-width: 380px;
@@ -28,43 +13,16 @@
   --filter-sheet-width: var(--panel-width);
   --bottom-nav-height: 68px;
 
-  /* Border radius — the same scale as Logjam GPS (RADIUS in @logjam/shared). */
-  --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
-  --radius-pill: 999px;
   /* A PERCENTAGE, so it is a circle only on a square box — a wider one gets
      an ellipse. Anything pill-shaped wants `--radius-pill`. */
   --radius-full: 50%;
 
-  /* `--ink` and the `--hue-*` identity colours are scheme-independent and are
-     set from @logjam/shared at startup (themePreferences.tsx), not restated
-     here. */
-
-  /* Type — rem, so a browser text-size setting reaches every label. A desktop
-     density: a mouse and a big screen want more on it than a phone does.
-     12px is the floor; nothing is drawn smaller. */
-  --font-xs: 0.75rem;
-  --font-sm: 0.8125rem;
-  --font-base: 0.875rem;
-  --font-lg: 1.125rem;
-  --font-xl: 1.25rem;
-
-  /* Control sizes. Every height and hit target in the kit reads one of these,
-     so density is decided here and nowhere else. A mouse gets the compact set
-     (still clear of WCAG 2.5.8's 24px); a touch screen gets Logjam GPS's. */
-  --control-lg: 36px; /* buttons, text fields */
-  --control-md: 32px; /* compact buttons, chips, icon buttons, menu items */
-  --control-sm: 24px; /* the round icon button at a pill's end */
   /* A switch is its own size, and a column of them lines up with one. */
   --switch-width: 36px;
   /* The side margin every panel, sheet and list keeps. */
-  --gutter: 16px;
+  --gutter: var(--space-2);
 
-  /* Kit surfaces. A text field sits a step darker than the page it is on. */
-  --surface-field: color-mix(in srgb, black 12%, var(--theme-primary));
-  --hairline: 1px solid var(--theme-bonus-2);
+  --hairline: 1px solid var(--color-line);
   /* Behind a modal: the page dims rather than disappears. */
   --scrim: color-mix(in srgb, black 40%, transparent);
 
@@ -75,19 +33,9 @@
   --shadow-float: 0 2px 10px rgba(0, 0, 0, 0.28);
   --shadow-modal: 0 4px 12px rgba(0, 0, 0, 0.3);
 
-  /* Transitions */
-  --transition-fast: 0.15s;
-  --transition-med: 0.2s;
-
-  /* Font sizes */
+  /* Type relative to its parent, for a label inside a label. */
   --text-xs: 0.75em;
   --text-sm: 0.85em;
-  --text-base: 1em;
-
-  /* Opacity */
-  --opacity-muted: 0.5;
-  --opacity-dimmed: 0.4;
-  --opacity-disabled: 0.5;
 }
 
 /* The reset. Every width in this app is written as though padding and border
@@ -111,8 +59,8 @@ html {
 body {
   margin: 0;
   padding: 0;
-  background-color: var(--theme-primary);
-  color: var(--theme-text-primary);
+  background-color: var(--color-page);
+  color: var(--color-text);
   /* The reader's own OS font, which is what Logjam GPS shows too: neither app
      ships a typeface, so both look like the system they are running on. */
   font-family:
@@ -129,24 +77,8 @@ body {
    and on the page alike. An outline rather than a box-shadow because forced-
    colours mode keeps outlines and drops shadows. */
 :focus-visible {
-  outline: 2px solid var(--theme-text-primary);
+  outline: 2px solid var(--color-text);
   outline-offset: 2px;
-}
-
-@media (prefers-color-scheme: dark) {
-  .icon {
-    filter: invert(1);
-  }
-}
-
-/* A coarse pointer (a finger) gets the phone's targets back. Keyed to the
-   POINTER, not the width: a narrow desktop window still has a mouse. */
-@media (pointer: coarse) {
-  :root {
-    --control-lg: 44px;
-    --control-md: 40px;
-    --control-sm: 32px;
-  }
 }
 
 /* Visually hidden, still read by assistive tech. */

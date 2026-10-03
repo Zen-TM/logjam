@@ -64,7 +64,7 @@ export function Button({
 const ICON_TONE_CLASS = {
   filled: "tinted",
   danger: "danger",
-  onFill: "onFill",
+  onInverse: "onInverse",
 } as const;
 
 /**
@@ -85,7 +85,7 @@ export function IconButton({
 }: Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children" | "aria-label"> & {
   icon: LucideIcon;
   label: string;
-  tone?: "default" | "filled" | "danger" | "onFill";
+  tone?: "default" | "filled" | "danger" | "onInverse";
   size?: number;
   /** At the end of a pill (a toast, a strip, a notice): a `--control-sm`
    *  circle. The host pads that end by (its height − that) / 2, so the circle

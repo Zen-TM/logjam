@@ -54,7 +54,6 @@ import {
   fontWeight,
   radius,
   spacing,
-  surface,
   theme,
   withAlpha,
 } from "../theme";
@@ -764,7 +763,7 @@ export function RegionDownloadScreen({
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: theme.primary },
+  root: { flex: 1, backgroundColor: theme.page },
   // The hero paints over the map's top strip, so it has to win the z-order.
   hero: { zIndex: 1 },
   mapWrap: { flex: 1, overflow: "hidden", marginTop: -HERO_OVERLAP },
@@ -776,9 +775,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   mapHintText: {
-    color: theme.textPrimary,
+    color: theme.text,
     fontSize: fontSize.xs,
-    backgroundColor: withAlpha(theme.primary, 0.85),
+    backgroundColor: withAlpha(theme.page, 0.85),
     borderRadius: radius.pill,
     paddingHorizontal: spacing(1.5),
     paddingVertical: spacing(0.5),
@@ -819,12 +818,12 @@ const styles = StyleSheet.create({
   namingNote: { color: theme.textMuted, fontSize: fontSize.sm },
   panel: {
     height: PANEL_HEIGHT,
-    backgroundColor: theme.primary,
+    backgroundColor: theme.page,
     paddingTop: spacing(1.25),
     paddingBottom: spacing(1.5),
     gap: spacing(1),
     borderTopWidth: 1,
-    borderTopColor: surface.border,
+    borderTopColor: theme.line,
   },
   panelGuest: { height: PANEL_HEIGHT_GUEST },
   panelBody: {

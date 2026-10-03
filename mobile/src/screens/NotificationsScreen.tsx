@@ -80,7 +80,7 @@ import {
 import type { NotificationDestination } from "../notifications/notificationDestination";
 import { NotificationOptionsSheet } from "../notifications/NotificationOptionsSheet";
 import type { SavedCategory } from "../saved/savedKeys";
-import { fontSize, fontWeight, spacing, surface, theme } from "../theme";
+import { fontSize, fontWeight, spacing, theme } from "../theme";
 import {
   enqueueNotificationDelete,
   enqueueNotificationRead,
@@ -1379,7 +1379,7 @@ function EmptyPanel({
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: theme.primary },
+  root: { flex: 1, backgroundColor: theme.page },
   rail: {
     paddingHorizontal: spacing(2),
     paddingTop: spacing(1.5),
@@ -1396,7 +1396,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: theme.primary,
+    backgroundColor: theme.page,
     paddingVertical: spacing(0.75),
   },
   dayLabel: {
@@ -1424,7 +1424,7 @@ const styles = StyleSheet.create({
   // which is most of them), the way an unread marker does in any inbox. Both
   // states declare the same WIDTH — see the note at the call site.
   rowEdgeAccent: { borderLeftWidth: 3, borderLeftColor: theme.accent },
-  rowEdgeIdle: { borderLeftWidth: 3, borderLeftColor: surface.border },
+  rowEdgeIdle: { borderLeftWidth: 3, borderLeftColor: theme.line },
   // One step in, so an expanded batch's rows read as belonging to the header
   // above them. Margin, never a border width change — the row's left edge is
   // 3pt in EVERY state for the Fabric clip-bounds reason at `rowEdgeIdle`.
@@ -1444,7 +1444,7 @@ const styles = StyleSheet.create({
     paddingTop: spacing(0.75),
   },
   empty: { alignItems: "center", gap: spacing(1), paddingVertical: spacing(6) },
-  emptyTitle: { color: theme.textPrimary, fontSize: fontSize.base },
+  emptyTitle: { color: theme.text, fontSize: fontSize.base },
   emptyHint: {
     color: theme.textMuted,
     fontSize: fontSize.sm,

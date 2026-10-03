@@ -10,13 +10,13 @@
   box-sizing: border-box;
   padding: 0 10px 0 16px;
   border-radius: var(--radius-pill);
-  background: var(--theme-primary);
-  color: var(--theme-text-muted);
+  background: var(--color-page);
+  color: var(--color-text-muted);
   box-shadow: var(--shadow-float);
 }
 
 .field:focus-within {
-  outline: 2px solid var(--theme-text-primary);
+  outline: 2px solid var(--color-text);
   outline-offset: 2px;
 }
 
@@ -29,7 +29,7 @@
   min-width: 0;
   border: none;
   background: transparent;
-  color: var(--theme-text-primary);
+  color: var(--color-text);
   font: inherit;
   /* Map chrome's own step (MapControl.module.css), between the panel's base
      and the old 16px. */
@@ -37,7 +37,7 @@
 }
 
 .input::placeholder {
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 .input:focus-visible {
@@ -52,7 +52,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--theme-text-muted);
+  border: 1px solid var(--color-text-muted);
   border-radius: var(--radius-sm);
   font: inherit;
   font-size: var(--font-xs);
@@ -66,7 +66,7 @@
   padding: 6px;
   border: var(--hairline);
   border-radius: var(--radius-lg);
-  background: var(--theme-primary);
+  background: var(--color-page);
   box-shadow: var(--shadow-float);
 }
 
@@ -85,24 +85,24 @@
   min-height: 40px;
   padding: 0 10px;
   border-radius: var(--radius-md);
-  color: var(--theme-text-primary);
+  color: var(--color-text);
   font-size: var(--font-sm);
   cursor: pointer;
 }
 
 .option:hover,
 .option[aria-selected="true"] {
-  background: color-mix(in srgb, var(--theme-text-primary) 10%, transparent);
+  background: color-mix(in srgb, var(--color-text) 10%, transparent);
 }
 
 .option[aria-selected="true"] {
-  outline: 2px solid var(--theme-text-primary);
+  outline: 2px solid var(--color-text);
   outline-offset: -2px;
 }
 
 .optionGlyph {
   flex: none;
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 .optionLabel {
@@ -115,12 +115,12 @@
 
 .optionMeta {
   font-size: var(--font-xs);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 .status {
   margin: 0;
   padding: 8px 10px;
   font-size: var(--font-sm);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
