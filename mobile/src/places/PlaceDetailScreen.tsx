@@ -33,6 +33,7 @@ import {
   formatTripDate,
   mediaCategory,
   messageFromError,
+  placeDeleteConfirm,
   removeShareConfirm,
   routeLengthM,
   placeStatus,
@@ -101,7 +102,6 @@ import {
 } from "../ui";
 import { TripEditSheet } from "../logs/TripEditSheet";
 import { PlaceEditSheet } from "./PlaceEditSheet";
-import { placeDeleteConfirm } from "./placeDeleteConfirm";
 import { PLACE_STATUS_META } from "./placeMeta";
 
 /** A parked value as one line. Objects are stringified rather than dropped:
@@ -370,7 +370,10 @@ export function PlaceDetailScreen({
   };
 
   const confirmDelete = () => {
-    const confirm = placeDeleteConfirm(place.name, linkedTrips.length);
+    const confirm = placeDeleteConfirm(
+      { name: place.name },
+      linkedTrips.length,
+    );
     Alert.alert(confirm.confirmTitle, confirm.confirmBody, [
       { text: "Cancel", style: "cancel" },
       {
@@ -441,13 +444,17 @@ export function PlaceDetailScreen({
               onPress={() => onShowOnMap(place)}
             />
           </View>
-          <View style={styles.action}>
-            <Button
-              label="Log a trip"
-              icon="edit-3"
-              onPress={() => setLogging(true)}
-            />
-          </View>
+          {/* Owner only (`PLACE_VERBS`): a trip links only its owner's places,
+              and the API refuses the rest. */}
+          {isOwner ? (
+            <View style={styles.action}>
+              <Button
+                label="Log a trip"
+                icon="edit-3"
+                onPress={() => setLogging(true)}
+              />
+            </View>
+          ) : null}
         </View>
 
         <SectionHeader label="Overview" />

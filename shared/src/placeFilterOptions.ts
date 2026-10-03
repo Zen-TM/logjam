@@ -1,6 +1,7 @@
-// The words and presets of the place filter sheet, shared by Logjam GPS and
-// Logjam Web so the two sheets offer the same sorts, the same RopeWiki choices
-// and the same logistics shortcuts under the same names.
+// The options of the place filter sheet, shared by Logjam GPS and Logjam Web
+// so the two sheets offer the same sorts and the same RopeWiki choices under
+// the same names. The sheet's sections and words are its contract
+// (`contracts/placesFilterSheet.ts`).
 import type {
   PlaceFilters,
   PlaceSortKey,
@@ -54,50 +55,6 @@ export const PLACE_ROPEWIKI_OPTIONS: {
   { value: "any", label: "Any" },
   { value: "linked", label: "From RopeWiki" },
   { value: "unlinked", label: "Not from RopeWiki" },
-];
-
-/**
- * The canyon logistics axes, each with the presets someone chose because they
- * are the numbers that decide a day. A field the user invented gets no presets:
- * deriving them from its bounds gave "Under 0 / Over 0 / Exactly 0".
- */
-export const PLACE_THRESHOLDS: {
-  key: string;
-  label: string;
-  unit: string;
-  presets: PlaceThresholdFilter[];
-}[] = [
-  {
-    key: "num_abseils",
-    label: "Abseils",
-    unit: "",
-    presets: [
-      ["Exactly", 0],
-      ["Less than", 5],
-      ["More than", 10],
-    ],
-  },
-  {
-    key: "longest_abseil",
-    label: "Longest abseil",
-    unit: "m",
-    presets: [
-      ["Less than", 20],
-      ["Less than", 30],
-      ["Less than", 45],
-      ["Less than", 60],
-    ],
-  },
-  {
-    key: "hours",
-    label: "Time out",
-    unit: "h",
-    presets: [
-      ["Less than", 4],
-      ["Less than", 6],
-      ["Less than", 8],
-    ],
-  },
 ];
 
 export const THRESHOLD_OPERATORS: PlaceThresholdFilter[0][] = [

@@ -5288,6 +5288,7 @@ export function MapScreen({
           Places list opens, minus its "Show on map" row. */}
       <PlaceOptionsSheet
         place={optionsPlace}
+        surface="pin"
         visible={optionsPlace !== null}
         onClose={() => setOptionsPlaceId(null)}
         onOpenPlace={(place) => onOpenPlace(place.id, place.name)}

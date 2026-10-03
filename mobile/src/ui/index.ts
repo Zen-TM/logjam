@@ -7,7 +7,8 @@ export { Card } from "./Card";
 export { Chip } from "./Chip";
 export { ChipPicker, type ChipOption } from "./ChipPicker";
 export { DatePicker } from "./DatePicker";
-export { AttributeFilter, ThresholdFilter } from "./AttributeFilter";
+export { AttributeFilter } from "./AttributeFilter";
+export { DateRangeFilter } from "./DateRangeFilter";
 export { RangePills } from "./RangePills";
 export {
   formatRange,
