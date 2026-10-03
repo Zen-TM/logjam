@@ -12,27 +12,6 @@
 // things. Nothing here renames or deletes in place any more.
 import { useMemo, useState } from "react";
 import {
-  Activity,
-  ChevronDown,
-  CopyPlus,
-  Download,
-  EllipsisVertical,
-  FilePlus,
-  Filter,
-  MapPin,
-  PenLine,
-  Pencil,
-  Plus,
-  Route as RouteGlyph,
-  Search,
-  Send,
-  Share2,
-  Trash2,
-  Upload,
-  X,
-  type LucideIcon,
-} from "lucide-react";
-import {
   exportFilename,
   formatDistanceM,
   GPX_MIME_TYPE,
@@ -57,6 +36,7 @@ import {
   SearchField,
   StatusPill,
   type MenuEntry,
+  type Glyph,
 } from "../../../ui";
 import { wayVerbs, type WayVerbId } from "./wayActions";
 import {
@@ -74,27 +54,27 @@ const ANY_KIND = "any";
 
 /** A kind's glyph and hue, from `ASSET_HUES` — the same identity Logjam GPS
  *  gives it on its Saved tab (DESIGN.md §3). */
-const KIND_IDENTITY: Record<WayKind, { icon: LucideIcon; hue: string }> = {
-  route: { icon: PenLine, hue: "var(--hue-route)" },
-  track: { icon: Activity, hue: "var(--hue-track)" },
-  import: { icon: FilePlus, hue: "var(--hue-import)" },
+const KIND_IDENTITY: Record<WayKind, { icon: Glyph; hue: string }> = {
+  route: { icon: "route", hue: "var(--hue-route)" },
+  track: { icon: "track", hue: "var(--hue-track)" },
+  import: { icon: "importedFile", hue: "var(--hue-import)" },
 };
 
-const VERB_ICON: Partial<Record<WayVerbId, LucideIcon>> = {
-  open: RouteGlyph,
-  openPlace: MapPin,
-  edit: Pencil,
-  copy: CopyPlus,
-  copyAndRemove: CopyPlus,
-  share: Share2,
-  sendCopy: Send,
-  exportGpx: Download,
-  exportKml: Download,
-  download: Download,
-  rename: Pencil,
+const VERB_ICON: Partial<Record<WayVerbId, Glyph>> = {
+  open: "route",
+  openPlace: "place",
+  edit: "edit",
+  copy: "copy",
+  copyAndRemove: "moveCopy",
+  share: "shareFriend",
+  sendCopy: "send",
+  exportGpx: "export",
+  exportKml: "export",
+  download: "download",
+  rename: "edit",
   // Not a bin: this drops the caller's own share and the owner keeps their row.
-  removeShare: X,
-  delete: Trash2,
+  removeShare: "close",
+  delete: "delete",
 };
 
 const plural = (count: number, noun: string) =>
@@ -290,11 +270,11 @@ export default function RoutesPanel({
       }
       actions={
         searchOpen ? (
-          <IconButton icon={X} label="Close search" onClick={closeSearch} />
+          <IconButton icon="close" label="Close search" onClick={closeSearch} />
         ) : (
           <>
             <IconButton
-              icon={Search}
+              icon="search"
               label="Search ways"
               tone={query ? "filled" : "default"}
               aria-expanded={false}
@@ -307,13 +287,13 @@ export default function RoutesPanel({
                 {
                   id: "draw",
                   label: "Draw a route",
-                  icon: PenLine,
+                  icon: "draw",
                   onSelect: onStartDrawingRoute,
                 },
                 {
                   id: "import",
                   label: "Import from file",
-                  icon: Upload,
+                  icon: "upload",
                   onSelect: onOpenUnifiedImport,
                 },
               ]}
@@ -322,8 +302,8 @@ export default function RoutesPanel({
                   {...props}
                   compact
                   variant="filled"
-                  icon={Plus}
-                  trailingIcon={ChevronDown}
+                  icon="add"
+                  trailingIcon="expand"
                 >
                   Add
                 </Button>
@@ -377,7 +357,7 @@ export default function RoutesPanel({
   ) : ways.length === 0 ? (
     <div className={classes.emptyArea}>
       <EmptyState
-        icon={RouteGlyph}
+        icon="route"
         title="No lines yet"
         body="Draw a route on the map, or bring a GPX or KML in from another app. Tracks you record in Logjam GPS appear here too."
         actions={
@@ -385,7 +365,7 @@ export default function RoutesPanel({
             <Button
               compact
               variant="filled"
-              icon={PenLine}
+              icon="draw"
               onClick={onStartDrawingRoute}
             >
               Draw a route
@@ -393,7 +373,7 @@ export default function RoutesPanel({
             <Button
               compact
               variant="outline"
-              icon={Upload}
+              icon="upload"
               onClick={onOpenUnifiedImport}
             >
               Import
@@ -405,7 +385,7 @@ export default function RoutesPanel({
   ) : visible.length === 0 ? (
     <div className={classes.emptyArea}>
       <EmptyState
-        icon={Filter}
+        icon="filter"
         title="No ways match"
         body="Nothing matches your search and the kind you picked."
         actions={
@@ -463,7 +443,7 @@ export default function RoutesPanel({
                   trigger={(props) => (
                     <IconButton
                       {...props}
-                      icon={EllipsisVertical}
+                      icon="overflow"
                       label={`Actions for ${way.title}`}
                     />
                   )}

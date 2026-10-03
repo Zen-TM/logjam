@@ -7,7 +7,6 @@ import {
   useCallback,
 } from "react";
 import { useIsMobile } from "../../useIsMobile";
-import { Check, ChevronRight, MapPin, Upload } from "lucide-react";
 import {
   Button,
   ChipRail,
@@ -18,6 +17,7 @@ import {
   Select,
   SwitchRow,
   TextField,
+  Icon,
 } from "../../ui";
 import {
   matchPlace,
@@ -1652,7 +1652,12 @@ function UnifiedImportDialog({
           className={classes.dropZone}
           data-dragging={dragging || undefined}
         >
-          <Upload size={28} aria-hidden className={classes.dropGlyph} />
+          <Icon
+            idea="upload"
+            size={28}
+            aria-hidden
+            className={classes.dropGlyph}
+          />
           <span>
             Drop a CSV here, or click to browse. You can add a place list and a
             logbook together.
@@ -1953,7 +1958,7 @@ function UnifiedImportDialog({
           <Button
             variant="outline"
             compact
-            icon={MapPin}
+            icon="place"
             className={classes.pickButton}
             onClick={() => handlePickCoordsFor(key)}
           >
@@ -2109,7 +2114,12 @@ function UnifiedImportDialog({
             }
             onOpen={() => setShowingMergeSettings(true)}
             trailing={
-              <ChevronRight size={18} aria-hidden className={classes.chevron} />
+              <Icon
+                idea="disclosure"
+                size={18}
+                aria-hidden
+                className={classes.chevron}
+              />
             }
           />
         )}
@@ -2158,7 +2168,7 @@ function UnifiedImportDialog({
       return (
         <Button
           variant="filled"
-          icon={Check}
+          icon="done"
           onClick={() => setShowingMergeSettings(false)}
         >
           Done

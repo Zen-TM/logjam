@@ -8,27 +8,6 @@ import {
   type ReactNode,
 } from "react";
 import {
-  ChevronDown,
-  CircleCheck,
-  Download,
-  EllipsisVertical,
-  FileText,
-  Filter,
-  Map as MapIcon,
-  MapPin,
-  Mountain,
-  Plus,
-  Search,
-  Share2,
-  SlidersHorizontal,
-  Star,
-  Trash2,
-  Upload,
-  Users,
-  X,
-  type LucideIcon,
-} from "lucide-react";
-import {
   comparePlaces,
   contractSectionKeys,
   EMPTY_PLACE_FILTERS,
@@ -37,6 +16,7 @@ import {
   PLACE_STATUS_LABELS,
   PLACE_STATUS_ORDER,
   PLACES_ADD,
+  PLACES_ADD_ICON,
   PLACES_FILTER_SHEET,
   PLACES_LIST,
   placeDeleteConfirm,
@@ -50,7 +30,6 @@ import {
   placeStatus,
   placeSummary,
   qualityLabel,
-  type PlacesEmptyKind,
   type PlaceSortKey,
   type PlaceStatus,
   type RegionBbox,
@@ -78,6 +57,7 @@ import {
   ChipRail,
   EmptyState,
   Hero,
+  Icon,
   IconButton,
   IconTile,
   Menu,
@@ -85,6 +65,7 @@ import {
   SearchField,
   SelectionBar,
   TileCheckbox,
+  type Glyph,
   type MenuEntry,
 } from "../../../ui";
 import { placeTypeLucideIcon } from "./placeTypeIcon";
@@ -100,21 +81,17 @@ import {
   withBucket,
   type StatusBucket,
 } from "./placesModel";
-import {
-  ADD_ENTRY_ICON,
-  placeVerbEntries,
-  type WebPlaceVerbId,
-} from "./placeVerbMenu";
+import { placeVerbEntries, type WebPlaceVerbId } from "./placeVerbMenu";
 import classes from "./PlacesPanel.module.css";
 
 const { copy } = PLACES_LIST;
 
 export type MapKind = "topo" | "geopdf";
 
-const STATUS_ICON: Record<PlaceStatus, LucideIcon> = {
-  done: CircleCheck,
-  todo: MapPin,
-  shared: Users,
+const STATUS_ICON: Record<PlaceStatus, Glyph> = {
+  done: "success",
+  todo: "place",
+  shared: "friends",
 };
 const STATUS_HUE: Record<PlaceStatus, string> = {
   done: "var(--color-accent)",
@@ -123,14 +100,6 @@ const STATUS_HUE: Record<PlaceStatus, string> = {
 };
 
 const ANY_TYPE = "any";
-
-const EMPTY_ICON: Record<PlacesEmptyKind, LucideIcon> = {
-  firstRun: MapPin,
-  filtered: Filter,
-  todo: MapPin,
-  done: CircleCheck,
-  shared: Users,
-};
 
 type Listed = { place: TPlace; owned: boolean; status: PlaceStatus };
 
@@ -403,13 +372,13 @@ function PlacesPanel({
       {
         id: "topo",
         label: "LiDAR topo",
-        icon: Mountain,
+        icon: "lidar",
         onSelect: () => onMakeMap(bounds, "topo"),
       },
       {
         id: "geopdf",
         label: "GeoPDF",
-        icon: FileText,
+        icon: "geoPdf",
         onSelect: () => onMakeMap(bounds, "geopdf"),
       },
     ];
@@ -542,7 +511,7 @@ function PlacesPanel({
 
   const filterButton = (
     <IconButton
-      icon={SlidersHorizontal}
+      icon="filter"
       label={
         sheetCount > 0
           ? `${PLACES_FILTER_SHEET.title}, ${plural(sheetCount, "filter")} on`
@@ -587,7 +556,7 @@ function PlacesPanel({
           <>
             {filterButton}
             <IconButton
-              icon={X}
+              icon="close"
               label={copy.closeSearch}
               onClick={closeSearch}
             />
@@ -595,7 +564,7 @@ function PlacesPanel({
         ) : (
           <>
             <IconButton
-              icon={Search}
+              icon="search"
               label={copy.search}
               tone={query ? "filled" : "default"}
               aria-expanded={false}
@@ -607,7 +576,7 @@ function PlacesPanel({
               placement="bottom-end"
               entries={contractSectionKeys(PLACES_ADD, "web").map((key) => ({
                 id: key,
-                icon: ADD_ENTRY_ICON[key],
+                icon: PLACES_ADD_ICON[key],
                 ...addEntries[key],
               }))}
               trigger={(props) => (
@@ -615,8 +584,8 @@ function PlacesPanel({
                   {...props}
                   compact
                   variant="filled"
-                  icon={Plus}
-                  trailingIcon={ChevronDown}
+                  icon="add"
+                  trailingIcon="expand"
                 >
                   {PLACES_ADD.title}
                 </Button>
@@ -672,7 +641,7 @@ function PlacesPanel({
           trailing={
             <Chip
               label={copy.newType}
-              icon={Plus}
+              icon="add"
               dashed
               onClick={() => setActivePanel("settings")}
             />
@@ -695,11 +664,11 @@ function PlacesPanel({
             label="Make a map"
             entries={makeMapEntries(selected)}
             trigger={(props) => (
-              <IconButton {...props} icon={MapIcon} label="Make a map" />
+              <IconButton {...props} icon="template" label="Make a map" />
             )}
           />
           <IconButton
-            icon={Share2}
+            icon="shareFriend"
             label="Share or export"
             onClick={() => onSharePlaces(selected.map((place) => place.id))}
           />
@@ -708,11 +677,11 @@ function PlacesPanel({
             placement="bottom-end"
             entries={exportEntries(selected)}
             trigger={(props) => (
-              <IconButton {...props} icon={Download} label="Export" />
+              <IconButton {...props} icon="export" label="Export" />
             )}
           />
           <IconButton
-            icon={Trash2}
+            icon="delete"
             label="Delete"
             tone="danger"
             onClick={() => setPendingDelete(selected.map((place) => place.id))}
@@ -756,7 +725,7 @@ function PlacesPanel({
   ) : empty && emptyState ? (
     <div className={classes.emptyArea}>
       <EmptyState
-        icon={EMPTY_ICON[empty]}
+        icon={emptyState.icon}
         title={emptyState.title}
         body={emptyState.body}
         actions={
@@ -766,14 +735,14 @@ function PlacesPanel({
             </Button>
           ) : emptyState.action === "add" ? (
             <>
-              <Button compact variant="filled" icon={Plus} onClick={onAddPlace}>
+              <Button compact variant="filled" icon="add" onClick={onAddPlace}>
                 {PLACES_ADD.copy.add}
               </Button>
               {empty === "firstRun" && (
                 <Button
                   compact
                   variant="outline"
-                  icon={Upload}
+                  icon={PLACES_ADD_ICON.importFile}
                   onClick={onOpenUnifiedImport}
                 >
                   {PLACES_ADD.copy.importFile}
@@ -841,7 +810,7 @@ function PlacesPanel({
                     className={classes.meta}
                     aria-label={`Rated ${quality.replace("★ ", "")}`}
                   >
-                    <Star size={12} aria-hidden />
+                    <Icon idea="favourite" size={12} aria-hidden />
                     {quality.replace("★ ", "")}
                   </span>
                 )}
@@ -851,7 +820,7 @@ function PlacesPanel({
                     title={`Shared with ${plural(shareCount, "friend")}`}
                     aria-label={`Shared with ${plural(shareCount, "friend")}`}
                   >
-                    <Users size={12} aria-hidden />
+                    <Icon idea="friends" size={12} aria-hidden />
                     {shareCount}
                   </span>
                 )}
@@ -864,7 +833,7 @@ function PlacesPanel({
                     trigger={(props) => (
                       <IconButton
                         {...props}
-                        icon={EllipsisVertical}
+                        icon="overflow"
                         label={`Actions for ${place.name}`}
                       />
                     )}
@@ -910,7 +879,7 @@ function PlacesPanel({
       <div className={classes.strip}>
         <span className={classes.stripText}>{note}</span>
         <IconButton
-          icon={X}
+          icon="close"
           size={14}
           round
           label={copy.clearFilters}

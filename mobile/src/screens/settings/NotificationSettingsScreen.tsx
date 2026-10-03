@@ -195,7 +195,7 @@ export function NotificationSettingsScreen() {
             either asks (the one place in the app that does) or opens the place
             it can be changed. A toggle here would be a lie. */}
         <Row
-          icon="smartphone"
+          icon="phone"
           title="Notifications from Logjam"
           subtitle={
             pushAllowed === null

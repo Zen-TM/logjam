@@ -114,7 +114,7 @@ export function CustomFieldList({
             isSystemFieldDef(def) ? (
               <Row
                 key={defRowKey(def)}
-                icon="lock"
+                icon="private"
                 // The BARE label, not `customFieldDisplayLabel`: that appends
                 // the range, and the subtitle one line down already says
                 // "Integer · 1–7". Printing the bounds twice on one row made
@@ -398,7 +398,7 @@ export function useCustomFieldForm({
         {numeric ? (
           <>
             <Row
-              icon="sliders"
+              icon="filter"
               title="Limit to a range"
               subtitle={
                 bounded
@@ -502,7 +502,7 @@ export function useCustomFieldForm({
 
       {editing ? (
         <Row
-          icon="trash-2"
+          icon="delete"
           hue={theme.warning}
           title={`Delete ${ATTRIBUTE_NOUN.one}`}
           onPress={confirmDelete}
@@ -524,7 +524,7 @@ export function useCustomFieldForm({
         <View style={styles.action}>
           <Button
             label={editing ? "Save" : `Add ${ATTRIBUTE_NOUN.one}`}
-            icon="check"
+            icon="done"
             loading={saving}
             onPress={() => void save()}
           />

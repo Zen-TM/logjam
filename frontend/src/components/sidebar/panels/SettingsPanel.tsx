@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { ChevronRight, Layers, Tag } from "lucide-react";
 import {
   ATTRIBUTE_NOUN,
   DEFAULT_NOTIFICATION_PREFERENCES,
@@ -15,7 +14,7 @@ import {
 } from "../../../placeUtils";
 import { messageFromError } from "../../../errors/messageFromError";
 import { useToast } from "../../feedback/ToastProvider";
-import { IconTile, Row, SectionHeader, SwitchRow } from "../../../ui";
+import { IconTile, Row, SectionHeader, SwitchRow, Icon } from "../../../ui";
 import CustomFieldSection from "./CustomFieldSection";
 import PlaceTypeSection from "./PlaceTypeSection";
 import ThemeChooser from "./ThemeChooser";
@@ -215,26 +214,26 @@ function SettingsPanel({
           downwards meets the categories, then what each one records. */}
       <SectionHeader title="Your own categories" />
       <Row
-        leading={<IconTile icon={Layers} hue="var(--color-accent)" />}
+        leading={<IconTile icon="place" hue="var(--color-accent)" />}
         title="Place types"
         subtitle={ownTypeCountLabel(placeTypes)}
-        trailing={<ChevronRight size={18} aria-hidden />}
+        trailing={<Icon idea="disclosure" size={18} aria-hidden />}
         onOpen={() => setPage("placeTypes")}
       />
 
       <SectionHeader title={`Your own ${ATTRIBUTE_NOUN.many}`} />
       <Row
-        leading={<IconTile icon={Tag} hue="var(--color-accent)" />}
+        leading={<IconTile icon="tag" hue="var(--color-accent)" />}
         title="Trip attributes"
         subtitle={attributeCountLabel(customFieldDefs)}
-        trailing={<ChevronRight size={18} aria-hidden />}
+        trailing={<Icon idea="disclosure" size={18} aria-hidden />}
         onOpen={() => setPage("tripAttributes")}
       />
       <Row
-        leading={<IconTile icon={Tag} hue="var(--color-accent)" />}
+        leading={<IconTile icon="tag" hue="var(--color-accent)" />}
         title="Place attributes"
         subtitle={attributeCountLabel(placeCustomFieldDefs)}
-        trailing={<ChevronRight size={18} aria-hidden />}
+        trailing={<Icon idea="disclosure" size={18} aria-hidden />}
         onOpen={() => setPage("placeAttributes")}
       />
     </div>

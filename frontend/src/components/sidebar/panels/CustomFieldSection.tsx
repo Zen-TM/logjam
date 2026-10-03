@@ -1,13 +1,5 @@
 import { useState } from "react";
 import {
-  EllipsisVertical,
-  Lock,
-  Pencil,
-  Plus,
-  Tag,
-  Trash2,
-} from "lucide-react";
-import {
   ATTRIBUTE_NOUN,
   buildCustomFieldDef,
   CUSTOM_FIELD_TYPES,
@@ -109,7 +101,7 @@ function CustomFieldSection({
           <Button
             compact
             variant="outline"
-            icon={Plus}
+            icon="add"
             onClick={() => setEditing("new")}
           >
             Add
@@ -139,7 +131,7 @@ function CustomFieldSection({
             {own.map((def) => (
               <Row
                 key={def.key}
-                leading={<IconTile icon={Tag} hue="var(--color-accent)" />}
+                leading={<IconTile icon="tag" hue="var(--color-accent)" />}
                 title={customFieldDisplayLabel(def)}
                 subtitle={rowSubtitle(def, placeTypes)}
                 description={`Opens this ${ATTRIBUTE_NOUN.one} for editing`}
@@ -159,13 +151,13 @@ function CustomFieldSection({
                       {
                         id: "edit",
                         label: `Edit ${ATTRIBUTE_NOUN.one}`,
-                        icon: Pencil,
+                        icon: "edit",
                         onSelect: () => setEditing(def),
                       },
                       {
                         id: "delete",
                         label: `Delete ${ATTRIBUTE_NOUN.one}`,
-                        icon: Trash2,
+                        icon: "delete",
                         danger: true,
                         onSelect: () => setDeletingDef(def),
                       },
@@ -173,7 +165,7 @@ function CustomFieldSection({
                     trigger={(props) => (
                       <IconButton
                         {...props}
-                        icon={EllipsisVertical}
+                        icon="overflow"
                         label={`Actions for ${def.label}`}
                       />
                     )}
@@ -189,7 +181,7 @@ function CustomFieldSection({
                   <Row
                     key={def.key}
                     leading={
-                      <IconTile icon={Lock} hue="var(--color-neutral)" />
+                      <IconTile icon="private" hue="var(--color-neutral)" />
                     }
                     title={customFieldDisplayLabel(def)}
                     subtitle={rowSubtitle(def, placeTypes)}

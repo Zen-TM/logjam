@@ -37,7 +37,6 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   activePlaceFilterCount,
@@ -52,6 +51,7 @@ import {
   type RegionBbox,
   PLACE_STATUS_ORDER,
   PLACES_ADD,
+  PLACES_ADD_ICON,
   PLACES_FILTER_SHEET,
   PLACES_LIST,
   placeDeleteConfirm,
@@ -93,6 +93,7 @@ import {
   Button,
   CapacityBar,
   HeroHeader,
+  Icon,
   IconButton,
   LoadingState,
   ErrorState,
@@ -121,8 +122,7 @@ import {
   usePlaceMapFilter,
 } from "./placeMapFilter";
 import { PLACE_STATUS_META } from "./placeMeta";
-import { placeTypeFeatherIcon } from "./placeTypeIcon";
-import { ADD_ENTRY_ICON } from "./placeVerbMeta";
+import { placeTypeGlyph } from "./placeTypeIcon";
 
 const { copy } = PLACES_LIST;
 
@@ -496,7 +496,7 @@ export function PlacesScreen({
         .map((type) => ({
           value: type.id,
           label: type.name,
-          icon: placeTypeFeatherIcon(type.iconKey),
+          icon: placeTypeGlyph(type.iconKey),
           hue: type.color,
           count: typeCounts.get(type.id) ?? 0,
           disabled:
@@ -525,7 +525,7 @@ export function PlacesScreen({
   const railOptions: SegmentOption<string>[] = useMemo(
     () => [
       ...typeOptions,
-      { value: NEW_TYPE, label: copy.newType, icon: "plus" },
+      { value: NEW_TYPE, label: copy.newType, icon: "add" },
     ],
     [typeOptions],
   );
@@ -694,7 +694,7 @@ export function PlacesScreen({
   const note = placesFilterNote(hiddenFilterCount, sort);
   const filterButton = (
     <IconButton
-      icon="sliders"
+      icon="filter"
       accessibilityLabel={PLACES_FILTER_SHEET.title}
       color={hiddenFilterCount > 0 ? theme.accent : theme.textMuted}
       filled={hiddenFilterCount > 0}
@@ -733,7 +733,7 @@ export function PlacesScreen({
               <Button
                 key={key}
                 label={PLACES_ADD.copy[key]}
-                icon={ADD_ENTRY_ICON[key]}
+                icon={PLACES_ADD_ICON[key]}
                 compact
                 onPress={() => startEditing(null)}
               />
@@ -747,7 +747,7 @@ export function PlacesScreen({
         {findOpen ? (
           <View style={styles.findRow}>
             <View style={styles.searchWrap}>
-              <Feather name="search" size={16} color={theme.textMuted} />
+              <Icon idea="search" size={16} color={theme.textMuted} />
               <TextInput
                 style={styles.searchInput}
                 value={search}
@@ -762,7 +762,7 @@ export function PlacesScreen({
             </View>
             {filterButton}
             <IconButton
-              icon="x"
+              icon="close"
               accessibilityLabel={copy.closeSearch}
               onPress={clearFind}
             />
@@ -844,7 +844,7 @@ export function PlacesScreen({
           {note}
         </Text>
         <IconButton
-          icon="x"
+          icon="close"
           size={16}
           accessibilityLabel={
             hiddenFilterCount === 0 ? copy.sortByNameAgain : copy.clearFilters
@@ -1061,7 +1061,7 @@ const PlaceRow = memo(function PlaceRow({
           {quality ? <Text style={styles.quality}>{quality}</Text> : null}
           {sharedWith > 0 ? (
             <View style={styles.badge}>
-              <Feather name="users" size={12} color={theme.textMuted} />
+              <Icon idea="friends" size={12} color={theme.textMuted} />
               <Text style={styles.badgeText}>{sharedWith}</Text>
             </View>
           ) : null}
@@ -1070,8 +1070,8 @@ const PlaceRow = memo(function PlaceRow({
             // shared place (an empty checkbox promises a tap that does nothing).
             <View style={styles.selectBox}>
               {deletable ? (
-                <Feather
-                  name={selected ? "check-circle" : "circle"}
+                <Icon
+                  idea={selected ? "success" : "unselected"}
                   size={22}
                   color={selected ? theme.accent : theme.textMuted}
                 />
@@ -1079,7 +1079,7 @@ const PlaceRow = memo(function PlaceRow({
             </View>
           ) : (
             <IconButton
-              icon="more-vertical"
+              icon="overflow"
               accessibilityLabel={`Actions for ${place.name}`}
               onPress={() => onMenu(place)}
             />
@@ -1089,17 +1089,6 @@ const PlaceRow = memo(function PlaceRow({
     />
   );
 });
-
-const EMPTY_ICON: Record<
-  PlacesEmptyKind,
-  React.ComponentProps<typeof Feather>["name"]
-> = {
-  firstRun: "map-pin",
-  filtered: "filter",
-  todo: "map-pin",
-  done: "check-circle",
-  shared: "users",
-};
 
 /** An empty tick list, an exhausted one and an over-tight filter are three
  * different problems with three different ways out. Which is which, and the
@@ -1119,11 +1108,7 @@ function EmptyPanel({
   const state = placesEmptyState(kind, { platform: "gps", guest });
   return (
     <View style={styles.empty}>
-      <Feather
-        name={EMPTY_ICON[kind]}
-        size={28}
-        color={withAlpha(theme.accent, 0.8)}
-      />
+      <Icon idea={state.icon} size={28} color={withAlpha(theme.accent, 0.8)} />
       <Text style={styles.emptyTitle}>{state.title}</Text>
       <Text style={styles.emptyBody}>{state.body}</Text>
       {state.action === "clear" ? (
@@ -1135,7 +1120,7 @@ function EmptyPanel({
       ) : state.action === "add" ? (
         <Button
           label={PLACES_ADD.copy.add}
-          icon={ADD_ENTRY_ICON.add}
+          icon={PLACES_ADD_ICON.add}
           onPress={onAdd}
         />
       ) : null}

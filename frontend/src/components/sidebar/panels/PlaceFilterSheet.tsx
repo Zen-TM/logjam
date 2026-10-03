@@ -1,5 +1,4 @@
 import { Fragment, type ReactNode } from "react";
-import { Check, Scan, SquareDashed } from "lucide-react";
 import {
   areaSizeLabel,
   contractSectionKeys,
@@ -124,7 +123,7 @@ export const FILTER_SHEET_SECTIONS: Record<
           <>
             <Chip
               label={areaSizeLabel(filters.area)}
-              icon={SquareDashed}
+              icon="pickArea"
               active
               aria-label={`Area set, ${areaSizeLabel(filters.area)}. ${copy.drawArea} again`}
               onClick={onDrawArea}
@@ -133,12 +132,8 @@ export const FILTER_SHEET_SECTIONS: Record<
           </>
         ) : (
           <>
-            <Chip
-              label={copy.drawArea}
-              icon={SquareDashed}
-              onClick={onDrawArea}
-            />
-            <Chip label={copy.areaToView} icon={Scan} onClick={onAreaToView} />
+            <Chip label={copy.drawArea} icon="pickArea" onClick={onDrawArea} />
+            <Chip label={copy.areaToView} icon="scan" onClick={onAreaToView} />
           </>
         )}
       </div>
@@ -244,7 +239,7 @@ export default function PlaceFilterSheet(props: Props) {
               {copy.reset}
             </Button>
           )}
-          <Button compact variant="filled" icon={Check} onClick={props.onClose}>
+          <Button compact variant="filled" icon="done" onClick={props.onClose}>
             {copy.done}
           </Button>
         </>

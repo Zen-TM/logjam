@@ -1,5 +1,4 @@
 import { useState, useEffect, useId, useMemo, useRef } from "react";
-import { MapPin, Plus, Trash2 } from "lucide-react";
 import type {
   ScopedCustomFieldDef,
   TripLogCustomFieldType,
@@ -710,7 +709,7 @@ function PlaceDialog({
                 required
               />
               <Button
-                icon={MapPin}
+                icon="place"
                 className={classes.pickButton}
                 onClick={handlePickCoords}
                 disabled={saving}
@@ -760,7 +759,7 @@ function PlaceDialog({
                     hand — they were the seven fields this list excluded. */}
                 {!isSystemFieldDef(def) && (
                   <IconButton
-                    icon={Trash2}
+                    icon="delete"
                     label={`Delete the attribute ${def.label}`}
                     tone="danger"
                     onClick={() => setFieldToDelete(def)}
@@ -790,7 +789,7 @@ function PlaceDialog({
             ) : (
               <Button
                 compact
-                icon={Plus}
+                icon="add"
                 className={classes.addAttribute}
                 onClick={() => {
                   setAddFieldError(null);
@@ -828,7 +827,7 @@ function PlaceDialog({
                   }}
                 />
                 <IconButton
-                  icon={Trash2}
+                  icon="delete"
                   label={`Delete the source ${source.label || index + 1}`}
                   tone="danger"
                   onClick={() =>
@@ -839,7 +838,7 @@ function PlaceDialog({
             ))}
             <Button
               compact
-              icon={Plus}
+              icon="add"
               className={classes.addAttribute}
               onClick={() => setSources([...sources, { label: "", url: "" }])}
             >

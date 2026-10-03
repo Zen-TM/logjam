@@ -26,6 +26,7 @@ import {
   placeDeleteConfirm,
   placeVerbs,
   removeShareConfirm,
+  type PlaceVerbIdOn,
   copyAndRemoveOutcomeMessage,
   copyOutcomeMessage,
 } from "@logjam/shared";
@@ -45,11 +46,16 @@ import { useConnectivity } from "../map/connectivity";
 import { useMirrorTrips } from "../sync/useSyncQueries";
 import type { MirrorPlace } from "../sync/mirrorStore";
 import { deletePlaceLocal } from "../sync/outbox";
-import {
-  PLACE_VERB_ICON,
-  PLACE_VERB_NEEDS_CONNECTION,
-  type GpsPlaceVerbId,
-} from "./placeVerbMeta";
+
+type GpsPlaceVerbId = PlaceVerbIdOn<"gps">;
+
+/** The verbs that reach the server, so they dim with the reason offline. */
+const NEEDS_CONNECTION: ReadonlySet<GpsPlaceVerbId> = new Set([
+  "share",
+  "copy",
+  "copyAndRemove",
+  "remove",
+]);
 
 export function PlaceOptionsSheet({
   place,
@@ -304,14 +310,12 @@ export function PlaceOptionsSheet({
                 <View style={styles.rule} />
               ) : null}
               <Row
-                icon={PLACE_VERB_ICON[verb.id]}
+                icon={verb.icon}
                 // Only Delete wears the warning: removing a share destroys
                 // nothing.
                 hue={verb.danger ? theme.warning : undefined}
                 title={verb.label}
-                {...(PLACE_VERB_NEEDS_CONNECTION.has(verb.id)
-                  ? shareRowProps
-                  : {})}
+                {...(NEEDS_CONNECTION.has(verb.id) ? shareRowProps : {})}
                 onPress={run[verb.id]}
               />
             </Fragment>

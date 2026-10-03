@@ -31,13 +31,13 @@ export function SyncStatusPills({
   return (
     <View style={styles.row}>
       {online ? null : (
-        <StatusPill label="Offline" tone="muted" icon="cloud-off" />
+        <StatusPill label="Offline" tone="muted" icon="offline" />
       )}
       {showPending ? (
         <StatusPill
           label={`${pendingCount} waiting to sync`}
           tone="outline"
-          icon="upload-cloud"
+          icon="uploading"
         />
       ) : null}
     </View>

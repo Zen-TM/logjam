@@ -4,6 +4,7 @@
 // Declared elsewhere and read by both, not copied here: the status buckets
 // and their order (`PLACE_STATUS_ORDER`, `PLACE_STATUS_LABELS`), the sorts
 // (`PLACE_SORT_OPTIONS`), a row's second line (`placeSummary`).
+import type { IconIdea } from "../icons.js";
 import { placeSortLabel } from "../placeFilterOptions.js";
 import type { PlaceSortKey } from "../placeFilter.js";
 import type { PlaceStatus } from "../placeStatus.js";
@@ -105,6 +106,17 @@ export const PLACES_ADD = {
   },
 } as const satisfies ScreenContract;
 
+/** The glyph of each way in, the same idea on both clients. Exhaustive by
+ *  type, so an entry cannot be added without one. */
+export const PLACES_ADD_ICON: Record<
+  (typeof PLACES_ADD)["sections"][number]["key"],
+  IconIdea
+> = {
+  add: "addPlace",
+  importFile: "upload",
+  importRopewiki: "saveOffline",
+};
+
 /** "1 place", "37 places". */
 export function placesCountLabel(count: number): string {
   return `${count} ${count === 1 ? "place" : "places"}`;
@@ -158,11 +170,17 @@ export type PlacesEmptyAction = "add" | "clear" | null;
 export function placesEmptyState(
   kind: PlacesEmptyKind,
   viewer: { platform: ContractPlatform; guest?: boolean },
-): { title: string; body: string; action: PlacesEmptyAction } {
+): {
+  icon: IconIdea;
+  title: string;
+  body: string;
+  action: PlacesEmptyAction;
+} {
   const copy = PLACES_LIST.copy;
   switch (kind) {
     case "firstRun":
       return {
+        icon: "place",
         title: copy.firstRunTitle,
         body:
           viewer.platform === "web"
@@ -174,15 +192,31 @@ export function placesEmptyState(
       };
     case "filtered":
       return {
+        icon: "filter",
         title: copy.filteredTitle,
         body: copy.filteredBody,
         action: "clear",
       };
     case "todo":
-      return { title: copy.todoTitle, body: copy.todoBody, action: "add" };
+      return {
+        icon: "place",
+        title: copy.todoTitle,
+        body: copy.todoBody,
+        action: "add",
+      };
     case "done":
-      return { title: copy.doneTitle, body: copy.doneBody, action: null };
+      return {
+        icon: "success",
+        title: copy.doneTitle,
+        body: copy.doneBody,
+        action: null,
+      };
     case "shared":
-      return { title: copy.sharedTitle, body: copy.sharedBody, action: null };
+      return {
+        icon: "friends",
+        title: copy.sharedTitle,
+        body: copy.sharedBody,
+        action: null,
+      };
   }
 }

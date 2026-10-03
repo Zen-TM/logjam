@@ -18,6 +18,7 @@ export {
 } from "@logjam/shared";
 export { HeroHeader } from "./HeroHeader";
 export { toDateKey, fromDateKey, todayDateKey } from "./monthGrid";
+export { Icon, type Glyph } from "./Icon";
 export { IconButton } from "./IconButton";
 export { SectionHeader } from "./SectionHeader";
 export { StatusPill } from "./StatusPill";

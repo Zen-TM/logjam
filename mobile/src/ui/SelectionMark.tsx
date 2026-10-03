@@ -1,7 +1,7 @@
-import { Feather } from "@expo/vector-icons";
 import { StyleSheet, View } from "react-native";
 
 import { theme } from "../theme";
+import { Icon } from "./Icon";
 
 /**
  * The checkbox a row shows while a multi-select is running (DESIGN.md §7).
@@ -26,8 +26,8 @@ export function SelectionMark({
   return (
     <View style={styles.box}>
       {selectable ? (
-        <Feather
-          name={selected ? "check-circle" : "circle"}
+        <Icon
+          idea={selected ? "success" : "unselected"}
           size={22}
           color={selected ? theme.accent : theme.textMuted}
         />

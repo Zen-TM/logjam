@@ -8,7 +8,6 @@
 // with a sentence saying what it gets you, which is what a row carries and a
 // button does not (§5). The recommended one is the accent tile.
 import { useState } from "react";
-import { Check, Database, FileUp } from "lucide-react";
 import { importFromRopeWiki } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import { ErrorBanner } from "../feedback/ErrorBanner";
@@ -93,7 +92,7 @@ function OnboardingChoiceDialog({
           }
           leading={
             <IconTile
-              icon={loaded ? Check : Database}
+              icon={loaded ? "done" : "place"}
               hue={loaded ? "var(--color-success)" : "var(--color-accent)"}
             />
           }
@@ -114,7 +113,7 @@ function OnboardingChoiceDialog({
         <Row
           title="Import my own files"
           subtitle="A place list needs name, latitude and longitude. A logbook needs a place name and a date."
-          leading={<IconTile icon={FileUp} hue="var(--color-neutral)" />}
+          leading={<IconTile icon="upload" hue="var(--color-neutral)" />}
           onOpen={onImportFiles}
           disabled={loading}
         />

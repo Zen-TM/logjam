@@ -6,7 +6,6 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { X } from "lucide-react";
 import { IconButton } from "./Button";
 import classes from "./Dialog.module.css";
 
@@ -164,7 +163,7 @@ function OpenDialog({
           {title}
         </h2>
         <IconButton
-          icon={X}
+          icon="close"
           label="Close"
           onClick={onClose}
           disabled={!dismissible}

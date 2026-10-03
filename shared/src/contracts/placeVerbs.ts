@@ -6,12 +6,15 @@
 // already on, and Show on map, absent on the map. Ownership decides the rest:
 // a place shared with you is somebody else's ground, so it is copied and let
 // go of rather than edited and deleted.
+import type { IconIdea } from "../icons.js";
 import type { ContractPlatform } from "./types.js";
 
 export type PlaceVerbSurface = "row" | "page" | "pin";
 
 type VerbDeclaration = {
   id: string;
+  /** The idea its glyph stands for, the same on both clients. */
+  icon: IconIdea;
   /** One label, or one per client where what the verb opens differs. */
   label: string | Record<ContractPlatform, string>;
   /** Whose place offers it. */
@@ -33,14 +36,21 @@ const NO_MAP_FROM_A_PLACE =
 
 /** In menu order. */
 export const PLACE_VERBS = [
-  { id: "open", label: "Open place", for: "both", omitOn: "page" },
-  { id: "show", label: "Show on map", for: "both", omitOn: "pin" },
+  {
+    id: "open",
+    icon: "place",
+    label: "Open place",
+    for: "both",
+    omitOn: "page",
+  },
+  { id: "show", icon: "map", label: "Show on map", for: "both", omitOn: "pin" },
   // Owner only: a trip links only its owner's places, and the API refuses the
   // rest.
-  { id: "logTrip", label: "Log a trip here", for: "owner" },
-  { id: "edit", label: "Edit place", for: "owner" },
+  { id: "logTrip", icon: "trip", label: "Log a trip here", for: "owner" },
+  { id: "edit", icon: "edit", label: "Edit place", for: "owner" },
   {
     id: "makeTopo",
+    icon: "lidar",
     label: "Make a LiDAR topo here",
     for: "both",
     on: "web",
@@ -48,6 +58,7 @@ export const PLACE_VERBS = [
   },
   {
     id: "makeGeoPdf",
+    icon: "geoPdf",
     label: "Make a GeoPDF here",
     for: "both",
     on: "web",
@@ -55,29 +66,33 @@ export const PLACE_VERBS = [
   },
   {
     id: "share",
+    icon: "shareFriend",
     // Logjam Web's dialog also exports the place; Logjam GPS's panel shares.
     label: { web: "Share or export…", gps: "Share" },
     for: "owner",
     separated: true,
   },
-  { id: "copy", label: "Save a copy", for: "sharee" },
+  { id: "copy", icon: "copy", label: "Save a copy", for: "sharee" },
   // Keeping a copy and dropping the share is ONE decision, and it sits with
   // the parting verbs. Copy first, so a failure leaves the user with both
   // rather than neither.
   {
     id: "copyAndRemove",
+    icon: "moveCopy",
     label: "Save a copy and remove",
     for: "sharee",
     separated: true,
   },
   {
     id: "remove",
+    icon: "unshare",
     label: "Remove from my account",
     for: "sharee",
     separated: true,
   },
   {
     id: "delete",
+    icon: "delete",
     label: "Delete place",
     for: "owner",
     danger: true,
@@ -95,6 +110,7 @@ export type PlaceVerbIdOn<P extends ContractPlatform> = Exclude<
 
 export type PlaceVerb<P extends ContractPlatform = ContractPlatform> = {
   id: PlaceVerbIdOn<P>;
+  icon: IconIdea;
   label: string;
   danger: boolean;
   separated: boolean;
@@ -124,6 +140,7 @@ export function placeVerbs<P extends ContractPlatform>(
     )
     .map((verb) => ({
       id: verb.id as PlaceVerbIdOn<P>,
+      icon: verb.icon,
       label: typeof verb.label === "string" ? verb.label : verb.label[platform],
       danger: verb.danger ?? false,
       separated: verb.separated ?? false,

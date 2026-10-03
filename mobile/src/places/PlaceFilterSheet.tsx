@@ -170,7 +170,7 @@ export const FILTER_SHEET_SECTIONS: Record<
         ))}
         {/* With the attributes because it widens only them. */}
         <Row
-          icon="help-circle"
+          icon="help"
           title={copy.includeMissing}
           right={
             <Toggle
@@ -215,7 +215,7 @@ export const FILTER_SHEET_SECTIONS: Record<
         ))}
       </View>
       <Row
-        icon="share-2"
+        icon="shareFriend"
         title={copy.sharedByMe}
         right={
           <Toggle
@@ -363,7 +363,7 @@ export function PlaceFilterSheet(props: Props) {
               </View>
             ) : null}
             <View style={styles.action}>
-              <Button label={copy.done} icon="check" onPress={onClose} />
+              <Button label={copy.done} icon="done" onPress={onClose} />
             </View>
           </View>
         ) : (
