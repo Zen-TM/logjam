@@ -26,7 +26,6 @@
 // PRIVACY: nothing here reads place data.
 import { useCallback, useState } from "react";
 import { StyleSheet, Text } from "react-native";
-import { Feather } from "@expo/vector-icons";
 import { ATTRIBUTE_NOUN, type ScopedCustomFieldDef } from "@logjam/shared";
 
 import { type CustomFieldEntity } from "../api/queries";
@@ -55,6 +54,8 @@ import {
   SectionHeader,
   Toast,
   type ToastMessage,
+  Icon,
+  type Glyph,
 } from "../ui";
 
 /** The sub-pages, in the order someone goes looking for them. */
@@ -67,14 +68,14 @@ export type SettingsPage =
 
 const PAGES: {
   page: SettingsPage;
-  icon: React.ComponentProps<typeof Feather>["name"];
+  icon: Glyph;
   title: string;
 }[] = [
-  { page: "display", icon: "type", title: "Display" },
+  { page: "display", icon: "typography", title: "Display" },
   { page: "map", icon: "map", title: "Map" },
-  { page: "notifications", icon: "bell", title: "Notifications" },
-  { page: "offline", icon: "download", title: "Offline and storage" },
-  { page: "privacy", icon: "lock", title: "Privacy and security" },
+  { page: "notifications", icon: "notifications", title: "Notifications" },
+  { page: "offline", icon: "device", title: "Offline and storage" },
+  { page: "privacy", icon: "private", title: "Privacy and security" },
 ];
 
 type SheetMode =
@@ -162,9 +163,7 @@ export function SettingsScreen({
                 ? capabilityRowProps("offlineSettings", accountState, online)
                 : {})}
             onPress={() => onOpenPage(page)}
-            right={
-              <Feather name="chevron-right" size={20} color={theme.textMuted} />
-            }
+            right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
           />
         ))}
 
@@ -175,13 +174,11 @@ export function SettingsScreen({
             and deleting stay here, with the list of them. */}
         <SectionHeader label="Your own categories" />
         <Row
-          icon="layers"
+          icon="place"
           title="Place types"
           subtitle={placeTypeCountLabel(placeTypes.data ?? [])}
           onPress={() => setSheet({ kind: "placeTypes" })}
-          right={
-            <Feather name="chevron-right" size={20} color={theme.textMuted} />
-          }
+          right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
         />
 
         <SectionHeader label="Your own attributes" />
@@ -190,18 +187,14 @@ export function SettingsScreen({
           title="Trip attributes"
           subtitle={fieldCountLabel(tripFields.defs.length)}
           onPress={() => setSheet({ kind: "fields", entity: "tripLog" })}
-          right={
-            <Feather name="chevron-right" size={20} color={theme.textMuted} />
-          }
+          right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
         />
         <Row
           icon="tag"
           title="Place attributes"
           subtitle={fieldCountLabel(placeFields.defs.length)}
           onPress={() => setSheet({ kind: "fields", entity: "place" })}
-          right={
-            <Feather name="chevron-right" size={20} color={theme.textMuted} />
-          }
+          right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
         />
 
         <SectionHeader label="About" />
@@ -235,7 +228,7 @@ export function SettingsScreen({
           ) : sheet.kind === "placeTypes" ? (
             <Button
               label="Add a place type"
-              icon="plus"
+              icon="add"
               onPress={() => setSheet({ kind: "placeTypeForm", editing: null })}
             />
           ) : sheet.kind === "fieldForm" ? (
@@ -246,7 +239,7 @@ export function SettingsScreen({
             // you came here to add to.
             <Button
               label={ATTRIBUTE_NOUN.add}
-              icon="plus"
+              icon="add"
               onPress={() =>
                 setSheet({
                   kind: "fieldForm",

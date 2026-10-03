@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import { ActivityIndicator, Pressable, StyleSheet, Text } from "react-native";
 
 import {
@@ -10,6 +9,7 @@ import {
   theme,
   touchTargetMin,
 } from "../theme";
+import { Icon, type Glyph } from "./Icon";
 
 // A compact button is drawn at `controlSize.md`; the slop takes its target to
 // the 48pt minimum.
@@ -24,7 +24,7 @@ type ButtonProps = {
   disabled?: boolean;
   loading?: boolean;
   /** Optional leading glyph, tinted with the label. */
-  icon?: React.ComponentProps<typeof Feather>["name"];
+  icon?: Glyph;
   /** Shrink-wrap for use inside a header/row instead of as a block action. */
   compact?: boolean;
   /**
@@ -72,7 +72,7 @@ export function Button({
       ) : (
         <>
           {icon ? (
-            <Feather name={icon} size={compact ? 16 : 18} color={tint} />
+            <Icon idea={icon} size={compact ? 16 : 18} color={tint} />
           ) : null}
           <Text
             style={[

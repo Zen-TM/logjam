@@ -1,5 +1,5 @@
 import type { ButtonHTMLAttributes, ReactNode, Ref } from "react";
-import type { LucideIcon } from "lucide-react";
+import { Icon, type Glyph } from "./Icon";
 import classes from "./MapControl.module.css";
 
 /**
@@ -9,7 +9,7 @@ import classes from "./MapControl.module.css";
  * place the kit casts a shadow.
  */
 export function MapButton({
-  icon: Icon,
+  icon,
   label,
   pressed,
   expanded,
@@ -21,7 +21,7 @@ export function MapButton({
   ButtonHTMLAttributes<HTMLButtonElement>,
   "children" | "aria-label" | "aria-pressed" | "aria-expanded"
 > & {
-  icon: LucideIcon;
+  icon: Glyph;
   label: string;
   pressed?: boolean;
   expanded?: boolean;
@@ -38,7 +38,7 @@ export function MapButton({
       className={[classes.mapButton, className].filter(Boolean).join(" ")}
       {...rest}
     >
-      <Icon size={20} aria-hidden />
+      <Icon idea={icon} size={20} />
     </button>
   );
 }
@@ -63,11 +63,11 @@ export function MapButtonGroup({
  * right now (filtered, generating, selected). An optional trailing action.
  */
 export function Notice({
-  icon: Icon,
+  icon,
   children,
   action,
 }: {
-  icon: LucideIcon;
+  icon: Glyph;
   children: ReactNode;
   action?: ReactNode;
 }) {
@@ -75,7 +75,7 @@ export function Notice({
     <div
       className={[classes.notice, action ? classes.withAction : ""].join(" ")}
     >
-      <Icon size={16} aria-hidden className={classes.noticeGlyph} />
+      <Icon idea={icon} size={16} className={classes.noticeGlyph} />
       <span>{children}</span>
       {action}
     </div>

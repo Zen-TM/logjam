@@ -1,6 +1,6 @@
 import type { ButtonHTMLAttributes, ReactNode, Ref } from "react";
-import { LoaderCircle, type LucideIcon } from "lucide-react";
 import classes from "./Button.module.css";
+import { Icon, type Glyph } from "./Icon";
 
 type ButtonVariant = "filled" | "outline" | "danger" | "destructive" | "plain";
 
@@ -17,8 +17,8 @@ export function Button({
   compact = false,
   busy = false,
   disabled,
-  icon: Icon,
-  trailingIcon: TrailingIcon,
+  icon,
+  trailingIcon,
   children,
   className,
   ref,
@@ -28,8 +28,8 @@ export function Button({
   variant?: ButtonVariant;
   compact?: boolean;
   busy?: boolean;
-  icon?: LucideIcon;
-  trailingIcon?: LucideIcon;
+  icon?: Glyph;
+  trailingIcon?: Glyph;
   children: ReactNode;
   ref?: Ref<HTMLButtonElement>;
 }) {
@@ -51,12 +51,12 @@ export function Button({
       {...rest}
     >
       {busy ? (
-        <LoaderCircle size={glyph} aria-hidden className={classes.spinner} />
+        <Icon idea="loading" size={glyph} className={classes.spinner} />
       ) : (
-        Icon && <Icon size={glyph} aria-hidden />
+        icon && <Icon idea={icon} size={glyph} />
       )}
       {children}
-      {TrailingIcon && <TrailingIcon size={glyph} aria-hidden />}
+      {trailingIcon && <Icon idea={trailingIcon} size={glyph} />}
     </button>
   );
 }
@@ -73,7 +73,7 @@ const ICON_TONE_CLASS = {
  * state is "on" (a search with a query, filters that are active).
  */
 export function IconButton({
-  icon: Icon,
+  icon,
   label,
   tone = "default",
   size = 18,
@@ -83,7 +83,7 @@ export function IconButton({
   type = "button",
   ...rest
 }: Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children" | "aria-label"> & {
-  icon: LucideIcon;
+  icon: Glyph;
   label: string;
   tone?: "default" | "filled" | "danger" | "onInverse";
   size?: number;
@@ -110,7 +110,7 @@ export function IconButton({
         .join(" ")}
       {...rest}
     >
-      <Icon size={size} aria-hidden />
+      <Icon idea={icon} size={size} />
     </button>
   );
 }

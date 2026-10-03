@@ -28,11 +28,10 @@
 // the map's attribution sheet, which lists the preview sources alongside the
 // active basemap's own attribution. Do not add a source here whose terms don't
 // allow keeping a copy of its tiles.
-import { Feather } from "@expo/vector-icons";
 import { Image, StyleSheet, View } from "react-native";
 
+import { Icon } from "../ui";
 import { assetHue, radius, withAlpha } from "../theme";
-import { BASEMAP_META } from "./basemapMeta";
 import type { BasemapId } from "./sourceResolver";
 
 // `void require(...)`: Metro bundles a drawable only when something requires it.
@@ -75,11 +74,7 @@ export function BasemapThumb({ basemapId }: { basemapId: BasemapId }) {
   if (resource === undefined) {
     return (
       <View style={[styles.tile, styles.glyphTile]}>
-        <Feather
-          name={BASEMAP_META[basemapId].icon}
-          size={20}
-          color={assetHue.region}
-        />
+        <Icon idea="map" size={20} color={assetHue.region} />
       </View>
     );
   }

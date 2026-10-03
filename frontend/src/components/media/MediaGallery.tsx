@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Trash2, FileDown, Play, ImageOff } from "lucide-react";
 import { mediaCategory, type MediaItem } from "@logjam/shared";
 import { deleteMedia } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
@@ -8,6 +7,7 @@ import ConfirmDialog from "../dialogs/ConfirmDialog";
 import Lightbox from "./Lightbox";
 import TrackIcon from "./TrackIcon";
 import classes from "./MediaGallery.module.css";
+import { Icon } from "../../ui";
 
 // `variant` selects which media this gallery surfaces:
 //   all     → visual grid + track list (default; legacy behaviour)
@@ -80,7 +80,7 @@ export default function MediaGallery({
                   type="button"
                   className={classes.tileButton}
                   onClick={() => setLightbox(m)}
-                  aria-label={`View ${m.filename}`}
+                  aria-label={`${isVideo ? "Play video" : "View"} ${m.filename}`}
                 >
                   {m.thumbnailUrl && !failedThumbIds.has(m.id) ? (
                     <img
@@ -94,13 +94,13 @@ export default function MediaGallery({
                     />
                   ) : (
                     <div className={classes.thumbFallback}>
-                      <ImageOff size={18} />
+                      <Icon idea="missingMedia" size={18} />
                       <span>{m.filename}</span>
                     </div>
                   )}
                   {isVideo && (
                     <span className={classes.playBadge}>
-                      <Play size={16} />
+                      <Icon idea="play" size={16} />
                     </span>
                   )}
                 </button>
@@ -112,7 +112,7 @@ export default function MediaGallery({
                     disabled={deletingId === m.id}
                     aria-label={`Delete ${m.filename}`}
                   >
-                    <Trash2 size={14} />
+                    <Icon idea="delete" size={14} />
                   </button>
                 )}
               </div>
@@ -133,7 +133,7 @@ export default function MediaGallery({
                 {m.color ? (
                   <TrackIcon color={m.color} />
                 ) : (
-                  <FileDown size={16} />
+                  <Icon idea="export" size={16} />
                 )}
                 <span className={classes.trackName}>{m.filename}</span>
               </a>
@@ -145,7 +145,7 @@ export default function MediaGallery({
                   disabled={deletingId === m.id}
                   aria-label={`Delete ${m.filename}`}
                 >
-                  <Trash2 size={14} />
+                  <Icon idea="delete" size={14} />
                 </button>
               )}
             </div>

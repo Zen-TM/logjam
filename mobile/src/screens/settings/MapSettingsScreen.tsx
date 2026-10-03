@@ -17,7 +17,6 @@
 // PRIVACY: sides, colours, enums and two sampling numbers. Nothing positional.
 import { useCallback, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-import { Feather } from "@expo/vector-icons";
 
 import {
   isCompassEnabled,
@@ -79,6 +78,7 @@ import {
   SectionHeader,
   Toast,
   type ToastMessage,
+  Icon,
 } from "../../ui";
 import { ChoiceGroup, PreferenceRow } from "./settingsKit";
 
@@ -285,7 +285,7 @@ export function MapSettingsScreen() {
         </View>
 
         <PreferenceRow
-          icon="navigation"
+          icon="northUp"
           title="Keep the map north-up"
           value={northUp}
           ready
@@ -296,7 +296,7 @@ export function MapSettingsScreen() {
           }}
         />
         <PreferenceRow
-          icon="minus"
+          icon="scaleBar"
           title="Scale bar"
           value={scaleBar}
           ready
@@ -321,7 +321,7 @@ export function MapSettingsScreen() {
 
         {/* Beneath the two instruments it joins in the same stack. */}
         <PreferenceRow
-          icon="trending-up"
+          icon="elevation"
           title="Speed and elevation"
           subtitle="Uses more battery while on the map."
           value={speedElevation}
@@ -433,7 +433,7 @@ export function MapSettingsScreen() {
             setting they cannot find is a trip's data lost. */}
         {sensorLoggingAvailable() && sensorCaps != null && (
           <PreferenceRow
-            icon="activity"
+            icon="sensors"
             title="Log raw sensors while recording"
             subtitle={sensorLoggingSubtitle(sensorCaps, sensorLogging)}
             subtitleNumberOfLines={4}
@@ -497,7 +497,7 @@ function ColorSwatch({
       ]}
     >
       <View style={[styles.swatch, { backgroundColor: color }]}>
-        {selected ? <Feather name="check" size={18} color="#1A1A1A" /> : null}
+        {selected ? <Icon idea="done" size={18} color="#1A1A1A" /> : null}
       </View>
     </Pressable>
   );

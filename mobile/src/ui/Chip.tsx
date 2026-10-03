@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import {
@@ -10,6 +9,7 @@ import {
   theme,
   withAlpha,
 } from "../theme";
+import { Icon, type Glyph } from "./Icon";
 
 // The single source of a chip's height (padding + font + border collapse to
 // this one number via `minHeight`) — `SegmentedControl` re-exports it so a
@@ -40,7 +40,7 @@ export function Chip({
   active?: boolean;
   disabled?: boolean;
   hue?: string;
-  icon?: React.ComponentProps<typeof Feather>["name"];
+  icon?: Glyph;
   count?: number;
   /** Trailing star: this chip is the one that counts (ChipPicker's `primaryValue`). */
   starred?: boolean;
@@ -63,8 +63,8 @@ export function Chip({
       ]}
     >
       {icon ? (
-        <Feather
-          name={icon}
+        <Icon
+          idea={icon}
           size={14}
           color={active ? theme.onFill : theme.textMuted}
         />
@@ -79,8 +79,8 @@ export function Chip({
         {label}
       </Text>
       {starred ? (
-        <Feather
-          name="star"
+        <Icon
+          idea="favourite"
           size={12}
           color={active ? theme.onFill : theme.textMuted}
         />

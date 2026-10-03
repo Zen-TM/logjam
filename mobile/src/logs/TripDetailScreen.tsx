@@ -11,7 +11,6 @@
 // outbox's authed upload.
 import { useCallback, useRef, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
-import { Feather } from "@expo/vector-icons";
 import {
   ATTRIBUTE_NOUN,
   attributeRows,
@@ -43,6 +42,7 @@ import {
   StatusPill,
   Toast,
   type ToastMessage,
+  Icon,
 } from "../ui";
 import { TripEditSheet } from "./TripEditSheet";
 import { primaryTripType, tripTypeLabel, tripTypeMeta } from "./tripTypeMeta";
@@ -99,7 +99,7 @@ export function TripDetailScreen({
         onBack={onBack}
         action={
           <IconButton
-            icon="edit-2"
+            icon="edit"
             accessibilityLabel="Edit trip"
             color={theme.accent}
             filled
@@ -139,15 +139,11 @@ export function TripDetailScreen({
           current.places.map((place) => (
             <Row
               key={place.id}
-              icon="map-pin"
+              icon="place"
               hue={theme.accent}
               title={place.name}
               right={
-                <Feather
-                  name="chevron-right"
-                  size={20}
-                  color={theme.textMuted}
-                />
+                <Icon idea="disclosure" size={20} color={theme.textMuted} />
               }
               onPress={() => onOpenPlace(place.id, place.name)}
             />
