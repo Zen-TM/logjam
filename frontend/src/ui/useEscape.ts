@@ -6,7 +6,7 @@ import { useEffect, useEffectEvent, type RefObject } from "react";
  *  ONE LAYER PER PRESS: the innermost layer handles it and the press goes no
  *  further. A popover's DOM lives inside whatever opened it, so without this a
  *  colour picker's Escape bubbled on to the side sheet holding it and closed
- *  both, with focus left nowhere (DESIGN.md §10, "Escape at every layer"). */
+ *  both, with focus left nowhere (DESIGN.md §7, "Escape at every layer"). */
 export function useEscape(
   ref: RefObject<HTMLElement | null> | null,
   onEscape: () => void,

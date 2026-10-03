@@ -42,7 +42,7 @@ import {
 } from "../ui";
 
 /**
- * Add or edit a place — one sheet for both (DESIGN.md §7). The fields are
+ * Add or edit a place — one sheet for both (DESIGN.md §5). The fields are
  * identical; only the title, the submit label and whether coordinates arrive
  * pre-filled differ.
  *
@@ -51,11 +51,11 @@ import {
  *
  * Coordinates are typed, or seeded by the caller from a point pressed on the map
  * (`initialCoords`). They are never captured from GPS *here*: a permission window
- * cannot be raised from an open sheet (DESIGN.md §7 — the bug that made "Take
+ * cannot be raised from an open sheet (DESIGN.md §5 — the bug that made "Take
  * photo" look dead), so any future fix-based entry belongs in the caller too.
  *
  * The user's own fields are edited here too, and their definitions are reached
- * through a MODE of this sheet, exactly as on `TripEditSheet` (DESIGN.md §6 —
+ * through a MODE of this sheet, exactly as on `TripEditSheet` (DESIGN.md §4 —
  * never a second modal). A date-typed field needs the picker, which is the
  * other mode.
  *
@@ -63,7 +63,7 @@ import {
  * They live in component state and leave only through the outbox's authed push;
  * nothing here is logged, and the failure copy is ours rather than the error's.
  */
-/** The sheet's sub-screens. Modes, never a second sheet (DESIGN.md §6). */
+/** The sheet's sub-screens. Modes, never a second sheet (DESIGN.md §4). */
 type Mode = "form" | "date" | "fields" | "fieldForm";
 
 export function PlaceEditSheet({
@@ -115,7 +115,7 @@ export function PlaceEditSheet({
   const [placeTypeId, setPlaceTypeId] = useState<string>(
     SYSTEM_PLACE_TYPE_IDS.canyon,
   );
-  // Attributed to their own control (DESIGN.md §8): the name check and
+  // Attributed to their own control (docs/ux-principles.md §11): the name check and
   // `validatePlacePayload`'s coordinate messages ("Latitude must be…",
   // "Longitude must be…") each go under the field they're about. Everything
   // else — a field-value range, a save the outbox rejected — belongs to no
@@ -349,7 +349,7 @@ export function PlaceEditSheet({
     } catch (err) {
       console.error(err);
       // The sheet is still open here — onClose() only runs on success — so a
-      // toast would render under it and never be seen (DESIGN.md §8). The
+      // toast would render under it and never be seen (docs/ux-principles.md §11). The
       // banner above Save is what reports it.
       setFormError("Couldn't save this place.");
     } finally {
@@ -419,7 +419,7 @@ export function PlaceEditSheet({
             {/* Not attributable to one control (a field-value range, a save
                 the outbox rejected) — directly above Save, never at the top
                 of the form where it can sit out of sight of the button
-                (DESIGN.md §8). */}
+                (docs/ux-principles.md §11). */}
             {formError ? <ErrorBanner message={formError} /> : null}
             <Button
               label={editing ? "Save changes" : "Add place"}

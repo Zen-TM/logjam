@@ -6,7 +6,7 @@ import { SheetErrorReveal } from "./BottomSheet";
 import { Icon } from "./Icon";
 
 /**
- * The one inline validation line (DESIGN.md §8, "Form errors"): directly under
+ * The one inline validation line (docs/ux-principles.md §11, "Form errors"): directly under
  * the control it is about: the words in `text` and a warning glyph before them,
  * because words are never an intent colour (UX §7). `TextField` and `ChipPicker`
  * render it from their `error` prop; any other control puts one under itself.

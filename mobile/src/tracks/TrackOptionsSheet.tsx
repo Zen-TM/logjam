@@ -5,7 +5,7 @@
 // ONE component for both, same shape and same reason as RouteOptionsSheet: the
 // actions have one definition in saved/assetActions.ts, and a track reached
 // from the map must not be a lesser object than one reached from Saved
-// (DESIGN.md §7). Rename, Send a copy and the stats are sub-modes of THIS
+// (DESIGN.md §5). Rename, Send a copy and the stats are sub-modes of THIS
 // sheet rather than second sheets (§6: never open a second sheet — swap the
 // content), so no caller can be the surface that forgot one.
 //
@@ -44,13 +44,13 @@ export function TrackOptionsSheet({
   /**
    * Fly the map to this track. Saved-only — the map surface omits it, because
    * the user got here by tapping the line and is already looking at it
-   * (DESIGN.md §7: "View on map" is the one row the two surfaces differ by).
+   * (DESIGN.md §5: "View on map" is the one row the two surfaces differ by).
    */
   onShowOnMap?: (bbox: Bbox) => void;
   /**
    * Pick this recording back up. Owned by the MAP rather than by this sheet
    * because starting a recorder needs the location permission prompt, which
-   * cannot be raised from an open sheet (DESIGN.md §7 — the bug that made
+   * cannot be raised from an open sheet (DESIGN.md §5 — the bug that made
    * "Take photo" look dead), and because the map is what has to enter
    * recording mode afterwards.
    */
@@ -177,7 +177,7 @@ export function TrackOptionsSheet({
   };
 
   // Every sub-mode backs out to the verb list; only the list itself closes the
-  // sheet (DESIGN.md §6 — a sub-mode swaps the content, it never stacks).
+  // sheet (DESIGN.md §4 — a sub-mode swaps the content, it never stacks).
   const leaveSubMode = renaming
     ? () => setRenaming(false)
     : sending
@@ -191,7 +191,7 @@ export function TrackOptionsSheet({
   return (
     <BottomSheet
       visible={visible}
-      // A sub-mode backs out to its parent, not out of the sheet (DESIGN.md §6).
+      // A sub-mode backs out to its parent, not out of the sheet (DESIGN.md §4).
       onClose={leaveSubMode ?? close}
       // The stats sub-mode keeps the track's own name: it is the same subject,
       // seen as numbers.
@@ -324,7 +324,7 @@ export function TrackOptionsSheet({
             </View>
           ) : null}
           {/* What this track IS, one tap in — a tapped line opens the verbs
-              now, and the numbers are behind this row (DESIGN.md §7). */}
+              now, and the numbers are behind this row (DESIGN.md §5). */}
           <Row
             title="View stats"
             subtitle="Distance, climb, pace and profiles"

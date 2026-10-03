@@ -1,6 +1,6 @@
 // Inbox — "what happened while I was away?"
 //
-// LAYOUT (DESIGN.md §1, §2): hero answers the question with a count and carries
+// LAYOUT (docs/ux-principles.md §2, §2): hero answers the question with a count and carries
 // the one bulk action; a pinned rail partitions into Unread / Read; the list is a
 // `SectionList` grouped by local calendar day with sticky headers, because a
 // notification list is chronological and dates are an ordering aid, not a second
@@ -244,7 +244,7 @@ export function NotificationsScreen({
   );
   const query = useNotifications(guestBlock !== null);
   const refetch = query.refetch;
-  // ONE toast channel for every action outcome (DESIGN.md §6): an inline banner
+  // ONE toast channel for every action outcome (DESIGN.md §4): an inline banner
   // reflows the list under the user's thumb and then lingers with no owner, and
   // on a scrolled list it lands off screen entirely — which is how accepting a
   // file came to look like it did nothing.
@@ -260,7 +260,7 @@ export function NotificationsScreen({
   /** Which row's ⋯ sheet is open, by id — the row itself is looked up from the
    *  live list, so a refetch can't leave the sheet holding a stale copy. */
   const [menuId, setMenuId] = useState<string | null>(null);
-  // Accept / decline are ONLINE-ONLY and dimmed rather than hidden (§10): the
+  // Accept / decline are ONLINE-ONLY and dimmed rather than hidden (DESIGN.md §8): the
   // list itself reads from the cache offline, so the row is there either way
   // and a vanishing button would read as "this one can't be answered".
   const online = useConnectivity() === "online";
@@ -342,7 +342,7 @@ export function NotificationsScreen({
   );
   const sections = useMemo(() => groupNotificationsByDay(rows), [rows]);
 
-  // --- Multi-select (DESIGN.md §7) -----------------------------------------
+  // --- Multi-select (DESIGN.md §5) -----------------------------------------
   // The same hook and the same bar as Places, Logs and Saved: press and hold a
   // row to start, tap to toggle, the last row deselected leaves the mode. Every
   // notification is selectable — unlike a shared place, there is no row the
@@ -372,7 +372,7 @@ export function NotificationsScreen({
     () => expandBatchSelection(selectedItems, batches),
     [batches, selectedItems],
   );
-  // A selection is a transient mode over rows you can see (§7). Also drops the
+  // A selection is a transient mode over rows you can see (DESIGN.md §5). Also drops the
   // per-row sheet: a sheet does not outlive the tab.
   useFocusEffect(
     useCallback(() => {
@@ -635,7 +635,7 @@ export function NotificationsScreen({
     [markRead, notify, onUnreadChanged, refetch],
   );
 
-  /** A destructive action is a dialog first, and the dialog carries the why (§7). */
+  /** A destructive action is a dialog first, and the dialog carries the why (DESIGN.md §5). */
   const requestAction = useCallback(
     (
       n: TNotification,
@@ -891,7 +891,7 @@ export function NotificationsScreen({
       <Hero
         eyebrow="Inbox"
         // The answer to "what happened while I was away?" is a NUMBER of things
-        // that did (§1). "Something new" was that answer rounded to a boolean —
+        // that did (docs/ux-principles.md §2). "Something new" was that answer rounded to a boolean —
         // it said the same words for one notification and for forty, and read as
         // a marketing line rather than a count. The tally below it stays the
         // whole inbox, so the two lines never restate each other.
@@ -918,7 +918,7 @@ export function NotificationsScreen({
       />
 
       {/* The bulk bar takes the ChipRail's slot and only that slot, so
-          the rail's height cannot change when a selection starts (§7). */}
+          the rail's height cannot change when a selection starts (DESIGN.md §5). */}
       {notifications.length > 0 ? (
         <View style={styles.rail}>
           {selecting && readAction ? (
@@ -950,7 +950,7 @@ export function NotificationsScreen({
             />
           )}
           {/* The name search, in the SAME place in both states so the rail's
-              height cannot differ between them (§7). It goes inert rather than
+              height cannot differ between them (DESIGN.md §5). It goes inert rather than
               unmounting while picking — a keystroke could narrow a selected row
               out of the list — and dims to say so, the treatment Saved's field
               and the waypoint tag rail already use. */}
@@ -1177,7 +1177,7 @@ const NotificationRow = memo(function NotificationRow({
                 />
               ))}
             </View>
-            {/* The reason on the thing that is dimmed, not on the screen (§10). */}
+            {/* The reason on the thing that is dimmed, not on the screen (DESIGN.md §8). */}
             {!online ? (
               <Text style={styles.actionHint}>Needs a connection</Text>
             ) : null}
@@ -1329,7 +1329,7 @@ const BatchRow = memo(function BatchRow({
   );
 });
 
-/** Per-bucket, and actionable where there is an action (§8). */
+/** Per-bucket, and actionable where there is an action (docs/ux-principles.md §11). */
 function EmptyPanel({
   bucket,
   searching,

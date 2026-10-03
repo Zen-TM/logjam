@@ -136,7 +136,7 @@ export default function WayDetailPanel({
    * A verb a ROW asked for, run once this page mounts. It is how one verb list
    * serves both surfaces: a row shows Share, Rename and Delete without hosting
    * a second copy of each form (wayActions.ts). CONSUMED, never counted — a
-   * request that stays set fires again on every re-render (DESIGN.md §9).
+   * request that stays set fires again on every re-render (DESIGN.md §6).
    */
   initialVerb: WayVerbId | null;
   onVerbConsumed: () => void;
@@ -791,7 +791,7 @@ export default function WayDetailPanel({
 }
 
 /** Renaming a file, as a form with a Cancel — never a live field that commits
- *  on blur (DESIGN.md §5). */
+ *  on blur (DESIGN.md §3). */
 function RenameWayDialog({
   file,
   busy,

@@ -32,7 +32,7 @@ export const PlaceRoutesLayer = memo(function PlaceRoutesLayer({
   onStatus,
 }: {
   /** Drawn/unavailable counts, so the map can say when it is showing less than
-   *  everything (DESIGN.md §8: a map that hides things says so). */
+   *  everything (docs/ux-principles.md §11: a map that hides things says so). */
   onStatus: (status: PlaceRoutesStatus) => void;
 }) {
   const tracks = useMirrorPlaceTracks(TRACK_MIME_TYPES);

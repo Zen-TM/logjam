@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { shareRowSubtitle } from "./shareRowSubtitle";
 
 // `shareRowSubtitle` is the one branchy thing in the sharing module, and its
-// ORDER is the part worth pinning: DESIGN.md §10 says needs-account beats
+// ORDER is the part worth pinning: DESIGN.md §8 says needs-account beats
 // needs-connection, and both beat any data-derived line — a guest must be told
 // they need an account, not that nobody has access yet.
 type Args = Parameters<typeof shareRowSubtitle>[0];
