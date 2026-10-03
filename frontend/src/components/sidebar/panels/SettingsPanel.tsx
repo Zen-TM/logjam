@@ -14,7 +14,14 @@ import {
 } from "../../../placeUtils";
 import { messageFromError } from "../../../errors/messageFromError";
 import { useToast } from "../../feedback/ToastProvider";
-import { IconTile, Row, SectionHeader, SwitchRow, Icon } from "../../../ui";
+import {
+  IconTile,
+  Row,
+  SectionHeader,
+  SwitchRow,
+  Icon,
+  LoadingState,
+} from "../../../ui";
 import CustomFieldSection from "./CustomFieldSection";
 import PlaceTypeSection from "./PlaceTypeSection";
 import ThemeChooser from "./ThemeChooser";
@@ -185,7 +192,7 @@ function SettingsPanel({
 
       <SectionHeader title="Notifications" />
       {notifPrefs === null ? (
-        <p className={classes.state}>Loading…</p>
+        <LoadingState />
       ) : (
         NOTIFICATIONS.map(({ key, title }) => (
           <SwitchRow
@@ -200,7 +207,7 @@ function SettingsPanel({
 
       <SectionHeader title="Downloads" />
       {autoDownloadGeoPdfs === null ? (
-        <p className={classes.state}>Loading…</p>
+        <LoadingState />
       ) : (
         <SwitchRow
           title="Download GeoPDFs automatically when they finish generating"

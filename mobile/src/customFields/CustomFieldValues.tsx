@@ -25,9 +25,9 @@ import { fontSize, fontWeight, spacing, theme } from "../theme";
 import {
   IconButton,
   Row,
-  SegmentedControl,
+  ChipRail,
   TextField,
-  type SegmentOption,
+  type ChipOption,
   Icon,
 } from "../ui";
 
@@ -41,7 +41,7 @@ import {
  * it. The same row of stops a bounded integer draws, for the same reason: unset
  * has to stay reachable.
  */
-const BOOLEAN_OPTIONS: SegmentOption<string>[] = [
+const BOOLEAN_OPTIONS: ChipOption<string>[] = [
   { value: "", label: "—" },
   { value: "true", label: "Yes" },
   { value: "false", label: "No" },
@@ -133,14 +133,14 @@ function CustomFieldValueInput({
   // know" into a wrong answer, which is why the first stop is "—".
   const stops = railStops(def);
   if (stops) {
-    const options: SegmentOption<string>[] = [{ value: "", label: "—" }];
+    const options: ChipOption<string>[] = [{ value: "", label: "—" }];
     for (const stop of stops)
       options.push({ value: String(stop), label: String(stop) });
     return (
       <View style={styles.field}>
         <Text style={styles.railLabel}>{def.label}</Text>
         <Beside trailing={trailing}>
-          <SegmentedControl
+          <ChipRail
             scroll
             options={options}
             value={value}
@@ -155,7 +155,7 @@ function CustomFieldValueInput({
       <View style={styles.field}>
         <Text style={styles.railLabel}>{label}</Text>
         <Beside trailing={trailing}>
-          <SegmentedControl
+          <ChipRail
             options={BOOLEAN_OPTIONS}
             value={value}
             onChange={onChange}

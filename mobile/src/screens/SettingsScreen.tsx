@@ -172,7 +172,7 @@ export function SettingsScreen({
             the Places tab's type rail ("New type", the chip at the end of it),
             because that is where a user notices they want another one; editing
             and deleting stay here, with the list of them. */}
-        <SectionHeader label="Your own categories" />
+        <SectionHeader title="Your own categories" />
         <Row
           icon="place"
           title="Place types"
@@ -181,7 +181,7 @@ export function SettingsScreen({
           right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
         />
 
-        <SectionHeader label="Your own attributes" />
+        <SectionHeader title="Your own attributes" />
         <Row
           icon="tag"
           title="Trip attributes"
@@ -197,7 +197,7 @@ export function SettingsScreen({
           right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
         />
 
-        <SectionHeader label="About" />
+        <SectionHeader title="About" />
         <Text style={styles.version}>{CLIENT_VERSION}</Text>
       </ScreenScroll>
 

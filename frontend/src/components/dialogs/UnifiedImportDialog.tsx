@@ -18,6 +18,7 @@ import {
   SwitchRow,
   TextField,
   Icon,
+  ErrorBanner,
 } from "../../ui";
 import {
   matchPlace,
@@ -85,7 +86,6 @@ import {
   describeDroppedTripRow,
 } from "../../csvImport/rowSkip";
 import { messageFromError } from "../../errors/messageFromError";
-import { ErrorBanner } from "../feedback/ErrorBanner";
 import { useToast } from "../feedback/ToastProvider";
 import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
 import ConfirmDialog from "./ConfirmDialog";

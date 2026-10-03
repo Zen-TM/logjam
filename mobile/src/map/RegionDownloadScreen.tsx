@@ -49,21 +49,15 @@ import {
 import { config } from "../config";
 import { formatBytes, formatMinutes } from "../format";
 import { useAccountState } from "../auth/AccountStateContext";
-import {
-  fontSize,
-  fontWeight,
-  radius,
-  spacing,
-  theme,
-  withAlpha,
-} from "../theme";
+import { fontSize, spacing, theme } from "../theme";
 import {
   BottomSheet,
   Button,
   Chip,
-  HeroHeader,
+  Hero,
+  Notice,
   SectionHeader,
-  SegmentedControl,
+  ChipRail,
   TextField,
 } from "../ui";
 import {
@@ -546,7 +540,7 @@ export function RegionDownloadScreen({
       {/* Wrapped only to lift it above the map, which now slides up under its
           rounded bottom corners. */}
       <View style={styles.hero}>
-        <HeroHeader
+        <Hero
           onBack={onBack}
           eyebrow="Offline maps"
           title="Save maps offline"
@@ -632,15 +626,13 @@ export function RegionDownloadScreen({
             cap reasons it carried were one message wearing three hats. */}
         {overCap ? (
           <View style={styles.mapWarning} pointerEvents="none">
-            <Text style={styles.mapWarningText}>
+            <Notice icon="warning" tone="warning">
               Too large — reduce the area or detail, or pick fewer maps.
-            </Text>
+            </Notice>
           </View>
         ) : null}
         <View style={styles.mapHint} pointerEvents="none">
-          <Text style={styles.mapHintText}>
-            Move the map · drag edges to resize
-          </Text>
+          <Notice>Move the map · drag edges to resize</Notice>
         </View>
       </View>
 
@@ -684,7 +676,7 @@ export function RegionDownloadScreen({
         <View style={styles.panelBody}>
           <View style={styles.detailBlock}>
             <View style={styles.detailHeader}>
-              <SectionHeader label="Detail" />
+              <SectionHeader title="Detail" />
               <Text style={styles.detailCaption}>
                 {/* Metres-per-pixel describes a RASTER pyramid: fixed images at
                   fixed scales. A vector clip has no pixels — it redraws sharp
@@ -695,7 +687,7 @@ export function RegionDownloadScreen({
                   : `z${deepestZoom} · ≈ ${metresPerPixel(centreLat, deepestZoom).toFixed(1)} m per pixel`}
               </Text>
             </View>
-            <SegmentedControl
+            <ChipRail
               scroll
               options={DETAIL_ZOOMS.map((zoom) => ({
                 value: String(zoom),
@@ -773,15 +765,6 @@ const styles = StyleSheet.create({
     bottom: spacing(1),
     alignItems: "center",
   },
-  mapHintText: {
-    color: theme.text,
-    fontSize: fontSize.xs,
-    backgroundColor: withAlpha(theme.page, 0.85),
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing(1.5),
-    paddingVertical: spacing(0.5),
-    overflow: "hidden",
-  },
   // The one warning, at the TOP of the map — same overlay treatment as the
   // hint along the bottom, in the warning colour. Over the map rather than in
   // the hero so that it costs no layout: the hero and the panel are what the
@@ -796,22 +779,6 @@ const styles = StyleSheet.create({
     right: spacing(2),
     top: HERO_OVERLAP + spacing(1),
     alignItems: "center",
-  },
-  // Outlined in the warning colour over a wash of it, rather than the page
-  // colour: over a map, a pill painted in the page's own brown reads as a gap
-  // in the map. The border is what holds it together at two lines.
-  mapWarningText: {
-    color: theme.warning,
-    fontSize: fontSize.xs,
-    fontWeight: fontWeight.medium,
-    textAlign: "center",
-    backgroundColor: withAlpha(theme.warning, 0.16),
-    borderWidth: 1,
-    borderColor: theme.warning,
-    borderRadius: radius.lg,
-    paddingHorizontal: spacing(1.5),
-    paddingVertical: spacing(0.75),
-    overflow: "hidden",
   },
   namingBody: { gap: spacing(1.5) },
   namingNote: { color: theme.textMuted, fontSize: fontSize.sm },

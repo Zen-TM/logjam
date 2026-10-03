@@ -14,6 +14,7 @@ import {
   FONT,
   FONT_WEIGHT,
   isThemeSchemeId,
+  OPACITY,
   PLACE_STATUS_HUES,
   RADIUS,
   SPACE_UNIT,
@@ -171,6 +172,9 @@ export const fontSize = {
 } as const;
 /** n steps of the shared unit: `spacing(1.5)` is the web's `--space-1-5`. */
 export const spacing = (n: number): number => n * SPACE_UNIT;
+
+/** A disabled control's dim, the same number on both clients. */
+export const opacity = OPACITY;
 
 /** Control heights: a phone is a touch screen, so it takes the touch set. */
 export const controlSize = CONTROL.touch;

@@ -33,8 +33,6 @@ import {
   isHttpUrl,
 } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
-import { ErrorBanner } from "../feedback/ErrorBanner";
-import { FieldError } from "../feedback/FieldError";
 import { useToast } from "../feedback/ToastProvider";
 import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
 import AddCustomFieldForm from "./AddCustomFieldForm";
@@ -53,6 +51,8 @@ import {
   SectionHeader,
   TextArea,
   TextField,
+  ErrorBanner,
+  FieldError,
 } from "../../ui";
 import classes from "./PlaceDialog.module.css";
 

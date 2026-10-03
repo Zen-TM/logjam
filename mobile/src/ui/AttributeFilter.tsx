@@ -246,7 +246,7 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.medium,
   },
   blockValue: { color: theme.textMuted, fontSize: fontSize.sm },
-  blockValueActive: { color: theme.accent, fontWeight: fontWeight.medium },
+  blockValueActive: { color: theme.text, fontWeight: fontWeight.medium },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing(0.75) },
   customRow: { gap: spacing(0.75) },
   customField: { maxWidth: 200 },

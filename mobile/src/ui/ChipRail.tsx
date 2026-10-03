@@ -9,25 +9,12 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 
 import { spacing, theme, withAlpha } from "../theme";
-import { Chip, CHIP_HEIGHT } from "./Chip";
-import { type Glyph } from "./Icon";
+import { Chip, CHIP_HEIGHT, type ChipOption } from "./Chip";
 
 // A single-line (`scroll`) control is exactly one chip tall — re-exported so
 // a bar replacing it in the same slot (Saved's multi-select bar, item A) can
 // match without a second hand-kept number.
-export const SEGMENTED_CONTROL_HEIGHT = CHIP_HEIGHT;
-
-export type SegmentOption<T extends string> = {
-  value: T;
-  label: string;
-  disabled?: boolean;
-  /** Optional tally rendered as a trailing badge (filter rails). */
-  count?: number;
-  /** Optional identity hue — tints the chip's border/label when active. */
-  hue?: string;
-  /** Optional leading glyph, for a rail whose options have a kind. */
-  icon?: Glyph;
-};
+export const CHIP_RAIL_HEIGHT = CHIP_HEIGHT;
 
 // Chip group for a single-select choice (basemap picker, filters, category
 // rails). Chips are fully rounded; the active one is filled with its `hue`
@@ -37,13 +24,13 @@ export type SegmentOption<T extends string> = {
 // `scroll` for a one-line horizontal rail — use it when the options are a
 // filter over a list below (a rail reads as "pick a view", a wrapped block
 // reads as "pick a setting") and the count can grow.
-export function SegmentedControl<T extends string>({
+export function ChipRail<T extends string>({
   options,
   value,
   onChange,
   scroll = false,
 }: {
-  options: SegmentOption<T>[];
+  options: ChipOption<T>[];
   value: T;
   onChange: (next: T) => void;
   scroll?: boolean;

@@ -1,5 +1,5 @@
 import classes from "./ErrorBanner.module.css";
-import { Icon } from "../../ui";
+import { Icon } from "./Icon";
 
 type Props = {
   message: string;

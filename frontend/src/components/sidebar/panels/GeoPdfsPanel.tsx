@@ -38,6 +38,7 @@ import {
   Row,
   StatusPill,
   type MenuEntry,
+  LoadingState,
 } from "../../../ui";
 import {
   MAP_IDENTITY,
@@ -311,7 +312,7 @@ export default function GeoPdfsPanel({
 
   const list = !jobsLoaded ? (
     <div className={classes.emptyArea} role="status">
-      <p className={classes.loading}>Loading your GeoPDFs…</p>
+      <LoadingState label="Loading your GeoPDFs…" />
     </div>
   ) : nothingYet ? (
     <div className={classes.emptyArea}>

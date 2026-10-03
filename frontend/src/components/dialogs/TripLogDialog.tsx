@@ -23,8 +23,6 @@ import {
   type TripLogCustomFieldDef,
   type TripLogCustomFieldType,
 } from "@logjam/shared";
-import { ErrorBanner } from "../feedback/ErrorBanner";
-import { FieldError } from "../feedback/FieldError";
 import { useToast } from "../feedback/ToastProvider";
 import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
 import type { TPlace, TTripLog } from "../../placeUtils";
@@ -60,6 +58,8 @@ import {
   TextArea,
   TextField,
   Icon,
+  ErrorBanner,
+  FieldError,
 } from "../../ui";
 import AddCustomFieldForm from "./AddCustomFieldForm";
 import CustomFieldInput, { customFieldValueError } from "./CustomFieldInput";

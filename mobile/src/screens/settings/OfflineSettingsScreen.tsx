@@ -185,7 +185,7 @@ export function OfflineSettingsScreen({
   return (
     <>
       <ScreenScroll>
-        <SectionHeader label="Fetch automatically" />
+        <SectionHeader title="Fetch automatically" />
         <PreferenceRow
           icon="geoPdf"
           title="Finished GeoPDFs"
@@ -211,7 +211,7 @@ export function OfflineSettingsScreen({
           }}
         />
 
-        <SectionHeader label="Allow on mobile data" />
+        <SectionHeader title="Allow on mobile data" />
         {METERED_ROWS.map((row) => {
           const off =
             (row.needs === "geoPdf" && !autoDownload) ||
@@ -232,7 +232,7 @@ export function OfflineSettingsScreen({
           );
         })}
 
-        <SectionHeader label="When you save a copy" />
+        <SectionHeader title="When you save a copy" />
         {/* The default for the switch that appears on the copy sheet itself,
             which is where it is usually changed. Here so it can be found and
             so Logjam Web — which has no switch of its own — follows it too. */}
@@ -249,7 +249,7 @@ export function OfflineSettingsScreen({
           onToggle={toggleCopyMedia}
         />
 
-        <SectionHeader label="On this phone" />
+        <SectionHeader title="On this phone" />
         <Row
           icon="device"
           title="Maps, imports and tracks"

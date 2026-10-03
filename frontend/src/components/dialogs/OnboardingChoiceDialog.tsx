@@ -10,8 +10,14 @@
 import { useState } from "react";
 import { importFromRopeWiki } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
-import { ErrorBanner } from "../feedback/ErrorBanner";
-import { Button, Dialog, IconTile, ProgressBar, Row } from "../../ui";
+import {
+  Button,
+  Dialog,
+  IconTile,
+  ProgressBar,
+  Row,
+  ErrorBanner,
+} from "../../ui";
 import classes from "./OnboardingChoiceDialog.module.css";
 
 function OnboardingChoiceDialog({

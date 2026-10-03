@@ -35,7 +35,7 @@ import { requestSync } from "../sync/syncEngine";
 import { fontSize, fontWeight, spacing, theme } from "../theme";
 import {
   Button,
-  HeroHeader,
+  Hero,
   Row,
   ScreenScroll,
   StatusPill,
@@ -99,10 +99,10 @@ export function MoreScreen({
     // Hero pinned, menu scrolls (§2) — the menu is short today, but the rule is
     // the rule and a sixth entry shouldn't push the sync answer off screen.
     <View style={styles.root}>
-      <HeroHeader
+      <Hero
         eyebrow={isGuest ? "Logjam" : user ? "Signed in as" : "Logjam"}
         title={isGuest ? "No account" : (user?.username ?? "Your account")}
-        action={
+        actions={
           // "Sync now" is meaningless without an account, so the hero's one
           // action becomes the way to get one — the same affordance slot, the
           // offer instead of the operation.
@@ -139,7 +139,7 @@ export function MoreScreen({
             <Text style={styles.detail}>{health.detail}</Text>
           </View>
         </View>
-      </HeroHeader>
+      </Hero>
 
       <ScreenScroll padded={false} contentStyle={styles.menu}>
         {/* The ONE "something is waiting on you" signal. Files a friend sent
