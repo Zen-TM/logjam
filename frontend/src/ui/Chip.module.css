@@ -51,8 +51,10 @@
   color: var(--color-on-fill);
 }
 
+/* No wash on a fill: an ink wash darkened Daylight's accent until the count
+   on it fell under 4.5:1. The count reads as `onFill` on the fill itself. */
 .active .count {
-  background: color-mix(in srgb, var(--color-on-fill) 14%, transparent);
+  background: transparent;
 }
 
 .chip:disabled {

@@ -128,7 +128,9 @@ const styles = StyleSheet.create({
     backgroundColor: withAlpha(theme.text, 0.12),
     alignItems: "center",
   },
-  badgeActive: { backgroundColor: withAlpha(theme.onFill, 0.15) },
+  // No wash on a fill: an ink wash darkened Daylight's accent until the count
+  // on it fell under 4.5:1. The count reads as `onFill` on the fill itself.
+  badgeActive: { backgroundColor: "transparent" },
   badgeText: {
     color: theme.textMuted,
     fontSize: fontSize.xs,
