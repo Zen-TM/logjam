@@ -101,6 +101,10 @@ COPY requirements.txt /tmp/requirements.txt
 RUN pip install --upgrade pip && \
     pip install -r /tmp/requirements.txt
 
+# Fail the build, not a job, if the venv's NumPy cannot load the apt GDAL
+# bindings (a NumPy 2 in the venv does exactly that).
+RUN python -c "from osgeo import gdal_array"
+
 # ------------------------------------------------------------
 # 4. Application
 # ------------------------------------------------------------
