@@ -37,6 +37,22 @@
   flex-shrink: 0;
 }
 
+.pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+/* The page's two primary verbs, side by side. */
+.verbs {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.verbs > * {
+  flex: 1;
+}
+
 .meta {
   margin: 0;
   font-size: var(--font-sm);
