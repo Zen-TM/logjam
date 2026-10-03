@@ -752,7 +752,7 @@ function PlaceDialog({
                     showError={showFieldErrors}
                   />
                 </div>
-                {/* ABSENT on a built-in, not disabled (DESIGN.md §7): the
+                {/* ABSENT on a built-in, not disabled (DESIGN.md §5): the
                     server owns those definitions and refuses the delete, so
                     the verb does not exist here rather than being unavailable
                     right now. It never arose while the grades were drawn by

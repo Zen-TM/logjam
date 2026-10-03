@@ -65,7 +65,7 @@ export function Checkbox({
  *
  * The colour's NAME is the trigger's accessible name ("Colour: Teal") and not
  * text beside the swatch: the swatch already shows the colour, and a reader who
- * cannot see it hears the name (DESIGN.md §9).
+ * cannot see it hears the name (DESIGN.md §6).
  *
  * The palette keeps its native radios, so the group is one tab stop and the
  * arrow keys move the choice; the popover only changes where they are. It is

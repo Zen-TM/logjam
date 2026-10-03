@@ -76,7 +76,7 @@ export function persistThemeSchemeId(id: ThemeSchemeId): boolean {
  *
  * Applied at launch, exactly like the scheme and for the same reason: these
  * numbers are snapshotted by every `StyleSheet.create` in the app at import
- * time (DESIGN.md §12).
+ * time (DESIGN.md §1).
  */
 export const TEXT_SCALES = [0.9, 1, 1.15, 1.3, 1.5] as const;
 export type TextScale = (typeof TEXT_SCALES)[number];
@@ -255,7 +255,7 @@ export type AssetHue = keyof typeof assetHue;
 /**
  * Place status identity for the Places screen — the same hue on a row's icon
  * tile and on its filter chip, exactly as `assetHue` works for saved assets
- * (DESIGN.md §3). Scheme-independent for the same reason: a place you have run
+ * (docs/ux-principles.md §8). Scheme-independent for the same reason: a place you have run
  * is what it is regardless of the user's theme.
  */
 export const placeHue = {
@@ -266,7 +266,7 @@ export const placeHue = {
 } as const;
 
 /**
- * Inbox identity — BORROWED, not invented (DESIGN.md §3). A notification is
+ * Inbox identity — BORROWED, not invented (docs/ux-principles.md §8). A notification is
  * always about something that lives somewhere else in the app, so it wears that
  * thing's hue: a topo notification is the same eucalypt as a topo overlay in
  * Saved, a place-share is the same heath as a shared place on the Places

@@ -10,7 +10,7 @@
 //    label.** A link inside a `<label>` toggles the control it labels, so
 //    reading the terms used to tick (or untick) the box that says you agree
 //    with them.
-//  - **The error goes directly above the button it belongs to** (§8), never at
+//  - **The error goes directly above the button it belongs to** (docs/ux-principles.md §11), never at
 //    the top of the form, and a field's own complaint goes under the field.
 import { useState, useEffect } from "react";
 import classes from "./SignIn.module.css";

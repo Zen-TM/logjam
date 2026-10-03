@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 /**
- * DESIGN.md §4, "Density": every control height in the kit reads a
+ * DESIGN.md §1, "Density": every control height in the kit reads a
  * `--control-*` token, so density is decided in index.css alone and a coarse
  * pointer can raise it. A hard-coded `min-height` undoes both without a sound —
  * the page still looks right under a mouse.

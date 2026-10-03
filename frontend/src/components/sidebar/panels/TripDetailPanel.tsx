@@ -1,6 +1,6 @@
 // One trip: "what did I do that day?" (Logjam GPS's `TripDetailScreen`).
 //
-// A PANEL, NOT A DIALOG (DESIGN.md §6). Looking at something is not a task
+// A PANEL, NOT A DIALOG (DESIGN.md §4). Looking at something is not a task
 // with an end — you arrive at it, follow a place out of it, come back, leave
 // it open beside the map — so it is a page like a place's and a way's, and the
 // form that edits it is the dialog this page raises. It was a dialog until
@@ -158,7 +158,7 @@ function TripDetailPanel({
   const attributes = attributeRows(customFieldDefs, trip.customFields);
   const title = tripTitle(trip);
 
-  // A VERB is in the ⋯ (DESIGN.md §7). Edit raises the form this page is the
+  // A VERB is in the ⋯ (DESIGN.md §5). Edit raises the form this page is the
   // read of; Delete sits below the rule with the verbs that end things.
   const entries: MenuEntry[] = [
     {

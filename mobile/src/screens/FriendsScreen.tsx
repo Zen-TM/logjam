@@ -1,11 +1,11 @@
 // Friends — "who can I share a place with, and who is waiting on me?"
 //
-// LAYOUT (DESIGN.md §1, §2): hero answers with a count and owns the one
+// LAYOUT (docs/ux-principles.md §2, §2): hero answers with a count and owns the one
 // acquisition action (Add, which opens the username search in a sheet); a pinned
 // rail partitions into Friends / Requests — a true partition, because a pending
 // request is not yet a friendship; one flat list under it. Per-row actions live
 // in an overflow sheet titled with the username, so a mis-tap can't revoke
-// anything (§7).
+// anything (DESIGN.md §5).
 //
 // Online-only, deliberately: managing friendships is never a field use case, and
 // the mirror handles the offline propagation of the resulting shares and
@@ -72,7 +72,7 @@ type Bucket = "all" | "friends" | "requests";
 /**
  * One row shape for both populations, so a single renderer covers the list.
  * A request wears the heath hue a shared place wears — it is someone else
- * reaching into your account, which is the same idea (§3).
+ * reaching into your account, which is the same idea (docs/ux-principles.md §8).
  */
 type FriendItem =
   | { kind: "friend"; key: string; username: string; friendshipId: string }
@@ -87,7 +87,7 @@ export function FriendsScreen({
    * Open the per-friend sharing audit — "what does this person see?". Pushed by
    * the caller so Back returns to this list. Reached by tapping the friend's row
    * body, and also from the row's overflow sheet: the body OPENS and the ⋯ ACTS
-   * (§7), so a mis-tap lands on a read-only screen rather than near a revoke.
+   * (DESIGN.md §5), so a mis-tap lands on a read-only screen rather than near a revoke.
    */
   onOpenShares: (friend: { friendshipId: string; username: string }) => void;
 }) {
@@ -164,7 +164,7 @@ export function FriendsScreen({
     (item: Extract<FriendItem, { kind: "friend" }>) => {
       setMenuItem(null);
       // A dialog, because the consequence is the point and it is bigger than the
-      // verb suggests (§7).
+      // verb suggests (DESIGN.md §5).
       Alert.alert(
         `Remove ${item.username}?`,
         "This also revokes every place you've shared with them.",
@@ -188,7 +188,7 @@ export function FriendsScreen({
   );
 
   // Stable identities so the memoised rows only re-render for a change that is
-  // actually theirs (DESIGN.md §9).
+  // actually theirs (DESIGN.md §7).
   const openFriend = useCallback(
     (item: FriendItem) => {
       if (item.kind !== "friend") return;
@@ -297,7 +297,7 @@ export function FriendsScreen({
       </View>
 
       {/* Stays inline with a retry, because a stale list IS the problem and it
-          persists until the fetch works (§6). */}
+          persists until the fetch works (DESIGN.md §4). */}
       {loadError ? (
         <View style={styles.banner}>
           <ErrorBanner message={loadError} onRetry={() => void load()} />
@@ -333,7 +333,7 @@ export function FriendsScreen({
         />
       </BottomSheet>
 
-      {/* Per-row actions, titled with the username (§7). */}
+      {/* Per-row actions, titled with the username (DESIGN.md §5). */}
       <BottomSheet
         visible={menuItem !== null}
         onClose={() => setMenuItem(null)}
@@ -403,7 +403,7 @@ export function FriendsScreen({
 }
 
 /**
- * The card every list in this app uses (§7): the row's body opens the thing, the
+ * The card every list in this app uses (DESIGN.md §5): the row's body opens the thing, the
  * ⋯ opens its actions. A friend opens to their sharing screen — read-only, so
  * the tap costs nothing, while the verbs that revoke stay behind the sheet. A
  * request has nowhere to open to, so both its body and its ⋯ reach the same
@@ -571,7 +571,7 @@ function AddFriendBody({
   );
 }
 
-/** Per-bucket and actionable (§8). */
+/** Per-bucket and actionable (docs/ux-principles.md §11). */
 function EmptyPanel({ bucket, onAdd }: { bucket: Bucket; onAdd: () => void }) {
   if (bucket === "requests") {
     return (

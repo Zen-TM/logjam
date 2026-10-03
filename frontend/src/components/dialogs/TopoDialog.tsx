@@ -5,7 +5,7 @@
 // holds the state's LiDAR, the user orders the tiles they want and uploads the
 // ZIP that arrives. That errand is several steps long and is needed once, so it
 // lives in a sub-view of this dialog rather than above the thing it explains
-// (DESIGN.md §6: a picker inside a dialog swaps the body and backs out to the
+// (DESIGN.md §4: a picker inside a dialog swaps the body and backs out to the
 // form). The raster settings are the other sub-view.
 import { useState, useRef, Fragment, useEffect, useCallback } from "react";
 import {

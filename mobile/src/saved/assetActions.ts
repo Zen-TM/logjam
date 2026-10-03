@@ -1,5 +1,5 @@
 // The three verbs every saved asset supports — *show on map*, *rename*,
-// *delete* — as one descriptor per kind (DESIGN.md §7: uniformity is the
+// *delete* — as one descriptor per kind (DESIGN.md §5: uniformity is the
 // feature).
 //
 // This exists because SEVERAL surfaces offer them, and two copies of "what does
@@ -340,7 +340,7 @@ export function vectorImportActions(imported: VectorImport): AssetActions {
       // collection, which is all the GeoJSON there is. Withheld entirely when
       // NEITHER is on this phone — a file that synced as a row but has not been
       // downloaded here has nothing to export, and the row that can only fail
-      // is absent rather than offered (DESIGN.md §7).
+      // is absent rather than offered (DESIGN.md §5).
       ...(geoJsonSource(imported, sourceFormat)
         ? [
             {
