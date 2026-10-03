@@ -21,9 +21,11 @@
   border-color: var(--chip-hue, var(--color-accent));
 }
 
+/* Inactive, the glyph is muted: a hue is only ever a fill (the active chip),
+   never a glyph on a surface, where light hues fail 3:1 on Daylight's card. */
 .glyph {
   flex: none;
-  color: var(--chip-hue, var(--color-accent));
+  color: var(--color-text-muted);
 }
 
 .count {
