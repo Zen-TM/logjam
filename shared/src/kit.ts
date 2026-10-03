@@ -36,8 +36,8 @@ export const KIT_COMPONENTS = {
   ChipRail: both,
   RangePills: both,
   AttributeFilter: both,
-  ThresholdFilter: gps(
-    "the numeric-threshold control; Logjam Web keeps it inside AttributeFilter",
+  DateRangeFilter: gps(
+    "a date range as two bounds that open the sheet's DatePicker; Logjam Web uses two date inputs in a FilterField",
   ),
   FilterField: web(
     "a filter's label, summary and clear; Logjam GPS's sheet lays its own",

@@ -14,6 +14,11 @@ is particular to a phone in the field: touch, sheets, no signal, a native map.
   predicate, and verbs shared with the map.
 - `src/screens/`: the More hub and its pages, a plain settings list.
 
+A screen Logjam Web also has is drawn from its **screen contract**
+(`shared/src/contracts/`): its sections, their order, its verbs and every
+word. Render from it, as `PlacesScreen`, `PlaceFilterSheet` and
+`PlaceOptionsSheet` do, and change the contract, not the component.
+
 Change a convention, change this file in the same commit.
 
 ## 1. Tokens
@@ -195,7 +200,7 @@ comments in `src/map/MapScreen.tsx`; these are the ones a screen designer meets.
   nonce'd navigation param.
 - **A tapped pin or line opens that sheet**, with Open place first on a place.
 - **Verbs and their confirm copy are descriptors** (`saved/assetActions.ts`,
-  `places/placeDeleteConfirm.ts`); a verb the API refuses is absent from the
+  `PLACE_VERBS` and `placeDeleteConfirm` in `@logjam/shared`); a verb the API refuses is absent from the
   descriptor, so no surface can offer it.
 - **One panel for "which place?"** (`usePlacePicker`) and **one for picking
   people** (`useSharePanel`, its promise banner first); extend them, never a

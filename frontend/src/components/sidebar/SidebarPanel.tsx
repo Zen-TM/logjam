@@ -40,6 +40,7 @@ import NotificationsPanel from "./panels/NotificationsPanel";
 import PlaceDetailPanel from "./panels/PlaceDetailPanel";
 import TripDetailPanel from "./panels/TripDetailPanel";
 import { placesBounds } from "./panels/placesModel";
+import type { WebPlaceVerbId } from "./panels/placeVerbMenu";
 import RoutesPanel from "./panels/RoutesPanel";
 import type { WayItem } from "./panels/waysModel";
 import type { WayVerbId } from "./panels/wayActions";
@@ -302,6 +303,11 @@ function SidebarPanel({
   // change, unless a map-pick flow is the one driving the sheet to peek (that
   // collapse is intentional — leave it alone).
   const [shownPanel, setShownPanel] = useState(activePanel);
+  // A verb pressed on a place's row that its page has to run (a form, a
+  // confirm). Consumed, not counted, like `openFiltersRequested`.
+  const [placeVerbRequest, setPlaceVerbRequest] = useState<{
+    id: WebPlaceVerbId;
+  } | null>(null);
   if (activePanel !== shownPanel) {
     setShownPanel(activePanel);
     if (!collapseToPeek) {
@@ -392,6 +398,7 @@ function SidebarPanel({
             onHoverPlace={onHoverPlace}
             onMakeMap={onMakeMap}
             onSharePlaces={onSharePlaces}
+            onPlaceVerb={(id) => setPlaceVerbRequest({ id })}
             onExpandSheet={expandSheetToFull}
           />
         )}
@@ -533,6 +540,8 @@ function SidebarPanel({
               if (bounds) onMakeMap(bounds, kind);
             }}
             onSharePlace={(id) => onSharePlaces([id])}
+            verbRequest={placeVerbRequest}
+            onVerbRequestConsumed={() => setPlaceVerbRequest(null)}
             onAfterDelete={() => setActivePanel("places")}
           />
         )}

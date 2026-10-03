@@ -13,8 +13,13 @@ is particular to a browser, a mouse, a keyboard and a big screen.
 - `src/components/sidebar/NavRail.tsx`, `SidebarPanel.tsx`, `map/MapChrome.tsx`,
   `map/LayersPopover.tsx` and `map/MapSearchBox.tsx`: the shell.
 
-Building a page that Logjam GPS also has? Open its counterpart first and lift
-its question, words and states. Anything both compute goes to `@logjam/shared`.
+Building a page that Logjam GPS also has? Its **screen contract**
+(`shared/src/contracts/`) declares the sections, their order, the verbs and
+every word: render from it (a `Record` of renderers iterated in contract
+order, as `PlacesPanel` and `PlaceFilterSheet` do), and change the contract,
+not the component. A page with no contract yet: open its Logjam GPS
+counterpart first and lift its question, words and states. Anything both
+compute goes to `@logjam/shared`.
 
 Change a convention, change this file in the same commit.
 
@@ -232,8 +237,8 @@ accessories, and an optional `footer` inside the card.
   the bar stays one line at 380px.
 - **A page's housekeeping verbs are behind the hero's ⋯** (Mark all as read),
   disabled when there is nothing to do.
-- **A thing's verbs are declared once** (`placeVerbs` in `placesModel.ts`,
-  `wayActions.ts`) and every menu for it renders the same list; the page's
+- **A thing's verbs are declared once** (`PLACE_VERBS` in
+  `shared/src/contracts/`, drawn by `placeVerbMenu.ts`; `wayActions.ts`) and every menu for it renders the same list; the page's
   menu omits Open. A verb that needs a form hands over by opening the page
   with that verb armed (`onOpenWay(way, verb)`).
 - **Export and Download are different verbs**: Export writes a file from

@@ -349,6 +349,11 @@ it, the rule names the test.
   (`designTokens.ts`, `themeSchemes.ts`), the icon for each idea, the kit's
   component list, each shared screen's contract (its sections, order, copy and
   empty states), and the words, verbs and predicates behind them.
+- **A shared screen is drawn from its contract** (`shared/src/contracts/`):
+  each client iterates the contract's sections and reads its words. To change
+  what a shared screen holds, change the contract.
+- **A section only one client draws says why** in the contract. "Not built
+  yet" is a gap to log, not a reason.
 - **A feature on one client exists on the other**, with the same verbs and
   words, unless the medium rules it out, and then that client's DESIGN.md says
   why. A tap on the map that tells you about a spot, a pin that opens its

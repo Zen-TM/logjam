@@ -7,7 +7,8 @@ export { Avatar } from "./Avatar";
 export { Chip, type ChipOption } from "./Chip";
 export { ChipPicker } from "./ChipPicker";
 export { DatePicker } from "./DatePicker";
-export { AttributeFilter, ThresholdFilter } from "./AttributeFilter";
+export { AttributeFilter } from "./AttributeFilter";
+export { DateRangeFilter } from "./DateRangeFilter";
 export { RangePills } from "./RangePills";
 export {
   formatRange,
