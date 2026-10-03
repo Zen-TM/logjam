@@ -18,18 +18,20 @@ import { ASSET_HUES, TRIP_TYPE_OPEN_HUES } from "./designTokens.js";
  * The hue is a scheme ROLE where the scheme decides it (`accent`, `untyped`)
  * and a fixed colour otherwise; each client resolves the role to its own theme
  * value. The glyph is a key each client maps into its own icon set (Feather on
- * the phone, lucide on the web), exactly as a place type's `iconKey` is.
+ * the phone, lucide on the web), exactly as a place type's `iconKey` is. None
+ * of them may be a UI idea's glyph (`icons.test.ts`): a trip type must not
+ * read as a button.
  */
 
 /** Every glyph a trip type can wear. Guarded on the web by
  *  `frontend/src/tripTypeIcons.test.ts`; Feather's type checks the phone. */
 export const TRIP_TYPE_ICON_KEYS = [
   "droplet",
-  "trending-up",
-  "navigation",
+  "sun",
+  "package",
   "anchor",
-  "tag",
-  "book-open",
+  "hash",
+  "bookmark",
 ] as const;
 
 export type TripTypeIconKey = (typeof TRIP_TYPE_ICON_KEYS)[number];
@@ -40,15 +42,15 @@ export type TripTypeIdentity = { icon: TripTypeIconKey; hue: TripTypeHue };
 
 const SEEDED: Record<string, TripTypeIdentity> = {
   canyoning: { icon: "droplet", hue: "accent" },
-  bushwalking: { icon: "trending-up", hue: ASSET_HUES.overlay },
-  bikepacking: { icon: "navigation", hue: ASSET_HUES.geoPdf },
+  bushwalking: { icon: "sun", hue: ASSET_HUES.overlay },
+  bikepacking: { icon: "package", hue: ASSET_HUES.geoPdf },
   packrafting: { icon: "anchor", hue: ASSET_HUES.import },
 };
 
 const OPEN_HUES = Object.values(TRIP_TYPE_OPEN_HUES);
 
 /** A trip with no type at all. */
-const UNTYPED: TripTypeIdentity = { icon: "book-open", hue: "untyped" };
+const UNTYPED: TripTypeIdentity = { icon: "bookmark", hue: "untyped" };
 
 function hashLabel(label: string): number {
   let hash = 0;
@@ -65,7 +67,7 @@ export function tripTypeIdentity(
   const seeded = SEEDED[type.toLowerCase()];
   if (seeded) return seeded;
   return {
-    icon: "tag",
+    icon: "hash",
     hue: OPEN_HUES[hashLabel(type.toLowerCase()) % OPEN_HUES.length],
   };
 }

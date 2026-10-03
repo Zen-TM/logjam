@@ -14,7 +14,6 @@
 // PRIVACY: nothing here touches user data.
 import { useCallback, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { Feather } from "@expo/vector-icons";
 import {
   THEME_SCHEMES,
   THEME_SCHEME_ORDER,
@@ -45,6 +44,7 @@ import {
   SectionHeader,
   Toast,
   type ToastMessage,
+  Icon,
 } from "../../ui";
 import { ChoiceGroup, Hint } from "./settingsKit";
 
@@ -211,9 +211,7 @@ function SchemeCard({
       <Text style={styles.schemeName} numberOfLines={1}>
         {scheme.name}
       </Text>
-      {selected ? (
-        <Feather name="check" size={16} color={theme.accent} />
-      ) : null}
+      {selected ? <Icon idea="done" size={16} color={theme.accent} /> : null}
     </Pressable>
   );
 }

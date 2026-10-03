@@ -108,7 +108,7 @@ export default function App() {
           {openStore ? (
             <Button
               label="Open the Play Store"
-              icon="external-link"
+              icon="openExternal"
               onPress={openStore}
             />
           ) : null}

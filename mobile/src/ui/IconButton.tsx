@@ -1,7 +1,7 @@
-import { Feather } from "@expo/vector-icons";
 import { Pressable, StyleSheet } from "react-native";
 
 import { hitSlop, radius, theme, withAlpha } from "../theme";
+import { Icon, type Glyph } from "./Icon";
 
 // An intent colour as a glyph on a wash of itself falls under 3:1 on
 // Daylight's paper, so a filled button draws its glyph in the text colour and
@@ -22,7 +22,7 @@ export function IconButton({
   filled = false,
   size = 20,
 }: {
-  icon: React.ComponentProps<typeof Feather>["name"];
+  icon: Glyph;
   onPress: () => void;
   accessibilityLabel: string;
   color?: string;
@@ -45,8 +45,8 @@ export function IconButton({
         disabled && styles.disabled,
       ]}
     >
-      <Feather
-        name={icon}
+      <Icon
+        idea={icon}
         size={size}
         color={
           disabled

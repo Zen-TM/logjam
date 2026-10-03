@@ -20,29 +20,6 @@ import {
   type CSSProperties,
 } from "react";
 import {
-  Activity,
-  Check,
-  ChevronRight,
-  CircleHelp,
-  CirclePlus,
-  Copy,
-  CopyPlus,
-  EllipsisVertical,
-  ExternalLink,
-  FileText,
-  Link as LinkIcon,
-  Link2Off,
-  LocateFixed,
-  MapIcon,
-  MapPin,
-  MapPinned,
-  Pencil,
-  Share2,
-  Trash2,
-  X,
-  type LucideIcon,
-} from "lucide-react";
-import {
   asForeignFields,
   copyAndRemoveConfirm,
   defsForType,
@@ -101,18 +78,20 @@ import {
   Row,
   SectionHeader,
   type MenuEntry,
+  Icon,
+  type Glyph,
 } from "../../../ui";
 
-const VERB_ICON: Partial<Record<PlaceVerbId, LucideIcon>> = {
-  edit: Pencil,
-  logTrip: Pencil,
-  show: LocateFixed,
-  makeMap: MapIcon,
-  share: Share2,
-  copy: CopyPlus,
-  copyAndRemove: CopyPlus,
-  remove: Link2Off,
-  delete: Trash2,
+const VERB_ICON: Partial<Record<PlaceVerbId, Glyph>> = {
+  edit: "edit",
+  logTrip: "trip",
+  show: "map",
+  makeMap: "template",
+  share: "shareFriend",
+  copy: "copy",
+  copyAndRemove: "moveCopy",
+  remove: "unlink",
+  delete: "delete",
 };
 
 // Format a stored attribute value for display. Returns null when the value is
@@ -427,12 +406,12 @@ function PlaceDetailPanel({
           onBack={onBack}
           backLabel="Back to Places"
           actions={
-            <IconButton icon={X} label="Close panel" onClick={onClose} />
+            <IconButton icon="close" label="Close panel" onClick={onClose} />
           }
         />
         <div className={classes.body}>
           <EmptyState
-            icon={MapPinned}
+            icon="map"
             title="No place selected"
             body="Pick one from Places, or press a pin on the map."
           />
@@ -667,14 +646,14 @@ function PlaceDetailPanel({
               {
                 id: "topo",
                 label: "Make a LiDAR topo here",
-                icon: MapIcon,
+                icon: "lidar",
                 disabled: busy,
                 onSelect: () => onMakeMap(current, "topo"),
               },
               {
                 id: "geopdf",
                 label: "Make a GeoPDF here",
-                icon: MapIcon,
+                icon: "geoPdf",
                 disabled: busy,
                 onSelect: () => onMakeMap(current, "geopdf"),
               },
@@ -722,12 +701,12 @@ function PlaceDetailPanel({
                 trigger={(props) => (
                   <IconButton
                     {...props}
-                    icon={EllipsisVertical}
+                    icon="overflow"
                     label={`Actions for ${current.name}`}
                   />
                 )}
               />
-              <IconButton icon={X} label="Close panel" onClick={onClose} />
+              <IconButton icon="close" label="Close panel" onClick={onClose} />
             </>
           }
         />
@@ -763,12 +742,12 @@ function PlaceDetailPanel({
           {/* WHERE IT IS, as the thing people actually do with it: copy the
               coordinates into whatever they are navigating with. */}
           <Row
-            leading={<IconTile icon={MapPin} hue="var(--color-accent)" />}
+            leading={<IconTile icon="place" hue="var(--color-accent)" />}
             title={coordinates}
             subtitle="Latitude, longitude"
             trailing={
               <IconButton
-                icon={copied ? Check : Copy}
+                icon={copied ? "done" : "copy"}
                 label={`Copy the coordinates of ${current.name}`}
                 onClick={() => void handleCopyCoordinates()}
               />
@@ -814,7 +793,7 @@ function PlaceDetailPanel({
                     key={index}
                     leading={
                       <IconTile
-                        icon={linkable ? ExternalLink : LinkIcon}
+                        icon={linkable ? "openExternal" : "link"}
                         hue="var(--color-neutral)"
                       />
                     }
@@ -835,7 +814,7 @@ function PlaceDetailPanel({
               {/* A FILE, so the row is a real link (middle-click, save as) —
                   wearing the same glyph and hue a track wears on Ways. */}
               <Row
-                leading={<IconTile icon={Activity} hue="var(--hue-track)" />}
+                leading={<IconTile icon="track" hue="var(--hue-track)" />}
                 title={track.filename}
                 subtitle="Click to download"
                 href={track.displayUrl}
@@ -843,7 +822,7 @@ function PlaceDetailPanel({
                 trailing={
                   isOwnedPlace ? (
                     <IconButton
-                      icon={Trash2}
+                      icon="delete"
                       label={`Delete the track ${track.filename}`}
                       tone="danger"
                       onClick={() => setTrackToDelete(track)}
@@ -912,12 +891,10 @@ function PlaceDetailPanel({
               {foreignFields.map((item) => (
                 <Row
                   key={item.key}
-                  leading={
-                    <IconTile icon={CircleHelp} hue="var(--color-accent)" />
-                  }
+                  leading={<IconTile icon="help" hue="var(--color-accent)" />}
                   title={item.label}
                   subtitle={foreignValueText(item)}
-                  trailing={<ChevronRight size={18} aria-hidden />}
+                  trailing={<Icon idea="disclosure" size={18} aria-hidden />}
                   onOpen={() => setForeignKey(item.key)}
                 />
               ))}
@@ -993,22 +970,20 @@ function PlaceDetailPanel({
                 unavailable, it is one that does not exist for this value. */}
             {!isReservedFieldKey(foreignItem.key) && (
               <Row
-                leading={
-                  <IconTile icon={CirclePlus} hue="var(--color-accent)" />
-                }
+                leading={<IconTile icon="add" hue="var(--color-accent)" />}
                 title="Create a new attribute for this place type"
                 onOpen={() => runForeignFieldAction("adopt")}
                 disabled={foreignFieldBusy}
               />
             )}
             <Row
-              leading={<IconTile icon={FileText} hue="var(--color-accent)" />}
+              leading={<IconTile icon="notes" hue="var(--color-accent)" />}
               title="Add to notes as text"
               onOpen={() => runForeignFieldAction("notes")}
               disabled={foreignFieldBusy}
             />
             <Row
-              leading={<IconTile icon={Trash2} hue="var(--color-accent)" />}
+              leading={<IconTile icon="delete" hue="var(--color-accent)" />}
               title="Discard"
               onOpen={() => setConfirmDiscard(true)}
               disabled={foreignFieldBusy}

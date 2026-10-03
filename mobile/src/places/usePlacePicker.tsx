@@ -148,7 +148,7 @@ export function usePlacePicker({
         {linkedPlace && onUnlink ? (
           <Row
             title={`Unlink from ${linkedPlace.name}`}
-            icon="link-2"
+            icon="link"
             hue={theme.warning}
             disabled={busy}
             onPress={() =>
@@ -188,7 +188,7 @@ export function usePlacePicker({
                       ? "Has a route already"
                       : undefined
                 }
-                icon={here ? "check" : "map-pin"}
+                icon={here ? "done" : "place"}
                 hue={here ? theme.accent : assetHue.route}
                 disabled={busy || here}
                 onPress={() => pick(place.id, place.name)}

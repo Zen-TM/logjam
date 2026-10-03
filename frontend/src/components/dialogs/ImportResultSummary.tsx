@@ -7,7 +7,6 @@
 // Nothing is behind a disclosure: the merge list used to sit in a closed
 // accordion, which is the shape DESIGN.md §6 rules out twice over — the answer
 // the reader came for cannot be a click away.
-import { Undo2 } from "lucide-react";
 import { Button, SectionHeader, StatGrid, type Stat } from "../../ui";
 import classes from "./ImportResultSummary.module.css";
 
@@ -154,7 +153,7 @@ function ImportResultSummary({
         <Button
           variant="danger"
           compact
-          icon={Undo2}
+          icon="undo"
           className={classes.undo}
           onClick={onUndo}
           busy={undoing}

@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
-import { Info } from "lucide-react";
 import { Tooltip } from "./Tooltip";
 import classes from "./SettingsRow.module.css";
+import { Icon } from "./Icon";
 
 /**
  * One setting as a LINE: what it is at the left, the control that sets it at
@@ -61,7 +61,7 @@ export function InfoTip({
           aria-label={`About ${label.toLowerCase()}`}
           aria-describedby={describedById}
         >
-          <Info size={14} aria-hidden />
+          <Icon idea="info" size={14} aria-hidden />
         </button>
       )}
     </Tooltip>
