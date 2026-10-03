@@ -61,22 +61,28 @@ export function MapButtonGroup({
 /**
  * A notice pinned over the map: something true about what the map is showing
  * right now (filtered, generating, selected). An optional trailing action.
+ * The same component as Logjam GPS's `Notice`: its words are `text`, centred IN
+ * the notice; the intent is the glyph, and `tone="warning"` adds the edge.
  */
 export function Notice({
   icon,
   children,
   action,
+  tone = "info",
 }: {
-  icon: Glyph;
+  icon?: Glyph;
   children: ReactNode;
   action?: ReactNode;
+  tone?: "info" | "warning";
 }) {
   return (
     <div
       className={[classes.notice, action ? classes.withAction : ""].join(" ")}
+      data-tone={tone}
+      role={tone === "warning" ? "alert" : undefined}
     >
-      <Icon idea={icon} size={16} className={classes.noticeGlyph} />
-      <span>{children}</span>
+      {icon && <Icon idea={icon} size={16} className={classes.noticeGlyph} />}
+      <span className={classes.noticeText}>{children}</span>
       {action}
     </div>
   );

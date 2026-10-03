@@ -528,7 +528,7 @@ export function MediaStrip({
               </Text>
             ) : (
               <>
-                <SectionHeader label={`${tracks.length} finished`} />
+                <SectionHeader title={`${tracks.length} finished`} />
                 {tracks.map((track) => (
                   <Row
                     key={track.id}

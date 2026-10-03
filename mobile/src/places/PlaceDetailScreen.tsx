@@ -86,7 +86,7 @@ import {
   Button,
   EmptyState,
   ErrorState,
-  HeroHeader,
+  Hero,
   IconButton,
   LoadingState,
   Row,
@@ -292,7 +292,7 @@ export function PlaceDetailScreen({
   stats.push({
     label: "Position",
     value: position,
-    wide: true,
+    span: true,
     onCopy: copyPosition,
   });
 
@@ -390,12 +390,12 @@ export function PlaceDetailScreen({
 
   return (
     <View style={styles.screen}>
-      <HeroHeader
+      <Hero
         eyebrow="Place"
         title={place.name}
         titleNumberOfLines={2}
         onBack={onBack}
-        action={
+        actions={
           isOwner ? (
             <IconButton
               icon="edit"
@@ -428,7 +428,7 @@ export function PlaceDetailScreen({
             />
           ) : null}
         </View>
-      </HeroHeader>
+      </Hero>
 
       <ScrollView contentContainerStyle={styles.body}>
         {/* The two things you do standing at a trailhead. Both work offline. */}
@@ -450,7 +450,7 @@ export function PlaceDetailScreen({
           </View>
         </View>
 
-        <SectionHeader label="Overview" />
+        <SectionHeader title="Overview" />
         <StatGrid stats={stats} />
         <Row
           icon="navigateTo"
@@ -464,7 +464,7 @@ export function PlaceDetailScreen({
             {/* Named for the TYPE, like the form and the filter sheet: on a
                 campsite these are Capacity and Is-a-cave, which are the app's,
                 not the user's. */}
-            <SectionHeader label={`${placeTypeName} ${ATTRIBUTE_NOUN.many}`} />
+            <SectionHeader title={`${placeTypeName} ${ATTRIBUTE_NOUN.many}`} />
             <AttributeTable rows={customFields} />
           </>
         ) : null}
@@ -472,7 +472,7 @@ export function PlaceDetailScreen({
         {isOwner && foreignFields.length > 0 ? (
           <>
             <SectionHeader
-              label={`Doesn\u2019t fit this type · ${foreignFields.length}`}
+              title={`Doesn\u2019t fit this type · ${foreignFields.length}`}
             />
             {/* Named for the CONDITION, not the cause, because there are two of
                 them: a type change strands what the new type has no definition
@@ -507,7 +507,7 @@ export function PlaceDetailScreen({
         ) : null}
 
         <SectionHeader
-          label={
+          title={
             place.notes ? "Notes · visible to anyone you share with" : "Notes"
           }
         />
@@ -518,7 +518,7 @@ export function PlaceDetailScreen({
         )}
 
         <SectionHeader
-          label={
+          title={
             photoCount === 0
               ? "Photos & videos"
               : `Photos & videos · ${photoCount}`
@@ -535,7 +535,7 @@ export function PlaceDetailScreen({
         />
 
         <SectionHeader
-          label={routeCount === 0 ? "Routes" : `Routes · ${routeCount}`}
+          title={routeCount === 0 ? "Routes" : `Routes · ${routeCount}`}
         />
         {/* One route per place — the API enforces it, so the UI has to as well
             (see `limit` in MediaStrip).
@@ -620,7 +620,7 @@ export function PlaceDetailScreen({
         {isOwner ? (
           <>
             <SectionHeader
-              label={
+              title={
                 linkedPlaces.length === 0
                   ? "Linked places"
                   : `Linked places · ${linkedPlaces.length}`
@@ -670,7 +670,7 @@ export function PlaceDetailScreen({
             ever your own trips: another person's visits to a place they shared
             with you are theirs, and never reach this device. */}
         <SectionHeader
-          label={
+          title={
             linkedTrips.length === 0
               ? "Your trips"
               : `Your trips · ${linkedTrips.length}`
@@ -710,7 +710,7 @@ export function PlaceDetailScreen({
               openRequest={shareOpenRequest}
               onShareRequested={() => setShareOpenRequest((n) => n + 1)}
             />
-            <SectionHeader label="Danger zone" />
+            <SectionHeader title="Danger zone" />
             <Row
               icon="delete"
               hue={theme.warning}
@@ -724,7 +724,7 @@ export function PlaceDetailScreen({
                 nothing above a place for it to be inherited from — so this row
                 is offered on every shared place. Online-only, like every other
                 share action, and dimmed with the reason rather than hidden. */}
-            <SectionHeader label="Shared with you" />
+            <SectionHeader title="Shared with you" />
             <Row
               icon="unshare"
               hue={theme.warning}
@@ -1042,7 +1042,7 @@ function PlaceSharingSection({
   return (
     <>
       <SectionHeader
-        label={
+        title={
           sharing.recipients && sharing.recipients.length > 0
             ? `Shared with · ${sharing.recipients.length}`
             : "Shared with"

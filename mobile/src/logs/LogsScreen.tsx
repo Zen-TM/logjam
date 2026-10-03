@@ -73,20 +73,20 @@ import {
   Chip,
   DatePicker,
   ErrorState,
-  HeroHeader,
+  Hero,
   IconButton,
   LoadingState,
   Row,
   SectionHeader,
-  SegmentedControl,
+  ChipRail,
   SelectionBar,
   SyncStatusPills,
   Toast,
-  Toggle,
   useBulkSelection,
-  type SegmentOption,
+  type ChipOption,
   type ToastMessage,
   Icon,
+  SwitchRow,
 } from "../ui";
 import { useFieldDefs } from "../customFields/useFieldDefs";
 import { primaryTripType, tripTypeLabel, tripTypeMeta } from "./tripTypeMeta";
@@ -262,7 +262,7 @@ export function LogsScreen({
     [criteria, trips],
   );
   const distinctTypes = useMemo(() => distinctTripTypes(trips), [trips]);
-  const typeOptions: SegmentOption<string>[] = useMemo(() => {
+  const typeOptions: ChipOption<string>[] = useMemo(() => {
     const distinct = distinctTypes;
     // Existence is decided by the whole set, the count by the other axes — so
     // this chip behaves like the type chips instead of vanishing when a search
@@ -414,10 +414,10 @@ export function LogsScreen({
 
   return (
     <View style={styles.screen}>
-      <HeroHeader
+      <Hero
         eyebrow="Logbook"
         title={trips.length === 1 ? "1 trip" : `${trips.length} trips`}
-        action={
+        actions={
           <View style={styles.heroActions}>
             {/* The retrospective lives one tap away rather than on this screen:
                 Logs answers "what have I done?", stats answers "am I getting
@@ -498,7 +498,7 @@ export function LogsScreen({
             is not an error here — logging, editing and attaching all work — so
             it is paired with what is waiting rather than with a warning. */}
         <SyncStatusPills online={online} pendingCount={pendingCount} />
-      </HeroHeader>
+      </Hero>
 
       <View style={styles.rail}>
         {selecting ? (
@@ -512,7 +512,7 @@ export function LogsScreen({
             onDelete={deleteSelected}
           />
         ) : (
-          <SegmentedControl
+          <ChipRail
             scroll
             options={typeOptions}
             value={typeFilter}
@@ -651,7 +651,7 @@ export function LogsScreen({
       >
         {dateMode === "presets" ? (
           <View style={styles.sheetBody}>
-            <SectionHeader label="Sort" />
+            <SectionHeader title="Sort" />
             <View style={styles.presets}>
               {TRIP_SORT_OPTIONS.map((option) => (
                 <Chip
@@ -669,7 +669,7 @@ export function LogsScreen({
                     thing it records. Same control Places uses, drawn by the
                     definition's SHAPE — a trip's "Rope length, 0-120" and a
                     canyon's grade are the same question asked the same way. */}
-                <SectionHeader label="Attributes" />
+                <SectionHeader title="Attributes" />
                 {filterableDefs.map((def) => (
                   <AttributeFilter
                     key={def.key}
@@ -687,26 +687,21 @@ export function LogsScreen({
                     }
                   />
                 ))}
-                <Row
+                <SwitchRow
                   title="Include trips missing this info"
                   // It sits WITH the attributes because it only affects them:
                   // most trips answer most fields not at all, so without the
                   // choice one attribute filter empties the logbook and nothing
                   // on screen says why.
-                  subtitle="Most trips don't record every attribute, so filters would hide them."
-                  subtitleNumberOfLines={2}
-                  right={
-                    <Toggle
-                      value={includeUnknowns}
-                      accessibilityLabel="Include trips missing the filtered data"
-                      onValueChange={setIncludeUnknowns}
-                    />
-                  }
+                  description="Most trips don't record every attribute, so filters would hide them."
+                  descriptionNumberOfLines={2}
+                  checked={includeUnknowns}
+                  onChange={setIncludeUnknowns}
                 />
               </>
             ) : null}
 
-            <SectionHeader label="Date range" />
+            <SectionHeader title="Date range" />
             <View style={styles.presets}>
               {datePresets().map((preset) => (
                 <Chip
@@ -720,7 +715,7 @@ export function LogsScreen({
                 />
               ))}
             </View>
-            <SectionHeader label="Exact range" />
+            <SectionHeader title="Exact range" />
             <Row
               icon="date"
               title={

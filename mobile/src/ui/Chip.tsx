@@ -4,6 +4,7 @@ import {
   fontSize,
   fontWeight,
   hitSlop,
+  opacity,
   radius,
   spacing,
   theme,
@@ -12,13 +13,26 @@ import {
 import { Icon, type Glyph } from "./Icon";
 
 // The single source of a chip's height (padding + font + border collapse to
-// this one number via `minHeight`) — `SegmentedControl` re-exports it so a
+// this one number via `minHeight`) — `ChipRail` re-exports it so a
 // scroll rail's height is never guessed at from outside this file.
 export const CHIP_HEIGHT = 36;
 
+/** One option of a chip rail or picker — the same shape on Logjam Web. */
+export type ChipOption<T extends string = string> = {
+  value: T;
+  label: string;
+  disabled?: boolean;
+  /** Optional tally rendered as a trailing badge (filter rails). */
+  count?: number;
+  /** Optional identity hue: fills the chip while it is active. */
+  hue?: string;
+  /** Optional leading glyph, for a rail whose options have a kind. */
+  icon?: Glyph;
+};
+
 /**
  * The pill primitive behind every chip surface — filter rails
- * (`SegmentedControl`) and multi-select vocabularies (`ChipPicker`) both render
+ * (`ChipRail`) and multi-select vocabularies (`ChipPicker`) both render
  * this, so a chip looks the same wherever it appears.
  *
  * Active fills with `hue` (default accent) and draws its label and glyph in
@@ -110,7 +124,7 @@ const styles = StyleSheet.create({
     minHeight: CHIP_HEIGHT,
   },
   pressed: { opacity: 0.75 },
-  disabled: { opacity: 0.4 },
+  disabled: { opacity: opacity.disabled },
   label: {
     color: theme.text,
     fontSize: fontSize.sm,

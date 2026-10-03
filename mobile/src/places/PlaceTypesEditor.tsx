@@ -85,7 +85,7 @@ export function PlaceTypeList({
   return (
     <View style={styles.body}>
       <SectionHeader
-        label={`${ordered.length} type${ordered.length === 1 ? "" : "s"}`}
+        title={`${ordered.length} type${ordered.length === 1 ? "" : "s"}`}
       />
       {ordered.map((type) =>
         isSystemPlaceType(type) ? (
@@ -250,7 +250,7 @@ export function usePlaceTypeForm({
           two different icon sets, and a marker colour carries a WCAG guarantee
           that can only be asserted over a closed set (`scripts/wcag-contrast.mjs`).
           A hex picker would not fail that check, it would delete it. */}
-      <SectionHeader label="Icon" />
+      <SectionHeader title="Icon" />
       <View style={styles.grid} onLayout={onGridLayout}>
         {/* Nothing until the row has been measured — one frame, and the
             alternative is every cell flashing at its intrinsic size first. */}
@@ -278,7 +278,7 @@ export function usePlaceTypeForm({
             ))}
       </View>
 
-      <SectionHeader label="Colour" />
+      <SectionHeader title="Colour" />
       <View style={styles.grid} onLayout={onGridLayout}>
         {cellSize == null
           ? null

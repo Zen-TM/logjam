@@ -29,6 +29,7 @@ import {
   Menu,
   Row,
   SectionHeader,
+  LoadingState,
 } from "../../../ui";
 import classes from "./ListPage.module.css";
 
@@ -111,7 +112,7 @@ function CustomFieldSection({
 
       <div className={classes.list}>
         {loading ? (
-          <p className={classes.state}>Loading…</p>
+          <LoadingState />
         ) : (
           <>
             {own.length === 0 && (

@@ -269,7 +269,7 @@ export function MapSettingsScreen() {
           hint="The compass and scale bar move to the other side."
         />
 
-        <SectionHeader label="Your location marker" />
+        <SectionHeader title="Your location marker" />
         <View style={styles.swatches}>
           {MARKER_COLOR_ORDER.map((id) => (
             <ColorSwatch

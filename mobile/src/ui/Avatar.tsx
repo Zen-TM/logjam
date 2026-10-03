@@ -1,20 +1,22 @@
-// A friend's initials in a tinted disc — the leading node on every row in
-// every sharing surface.
+// A person's tile: the hue their name hashes to, filled, with their initials in
+// the one ink — the leading node on every row in every sharing surface, and the
+// same box, hue and two letters as Logjam Web's `Avatar`.
 //
 // A list of people rendered with the same "user" glyph on every line is a list
 // you have to read word by word; initials plus a stable colour make a row
 // recognisable before the name is. The hue is hashed from the NAME (DESIGN.md
 // §3, open vocabularies) so a person keeps their colour across sessions and
-// devices, and a new friend never repaints anyone else.
+// devices, and a new friend never repaints anyone else. A hue is a fill, never
+// letters on a surface, so the initials are `onFill`.
 //
-// PRIVACY: usernames only. There is no avatar image anywhere in this app and
-// this is not the place to introduce one.
+// PRIVACY: usernames only. There is no avatar image anywhere in Logjam and this
+// is not the place to introduce one.
 import { StyleSheet, Text, View } from "react-native";
 
-import { fontSize, fontWeight, radius, theme, withAlpha } from "../theme";
+import { fontSize, fontWeight, radius, theme } from "../theme";
 import { avatarInitials, friendAvatarHue } from "@logjam/shared";
 
-export function FriendAvatar({
+export function Avatar({
   username,
   selected = false,
 }: {
@@ -24,18 +26,8 @@ export function FriendAvatar({
 }) {
   const hue = selected ? theme.accent : friendAvatarHue(username);
   return (
-    <View
-      style={[
-        styles.disc,
-        {
-          backgroundColor: withAlpha(hue, selected ? 0.28 : 0.18),
-          borderColor: hue,
-        },
-      ]}
-    >
-      <Text style={[styles.initials, { color: hue }]}>
-        {avatarInitials(username)}
-      </Text>
+    <View style={[styles.disc, { backgroundColor: hue }]}>
+      <Text style={styles.initials}>{avatarInitials(username)}</Text>
     </View>
   );
 }
@@ -45,11 +37,11 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: radius.pill,
-    borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
   },
   initials: {
+    color: theme.onFill,
     fontSize: fontSize.sm,
     fontWeight: fontWeight.bold,
     letterSpacing: 0.5,

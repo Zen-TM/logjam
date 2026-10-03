@@ -65,7 +65,7 @@ import {
 import { getShares, shareItem, unshareItem } from "../api/shares";
 import { sendFileCopy } from "../api/fileSends";
 import type { AssetActions } from "../saved/assetActions";
-import { Button, ErrorBanner, SectionHeader, Row, Icon } from "../ui";
+import { Avatar, Button, ErrorBanner, SectionHeader, Row, Icon } from "../ui";
 import {
   fontSize,
   lineHeight,
@@ -74,7 +74,6 @@ import {
   theme,
   withAlpha,
 } from "../theme";
-import { FriendAvatar } from "./FriendAvatar";
 import { friendListLoadKey } from "./friendListLoad";
 
 import {
@@ -427,7 +426,7 @@ export function useSharePanel({
             />
           ) : null}
           {search}
-          <SectionHeader label="Send to" />
+          <SectionHeader title="Send to" />
           <FriendRows
             friends={friends.list}
             shown={shown}
@@ -496,7 +495,7 @@ export function useSharePanel({
             text={`They'll keep their own copy — you can't take it back.`}
           />
           {search}
-          <SectionHeader label="Send to" />
+          <SectionHeader title="Send to" />
           <FriendRows
             friends={friends.list}
             shown={shown}
@@ -572,11 +571,11 @@ export function useSharePanel({
         {search}
         {recipients.length > 0 ? (
           <>
-            <SectionHeader label={`Shared with · ${recipients.length}`} />
+            <SectionHeader title={`Shared with · ${recipients.length}`} />
             <RecipientRows sharing={sharing} recipients={recipients} />
           </>
         ) : null}
-        <SectionHeader label="Share with" />
+        <SectionHeader title="Share with" />
         <FriendRows
           friends={friends.list && shareable}
           shown={shown}
@@ -708,9 +707,7 @@ function FriendRows({
         return (
           <Row
             key={friend.id}
-            leading={
-              <FriendAvatar username={friend.username} selected={selected} />
-            }
+            leading={<Avatar username={friend.username} selected={selected} />}
             title={friend.username}
             selected={selected}
             accessibilityLabel={

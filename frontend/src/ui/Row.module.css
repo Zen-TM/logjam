@@ -22,18 +22,32 @@
     calc(var(--space-1) - 1px) var(--space-1);
   box-sizing: border-box;
   border-radius: var(--radius-lg);
-  border: var(--hairline);
-  background: var(--color-card);
+  /* Read-only: no fill and no visible edge, but the border keeps its width, so
+     the tile and the title line up with the pressable rows around it. */
+  border: 1px solid transparent;
+  background: transparent;
   box-shadow: var(--edge), var(--outline);
 }
 
-/* Only a row that DOES something answers the pointer: one that opens (`onOpen`
-   lays the stretched button over the card) or one that can be picked. A Stats
-   row is a read-out, and lighting its edge on hover promised a press that does
-   nothing (operator, 2026-09-16). */
+/* THE CARD FILL MEANS "PRESS ME" (UX §4). Only a row that DOES something wears
+   it: one that opens (`onOpen` or `href` lays the stretched button over the
+   card) or one that can be picked. A read-out has no fill and does not answer
+   the pointer: lighting its edge on hover promised a press that does nothing
+   (operator, 2026-09-16). A row with only trailing controls is not pressable:
+   its controls are. */
+.row:has(.open),
+.row:has(.pick) {
+  border-color: var(--color-line);
+  background: var(--color-card);
+}
+
 .row:has(.open):hover,
 .row:has(.pick):hover {
   border-color: color-mix(in srgb, var(--color-accent) 70%, var(--color-line));
+}
+
+.row:has(.open:active) {
+  background: var(--color-card-pressed);
 }
 
 .row[data-selected="true"] {
@@ -62,8 +76,12 @@
   padding-left: calc(32px + var(--space-1));
 }
 
+.row[data-disabled="true"]:has(.open):hover {
+  border-color: var(--color-line);
+}
+
 .row[data-disabled="true"] {
-  opacity: 0.45;
+  opacity: var(--opacity-disabled);
 }
 
 /* The focus ring belongs to the card the stretched button covers. */

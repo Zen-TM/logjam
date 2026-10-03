@@ -55,6 +55,7 @@ import {
   Row,
   StatusPill,
   type MenuEntry,
+  LoadingState,
 } from "../../../ui";
 import {
   MAP_IDENTITY,
@@ -439,7 +440,7 @@ export default function LidarPanel({
 
   const list = !topoJobsLoaded ? (
     <div className={classes.emptyArea} role="status">
-      <p className={classes.loading}>Loading your LiDAR topos…</p>
+      <LoadingState label="Loading your LiDAR topos…" />
     </div>
   ) : nothingYet ? (
     <div className={classes.emptyArea}>

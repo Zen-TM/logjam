@@ -9,8 +9,13 @@ import {
   type ExportSelection,
   type TopoLayerKey,
 } from "@logjam/shared";
-import { Checkbox, ChipRail, SectionHeader, type ChipOption } from "../../ui";
-import { FieldError } from "../feedback/FieldError";
+import {
+  Checkbox,
+  ChipRail,
+  SectionHeader,
+  type ChipOption,
+  FieldError,
+} from "../../ui";
 import { TOPO_LAYERS } from "../../topoLayerTypes";
 import classes from "./topoSettings/topoSettings.module.css";
 

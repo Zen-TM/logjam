@@ -1,3 +1,4 @@
+import { FieldError } from "./FieldError";
 import {
   useId,
   useState,
@@ -9,7 +10,6 @@ import {
   type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
 } from "react";
-import { FieldError } from "../components/feedback/FieldError";
 import {
   numericFieldError,
   sanitizeDecimalInput,
