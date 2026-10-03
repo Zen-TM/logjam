@@ -1,5 +1,4 @@
 import { Fragment, type CSSProperties } from "react";
-import { Plus, Trash2 } from "lucide-react";
 import {
   applySlopeGradient,
   rgbaCssFromHex,
@@ -14,8 +13,9 @@ import {
   IconButton,
   InfoTip,
   LiveNumberField,
+  Icon,
+  FieldError,
 } from "../../../ui";
-import { FieldError } from "../../feedback/FieldError";
 import type { NumericFieldConstraints } from "../../../numberInput";
 import styles from "./topoSettings.module.css";
 
@@ -195,7 +195,7 @@ export default function SlopeSettings({ value, onChange }: Props) {
         disabled={!room}
         onClick={() => insertAt(position)}
       >
-        <Plus size={14} aria-hidden />
+        <Icon idea="add" size={14} aria-hidden />
       </button>
     );
   };
@@ -302,7 +302,7 @@ export default function SlopeSettings({ value, onChange }: Props) {
             </span>
             {bands.length > 1 ? (
               <IconButton
-                icon={Trash2}
+                icon="delete"
                 label={`Remove band ${idx + 1}`}
                 onClick={() => removeBand(idx)}
               />

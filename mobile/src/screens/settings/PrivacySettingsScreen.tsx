@@ -91,9 +91,9 @@ export function PrivacySettingsScreen() {
   return (
     <>
       <ScreenScroll>
-        <SectionHeader label="This phone" />
+        <SectionHeader title="This phone" />
         <PreferenceRow
-          icon="lock"
+          icon="private"
           title="App lock"
           // No trailing pill beside the switch: the switch is already the
           // trailing element, and a pill next to it was what forced this
@@ -104,7 +104,7 @@ export function PrivacySettingsScreen() {
           onToggle={() => void toggleAppLock()}
         />
         <PreferenceRow
-          icon="alert-octagon"
+          icon="warning"
           title="Send crash reports"
           // Names what is scrubbed, because "anonymous" alone is a claim the
           // user has no way to check and this app's whole premise is that
@@ -119,9 +119,9 @@ export function PrivacySettingsScreen() {
             it is the one control on this page that sends a copy of your data
             OUT of Logjam, which is why it lives on the privacy page at all and
             why it must not read as a third security setting. */}
-        <SectionHeader label="Photos and videos" />
+        <SectionHeader title="Photos and videos" />
         <PreferenceRow
-          icon="image"
+          icon="photo"
           title="Save photos to your gallery"
           // Says the consequence, which is the part a switch label can't: the
           // copy is out of Logjam's storage and its backup exclusion, and
@@ -133,7 +133,7 @@ export function PrivacySettingsScreen() {
           onToggle={toggleSaveToGallery}
         />
 
-        <SectionHeader label="What's on this phone" />
+        <SectionHeader title="What's on this phone" />
         <Text style={styles.note}>
           {"Your places, trips, notes, photos and maps are stored on this device, " +
             "outside your phone's cloud backup. The app lock protects them if " +

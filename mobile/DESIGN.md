@@ -156,6 +156,7 @@ comments in `src/map/MapScreen.tsx`; these are the ones a screen designer meets.
   bars and the sheet runs to the physical bottom edge.
 - **The handle drags**: past ~120pt or a flick dismisses, less springs back.
   A tap on it does nothing, because a drag is discard.
+- **A titled sheet draws a × at the top right of its header.**
 - **The backdrop is the screen-reader dismiss** (`Close <sheet title>`); the
   handle is hidden from assistive tech. The title is therefore read as part of
   the way out.
@@ -234,7 +235,22 @@ comments in `src/map/MapScreen.tsx`; these are the ones a screen designer meets.
 ## 7. Kit
 
 The kit is `src/ui`, imported only through its barrel. Its component list is
-`KIT_COMPONENTS` in `@logjam/shared`, the same names Logjam Web uses.
+`KIT_COMPONENTS` in `shared/src/kit.ts`, the one list both clients' barrels are
+held to (`src/ui/kit.test.ts`): which components Logjam Web has too, and why a
+platform-only one is not shared.
+
+- **A card fill means "press me"** (UX §4). `Row` and `StatGrid` sit on `card`
+  only when they do something (`onPress`/`onLongPress`; a stat's `onCopy`); a
+  read-only one has no fill but the same box. A switch is a `SwitchRow`: the
+  whole row is the target and a screen reader meets one `switch`. There is no
+  `Card`.
+- **A disabled control dims by `opacity.disabled`, does not answer a press and
+  says why**: a `Row`'s subtitle, a `Button`'s `disabledReason` (its
+  accessibility hint).
+- **Icons are ideas: draw `<Icon idea=…>`**, never a Feather or
+  MaterialCommunityIcons name (a lint rule stops it). The registry is
+  `shared/src/icons.ts`.
+- **Map pills are `Notice`**, text centred, on the page colour.
 
 - **Extend a primitive rather than hand-roll a copy** (`Row.icon`,
   `Button.icon`, `ChipRail.scroll`, `StatusPill.icon`). A new kit file only for

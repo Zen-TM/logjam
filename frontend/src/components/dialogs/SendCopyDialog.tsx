@@ -8,13 +8,19 @@
 //
 // PRIVACY: usernames only, never email (root AGENTS.md).
 import { useState } from "react";
-import { TriangleAlert, Users } from "lucide-react";
 import { friendMatches } from "@logjam/shared";
 import classes from "./SendCopyDialog.module.css";
-import { ErrorBanner } from "../feedback/ErrorBanner";
 import { messageFromError } from "../../errors/messageFromError";
 import type { TFriend } from "../../placeUtils";
-import { Button, Checkbox, Dialog, EmptyState, SearchField } from "../../ui";
+import {
+  Button,
+  Checkbox,
+  Dialog,
+  EmptyState,
+  SearchField,
+  Icon,
+  ErrorBanner,
+} from "../../ui";
 
 /** The list stays searchable only once it is long enough to need it. */
 const SEARCH_FROM = 8;
@@ -102,7 +108,7 @@ function SendCopyDialog({
     >
       {friends.length === 0 ? (
         <EmptyState
-          icon={Users}
+          icon="friends"
           title="No friends yet"
           body="Copies go to friends. Add one on the Friends page, then come back."
         />
@@ -110,7 +116,12 @@ function SendCopyDialog({
         <div className={classes.body}>
           {error && <ErrorBanner message={error} />}
           <p className={classes.promise}>
-            <TriangleAlert size={16} aria-hidden className={classes.glyph} />
+            <Icon
+              idea="warning"
+              size={16}
+              aria-hidden
+              className={classes.glyph}
+            />
             They'll keep their own copy — you can't take it back.
           </p>
           {searchable && (

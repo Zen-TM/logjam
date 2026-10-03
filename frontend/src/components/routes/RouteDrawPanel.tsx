@@ -19,7 +19,6 @@
 // stats describe what the last one produced — a control below the readout it
 // governs reads as a footnote to it (operator, 2026-09-17).
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeftRight, Redo2, Trash2, Undo2, X } from "lucide-react";
 import {
   densifyLine,
   formatDistanceM,
@@ -172,7 +171,7 @@ export function RouteDrawPanel({
         title={editingName ? `Editing ${editingName}` : "New route"}
         actions={
           <IconButton
-            icon={X}
+            icon="close"
             label="Cancel drawing"
             onClick={onCancel}
             disabled={saving}
@@ -285,19 +284,19 @@ export function RouteDrawPanel({
 
         <div className={classes.buttons}>
           <IconButton
-            icon={Undo2}
+            icon="undo"
             label="Undo"
             onClick={onUndo}
             disabled={!canUndo || saving}
           />
           <IconButton
-            icon={ArrowLeftRight}
+            icon="reverse"
             label="Reverse direction"
             onClick={onReverse}
             disabled={!hasLine || saving}
           />
           <IconButton
-            icon={Trash2}
+            icon="delete"
             label="Clear all points"
             onClick={onClear}
             disabled={points.length === 0 || saving}
@@ -309,7 +308,7 @@ export function RouteDrawPanel({
           <Button
             compact
             variant="filled"
-            icon={Redo2}
+            icon="done"
             onClick={onSave}
             disabled={!canSave}
             busy={saving}

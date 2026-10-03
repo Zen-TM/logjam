@@ -1,9 +1,8 @@
 import { useId, useState } from "react";
 import { updateUserAttribute, confirmUserAttribute } from "aws-amplify/auth";
 import { messageFromError } from "../../errors/messageFromError";
-import { ErrorBanner } from "../feedback/ErrorBanner";
 import { isValidEmailFormat } from "../../emailValidation";
-import { Button, Dialog, TextField } from "../../ui";
+import { Button, Dialog, TextField, ErrorBanner } from "../../ui";
 import classes from "./ChangeEmailDialog.module.css";
 
 type Stage = "input" | "verify" | "done";

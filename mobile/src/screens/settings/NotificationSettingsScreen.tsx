@@ -161,7 +161,7 @@ export function NotificationSettingsScreen() {
   return (
     <>
       <ScreenScroll>
-        <SectionHeader label="Email me when" />
+        <SectionHeader title="Email me when" />
         {/* Reported here rather than as a screen-level error: the OS row below
             works regardless, and this is the part that needs the fetch. */}
         {online && userQuery.error ? (
@@ -178,7 +178,7 @@ export function NotificationSettingsScreen() {
           />
         ))}
 
-        <SectionHeader label="Notify me in Logjam GPS about" />
+        <SectionHeader title="Notify me in Logjam GPS about" />
         {NOTIFICATION_ROWS.filter((row) => row.group === "inApp").map((row) => (
           <PreferenceRow
             key={row.key}
@@ -190,12 +190,12 @@ export function NotificationSettingsScreen() {
           />
         ))}
 
-        <SectionHeader label="This phone" />
+        <SectionHeader title="This phone" />
         {/* Not a switch: Android owns this one, so the row reports it and
             either asks (the one place in the app that does) or opens the place
             it can be changed. A toggle here would be a lie. */}
         <Row
-          icon="smartphone"
+          icon="phone"
           title="Notifications from Logjam"
           subtitle={
             pushAllowed === null

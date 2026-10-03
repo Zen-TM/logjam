@@ -1,30 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowRight,
-  ChevronDown,
-  CircleCheck,
-  CloudDownload,
-  Download,
-  EllipsisVertical,
-  FileText,
-  Filter,
-  LocateFixed,
-  Map as MapIcon,
-  MapPin,
-  MapPinPlus,
-  Mountain,
-  Plus,
-  Search,
-  Share2,
-  SlidersHorizontal,
-  Star,
-  Trash2,
-  Upload,
-  Users,
-  X,
-  type LucideIcon,
-} from "lucide-react";
-import {
   comparePlaces,
   EMPTY_PLACE_FILTERS,
   numericFieldValue,
@@ -70,6 +45,9 @@ import {
   SelectionBar,
   TileCheckbox,
   type MenuEntry,
+  Icon,
+  type Glyph,
+  LoadingState,
 } from "../../../ui";
 import { placeTypeLucideIcon } from "./placeTypeIcon";
 import PlaceFilterSheet from "./PlaceFilterSheet";
@@ -88,10 +66,10 @@ import classes from "./PlacesPanel.module.css";
 
 export type MapKind = "topo" | "geopdf";
 
-const STATUS_ICON: Record<PlaceStatus, LucideIcon> = {
-  done: CircleCheck,
-  todo: MapPin,
-  shared: Users,
+const STATUS_ICON: Record<PlaceStatus, Glyph> = {
+  done: "success",
+  todo: "place",
+  shared: "friends",
 };
 const STATUS_HUE: Record<PlaceStatus, string> = {
   done: "var(--color-accent)",
@@ -368,13 +346,13 @@ function PlacesPanel({
       {
         id: "topo",
         label: "LiDAR topo",
-        icon: Mountain,
+        icon: "lidar",
         onSelect: () => onMakeMap(bounds, "topo"),
       },
       {
         id: "geopdf",
         label: "GeoPDF",
-        icon: FileText,
+        icon: "geoPdf",
         onSelect: () => onMakeMap(bounds, "geopdf"),
       },
     ];
@@ -405,13 +383,13 @@ function PlacesPanel({
     {
       id: "open",
       label: "Open place",
-      icon: ArrowRight,
+      icon: "forward",
       onSelect: () => openPlace(place),
     },
     {
       id: "show",
       label: "Show on map",
-      icon: LocateFixed,
+      icon: "map",
       onSelect: () => onFlyToPlace(place.latitude, place.longitude),
     },
     ...makeMapEntries([place]).map((entry) =>
@@ -425,14 +403,14 @@ function PlacesPanel({
           {
             id: "share",
             label: "Share or export…",
-            icon: Share2,
+            icon: "shareFriend",
             onSelect: () => onSharePlaces([place.id]),
           },
           { id: "sep2", separator: true },
           {
             id: "delete",
             label: "Delete",
-            icon: Trash2,
+            icon: "delete",
             danger: true,
             onSelect: () => setPendingDelete([place.id]),
           },
@@ -516,7 +494,7 @@ function PlacesPanel({
 
   const filterButton = (
     <IconButton
-      icon={SlidersHorizontal}
+      icon="filter"
       label={
         sheetCount > 0
           ? `Sort and filter, ${plural(sheetCount, "filter")} on`
@@ -548,12 +526,16 @@ function PlacesPanel({
         searchOpen ? (
           <>
             {filterButton}
-            <IconButton icon={X} label="Close search" onClick={closeSearch} />
+            <IconButton
+              icon="close"
+              label="Close search"
+              onClick={closeSearch}
+            />
           </>
         ) : (
           <>
             <IconButton
-              icon={Search}
+              icon="search"
               label="Search places"
               tone={query ? "filled" : "default"}
               aria-expanded={false}
@@ -567,13 +549,13 @@ function PlacesPanel({
                 {
                   id: "add",
                   label: "Add a place",
-                  icon: MapPinPlus,
+                  icon: "addPlace",
                   onSelect: onAddPlace,
                 },
                 {
                   id: "file",
                   label: "Import from file",
-                  icon: Upload,
+                  icon: "upload",
                   onSelect: onOpenUnifiedImport,
                 },
                 {
@@ -581,7 +563,7 @@ function PlacesPanel({
                   label: refreshing
                     ? "Importing from RopeWiki…"
                     : "Import from RopeWiki",
-                  icon: CloudDownload,
+                  icon: "saveOffline",
                   disabled: refreshing,
                   onSelect: () => setConfirmRefresh(true),
                 },
@@ -591,8 +573,8 @@ function PlacesPanel({
                   {...props}
                   compact
                   variant="filled"
-                  icon={Plus}
-                  trailingIcon={ChevronDown}
+                  icon="add"
+                  trailingIcon="expand"
                 >
                   Add
                 </Button>
@@ -649,7 +631,7 @@ function PlacesPanel({
           trailing={
             <Chip
               label="New type"
-              icon={Plus}
+              icon="add"
               dashed
               onClick={() => setActivePanel("settings")}
             />
@@ -667,11 +649,11 @@ function PlacesPanel({
             label="Make a map"
             entries={makeMapEntries(selected)}
             trigger={(props) => (
-              <IconButton {...props} icon={MapIcon} label="Make a map" />
+              <IconButton {...props} icon="template" label="Make a map" />
             )}
           />
           <IconButton
-            icon={Share2}
+            icon="shareFriend"
             label="Share or export"
             onClick={() => onSharePlaces(selected.map((place) => place.id))}
           />
@@ -680,11 +662,11 @@ function PlacesPanel({
             placement="bottom-end"
             entries={exportEntries(selected)}
             trigger={(props) => (
-              <IconButton {...props} icon={Download} label="Export" />
+              <IconButton {...props} icon="export" label="Export" />
             )}
           />
           <IconButton
-            icon={Trash2}
+            icon="delete"
             label="Delete"
             tone="danger"
             onClick={() => setPendingDelete(selected.map((place) => place.id))}
@@ -713,23 +695,23 @@ function PlacesPanel({
 
   const list = !placesLoaded ? (
     <div className={classes.emptyArea} role="status">
-      <p className={classes.loading}>Loading your places…</p>
+      <LoadingState label="Loading your places…" />
     </div>
   ) : collection.length === 0 ? (
     <div className={classes.emptyArea}>
       <EmptyState
-        icon={MapPin}
+        icon="place"
         title="No places yet"
         body="Add a place on the map, or bring your list in from a file or RopeWiki. Places you add here reach Logjam GPS for offline use."
         actions={
           <>
-            <Button compact variant="filled" icon={Plus} onClick={onAddPlace}>
+            <Button compact variant="filled" icon="add" onClick={onAddPlace}>
               Add a place
             </Button>
             <Button
               compact
               variant="outline"
-              icon={Upload}
+              icon="upload"
               onClick={onOpenUnifiedImport}
             >
               Import
@@ -741,7 +723,7 @@ function PlacesPanel({
   ) : visible.length === 0 ? (
     <div className={classes.emptyArea}>
       <EmptyState
-        icon={Filter}
+        icon="filter"
         title="No places match"
         body="Nothing matches your search and filters. Clear them to see the rest."
         actions={
@@ -808,7 +790,7 @@ function PlacesPanel({
                     className={classes.meta}
                     aria-label={`Rated ${quality.replace("★ ", "")}`}
                   >
-                    <Star size={12} aria-hidden />
+                    <Icon idea="favourite" size={12} aria-hidden />
                     {quality.replace("★ ", "")}
                   </span>
                 )}
@@ -818,7 +800,7 @@ function PlacesPanel({
                     title={`Shared with ${plural(shareCount, "friend")}`}
                     aria-label={`Shared with ${plural(shareCount, "friend")}`}
                   >
-                    <Users size={12} aria-hidden />
+                    <Icon idea="friends" size={12} aria-hidden />
                     {shareCount}
                   </span>
                 )}
@@ -831,7 +813,7 @@ function PlacesPanel({
                     trigger={(props) => (
                       <IconButton
                         {...props}
-                        icon={EllipsisVertical}
+                        icon="overflow"
                         label={`Actions for ${place.name}`}
                       />
                     )}
@@ -876,7 +858,7 @@ function PlacesPanel({
                 {sort !== "name" ? ` · ${placeSortLabel(sort)}` : ""}
               </span>
               <IconButton
-                icon={X}
+                icon="close"
                 size={14}
                 round
                 label="Clear filters"

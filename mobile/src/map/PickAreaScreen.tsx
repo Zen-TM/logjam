@@ -317,7 +317,7 @@ export function PickAreaScreen({
         <View style={styles.action}>
           <Button
             label="Use this area"
-            icon="check"
+            icon="done"
             // Null only until the map has reported its first bounds — a second
             // or two on launch, not a state the user can get stuck in.
             disabled={area == null}

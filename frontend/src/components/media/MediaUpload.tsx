@@ -1,10 +1,10 @@
 import { useRef, useState } from "react";
-import { Upload, Loader2 } from "lucide-react";
 import type { MediaItem, MediaLinkedType } from "@logjam/shared";
 import { uploadMedia } from "../../placeUtils";
 import { resolveMediaType, generateThumbnail } from "./mediaFiles";
 import { messageFromError } from "../../errors/messageFromError";
 import classes from "./MediaUpload.module.css";
+import { Icon } from "../../ui";
 
 // One uploader serves both surfaces; the category narrows what's accepted.
 //   visual → photos + videos      track → GPX/KML only      (undefined → all)
@@ -157,9 +157,9 @@ export default function MediaUpload({
         }}
       >
         {busy ? (
-          <Loader2 size={20} className={classes.spinner} />
+          <Icon idea="loading" size={20} className={classes.spinner} />
         ) : (
-          <Upload size={20} />
+          <Icon idea="upload" size={20} />
         )}
         <span className={classes.hint}>
           {busy

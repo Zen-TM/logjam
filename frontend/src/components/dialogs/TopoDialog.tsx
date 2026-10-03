@@ -9,21 +9,12 @@
 // form). The raster settings are the other sub-view.
 import { useState, useRef, Fragment, useEffect, useCallback } from "react";
 import {
-  CircleCheckBig,
-  ExternalLink,
-  Info,
-  Settings2,
-  SquareDashed,
-  Upload,
-} from "lucide-react";
-import {
   apiFetch,
   fetchComputeEstimate,
   fetchCurrentUser,
   putToPresignedUrl,
 } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
-import { ErrorBanner } from "../feedback/ErrorBanner";
 import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
 import ConfirmDialog from "./ConfirmDialog";
 import type { TBbox } from "../map/Map";
@@ -52,6 +43,8 @@ import {
   Select,
   StatusPill,
   TextField,
+  Icon,
+  ErrorBanner,
 } from "../../ui";
 import AdvancedSettings from "./topoSettings/AdvancedSettings";
 import { SETTINGS_TABS, type SettingsTab } from "./topoSettings/settingsTabs";
@@ -659,7 +652,8 @@ export default function TopoDialog({
           </div>
         ) : phase === "done" ? (
           <div className={classes.done}>
-            <CircleCheckBig
+            <Icon
+              idea="success"
               size={40}
               aria-hidden
               className={classes.doneGlyph}
@@ -729,7 +723,12 @@ export default function TopoDialog({
                 }
               }}
             >
-              <Upload size={28} aria-hidden className={classes.dropGlyph} />
+              <Icon
+                idea="upload"
+                size={28}
+                aria-hidden
+                className={classes.dropGlyph}
+              />
               <span className={classes.dropLine}>
                 {file
                   ? file.name
@@ -753,7 +752,7 @@ export default function TopoDialog({
 
             <div className={classes.errandLine}>
               <Button
-                icon={Info}
+                icon="info"
                 compact
                 variant="outline"
                 onClick={() => setMode("instructions")}
@@ -812,7 +811,7 @@ export default function TopoDialog({
 
             <div className={classes.errandLine}>
               <Button
-                icon={Settings2}
+                icon="settings"
                 compact
                 variant="outline"
                 onClick={() => setMode("settings")}
@@ -937,7 +936,7 @@ function ElvisInstructions({
           <SectionHeader title="Mark out what you want covered" />
           <div className={classes.stepControls}>
             <Button
-              icon={SquareDashed}
+              icon="pickArea"
               compact
               variant="outline"
               onClick={onSelectBbox}
@@ -976,7 +975,7 @@ function ElvisInstructions({
           </p>
           <div className={classes.stepControls}>
             <Button
-              icon={ExternalLink}
+              icon="openExternal"
               compact
               variant="outline"
               onClick={() =>

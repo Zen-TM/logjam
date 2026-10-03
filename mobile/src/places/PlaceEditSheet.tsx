@@ -1,6 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { Feather } from "@expo/vector-icons";
 import {
   ATTRIBUTE_NOUN,
   defsForType,
@@ -28,7 +27,7 @@ import {
 } from "../customFields/fieldValueCoercion";
 import { useFieldDefs } from "../customFields/useFieldDefs";
 import { useMirrorPlaceTypes } from "../sync/useSyncQueries";
-import { placeTypeFeatherIcon } from "./placeTypeIcon";
+import { placeTypeGlyph } from "./placeTypeIcon";
 import {
   BottomSheet,
   Button,
@@ -36,9 +35,10 @@ import {
   ErrorBanner,
   Row,
   SectionHeader,
-  SegmentedControl,
+  ChipRail,
   TextField,
-  type SegmentOption,
+  type ChipOption,
+  Icon,
 } from "../ui";
 
 /**
@@ -202,12 +202,12 @@ export function PlaceEditSheet({
 
   /** Every type is offered here, including the empty ones — the list hides a
    *  type with no places, but you have to be able to make the first one. */
-  const typeOptions: SegmentOption<string>[] = useMemo(
+  const typeOptions: ChipOption<string>[] = useMemo(
     () =>
       (placeTypes.data ?? []).map((type) => ({
         value: type.id,
         label: type.name,
-        icon: placeTypeFeatherIcon(type.iconKey),
+        icon: placeTypeGlyph(type.iconKey),
         hue: type.color,
       })),
     [placeTypes.data],
@@ -423,7 +423,7 @@ export function PlaceEditSheet({
             {formError ? <ErrorBanner message={formError} /> : null}
             <Button
               label={editing ? "Save changes" : "Add place"}
-              icon="check"
+              icon="done"
               loading={saving}
               onPress={() => void save()}
             />
@@ -436,14 +436,14 @@ export function PlaceEditSheet({
           // there.
           <Button
             label={ATTRIBUTE_NOUN.add}
-            icon="plus"
+            icon="add"
             onPress={() => {
               setEditingField(null);
               setMode("fieldForm");
             }}
           />
         ) : (
-          <Button label="Done" icon="check" onPress={() => setMode("form")} />
+          <Button label="Done" icon="done" onPress={() => setMode("form")} />
         )
       }
     >
@@ -460,7 +460,7 @@ export function PlaceEditSheet({
           {fieldValues[dateFieldKey] ? (
             <Button
               label="Clear date"
-              icon="x"
+              icon="close"
               variant="ghost"
               onPress={() => {
                 setFieldValues((current) => ({
@@ -501,8 +501,8 @@ export function PlaceEditSheet({
             field for are kept and offered back (§2.6), never dropped. */}
           {typeOptions.length > 1 ? (
             <View style={styles.field}>
-              <SectionHeader label="Type" />
-              <SegmentedControl
+              <SectionHeader title="Type" />
+              <ChipRail
                 scroll
                 options={typeOptions}
                 value={placeTypeId}
@@ -534,7 +534,7 @@ export function PlaceEditSheet({
             </Text>
           </View>
 
-          <SectionHeader label="Position" />
+          <SectionHeader title="Position" />
           <View style={styles.coordRow}>
             <View style={styles.coordField}>
               <TextField
@@ -568,7 +568,7 @@ export function PlaceEditSheet({
           {onPickOnMap ? (
             <Button
               label="Select on map"
-              icon="map-pin"
+              icon="place"
               variant="outlineAccent"
               onPress={() =>
                 onPickOnMap(
@@ -581,7 +581,7 @@ export function PlaceEditSheet({
           ) : null}
           {!editing && initialCoords ? (
             <View style={styles.fixNote}>
-              <Feather name="map-pin" size={14} color={theme.accent} />
+              <Icon idea="place" size={14} color={theme.accent} />
               <Text style={styles.hint}>
                 Filled in from the point you pressed.
               </Text>
@@ -609,7 +609,7 @@ export function PlaceEditSheet({
             type has none rather than standing over nothing. */}
           {typeFieldDefs.length > 0 ? (
             <SectionHeader
-              label={`${typeName(placeTypeId, placeTypes.data)} ${ATTRIBUTE_NOUN.many}`}
+              title={`${typeName(placeTypeId, placeTypes.data)} ${ATTRIBUTE_NOUN.many}`}
             />
           ) : null}
           <CustomFieldValueInputs
@@ -626,16 +626,14 @@ export function PlaceEditSheet({
           {/* Definitions are local rows written through the outbox, so this door
             is open with no account and no signal, for everyone. */}
           <Row
-            icon="sliders"
+            icon="tag"
             title={`Your place ${ATTRIBUTE_NOUN.many}`}
             subtitle={
               typeFieldDefs.length === 0
                 ? "Add your own — permits, access notes, anything."
                 : `${typeFieldDefs.length} on this type`
             }
-            right={
-              <Feather name="chevron-right" size={20} color={theme.textMuted} />
-            }
+            right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
             onPress={() => setMode("fields")}
           />
         </View>

@@ -13,32 +13,18 @@
 // tray behind it would be two answers to the same question.
 import { useEffect, useState } from "react";
 import { Animated, Easing, Pressable, StyleSheet, View } from "react-native";
-import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 
 import { FAB_ICON, FAB_SIZE, CHROME_GAP } from "./mapChrome";
+import type { IconIdea } from "@logjam/shared";
+
 import { theme } from "../theme";
+import { Icon } from "../ui";
 
 export type MapTool = "measure" | "route";
 
-/**
- * Icon family per tool. Feather has no ruler in its 286 glyphs, and the nearest
- * stand-ins (maximize-2, git-commit) read as "resize" and "commit" rather than
- * "measure" — so measure borrows MaterialCommunityIcons, which ships inside
- * @expo/vector-icons already (no new dependency). See DESIGN.md §3.
- */
-const TOOLS: {
-  id: MapTool;
-  label: string;
-  family: "feather" | "material";
-  icon: string;
-}[] = [
-  {
-    id: "measure",
-    label: "Measure distance",
-    family: "material",
-    icon: "ruler",
-  },
-  { id: "route", label: "Draw a route", family: "feather", icon: "pen-tool" },
+const TOOLS: { id: MapTool; label: string; icon: IconIdea }[] = [
+  { id: "measure", label: "Measure distance", icon: "measure" },
+  { id: "route", label: "Draw a route", icon: "draw" },
 ];
 
 /** Time to slide one tool across one button + gap. */
@@ -146,19 +132,7 @@ export function MapToolGroup({
             ]}
             onPress={() => onPickTool(tool.id)}
           >
-            {tool.family === "material" ? (
-              <MaterialCommunityIcons
-                name={tool.icon as never}
-                size={FAB_ICON}
-                color={theme.text}
-              />
-            ) : (
-              <Feather
-                name={tool.icon as never}
-                size={FAB_ICON}
-                color={theme.text}
-              />
-            )}
+            <Icon idea={tool.icon} size={FAB_ICON} color={theme.text} />
           </Pressable>
         </Animated.View>
       ))}
@@ -174,8 +148,8 @@ export function MapToolGroup({
         ]}
         onPress={onToggleOpen}
       >
-        <Feather
-          name={open ? "x" : "plus"}
+        <Icon
+          idea={open ? "close" : "add"}
           size={FAB_ICON}
           color={theme.text}
         />

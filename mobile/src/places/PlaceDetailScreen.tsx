@@ -22,7 +22,6 @@ import {
   Text,
   View,
 } from "react-native";
-import { Feather } from "@expo/vector-icons";
 import {
   ATTRIBUTE_NOUN,
   isReservedFieldKey,
@@ -87,7 +86,7 @@ import {
   Button,
   EmptyState,
   ErrorState,
-  HeroHeader,
+  Hero,
   IconButton,
   LoadingState,
   Row,
@@ -98,6 +97,7 @@ import {
   Toast,
   type Stat,
   type ToastMessage,
+  Icon,
 } from "../ui";
 import { TripEditSheet } from "../logs/TripEditSheet";
 import { PlaceEditSheet } from "./PlaceEditSheet";
@@ -292,7 +292,7 @@ export function PlaceDetailScreen({
   stats.push({
     label: "Position",
     value: position,
-    wide: true,
+    span: true,
     onCopy: copyPosition,
   });
 
@@ -390,15 +390,15 @@ export function PlaceDetailScreen({
 
   return (
     <View style={styles.screen}>
-      <HeroHeader
+      <Hero
         eyebrow="Place"
         title={place.name}
         titleNumberOfLines={2}
         onBack={onBack}
-        action={
+        actions={
           isOwner ? (
             <IconButton
-              icon="edit-2"
+              icon="edit"
               accessibilityLabel="Edit place"
               color={theme.accent}
               filled
@@ -428,7 +428,7 @@ export function PlaceDetailScreen({
             />
           ) : null}
         </View>
-      </HeroHeader>
+      </Hero>
 
       <ScrollView contentContainerStyle={styles.body}>
         {/* The two things you do standing at a trailhead. Both work offline. */}
@@ -444,16 +444,16 @@ export function PlaceDetailScreen({
           <View style={styles.action}>
             <Button
               label="Log a trip"
-              icon="edit-3"
+              icon="trip"
               onPress={() => setLogging(true)}
             />
           </View>
         </View>
 
-        <SectionHeader label="Overview" />
+        <SectionHeader title="Overview" />
         <StatGrid stats={stats} />
         <Row
-          icon="navigation"
+          icon="navigateTo"
           title="Open in a maps app"
           subtitle="Opens your navigation app to this location."
           onPress={openInMapsApp}
@@ -464,7 +464,7 @@ export function PlaceDetailScreen({
             {/* Named for the TYPE, like the form and the filter sheet: on a
                 campsite these are Capacity and Is-a-cave, which are the app's,
                 not the user's. */}
-            <SectionHeader label={`${placeTypeName} ${ATTRIBUTE_NOUN.many}`} />
+            <SectionHeader title={`${placeTypeName} ${ATTRIBUTE_NOUN.many}`} />
             <AttributeTable rows={customFields} />
           </>
         ) : null}
@@ -472,7 +472,7 @@ export function PlaceDetailScreen({
         {isOwner && foreignFields.length > 0 ? (
           <>
             <SectionHeader
-              label={`Doesn\u2019t fit this type · ${foreignFields.length}`}
+              title={`Doesn\u2019t fit this type · ${foreignFields.length}`}
             />
             {/* Named for the CONDITION, not the cause, because there are two of
                 them: a type change strands what the new type has no definition
@@ -494,15 +494,11 @@ export function PlaceDetailScreen({
             {foreignFields.map((item) => (
               <Row
                 key={item.key}
-                icon="help-circle"
+                icon="help"
                 title={item.label}
                 subtitle={foreignValueText(item.value)}
                 right={
-                  <Feather
-                    name="chevron-right"
-                    size={20}
-                    color={theme.textMuted}
-                  />
+                  <Icon idea="disclosure" size={20} color={theme.textMuted} />
                 }
                 onPress={() => setForeignKey(item.key)}
               />
@@ -511,7 +507,7 @@ export function PlaceDetailScreen({
         ) : null}
 
         <SectionHeader
-          label={
+          title={
             place.notes ? "Notes · visible to anyone you share with" : "Notes"
           }
         />
@@ -522,7 +518,7 @@ export function PlaceDetailScreen({
         )}
 
         <SectionHeader
-          label={
+          title={
             photoCount === 0
               ? "Photos & videos"
               : `Photos & videos · ${photoCount}`
@@ -539,7 +535,7 @@ export function PlaceDetailScreen({
         />
 
         <SectionHeader
-          label={routeCount === 0 ? "Routes" : `Routes · ${routeCount}`}
+          title={routeCount === 0 ? "Routes" : `Routes · ${routeCount}`}
         />
         {/* One route per place — the API enforces it, so the UI has to as well
             (see `limit` in MediaStrip).
@@ -559,13 +555,13 @@ export function PlaceDetailScreen({
             <Row
               title={linkedRoute.name}
               subtitle={`Drawn route · ${formatDistanceM(routeLengthM(linkedRoute.points))}`}
-              icon="edit-3"
+              icon="route"
               hue={assetHue.route}
               onPress={() => onFocusOnMap(routeBbox(linkedRoute.points))}
               right={
                 isOwner ? (
                   <IconButton
-                    icon="more-horizontal"
+                    icon="overflow"
                     accessibilityLabel="Route options"
                     onPress={() => setRouteSlotMenu(true)}
                   />
@@ -624,7 +620,7 @@ export function PlaceDetailScreen({
         {isOwner ? (
           <>
             <SectionHeader
-              label={
+              title={
                 linkedPlaces.length === 0
                   ? "Linked places"
                   : `Linked places · ${linkedPlaces.length}`
@@ -635,7 +631,7 @@ export function PlaceDetailScreen({
               : linkedPlaces.map((linked) => (
                   <Row
                     key={linked.id}
-                    icon="map-pin"
+                    icon="place"
                     title={linked.name}
                     onPress={() => onShowPlaceOnMap?.(linked)}
                     // The row's own action is "show me where that is"; the verb
@@ -643,7 +639,7 @@ export function PlaceDetailScreen({
                     // thumb reaching for the map cannot unlink instead.
                     right={
                       <IconButton
-                        icon="more-vertical"
+                        icon="overflow"
                         accessibilityLabel={`Options for ${linked.name}`}
                         onPress={() => setLinkMenuId(linked.id)}
                       />
@@ -674,7 +670,7 @@ export function PlaceDetailScreen({
             ever your own trips: another person's visits to a place they shared
             with you are theirs, and never reach this device. */}
         <SectionHeader
-          label={
+          title={
             linkedTrips.length === 0
               ? "Your trips"
               : `Your trips · ${linkedTrips.length}`
@@ -693,16 +689,12 @@ export function PlaceDetailScreen({
             .map((trip) => (
               <Row
                 key={trip.id}
-                icon="book-open"
+                icon="trip"
                 hue={theme.accent}
                 title={tripTitle(trip)}
                 subtitle={formatTripDate(trip.date)}
                 right={
-                  <Feather
-                    name="chevron-right"
-                    size={20}
-                    color={theme.textMuted}
-                  />
+                  <Icon idea="disclosure" size={20} color={theme.textMuted} />
                 }
                 onPress={() => onOpenTrip(trip)}
               />
@@ -718,9 +710,9 @@ export function PlaceDetailScreen({
               openRequest={shareOpenRequest}
               onShareRequested={() => setShareOpenRequest((n) => n + 1)}
             />
-            <SectionHeader label="Danger zone" />
+            <SectionHeader title="Danger zone" />
             <Row
-              icon="trash-2"
+              icon="delete"
               hue={theme.warning}
               title="Delete place"
               onPress={confirmDelete}
@@ -732,9 +724,9 @@ export function PlaceDetailScreen({
                 nothing above a place for it to be inherited from — so this row
                 is offered on every shared place. Online-only, like every other
                 share action, and dimmed with the reason rather than hidden. */}
-            <SectionHeader label="Shared with you" />
+            <SectionHeader title="Shared with you" />
             <Row
-              icon="x-circle"
+              icon="unshare"
               hue={theme.warning}
               title="Remove from my account"
               {...shareRowProps}
@@ -805,7 +797,7 @@ export function PlaceDetailScreen({
                 {visible.map((row) => (
                   <Row
                     key={row.id}
-                    icon="map-pin"
+                    icon="place"
                     title={row.name}
                     onPress={() => {
                       setLinking(false);
@@ -838,7 +830,7 @@ export function PlaceDetailScreen({
       >
         <View style={styles.sheetBody}>
           <Row
-            icon="link-2"
+            icon="link"
             hue={theme.warning}
             title="Unlink from this place"
             subtitle="Both places are kept."
@@ -892,7 +884,7 @@ export function PlaceDetailScreen({
               that is not on screen, is the panel apologising for itself. */}
           {foreignIsBuiltIn ? null : (
             <Row
-              icon="plus-circle"
+              icon="add"
               title={`Create a new ${ATTRIBUTE_NOUN.one} for this place type`}
               // No explanation line: the three titles say what they do, and a
               // sentence under each turned a three-item menu into a wall. The
@@ -904,14 +896,14 @@ export function PlaceDetailScreen({
             />
           )}
           <Row
-            icon="file-text"
+            icon="notes"
             title="Add to notes as text"
             subtitle={online ? undefined : "Needs a connection"}
             disabled={!online || resolvingForeign}
             onPress={() => runForeignAction("notes")}
           />
           <Row
-            icon="trash-2"
+            icon="delete"
             hue={theme.warning}
             title="Discard"
             subtitle={online ? undefined : "Needs a connection"}
@@ -950,7 +942,7 @@ export function PlaceDetailScreen({
               route on the way in is a slot with two different rules. */}
           <Row
             title="Replace with another way"
-            icon="repeat"
+            icon="replace"
             hue={assetHue.route}
             onPress={() => {
               setRouteSlotMenu(false);
@@ -960,7 +952,7 @@ export function PlaceDetailScreen({
           <Row
             title="Unlink from this place"
             subtitle="The route is kept."
-            icon="link-2"
+            icon="link"
             hue={theme.warning}
             onPress={() => {
               const target = linkedRoute;
@@ -1050,7 +1042,7 @@ function PlaceSharingSection({
   return (
     <>
       <SectionHeader
-        label={
+        title={
           sharing.recipients && sharing.recipients.length > 0
             ? `Shared with · ${sharing.recipients.length}`
             : "Shared with"
@@ -1063,7 +1055,7 @@ function PlaceSharingSection({
           (DESIGN.md §10) rather than hidden, so the feature doesn't appear to
           come and go. */}
       <Row
-        icon="share-2"
+        icon="shareFriend"
         title="Share with a friend"
         subtitle={shareRowSubtitle(sharing)}
         disabled={!sharing.canShare || sharing.loadFailed}

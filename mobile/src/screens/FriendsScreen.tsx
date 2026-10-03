@@ -53,15 +53,15 @@ import {
   EmptyState,
   ErrorBanner,
   ErrorState,
-  HeroHeader,
+  Hero,
   IconButton,
   LoadingState,
   Row,
-  SegmentedControl,
+  ChipRail,
   StatusPill,
   TextField,
   Toast,
-  type SegmentOption,
+  type ChipOption,
   type ToastMessage,
 } from "../ui";
 
@@ -241,7 +241,7 @@ export function FriendsScreen({
   if (guestBlock) {
     return (
       <View style={styles.root}>
-        <HeroHeader eyebrow="Friends" title="Friends" onBack={onBack} />
+        <Hero eyebrow="Friends" title="Friends" onBack={onBack} />
         <EmptyState title={guestBlock.title} hint={guestBlock.hint} />
       </View>
     );
@@ -251,7 +251,7 @@ export function FriendsScreen({
   }
   if (friends === null) return <LoadingState />;
 
-  const buckets: SegmentOption<Bucket>[] = [
+  const buckets: ChipOption<Bucket>[] = [
     { value: "all", label: "All", count: friends.length + requests.length },
     {
       value: "friends",
@@ -270,16 +270,16 @@ export function FriendsScreen({
 
   return (
     <View style={styles.root}>
-      <HeroHeader
+      <Hero
         eyebrow="Friends"
         title={requests.length > 0 ? "Someone's waiting" : "Your people"}
         onBack={onBack}
         value={String(friends.length)}
         valueSuffix={friends.length === 1 ? "friend" : "friends"}
-        action={
+        actions={
           <Button
             label="Add"
-            icon="user-plus"
+            icon="addFriend"
             variant="outlineAccent"
             compact
             onPress={() => setAddOpen(true)}
@@ -288,7 +288,7 @@ export function FriendsScreen({
       />
 
       <View style={styles.rail}>
-        <SegmentedControl
+        <ChipRail
           options={buckets}
           value={bucket}
           onChange={setBucket}
@@ -342,7 +342,7 @@ export function FriendsScreen({
         {menuItem?.kind === "friend" ? (
           <View style={styles.menuBody}>
             <Row
-              icon="share-2"
+              icon="shareFriend"
               title="Shared items"
               subtitle="What they can see, and what they share with you"
               onPress={() => {
@@ -355,7 +355,7 @@ export function FriendsScreen({
               }}
             />
             <Row
-              icon="user-minus"
+              icon="unshare"
               hue={theme.warning}
               title="Remove friend"
               onPress={() => confirmRemove(menuItem)}
@@ -365,7 +365,7 @@ export function FriendsScreen({
         {menuItem?.kind === "request" ? (
           <View style={styles.menuBody}>
             <Row
-              icon="user-check"
+              icon="accept"
               title="Accept"
               onPress={() => {
                 const request = menuItem;
@@ -379,7 +379,7 @@ export function FriendsScreen({
               }}
             />
             <Row
-              icon="user-x"
+              icon="ignore"
               hue={theme.warning}
               title="Decline"
               onPress={() => {
@@ -426,7 +426,7 @@ const FriendRow = memo(function FriendRow({
   const request = item.kind === "request";
   return (
     <Row
-      icon={request ? "user-plus" : "user"}
+      icon={request ? "addFriend" : "account"}
       hue={request ? placeHue.shared : undefined}
       title={item.username}
       subtitle={request ? "Wants to be friends" : undefined}
@@ -436,7 +436,7 @@ const FriendRow = memo(function FriendRow({
           <ActivityIndicator color={theme.accent} />
         ) : (
           <IconButton
-            icon="more-vertical"
+            icon="overflow"
             accessibilityLabel={`Actions for ${item.username}`}
             onPress={() => onMenu(item)}
           />
@@ -547,7 +547,7 @@ function AddFriendBody({
         return (
           <Row
             key={user.id}
-            icon="user"
+            icon="account"
             title={user.username}
             right={
               alreadyFriend ? (
@@ -586,7 +586,7 @@ function EmptyPanel({ bucket, onAdd }: { bucket: Bucket; onAdd: () => void }) {
       <Text style={styles.emptyHint}>
         You need to be friends to share a place.
       </Text>
-      <Button label="Add a friend" icon="user-plus" onPress={onAdd} />
+      <Button label="Add a friend" icon="addFriend" onPress={onAdd} />
     </View>
   );
 }

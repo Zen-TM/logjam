@@ -1,15 +1,16 @@
-import { Feather } from "@expo/vector-icons";
 import { ActivityIndicator, Pressable, StyleSheet, Text } from "react-native";
 
 import {
   controlSize,
   fontSize,
   fontWeight,
+  opacity,
   radius,
   spacing,
   theme,
   touchTargetMin,
 } from "../theme";
+import { Icon, type Glyph } from "./Icon";
 
 // A compact button is drawn at `controlSize.md`; the slop takes its target to
 // the 48pt minimum.
@@ -22,9 +23,15 @@ type ButtonProps = {
   onPress: () => void;
   variant?: ButtonVariant;
   disabled?: boolean;
+  /**
+   * Why it is disabled (UX §5): "Needs a connection", "Needs an account".
+   * Read by a screen reader as the hint, and what to show beside it. The button
+   * does not draw it — the screen puts the words where there is room.
+   */
+  disabledReason?: string;
   loading?: boolean;
   /** Optional leading glyph, tinted with the label. */
-  icon?: React.ComponentProps<typeof Feather>["name"];
+  icon?: Glyph;
   /** Shrink-wrap for use inside a header/row instead of as a block action. */
   compact?: boolean;
   /**
@@ -43,6 +50,7 @@ export function Button({
   onPress,
   variant = "filledAccent",
   disabled = false,
+  disabledReason,
   loading = false,
   icon,
   compact = false,
@@ -55,6 +63,9 @@ export function Button({
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityHint={disabled ? disabledReason : undefined}
+      accessibilityState={{ disabled: inactive, busy: loading }}
       onPress={onPress}
       disabled={inactive}
       hitSlop={compact ? COMPACT_SLOP : undefined}
@@ -64,7 +75,9 @@ export function Button({
         grow && styles.grow,
         styles[variant],
         pressed && styles.pressed,
-        inactive && styles.disabled,
+        // A button that is loading is working, not unavailable: it keeps its
+        // colour, as on Logjam Web.
+        disabled && styles.disabled,
       ]}
     >
       {loading ? (
@@ -72,7 +85,7 @@ export function Button({
       ) : (
         <>
           {icon ? (
-            <Feather name={icon} size={compact ? 16 : 18} color={tint} />
+            <Icon idea={icon} size={compact ? 16 : 18} color={tint} />
           ) : null}
           <Text
             style={[
@@ -110,7 +123,7 @@ const styles = StyleSheet.create({
   outlineAccent: { borderWidth: 1, borderColor: theme.accent },
   ghost: {},
   pressed: { opacity: 0.75 },
-  disabled: { opacity: 0.45 },
+  disabled: { opacity: opacity.disabled },
   label: { fontSize: fontSize.base, fontWeight: fontWeight.medium },
   labelCompact: { fontSize: fontSize.sm },
 });

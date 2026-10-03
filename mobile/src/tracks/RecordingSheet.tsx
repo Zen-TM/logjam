@@ -196,10 +196,10 @@ export function RecordingSheet({
             compact
             onPress={handlePauseResume}
           />
-          <Button label="Finish" icon="check" compact onPress={handleFinish} />
+          <Button label="Finish" icon="done" compact onPress={handleFinish} />
           <View style={styles.spacer} />
           <IconButton
-            icon="trash-2"
+            icon="delete"
             color={theme.warning}
             accessibilityLabel="Discard this recording"
             onPress={handleDiscard}

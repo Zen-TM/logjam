@@ -8,29 +8,6 @@ import {
   type ReactNode,
 } from "react";
 import {
-  ArrowRight,
-  Bell,
-  CheckCheck,
-  ChevronDown,
-  ChevronUp,
-  CircleAlert,
-  Download,
-  EllipsisVertical,
-  Eye,
-  EyeOff,
-  FilePlus,
-  FileText,
-  Layers,
-  LocateFixed,
-  Search,
-  Share2,
-  Trash2,
-  TriangleAlert,
-  Users,
-  X,
-  type LucideIcon,
-} from "lucide-react";
-import {
   batchKeyFromRowId,
   batchKeyOf,
   batchLabel,
@@ -89,20 +66,22 @@ import {
   SelectionBar,
   TileCheckbox,
   type MenuEntry,
+  type Glyph,
+  LoadingState,
 } from "../../../ui";
 import { idRange } from "./placesModel";
 import { inboxDestination, type InboxDestination } from "./inboxModel";
 import classes from "./NotificationsPanel.module.css";
 
 // Glyphs match Logjam GPS's Feather set, drawn in lucide.
-const KIND_GLYPH: Record<NotificationKind, LucideIcon> = {
-  share: Share2,
-  file: FilePlus,
-  people: Users,
-  topo: Layers,
-  export: Download,
-  geoPdf: FileText,
-  problem: TriangleAlert,
+const KIND_GLYPH: Record<NotificationKind, Glyph> = {
+  share: "shareFriend",
+  file: "importedFile",
+  people: "friends",
+  topo: "lidar",
+  export: "export",
+  geoPdf: "geoPdf",
+  problem: "warning",
 };
 
 // Borrowed, not invented (DESIGN.md §3): each kind wears the hue of the thing it
@@ -575,7 +554,7 @@ function NotificationsPanel({
         {
           id: "go",
           label: destination.label,
-          icon: ArrowRight,
+          icon: "forward",
           onSelect: () => goTo(n, destination),
         },
         { id: "sep-go", separator: true },
@@ -586,20 +565,20 @@ function NotificationsPanel({
         ? {
             id: "unread",
             label: "Mark as unread",
-            icon: EyeOff,
+            icon: "hide",
             onSelect: () => void setRead([n.id], false),
           }
         : {
             id: "read",
             label: "Mark as read",
-            icon: Eye,
+            icon: "show",
             onSelect: () => void setRead([n.id], true),
           },
       { id: "sep-delete", separator: true },
       {
         id: "delete",
         label: "Delete",
-        icon: Trash2,
+        icon: "delete",
         danger: true,
         onSelect: () => confirmDelete([n.id]),
       },
@@ -632,7 +611,7 @@ function NotificationsPanel({
         <Button
           compact
           variant="outline"
-          icon={LocateFixed}
+          icon="map"
           disabled={selecting}
           onClick={() => zoomToMap(n, footprint)}
         >
@@ -650,7 +629,7 @@ function NotificationsPanel({
         <Button
           compact
           variant="outline"
-          icon={Download}
+          icon="download"
           disabled={selecting}
           onClick={() =>
             void downloadJobFile(
@@ -674,7 +653,7 @@ function NotificationsPanel({
         <Button
           compact
           variant="outline"
-          icon={Download}
+          icon="download"
           disabled={selecting}
           onClick={() =>
             void downloadJobFile(
@@ -752,7 +731,7 @@ function NotificationsPanel({
             // No ⋯ on a batch: its verbs act on one notification, and the
             // selection bar already acts on all of them through the header.
             <IconButton
-              icon={expanded ? ChevronUp : ChevronDown}
+              icon={expanded ? "collapse" : "expand"}
               label={expanded ? "Collapse this group" : "Show each one"}
               aria-expanded={expanded}
               onClick={() => toggleBatch(batch)}
@@ -766,7 +745,7 @@ function NotificationsPanel({
               trigger={(props) => (
                 <IconButton
                   {...props}
-                  icon={EllipsisVertical}
+                  icon="overflow"
                   label={`Actions for ${title}`}
                 />
               )}
@@ -796,11 +775,11 @@ function NotificationsPanel({
       }
       actions={
         searchOpen ? (
-          <IconButton icon={X} label="Close search" onClick={closeSearch} />
+          <IconButton icon="close" label="Close search" onClick={closeSearch} />
         ) : (
           <>
             <IconButton
-              icon={Search}
+              icon="search"
               label="Search notifications"
               tone={query ? "filled" : "default"}
               aria-expanded={false}
@@ -813,25 +792,21 @@ function NotificationsPanel({
                 {
                   id: "read-all",
                   label: "Mark all as read",
-                  icon: CheckCheck,
+                  icon: "selectAll",
                   disabled: tally.unread === 0,
                   onSelect: () => void markAllRead(),
                 },
                 {
                   id: "clear-read",
                   label: "Clear read notifications…",
-                  icon: Trash2,
+                  icon: "delete",
                   danger: true,
                   disabled: readCount === 0,
                   onSelect: confirmClearRead,
                 },
               ]}
               trigger={(props) => (
-                <IconButton
-                  {...props}
-                  icon={EllipsisVertical}
-                  label="Inbox actions"
-                />
+                <IconButton {...props} icon="overflow" label="Inbox actions" />
               )}
             />
           </>
@@ -866,12 +841,12 @@ function NotificationsPanel({
 
   const list = !notificationsLoaded ? (
     <div className={classes.emptyArea} role="status">
-      <p className={classes.loading}>Loading your inbox…</p>
+      <LoadingState label="Loading your inbox…" />
     </div>
   ) : notificationsError && live.length === 0 ? (
     emptyArea(
       <EmptyState
-        icon={CircleAlert}
+        icon="warning"
         title="Couldn't load your inbox"
         body={notificationsError}
         actions={
@@ -884,7 +859,7 @@ function NotificationsPanel({
   ) : live.length === 0 ? (
     emptyArea(
       <EmptyState
-        icon={Bell}
+        icon="notifications"
         title="Nothing yet"
         body="Shares, friend requests and finished maps appear here."
       />,
@@ -893,7 +868,7 @@ function NotificationsPanel({
     emptyArea(
       needle ? (
         <EmptyState
-          icon={Search}
+          icon="search"
           title="Nothing matches"
           body="The search runs over what a row says — a name, a place, a filename."
           actions={
@@ -904,13 +879,13 @@ function NotificationsPanel({
         />
       ) : bucket === "unread" ? (
         <EmptyState
-          icon={CheckCheck}
+          icon="selectAll"
           title="Nothing unread"
           actions={showEverything}
         />
       ) : (
         <EmptyState
-          icon={Bell}
+          icon="notifications"
           title="Nothing read yet"
           actions={showEverything}
         />
@@ -959,13 +934,13 @@ function NotificationsPanel({
                     decides it. */}
                 {readAction && (
                   <IconButton
-                    icon={readAction.icon === "eye" ? Eye : EyeOff}
+                    icon={readAction.icon}
                     label={readAction.label}
                     onClick={() => void applyReadAction()}
                   />
                 )}
                 <IconButton
-                  icon={Trash2}
+                  icon="delete"
                   label="Delete"
                   tone="danger"
                   onClick={() => confirmDelete(selected.map((n) => n.id))}

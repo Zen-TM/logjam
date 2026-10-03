@@ -185,9 +185,9 @@ export function OfflineSettingsScreen({
   return (
     <>
       <ScreenScroll>
-        <SectionHeader label="Fetch automatically" />
+        <SectionHeader title="Fetch automatically" />
         <PreferenceRow
-          icon="download"
+          icon="geoPdf"
           title="Finished GeoPDFs"
           subtitle="GeoPDFs generated on Logjam Web download here automatically."
           value={autoDownload}
@@ -199,7 +199,7 @@ export function OfflineSettingsScreen({
           }}
         />
         <PreferenceRow
-          icon="layers"
+          icon="lidar"
           title="Finished LiDAR topos"
           subtitle="LiDAR topos generated on Logjam Web download here automatically."
           value={topoAutoDownload}
@@ -211,7 +211,7 @@ export function OfflineSettingsScreen({
           }}
         />
 
-        <SectionHeader label="Allow on mobile data" />
+        <SectionHeader title="Allow on mobile data" />
         {METERED_ROWS.map((row) => {
           const off =
             (row.needs === "geoPdf" && !autoDownload) ||
@@ -232,12 +232,12 @@ export function OfflineSettingsScreen({
           );
         })}
 
-        <SectionHeader label="When you save a copy" />
+        <SectionHeader title="When you save a copy" />
         {/* The default for the switch that appears on the copy sheet itself,
             which is where it is usually changed. Here so it can be found and
             so Logjam Web — which has no switch of its own — follows it too. */}
         <PreferenceRow
-          icon="image"
+          icon="photo"
           title="Photos with copied places"
           subtitle={
             copyMediaBlocked ??
@@ -249,9 +249,9 @@ export function OfflineSettingsScreen({
           onToggle={toggleCopyMedia}
         />
 
-        <SectionHeader label="On this phone" />
+        <SectionHeader title="On this phone" />
         <Row
-          icon="hard-drive"
+          icon="device"
           title="Maps, imports and tracks"
           subtitle="Managed on the Saved tab"
           onPress={onOpenSaved}

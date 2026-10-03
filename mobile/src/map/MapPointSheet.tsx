@@ -128,7 +128,7 @@ function PointDetail({
     onInfo("Coordinates copied.");
   };
   const stats: Stat[] = [
-    { label: "Position", value: position, wide: true, onCopy: copyPosition },
+    { label: "Position", value: position, span: true, onCopy: copyPosition },
     {
       label: "Elevation",
       value:
@@ -162,7 +162,7 @@ function PointDetail({
         </Text>
       ) : null}
       <Row
-        icon="navigation"
+        icon="navigateTo"
         title="Navigate to this point"
         subtitle="Live distance and bearing — nothing saved"
         onPress={() => {

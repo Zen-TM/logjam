@@ -97,18 +97,18 @@ import {
   Button,
   EmptyState,
   ErrorState,
-  HeroHeader,
+  Hero,
   IconButton,
   LoadingState,
   Row,
-  SegmentedControl,
+  ChipRail,
   SelectionBar,
   SelectionMark,
   StatusPill,
   TextField,
   Toast,
   useBulkSelection,
-  type SegmentOption,
+  type ChipOption,
   type ToastMessage,
 } from "../ui";
 import { notificationMeta } from "./notificationMeta";
@@ -852,7 +852,7 @@ export function NotificationsScreen({
   // row in each, because a group that is partly read is genuinely still in both
   // piles. The collapsed row already says so — it keeps its New pill while any
   // member is unread.
-  const buckets: SegmentOption<Bucket>[] = [
+  const buckets: ChipOption<Bucket>[] = [
     { value: "all", label: "All", count: bucketCounts.all },
     {
       value: "unread",
@@ -876,7 +876,7 @@ export function NotificationsScreen({
   if (guestBlock) {
     return (
       <View style={styles.root}>
-        <HeroHeader eyebrow="Inbox" title="Inbox" onBack={onBack} />
+        <Hero eyebrow="Inbox" title="Inbox" onBack={onBack} />
         <EmptyState title={guestBlock.title} hint={guestBlock.hint} />
       </View>
     );
@@ -888,7 +888,7 @@ export function NotificationsScreen({
 
   return (
     <View style={styles.root}>
-      <HeroHeader
+      <Hero
         eyebrow="Inbox"
         // The answer to "what happened while I was away?" is a NUMBER of things
         // that did (§1). "Something new" was that answer rounded to a boolean —
@@ -905,7 +905,7 @@ export function NotificationsScreen({
         onBack={onBack}
         value={String(tally.total)}
         valueSuffix={tally.total === 1 ? "notification" : "notifications"}
-        action={
+        actions={
           unreadCount > 0 ? (
             <Button
               label="Mark all read"
@@ -917,7 +917,7 @@ export function NotificationsScreen({
         }
       />
 
-      {/* The bulk bar takes the SegmentedControl's slot and only that slot, so
+      {/* The bulk bar takes the ChipRail's slot and only that slot, so
           the rail's height cannot change when a selection starts (§7). */}
       {notifications.length > 0 ? (
         <View style={styles.rail}>
@@ -942,7 +942,7 @@ export function NotificationsScreen({
               onDelete={deleteSelected}
             />
           ) : (
-            <SegmentedControl
+            <ChipRail
               options={buckets}
               value={bucket}
               onChange={changeBucket}
@@ -1123,7 +1123,7 @@ const NotificationRow = memo(function NotificationRow({
             <SelectionMark selected={selected} />
           ) : (
             <IconButton
-              icon="more-vertical"
+              icon="overflow"
               accessibilityLabel="Notification actions"
               onPress={() => onMenu(item)}
             />
@@ -1262,7 +1262,7 @@ const BatchRow = memo(function BatchRow({
             <SelectionMark selected={selected} />
           ) : (
             <IconButton
-              icon={expanded ? "chevron-up" : "chevron-down"}
+              icon={expanded ? "collapse" : "expand"}
               accessibilityLabel={
                 expanded ? "Collapse this group" : "Show each one"
               }

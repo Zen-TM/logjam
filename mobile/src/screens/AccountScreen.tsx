@@ -14,7 +14,6 @@
 // the root CLAUDE.md convention.
 import { useCallback, useEffect, useState } from "react";
 import { Alert, StyleSheet, Text, View } from "react-native";
-import { Feather } from "@expo/vector-icons";
 import { confirmUserAttribute, updateUserAttribute } from "aws-amplify/auth";
 import { formatCredits, messageFromError } from "@logjam/shared";
 
@@ -40,10 +39,10 @@ import {
 import {
   BottomSheet,
   Button,
-  CapacityBar,
+  Meter,
   ErrorBanner,
   ErrorState,
-  HeroHeader,
+  Hero,
   IconButton,
   LoadingState,
   Row,
@@ -52,6 +51,7 @@ import {
   TextField,
   Toast,
   type ToastMessage,
+  Icon,
 } from "../ui";
 
 /**
@@ -98,36 +98,36 @@ function GuestAccountScreen({ onBack }: { onBack: () => void }) {
 
   return (
     <View style={styles.root}>
-      <HeroHeader eyebrow="Account" title="No account" onBack={onBack}>
+      <Hero eyebrow="Account" title="No account" onBack={onBack}>
         <Text style={styles.email}>
           {summary
             ? `${summary} on this phone`
             : "Everything you record stays on this phone"}
         </Text>
-      </HeroHeader>
+      </Hero>
 
       <ScreenScroll padded={false} contentStyle={styles.body}>
-        <SectionHeader label="With an account" />
+        <SectionHeader title="With an account" />
         <Row
-          icon="upload-cloud"
+          icon="sync"
           title="Backed up"
           subtitle="Your places and trips survive a lost phone"
         />
         <Row
-          icon="users"
+          icon="friends"
           title="Sharing"
           subtitle="Share individual places with friends"
         />
         <Row
-          icon="layers"
+          icon="lidar"
           title="LiDAR maps"
           subtitle="Import topos from Logjam Web"
         />
 
-        <SectionHeader label="Get an account" />
+        <SectionHeader title="Get an account" />
         <Button
           label="Sign in or create an account"
-          icon="user-plus"
+          icon="addFriend"
           onPress={startLinking}
         />
         <Text style={styles.guestNote}>
@@ -216,13 +216,13 @@ function LinkedAccountScreen({
 
   return (
     <View style={styles.root}>
-      <HeroHeader
+      <Hero
         eyebrow="Account"
         title={user.username}
         onBack={onBack}
-        action={
+        actions={
           <IconButton
-            icon="edit-2"
+            icon="edit"
             accessibilityLabel="Change username"
             color={theme.accent}
             filled
@@ -231,18 +231,18 @@ function LinkedAccountScreen({
         }
       >
         <Text style={styles.email}>{user.email}</Text>
-      </HeroHeader>
+      </Hero>
 
       <ScreenScroll padded={false} contentStyle={styles.body}>
         {/* Two quotas, same shape. `total` on a one-segment bar is exactly the
-            "used vs capacity" case CapacityBar's remainder track is for. */}
-        <SectionHeader label="Storage" />
-        <CapacityBar
+            "used vs capacity" case Meter's remainder track is for. */}
+        <SectionHeader title="Storage" />
+        <Meter
           segments={[
             {
               label: "Used",
               value: user.storageUsedBytes,
-              color: theme.accent,
+              hue: theme.accent,
               display: formatBytes(user.storageUsedBytes),
             },
           ]}
@@ -258,13 +258,13 @@ function LinkedAccountScreen({
           </Text>
         </Text>
 
-        <SectionHeader label="Processing credits this month" />
-        <CapacityBar
+        <SectionHeader title="Processing credits this month" />
+        <Meter
           segments={[
             {
               label: "Used",
               value: user.monthlyComputeUsage,
-              color: assetHue.overlay,
+              hue: assetHue.overlay,
               display: formatCredits(user.monthlyComputeUsage),
             },
           ]}
@@ -280,36 +280,32 @@ function LinkedAccountScreen({
           <Text style={styles.meterHint}> · topo, exports and GeoPDFs</Text>
         </Text>
 
-        <SectionHeader label="Sign-in" />
+        <SectionHeader title="Sign-in" />
         <Row
-          icon="mail"
+          icon="email"
           title="Email"
           subtitle={online ? user.email : undefined}
           {...capabilityRowProps("serverPrefs", "linked", online)}
           onPress={() => setSheet("email")}
-          right={
-            <Feather name="chevron-right" size={20} color={theme.textMuted} />
-          }
+          right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
         />
         <Row
-          icon="users"
+          icon="friends"
           title="Friends"
           {...capabilityRowProps("friends", "linked", online)}
           onPress={onOpenFriends}
-          right={
-            <Feather name="chevron-right" size={20} color={theme.textMuted} />
-          }
+          right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
         />
 
-        <SectionHeader label="Leaving" />
+        <SectionHeader title="Leaving" />
         <Button
           label="Sign out"
           variant="outlineAccent"
-          icon="log-out"
+          icon="signOut"
           onPress={onSignOut}
         />
         <Row
-          icon="trash-2"
+          icon="delete"
           hue={theme.warning}
           title="Delete account"
           {...capabilityRowProps("serverPrefs", "linked", online)}
@@ -407,7 +403,7 @@ function UsernameForm({
       </Text>
       <Button
         label="Save username"
-        icon="check"
+        icon="done"
         loading={saving}
         onPress={() => void save()}
       />
@@ -494,7 +490,7 @@ function EmailForm({
         />
         <Button
           label="Confirm email"
-          icon="check"
+          icon="done"
           loading={busy}
           onPress={() => void confirm()}
         />
@@ -518,7 +514,7 @@ function EmailForm({
       />
       <Button
         label="Send code"
-        icon="mail"
+        icon="email"
         loading={busy}
         onPress={() => void request()}
       />
@@ -577,7 +573,7 @@ function DeleteAccountForm({
       {error ? <ErrorBanner message={error} /> : null}
       <Button
         label="Delete my account"
-        icon="trash-2"
+        icon="delete"
         variant="outlineAccent"
         loading={busy}
         disabled={!matches}

@@ -4,9 +4,9 @@ import {
   type HTMLAttributes,
   type ReactNode,
 } from "react";
-import { Circle, CircleCheck, type LucideIcon } from "lucide-react";
 import { avatarInitials, friendAvatarHue } from "@logjam/shared";
 import classes from "./Row.module.css";
+import { Icon, type Glyph } from "./Icon";
 
 /**
  * A row's tile that is also its checkbox (DESIGN.md §7): the tile at rest, a
@@ -41,7 +41,11 @@ export function TileCheckbox({
     >
       <span className={classes.pickTile}>{tile}</span>
       <span className={classes.pickMark} aria-hidden>
-        {checked ? <CircleCheck size={20} /> : <Circle size={20} />}
+        {checked ? (
+          <Icon idea="success" size={20} />
+        ) : (
+          <Icon idea="unselected" size={20} />
+        )}
       </span>
     </button>
   );
@@ -54,11 +58,11 @@ export function TileCheckbox({
  * status); omit it when the row's text already says the same thing.
  */
 export function IconTile({
-  icon: Icon,
+  icon,
   hue,
   label,
 }: {
-  icon: LucideIcon;
+  icon: Glyph;
   hue: string;
   label?: string;
 }) {
@@ -70,7 +74,7 @@ export function IconTile({
       aria-label={label}
       title={label}
     >
-      <Icon size={16} aria-hidden />
+      <Icon idea={icon} size={16} />
     </span>
   );
 }

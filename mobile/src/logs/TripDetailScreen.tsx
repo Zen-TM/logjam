@@ -11,7 +11,6 @@
 // outbox's authed upload.
 import { useCallback, useRef, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
-import { Feather } from "@expo/vector-icons";
 import {
   ATTRIBUTE_NOUN,
   attributeRows,
@@ -36,13 +35,14 @@ import {
   useMirrorTrips,
 } from "../sync/useSyncQueries";
 import {
-  HeroHeader,
+  Hero,
   IconButton,
   Row,
   SectionHeader,
   StatusPill,
   Toast,
   type ToastMessage,
+  Icon,
 } from "../ui";
 import { TripEditSheet } from "./TripEditSheet";
 import { primaryTripType, tripTypeLabel, tripTypeMeta } from "./tripTypeMeta";
@@ -92,14 +92,14 @@ export function TripDetailScreen({
 
   return (
     <View style={styles.screen}>
-      <HeroHeader
+      <Hero
         eyebrow={formatTripDate(current.date)}
         title={tripTitle(current)}
         titleNumberOfLines={2}
         onBack={onBack}
-        action={
+        actions={
           <IconButton
-            icon="edit-2"
+            icon="edit"
             accessibilityLabel="Edit trip"
             color={theme.accent}
             filled
@@ -121,11 +121,11 @@ export function TripDetailScreen({
             <StatusPill label="No type set" icon={meta.icon} hue={meta.hue} />
           )}
         </View>
-      </HeroHeader>
+      </Hero>
 
       <ScrollView contentContainerStyle={styles.body}>
         <SectionHeader
-          label={
+          title={
             current.places.length === 1
               ? "Place"
               : `Places · ${current.places.length}`
@@ -139,15 +139,11 @@ export function TripDetailScreen({
           current.places.map((place) => (
             <Row
               key={place.id}
-              icon="map-pin"
+              icon="place"
               hue={theme.accent}
               title={place.name}
               right={
-                <Feather
-                  name="chevron-right"
-                  size={20}
-                  color={theme.textMuted}
-                />
+                <Icon idea="disclosure" size={20} color={theme.textMuted} />
               }
               onPress={() => onOpenPlace(place.id, place.name)}
             />
@@ -155,7 +151,7 @@ export function TripDetailScreen({
         )}
 
         <SectionHeader
-          label={
+          title={
             photoCount === 0
               ? "Photos & videos"
               : `Photos & videos · ${photoCount}`
@@ -172,7 +168,7 @@ export function TripDetailScreen({
         />
 
         <SectionHeader
-          label={routeCount === 0 ? "Routes" : `Routes · ${routeCount}`}
+          title={routeCount === 0 ? "Routes" : `Routes · ${routeCount}`}
         />
         <MediaStrip
           kind="track"
@@ -201,7 +197,7 @@ export function TripDetailScreen({
           }}
         />
 
-        <SectionHeader label="Notes" />
+        <SectionHeader title="Notes" />
         {current.notes ? (
           <Text style={styles.notes}>{current.notes}</Text>
         ) : (
@@ -212,7 +208,7 @@ export function TripDetailScreen({
           <>
             {/* "Trip attributes", the way a place's section is "Canyon
                 attributes" — "Your attributes" did not say whose. */}
-            <SectionHeader label={`Trip ${ATTRIBUTE_NOUN.many}`} />
+            <SectionHeader title={`Trip ${ATTRIBUTE_NOUN.many}`} />
             <AttributeTable rows={customFields} />
           </>
         ) : null}

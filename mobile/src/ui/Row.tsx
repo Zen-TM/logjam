@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import {
   Pressable,
   StyleSheet,
@@ -11,16 +10,23 @@ import {
   fontSize,
   fontWeight,
   hitSlop,
+  opacity,
   radius,
   spacing,
   theme,
   withAlpha,
 } from "../theme";
+import { Icon, type Glyph } from "./Icon";
 
-// Canonical list row — one warm card laid out horizontally: a leading node
-// (icon tile / dot / thumbnail), a title + optional subtitle, and an optional
-// trailing accessory (StatusPill, chevron, Toggle, action buttons).
-// Non-pressable when `onPress` is omitted.
+// Canonical list row, laid out horizontally: a leading node (icon tile / dot /
+// thumbnail), a title + optional subtitle, and an optional trailing accessory
+// (StatusPill, chevron, action buttons).
+//
+// THE CARD FILL MEANS "PRESS ME" (UX §4). A row with `onPress` or `onLongPress`
+// sits on the card colour and answers a press; a row with neither is read-only:
+// no fill, no edge, no pressed state, but the same padding, so its tile and
+// title line up with the pressable rows above and below it. A row with only
+// trailing controls (a ⋯) is read-only: its controls are the pressables.
 //
 // Pass `icon` + `hue` for the standard identity tile: a 40pt rounded square
 // filled SOLID with the hue under an `onFill` glyph, as on Logjam Web (a hue
@@ -28,7 +34,7 @@ import {
 // list of mixed kinds stays scannable — colour and glyph say *what* a row is
 // before the text is read — so prefer it over a bare `leading` node whenever
 // the row has a kind. `progress` (0-1) draws a hue-coloured determinate bar
-// pinned to the row's bottom edge for in-flight work.
+// pinned to the row's bottom edge for in-flight work, drawn in the accent.
 export function Row({
   title,
   subtitle,
@@ -40,6 +46,7 @@ export function Row({
   progress,
   onPress,
   onLongPress,
+  checked,
   selected = false,
   disabled = false,
   accessibilityLabel,
@@ -61,7 +68,7 @@ export function Row({
   title: string;
   subtitle?: string;
   leading?: React.ReactNode;
-  icon?: React.ComponentProps<typeof Feather>["name"];
+  icon?: Glyph;
   hue?: string;
   right?: React.ReactNode;
   /**
@@ -77,15 +84,22 @@ export function Row({
   /** Press-and-hold — the way a multi-select starts (DESIGN.md §7). */
   onLongPress?: () => void;
   /**
-   * Picked: accent border + accent tint over the whole card. The canonical
+   * The row IS a switch (`SwitchRow`): pressing anywhere on it flips it, and a
+   * screen reader meets one `switch` named by the title, not a row and a
+   * second control inside it.
+   */
+  checked?: boolean;
+  /**
+   * Picked: an accent border, no tint. The canonical
    * "a selection is a STATE of the row, not a label on it" treatment — the
    * active basemap and a multi-selected saved asset are the same thing.
    */
   selected?: boolean;
   /**
-   * Unavailable right now, with the reason in the subtitle. Dims the row AND
-   * stops it responding — dropping `onPress` alone leaves a row that looks
-   * live and silently does nothing, which is worse than a visibly dead one.
+   * Unavailable right now, with the reason in the subtitle (UX §5): the row
+   * dims AND stops responding, and a screen reader hears the subtitle as the
+   * reason. Dropping `onPress` alone leaves a row that looks live and silently
+   * does nothing, which is worse than a visibly dead one.
    */
   disabled?: boolean;
   accessibilityLabel?: string;
@@ -99,7 +113,7 @@ export function Row({
     leading ??
     (icon ? (
       <View style={[styles.iconTile, { backgroundColor: tint }]}>
-        <Feather name={icon} size={20} color={theme.onFill} />
+        <Icon idea={icon} size={20} color={theme.onFill} />
       </View>
     ) : null);
 
@@ -130,7 +144,7 @@ export function Row({
             style={[
               styles.progressFill,
               {
-                backgroundColor: tint,
+                backgroundColor: theme.accent,
                 width: `${Math.min(100, Math.max(0, progress * 100))}%`,
               },
             ]}
@@ -140,11 +154,12 @@ export function Row({
     </>
   );
 
-  if ((!onPress && !onLongPress) || disabled) {
+  if (!onPress && !onLongPress) {
     return (
       <View
         style={[
           styles.row,
+          styles.readOnly,
           selected && styles.selected,
           disabled && styles.disabled,
           style,
@@ -156,16 +171,19 @@ export function Row({
   }
   return (
     <Pressable
-      accessibilityRole="button"
+      accessibilityRole={checked === undefined ? "button" : "switch"}
       accessibilityLabel={accessibilityLabel ?? title}
-      accessibilityState={{ disabled, selected }}
+      accessibilityHint={disabled ? subtitle : undefined}
+      accessibilityState={{ disabled, selected, checked }}
       onPress={onPress}
       onLongPress={onLongPress}
+      disabled={disabled}
       hitSlop={hitSlop}
       style={({ pressed }) => [
         styles.row,
         selected && styles.selected,
         pressed && styles.pressed,
+        disabled && styles.disabled,
         style,
       ]}
     >
@@ -191,11 +209,13 @@ const styles = StyleSheet.create({
   line: { flexDirection: "row", alignItems: "center", gap: spacing(1.5) },
   footer: { paddingTop: spacing(1.25) },
   pressed: { backgroundColor: theme.cardPressed },
-  selected: {
-    borderColor: theme.accent,
-    backgroundColor: withAlpha(theme.accent, 0.12),
-  },
-  disabled: { opacity: 0.45 },
+  // An accent edge and no tint: a tint dropped the subtitle's contrast
+  // (UX §9), and Logjam Web's selected row is the same edge.
+  selected: { borderColor: theme.accent },
+  disabled: { opacity: opacity.disabled },
+  // No fill and no edge colour, but the border's width stays: the box is the
+  // same size as a pressable row's.
+  readOnly: { backgroundColor: "transparent", borderColor: "transparent" },
   leading: { alignItems: "center", justifyContent: "center" },
   iconTile: {
     width: 40,

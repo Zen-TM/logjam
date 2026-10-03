@@ -22,11 +22,10 @@ import {
   Chip,
   DatePicker,
   RangePills,
-  Row,
   SectionHeader,
   ThresholdFilter,
-  Toggle,
   type NumberRange,
+  SwitchRow,
 } from "../ui";
 import { formatDateKey } from "@logjam/shared";
 import { useFieldDefs } from "../customFields/useFieldDefs";
@@ -245,7 +244,7 @@ export function PlaceFilterSheet({
       }
       footer={
         mode.kind === "main" ? (
-          <Button label="Done" icon="check" onPress={onClose} />
+          <Button label="Done" icon="done" onPress={onClose} />
         ) : (
           // Two ways back out of a date, because they mean different things:
           // Cancel keeps whatever bound was already set, Clear removes it.
@@ -282,7 +281,7 @@ export function PlaceFilterSheet({
           Visited, not visited and shared are filtered by the tabs above.
         </Text>
 
-        <SectionHeader label="Sort" />
+        <SectionHeader title="Sort" />
         <View style={styles.chipRow}>
           {SORTS.map((option) => (
             <Chip
@@ -296,7 +295,7 @@ export function PlaceFilterSheet({
 
         {canyonAxesShown ? (
           <>
-            <SectionHeader label="Grade" />
+            <SectionHeader title="Grade" />
             <RangePills
               label="Vertical"
               prefix="V"
@@ -330,7 +329,7 @@ export function PlaceFilterSheet({
 
         {THRESHOLDS.some((spec) => hasReserved(spec.key)) ? (
           <>
-            <SectionHeader label="Logistics" />
+            <SectionHeader title="Logistics" />
             {THRESHOLDS.filter((spec) => hasReserved(spec.key)).map((spec) => (
               <ThresholdFilter
                 key={spec.key}
@@ -350,7 +349,7 @@ export function PlaceFilterSheet({
             the grades are, because they ARE the same thing. */}
         {ownFieldDefs.length > 0 ? (
           <>
-            <SectionHeader label={fieldSectionLabel} />
+            <SectionHeader title={fieldSectionLabel} />
             {ownFieldDefs.map((def) => (
               <AttributeFilter
                 key={def.key}
@@ -362,14 +361,14 @@ export function PlaceFilterSheet({
           </>
         ) : null}
 
-        <SectionHeader label="Location" />
+        <SectionHeader title="Location" />
         <AreaFilter
           area={filters.area}
           onPick={onPickArea}
           onClear={() => patch({ area: null })}
         />
 
-        <SectionHeader label="Source" />
+        <SectionHeader title="Source" />
         <View style={styles.chipRow}>
           {ROPEWIKI.map((option) => (
             <Chip
@@ -380,19 +379,14 @@ export function PlaceFilterSheet({
             />
           ))}
         </View>
-        <Row
-          icon="share-2"
+        <SwitchRow
+          icon="shareFriend"
           title="Shared by me"
-          right={
-            <Toggle
-              value={filters.shared_by_me}
-              accessibilityLabel="Only places you have shared"
-              onValueChange={(next) => patch({ shared_by_me: next })}
-            />
-          }
+          checked={filters.shared_by_me}
+          onChange={(next) => patch({ shared_by_me: next })}
         />
 
-        <SectionHeader label="Dates" />
+        <SectionHeader title="Dates" />
         <DateRangeFilter
           label="Added"
           value={filters.created_at}
@@ -410,11 +404,11 @@ export function PlaceFilterSheet({
           onClear={() => patch({ updated_at: null })}
         />
 
-        <SectionHeader label="On the map" />
-        <Row
+        <SectionHeader title="On the map" />
+        <SwitchRow
           icon="map"
           title="Show filtered places on the map"
-          subtitle={
+          description={
             !showFilteredOnMap
               ? "The map shows every place"
               : filteredCount >= totalCount
@@ -423,31 +417,21 @@ export function PlaceFilterSheet({
                   `All ${totalCount} places`
                 : `${filteredCount} of ${totalCount} places`
           }
-          right={
-            <Toggle
-              value={showFilteredOnMap}
-              accessibilityLabel="Show only the filtered places on the map"
-              onValueChange={onChangeShowFilteredOnMap}
-            />
-          }
+          checked={showFilteredOnMap}
+          onChange={onChangeShowFilteredOnMap}
         />
 
-        <SectionHeader label="Missing info" />
-        <Row
-          icon="help-circle"
+        <SectionHeader title="Missing info" />
+        <SwitchRow
+          icon="help"
           title="Include places missing this info"
           // Two lines: it has to fit beside a Toggle, and the one-line version
           // ellipsised. Also no longer says "grade" — this switch covers every
           // filtered field, not just the grades.
-          subtitle="Imported places often lack it, so filters would hide them."
-          subtitleNumberOfLines={2}
-          right={
-            <Toggle
-              value={filters.include_unknowns}
-              accessibilityLabel="Include places missing the filtered data"
-              onValueChange={(next) => patch({ include_unknowns: next })}
-            />
-          }
+          description="Imported places often lack it, so filters would hide them."
+          descriptionNumberOfLines={2}
+          checked={filters.include_unknowns}
+          onChange={(next) => patch({ include_unknowns: next })}
         />
 
         {activeCount > 0 ? (

@@ -13,17 +13,6 @@
 // list view carries no extent to centre the map on — and in a browser opening a
 // PDF is fetching it. Its ⋯ holds every verb, Download first (DESIGN.md §5).
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  ChevronDown,
-  Download,
-  EllipsisVertical,
-  FileText,
-  Pencil,
-  Plus,
-  Share2,
-  Trash2,
-  X,
-} from "lucide-react";
 import { removeShareConfirm } from "@logjam/shared";
 import {
   apiFetch,
@@ -49,6 +38,7 @@ import {
   Row,
   StatusPill,
   type MenuEntry,
+  LoadingState,
 } from "../../../ui";
 import {
   MAP_IDENTITY,
@@ -153,7 +143,7 @@ export default function GeoPdfsPanel({
           {
             id: "download",
             label: "Download",
-            icon: Download,
+            icon: "download",
             onSelect: () => downloadFile(job.downloadUrl!),
           },
         ]
@@ -167,14 +157,14 @@ export default function GeoPdfsPanel({
         {
           id: "share",
           label: "Share…",
-          icon: Share2,
+          icon: "shareFriend",
           onSelect: () => setShareJob({ id: job.id, label }),
         },
         { id: "delete-sep", separator: true },
         {
           id: "delete",
           label: "Delete",
-          icon: Trash2,
+          icon: "delete",
           danger: true,
           onSelect: () =>
             ask({
@@ -200,7 +190,7 @@ export default function GeoPdfsPanel({
       {
         id: "removeShare",
         label: "Remove",
-        icon: X,
+        icon: "close",
         onSelect: () =>
           ask({
             title: confirm.title,
@@ -228,20 +218,20 @@ export default function GeoPdfsPanel({
     {
       id: "make",
       label: "Make a GeoPDF with this",
-      icon: FileText,
+      icon: "geoPdf",
       onSelect: () => onOpenGeoPdfWithTemplate(template.id),
     },
     {
       id: "edit",
       label: "Edit…",
-      icon: Pencil,
+      icon: "edit",
       onSelect: () => onEditGeoPdfTemplate(template),
     },
     { id: "delete-sep", separator: true },
     {
       id: "delete",
       label: "Delete",
-      icon: Trash2,
+      icon: "delete",
       danger: true,
       onSelect: () =>
         ask({
@@ -288,13 +278,13 @@ export default function GeoPdfsPanel({
             {
               id: "make",
               label: "Make a GeoPDF",
-              icon: FileText,
+              icon: "geoPdf",
               onSelect: onOpenGeoPdf,
             },
             {
               id: "template",
               label: "New template…",
-              icon: Plus,
+              icon: "add",
               onSelect: onCreateGeoPdfTemplate,
             },
           ]}
@@ -303,8 +293,8 @@ export default function GeoPdfsPanel({
               {...props}
               compact
               variant="filled"
-              icon={Plus}
-              trailingIcon={ChevronDown}
+              icon="add"
+              trailingIcon="expand"
             >
               Make
             </Button>
@@ -322,21 +312,16 @@ export default function GeoPdfsPanel({
 
   const list = !jobsLoaded ? (
     <div className={classes.emptyArea} role="status">
-      <p className={classes.loading}>Loading your GeoPDFs…</p>
+      <LoadingState label="Loading your GeoPDFs…" />
     </div>
   ) : nothingYet ? (
     <div className={classes.emptyArea}>
       <EmptyState
-        icon={FileText}
+        icon="geoPdf"
         title="No GeoPDFs yet"
         body="Frame an area on the map, and Logjam Web makes a map of it to print, or to load into Logjam GPS for the field."
         actions={
-          <Button
-            compact
-            variant="filled"
-            icon={FileText}
-            onClick={onOpenGeoPdf}
-          >
+          <Button compact variant="filled" icon="geoPdf" onClick={onOpenGeoPdf}>
             Make a GeoPDF
           </Button>
         }
@@ -372,7 +357,7 @@ export default function GeoPdfsPanel({
                 description={MAP_IDENTITY.geoPdf.label}
                 leading={
                   <IconTile
-                    icon={FileText}
+                    icon="geoPdf"
                     hue={MAP_IDENTITY.geoPdf.hue}
                     label={MAP_IDENTITY.geoPdf.label}
                   />
@@ -395,7 +380,7 @@ export default function GeoPdfsPanel({
                       trigger={(props) => (
                         <IconButton
                           {...props}
-                          icon={EllipsisVertical}
+                          icon="overflow"
                           label={`Actions for ${label}`}
                         />
                       )}
@@ -453,7 +438,7 @@ export default function GeoPdfsPanel({
                   trigger={(props) => (
                     <IconButton
                       {...props}
-                      icon={EllipsisVertical}
+                      icon="overflow"
                       label={`Actions for ${template.name}`}
                     />
                   )}

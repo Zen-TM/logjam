@@ -26,8 +26,9 @@
   color: var(--color-text-muted);
 }
 
-/* Accent as text sits on the page colour only (4.5:1 there, not on a card). */
+/* Set is said by weight, and by the clear button beside it: words are never an
+   intent colour. */
 .summary[data-active="true"] {
-  color: var(--color-accent);
+  color: var(--color-text);
   font-weight: 600;
 }

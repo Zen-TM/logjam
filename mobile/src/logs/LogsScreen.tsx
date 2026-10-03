@@ -23,7 +23,6 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   activeTripFilterCount,
@@ -74,19 +73,20 @@ import {
   Chip,
   DatePicker,
   ErrorState,
-  HeroHeader,
+  Hero,
   IconButton,
   LoadingState,
   Row,
   SectionHeader,
-  SegmentedControl,
+  ChipRail,
   SelectionBar,
   SyncStatusPills,
   Toast,
-  Toggle,
   useBulkSelection,
-  type SegmentOption,
+  type ChipOption,
   type ToastMessage,
+  Icon,
+  SwitchRow,
 } from "../ui";
 import { useFieldDefs } from "../customFields/useFieldDefs";
 import { primaryTripType, tripTypeLabel, tripTypeMeta } from "./tripTypeMeta";
@@ -262,7 +262,7 @@ export function LogsScreen({
     [criteria, trips],
   );
   const distinctTypes = useMemo(() => distinctTripTypes(trips), [trips]);
-  const typeOptions: SegmentOption<string>[] = useMemo(() => {
+  const typeOptions: ChipOption<string>[] = useMemo(() => {
     const distinct = distinctTypes;
     // Existence is decided by the whole set, the count by the other axes — so
     // this chip behaves like the type chips instead of vanishing when a search
@@ -414,10 +414,10 @@ export function LogsScreen({
 
   return (
     <View style={styles.screen}>
-      <HeroHeader
+      <Hero
         eyebrow="Logbook"
         title={trips.length === 1 ? "1 trip" : `${trips.length} trips`}
-        action={
+        actions={
           <View style={styles.heroActions}>
             {/* The retrospective lives one tap away rather than on this screen:
                 Logs answers "what have I done?", stats answers "am I getting
@@ -425,7 +425,7 @@ export function LogsScreen({
                 (DESIGN.md §1). It sits beside search because both are ways of
                 asking the logbook something, rather than adding to it. */}
             <IconButton
-              icon="bar-chart-2"
+              icon="stats"
               accessibilityLabel="Logbook stats"
               color={theme.textMuted}
               onPress={onOpenStats}
@@ -439,7 +439,7 @@ export function LogsScreen({
             />
             <Button
               label="Log trip"
-              icon="plus"
+              icon="add"
               compact
               onPress={() => setEditing({ trip: null })}
             />
@@ -452,7 +452,7 @@ export function LogsScreen({
         {findOpen ? (
           <View style={styles.findRow}>
             <View style={styles.searchWrap}>
-              <Feather name="search" size={16} color={theme.textMuted} />
+              <Icon idea="search" size={16} color={theme.textMuted} />
               <TextInput
                 style={styles.searchInput}
                 value={search}
@@ -466,7 +466,7 @@ export function LogsScreen({
               />
             </View>
             <IconButton
-              icon="sliders"
+              icon="filter"
               accessibilityLabel="Sort and filter trips"
               color={sheetFilterCount > 0 ? theme.accent : theme.textMuted}
               filled={sheetFilterCount > 0}
@@ -480,7 +480,7 @@ export function LogsScreen({
               }}
             />
             <IconButton
-              icon="x"
+              icon="close"
               accessibilityLabel="Clear filters and close search"
               onPress={clearFind}
             />
@@ -498,7 +498,7 @@ export function LogsScreen({
             is not an error here — logging, editing and attaching all work — so
             it is paired with what is waiting rather than with a warning. */}
         <SyncStatusPills online={online} pendingCount={pendingCount} />
-      </HeroHeader>
+      </Hero>
 
       <View style={styles.rail}>
         {selecting ? (
@@ -512,7 +512,7 @@ export function LogsScreen({
             onDelete={deleteSelected}
           />
         ) : (
-          <SegmentedControl
+          <ChipRail
             scroll
             options={typeOptions}
             value={typeFilter}
@@ -527,7 +527,7 @@ export function LogsScreen({
             {dateRangeLabel(dateFrom, dateTo)}
           </Text>
           <IconButton
-            icon="x"
+            icon="close"
             size={16}
             accessibilityLabel="Clear the date range"
             onPress={() => {
@@ -589,7 +589,7 @@ export function LogsScreen({
         {menuTrip ? (
           <View style={styles.sheetBody}>
             <Row
-              icon="book-open"
+              icon="trip"
               title="Open trip"
               onPress={() => {
                 const trip = menuTrip;
@@ -598,7 +598,7 @@ export function LogsScreen({
               }}
             />
             <Row
-              icon="edit-2"
+              icon="edit"
               title="Edit trip"
               onPress={() => {
                 const trip = menuTrip;
@@ -607,7 +607,7 @@ export function LogsScreen({
               }}
             />
             <Row
-              icon="trash-2"
+              icon="delete"
               hue={theme.warning}
               title="Delete trip"
               onPress={() => confirmDelete(menuTrip)}
@@ -633,7 +633,7 @@ export function LogsScreen({
           dateMode === "presets" ? (
             <Button
               label="Done"
-              icon="check"
+              icon="done"
               onPress={() => setDateMode(null)}
             />
           ) : (
@@ -651,7 +651,7 @@ export function LogsScreen({
       >
         {dateMode === "presets" ? (
           <View style={styles.sheetBody}>
-            <SectionHeader label="Sort" />
+            <SectionHeader title="Sort" />
             <View style={styles.presets}>
               {TRIP_SORT_OPTIONS.map((option) => (
                 <Chip
@@ -669,7 +669,7 @@ export function LogsScreen({
                     thing it records. Same control Places uses, drawn by the
                     definition's SHAPE — a trip's "Rope length, 0-120" and a
                     canyon's grade are the same question asked the same way. */}
-                <SectionHeader label="Attributes" />
+                <SectionHeader title="Attributes" />
                 {filterableDefs.map((def) => (
                   <AttributeFilter
                     key={def.key}
@@ -687,26 +687,21 @@ export function LogsScreen({
                     }
                   />
                 ))}
-                <Row
+                <SwitchRow
                   title="Include trips missing this info"
                   // It sits WITH the attributes because it only affects them:
                   // most trips answer most fields not at all, so without the
                   // choice one attribute filter empties the logbook and nothing
                   // on screen says why.
-                  subtitle="Most trips don't record every attribute, so filters would hide them."
-                  subtitleNumberOfLines={2}
-                  right={
-                    <Toggle
-                      value={includeUnknowns}
-                      accessibilityLabel="Include trips missing the filtered data"
-                      onValueChange={setIncludeUnknowns}
-                    />
-                  }
+                  description="Most trips don't record every attribute, so filters would hide them."
+                  descriptionNumberOfLines={2}
+                  checked={includeUnknowns}
+                  onChange={setIncludeUnknowns}
                 />
               </>
             ) : null}
 
-            <SectionHeader label="Date range" />
+            <SectionHeader title="Date range" />
             <View style={styles.presets}>
               {datePresets().map((preset) => (
                 <Chip
@@ -720,9 +715,9 @@ export function LogsScreen({
                 />
               ))}
             </View>
-            <SectionHeader label="Exact range" />
+            <SectionHeader title="Exact range" />
             <Row
-              icon="calendar"
+              icon="date"
               title={
                 dateFrom
                   ? formatDateKey(`${dateFrom}T00:00:00.000Z`)
@@ -732,7 +727,7 @@ export function LogsScreen({
               onPress={() => setDateMode("from")}
             />
             <Row
-              icon="calendar"
+              icon="date"
               title={
                 dateTo ? formatDateKey(`${dateTo}T00:00:00.000Z`) : "Today"
               }
@@ -828,30 +823,30 @@ const TripRow = memo(function TripRow({
               already implied by the rail and shown in full on the trip. */}
           {attachments > 0 ? (
             <View style={styles.badge}>
-              <Feather name="paperclip" size={12} color={theme.textMuted} />
+              <Icon idea="attachment" size={12} color={theme.textMuted} />
               <Text style={styles.badgeText}>{attachments}</Text>
             </View>
           ) : null}
           {trip.notes ? (
-            <Feather
-              name="align-left"
+            <Icon
+              idea="notes"
               size={14}
               color={theme.textMuted}
-              accessibilityLabel="Has notes"
+              label="Has notes"
             />
           ) : null}
           {selecting ? (
             // The ⋯ button's box, holding the checkbox.
             <View style={styles.selectBox}>
-              <Feather
-                name={selected ? "check-circle" : "circle"}
+              <Icon
+                idea={selected ? "success" : "unselected"}
                 size={22}
                 color={selected ? theme.accent : theme.textMuted}
               />
             </View>
           ) : (
             <IconButton
-              icon="more-vertical"
+              icon="overflow"
               accessibilityLabel={`Actions for ${tripTitle(trip)}`}
               onPress={() => onMenu(trip)}
             />
@@ -875,8 +870,8 @@ function EmptyPanel({
 }) {
   return (
     <View style={styles.empty}>
-      <Feather
-        name={filtering ? "filter" : "book-open"}
+      <Icon
+        idea={filtering ? "filter" : "trip"}
         size={28}
         color={withAlpha(theme.accent, 0.8)}
       />
@@ -895,7 +890,7 @@ function EmptyPanel({
           onPress={onClear}
         />
       ) : (
-        <Button label="Log your first trip" icon="plus" onPress={onLogTrip} />
+        <Button label="Log your first trip" icon="add" onPress={onLogTrip} />
       )}
     </View>
   );

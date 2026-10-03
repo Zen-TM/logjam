@@ -40,7 +40,6 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { Feather } from "@expo/vector-icons";
 
 import {
   friendMatches,
@@ -66,7 +65,7 @@ import {
 import { getShares, shareItem, unshareItem } from "../api/shares";
 import { sendFileCopy } from "../api/fileSends";
 import type { AssetActions } from "../saved/assetActions";
-import { Button, ErrorBanner, SectionHeader, Row } from "../ui";
+import { Avatar, Button, ErrorBanner, SectionHeader, Row, Icon } from "../ui";
 import {
   fontSize,
   lineHeight,
@@ -75,7 +74,6 @@ import {
   theme,
   withAlpha,
 } from "../theme";
-import { FriendAvatar } from "./FriendAvatar";
 import { friendListLoadKey } from "./friendListLoad";
 
 import {
@@ -428,7 +426,7 @@ export function useSharePanel({
             />
           ) : null}
           {search}
-          <SectionHeader label="Send to" />
+          <SectionHeader title="Send to" />
           <FriendRows
             friends={friends.list}
             shown={shown}
@@ -453,7 +451,7 @@ export function useSharePanel({
               still dims it and refuses taps. */}
           <Button
             label={bulkShareButtonLabel(plan, selected.size, bulkProgress)}
-            icon="share-2"
+            icon="shareFriend"
             onPress={confirmBulk}
             disabled={
               selected.size === 0 || sending || plan.actionableCount === 0
@@ -497,7 +495,7 @@ export function useSharePanel({
             text={`They'll keep their own copy — you can't take it back.`}
           />
           {search}
-          <SectionHeader label="Send to" />
+          <SectionHeader title="Send to" />
           <FriendRows
             friends={friends.list}
             shown={shown}
@@ -573,11 +571,11 @@ export function useSharePanel({
         {search}
         {recipients.length > 0 ? (
           <>
-            <SectionHeader label={`Shared with · ${recipients.length}`} />
+            <SectionHeader title={`Shared with · ${recipients.length}`} />
             <RecipientRows sharing={sharing} recipients={recipients} />
           </>
         ) : null}
-        <SectionHeader label="Share with" />
+        <SectionHeader title="Share with" />
         <FriendRows
           friends={friends.list && shareable}
           shown={shown}
@@ -709,9 +707,7 @@ function FriendRows({
         return (
           <Row
             key={friend.id}
-            leading={
-              <FriendAvatar username={friend.username} selected={selected} />
-            }
+            leading={<Avatar username={friend.username} selected={selected} />}
             title={friend.username}
             selected={selected}
             accessibilityLabel={
@@ -731,13 +727,13 @@ function FriendRows({
                 // In select mode the tick IS the state of the row; in grant
                 // mode a tap is the whole interaction, and a checkbox there
                 // would imply a pending one.
-                <Feather
-                  name={
+                <Icon
+                  idea={
                     mode === "select"
                       ? selected
-                        ? "check-circle"
-                        : "circle"
-                      : "plus-circle"
+                        ? "success"
+                        : "unselected"
+                      : "add"
                   }
                   size={20}
                   color={selected ? theme.accent : theme.textMuted}
@@ -774,8 +770,8 @@ function PromiseBanner({
         },
       ]}
     >
-      <Feather
-        name={tone === "copy" ? "alert-triangle" : "eye"}
+      <Icon
+        idea={tone === "copy" ? "warning" : "show"}
         size={18}
         color={hue}
         style={styles.promiseIcon}
@@ -801,7 +797,7 @@ function SearchField({
 }) {
   return (
     <View style={styles.search}>
-      <Feather name="search" size={18} color={theme.textMuted} />
+      <Icon idea="search" size={18} color={theme.textMuted} />
       <TextInput
         style={styles.searchInput}
         value={value}
@@ -820,7 +816,7 @@ function SearchField({
           accessibilityLabel="Clear search"
           onPress={() => onChangeText("")}
         >
-          <Feather name="x" size={18} color={theme.textMuted} />
+          <Icon idea="close" size={18} color={theme.textMuted} />
         </Pressable>
       ) : null}
     </View>

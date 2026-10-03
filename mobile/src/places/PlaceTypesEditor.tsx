@@ -35,7 +35,6 @@ import {
   View,
   type LayoutChangeEvent,
 } from "react-native";
-import { Feather } from "@expo/vector-icons";
 import {
   PLACE_TYPE_COLORS,
   PLACE_TYPE_ICON_KEYS,
@@ -50,8 +49,15 @@ import {
   deletePlaceTypeLocal,
   updatePlaceTypeLocal,
 } from "../sync/outbox";
-import { Button, ErrorBanner, Row, SectionHeader, TextField } from "../ui";
-import { placeTypeFeatherIcon } from "./placeTypeIcon";
+import {
+  Button,
+  ErrorBanner,
+  Row,
+  SectionHeader,
+  TextField,
+  Icon,
+} from "../ui";
+import { placeTypeGlyph } from "./placeTypeIcon";
 
 /** A type nobody owns is a built-in: not renameable, not deletable. Same rule
  *  and same reason as `isSystemFieldDef`, on the other system vocabulary. */
@@ -79,13 +85,13 @@ export function PlaceTypeList({
   return (
     <View style={styles.body}>
       <SectionHeader
-        label={`${ordered.length} type${ordered.length === 1 ? "" : "s"}`}
+        title={`${ordered.length} type${ordered.length === 1 ? "" : "s"}`}
       />
       {ordered.map((type) =>
         isSystemPlaceType(type) ? (
           <Row
             key={type.id}
-            icon={placeTypeFeatherIcon(type.iconKey)}
+            icon={placeTypeGlyph(type.iconKey)}
             hue={type.color}
             title={type.name}
             subtitle="Built in"
@@ -93,7 +99,7 @@ export function PlaceTypeList({
         ) : (
           <Row
             key={type.id}
-            icon={placeTypeFeatherIcon(type.iconKey)}
+            icon={placeTypeGlyph(type.iconKey)}
             hue={type.color}
             title={type.name}
             onPress={() => onEdit(type)}
@@ -244,7 +250,7 @@ export function usePlaceTypeForm({
           two different icon sets, and a marker colour carries a WCAG guarantee
           that can only be asserted over a closed set (`scripts/wcag-contrast.mjs`).
           A hex picker would not fail that check, it would delete it. */}
-      <SectionHeader label="Icon" />
+      <SectionHeader title="Icon" />
       <View style={styles.grid} onLayout={onGridLayout}>
         {/* Nothing until the row has been measured — one frame, and the
             alternative is every cell flashing at its intrinsic size first. */}
@@ -263,8 +269,8 @@ export function usePlaceTypeForm({
                   draft.iconKey === iconKey ? styles.cellChosen : null,
                 ]}
               >
-                <Feather
-                  name={placeTypeFeatherIcon(iconKey)}
+                <Icon
+                  idea={placeTypeGlyph(iconKey)}
                   size={20}
                   color={draft.iconKey === iconKey ? theme.accent : theme.text}
                 />
@@ -272,7 +278,7 @@ export function usePlaceTypeForm({
             ))}
       </View>
 
-      <SectionHeader label="Colour" />
+      <SectionHeader title="Colour" />
       <View style={styles.grid} onLayout={onGridLayout}>
         {cellSize == null
           ? null
@@ -294,7 +300,7 @@ export function usePlaceTypeForm({
                 {draft.color === color ? (
                   // Dark ink on a light swatch: the palette is light precisely so a
                   // mark on top of it stays legible.
-                  <Feather name="check" size={16} color={theme.onFill} />
+                  <Icon idea="done" size={16} color={theme.onFill} />
                 ) : null}
               </Pressable>
             ))}
@@ -306,7 +312,7 @@ export function usePlaceTypeForm({
 
       {editing ? (
         <Row
-          icon="trash-2"
+          icon="delete"
           hue={theme.warning}
           title="Delete type"
           onPress={confirmDelete}
@@ -328,7 +334,7 @@ export function usePlaceTypeForm({
         <View style={styles.action}>
           <Button
             label={editing ? "Save" : "Add type"}
-            icon="check"
+            icon="done"
             loading={saving}
             onPress={() => void save()}
           />

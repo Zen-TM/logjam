@@ -24,7 +24,6 @@
 // broaden visibility by default.
 import { useCallback, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
-import { Feather } from "@expo/vector-icons";
 import {
   activityTalliesOverlap,
   activityTallySubtitle,
@@ -56,14 +55,14 @@ import { useTracks } from "../tracks/useTracks";
 import { fontSize, fontWeight, spacing, theme, withAlpha } from "../theme";
 import {
   ActivitySpark,
-  Card,
   Chip,
   EmptyState,
-  HeroHeader,
+  Hero,
   Row,
   ScreenScroll,
   SectionHeader,
   StatGrid,
+  Icon,
 } from "../ui";
 import { tripTypeMeta } from "./tripTypeMeta";
 
@@ -161,7 +160,7 @@ export function StatsScreen({
 
   return (
     <View style={styles.screen}>
-      <HeroHeader
+      <Hero
         eyebrow={activity ? "Logbook stats" : "Logbook"}
         title={title}
         titleNumberOfLines={2}
@@ -184,7 +183,7 @@ export function StatsScreen({
             />
           ))}
         </ScrollView>
-      </HeroHeader>
+      </Hero>
 
       {stats.trips === 0 ? (
         <EmptyState
@@ -283,7 +282,7 @@ function Activities({
   const multiTagged = activityTalliesOverlap(stats);
   return (
     <View style={styles.section}>
-      <SectionHeader label="By activity" />
+      <SectionHeader title="By activity" />
       {stats.activityTallies.map((tally) => {
         const meta = tripTypeMeta(
           tally.type === UNTAGGED_ACTIVITY ? null : tally.type,
@@ -295,9 +294,7 @@ function Activities({
             hue={meta.hue}
             title={logbookActivityLabel(tally.type)}
             subtitle={activityTallySubtitle(tally)}
-            right={
-              <Feather name="chevron-right" size={20} color={theme.textMuted} />
-            }
+            right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
             onPress={() => onOpenActivity(tally.type)}
           />
         );
@@ -323,8 +320,8 @@ function PlacesVisited({ stats }: { stats: LogbookStats }) {
   if (stats.completion.length === 0) return null;
   return (
     <View style={styles.section}>
-      <SectionHeader label="Places visited" />
-      <Card>
+      <SectionHeader title="Places visited" />
+      <View style={styles.completion}>
         {stats.completion.map((entry) => (
           <View key={entry.typeId} style={styles.meterRow}>
             <View style={styles.meterLabels}>
@@ -359,7 +356,7 @@ function PlacesVisited({ stats }: { stats: LogbookStats }) {
             {stats.mostReturned.trips}
           </Text>
         ) : null}
-      </Card>
+      </View>
     </View>
   );
 }
@@ -410,7 +407,7 @@ function OnFoot({
 
   return (
     <View style={styles.section}>
-      <SectionHeader label="On foot" />
+      <SectionHeader title="On foot" />
       <StatGrid
         stats={[
           { label: "Distance", value: formatDistanceM(distanceM) },
@@ -458,7 +455,7 @@ function AttributeSections({
     <View style={styles.section}>
       {groups.map((group) => (
         <View key={group.typeId} style={styles.section}>
-          <SectionHeader label={`${group.name} attributes`} />
+          <SectionHeader title={`${group.name} attributes`} />
           {group.stats.map((entry) => (
             <AttributeStat key={`${group.typeId}:${entry.key}`} stat={entry} />
           ))}
@@ -466,7 +463,7 @@ function AttributeSections({
       ))}
       {stats.tripFieldStats.length > 0 || underActivities > 0 ? (
         <View style={styles.section}>
-          <SectionHeader label="Trip attributes" />
+          <SectionHeader title="Trip attributes" />
           {stats.tripFieldStats.map((entry) => (
             <AttributeStat key={`trip:${entry.key}`} stat={entry} />
           ))}
@@ -563,6 +560,8 @@ const styles = StyleSheet.create({
     fontSize: fontSize.base,
     fontWeight: fontWeight.medium,
   },
+  // Read-only, so it sits on the page: a card fill would say "press me".
+  completion: { gap: spacing(1) },
   meterRow: { marginBottom: spacing(1) },
   meterLabels: {
     flexDirection: "row",

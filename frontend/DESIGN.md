@@ -246,7 +246,10 @@ accessories, and an optional `footer` inside the card.
 ## 6. Kit
 
 The kit is `src/ui`, native elements and CSS modules. Its component list is
-`KIT_COMPONENTS` in `@logjam/shared`, the same names Logjam GPS uses.
+`KIT_COMPONENTS` in `shared/src/kit.ts`, the one list both clients' barrels are
+held to (`src/ui/kit.test.ts`): which components Logjam GPS has too, and why a
+platform-only one is not shared. A helper (a hook, a constant) is not a kit
+component.
 
 - **Compose the kit; extend it rather than styling around it.** Screen CSS
   modules do layout; the kit does looks.
@@ -275,6 +278,19 @@ The kit is `src/ui`, native elements and CSS modules. Its component list is
 - **An attribute is drawn by the shape of its definition**, on a form as in
   the filter sheet (`CustomFieldInput`, `railStops`); a rail over an optional
   value starts with "—".
+- **A card fill means "press me"** (UX §4). `Row` and `StatGrid` wear `card`
+  only when they do something: a row with `onOpen`, `href` or a pick, a stat
+  with `onCopy`. A read-only one has no fill and no hover but the same box, so
+  it lines up with its neighbours. A `SwitchRow` makes the whole row the
+  switch's target: one `role="switch"` named by its title.
+- **A disabled control dims by `--opacity-disabled`, does not answer a press
+  and says why**: a `Row`'s subtitle, a `Button`'s `disabledReason` (a tooltip
+  on hover and focus; the button stays focusable with `aria-disabled`).
+- **Every surface carries its way out**: `Dialog`, `SideSheet` and `Popover`
+  draw a × at the top right; `Hero onBack` draws the arrow at the top left.
+- **A load is `LoadingState`, a failed load `ErrorState`.**
+- **Icons are ideas: draw `<Icon idea=…>`**, never a Lucide import (a lint
+  rule stops it). The registry is `shared/src/icons.ts`.
 - **A state as a word is a `StatusPill`**, never a `Chip`, which is a control.
 - **`Button busy`** swaps the glyph for a spinner and disables without fading.
 - **Icon-only controls require a `label`**: the accessible name and the

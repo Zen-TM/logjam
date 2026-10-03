@@ -1,6 +1,6 @@
 // Snap picker for the measure and route-draw HUDs.
 //
-// A wrapped SegmentedControl from the kit, not a hand-rolled chip row
+// A wrapped ChipRail from the kit, not a hand-rolled chip row
 // (DESIGN.md §9): four short options, all visible at once, and per §2 the
 // wrapped form is right because this picks a SETTING rather than filtering a
 // list below it.
@@ -11,7 +11,7 @@ import { StyleSheet, Text, View } from "react-native";
 import type { SnapMode } from "@logjam/shared";
 
 import { fontSize, fontWeight, spacing, theme } from "../theme";
-import { SegmentedControl } from "../ui";
+import { ChipRail } from "../ui";
 
 const OPTIONS: { value: SnapMode; label: string }[] = [
   { value: "off", label: "Off" },
@@ -32,7 +32,7 @@ export function SnapPicker({
   return (
     <View style={styles.wrap}>
       <Text style={styles.label}>Snap to</Text>
-      <SegmentedControl
+      <ChipRail
         options={OPTIONS.map((option) => ({ ...option, disabled }))}
         value={mode}
         onChange={onChange}
