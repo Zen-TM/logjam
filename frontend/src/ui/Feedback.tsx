@@ -1,7 +1,7 @@
 import type { CSSProperties, ReactNode } from "react";
-import { CircleAlert, CircleCheck, X, type LucideIcon } from "lucide-react";
 import { IconButton } from "./Button";
 import classes from "./Feedback.module.css";
+import { Icon, type Glyph } from "./Icon";
 
 /**
  * A state, as a word: "Queued", "Failed", "Shared". Not a control, so never
@@ -13,15 +13,15 @@ import classes from "./Feedback.module.css";
 export function StatusPill({
   label,
   tone = "outline",
-  icon: Icon,
+  icon,
 }: {
   label: string;
   tone?: "accent" | "outline" | "warning" | "muted";
-  icon?: LucideIcon;
+  icon?: Glyph;
 }) {
   return (
     <span className={classes.pill} data-tone={tone}>
-      {Icon && <Icon size={12} aria-hidden />}
+      {icon && <Icon idea={icon} size={12} />}
       {label}
     </span>
   );
@@ -69,19 +69,19 @@ export function ProgressBar({
  * be here and offers the way to get it.
  */
 export function EmptyState({
-  icon: Icon,
+  icon,
   title,
   body,
   actions,
 }: {
-  icon: LucideIcon;
+  icon: Glyph;
   title: string;
   body?: string;
   actions?: ReactNode;
 }) {
   return (
     <div className={classes.empty}>
-      <Icon size={24} aria-hidden className={classes.emptyGlyph} />
+      <Icon idea={icon} size={24} className={classes.emptyGlyph} />
       <p className={classes.emptyTitle}>{title}</p>
       {body && <p className={classes.emptyBody}>{body}</p>}
       {actions && <div className={classes.emptyActions}>{actions}</div>}
@@ -105,7 +105,11 @@ export function SelectionBar({
 }) {
   return (
     <div role="group" aria-label="Selection" className={classes.selectionBar}>
-      <IconButton icon={X} label="Clear selection (Esc)" onClick={onClear} />
+      <IconButton
+        icon="close"
+        label="Clear selection (Esc)"
+        onClick={onClear}
+      />
       <span className={classes.selectionCount} aria-live="polite">
         {countLabel}
       </span>
@@ -126,16 +130,16 @@ export function Toast({
   severity: ToastSeverity;
   onDismiss: () => void;
 }) {
-  const Icon = severity === "error" ? CircleAlert : CircleCheck;
+  const icon = severity === "error" ? "warning" : "success";
   return (
     <div
       className={classes.toast}
       role={severity === "error" ? "alert" : "status"}
     >
-      <Icon size={16} aria-hidden className={classes.toastGlyph} />
+      <Icon idea={icon} size={16} className={classes.toastGlyph} />
       <span className={classes.toastText}>{message}</span>
       <IconButton
-        icon={X}
+        icon="close"
         label="Dismiss"
         tone="onInverse"
         size={14}

@@ -84,7 +84,7 @@ export function ChipPicker({
         {onAdd && !adding ? (
           <Chip
             label={addPlaceholder}
-            icon="plus"
+            icon="add"
             onPress={() => {
               setAdding(true);
               // Focus on the next frame: the input does not exist yet on this one.

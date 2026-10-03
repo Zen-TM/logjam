@@ -9,7 +9,6 @@ import {
   type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
 } from "react";
-import { ChevronDown, Search } from "lucide-react";
 import { FieldError } from "../components/feedback/FieldError";
 import {
   numericFieldError,
@@ -17,6 +16,7 @@ import {
   type NumericFieldConstraints,
 } from "../numberInput";
 import classes from "./TextField.module.css";
+import { Icon } from "./Icon";
 
 type FieldLabelling = {
   label: string;
@@ -296,7 +296,12 @@ export function Select({
         >
           {children}
         </select>
-        <ChevronDown size={16} aria-hidden className={classes.selectGlyph} />
+        <Icon
+          idea="expand"
+          size={16}
+          aria-hidden
+          className={classes.selectGlyph}
+        />
       </div>
     </Field>
   );
@@ -316,7 +321,12 @@ export function SearchField({
 }) {
   return (
     <div className={[classes.search, className].filter(Boolean).join(" ")}>
-      <Search size={14} aria-hidden className={classes.searchGlyph} />
+      <Icon
+        idea="search"
+        size={14}
+        aria-hidden
+        className={classes.searchGlyph}
+      />
       <input
         ref={ref}
         type="search"

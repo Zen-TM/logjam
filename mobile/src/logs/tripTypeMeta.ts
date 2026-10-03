@@ -1,7 +1,7 @@
-import type { Feather } from "@expo/vector-icons";
 import { tripTypeIdentity } from "@logjam/shared";
 
 import { theme } from "../theme";
+import { type Glyph } from "../ui";
 
 export { primaryTripType, tripTypeLabel } from "@logjam/shared";
 
@@ -12,14 +12,14 @@ export { primaryTripType, tripTypeLabel } from "@logjam/shared";
  * the same trip the same colour.
  */
 type TripTypeMeta = {
-  icon: React.ComponentProps<typeof Feather>["name"];
+  icon: Glyph;
   hue: string;
 };
 
 export function tripTypeMeta(type: string | null | undefined): TripTypeMeta {
   const { icon, hue } = tripTypeIdentity(type);
   return {
-    icon,
+    icon: { picked: icon },
     hue:
       hue === "accent" ? theme.accent : hue === "untyped" ? theme.neutral : hue,
   };

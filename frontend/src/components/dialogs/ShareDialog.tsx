@@ -23,7 +23,6 @@
 // username-only server-side (root CLAUDE.md) and this must not become the
 // surface that wants more.
 import { useCallback, useEffect, useState } from "react";
-import { Check, Plus, Users, X } from "lucide-react";
 import { friendMatches } from "@logjam/shared";
 import classes from "./ShareDialog.module.css";
 import { useToast } from "../feedback/ToastProvider";
@@ -38,6 +37,7 @@ import {
   Row,
   SearchField,
   SectionHeader,
+  Icon,
 } from "../../ui";
 
 /** Enough of a share row to list and revoke it. Both endpoints return this. */
@@ -165,7 +165,7 @@ function ShareDialog({
     >
       {friends.length === 0 ? (
         <EmptyState
-          icon={Users}
+          icon="friends"
           title="No friends yet"
           body="Sharing is between friends. Add one on the Friends page, then come back."
         />
@@ -193,7 +193,7 @@ function ShareDialog({
                   title={row.sharedWith.username}
                   trailing={
                     <IconButton
-                      icon={X}
+                      icon="unshare"
                       label={`Stop sharing with ${row.sharedWith.username}`}
                       disabled={busyId !== null}
                       onClick={() => void handleUnshare(row)}
@@ -226,9 +226,9 @@ function ShareDialog({
                   trailing={
                     <span className={classes.grantMark} data-mark aria-hidden>
                       {busyId === friend.id ? (
-                        <Check size={16} />
+                        <Icon idea="done" size={16} />
                       ) : (
-                        <Plus size={16} />
+                        <Icon idea="add" size={16} />
                       )}
                     </span>
                   }

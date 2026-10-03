@@ -162,7 +162,7 @@ function PointDetail({
         </Text>
       ) : null}
       <Row
-        icon="navigation"
+        icon="navigateTo"
         title="Navigate to this point"
         subtitle="Live distance and bearing — nothing saved"
         onPress={() => {

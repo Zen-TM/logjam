@@ -199,7 +199,7 @@ export function useCopyPanel({
 
         {media.count > 0 ? (
           <Row
-            icon="image"
+            icon="photo"
             title={
               media.count === 1
                 ? "Also copy 1 photo or file"

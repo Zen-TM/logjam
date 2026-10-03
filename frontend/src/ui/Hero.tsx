@@ -1,5 +1,4 @@
 import type { CSSProperties, ReactNode } from "react";
-import { ArrowLeft } from "lucide-react";
 import { IconButton } from "./Button";
 import classes from "./Hero.module.css";
 
@@ -33,9 +32,7 @@ export function Hero({
 }) {
   return (
     <header className={classes.hero} data-back={onBack ? true : undefined}>
-      {onBack && (
-        <IconButton icon={ArrowLeft} label={backLabel} onClick={onBack} />
-      )}
+      {onBack && <IconButton icon="back" label={backLabel} onClick={onBack} />}
       <h2 className={children ? "visually-hidden" : classes.title}>{title}</h2>
       {children}
       {actions}

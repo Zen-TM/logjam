@@ -210,7 +210,7 @@ export function RecipientRows({
               <ActivityIndicator color={theme.accent} />
             ) : (
               <IconButton
-                icon="x"
+                icon="close"
                 color={theme.warning}
                 accessibilityLabel={`Stop sharing with ${recipient.sharedWith.username}`}
                 onPress={() => sharing.confirmRevoke(recipient)}

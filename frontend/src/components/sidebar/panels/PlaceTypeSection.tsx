@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { EllipsisVertical, Merge, Pencil, Plus, Trash2 } from "lucide-react";
 import {
   PLACE_TYPE_COLORS,
   PLACE_TYPE_ICON_KEYS,
@@ -124,7 +123,7 @@ function PlaceTypeSection({
           <Button
             compact
             variant="outline"
-            icon={Plus}
+            icon="add"
             onClick={() => setEditing("new")}
           >
             Add
@@ -174,14 +173,14 @@ function PlaceTypeSection({
                       {
                         id: "edit",
                         label: "Edit type",
-                        icon: Pencil,
+                        icon: "edit",
                         onSelect: () => setEditing(type),
                       },
                       type.placeCount > 0
                         ? {
                             id: "merge",
                             label: "Merge into another type",
-                            icon: Merge,
+                            icon: "merge",
                             danger: true,
                             onSelect: () => {
                               setMergingFrom(type);
@@ -194,7 +193,7 @@ function PlaceTypeSection({
                         : {
                             id: "delete",
                             label: "Delete type",
-                            icon: Trash2,
+                            icon: "delete",
                             danger: true,
                             onSelect: () => setDeleting(type),
                           },
@@ -202,7 +201,7 @@ function PlaceTypeSection({
                     trigger={(props) => (
                       <IconButton
                         {...props}
-                        icon={EllipsisVertical}
+                        icon="overflow"
                         label={`Actions for ${type.name}`}
                       />
                     )}

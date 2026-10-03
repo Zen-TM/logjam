@@ -245,7 +245,7 @@ export function PlaceFilterSheet({
       }
       footer={
         mode.kind === "main" ? (
-          <Button label="Done" icon="check" onPress={onClose} />
+          <Button label="Done" icon="done" onPress={onClose} />
         ) : (
           // Two ways back out of a date, because they mean different things:
           // Cancel keeps whatever bound was already set, Clear removes it.
@@ -381,7 +381,7 @@ export function PlaceFilterSheet({
           ))}
         </View>
         <Row
-          icon="share-2"
+          icon="shareFriend"
           title="Shared by me"
           right={
             <Toggle
@@ -434,7 +434,7 @@ export function PlaceFilterSheet({
 
         <SectionHeader label="Missing info" />
         <Row
-          icon="help-circle"
+          icon="help"
           title="Include places missing this info"
           // Two lines: it has to fit beside a Toggle, and the one-line version
           // ellipsised. Also no longer says "grade" — this switch covers every

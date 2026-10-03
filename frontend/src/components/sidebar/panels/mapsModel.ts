@@ -16,15 +16,9 @@ import {
   type GeoPdfJobView,
   type TopoExportJobView,
 } from "@logjam/shared";
-import {
-  FileDown,
-  FileText,
-  LayoutTemplate,
-  Mountain,
-  type LucideIcon,
-} from "lucide-react";
 import type { CompletedTopoJob } from "../../../topoLayerTypes";
 import type { TopoJob } from "../../dialogs/TopoDialog";
+import { type Glyph } from "../../../ui";
 
 /**
  * A kind's glyph and hue (DESIGN.md §3), from Logjam GPS's Saved tab: a GeoPDF
@@ -36,25 +30,25 @@ import type { TopoJob } from "../../dialogs/TopoDialog";
 export const MAP_IDENTITY: Record<
   "geoPdf" | "topo" | "export" | "geoPdfTemplate" | "topoTemplate",
   {
-    icon: LucideIcon;
+    icon: Glyph;
     hue: string;
     label: string;
   }
 > = {
-  geoPdf: { icon: FileText, hue: "var(--hue-geo-pdf)", label: "GeoPDF" },
-  topo: { icon: Mountain, hue: "var(--hue-overlay)", label: "LiDAR topo" },
+  geoPdf: { icon: "geoPdf", hue: "var(--hue-geo-pdf)", label: "GeoPDF" },
+  topo: { icon: "lidar", hue: "var(--hue-overlay)", label: "LiDAR topo" },
   export: {
-    icon: FileDown,
+    icon: "export",
     hue: "var(--hue-overlay)",
     label: "Export of a LiDAR topo",
   },
   geoPdfTemplate: {
-    icon: LayoutTemplate,
+    icon: "template",
     hue: "var(--hue-geo-pdf)",
     label: "GeoPDF template",
   },
   topoTemplate: {
-    icon: LayoutTemplate,
+    icon: "template",
     hue: "var(--hue-overlay)",
     label: "LiDAR topo template",
   },
