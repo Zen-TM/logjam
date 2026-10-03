@@ -25,7 +25,7 @@
 // an error string.
 import { mediaCategory, mediaDisplayName } from "@logjam/shared";
 
-import type { DeleteConfirmCopy } from "./placeDeleteConfirm";
+import type { DeleteConfirmCopy } from "@logjam/shared";
 import type { MirrorMedia } from "../sync/mirrorStore";
 
 /** Where a new way comes from. The panel that offers all five is AddWaySheet. */
