@@ -39,10 +39,11 @@ terraform -chdir=infra/terraform/envs/github init -backend=false -input=false
 terraform -chdir=infra/terraform/envs/github test
 ```
 
-The prod and GitHub-settings plans run on your PR by themselves
-(`terraform-plan.yml`, jobs `plan-prod` and `plan-github`) and are posted as
-comments. Merging applies those plans
-([0026](../docs/decisions/0026-plan-fingerprint-covers-planned-values.md),
+The prod and GitHub-settings plans run on your PR (`terraform-plan.yml`, jobs
+`plan-prod` and `plan-github`) once the maintainer approves the run, and are
+posted as comments. A PR that changes no infra skips them
+([0027](../../docs/decisions/0027-pr-plans-run-after-the-maintainer-approves.md)). Merging applies those plans
+([0026](../../docs/decisions/0026-plan-fingerprint-covers-planned-values.md),
 [0025](../../docs/decisions/0025-github-settings-in-terraform.md)).
 
 ## Read prod (maintainer's AWS access)

@@ -17,17 +17,15 @@ run "plan_role_trusts_only_approved_runs_and_main" {
     target = [aws_iam_role.github_actions_plan]
   }
 
-  # Mutation: adding a subject (a branch, `*`, a StringLike condition) or a
-  # second statement lets workflows nobody approved assume the plan role.
-  # pull_request is transitional: it goes when the plan jobs move into the
-  # terraform-plan Environment.
+  # Mutation: adding a subject (`pull_request`, a branch, `*`, a StringLike
+  # condition) or a second statement lets workflows nobody approved assume
+  # the plan role.
   assert {
     condition = (
       length(jsondecode(aws_iam_role.github_actions_plan.assume_role_policy).Statement) == 1 &&
       keys(jsondecode(aws_iam_role.github_actions_plan.assume_role_policy).Statement[0].Condition) == ["StringEquals"] &&
       toset(jsondecode(aws_iam_role.github_actions_plan.assume_role_policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"]) == toset([
         "repo:Zen-TM/logjam:environment:terraform-plan",
-        "repo:Zen-TM/logjam:pull_request",
         "repo:Zen-TM/logjam:ref:refs/heads/main",
       ])
     )

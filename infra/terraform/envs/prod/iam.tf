@@ -40,7 +40,8 @@ resource "aws_iam_role" "topo_worker" {
 # push a branch could deploy to prod or run the migrate task without a PR.
 #   - deploy (this role, name kept so nothing else moves): only jobs running in
 #     the `prod` GitHub Environment, which only `main` may deploy to.
-#   - plan (below): read-only, for terraform plan on PRs and on main.
+#   - plan (below): read-only, for terraform plan on PRs the maintainer
+#     approved (the terraform-plan Environment) and on main.
 #   - apply (iam_apply.tf): terraform apply on merge, `prod` Environment only.
 locals {
   github_oidc_provider_arn = "arn:aws:iam::620853681701:oidc-provider/token.actions.githubusercontent.com"
@@ -76,13 +77,13 @@ resource "aws_iam_role" "github_actions_plan" {
       Condition = {
         StringEquals = {
           "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-          # pull_request goes once terraform-plan.yml's plan jobs run in the
-          # terraform-plan Environment (infra/terraform/envs/github/environments.tf),
-          # whose runs wait for the maintainer's approval. Guard:
-          # tests/guards.tftest.hcl.
+          # PR plans run in the terraform-plan Environment, whose runs wait
+          # for the maintainer's approval (infra/terraform/envs/github/environments.tf,
+          # docs/decisions/0027-pr-plans-run-after-the-maintainer-approves.md);
+          # main is the nightly drift plan. Never `pull_request`: that is any
+          # PR's workflow, approved by no one. Guard: tests/guards.tftest.hcl.
           "token.actions.githubusercontent.com:sub" = [
             "repo:Zen-TM/logjam:environment:terraform-plan",
-            "repo:Zen-TM/logjam:pull_request",
             "repo:Zen-TM/logjam:ref:refs/heads/main",
           ]
         }
