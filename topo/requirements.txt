@@ -4,7 +4,7 @@
 
 # Stay below 2: the apt python3-gdal bindings in the image are built against
 # NumPy 1.x (tests/test_numpy_gdal_abi.py).
-numpy>=1.26,<2.0
+numpy>=2.5.3,<3.0
 Pillow>=12.3.0,<13.0
 requests>=2.34.2,<3.0
 boto3>=1.43.104,<2.0
