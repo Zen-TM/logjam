@@ -226,7 +226,7 @@ export function MapSearchBar({
         <Feather
           name="search"
           size={GLYPH}
-          color={expanded ? theme.textMuted : theme.textPrimary}
+          color={expanded ? theme.textMuted : theme.text}
           style={side === "right" ? styles.glyphRight : styles.glyph}
         />
         <Animated.View
@@ -254,7 +254,7 @@ export function MapSearchBar({
             hitSlop={hitSlop}
             onPress={() => (query ? setQuery("") : collapse())}
           >
-            <Feather name="x" size={GLYPH} color={theme.textPrimary} />
+            <Feather name="x" size={GLYPH} color={theme.text} />
           </Pressable>
         </Animated.View>
         {/* Collapsed, the whole circle is the button; expanded it must not
@@ -347,7 +347,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     height: SEARCH_SIZE,
     borderRadius: SEARCH_SIZE / 2,
-    backgroundColor: theme.secondary,
+    backgroundColor: theme.card,
     // The field is clipped by the growing circle rather than spilling past it.
     overflow: "hidden",
   },
@@ -370,12 +370,12 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontSize: fontSize.base,
-    color: theme.textPrimary,
+    color: theme.text,
     paddingVertical: spacing(1),
   },
   panel: {
     alignSelf: "stretch",
-    backgroundColor: theme.secondary,
+    backgroundColor: theme.card,
     borderRadius: radius.lg,
     overflow: "hidden",
     maxHeight: 260,
@@ -390,9 +390,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing(2),
     paddingVertical: spacing(1.5),
     borderBottomWidth: 1,
-    borderBottomColor: theme.bonus2,
+    borderBottomColor: theme.line,
   },
-  resultPressed: { backgroundColor: theme.bonus2 },
+  resultPressed: { backgroundColor: theme.cardPressed },
   savedResult: {
     flexDirection: "row",
     alignItems: "center",
@@ -401,7 +401,7 @@ const styles = StyleSheet.create({
   savedText: { flex: 1 },
   resultKind: { color: theme.textMuted, fontSize: fontSize.xs },
   resultText: {
-    color: theme.textPrimary,
+    color: theme.text,
     fontSize: fontSize.sm,
     fontWeight: fontWeight.regular,
   },

@@ -94,7 +94,7 @@ const STATUS_ICON: Record<PlaceStatus, LucideIcon> = {
   shared: Users,
 };
 const STATUS_HUE: Record<PlaceStatus, string> = {
-  done: "var(--theme-accent)",
+  done: "var(--color-accent)",
   todo: "var(--hue-todo)",
   shared: "var(--hue-shared)",
 };

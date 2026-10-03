@@ -110,7 +110,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing(1.25),
     paddingHorizontal: spacing(1.5),
     fontSize: fontSize.base,
-    color: theme.textPrimary,
+    color: theme.text,
   },
   inputRow: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
   grow: { flex: 1 },

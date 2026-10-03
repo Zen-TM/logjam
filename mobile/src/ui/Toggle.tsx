@@ -22,9 +22,9 @@ export function Toggle({
       onValueChange={onValueChange}
       disabled={disabled}
       accessibilityLabel={accessibilityLabel}
-      trackColor={{ false: theme.bonus2, true: theme.accent }}
-      thumbColor={theme.textPrimary}
-      ios_backgroundColor={theme.bonus2}
+      trackColor={{ false: theme.line, true: theme.accent }}
+      thumbColor={theme.text}
+      ios_backgroundColor={theme.line}
     />
   );
 }

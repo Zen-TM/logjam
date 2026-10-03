@@ -13,15 +13,7 @@ import {
   type ScopedCustomFieldDef,
 } from "@logjam/shared";
 
-import {
-  fontSize,
-  fontWeight,
-  radius,
-  spacing,
-  surface,
-  theme,
-  withAlpha,
-} from "../theme";
+import { fontSize, fontWeight, radius, spacing, theme } from "../theme";
 import type { MirrorPlace, MirrorTrip } from "../sync/mirrorStore";
 import {
   createTripLocal,
@@ -755,7 +747,7 @@ function PlacePicker({
           <Row
             key={place.id}
             icon="plus"
-            hue={theme.bonus1}
+            hue={theme.neutral}
             title={place.name}
             onPress={() => onToggle(place)}
             accessibilityLabel={`Add ${place.name} to this trip`}
@@ -779,14 +771,14 @@ const styles = StyleSheet.create({
     gap: spacing(1),
     borderRadius: radius.pill,
     borderWidth: 1,
-    borderColor: withAlpha(theme.bonus1, 0.4),
-    backgroundColor: surface.card,
+    borderColor: theme.lineStrong,
+    backgroundColor: theme.card,
     paddingHorizontal: spacing(1.5),
     minHeight: 44,
   },
   searchInput: {
     flex: 1,
-    color: theme.textPrimary,
+    color: theme.text,
     fontSize: fontSize.base,
     fontWeight: fontWeight.regular,
   },

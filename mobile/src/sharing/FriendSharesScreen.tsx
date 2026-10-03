@@ -830,7 +830,7 @@ function ShareCardMenu({
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: theme.primary },
+  root: { flex: 1, backgroundColor: theme.page },
   // Both children are SEGMENTED_CONTROL_HEIGHT tall by construction, which is
   // what keeps the list still when the bar swaps in (DESIGN.md §7).
   rail: {

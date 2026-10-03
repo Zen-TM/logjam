@@ -195,12 +195,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: spacing(2),
     padding: spacing(3),
-    backgroundColor: theme.primary,
+    backgroundColor: theme.page,
   },
   title: {
     fontSize: fontSize.xl,
     fontWeight: fontWeight.bold,
-    color: theme.textPrimary,
+    color: theme.text,
   },
   line: {
     fontSize: fontSize.sm,

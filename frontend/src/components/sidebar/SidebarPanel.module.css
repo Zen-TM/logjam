@@ -7,10 +7,10 @@
   width: var(--panel-width);
   display: flex;
   flex-direction: column;
-  background: var(--theme-primary);
-  color: var(--theme-text-primary);
+  background: var(--color-page);
+  color: var(--color-text);
   border-right: var(--hairline);
-  animation: slideIn var(--transition-med) ease-out;
+  animation: slideIn var(--motion-med) ease-out;
 }
 
 @keyframes slideIn {

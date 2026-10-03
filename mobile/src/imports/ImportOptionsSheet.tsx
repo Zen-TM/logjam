@@ -272,7 +272,7 @@ export function ImportOptionsSheet({
               key={option.title}
               title={option.title}
               icon="download"
-              hue={theme.bonus1}
+              hue={theme.neutral}
               disabled={busy}
               onPress={() => save(option)}
             />
@@ -284,7 +284,7 @@ export function ImportOptionsSheet({
             <Row
               title="Send a copy"
               icon="send"
-              hue={theme.bonus1}
+              hue={theme.neutral}
               {...shareRowProps}
               disabled={busy || shareRowProps.disabled}
               onPress={() => setSending((open) => !open)}
@@ -294,7 +294,7 @@ export function ImportOptionsSheet({
             <Row
               title="Rename"
               icon="edit-2"
-              hue={theme.bonus1}
+              hue={theme.neutral}
               disabled={busy}
               onPress={() => setRenaming(true)}
             />

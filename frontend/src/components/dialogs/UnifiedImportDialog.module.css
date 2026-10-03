@@ -14,13 +14,13 @@
 .lede {
   margin: 0;
   font-size: var(--font-base);
-  color: var(--theme-text-primary);
+  color: var(--color-text);
 }
 
 .note {
   margin: 0;
   font-size: var(--font-sm);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
   line-height: 1.5;
 }
 
@@ -33,27 +33,27 @@
   gap: 6px;
   width: 100%;
   padding: 24px;
-  border: 2px dashed var(--theme-bonus-2);
+  border: 2px dashed var(--color-line-strong);
   border-radius: var(--radius-md);
-  background: color-mix(in srgb, black 8%, var(--theme-primary));
-  color: var(--theme-text-muted);
+  background: var(--color-field);
+  color: var(--color-text-muted);
   font: inherit;
   font-size: var(--font-sm);
   text-align: center;
   cursor: pointer;
   transition:
-    border-color var(--transition-fast),
-    background-color var(--transition-fast);
+    border-color var(--motion-fast),
+    background-color var(--motion-fast);
 }
 
 .dropZone:hover,
 .dropZone[data-dragging] {
-  border-color: var(--theme-accent);
-  background: color-mix(in srgb, var(--theme-accent) 8%, transparent);
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
 }
 
 .dropGlyph {
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 /* A link INSIDE a sentence: the one shape an anchor keeps in this app (§5). */
@@ -62,7 +62,7 @@
   border: none;
   background: none;
   font: inherit;
-  color: var(--theme-accent);
+  color: var(--color-accent);
   text-decoration: underline;
   cursor: pointer;
 }
@@ -74,7 +74,7 @@
   gap: 12px;
   flex-wrap: wrap;
   padding: 8px 12px;
-  background: var(--theme-secondary);
+  background: var(--color-card);
   border: var(--hairline);
   border-radius: var(--radius-md);
 }
@@ -84,7 +84,7 @@
   min-width: 0;
   font-size: var(--font-sm);
   font-weight: 600;
-  color: var(--theme-text-primary);
+  color: var(--color-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -106,7 +106,7 @@
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 .mapHeaderRole {
@@ -126,7 +126,7 @@
   min-width: 0;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: var(--font-sm);
-  color: var(--theme-text-primary);
+  color: var(--color-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -146,7 +146,7 @@
   gap: 8px;
   margin-left: 8px;
   padding-left: 10px;
-  border-left: 2px solid var(--theme-accent);
+  border-left: 2px solid var(--color-accent);
 }
 
 .createForm {
@@ -171,7 +171,7 @@
 }
 
 .chevron {
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 /* A narrow screen cannot hold two columns of a column map, and this tool says
