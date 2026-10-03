@@ -21,16 +21,22 @@ Change a convention, change this file in the same commit.
 ## 1. Tokens
 
 All tokens are declared in `@logjam/shared` (`designTokens.ts`,
-`themeSchemes.ts`) and generated into `src/tokens.generated.css`; never edit
-that file, regenerate it. A scheme is a `data-scheme` attribute on `<html>`,
-applied live.
+`themeSchemes.ts`) and generated into `src/tokens.generated.css` by
+`npm run tokens`; never edit that file (`src/tokens.generated.test.ts` fails
+when it is stale). Logjam Web's own layout values (rail and panel widths,
+shadows) are in `src/index.css`. A scheme is a `data-scheme` attribute on
+`<html>`, applied live.
 
-- **Every colour, size, radius, space, duration and text size is a custom
-  property, never a literal.** Exemptions: a 1–2px border or outline offset,
-  the 768px breakpoint (a media query cannot read a variable), and a shape's
-  own geometry (the 36×4 grab handle). A hue set per element goes through a
-  custom property the kit reads (`--tile-hue`, `--chip-hue`), never an inline
-  colour. CSS modules only; an inline `style` only sets a custom property.
+- **Every colour, space, size, radius, duration and text size is a custom
+  property, never a literal**: `--color-<role>`, `--hue-<kind>`, `--space-<n>`
+  (8 × n: `--space-1-5` is 12px), `--radius-*`, `--font-*`, `--control-*`,
+  `--motion-*`. A px literal is allowed only for a 1–2px border or offset, the
+  768px breakpoint (a media query cannot read a variable) and a shape's own
+  geometry marked `/* intrinsic … */` (the 36×4 grab handle).
+  `src/pxBudget.test.ts` holds each screen stylesheet to a count that only
+  shrinks. A hue set per element goes through a custom property the kit reads
+  (`--tile-hue`, `--chip-hue`), never an inline colour. CSS modules only; an
+  inline `style` only sets a custom property.
 - **Density is desktop density**, decided in the tokens alone: type
   12/13/14/18/20px (`--font-xs` … `--font-xl`), in `rem` so the browser's text
   size reaches it, and 12px is the floor. Controls are `--control-lg` 36
@@ -140,8 +146,8 @@ rail 84px │ panel 380px             │ sheet 380px (optional) │ map
 - **MapLibre's controls are restyled, not re-invented.** Zoom, compass and
   locate are kit buttons on the map's public API; the scale bar and the
   attribution are MapLibre's own, restyled.
-- **Map-drawn colours belong to the basemap, not the scheme**: label halos and
-  map text do not change with Daylight.
+- **Map-drawn colours belong to the basemap, not the scheme**: labels, halos
+  and line casings use the fixed `MAP_INK` and do not change with Daylight.
 
 ## 3. Rows
 

@@ -14,7 +14,7 @@
     display: block;
     margin: 0;
     font-size: var(--font-xs);
-    color: var(--theme-text-muted);
+    color: var(--color-text-muted);
   }
 }
 
@@ -26,43 +26,43 @@
   align-items: center;
   gap: 2px;
   padding: 20px var(--gutter);
-  border: 1px dashed var(--theme-bonus-2);
+  border: 1px dashed var(--color-line-strong);
   border-radius: var(--radius-md);
-  background: var(--surface-field);
+  background: var(--color-field);
   cursor: pointer;
   text-align: center;
   transition:
-    border-color var(--transition-fast),
-    background-color var(--transition-fast);
+    border-color var(--motion-fast),
+    background-color var(--motion-fast);
 }
 
 .drop:hover,
 .drop[data-dragging] {
-  border-color: var(--theme-accent);
-  background: color-mix(in srgb, var(--theme-accent) 8%, transparent);
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
 }
 
 .dropGlyph {
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 .drop[data-loaded] .dropGlyph {
-  color: var(--theme-accent);
+  color: var(--color-accent);
 }
 
 .dropLine {
   font-size: var(--font-sm);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
   overflow-wrap: anywhere;
 }
 
 .drop[data-loaded] .dropLine {
-  color: var(--theme-text-primary);
+  color: var(--color-text);
 }
 
 .dropHint {
   font-size: var(--font-xs);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 /* A line holding the one button that leads somewhere else. Centred and given
@@ -100,7 +100,7 @@
   padding: 10px 12px;
   border: var(--hairline);
   border-radius: var(--radius-sm);
-  background: var(--surface-field);
+  background: var(--color-field);
 }
 
 .summaryGrid {
@@ -113,20 +113,20 @@
 
 .summaryLabel {
   font-size: var(--font-xs);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 .summaryValue {
   margin: 0;
   font-size: var(--font-xs);
-  color: var(--theme-text-primary);
+  color: var(--color-text);
   overflow-wrap: anywhere;
 }
 
 .summaryNote {
   margin: 0;
   font-size: var(--font-xs);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 /* Uploading and starting: one line, the bar, and the megabytes under it. */
@@ -140,13 +140,13 @@
 .workingLine {
   margin: 0;
   font-size: var(--font-sm);
-  color: var(--theme-text-primary);
+  color: var(--color-text);
 }
 
 .workingDetail {
   margin: 0;
   font-size: var(--font-xs);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 /* Submitted. */
@@ -160,13 +160,13 @@
 }
 
 .doneGlyph {
-  color: var(--theme-accent);
+  color: var(--color-accent);
 }
 
 .doneName {
   margin: 0;
   font-size: var(--font-base);
-  color: var(--theme-text-primary);
+  color: var(--color-text);
 }
 
 /* The ELVIS errand, numbered because it is done in order. */
@@ -185,7 +185,7 @@
 }
 
 .step::marker {
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
   font-size: var(--font-sm);
 }
 
@@ -198,13 +198,13 @@
 .stepLine {
   margin: 0;
   font-size: var(--font-sm);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 .stepWarning {
   margin: 0;
   font-size: var(--font-sm);
-  color: var(--theme-warning);
+  color: var(--color-warning);
 }
 
 .stepControls {

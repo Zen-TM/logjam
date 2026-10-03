@@ -13,7 +13,7 @@
   padding: 14px 0 12px;
   overflow-y: auto;
   scrollbar-width: none;
-  background: var(--theme-primary);
+  background: var(--color-page);
   border-right: var(--hairline);
 }
 
@@ -26,8 +26,8 @@
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-lg);
-  background: color-mix(in srgb, var(--theme-accent) 16%, transparent);
-  color: var(--theme-accent);
+  background: color-mix(in srgb, var(--color-accent) 16%, transparent);
+  color: var(--color-accent);
 }
 
 .brandMark {
@@ -54,7 +54,7 @@
   border: none;
   border-radius: var(--radius-lg);
   background: transparent;
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
   font: inherit;
   font-size: var(--font-xs);
   font-weight: 600;
@@ -68,21 +68,21 @@
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-pill);
-  transition: background-color var(--transition-fast);
+  transition: background-color var(--motion-fast);
 }
 
 .item:hover .pill {
-  background: color-mix(in srgb, var(--theme-text-primary) 10%, transparent);
-  color: var(--theme-text-primary);
+  background: color-mix(in srgb, var(--color-text) 10%, transparent);
+  color: var(--color-text);
 }
 
 .item[data-active="true"] {
-  color: var(--theme-text-primary);
+  color: var(--color-text);
 }
 
 .item[data-active="true"] .pill {
-  background: var(--theme-accent);
-  color: var(--ink);
+  background: var(--color-accent);
+  color: var(--color-on-fill);
 }
 
 .label {
@@ -102,8 +102,8 @@
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-pill);
-  background: var(--theme-warning);
-  color: var(--ink);
+  background: var(--color-warning);
+  color: var(--color-on-fill);
   font-size: 11px;
   font-weight: 700;
 }
@@ -122,7 +122,7 @@
   display: flex;
   align-items: center;
   justify-content: space-around;
-  background: var(--theme-primary);
+  background: var(--color-page);
   border-top: var(--hairline);
 }
 

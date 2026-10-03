@@ -230,7 +230,7 @@ function Trailing({ badge }: { badge?: React.ReactNode }) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: theme.primary },
+  root: { flex: 1, backgroundColor: theme.page },
   // The hero runs edge to edge; only the menu takes the body padding.
   menu: { padding: spacing(2), gap: spacing(1), paddingBottom: spacing(4) },
   health: { flexDirection: "row", alignItems: "flex-start", gap: spacing(1) },

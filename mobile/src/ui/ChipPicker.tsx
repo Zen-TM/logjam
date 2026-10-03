@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { StyleSheet, TextInput, View } from "react-native";
 
-import { fontSize, radius, spacing, surface, theme } from "../theme";
+import { fontSize, radius, spacing, theme } from "../theme";
 import { Chip } from "./Chip";
 import { FieldError } from "./FieldError";
 import { SectionHeader } from "./SectionHeader";
@@ -122,10 +122,10 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: theme.accent,
-    backgroundColor: surface.card,
+    backgroundColor: theme.card,
     paddingHorizontal: spacing(1.5),
     paddingVertical: spacing(0.5),
-    color: theme.textPrimary,
+    color: theme.text,
     fontSize: fontSize.sm,
   },
 });

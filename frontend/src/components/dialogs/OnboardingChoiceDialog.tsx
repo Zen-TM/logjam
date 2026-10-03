@@ -94,9 +94,7 @@ function OnboardingChoiceDialog({
           leading={
             <IconTile
               icon={loaded ? Check : Database}
-              hue={
-                loaded ? "var(--completed-place-color)" : "var(--theme-accent)"
-              }
+              hue={loaded ? "var(--color-success)" : "var(--color-accent)"}
             />
           }
           // Absent, not disabled, once it has run: there is nothing left to
@@ -116,7 +114,7 @@ function OnboardingChoiceDialog({
         <Row
           title="Import my own files"
           subtitle="A place list needs name, latitude and longitude. A logbook needs a place name and a date."
-          leading={<IconTile icon={FileUp} hue="var(--theme-bonus-1)" />}
+          leading={<IconTile icon={FileUp} hue="var(--color-neutral)" />}
           onOpen={onImportFiles}
           disabled={loading}
         />

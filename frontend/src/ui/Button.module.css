@@ -2,69 +2,61 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: var(--space-0-5);
   min-height: var(--control-lg);
-  padding: 0 14px;
+  padding: 0 var(--space-1-5);
   border-radius: var(--radius-pill);
   border: 1px solid transparent;
   background: transparent;
-  color: var(--theme-text-primary);
+  color: var(--color-text);
   font: inherit;
   font-size: var(--font-base);
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
-  transition: background-color var(--transition-fast);
+  transition: background-color var(--motion-fast);
 }
 
 .compact {
   min-height: var(--control-md);
-  padding: 0 12px;
+  padding: 0 var(--space-1-5);
   font-size: var(--font-sm);
 }
 
-/* The label on a fill is the fixed ink, never the scheme's primary (root
-   CLAUDE.md: text ON a colour fill). */
+/* The label on a fill is `onFill`, never the page colour (root CLAUDE.md:
+   text ON a colour fill). */
 .filled {
-  background: var(--theme-accent);
-  color: var(--ink);
+  background: var(--color-accent);
+  color: var(--color-on-fill);
 }
 
 .filled:hover:not(:disabled) {
-  background: color-mix(
-    in srgb,
-    var(--theme-accent) 85%,
-    var(--theme-text-primary)
-  );
+  background: color-mix(in srgb, var(--color-accent) 85%, var(--color-text));
 }
 
 /* Accent as the EDGE, the label in the text colour. Accent text clears 4.5:1
    only on the page colour, and an outline button also sits on cards (a row's
    Decline): there accent text was 3.6:1 under Sandstone (DESIGN.md §4). */
 .outline {
-  border-color: var(--theme-accent);
-  color: var(--theme-text-primary);
+  border-color: var(--color-accent);
+  color: var(--color-text);
 }
 
 .danger {
-  border-color: var(--theme-warning);
-  color: var(--theme-warning);
+  border-color: var(--color-warning);
+  color: var(--color-warning);
 }
 
 /* The verb of a destructive confirm: a warning fill with the ink label. A
    destructive TRIGGER (a row's Delete) stays `danger`, so the fill is only ever
    the last step. */
 .destructive {
-  background: var(--theme-warning);
-  color: var(--ink);
+  background: var(--color-warning);
+  color: var(--color-on-fill);
 }
 
 .destructive:hover:not(:disabled) {
-  background: color-mix(
-    in srgb,
-    var(--theme-warning) 85%,
-    var(--theme-text-primary)
-  );
+  background: color-mix(in srgb, var(--color-warning) 85%, var(--color-text));
 }
 
 .plain:hover:not(:disabled),
@@ -111,14 +103,14 @@
   border: none;
   border-radius: var(--radius-md);
   background: transparent;
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
   cursor: pointer;
-  transition: background-color var(--transition-fast);
+  transition: background-color var(--motion-fast);
 }
 
 .iconButton:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--theme-text-primary) 10%, transparent);
-  color: var(--theme-text-primary);
+  background: color-mix(in srgb, var(--color-text) 10%, transparent);
+  color: var(--color-text);
 }
 
 .iconButton:disabled {
@@ -127,29 +119,31 @@
 }
 
 /* An icon button that is "on" takes a tint rather than a fill, so it cannot
-   outshout the page's primary action. */
+   outshout the page's primary action. Its glyph is the text colour: an accent
+   glyph on a wash of itself fell to 2.7:1 on Daylight's paper. */
 .iconButton.tinted {
-  background: color-mix(in srgb, var(--theme-accent) 16%, transparent);
-  color: var(--theme-accent);
+  background: color-mix(in srgb, var(--color-accent) 16%, transparent);
+  color: var(--color-text);
 }
 
 .iconButton.danger {
-  color: var(--theme-warning);
+  color: var(--color-warning);
 }
 
-/* An icon button sitting on a light fill (a toast, a tooltip). */
-.iconButton.onFill {
-  color: var(--ink);
+/* An icon button sitting on the inverted surface (a toast, a tooltip). */
+.iconButton.onInverse {
+  color: var(--color-on-inverse);
 }
 
-.iconButton.onFill:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--ink) 10%, transparent);
-  color: var(--ink);
+.iconButton.onInverse:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-on-inverse) 10%, transparent);
+  color: var(--color-on-inverse);
 }
 
-/* The global ring is the text colour, which IS a light fill: invisible here. */
-.iconButton.onFill:focus-visible {
-  outline-color: var(--ink);
+/* The global ring is the text colour, which IS the inverted surface: invisible
+   here. */
+.iconButton.onInverse:focus-visible {
+  outline-color: var(--color-on-inverse);
 }
 
 .iconButton.round {

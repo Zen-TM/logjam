@@ -34,7 +34,7 @@
   /* The end pad centres the round clear button in the pill's end cap. */
   padding: 0 calc((var(--control-md) - var(--control-sm)) / 2) 0 12px;
   border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--theme-accent) 12%, var(--theme-primary));
+  background: color-mix(in srgb, var(--color-accent) 12%, var(--color-page));
   font-size: var(--font-sm);
 }
 
@@ -51,14 +51,14 @@
   gap: 12px;
   padding: 0 var(--gutter) 6px;
   font-size: var(--font-xs);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 .note {
   flex-shrink: 0;
   margin: 0 var(--gutter) 8px;
   font-size: var(--font-xs);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 .list {
@@ -85,7 +85,7 @@
   margin: 0;
   text-align: center;
   font-size: var(--font-sm);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 .meta {

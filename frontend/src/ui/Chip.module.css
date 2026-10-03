@@ -2,37 +2,39 @@
   flex: none;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--space-0-5);
   min-height: var(--control-md);
-  padding: 0 10px;
+  padding: 0 var(--space-1);
   border-radius: var(--radius-pill);
   border: var(--hairline);
-  background: var(--theme-secondary);
-  color: var(--theme-text-primary);
+  background: var(--color-card);
+  color: var(--color-text);
   font: inherit;
   font-size: var(--font-sm);
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
-  transition: border-color var(--transition-fast);
+  transition: border-color var(--motion-fast);
 }
 
 .chip:hover:not(:disabled) {
-  border-color: var(--chip-hue, var(--theme-accent));
+  border-color: var(--chip-hue, var(--color-accent));
 }
 
+/* Inactive, the glyph is muted: a hue is only ever a fill (the active chip),
+   never a glyph on a surface, where light hues fail 3:1 on Daylight's card. */
 .glyph {
   flex: none;
-  color: var(--chip-hue, var(--theme-accent));
+  color: var(--color-text-muted);
 }
 
 .count {
   min-width: 20px;
   height: 18px;
-  padding: 0 5px;
+  padding: 0 var(--space-0-5);
   box-sizing: border-box;
   border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--theme-text-primary) 12%, transparent);
+  background: color-mix(in srgb, var(--color-text) 12%, transparent);
   font-size: var(--font-xs);
   display: inline-flex;
   align-items: center;
@@ -40,17 +42,19 @@
 }
 
 .active {
-  background: var(--chip-hue, var(--theme-accent));
-  border-color: var(--chip-hue, var(--theme-accent));
-  color: var(--ink);
+  background: var(--chip-hue, var(--color-accent));
+  border-color: var(--chip-hue, var(--color-accent));
+  color: var(--color-on-fill);
 }
 
 .active .glyph {
-  color: var(--ink);
+  color: var(--color-on-fill);
 }
 
+/* No wash on a fill: an ink wash darkened Daylight's accent until the count
+   on it fell under 4.5:1. The count reads as `onFill` on the fill itself. */
 .active .count {
-  background: color-mix(in srgb, var(--ink) 14%, transparent);
+  background: transparent;
 }
 
 .chip:disabled {
@@ -61,12 +65,12 @@
 .dashed {
   background: transparent;
   border-style: dashed;
-  border-color: var(--theme-text-muted);
-  color: var(--theme-text-muted);
+  border-color: var(--color-text-muted);
+  color: var(--color-text-muted);
 }
 
 .dashed .glyph {
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 /* ── Picker ────────────────────────────────────────────────────────────── */
@@ -74,43 +78,43 @@
 .picker {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-0-5);
 }
 
 /* A field's label, not a section title: sentence case, like TextField's. */
 .pickerLabel {
   font-size: var(--font-sm);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 .pickerChips {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--space-0-5);
 }
 
 .pickerInput {
   width: 140px;
   min-height: var(--control-md);
   box-sizing: border-box;
-  padding: 0 12px;
+  padding: 0 var(--space-1-5);
   border-radius: var(--radius-pill);
-  border: 1px solid var(--theme-accent);
-  background: var(--surface-field);
-  color: var(--theme-text-primary);
+  border: 1px solid var(--color-accent);
+  background: var(--color-field);
+  color: var(--color-text);
   font: inherit;
   font-size: var(--font-sm);
 }
 
 .pickerInput:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 1px var(--theme-accent);
+  box-shadow: 0 0 0 1px var(--color-accent);
 }
 
 .pickerHint {
   margin: 0;
   font-size: var(--font-xs);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 /* ── Rail ──────────────────────────────────────────────────────────────── */
@@ -126,14 +130,14 @@
   --fade-end-size: 0px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-1);
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
   /* Room for the focus ring, which the scroll container would otherwise clip;
      the negative margin keeps the chips on the panel's text edge. */
-  padding: 4px;
-  margin: -4px;
+  padding: var(--space-0-5);
+  margin: calc(-1 * var(--space-0-5));
   /* The browser's focus scrolling stops this far from each edge — clear of the
      fade (WCAG 2.4.11). */
   scroll-padding-inline: var(--fade);
@@ -160,5 +164,5 @@
 
 .group {
   display: flex;
-  gap: 8px;
+  gap: var(--space-1);
 }

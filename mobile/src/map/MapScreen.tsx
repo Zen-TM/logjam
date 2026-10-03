@@ -4503,7 +4503,7 @@ export function MapScreen({
               type="fill"
               id="offline-mask-fill"
               layerIndex={maskLayerIndex}
-              style={{ fillColor: theme.primary, fillOpacity: 1 }}
+              style={{ fillColor: theme.page, fillOpacity: 1 }}
             />
           </GeoJSONSource>
         ) : null}
@@ -4787,7 +4787,7 @@ export function MapScreen({
                 accessibilityLabel="Remove this point"
                 style={styles.anchorDelete}
               >
-                <Feather name="trash-2" size={20} color={theme.primary} />
+                <Feather name="trash-2" size={20} color={theme.onFill} />
               </View>
             </Marker>
           ) : null}
@@ -5059,7 +5059,7 @@ export function MapScreen({
           style={styles.controlButton}
           onPress={() => setPickerOpen(true)}
         >
-          <Feather name="layers" size={FAB_ICON} color={theme.textPrimary} />
+          <Feather name="layers" size={FAB_ICON} color={theme.text} />
         </Pressable>
         <Pressable
           accessibilityRole="button"
@@ -5077,7 +5077,7 @@ export function MapScreen({
           <Feather
             name={LOCATE_ICON[followMode]}
             size={FAB_ICON}
-            color={theme.textPrimary}
+            color={theme.text}
             // The arrow glyph's ink sits up-and-right of its box centre, so a
             // geometrically centred icon reads off-centre — nudge it back.
             style={followMode === "off" ? styles.locateIcon : undefined}
@@ -5089,7 +5089,7 @@ export function MapScreen({
           style={styles.miniButton}
           onPress={() => setAttributionOpen(true)}
         >
-          <Feather name="info" size={MINI_FAB_ICON} color={theme.textPrimary} />
+          <Feather name="info" size={MINI_FAB_ICON} color={theme.text} />
         </Pressable>
       </View>
 
@@ -5520,12 +5520,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: theme.warning,
     borderWidth: 2,
-    borderColor: theme.primary,
+    borderColor: theme.page,
   },
   // The field and its Save button were flush against each other, which read as
   // one control and put the button under the thumb aiming for the input.
   nameForm: { gap: spacing(2) },
-  root: { flex: 1, backgroundColor: theme.primary },
+  root: { flex: 1, backgroundColor: theme.page },
   map: { flex: 1 },
   noticeStack: {
     position: "absolute",
@@ -5544,13 +5544,13 @@ const styles = StyleSheet.create({
   // around its own midline — left-aligned text in a box that moves under it
   // reads as drifting, and these wrap to two lines at large text sizes.
   noticeText: {
-    color: theme.textPrimary,
+    color: theme.text,
     fontSize: fontSize.sm,
     textAlign: "center",
   },
   // Takes the slack so the dismiss sits at the pill's right edge rather than
   // floating next to the text.
-  filterBadgeText: { flex: 1, color: theme.textPrimary, fontSize: fontSize.sm },
+  filterBadgeText: { flex: 1, color: theme.text, fontSize: fontSize.sm },
   sheetBody: { gap: spacing(1) },
   measureTile: {
     width: 40,
@@ -5575,7 +5575,7 @@ const styles = StyleSheet.create({
     width: FAB_SIZE,
     height: FAB_SIZE,
     borderRadius: FAB_SIZE / 2,
-    backgroundColor: theme.secondary,
+    backgroundColor: theme.card,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -5583,7 +5583,7 @@ const styles = StyleSheet.create({
     width: MINI_FAB_SIZE,
     height: MINI_FAB_SIZE,
     borderRadius: MINI_FAB_SIZE / 2,
-    backgroundColor: theme.secondary,
+    backgroundColor: theme.card,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -5599,7 +5599,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: withAlpha(theme.accent, 0.5),
-    backgroundColor: withAlpha(theme.primary, 0.92),
+    backgroundColor: withAlpha(theme.page, 0.92),
   },
   instruments: {
     position: "absolute",

@@ -20,8 +20,8 @@ Change a convention, change this file in the same commit.
 
 `src/theme.ts` reads every token from `@logjam/shared` (`designTokens.ts`,
 `themeSchemes.ts`): `theme` holds the active scheme's role colours, beside the
-shared `radius`, `spacing(n)` (8 × n), `fontSize`, control sizes and
-`withAlpha`. Never a hex, never `rgba(255,255,255,…)`: a tint is
+shared `radius`, `spacing(n)` (8 × n), `fontSize`, `controlSize` and
+`withAlpha` (`src/themeParity.test.ts` holds them equal to the declaration). Never a hex, never `rgba(255,255,255,…)`: a tint is
 `withAlpha(token, a)`.
 
 - **The scheme applies at the next launch, and says so.** `theme` is a module
@@ -39,8 +39,10 @@ shared `radius`, `spacing(n)` (8 × n), `fontSize`, control sizes and
   48dp. `Button` is 48 (compact 40), `IconButton` 40 + `hitSlop`.
 - **No shadows.** Depth is the scheme's surfaces; a sheet is the page colour
   sliding up, and the rows on it are cards.
-- **`mode` (dark or light) drives the status and navigation bars.** Colours
-  drawn on the map belong to the basemap, not the scheme.
+- **`themeMode` (dark or light) drives the status and navigation bars.**
+  Colours drawn on the map (labels, halos, casings) are the fixed `MAP_INK`:
+  they belong to the basemap, not the scheme. A photo viewer's chrome is fixed
+  too: a photo sits on black.
 
 | Role | Token |
 |---|---|

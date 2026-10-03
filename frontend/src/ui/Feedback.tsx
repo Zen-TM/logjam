@@ -137,7 +137,7 @@ export function Toast({
       <IconButton
         icon={X}
         label="Dismiss"
-        tone="onFill"
+        tone="onInverse"
         size={14}
         round
         onClick={onDismiss}
