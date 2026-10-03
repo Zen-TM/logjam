@@ -90,7 +90,7 @@ export function Row({
    */
   checked?: boolean;
   /**
-   * Picked: accent border + accent tint over the whole card. The canonical
+   * Picked: an accent border, no tint. The canonical
    * "a selection is a STATE of the row, not a label on it" treatment — the
    * active basemap and a multi-selected saved asset are the same thing.
    */
@@ -209,10 +209,9 @@ const styles = StyleSheet.create({
   line: { flexDirection: "row", alignItems: "center", gap: spacing(1.5) },
   footer: { paddingTop: spacing(1.25) },
   pressed: { backgroundColor: theme.cardPressed },
-  selected: {
-    borderColor: theme.accent,
-    backgroundColor: withAlpha(theme.accent, 0.12),
-  },
+  // An accent edge and no tint: a tint dropped the subtitle's contrast
+  // (UX §9), and Logjam Web's selected row is the same edge.
+  selected: { borderColor: theme.accent },
   disabled: { opacity: opacity.disabled },
   // No fill and no edge colour, but the border's width stays: the box is the
   // same size as a pressable row's.
