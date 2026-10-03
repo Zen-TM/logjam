@@ -35,9 +35,9 @@ import {
   ErrorBanner,
   Row,
   SectionHeader,
-  SegmentedControl,
+  ChipRail,
   TextField,
-  type SegmentOption,
+  type ChipOption,
   Icon,
 } from "../ui";
 
@@ -202,7 +202,7 @@ export function PlaceEditSheet({
 
   /** Every type is offered here, including the empty ones — the list hides a
    *  type with no places, but you have to be able to make the first one. */
-  const typeOptions: SegmentOption<string>[] = useMemo(
+  const typeOptions: ChipOption<string>[] = useMemo(
     () =>
       (placeTypes.data ?? []).map((type) => ({
         value: type.id,
@@ -501,8 +501,8 @@ export function PlaceEditSheet({
             field for are kept and offered back (§2.6), never dropped. */}
           {typeOptions.length > 1 ? (
             <View style={styles.field}>
-              <SectionHeader label="Type" />
-              <SegmentedControl
+              <SectionHeader title="Type" />
+              <ChipRail
                 scroll
                 options={typeOptions}
                 value={placeTypeId}
@@ -534,7 +534,7 @@ export function PlaceEditSheet({
             </Text>
           </View>
 
-          <SectionHeader label="Position" />
+          <SectionHeader title="Position" />
           <View style={styles.coordRow}>
             <View style={styles.coordField}>
               <TextField
@@ -609,7 +609,7 @@ export function PlaceEditSheet({
             type has none rather than standing over nothing. */}
           {typeFieldDefs.length > 0 ? (
             <SectionHeader
-              label={`${typeName(placeTypeId, placeTypes.data)} ${ATTRIBUTE_NOUN.many}`}
+              title={`${typeName(placeTypeId, placeTypes.data)} ${ATTRIBUTE_NOUN.many}`}
             />
           ) : null}
           <CustomFieldValueInputs

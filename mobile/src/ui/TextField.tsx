@@ -6,7 +6,7 @@ import {
   type TextInputProps,
 } from "react-native";
 
-import { fontSize, radius, spacing, theme } from "../theme";
+import { fontSize, opacity, radius, spacing, theme } from "../theme";
 import { FieldError } from "./FieldError";
 
 type TextFieldProps = {
@@ -72,6 +72,7 @@ export function TextField({
       onChangeText={onChangeText}
       placeholderTextColor={theme.textMuted}
       accessibilityLabel={label}
+      accessibilityState={{ disabled }}
       multiline={multiline}
       {...inputProps}
     />
@@ -94,8 +95,8 @@ export function TextField({
 
 const styles = StyleSheet.create({
   container: { gap: spacing(0.5) },
-  // Matches `Row`'s/`Button`'s disabled dim (0.45) — see the note above.
-  disabled: { opacity: 0.45 },
+  // The kit's one disabled dim — see the note above.
+  disabled: { opacity: opacity.disabled },
   label: {
     fontSize: fontSize.xs,
     fontWeight: "600",

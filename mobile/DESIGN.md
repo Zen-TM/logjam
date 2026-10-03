@@ -53,15 +53,15 @@ difference between an informative header and a dashboard nobody asked for.
 ## 2. Layout skeleton
 
 ```
-HeroHeader          pinned · headline state + primary "add/create" action
-filter rail         pinned · SegmentedControl scroll — categories with tallies
+Hero          pinned · headline state + primary "add/create" action
+filter rail         pinned · ChipRail scroll — categories with tallies
 ScrollView          the inventory; only this moves
 BottomSheet(s)      acquisition + per-item actions
 ```
 
 - **Pin the hero and the rail, scroll only the list.** The filter you are
   working in must never scroll out of reach. Set `headerShown: false` on the
-  route; `HeroHeader` carries its own top safe-area inset.
+  route; `Hero` carries its own top safe-area inset.
 - Body padding `spacing(2)` horizontal, `spacing(1)` gap between rows,
   `spacing(4)` bottom (tab bar clearance).
 - The rail owns a `spacing(1.5)` bottom pad: that gap is what the list scrolls
@@ -203,7 +203,7 @@ BottomSheet(s)      acquisition + per-item actions
   picker (`SnapPicker.tsx`) sits in the tool panel because it
   governs what the NEXT TAP does — it is part of the tool's mode, not a property
   of the map. Layer visibility goes in the layers sheet; tool behaviour goes with
-  the tool. Use the wrapped `SegmentedControl` from the kit for the choice (§9:
+  the tool. Use the wrapped `ChipRail` from the kit for the choice (§9:
   never hand-roll a chip row), and say plainly when the setting cannot take
   effect — snapping needs the vector basemap at a zoom that still carries paths
   and creeks, so the picker names that rather than silently doing nothing.
@@ -343,7 +343,7 @@ BottomSheet(s)      acquisition + per-item actions
   the wrong number by ~12.5°. In magnetic the tape carries an "M": the default
   gets no mark (every pixel of chrome is terrain), a non-default that silently
   reads 12° low gets one.
-- **A hero on a pushed screen owns the back button** (`HeroHeader.onBack`).
+- **A hero on a pushed screen owns the back button** (`Hero.onBack`).
   Turning off the native header removes the back affordance too, and the
   swipe/hardware gesture is not a visible way out.
 
@@ -418,7 +418,7 @@ A filter you can't see is a bug report waiting to happen.
 `MapLayersSheet` is the worked example: basemap choice, layer visibility and
 offline storage were one column of six stacked `SectionHeader` groups, so each of
 the three was a scroll away from the others. They are now a pinned
-`SegmentedControl` inside the sheet — the same content-swap rule as §6 ("never
+`ChipRail` inside the sheet — the same content-swap rule as §6 ("never
 open a second sheet"), applied to a sheet that is really three panels. The rail
 carries the count that matters (`Layers 9`), and the tab you are in is never
 scrolled out of reach.
@@ -510,7 +510,7 @@ one screen tall.
 
 Anything with kinds gets a per-kind hue and glyph from a single map
 (`CATEGORY_META` + `assetHue`), used in **all four** places: the row's icon
-tile, its filter chip when active, its `CapacityBar` segment, and its entry in
+tile, its filter chip when active, its `Meter` segment, and its entry in
 the add sheet. That repetition is what makes a mixed list scannable, and it
 means a new kind is one object literal, not a design decision.
 
@@ -1041,13 +1041,13 @@ which subsystem is talking.
   SEGMENTED CONTROL'S slot.** Hold any row to enter the mode with that row
   picked, tap to toggle the rest, and the last row deselected leaves the mode
   — no separate "done". While it is running, the contextual bar replaces the
-  category SegmentedControl in place, rather than stacking a second bar above
+  category ChipRail in place, rather than stacking a second bar above
   the tab bar: two rows of chrome eat the list, and the tabs themselves are
   the way out of the mode. It used to take the WHOLE rail's slot — search
   field and tag chips included — which is exactly what broke item 15: a tab
   with rows below the fold has a taller rail than the bar replacing it, so
   every row slid up the instant a selection started. Any narrowing control
-  under the SegmentedControl (the name search every tab now has, and the
+  under the ChipRail (the name search every tab now has, and the
   waypoint tag rail) stays MOUNTED in the same place in both states — so the
   rail's height cannot differ — and goes INERT rather than unmounting: typing
   or picking a tag mid-selection could narrow a selected row out of the
@@ -1057,7 +1057,7 @@ which subsystem is talking.
   field that silently drops every tap read as broken, so `TextField` grew its
   own `disabled` treatment (`editable={false}` dims it, matching `Row`'s and
   `IconButton`'s convention) and the waypoint tag rail dims the same way. **The
-  bar itself is pinned to `SEGMENTED_CONTROL_HEIGHT`** (`ui/SegmentedControl.tsx`,
+  bar itself is pinned to `CHIP_RAIL_HEIGHT`** (`ui/ChipRail.tsx`,
   re-exporting `Chip`'s own `CHIP_HEIGHT`) rather than left to size itself off
   its 40pt `IconButton`s — a few px taller than one chip is still a jump, just
   a smaller one. Its buttons keep their full tap target and simply overflow
@@ -1092,12 +1092,12 @@ which subsystem is talking.
     trailing slot emptied, the title column took the width back and every row
     changed height the moment a selection started. One component, one box,
     `selectable={false}` for a row a group verb cannot act on.
-  - **A screen with no SegmentedControl still needs the rail, at the bar's
+  - **A screen with no ChipRail still needs the rail, at the bar's
     height.** The multi-select bar takes the rail's slot, so a screen whose rail
     is empty when idle grows one the moment a selection starts and the list
     jumps under the finger that started it — the same bug `SelectionMark` fixes
     one level down. Put the screen's one-line hint there instead, in a container
-    of `SEGMENTED_CONTROL_HEIGHT`, and let the bar swap into it (Account sync
+    of `CHIP_RAIL_HEIGHT`, and let the bar swap into it (Account sync
     issues).
   - **A row the group verb cannot act on is not selectable.** Deleting is all a
     selection does, so a shared route or waypoint (no `delete` descriptor) is
@@ -1279,7 +1279,7 @@ which subsystem is talking.
   many maps. Three rules follow:
   - **TWO stats, equal weight, fixed height.** The two things the decision turns
     on are what it costs in disk and what it costs in time, so they are peers
-    (`HeroHeader.secondaryValue`) — a time in the small muted `valueSuffix` font
+    (`Hero.secondaryValue`) — a time in the small muted `valueSuffix` font
     said it was a footnote to the size. The tile count and the p90 spread were
     the third and fourth stats, they overflowed the line, and neither changes
     what the user does next. The hero's height never changes, because the map
@@ -1495,9 +1495,9 @@ One convention for every form, in a sheet or on a screen. The pieces are
 
 Screens import from the barrel `../ui`, never from a component file. When a
 screen needs a variation, **extend the primitive** (`Row.icon`, `Button.icon`,
-`SegmentedControl.scroll`, `StatusPill.icon`) rather than hand-rolling a local
+`ChipRail.scroll`, `StatusPill.icon`) rather than hand-rolling a local
 copy — a hand-rolled row is how the last drift started. Add a new kit file only
-for a genuinely new shape (`CapacityBar`, `HeroHeader`).
+for a genuinely new shape (`Meter`, `Hero`).
 
 **A long list is a `SectionList`/`FlatList` with stable render callbacks and a
 narrowed window.** An inline `renderItem={({item}) => …}` arrow is a new
@@ -1509,7 +1509,7 @@ to something near what fits. This was the whole of the Logs screen's
 sluggishness: tapping the search icon re-rendered 115 rows to change one chip.
 
 A rail cues its own scrollability: **either** edge dissolves into the page
-colour when there is content past it (`SegmentedControl`'s `EdgeFade`, an
+colour when there is content past it (`ChipRail`'s `EdgeFade`, an
 `expo-linear-gradient` fade to `theme.page`, `spacing(6)` wide). Both sides,
 driven by scroll offset — a fade on only one end still leaves a hard-sliced chip
 at the other, and a fade shown at rest dims a chip with nothing behind it. Use a
@@ -1529,11 +1529,11 @@ something — a trip's first type picks its glyph and hue — the picker stars t
 chip (`primaryValue`) instead of moving it.
 
 **A list of one KIND of thing is one kind of card.** `Row` is `radius.lg` and
-`Card` is `radius.md`, so a list that draws some entries with one and some with
-the other reads as two lists badly interleaved — and only `ScreenScroll`'s own
+a hand-made card was `radius.md`, so a list that draws some entries with one and
+some with the other reads as two lists badly interleaved — and only `ScreenScroll`'s own
 children get its gap, so a section that wraps its rows in a `View` has to repeat
 `gap: spacing(1)` or they sit flush. The logbook's attribute list shipped both
-faults at once: the entries with a chart were `Card`s, the rest were `Row`s.
+faults at once: the entries with a chart were hand-made cards, the rest were `Row`s.
 Where a row needs a chart or any full-width content under its own line, that is
 what **`Row`'s `footer`** is for — inside the same card, same corner, same gap.
 
@@ -1569,7 +1569,7 @@ bearing that reads "24…" is an instrument that can't be used. This is the only
 layout code that should reach for `textScale`; everything else is `spacing`.
 
 **One visual, one component.** `Chip` is the single pill primitive behind both
-`SegmentedControl` (single-select rail) and `ChipPicker` (multi-select
+`ChipRail` (single-select rail) and `ChipPicker` (multi-select
 vocabulary); `MediaStrip` is the single photo surface behind both detail
 screens. When a second screen needs something the first already draws, lift it
 into the kit rather than copying the styles — two stylesheets for one visual is
@@ -1604,12 +1604,23 @@ IO or outbox writes is a FEATURE component and lives with its feature
 (`src/media/MediaStrip.tsx`), even when two screens use it — otherwise `src/ui`
 slowly becomes the place everything shared goes.
 
-Current kit: `ActivitySpark` · `BottomSheet` · `Button` · `CapacityBar` ·
-`Card` · `Chip` · `ChipPicker` · `DatePicker` ·
-`ErrorBanner` · `FieldError` · `HeroHeader` · `IconButton` · `RangePills` · `Row` ·
-`Screen`/`ScreenScroll` · `ScreenStates` · `SectionHeader` ·
-`SegmentedControl` · `StatGrid` · `StatusPill` · `TextField` · `Toast` ·
-`Toggle`.
+The component list is `KIT_COMPONENTS` in `shared/src/kit.ts`, the one list both
+clients' barrels are held to (`src/ui/kit.test.ts`). It says which components
+Logjam Web has too, and why each one it has not is not shared. A component
+starts there.
+
+**A card fill means "press me".** `Row` and `StatGrid` sit on the `card` colour
+only when they do something (`onPress`/`onLongPress`; a stat's `onCopy`); a
+read-only one has no fill and no edge colour but the same box, so its tile and
+title line up with the pressable rows around it. A switch is a `SwitchRow`: the
+whole row is the target and a screen reader meets one `switch` named by the
+title. There is no `Card`: a non-pressable box with a card fill is the thing
+the rule forbids.
+
+**A disabled control dims by `opacity.disabled`, does not answer a press and
+says why**: a `Row`'s subtitle, a `Button`'s `disabledReason` (read as the
+accessibility hint). A `BottomSheet` has a visible × at the top right of its
+header; a pushed screen's `Hero onBack` draws the back arrow at the top left.
 
 ## 10. Offline is a normal state, not an error
 

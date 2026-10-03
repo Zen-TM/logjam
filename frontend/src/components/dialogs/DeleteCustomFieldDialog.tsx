@@ -4,13 +4,13 @@ import type {
   TripLogCustomFieldDef,
 } from "@logjam/shared";
 import ConfirmDialog from "./ConfirmDialog";
-import { ErrorBanner } from "../feedback/ErrorBanner";
 import {
   deleteCustomField,
   type CustomFieldEntityKind,
 } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import { useCustomFieldImpact } from "./useCustomFieldImpact";
+import { ErrorBanner } from "../../ui";
 
 // Entity-specific copy nouns. Both families store values keyed by the field's
 // `key`; only the surface wording differs (trip logs vs places).

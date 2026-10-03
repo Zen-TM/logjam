@@ -91,7 +91,7 @@ export function PrivacySettingsScreen() {
   return (
     <>
       <ScreenScroll>
-        <SectionHeader label="This phone" />
+        <SectionHeader title="This phone" />
         <PreferenceRow
           icon="private"
           title="App lock"
@@ -119,7 +119,7 @@ export function PrivacySettingsScreen() {
             it is the one control on this page that sends a copy of your data
             OUT of Logjam, which is why it lives on the privacy page at all and
             why it must not read as a third security setting. */}
-        <SectionHeader label="Photos and videos" />
+        <SectionHeader title="Photos and videos" />
         <PreferenceRow
           icon="photo"
           title="Save photos to your gallery"
@@ -133,7 +133,7 @@ export function PrivacySettingsScreen() {
           onToggle={toggleSaveToGallery}
         />
 
-        <SectionHeader label="What's on this phone" />
+        <SectionHeader title="What's on this phone" />
         <Text style={styles.note}>
           {"Your places, trips, notes, photos and maps are stored on this device, " +
             "outside your phone's cloud backup. The app lock protects them if " +

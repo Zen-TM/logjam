@@ -23,7 +23,6 @@ import {
 import type { TFriend, TPlace, TRoute, PlaceTrack } from "../../../placeUtils";
 import { ownerUsername } from "../../../placeUtils";
 import { useStoredState } from "../../../useStoredState";
-import { ErrorBanner } from "../../feedback/ErrorBanner";
 import {
   Button,
   ChipRail,
@@ -37,6 +36,8 @@ import {
   StatusPill,
   type MenuEntry,
   type Glyph,
+  ErrorBanner,
+  LoadingState,
 } from "../../../ui";
 import { wayVerbs, type WayVerbId } from "./wayActions";
 import {
@@ -352,7 +353,7 @@ export default function RoutesPanel({
 
   const list = !waysLoaded ? (
     <div className={classes.emptyArea} role="status">
-      <p className={classes.loading}>Loading your ways…</p>
+      <LoadingState label="Loading your ways…" />
     </div>
   ) : ways.length === 0 ? (
     <div className={classes.emptyArea}>

@@ -30,7 +30,7 @@
   color: var(--color-on-fill);
 }
 
-.filled:hover:not(:disabled) {
+.filled:hover:not(:disabled, [aria-disabled="true"]) {
   background: color-mix(in srgb, var(--color-accent) 85%, var(--color-text));
 }
 
@@ -42,9 +42,10 @@
   color: var(--color-text);
 }
 
+/* The warning is the EDGE; the label is text, as an outline button's is. */
 .danger {
   border-color: var(--color-warning);
-  color: var(--color-warning);
+  color: var(--color-text);
 }
 
 /* The verb of a destructive confirm: a warning fill with the ink label. A
@@ -55,18 +56,19 @@
   color: var(--color-on-fill);
 }
 
-.destructive:hover:not(:disabled) {
+.destructive:hover:not(:disabled, [aria-disabled="true"]) {
   background: color-mix(in srgb, var(--color-warning) 85%, var(--color-text));
 }
 
-.plain:hover:not(:disabled),
-.outline:hover:not(:disabled),
-.danger:hover:not(:disabled) {
+.plain:hover:not(:disabled, [aria-disabled="true"]),
+.outline:hover:not(:disabled, [aria-disabled="true"]),
+.danger:hover:not(:disabled, [aria-disabled="true"]) {
   background: color-mix(in srgb, currentColor 12%, transparent);
 }
 
-.button:disabled {
-  opacity: 0.45;
+.button:disabled,
+.button[aria-disabled="true"] {
+  opacity: var(--opacity-disabled);
   cursor: default;
 }
 
@@ -114,7 +116,7 @@
 }
 
 .iconButton:disabled {
-  opacity: 0.4;
+  opacity: var(--opacity-disabled);
   cursor: default;
 }
 

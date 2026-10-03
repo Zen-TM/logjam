@@ -5,9 +5,8 @@ import {
 } from "../consent";
 import { recordConsent, type TUser } from "../placeUtils";
 import { messageFromError } from "../errors/messageFromError";
-import { ErrorBanner } from "./feedback/ErrorBanner";
 import BrandMark from "./brand/BrandMark";
-import { Button, Checkbox } from "../ui";
+import { Button, Checkbox, ErrorBanner } from "../ui";
 import classes from "./ConsentGate.module.css";
 
 /**

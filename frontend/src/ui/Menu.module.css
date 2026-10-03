@@ -68,7 +68,7 @@
 }
 
 .item:disabled {
-  opacity: 0.45;
+  opacity: var(--opacity-disabled);
   cursor: default;
 }
 
@@ -81,7 +81,8 @@
   flex: 1;
 }
 
-.danger,
+/* A destructive verb is said by its glyph: words are never an intent colour,
+   and a warning-coloured label fails 4.5:1 on Daylight's paper. */
 .danger .glyph {
   color: var(--color-warning);
 }
@@ -123,4 +124,11 @@
 
 .popover:focus-visible {
   outline: none;
+}
+
+/* The way out: a × at the top right, above the content, so it never covers it. */
+.bar {
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--space-0-5) var(--space-0-5) 0;
 }

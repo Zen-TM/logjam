@@ -166,6 +166,8 @@ export default function LayersPopover({
       anchorRef={anchorRef}
       label={view === "topos" ? "LiDAR topos" : "Map layers"}
       className={classes.popover}
+      // Both views carry their own × in the header.
+      closeButton={false}
     >
       {view === "topos" ? (
         <ToposView
