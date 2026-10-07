@@ -1031,6 +1031,10 @@ export function AppShell({
             <Tabs.Screen
               name="More"
               options={{
+                // Leaving More and coming back shows its ROOT, not the page last
+                // open inside it: the hub is where a visit starts. React
+                // Navigation pops the tab's stack when the tab loses focus.
+                popToTopOnBlur: true,
                 tabBarIcon: ({ color }) => (
                   <TabIcon idea="moreTab" color={color} />
                 ),
