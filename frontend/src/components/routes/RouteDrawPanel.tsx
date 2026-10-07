@@ -171,14 +171,8 @@ export function RouteDrawPanel({
     <div className={classes.root}>
       <Hero
         title={editingName ? `Editing ${editingName}` : "New route"}
-        actions={
-          <IconButton
-            icon="close"
-            label="Cancel drawing"
-            onClick={onCancel}
-            disabled={saving}
-          />
-        }
+        onClose={onCancel}
+        closeDisabled={saving}
       />
 
       <div className={classes.body}>

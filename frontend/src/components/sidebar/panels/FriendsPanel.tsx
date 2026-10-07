@@ -139,9 +139,10 @@ function FriendsPanel({
       bucket === "requests" ? [] : friends.map((friend) => friend.friendshipId),
     [bucket, friends],
   );
-  const selection = useRowSelection(friendIds);
+  const { rootRef, selectedIds, selecting, toggle, clear } =
+    useRowSelection(friendIds);
   const selectedFriends = friends.filter((friend) =>
-    selection.selectedIds.includes(friend.friendshipId),
+    selectedIds.includes(friend.friendshipId),
   );
 
   async function handleRemoveSelected() {
@@ -161,7 +162,7 @@ function FriendsPanel({
     } finally {
       setBusyId(null);
       setRemovingSelected(false);
-      selection.clear();
+      clear();
       onRefetchFriends();
       onRefetchShared();
     }
@@ -248,10 +249,10 @@ function FriendsPanel({
       // The selection bar takes the rail's slot at the rail's height, so the
       // list does not move when a selection starts (DESIGN.md §5).
       <div className={classes.rails}>
-        {selection.selecting ? (
+        {selecting ? (
           <SelectionBar
             countLabel={`${selectedFriends.length} selected`}
-            onClear={selection.clear}
+            onClear={clear}
           >
             <IconButton
               icon={friendVerb("remove").icon}
@@ -341,22 +342,20 @@ function FriendsPanel({
                     <TileCheckbox
                       tile={<Avatar username={friend.username} />}
                       label={`Select ${friend.username}`}
-                      checked={selection.selectedIds.includes(
-                        friend.friendshipId,
-                      )}
-                      selecting={selection.selecting}
+                      checked={selectedIds.includes(friend.friendshipId)}
+                      selecting={selecting}
                       onToggle={(extendRange) =>
-                        selection.toggle(friend.friendshipId, extendRange)
+                        toggle(friend.friendshipId, extendRange)
                       }
                     />
                   }
-                  selected={selection.selectedIds.includes(friend.friendshipId)}
+                  selected={selectedIds.includes(friend.friendshipId)}
                   title={friend.username}
                   description="Opens what you share with each other"
                   disabled={busyId === friend.friendshipId}
                   onOpen={() => setOpenFriend(friend)}
                   trailing={
-                    selection.selecting ? undefined : (
+                    selecting ? undefined : (
                       <Menu
                         label={`Actions for ${friend.username}`}
                         title={friend.username}
@@ -396,7 +395,7 @@ function FriendsPanel({
   };
 
   return (
-    <div ref={selection.rootRef} className={classes.root}>
+    <div ref={rootRef} className={classes.root}>
       {contractSectionKeys(FRIENDS, "web").map((key) => (
         <Fragment key={key}>{page[key]()}</Fragment>
       ))}

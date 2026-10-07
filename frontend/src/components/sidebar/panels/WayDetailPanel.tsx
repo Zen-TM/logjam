@@ -118,7 +118,6 @@ export default function WayDetailPanel({
   sharedPlaces,
   allRoutes,
   onBack,
-  onClose,
   onEdit,
   onCopied,
   onChanged,
@@ -149,7 +148,6 @@ export default function WayDetailPanel({
   allRoutes: TRoute[];
   /** Back to Ways — the list this page is one step inside of. */
   onBack: () => void;
-  onClose: () => void;
   onEdit: (route: TRoute) => void;
   /** A copy of a shared route has just been made and is the user's own now —
    *  go and show it to them. The copying itself happens here, because it is
@@ -541,7 +539,6 @@ export default function WayDetailPanel({
                 />
               )}
             />
-            <IconButton icon="close" label="Close panel" onClick={onClose} />
           </>
         }
       />

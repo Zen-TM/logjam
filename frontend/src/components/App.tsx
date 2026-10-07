@@ -1548,7 +1548,6 @@ function App() {
                   setSelectedWay(null);
                   setActivePanel("ways");
                 }}
-                onClose={() => setActivePanel(null)}
                 onEdit={startEditingRoute}
                 onCopied={showCopiedRoute}
                 onChanged={() => {
