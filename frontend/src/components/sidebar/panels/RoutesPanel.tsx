@@ -78,9 +78,6 @@ const VERB_ICON: Partial<Record<WayVerbId, Glyph>> = {
   delete: "delete",
 };
 
-const plural = (count: number, noun: string) =>
-  `${count} ${noun}${count === 1 ? "" : "s"}`;
-
 /** Export never touches the server — a route's geometry is already here. */
 function downloadText(filename: string, text: string, mimeType: string): void {
   const url = URL.createObjectURL(new Blob([text], { type: mimeType }));
@@ -262,13 +259,7 @@ export default function RoutesPanel({
 
   const hero = (
     <Hero
-      title={
-        !waysLoaded
-          ? "Ways"
-          : ways.length === 0
-            ? "No lines yet"
-            : plural(ways.length, "line")
-      }
+      title="Ways"
       actions={
         searchOpen ? (
           <IconButton icon="close" label="Close search" onClick={closeSearch} />

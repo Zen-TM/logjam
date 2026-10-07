@@ -30,7 +30,6 @@ import {
   friendRemovedMessage,
   friendRemoveConfirm,
   friendsEmptyKind,
-  friendsHeroTitle,
   friendVerb,
   type FriendsBucket,
   type SectionKeysOn,
@@ -176,7 +175,7 @@ function FriendsPanel({
   const page: Record<SectionKeysOn<typeof FRIENDS, "web">, () => ReactNode> = {
     hero: () => (
       <Hero
-        title={friendsHeroTitle(friendRequests.length, friends.length)}
+        title={FRIENDS.title}
         actions={
           <Button
             compact

@@ -27,7 +27,6 @@ import {
   tripsEmptyKind,
   tripsEmptyState,
   tripsFilterNote,
-  tripsHeroTitle,
   TRIPS_ADD,
   TRIPS_ADD_ICON,
   TRIPS_FILTER_SHEET,
@@ -454,8 +453,6 @@ function TripLogsPanel({
     />
   );
 
-  const total = tripLogsTotal ?? tripLogs.length;
-
   // The ways to add a trip, in the contract's order.
   const addEntries: Record<
     SectionKeysOn<typeof TRIPS_ADD, "web">,
@@ -470,7 +467,7 @@ function TripLogsPanel({
 
   const hero = (
     <Hero
-      title={!loaded ? "Logs" : tripsHeroTitle(total)}
+      title={TRIPS_LIST.title}
       actions={
         searchOpen ? (
           <>

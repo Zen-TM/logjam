@@ -26,7 +26,6 @@ import {
   placesEmptyKind,
   placesEmptyState,
   placesFilterNote,
-  placesHeroTitle,
   placeSortLabel,
   placeStatus,
   placeSummary,
@@ -548,7 +547,7 @@ function PlacesPanel({
   // visited and shared, and the bar beside them was the same numbers again.
   const hero = (
     <Hero
-      title={!placesLoaded ? "Places" : placesHeroTitle(collection.length)}
+      title={PLACES_LIST.title}
       actions={
         searchOpen ? (
           <>
