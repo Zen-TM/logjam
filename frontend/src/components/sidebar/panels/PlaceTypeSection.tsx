@@ -27,7 +27,7 @@ import {
   Row,
   SectionHeader,
   Select,
-  SwatchPicker,
+  ColourField,
   TextField,
   ErrorBanner,
   LoadingState,
@@ -419,9 +419,9 @@ function PlaceTypeDialog({
           })}
         </div>
 
-        <SwatchPicker
+        <ColourField
           label="Colour"
-          colors={PLACE_TYPE_COLORS}
+          palette={PLACE_TYPE_COLORS}
           value={color}
           onChange={setColor}
           nameOf={placeTypeColorName}

@@ -38,7 +38,7 @@ import {
   SectionHeader,
   Select,
   StatGrid,
-  SwatchPicker,
+  ColourField,
   type Stat,
 } from "../../ui";
 import ElevationProfile from "./ElevationProfile";
@@ -254,9 +254,9 @@ export function RouteDrawPanel({
               drawing rather than in the save dialog: the line is on the map in
               this colour as it is built, so it is a property of the draft, not
               a question asked at the end. */}
-          <SwatchPicker
+          <ColourField
             label="Colour"
-            colors={TRACK_COLORS}
+            palette={TRACK_COLORS}
             value={color ?? undefined}
             nameOf={trackColorName}
             disabled={saving}

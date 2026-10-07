@@ -70,7 +70,7 @@ import {
   Menu,
   SectionHeader,
   StatGrid,
-  SwatchPicker,
+  ColourField,
   TextField,
   Dialog,
   type MenuEntry,
@@ -589,9 +589,9 @@ export default function WayDetailPanel({
             the API has no way to change it (wayActions.ts). */}
         {properties.colour && route && (
           <section className={classes.section}>
-            <SwatchPicker
+            <ColourField
               label="Colour"
-              colors={TRACK_COLORS}
+              palette={TRACK_COLORS}
               value={shownColour ?? undefined}
               nameOf={trackColorName}
               // NOT disabled while the write is in flight: the swatch already
