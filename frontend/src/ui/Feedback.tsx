@@ -5,10 +5,11 @@ import { Icon, type Glyph } from "./Icon";
 
 /**
  * A state, as a word: "Queued", "Failed", "Shared". Not a control, so never
- * pressable, and never a `Chip`, which is one. Logjam GPS's four tones:
- * `accent` done or ready (the accent fill, the ink label), `outline` a neutral
- * state, `warning` needs the user, `muted` quiet and not a problem (paused).
- * An `icon` makes the state readable at a glance.
+ * pressable, and never a `Chip`, which is one: it has NO fill and no edge
+ * (filled is interactive, UX §4). Four tones: `accent` done or ready (a dot
+ * in the accent), `outline` a neutral state, `warning` needs the user (a dot
+ * in the warning), `muted` quiet and not a problem (paused). An `icon` makes
+ * the state readable at a glance and stands in for the dot.
  */
 export function StatusPill({
   label,
@@ -20,7 +21,11 @@ export function StatusPill({
   icon?: Glyph;
 }) {
   return (
-    <span className={classes.pill} data-tone={tone}>
+    <span
+      className={classes.pill}
+      data-tone={tone}
+      data-glyph={icon ? "" : undefined}
+    >
       {icon && <Icon idea={icon} size={12} />}
       {label}
     </span>

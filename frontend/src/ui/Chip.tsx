@@ -18,9 +18,9 @@ import { Icon, type Glyph } from "./Icon";
 
 /**
  * The pill behind every chip surface: filter rails, sort choices, sub-mode
- * switches. Active fills with `hue` (default accent) and writes its label in
- * the fixed ink; a `count` rides as a trailing badge; an `icon` leads, tinted
- * with the hue. `dashed` is the "add one" chip at the end of a vocabulary.
+ * switches. Active fills with `hue` (default accent), writes its label in the
+ * fixed ink and leads with a check unless it has an `icon` of its own; a
+ * `count` rides as a trailing badge; an `icon` leads. `dashed` is the "add one" chip at the end of a vocabulary.
  */
 export function Chip({
   label,
@@ -64,7 +64,13 @@ export function Chip({
       aria-label={count != null ? `${label}, ${count}` : undefined}
       {...rest}
     >
-      {icon && <Icon idea={icon} size={14} className={classes.glyph} />}
+      {icon ? (
+        <Icon idea={icon} size={14} className={classes.glyph} />
+      ) : (
+        // A SELECTED chip says so with a check as well as a fill, so it is
+        // never mistaken for the primary button, which is filled too.
+        active && <Icon idea="done" size={14} className={classes.glyph} />
+      )}
       <span>{label}</span>
       {starred && (
         <Icon
