@@ -23,13 +23,13 @@
 .note {
   margin: 0;
   font-size: var(--font-xs);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 .state {
   margin: 0;
   font-size: var(--font-sm);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 /* The editor these pages raise: the dialog supplies the surface, this stacks
@@ -55,23 +55,23 @@
   aspect-ratio: 1;
   border: var(--hairline);
   border-radius: var(--radius-md);
-  background: var(--theme-secondary);
-  color: var(--theme-text-primary);
+  background: var(--color-card);
+  color: var(--color-text);
   cursor: pointer;
 }
 
 .iconCell:hover {
-  border-color: var(--theme-text-muted);
+  border-color: var(--color-text-muted);
 }
 
 .iconCell:has(:focus-visible) {
-  outline: 2px solid var(--theme-accent);
+  outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
 
 .iconCell[data-selected] {
-  border-color: var(--theme-accent);
-  color: var(--theme-accent);
+  border-color: var(--color-accent);
+  color: var(--color-accent);
 }
 
 /* The impact line sits under the shared form inside a dialog, and the form

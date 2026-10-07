@@ -1,7 +1,7 @@
 .checkbox {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-1);
   min-height: var(--control-md);
   cursor: pointer;
 }
@@ -24,7 +24,7 @@
   width: 100%;
   height: 100%;
   margin: 0;
-  border: 1.5px solid var(--theme-text-muted);
+  border: 1.5px solid var(--color-text-muted);
   border-radius: var(--radius-sm);
   background: transparent;
   cursor: inherit;
@@ -32,15 +32,15 @@
 
 /* Checked is the accent fill with the ink tick, like an active chip. */
 .checkboxInput:checked {
-  border-color: var(--theme-accent);
-  background: var(--theme-accent);
+  border-color: var(--color-accent);
+  background: var(--color-accent);
 }
 
 .tick {
   position: absolute;
   inset: 0;
   margin: auto;
-  color: var(--ink);
+  color: var(--color-on-fill);
   pointer-events: none;
   visibility: hidden;
 }
@@ -72,7 +72,7 @@
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-1);
   min-height: var(--control-lg);
 }
 
@@ -80,7 +80,7 @@
   flex: 1;
   min-width: 0;
   font-size: var(--font-sm);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 /* The control: a square of the colour, right-aligned, the row's full height. */
@@ -96,7 +96,7 @@
   cursor: pointer;
   /* An unset colour is an empty well, not a black one. */
   box-shadow: inset 0 0 0 1.5px
-    color-mix(in srgb, var(--theme-text-muted) 60%, transparent);
+    color-mix(in srgb, var(--color-text-muted) 60%, transparent);
 }
 
 .swatchTrigger:disabled {
@@ -110,7 +110,7 @@
    meant to stop. `max-content` lets the 3-wide grid decide. */
 .swatchPopover {
   width: max-content;
-  padding: 12px;
+  padding: var(--space-1-5);
 }
 
 .swatches {
@@ -122,10 +122,10 @@
 
 /* The field label's style: sentence case, muted. */
 .legend {
-  margin-bottom: 6px;
+  margin-bottom: var(--space-0-5);
   padding: 0;
   font-size: var(--font-sm);
-  color: var(--theme-text-muted);
+  color: var(--color-text-muted);
 }
 
 /* Three across, so ten colours make a block taller than it is wide rather than
@@ -134,7 +134,7 @@
 .swatchGrid {
   display: grid;
   grid-template-columns: repeat(3, var(--control-md));
-  gap: 10px;
+  gap: var(--space-1);
 }
 
 .swatch {
@@ -151,8 +151,8 @@
 /* A gap of the page colour, then the accent ring (accent on the page: 3:1). */
 .swatch:checked {
   box-shadow:
-    0 0 0 2px var(--theme-primary),
-    0 0 0 4px var(--theme-accent);
+    0 0 0 2px var(--color-page),
+    0 0 0 4px var(--color-accent);
 }
 
 /* Outside the ring, so focus and choice never draw over each other. */

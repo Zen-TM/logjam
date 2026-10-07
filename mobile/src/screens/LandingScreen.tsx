@@ -207,7 +207,7 @@ function GuestExplainer({
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: theme.primary },
+  root: { flex: 1, backgroundColor: theme.page },
   scroll: {
     flexGrow: 1,
     justifyContent: "center",
@@ -235,7 +235,7 @@ const styles = StyleSheet.create({
   appTitle: {
     fontSize: fontSize.xl,
     fontWeight: fontWeight.bold,
-    color: theme.textPrimary,
+    color: theme.text,
   },
   tagline: {
     fontSize: fontSize.sm,
@@ -246,7 +246,7 @@ const styles = StyleSheet.create({
   heading: {
     fontSize: fontSize.lg,
     fontWeight: fontWeight.medium,
-    color: theme.textPrimary,
+    color: theme.text,
   },
   body: {
     fontSize: fontSize.sm,

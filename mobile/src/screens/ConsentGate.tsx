@@ -80,7 +80,7 @@ export function ConsentGate({
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: theme.primary },
+  root: { flex: 1, backgroundColor: theme.page },
   content: {
     flexGrow: 1,
     justifyContent: "center",
@@ -90,11 +90,11 @@ const styles = StyleSheet.create({
   title: {
     fontSize: fontSize.xl,
     fontWeight: fontWeight.bold,
-    color: theme.textPrimary,
+    color: theme.text,
   },
   body: {
     fontSize: fontSize.base,
-    color: theme.textPrimary,
+    color: theme.text,
     lineHeight: lineHeight.body,
   },
 });

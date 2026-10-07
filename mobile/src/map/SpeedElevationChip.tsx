@@ -116,7 +116,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     width: CHIP_WIDTH,
     height: READOUT_CHIP_HEIGHT,
-    backgroundColor: `${theme.primary}CC`,
+    backgroundColor: `${theme.page}CC`,
     borderRadius: radius.sm,
     paddingHorizontal: spacing(0.5),
   },
@@ -127,7 +127,7 @@ const styles = StyleSheet.create({
     lineHeight: LABEL_LINE,
   },
   value: {
-    color: theme.textPrimary,
+    color: theme.text,
     fontSize: fontSize.sm,
     lineHeight: VALUE_LINE,
     fontWeight: fontWeight.medium,
@@ -139,6 +139,6 @@ const styles = StyleSheet.create({
     width: StyleSheet.hairlineWidth,
     alignSelf: "stretch",
     marginVertical: spacing(0.75),
-    backgroundColor: withAlpha(theme.textPrimary, 0.25),
+    backgroundColor: withAlpha(theme.text, 0.25),
   },
 });

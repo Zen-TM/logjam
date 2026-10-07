@@ -46,7 +46,7 @@ export function ElevationReadout({
 const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "baseline", gap: spacing(1.25) },
   value: {
-    color: theme.textPrimary,
+    color: theme.text,
     fontSize: fontSize.sm,
     fontWeight: fontWeight.medium,
     fontVariant: ["tabular-nums"],

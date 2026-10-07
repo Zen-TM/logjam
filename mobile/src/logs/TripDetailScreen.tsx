@@ -234,7 +234,7 @@ export function TripDetailScreen({
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: theme.primary },
+  screen: { flex: 1, backgroundColor: theme.page },
   typeRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing(0.75) },
   body: {
     paddingHorizontal: spacing(2),
@@ -243,7 +243,7 @@ const styles = StyleSheet.create({
   },
   muted: { color: theme.textMuted, fontSize: fontSize.sm },
   notes: {
-    color: theme.textPrimary,
+    color: theme.text,
     fontSize: fontSize.base,
     lineHeight: lineHeight.body,
   },

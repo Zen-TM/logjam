@@ -13,8 +13,8 @@ import classes from "./Hero.module.css";
  * box), so opening it moves nothing. The title stays in the document as the
  * page's heading for assistive tech.
  *
- * No fill, unlike Logjam GPS's hero: that fill (`bonus2`) fails AA under two
- * schemes, so the web hero separates with an accent hairline instead.
+ * No fill: a filled hero failed AA under its own text in two schemes, so it
+ * separates with a hairline instead (Logjam GPS's hero does the same).
  */
 export function Hero({
   title,

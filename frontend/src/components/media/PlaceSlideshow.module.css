@@ -75,7 +75,7 @@
   background-color: rgba(0, 0, 0, 0.45);
   color: #fff;
   cursor: pointer;
-  transition: background-color var(--transition-fast);
+  transition: background-color var(--motion-fast);
 }
 
 .arrow:hover {
@@ -102,16 +102,12 @@
   padding: 0;
   border: none;
   border-radius: 50%;
-  background-color: color-mix(
-    in srgb,
-    var(--theme-text-primary) 30%,
-    transparent
-  );
+  background-color: color-mix(in srgb, var(--color-text) 30%, transparent);
   cursor: pointer;
   transition:
-    background-color var(--transition-fast),
-    width var(--transition-fast),
-    height var(--transition-fast);
+    background-color var(--motion-fast),
+    width var(--motion-fast),
+    height var(--motion-fast);
 }
 
 .small {
@@ -130,5 +126,5 @@
 }
 
 .active {
-  background-color: var(--theme-accent);
+  background-color: var(--color-accent);
 }
