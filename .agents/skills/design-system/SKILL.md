@@ -38,7 +38,7 @@ Read the principles section for what you are touching, not the whole file.
 4. **A new foreground/background pair joins `scripts/wcag-contrast.mjs`**,
    measured on the surface it renders on, under every scheme. Its
    `KNOWN_FAILURES` only shrinks.
-5. **Look at it in every scheme**, Daylight included, at 1440 and 390 on the
+5. **Look at it in every scheme**, Ghost Gum (the light one) included, at 1440 and 390 on the
    web and on the emulator for GPS, using the seed's made-up data only. The
    `local-testing` skill has the stack.
 6. **A new web surface joins `frontend/e2e/a11y.spec.ts`.**

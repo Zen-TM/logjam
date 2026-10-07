@@ -18,8 +18,9 @@ it, the rule names the test.
 
 ## 1. The field comes first
 
-- **Readable in full sun.** The Daylight scheme is for direct sunlight: dark
-  text on a light page, every text pair at 7:1 or more. The four dark schemes
+- **Readable in full sun.** The Ghost Gum scheme is for direct sunlight: dark
+  text on a light page, every text pair at 7:1 or more, with only its surfaces
+  and fills kept soft. The three dark schemes
   are for dusk, night and indoors, and hold the WCAG AA floor: 4.5:1 for text,
   3:1 for a glyph, an edge or a control. Guard: `scripts/wcag-contrast.mjs`
   measures every pair under every scheme, in CI.
@@ -62,14 +63,29 @@ it, the rule names the test.
   around it.
 - **A heading divides a list from something.** "Yours" earns a line only when
   "Built in" is opposite it.
+- **Capitals mark a section heading and nothing else.** A field's or a
+  control's label is sentence case, small and muted, so a heading is never
+  mistaken for the label under it.
+- **A title does not repeat a count the screen already shows.** Where a chip
+  carries "35", the title is the page's name; a count is a title only where
+  nothing else shows it.
+- **A pair is drawn as a pair.** Ascent and descent share a line, as do
+  highest and lowest point; a figure with no partner takes the whole line.
+  The pairs are declared once (`shared/src/statPairs.ts`).
 
 ## 3. Getting around and getting out
 
-- **Every surface has a visible way out, in the same place every time.** A
-  screen you were pushed to has a back arrow at its top left. A sheet, dialog
-  or popover has a close (×) at its top right. A form has Cancel beside its
-  submit. These are learned shapes that feel safe; never leave a user with
-  only a gesture, a system button or a guess.
+- **Every surface has a visible way out, in the same place every time.**
+  Anything that can be closed has a close (×) at its top right: a sheet, a
+  dialog, a popover, and a panel beside Logjam Web's map, where × does what
+  pressing its nav icon again does. A screen you were pushed to has a back
+  arrow at its top left, and keeps its × if the surface under it can close. A
+  form has Cancel beside its submit. A root tab on Logjam GPS cannot be
+  closed, so it has neither. These are learned shapes that feel safe; never
+  leave a user with only a gesture, a system button, a second press on a nav
+  icon, or a guess.
+- **A tab opens at its root.** Leaving a tab and coming back shows its first
+  screen, not the sub-page the user was last on.
 - **The way out goes back one step, not all the way.** A sub-view inside a
   sheet or dialog (a picker, a settings group) backs out to its parent, never
   out of the surface, and the title says which step you are on. Escape, the
@@ -80,19 +96,30 @@ it, the rule names the test.
   layer), not for pages.
 - **Opening a thing brings the map to it.** Opening a place, a way or a topo
   from any list fits the map to it, so the page and the map talk about the
-  same ground.
+  same ground. It happens in the one function that opens the thing, never in
+  each caller. Where the map sits beside the page (Logjam Web) a place
+  therefore has no "Show on map" verb; where the page covers the map (Logjam
+  GPS) it does.
 - **One gesture, one meaning.** A press on a pin, a row or a line does the
   same thing whichever screen is up. A tap asks ("what is here?"); a
   press-and-hold commits ("put something here").
 
 ## 4. What can be pressed looks pressable
 
-- **A card's fill means "press me".** A thing you can open or press sits on
-  the card colour; a thing you only read sits on the page, grouped by space, a
-  section header or a hairline. So the eye learns one rule: filled is
-  interactive. Exempt, because each has its own look: buttons, chips, text
+- **A fill means "you can act here".** A thing you can open or press sits on
+  the card colour, and so does a row that holds its own controls (a friend
+  request with Accept and Decline); a thing you only read sits on the page,
+  grouped by space, a section header or a hairline. So the eye learns one
+  rule: filled is interactive. Exempt, because each has its own look: text
   fields, switches, the surfaces themselves (sheets, dialogs, popovers, toasts)
   and the map's chrome.
+- **The rule holds for small things.** A button wears the card fill, and the
+  one primary action of a surface wears the accent. A status pill is read, not
+  pressed, so it has no fill: words with a dot or a glyph. A selected chip
+  looks like neither. The exception is a badge on or inside something
+  pressable (an unread count, a chip's tally), which keeps its fill.
+- **A pill is never narrower than it is tall**, so a pill holding one digit or
+  one glyph is a circle.
 - **Things that look alike behave alike.** Two rows drawn the same way open
   the same way; two chips drawn the same way filter the same way. If something
   behaves differently, it looks different. This is why the kit exists: one
@@ -216,10 +243,16 @@ it, the rule names the test.
 - **What a row's press does follows from what the thing is.** A thing with a
   page opens it; a thing with nowhere to open does its one obvious job (a
   file downloads, a template makes a map), and that job is also the first
-  item in its ⋯, so the press is never the only way to it.
+  item in its ⋯, so the press is never the only way to it. A thing whose only
+  home is the map (a way, a GeoPDF, a saved map, a LiDAR topo) opens on the
+  map. No card answers a press and then does nothing.
+- **A list ends with the button its empty state offers.** The user reaches the
+  end having not found the thing, which is when they want to add it: "Import
+  a GeoPDF" closes the list of GeoPDFs, and the map's overlays end with
+  "Import a file".
 - **A list you act on in bulk lets you pick**, never only "do it to all".
 - **One intent is one verb.** Keeping a friend's route and dropping their
-  share is "Save to my Ways and remove", ordered so a failure halfway leaves
+  share is "Save a copy and remove", ordered so a failure halfway leaves
   the user with both, never neither.
 - **Visibility belongs to the layer**, not to a switch on each thing's page.
 - **A row's subtitle says something the user cannot already see**: never the
@@ -254,6 +287,8 @@ it, the rule names the test.
 - **Rename in a form, never in a live field on the row.** A field that saves
   on blur gives no way to abandon the rename.
 - **A step that asks nothing is skipped, never shown empty.**
+- **A colour is picked from a floating palette** opened from its swatch, never
+  from a row of swatches laid into the form.
 - **A shortcut into a form hands off to the real form, pre-filled.** "Log a
   trip here" opens the trip form with the place already linked.
 - **An edit sends only what changed.**
