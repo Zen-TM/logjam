@@ -171,7 +171,7 @@ import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
 import { useStandaloneTrackMedia } from "../tracks/useRemoteTracks";
 import { BulkShareButton, BulkShareSheet } from "../sharing/BulkShareSheet";
 import { useTracks } from "../tracks/useTracks";
-import type { Bbox } from "./bboxOfPoints";
+import { bboxOfFootprint, type Bbox } from "./bboxOfPoints";
 import { bulkDeleteConfirmBody } from "./bulkDeleteConfirm";
 import { RouteOptionsSheet } from "../routes/RouteOptionsSheet";
 
@@ -745,6 +745,7 @@ export function SavedScreen({
     .map((job) => ({
       jobId: job.jobId,
       label: job.name ?? `Topo ${job.jobId.slice(0, 8)}`,
+      bbox: bboxOfFootprint(job.footprint),
       // A synthetic job (built from what is on disk when the account list is
       // unreachable) carries no URL, so there is nothing to offer.
       missing: job.layers.filter(
@@ -1052,8 +1053,9 @@ export function SavedScreen({
               },
             }
           : { share: { entityType: "topoJob" as const, entityId: group.key } }),
-        locatable: group.bbox != null,
-        resolveBbox: async () => group.bbox,
+        // The saved layers' own extent, else the job's footprint from the account.
+        locatable: (group.bbox ?? bboxOfFootprint(job?.footprint)) != null,
+        resolveBbox: async () => group.bbox ?? bboxOfFootprint(job?.footprint),
         // Topo artifacts carry no groupId (they are written a layer at a time
         // by the overlay downloader), so the group rename writes each row's
         // own display label. Display only, as everywhere else.
@@ -1561,6 +1563,34 @@ export function SavedScreen({
     [fail, onOpenMap],
   );
 
+  /**
+   * A tap on a card: open the thing. Everything saved lives on the map, so that
+   * is "Show on map"; one with no place to show falls back to its ⋯ sheet
+   * rather than pressing to nothing.
+   */
+  const openItem = useCallback(
+    (item: SavedItem) => {
+      if (item.locatable) showOnMap(item);
+      else openItemSheet(item.key);
+    },
+    [openItemSheet, showOnMap],
+  );
+
+  /** A topo that is on the account but not the phone: fit to its footprint, layers on. */
+  const showJobOnMap = useCallback(
+    (job: { jobId: string; bbox: Bbox | null }) => {
+      if (!job.bbox) {
+        fail("This one has no saved location to show.");
+        return;
+      }
+      onOpenMap(job.bbox, undefined, {
+        category: "overlay",
+        key: savedOverlayKey(job.jobId),
+      });
+    },
+    [fail, onOpenMap],
+  );
+
   const menuItem = items.find((item) => item.key === menuItemKey) ?? null;
   // A route's overflow is the SAME sheet the map shows, so the two surfaces
   // cannot offer different verbs for the same object (DESIGN.md §5) — rename,
@@ -1889,11 +1919,13 @@ export function SavedScreen({
                 // account-gated row gets — rather than offered and then refused.
                 disabled={selecting && !item.delete}
                 // Press and hold starts a selection anywhere; once one is running a
-                // plain tap toggles. Outside the mode a row still has no onPress —
-                // its verbs live in the ⋯ sheet, and a whole-row tap that did one
-                // of them would be a mis-tap waiting to happen (DESIGN.md §5).
+                // plain tap toggles. Outside the mode a tap OPENS the thing: every
+                // kind here lives on the map, so that is "Show on map" (the card
+                // never presses to nothing). The rest of its verbs are in the ⋯.
                 onLongPress={() => selectItem(item)}
-                onPress={selecting ? () => selectItem(item) : undefined}
+                onPress={
+                  selecting ? () => selectItem(item) : () => openItem(item)
+                }
                 /* ONE trailing slot for both modes, and every child of it keeps its
                place when the mode changes. Selecting used to render a slot of
                its own holding only the size and a 22px circle: the pill and the
@@ -2026,6 +2058,7 @@ export function SavedScreen({
               >
                 <Row
                   title={job.label}
+                  onPress={() => showJobOnMap(job)}
                   // "Not on this device" restated the section header it sits
                   // under; the layer count does not.
                   subtitle={
@@ -2068,6 +2101,13 @@ export function SavedScreen({
               >
                 <Row
                   title={job.title ?? "Untitled GeoPDF"}
+                  // Its home is the map but it is not on the phone: the one
+                  // obvious job is bringing it here, as its button does.
+                  onPress={
+                    geoPdfBusy
+                      ? undefined
+                      : () => handleImportAccountGeoPdf(job)
+                  }
                   subtitle={
                     job.resultBytes != null
                       ? formatBytes(job.resultBytes)
