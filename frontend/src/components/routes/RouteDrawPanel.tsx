@@ -26,6 +26,8 @@ import {
   trackColorName,
   MAX_ROUTE_POINTS,
   TRACK_COLORS,
+  PAIRED_STAT_LABELS,
+  pairedStatLayout,
 } from "@logjam/shared";
 import type { SnapMode } from "../map/Map";
 import { useElevationProfile } from "../../placeUtils";
@@ -156,11 +158,11 @@ export function RouteDrawPanel({
       span: true,
     },
     {
-      label: "Climb",
+      label: PAIRED_STAT_LABELS.ascent,
       value: profile ? `↑ ${Math.round(profile.gainM)} m` : "—",
     },
     {
-      label: "Descent",
+      label: PAIRED_STAT_LABELS.descent,
       value: profile ? `↓ ${Math.round(profile.lossM)} m` : "—",
     },
   ];
@@ -198,7 +200,7 @@ export function RouteDrawPanel({
             what the next click does are in the footer, with Undo and Clear —
             which is also why they no longer need to sit above the figures they
             do not describe. */}
-        <StatGrid stats={stats} />
+        <StatGrid stats={pairedStatLayout(stats)} />
 
         {atCap && (
           <p className={classes.warning} role="status">

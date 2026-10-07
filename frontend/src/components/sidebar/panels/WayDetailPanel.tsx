@@ -36,6 +36,8 @@ import {
   KML_MIME_TYPE,
   TRACK_COLORS,
   type StandaloneFile,
+  PAIRED_STAT_LABELS,
+  pairedStatLayout,
 } from "@logjam/shared";
 import {
   copyRoute,
@@ -260,11 +262,11 @@ export default function WayDetailPanel({
           span: true,
         },
         {
-          label: "Climb",
+          label: PAIRED_STAT_LABELS.ascent,
           value: profile ? `↑ ${Math.round(profile.gainM)} m` : "—",
         },
         {
-          label: "Descent",
+          label: PAIRED_STAT_LABELS.descent,
           value: profile ? `↓ ${Math.round(profile.lossM)} m` : "—",
         },
       ]
@@ -281,7 +283,7 @@ export default function WayDetailPanel({
         ...(file?.metadata.elevationGainM != null
           ? [
               {
-                label: "Climb",
+                label: PAIRED_STAT_LABELS.ascent,
                 value: `↑ ${Math.round(file.metadata.elevationGainM)} m`,
               },
             ]
@@ -289,7 +291,7 @@ export default function WayDetailPanel({
         ...(file?.metadata.elevationLossM != null
           ? [
               {
-                label: "Descent",
+                label: PAIRED_STAT_LABELS.descent,
                 value: `↓ ${Math.round(file.metadata.elevationLossM)} m`,
               },
             ]
@@ -545,7 +547,7 @@ export default function WayDetailPanel({
       />
 
       <div className={classes.body}>
-        {stats.length > 0 && <StatGrid stats={stats} />}
+        {stats.length > 0 && <StatGrid stats={pairedStatLayout(stats)} />}
 
         {/* Only a route has its geometry here to profile. A recording's climb
             and descent are in the figures above, measured by the recorder that
