@@ -1,9 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { SYSTEM_FIELD_DEFS } from "../placeTypes.js";
+import { DEFAULT_NOTIFICATION_PREFERENCES } from "../themeSchemes.js";
 import {
   attributeFilterShape,
+  attributeDeleteConfirm,
   contractSectionKeys,
   contractSectionsFor,
+  drawsYoursHeading,
+  notificationGroupLead,
+  NOTIFICATION_PREFERENCES,
+  ownAttributeCountLabel,
+  ownTypeCountLabel,
+  placeTypeDeleteConfirm,
   FRIEND_SHARE_VERBS,
   friendRemoveConfirm,
   friendSharesEmptyTitle,
@@ -431,5 +439,53 @@ describe("friends", () => {
     expect(friendSharesEmptyTitle("youSee", "abel")).toBe(
       "abel hasn't shared anything with you",
     );
+  });
+});
+
+describe("settings", () => {
+  // Red when a notification preference is added to the API's defaults and not
+  // to the list both clients draw its switch from: it would have no switch.
+  it("has a switch for every notification preference, and no other", () => {
+    expect(NOTIFICATION_PREFERENCES.map((row) => row.key).sort()).toEqual(
+      Object.keys(DEFAULT_NOTIFICATION_PREFERENCES).sort(),
+    );
+  });
+
+  it("names the surface a notification is shown in", () => {
+    expect(notificationGroupLead("email", "Logjam Web")).toBe("Email me when");
+    expect(notificationGroupLead("inApp", "Logjam GPS")).toBe(
+      "Notify me in Logjam GPS when",
+    );
+  });
+
+  it("counts only what the user made", () => {
+    expect(ownTypeCountLabel(0)).toBe("Built-ins only");
+    expect(ownTypeCountLabel(2)).toBe("2 of your own");
+    expect(ownAttributeCountLabel(0)).toBe("None yet");
+    expect(ownAttributeCountLabel(1)).toBe("1 attribute");
+    expect(ownAttributeCountLabel(4)).toBe("4 attributes");
+  });
+
+  it("draws a Yours heading only against a Built in", () => {
+    expect(drawsYoursHeading(2, 3)).toBe(true);
+    expect(drawsYoursHeading(0, 3)).toBe(false);
+    expect(drawsYoursHeading(2, 0)).toBe(false);
+  });
+
+  it("says what deleting a type or an attribute costs", () => {
+    expect(placeTypeDeleteConfirm("Cave").confirmTitle).toBe("Delete Cave?");
+    const rows = { one: "trip", many: "trips" };
+    expect(attributeDeleteConfirm("Water level", 0, rows).confirmBody).toBe(
+      "This removes the attribute from every trip. No trips have a value for it. This can't be undone.",
+    );
+    expect(
+      attributeDeleteConfirm("Water level", 1, rows).confirmBody,
+    ).toContain("1 trip has a value for it, and that value goes too.");
+    expect(
+      attributeDeleteConfirm("Water level", 12, rows).confirmBody,
+    ).toContain("12 trips have a value for it, and those values go too.");
+    expect(
+      attributeDeleteConfirm("Water level", "unknown", rows).confirmBody,
+    ).toBe("This removes the attribute from every trip. This can't be undone.");
   });
 });

@@ -1,15 +1,20 @@
 import { useState } from "react";
 import {
   ATTRIBUTE_NOUN,
+  attributesEmptyHint,
   buildCustomFieldDef,
   CUSTOM_FIELD_TYPES,
   customFieldDisplayLabel,
+  drawsYoursHeading,
   isSystemFieldDef,
+  SETTINGS_LIST,
   tripTypeLabel,
   type ScopedCustomFieldDef,
   type TripLogCustomFieldDef,
   type TripLogCustomFieldType,
 } from "@logjam/shared";
+
+const listCopy = SETTINGS_LIST.copy;
 import {
   createCustomField,
   updateCustomField,
@@ -105,7 +110,7 @@ function CustomFieldSection({
             icon="add"
             onClick={() => setEditing("new")}
           >
-            Add
+            {listCopy.addAttribute}
           </Button>
         }
       />
@@ -116,17 +121,14 @@ function CustomFieldSection({
         ) : (
           <>
             {own.length === 0 && (
-              <p className={classes.note}>
-                Add your own {ATTRIBUTE_NOUN.one} to record on every {rowNoun} —
-                water level, say, or party size.
-              </p>
+              <p className={classes.note}>{attributesEmptyHint(rowNoun)}</p>
             )}
             {/* "Yours" only earns a line when there is a "Built in" opposite
                 it. Every system definition is place-scoped, so a trip's list
                 is nothing but the user's own, and a heading dividing a list
                 from nothing states a contrast that is not there. */}
-            {own.length > 0 && system.length > 0 && (
-              <SectionHeader title="Yours" count={own.length} />
+            {drawsYoursHeading(own.length, system.length) && (
+              <SectionHeader title={listCopy.yours} count={own.length} />
             )}
 
             {own.map((def) => (
@@ -151,13 +153,13 @@ function CustomFieldSection({
                          you learn to avoid. */
                       {
                         id: "edit",
-                        label: `Edit ${ATTRIBUTE_NOUN.one}`,
+                        label: listCopy.editAttribute,
                         icon: "edit",
                         onSelect: () => setEditing(def),
                       },
                       {
                         id: "delete",
-                        label: `Delete ${ATTRIBUTE_NOUN.one}`,
+                        label: listCopy.deleteAttribute,
                         icon: "delete",
                         danger: true,
                         onSelect: () => setDeletingDef(def),
@@ -177,7 +179,7 @@ function CustomFieldSection({
 
             {system.length > 0 && (
               <>
-                <SectionHeader title="Built in" count={system.length} />
+                <SectionHeader title={listCopy.builtIn} count={system.length} />
                 {system.map((def) => (
                   <Row
                     key={def.key}
