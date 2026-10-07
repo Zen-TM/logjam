@@ -87,7 +87,6 @@ function SidebarPanel({
   onHoverPlace,
   onMakeMap,
   onSharePlaces,
-  onFlyToPlace,
   // GeoPDFs
   onOpenGeoPdf,
   onOpenGeoPdfWithTemplate,
@@ -190,7 +189,6 @@ function SidebarPanel({
   onHoverPlace: (id: string | null) => void;
   onMakeMap: (bounds: RegionBbox, kind: MapKind) => void;
   onSharePlaces: (ids: string[]) => void;
-  onFlyToPlace: (lat: number, lng: number) => void;
   // GeoPDFs
   onOpenGeoPdf: () => void;
   onOpenGeoPdfWithTemplate: (id: string) => void;
@@ -392,7 +390,6 @@ function SidebarPanel({
             openFiltersRequested={openFiltersRequested}
             onOpenFiltersConsumed={onOpenFiltersConsumed}
             onFiltersOpenChange={onFiltersOpenChange}
-            onFlyToPlace={onFlyToPlace}
             setSelectedPlaceID={setSelectedPlaceID}
             setActivePanel={setActivePanel}
             onHoverPlace={onHoverPlace}
@@ -533,7 +530,6 @@ function SidebarPanel({
             onRefetchTripLogs={onRefetchTripLogs}
             onBack={() => setActivePanel("places")}
             onClose={onClose}
-            onFlyToPlace={onFlyToPlace}
             onOpenTrip={openTripDetail}
             onMakeMap={(target, kind) => {
               const bounds = placesBounds([target]);

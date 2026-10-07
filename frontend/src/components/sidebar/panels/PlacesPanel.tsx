@@ -142,7 +142,6 @@ function PlacesPanel({
   openFiltersRequested,
   onOpenFiltersConsumed,
   onFiltersOpenChange,
-  onFlyToPlace,
   setSelectedPlaceID,
   setActivePanel,
   onHoverPlace,
@@ -175,7 +174,6 @@ function PlacesPanel({
   openFiltersRequested: boolean;
   onOpenFiltersConsumed: () => void;
   onFiltersOpenChange: (open: boolean) => void;
-  onFlyToPlace: (lat: number, lng: number) => void;
   setSelectedPlaceID: (id: string | null) => void;
   setActivePanel: (panel: PanelId | null) => void;
   /** The row under the pointer, so its pin lights on the map. */
@@ -362,7 +360,6 @@ function PlacesPanel({
 
   // ── Verbs ─────────────────────────────────────────────────────────────
   const openPlace = (place: TPlace) => {
-    onFlyToPlace(place.latitude, place.longitude);
     setSelectedPlaceID(place.id);
     setActivePanel("place-detail");
   };
@@ -423,7 +420,6 @@ function PlacesPanel({
     };
     const run: Record<WebPlaceVerbId, () => void> = {
       open: onPage,
-      show: () => onFlyToPlace(place.latitude, place.longitude),
       logTrip: handOff("logTrip"),
       edit: handOff("edit"),
       makeTopo: makeMap("topo"),

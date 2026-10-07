@@ -222,6 +222,18 @@ describe("a place's verbs", () => {
       }
   });
 
+  // Red when "show" loses its `on: "gps"`: on Logjam Web opening a place
+  // already flies the map there, so a button for it is a second way to do one
+  // thing.
+  it("offers Show on map on Logjam GPS only, where the map is another screen", () => {
+    for (const owned of [true, false]) {
+      expect(ids("web", "row", owned)).not.toContain("show");
+      expect(ids("web", "page", owned)).not.toContain("show");
+      expect(ids("gps", "row", owned)).toContain("show");
+      expect(ids("gps", "page", owned)).toContain("show");
+    }
+  });
+
   it("never offers to edit, share, delete or log a trip at a place someone shared with you", () => {
     for (const platform of ["web", "gps"] as const) {
       const shared = ids(platform, "row", false);

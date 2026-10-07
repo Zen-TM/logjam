@@ -177,7 +177,6 @@ function PlaceDetailPanel({
   onCancelPickCoords,
   onBack,
   onClose,
-  onFlyToPlace,
   onOpenTrip,
   onMakeMap,
   onSharePlace,
@@ -206,7 +205,6 @@ function PlaceDetailPanel({
   onBack: () => void;
   onClose: () => void;
   /** Centre the map on this place — the same verb its row and its pin offer. */
-  onFlyToPlace: (latitude: number, longitude: number) => void;
   /** A trip is READ on its own page (DESIGN.md §4), not in a dialog over this one. */
   onOpenTrip: (tripLogId: string) => void;
   /** Start a map over this place; the menu names the two kinds. */
@@ -631,7 +629,6 @@ function PlaceDetailPanel({
       setEditingTripLog(undefined);
       setShowTripLogDialog(true);
     },
-    show: () => onFlyToPlace(current.latitude, current.longitude),
     makeTopo: () => onMakeMap(current, "topo"),
     makeGeoPdf: () => onMakeMap(current, "geopdf"),
     share: () => onSharePlace(current.id),

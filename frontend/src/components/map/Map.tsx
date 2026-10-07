@@ -134,7 +134,6 @@ const DRAG_INSERT_MIN_PIXELS = 6;
 // kilometres of route says anything about where it goes.
 const ROUTE_MIN_ZOOM = 10;
 
-const SIDEBAR_TRANSITION_MS = 300;
 const INITIAL_CENTER: [number, number] = [151.2093, -33.8688];
 const INITIAL_ZOOM = 7;
 
@@ -1426,15 +1425,7 @@ function Map({
         const feature = e.features[0];
         const id = feature.properties?.id as string;
         if (feature.geometry.type !== "Point") return;
-        const [lng, lat] = feature.geometry.coordinates as [number, number];
         selectPlaceRef.current(id);
-        // Guard flyTo against an out-of-range legacy marker (PLACE-1) so a
-        // click still selects it instead of throwing "Invalid LngLat".
-        if (isValidLatitude(lat) && isValidLongitude(lng)) {
-          setTimeout(() => {
-            map.flyTo({ center: [lng, lat], zoom: 16, duration: 1500 });
-          }, SIDEBAR_TRANSITION_MS);
-        }
       });
 
       // One registration over both layers, so a press on the pin (which is
@@ -1445,14 +1436,7 @@ function Map({
         const feature = e.features[0];
         const id = feature.properties?.id as string;
         if (feature.geometry.type !== "Point") return;
-        const [lng, lat] = feature.geometry.coordinates as [number, number];
         selectPlaceRef.current(id);
-        // Guard flyTo against an out-of-range legacy marker (PLACE-1).
-        if (isValidLatitude(lat) && isValidLongitude(lng)) {
-          setTimeout(() => {
-            map.flyTo({ center: [lng, lat], zoom: 16, duration: 1500 });
-          }, SIDEBAR_TRANSITION_MS);
-        }
       });
 
       map.on("mouseenter", "place-circles", () => {
@@ -3084,18 +3068,6 @@ function Map({
             sharedPlaces={sharedPlaces}
             onSelectPlace={(place) => {
               selectPlaceRef.current(place.id);
-              if (
-                isValidLatitude(place.latitude) &&
-                isValidLongitude(place.longitude)
-              ) {
-                setTimeout(() => {
-                  mapRef.current?.flyTo({
-                    center: [place.longitude, place.latitude],
-                    zoom: 15,
-                    duration: 1200,
-                  });
-                }, SIDEBAR_TRANSITION_MS);
-              }
             }}
             onSelectLocation={(lat, lon) =>
               mapRef.current?.flyTo({

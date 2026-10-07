@@ -3,7 +3,7 @@
 //
 // A thing offers the same verbs wherever it appears (docs/ux-principles.md §9).
 // The lists differ by exactly one verb each: Open, absent on the page you are
-// already on, and Show on map, absent on the map. Ownership decides the rest:
+// already on, and (Logjam GPS only) Show on map, absent on the map. Ownership decides the rest:
 // a place shared with you is somebody else's ground, so it is copied and let
 // go of rather than edited and deleted.
 import type { IconIdea } from "../icons.js";
@@ -34,6 +34,9 @@ type VerbDeclaration = {
 const NO_MAP_FROM_A_PLACE =
   "Logjam GPS makes a map from an area framed on its map, not from a place.";
 
+const OPENING_SHOWS_IT_ON_WEB =
+  "On Logjam Web the map sits beside the page, and opening a place already flies it there.";
+
 /** In menu order. */
 export const PLACE_VERBS = [
   {
@@ -43,7 +46,15 @@ export const PLACE_VERBS = [
     for: "both",
     omitOn: "page",
   },
-  { id: "show", icon: "map", label: "Show on map", for: "both", omitOn: "pin" },
+  {
+    id: "show",
+    icon: "map",
+    label: "Show on map",
+    for: "both",
+    omitOn: "pin",
+    on: "gps",
+    reason: OPENING_SHOWS_IT_ON_WEB,
+  },
   // Owner only: a trip links only its owner's places, and the API refuses the
   // rest.
   { id: "logTrip", icon: "trip", label: "Log a trip here", for: "owner" },
