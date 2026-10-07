@@ -483,12 +483,7 @@ export default function GeoPdfsPanel({
       {shareJob && (
         <ShareDialog
           title={`Share ${shareJob.label}`}
-          blurb={
-            <>
-              Recipients can view and download this GeoPDF. They cannot delete
-              it, and you can unshare at any time.
-            </>
-          }
+          kind="geoPdfJob"
           friends={friends}
           open
           onClose={() => setShareJob(null)}

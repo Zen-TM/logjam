@@ -1,7 +1,13 @@
-import { useState } from "react";
+import { Fragment, useState, type ReactNode } from "react";
 import {
-  ATTRIBUTE_NOUN,
+  contractSectionKeys,
   DEFAULT_NOTIFICATION_PREFERENCES,
+  notificationGroupLead,
+  NOTIFICATION_PREFERENCES,
+  ownAttributeCountLabel,
+  ownTypeCountLabel,
+  SETTINGS,
+  type SectionKeysOn,
   type NotificationPreferences,
   type ScopedCustomFieldDef,
 } from "@logjam/shared";
@@ -26,19 +32,6 @@ import CustomFieldSection from "./CustomFieldSection";
 import PlaceTypeSection from "./PlaceTypeSection";
 import ThemeChooser from "./ThemeChooser";
 import classes from "./SettingsPanel.module.css";
-
-/** Which notification the user is switching, and the words for it. No glyph: a
- *  list of statements is not a list of objects, so one there is decoration. */
-const NOTIFICATIONS: { key: keyof NotificationPreferences; title: string }[] = [
-  { key: "topoEmail", title: "Email me when a topo finishes or fails" },
-  {
-    key: "exportEmail",
-    title: "Email me when a topo export finishes or fails",
-  },
-  { key: "geoPdfEmail", title: "Email me when a GeoPDF finishes or fails" },
-  { key: "friendRequestInApp", title: "Tell me here about friend requests" },
-  { key: "shareInApp", title: "Tell me here when something is shared with me" },
-];
 
 /** A page inside Settings: a list you keep, rather than a preference you set. */
 type ListPage = "placeTypes" | "tripAttributes" | "placeAttributes";
@@ -186,79 +179,94 @@ function SettingsPanel({
     );
   }
 
+  // Exhaustive by type: a section the contract names and this panel does not
+  // draw, or the reverse, fails `tsc` (`SETTINGS`, shared/src/contracts).
+  const sections: Record<
+    SectionKeysOn<typeof SETTINGS, "web">,
+    () => ReactNode
+  > = {
+    preferences: () => (
+      <>
+        <ThemeChooser />
+
+        <SectionHeader title="Notifications" />
+        {notifPrefs === null ? (
+          <LoadingState />
+        ) : (
+          NOTIFICATION_PREFERENCES.map(({ key, group, what }) => (
+            <SwitchRow
+              key={key}
+              title={`${notificationGroupLead(group, "Logjam Web")} ${what}`}
+              checked={notifPrefs[key]}
+              disabled={notifSavingKey === key}
+              onChange={() => handleToggleNotif(key)}
+            />
+          ))
+        )}
+
+        <SectionHeader title="Downloads" />
+        {autoDownloadGeoPdfs === null ? (
+          <LoadingState />
+        ) : (
+          <SwitchRow
+            title="Download GeoPDFs automatically when they finish generating"
+            checked={autoDownloadGeoPdfs}
+            disabled={autoDownloadSaving}
+            onChange={handleToggleAutoDownload}
+          />
+        )}
+      </>
+    ),
+    categories: () => (
+      <>
+        {/* Types come BEFORE the attributes scoped to them: a user reading
+            downwards meets the categories, then what each one records. */}
+        <SectionHeader title={copy.categories} />
+        <Row
+          leading={<IconTile icon="place" hue="var(--color-accent)" />}
+          title={copy.placeTypes}
+          subtitle={ownTypeCountLabel(
+            placeTypes.filter((type) => !type.isSystem).length,
+          )}
+          trailing={<Icon idea="disclosure" size={18} aria-hidden />}
+          onOpen={() => setPage("placeTypes")}
+        />
+      </>
+    ),
+    attributes: () => (
+      <>
+        <SectionHeader title={copy.attributes} />
+        <Row
+          leading={<IconTile icon="tag" hue="var(--color-accent)" />}
+          title={copy.tripAttributes}
+          subtitle={ownAttributeCountLabel(ownCount(customFieldDefs))}
+          trailing={<Icon idea="disclosure" size={18} aria-hidden />}
+          onOpen={() => setPage("tripAttributes")}
+        />
+        <Row
+          leading={<IconTile icon="tag" hue="var(--color-accent)" />}
+          title={copy.placeAttributes}
+          subtitle={ownAttributeCountLabel(ownCount(placeCustomFieldDefs))}
+          trailing={<Icon idea="disclosure" size={18} aria-hidden />}
+          onOpen={() => setPage("placeAttributes")}
+        />
+      </>
+    ),
+  };
+
   return (
     <div className={classes.root}>
-      <ThemeChooser />
-
-      <SectionHeader title="Notifications" />
-      {notifPrefs === null ? (
-        <LoadingState />
-      ) : (
-        NOTIFICATIONS.map(({ key, title }) => (
-          <SwitchRow
-            key={key}
-            title={title}
-            checked={notifPrefs[key]}
-            disabled={notifSavingKey === key}
-            onChange={() => handleToggleNotif(key)}
-          />
-        ))
-      )}
-
-      <SectionHeader title="Downloads" />
-      {autoDownloadGeoPdfs === null ? (
-        <LoadingState />
-      ) : (
-        <SwitchRow
-          title="Download GeoPDFs automatically when they finish generating"
-          checked={autoDownloadGeoPdfs}
-          disabled={autoDownloadSaving}
-          onChange={handleToggleAutoDownload}
-        />
-      )}
-
-      {/* Types come BEFORE the attributes scoped to them: a user reading
-          downwards meets the categories, then what each one records. */}
-      <SectionHeader title="Your own categories" />
-      <Row
-        leading={<IconTile icon="place" hue="var(--color-accent)" />}
-        title="Place types"
-        subtitle={ownTypeCountLabel(placeTypes)}
-        trailing={<Icon idea="disclosure" size={18} aria-hidden />}
-        onOpen={() => setPage("placeTypes")}
-      />
-
-      <SectionHeader title={`Your own ${ATTRIBUTE_NOUN.many}`} />
-      <Row
-        leading={<IconTile icon="tag" hue="var(--color-accent)" />}
-        title="Trip attributes"
-        subtitle={attributeCountLabel(customFieldDefs)}
-        trailing={<Icon idea="disclosure" size={18} aria-hidden />}
-        onOpen={() => setPage("tripAttributes")}
-      />
-      <Row
-        leading={<IconTile icon="tag" hue="var(--color-accent)" />}
-        title="Place attributes"
-        subtitle={attributeCountLabel(placeCustomFieldDefs)}
-        trailing={<Icon idea="disclosure" size={18} aria-hidden />}
-        onOpen={() => setPage("placeAttributes")}
-      />
+      {contractSectionKeys(SETTINGS, "web").map((key) => (
+        <Fragment key={key}>{sections[key]()}</Fragment>
+      ))}
     </div>
   );
 }
 
-/** Only the user's OWN types are counted: "4 types" for an account that has
- *  made none reads as a list they are already keeping. */
-function ownTypeCountLabel(types: TPlaceType[]): string {
-  const own = types.filter((type) => !type.isSystem).length;
-  if (own === 0) return "Built-ins only";
-  return `${own} of your own`;
-}
+const copy = SETTINGS.copy;
 
-function attributeCountLabel(defs: ScopedCustomFieldDef[]): string {
-  const own = defs.filter((def) => def.ownerId !== null).length;
-  if (own === 0) return "None yet";
-  return `${own} ${own === 1 ? ATTRIBUTE_NOUN.one : ATTRIBUTE_NOUN.many}`;
-}
+/** Only the user's OWN attributes are counted. */
+const ownCount = (defs: ScopedCustomFieldDef[]) =>
+  defs.filter((def) => def.ownerId !== null).length;
 
 export default SettingsPanel;

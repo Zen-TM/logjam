@@ -30,7 +30,14 @@
 // PRIVACY: usernames only, never email — the friends endpoints are
 // username-only server-side and this must not become the surface that wants
 // more. Error copy is OURS, never the server's message.
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -42,8 +49,16 @@ import {
 } from "react-native";
 
 import {
+  contractSectionKeys,
   friendMatches,
   messageFromError,
+  noFriendsMatch,
+  noFriendsMessage,
+  SEND_COPY,
+  sendCopyLabel,
+  SHARE_SHEET,
+  sharePromise,
+  type SectionKeysOn,
   type SharableEntityType,
 } from "@logjam/shared";
 
@@ -95,6 +110,12 @@ import {
   type SharingCalls,
 } from "./useSharing";
 
+/** The picker's one-line empty state: the title and the way out. */
+const noFriendsText = (purpose: "share" | "copy") => {
+  const { title, body } = noFriendsMessage(purpose);
+  return `${title}. ${body}`;
+};
+
 /**
  * What this panel is acting on. The three cases are the three API shapes:
  * places keep their own endpoints (the hybrid share model lives behind them),
@@ -113,28 +134,6 @@ export type SharePanelTarget =
    * is that the irrevocable half sets the interaction for the whole thing.
    */
   | { kind: "bulk"; plan: BulkSharePlan<BulkShareCandidate> };
-
-/**
- * THE PROMISE, per kind, and the only place either sentence is written.
- *
- * Not a prop: two call sites wording the same grant differently is the drift
- * this panel exists to end, and a place is now shared from two screens (its
- * detail page and the Places list's options sheet). A place sharee sees
- * notes and photos — a bigger promise than a line on a map — so it says so,
- * and says what stays private.
- */
-const SHARE_BLURB =
-  "Friends you pick can view and export it, but can't change it. You can stop sharing anytime.";
-/**
- * The same promise, about a selection. Not `SHARE_BLURB` with an "s" bolted on
- * by the caller: the two sentences are read in different places and either one
- * changing alone is the drift this file exists to stop, so both are written
- * here, in full, once.
- */
-const BULK_SHARE_BLURB =
-  "Friends you pick can view and export these, but can't change them. You can stop sharing anytime.";
-const PLACE_SHARE_BLURB =
-  "Friends you pick can see this place and its notes and photos. Your trip logs stay private. You can stop sharing at anytime.";
 
 /**
  * Row props for a Share / Send a copy verb: `disabled` plus the REASON as a
@@ -414,10 +413,9 @@ export function useSharePanel({
               single thing this whole feature could get wrong: a user who
               believes every one of the 23 can be taken back was misled here. */}
           {plan.shares.length > 0 ? (
-            // The PLURAL promise. `SHARE_BLURB` says "view and export it",
-            // which is right above one item and wrong above twenty — the panel
-            // read "…can view and export it" over a list of 23.
-            <PromiseBanner tone="share" text={BULK_SHARE_BLURB} />
+            // The PLURAL promise: "view and export it" is right above one item
+            // and wrong above twenty.
+            <PromiseBanner tone="share" text={sharePromise("selection")} />
           ) : null}
           {plan.copies.length > 0 ? (
             <PromiseBanner
@@ -426,7 +424,6 @@ export function useSharePanel({
             />
           ) : null}
           {search}
-          <SectionHeader title="Send to" />
           <FriendRows
             friends={friends.list}
             shown={shown}
@@ -435,7 +432,7 @@ export function useSharePanel({
             selectedIds={selected}
             disabled={sending}
             onPress={(friend) => toggle(friend.id)}
-            emptyText="No friends yet — add friends from the More tab."
+            emptyText={noFriendsText("share")}
           />
         </View>
       ),
@@ -480,6 +477,31 @@ export function useSharePanel({
     const shown = (friends.list ?? []).filter((friend) =>
       friendMatches(friend.username, query),
     );
+    // Exhaustive by type: a section the contract names and this panel does not
+    // draw, or the reverse, fails `tsc` (`SEND_COPY`, shared/src/contracts).
+    const sections: Record<
+      SectionKeysOn<typeof SEND_COPY, "gps">,
+      () => ReactNode
+    > = {
+      promise: () => (
+        // The promise, stated plainly and in the warning hue, because it
+        // cannot be undone: this is where a user learns Send is not Share.
+        <PromiseBanner tone="copy" text={SEND_COPY.copy.promise} />
+      ),
+      search: () => search,
+      friends: () => (
+        <FriendRows
+          friends={friends.list}
+          shown={shown}
+          query={query}
+          mode="select"
+          selectedIds={selected}
+          disabled={sending}
+          onPress={(friend) => toggle(friend.id)}
+          emptyText={noFriendsText("copy")}
+        />
+      ),
+    };
     return {
       title: `Send a copy of ${itemLabel}`,
       sharing,
@@ -488,24 +510,9 @@ export function useSharePanel({
           {friends.error ? (
             <ErrorBanner message={friends.error} onRetry={friends.retry} />
           ) : null}
-          {/* The promise, stated plainly and in the warning hue, because it
-              cannot be undone: this is where a user learns Send is not Share. */}
-          <PromiseBanner
-            tone="copy"
-            text={`They'll keep their own copy — you can't take it back.`}
-          />
-          {search}
-          <SectionHeader title="Send to" />
-          <FriendRows
-            friends={friends.list}
-            shown={shown}
-            query={query}
-            mode="select"
-            selectedIds={selected}
-            disabled={sending}
-            onPress={(friend) => toggle(friend.id)}
-            emptyText="No friends yet — add friends from the More tab."
-          />
+          {contractSectionKeys(SEND_COPY, "gps").map((key) => (
+            <Fragment key={key}>{sections[key]()}</Fragment>
+          ))}
         </View>
       ),
       footer: (
@@ -514,11 +521,7 @@ export function useSharePanel({
         <View style={styles.footerStack}>
           {sendError ? <ErrorBanner message={sendError} /> : null}
           <Button
-            label={
-              selected.size === 0
-                ? "Send a copy"
-                : `Send a copy to ${selected.size}`
-            }
+            label={sendCopyLabel(selected.size)}
             icon="send"
             onPress={() => void send()}
             disabled={selected.size === 0 || sending}
@@ -554,28 +557,32 @@ export function useSharePanel({
     friendMatches(friend.username, query),
   );
 
-  return {
-    title: `Share ${itemLabel}`,
-    sharing,
-    footer: null,
-    body: (
-      <View style={styles.body}>
-        <SharingError sharing={sharing} />
-        {friends.error ? (
-          <ErrorBanner message={friends.error} onRetry={friends.retry} />
-        ) : null}
-        <PromiseBanner
-          tone="share"
-          text={placeId ? PLACE_SHARE_BLURB : SHARE_BLURB}
-        />
-        {search}
-        {recipients.length > 0 ? (
-          <>
-            <SectionHeader title={`Shared with · ${recipients.length}`} />
-            <RecipientRows sharing={sharing} recipients={recipients} />
-          </>
-        ) : null}
-        <SectionHeader title="Share with" />
+  // Exhaustive by type: a section the contract names and this panel does not
+  // draw, or the reverse, fails `tsc` (`SHARE_SHEET`, shared/src/contracts).
+  const sections: Record<
+    SectionKeysOn<typeof SHARE_SHEET, "gps">,
+    () => ReactNode
+  > = {
+    promise: () => (
+      <PromiseBanner
+        tone="share"
+        text={sharePromise(placeId ? "place" : (entityType ?? "route"))}
+      />
+    ),
+    search: () => search,
+    sharedWith: () =>
+      recipients.length > 0 ? (
+        <>
+          <SectionHeader
+            title={SHARE_SHEET.copy.sharedWith}
+            count={recipients.length}
+          />
+          <RecipientRows sharing={sharing} recipients={recipients} />
+        </>
+      ) : null,
+    candidates: () => (
+      <>
+        <SectionHeader title={SHARE_SHEET.copy.shareWith} />
         <FriendRows
           friends={friends.list && shareable}
           shown={shown}
@@ -587,10 +594,27 @@ export function useSharePanel({
           }}
           emptyText={
             (friends.list?.length ?? 0) === 0
-              ? "No friends yet — add friends from the More tab."
-              : "All your friends already have access."
+              ? noFriendsText("share")
+              : SHARE_SHEET.copy.allHaveAccess
           }
         />
+      </>
+    ),
+  };
+
+  return {
+    title: `Share ${itemLabel}`,
+    sharing,
+    footer: null,
+    body: (
+      <View style={styles.body}>
+        <SharingError sharing={sharing} />
+        {friends.error ? (
+          <ErrorBanner message={friends.error} onRetry={friends.retry} />
+        ) : null}
+        {contractSectionKeys(SHARE_SHEET, "gps").map((key) => (
+          <Fragment key={key}>{sections[key]()}</Fragment>
+        ))}
       </View>
     ),
   };
@@ -697,7 +721,7 @@ function FriendRows({
   if (shown.length === 0) {
     // Distinct from `emptyText`: "nobody matches what you typed" is a dead end
     // you can back out of, "you have no friends" is not.
-    return <Text style={styles.muted}>No friends match “{query.trim()}”.</Text>;
+    return <Text style={styles.muted}>{noFriendsMatch(query)}</Text>;
   }
   return (
     <>

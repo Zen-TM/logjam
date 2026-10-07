@@ -72,6 +72,7 @@ import {
   trackPointsToGpx,
   simplifyToFit,
   type RoutePoint,
+  wayVerbLabel,
 } from "@logjam/shared";
 import { removeSharedEntity } from "../sharing/removeShare";
 import { exportStoredFile, exportTrack } from "../fileExport";
@@ -519,7 +520,10 @@ export function trackActions(track: Track): AssetActions {
     ...(track.pointCount > 0
       ? {
           exports: (["gpx", "kml"] as const).map((format) => ({
-            title: `Save as ${format.toUpperCase()}`,
+            title: wayVerbLabel(
+              format === "gpx" ? "exportGpx" : "exportKml",
+              "gps",
+            ),
             run: async () =>
               exportTrack(
                 { name: track.name, points: await listTrackPoints(track.id) },

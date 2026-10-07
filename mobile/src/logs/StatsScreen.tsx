@@ -22,26 +22,40 @@
 // already shows. Nothing is logged, and there is deliberately NO share or
 // export affordance: a stats card is exactly the kind of thing that would
 // broaden visibility by default.
-import { useCallback, useMemo, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import {
   activityTalliesOverlap,
   activityTallySubtitle,
   computeLogbookStats,
+  contractSectionKeys,
   fieldStatDisplay,
   formatDistanceM,
   formatDurationMs,
   logbookActivityLabel,
   logbookRanges,
   pluralCount,
+  STATS,
   statsCadence,
+  statsEmptyActivityBody,
   statsHeadline,
+  statsHeroTitle,
+  statsMostReturnedLine,
+  statsPlaceAttributesTitle,
   statsSpark,
+  statsUnderActivitiesNote,
   tripYear,
   UNTAGGED_ACTIVITY,
   type FieldStat,
   type LogbookRange,
   type LogbookStats,
+  type SectionKeysOn,
 } from "@logjam/shared";
 
 import { useFieldDefs } from "../customFields/useFieldDefs";
@@ -65,6 +79,8 @@ import {
   Icon,
 } from "../ui";
 import { tripTypeMeta } from "./tripTypeMeta";
+
+const copy = STATS.copy;
 
 const RANGE_PREF_KEY = "logbookStatsRange";
 
@@ -156,10 +172,16 @@ export function StatsScreen({
 
   const title = activity
     ? logbookActivityLabel(activity)
-    : `${pluralCount(stats.days, "day")} out`;
+    : statsHeroTitle(stats.days);
 
-  return (
-    <View style={styles.screen}>
+  const showing = stats.trips > 0;
+  // Exhaustive by type: a section the contract names and this screen does not
+  // draw, or the reverse, fails `tsc` (`STATS`, shared/src/contracts).
+  const sections: Record<
+    SectionKeysOn<typeof STATS, "gps">,
+    () => ReactNode
+  > = {
+    hero: () => (
       <Hero
         eyebrow={activity ? "Logbook stats" : "Logbook"}
         title={title}
@@ -167,8 +189,8 @@ export function StatsScreen({
         onBack={onBack}
       >
         {/* The rail is part of the hero rather than the scroll: it is the frame
-            every number below is read in, and a window control that scrolls
-            away leaves the reader unsure what they are looking at. */}
+              every number below is read in, and a window control that scrolls
+              away leaves the reader unsure what they are looking at. */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -184,39 +206,48 @@ export function StatsScreen({
           ))}
         </ScrollView>
       </Hero>
+    ),
+    spark: () => <Spark stats={stats} range={range} activity={activity} />,
+    headline: () => (
+      <Headline
+        stats={stats}
+        activity={activity}
+        bounded={range.from != null || range.to != null}
+      />
+    ),
+    activities: () =>
+      activity ? null : (
+        <Activities stats={stats} onOpenActivity={onOpenActivity} />
+      ),
+    placesVisited: () => (activity ? null : <PlacesVisited stats={stats} />),
+    onFoot: () => (activity ? null : <OnFoot tracks={tracks} range={range} />),
+    attributes: () => <AttributeSections stats={stats} tripOnly={!activity} />,
+  };
+  const keys = contractSectionKeys(STATS, "gps");
 
-      {stats.trips === 0 ? (
+  return (
+    <View style={styles.screen}>
+      {sections.hero()}
+
+      {showing ? (
+        <ScreenScroll>
+          {keys
+            .filter((key) => key !== "hero")
+            .map((key) => (
+              <Fragment key={key}>{sections[key]()}</Fragment>
+            ))}
+        </ScreenScroll>
+      ) : (
         <EmptyState
-          title={
-            reading ? "Reading your logbook…" : "Nothing logged in here yet"
-          }
+          title={reading ? copy.loading : copy.emptyTitle}
           hint={
             reading
               ? undefined
               : activity
-                ? `No ${logbookActivityLabel(activity).toLowerCase()} trips in this window. Try a wider one.`
-                : "Log a few trips and this fills in — days out, how often you get away, and how far you've got through your places."
+                ? statsEmptyActivityBody(logbookActivityLabel(activity))
+                : copy.emptyBody
           }
         />
-      ) : (
-        <ScreenScroll>
-          <Spark stats={stats} range={range} activity={activity} />
-          <Headline
-            stats={stats}
-            activity={activity}
-            bounded={range.from != null || range.to != null}
-          />
-          {activity ? (
-            <AttributeSections stats={stats} />
-          ) : (
-            <>
-              <Activities stats={stats} onOpenActivity={onOpenActivity} />
-              <PlacesVisited stats={stats} />
-              <OnFoot tracks={tracks} range={range} />
-              <AttributeSections stats={stats} tripOnly />
-            </>
-          )}
-        </ScreenScroll>
       )}
     </View>
   );
@@ -282,7 +313,7 @@ function Activities({
   const multiTagged = activityTalliesOverlap(stats);
   return (
     <View style={styles.section}>
-      <SectionHeader title="By activity" />
+      <SectionHeader title={copy.byActivity} />
       {stats.activityTallies.map((tally) => {
         const meta = tripTypeMeta(
           tally.type === UNTAGGED_ACTIVITY ? null : tally.type,
@@ -303,9 +334,7 @@ function Activities({
           tags, so without this the rows visibly out-sum the trip tile above and
           read as a bug. */}
       {multiTagged ? (
-        <Text style={styles.caption}>
-          a trip with two tags counts under both
-        </Text>
+        <Text style={styles.caption}>{copy.multiTagged}</Text>
       ) : null}
     </View>
   );
@@ -320,7 +349,7 @@ function PlacesVisited({ stats }: { stats: LogbookStats }) {
   if (stats.completion.length === 0) return null;
   return (
     <View style={styles.section}>
-      <SectionHeader title="Places visited" />
+      <SectionHeader title={copy.placesVisited} />
       <View style={styles.completion}>
         {stats.completion.map((entry) => (
           <View key={entry.typeId} style={styles.meterRow}>
@@ -352,8 +381,10 @@ function PlacesVisited({ stats }: { stats: LogbookStats }) {
         ))}
         {stats.mostReturned ? (
           <Text style={styles.cadence}>
-            most returned to · {stats.mostReturned.name} ×
-            {stats.mostReturned.trips}
+            {statsMostReturnedLine(
+              stats.mostReturned.name,
+              stats.mostReturned.trips,
+            )}
           </Text>
         ) : null}
       </View>
@@ -407,7 +438,7 @@ function OnFoot({
 
   return (
     <View style={styles.section}>
-      <SectionHeader title="On foot" />
+      <SectionHeader title={copy.onFoot} />
       <StatGrid
         stats={[
           { label: "Distance", value: formatDistanceM(distanceM) },
@@ -455,7 +486,7 @@ function AttributeSections({
     <View style={styles.section}>
       {groups.map((group) => (
         <View key={group.typeId} style={styles.section}>
-          <SectionHeader title={`${group.name} attributes`} />
+          <SectionHeader title={statsPlaceAttributesTitle(group.name)} />
           {group.stats.map((entry) => (
             <AttributeStat key={`${group.typeId}:${entry.key}`} stat={entry} />
           ))}
@@ -463,7 +494,7 @@ function AttributeSections({
       ))}
       {stats.tripFieldStats.length > 0 || underActivities > 0 ? (
         <View style={styles.section}>
-          <SectionHeader title="Trip attributes" />
+          <SectionHeader title={copy.tripAttributes} />
           {stats.tripFieldStats.map((entry) => (
             <AttributeStat key={`trip:${entry.key}`} stat={entry} />
           ))}
@@ -472,9 +503,7 @@ function AttributeSections({
               without this it reads as having vanished from the logbook. */}
           {underActivities > 0 ? (
             <Text style={styles.caption}>
-              {underActivities === 1
-                ? "1 more attribute belongs to a single activity — open that activity above to see it"
-                : `${underActivities} more attributes belong to single activities — open an activity above to see them`}
+              {statsUnderActivitiesNote(underActivities)}
             </Text>
           ) : null}
         </View>

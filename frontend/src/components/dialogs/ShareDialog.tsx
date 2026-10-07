@@ -22,6 +22,15 @@
 // PRIVACY: usernames only, never email. The friends endpoints are
 // username-only server-side (root CLAUDE.md) and this must not become the
 // surface that wants more.
+import { Fragment, type ReactNode } from "react";
+import {
+  contractSectionKeys,
+  noFriendsMessage,
+  SHARE_SHEET,
+  sharePromise,
+  type BulkShareItemType,
+  type SectionKeysOn,
+} from "@logjam/shared";
 import { useCallback, useEffect, useState } from "react";
 import { friendMatches } from "@logjam/shared";
 import classes from "./ShareDialog.module.css";
@@ -49,9 +58,11 @@ export type ShareRecipientRow = {
 /** The list stays searchable only once it is long enough to need it. */
 const SEARCH_FROM = 8;
 
+const copy = SHARE_SHEET.copy;
+
 function ShareDialog({
   title,
-  blurb,
+  kind,
   friends,
   open,
   onClose,
@@ -61,9 +72,9 @@ function ShareDialog({
 }: {
   /** Dialog heading, e.g. `Share ${place.name}`. */
   title: string;
-  /** What the recipient gets, in the caller's own words — a place share and a
-   *  route share do not grant the same things. */
-  blurb: React.ReactNode;
+  /** What is being shared: the promise to the recipient is the contract's, and a
+   *  place share and a route share do not grant the same things. */
+  kind: BulkShareItemType;
   friends: TFriend[];
   open: boolean;
   onClose: () => void;
@@ -155,6 +166,90 @@ function ShareDialog({
     ? shares.filter((row) => friendMatches(row.sharedWith.username, query))
     : shares;
 
+  // Exhaustive by type: a section the contract names and this dialog does not
+  // draw, or the reverse, fails `tsc` (`SHARE_SHEET`, shared/src/contracts).
+  const sections: Record<
+    SectionKeysOn<typeof SHARE_SHEET, "web">,
+    () => ReactNode
+  > = {
+    promise: () => (
+      <>
+        {/* What the press will do, before the press. */}
+        <p className={classes.promise}>{sharePromise(kind)}</p>
+      </>
+    ),
+    search: () => (
+      <>
+        {searchable && (
+          <SearchField
+            label={copy.searchFriends}
+            placeholder={copy.searchFriends}
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        )}
+      </>
+    ),
+    sharedWith: () => (
+      <>
+        {recipients.length > 0 && (
+          <section className={classes.group}>
+            <SectionHeader title={copy.sharedWith} count={shares.length} />
+            {recipients.map((row) => (
+              <Row
+                key={row.id}
+                leading={<Avatar username={row.sharedWith.username} />}
+                title={row.sharedWith.username}
+                trailing={
+                  <IconButton
+                    icon="unshare"
+                    label={`Stop sharing with ${row.sharedWith.username}`}
+                    disabled={busyId !== null}
+                    onClick={() => void handleUnshare(row)}
+                  />
+                }
+              />
+            ))}
+          </section>
+        )}
+      </>
+    ),
+    candidates: () => (
+      <>
+        <section className={classes.group}>
+          <SectionHeader title={copy.shareWith} />
+          {shareable.length === 0 ? (
+            <p className={classes.note}>{copy.allHaveAccess}</p>
+          ) : shown.length === 0 ? (
+            // A different dead end from the one above, and it backs out by
+            // clearing the box rather than by adding a friend.
+            <p className={classes.note}>No friends match “{query.trim()}”.</p>
+          ) : (
+            shown.map((friend) => (
+              <Row
+                key={friend.id}
+                leading={<Avatar username={friend.username} />}
+                title={friend.username}
+                description="Press to share"
+                onOpen={() => void handleShare(friend)}
+                disabled={busyId !== null}
+                trailing={
+                  <span className={classes.grantMark} data-mark aria-hidden>
+                    {busyId === friend.id ? (
+                      <Icon idea="done" size={16} />
+                    ) : (
+                      <Icon idea="add" size={16} />
+                    )}
+                  </span>
+                }
+              />
+            ))
+          )}
+        </section>
+      </>
+    ),
+  };
+
   return (
     <Dialog
       open={open}
@@ -166,76 +261,14 @@ function ShareDialog({
       {friends.length === 0 ? (
         <EmptyState
           icon="friends"
-          title="No friends yet"
-          body="Sharing is between friends. Add one on the Friends page, then come back."
+          title={noFriendsMessage("share").title}
+          body={noFriendsMessage("share").body}
         />
       ) : (
         <div className={classes.body}>
-          {/* What the press will do, before the press. */}
-          <p className={classes.promise}>{blurb}</p>
-
-          {searchable && (
-            <SearchField
-              label="Search friends"
-              placeholder="Search friends"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-          )}
-
-          {recipients.length > 0 && (
-            <section className={classes.group}>
-              <SectionHeader title="Shared with" count={shares.length} />
-              {recipients.map((row) => (
-                <Row
-                  key={row.id}
-                  leading={<Avatar username={row.sharedWith.username} />}
-                  title={row.sharedWith.username}
-                  trailing={
-                    <IconButton
-                      icon="unshare"
-                      label={`Stop sharing with ${row.sharedWith.username}`}
-                      disabled={busyId !== null}
-                      onClick={() => void handleUnshare(row)}
-                    />
-                  }
-                />
-              ))}
-            </section>
-          )}
-
-          <section className={classes.group}>
-            <SectionHeader title="Share with" />
-            {shareable.length === 0 ? (
-              <p className={classes.note}>
-                Everyone you know already has this.
-              </p>
-            ) : shown.length === 0 ? (
-              // A different dead end from the one above, and it backs out by
-              // clearing the box rather than by adding a friend.
-              <p className={classes.note}>No friends match “{query.trim()}”.</p>
-            ) : (
-              shown.map((friend) => (
-                <Row
-                  key={friend.id}
-                  leading={<Avatar username={friend.username} />}
-                  title={friend.username}
-                  description="Press to share"
-                  onOpen={() => void handleShare(friend)}
-                  disabled={busyId !== null}
-                  trailing={
-                    <span className={classes.grantMark} data-mark aria-hidden>
-                      {busyId === friend.id ? (
-                        <Icon idea="done" size={16} />
-                      ) : (
-                        <Icon idea="add" size={16} />
-                      )}
-                    </span>
-                  }
-                />
-              ))
-            )}
-          </section>
+          {contractSectionKeys(SHARE_SHEET, "web").map((key) => (
+            <Fragment key={key}>{sections[key]()}</Fragment>
+          ))}
         </div>
       )}
     </Dialog>

@@ -26,6 +26,7 @@ import {
   messageFromError,
   copyAndRemoveOutcomeMessage,
   copyOutcomeMessage,
+  wayVerbLabel,
 } from "@logjam/shared";
 
 import { assetHue, placeHue, theme } from "../theme";
@@ -388,7 +389,7 @@ export function RouteOptionsSheet({
               // ONE verb for every way of editing this route. It opens the draw
               // tool on the map, where the points, the direction and the colour
               // are all in reach of the line they change.
-              title="Edit"
+              title={wayVerbLabel("edit", "gps")}
               icon="edit"
               hue={assetHue.route}
               disabled={busy}
@@ -407,14 +408,14 @@ export function RouteOptionsSheet({
             />
           ) : null}
           <Row
-            title="Save as GPX"
+            title={wayVerbLabel("exportGpx", "gps")}
             icon="export"
             hue={theme.neutral}
             disabled={busy}
             onPress={() => save("gpx")}
           />
           <Row
-            title="Save as KML"
+            title={wayVerbLabel("exportKml", "gps")}
             icon="export"
             hue={theme.neutral}
             disabled={busy}
@@ -426,7 +427,7 @@ export function RouteOptionsSheet({
             can be the one that lacks it. */}
           {actions.rename ? (
             <Row
-              title="Rename"
+              title={wayVerbLabel("rename", "gps")}
               icon="edit"
               hue={theme.neutral}
               disabled={busy}
@@ -438,7 +439,7 @@ export function RouteOptionsSheet({
             with a 403. The panel behind it is a sub-mode of THIS sheet. */}
           {actions.share ? (
             <Row
-              title="Share"
+              title={wayVerbLabel("share", "gps")}
               icon="shareFriend"
               hue={theme.neutral}
               {...shareRowProps}
@@ -465,7 +466,7 @@ export function RouteOptionsSheet({
             "someone else owns this" and not on there being a share row. */}
           {actions.sharedWithYou ? (
             <Row
-              title="Save a copy"
+              title={wayVerbLabel("copy", "gps")}
               icon="copy"
               {...shareRowProps}
               disabled={busy || shareRowProps.disabled}
@@ -478,7 +479,7 @@ export function RouteOptionsSheet({
             two different promises. */}
           {actions.sharedWithYou && actions.removeShare ? (
             <Row
-              title="Save a copy and remove"
+              title={wayVerbLabel("copyAndRemove", "gps")}
               icon="moveCopy"
               {...shareRowProps}
               disabled={busy || shareRowProps.disabled}
@@ -490,7 +491,7 @@ export function RouteOptionsSheet({
             offline with the reason in place of its subtitle, never hidden. */}
           {actions.removeShare ? (
             <Row
-              title="Remove from my account"
+              title={wayVerbLabel("removeShare", "gps")}
               icon="unshare"
               hue={theme.warning}
               {...shareRowProps}

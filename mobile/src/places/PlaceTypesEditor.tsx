@@ -36,8 +36,11 @@ import {
   type LayoutChangeEvent,
 } from "react-native";
 import {
+  drawsYoursHeading,
   PLACE_TYPE_COLORS,
   PLACE_TYPE_ICON_KEYS,
+  placeTypeDeleteConfirm,
+  SETTINGS_LIST,
   type PlaceTypeIconKey,
 } from "@logjam/shared";
 
@@ -59,6 +62,8 @@ import {
 } from "../ui";
 import { placeTypeGlyph } from "./placeTypeIcon";
 
+const copy = SETTINGS_LIST.copy;
+
 /** A type nobody owns is a built-in: not renameable, not deletable. Same rule
  *  and same reason as `isSystemFieldDef`, on the other system vocabulary. */
 export function isSystemPlaceType(type: MirrorPlaceType): boolean {
@@ -78,34 +83,31 @@ export function PlaceTypeList({
   // Places tab's rail and `GET /place-types` still put the system types first,
   // because there the leftmost tab and the default type for a new place are
   // decided by that order.
-  const ordered = [
-    ...types.filter((type) => !isSystemPlaceType(type)),
-    ...types.filter(isSystemPlaceType),
-  ];
+  const own = types.filter((type) => !isSystemPlaceType(type));
+  const builtIn = types.filter(isSystemPlaceType);
   return (
     <View style={styles.body}>
-      <SectionHeader
-        title={`${ordered.length} type${ordered.length === 1 ? "" : "s"}`}
-      />
-      {ordered.map((type) =>
-        isSystemPlaceType(type) ? (
-          <Row
-            key={type.id}
-            icon={placeTypeGlyph(type.iconKey)}
-            hue={type.color}
-            title={type.name}
-            subtitle="Built in"
-          />
-        ) : (
-          <Row
-            key={type.id}
-            icon={placeTypeGlyph(type.iconKey)}
-            hue={type.color}
-            title={type.name}
-            onPress={() => onEdit(type)}
-          />
-        ),
-      )}
+      {drawsYoursHeading(own.length, builtIn.length) ? (
+        <SectionHeader title={copy.yours} count={own.length} />
+      ) : null}
+      {own.map((type) => (
+        <Row
+          key={type.id}
+          icon={placeTypeGlyph(type.iconKey)}
+          hue={type.color}
+          title={type.name}
+          onPress={() => onEdit(type)}
+        />
+      ))}
+      <SectionHeader title={copy.builtIn} count={builtIn.length} />
+      {builtIn.map((type) => (
+        <Row
+          key={type.id}
+          icon={placeTypeGlyph(type.iconKey)}
+          hue={type.color}
+          title={type.name}
+        />
+      ))}
     </View>
   );
 }
@@ -204,10 +206,13 @@ export function usePlaceTypeForm({
           );
           return;
         }
-        Alert.alert(`Delete “${editing.name}”?`, "This can't be undone.", [
+        const { confirmTitle, confirmBody } = placeTypeDeleteConfirm(
+          editing.name,
+        );
+        Alert.alert(confirmTitle, confirmBody, [
           { text: "Cancel", style: "cancel" },
           {
-            text: "Delete",
+            text: copy.deleteType,
             style: "destructive",
             onPress: () => {
               deletePlaceTypeLocal(editing.id)
@@ -314,7 +319,7 @@ export function usePlaceTypeForm({
         <Row
           icon="delete"
           hue={theme.warning}
-          title="Delete type"
+          title={copy.deleteType}
           onPress={confirmDelete}
         />
       ) : null}
