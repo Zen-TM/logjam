@@ -2,6 +2,7 @@ import { StyleSheet, Text, View } from "react-native";
 
 import { fontSize, fontWeight, radius, spacing, theme } from "../theme";
 import { Icon, type Glyph } from "./Icon";
+import { PILL_HEIGHT } from "./pill";
 
 // Small status chip. `accent` = filled (active/saved-for-offline), `outline` =
 // neutral bordered (Shared / Online), `warning` = attention (Update / error),
@@ -75,6 +76,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing(1),
     paddingVertical: spacing(0.375),
     alignSelf: "flex-start",
+    // A pill is never narrower than it is tall: a one-digit count is a circle.
+    minHeight: PILL_HEIGHT,
+    minWidth: PILL_HEIGHT,
+    justifyContent: "center",
   },
   label: { fontSize: fontSize.xs, fontWeight: fontWeight.medium },
   accentBox: { backgroundColor: theme.accent },

@@ -28,3 +28,22 @@ describe("the chip's count badge", () => {
     expect(source).toContain('key={active ? "on" : "off"}');
   });
 });
+
+// A pill-shaped control is never narrower than it is tall (`minWidth` = its
+// height), so a one-glyph or one-digit pill is a circle. To see it red: delete
+// the `minWidth` line from the style named below.
+describe("a pill is never narrower than it is tall", () => {
+  const rule: [string, RegExp][] = [
+    ["Chip.tsx", /minHeight: CHIP_HEIGHT,[\s\S]*?minWidth: CHIP_HEIGHT/],
+    ["StatusPill.tsx", /minHeight: PILL_HEIGHT,\s*minWidth: PILL_HEIGHT/],
+    [
+      "Button.tsx",
+      /minHeight: controlSize\.lg,[\s\S]*?minWidth: controlSize\.lg/,
+    ],
+    ["Button.tsx", /minHeight: controlSize\.md,\s*minWidth: controlSize\.md/],
+  ];
+  it.each(rule)("%s", (file, pattern) => {
+    const source = readFileSync(new URL(`./${file}`, import.meta.url), "utf8");
+    expect(source).toMatch(pattern);
+  });
+});

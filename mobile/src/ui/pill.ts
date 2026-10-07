@@ -1,6 +1,9 @@
 // Pure geometry for pill-shaped things, kept out of the components so the unit
 // suite can import it without React Native (kit.test.ts).
 
+/** A status pill's height: its label's line plus the pill's own padding. */
+export const PILL_HEIGHT = 22;
+
 /** The count badge on a chip: a circle for one digit, a pill for more. */
 export const BADGE_SIZE = 20;
 

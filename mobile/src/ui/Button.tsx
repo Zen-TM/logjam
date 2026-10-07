@@ -112,11 +112,14 @@ const styles = StyleSheet.create({
     paddingVertical: spacing(1.5),
     paddingHorizontal: spacing(2),
     minHeight: controlSize.lg,
+    // A pill is never narrower than it is tall: a glyph-only button is a circle.
+    minWidth: controlSize.lg,
   },
   compact: {
     paddingVertical: spacing(0.75),
     paddingHorizontal: spacing(1.5),
     minHeight: controlSize.md,
+    minWidth: controlSize.md,
   },
   grow: { flex: 1 },
   filledAccent: { backgroundColor: theme.accent },

@@ -129,6 +129,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing(1.5),
     paddingVertical: spacing(0.75),
     minHeight: CHIP_HEIGHT,
+    // A pill is never narrower than it is tall: a one-glyph chip is a circle.
+    minWidth: CHIP_HEIGHT,
+    justifyContent: "center",
   },
   pressed: { opacity: 0.75 },
   disabled: { opacity: opacity.disabled },
