@@ -34,12 +34,13 @@
 // contours, features) over an area, and drawing all five at once is three
 // stacked rasters under a vector stack — a mess, not a map. So it keeps its
 // disclosure, and sits LAST because it is the only row that opens.
-import { useMemo, useState, type ReactNode } from "react";
+import { Fragment, useMemo, useState, type ReactNode } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import {
   BASEMAP_CATALOG,
   contractSectionKeys,
   MAP_LAYERS,
+  MAP_OVERLAYS,
   type SectionKeysOn,
 } from "@logjam/shared";
 
@@ -384,15 +385,21 @@ function LayersTab({
   const [expanded, setExpanded] = useState(false);
   const expandable = overlays.length > 0;
 
-  return (
-    <View style={styles.body}>
-      {layers.map((entry) => (
-        <LayerRow key={entry.key} entry={entry} />
-      ))}
+  const entryRow = (key: string) => {
+    const entry = layers.find((candidate) => candidate.key === key);
+    return entry ? <LayerRow entry={entry} /> : null;
+  };
 
-      {/* LAST, and the only row that opens — see the header. Its "items" are
-          five layer TYPES over an area, not five files, so the choice between
-          them is the map itself rather than an inventory question. */}
+  // Exhaustive by type: a row the contract names and this tab does not draw, or
+  // the reverse, fails `tsc` (`MAP_OVERLAYS`, shared/src/contracts).
+  const rows: Record<
+    SectionKeysOn<typeof MAP_OVERLAYS, "gps">,
+    () => ReactNode
+  > = {
+    places: () => entryRow("places"),
+    ways: () => entryRow("ways"),
+    geoPdfs: () => entryRow("geoPdfs"),
+    lidarTopos: () => (
       <View style={styles.group}>
         <Row
           icon="lidar"
@@ -434,15 +441,22 @@ function LayersTab({
           </View>
         ) : null}
       </View>
-
-      {/* The list ends with the way to add to it: the same importer the Saved
-          tab's Import a file runs. */}
+    ),
+    importFile: () => (
       <Row
         icon="upload"
         hue={theme.neutral}
         title={copy.importFile}
         onPress={onImportFile}
       />
+    ),
+  };
+
+  return (
+    <View style={styles.body}>
+      {contractSectionKeys(MAP_OVERLAYS, "gps").map((key) => (
+        <Fragment key={key}>{rows[key]()}</Fragment>
+      ))}
     </View>
   );
 }

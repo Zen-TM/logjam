@@ -18,6 +18,8 @@ import {
   WAY_VERBS,
   wayVerbLabel,
   MAP_LAYERS,
+  MAP_OVERLAYS,
+  MAP_OVERLAY_REFINEMENTS,
   attributeDeleteConfirm,
   contractSectionKeys,
   deleteAccountPhrase,
@@ -620,5 +622,30 @@ describe("the logbook's stats", () => {
     expect(contractSectionKeys(STATS, "web")).not.toContain("onFoot");
     expect(contractSectionKeys(STATS, "web")).toContain("truncated");
     expect(contractSectionKeys(STATS, "gps")).not.toContain("truncated");
+  });
+});
+
+describe("the map's overlays list", () => {
+  // Red when Logjam GPS's list drifts from Logjam Web's: the web's rows are the
+  // list, and the phone adds only what it declares (a GeoPDF row, refinements).
+  it("is Logjam Web's rows, with the phone's one declared extra", () => {
+    expect(contractSectionKeys(MAP_OVERLAYS, "web")).toEqual([
+      "places",
+      "ways",
+      "lidarTopos",
+      "importFile",
+    ]);
+    expect(contractSectionKeys(MAP_OVERLAYS, "gps")).toEqual([
+      "places",
+      "ways",
+      "geoPdfs",
+      "lidarTopos",
+      "importFile",
+    ]);
+  });
+
+  it("refines only rows that exist", () => {
+    for (const row of Object.keys(MAP_OVERLAY_REFINEMENTS))
+      expect(contractSectionKeys(MAP_OVERLAYS, "gps")).toContain(row);
   });
 });
