@@ -22,6 +22,11 @@
   color: var(--color-text-muted);
 }
 
+.noteRow {
+  flex-shrink: 0;
+  padding: 0 var(--gutter) var(--space-1);
+}
+
 .banner {
   flex-shrink: 0;
   margin: 0 var(--gutter) 8px;

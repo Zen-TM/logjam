@@ -1,3 +1,10 @@
+import {
+  ACCOUNT,
+  ACCOUNT_DELETE_BODY,
+  deleteAccountPhrase,
+  deleteAccountPhraseLabel,
+  deleteAccountPhraseMatches,
+} from "@logjam/shared";
 import { useId, useState } from "react";
 import { deleteUser } from "aws-amplify/auth";
 import { deleteAccount } from "../../placeUtils";
@@ -49,9 +56,7 @@ function DeleteAccountForm({
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const expectedPhrase = `delete ${username}`;
-  const inputMatches =
-    confirmInput.trim().toLowerCase() === expectedPhrase.toLowerCase();
+  const inputMatches = deleteAccountPhraseMatches(confirmInput, username);
 
   async function handleDelete() {
     if (!inputMatches || deleting) return;
@@ -75,7 +80,7 @@ function DeleteAccountForm({
   return (
     <Dialog
       open
-      title="Delete account"
+      title={ACCOUNT.copy.deleteAccount}
       onClose={onClose}
       dismissible={!deleting}
       alert
@@ -91,7 +96,7 @@ function DeleteAccountForm({
             busy={deleting}
             disabled={!inputMatches}
           >
-            Delete account
+            {ACCOUNT.copy.deleteAccount}
           </Button>
         </>
       }
@@ -104,15 +109,12 @@ function DeleteAccountForm({
           handleDelete();
         }}
       >
-        <p className={classes.warning}>
-          This deletes your account and everything in it — places, trips, media,
-          maps and settings. It cannot be undone.
-        </p>
+        <p className={classes.warning}>{ACCOUNT_DELETE_BODY}</p>
         <TextField
-          label={`Type "${expectedPhrase}" to confirm`}
+          label={deleteAccountPhraseLabel(username)}
           value={confirmInput}
           onChange={(event) => setConfirmInput(event.target.value)}
-          placeholder={expectedPhrase}
+          placeholder={deleteAccountPhrase(username)}
           disabled={deleting}
           data-autofocus
         />

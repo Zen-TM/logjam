@@ -12,10 +12,25 @@
 // PRIVACY: username, email, byte counts and tile counts. The email appears here
 // and nowhere else in the app — friend search and lists are username-only, per
 // the root CLAUDE.md convention.
-import { useCallback, useEffect, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 import { Alert, StyleSheet, Text, View } from "react-native";
 import { confirmUserAttribute, updateUserAttribute } from "aws-amplify/auth";
-import { formatCredits, messageFromError } from "@logjam/shared";
+import {
+  ACCOUNT,
+  ACCOUNT_DELETE_BODY,
+  contractSectionKeys,
+  deleteAccountPhraseLabel,
+  deleteAccountPhraseMatches,
+  formatCredits,
+  messageFromError,
+  type SectionKeysOn,
+} from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
 import { fetchCurrentUser, useApiQuery } from "../api/queries";
@@ -28,14 +43,7 @@ import { formatBytes } from "../format";
 import { useConnectivity } from "../map/connectivity";
 import { countLocalEntities, type LocalEntityCounts } from "../sync/syncDb";
 import { describeLocalData, linkConfirmationMessage } from "./linkAccountCopy";
-import {
-  assetHue,
-  fontSize,
-  fontWeight,
-  lineHeight,
-  spacing,
-  theme,
-} from "../theme";
+import { assetHue, fontSize, lineHeight, spacing, theme } from "../theme";
 import {
   BottomSheet,
   Button,
@@ -53,6 +61,8 @@ import {
   type ToastMessage,
   Icon,
 } from "../ui";
+
+const copy = ACCOUNT.copy;
 
 /**
  * The Account screen for a guest: what's on this phone, what an account would
@@ -148,9 +158,9 @@ function updateUsername(username: string): Promise<TUser> {
 type SheetMode = "closed" | "username" | "email" | "delete";
 
 const SHEET_TITLE: Record<Exclude<SheetMode, "closed">, string> = {
-  username: "Change username",
-  email: "Change email",
-  delete: "Delete account",
+  username: copy.changeUsername,
+  email: copy.changeEmail,
+  delete: copy.deleteAccount,
 };
 
 export function AccountScreen({
@@ -214,8 +224,13 @@ function LinkedAccountScreen({
       })
     : null;
 
-  return (
-    <View style={styles.root}>
+  // Exhaustive by type: a section the contract names and this screen does not
+  // draw, or the reverse, fails `tsc` (`ACCOUNT`, shared/src/contracts).
+  const sections: Record<
+    SectionKeysOn<typeof ACCOUNT, "gps">,
+    () => ReactNode
+  > = {
+    hero: () => (
       <Hero
         eyebrow="Account"
         title={user.username}
@@ -223,7 +238,7 @@ function LinkedAccountScreen({
         actions={
           <IconButton
             icon="edit"
-            accessibilityLabel="Change username"
+            accessibilityLabel={copy.changeUsername}
             color={theme.accent}
             filled
             onPress={() => setSheet("username")}
@@ -232,11 +247,12 @@ function LinkedAccountScreen({
       >
         <Text style={styles.email}>{user.email}</Text>
       </Hero>
-
-      <ScreenScroll padded={false} contentStyle={styles.body}>
+    ),
+    storage: () => (
+      <>
         {/* Two quotas, same shape. `total` on a one-segment bar is exactly the
             "used vs capacity" case Meter's remainder track is for. */}
-        <SectionHeader title="Storage" />
+        <SectionHeader title={copy.storage} />
         <Meter
           segments={[
             {
@@ -252,13 +268,13 @@ function LinkedAccountScreen({
         <Text style={styles.meterLabel}>
           {formatBytes(user.storageUsedBytes)} of{" "}
           {formatBytes(user.storageQuotaBytes)}
-          <Text style={styles.meterHint}>
-            {" "}
-            · photos, videos and topo outputs
-          </Text>
+          <Text style={styles.meterHint}> · {copy.storageHint}</Text>
         </Text>
-
-        <SectionHeader title="Processing credits this month" />
+      </>
+    ),
+    credits: () => (
+      <>
+        <SectionHeader title={copy.credits} />
         <Meter
           segments={[
             {
@@ -277,13 +293,16 @@ function LinkedAccountScreen({
           {creditsResetLabel ? (
             <Text style={styles.meterHint}> · resets {creditsResetLabel}</Text>
           ) : null}
-          <Text style={styles.meterHint}> · topo, exports and GeoPDFs</Text>
+          <Text style={styles.meterHint}> · {copy.creditsHint}</Text>
         </Text>
-
-        <SectionHeader title="Sign-in" />
+      </>
+    ),
+    signIn: () => (
+      <>
+        <SectionHeader title={copy.signIn} />
         <Row
           icon="email"
-          title="Email"
+          title={copy.email}
           subtitle={online ? user.email : undefined}
           {...capabilityRowProps("serverPrefs", "linked", online)}
           onPress={() => setSheet("email")}
@@ -296,10 +315,13 @@ function LinkedAccountScreen({
           onPress={onOpenFriends}
           right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
         />
-
-        <SectionHeader title="Leaving" />
+      </>
+    ),
+    leaving: () => (
+      <>
+        <SectionHeader title={copy.leaving} />
         <Button
-          label="Sign out"
+          label={copy.signOut}
           variant="outlineAccent"
           icon="signOut"
           onPress={onSignOut}
@@ -307,12 +329,26 @@ function LinkedAccountScreen({
         <Row
           icon="delete"
           hue={theme.warning}
-          title="Delete account"
+          title={copy.deleteAccount}
           {...capabilityRowProps("serverPrefs", "linked", online)}
           onPress={() => setSheet("delete")}
         />
+      </>
+    ),
+    footer: () => <Text style={styles.version}>{CLIENT_VERSION}</Text>,
+  };
+  const keys = contractSectionKeys(ACCOUNT, "gps");
 
-        <Text style={styles.version}>{CLIENT_VERSION}</Text>
+  return (
+    <View style={styles.root}>
+      {sections.hero()}
+
+      <ScreenScroll padded={false} contentStyle={styles.body}>
+        {keys
+          .filter((key) => key !== "hero")
+          .map((key) => (
+            <Fragment key={key}>{sections[key]()}</Fragment>
+          ))}
       </ScreenScroll>
 
       <BottomSheet
@@ -479,7 +515,7 @@ function EmailForm({
           We sent a code to {email.trim()}. Enter it to finish the change.
         </Text>
         <TextField
-          label="Confirmation code"
+          label={copy.verificationCode}
           value={code}
           onChangeText={(text) => {
             setCode(text);
@@ -489,7 +525,7 @@ function EmailForm({
           error={error}
         />
         <Button
-          label="Confirm email"
+          label={copy.confirmEmail}
           icon="done"
           loading={busy}
           onPress={() => void confirm()}
@@ -502,7 +538,7 @@ function EmailForm({
     <View style={styles.form}>
       <Text style={styles.formHint}>Signed in with {current}.</Text>
       <TextField
-        label="New email"
+        label={copy.newEmail}
         value={email}
         onChangeText={(text) => {
           setEmail(text);
@@ -513,7 +549,7 @@ function EmailForm({
         error={error}
       />
       <Button
-        label="Send code"
+        label={copy.sendCode}
         icon="email"
         loading={busy}
         onPress={() => void request()}
@@ -539,7 +575,7 @@ function DeleteAccountForm({
   const [typed, setTyped] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const matches = typed.trim() === username;
+  const matches = deleteAccountPhraseMatches(typed, username);
 
   const run = useCallback(async () => {
     if (!matches) return;
@@ -558,14 +594,9 @@ function DeleteAccountForm({
 
   return (
     <View style={styles.form}>
-      <Text style={styles.danger}>This can&apos;t be undone.</Text>
-      <Text style={styles.formHint}>
-        Your sign-in, places, trips, notes, photos and shares are deleted from
-        the server and from this phone. Places other people copied from you stay
-        theirs.
-      </Text>
+      <Text style={styles.formHint}>{ACCOUNT_DELETE_BODY}</Text>
       <TextField
-        label={`Type ${username} to confirm`}
+        label={deleteAccountPhraseLabel(username)}
         value={typed}
         onChangeText={setTyped}
         autoCapitalize="none"
@@ -591,11 +622,6 @@ const styles = StyleSheet.create({
   meterHint: { color: theme.textMuted },
   form: { gap: spacing(1.5) },
   formHint: { color: theme.textMuted, fontSize: fontSize.sm },
-  danger: {
-    color: theme.warning,
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.medium,
-  },
   version: {
     color: theme.textMuted,
     fontSize: fontSize.xs,

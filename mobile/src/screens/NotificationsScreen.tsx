@@ -27,7 +27,15 @@
 // user-supplied text, allowed) and a timestamp. Never a coordinate. Tapping
 // through passes an opaque id and the detail screen fetches over the authed API,
 // so a share revoked since the notification lands on the 404-not-403 path.
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Fragment,
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   Alert,
   RefreshControl,
@@ -44,20 +52,26 @@ import {
   batchPendingFileSends,
   bulkReadAction,
   collapseBatches,
+  contractSectionKeys,
   countBatchRows,
   expandBatchSelection,
   findNotificationBatches,
   groupNotificationsByDay,
+  INBOX,
+  inboxHeroTitle,
+  inboxTruncatedNote,
   isResolvedElsewhereError,
   messageFromError,
   newestNotificationsFirst,
   notificationActions,
+  notificationDeleteConfirm,
   notificationHaystack,
   notificationLabel,
   notificationPlaceId,
   notificationsTruncated,
   selectionCountLabel,
   tallyNotifications,
+  type SectionKeysOn,
   type NotificationActionKind,
   type NotificationActions,
   type NotificationBatch,
@@ -160,7 +174,7 @@ function useNotifications(blocked: boolean): NotificationsState {
         }
       } catch (err) {
         if (!cancelled && !cache) {
-          setError(messageFromError(err, "Couldn't load notifications."));
+          setError(messageFromError(err, INBOX.copy.loadFailed));
           setNotifications([]);
         }
       }
@@ -524,27 +538,20 @@ export function NotificationsScreen({
   const deleteSelected = useCallback(() => {
     const targets = selectedNotifications;
     const count = targets.length;
-    Alert.alert(
-      count === 1
-        ? "Delete this notification?"
-        : `Delete ${count} notifications?`,
-      count === 1
-        ? "It goes from every device on your account. This can't be undone."
-        : "They go from every device on your account. This can't be undone.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: () => {
-            void (async () => {
-              await deleteNotifications(targets);
-              clearSelection();
-            })();
-          },
+    const { confirmTitle, confirmBody } = notificationDeleteConfirm(count);
+    Alert.alert(confirmTitle, confirmBody, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: () => {
+          void (async () => {
+            await deleteNotifications(targets);
+            clearSelection();
+          })();
         },
-      ],
-    );
+      },
+    ]);
   }, [clearSelection, deleteNotifications, selectedNotifications]);
 
   const markAll = useCallback(async () => {
@@ -853,10 +860,10 @@ export function NotificationsScreen({
   // piles. The collapsed row already says so — it keeps its New pill while any
   // member is unread.
   const buckets: ChipOption<Bucket>[] = [
-    { value: "all", label: "All", count: bucketCounts.all },
+    { value: "all", label: INBOX.copy.bucketAll, count: bucketCounts.all },
     {
       value: "unread",
-      label: "Unread",
+      label: INBOX.copy.bucketUnread,
       count: bucketCounts.unread,
       // A bucket the search has emptied stays in place but is not a tap into a
       // dead end — a rail that reshuffles on every keystroke is worse.
@@ -864,7 +871,7 @@ export function NotificationsScreen({
     },
     {
       value: "read",
-      label: "Read",
+      label: INBOX.copy.bucketRead,
       count: bucketCounts.read,
       disabled: bucketCounts.read === 0 && bucket !== "read",
     },
@@ -876,39 +883,36 @@ export function NotificationsScreen({
   if (guestBlock) {
     return (
       <View style={styles.root}>
-        <Hero eyebrow="Inbox" title="Inbox" onBack={onBack} />
+        <Hero eyebrow={INBOX.title} title={INBOX.title} onBack={onBack} />
         <EmptyState title={guestBlock.title} hint={guestBlock.hint} />
       </View>
     );
   }
-  if (query.loading && notifications.length === 0) return <LoadingState />;
+  if (query.loading && notifications.length === 0)
+    return <LoadingState label={INBOX.copy.loading} />;
   if (query.error && notifications.length === 0) {
     return <ErrorState message={query.error} onRetry={query.refetch} />;
   }
 
-  return (
-    <View style={styles.root}>
+  // Exhaustive by type: a section the contract names and this screen does not
+  // draw, or the reverse, fails `tsc` (`INBOX`, shared/src/contracts).
+  const page: Record<SectionKeysOn<typeof INBOX, "gps">, () => ReactNode> = {
+    hero: () => (
       <Hero
-        eyebrow="Inbox"
+        eyebrow={INBOX.title}
         // The answer to "what happened while I was away?" is a NUMBER of things
         // that did (docs/ux-principles.md §2). "Something new" was that answer rounded to a boolean —
         // it said the same words for one notification and for forty, and read as
         // a marketing line rather than a count. The tally below it stays the
         // whole inbox, so the two lines never restate each other.
-        title={
-          unreadCount > 0
-            ? `${unreadCount} unread`
-            : notifications.length > 0
-              ? "All caught up"
-              : "Nothing yet"
-        }
+        title={inboxHeroTitle(unreadCount, notifications.length)}
         onBack={onBack}
         value={String(tally.total)}
         valueSuffix={tally.total === 1 ? "notification" : "notifications"}
         actions={
           unreadCount > 0 ? (
             <Button
-              label="Mark all read"
+              label={INBOX.copy.markAllRead}
               variant="outlineAccent"
               compact
               onPress={() => void markAll()}
@@ -916,55 +920,65 @@ export function NotificationsScreen({
           ) : undefined
         }
       />
-
-      {/* The bulk bar takes the ChipRail's slot and only that slot, so
-          the rail's height cannot change when a selection starts (DESIGN.md §5). */}
-      {notifications.length > 0 ? (
-        <View style={styles.rail}>
-          {selecting && readAction ? (
-            <SelectionBar
-              countLabel={selectionCountLabel(selectedNotifications)}
-              showSelectAll={selectedItems.length < selectableItems.length}
-              // ONE read/unread button, not a pair: which way it goes follows the
-              // selection (all read → unread, anything unread → read), and the
-              // bar's count line states the unread tally so the direction can be
-              // read off the screen rather than remembered.
-              extra={
-                <IconButton
-                  icon={readAction.icon}
-                  accessibilityLabel={readAction.label}
-                  color={theme.accent}
-                  onPress={applyReadAction}
-                />
-              }
-              onClear={clearSelection}
-              onSelectAll={selectAll}
-              onDelete={deleteSelected}
-            />
-          ) : (
-            <ChipRail
-              options={buckets}
-              value={bucket}
-              onChange={changeBucket}
-              scroll
-            />
-          )}
-          {/* The name search, in the SAME place in both states so the rail's
-              height cannot differ between them (DESIGN.md §5). It goes inert rather than
-              unmounting while picking — a keystroke could narrow a selected row
-              out of the list — and dims to say so, the treatment Saved's field
-              and the waypoint tag rail already use. */}
-          <View style={styles.searchField}>
-            <TextField
-              label="Search notifications"
-              value={search}
-              onChangeText={setSearch}
-              editable={!selecting}
-            />
+    ),
+    buckets: () => (
+      <>
+        {/* The bulk bar takes the ChipRail's slot and only that slot, so
+            the rail's height cannot change when a selection starts (DESIGN.md §5). */}
+        {notifications.length > 0 ? (
+          <View style={styles.rail}>
+            {selecting && readAction ? (
+              <SelectionBar
+                countLabel={selectionCountLabel(selectedNotifications)}
+                showSelectAll={selectedItems.length < selectableItems.length}
+                // ONE read/unread button, not a pair: which way it goes follows the
+                // selection (all read → unread, anything unread → read), and the
+                // bar's count line states the unread tally so the direction can be
+                // read off the screen rather than remembered.
+                extra={
+                  <IconButton
+                    icon={readAction.icon}
+                    accessibilityLabel={readAction.label}
+                    color={theme.accent}
+                    onPress={applyReadAction}
+                  />
+                }
+                onClear={clearSelection}
+                onSelectAll={selectAll}
+                onDelete={deleteSelected}
+              />
+            ) : (
+              <ChipRail
+                options={buckets}
+                value={bucket}
+                onChange={changeBucket}
+                scroll
+              />
+            )}
+            {/* The name search, in the SAME place in both states so the rail's
+                height cannot differ between them (DESIGN.md §5). It goes inert rather than
+                unmounting while picking — a keystroke could narrow a selected row
+                out of the list — and dims to say so, the treatment Saved's field
+                and the waypoint tag rail already use. */}
+            <View style={styles.searchField}>
+              <TextField
+                label={INBOX.copy.searchField}
+                value={search}
+                onChangeText={setSearch}
+                editable={!selecting}
+              />
+            </View>
           </View>
-        </View>
-      ) : null}
-
+        ) : null}
+      </>
+    ),
+    truncated: () =>
+      truncated ? (
+        <Text style={styles.truncation}>
+          {inboxTruncatedNote(query.notifications.length, query.total ?? 0)}
+        </Text>
+      ) : null,
+    list: () => (
       <SectionList
         style={styles.list}
         contentContainerStyle={styles.listContent}
@@ -993,14 +1007,15 @@ export function NotificationsScreen({
             }}
           />
         }
-        ListFooterComponent={
-          truncated ? (
-            <Text style={styles.truncation}>
-              {`Showing the ${query.notifications.length} most recent of ${query.total}. Older ones aren't listed.`}
-            </Text>
-          ) : null
-        }
       />
+    ),
+  };
+
+  return (
+    <View style={styles.root}>
+      {contractSectionKeys(INBOX, "gps").map((key) => (
+        <Fragment key={key}>{page[key]()}</Fragment>
+      ))}
 
       {/* Per-row verbs. Looked up from the live list, so a refetch that drops
           or restyles the row cannot leave the sheet acting on a stale copy. */}
@@ -1105,7 +1120,7 @@ const NotificationRow = memo(function NotificationRow({
   const pill = target?.pill ? (
     <StatusPill label={target.pill} tone="muted" />
   ) : !item.read ? (
-    <StatusPill label="New" tone="accent" />
+    <StatusPill label={INBOX.copy.unreadMark} tone="accent" />
   ) : undefined;
   return (
     <Row
@@ -1256,7 +1271,7 @@ const BatchRow = memo(function BatchRow({
       right={
         <View style={styles.rowTrailing}>
           {batch.unreadCount > 0 ? (
-            <StatusPill label="New" tone="accent" />
+            <StatusPill label={INBOX.copy.unreadMark} tone="accent" />
           ) : undefined}
           {selecting ? (
             <SelectionMark selected={selected} />
@@ -1264,7 +1279,7 @@ const BatchRow = memo(function BatchRow({
             <IconButton
               icon={expanded ? "collapse" : "expand"}
               accessibilityLabel={
-                expanded ? "Collapse this group" : "Show each one"
+                expanded ? INBOX.copy.collapseGroup : INBOX.copy.expandGroup
               }
               onPress={() => onToggleBatch(batch.key)}
             />
@@ -1341,39 +1356,34 @@ function EmptyPanel({
   searching: boolean;
   onShowAll: () => void;
 }) {
+  const copy = INBOX.copy;
   if (searching) {
     return (
       <View style={styles.empty}>
-        <Text style={styles.emptyTitle}>Nothing matches</Text>
-        <Text style={styles.emptyHint}>
-          The search runs over what a row says — a name, a place, a filename.
+        <Text style={styles.emptyTitle}>{copy.noMatchTitle}</Text>
+        <Text style={styles.emptyHint}>{copy.noMatchBody}</Text>
+        <Button label={copy.clearSearch} variant="ghost" onPress={onShowAll} />
+      </View>
+    );
+  }
+  if (bucket !== "all") {
+    return (
+      <View style={styles.empty}>
+        <Text style={styles.emptyTitle}>
+          {bucket === "unread" ? copy.noUnreadTitle : copy.noReadTitle}
         </Text>
-        <Button label="Clear search" variant="ghost" onPress={onShowAll} />
-      </View>
-    );
-  }
-  if (bucket === "unread") {
-    return (
-      <View style={styles.empty}>
-        <Text style={styles.emptyTitle}>Nothing unread</Text>
-        <Button label="Show everything" variant="ghost" onPress={onShowAll} />
-      </View>
-    );
-  }
-  if (bucket === "read") {
-    return (
-      <View style={styles.empty}>
-        <Text style={styles.emptyTitle}>Nothing read yet</Text>
-        <Button label="Show everything" variant="ghost" onPress={onShowAll} />
+        <Button
+          label={copy.showEverything}
+          variant="ghost"
+          onPress={onShowAll}
+        />
       </View>
     );
   }
   return (
     <View style={styles.empty}>
-      <Text style={styles.emptyTitle}>No notifications</Text>
-      <Text style={styles.emptyHint}>
-        Shares, friend requests and finished maps appear here.
-      </Text>
+      <Text style={styles.emptyTitle}>{copy.firstRunTitle}</Text>
+      <Text style={styles.emptyHint}>{copy.firstRunBody}</Text>
     </View>
   );
 }
@@ -1416,6 +1426,7 @@ const styles = StyleSheet.create({
     fontSize: fontSize.xs,
     textAlign: "center",
     paddingTop: spacing(1.5),
+    paddingHorizontal: spacing(2),
   },
   // Unread is an accent EDGE, not an accent border all round — that border is
   // `Row`'s `selected` treatment, and while a multi-select is running the two
