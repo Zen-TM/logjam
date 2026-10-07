@@ -60,6 +60,7 @@ import { PlacePinsLayer, toPlaceFeatureCollection } from "./PlacePinsLayer";
 import { readLastMapCamera } from "./lastCamera";
 import { DEFAULT_CENTER, DEFAULT_ZOOM } from "./mapChrome";
 import { ResolvedSource, sourceIdFor } from "./ResolvedSource";
+import { MAP_BACK_SPACE, MapBackButton } from "./MapBackButton";
 import { SelectionFrame } from "./SelectionFrame";
 import {
   bboxToFrame,
@@ -299,6 +300,8 @@ export function PickAreaScreen({
         ) : null}
       </View>
 
+      <MapBackButton top={insets.top + spacing(2)} onPress={onCancel} />
+
       <View
         style={[styles.hint, { top: insets.top + spacing(2) }]}
         pointerEvents="none"
@@ -331,7 +334,12 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.page },
   // Where the notice sits; the kit `Notice` draws it (a scrim under `text`
   // was dark on dark in Daylight).
-  hint: { position: "absolute", left: spacing(2), right: spacing(2) },
+  // After the back button, which owns the top left.
+  hint: {
+    position: "absolute",
+    left: MAP_BACK_SPACE,
+    right: spacing(2),
+  },
   actions: {
     position: "absolute",
     left: 0,

@@ -9,6 +9,7 @@ import {
 
 import { fontSize, opacity, radius, spacing, theme } from "../theme";
 import { FieldError } from "./FieldError";
+import { fieldLabel } from "./fieldLabel";
 
 type TextFieldProps = {
   label: string;
@@ -105,13 +106,7 @@ const styles = StyleSheet.create({
   container: { gap: spacing(0.5) },
   // The kit's one disabled dim — see the note above.
   disabled: { opacity: opacity.disabled },
-  label: {
-    fontSize: fontSize.xs,
-    fontWeight: "600",
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-    color: theme.textMuted,
-  },
+  label: fieldLabel,
   input: {
     borderWidth: 1,
     borderColor: theme.lineStrong,

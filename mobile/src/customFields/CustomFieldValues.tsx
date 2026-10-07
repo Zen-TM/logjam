@@ -30,6 +30,7 @@ import {
   type ChipOption,
   Icon,
 } from "../ui";
+import { fieldLabel } from "../ui/fieldLabel";
 
 /**
  * A yes/no answer has THREE states, and "—" is the one a form starts on.
@@ -217,15 +218,9 @@ function Beside({
 const styles = StyleSheet.create({
   field: { gap: spacing(0.5) },
   // Matches `TextField`'s own label exactly. A rail and a number box sit in one
-  // list under one heading now, so a sentence-case label beside an uppercase
-  // one reads as two different kinds of control.
-  railLabel: {
-    fontSize: fontSize.xs,
-    fontWeight: "600",
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-    color: theme.textMuted,
-  },
+  // list under one heading now, so a label beside a different one reads as two
+  // different kinds of control.
+  railLabel: fieldLabel,
   beside: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
   // `minWidth: 0` lets a scrolling rail shrink beside the button instead of
   // pushing it off the edge.

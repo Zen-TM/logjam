@@ -18,9 +18,11 @@ import {
   countBatchRows,
   expandBatchSelection,
   findNotificationBatches,
+  CLEAR_READ_CONFIRM,
   contractSectionKeys,
   groupNotificationsByDay,
   INBOX,
+  inboxVerb,
   inboxTruncatedNote,
   isResolvedElsewhereError,
   newestNotificationsFirst,
@@ -440,19 +442,16 @@ function NotificationsPanel({
 
   const confirmClearRead = () =>
     setPendingConfirm({
-      title: "Clear read notifications?",
-      message:
-        "Every notification you've read goes, from every device on your account. Unread ones stay.",
-      confirmLabel: "Clear",
+      title: CLEAR_READ_CONFIRM.confirmTitle,
+      message: CLEAR_READ_CONFIRM.confirmBody,
+      confirmLabel: CLEAR_READ_CONFIRM.confirmLabel,
       run: async () => {
         try {
           await clearReadNotifications();
           clearSelection();
         } catch (err) {
           console.error(err);
-          toast.error(
-            messageFromError(err, "Couldn't clear read notifications."),
-          );
+          toast.error(messageFromError(err, CLEAR_READ_CONFIRM.failed));
         } finally {
           onRefetchNotifications();
         }
@@ -789,14 +788,14 @@ function NotificationsPanel({
               entries={[
                 {
                   id: "read-all",
-                  label: copy.markAllRead,
+                  label: inboxVerb("markAllRead").label,
                   icon: "selectAll",
                   disabled: tally.unread === 0,
                   onSelect: () => void markAllRead(),
                 },
                 {
                   id: "clear-read",
-                  label: "Clear read notifications…",
+                  label: inboxVerb("clearRead").label,
                   icon: "delete",
                   danger: true,
                   disabled: readCount === 0,

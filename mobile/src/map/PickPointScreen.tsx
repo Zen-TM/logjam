@@ -69,6 +69,7 @@ import { readLastMapCamera } from "./lastCamera";
 import { DEFAULT_CENTER, DEFAULT_ZOOM } from "./mapChrome";
 import { ResolvedSource, sourceIdFor } from "./ResolvedSource";
 import { RoutesLayer } from "./RoutesLayer";
+import { MAP_BACK_SPACE, MapBackButton } from "./MapBackButton";
 import {
   resolveMapSource,
   type BasemapId,
@@ -308,6 +309,8 @@ export function PickPointScreen({
         ))}
       </View>
 
+      <MapBackButton top={insets.top + spacing(2)} onPress={onCancel} />
+
       <View
         style={[styles.hint, { top: insets.top + spacing(2) }]}
         pointerEvents="none"
@@ -366,9 +369,10 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   thumbActive: { borderColor: theme.accent },
+  // After the back button, which owns the top left.
   hint: {
     position: "absolute",
-    left: spacing(2),
+    left: MAP_BACK_SPACE,
     backgroundColor: scrim.heavy,
     borderRadius: radius.md,
     paddingHorizontal: spacing(2),
