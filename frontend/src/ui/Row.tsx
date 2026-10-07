@@ -102,6 +102,15 @@ export function Avatar({ username }: { username: string }) {
 }
 
 /**
+ * The last thing in a list: the same button its empty state offers ("Add a
+ * place type", "Make a GeoPDF"), so adding is where the eye ends up after
+ * scrolling to the bottom, not only when there is nothing to scroll.
+ */
+export function ListEnd({ children }: { children: ReactNode }) {
+  return <div className={classes.listEnd}>{children}</div>;
+}
+
+/**
  * The canonical list row: a card with a leading node, a title and subtitle,
  * and trailing accessories.
  *

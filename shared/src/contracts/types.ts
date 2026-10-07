@@ -31,7 +31,13 @@ export type ScreenContract<
   id: string;
   /** The question the surface's hero answers. Documentation, never rendered. */
   question?: string;
-  /** The surface's title, where it is a constant. */
+  /**
+   * The surface's name, the nav rail's word for it. Logjam Web's hero IS this:
+   * its chips already show the counts, so a count in the title says it twice.
+   * Logjam GPS's hero says the answer to `question` (its `…HeroTitle`
+   * function) and shows this as the eyebrow. A count stays in a title only
+   * where nothing else on the panel shows it (Stats' days out).
+   */
   title?: string;
   sections: readonly ContractSection<K>[];
   /** Section titles, labels and empty states: the words both clients draw. */

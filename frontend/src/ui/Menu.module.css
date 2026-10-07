@@ -82,7 +82,7 @@
 }
 
 /* A destructive verb is said by its glyph: words are never an intent colour,
-   and a warning-coloured label fails 4.5:1 on Daylight's paper. */
+   and a warning-coloured label fails 4.5:1 on Ghost Gum's paper. */
 .danger .glyph {
   color: var(--color-warning);
 }

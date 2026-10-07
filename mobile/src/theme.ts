@@ -13,7 +13,7 @@ import {
   DEFAULT_THEME_SCHEME_ID,
   FONT,
   FONT_WEIGHT,
-  isThemeSchemeId,
+  normalizeThemeSchemeId,
   OPACITY,
   PLACE_STATUS_HUES,
   RADIUS,
@@ -33,7 +33,7 @@ function resolveSchemeId(): ThemeSchemeId {
   const stored = readPref(THEME_SCHEME_PREF_KEY);
   // An unrecognised id (downgraded app, hand-edited row) falls back rather than
   // crashing the whole style layer on a bad string.
-  return isThemeSchemeId(stored) ? stored : DEFAULT_THEME_SCHEME_ID;
+  return normalizeThemeSchemeId(stored) ?? DEFAULT_THEME_SCHEME_ID;
 }
 
 /** The scheme this launch is painted in. */

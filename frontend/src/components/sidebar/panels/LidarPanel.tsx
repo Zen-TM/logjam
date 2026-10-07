@@ -51,6 +51,7 @@ import {
   Hero,
   IconButton,
   IconTile,
+  ListEnd,
   Menu,
   Row,
   StatusPill,
@@ -438,6 +439,13 @@ export default function LidarPanel({
     beingMade.length === 0 &&
     finishedExports.length === 0;
 
+  // The same button is the empty state's and the end of the list's.
+  const makeTopoButton = (
+    <Button compact variant="filled" icon="lidar" onClick={onOpenTopo}>
+      Make a LiDAR topo
+    </Button>
+  );
+
   const list = !topoJobsLoaded ? (
     <div className={classes.emptyArea} role="status">
       <LoadingState label="Loading your LiDAR topos…" />
@@ -448,11 +456,7 @@ export default function LidarPanel({
         icon="lidar"
         title="No LiDAR topos yet"
         body="Pick an area and Logjam Web builds contours, slope, hillshade and vegetation from the government's LiDAR survey. Save one to Logjam GPS for the field."
-        actions={
-          <Button compact variant="filled" icon="lidar" onClick={onOpenTopo}>
-            Make a LiDAR topo
-          </Button>
-        }
+        actions={makeTopoButton}
       />
     </div>
   ) : (
@@ -620,6 +624,7 @@ export default function LidarPanel({
           ))}
         </section>
       )}
+      <ListEnd>{makeTopoButton}</ListEnd>
     </div>
   );
 

@@ -44,7 +44,10 @@ export const INBOX = {
   },
 } as const satisfies ScreenContract;
 
-/** The hero: what is unread, else that nothing is. */
+/**
+ * Logjam GPS's hero: what is unread, else that nothing is. Logjam Web's hero
+ * is `INBOX.title`: its chips show the unread count.
+ */
 export function inboxHeroTitle(unread: number, total: number): string {
   if (unread > 0) return `${unread} unread`;
   return total > 0 ? "All caught up" : "Nothing yet";

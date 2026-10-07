@@ -2,8 +2,11 @@
   flex: none;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: var(--space-0-5);
   min-height: var(--control-md);
+  /* Never narrower than tall: a one-digit chip is a circle. */
+  min-width: var(--control-md);
   padding: 0 var(--space-1);
   border-radius: var(--radius-pill);
   border: var(--hairline);
@@ -22,7 +25,7 @@
 }
 
 /* Inactive, the glyph is muted: a hue is only ever a fill (the active chip),
-   never a glyph on a surface, where light hues fail 3:1 on Daylight's card. */
+   never a glyph on a surface, where light hues fail 3:1 on Ghost Gum's card. */
 .glyph {
   flex: none;
   color: var(--color-text-muted);
@@ -51,7 +54,7 @@
   color: var(--color-on-fill);
 }
 
-/* No wash on a fill: an ink wash darkened Daylight's accent until the count
+/* No wash on a fill: an ink wash darkened Ghost Gum's accent until the count
    on it fell under 4.5:1. The count reads as `onFill` on the fill itself. */
 .active .count {
   background: transparent;
