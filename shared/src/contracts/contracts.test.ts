@@ -1,9 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { SYSTEM_FIELD_DEFS } from "../placeTypes.js";
+import { BULK_SHARE_ITEM_TYPES } from "../sharing.js";
 import { DEFAULT_NOTIFICATION_PREFERENCES } from "../themeSchemes.js";
 import {
   attributeFilterShape,
   ACCOUNT_DELETE_BODY,
+  noFriendsMatch,
+  noFriendsMessage,
+  sendCopyLabel,
+  sharePromise,
+  WAY_VERBS,
+  wayVerbLabel,
   MAP_LAYERS,
   attributeDeleteConfirm,
   contractSectionKeys,
@@ -519,5 +526,53 @@ describe("the map's layers", () => {
       "overlays",
       "offline",
     ]);
+  });
+});
+
+describe("sharing", () => {
+  // Red when a kind is added to what can be shared and its promise is not
+  // written: a screen would have nothing to tell the friend it grants.
+  it("promises something for every kind that can be shared", () => {
+    for (const kind of BULK_SHARE_ITEM_TYPES)
+      expect(sharePromise(kind), kind).toMatch(/^Friends you pick/);
+    expect(sharePromise("selection")).toContain("these");
+  });
+
+  it("says a place share leaves copies alone, and a route's can be stopped", () => {
+    expect(sharePromise("place")).toContain("copies they've already made");
+    expect(sharePromise("route")).toContain("stop sharing anytime");
+  });
+
+  it("names the way out of an empty friend picker", () => {
+    expect(noFriendsMessage("copy").body).toContain("Copies go to friends");
+    expect(noFriendsMessage("share").body).toContain("Add one in Friends");
+    expect(noFriendsMatch("  ab ")).toBe("No friends match “ab”.");
+  });
+
+  it("counts a send", () => {
+    expect(sendCopyLabel(0)).toBe("Send a copy");
+    expect(sendCopyLabel(1)).toBe("Send a copy");
+    expect(sendCopyLabel(3)).toBe("Send 3 copies");
+  });
+});
+
+describe("a way's verbs", () => {
+  // Red when a way's copy verb drifts from the place's: Logjam Web said "Save
+  // to my Ways" where a place said "Save a copy".
+  it("keeps a copy with the words places use", () => {
+    expect(wayVerbLabel("copy", "web")).toBe(
+      placeVerbs("web", "row", false).find((verb) => verb.id === "copy")!.label,
+    );
+    expect(wayVerbLabel("copyAndRemove", "gps")).toBe(
+      placeVerbs("gps", "row", false).find(
+        (verb) => verb.id === "copyAndRemove",
+      )!.label,
+    );
+  });
+
+  it("marks a dialog with an ellipsis on Logjam Web only", () => {
+    expect(wayVerbLabel("share", "web")).toBe("Share…");
+    expect(wayVerbLabel("share", "gps")).toBe("Share");
+    expect(WAY_VERBS.length).toBeGreaterThan(0);
   });
 });

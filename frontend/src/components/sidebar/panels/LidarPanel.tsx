@@ -691,13 +691,7 @@ export default function LidarPanel({
       {shareJob && (
         <ShareDialog
           title={`Share ${shareJob.label}`}
-          blurb={
-            <>
-              Recipients see this topo on their map, and can download or export
-              it themselves. Only you can delete it, and you can unshare at any
-              time.
-            </>
-          }
+          kind="topoJob"
           friends={friends}
           open
           onClose={() => setShareJob(null)}
