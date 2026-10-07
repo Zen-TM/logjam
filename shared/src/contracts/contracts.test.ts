@@ -35,7 +35,10 @@ import {
   friendSharesNote,
   friendsEmptyKind,
   friendsHeroTitle,
+  INBOX,
+  INBOX_VERBS,
   inboxHeroTitle,
+  inboxVerb,
   inboxTruncatedNote,
   notificationDeleteConfirm,
   NOTIFICATION_VERBS,
@@ -409,6 +412,15 @@ describe("the inbox", () => {
       "Delete 3 notifications?",
     );
     expect(notificationDeleteConfirm(3).confirmBody).toMatch(/^They go/);
+  });
+
+  // Red when the hero's ⋯ verbs and the copy's "Mark all as read" drift: the
+  // two clients read both.
+  it("words the hero's mark-all verb as its copy does, and marks only Clear destructive", () => {
+    expect(inboxVerb("markAllRead").label).toBe(INBOX.copy.markAllRead);
+    expect(
+      INBOX_VERBS.filter((verb) => "danger" in verb).map((v) => v.id),
+    ).toEqual(["clearRead"]);
   });
 
   it("marks only Delete destructive, below the rule", () => {

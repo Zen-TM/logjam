@@ -52,6 +52,7 @@ import {
   batchPendingFileSends,
   bulkReadAction,
   collapseBatches,
+  CLEAR_READ_CONFIRM,
   contractSectionKeys,
   countBatchRows,
   expandBatchSelection,
@@ -60,6 +61,7 @@ import {
   INBOX,
   inboxHeroTitle,
   inboxTruncatedNote,
+  inboxVerb,
   isResolvedElsewhereError,
   messageFromError,
   newestNotificationsFirst,
@@ -107,7 +109,9 @@ import {
   removeCachedNotifications,
 } from "../sync/notificationsCache";
 import { onMirrorChanged } from "../sync/syncDb";
+import { clearReadNotifications } from "../api/queries";
 import {
+  BottomSheet,
   Button,
   EmptyState,
   ErrorState,
@@ -566,6 +570,42 @@ export function NotificationsScreen({
     }
   }, [notifications, notify, onUnreadChanged]);
 
+  // The hero's ⋯: the verbs that act on the whole inbox (`INBOX_VERBS`).
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const readCount = notifications.filter((n) => n.read).length;
+
+  const clearRead = useCallback(() => {
+    Alert.alert(
+      CLEAR_READ_CONFIRM.confirmTitle,
+      CLEAR_READ_CONFIRM.confirmBody,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: CLEAR_READ_CONFIRM.confirmLabel,
+          style: "destructive",
+          onPress: () => {
+            void (async () => {
+              try {
+                await clearReadNotifications();
+                // The mirror follows the server: the read ones this phone holds
+                // go from the cache too, so they stay gone offline.
+                await removeCachedNotifications(
+                  notifications.filter((n) => n.read).map((n) => n.id),
+                );
+                clearSelection();
+                onUnreadChanged?.();
+                query.refetch();
+              } catch (err) {
+                console.error(err);
+                notify(CLEAR_READ_CONFIRM.failed, "error");
+              }
+            })();
+          },
+        },
+      ],
+    );
+  }, [clearSelection, notifications, notify, onUnreadChanged, query]);
+
   /**
    * Answer a notification's question, then let the refetch settle the row.
    *
@@ -910,14 +950,11 @@ export function NotificationsScreen({
         value={String(tally.total)}
         valueSuffix={tally.total === 1 ? "notification" : "notifications"}
         actions={
-          unreadCount > 0 ? (
-            <Button
-              label={INBOX.copy.markAllRead}
-              variant="outlineAccent"
-              compact
-              onPress={() => void markAll()}
-            />
-          ) : undefined
+          <IconButton
+            icon="overflow"
+            accessibilityLabel="Inbox actions"
+            onPress={() => setActionsOpen(true)}
+          />
         }
       />
     ),
@@ -1028,6 +1065,43 @@ export function NotificationsScreen({
         onSetRead={(n, read) => void setRead([n.id], read)}
         onDelete={(n) => void deleteNotifications([n])}
       />
+
+      <BottomSheet
+        visible={actionsOpen}
+        onClose={() => setActionsOpen(false)}
+        title="Inbox actions"
+      >
+        <View style={styles.actionsBody}>
+          <Row
+            icon={inboxVerb("markAllRead").icon}
+            title={inboxVerb("markAllRead").label}
+            // Disabled, with its reason, when it could apply but not now (UX §5).
+            disabled={unreadCount === 0}
+            subtitle={unreadCount === 0 ? "Nothing to mark as read" : undefined}
+            onPress={() => {
+              setActionsOpen(false);
+              void markAll();
+            }}
+          />
+          <Row
+            icon={inboxVerb("clearRead").icon}
+            hue={theme.warning}
+            title={inboxVerb("clearRead").label}
+            disabled={readCount === 0 || !online}
+            subtitle={
+              !online
+                ? "Needs a connection"
+                : readCount === 0
+                  ? "No read notifications"
+                  : undefined
+            }
+            onPress={() => {
+              setActionsOpen(false);
+              clearRead();
+            }}
+          />
+        </View>
+      </BottomSheet>
 
       <Toast message={toast} onDismissed={() => setToast(null)} />
     </View>
@@ -1389,6 +1463,7 @@ function EmptyPanel({
 }
 
 const styles = StyleSheet.create({
+  actionsBody: { gap: spacing(1) },
   root: { flex: 1, backgroundColor: theme.page },
   rail: {
     paddingHorizontal: spacing(2),
