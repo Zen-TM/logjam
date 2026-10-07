@@ -9,6 +9,12 @@ import {
   noFriendsMessage,
   sendCopyLabel,
   sharePromise,
+  STATS,
+  statsEmptyActivityBody,
+  statsHeroTitle,
+  statsMostReturnedLine,
+  statsTruncatedNote,
+  statsUnderActivitiesNote,
   WAY_VERBS,
   wayVerbLabel,
   MAP_LAYERS,
@@ -574,5 +580,33 @@ describe("a way's verbs", () => {
     expect(wayVerbLabel("share", "web")).toBe("Share…");
     expect(wayVerbLabel("share", "gps")).toBe("Share");
     expect(WAY_VERBS.length).toBeGreaterThan(0);
+  });
+});
+
+describe("the logbook's stats", () => {
+  it("leads with days out", () => {
+    expect(statsHeroTitle(1)).toBe("1 day out");
+    expect(statsHeroTitle(12)).toBe("12 days out");
+  });
+
+  it("says what an empty window holds, and says a capped count is capped", () => {
+    expect(statsEmptyActivityBody("Canyoning")).toBe(
+      "No canyoning trips in this window. Try a wider one.",
+    );
+    expect(statsMostReturnedLine("Claustral", 4)).toBe(
+      "most returned to · Claustral ×4",
+    );
+    expect(statsUnderActivitiesNote(1)).toContain("1 more attribute belongs");
+    expect(statsUnderActivitiesNote(3)).toContain("3 more attributes belong");
+    expect(statsTruncatedNote(500, 612)).toContain(
+      "500 most recent trips of 612",
+    );
+  });
+
+  it("draws On foot on Logjam GPS only, and the capped note on Logjam Web only", () => {
+    expect(contractSectionKeys(STATS, "gps")).toContain("onFoot");
+    expect(contractSectionKeys(STATS, "web")).not.toContain("onFoot");
+    expect(contractSectionKeys(STATS, "web")).toContain("truncated");
+    expect(contractSectionKeys(STATS, "gps")).not.toContain("truncated");
   });
 });
