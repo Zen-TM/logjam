@@ -1,3 +1,4 @@
+import { FRIENDS, FRIEND_SHARES } from "./friends.js";
 import { INBOX } from "./inbox.js";
 import { PLACE_PAGE } from "./placePage.js";
 import { TRIP_PAGE } from "./tripPage.js";
@@ -15,6 +16,7 @@ export * from "./tripVerbs.js";
 export * from "./tripPage.js";
 export * from "./tripLogs.js";
 export * from "./inbox.js";
+export * from "./friends.js";
 
 /** Every screen contract, so `contracts.test.ts` checks a new one unasked. */
 export const SCREEN_CONTRACTS: readonly ScreenContract[] = [
@@ -27,4 +29,6 @@ export const SCREEN_CONTRACTS: readonly ScreenContract[] = [
   TRIPS_ADD,
   TRIPS_FILTER_SHEET,
   INBOX,
+  FRIENDS,
+  FRIEND_SHARES,
 ];

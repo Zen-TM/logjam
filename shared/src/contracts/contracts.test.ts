@@ -4,6 +4,12 @@ import {
   attributeFilterShape,
   contractSectionKeys,
   contractSectionsFor,
+  FRIEND_SHARE_VERBS,
+  friendRemoveConfirm,
+  friendSharesEmptyTitle,
+  friendSharesNote,
+  friendsEmptyKind,
+  friendsHeroTitle,
   inboxHeroTitle,
   inboxTruncatedNote,
   notificationDeleteConfirm,
@@ -385,5 +391,45 @@ describe("the inbox", () => {
       (verb) => "danger" in verb && verb.danger,
     );
     expect(danger.map((verb) => verb.id)).toEqual(["delete"]);
+  });
+});
+
+describe("friends", () => {
+  it("leads with a request, then the count of friends", () => {
+    expect(friendsHeroTitle(2, 5)).toBe("2 requests");
+    expect(friendsHeroTitle(1, 5)).toBe("1 request");
+    expect(friendsHeroTitle(0, 0)).toBe("No friends yet");
+    expect(friendsHeroTitle(0, 1)).toBe("1 friend");
+  });
+
+  it("tells an empty page from an empty bucket", () => {
+    const kind = (
+      friends: number,
+      requests: number,
+      bucket: "all" | "friends" | "requests",
+    ) => friendsEmptyKind({ friends, requests, bucket });
+    expect(kind(0, 0, "all")).toBe("firstRun");
+    expect(kind(2, 0, "requests")).toBe("noRequests");
+    expect(kind(0, 1, "friends")).toBe("firstRun");
+    expect(kind(2, 1, "all")).toBeNull();
+  });
+
+  it("says removing a friend ends sharing both ways", () => {
+    expect(friendRemoveConfirm("abel").confirmTitle).toBe("Remove abel?");
+    expect(friendRemoveConfirm("abel").confirmBody).toContain("both ways");
+  });
+
+  it("gives a reason for each share verb only one client has", () => {
+    for (const verb of FRIEND_SHARE_VERBS)
+      if ("on" in verb) expect(verb.reason).toBeTruthy();
+  });
+
+  it("names the direction a friend's list runs", () => {
+    expect(friendSharesNote("theySee", "abel")).toBe(
+      "Items you have shared with abel.",
+    );
+    expect(friendSharesEmptyTitle("youSee", "abel")).toBe(
+      "abel hasn't shared anything with you",
+    );
   });
 });

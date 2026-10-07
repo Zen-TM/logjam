@@ -22,7 +22,19 @@
 // PRIVACY: usernames only, everywhere. `/friends`, `/friends/requests` and
 // `/friends/search` never return an email (root CLAUDE.md), and nothing here
 // would have somewhere to put one.
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  contractSectionKeys,
+  FRIENDS,
+  friendAcceptedMessage,
+  friendRemovedMessage,
+  friendRemoveConfirm,
+  friendsEmptyKind,
+  friendsHeroTitle,
+  friendVerb,
+  type FriendsBucket,
+  type SectionKeysOn,
+} from "@logjam/shared";
 import classes from "./FriendsPanel.module.css";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
 import FriendSharingSection from "./FriendSharingSection";
@@ -54,10 +66,9 @@ import {
 /** Shorter than this and the server has nothing useful to match on. */
 const SEARCH_MIN_CHARS = 3;
 
-type Bucket = "all" | "friends" | "requests";
+type Bucket = FriendsBucket;
 
-const plural = (count: number, noun: string) =>
-  `${count} ${noun}${count === 1 ? "" : "s"}`;
+const copy = FRIENDS.copy;
 
 function FriendsPanel({
   friends,
@@ -112,7 +123,8 @@ function FriendsPanel({
     await runAction(
       friend.friendshipId,
       () => removeFriend(friend.friendshipId),
-      "Couldn't remove friend.",
+      copy.removeFailed,
+      friendRemovedMessage(friend.username),
     );
     setRemoving(null);
     onRefetchShared();
@@ -131,18 +143,18 @@ function FriendsPanel({
   const buckets: ChipOption<Bucket>[] = [
     {
       value: "all",
-      label: "All",
+      label: copy.bucketAll,
       count: friends.length + friendRequests.length,
     },
     {
       value: "friends",
-      label: "Friends",
+      label: copy.bucketFriends,
       count: friends.length,
       disabled: friends.length === 0,
     },
     {
       value: "requests",
-      label: "Requests",
+      label: copy.bucketRequests,
       count: friendRequests.length,
       hue: "var(--hue-shared)",
       disabled: friendRequests.length === 0,
@@ -153,19 +165,18 @@ function FriendsPanel({
   const showRequests = bucket !== "friends";
   const showFriends = bucket !== "requests";
 
-  return (
-    <div className={classes.root}>
-      {/* A request outranks the count: it is the only thing on this page that
-          is waiting on you. Otherwise the title is the count of FRIENDS, not of
-          rows — a request is not one yet. */}
+  const emptyKind = friendsEmptyKind({
+    friends: friends.length,
+    requests: friendRequests.length,
+    bucket,
+  });
+
+  // Exhaustive by type: a section the contract names and this panel does not
+  // draw, or the reverse, fails `tsc` (`FRIENDS`, shared/src/contracts).
+  const page: Record<SectionKeysOn<typeof FRIENDS, "web">, () => ReactNode> = {
+    hero: () => (
       <Hero
-        title={
-          friendRequests.length > 0
-            ? plural(friendRequests.length, "request")
-            : friends.length === 0
-              ? "No friends yet"
-              : plural(friends.length, "friend")
-        }
+        title={friendsHeroTitle(friendRequests.length, friends.length)}
         actions={
           <Button
             compact
@@ -173,11 +184,12 @@ function FriendsPanel({
             icon="addFriend"
             onClick={() => setAddOpen(true)}
           >
-            Add
+            {copy.add}
           </Button>
         }
       />
-
+    ),
+    buckets: () => (
       <div className={classes.rails}>
         <ChipRail
           label="Which people"
@@ -186,114 +198,129 @@ function FriendsPanel({
           onChange={setBucket}
         />
       </div>
+    ),
+    list: () => (
+      <>
+        {emptyKind === "firstRun" ? (
+          <div className={classes.emptyArea}>
+            <EmptyState
+              icon="friends"
+              title={copy.firstRunTitle}
+              body={copy.firstRunBody}
+              actions={
+                <Button
+                  variant="filled"
+                  icon="addFriend"
+                  onClick={() => setAddOpen(true)}
+                >
+                  {copy.addTitle}
+                </Button>
+              }
+            />
+          </div>
+        ) : emptyKind === "noRequests" ? (
+          <div className={classes.emptyArea}>
+            <EmptyState icon="friends" title={copy.noRequestsTitle} />
+          </div>
+        ) : (
+          <div className={classes.list}>
+            {showRequests &&
+              friendRequests.map((request) => (
+                <Row
+                  key={request.id}
+                  leading={<Avatar username={request.requester.username} />}
+                  title={request.requester.username}
+                  subtitle={copy.requestSubtitle}
+                  disabled={busyId === request.id}
+                  accentEdge
+                  footer={
+                    <>
+                      <Button
+                        compact
+                        variant="filled"
+                        disabled={busyId === request.id}
+                        onClick={() =>
+                          void runAction(
+                            request.id,
+                            () => acceptFriendRequest(request.id),
+                            copy.acceptFailed,
+                            friendAcceptedMessage(request.requester.username),
+                          ).then(onRefetchNotifications)
+                        }
+                      >
+                        {friendVerb("accept").label}
+                      </Button>
+                      <Button
+                        compact
+                        variant="outline"
+                        disabled={busyId === request.id}
+                        onClick={() =>
+                          void runAction(
+                            request.id,
+                            () => declineFriendRequest(request.id),
+                            copy.declineFailed,
+                            copy.declined,
+                          )
+                        }
+                      >
+                        {friendVerb("decline").label}
+                      </Button>
+                    </>
+                  }
+                />
+              ))}
 
-      {friends.length === 0 && friendRequests.length === 0 ? (
-        <div className={classes.emptyArea}>
-          <EmptyState
-            icon="friends"
-            title="No friends yet"
-            body="Friends are who you can share a place, a route or a map with. Find one by their username."
-            actions={
-              <Button
-                variant="filled"
-                icon="addFriend"
-                onClick={() => setAddOpen(true)}
-              >
-                Add a friend
-              </Button>
-            }
-          />
-        </div>
-      ) : (
-        <div className={classes.list}>
-          {showRequests &&
-            friendRequests.map((request) => (
-              <Row
-                key={request.id}
-                leading={<Avatar username={request.requester.username} />}
-                title={request.requester.username}
-                subtitle="Wants to be friends"
-                disabled={busyId === request.id}
-                accentEdge
-                footer={
-                  <>
-                    <Button
-                      compact
-                      variant="filled"
-                      disabled={busyId === request.id}
-                      onClick={() =>
-                        void runAction(
-                          request.id,
-                          () => acceptFriendRequest(request.id),
-                          "Couldn't accept friend request.",
-                          `${request.requester.username} is now a friend.`,
-                        ).then(onRefetchNotifications)
-                      }
-                    >
-                      Accept
-                    </Button>
-                    <Button
-                      compact
-                      variant="outline"
-                      disabled={busyId === request.id}
-                      onClick={() =>
-                        void runAction(
-                          request.id,
-                          () => declineFriendRequest(request.id),
-                          "Couldn't decline friend request.",
-                          "Request declined.",
-                        )
-                      }
-                    >
-                      Decline
-                    </Button>
-                  </>
-                }
-              />
-            ))}
+            {showFriends &&
+              friends.map((friend) => (
+                <Row
+                  key={friend.friendshipId}
+                  leading={<Avatar username={friend.username} />}
+                  title={friend.username}
+                  description="Opens what you share with each other"
+                  disabled={busyId === friend.friendshipId}
+                  onOpen={() => setOpenFriend(friend)}
+                  trailing={
+                    <Menu
+                      label={`Actions for ${friend.username}`}
+                      title={friend.username}
+                      placement="bottom-end"
+                      entries={[
+                        {
+                          id: "shares",
+                          label: friendVerb("shares").label,
+                          icon: "shareFriend",
+                          onSelect: () => setOpenFriend(friend),
+                        },
+                        {
+                          id: "remove",
+                          label: friendVerb("remove").label,
+                          icon: "unshare",
+                          danger: true,
+                          onSelect: () => setRemoving(friend),
+                        },
+                      ]}
+                      trigger={(props) => (
+                        <IconButton
+                          {...props}
+                          icon="overflow"
+                          label={`Actions for ${friend.username}`}
+                        />
+                      )}
+                    />
+                  }
+                />
+              ))}
+          </div>
+        )}
+      </>
+    ),
+  };
 
-          {showFriends &&
-            friends.map((friend) => (
-              <Row
-                key={friend.friendshipId}
-                leading={<Avatar username={friend.username} />}
-                title={friend.username}
-                description="Opens what you share with each other"
-                disabled={busyId === friend.friendshipId}
-                onOpen={() => setOpenFriend(friend)}
-                trailing={
-                  <Menu
-                    label={`Actions for ${friend.username}`}
-                    title={friend.username}
-                    placement="bottom-end"
-                    entries={[
-                      {
-                        id: "shares",
-                        label: "Shared items",
-                        icon: "shareFriend",
-                        onSelect: () => setOpenFriend(friend),
-                      },
-                      {
-                        id: "remove",
-                        label: "Remove friend",
-                        icon: "unshare",
-                        danger: true,
-                        onSelect: () => setRemoving(friend),
-                      },
-                    ]}
-                    trigger={(props) => (
-                      <IconButton
-                        {...props}
-                        icon="overflow"
-                        label={`Actions for ${friend.username}`}
-                      />
-                    )}
-                  />
-                }
-              />
-            ))}
-        </div>
-      )}
+  return (
+    <div className={classes.root}>
+      {contractSectionKeys(FRIENDS, "web").map((key) => (
+        <Fragment key={key}>{page[key]()}</Fragment>
+      ))}
 
       <AddFriendDialog
         open={addOpen}
@@ -304,11 +331,11 @@ function FriendsPanel({
 
       <ConfirmDialog
         open={removing != null}
-        title={removing ? `Remove ${removing.username}?` : ""}
+        title={
+          removing ? friendRemoveConfirm(removing.username).confirmTitle : ""
+        }
         message={
-          removing
-            ? `Everything you share with each other stops being shared, both ways. You can send ${removing.username} a friend request again later, and sharing does not come back with it.`
-            : null
+          removing ? friendRemoveConfirm(removing.username).confirmBody : null
         }
         confirmLabel="Remove"
         busy={busyId != null}
@@ -372,7 +399,7 @@ function AddFriendDialog({
         .catch((err) => {
           if (cancelled) return;
           console.error(err);
-          toast.error(messageFromError(err, "Couldn't search users."));
+          toast.error(messageFromError(err, copy.searchFailed));
         });
     }, 300);
     return () => {
@@ -391,7 +418,7 @@ function AddFriendDialog({
       onSent();
     } catch (err) {
       console.error(err);
-      toast.error(messageFromError(err, "Couldn't send friend request."));
+      toast.error(messageFromError(err, copy.sendFailed));
     } finally {
       setSendingId(null);
     }
@@ -403,25 +430,23 @@ function AddFriendDialog({
   return (
     <Dialog
       open={open}
-      title="Add a friend"
+      title={copy.addTitle}
       onClose={onClose}
       dismissible={sendingId === null}
       footer={<Button onClick={onClose}>Close</Button>}
     >
       <div className={classes.addBody}>
         <SearchField
-          label="Search by username"
-          placeholder="Search by username"
+          label={copy.searchField}
+          placeholder={copy.searchField}
           value={query}
           data-autofocus
           onChange={(event) => setQuery(event.target.value)}
         />
         {typed.length < SEARCH_MIN_CHARS ? (
-          <p className={classes.note}>
-            Keep typing — at least {SEARCH_MIN_CHARS} characters.
-          </p>
+          <p className={classes.note}>{copy.searchHint}</p>
         ) : results.length === 0 ? (
-          <p className={classes.note}>No one by that name.</p>
+          <p className={classes.note}>{copy.searchEmpty}</p>
         ) : (
           results.map((user) => (
             <Row
@@ -430,9 +455,9 @@ function AddFriendDialog({
               title={user.username}
               trailing={
                 friendIds.has(user.id) ? (
-                  <StatusPill label="Friend" tone="muted" />
+                  <StatusPill label={copy.pillFriend} tone="muted" />
                 ) : sentIds.has(user.id) ? (
-                  <StatusPill label="Requested" tone="outline" />
+                  <StatusPill label={copy.pillRequested} tone="outline" />
                 ) : (
                   <Button
                     compact
@@ -441,7 +466,7 @@ function AddFriendDialog({
                     disabled={sendingId !== null}
                     onClick={() => void handleSend(user)}
                   >
-                    Add
+                    {copy.add}
                   </Button>
                 )
               }
