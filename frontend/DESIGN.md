@@ -16,8 +16,9 @@ is particular to a browser, a mouse, a keyboard and a big screen.
 Building a page that Logjam GPS also has? Its **screen contract**
 (`shared/src/contracts/`) declares the sections, their order, the verbs and
 every word: render from it (a `Record` of renderers iterated in contract
-order, as `PlacesPanel` and `PlaceFilterSheet` do), and change the contract,
-not the component. A page with no contract yet: open its Logjam GPS
+order, as `PlacesPanel`, `PlaceDetailPanel`, `TripDetailPanel`,
+`TripLogsPanel` and their filter sheets do), and change the contract, not the
+component. A page with no contract yet: open its Logjam GPS
 counterpart first and lift its question, words and states. Anything both
 compute goes to `@logjam/shared`.
 
