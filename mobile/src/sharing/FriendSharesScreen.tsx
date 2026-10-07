@@ -29,7 +29,14 @@
 //
 // PRIVACY: usernames and item names only — the payload carries no coordinates
 // and no notes. Nothing here is logged.
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   Alert,
   FlatList,
@@ -41,6 +48,9 @@ import {
 
 import {
   buildShareCards,
+  bulkRemoveLabel,
+  bulkUnshareLabel,
+  contractSectionKeys,
   copyAndRemoveOutcomeMessage,
   copyOutcomeMessage,
   removeAllConfirm,
@@ -49,6 +59,10 @@ import {
   shareSelectionCountLabel,
   unshareAllConfirm,
   unshareOutcomeMessage,
+  FRIEND_SHARES,
+  friendSharesEmptyTitle,
+  friendSharesNote,
+  friendShareVerb,
   messageFromError,
   removeRowSubtitle,
   SHARE_KIND_LABEL,
@@ -57,6 +71,7 @@ import {
   type FriendShareRow,
   type FriendShares,
   type IconIdea,
+  type SectionKeysOn,
 } from "@logjam/shared";
 
 import { getFriendShares, unshareWithFriend } from "../api/friends";
@@ -90,6 +105,8 @@ import {
   type CopyAndRemoveTarget,
 } from "./copyAndRemove";
 import { removeSharedPlace, removeSharedEntity } from "./removeShare";
+
+const copy = FRIEND_SHARES.copy;
 
 /**
  * The idea per kind: a place, a route, a LiDAR topo, a GeoPDF — the same four
@@ -162,12 +179,7 @@ export function FriendSharesScreen({
       .catch((err: unknown) => {
         console.error(err);
         // Our own copy, never the error's: it may carry an item name.
-        setLoadError(
-          messageFromError(
-            err,
-            "Couldn't load what's shared with this friend.",
-          ),
-        );
+        setLoadError(messageFromError(err, copy.loadFailed));
       });
   }, [friendshipId, guestBlock]);
 
@@ -269,10 +281,7 @@ export function FriendSharesScreen({
               })
               .catch((err: unknown) => {
                 console.error(err);
-                notify(
-                  "Couldn't unshare those. Try again in a moment.",
-                  "error",
-                );
+                notify(copy.unshareFailed, "error");
               })
               .finally(() => setBusy(false));
           },
@@ -443,22 +452,27 @@ export function FriendSharesScreen({
   if (shares === null && loadError) {
     return <ErrorState message={loadError} onRetry={() => void load()} />;
   }
-  if (shares === null) return <LoadingState />;
+  if (shares === null) return <LoadingState label={copy.loading} />;
 
   const theirCount = shares.sharedWithThem.length;
   const yourCount = shares.sharedWithYou.length;
   const directions: ChipOption<FriendShareDirection>[] = [
-    { value: "theySee", label: "You share", count: theirCount },
+    { value: "theySee", label: copy.youShare, count: theirCount },
     {
       value: "youSee",
-      label: "They share",
+      label: copy.theyShare,
       count: yourCount,
       hue: placeHue.shared,
     },
   ];
 
-  return (
-    <View style={styles.root}>
+  // Exhaustive by type: a section the contract names and this screen does not
+  // draw, or the reverse, fails `tsc` (`FRIEND_SHARES`, shared/src/contracts).
+  const page: Record<
+    SectionKeysOn<typeof FRIEND_SHARES, "gps">,
+    () => ReactNode
+  > = {
+    hero: () => (
       <Hero
         eyebrow="Sharing"
         title={username}
@@ -468,7 +482,8 @@ export function FriendSharesScreen({
           theirCount === 1 ? "item they can see" : "items they can see"
         }
       />
-
+    ),
+    directions: () => (
       <View style={styles.rail}>
         {selecting ? (
           <SelectionBar
@@ -503,8 +518,8 @@ export function FriendSharesScreen({
             deleteIcon={direction === "theySee" ? "unshare" : "hide"}
             deleteLabel={
               direction === "theySee"
-                ? `Unshare ${selectedItems.length} selected items from ${username}`
-                : `Remove ${removable.length} selected items from your account`
+                ? bulkUnshareLabel(selectedItems.length, username)
+                : bulkRemoveLabel(removable.length)
             }
             onDelete={() => {
               if (!online) {
@@ -533,52 +548,56 @@ export function FriendSharesScreen({
           />
         )}
       </View>
-
-      {/* What this tab holds, in the plainest words available — the two lists
-          are near-identical at a glance and the chips alone ("You share" /
-          "They share") are read as a filter rather than as a direction. */}
-      <View style={styles.note}>
-        <Text style={styles.noteText} numberOfLines={2}>
-          {direction === "theySee"
-            ? `Items you have shared with ${username}.`
-            : `Items ${username} has shared with you.`}
-        </Text>
-      </View>
-
-      {loadError ? (
-        <View style={styles.banner}>
-          <ErrorBanner message={loadError} onRetry={() => void load()} />
+    ),
+    note: () => (
+      <>
+        {/* What this tab holds, in the plainest words available — the two lists
+            are near-identical at a glance and the chips alone ("You share" /
+            "They share") are read as a filter rather than as a direction. */}
+        <View style={styles.note}>
+          <Text style={styles.noteText} numberOfLines={2}>
+            {friendSharesNote(direction, username)}
+          </Text>
         </View>
-      ) : null}
+      </>
+    ),
+    list: () => (
+      <>
+        {loadError ? (
+          <View style={styles.banner}>
+            <ErrorBanner message={loadError} onRetry={() => void load()} />
+          </View>
+        ) : null}
 
-      <FlatList
-        style={styles.list}
-        contentContainerStyle={styles.listContent}
-        data={cards}
-        keyExtractor={cardKey}
-        renderItem={renderItem}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={theme.accent}
-          />
-        }
-        ListEmptyComponent={
-          <EmptyState
-            title={
-              direction === "theySee"
-                ? `You haven't shared anything with ${username}`
-                : `${username} hasn't shared anything with you`
-            }
-            hint={
-              direction === "theySee"
-                ? "Share a place, waypoint, route or map from its own options."
-                : undefined
-            }
-          />
-        }
-      />
+        <FlatList
+          style={styles.list}
+          contentContainerStyle={styles.listContent}
+          data={cards}
+          keyExtractor={cardKey}
+          renderItem={renderItem}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={theme.accent}
+            />
+          }
+          ListEmptyComponent={
+            <EmptyState
+              title={friendSharesEmptyTitle(direction, username)}
+              hint={direction === "theySee" ? copy.emptyHint : undefined}
+            />
+          }
+        />
+      </>
+    ),
+  };
+
+  return (
+    <View style={styles.root}>
+      {contractSectionKeys(FRIEND_SHARES, "gps").map((key) => (
+        <Fragment key={key}>{page[key]()}</Fragment>
+      ))}
 
       {/* Per-row verbs, titled with the item (DESIGN.md §5). */}
       <BottomSheet
@@ -737,17 +756,17 @@ function ShareCardMenu({
     <View style={styles.menuBody}>
       {card.row.entityType === "place" ? (
         <Row
-          icon="place"
-          title="Open place"
+          icon={friendShareVerb("open").icon}
+          title={friendShareVerb("open").label}
           onPress={() => onOpenPlace(card.row.entityId)}
         />
       ) : null}
 
       {direction === "theySee" ? (
         <Row
-          icon="unshare"
+          icon={friendShareVerb("unshare").icon}
           hue={theme.warning}
-          title={`Unshare from ${username}`}
+          title={friendShareVerb("unshare").label}
           subtitle={
             online ? `${username} stops seeing this ${kind}.` : undefined
           }
@@ -758,8 +777,8 @@ function ShareCardMenu({
 
       {card.copyable ? (
         <Row
-          icon="copy"
-          title="Save a copy"
+          icon={friendShareVerb("copy").icon}
+          title={friendShareVerb("copy").label}
           subtitle={
             online
               ? card.row.entityType === "place"
@@ -787,8 +806,8 @@ function ShareCardMenu({
           promise: keep it in your own things, take it off the active list. */}
       {card.copyable && card.removable ? (
         <Row
-          icon="moveCopy"
-          title="Save a copy and remove"
+          icon={friendShareVerb("copyAndRemove").icon}
+          title={friendShareVerb("copyAndRemove").label}
           subtitle={
             online
               ? `Keeps a copy of your own, then stops ${username} sharing this one with you.`
@@ -802,9 +821,9 @@ function ShareCardMenu({
 
       {direction === "youSee" && card.removable ? (
         <Row
-          icon="hide"
+          icon={friendShareVerb("remove").icon}
           hue={theme.warning}
-          title="Remove"
+          title={friendShareVerb("remove").label}
           subtitle={
             online
               ? removeRowSubtitle({ kindLabel: kind, friendName: username })

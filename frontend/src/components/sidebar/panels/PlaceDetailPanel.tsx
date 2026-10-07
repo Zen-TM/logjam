@@ -1078,15 +1078,7 @@ function PlaceDetailPanel({
       {isOwnedPlace && (
         <ShareDialog
           title={`Share ${current.name}`}
-          blurb={
-            <>
-              Recipients see this place&rsquo;s details, place-level notes and
-              place-level media, and can copy or export it while the share is
-              active. They do <b>not</b> see your trip logs or any per-trip
-              notes or media. Unsharing won&rsquo;t remove copies they&rsquo;ve
-              already made.
-            </>
-          }
+          kind="place"
           friends={friends}
           open={showShareDialog}
           onClose={() => setShowShareDialog(false)}

@@ -1,23 +1,33 @@
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   activityTalliesOverlap,
   activityTallySubtitle,
   computeLogbookStats,
+  contractSectionKeys,
   fieldStatDisplay,
   logbookActivityLabel,
   logbookRanges,
-  pluralCount,
+  STATS,
   statsCadence,
+  statsEmptyActivityBody,
   statsHeadline,
+  statsHeroTitle,
+  statsMostReturnedLine,
+  statsPlaceAttributesTitle,
   statsSpark,
+  statsTruncatedNote,
+  statsUnderActivitiesNote,
   tripYear,
   UNTAGGED_ACTIVITY,
   type FieldStat,
   type LogbookRange,
   type LogbookStats,
   type ScopedCustomFieldDef,
+  type SectionKeysOn,
   type StatsSpark,
 } from "@logjam/shared";
+
+const copy = STATS.copy;
 import type { TPlace, TPlaceType, TTripLog } from "../../../placeUtils";
 import { useStoredState } from "../../../useStoredState";
 import {
@@ -165,36 +175,67 @@ function AnalyticsPanel({
   };
 
   const title = !loaded
-    ? "Stats"
+    ? STATS.title
     : activity
       ? logbookActivityLabel(activity)
-      : `${pluralCount(stats.days, "day")} out`;
+      : statsHeroTitle(stats.days);
 
-  const content = !loaded ? (
+  const status = !loaded ? (
     <div className={classes.emptyArea} role="status">
-      <LoadingState label="Reading your logbook…" />
+      <LoadingState label={copy.loading} />
     </div>
   ) : stats.trips === 0 ? (
     <div className={classes.emptyArea}>
       <EmptyState
         icon="stats"
-        title="Nothing logged in here yet"
+        title={copy.emptyTitle}
         body={
           activity
-            ? `No ${logbookActivityLabel(activity).toLowerCase()} trips in this window. Try a wider one.`
-            : "Log a few trips and this fills in — days out, how often you get away, and how far you've got through your places."
+            ? statsEmptyActivityBody(logbookActivityLabel(activity))
+            : copy.emptyBody
         }
       />
     </div>
-  ) : (
-    <div className={classes.list}>
-      {tripLogsTotal != null && tripLogsTotal > tripLogs.length && (
+  ) : null;
+
+  const showing = loaded && stats.trips > 0;
+  // Exhaustive by type: a section the contract names and this panel does not
+  // draw, or the reverse, fails `tsc` (`STATS`, shared/src/contracts).
+  const sections: Record<
+    SectionKeysOn<typeof STATS, "web">,
+    () => ReactNode
+  > = {
+    hero: () => (
+      <>
+        <Hero
+          title={title}
+          onBack={activity ? closeActivity : undefined}
+          backLabel={copy.backToActivities}
+        />
+        <div className={classes.rails}>
+          {views}
+          {tripLogs.length > 0 && (
+            <ChipRail
+              label="Period"
+              options={ranges.map((entry) => ({
+                value: entry.label,
+                label: entry.label,
+              }))}
+              value={range.label}
+              onChange={setRangeLabel}
+            />
+          )}
+        </div>
+      </>
+    ),
+    truncated: () =>
+      tripLogsTotal != null && tripLogsTotal > tripLogs.length ? (
         <p className={classes.caption}>
-          Counted over your {tripLogs.length} most recent trips of{" "}
-          {tripLogsTotal}. Older ones aren&rsquo;t loaded.
+          {statsTruncatedNote(tripLogs.length, tripLogsTotal)}
         </p>
-      )}
-      <SparkBlock stats={stats} range={range} activity={activity} />
+      ) : null,
+    spark: () => <SparkBlock stats={stats} range={range} activity={activity} />,
+    headline: () => (
       <StatGrid
         stats={statsHeadline(
           stats,
@@ -202,40 +243,28 @@ function AnalyticsPanel({
           range.from != null || range.to != null,
         )}
       />
-      {activity ? (
-        <AttributeSections stats={stats} />
-      ) : (
-        <>
-          <Activities stats={stats} onOpen={openActivity} />
-          <PlacesVisited stats={stats} placeTypes={placeTypes} />
-          <AttributeSections stats={stats} tripOnly />
-        </>
-      )}
-    </div>
+    ),
+    activities: () =>
+      activity ? null : <Activities stats={stats} onOpen={openActivity} />,
+    placesVisited: () =>
+      activity ? null : <PlacesVisited stats={stats} placeTypes={placeTypes} />,
+    attributes: () => <AttributeSections stats={stats} tripOnly={!activity} />,
+  };
+  const keys = contractSectionKeys(STATS, "web");
+  const render = (key: (typeof keys)[number]) => (
+    <Fragment key={key}>{sections[key]()}</Fragment>
   );
 
   return (
     <div ref={rootRef} className={classes.root}>
-      <Hero
-        title={title}
-        onBack={activity ? closeActivity : undefined}
-        backLabel="Back to every activity"
-      />
-      <div className={classes.rails}>
-        {views}
-        {tripLogs.length > 0 && (
-          <ChipRail
-            label="Period"
-            options={ranges.map((entry) => ({
-              value: entry.label,
-              label: entry.label,
-            }))}
-            value={range.label}
-            onChange={setRangeLabel}
-          />
-        )}
-      </div>
-      {content}
+      {render("hero")}
+      {showing ? (
+        <div className={classes.list}>
+          {keys.filter((key) => key !== "hero").map(render)}
+        </div>
+      ) : (
+        status
+      )}
     </div>
   );
 }
@@ -281,7 +310,7 @@ function Activities({
   if (stats.activityTallies.length === 0) return null;
   return (
     <section className={classes.section}>
-      <SectionHeader title="By activity" />
+      <SectionHeader title={copy.byActivity} />
       {stats.activityTallies.map((tally, index) => {
         const look = tripTypeLook(
           tally.type === UNTAGGED_ACTIVITY ? null : tally.type,
@@ -308,9 +337,7 @@ function Activities({
       {/* Load-bearing: a trip tagged twice counts under both tags, so without
           this the rows out-sum the trip tile above and read as a bug. */}
       {activityTalliesOverlap(stats) && (
-        <p className={classes.caption}>
-          a trip with two tags counts under both
-        </p>
+        <p className={classes.caption}>{copy.multiTagged}</p>
       )}
     </section>
   );
@@ -328,7 +355,7 @@ function PlacesVisited({
   if (stats.completion.length === 0) return null;
   return (
     <section className={classes.section}>
-      <SectionHeader title="Places visited" />
+      <SectionHeader title={copy.placesVisited} />
       {stats.completion.map((entry) => {
         const type = placeTypes.find(
           (candidate) => candidate.id === entry.typeId,
@@ -365,8 +392,10 @@ function PlacesVisited({
       })}
       {stats.mostReturned && (
         <p className={classes.caption}>
-          most returned to · {stats.mostReturned.name} ×
-          {stats.mostReturned.trips}
+          {statsMostReturnedLine(
+            stats.mostReturned.name,
+            stats.mostReturned.trips,
+          )}
         </p>
       )}
     </section>
@@ -392,7 +421,7 @@ function AttributeSections({
     <>
       {groups.map((group) => (
         <section key={group.typeId} className={classes.section}>
-          <SectionHeader title={`${group.name} attributes`} />
+          <SectionHeader title={statsPlaceAttributesTitle(group.name)} />
           {group.stats.map((entry) => (
             <AttributeStat key={`${group.typeId}:${entry.key}`} stat={entry} />
           ))}
@@ -400,7 +429,7 @@ function AttributeSections({
       ))}
       {(stats.tripFieldStats.length > 0 || underActivities > 0) && (
         <section className={classes.section}>
-          <SectionHeader title="Trip attributes" />
+          <SectionHeader title={copy.tripAttributes} />
           {stats.tripFieldStats.map((entry) => (
             <AttributeStat key={`trip:${entry.key}`} stat={entry} />
           ))}
@@ -409,9 +438,7 @@ function AttributeSections({
               this it reads as having vanished from the logbook. */}
           {underActivities > 0 && (
             <p className={classes.caption}>
-              {underActivities === 1
-                ? "1 more attribute belongs to a single activity — open that activity above to see it"
-                : `${underActivities} more attributes belong to single activities — open an activity above to see them`}
+              {statsUnderActivitiesNote(underActivities)}
             </p>
           )}
         </section>

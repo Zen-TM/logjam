@@ -170,7 +170,7 @@ test.describe("desktop", () => {
 
     // Its editor is a DIALOG, like every other create in the app, and its form
     // is the icon grid and the swatch line, both radio groups.
-    await aside.getByRole("button", { name: "Add", exact: true }).click();
+    await aside.getByRole("button", { name: "Add a place type" }).click();
     const typeDialog = page.locator("dialog[open]");
     await expect(
       typeDialog.getByRole("radiogroup", { name: "Icon" }),
@@ -357,7 +357,7 @@ test.describe("desktop", () => {
       .first();
     await expect(rowMenu).toBeVisible({ timeout: 15_000 });
     await rowMenu.click();
-    await page.getByRole("menuitem", { name: "Delete" }).click();
+    await page.getByRole("menuitem", { name: "Delete notification" }).click();
 
     const confirm = page.getByRole("alertdialog");
     await expect(confirm).toBeVisible();

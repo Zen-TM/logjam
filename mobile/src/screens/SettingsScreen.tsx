@@ -24,9 +24,19 @@
 // §10's "Needs an account".
 //
 // PRIVACY: nothing here reads place data.
-import { useCallback, useState } from "react";
+import { Fragment, useCallback, useState, type ReactNode } from "react";
 import { StyleSheet, Text } from "react-native";
-import { ATTRIBUTE_NOUN, type ScopedCustomFieldDef } from "@logjam/shared";
+import {
+  ATTRIBUTE_NOUN,
+  contractSectionKeys,
+  isSystemFieldDef,
+  ownAttributeCountLabel,
+  ownTypeCountLabel,
+  SETTINGS,
+  SETTINGS_LIST,
+  type ScopedCustomFieldDef,
+  type SectionKeysOn,
+} from "@logjam/shared";
 
 import { type CustomFieldEntity } from "../api/queries";
 import { useAccountState } from "../auth/AccountStateContext";
@@ -65,6 +75,8 @@ export type SettingsPage =
   | "notifications"
   | "offline"
   | "privacy";
+
+const copy = SETTINGS.copy;
 
 const PAGES: {
   page: SettingsPage;
@@ -145,9 +157,14 @@ export function SettingsScreen({
     onDone: () => setSheet({ kind: "fields", entity: formEntity }),
   });
 
-  return (
-    <>
-      <ScreenScroll>
+  // Exhaustive by type: a section the contract names and this screen does not
+  // draw, or the reverse, fails `tsc` (`SETTINGS`, shared/src/contracts).
+  const sections: Record<
+    SectionKeysOn<typeof SETTINGS, "gps">,
+    () => ReactNode
+  > = {
+    preferences: () => (
+      <>
         {PAGES.map(({ page, icon, title }) => (
           <Row
             key={page}
@@ -166,39 +183,61 @@ export function SettingsScreen({
             right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
           />
         ))}
-
+      </>
+    ),
+    categories: () => (
+      <>
         {/* A list you keep, not a preference you set — which is why the LIST
             sits here with the attribute lists. The form is also one tap from
             the Places tab's type rail ("New type", the chip at the end of it),
             because that is where a user notices they want another one; editing
             and deleting stay here, with the list of them. */}
-        <SectionHeader title="Your own categories" />
+        <SectionHeader title={copy.categories} />
         <Row
           icon="place"
-          title="Place types"
-          subtitle={placeTypeCountLabel(placeTypes.data ?? [])}
+          title={copy.placeTypes}
+          subtitle={ownTypeCountLabel(
+            (placeTypes.data ?? []).filter((type) => !isSystemPlaceType(type))
+              .length,
+          )}
           onPress={() => setSheet({ kind: "placeTypes" })}
           right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
         />
-
-        <SectionHeader title="Your own attributes" />
+      </>
+    ),
+    attributes: () => (
+      <>
+        <SectionHeader title={copy.attributes} />
         <Row
           icon="tag"
-          title="Trip attributes"
-          subtitle={fieldCountLabel(tripFields.defs.length)}
+          title={copy.tripAttributes}
+          subtitle={ownAttributeCountLabel(ownCount(tripFields.defs))}
           onPress={() => setSheet({ kind: "fields", entity: "tripLog" })}
           right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
         />
         <Row
           icon="tag"
-          title="Place attributes"
-          subtitle={fieldCountLabel(placeFields.defs.length)}
+          title={copy.placeAttributes}
+          subtitle={ownAttributeCountLabel(ownCount(placeFields.defs))}
           onPress={() => setSheet({ kind: "fields", entity: "place" })}
           right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
         />
-
-        <SectionHeader title="About" />
+      </>
+    ),
+    about: () => (
+      <>
+        <SectionHeader title={copy.about} />
         <Text style={styles.version}>{CLIENT_VERSION}</Text>
+      </>
+    ),
+  };
+
+  return (
+    <>
+      <ScreenScroll>
+        {contractSectionKeys(SETTINGS, "gps").map((key) => (
+          <Fragment key={key}>{sections[key]()}</Fragment>
+        ))}
       </ScreenScroll>
 
       {/* One sheet, two modes (§6: never a second sheet — swap the content). */}
@@ -227,7 +266,7 @@ export function SettingsScreen({
             placeTypeForm.footer
           ) : sheet.kind === "placeTypes" ? (
             <Button
-              label="Add a place type"
+              label={SETTINGS_LIST.copy.addPlaceType}
               icon="add"
               onPress={() => setSheet({ kind: "placeTypeForm", editing: null })}
             />
@@ -238,7 +277,7 @@ export function SettingsScreen({
             // for, and a list long enough to need scrolling is exactly the list
             // you came here to add to.
             <Button
-              label={ATTRIBUTE_NOUN.add}
+              label={SETTINGS_LIST.copy.addAttribute}
               icon="add"
               onPress={() =>
                 setSheet({
@@ -294,18 +333,9 @@ function sheetTitle(sheet: SheetMode): string {
     : `New ${noun.toLowerCase()} ${ATTRIBUTE_NOUN.one}`;
 }
 
-function fieldCountLabel(count: number): string {
-  if (count === 0) return "None yet";
-  return `${count} ${count === 1 ? ATTRIBUTE_NOUN.one : ATTRIBUTE_NOUN.many}`;
-}
-
-/** Only the user's OWN types are counted: "3 types" for an account that has
- *  made none reads as a list they are already keeping. */
-function placeTypeCountLabel(types: MirrorPlaceType[]): string {
-  const own = types.filter((type) => !isSystemPlaceType(type)).length;
-  if (own === 0) return "Built-ins only";
-  return `${own} of your own`;
-}
+/** Only the user's OWN attributes are counted: a built-in is not theirs. */
+const ownCount = (defs: ScopedCustomFieldDef[]) =>
+  defs.filter((def) => !isSystemFieldDef(def)).length;
 
 const styles = StyleSheet.create({
   version: { color: theme.textMuted, fontSize: fontSize.xs },

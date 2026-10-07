@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
 import {
+  drawsYoursHeading,
   PLACE_TYPE_COLORS,
   PLACE_TYPE_ICON_KEYS,
   placeTypeColorName,
+  placeTypeDeleteConfirm,
+  SETTINGS_LIST,
 } from "@logjam/shared";
 
 import {
@@ -31,6 +34,8 @@ import {
 } from "../../../ui";
 import classes from "./ListPage.module.css";
 import { placeTypeLucideIcon } from "./placeTypeIcon";
+
+const copy = SETTINGS_LIST.copy;
 
 /**
  * The place types a user keeps — Settings' first list page. The list is the
@@ -127,7 +132,7 @@ function PlaceTypeSection({
             icon="add"
             onClick={() => setEditing("new")}
           >
-            Add
+            {copy.addPlaceType}
           </Button>
         }
       />
@@ -141,8 +146,8 @@ function PlaceTypeSection({
           <LoadingState />
         ) : (
           <>
-            {own.length > 0 && (
-              <SectionHeader title="Yours" count={own.length} />
+            {drawsYoursHeading(own.length, system.length) && (
+              <SectionHeader title={copy.yours} count={own.length} />
             )}
             {own.map((type) => (
               <Row
@@ -173,14 +178,14 @@ function PlaceTypeSection({
                     entries={[
                       {
                         id: "edit",
-                        label: "Edit type",
+                        label: copy.editType,
                         icon: "edit",
                         onSelect: () => setEditing(type),
                       },
                       type.placeCount > 0
                         ? {
                             id: "merge",
-                            label: "Merge into another type",
+                            label: copy.mergeType,
                             icon: "merge",
                             danger: true,
                             onSelect: () => {
@@ -193,7 +198,7 @@ function PlaceTypeSection({
                           }
                         : {
                             id: "delete",
-                            label: "Delete type",
+                            label: copy.deleteType,
                             icon: "delete",
                             danger: true,
                             onSelect: () => setDeleting(type),
@@ -214,7 +219,7 @@ function PlaceTypeSection({
             {/* A built-in gets no verbs at all rather than disabled ones: it
                 belongs to no account, and a greyed button invites the question
                 "why not". */}
-            <SectionHeader title="Built in" count={system.length} />
+            <SectionHeader title={copy.builtIn} count={system.length} />
             {system.map((type) => (
               <Row
                 key={type.id}
@@ -260,9 +265,9 @@ function PlaceTypeSection({
 
       <ConfirmDialog
         open={deleting !== null}
-        title={`Delete "${deleting?.name ?? ""}"?`}
-        message="Any attributes that belong only to this type are deleted with it. Places are not affected — this type has none."
-        confirmLabel="Delete"
+        title={placeTypeDeleteConfirm(deleting?.name ?? "").confirmTitle}
+        message={placeTypeDeleteConfirm(deleting?.name ?? "").confirmBody}
+        confirmLabel={copy.deleteType}
         confirmColor="error"
         busy={saving}
         onConfirm={async () => {

@@ -3,9 +3,16 @@ import {
   useRef,
   useState,
   type KeyboardEvent,
+  type ReactNode,
   type RefObject,
 } from "react";
-import { PLACE_TYPE_COLORS, type RegionBbox } from "@logjam/shared";
+import {
+  contractSectionKeys,
+  MAP_LAYERS,
+  PLACE_TYPE_COLORS,
+  type RegionBbox,
+  type SectionKeysOn,
+} from "@logjam/shared";
 import { TOPO_LAYERS, type CompletedTopoJob } from "../../topoLayerTypes";
 import { PROTOMAPS_SWATCH } from "../../basemapSwatch";
 import { previewUrlFor, type TileLayer } from "../sidebar/panels/tilePreview";
@@ -38,6 +45,8 @@ const LAYER_DESCRIPTIONS: Partial<Record<string, string>> = {
     "Orange crosshatching marks areas burnt more recently than the LiDAR survey, " +
     "so the estimate there may be out of date.",
 };
+
+const copy = MAP_LAYERS.copy;
 
 const countOf = (count: number, noun: string) =>
   `${count} ${noun}${count === 1 ? "" : "s"}`;
@@ -192,87 +201,101 @@ export default function LayersPopover({
             <ChipRail
               label="Layers view"
               className={classes.grow}
-              options={[
-                { value: "basemap", label: "Basemap", icon: "map" },
-                { value: "overlays", label: "Overlays", count: overlaysOn },
-              ]}
+              options={contractSectionKeys(MAP_LAYERS, "web").map((key) =>
+                key === "basemap"
+                  ? { value: key, label: copy.tabBasemap, icon: "map" as const }
+                  : { value: key, label: copy.tabOverlays, count: overlaysOn },
+              )}
               value={view}
               onChange={setView}
             />
             <IconButton icon="close" label="Close" onClick={close} />
           </div>
-          {view === "overlays" ? (
-            <div className={classes.body}>
-              {/* TWO overlays for the user's own data, and they divide it by
-                  WHAT A THING IS: a pin is a place, a line is a way. Nothing
-                  belongs to both, so no toggle overlaps another and there is
-                  nothing to explain.
+          {/* Exhaustive by type: a tab the contract names and this popover
+              does not draw, or the reverse, fails `tsc` (`MAP_LAYERS`). */}
+          {(() => {
+            const panes: Record<
+              SectionKeysOn<typeof MAP_LAYERS, "web">,
+              () => ReactNode
+            > = {
+              basemap: () => (
+                <BasemapGallery
+                  layers={baseLayers}
+                  activeLayerId={activeLayerId}
+                  onChange={onActiveLayerChange}
+                  mapView={mapView}
+                />
+              ),
+              overlays: () => (
+                <div className={classes.body}>
+                  {/* TWO overlays for the user's own data, and they divide it by
+                            WHAT A THING IS: a pin is a place, a line is a way. Nothing
+                            belongs to both, so no toggle overlaps another and there is
+                            nothing to explain.
 
-                  Ownership deliberately does NOT split them. It was tried
-                  (Your places / Shared with you, then Ways / Shared ways) and
-                  it splits the wrong axis: "mine" and "shared with me" are the
-                  same KIND of thing drawn the same way, so two rows say one
-                  thing twice — while any three-row arrangement that keeps a
-                  "Shared with you" row makes a shared place answer to two
-                  toggles at once. Whose a thing is is already on the thing
-                  itself: on the map FILL is the type and the RING is sharing
-                  (root CLAUDE.md), and every list marks a shared row. A legend
-                  says what kind; the pin says whose (operator, 2026-09-17). */}
-              <OverlayRow
-                icon="place"
-                hue={PLACE_TYPE_COLORS[0]}
-                title="Places"
-                subtitle={countOf(placeCount, "place")}
-                checked={showPlaces}
-                onToggle={setShowPlaces}
-              />
-              {/* "Ways" rather than "Routes": it draws every line there is —
-                  routes drawn here, files imported or recorded, and the tracks
-                  on places friends shared. Those files used to be drawn by a
-                  per-item switch buried on each one's detail page, which is a
-                  control you had to open a page to find. */}
-              <OverlayRow
-                icon="route"
-                hue="var(--hue-route)"
-                title="Ways"
-                subtitle={
-                  wayCount == null
-                    ? "Every line you have"
-                    : countOf(wayCount, "way")
-                }
-                checked={showWays}
-                onToggle={setShowWays}
-              />
-              {completedTopoJobs.length === 0 ? (
-                <Row
-                  leading={<IconTile icon="lidar" hue="var(--hue-overlay)" />}
-                  title="LiDAR topos"
-                  subtitle="None yet. Make one from Maps."
-                />
-              ) : (
-                <OverlayRow
-                  icon="lidar"
-                  hue="var(--hue-overlay)"
-                  title="LiDAR topos"
-                  subtitle={[
-                    `${shownJobs.length} of ${completedTopoJobs.length} shown`,
-                    shownLayerLabels.join(", ") || "no layers",
-                  ].join(" · ")}
-                  checked={lidarEnabled}
-                  onToggle={setLidarEnabled}
-                  onOpen={() => setView("topos")}
-                  openLabel="Choose topos and layers"
-                />
-              )}
-            </div>
-          ) : (
-            <BasemapGallery
-              layers={baseLayers}
-              activeLayerId={activeLayerId}
-              onChange={onActiveLayerChange}
-              mapView={mapView}
-            />
-          )}
+                            Ownership deliberately does NOT split them. It was tried
+                            (Your places / Shared with you, then Ways / Shared ways) and
+                            it splits the wrong axis: "mine" and "shared with me" are the
+                            same KIND of thing drawn the same way, so two rows say one
+                            thing twice — while any three-row arrangement that keeps a
+                            "Shared with you" row makes a shared place answer to two
+                            toggles at once. Whose a thing is is already on the thing
+                            itself: on the map FILL is the type and the RING is sharing
+                            (root CLAUDE.md), and every list marks a shared row. A legend
+                            says what kind; the pin says whose (operator, 2026-09-17). */}
+                  <OverlayRow
+                    icon="place"
+                    hue={PLACE_TYPE_COLORS[0]}
+                    title={copy.places}
+                    subtitle={countOf(placeCount, "place")}
+                    checked={showPlaces}
+                    onToggle={setShowPlaces}
+                  />
+                  {/* "Ways" rather than "Routes": it draws every line there is —
+                            routes drawn here, files imported or recorded, and the tracks
+                            on places friends shared. Those files used to be drawn by a
+                            per-item switch buried on each one's detail page, which is a
+                            control you had to open a page to find. */}
+                  <OverlayRow
+                    icon="route"
+                    hue="var(--hue-route)"
+                    title={copy.ways}
+                    subtitle={
+                      wayCount == null
+                        ? "Every line you have"
+                        : countOf(wayCount, "way")
+                    }
+                    checked={showWays}
+                    onToggle={setShowWays}
+                  />
+                  {completedTopoJobs.length === 0 ? (
+                    <Row
+                      leading={
+                        <IconTile icon="lidar" hue="var(--hue-overlay)" />
+                      }
+                      title={copy.lidarTopos}
+                      subtitle="None yet. Make one from Maps."
+                    />
+                  ) : (
+                    <OverlayRow
+                      icon="lidar"
+                      hue="var(--hue-overlay)"
+                      title={copy.lidarTopos}
+                      subtitle={[
+                        `${shownJobs.length} of ${completedTopoJobs.length} shown`,
+                        shownLayerLabels.join(", ") || "no layers",
+                      ].join(" · ")}
+                      checked={lidarEnabled}
+                      onToggle={setLidarEnabled}
+                      onOpen={() => setView("topos")}
+                      openLabel="Choose topos and layers"
+                    />
+                  )}
+                </div>
+              ),
+            };
+            return panes[view as keyof typeof panes]();
+          })()}
         </>
       )}
     </Popover>

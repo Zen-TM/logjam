@@ -74,6 +74,7 @@ import {
   formatDistanceM,
   haversineMeters,
   initialBearingDegrees,
+  MAP_LAYERS,
   messageFromError,
   pickNextTrackColor,
   ROUTE_NAME_MAX_LENGTH,
@@ -4142,7 +4143,7 @@ export function MapScreen({
       // campsites). Hanging them under an ownership row said the opposite of
       // what the code does, and its count disagreed with the children's by the
       // number of shared places.
-      title: "Places",
+      title: MAP_LAYERS.copy.places,
       count: ownedPlaces.length + sharedPlaces.length,
       value: showPlaces,
       onChange: setShowPlaces,

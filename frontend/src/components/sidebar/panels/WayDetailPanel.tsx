@@ -669,12 +669,7 @@ export default function WayDetailPanel({
       {owned && route && (
         <ShareDialog
           title={`Share ${way.title}`}
-          blurb={
-            <>
-              Recipients see this route on their map and can export it. They
-              cannot edit or delete it, and you can unshare at any time.
-            </>
-          }
+          kind="route"
           friends={friends}
           open={showShare}
           onClose={() => setShowShare(false)}

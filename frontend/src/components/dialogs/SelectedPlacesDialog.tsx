@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { TripLogCustomFieldDef } from "@logjam/shared";
+import { noFriendsMessage, type TripLogCustomFieldDef } from "@logjam/shared";
 import type { TPlace, TFriend } from "../../placeUtils";
 import { bulkDeletePlaces, sharePlaceWith } from "../../placeUtils";
 import { useToast } from "../feedback/ToastProvider";
@@ -305,10 +305,7 @@ function SelectedPlacesDialog({
                 Sharing is for your own places, and none of these are yours.
               </p>
             ) : friends.length === 0 ? (
-              <p className={classes.note}>
-                Sharing is between friends. Add one on the Friends page, then
-                come back.
-              </p>
+              <p className={classes.note}>{noFriendsMessage("share").body}</p>
             ) : (
               <>
                 {/* What the press will do, before the press. */}

@@ -1,7 +1,9 @@
 import { useState } from "react";
-import type {
-  ScopedCustomFieldDef,
-  TripLogCustomFieldDef,
+import {
+  attributeDeleteConfirm,
+  SETTINGS_LIST,
+  type ScopedCustomFieldDef,
+  type TripLogCustomFieldDef,
 } from "@logjam/shared";
 import ConfirmDialog from "./ConfirmDialog";
 import {
@@ -12,22 +14,14 @@ import { messageFromError } from "../../errors/messageFromError";
 import { useCustomFieldImpact } from "./useCustomFieldImpact";
 import { ErrorBanner } from "../../ui";
 
-// Entity-specific copy nouns. Both families store values keyed by the field's
-// `key`; only the surface wording differs (trip logs vs places).
-const ENTITY_COPY: Record<
+// Entity-specific nouns. Both families store values keyed by the field's
+// `key`; only the rows' name differs (trips vs places).
+const ENTITY_ROWS: Record<
   CustomFieldEntityKind,
-  { removesFrom: string; singular: string; plural: string }
+  { one: string; many: string }
 > = {
-  "trip-log": {
-    removesFrom: "all your trip logs",
-    singular: "trip log",
-    plural: "trip logs",
-  },
-  place: {
-    removesFrom: "all your places",
-    singular: "place",
-    plural: "places",
-  },
+  "trip-log": { one: "trip", many: "trips" },
+  place: { one: "place", many: "places" },
 };
 
 /**
@@ -58,7 +52,11 @@ function DeleteCustomFieldDialog({
     entity,
     def?.key ?? null,
   );
-  const copy = ENTITY_COPY[entity];
+  const confirm = attributeDeleteConfirm(
+    def?.label ?? "",
+    count === null && impactError ? "unknown" : count,
+    ENTITY_ROWS[entity],
+  );
 
   async function handleConfirm() {
     if (!def) return;
@@ -87,32 +85,18 @@ function DeleteCustomFieldDialog({
     onClose();
   }
 
-  const impact =
-    count === null
-      ? impactError
-        ? ""
-        : `Checking how many ${copy.plural} use it…`
-      : count === 0
-        ? `No ${copy.plural} have a value for it.`
-        : `${count} ${count === 1 ? copy.singular : copy.plural} ${count === 1 ? "has" : "have"} a value for it, and ${
-            count === 1 ? "that value goes" : "those values go"
-          } too.`;
-
   return (
     <ConfirmDialog
       open={def !== null}
-      title={`Delete "${def?.label ?? ""}"?`}
+      title={confirm.confirmTitle}
       message={
         <>
-          <p>
-            This removes the attribute from {copy.removesFrom}. {impact} This
-            can&rsquo;t be undone.
-          </p>
+          <p>{confirm.confirmBody}</p>
           {impactError && <ErrorBanner message={impactError} />}
           {error && <ErrorBanner message={error} />}
         </>
       }
-      confirmLabel="Delete attribute"
+      confirmLabel={SETTINGS_LIST.copy.deleteAttribute}
       busy={deleting}
       onConfirm={handleConfirm}
       onClose={handleClose}

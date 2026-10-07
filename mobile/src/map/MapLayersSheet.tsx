@@ -34,9 +34,14 @@
 // contours, features) over an area, and drawing all five at once is three
 // stacked rasters under a vector stack — a mess, not a map. So it keeps its
 // disclosure, and sits LAST because it is the only row that opens.
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { BASEMAP_CATALOG } from "@logjam/shared";
+import {
+  BASEMAP_CATALOG,
+  contractSectionKeys,
+  MAP_LAYERS,
+  type SectionKeysOn,
+} from "@logjam/shared";
 
 import { assetHue, fontSize, fontWeight, spacing, theme } from "../theme";
 import {
@@ -54,7 +59,15 @@ import { MOBILE_BASEMAPS } from "./basemapMeta";
 import type { Connectivity } from "./connectivity";
 import type { BasemapId, MapArtifact } from "./sourceResolver";
 
-type Tab = "basemap" | "layers" | "offline";
+type Tab = SectionKeysOn<typeof MAP_LAYERS, "gps">;
+
+const copy = MAP_LAYERS.copy;
+
+const TAB_LABEL: Record<Tab, string> = {
+  basemap: copy.tabBasemap,
+  overlays: copy.tabOverlays,
+  offline: copy.tabOffline,
+};
 
 /**
  * One switchable kind of thing drawn over the basemap.
@@ -156,52 +169,55 @@ export function MapLayersSheet({
   const [tab, setTab] = useState<Tab>("basemap");
   const online = connectivity === "online";
 
+  // Exhaustive by type: a tab the contract names and this sheet does not
+  // draw, or the reverse, fails `tsc` (`MAP_LAYERS`, shared/src/contracts).
+  const panes: Record<Tab, () => ReactNode> = {
+    basemap: () => (
+      <BasemapTab
+        basemapId={basemapId}
+        onBasemapChange={onBasemapChange}
+        online={online}
+      />
+    ),
+    overlays: () => (
+      <LayersTab
+        layers={layers}
+        overlays={overlays}
+        enabledOverlays={enabledOverlays}
+        onToggleOverlay={onToggleOverlay}
+        mutedAreas={mutedAreas}
+        onSetAreasMuted={onSetAreasMuted}
+        showOverlays={showOverlays}
+        onShowOverlaysChange={onShowOverlaysChange}
+      />
+    ),
+    offline: () => (
+      <OfflineTab
+        online={online}
+        offlineOnly={offlineOnly}
+        onOfflineOnlyChange={onOfflineOnlyChange}
+        onSaveArea={onSaveArea}
+        onOpenSaved={onOpenSaved}
+        artifacts={artifacts}
+        visible={visible}
+      />
+    ),
+  };
+
   return (
-    <BottomSheet visible={visible} onClose={onClose} title="Map layers">
+    <BottomSheet visible={visible} onClose={onClose} title={MAP_LAYERS.title}>
       <View style={styles.rail}>
         <ChipRail
-          options={[
-            { value: "basemap", label: "Basemap" },
-            { value: "layers", label: "Layers" },
-            { value: "offline", label: "Offline" },
-          ]}
+          options={contractSectionKeys(MAP_LAYERS, "gps").map((key) => ({
+            value: key,
+            label: TAB_LABEL[key],
+          }))}
           value={tab}
           onChange={(next) => setTab(next as Tab)}
         />
       </View>
 
-      {tab === "basemap" ? (
-        <BasemapTab
-          basemapId={basemapId}
-          onBasemapChange={onBasemapChange}
-          online={online}
-        />
-      ) : null}
-
-      {tab === "layers" ? (
-        <LayersTab
-          layers={layers}
-          overlays={overlays}
-          enabledOverlays={enabledOverlays}
-          onToggleOverlay={onToggleOverlay}
-          mutedAreas={mutedAreas}
-          onSetAreasMuted={onSetAreasMuted}
-          showOverlays={showOverlays}
-          onShowOverlaysChange={onShowOverlaysChange}
-        />
-      ) : null}
-
-      {tab === "offline" ? (
-        <OfflineTab
-          online={online}
-          offlineOnly={offlineOnly}
-          onOfflineOnlyChange={onOfflineOnlyChange}
-          onSaveArea={onSaveArea}
-          onOpenSaved={onOpenSaved}
-          artifacts={artifacts}
-          visible={visible}
-        />
-      ) : null}
+      {panes[tab]()}
     </BottomSheet>
   );
 }
@@ -375,20 +391,20 @@ function LayersTab({
         <Row
           icon="lidar"
           hue={assetHue.overlay}
-          title="Topo overlays"
+          title={copy.lidarTopos}
           onPress={
             expandable
               ? () => setExpanded((current) => !current)
               : () => onShowOverlaysChange(!showOverlays)
           }
-          accessibilityLabel={`Topo overlays — ${expanded ? "hide" : "show"} the list`}
+          accessibilityLabel={`${copy.lidarTopos} — ${expanded ? "hide" : "show"} the list`}
           right={
             <View style={styles.trailing}>
               <Text style={styles.count}>{overlays.length}</Text>
               <Toggle
                 checked={showOverlays}
                 onChange={onShowOverlaysChange}
-                accessibilityLabel="Show topo overlays"
+                accessibilityLabel={`Show ${copy.lidarTopos}`}
               />
               {expandable ? (
                 <Icon

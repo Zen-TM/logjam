@@ -1,9 +1,44 @@
 import { describe, expect, it } from "vitest";
 import { SYSTEM_FIELD_DEFS } from "../placeTypes.js";
+import { BULK_SHARE_ITEM_TYPES } from "../sharing.js";
+import { DEFAULT_NOTIFICATION_PREFERENCES } from "../themeSchemes.js";
 import {
   attributeFilterShape,
+  ACCOUNT_DELETE_BODY,
+  noFriendsMatch,
+  noFriendsMessage,
+  sendCopyLabel,
+  sharePromise,
+  STATS,
+  statsEmptyActivityBody,
+  statsHeroTitle,
+  statsMostReturnedLine,
+  statsTruncatedNote,
+  statsUnderActivitiesNote,
+  WAY_VERBS,
+  wayVerbLabel,
+  MAP_LAYERS,
+  attributeDeleteConfirm,
   contractSectionKeys,
+  deleteAccountPhrase,
+  deleteAccountPhraseMatches,
   contractSectionsFor,
+  drawsYoursHeading,
+  notificationGroupLead,
+  NOTIFICATION_PREFERENCES,
+  ownAttributeCountLabel,
+  ownTypeCountLabel,
+  placeTypeDeleteConfirm,
+  FRIEND_SHARE_VERBS,
+  friendRemoveConfirm,
+  friendSharesEmptyTitle,
+  friendSharesNote,
+  friendsEmptyKind,
+  friendsHeroTitle,
+  inboxHeroTitle,
+  inboxTruncatedNote,
+  notificationDeleteConfirm,
+  NOTIFICATION_VERBS,
   PLACE_PAGE,
   PLACE_PAGE_PRIMARY_VERBS,
   placeAttributesTitle,
@@ -348,5 +383,230 @@ describe("the logbook", () => {
 
   it("counts a selection the same on every list", () => {
     expect(listSelectionLabel(3)).toBe("3 selected");
+  });
+});
+
+describe("the inbox", () => {
+  it("answers the hero's question with what is unread", () => {
+    expect(inboxHeroTitle(3, 10)).toBe("3 unread");
+    expect(inboxHeroTitle(0, 10)).toBe("All caught up");
+    expect(inboxHeroTitle(0, 0)).toBe("Nothing yet");
+  });
+
+  it("says a capped list is capped", () => {
+    expect(inboxTruncatedNote(500, 612)).toBe(
+      "Showing the 500 most recent of 612. Older ones aren't listed.",
+    );
+  });
+
+  it("says where a deleted notification goes, for one or many", () => {
+    expect(notificationDeleteConfirm(1)).toEqual({
+      confirmTitle: "Delete this notification?",
+      confirmBody:
+        "It goes from every device on your account. This can't be undone.",
+    });
+    expect(notificationDeleteConfirm(3).confirmTitle).toBe(
+      "Delete 3 notifications?",
+    );
+    expect(notificationDeleteConfirm(3).confirmBody).toMatch(/^They go/);
+  });
+
+  it("marks only Delete destructive, below the rule", () => {
+    const danger = NOTIFICATION_VERBS.filter(
+      (verb) => "danger" in verb && verb.danger,
+    );
+    expect(danger.map((verb) => verb.id)).toEqual(["delete"]);
+  });
+});
+
+describe("friends", () => {
+  it("leads with a request, then the count of friends", () => {
+    expect(friendsHeroTitle(2, 5)).toBe("2 requests");
+    expect(friendsHeroTitle(1, 5)).toBe("1 request");
+    expect(friendsHeroTitle(0, 0)).toBe("No friends yet");
+    expect(friendsHeroTitle(0, 1)).toBe("1 friend");
+  });
+
+  it("tells an empty page from an empty bucket", () => {
+    const kind = (
+      friends: number,
+      requests: number,
+      bucket: "all" | "friends" | "requests",
+    ) => friendsEmptyKind({ friends, requests, bucket });
+    expect(kind(0, 0, "all")).toBe("firstRun");
+    expect(kind(2, 0, "requests")).toBe("noRequests");
+    expect(kind(0, 1, "friends")).toBe("firstRun");
+    expect(kind(2, 1, "all")).toBeNull();
+  });
+
+  it("says removing a friend ends sharing both ways", () => {
+    expect(friendRemoveConfirm("abel").confirmTitle).toBe("Remove abel?");
+    expect(friendRemoveConfirm("abel").confirmBody).toContain("both ways");
+  });
+
+  it("gives a reason for each share verb only one client has", () => {
+    for (const verb of FRIEND_SHARE_VERBS)
+      if ("on" in verb) expect(verb.reason).toBeTruthy();
+  });
+
+  it("names the direction a friend's list runs", () => {
+    expect(friendSharesNote("theySee", "abel")).toBe(
+      "Items you have shared with abel.",
+    );
+    expect(friendSharesEmptyTitle("youSee", "abel")).toBe(
+      "abel hasn't shared anything with you",
+    );
+  });
+});
+
+describe("settings", () => {
+  // Red when a notification preference is added to the API's defaults and not
+  // to the list both clients draw its switch from: it would have no switch.
+  it("has a switch for every notification preference, and no other", () => {
+    expect(NOTIFICATION_PREFERENCES.map((row) => row.key).sort()).toEqual(
+      Object.keys(DEFAULT_NOTIFICATION_PREFERENCES).sort(),
+    );
+  });
+
+  it("names the surface a notification is shown in", () => {
+    expect(notificationGroupLead("email", "Logjam Web")).toBe("Email me when");
+    expect(notificationGroupLead("inApp", "Logjam GPS")).toBe(
+      "Notify me in Logjam GPS when",
+    );
+  });
+
+  it("counts only what the user made", () => {
+    expect(ownTypeCountLabel(0)).toBe("Built-ins only");
+    expect(ownTypeCountLabel(2)).toBe("2 of your own");
+    expect(ownAttributeCountLabel(0)).toBe("None yet");
+    expect(ownAttributeCountLabel(1)).toBe("1 attribute");
+    expect(ownAttributeCountLabel(4)).toBe("4 attributes");
+  });
+
+  it("draws a Yours heading only against a Built in", () => {
+    expect(drawsYoursHeading(2, 3)).toBe(true);
+    expect(drawsYoursHeading(0, 3)).toBe(false);
+    expect(drawsYoursHeading(2, 0)).toBe(false);
+  });
+
+  it("says what deleting a type or an attribute costs", () => {
+    expect(placeTypeDeleteConfirm("Cave").confirmTitle).toBe("Delete Cave?");
+    const rows = { one: "trip", many: "trips" };
+    expect(attributeDeleteConfirm("Water level", 0, rows).confirmBody).toBe(
+      "This removes the attribute from every trip. No trips have a value for it. This can't be undone.",
+    );
+    expect(
+      attributeDeleteConfirm("Water level", 1, rows).confirmBody,
+    ).toContain("1 trip has a value for it, and that value goes too.");
+    expect(
+      attributeDeleteConfirm("Water level", 12, rows).confirmBody,
+    ).toContain("12 trips have a value for it, and those values go too.");
+    expect(
+      attributeDeleteConfirm("Water level", "unknown", rows).confirmBody,
+    ).toBe("This removes the attribute from every trip. This can't be undone.");
+  });
+});
+
+describe("the account", () => {
+  // Red when the phrase to type is relaxed to the bare username: a paste of
+  // the name on screen must not be enough to delete an account.
+  it("asks for more than the username to delete an account", () => {
+    expect(deleteAccountPhrase("alice")).toBe("delete alice");
+    expect(deleteAccountPhraseMatches("  Delete Alice ", "alice")).toBe(true);
+    expect(deleteAccountPhraseMatches("alice", "alice")).toBe(false);
+  });
+
+  it("says what stays as well as what goes", () => {
+    expect(ACCOUNT_DELETE_BODY).toContain("stay theirs");
+  });
+});
+
+describe("the map's layers", () => {
+  it("draws Offline on Logjam GPS only, and says why", () => {
+    expect(contractSectionKeys(MAP_LAYERS, "web")).toEqual([
+      "basemap",
+      "overlays",
+    ]);
+    expect(contractSectionKeys(MAP_LAYERS, "gps")).toEqual([
+      "basemap",
+      "overlays",
+      "offline",
+    ]);
+  });
+});
+
+describe("sharing", () => {
+  // Red when a kind is added to what can be shared and its promise is not
+  // written: a screen would have nothing to tell the friend it grants.
+  it("promises something for every kind that can be shared", () => {
+    for (const kind of BULK_SHARE_ITEM_TYPES)
+      expect(sharePromise(kind), kind).toMatch(/^Friends you pick/);
+    expect(sharePromise("selection")).toContain("these");
+  });
+
+  it("says a place share leaves copies alone, and a route's can be stopped", () => {
+    expect(sharePromise("place")).toContain("copies they've already made");
+    expect(sharePromise("route")).toContain("stop sharing anytime");
+  });
+
+  it("names the way out of an empty friend picker", () => {
+    expect(noFriendsMessage("copy").body).toContain("Copies go to friends");
+    expect(noFriendsMessage("share").body).toContain("Add one in Friends");
+    expect(noFriendsMatch("  ab ")).toBe("No friends match “ab”.");
+  });
+
+  it("counts a send", () => {
+    expect(sendCopyLabel(0)).toBe("Send a copy");
+    expect(sendCopyLabel(1)).toBe("Send a copy");
+    expect(sendCopyLabel(3)).toBe("Send 3 copies");
+  });
+});
+
+describe("a way's verbs", () => {
+  // Red when a way's copy verb drifts from the place's: Logjam Web said "Save
+  // to my Ways" where a place said "Save a copy".
+  it("keeps a copy with the words places use", () => {
+    expect(wayVerbLabel("copy", "web")).toBe(
+      placeVerbs("web", "row", false).find((verb) => verb.id === "copy")!.label,
+    );
+    expect(wayVerbLabel("copyAndRemove", "gps")).toBe(
+      placeVerbs("gps", "row", false).find(
+        (verb) => verb.id === "copyAndRemove",
+      )!.label,
+    );
+  });
+
+  it("marks a dialog with an ellipsis on Logjam Web only", () => {
+    expect(wayVerbLabel("share", "web")).toBe("Share…");
+    expect(wayVerbLabel("share", "gps")).toBe("Share");
+    expect(WAY_VERBS.length).toBeGreaterThan(0);
+  });
+});
+
+describe("the logbook's stats", () => {
+  it("leads with days out", () => {
+    expect(statsHeroTitle(1)).toBe("1 day out");
+    expect(statsHeroTitle(12)).toBe("12 days out");
+  });
+
+  it("says what an empty window holds, and says a capped count is capped", () => {
+    expect(statsEmptyActivityBody("Canyoning")).toBe(
+      "No canyoning trips in this window. Try a wider one.",
+    );
+    expect(statsMostReturnedLine("Claustral", 4)).toBe(
+      "most returned to · Claustral ×4",
+    );
+    expect(statsUnderActivitiesNote(1)).toContain("1 more attribute belongs");
+    expect(statsUnderActivitiesNote(3)).toContain("3 more attributes belong");
+    expect(statsTruncatedNote(500, 612)).toContain(
+      "500 most recent trips of 612",
+    );
+  });
+
+  it("draws On foot on Logjam GPS only, and the capped note on Logjam Web only", () => {
+    expect(contractSectionKeys(STATS, "gps")).toContain("onFoot");
+    expect(contractSectionKeys(STATS, "web")).not.toContain("onFoot");
+    expect(contractSectionKeys(STATS, "web")).toContain("truncated");
+    expect(contractSectionKeys(STATS, "gps")).not.toContain("truncated");
   });
 });
