@@ -19,4 +19,12 @@ describe("the chip's count badge", () => {
     expect(badge).toContain("halfRadius(BADGE_SIZE)");
     expect(badge).not.toContain("radius.pill");
   });
+
+  // Red when the badge stops remounting as its chip flips: a half radius alone
+  // still came back squarish on the emulator once another chip was selected.
+  // To see it: delete the `key={active ? "on" : "off"}` line in Chip.tsx.
+  it("is remounted when its chip flips between active and not", () => {
+    const source = readFileSync(new URL("./Chip.tsx", import.meta.url), "utf8");
+    expect(source).toContain('key={active ? "on" : "off"}');
+  });
 });

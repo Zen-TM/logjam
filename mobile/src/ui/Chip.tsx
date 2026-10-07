@@ -101,7 +101,13 @@ export function Chip({
         />
       ) : null}
       {count != null ? (
-        <View style={[styles.badge, active && styles.badgeActive]}>
+        <View
+          // Remounted when the chip flips: RN Android loses the corner radius of
+          // a view whose background was swapped after layout (see `halfRadius`),
+          // and a fresh view is laid out exactly like the first one was.
+          key={active ? "on" : "off"}
+          style={[styles.badge, active && styles.badgeActive]}
+        >
           <Text style={[styles.badgeText, active && styles.badgeTextActive]}>
             {count}
           </Text>
