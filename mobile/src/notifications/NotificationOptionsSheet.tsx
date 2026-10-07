@@ -28,7 +28,12 @@ import {
 } from "./notificationDestination";
 import { theme, spacing } from "../theme";
 import { BottomSheet, Row } from "../ui";
-import { notificationPlaceId, notificationLabel } from "@logjam/shared";
+import {
+  notificationDeleteConfirm,
+  notificationLabel,
+  notificationPlaceId,
+  notificationVerb,
+} from "@logjam/shared";
 
 export function NotificationOptionsSheet({
   notification,
@@ -69,8 +74,8 @@ export function NotificationOptionsSheet({
       // because a delete is not undoable and there is no trash to fish it out
       // of (DESIGN.md §5).
       Alert.alert(
-        "Delete this notification?",
-        "It goes from every device on your account. This can't be undone.",
+        notificationDeleteConfirm(1).confirmTitle,
+        notificationDeleteConfirm(1).confirmBody,
         [
           { text: "Cancel", style: "cancel" },
           {
@@ -87,28 +92,32 @@ export function NotificationOptionsSheet({
       <View style={styles.body}>
         {openable ? (
           <Row
-            icon="openExternal"
-            title="Open"
+            icon={notificationVerb("open").icon}
+            title={notificationVerb("open").label}
             onPress={() => act(() => onOpen(notification))}
           />
         ) : null}
         {destination ? (
           <Row
-            // The tab's own glyph, so the row looks like where it goes.
-            icon={destination.tab === "friends" ? "friends" : "saved"}
+            icon={notificationVerb("view").icon}
             title={destination.label}
             onPress={() => act(() => onView(notification, destination))}
           />
         ) : null}
         <Row
-          icon={notification.read ? "hide" : "show"}
-          title={notification.read ? "Mark as unread" : "Mark as read"}
+          icon={
+            notificationVerb(notification.read ? "markUnread" : "markRead").icon
+          }
+          title={
+            notificationVerb(notification.read ? "markUnread" : "markRead")
+              .label
+          }
           onPress={() => act(() => onSetRead(notification, !notification.read))}
         />
         <Row
           icon="delete"
           hue={theme.warning}
-          title="Delete notification"
+          title={notificationVerb("delete").label}
           onPress={confirmDelete}
         />
       </View>

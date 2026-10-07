@@ -4,6 +4,10 @@ import {
   attributeFilterShape,
   contractSectionKeys,
   contractSectionsFor,
+  inboxHeroTitle,
+  inboxTruncatedNote,
+  notificationDeleteConfirm,
+  NOTIFICATION_VERBS,
   PLACE_PAGE,
   PLACE_PAGE_PRIMARY_VERBS,
   placeAttributesTitle,
@@ -348,5 +352,38 @@ describe("the logbook", () => {
 
   it("counts a selection the same on every list", () => {
     expect(listSelectionLabel(3)).toBe("3 selected");
+  });
+});
+
+describe("the inbox", () => {
+  it("answers the hero's question with what is unread", () => {
+    expect(inboxHeroTitle(3, 10)).toBe("3 unread");
+    expect(inboxHeroTitle(0, 10)).toBe("All caught up");
+    expect(inboxHeroTitle(0, 0)).toBe("Nothing yet");
+  });
+
+  it("says a capped list is capped", () => {
+    expect(inboxTruncatedNote(500, 612)).toBe(
+      "Showing the 500 most recent of 612. Older ones aren't listed.",
+    );
+  });
+
+  it("says where a deleted notification goes, for one or many", () => {
+    expect(notificationDeleteConfirm(1)).toEqual({
+      confirmTitle: "Delete this notification?",
+      confirmBody:
+        "It goes from every device on your account. This can't be undone.",
+    });
+    expect(notificationDeleteConfirm(3).confirmTitle).toBe(
+      "Delete 3 notifications?",
+    );
+    expect(notificationDeleteConfirm(3).confirmBody).toMatch(/^They go/);
+  });
+
+  it("marks only Delete destructive, below the rule", () => {
+    const danger = NOTIFICATION_VERBS.filter(
+      (verb) => "danger" in verb && verb.danger,
+    );
+    expect(danger.map((verb) => verb.id)).toEqual(["delete"]);
   });
 });
