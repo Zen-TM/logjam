@@ -19,6 +19,7 @@
 // off the title). Where there is no state to report, there is no subtitle — §7.
 //
 // PRIVACY: counts, a username, a storage figure. No place names, no coordinates.
+import { useCallback, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { fetchCurrentUser, useApiQuery } from "../api/queries";
@@ -31,7 +32,7 @@ import {
   useSyncIssueCount,
   useSyncStatus,
 } from "../sync/useSyncQueries";
-import { requestSync } from "../sync/syncEngine";
+import { getSyncStatus, requestSync } from "../sync/syncEngine";
 import { fontSize, fontWeight, spacing, theme } from "../theme";
 import {
   Button,
@@ -40,7 +41,9 @@ import {
   ScreenScroll,
   StatusPill,
   Icon,
+  Toast,
   type Glyph,
+  type ToastMessage,
 } from "../ui";
 import { syncHealth, type SyncTone } from "./syncHealth";
 
@@ -93,6 +96,15 @@ export function MoreScreen({
     accountState,
   });
   const tone = TONE_STYLE[health.tone];
+
+  // The hero's "Sync now" says how it went. A failure already has its words (the
+  // health line and its detail), so only a clean cycle is announced here.
+  const [toast, setToast] = useState<ToastMessage | null>(null);
+  const syncNow = useCallback(async () => {
+    await requestSync();
+    if (getSyncStatus().state !== "error")
+      setToast({ text: "Synced.", tone: "info", nonce: Date.now() });
+  }, []);
   const user = userQuery.data;
 
   return (
@@ -125,7 +137,7 @@ export function MoreScreen({
                 capabilityStatus("syncNow", accountState, online).status !==
                 "available"
               }
-              onPress={() => void requestSync()}
+              onPress={() => void syncNow()}
             />
           )
         }
@@ -219,6 +231,7 @@ export function MoreScreen({
           right={<Trailing />}
         />
       </ScreenScroll>
+      <Toast message={toast} onDismissed={() => setToast(null)} />
     </View>
   );
 }

@@ -74,7 +74,8 @@ export function Button({
         compact && styles.compact,
         grow && styles.grow,
         styles[variant],
-        pressed && styles.pressed,
+        pressed &&
+          (variant === "filledAccent" ? styles.pressedFilled : styles.pressed),
         // A button that is loading is working, not unavailable: it keeps its
         // colour, as on Logjam Web.
         disabled && styles.disabled,
@@ -112,17 +113,27 @@ const styles = StyleSheet.create({
     paddingVertical: spacing(1.5),
     paddingHorizontal: spacing(2),
     minHeight: controlSize.lg,
+    backgroundColor: theme.card,
+    borderWidth: 1,
+    borderColor: theme.line,
+    // A pill is never narrower than it is tall: a glyph-only button is a circle.
+    minWidth: controlSize.lg,
   },
   compact: {
     paddingVertical: spacing(0.75),
     paddingHorizontal: spacing(1.5),
     minHeight: controlSize.md,
+    minWidth: controlSize.md,
   },
   grow: { flex: 1 },
-  filledAccent: { backgroundColor: theme.accent },
-  outlineAccent: { borderWidth: 1, borderColor: theme.accent },
+  // EVERY button wears the pressable card fill and a hairline (UX §4: filled is
+  // interactive); the one primary of a surface overrides it with the accent. The
+  // outline's edge is the accent and its label stays the text colour.
+  filledAccent: { backgroundColor: theme.accent, borderColor: theme.accent },
+  outlineAccent: { borderColor: theme.accent },
   ghost: {},
-  pressed: { opacity: 0.75 },
+  pressed: { backgroundColor: theme.cardPressed },
+  pressedFilled: { opacity: 0.85 },
   disabled: { opacity: opacity.disabled },
   label: { fontSize: fontSize.base, fontWeight: fontWeight.medium },
   labelCompact: { fontSize: fontSize.sm },

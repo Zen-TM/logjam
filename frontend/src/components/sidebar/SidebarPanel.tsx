@@ -31,6 +31,7 @@ import type { TopoJob, GeoJsonPolygonal } from "../dialogs/TopoDialog";
 import type { CompletedTopoJob } from "../../topoLayerTypes";
 import type { GeoPdfTemplate } from "../dialogs/GeoPdfDialog";
 import { ChipRail } from "../../ui";
+import { PanelCloseContext } from "../../ui/Hero";
 import classes from "./SidebarPanel.module.css";
 import PlacesPanel, { type MapKind } from "./panels/PlacesPanel";
 import GeoPdfsPanel from "./panels/GeoPdfsPanel";
@@ -87,7 +88,6 @@ function SidebarPanel({
   onHoverPlace,
   onMakeMap,
   onSharePlaces,
-  onFlyToPlace,
   // GeoPDFs
   onOpenGeoPdf,
   onOpenGeoPdfWithTemplate,
@@ -190,7 +190,6 @@ function SidebarPanel({
   onHoverPlace: (id: string | null) => void;
   onMakeMap: (bounds: RegionBbox, kind: MapKind) => void;
   onSharePlaces: (ids: string[]) => void;
-  onFlyToPlace: (lat: number, lng: number) => void;
   // GeoPDFs
   onOpenGeoPdf: () => void;
   onOpenGeoPdfWithTemplate: (id: string) => void;
@@ -370,8 +369,9 @@ function SidebarPanel({
     />
   );
 
+  // Every hero in a panel draws the ×, and it does what the rail icon does.
   const panelContent = (
-    <>
+    <PanelCloseContext.Provider value={onClose}>
       <div className={classes.panelBody}>
         {activePanel === "places" && (
           <PlacesPanel
@@ -392,7 +392,6 @@ function SidebarPanel({
             openFiltersRequested={openFiltersRequested}
             onOpenFiltersConsumed={onOpenFiltersConsumed}
             onFiltersOpenChange={onFiltersOpenChange}
-            onFlyToPlace={onFlyToPlace}
             setSelectedPlaceID={setSelectedPlaceID}
             setActivePanel={setActivePanel}
             onHoverPlace={onHoverPlace}
@@ -532,8 +531,6 @@ function SidebarPanel({
             onQuotaChanged={onQuotaChanged}
             onRefetchTripLogs={onRefetchTripLogs}
             onBack={() => setActivePanel("places")}
-            onClose={onClose}
-            onFlyToPlace={onFlyToPlace}
             onOpenTrip={openTripDetail}
             onMakeMap={(target, kind) => {
               const bounds = placesBounds([target]);
@@ -553,7 +550,6 @@ function SidebarPanel({
             onCustomFieldDefsChange={onCustomFieldDefsChange}
             existingTripTypes={tripLogs.flatMap((trip) => trip.types)}
             onBack={() => setActivePanel("logs")}
-            onClose={onClose}
             onOpenPlace={openPlaceDetail}
             onRefetchTripLogs={onRefetchTripLogs}
             onRefetchPlaces={onRefetch}
@@ -583,7 +579,7 @@ function SidebarPanel({
           />
         )}
       </div>
-    </>
+    </PanelCloseContext.Provider>
   );
 
   if (isMobile) {

@@ -96,6 +96,7 @@ import {
   Meter,
   Hero,
   IconButton,
+  ListEnd,
   RenameForm,
   Row,
   SectionHeader,
@@ -171,7 +172,7 @@ import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
 import { useStandaloneTrackMedia } from "../tracks/useRemoteTracks";
 import { BulkShareButton, BulkShareSheet } from "../sharing/BulkShareSheet";
 import { useTracks } from "../tracks/useTracks";
-import type { Bbox } from "./bboxOfPoints";
+import { bboxOfFootprint, type Bbox } from "./bboxOfPoints";
 import { bulkDeleteConfirmBody } from "./bulkDeleteConfirm";
 import { RouteOptionsSheet } from "../routes/RouteOptionsSheet";
 
@@ -386,6 +387,7 @@ export function SavedScreen({
   onOpenPlace,
   initialFilter,
   initialHighlight,
+  initialImport,
 }: {
   /**
    * One row to point at on arrival, from a notification's "View in Saved". The
@@ -398,6 +400,8 @@ export function SavedScreen({
    * still the right place to be looking.
    */
   initialHighlight?: { key: string; nonce: number };
+  /** The nonce of a request to open the file picker on arrival (the map's "Import a file"). */
+  initialImport?: number;
   onOpenMap: (
     bbox?: Bbox,
     basemapId?: BasemapId,
@@ -745,6 +749,7 @@ export function SavedScreen({
     .map((job) => ({
       jobId: job.jobId,
       label: job.name ?? `Topo ${job.jobId.slice(0, 8)}`,
+      bbox: bboxOfFootprint(job.footprint),
       // A synthetic job (built from what is on disk when the account list is
       // unreachable) carries no URL, so there is nothing to offer.
       missing: job.layers.filter(
@@ -874,6 +879,16 @@ export function SavedScreen({
   // the import buttons out while a run is up, wherever it was started from.
   const importRun = useGeoPdfImportRun();
   const geoPdfBusy = importRun !== null;
+
+  // The map's "Import a file" row lands here and opens the picker once per
+  // request (its nonce), the same entry the tab's own Import button runs.
+  const handledImportRequest = useRef<number | null>(null);
+  useEffect(() => {
+    if (initialImport === undefined) return;
+    if (handledImportRequest.current === initialImport) return;
+    handledImportRequest.current = initialImport;
+    void handleImportFile();
+  }, [handleImportFile, initialImport]);
 
   // The list is only refreshed by registry notifications, which fire before the
   // artifact's size is known; a finished import changes what the capacity meter
@@ -1052,8 +1067,9 @@ export function SavedScreen({
               },
             }
           : { share: { entityType: "topoJob" as const, entityId: group.key } }),
-        locatable: group.bbox != null,
-        resolveBbox: async () => group.bbox,
+        // The saved layers' own extent, else the job's footprint from the account.
+        locatable: (group.bbox ?? bboxOfFootprint(job?.footprint)) != null,
+        resolveBbox: async () => group.bbox ?? bboxOfFootprint(job?.footprint),
         // Topo artifacts carry no groupId (they are written a layer at a time
         // by the overlay downloader), so the group rename writes each row's
         // own display label. Display only, as everywhere else.
@@ -1288,14 +1304,21 @@ export function SavedScreen({
    * you are standing on would be an affordance that only refuses (DESIGN.md
    * §7).
    */
-  const emptyAction = ((): { label: string; onPress: () => void } | null => {
+  const emptyAction = ((): {
+    label: string;
+    onPress: () => void;
+    /** Present when it could apply but not now: the button is dimmed and says why. */
+    disabledReason?: string;
+  } | null => {
     switch (filter) {
       case "all":
         return { label: "Add to device", onPress: () => setAddSheetOpen(true) };
       case "region":
-        return online
-          ? { label: "Download a region", onPress: onDownloadRegion }
-          : null;
+        return {
+          label: "Download a region",
+          onPress: onDownloadRegion,
+          ...(online ? {} : { disabledReason: "Needs a connection" }),
+        };
       case "overlay":
         return null;
       case "geoPdf":
@@ -1557,6 +1580,34 @@ export function SavedScreen({
           console.error(err);
           fail("Couldn't work out where this is.");
         });
+    },
+    [fail, onOpenMap],
+  );
+
+  /**
+   * A tap on a card: open the thing. Everything saved lives on the map, so that
+   * is "Show on map"; one with no place to show falls back to its ⋯ sheet
+   * rather than pressing to nothing.
+   */
+  const openItem = useCallback(
+    (item: SavedItem) => {
+      if (item.locatable) showOnMap(item);
+      else openItemSheet(item.key);
+    },
+    [openItemSheet, showOnMap],
+  );
+
+  /** A topo that is on the account but not the phone: fit to its footprint, layers on. */
+  const showJobOnMap = useCallback(
+    (job: { jobId: string; bbox: Bbox | null }) => {
+      if (!job.bbox) {
+        fail("This one has no saved location to show.");
+        return;
+      }
+      onOpenMap(job.bbox, undefined, {
+        category: "overlay",
+        key: savedOverlayKey(job.jobId),
+      });
     },
     [fail, onOpenMap],
   );
@@ -1889,11 +1940,13 @@ export function SavedScreen({
                 // account-gated row gets — rather than offered and then refused.
                 disabled={selecting && !item.delete}
                 // Press and hold starts a selection anywhere; once one is running a
-                // plain tap toggles. Outside the mode a row still has no onPress —
-                // its verbs live in the ⋯ sheet, and a whole-row tap that did one
-                // of them would be a mis-tap waiting to happen (DESIGN.md §5).
+                // plain tap toggles. Outside the mode a tap OPENS the thing: every
+                // kind here lives on the map, so that is "Show on map" (the card
+                // never presses to nothing). The rest of its verbs are in the ⋯.
                 onLongPress={() => selectItem(item)}
-                onPress={selecting ? () => selectItem(item) : undefined}
+                onPress={
+                  selecting ? () => selectItem(item) : () => openItem(item)
+                }
                 /* ONE trailing slot for both modes, and every child of it keeps its
                place when the mode changes. Selecting used to render a slot of
                its own holding only the size and a 22px circle: the pill and the
@@ -2026,6 +2079,7 @@ export function SavedScreen({
               >
                 <Row
                   title={job.label}
+                  onPress={() => showJobOnMap(job)}
                   // "Not on this device" restated the section header it sits
                   // under; the layer count does not.
                   subtitle={
@@ -2068,6 +2122,13 @@ export function SavedScreen({
               >
                 <Row
                   title={job.title ?? "Untitled GeoPDF"}
+                  // Its home is the map but it is not on the phone: the one
+                  // obvious job is bringing it here, as its button does.
+                  onPress={
+                    geoPdfBusy
+                      ? undefined
+                      : () => handleImportAccountGeoPdf(job)
+                  }
                   subtitle={
                     job.resultBytes != null
                       ? formatBytes(job.resultBytes)
@@ -2089,6 +2150,13 @@ export function SavedScreen({
             ))}
           </>
         ) : null}
+
+        {/* The list ends with the button its empty state offers (the same one),
+            so adding is where the eye ends up after scrolling to the bottom. */}
+        <SavedListEnd
+          show={visibleItems.length > 0 && !searching}
+          action={emptyAction}
+        />
       </ScrollView>
 
       {/* Share the whole selection — the same sheet the Places screen opens,
@@ -2480,7 +2548,7 @@ function EmptyPanel({
   filter: Category | "all";
   online: boolean;
   /** The one thing that fills this tab, or null where the tab is already it. */
-  action: { label: string; onPress: () => void } | null;
+  action: SavedAction | null;
   /** The tab has rows, but a search/tag narrowed all of them out — a
    *  different message from the tab genuinely holding nothing (item 8), same
    *  pattern as `usePlacePicker`'s "No place of yours matches that." */
@@ -2535,13 +2603,46 @@ function EmptyPanel({
     <View style={styles.empty}>
       <Text style={styles.emptyTitle}>{title}</Text>
       <Text style={styles.emptyHint}>{hint}</Text>
-      {action ? (
-        <Button
-          label={action.label}
-          icon="add"
-          compact
-          onPress={action.onPress}
-        />
+      {action ? <SavedAddButton action={action} /> : null}
+    </View>
+  );
+}
+
+type SavedAction = {
+  label: string;
+  onPress: () => void;
+  disabledReason?: string;
+};
+
+/** The end of a non-empty tab: the add button its empty state offers. */
+function SavedListEnd({
+  show,
+  action,
+}: {
+  show: boolean;
+  action: SavedAction | null;
+}) {
+  if (!show || !action) return null;
+  return (
+    <ListEnd>
+      <SavedAddButton action={action} />
+    </ListEnd>
+  );
+}
+
+/** The tab's one add button, with its reason when it cannot run just now. */
+function SavedAddButton({ action }: { action: SavedAction }) {
+  return (
+    <View style={styles.addButton}>
+      <Button
+        label={action.label}
+        icon="add"
+        compact
+        disabled={action.disabledReason != null}
+        onPress={action.onPress}
+      />
+      {action.disabledReason ? (
+        <Text style={styles.addReason}>{action.disabledReason}</Text>
       ) : null}
     </View>
   );
@@ -2609,6 +2710,8 @@ function PulseSlot({
 }
 
 const styles = StyleSheet.create({
+  addButton: { alignItems: "center", gap: spacing(0.5) },
+  addReason: { color: theme.textMuted, fontSize: fontSize.sm },
   // Matches `Row`'s own card radius, so the tint stops where the card does
   // rather than squaring off its corners.
   pulseWash: {

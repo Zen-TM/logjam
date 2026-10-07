@@ -34,12 +34,13 @@
 // contours, features) over an area, and drawing all five at once is three
 // stacked rasters under a vector stack — a mess, not a map. So it keeps its
 // disclosure, and sits LAST because it is the only row that opens.
-import { useMemo, useState, type ReactNode } from "react";
+import { Fragment, useMemo, useState, type ReactNode } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import {
   BASEMAP_CATALOG,
   contractSectionKeys,
   MAP_LAYERS,
+  MAP_OVERLAYS,
   type SectionKeysOn,
 } from "@logjam/shared";
 
@@ -142,6 +143,7 @@ export function MapLayersSheet({
   onOfflineOnlyChange,
   onSaveArea,
   onOpenSaved,
+  onImportFile,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -165,6 +167,8 @@ export function MapLayersSheet({
   onOfflineOnlyChange: (next: boolean) => void;
   onSaveArea: () => void;
   onOpenSaved: (category: "region") => void;
+  /** The overlays list ends with the way to add one: the existing importer. */
+  onImportFile: () => void;
 }) {
   const [tab, setTab] = useState<Tab>("basemap");
   const online = connectivity === "online";
@@ -189,6 +193,7 @@ export function MapLayersSheet({
         onSetAreasMuted={onSetAreasMuted}
         showOverlays={showOverlays}
         onShowOverlaysChange={onShowOverlaysChange}
+        onImportFile={onImportFile}
       />
     ),
     offline: () => (
@@ -365,6 +370,7 @@ function LayersTab({
   onSetAreasMuted,
   showOverlays,
   onShowOverlaysChange,
+  onImportFile,
 }: {
   layers: LayerToggleEntry[];
   overlays: OverlayEntry[];
@@ -374,19 +380,26 @@ function LayersTab({
   onSetAreasMuted: (areaIds: string[], muted: boolean) => void;
   showOverlays: boolean;
   onShowOverlaysChange: (next: boolean) => void;
+  onImportFile: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const expandable = overlays.length > 0;
 
-  return (
-    <View style={styles.body}>
-      {layers.map((entry) => (
-        <LayerRow key={entry.key} entry={entry} />
-      ))}
+  const entryRow = (key: string) => {
+    const entry = layers.find((candidate) => candidate.key === key);
+    return entry ? <LayerRow entry={entry} /> : null;
+  };
 
-      {/* LAST, and the only row that opens — see the header. Its "items" are
-          five layer TYPES over an area, not five files, so the choice between
-          them is the map itself rather than an inventory question. */}
+  // Exhaustive by type: a row the contract names and this tab does not draw, or
+  // the reverse, fails `tsc` (`MAP_OVERLAYS`, shared/src/contracts).
+  const rows: Record<
+    SectionKeysOn<typeof MAP_OVERLAYS, "gps">,
+    () => ReactNode
+  > = {
+    places: () => entryRow("places"),
+    ways: () => entryRow("ways"),
+    geoPdfs: () => entryRow("geoPdfs"),
+    lidarTopos: () => (
       <View style={styles.group}>
         <Row
           icon="lidar"
@@ -428,6 +441,22 @@ function LayersTab({
           </View>
         ) : null}
       </View>
+    ),
+    importFile: () => (
+      <Row
+        icon="upload"
+        hue={theme.neutral}
+        title={copy.importFile}
+        onPress={onImportFile}
+      />
+    ),
+  };
+
+  return (
+    <View style={styles.body}>
+      {contractSectionKeys(MAP_OVERLAYS, "gps").map((key) => (
+        <Fragment key={key}>{rows[key]()}</Fragment>
+      ))}
     </View>
   );
 }

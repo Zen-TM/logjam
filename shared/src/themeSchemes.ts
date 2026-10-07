@@ -4,12 +4,7 @@ import {
   type TripLogCustomFieldDef,
 } from "./tripLogFields.js";
 
-export type ThemeSchemeId =
-  | "sandstone"
-  | "basalt"
-  | "scribblyGum"
-  | "ironbark"
-  | "daylight";
+export type ThemeSchemeId = "sandstone" | "basalt" | "scribblyGum" | "ghostGum";
 
 /**
  * A scheme's colours, named for the ROLE each plays — never its rank — and
@@ -167,7 +162,7 @@ function normalizeNotificationPreferences(
 
 export const DEFAULT_THEME_SCHEME_ID: ThemeSchemeId = "sandstone";
 
-// The four dark schemes keep the values they had under the old rank names:
+// The three dark schemes keep the values they had under the old rank names:
 // `field` is the old web `color-mix(in srgb, black 12%, page)` worked out to a
 // hex, `lineStrong` the muted text colour. `cardPressed` is the card a step
 // darker in Sandstone and Ironbark, where the old `bonus2` it replaced was
@@ -222,14 +217,15 @@ export const THEME_SCHEMES: Record<ThemeSchemeId, ThemeScheme> = {
   scribblyGum: {
     id: "scribblyGum",
     name: "Scribbly Gum",
-    description: "Bushland greens and fog-softened neutrals.",
+    description:
+      "Bushland greys with a hint of green, and fog-softened neutrals.",
     mode: "dark",
     tokens: {
-      page: "#2F4F3E",
-      card: "#3F5547",
-      cardPressed: "#22372B",
-      field: "#294637",
-      line: "#22372B",
+      page: "#2D3E38",
+      card: "#3A4D45",
+      cardPressed: "#2A3A34",
+      field: "#27362F",
+      line: "#212E29",
       lineStrong: "#B4C8BC",
       text: "#EAF2EC",
       textMuted: "#B4C8BC",
@@ -242,52 +238,31 @@ export const THEME_SCHEMES: Record<ThemeSchemeId, ThemeScheme> = {
       onFill: INK,
     },
   },
-  ironbark: {
-    id: "ironbark",
-    name: "Ironbark",
-    description: "Topographic ink tones with native vegetation highlights.",
-    mode: "dark",
-    tokens: {
-      page: "#2B3A3F",
-      card: "#364B45",
-      cardPressed: "#2E403B",
-      field: "#263337",
-      line: "#7FA48F",
-      lineStrong: "#A7B8B2",
-      text: "#ECF2EF",
-      textMuted: "#A7B8B2",
-      accent: "#CD9482",
-      warning: "#F18B77",
-      success: "#8CB79A",
-      neutral: "#CAD7CF",
-      inverse: "#ECF2EF",
-      onInverse: INK,
-      onFill: INK,
-    },
-  },
   // The one light scheme, for reading in full sun: its text pairs clear AAA
-  // (7:1), not AA. Its intent colours sit in the narrow luminance band where
-  // they clear 4.5:1 under the dark `onFill` AND 3:1 on the paper page.
-  daylight: {
-    id: "daylight",
-    name: "Daylight",
-    description: "Paper and ink, for reading in full sun.",
+  // (7:1), not AA, and only its surfaces and fills are soft. Pale smooth bark
+  // and grey-green leaves. Its intent colours sit in the narrow luminance band
+  // where they clear 4.5:1 under the dark `onFill` AND 3:1 on the pale page.
+  ghostGum: {
+    id: "ghostGum",
+    name: "Ghost Gum",
+    description:
+      "Pale smooth bark and grey-green leaves, for reading in full sun.",
     mode: "light",
     tokens: {
-      page: "#F5F1EA",
-      card: "#FFFFFF",
-      cardPressed: "#EEE8DE",
-      field: "#FFFFFF",
-      line: "#E0D8CB",
-      lineStrong: "#8A7D6C",
-      text: "#1E1B18",
-      textMuted: "#55493D",
-      accent: "#BA7941",
-      warning: "#D66752",
-      success: "#5B9653",
-      neutral: "#B8AB98",
-      inverse: "#2E2924",
-      onInverse: "#F5F1EA",
+      page: "#ECEEE8",
+      card: "#F9FAF6",
+      cardPressed: "#E0E4DB",
+      field: "#F9FAF6",
+      line: "#D5DAD0",
+      lineStrong: "#7A857C",
+      text: "#252A26",
+      textMuted: "#4C554D",
+      accent: "#6A9072",
+      warning: "#C2735A",
+      success: "#7E8E3E",
+      neutral: "#B3BBAE",
+      inverse: "#2B312C",
+      onInverse: "#ECEEE8",
       onFill: INK,
     },
   },
@@ -297,8 +272,7 @@ export const THEME_SCHEME_ORDER: ThemeSchemeId[] = [
   "sandstone",
   "basalt",
   "scribblyGum",
-  "ironbark",
-  "daylight",
+  "ghostGum",
 ];
 
 export function isThemeSchemeId(value: unknown): value is ThemeSchemeId {
@@ -306,6 +280,28 @@ export function isThemeSchemeId(value: unknown): value is ThemeSchemeId {
     typeof value === "string" &&
     Object.prototype.hasOwnProperty.call(THEME_SCHEMES, value)
   );
+}
+
+/**
+ * Ids that were schemes once and are not now, with the scheme a stored one
+ * becomes. Ironbark shipped (prod accounts may hold it) and its cool grey is
+ * Scribbly Gum's now; Daylight was never released, but is mapped anyway so a
+ * dev database cannot hold a scheme that does not exist.
+ */
+export const RETIRED_THEME_SCHEME_IDS: Readonly<Record<string, ThemeSchemeId>> =
+  {
+    ironbark: "scribblyGum",
+    daylight: "ghostGum",
+  };
+
+/** A stored or received id as a scheme that exists, or null when it is neither
+ *  one nor a retired one. Read every stored `themeSchemeId` through this. */
+export function normalizeThemeSchemeId(value: unknown): ThemeSchemeId | null {
+  if (isThemeSchemeId(value)) return value;
+  return typeof value === "string" &&
+    Object.prototype.hasOwnProperty.call(RETIRED_THEME_SCHEME_IDS, value)
+    ? RETIRED_THEME_SCHEME_IDS[value]
+    : null;
 }
 
 // Legacy alias: an early seed/data shape stored free-text fields as type "text",
@@ -366,9 +362,8 @@ export function normalizeImportMergePolicy(
 export function normalizeUserUiPreferences(value: unknown): UserUiPreferences {
   if (typeof value === "object" && value !== null) {
     const prefs = value as Record<string, unknown>;
-    const themeSchemeId = isThemeSchemeId(prefs.themeSchemeId)
-      ? prefs.themeSchemeId
-      : DEFAULT_THEME_SCHEME_ID;
+    const themeSchemeId =
+      normalizeThemeSchemeId(prefs.themeSchemeId) ?? DEFAULT_THEME_SCHEME_ID;
     const tripLogCustomFields = normalizeCustomFieldDefs(
       prefs.tripLogCustomFields,
     );

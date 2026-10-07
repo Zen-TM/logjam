@@ -31,6 +31,8 @@ export type CompletedOverlaysResponse = {
      * with its reason instead, and the verb needs the network anyway.
      */
     syncRole?: "owner" | "shared";
+    /** The ground the job covers, as the server sends it (absent on a synthetic job). */
+    footprint?: { coordinates: unknown } | null;
     layers: {
       name: TopoLayerName;
       format: TopoLayerFormat;

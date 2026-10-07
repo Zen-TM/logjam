@@ -202,7 +202,7 @@ function pairsFor({ mode, tokens: t }) {
     // An "on" icon button wears the same wash with a `text` glyph: an accent
     // glyph on a wash of itself fell to 2.7:1 on the light page.
     {
-      name: "text on accent wash over page (filters-active strip, active icon button)",
+      name: "text on accent wash over page (active icon button)",
       fg: t.text,
       bg: tint(t.accent, 0.12, t.page),
       min: textMin,

@@ -21,6 +21,7 @@ import {
 import { messageFromError } from "../../../errors/messageFromError";
 import { useToast } from "../../feedback/ToastProvider";
 import {
+  Hero,
   IconTile,
   Row,
   SectionHeader,
@@ -255,10 +256,15 @@ function SettingsPanel({
   };
 
   return (
-    <div className={classes.root}>
-      {contractSectionKeys(SETTINGS, "web").map((key) => (
-        <Fragment key={key}>{sections[key]()}</Fragment>
-      ))}
+    <div className={classes.page}>
+      {/* Not a hero that answers a question (there is none): the title row
+          every panel has, which is where its × lives. */}
+      <Hero title={SETTINGS.title} />
+      <div className={classes.root}>
+        {contractSectionKeys(SETTINGS, "web").map((key) => (
+          <Fragment key={key}>{sections[key]()}</Fragment>
+        ))}
+      </div>
     </div>
   );
 }

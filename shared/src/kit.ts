@@ -45,6 +45,7 @@ export const KIT_COMPONENTS = {
 
   // — rows, tiles and lists —
   Row: both,
+  ListEnd: both,
   SwitchRow: both,
   SectionHeader: both,
   Avatar: both,
@@ -87,10 +88,9 @@ export const KIT_COMPONENTS = {
   SearchField: web("Logjam GPS's TextField with a search keyboard"),
   Select: web("a native select; touch uses ChipRail or a sheet"),
   Checkbox: web("a native checkbox; Logjam GPS uses Toggle or a chip"),
-  SwatchPicker: web("Logjam GPS has no colour picker"),
-  ColourField: web(
-    "a hex field with a swatch; Logjam GPS has no colour picker",
-  ),
+  // One colour picker, a floating palette: Logjam GPS draws the closed-palette
+  // mode (a `palette` prop); the free colour with opacity is a topo's cartography.
+  ColourField: both,
   DatePicker: gps("Logjam Web uses the browser's date input"),
   RenameForm: gps("the phone's one-field rename sheet body"),
 

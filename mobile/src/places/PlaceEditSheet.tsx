@@ -40,6 +40,7 @@ import {
   type ChipOption,
   Icon,
 } from "../ui";
+import { fieldLabel } from "../ui/fieldLabel";
 
 /**
  * Add or edit a place — one sheet for both (DESIGN.md §5). The fields are
@@ -501,7 +502,7 @@ export function PlaceEditSheet({
             field for are kept and offered back (§2.6), never dropped. */}
           {typeOptions.length > 1 ? (
             <View style={styles.field}>
-              <SectionHeader title="Type" />
+              <Text style={fieldLabel}>Type</Text>
               <ChipRail
                 scroll
                 options={typeOptions}

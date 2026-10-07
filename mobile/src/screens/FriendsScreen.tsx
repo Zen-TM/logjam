@@ -74,6 +74,7 @@ import {
   ErrorBanner,
   ErrorState,
   Hero,
+  ListEnd,
   IconButton,
   LoadingState,
   Row,
@@ -343,6 +344,19 @@ export function FriendsScreen({
             />
           }
           renderItem={renderItem}
+          ListFooterComponent={
+            // The list ends with the button its empty state offers.
+            items.length > 0 ? (
+              <ListEnd>
+                <Button
+                  label={copy.addTitle}
+                  icon="addFriend"
+                  variant="outlineAccent"
+                  onPress={() => setAddOpen(true)}
+                />
+              </ListEnd>
+            ) : null
+          }
           ListEmptyComponent={
             <EmptyPanel
               kind={friendsEmptyKind({

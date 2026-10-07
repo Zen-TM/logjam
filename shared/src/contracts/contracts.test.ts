@@ -18,6 +18,8 @@ import {
   WAY_VERBS,
   wayVerbLabel,
   MAP_LAYERS,
+  MAP_OVERLAYS,
+  MAP_OVERLAY_REFINEMENTS,
   attributeDeleteConfirm,
   contractSectionKeys,
   deleteAccountPhrase,
@@ -31,11 +33,15 @@ import {
   placeTypeDeleteConfirm,
   FRIEND_SHARE_VERBS,
   friendRemoveConfirm,
+  friendsRemoveConfirm,
   friendSharesEmptyTitle,
   friendSharesNote,
   friendsEmptyKind,
   friendsHeroTitle,
+  INBOX,
+  INBOX_VERBS,
   inboxHeroTitle,
+  inboxVerb,
   inboxTruncatedNote,
   notificationDeleteConfirm,
   NOTIFICATION_VERBS,
@@ -220,6 +226,18 @@ describe("a place's verbs", () => {
           row.filter((id) => id !== "show"),
         );
       }
+  });
+
+  // Red when "show" loses its `on: "gps"`: on Logjam Web opening a place
+  // already flies the map there, so a button for it is a second way to do one
+  // thing.
+  it("offers Show on map on Logjam GPS only, where the map is another screen", () => {
+    for (const owned of [true, false]) {
+      expect(ids("web", "row", owned)).not.toContain("show");
+      expect(ids("web", "page", owned)).not.toContain("show");
+      expect(ids("gps", "row", owned)).toContain("show");
+      expect(ids("gps", "page", owned)).toContain("show");
+    }
   });
 
   it("never offers to edit, share, delete or log a trip at a place someone shared with you", () => {
@@ -411,6 +429,15 @@ describe("the inbox", () => {
     expect(notificationDeleteConfirm(3).confirmBody).toMatch(/^They go/);
   });
 
+  // Red when the hero's ⋯ verbs and the copy's "Mark all as read" drift: the
+  // two clients read both.
+  it("words the hero's mark-all verb as its copy does, and marks only Clear destructive", () => {
+    expect(inboxVerb("markAllRead").label).toBe(INBOX.copy.markAllRead);
+    expect(
+      INBOX_VERBS.filter((verb) => "danger" in verb).map((v) => v.id),
+    ).toEqual(["clearRead"]);
+  });
+
   it("marks only Delete destructive, below the rule", () => {
     const danger = NOTIFICATION_VERBS.filter(
       (verb) => "danger" in verb && verb.danger,
@@ -442,6 +469,8 @@ describe("friends", () => {
   it("says removing a friend ends sharing both ways", () => {
     expect(friendRemoveConfirm("abel").confirmTitle).toBe("Remove abel?");
     expect(friendRemoveConfirm("abel").confirmBody).toContain("both ways");
+    expect(friendsRemoveConfirm(3).confirmTitle).toBe("Remove 3 friends?");
+    expect(friendsRemoveConfirm(3).confirmBody).toContain("both ways");
   });
 
   it("gives a reason for each share verb only one client has", () => {
@@ -608,5 +637,30 @@ describe("the logbook's stats", () => {
     expect(contractSectionKeys(STATS, "web")).not.toContain("onFoot");
     expect(contractSectionKeys(STATS, "web")).toContain("truncated");
     expect(contractSectionKeys(STATS, "gps")).not.toContain("truncated");
+  });
+});
+
+describe("the map's overlays list", () => {
+  // Red when Logjam GPS's list drifts from Logjam Web's: the web's rows are the
+  // list, and the phone adds only what it declares (a GeoPDF row, refinements).
+  it("is Logjam Web's rows, with the phone's one declared extra", () => {
+    expect(contractSectionKeys(MAP_OVERLAYS, "web")).toEqual([
+      "places",
+      "ways",
+      "lidarTopos",
+      "importFile",
+    ]);
+    expect(contractSectionKeys(MAP_OVERLAYS, "gps")).toEqual([
+      "places",
+      "ways",
+      "geoPdfs",
+      "lidarTopos",
+      "importFile",
+    ]);
+  });
+
+  it("refines only rows that exist", () => {
+    for (const row of Object.keys(MAP_OVERLAY_REFINEMENTS))
+      expect(contractSectionKeys(MAP_OVERLAYS, "gps")).toContain(row);
   });
 });

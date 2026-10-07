@@ -13,6 +13,7 @@ import type { ContractPlatform, ScreenContract } from "./types.js";
 export const PLACES_LIST = {
   id: "places.list",
   question: "How far through my list am I?",
+  title: "Places",
   sections: [
     { key: "hero" },
     // Two rails, in this order: what kind of place, then where it is in the
@@ -122,7 +123,10 @@ export function placesCountLabel(count: number): string {
   return `${count} ${count === 1 ? "place" : "places"}`;
 }
 
-/** The hero's answer: the size of the whole collection, whatever is filtered. */
+/**
+ * Logjam GPS's hero: the size of the whole collection, whatever is filtered.
+ * Logjam Web's hero is `PLACES_LIST.title`: its chips already show the counts.
+ */
 export function placesHeroTitle(count: number): string {
   return count === 0 ? PLACES_LIST.copy.firstRunTitle : placesCountLabel(count);
 }

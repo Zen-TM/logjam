@@ -44,7 +44,10 @@ export const INBOX = {
   },
 } as const satisfies ScreenContract;
 
-/** The hero: what is unread, else that nothing is. */
+/**
+ * Logjam GPS's hero: what is unread, else that nothing is. Logjam Web's hero
+ * is `INBOX.title`: its chips show the unread count.
+ */
 export function inboxHeroTitle(unread: number, total: number): string {
   if (unread > 0) return `${unread} unread`;
   return total > 0 ? "All caught up" : "Nothing yet";
@@ -54,6 +57,42 @@ export function inboxHeroTitle(unread: number, total: number): string {
 export function inboxTruncatedNote(shown: number, total: number): string {
   return `Showing the ${shown} most recent of ${total}. Older ones aren't listed.`;
 }
+
+type InboxVerbDeclaration = {
+  id: string;
+  icon: IconIdea;
+  label: string;
+  danger?: boolean;
+};
+
+/**
+ * The Inbox's own verbs, in the hero's ⋯: they act on the whole inbox, not on a
+ * row. A "…" marks the one that asks first.
+ */
+export const INBOX_VERBS = [
+  { id: "markAllRead", icon: "selectAll", label: "Mark all as read" },
+  {
+    id: "clearRead",
+    icon: "delete",
+    label: "Clear read notifications…",
+    danger: true,
+  },
+] as const satisfies readonly InboxVerbDeclaration[];
+
+export type InboxVerbId = (typeof INBOX_VERBS)[number]["id"];
+
+export function inboxVerb(id: InboxVerbId) {
+  return INBOX_VERBS.find((verb) => verb.id === id)!;
+}
+
+/** What clearing the read notifications costs: read ones go everywhere, unread stay. */
+export const CLEAR_READ_CONFIRM = {
+  confirmTitle: "Clear read notifications?",
+  confirmBody:
+    "Every notification you've read goes, from every device on your account. Unread ones stay.",
+  confirmLabel: "Clear",
+  failed: "Couldn't clear read notifications.",
+} as const;
 
 type NotificationVerbDeclaration = {
   id: string;

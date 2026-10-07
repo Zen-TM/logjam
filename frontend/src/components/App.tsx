@@ -143,7 +143,9 @@ function App() {
     () => setOpenFiltersRequested(false),
     [],
   );
-  const [selectedPlaceID, setSelectedPlaceID] = useState<string | null>(null);
+  const [selectedPlaceID, setSelectedPlaceIDRaw] = useState<string | null>(
+    null,
+  );
   // The trip whose page is open. A trip is READ on a page like a place and a
   // way (DESIGN.md §4), so it needs the same one piece of state.
   const [selectedTripLogId, setSelectedTripLogId] = useState<string | null>(
@@ -337,6 +339,19 @@ function App() {
     lat: number;
     lng: number;
   } | null>(null);
+
+  // OPENING A PLACE SHOWS IT ON THE MAP (UX §3). Every way to open a place's
+  // page ends in this setter (a row, a pin, a search hit, an inbox item, a
+  // linked place), so the fly-to lives here once rather than beside each
+  // caller. It runs on a repeat open of the same place too, which an effect
+  // keyed on the id would miss after the user had panned away. Closing (null)
+  // leaves the camera alone.
+  const allPlacesRef = useRef<TPlace[]>([]);
+  const setSelectedPlaceID = useCallback((id: string | null) => {
+    setSelectedPlaceIDRaw(id);
+    const target = id && allPlacesRef.current.find((p) => p.id === id);
+    if (target) setFlyToPlace({ lat: target.latitude, lng: target.longitude });
+  }, []);
 
   // LiDAR topo panel state — lifted so it persists across panel open/close
   const [lidarEnabled, setLidarEnabled] = useStoredState(
@@ -1144,6 +1159,9 @@ function App() {
 
   // Derived values
   const allPlaces = [...places, ...sharedPlaces];
+  useEffect(() => {
+    allPlacesRef.current = allPlaces;
+  });
   const filteredPlaces = useMemo(
     () => [
       ...places.filter((c) => passesFilters(c, filters, true)),
@@ -1530,7 +1548,6 @@ function App() {
                   setSelectedWay(null);
                   setActivePanel("ways");
                 }}
-                onClose={() => setActivePanel(null)}
                 onEdit={startEditingRoute}
                 onCopied={showCopiedRoute}
                 onChanged={() => {
@@ -1598,7 +1615,6 @@ function App() {
           }}
           openFiltersRequested={openFiltersRequested}
           onOpenFiltersConsumed={consumeOpenFilters}
-          onFlyToPlace={(lat, lng) => setFlyToPlace({ lat, lng })}
           onOpenGeoPdf={() => {
             setEditingGeoPdfTemplate(undefined);
             setInitialGeoPdfTemplateId(null);
@@ -1786,6 +1802,7 @@ function App() {
       </main>
 
       <LayersPopover
+        onImportFile={() => setShowUnifiedImport(true)}
         open={layersOpen}
         onClose={() => setLayersOpen(false)}
         anchorRef={layersButtonRef}

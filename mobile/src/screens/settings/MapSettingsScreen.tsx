@@ -16,7 +16,6 @@
 //
 // PRIVACY: sides, colours, enums and two sampling numbers. Nothing positional.
 import { useCallback, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
 
 import {
   isCompassEnabled,
@@ -72,13 +71,12 @@ import {
   writeSensorLoggingEnabled,
 } from "../../tracks/sensorLog";
 import { applyRecordingOptionsToActiveTrack } from "../../tracks/trackRecorder";
-import { radius, spacing, theme, withAlpha } from "../../theme";
 import {
   ScreenScroll,
   SectionHeader,
+  ColourField,
   Toast,
   type ToastMessage,
-  Icon,
 } from "../../ui";
 import { ChoiceGroup, PreferenceRow } from "./settingsKit";
 
@@ -270,19 +268,22 @@ export function MapSettingsScreen() {
         />
 
         <SectionHeader title="Your location marker" />
-        <View style={styles.swatches}>
-          {MARKER_COLOR_ORDER.map((id) => (
-            <ColorSwatch
-              key={id}
-              colorId={id}
-              selected={id === markerColorId}
-              onPress={() => {
-                if (!stored(writeMarkerColorId(id))) return;
-                setMarkerColorId(id);
-              }}
-            />
-          ))}
-        </View>
+        <ColourField
+          label="Colour"
+          palette={MARKER_COLOR_ORDER.map((id) => MARKER_COLORS[id])}
+          value={MARKER_COLORS[markerColorId]}
+          nameOf={(color) =>
+            MARKER_COLOR_ORDER.find((id) => MARKER_COLORS[id] === color) ??
+            color
+          }
+          onChange={(color) => {
+            const id = MARKER_COLOR_ORDER.find(
+              (candidate) => MARKER_COLORS[candidate] === color,
+            );
+            if (!id || !stored(writeMarkerColorId(id))) return;
+            setMarkerColorId(id);
+          }}
+        />
 
         <PreferenceRow
           icon="northUp"
@@ -468,61 +469,6 @@ export function MapSettingsScreen() {
     </>
   );
 }
-
-/**
- * One marker colour. A filled circle of the colour itself, because the choice is
- * entirely visual — the same reasoning as the theme swatches, and the same
- * hairline for the same reason (white on a light card would otherwise vanish).
- */
-function ColorSwatch({
-  colorId,
-  selected,
-  onPress,
-}: {
-  colorId: MarkerColorId;
-  selected: boolean;
-  onPress: () => void;
-}) {
-  const color = MARKER_COLORS[colorId];
-  return (
-    <Pressable
-      accessibilityRole="radio"
-      accessibilityState={{ selected }}
-      accessibilityLabel={colorId}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.swatchTarget,
-        selected && styles.swatchSelected,
-        pressed && styles.swatchPressed,
-      ]}
-    >
-      <View style={[styles.swatch, { backgroundColor: color }]}>
-        {selected ? <Icon idea="done" size={18} color="#1A1A1A" /> : null}
-      </View>
-    </Pressable>
-  );
-}
-
-const styles = StyleSheet.create({
-  swatches: { flexDirection: "row", flexWrap: "wrap", gap: spacing(1) },
-  swatchTarget: {
-    padding: spacing(0.5),
-    borderRadius: radius.pill,
-    borderWidth: 2,
-    borderColor: "transparent",
-  },
-  swatchSelected: { borderColor: theme.accent },
-  swatchPressed: { backgroundColor: theme.cardPressed },
-  swatch: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.pill,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: withAlpha(theme.text, 0.2),
-  },
-});
 
 /**
  * What the toggle actually costs and what it produces, in the two sentences a

@@ -153,7 +153,7 @@ rail 84px │ panel 380px             │ sheet 380px (optional) │ map
   locate are kit buttons on the map's public API; the scale bar and the
   attribution are MapLibre's own, restyled.
 - **Map-drawn colours belong to the basemap, not the scheme**: labels, halos
-  and line casings use the fixed `MAP_INK` and do not change with Daylight.
+  and line casings use the fixed `MAP_INK` and do not change with the scheme.
 
 ## 3. Rows
 
@@ -273,9 +273,14 @@ component.
     `SwitchRow`.
   - `ChipRail` is the one single-choice control; `ChipPicker` is several
     choices from a vocabulary the user extends.
-  - `SwatchPicker` for a closed palette (an identity colour), `ColourField`
-    for a free colour with opacity (a topo style). Never a free picker for an
-    identity hue: the contrast guard measures closed palettes.
+  - `ColourField` is the one colour picker, always a floating palette:
+    `palette={…}` for a closed set (an identity colour), free with opacity for
+    a topo style. Never a free picker for an identity hue: the contrast guard
+    measures closed palettes. `kit.test.ts` fails on a second picker.
+  - `ListEnd` draws a list's add button after its last row; the same button
+    object feeds the empty state.
+  - `Hero` draws the panel's × from `PanelCloseContext`; a panel never makes
+    its own close button.
   - `RangeField` is the one slider, for a bounded continuous multiplier.
   - `PlacePicker` wherever a field points at a place: a combobox over
     `placeMatchesSearch`, never a `<select>`, and never the network.

@@ -94,6 +94,7 @@ import {
   Button,
   Meter,
   Hero,
+  ListEnd,
   Icon,
   IconButton,
   LoadingState,
@@ -882,6 +883,19 @@ export function PlacesScreen({
             }}
             tintColor={theme.accent}
           />
+        }
+        ListFooterComponent={
+          // The list ends with the button its empty state offers.
+          places.length > 0 && !filtering ? (
+            <ListEnd>
+              <Button
+                label={PLACES_ADD.copy.add}
+                icon={PLACES_ADD_ICON.add}
+                variant="outlineAccent"
+                onPress={() => startEditing(null)}
+              />
+            </ListEnd>
+          ) : null
         }
         ListEmptyComponent={
           <EmptyPanel

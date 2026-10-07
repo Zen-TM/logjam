@@ -176,8 +176,6 @@ function PlaceDetailPanel({
   pickingCoords,
   onCancelPickCoords,
   onBack,
-  onClose,
-  onFlyToPlace,
   onOpenTrip,
   onMakeMap,
   onSharePlace,
@@ -204,9 +202,7 @@ function PlaceDetailPanel({
   onCancelPickCoords: () => void;
   /** Back to the list this place was opened from. */
   onBack: () => void;
-  onClose: () => void;
   /** Centre the map on this place — the same verb its row and its pin offer. */
-  onFlyToPlace: (latitude: number, longitude: number) => void;
   /** A trip is READ on its own page (DESIGN.md §4), not in a dialog over this one. */
   onOpenTrip: (tripLogId: string) => void;
   /** Start a map over this place; the menu names the two kinds. */
@@ -410,14 +406,7 @@ function PlaceDetailPanel({
   if (!place) {
     return (
       <div className={classes.root}>
-        <Hero
-          title="Place"
-          onBack={onBack}
-          backLabel="Back to Places"
-          actions={
-            <IconButton icon="close" label="Close panel" onClick={onClose} />
-          }
-        />
+        <Hero title="Place" onBack={onBack} backLabel="Back to Places" />
         <div className={classes.body}>
           <EmptyState
             icon="map"
@@ -631,7 +620,6 @@ function PlaceDetailPanel({
       setEditingTripLog(undefined);
       setShowTripLogDialog(true);
     },
-    show: () => onFlyToPlace(current.latitude, current.longitude),
     makeTopo: () => onMakeMap(current, "topo"),
     makeGeoPdf: () => onMakeMap(current, "geopdf"),
     share: () => onSharePlace(current.id),
@@ -978,7 +966,6 @@ function PlaceDetailPanel({
                   />
                 )}
               />
-              <IconButton icon="close" label="Close panel" onClick={onClose} />
             </>
           }
         />
