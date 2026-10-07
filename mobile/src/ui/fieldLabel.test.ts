@@ -22,7 +22,7 @@ const MAY_SHOUT = [
   "ui/Hero.tsx",
   "ui/StatGrid.tsx",
   "screens/NotificationsScreen.tsx", // the day heading
-  "routes/RouteStatsBody.tsx", // chart caption and stat captions
+  "routes/RouteStatsBody.tsx", // chart caption
   "tracks/TrackStatsBody.tsx",
 ];
 

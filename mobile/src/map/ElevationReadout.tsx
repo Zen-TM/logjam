@@ -24,7 +24,7 @@ export function ElevationReadout({
     <View style={styles.row}>
       <Text
         style={styles.value}
-        accessibilityLabel={`Climb ${Math.round(profile.gainM)} metres`}
+        accessibilityLabel={`Ascent ${Math.round(profile.gainM)} metres`}
       >
         ↑ {Math.round(profile.gainM)} m
       </Text>
