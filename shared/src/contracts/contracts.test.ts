@@ -3,8 +3,11 @@ import { SYSTEM_FIELD_DEFS } from "../placeTypes.js";
 import { DEFAULT_NOTIFICATION_PREFERENCES } from "../themeSchemes.js";
 import {
   attributeFilterShape,
+  ACCOUNT_DELETE_BODY,
   attributeDeleteConfirm,
   contractSectionKeys,
+  deleteAccountPhrase,
+  deleteAccountPhraseMatches,
   contractSectionsFor,
   drawsYoursHeading,
   notificationGroupLead,
@@ -487,5 +490,19 @@ describe("settings", () => {
     expect(
       attributeDeleteConfirm("Water level", "unknown", rows).confirmBody,
     ).toBe("This removes the attribute from every trip. This can't be undone.");
+  });
+});
+
+describe("the account", () => {
+  // Red when the phrase to type is relaxed to the bare username: a paste of
+  // the name on screen must not be enough to delete an account.
+  it("asks for more than the username to delete an account", () => {
+    expect(deleteAccountPhrase("alice")).toBe("delete alice");
+    expect(deleteAccountPhraseMatches("  Delete Alice ", "alice")).toBe(true);
+    expect(deleteAccountPhraseMatches("alice", "alice")).toBe(false);
+  });
+
+  it("says what stays as well as what goes", () => {
+    expect(ACCOUNT_DELETE_BODY).toContain("stay theirs");
   });
 });

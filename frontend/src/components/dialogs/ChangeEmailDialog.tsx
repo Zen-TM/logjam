@@ -1,3 +1,4 @@
+import { ACCOUNT } from "@logjam/shared";
 import { useId, useState } from "react";
 import { updateUserAttribute, confirmUserAttribute } from "aws-amplify/auth";
 import { messageFromError } from "../../errors/messageFromError";
@@ -8,7 +9,7 @@ import classes from "./ChangeEmailDialog.module.css";
 type Stage = "input" | "verify" | "done";
 
 const TITLES: Record<Stage, string> = {
-  input: "Change email",
+  input: ACCOUNT.copy.changeEmail,
   verify: "Verify new email",
   done: "Email updated",
 };
@@ -167,7 +168,9 @@ function ChangeEmailForm({
               busy={busy}
               disabled={stage === "input" ? !newEmail.trim() : !code.trim()}
             >
-              {stage === "input" ? "Send code" : "Confirm"}
+              {stage === "input"
+                ? ACCOUNT.copy.sendCode
+                : ACCOUNT.copy.confirmEmail}
             </Button>
           </>
         )
@@ -189,7 +192,7 @@ function ChangeEmailForm({
               sign in with it from then on.
             </p>
             <TextField
-              label="New email"
+              label={ACCOUNT.copy.newEmail}
               type="email"
               value={newEmail}
               onChange={(event) => {
@@ -210,7 +213,7 @@ function ChangeEmailForm({
               Check the spam folder if it hasn't arrived.
             </p>
             <TextField
-              label="Verification code"
+              label={ACCOUNT.copy.verificationCode}
               value={code}
               onChange={(event) => setCode(event.target.value)}
               maxLength={10}

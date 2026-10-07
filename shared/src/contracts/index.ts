@@ -1,4 +1,5 @@
 import { FRIENDS, FRIEND_SHARES } from "./friends.js";
+import { ACCOUNT } from "./account.js";
 import { SETTINGS } from "./settings.js";
 import { INBOX } from "./inbox.js";
 import { PLACE_PAGE } from "./placePage.js";
@@ -19,6 +20,7 @@ export * from "./tripLogs.js";
 export * from "./inbox.js";
 export * from "./friends.js";
 export * from "./settings.js";
+export * from "./account.js";
 
 /** Every screen contract, so `contracts.test.ts` checks a new one unasked. */
 export const SCREEN_CONTRACTS: readonly ScreenContract[] = [
@@ -34,4 +36,5 @@ export const SCREEN_CONTRACTS: readonly ScreenContract[] = [
   FRIENDS,
   FRIEND_SHARES,
   SETTINGS,
+  ACCOUNT,
 ];

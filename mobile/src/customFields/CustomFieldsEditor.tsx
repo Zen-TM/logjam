@@ -16,8 +16,6 @@ import {
   type TripLogCustomFieldType,
 } from "@logjam/shared";
 
-const listCopy = SETTINGS_LIST.copy;
-
 import { fontSize, spacing, theme } from "../theme";
 import type { CustomFieldEntity } from "../api/queries";
 import {
@@ -37,6 +35,8 @@ import {
   TextField,
   SwitchRow,
 } from "../ui";
+
+const listCopy = SETTINGS_LIST.copy;
 
 /**
  * Manage the user's own custom field definitions — the mobile counterpart of the

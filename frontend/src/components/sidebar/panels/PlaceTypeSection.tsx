@@ -8,8 +8,6 @@ import {
   SETTINGS_LIST,
 } from "@logjam/shared";
 
-const copy = SETTINGS_LIST.copy;
-
 import {
   createPlaceType,
   deletePlaceType,
@@ -36,6 +34,8 @@ import {
 } from "../../../ui";
 import classes from "./ListPage.module.css";
 import { placeTypeLucideIcon } from "./placeTypeIcon";
+
+const copy = SETTINGS_LIST.copy;
 
 /**
  * The place types a user keeps — Settings' first list page. The list is the

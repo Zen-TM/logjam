@@ -44,8 +44,6 @@ import {
   type PlaceTypeIconKey,
 } from "@logjam/shared";
 
-const copy = SETTINGS_LIST.copy;
-
 import { fontSize, radius, spacing, theme } from "../theme";
 import type { MirrorPlaceType } from "../sync/mirrorStore";
 import { listMirrorPlaces } from "../sync/mirrorStore";
@@ -63,6 +61,8 @@ import {
   Icon,
 } from "../ui";
 import { placeTypeGlyph } from "./placeTypeIcon";
+
+const copy = SETTINGS_LIST.copy;
 
 /** A type nobody owns is a built-in: not renameable, not deletable. Same rule
  *  and same reason as `isSystemFieldDef`, on the other system vocabulary. */

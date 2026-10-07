@@ -74,8 +74,6 @@ import {
   type SectionKeysOn,
 } from "@logjam/shared";
 
-const copy = FRIEND_SHARES.copy;
-
 import { getFriendShares, unshareWithFriend } from "../api/friends";
 import { useAccountState } from "../auth/AccountStateContext";
 import { capabilityScreenBlock } from "../auth/capabilities";
@@ -107,6 +105,8 @@ import {
   type CopyAndRemoveTarget,
 } from "./copyAndRemove";
 import { removeSharedPlace, removeSharedEntity } from "./removeShare";
+
+const copy = FRIEND_SHARES.copy;
 
 /**
  * The idea per kind: a place, a route, a LiDAR topo, a GeoPDF — the same four

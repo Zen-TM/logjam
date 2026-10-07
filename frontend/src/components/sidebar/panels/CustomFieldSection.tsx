@@ -14,7 +14,6 @@ import {
   type TripLogCustomFieldType,
 } from "@logjam/shared";
 
-const listCopy = SETTINGS_LIST.copy;
 import {
   createCustomField,
   updateCustomField,
@@ -37,6 +36,8 @@ import {
   LoadingState,
 } from "../../../ui";
 import classes from "./ListPage.module.css";
+
+const listCopy = SETTINGS_LIST.copy;
 
 function customFieldTypeName(type: TripLogCustomFieldDef["type"]): string {
   return (
