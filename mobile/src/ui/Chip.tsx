@@ -83,6 +83,10 @@ export function Chip({
           size={14}
           color={active ? theme.onFill : theme.textMuted}
         />
+      ) : active ? (
+        // A SELECTED chip says so with a check as well as a fill, so it is never
+        // mistaken for the primary button, which is filled too.
+        <Icon idea="done" size={14} color={theme.onFill} />
       ) : null}
       <Text
         style={[

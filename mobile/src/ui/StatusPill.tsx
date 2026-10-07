@@ -4,14 +4,13 @@ import { fontSize, fontWeight, radius, spacing, theme } from "../theme";
 import { Icon, type Glyph } from "./Icon";
 import { PILL_HEIGHT } from "./pill";
 
-// Small status chip. `accent` = filled (active/saved-for-offline), `outline` =
-// neutral bordered (Shared / Online), `warning` = attention (Update / error),
-// `muted` = de-emphasised state that is not a problem (Queued / Paused).
-// The palette has no dedicated success green, so "saved offline" reads as the
-// filled accent — the strongest on-palette affirmative.
-//
-// Pills are fully rounded and never wider than their text; an optional `icon`
-// carries state for glance-reading (check = ready, alert = needs attention).
+// A status pill is READ, not pressed, so it draws no fill and no edge (UX §4:
+// filled is interactive). The tone is carried by a dot or a glyph beside words
+// in the text colour: `accent` = active / saved-for-offline, `warning` =
+// attention (Update / error), `outline` and `muted` = quiet state (Shared /
+// Queued / Paused), muted words with no dot. An optional `icon` carries state for
+// glance-reading (check = ready, alert = needs attention) in place of the dot.
+// Guard: `pressableFill.test.ts`.
 type PillTone = "accent" | "outline" | "warning" | "muted";
 
 export function StatusPill({
@@ -24,29 +23,25 @@ export function StatusPill({
   tone?: PillTone;
   icon?: Glyph;
   /**
-   * Identity colour override — fills the pill with `hue` under the `onFill`
-   * ink. For a pill that says *what a thing is* (a trip type) rather than how
-   * it is going; the four tones stay the vocabulary for state. A hue is a
-   * fill, never letters on a surface (it fails 3:1 on the light page).
+   * Identity colour: a dot of `hue` says *what a thing is* (a trip type) rather
+   * than how it is going; the four tones stay the vocabulary for state. A hue is
+   * a fill, never letters on a surface, so it is only ever the dot.
    */
   hue?: string;
 }) {
-  const color = hue != null ? theme.onFill : TONE_TEXT[tone];
-  const glyph = hue != null ? theme.onFill : TONE_GLYPH[tone];
+  const dot = hue ?? TONE_DOT[tone];
   return (
-    <View
-      style={[
-        styles.base,
-        styles[`${tone}Box`],
-        hue != null && {
-          borderWidth: 1,
-          borderColor: hue,
-          backgroundColor: hue,
-        },
-      ]}
-    >
-      {icon ? <Icon idea={icon} size={12} color={glyph} /> : null}
-      <Text style={[styles.label, { color }]} numberOfLines={1}>
+    <View style={styles.base}>
+      {icon ? <Icon idea={icon} size={12} color={TONE_GLYPH[tone]} /> : null}
+      {!icon || hue != null ? (
+        dot != null ? (
+          <View style={[styles.dot, { backgroundColor: dot }]} />
+        ) : null
+      ) : null}
+      <Text
+        style={[styles.label, { color: TONE_TEXT[tone] }]}
+        numberOfLines={1}
+      >
         {label}
       </Text>
     </View>
@@ -54,17 +49,27 @@ export function StatusPill({
 }
 
 // Words are `text` or `textMuted`, never an intent colour (as on Logjam Web):
-// a warning pill says so with its edge and glyph.
+// the dot or the glyph says the tone.
 const TONE_TEXT: Record<PillTone, string> = {
-  accent: theme.onFill,
+  accent: theme.text,
   outline: theme.textMuted,
   warning: theme.text,
   muted: theme.textMuted,
 };
 
 const TONE_GLYPH: Record<PillTone, string> = {
-  ...TONE_TEXT,
+  accent: theme.accent,
+  outline: theme.textMuted,
   warning: theme.warning,
+  muted: theme.textMuted,
+};
+
+// The tones with something to say get a dot; the quiet ones do not.
+const TONE_DOT: Record<PillTone, string | undefined> = {
+  accent: theme.accent,
+  outline: undefined,
+  warning: theme.warning,
+  muted: undefined,
 };
 
 const styles = StyleSheet.create({
@@ -72,20 +77,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: spacing(0.5),
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing(1),
-    paddingVertical: spacing(0.375),
     alignSelf: "flex-start",
-    // A pill is never narrower than it is tall: a one-digit count is a circle.
     minHeight: PILL_HEIGHT,
     minWidth: PILL_HEIGHT,
     justifyContent: "center",
   },
+  dot: { width: 8, height: 8, borderRadius: radius.pill },
   label: { fontSize: fontSize.xs, fontWeight: fontWeight.medium },
-  accentBox: { backgroundColor: theme.accent },
-  outlineBox: { borderWidth: 1, borderColor: theme.textMuted },
-  warningBox: { borderWidth: 1, borderColor: theme.warning },
-  // Quiet is the absence of the outline. The old fill under the muted label
-  // fell under 4.5:1 in Sandstone.
-  mutedBox: { borderWidth: 1, borderColor: "transparent" },
 });
