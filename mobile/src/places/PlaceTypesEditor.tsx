@@ -39,6 +39,7 @@ import {
   drawsYoursHeading,
   PLACE_TYPE_COLORS,
   PLACE_TYPE_ICON_KEYS,
+  placeTypeColorName,
   placeTypeDeleteConfirm,
   SETTINGS_LIST,
   type PlaceTypeIconKey,
@@ -59,6 +60,7 @@ import {
   SectionHeader,
   TextField,
   Icon,
+  SwatchPicker,
 } from "../ui";
 import { fieldLabel } from "../ui/fieldLabel";
 import { placeTypeGlyph } from "./placeTypeIcon";
@@ -284,33 +286,13 @@ export function usePlaceTypeForm({
             ))}
       </View>
 
-      <Text style={fieldLabel}>Colour</Text>
-      <View style={styles.grid} onLayout={onGridLayout}>
-        {cellSize == null
-          ? null
-          : PLACE_TYPE_COLORS.map((color) => (
-              <Pressable
-                key={color}
-                accessibilityRole="button"
-                accessibilityLabel={color}
-                accessibilityState={{ selected: draft.color === color }}
-                onPress={() => setDraft((current) => ({ ...current, color }))}
-                style={[
-                  styles.cell,
-                  styles.swatch,
-                  cellSize,
-                  { backgroundColor: color },
-                  draft.color === color ? styles.cellChosen : null,
-                ]}
-              >
-                {draft.color === color ? (
-                  // Dark ink on a light swatch: the palette is light precisely so a
-                  // mark on top of it stays legible.
-                  <Icon idea="done" size={16} color={theme.onFill} />
-                ) : null}
-              </Pressable>
-            ))}
-      </View>
+      <SwatchPicker
+        label="Colour"
+        colors={PLACE_TYPE_COLORS}
+        value={draft.color}
+        nameOf={placeTypeColorName}
+        onChange={(color) => setDraft((current) => ({ ...current, color }))}
+      />
 
       <Text style={styles.hint}>
         A ring around a pin means the place was shared with you by a friend.
@@ -416,7 +398,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  swatch: { borderColor: "transparent" },
   cellChosen: { borderWidth: 2, borderColor: theme.accent },
   hint: { color: theme.textMuted, fontSize: fontSize.sm },
 });
