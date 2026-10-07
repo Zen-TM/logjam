@@ -175,7 +175,7 @@ export function usePlaceTypeForm({
     } catch (err) {
       console.error(err);
       // The sheet is still open here (onDone only runs on success) — a toast
-      // would render under it and never be seen (DESIGN.md §8), so this is the
+      // would render under it and never be seen (docs/ux-principles.md §11), so this is the
       // footer's banner, not a toast. A local write, so this is a broken
       // database rather than a missing connection — do not offer a network
       // explanation for something reconnecting cannot fix.
@@ -238,7 +238,7 @@ export function usePlaceTypeForm({
         value={draft.name}
         onChangeText={(next) => {
           setDraft((current) => ({ ...current, name: next }));
-          // The empty-name requirement is checked on Save (DESIGN.md §8); once
+          // The empty-name requirement is checked on Save (docs/ux-principles.md §11); once
           // shown it clears the moment the field it's about is edited.
           if (error) setError(null);
         }}
@@ -325,7 +325,7 @@ export function usePlaceTypeForm({
     <View style={styles.footer}>
       {/* Not attributable to one control (a local write failing, or the
           places-in-use check itself failing) — the banner sits directly above
-          Save, same as every other form (DESIGN.md §8). */}
+          Save, same as every other form (docs/ux-principles.md §11). */}
       {formError ? <ErrorBanner message={formError} /> : null}
       <View style={styles.actions}>
         <View style={styles.action}>

@@ -84,7 +84,7 @@ const KIND_GLYPH: Record<NotificationKind, Glyph> = {
   problem: "warning",
 };
 
-// Borrowed, not invented (DESIGN.md §3): each kind wears the hue of the thing it
+// Borrowed, not invented (docs/ux-principles.md §8): each kind wears the hue of the thing it
 // is about, where that thing lives. A file you accept becomes an import, so it
 // wears the import blue; a failure takes the one hue that means "look".
 const KIND_HUE: Record<NotificationKind, string> = {
@@ -922,7 +922,7 @@ function NotificationsPanel({
       {live.length > 0 && (
         <>
           {/* The selection bar takes the rail's slot at the rail's height, so
-              the list does not move when a selection starts (DESIGN.md §7). */}
+              the list does not move when a selection starts (DESIGN.md §5). */}
           <div className={classes.rails}>
             {selecting ? (
               <SelectionBar

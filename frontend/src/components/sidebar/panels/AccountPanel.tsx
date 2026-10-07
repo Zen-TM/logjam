@@ -42,7 +42,7 @@ function percentUsed(used: number, quota: number): number {
 }
 
 /**
- * Account — "who am I here, and what am I using of it?" (DESIGN.md §1).
+ * Account — "who am I here, and what am I using of it?" (docs/ux-principles.md §2).
  *
  * The two quota meters ARE the question, so they lead. Everything else is the
  * sign-in identity and the two irreversible things: signing out and deleting
@@ -116,7 +116,7 @@ function AccountPanel({
 
   return (
     <div className={classes.root}>
-      {/* The title is who you are — the page's own answer (DESIGN.md §1) —
+      {/* The title is who you are — the page's own answer (docs/ux-principles.md §2) —
           and it waits for the record rather than announcing a name the account
           may not have. */}
       <Hero
@@ -288,7 +288,7 @@ function UsernameForm({
 
   async function save() {
     const trimmed = value.trim();
-    // Empty is a requirement, reported on submit (DESIGN.md §8); unchanged is
+    // Empty is a requirement, reported on submit (docs/ux-principles.md §11); unchanged is
     // not an error at all, just nothing to do.
     if (!trimmed) {
       setError("Enter a username.");

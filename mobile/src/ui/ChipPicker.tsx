@@ -42,7 +42,7 @@ export function ChipPicker({
    *  first type picks its glyph and hue. Starred rather than moved to the
    *  front, since chips keep their positions. */
   primaryValue?: string;
-  /** The problem with this choice (DESIGN.md §8, "Form errors"). */
+  /** The problem with this choice (docs/ux-principles.md §11, "Form errors"). */
   error?: string | null;
 }) {
   const [adding, setAdding] = useState(false);

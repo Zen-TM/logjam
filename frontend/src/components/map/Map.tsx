@@ -730,7 +730,7 @@ function Map({
   /**
    * Fit the map to a way's extent: opening one centres it, and so does arming
    * the draw tool on it. A CONSUMED request, not a counter — a counter above
-   * zero fires again on every remount (DESIGN.md §9).
+   * zero fires again on every remount (DESIGN.md §6).
    */
   flyToBounds?: [number, number, number, number] | null;
   onFlyToBoundsConsumed?: () => void;
@@ -2173,7 +2173,7 @@ function Map({
   // measured at 72ms per pointer move, against 16ms for the same drag with the
   // write removed — the same cost as dragging over dead panel. A Marker is a
   // DOM node the library moves with a CSS transform; the canvas is untouched.
-  // (DESIGN.md §9, which also records the three wrong guesses that preceded
+  // (DESIGN.md §6, which also records the three wrong guesses that preceded
   // this one.)
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;

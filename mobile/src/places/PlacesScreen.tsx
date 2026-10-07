@@ -14,7 +14,7 @@
 // renders from too. Filtering shares its predicate (`passesPlaceFilters`).
 //
 // PRIVACY: rows carry names, grades, tallies — never coordinates or any derived
-// location detail (DESIGN.md §11). Nothing here is logged, and the failure paths
+// location detail (docs/ux-principles.md §13). Nothing here is logged, and the failure paths
 // print our own copy rather than an error string that might embed a place name.
 import { numericFieldValue } from "@logjam/shared";
 import {
@@ -265,7 +265,7 @@ export function PlacesScreen({
     setToast({ text, tone: "error", nonce: toastNonce.current });
   }, []);
 
-  // Sheets don't outlive the tab (DESIGN.md §7) — with ONE exception, and it is
+  // Sheets don't outlive the tab (DESIGN.md §5) — with ONE exception, and it is
   // the same focus effect because the two must not race: arriving back from the
   // point picker is not "the user came to this tab", it is the second half of
   // something they started here. `takePickedPoint` consumes the answer, so a
@@ -376,7 +376,7 @@ export function PlacesScreen({
     isDeletable: (place) => place.syncRole === "owner",
   });
   // A selection is a transient mode over rows you can see; a pending "delete
-  // these five" you no longer remember making is a stale prompt (DESIGN.md §7).
+  // these five" you no longer remember making is a stale prompt (DESIGN.md §5).
   useFocusEffect(
     useCallback(() => {
       clearSelection();
@@ -632,7 +632,7 @@ export function PlacesScreen({
   const menuPlace = places.find((place) => place.id === menuPlaceId) ?? null;
 
   // Stable identities so the memoised rows never re-render for a state change
-  // that has nothing to do with them (DESIGN.md §9).
+  // that has nothing to do with them (DESIGN.md §7).
   const openPlace = useCallback(
     (place: MirrorPlace) => onOpenPlace(place),
     [onOpenPlace],
@@ -792,7 +792,7 @@ export function PlacesScreen({
           one yet would have hidden the affordance from everyone who needs it. */}
         {/* STAYS MOUNTED WHILE SELECTING, dimmed and inert. Unmounting it took
           ~52pt of chrome out from under the finger that had just long-pressed a
-          row, sliding every row up mid-gesture — the same jump DESIGN.md §7
+          row, sliding every row up mid-gesture — the same jump DESIGN.md §5
           fixed once for the bucket rail. A filter that cannot be changed during
           a selection still has to say what the selection is drawn from. */}
         <View

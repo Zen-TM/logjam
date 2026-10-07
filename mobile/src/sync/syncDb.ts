@@ -346,7 +346,7 @@ export async function wipeMirror(): Promise<void> {
 }
 
 /**
- * Explicit sign-out / account switch (§9): everything goes, outbox included.
+ * Explicit sign-out / account switch (DESIGN.md §7): everything goes, outbox included.
  * The caller owns the blocking "you have N unsynced changes" confirmation
  * BEFORE calling this — this function does not ask.
  *

@@ -6,7 +6,7 @@ import { Icon } from "./Icon";
 /**
  * One setting as a LINE: what it is at the left, the control that sets it at
  * the right — the same anatomy as `SwatchPicker` and the style sheet's widths
- * (DESIGN.md §9). The visible words are the row's; the control carries the same
+ * (DESIGN.md §6). The visible words are the row's; the control carries the same
  * words as its own accessible name (`hideLabel`, or `Toggle label`), so a
  * reader hears the setting and a pointer sees it once.
  *
