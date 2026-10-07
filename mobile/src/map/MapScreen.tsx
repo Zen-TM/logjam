@@ -74,7 +74,8 @@ import {
   formatDistanceM,
   haversineMeters,
   initialBearingDegrees,
-  MAP_LAYERS,
+  MAP_OVERLAY_REFINEMENTS,
+  MAP_OVERLAYS,
   messageFromError,
   pickNextTrackColor,
   ROUTE_NAME_MAX_LENGTH,
@@ -749,6 +750,7 @@ const LiveCompassStrip = memo(function LiveCompassStrip({
 export function MapScreen({
   onOpenPlace,
   onOpenSaved,
+  onImportFile,
   onSaveMapsOffline,
   onPickPoint,
   focus,
@@ -770,6 +772,8 @@ export function MapScreen({
   }) => void;
   // Opens the Saved tab on one category, from the layer sheet's regions row.
   onOpenSaved?: (category: "region") => void;
+  /** The layers sheet's "Import a file": Saved, with the file picker open. */
+  onImportFile?: () => void;
   /**
    * Open the full-screen point picker for the place form, starting on
    * `from` when the form already holds a coordinate. The answer comes back
@@ -4143,7 +4147,7 @@ export function MapScreen({
       // campsites). Hanging them under an ownership row said the opposite of
       // what the code does, and its count disagreed with the children's by the
       // number of shared places.
-      title: MAP_LAYERS.copy.places,
+      title: MAP_OVERLAYS.copy.places,
       count: ownedPlaces.length + sharedPlaces.length,
       value: showPlaces,
       onChange: setShowPlaces,
@@ -4151,90 +4155,111 @@ export function MapScreen({
       // campsites". A type with no places is left out — the list has to stay
       // short enough to read at a trailhead, and a switch for nothing is a
       // switch that does nothing.
-      children: (placeTypes.data ?? [])
-        .map((type) => ({
-          type,
-          count: placesByType[type.id] ?? 0,
-        }))
-        .filter(({ count }) => count > 0)
-        .map(({ type, count }) => ({
-          key: `place-type:${type.id}`,
-          title: type.name,
-          hue: type.color,
-          count,
-          value: !hiddenPlaceTypeIds.has(type.id),
-          onChange: (next: boolean) =>
-            setHiddenPlaceTypeIds((current) => {
-              const hidden = new Set(current);
-              if (next) hidden.delete(type.id);
-              else hidden.add(type.id);
-              return hidden;
-            }),
-        })),
+      children: [
+        ...(placeTypes.data ?? [])
+          .map((type) => ({
+            type,
+            count: placesByType[type.id] ?? 0,
+          }))
+          .filter(({ count }) => count > 0)
+          .map(({ type, count }) => ({
+            key: `place-type:${type.id}`,
+            title: type.name,
+            hue: type.color,
+            count,
+            value: !hiddenPlaceTypeIds.has(type.id),
+            onChange: (next: boolean) =>
+              setHiddenPlaceTypeIds((current) => {
+                const hidden = new Set(current);
+                if (next) hidden.delete(type.id);
+                else hidden.add(type.id);
+                return hidden;
+              }),
+          })),
+        // The one axis that crosses every type: whose, not what kind.
+        ...(sharedPlaces.length > 0
+          ? [
+              {
+                key: "shared-places",
+                title: MAP_OVERLAY_REFINEMENTS.places.sharedWithMe,
+                hue: SHARED_PLACE_COLOR,
+                count: sharedPlaces.length,
+                value: showSharedPlaces && showPlaces,
+                onChange: setShowSharedPlaces,
+              },
+            ]
+          : []),
+      ],
     },
     {
-      // The OTHER axis: whose, not what kind. It stays a row of its own rather
-      // than a child, because it crosses every type.
-      key: "shared-places",
-      icon: "friends",
-      hue: SHARED_PLACE_COLOR,
-      title: "Shared with me",
-      count: sharedPlaces.length,
-      value: showSharedPlaces,
-      onChange: setShowSharedPlaces,
-      // Places off means places off: a switch that flips real state while the
-      // map draws nothing is the same lie as a dead button.
-      inert: !showPlaces,
-    },
-    {
-      key: "routes",
+      // ONE row for every line there is, as on Logjam Web. Logjam GPS refines it
+      // by what the line IS (`MAP_OVERLAY_REFINEMENTS.ways`): the lines this
+      // phone holds are the ones a hiker wants to hide one kind of.
+      key: "ways",
       icon: "route",
       hue: assetHue.route,
-      title: "My routes",
-      count: standaloneRoutes.length,
-      value: showRoutes,
-      onChange: setShowRoutes,
-    },
-    {
-      key: "place-routes",
-      icon: "waypoint",
-      hue: OWNED_PLACE_COLOR,
-      title: "Place routes",
-      count: placeRouteCount + placeLinkedRoutes.length,
-      // The layer's own report of what it could not draw. Present only while
-      // it is on AND something is missing — a map drawing less than it says
-      // has to say so (docs/ux-principles.md §11), and the rest of the time there is
-      // nothing to report.
+      title: MAP_OVERLAYS.copy.ways,
+      count:
+        standaloneRoutes.length +
+        placeRouteCount +
+        placeLinkedRoutes.length +
+        imports.length +
+        savedTracks.length,
+      value: showRoutes || showPlaceRoutes || showVectorImports || showTracks,
+      // All the kinds together: on draws every kind, off hides every kind.
+      onChange: (next: boolean) => {
+        setShowRoutes(next);
+        setShowPlaceRoutes(next);
+        setShowVectorImports(next);
+        setShowTracks(next);
+      },
+      children: [
+        {
+          key: "routes",
+          title: MAP_OVERLAY_REFINEMENTS.ways.routes,
+          hue: assetHue.route,
+          count: standaloneRoutes.length,
+          value: showRoutes,
+          onChange: setShowRoutes,
+        },
+        {
+          key: "place-routes",
+          title: MAP_OVERLAY_REFINEMENTS.ways.placeRoutes,
+          hue: OWNED_PLACE_COLOR,
+          count: placeRouteCount + placeLinkedRoutes.length,
+          value: showPlaceRoutes,
+          onChange: setShowPlaceRoutes,
+        },
+        {
+          key: "vector-imports",
+          title: MAP_OVERLAY_REFINEMENTS.ways.importedWays,
+          hue: assetHue.import,
+          count: imports.length,
+          value: showVectorImports,
+          onChange: setShowVectorImports,
+        },
+        {
+          key: "tracks",
+          title: MAP_OVERLAY_REFINEMENTS.ways.tracks,
+          hue: assetHue.track,
+          count: savedTracks.length,
+          value: showTracks,
+          onChange: setShowTracks,
+        },
+      ],
+      // The layer's own report of what it could not draw. Present only while it
+      // is on AND something is missing: a map drawing less than it says has to
+      // say so (docs/ux-principles.md §11).
       note:
         showPlaceRoutes && routesStatus && routesStatus.unavailable > 0
           ? `${routesStatus.unavailable} not downloaded yet`
           : undefined,
-      value: showPlaceRoutes,
-      onChange: setShowPlaceRoutes,
     },
     {
-      key: "vector-imports",
-      icon: "importedFile",
-      hue: assetHue.import,
-      title: "Imported ways",
-      count: imports.length,
-      value: showVectorImports,
-      onChange: setShowVectorImports,
-    },
-    {
-      key: "tracks",
-      icon: "track",
-      hue: assetHue.track,
-      title: "Tracks",
-      count: savedTracks.length,
-      value: showTracks,
-      onChange: setShowTracks,
-    },
-    {
-      key: "geopdfs",
+      key: "geoPdfs",
       icon: "geoPdf",
       hue: assetHue.geoPdf,
-      title: "GeoPDF maps",
+      title: MAP_OVERLAYS.copy.geoPdfs,
       count: readyGeoPdfs.length,
       value: showGeoPdfs,
       onChange: setShowGeoPdfs,
@@ -5385,6 +5410,10 @@ export function MapScreen({
         onOpenSaved={(category) => {
           setPickerOpen(false);
           onOpenSaved?.(category);
+        }}
+        onImportFile={() => {
+          setPickerOpen(false);
+          onImportFile?.();
         }}
       />
     </View>

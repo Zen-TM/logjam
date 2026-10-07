@@ -21,6 +21,8 @@ export { toDateKey, fromDateKey, todayDateKey } from "./monthGrid";
 export { Icon, type Glyph } from "./Icon";
 export { IconButton } from "./IconButton";
 export { SectionHeader } from "./SectionHeader";
+export { ListEnd } from "./ListEnd";
+export { ColourField } from "./ColourField";
 export { StatusPill } from "./StatusPill";
 export { SyncStatusPills } from "./SyncStatusPills";
 export { Toggle } from "./Toggle";

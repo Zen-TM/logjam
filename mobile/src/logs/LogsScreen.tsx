@@ -88,6 +88,7 @@ import {
   Button,
   ErrorState,
   Hero,
+  ListEnd,
   IconButton,
   LoadingState,
   Row,
@@ -568,6 +569,19 @@ export function LogsScreen({
             }}
             tintColor={theme.accent}
           />
+        }
+        ListFooterComponent={
+          // The list ends with the button its empty state offers.
+          trips.length > 0 && !filtering ? (
+            <ListEnd>
+              <Button
+                label={TRIPS_ADD.copy.add}
+                icon={TRIPS_ADD_ICON.add}
+                variant="outlineAccent"
+                onPress={() => setEditing({ trip: null })}
+              />
+            </ListEnd>
+          ) : null
         }
         ListEmptyComponent={
           <EmptyPanel

@@ -56,10 +56,10 @@ import {
   Chip,
   Hero,
   Notice,
-  SectionHeader,
   ChipRail,
   TextField,
 } from "../ui";
+import { fieldLabel } from "../ui/fieldLabel";
 import {
   enqueueRegionDownloads,
   setRegionGroupLabel,
@@ -676,7 +676,7 @@ export function RegionDownloadScreen({
         <View style={styles.panelBody}>
           <View style={styles.detailBlock}>
             <View style={styles.detailHeader}>
-              <SectionHeader title="Detail" />
+              <Text style={fieldLabel}>Detail</Text>
               <Text style={styles.detailCaption}>
                 {/* Metres-per-pixel describes a RASTER pyramid: fixed images at
                   fixed scales. A vector clip has no pixels — it redraws sharp
