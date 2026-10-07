@@ -58,6 +58,7 @@ import {
   Hero,
   IconButton,
   IconTile,
+  ListEnd,
   Menu,
   Row,
   SearchField,
@@ -630,6 +631,28 @@ function TripLogsPanel({
         })
       : null;
 
+  // The same buttons are the empty state's and the end of the list's.
+  const addTripButtons = (
+    <>
+      <Button
+        compact
+        variant="filled"
+        icon={TRIPS_ADD_ICON.add}
+        onClick={() => setCreatingTrip(true)}
+      >
+        {TRIPS_ADD.copy.add}
+      </Button>
+      <Button
+        compact
+        variant="outline"
+        icon={TRIPS_ADD_ICON.importFile}
+        onClick={onOpenUnifiedImport}
+      >
+        {TRIPS_ADD.copy.importFile}
+      </Button>
+    </>
+  );
+
   const list = !loaded ? (
     <div className={classes.emptyArea} role="status">
       <LoadingState label={copy.loading} />
@@ -642,24 +665,7 @@ function TripLogsPanel({
         body={emptyState.body}
         actions={
           emptyState.action === "add" ? (
-            <>
-              <Button
-                compact
-                variant="filled"
-                icon={TRIPS_ADD_ICON.add}
-                onClick={() => setCreatingTrip(true)}
-              >
-                {TRIPS_ADD.copy.add}
-              </Button>
-              <Button
-                compact
-                variant="outline"
-                icon={TRIPS_ADD_ICON.importFile}
-                onClick={onOpenUnifiedImport}
-              >
-                {TRIPS_ADD.copy.importFile}
-              </Button>
-            </>
+            addTripButtons
           ) : filtering ? (
             <Button compact variant="outline" onClick={clearEverything}>
               {copy.clearFilters}
@@ -688,6 +694,7 @@ function TripLogsPanel({
           </section>
         );
       })}
+      <ListEnd>{addTripButtons}</ListEnd>
     </div>
   );
 

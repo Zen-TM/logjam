@@ -30,6 +30,7 @@ import {
   Hero,
   IconButton,
   IconTile,
+  ListEnd,
   Menu,
   Row,
   SearchField,
@@ -342,6 +343,28 @@ export default function RoutesPanel({
     </div>
   );
 
+  // The same buttons are the empty state's and the end of the list's.
+  const addWayButtons = (
+    <>
+      <Button
+        compact
+        variant="filled"
+        icon="draw"
+        onClick={onStartDrawingRoute}
+      >
+        Draw a route
+      </Button>
+      <Button
+        compact
+        variant="outline"
+        icon="upload"
+        onClick={onOpenUnifiedImport}
+      >
+        Import
+      </Button>
+    </>
+  );
+
   const list = !waysLoaded ? (
     <div className={classes.emptyArea} role="status">
       <LoadingState label="Loading your ways…" />
@@ -352,26 +375,7 @@ export default function RoutesPanel({
         icon="route"
         title="No lines yet"
         body="Draw a route on the map, or bring a GPX or KML in from another app. Tracks you record in Logjam GPS appear here too."
-        actions={
-          <>
-            <Button
-              compact
-              variant="filled"
-              icon="draw"
-              onClick={onStartDrawingRoute}
-            >
-              Draw a route
-            </Button>
-            <Button
-              compact
-              variant="outline"
-              icon="upload"
-              onClick={onOpenUnifiedImport}
-            >
-              Import
-            </Button>
-          </>
-        }
+        actions={addWayButtons}
       />
     </div>
   ) : visible.length === 0 ? (
@@ -445,6 +449,7 @@ export default function RoutesPanel({
           />
         );
       })}
+      <ListEnd>{addWayButtons}</ListEnd>
     </div>
   );
 

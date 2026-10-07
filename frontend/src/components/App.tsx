@@ -1803,6 +1803,7 @@ function App() {
       </main>
 
       <LayersPopover
+        onImportFile={() => setShowUnifiedImport(true)}
         open={layersOpen}
         onClose={() => setLayersOpen(false)}
         anchorRef={layersButtonRef}

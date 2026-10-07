@@ -23,6 +23,7 @@ import {
   Hero,
   IconButton,
   IconTile,
+  ListEnd,
   Menu,
   Row,
   SectionHeader,
@@ -119,22 +120,25 @@ function PlaceTypeSection({
   const system = types.filter((type) => type.isSystem);
   const mergeTarget = types.find((type) => type.id === mergeTargetId) ?? null;
 
+  // The hero's button and the end of the list's are the same button.
+  const addTypeButton = (
+    <Button
+      compact
+      variant="outline"
+      icon="add"
+      onClick={() => setEditing("new")}
+    >
+      {copy.addPlaceType}
+    </Button>
+  );
+
   return (
     <div className={classes.root}>
       <Hero
         title="Place types"
         onBack={onBack}
         backLabel="Back to Settings"
-        actions={
-          <Button
-            compact
-            variant="outline"
-            icon="add"
-            onClick={() => setEditing("new")}
-          >
-            {copy.addPlaceType}
-          </Button>
-        }
+        actions={addTypeButton}
       />
 
       {error && (
@@ -233,6 +237,7 @@ function PlaceTypeSection({
                 subtitle={placeCountLabel(type.placeCount)}
               />
             ))}
+            <ListEnd>{addTypeButton}</ListEnd>
           </>
         )}
       </div>

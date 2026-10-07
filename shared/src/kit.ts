@@ -45,6 +45,9 @@ export const KIT_COMPONENTS = {
 
   // — rows, tiles and lists —
   Row: both,
+  ListEnd: web(
+    "the add button that ends a list; Logjam GPS adds from its hero and tab bar",
+  ),
   SwitchRow: both,
   SectionHeader: both,
   Avatar: both,

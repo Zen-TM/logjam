@@ -57,6 +57,7 @@ import {
   EmptyState,
   Hero,
   IconButton,
+  ListEnd,
   Menu,
   Row,
   SearchField,
@@ -212,6 +213,13 @@ function FriendsPanel({
   const showRequests = bucket !== "friends";
   const showFriends = bucket !== "requests";
 
+  // The same button is the empty state's and the end of the list's.
+  const addFriendButton = (
+    <Button variant="filled" icon="addFriend" onClick={() => setAddOpen(true)}>
+      {copy.addTitle}
+    </Button>
+  );
+
   const emptyKind = friendsEmptyKind({
     friends: friends.length,
     requests: friendRequests.length,
@@ -270,15 +278,7 @@ function FriendsPanel({
               icon="friends"
               title={copy.firstRunTitle}
               body={copy.firstRunBody}
-              actions={
-                <Button
-                  variant="filled"
-                  icon="addFriend"
-                  onClick={() => setAddOpen(true)}
-                >
-                  {copy.addTitle}
-                </Button>
-              }
+              actions={addFriendButton}
             />
           </div>
         ) : emptyKind === "noRequests" ? (
@@ -388,6 +388,7 @@ function FriendsPanel({
                   }
                 />
               ))}
+            <ListEnd>{addFriendButton}</ListEnd>
           </div>
         )}
       </>

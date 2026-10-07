@@ -60,6 +60,7 @@ import {
   Icon,
   IconButton,
   IconTile,
+  ListEnd,
   LoadingState,
   Menu,
   Row,
@@ -715,6 +716,13 @@ function PlacesPanel({
       : null;
   const emptyState = empty && placesEmptyState(empty, { platform: "web" });
 
+  // The same button is the empty state's and the end of the list's.
+  const addPlaceButton = (
+    <Button compact variant="filled" icon="add" onClick={onAddPlace}>
+      {PLACES_ADD.copy.add}
+    </Button>
+  );
+
   const list = !placesLoaded ? (
     <div className={classes.emptyArea} role="status">
       <LoadingState label={copy.loading} />
@@ -732,9 +740,7 @@ function PlacesPanel({
             </Button>
           ) : emptyState.action === "add" ? (
             <>
-              <Button compact variant="filled" icon="add" onClick={onAddPlace}>
-                {PLACES_ADD.copy.add}
-              </Button>
+              {addPlaceButton}
               {empty === "firstRun" && (
                 <Button
                   compact
@@ -841,6 +847,7 @@ function PlacesPanel({
           />
         );
       })}
+      <ListEnd>{addPlaceButton}</ListEnd>
     </div>
   );
 

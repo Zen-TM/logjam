@@ -118,6 +118,7 @@ export default function LayersPopover({
   activeLayerId,
   onActiveLayerChange,
   mapView,
+  onImportFile,
 }: {
   open: boolean;
   onClose: () => void;
@@ -146,6 +147,8 @@ export default function LayersPopover({
   activeLayerId: string;
   onActiveLayerChange: (id: string) => void;
   mapView: { lng: number; lat: number; zoom: number } | null;
+  /** Opens the importer (the same entry the Ways and Logs lists use). */
+  onImportFile: () => void;
 }) {
   const [view, setView] = useState<View>("overlays");
 
@@ -291,6 +294,18 @@ export default function LayersPopover({
                       openLabel="Choose topos and layers"
                     />
                   )}
+                  {/* The list ends with the way to add to it: the same
+                      import the Ways and Logs lists offer. */}
+                  <Row
+                    leading={
+                      <IconTile icon="upload" hue="var(--color-neutral)" />
+                    }
+                    title={copy.importFile}
+                    onOpen={() => {
+                      onClose();
+                      onImportFile();
+                    }}
+                  />
                 </div>
               ),
             };

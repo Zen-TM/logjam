@@ -243,3 +243,14 @@
 .pick[data-selecting="true"] .pickMark {
   display: flex;
 }
+
+/* The add button that ends a list. It never shrinks (a list is a flex column
+   its panel scrolls) and keeps its own width, centred. */
+.listEnd {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-1);
+  padding-top: var(--space-1);
+}

@@ -29,5 +29,7 @@ export const MAP_LAYERS = {
     places: "Places",
     ways: "Ways",
     lidarTopos: "LiDAR topos",
+    // The overlays list ends with the way to add one (Logjam Web).
+    importFile: "Import a file",
   },
 } as const satisfies ScreenContract;
