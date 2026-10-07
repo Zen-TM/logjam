@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import {
   isThemeSchemeId,
   normalizeThemeSchemeId,
-  THEME_SCHEMES,
   isNotificationPreferences,
   normalizeUserUiPreferences,
   normalizeImportMergePolicy,
