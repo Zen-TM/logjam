@@ -749,6 +749,7 @@ const LiveCompassStrip = memo(function LiveCompassStrip({
 export function MapScreen({
   onOpenPlace,
   onOpenSaved,
+  onImportFile,
   onSaveMapsOffline,
   onPickPoint,
   focus,
@@ -770,6 +771,8 @@ export function MapScreen({
   }) => void;
   // Opens the Saved tab on one category, from the layer sheet's regions row.
   onOpenSaved?: (category: "region") => void;
+  /** The layers sheet's "Import a file": Saved, with the file picker open. */
+  onImportFile?: () => void;
   /**
    * Open the full-screen point picker for the place form, starting on
    * `from` when the form already holds a coordinate. The answer comes back
@@ -5385,6 +5388,10 @@ export function MapScreen({
         onOpenSaved={(category) => {
           setPickerOpen(false);
           onOpenSaved?.(category);
+        }}
+        onImportFile={() => {
+          setPickerOpen(false);
+          onImportFile?.();
         }}
       />
     </View>

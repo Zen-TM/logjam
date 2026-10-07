@@ -96,6 +96,7 @@ import {
   Meter,
   Hero,
   IconButton,
+  ListEnd,
   RenameForm,
   Row,
   SectionHeader,
@@ -386,6 +387,7 @@ export function SavedScreen({
   onOpenPlace,
   initialFilter,
   initialHighlight,
+  initialImport,
 }: {
   /**
    * One row to point at on arrival, from a notification's "View in Saved". The
@@ -398,6 +400,8 @@ export function SavedScreen({
    * still the right place to be looking.
    */
   initialHighlight?: { key: string; nonce: number };
+  /** The nonce of a request to open the file picker on arrival (the map's "Import a file"). */
+  initialImport?: number;
   onOpenMap: (
     bbox?: Bbox,
     basemapId?: BasemapId,
@@ -876,6 +880,16 @@ export function SavedScreen({
   const importRun = useGeoPdfImportRun();
   const geoPdfBusy = importRun !== null;
 
+  // The map's "Import a file" row lands here and opens the picker once per
+  // request (its nonce), the same entry the tab's own Import button runs.
+  const handledImportRequest = useRef<number | null>(null);
+  useEffect(() => {
+    if (initialImport === undefined) return;
+    if (handledImportRequest.current === initialImport) return;
+    handledImportRequest.current = initialImport;
+    void handleImportFile();
+  }, [handleImportFile, initialImport]);
+
   // The list is only refreshed by registry notifications, which fire before the
   // artifact's size is known; a finished import changes what the capacity meter
   // should read, so recompute when a run ends.
@@ -1290,14 +1304,21 @@ export function SavedScreen({
    * you are standing on would be an affordance that only refuses (DESIGN.md
    * §7).
    */
-  const emptyAction = ((): { label: string; onPress: () => void } | null => {
+  const emptyAction = ((): {
+    label: string;
+    onPress: () => void;
+    /** Present when it could apply but not now: the button is dimmed and says why. */
+    disabledReason?: string;
+  } | null => {
     switch (filter) {
       case "all":
         return { label: "Add to device", onPress: () => setAddSheetOpen(true) };
       case "region":
-        return online
-          ? { label: "Download a region", onPress: onDownloadRegion }
-          : null;
+        return {
+          label: "Download a region",
+          onPress: onDownloadRegion,
+          ...(online ? {} : { disabledReason: "Needs a connection" }),
+        };
       case "overlay":
         return null;
       case "geoPdf":
@@ -2129,6 +2150,13 @@ export function SavedScreen({
             ))}
           </>
         ) : null}
+
+        {/* The list ends with the button its empty state offers (the same one),
+            so adding is where the eye ends up after scrolling to the bottom. */}
+        <SavedListEnd
+          show={visibleItems.length > 0 && !searching}
+          action={emptyAction}
+        />
       </ScrollView>
 
       {/* Share the whole selection — the same sheet the Places screen opens,
@@ -2520,7 +2548,7 @@ function EmptyPanel({
   filter: Category | "all";
   online: boolean;
   /** The one thing that fills this tab, or null where the tab is already it. */
-  action: { label: string; onPress: () => void } | null;
+  action: SavedAction | null;
   /** The tab has rows, but a search/tag narrowed all of them out — a
    *  different message from the tab genuinely holding nothing (item 8), same
    *  pattern as `usePlacePicker`'s "No place of yours matches that." */
@@ -2575,13 +2603,46 @@ function EmptyPanel({
     <View style={styles.empty}>
       <Text style={styles.emptyTitle}>{title}</Text>
       <Text style={styles.emptyHint}>{hint}</Text>
-      {action ? (
-        <Button
-          label={action.label}
-          icon="add"
-          compact
-          onPress={action.onPress}
-        />
+      {action ? <SavedAddButton action={action} /> : null}
+    </View>
+  );
+}
+
+type SavedAction = {
+  label: string;
+  onPress: () => void;
+  disabledReason?: string;
+};
+
+/** The end of a non-empty tab: the add button its empty state offers. */
+function SavedListEnd({
+  show,
+  action,
+}: {
+  show: boolean;
+  action: SavedAction | null;
+}) {
+  if (!show || !action) return null;
+  return (
+    <ListEnd>
+      <SavedAddButton action={action} />
+    </ListEnd>
+  );
+}
+
+/** The tab's one add button, with its reason when it cannot run just now. */
+function SavedAddButton({ action }: { action: SavedAction }) {
+  return (
+    <View style={styles.addButton}>
+      <Button
+        label={action.label}
+        icon="add"
+        compact
+        disabled={action.disabledReason != null}
+        onPress={action.onPress}
+      />
+      {action.disabledReason ? (
+        <Text style={styles.addReason}>{action.disabledReason}</Text>
       ) : null}
     </View>
   );
@@ -2649,6 +2710,8 @@ function PulseSlot({
 }
 
 const styles = StyleSheet.create({
+  addButton: { alignItems: "center", gap: spacing(0.5) },
+  addReason: { color: theme.textMuted, fontSize: fontSize.sm },
   // Matches `Row`'s own card radius, so the tint stops where the card does
   // rather than squaring off its corners.
   pulseWash: {

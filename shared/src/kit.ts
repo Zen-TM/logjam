@@ -45,6 +45,7 @@ export const KIT_COMPONENTS = {
 
   // — rows, tiles and lists —
   Row: both,
+  ListEnd: both,
   SwitchRow: both,
   SectionHeader: both,
   Avatar: both,

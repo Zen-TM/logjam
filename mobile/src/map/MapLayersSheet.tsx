@@ -142,6 +142,7 @@ export function MapLayersSheet({
   onOfflineOnlyChange,
   onSaveArea,
   onOpenSaved,
+  onImportFile,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -165,6 +166,8 @@ export function MapLayersSheet({
   onOfflineOnlyChange: (next: boolean) => void;
   onSaveArea: () => void;
   onOpenSaved: (category: "region") => void;
+  /** The overlays list ends with the way to add one: the existing importer. */
+  onImportFile: () => void;
 }) {
   const [tab, setTab] = useState<Tab>("basemap");
   const online = connectivity === "online";
@@ -189,6 +192,7 @@ export function MapLayersSheet({
         onSetAreasMuted={onSetAreasMuted}
         showOverlays={showOverlays}
         onShowOverlaysChange={onShowOverlaysChange}
+        onImportFile={onImportFile}
       />
     ),
     offline: () => (
@@ -365,6 +369,7 @@ function LayersTab({
   onSetAreasMuted,
   showOverlays,
   onShowOverlaysChange,
+  onImportFile,
 }: {
   layers: LayerToggleEntry[];
   overlays: OverlayEntry[];
@@ -374,6 +379,7 @@ function LayersTab({
   onSetAreasMuted: (areaIds: string[], muted: boolean) => void;
   showOverlays: boolean;
   onShowOverlaysChange: (next: boolean) => void;
+  onImportFile: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const expandable = overlays.length > 0;
@@ -428,6 +434,15 @@ function LayersTab({
           </View>
         ) : null}
       </View>
+
+      {/* The list ends with the way to add to it: the same importer the Saved
+          tab's Import a file runs. */}
+      <Row
+        icon="upload"
+        hue={theme.neutral}
+        title={copy.importFile}
+        onPress={onImportFile}
+      />
     </View>
   );
 }

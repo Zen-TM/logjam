@@ -197,7 +197,13 @@ type SavedStackParams = {
   // Saved" knows which item its notification was about, and a filter alone does
   // not answer "which of these forty".
   SavedHome:
-    | { filter?: SavedCategory; nonce?: number; highlightKey?: string }
+    | {
+        filter?: SavedCategory;
+        nonce?: number;
+        highlightKey?: string;
+        /** Open the file picker on arrival: the map's "Import a file" row. */
+        startImport?: boolean;
+      }
     | undefined;
   /**
    * The point picker for the "place from coordinates" form — the same screen
@@ -292,6 +298,16 @@ function MapStackNav() {
               navigation.getParent()?.navigate("Saved", {
                 screen: "SavedHome",
                 params: { filter: category, nonce: Date.now() },
+              })
+            }
+            onImportFile={() =>
+              navigation.getParent()?.navigate("Saved", {
+                screen: "SavedHome",
+                params: {
+                  filter: "import",
+                  nonce: Date.now(),
+                  startImport: true,
+                },
               })
             }
             onSaveMapsOffline={(context) =>
@@ -433,6 +449,9 @@ function SavedStackNav() {
                     nonce: route.params.nonce ?? 0,
                   }
                 : undefined
+            }
+            initialImport={
+              route.params?.startImport ? (route.params.nonce ?? 0) : undefined
             }
             initialHighlight={
               route.params?.highlightKey
