@@ -4,6 +4,7 @@ import { DEFAULT_NOTIFICATION_PREFERENCES } from "../themeSchemes.js";
 import {
   attributeFilterShape,
   ACCOUNT_DELETE_BODY,
+  MAP_LAYERS,
   attributeDeleteConfirm,
   contractSectionKeys,
   deleteAccountPhrase,
@@ -504,5 +505,19 @@ describe("the account", () => {
 
   it("says what stays as well as what goes", () => {
     expect(ACCOUNT_DELETE_BODY).toContain("stay theirs");
+  });
+});
+
+describe("the map's layers", () => {
+  it("draws Offline on Logjam GPS only, and says why", () => {
+    expect(contractSectionKeys(MAP_LAYERS, "web")).toEqual([
+      "basemap",
+      "overlays",
+    ]);
+    expect(contractSectionKeys(MAP_LAYERS, "gps")).toEqual([
+      "basemap",
+      "overlays",
+      "offline",
+    ]);
   });
 });
