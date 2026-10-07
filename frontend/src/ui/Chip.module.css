@@ -2,8 +2,11 @@
   flex: none;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: var(--space-0-5);
   min-height: var(--control-md);
+  /* Never narrower than tall: a one-digit chip is a circle. */
+  min-width: var(--control-md);
   padding: 0 var(--space-1);
   border-radius: var(--radius-pill);
   border: var(--hairline);
