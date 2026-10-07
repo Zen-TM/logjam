@@ -50,3 +50,23 @@ describe("a button wears the pressable fill", () => {
     expect(source).toContain("var(--color-card-pressed)");
   });
 });
+
+describe("a row you can act on wears the card fill", () => {
+  // Red when a row holding Accept / Decline or a ⋯ goes back to bare: it
+  // looked broken beside the openable cards around it.
+  const source = css("Row.module.css").replace(/\s+/g, " ");
+
+  it.each(["button", "a", "input", '[role="switch"]'])(
+    "a footer or trailing %s fills the row",
+    (control) => {
+      const selector = source.match(
+        /\.row:has\( ?:is\(\.trailing, \.footer\) :is\(([^)]*)\)/,
+      );
+      expect(selector?.[1]).toContain(control);
+    },
+  );
+
+  it("leaves the read-out row bare", () => {
+    expect(source).toMatch(/\.row \{[^}]*background: transparent/);
+  });
+});

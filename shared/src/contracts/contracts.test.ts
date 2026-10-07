@@ -31,6 +31,7 @@ import {
   placeTypeDeleteConfirm,
   FRIEND_SHARE_VERBS,
   friendRemoveConfirm,
+  friendsRemoveConfirm,
   friendSharesEmptyTitle,
   friendSharesNote,
   friendsEmptyKind,
@@ -454,6 +455,8 @@ describe("friends", () => {
   it("says removing a friend ends sharing both ways", () => {
     expect(friendRemoveConfirm("abel").confirmTitle).toBe("Remove abel?");
     expect(friendRemoveConfirm("abel").confirmBody).toContain("both ways");
+    expect(friendsRemoveConfirm(3).confirmTitle).toBe("Remove 3 friends?");
+    expect(friendsRemoveConfirm(3).confirmBody).toContain("both ways");
   });
 
   it("gives a reason for each share verb only one client has", () => {

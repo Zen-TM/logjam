@@ -93,6 +93,22 @@ export function friendRemoveConfirm(username: string): {
   };
 }
 
+/** The same confirm for a selection of friends (Logjam Web's bulk bar). */
+export function friendsRemoveConfirm(count: number): {
+  confirmTitle: string;
+  confirmBody: string;
+} {
+  return {
+    confirmTitle: `Remove ${count} friends?`,
+    confirmBody:
+      "Everything you share with each of them stops being shared, both ways. You can send them a friend request again later, and sharing does not come back with it.",
+  };
+}
+
+export function friendsRemovedMessage(count: number): string {
+  return `${count} friends removed.`;
+}
+
 type FriendVerbDeclaration = {
   id: string;
   icon: IconIdea;
