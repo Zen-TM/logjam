@@ -742,13 +742,13 @@ test.describe("desktop", () => {
 });
 
 /**
- * Daylight, the one light scheme, on the surfaces most used outdoors. It is
+ * Ghost Gum, the one light scheme, on the surfaces most used outdoors. It is
  * reached the way a user's choice is: `/users/me` says so (rewriting only the
  * field the decision reads), and the generated `[data-scheme]` block repaints.
  * Its text pairs are held to 7:1 by `scripts/wcag-contrast.mjs`; this is what
  * catches a surface drawing a pair that script never heard of.
  */
-test.describe("daylight", () => {
+test.describe("ghost gum", () => {
   test.beforeEach(async ({ page }) => {
     await page.route("**/users/me", async (route) => {
       if (route.request().method() !== "GET") return route.continue();
@@ -758,7 +758,7 @@ test.describe("daylight", () => {
         response,
         json: {
           ...user,
-          uiPreferences: { ...user.uiPreferences, themeSchemeId: "daylight" },
+          uiPreferences: { ...user.uiPreferences, themeSchemeId: "ghostGum" },
         },
       });
     });
@@ -768,7 +768,7 @@ test.describe("daylight", () => {
     await openApp(page);
     await expect(page.locator("html")).toHaveAttribute(
       "data-scheme",
-      "daylight",
+      "ghostGum",
     );
     const aside = page.locator("aside");
 
@@ -788,8 +788,8 @@ test.describe("daylight", () => {
 
     await page.getByRole("button", { name: "Settings", exact: true }).click();
     const theme = aside.getByRole("radiogroup", { name: "Theme" });
-    await expect(theme.getByRole("radio")).toHaveCount(5);
-    await expect(theme.getByRole("radio", { name: "Daylight" })).toBeChecked();
+    await expect(theme.getByRole("radio")).toHaveCount(4);
+    await expect(theme.getByRole("radio", { name: "Ghost Gum" })).toBeChecked();
     await expectNoViolations(page, "aside");
 
     await page.getByRole("button", { name: /^Inbox/ }).click();

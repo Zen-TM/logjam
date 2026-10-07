@@ -21,7 +21,6 @@ import {
   contractSectionKeys,
   groupNotificationsByDay,
   INBOX,
-  inboxHeroTitle,
   inboxTruncatedNote,
   isResolvedElsewhereError,
   newestNotificationsFirst,
@@ -767,11 +766,7 @@ function NotificationsPanel({
 
   const hero = (
     <Hero
-      title={
-        notificationsLoaded
-          ? inboxHeroTitle(tally.unread, tally.total)
-          : INBOX.title
-      }
+      title={INBOX.title}
       actions={
         searchOpen ? (
           <IconButton

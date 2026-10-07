@@ -6,10 +6,10 @@ export { Icon, type Glyph } from "./Icon";
 export { NorthNeedle } from "./webIcons";
 export { Chip, ChipPicker, ChipRail, type ChipOption } from "./Chip";
 export { ActivitySpark, StatGrid, type SparkBucket, type Stat } from "./Stats";
-export { Avatar, IconTile, Row, TileCheckbox } from "./Row";
+export { Avatar, IconTile, ListEnd, Row, TileCheckbox } from "./Row";
 export { Hero, Meter, type MeterSegment } from "./Hero";
 export { SwitchRow, Toggle } from "./Toggle";
-export { Checkbox, SwatchPicker } from "./Choice";
+export { Checkbox } from "./Choice";
 export {
   LiveNumberField,
   NumberField,

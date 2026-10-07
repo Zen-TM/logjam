@@ -30,6 +30,7 @@ import {
   Hero,
   IconButton,
   IconTile,
+  ListEnd,
   Menu,
   Row,
   SearchField,
@@ -77,9 +78,6 @@ const VERB_ICON: Partial<Record<WayVerbId, Glyph>> = {
   removeShare: "close",
   delete: "delete",
 };
-
-const plural = (count: number, noun: string) =>
-  `${count} ${noun}${count === 1 ? "" : "s"}`;
 
 /** Export never touches the server — a route's geometry is already here. */
 function downloadText(filename: string, text: string, mimeType: string): void {
@@ -262,13 +260,7 @@ export default function RoutesPanel({
 
   const hero = (
     <Hero
-      title={
-        !waysLoaded
-          ? "Ways"
-          : ways.length === 0
-            ? "No lines yet"
-            : plural(ways.length, "line")
-      }
+      title="Ways"
       actions={
         searchOpen ? (
           <IconButton icon="close" label="Close search" onClick={closeSearch} />
@@ -351,6 +343,28 @@ export default function RoutesPanel({
     </div>
   );
 
+  // The same buttons are the empty state's and the end of the list's.
+  const addWayButtons = (
+    <>
+      <Button
+        compact
+        variant="filled"
+        icon="draw"
+        onClick={onStartDrawingRoute}
+      >
+        Draw a route
+      </Button>
+      <Button
+        compact
+        variant="outline"
+        icon="upload"
+        onClick={onOpenUnifiedImport}
+      >
+        Import
+      </Button>
+    </>
+  );
+
   const list = !waysLoaded ? (
     <div className={classes.emptyArea} role="status">
       <LoadingState label="Loading your ways…" />
@@ -361,26 +375,7 @@ export default function RoutesPanel({
         icon="route"
         title="No lines yet"
         body="Draw a route on the map, or bring a GPX or KML in from another app. Tracks you record in Logjam GPS appear here too."
-        actions={
-          <>
-            <Button
-              compact
-              variant="filled"
-              icon="draw"
-              onClick={onStartDrawingRoute}
-            >
-              Draw a route
-            </Button>
-            <Button
-              compact
-              variant="outline"
-              icon="upload"
-              onClick={onOpenUnifiedImport}
-            >
-              Import
-            </Button>
-          </>
-        }
+        actions={addWayButtons}
       />
     </div>
   ) : visible.length === 0 ? (
@@ -454,6 +449,7 @@ export default function RoutesPanel({
           />
         );
       })}
+      <ListEnd>{addWayButtons}</ListEnd>
     </div>
   );
 

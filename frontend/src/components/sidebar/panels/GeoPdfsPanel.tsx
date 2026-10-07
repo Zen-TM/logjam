@@ -34,6 +34,7 @@ import {
   Hero,
   IconButton,
   IconTile,
+  ListEnd,
   Menu,
   Row,
   StatusPill,
@@ -310,6 +311,13 @@ export default function GeoPdfsPanel({
     jobs.length === 0 &&
     templates.length === 0;
 
+  // The same button is the empty state's and the end of the list's.
+  const makeGeoPdfButton = (
+    <Button compact variant="filled" icon="geoPdf" onClick={onOpenGeoPdf}>
+      Make a GeoPDF
+    </Button>
+  );
+
   const list = !jobsLoaded ? (
     <div className={classes.emptyArea} role="status">
       <LoadingState label="Loading your GeoPDFs…" />
@@ -320,11 +328,7 @@ export default function GeoPdfsPanel({
         icon="geoPdf"
         title="No GeoPDFs yet"
         body="Frame an area on the map, and Logjam Web makes a map of it to print, or to load into Logjam GPS for the field."
-        actions={
-          <Button compact variant="filled" icon="geoPdf" onClick={onOpenGeoPdf}>
-            Make a GeoPDF
-          </Button>
-        }
+        actions={makeGeoPdfButton}
       />
     </div>
   ) : (
@@ -448,6 +452,7 @@ export default function GeoPdfsPanel({
           ))}
         </section>
       )}
+      <ListEnd>{makeGeoPdfButton}</ListEnd>
     </div>
   );
 

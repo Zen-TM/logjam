@@ -50,7 +50,6 @@ function TripDetailPanel({
   onCustomFieldDefsChange,
   existingTripTypes,
   onBack,
-  onClose,
   onOpenPlace,
   onRefetchTripLogs,
   onRefetchPlaces,
@@ -68,7 +67,6 @@ function TripDetailPanel({
   /** Back to the logbook this trip belongs to — the same call a place's page
    *  and a way's page make, whichever surface opened it. */
   onBack: () => void;
-  onClose: () => void;
   onOpenPlace: (placeId: string) => void;
   onRefetchTripLogs: () => void;
   onRefetchPlaces: () => void;
@@ -137,14 +135,7 @@ function TripDetailPanel({
   if (!tripLog) {
     return (
       <div className={classes.root}>
-        <Hero
-          title="Trip"
-          onBack={onBack}
-          backLabel="Back to Logs"
-          actions={
-            <IconButton icon="close" label="Close panel" onClick={onClose} />
-          }
-        />
+        <Hero title="Trip" onBack={onBack} backLabel="Back to Logs" />
         <div className={classes.body}>
           <EmptyState
             icon="edit"
@@ -321,7 +312,6 @@ function TripDetailPanel({
                   />
                 )}
               />
-              <IconButton icon="close" label="Close panel" onClick={onClose} />
             </>
           }
         />

@@ -63,3 +63,4 @@ export * from "./routeArrow.js";
 export * from "./format.js";
 export * from "./icons.js";
 export * from "./kit.js";
+export * from "./statPairs.js";

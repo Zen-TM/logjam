@@ -32,7 +32,6 @@ test("an owned place's row has every verb, and Edit opens the form on its page",
   const menu = page.getByRole("menu");
   await expect(menu.getByRole("menuitem")).toHaveText([
     "Open place",
-    "Show on map",
     "Log a trip here",
     "Edit place",
     "Make a LiDAR topo here",
@@ -61,7 +60,6 @@ test("a shared place's row offers to keep and to let go, never to edit or delete
   const menu = page.getByRole("menu");
   await expect(menu.getByRole("menuitem")).toHaveText([
     "Open place",
-    "Show on map",
     "Make a LiDAR topo here",
     "Make a GeoPDF here",
     "Save a copy",

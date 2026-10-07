@@ -22,15 +22,23 @@
 // PRIVACY: usernames only, everywhere. `/friends`, `/friends/requests` and
 // `/friends/search` never return an email (root CLAUDE.md), and nothing here
 // would have somewhere to put one.
-import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  Fragment,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   contractSectionKeys,
   FRIENDS,
   friendAcceptedMessage,
   friendRemovedMessage,
+  friendsRemovedMessage,
+  friendsRemoveConfirm,
   friendRemoveConfirm,
   friendsEmptyKind,
-  friendsHeroTitle,
   friendVerb,
   type FriendsBucket,
   type SectionKeysOn,
@@ -38,6 +46,7 @@ import {
 import classes from "./FriendsPanel.module.css";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
 import FriendSharingSection from "./FriendSharingSection";
+import { useRowSelection } from "./useRowSelection";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
 import {
@@ -48,9 +57,12 @@ import {
   EmptyState,
   Hero,
   IconButton,
+  ListEnd,
   Menu,
   Row,
   SearchField,
+  SelectionBar,
+  TileCheckbox,
   StatusPill,
   type ChipOption,
 } from "../../../ui";
@@ -88,6 +100,7 @@ function FriendsPanel({
   const [addOpen, setAddOpen] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [removing, setRemoving] = useState<TFriend | null>(null);
+  const [removingSelected, setRemovingSelected] = useState(false);
   // Non-null = the sharing audit for that friend replaces the list: at 380px
   // there is no room for both, and the audit is a page you go and read.
   const [openFriend, setOpenFriend] = useState<TFriend | null>(null);
@@ -116,6 +129,42 @@ function FriendsPanel({
       toast.error(messageFromError(err, failure));
     } finally {
       setBusyId(null);
+    }
+  }
+
+  // Friends, not requests, are what a selection can hold: Remove is the one
+  // bulk verb, and a request has Accept / Decline of its own.
+  const friendIds = useMemo(
+    () =>
+      bucket === "requests" ? [] : friends.map((friend) => friend.friendshipId),
+    [bucket, friends],
+  );
+  const { rootRef, selectedIds, selecting, toggle, clear } =
+    useRowSelection(friendIds);
+  const selectedFriends = friends.filter((friend) =>
+    selectedIds.includes(friend.friendshipId),
+  );
+
+  async function handleRemoveSelected() {
+    setBusyId("selection");
+    let removed = 0;
+    try {
+      // One request per friend: a selection is a handful, and a failure halfway
+      // leaves the ones already removed removed and says so.
+      for (const friend of selectedFriends) {
+        await removeFriend(friend.friendshipId);
+        removed += 1;
+      }
+      toast.success(friendsRemovedMessage(removed));
+    } catch (err) {
+      console.error(err);
+      toast.error(messageFromError(err, copy.removeFailed));
+    } finally {
+      setBusyId(null);
+      setRemovingSelected(false);
+      clear();
+      onRefetchFriends();
+      onRefetchShared();
     }
   }
 
@@ -165,6 +214,13 @@ function FriendsPanel({
   const showRequests = bucket !== "friends";
   const showFriends = bucket !== "requests";
 
+  // The same button is the empty state's and the end of the list's.
+  const addFriendButton = (
+    <Button variant="filled" icon="addFriend" onClick={() => setAddOpen(true)}>
+      {copy.addTitle}
+    </Button>
+  );
+
   const emptyKind = friendsEmptyKind({
     friends: friends.length,
     requests: friendRequests.length,
@@ -176,7 +232,7 @@ function FriendsPanel({
   const page: Record<SectionKeysOn<typeof FRIENDS, "web">, () => ReactNode> = {
     hero: () => (
       <Hero
-        title={friendsHeroTitle(friendRequests.length, friends.length)}
+        title={FRIENDS.title}
         actions={
           <Button
             compact
@@ -190,13 +246,29 @@ function FriendsPanel({
       />
     ),
     buckets: () => (
+      // The selection bar takes the rail's slot at the rail's height, so the
+      // list does not move when a selection starts (DESIGN.md §5).
       <div className={classes.rails}>
-        <ChipRail
-          label="Which people"
-          options={buckets}
-          value={bucket}
-          onChange={setBucket}
-        />
+        {selecting ? (
+          <SelectionBar
+            countLabel={`${selectedFriends.length} selected`}
+            onClear={clear}
+          >
+            <IconButton
+              icon={friendVerb("remove").icon}
+              label={friendVerb("remove").label}
+              tone="danger"
+              onClick={() => setRemovingSelected(true)}
+            />
+          </SelectionBar>
+        ) : (
+          <ChipRail
+            label="Which people"
+            options={buckets}
+            value={bucket}
+            onChange={setBucket}
+          />
+        )}
       </div>
     ),
     list: () => (
@@ -207,15 +279,7 @@ function FriendsPanel({
               icon="friends"
               title={copy.firstRunTitle}
               body={copy.firstRunBody}
-              actions={
-                <Button
-                  variant="filled"
-                  icon="addFriend"
-                  onClick={() => setAddOpen(true)}
-                >
-                  {copy.addTitle}
-                </Button>
-              }
+              actions={addFriendButton}
             />
           </div>
         ) : emptyKind === "noRequests" ? (
@@ -274,42 +338,56 @@ function FriendsPanel({
               friends.map((friend) => (
                 <Row
                   key={friend.friendshipId}
-                  leading={<Avatar username={friend.username} />}
+                  leading={
+                    <TileCheckbox
+                      tile={<Avatar username={friend.username} />}
+                      label={`Select ${friend.username}`}
+                      checked={selectedIds.includes(friend.friendshipId)}
+                      selecting={selecting}
+                      onToggle={(extendRange) =>
+                        toggle(friend.friendshipId, extendRange)
+                      }
+                    />
+                  }
+                  selected={selectedIds.includes(friend.friendshipId)}
                   title={friend.username}
                   description="Opens what you share with each other"
                   disabled={busyId === friend.friendshipId}
                   onOpen={() => setOpenFriend(friend)}
                   trailing={
-                    <Menu
-                      label={`Actions for ${friend.username}`}
-                      title={friend.username}
-                      placement="bottom-end"
-                      entries={[
-                        {
-                          id: "shares",
-                          label: friendVerb("shares").label,
-                          icon: "shareFriend",
-                          onSelect: () => setOpenFriend(friend),
-                        },
-                        {
-                          id: "remove",
-                          label: friendVerb("remove").label,
-                          icon: "unshare",
-                          danger: true,
-                          onSelect: () => setRemoving(friend),
-                        },
-                      ]}
-                      trigger={(props) => (
-                        <IconButton
-                          {...props}
-                          icon="overflow"
-                          label={`Actions for ${friend.username}`}
-                        />
-                      )}
-                    />
+                    selecting ? undefined : (
+                      <Menu
+                        label={`Actions for ${friend.username}`}
+                        title={friend.username}
+                        placement="bottom-end"
+                        entries={[
+                          {
+                            id: "shares",
+                            label: friendVerb("shares").label,
+                            icon: "shareFriend",
+                            onSelect: () => setOpenFriend(friend),
+                          },
+                          {
+                            id: "remove",
+                            label: friendVerb("remove").label,
+                            icon: "unshare",
+                            danger: true,
+                            onSelect: () => setRemoving(friend),
+                          },
+                        ]}
+                        trigger={(props) => (
+                          <IconButton
+                            {...props}
+                            icon="overflow"
+                            label={`Actions for ${friend.username}`}
+                          />
+                        )}
+                      />
+                    )
                   }
                 />
               ))}
+            <ListEnd>{addFriendButton}</ListEnd>
           </div>
         )}
       </>
@@ -317,7 +395,7 @@ function FriendsPanel({
   };
 
   return (
-    <div className={classes.root}>
+    <div ref={rootRef} className={classes.root}>
       {contractSectionKeys(FRIENDS, "web").map((key) => (
         <Fragment key={key}>{page[key]()}</Fragment>
       ))}
@@ -341,6 +419,15 @@ function FriendsPanel({
         busy={busyId != null}
         onConfirm={() => removing && void handleRemove(removing)}
         onClose={() => setRemoving(null)}
+      />
+      <ConfirmDialog
+        open={removingSelected}
+        title={friendsRemoveConfirm(selectedFriends.length).confirmTitle}
+        message={friendsRemoveConfirm(selectedFriends.length).confirmBody}
+        confirmLabel="Remove"
+        busy={busyId != null}
+        onConfirm={() => void handleRemoveSelected()}
+        onClose={() => setRemovingSelected(false)}
       />
     </div>
   );
