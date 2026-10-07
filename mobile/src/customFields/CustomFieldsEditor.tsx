@@ -35,6 +35,7 @@ import {
   TextField,
   SwitchRow,
 } from "../ui";
+import { fieldLabel } from "../ui/fieldLabel";
 
 const listCopy = SETTINGS_LIST.copy;
 
@@ -379,7 +380,7 @@ export function useCustomFieldForm({
           under a heading of their own put them next to the place-type picker,
           which is the other thing on this screen called a "type". */}
       <View style={styles.typeBlock}>
-        <SectionHeader title={`What it holds`} />
+        <Text style={fieldLabel}>What it holds</Text>
         <ChipRail
           options={CUSTOM_FIELD_TYPES.map((entry) => ({
             value: entry.value,

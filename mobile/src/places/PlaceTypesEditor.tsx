@@ -60,6 +60,7 @@ import {
   TextField,
   Icon,
 } from "../ui";
+import { fieldLabel } from "../ui/fieldLabel";
 import { placeTypeGlyph } from "./placeTypeIcon";
 
 const copy = SETTINGS_LIST.copy;
@@ -255,7 +256,7 @@ export function usePlaceTypeForm({
           two different icon sets, and a marker colour carries a WCAG guarantee
           that can only be asserted over a closed set (`scripts/wcag-contrast.mjs`).
           A hex picker would not fail that check, it would delete it. */}
-      <SectionHeader title="Icon" />
+      <Text style={fieldLabel}>Icon</Text>
       <View style={styles.grid} onLayout={onGridLayout}>
         {/* Nothing until the row has been measured — one frame, and the
             alternative is every cell flashing at its intrinsic size first. */}
@@ -283,7 +284,7 @@ export function usePlaceTypeForm({
             ))}
       </View>
 
-      <SectionHeader title="Colour" />
+      <Text style={fieldLabel}>Colour</Text>
       <View style={styles.grid} onLayout={onGridLayout}>
         {cellSize == null
           ? null
