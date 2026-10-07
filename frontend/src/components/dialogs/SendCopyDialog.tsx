@@ -100,12 +100,7 @@ function SendCopyDialog({
   > = {
     promise: () => (
       <p className={classes.promise}>
-        <Icon
-          idea="warning"
-          size={16}
-          aria-hidden
-          className={classes.glyph}
-        />
+        <Icon idea="warning" size={16} aria-hidden className={classes.glyph} />
         {SEND_COPY.copy.promise}
       </p>
     ),
