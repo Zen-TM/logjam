@@ -58,11 +58,17 @@ shared `radius`, `spacing(n)` (8 × n), `fontSize`, `controlSize` and
 | Display metric | `fontSize.display`, only where the number is the whole point of the screen |
 | Eyebrow, section header, stat label | `fontSize.xs`, medium, uppercase, `letterSpacing` 0.8–1 |
 | Row title | `fontSize.base`, medium |
+| Field or control label | `ui/fieldLabel.ts`: `fontSize.sm`, sentence case, `textMuted`; never uppercase (`ui/fieldLabel.test.ts` lists the files that may be) |
 | Row subtitle, hint, legend | `fontSize.sm` (`xs` for legends), `textMuted` |
 
 **Radius**: `md` for tiles and inline surfaces; `lg` for cards and rows; `xl`
 for sheets; `pill` for anything text-shaped that is not a card. `sm` only for
 decorative swatches. No fourth card radius.
+
+A count badge is a fixed box with a radius of exactly half its side
+(`ui/pill.ts`), remounted when its chip flips: React Native on Android drops a
+view's corner radius when its background changes after layout, and
+`radius.pill` makes it worse. Guard: `ui/pill.test.ts`.
 
 ## 2. Screens
 
