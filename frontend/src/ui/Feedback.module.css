@@ -31,6 +31,46 @@
   gap: var(--space-1);
 }
 
+.state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.spinner {
+  flex: none;
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}
+
+.errorState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.errorGlyph {
+  flex: none;
+  color: var(--color-warning);
+}
+
 /* The same height as the chip rail whose slot it takes: chips and icon buttons
    are both `--control-md`, so the list below does not move. */
 .selectionBar {

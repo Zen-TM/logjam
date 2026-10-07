@@ -31,9 +31,8 @@ import { useAccountState } from "../auth/AccountStateContext";
 import { shareCapabilityStatus } from "../auth/capabilities";
 import type { Friend } from "../api/friends";
 import type { ShareRecipient } from "../api/shares";
-import { ErrorBanner, IconButton, Row } from "../ui";
+import { Avatar, ErrorBanner, IconButton, Row } from "../ui";
 import { theme } from "../theme";
-import { FriendAvatar } from "./FriendAvatar";
 
 /**
  * The three endpoints, for whichever kind this is.
@@ -203,7 +202,7 @@ export function RecipientRows({
       {recipients.map((recipient) => (
         <Row
           key={recipient.id}
-          leading={<FriendAvatar username={recipient.sharedWith.username} />}
+          leading={<Avatar username={recipient.sharedWith.username} />}
           title={recipient.sharedWith.username}
           right={
             sharing.busyId === recipient.id ? (

@@ -429,7 +429,7 @@ export function AddWaySheet({
             </Text>
           ) : (
             <>
-              <SectionHeader label={`${convertibleTracks.length} finished`} />
+              <SectionHeader title={`${convertibleTracks.length} finished`} />
               {convertibleTracks.map((track) => (
                 <Row
                   key={track.id}

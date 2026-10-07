@@ -1,3 +1,4 @@
+import { FieldError } from "./FieldError";
 import {
   useCallback,
   useEffect,
@@ -11,7 +12,6 @@ import {
   type ReactNode,
   type Ref,
 } from "react";
-import { FieldError } from "../components/feedback/FieldError";
 import { nextEnabledIndex } from "./rovingFocus";
 import classes from "./Chip.module.css";
 import { Icon, type Glyph } from "./Icon";

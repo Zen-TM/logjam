@@ -67,6 +67,7 @@ import {
   TileCheckbox,
   type MenuEntry,
   type Glyph,
+  LoadingState,
 } from "../../../ui";
 import { idRange } from "./placesModel";
 import { inboxDestination, type InboxDestination } from "./inboxModel";
@@ -840,7 +841,7 @@ function NotificationsPanel({
 
   const list = !notificationsLoaded ? (
     <div className={classes.emptyArea} role="status">
-      <p className={classes.loading}>Loading your inbox…</p>
+      <LoadingState label="Loading your inbox…" />
     </div>
   ) : notificationsError && live.length === 0 ? (
     emptyArea(

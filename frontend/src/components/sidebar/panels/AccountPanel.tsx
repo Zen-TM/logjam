@@ -11,7 +11,6 @@ import DeleteAccountDialog from "../../dialogs/DeleteAccountDialog";
 import ChangeEmailDialog from "../../dialogs/ChangeEmailDialog";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
-import { ErrorBanner } from "../../feedback/ErrorBanner";
 import {
   Button,
   Dialog,
@@ -22,6 +21,8 @@ import {
   Row,
   SectionHeader,
   TextField,
+  ErrorBanner,
+  LoadingState,
 } from "../../../ui";
 import Footer from "../../Footer";
 import classes from "./AccountPanel.module.css";
@@ -136,7 +137,7 @@ function AccountPanel({
           error ? (
             <ErrorBanner message={error} onRetry={onRetry} />
           ) : (
-            <p className={classes.state}>Loading…</p>
+            <LoadingState />
           )
         ) : (
           <>

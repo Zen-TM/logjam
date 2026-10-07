@@ -2,12 +2,11 @@ import { useState } from "react";
 import { mediaCategory, type MediaItem } from "@logjam/shared";
 import { deleteMedia } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
-import { ErrorBanner } from "../feedback/ErrorBanner";
 import ConfirmDialog from "../dialogs/ConfirmDialog";
 import Lightbox from "./Lightbox";
 import TrackIcon from "./TrackIcon";
 import classes from "./MediaGallery.module.css";
-import { Icon } from "../../ui";
+import { Icon, ErrorBanner } from "../../ui";
 
 // `variant` selects which media this gallery surfaces:
 //   all     → visual grid + track list (default; legacy behaviour)

@@ -59,6 +59,7 @@ import {
   TileCheckbox,
   type MenuEntry,
   Icon,
+  LoadingState,
 } from "../../../ui";
 import { usePanelSheet } from "./usePanelSheet";
 import { idRange } from "./placesModel";
@@ -612,7 +613,7 @@ function TripLogsPanel({
 
   const list = !loaded ? (
     <div className={classes.emptyArea} role="status">
-      <p className={classes.loading}>Loading your logbook…</p>
+      <LoadingState label="Loading your logbook…" />
     </div>
   ) : tripLogs.length === 0 ? (
     <div className={classes.emptyArea}>

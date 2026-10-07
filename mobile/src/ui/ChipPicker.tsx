@@ -2,16 +2,9 @@ import { useRef, useState } from "react";
 import { StyleSheet, TextInput, View } from "react-native";
 
 import { fontSize, radius, spacing, theme } from "../theme";
-import { Chip } from "./Chip";
+import { Chip, type ChipOption } from "./Chip";
 import { FieldError } from "./FieldError";
 import { SectionHeader } from "./SectionHeader";
-
-export type ChipOption = {
-  value: string;
-  label: string;
-  hue?: string;
-  icon?: React.ComponentProps<typeof Chip>["icon"];
-};
 
 /**
  * Multi-select over a vocabulary that the user can extend — trip types are a
@@ -67,7 +60,7 @@ export function ChipPicker({
 
   return (
     <View style={styles.wrap}>
-      <SectionHeader label={label} />
+      <SectionHeader title={label} />
       <View style={styles.chips}>
         {options.map((option) => (
           <Chip
@@ -122,7 +115,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: theme.accent,
-    backgroundColor: theme.card,
+    backgroundColor: theme.field,
     paddingHorizontal: spacing(1.5),
     paddingVertical: spacing(0.5),
     color: theme.text,

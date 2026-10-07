@@ -10,7 +10,6 @@
 import { useState } from "react";
 import { friendMatches } from "@logjam/shared";
 import classes from "./SendCopyDialog.module.css";
-import { ErrorBanner } from "../feedback/ErrorBanner";
 import { messageFromError } from "../../errors/messageFromError";
 import type { TFriend } from "../../placeUtils";
 import {
@@ -20,6 +19,7 @@ import {
   EmptyState,
   SearchField,
   Icon,
+  ErrorBanner,
 } from "../../ui";
 
 /** The list stays searchable only once it is long enough to need it. */

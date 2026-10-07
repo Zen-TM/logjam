@@ -1,12 +1,12 @@
-// The contextual bar a multi-select swaps into the rail's SegmentedControl slot.
-// Cancel / count / select-all / destroy, fixed to SEGMENTED_CONTROL_HEIGHT so the
+// The contextual bar a multi-select swaps into the rail's ChipRail slot.
+// Cancel / count / select-all / destroy, fixed to CHIP_RAIL_HEIGHT so the
 // rail's height cannot differ between the two states and the list below does not
 // jump (the bug the Saved screen fixed in 2026-08-24 — see its selectionBar note).
 import { StyleSheet, Text, View } from "react-native";
 
 import { fontSize, fontWeight, spacing, theme } from "../theme";
 import { IconButton } from "./IconButton";
-import { SEGMENTED_CONTROL_HEIGHT } from "./SegmentedControl";
+import { CHIP_RAIL_HEIGHT } from "./ChipRail";
 
 export function SelectionBar({
   countLabel,
@@ -83,7 +83,7 @@ export function SelectionBar({
 
 const styles = StyleSheet.create({
   bar: {
-    height: SEGMENTED_CONTROL_HEIGHT,
+    height: CHIP_RAIL_HEIGHT,
     flexDirection: "row",
     alignItems: "center",
     gap: spacing(0.5),

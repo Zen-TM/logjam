@@ -1,7 +1,6 @@
 import { useId, useState } from "react";
 import { apiFetch } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
-import { ErrorBanner } from "../feedback/ErrorBanner";
 import {
   RASTER_TEMPLATE_DEFAULTS,
   AUTO_EXPORT_DEFAULTS,
@@ -11,7 +10,7 @@ import {
   type RasterTemplateSettings,
   type AutoExportSettings,
 } from "@logjam/shared";
-import { Button, ChipRail, Dialog, TextField } from "../../ui";
+import { Button, ChipRail, Dialog, TextField, ErrorBanner } from "../../ui";
 import AdvancedSettings from "./topoSettings/AdvancedSettings";
 import { SETTINGS_TABS, type SettingsTab } from "./topoSettings/settingsTabs";
 import type { TopoTemplate } from "./TopoDialog";
