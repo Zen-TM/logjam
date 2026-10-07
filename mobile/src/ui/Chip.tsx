@@ -11,6 +11,7 @@ import {
   withAlpha,
 } from "../theme";
 import { Icon, type Glyph } from "./Icon";
+import { BADGE_SIZE, halfRadius } from "./pill";
 
 // The single source of a chip's height (padding + font + border collapse to
 // this one number via `minHeight`) — `ChipRail` re-exports it so a
@@ -135,12 +136,18 @@ const styles = StyleSheet.create({
   // ink").
   labelActive: { color: theme.onFill },
   labelDisabled: { color: theme.textMuted },
+  // A fixed box with a radius of exactly half of it, and a background that is
+  // always set (`badgeActive` makes it transparent, never absent): see
+  // `halfRadius` for why a 999 radius came back square once another chip was
+  // selected.
   badge: {
-    minWidth: 20,
+    height: BADGE_SIZE,
+    minWidth: BADGE_SIZE,
     paddingHorizontal: spacing(0.5),
-    borderRadius: radius.pill,
+    borderRadius: halfRadius(BADGE_SIZE),
     backgroundColor: withAlpha(theme.text, 0.12),
     alignItems: "center",
+    justifyContent: "center",
   },
   // No wash on a fill: an ink wash darkened Daylight's accent until the count
   // on it fell under 4.5:1. The count reads as `onFill` on the fill itself.
