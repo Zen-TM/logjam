@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -26,7 +25,7 @@ import {
 } from "../theme";
 import { ensureDisplayCached } from "../sync/mediaCache";
 import type { MirrorMedia } from "../sync/mirrorStore";
-import { IconButton } from "../ui";
+import { IconButton, Icon } from "../ui";
 
 // A photo is judged against black (`scrim.photo`), so the viewer's chrome
 // always wears a DARK scheme's colours, whatever the app is painted in: a
@@ -113,7 +112,7 @@ export function MediaViewer({
             {items.length > 1 ? `${index + 1} / ${items.length}` : ""}
           </Text>
           <IconButton
-            icon="x"
+            icon="close"
             accessibilityLabel="Close"
             color={photoChrome.text}
             onPress={onClose}
@@ -129,7 +128,7 @@ export function MediaViewer({
             <View style={styles.arrowSlot}>
               {index > 0 ? (
                 <IconButton
-                  icon="chevron-left"
+                  icon="back"
                   accessibilityLabel="Previous attachment"
                   color={photoChrome.text}
                   filled
@@ -140,7 +139,7 @@ export function MediaViewer({
             <View style={styles.arrowSlot}>
               {index < items.length - 1 ? (
                 <IconButton
-                  icon="chevron-right"
+                  icon="forward"
                   accessibilityLabel="Next attachment"
                   color={photoChrome.text}
                   filled
@@ -214,7 +213,7 @@ function MediaPage({ item, active }: { item: MirrorMedia; active: boolean }) {
   if (state === "missing" || uri === null) {
     return (
       <View style={styles.page}>
-        <Feather name="cloud-off" size={28} color={photoChrome.textMuted} />
+        <Icon idea="offline" size={28} color={photoChrome.textMuted} />
         <Text style={styles.notice}>
           Not downloaded to this phone yet. It will appear once you have signal.
         </Text>
@@ -227,7 +226,7 @@ function MediaPage({ item, active }: { item: MirrorMedia; active: boolean }) {
   if (category === "track") {
     return (
       <View style={styles.page}>
-        <Feather name="map" size={28} color={photoChrome.textMuted} />
+        <Icon idea="map" size={28} color={photoChrome.textMuted} />
         <Text style={styles.notice}>{item.filename ?? "Route file"}</Text>
         <Text style={styles.noticeMuted}>Routes open on the map.</Text>
       </View>

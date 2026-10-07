@@ -330,7 +330,7 @@ export function PickPointScreen({
         <View style={styles.action}>
           <Button
             label="Use this point"
-            icon="check"
+            icon="done"
             // Absent-minded taps aside, there is nothing to confirm without a
             // point — and a button that exists only to refuse is worse than a
             // disabled one saying why (DESIGN.md §7), which is what the hint

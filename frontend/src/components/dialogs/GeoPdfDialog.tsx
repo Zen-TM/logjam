@@ -14,7 +14,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { SquareDashed } from "lucide-react";
 import type { TBbox } from "../map/Map";
 import { BASE_LAYERS } from "../map/Map";
 import { TOPO_LAYERS } from "../../topoLayerTypes";
@@ -1219,7 +1218,7 @@ function GeoPdfDialog({
             {!templateMode && (
               <div className={classes.errandLine}>
                 <Button
-                  icon={SquareDashed}
+                  icon="pickArea"
                   compact
                   variant="outline"
                   onClick={handleSelectOnMap}

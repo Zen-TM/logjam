@@ -10,7 +10,6 @@
 // linking an account later a flush rather than a migration.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, View } from "react-native";
-import { Feather } from "@expo/vector-icons";
 import {
   DarkTheme,
   DefaultTheme,
@@ -22,7 +21,7 @@ import { isRouteEditing } from "./map/routeEditLock";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { isThemeSchemeId, needsReconsent } from "@logjam/shared";
+import { isThemeSchemeId, needsReconsent, type IconIdea } from "@logjam/shared";
 
 import {
   fetchCurrentUser,
@@ -76,6 +75,7 @@ import { LogsScreen } from "./logs/LogsScreen";
 import { StatsScreen } from "./logs/StatsScreen";
 import { TripDetailScreen } from "./logs/TripDetailScreen";
 import { LoadingState } from "./ui/ScreenStates";
+import { Icon } from "./ui";
 
 // Said in one place because it is said from two: the tab bar and the
 // notification-response listener are both ways off the map, and two copies of
@@ -742,14 +742,8 @@ function TripsStackNav() {
   );
 }
 
-function TabIcon({
-  name,
-  color,
-}: {
-  name: React.ComponentProps<typeof Feather>["name"];
-  color: string;
-}) {
-  return <Feather name={name} size={22} color={color} />;
+function TabIcon({ idea, color }: { idea: IconIdea; color: string }) {
+  return <Icon idea={idea} size={22} color={color} />;
 }
 
 // Foreground pushes show as banners; the inbox badge is refreshed on focus.
@@ -980,7 +974,7 @@ export function AppShell({
             <Tabs.Screen
               name="Map"
               options={{
-                tabBarIcon: ({ color }) => <TabIcon name="map" color={color} />,
+                tabBarIcon: ({ color }) => <TabIcon idea="map" color={color} />,
               }}
             >
               {() => <MapStackNav />}
@@ -989,7 +983,7 @@ export function AppShell({
               name="Places"
               options={{
                 tabBarIcon: ({ color }) => (
-                  <TabIcon name="map-pin" color={color} />
+                  <TabIcon idea="place" color={color} />
                 ),
               }}
             >
@@ -999,7 +993,7 @@ export function AppShell({
               name="Logs"
               options={{
                 tabBarIcon: ({ color }) => (
-                  <TabIcon name="book-open" color={color} />
+                  <TabIcon idea="trip" color={color} />
                 ),
               }}
             >
@@ -1009,7 +1003,7 @@ export function AppShell({
               name="Saved"
               options={{
                 tabBarIcon: ({ color }) => (
-                  <TabIcon name="download" color={color} />
+                  <TabIcon idea="saved" color={color} />
                 ),
               }}
             >
@@ -1019,7 +1013,7 @@ export function AppShell({
               name="More"
               options={{
                 tabBarIcon: ({ color }) => (
-                  <TabIcon name="more-horizontal" color={color} />
+                  <TabIcon idea="moreTab" color={color} />
                 ),
                 ...(unreadCount ? { tabBarBadge: unreadCount } : {}),
               }}

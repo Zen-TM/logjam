@@ -50,7 +50,6 @@ import {
   type PressEventWithFeatures,
   type ViewStateChangeEvent,
 } from "@maplibre/maplibre-react-native";
-import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import * as FileSystem from "expo-file-system/legacy";
@@ -80,6 +79,7 @@ import {
   ROUTE_NAME_MAX_LENGTH,
   nearestSegment,
   snapSegment,
+  type IconIdea,
   type SnapMode,
 } from "@logjam/shared";
 
@@ -223,6 +223,7 @@ import { RouteOptionsSheet } from "../routes/RouteOptionsSheet";
 import { BottomSheet } from "../ui/BottomSheet";
 import { Button } from "../ui/Button";
 import { TextField } from "../ui/TextField";
+import { Icon } from "../ui/Icon";
 import { IconButton } from "../ui/IconButton";
 import { Row } from "../ui/Row";
 import { Toast, type ToastMessage } from "../ui/Toast";
@@ -478,12 +479,11 @@ const GPS_TOAST_MIN_GAP_MS = 300_000;
 /** Tag for this screen's wake lock, so releasing it can't release anyone else's. */
 const KEEP_AWAKE_TAG = "logjam-map";
 
-const LOCATE_ICON: Record<FollowMode, "navigation" | "crosshair" | "compass"> =
-  {
-    off: "navigation",
-    follow: "crosshair",
-    "course-up": "compass",
-  };
+const LOCATE_ICON: Record<FollowMode, IconIdea> = {
+  off: "locate",
+  follow: "following",
+  "course-up": "compass",
+};
 
 const LOCATE_LABEL: Record<FollowMode, string> = {
   off: "Show where I am",
@@ -4081,7 +4081,7 @@ export function MapScreen({
     () => [
       ...ownedPlaces.map((place) => ({
         key: `place:${place.id}`,
-        icon: "map-pin" as const,
+        icon: "place" as const,
         hue: OWNED_PLACE_COLOR,
         title: place.name,
         kindLabel: "Place",
@@ -4091,7 +4091,7 @@ export function MapScreen({
       })),
       ...sharedPlaces.map((place) => ({
         key: `place:${place.id}`,
-        icon: "share-2" as const,
+        icon: "friends" as const,
         hue: SHARED_PLACE_COLOR,
         title: place.name,
         kindLabel: "Shared place",
@@ -4101,7 +4101,7 @@ export function MapScreen({
       })),
       ...savedTracks.map((track) => ({
         key: `track:${track.id}`,
-        icon: "activity" as const,
+        icon: "track" as const,
         hue: assetHue.track,
         title: track.name,
         kindLabel: "Track",
@@ -4109,7 +4109,7 @@ export function MapScreen({
       })),
       ...(routes.data ?? []).map((route) => ({
         key: `route:${route.id}`,
-        icon: "edit-3" as const,
+        icon: "route" as const,
         hue: assetHue.route,
         title: route.name,
         kindLabel: "Route",
@@ -4117,7 +4117,7 @@ export function MapScreen({
       })),
       ...imports.map((imported) => ({
         key: `import:${imported.id}`,
-        icon: "file-plus" as const,
+        icon: "importedFile" as const,
         hue: assetHue.import,
         title: imported.name,
         kindLabel: "Imported file",
@@ -4139,7 +4139,7 @@ export function MapScreen({
   const layerToggles: LayerToggleEntry[] = [
     {
       key: "places",
-      icon: "map-pin",
+      icon: "place",
       hue: OWNED_PLACE_COLOR,
       // "PLACES", not "My places", and the count is every place on the phone:
       // the children under it are TYPES, and a type governs a shared campsite
@@ -4180,7 +4180,7 @@ export function MapScreen({
       // The OTHER axis: whose, not what kind. It stays a row of its own rather
       // than a child, because it crosses every type.
       key: "shared-places",
-      icon: "share-2",
+      icon: "friends",
       hue: SHARED_PLACE_COLOR,
       title: "Shared with me",
       count: sharedPlaces.length,
@@ -4192,7 +4192,7 @@ export function MapScreen({
     },
     {
       key: "routes",
-      icon: "edit-3",
+      icon: "route",
       hue: assetHue.route,
       title: "My routes",
       count: standaloneRoutes.length,
@@ -4201,7 +4201,7 @@ export function MapScreen({
     },
     {
       key: "place-routes",
-      icon: "git-commit",
+      icon: "waypoint",
       hue: OWNED_PLACE_COLOR,
       title: "Place routes",
       count: placeRouteCount + placeLinkedRoutes.length,
@@ -4218,7 +4218,7 @@ export function MapScreen({
     },
     {
       key: "vector-imports",
-      icon: "file-plus",
+      icon: "importedFile",
       hue: assetHue.import,
       title: "Imported ways",
       count: imports.length,
@@ -4227,7 +4227,7 @@ export function MapScreen({
     },
     {
       key: "tracks",
-      icon: "activity",
+      icon: "track",
       hue: assetHue.track,
       title: "Tracks",
       count: savedTracks.length,
@@ -4236,7 +4236,7 @@ export function MapScreen({
     },
     {
       key: "geopdfs",
-      icon: "file-text",
+      icon: "geoPdf",
       hue: assetHue.geoPdf,
       title: "GeoPDF maps",
       count: readyGeoPdfs.length,
@@ -4787,7 +4787,7 @@ export function MapScreen({
                 accessibilityLabel="Remove this point"
                 style={styles.anchorDelete}
               >
-                <Feather name="trash-2" size={20} color={theme.onFill} />
+                <Icon idea="delete" size={20} color={theme.onFill} />
               </View>
             </Marker>
           ) : null}
@@ -5002,14 +5002,14 @@ export function MapScreen({
             Places screen's "show only these" option back off. */}
         {withholdingPlaces ? (
           <View style={styles.filterBadge}>
-            <Feather name="filter" size={14} color={theme.accent} />
+            <Icon idea="filter" size={14} color={theme.accent} />
             {/* Two lines: this sentence grows with the user's text size, and a
                 badge that says "Showing 5 of 2…" is a warning nobody can act on. */}
             <Text style={styles.filterBadgeText} numberOfLines={2}>
               {`Showing ${mapFilter.visibleIds?.length ?? 0} of ${mapFilter.totalCount} places`}
             </Text>
             <IconButton
-              icon="x"
+              icon="close"
               size={16}
               accessibilityLabel="Show all places again"
               onPress={() => setPlaceMapFilterEnabled(false)}
@@ -5059,7 +5059,7 @@ export function MapScreen({
           style={styles.controlButton}
           onPress={() => setPickerOpen(true)}
         >
-          <Feather name="layers" size={FAB_ICON} color={theme.text} />
+          <Icon idea="layers" size={FAB_ICON} color={theme.text} />
         </Pressable>
         <Pressable
           accessibilityRole="button"
@@ -5070,17 +5070,14 @@ export function MapScreen({
           ]}
           onPress={handleLocateMe}
         >
-          {/* Three states, three glyphs: an arrow you are not following, a
+          {/* Three states, three glyphs: a crosshair you are not following, a
               crosshair locked on you, a compass rose when the map itself turns
               to face where you are looking. Colour alone said "active" but
               never said WHICH active. */}
-          <Feather
-            name={LOCATE_ICON[followMode]}
+          <Icon
+            idea={LOCATE_ICON[followMode]}
             size={FAB_ICON}
             color={theme.text}
-            // The arrow glyph's ink sits up-and-right of its box centre, so a
-            // geometrically centred icon reads off-centre — nudge it back.
-            style={followMode === "off" ? styles.locateIcon : undefined}
           />
         </Pressable>
         <Pressable
@@ -5089,7 +5086,7 @@ export function MapScreen({
           style={styles.miniButton}
           onPress={() => setAttributionOpen(true)}
         >
-          <Feather name="info" size={MINI_FAB_ICON} color={theme.text} />
+          <Icon idea="info" size={MINI_FAB_ICON} color={theme.text} />
         </Pressable>
       </View>
 
@@ -5229,7 +5226,7 @@ export function MapScreen({
             }}
           />
           <Row
-            icon="navigation"
+            icon="navigateTo"
             title="Navigate here"
             onPress={() => {
               const point = longPressPoint;
@@ -5238,7 +5235,7 @@ export function MapScreen({
             }}
           />
           <Row
-            icon="pen-tool"
+            icon="draw"
             title="Draw a route from here"
             onPress={() => {
               const point = longPressPoint;
@@ -5246,10 +5243,8 @@ export function MapScreen({
               if (point) startRouteDrawAt(point);
             }}
           />
-          {/* MaterialCommunityIcons, as everywhere else measure appears: Feather
-              has no ruler, and the near misses read as "resize" (DESIGN.md §2). */}
           <Row
-            leading={<MeasureGlyph />}
+            icon="measure"
             title="Measure from here"
             onPress={() => {
               const point = longPressPoint;
@@ -5258,7 +5253,7 @@ export function MapScreen({
             }}
           />
           <Row
-            icon="plus-circle"
+            icon="addPlace"
             title="Add a place"
             subtitle="With this position filled in"
             onPress={() => {
@@ -5486,24 +5481,10 @@ function RouteNameForm({
       />
       <Button
         label={saving ? "Saving…" : "Save"}
-        icon="check"
+        icon="done"
         disabled={saving}
         onPress={commit}
       />
-    </View>
-  );
-}
-
-/**
- * The measure tool's icon in a `Row`'s identity tile. Hand-built rather than
- * passed as `Row.icon` because that prop takes a Feather name, and measure is
- * the one glyph Feather doesn't have (DESIGN.md §2 — a second family is allowed
- * only for a glyph it lacks). Mirrors `Row`'s own tile exactly.
- */
-function MeasureGlyph() {
-  return (
-    <View style={styles.measureTile}>
-      <MaterialCommunityIcons name="ruler" size={20} color={theme.accent} />
     </View>
   );
 }
@@ -5552,14 +5533,6 @@ const styles = StyleSheet.create({
   // floating next to the text.
   filterBadgeText: { flex: 1, color: theme.text, fontSize: fontSize.sm },
   sheetBody: { gap: spacing(1) },
-  measureTile: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.md,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: withAlpha(theme.accent, 0.16),
-  },
   controls: {
     position: "absolute",
     right: CHROME_GAP,
@@ -5588,7 +5561,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   controlActive: { backgroundColor: theme.accent },
-  locateIcon: { marginTop: 3, marginLeft: -3 },
   // Pill shape for "something is being done to this map" notices.
   filterBadge: {
     flexDirection: "row",

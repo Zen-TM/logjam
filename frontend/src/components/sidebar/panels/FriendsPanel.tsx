@@ -23,13 +23,6 @@
 // `/friends/search` never return an email (root CLAUDE.md), and nothing here
 // would have somewhere to put one.
 import { useEffect, useRef, useState } from "react";
-import {
-  EllipsisVertical,
-  Share2,
-  UserMinus,
-  UserPlus,
-  Users,
-} from "lucide-react";
 import classes from "./FriendsPanel.module.css";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
 import FriendSharingSection from "./FriendSharingSection";
@@ -177,7 +170,7 @@ function FriendsPanel({
           <Button
             compact
             variant="outline"
-            icon={UserPlus}
+            icon="addFriend"
             onClick={() => setAddOpen(true)}
           >
             Add
@@ -197,13 +190,13 @@ function FriendsPanel({
       {friends.length === 0 && friendRequests.length === 0 ? (
         <div className={classes.emptyArea}>
           <EmptyState
-            icon={Users}
+            icon="friends"
             title="No friends yet"
             body="Friends are who you can share a place, a route or a map with. Find one by their username."
             actions={
               <Button
                 variant="filled"
-                icon={UserPlus}
+                icon="addFriend"
                 onClick={() => setAddOpen(true)}
               >
                 Add a friend
@@ -277,13 +270,13 @@ function FriendsPanel({
                       {
                         id: "shares",
                         label: "Shared items",
-                        icon: Share2,
+                        icon: "shareFriend",
                         onSelect: () => setOpenFriend(friend),
                       },
                       {
                         id: "remove",
                         label: "Remove friend",
-                        icon: UserMinus,
+                        icon: "unshare",
                         danger: true,
                         onSelect: () => setRemoving(friend),
                       },
@@ -291,7 +284,7 @@ function FriendsPanel({
                     trigger={(props) => (
                       <IconButton
                         {...props}
-                        icon={EllipsisVertical}
+                        icon="overflow"
                         label={`Actions for ${friend.username}`}
                       />
                     )}

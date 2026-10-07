@@ -88,7 +88,7 @@ export function RenameForm({
           multiline
         />
       ) : null}
-      <Button label="Save" icon="check" onPress={commit} />
+      <Button label="Save" icon="done" onPress={commit} />
     </>
   );
 }

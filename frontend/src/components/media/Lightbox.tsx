@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { X, ImageOff } from "lucide-react";
 import { mediaCategory, type MediaItem } from "@logjam/shared";
 import classes from "./Lightbox.module.css";
+import { Icon } from "../../ui";
 
 // Full-res image/video overlay with a focus trap (WCAG 2.1.2 / 4.1.2). Shared
 // by MediaGallery (grid thumbnails) and PlaceSlideshow so the close/Esc/focus
@@ -88,12 +88,12 @@ export default function Lightbox({
         onClick={onClose}
         aria-label="Close"
       >
-        <X size={22} />
+        <Icon idea="close" size={22} />
       </button>
       <div className={classes.lightboxContent}>
         {failed ? (
           <div className={classes.lightboxFallback}>
-            <ImageOff size={32} />
+            <Icon idea="missingMedia" size={32} />
             <span>Couldn&rsquo;t load {item.filename}.</span>
           </div>
         ) : mediaCategory(item.mediaType) === "video" ? (

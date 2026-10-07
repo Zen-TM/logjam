@@ -1,5 +1,5 @@
-import { AlertTriangle } from "lucide-react";
 import classes from "./ErrorBanner.module.css";
+import { Icon } from "../../ui";
 
 type Props = {
   message: string;
@@ -10,7 +10,7 @@ type Props = {
 export function ErrorBanner({ message, onRetry, onDismiss }: Props) {
   return (
     <div className={classes.banner} role="alert">
-      <AlertTriangle size={14} className={classes.icon} />
+      <Icon idea="warning" size={14} className={classes.icon} />
       <div className={classes.content}>
         {message}
         {(onRetry || onDismiss) && (

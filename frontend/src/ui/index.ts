@@ -2,6 +2,8 @@
 // something the kit does not have adds it HERE rather than styling its own.
 // Native elements and CSS modules only — no MUI (frontend/DESIGN.md).
 export { Button, IconButton } from "./Button";
+export { Icon, type Glyph } from "./Icon";
+export { NorthNeedle } from "./webIcons";
 export { Chip, ChipPicker, ChipRail, type ChipOption } from "./Chip";
 export { ActivitySpark, StatGrid, type SparkBucket, type Stat } from "./Stats";
 export { Avatar, IconTile, Row, TileCheckbox } from "./Row";

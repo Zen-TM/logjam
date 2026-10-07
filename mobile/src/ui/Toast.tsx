@@ -1,8 +1,8 @@
 import { useEffect, useEffectEvent, useState } from "react";
 import { Animated, StyleSheet, Text, View } from "react-native";
-import { Feather } from "@expo/vector-icons";
 
 import { fontSize, fontWeight, radius, spacing, theme } from "../theme";
+import { Icon } from "./Icon";
 
 export type ToastMessage = {
   text: string;
@@ -82,8 +82,8 @@ export function Toast({
           { opacity, transform: [{ translateY: lift }] },
         ]}
       >
-        <Feather
-          name={error ? "alert-circle" : "check-circle"}
+        <Icon
+          idea={error ? "warning" : "success"}
           size={16}
           color={theme.onInverse}
         />

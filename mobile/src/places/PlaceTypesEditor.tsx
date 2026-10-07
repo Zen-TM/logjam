@@ -35,7 +35,6 @@ import {
   View,
   type LayoutChangeEvent,
 } from "react-native";
-import { Feather } from "@expo/vector-icons";
 import {
   PLACE_TYPE_COLORS,
   PLACE_TYPE_ICON_KEYS,
@@ -50,8 +49,15 @@ import {
   deletePlaceTypeLocal,
   updatePlaceTypeLocal,
 } from "../sync/outbox";
-import { Button, ErrorBanner, Row, SectionHeader, TextField } from "../ui";
-import { placeTypeFeatherIcon } from "./placeTypeIcon";
+import {
+  Button,
+  ErrorBanner,
+  Row,
+  SectionHeader,
+  TextField,
+  Icon,
+} from "../ui";
+import { placeTypeGlyph } from "./placeTypeIcon";
 
 /** A type nobody owns is a built-in: not renameable, not deletable. Same rule
  *  and same reason as `isSystemFieldDef`, on the other system vocabulary. */
@@ -85,7 +91,7 @@ export function PlaceTypeList({
         isSystemPlaceType(type) ? (
           <Row
             key={type.id}
-            icon={placeTypeFeatherIcon(type.iconKey)}
+            icon={placeTypeGlyph(type.iconKey)}
             hue={type.color}
             title={type.name}
             subtitle="Built in"
@@ -93,7 +99,7 @@ export function PlaceTypeList({
         ) : (
           <Row
             key={type.id}
-            icon={placeTypeFeatherIcon(type.iconKey)}
+            icon={placeTypeGlyph(type.iconKey)}
             hue={type.color}
             title={type.name}
             onPress={() => onEdit(type)}
@@ -263,8 +269,8 @@ export function usePlaceTypeForm({
                   draft.iconKey === iconKey ? styles.cellChosen : null,
                 ]}
               >
-                <Feather
-                  name={placeTypeFeatherIcon(iconKey)}
+                <Icon
+                  idea={placeTypeGlyph(iconKey)}
                   size={20}
                   color={draft.iconKey === iconKey ? theme.accent : theme.text}
                 />
@@ -294,7 +300,7 @@ export function usePlaceTypeForm({
                 {draft.color === color ? (
                   // Dark ink on a light swatch: the palette is light precisely so a
                   // mark on top of it stays legible.
-                  <Feather name="check" size={16} color={theme.onFill} />
+                  <Icon idea="done" size={16} color={theme.onFill} />
                 ) : null}
               </Pressable>
             ))}
@@ -306,7 +312,7 @@ export function usePlaceTypeForm({
 
       {editing ? (
         <Row
-          icon="trash-2"
+          icon="delete"
           hue={theme.warning}
           title="Delete type"
           onPress={confirmDelete}
@@ -328,7 +334,7 @@ export function usePlaceTypeForm({
         <View style={styles.action}>
           <Button
             label={editing ? "Save" : "Add type"}
-            icon="check"
+            icon="done"
             loading={saving}
             onPress={() => void save()}
           />
