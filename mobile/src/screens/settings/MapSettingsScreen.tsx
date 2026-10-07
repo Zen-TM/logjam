@@ -74,7 +74,7 @@ import { applyRecordingOptionsToActiveTrack } from "../../tracks/trackRecorder";
 import {
   ScreenScroll,
   SectionHeader,
-  SwatchPicker,
+  ColourField,
   Toast,
   type ToastMessage,
 } from "../../ui";
@@ -268,9 +268,9 @@ export function MapSettingsScreen() {
         />
 
         <SectionHeader title="Your location marker" />
-        <SwatchPicker
+        <ColourField
           label="Colour"
-          colors={MARKER_COLOR_ORDER.map((id) => MARKER_COLORS[id])}
+          palette={MARKER_COLOR_ORDER.map((id) => MARKER_COLORS[id])}
           value={MARKER_COLORS[markerColorId]}
           nameOf={(color) =>
             MARKER_COLOR_ORDER.find((id) => MARKER_COLORS[id] === color) ??

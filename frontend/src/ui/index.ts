@@ -9,7 +9,7 @@ export { ActivitySpark, StatGrid, type SparkBucket, type Stat } from "./Stats";
 export { Avatar, IconTile, ListEnd, Row, TileCheckbox } from "./Row";
 export { Hero, Meter, type MeterSegment } from "./Hero";
 export { SwitchRow, Toggle } from "./Toggle";
-export { Checkbox, SwatchPicker } from "./Choice";
+export { Checkbox } from "./Choice";
 export {
   LiveNumberField,
   NumberField,

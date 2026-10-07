@@ -29,14 +29,20 @@
   box-shadow: var(--edge), var(--outline);
 }
 
-/* THE CARD FILL MEANS "PRESS ME" (UX §4). Only a row that DOES something wears
-   it: one that opens (`onOpen` or `href` lays the stretched button over the
-   card) or one that can be picked. A read-out has no fill and does not answer
-   the pointer: lighting its edge on hover promised a press that does nothing
-   (operator, 2026-09-16). A row with only trailing controls is not pressable:
-   its controls are. */
+/* THE CARD FILL MEANS "YOU CAN ACT ON THIS" (UX §4). A row wears it when it
+   opens (`onOpen` or `href` lays the stretched button over the card), can be
+   picked, or holds controls of its own (a ⋯, Accept / Decline, a switch): a
+   request row with two buttons and no card looked broken (operator,
+   2026-10-06). Only a READ-OUT has none, and it does not answer the pointer:
+   lighting its edge on hover promised a press that does nothing (operator,
+   2026-09-16). A row of controls alone gets the fill but not the hover edge,
+   because the card itself is not what presses. */
 .row:has(.open),
-.row:has(.pick) {
+.row:has(.pick),
+.row:has(
+  :is(.trailing, .footer)
+    :is(button, a, input, select, textarea, [role="switch"])
+) {
   border-color: var(--color-line);
   background: var(--color-card);
 }

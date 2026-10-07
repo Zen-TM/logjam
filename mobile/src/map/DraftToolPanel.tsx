@@ -50,7 +50,7 @@ import {
   theme,
   withAlpha,
 } from "../theme";
-import { Button, IconButton, SwatchPicker } from "../ui";
+import { Button, IconButton, ColourField } from "../ui";
 import { ElevationReadout } from "./ElevationReadout";
 import { SnapPicker } from "./SnapPicker";
 import { useElevationProfile } from "./useElevationProfile";
@@ -179,10 +179,10 @@ export function DraftToolPanel({
               It keeps an IconButton's 40pt box so it lines up with the buttons
               either side of it and stays a real tap target. */}
           {onColorChange ? (
-            <SwatchPicker
+            <ColourField
               label="Route colour"
               hideLabel
-              colors={TRACK_COLORS}
+              palette={TRACK_COLORS}
               value={color ?? theme.accent}
               nameOf={trackColorName}
               disabled={saving}

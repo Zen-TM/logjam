@@ -18,7 +18,7 @@ const SWATCH = 32;
 const CELL = 48;
 
 /**
- * A colour chosen from a closed palette, as on Logjam Web (`SwatchPicker`): the
+ * A colour chosen from a closed palette, as on Logjam Web (`ColourField`): the
  * label at the left, the colour as a filled disc at the right, and only the
  * disc presses. The palette is ALWAYS a floating card over the screen, opened
  * from that disc and closed by a choice, the ×, or a press outside it: never
@@ -33,9 +33,9 @@ const CELL = 48;
  * Words are text-coloured and the tick is the one ink, `onFill`; the palette is
  * light precisely so a mark on top of a swatch stays legible.
  */
-export function SwatchPicker({
+export function ColourField({
   label,
-  colors,
+  palette,
   value,
   onChange,
   nameOf,
@@ -43,7 +43,9 @@ export function SwatchPicker({
   disabled = false,
 }: {
   label: string;
-  colors: readonly string[];
+  /** The closed list to choose from. Logjam Web's `ColourField` takes the same
+   *  prop; its free colour with opacity (a topo's cartography) is web only. */
+  palette: readonly string[];
   value: string | undefined;
   onChange: (next: string) => void;
   /** What to CALL each colour, as its accessible name. Without one a swatch
@@ -97,7 +99,7 @@ export function SwatchPicker({
               />
             </View>
             <View style={styles.grid}>
-              {colors.map((color) => (
+              {palette.map((color) => (
                 <Pressable
                   key={color}
                   accessibilityRole="button"

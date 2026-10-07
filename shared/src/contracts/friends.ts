@@ -50,7 +50,11 @@ export const FRIENDS = {
 
 export type FriendsBucket = "all" | "friends" | "requests";
 
-/** A request outranks the count: it is the one thing waiting on the user. */
+/**
+ * Logjam GPS's hero. A request outranks the count: it is the one thing
+ * waiting on the user. Logjam Web's hero is `FRIENDS.title`: its chips show
+ * both counts.
+ */
 export function friendsHeroTitle(requests: number, friends: number): string {
   if (requests > 0)
     return `${requests} ${requests === 1 ? "request" : "requests"}`;
@@ -87,6 +91,22 @@ export function friendRemoveConfirm(username: string): {
     confirmTitle: `Remove ${username}?`,
     confirmBody: `Everything you share with each other stops being shared, both ways. You can send ${username} a friend request again later, and sharing does not come back with it.`,
   };
+}
+
+/** The same confirm for a selection of friends (Logjam Web's bulk bar). */
+export function friendsRemoveConfirm(count: number): {
+  confirmTitle: string;
+  confirmBody: string;
+} {
+  return {
+    confirmTitle: `Remove ${count} friends?`,
+    confirmBody:
+      "Everything you share with each of them stops being shared, both ways. You can send them a friend request again later, and sharing does not come back with it.",
+  };
+}
+
+export function friendsRemovedMessage(count: number): string {
+  return `${count} friends removed.`;
 }
 
 type FriendVerbDeclaration = {

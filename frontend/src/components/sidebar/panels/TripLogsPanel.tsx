@@ -27,7 +27,6 @@ import {
   tripsEmptyKind,
   tripsEmptyState,
   tripsFilterNote,
-  tripsHeroTitle,
   TRIPS_ADD,
   TRIPS_ADD_ICON,
   TRIPS_FILTER_SHEET,
@@ -59,6 +58,7 @@ import {
   Hero,
   IconButton,
   IconTile,
+  ListEnd,
   Menu,
   Row,
   SearchField,
@@ -454,8 +454,6 @@ function TripLogsPanel({
     />
   );
 
-  const total = tripLogsTotal ?? tripLogs.length;
-
   // The ways to add a trip, in the contract's order.
   const addEntries: Record<
     SectionKeysOn<typeof TRIPS_ADD, "web">,
@@ -470,7 +468,7 @@ function TripLogsPanel({
 
   const hero = (
     <Hero
-      title={!loaded ? "Logs" : tripsHeroTitle(total)}
+      title={TRIPS_LIST.title}
       actions={
         searchOpen ? (
           <>
@@ -633,6 +631,28 @@ function TripLogsPanel({
         })
       : null;
 
+  // The same buttons are the empty state's and the end of the list's.
+  const addTripButtons = (
+    <>
+      <Button
+        compact
+        variant="filled"
+        icon={TRIPS_ADD_ICON.add}
+        onClick={() => setCreatingTrip(true)}
+      >
+        {TRIPS_ADD.copy.add}
+      </Button>
+      <Button
+        compact
+        variant="outline"
+        icon={TRIPS_ADD_ICON.importFile}
+        onClick={onOpenUnifiedImport}
+      >
+        {TRIPS_ADD.copy.importFile}
+      </Button>
+    </>
+  );
+
   const list = !loaded ? (
     <div className={classes.emptyArea} role="status">
       <LoadingState label={copy.loading} />
@@ -645,24 +665,7 @@ function TripLogsPanel({
         body={emptyState.body}
         actions={
           emptyState.action === "add" ? (
-            <>
-              <Button
-                compact
-                variant="filled"
-                icon={TRIPS_ADD_ICON.add}
-                onClick={() => setCreatingTrip(true)}
-              >
-                {TRIPS_ADD.copy.add}
-              </Button>
-              <Button
-                compact
-                variant="outline"
-                icon={TRIPS_ADD_ICON.importFile}
-                onClick={onOpenUnifiedImport}
-              >
-                {TRIPS_ADD.copy.importFile}
-              </Button>
-            </>
+            addTripButtons
           ) : filtering ? (
             <Button compact variant="outline" onClick={clearEverything}>
               {copy.clearFilters}
@@ -691,6 +694,7 @@ function TripLogsPanel({
           </section>
         );
       })}
+      <ListEnd>{addTripButtons}</ListEnd>
     </div>
   );
 

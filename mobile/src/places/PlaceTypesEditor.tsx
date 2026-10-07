@@ -60,7 +60,7 @@ import {
   SectionHeader,
   TextField,
   Icon,
-  SwatchPicker,
+  ColourField,
 } from "../ui";
 import { fieldLabel } from "../ui/fieldLabel";
 import { placeTypeGlyph } from "./placeTypeIcon";
@@ -286,9 +286,9 @@ export function usePlaceTypeForm({
             ))}
       </View>
 
-      <SwatchPicker
+      <ColourField
         label="Colour"
-        colors={PLACE_TYPE_COLORS}
+        palette={PLACE_TYPE_COLORS}
         value={draft.color}
         nameOf={placeTypeColorName}
         onChange={(color) => setDraft((current) => ({ ...current, color }))}

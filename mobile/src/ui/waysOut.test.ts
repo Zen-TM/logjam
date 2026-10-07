@@ -35,7 +35,7 @@ describe("ways out", () => {
     expect(modals).toEqual([
       "media/MediaViewer.tsx",
       "ui/BottomSheet.tsx",
-      "ui/SwatchPicker.tsx",
+      "ui/ColourField.tsx",
     ]);
   });
 

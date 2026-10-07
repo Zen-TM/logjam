@@ -16,7 +16,7 @@ import { Alert, StyleSheet, View } from "react-native";
 import { messageFromError, TRACK_COLORS, trackColorName } from "@logjam/shared";
 
 import { assetHue, spacing, theme } from "../theme";
-import { BottomSheet, RenameForm, Row, SwatchPicker } from "../ui";
+import { BottomSheet, RenameForm, Row, ColourField } from "../ui";
 import { trackActions } from "../saved/assetActions";
 import { usePlacePicker } from "../places/usePlacePicker";
 import type { Bbox } from "../saved/bboxOfPoints";
@@ -269,9 +269,9 @@ export function TrackOptionsSheet({
               }}
             />
           ) : null}
-          <SwatchPicker
+          <ColourField
             label="Colour"
-            colors={TRACK_COLORS}
+            palette={TRACK_COLORS}
             value={track.color}
             nameOf={trackColorName}
             onChange={(swatch) => {
