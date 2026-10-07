@@ -124,7 +124,7 @@
 
 /* An icon button that is "on" takes a tint rather than a fill, so it cannot
    outshout the page's primary action. Its glyph is the text colour: an accent
-   glyph on a wash of itself fell to 2.7:1 on Daylight's paper. */
+   glyph on a wash of itself fell to 2.7:1 on Ghost Gum's paper. */
 .iconButton.tinted {
   background: color-mix(in srgb, var(--color-accent) 16%, transparent);
   color: var(--color-text);

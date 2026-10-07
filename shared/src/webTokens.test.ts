@@ -32,7 +32,7 @@ describe("webTokensCss", () => {
         expect(props.get(`--color-${kebab(role)}`)).toBe(hex.toLowerCase());
       }
     }
-    expect(blockOf(css, '[data-scheme="daylight"]').get("color-scheme")).toBe(
+    expect(blockOf(css, '[data-scheme="ghostGum"]').get("color-scheme")).toBe(
       "light",
     );
   });
