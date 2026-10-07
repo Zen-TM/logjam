@@ -29,6 +29,7 @@ import {
   isReservedFieldKey,
   mediaCategory,
   primaryTripType,
+  placeDeleteConfirm,
   removeShareConfirm,
   SOURCES_FIELD_KEY,
   systemFieldDef,
@@ -67,32 +68,42 @@ import {
 import PlaceSlideshow from "../../media/PlaceSlideshow";
 import { placeTypeLucideIcon } from "./placeTypeIcon";
 import { tripTypeLook } from "./tripTypeIcon";
-import { placeVerbs, type PlaceVerbId } from "./placesModel";
+import { placeVerbEntries, type WebPlaceVerbId } from "./placeVerbMenu";
 import {
   Dialog,
   EmptyState,
   Hero,
+  Icon,
   IconButton,
   IconTile,
   Menu,
   Row,
   SectionHeader,
-  type MenuEntry,
-  Icon,
-  type Glyph,
 } from "../../../ui";
 
-const VERB_ICON: Partial<Record<PlaceVerbId, Glyph>> = {
-  edit: "edit",
-  logTrip: "trip",
-  show: "map",
-  makeMap: "template",
-  share: "shareFriend",
-  copy: "copy",
-  copyAndRemove: "moveCopy",
-  remove: "unlink",
-  delete: "delete",
-};
+/**
+ * Runs a verb pressed on the place's ROW that needs this page's forms and
+ * confirms. Once per request: the ref outlives StrictMode's second effect
+ * pass, which would otherwise save two copies of a shared place.
+ */
+function RunVerbRequest({
+  request,
+  run,
+  onConsumed,
+}: {
+  request: { id: WebPlaceVerbId } | null;
+  run: (id: WebPlaceVerbId) => void;
+  onConsumed: () => void;
+}) {
+  const handled = useRef<object | null>(null);
+  useEffect(() => {
+    if (!request || handled.current === request) return;
+    handled.current = request;
+    run(request.id);
+    onConsumed();
+  });
+  return null;
+}
 
 // Format a stored attribute value for display. Returns null when the value is
 // empty so the caller can skip the row entirely.
@@ -176,6 +187,8 @@ function PlaceDetailPanel({
   onOpenTrip,
   onMakeMap,
   onSharePlace,
+  verbRequest,
+  onVerbRequestConsumed,
   customFieldDefs,
   placeTypes,
   onCustomFieldDefsChange,
@@ -206,6 +219,9 @@ function PlaceDetailPanel({
   onMakeMap: (place: TPlace, kind: "topo" | "geopdf") => void;
   /** Open the share-or-export dialog on this place, the one the list uses. */
   onSharePlace: (placeId: string) => void;
+  /** A verb pressed on this place's row in the list, for this page to run. */
+  verbRequest: { id: WebPlaceVerbId } | null;
+  onVerbRequestConsumed: () => void;
   customFieldDefs: ScopedCustomFieldDef[];
   /** The types a place may be filed under, passed to the edit dialog. */
   placeTypes: TPlaceType[];
@@ -450,6 +466,10 @@ function PlaceDetailPanel({
     itemName: current.name,
     ownerName: ownerUsername(friends, current.ownerId),
   });
+  const deleteCopy = placeDeleteConfirm(
+    { name: current.name },
+    loadingTrips ? undefined : tripLogs.length,
+  );
   const removeCopy = removeShareConfirm({
     kindLabel: "place",
     itemName: current.name,
@@ -610,72 +630,29 @@ function PlaceDetailPanel({
 
   const busy = copying || deleting || removing;
 
-  function runVerb(id: PlaceVerbId) {
-    switch (id) {
-      case "open":
-        return; // A row's verb; this page is what it opens.
-      case "edit":
-        return setShowEdit(true);
-      case "logTrip":
-        setEditingTripLog(undefined);
-        return setShowTripLogDialog(true);
-      case "show":
-        return onFlyToPlace(current.latitude, current.longitude);
-      case "makeMap":
-        return; // Replaced by its two named entries below.
-      case "share":
-        return onSharePlace(current.id);
-      case "copy":
-        return void handleCopyPlace(false);
-      case "copyAndRemove":
-        return setConfirmCopyAndRemove(true);
-      case "remove":
-        return setConfirmRemove(true);
-      case "delete":
-        return setShowDeleteConfirm(true);
-    }
-  }
-
-  const entries: MenuEntry[] = placeVerbs("detail", isOwnedPlace).flatMap(
-    (verb, index, all) => {
-      // "Make a map here" is two maps, so it is two entries — the same pair the
-      // list's menu offers, named the same way.
-      const items: MenuEntry[] =
-        verb.id === "makeMap"
-          ? [
-              {
-                id: "topo",
-                label: "Make a LiDAR topo here",
-                icon: "lidar",
-                disabled: busy,
-                onSelect: () => onMakeMap(current, "topo"),
-              },
-              {
-                id: "geopdf",
-                label: "Make a GeoPDF here",
-                icon: "geoPdf",
-                disabled: busy,
-                onSelect: () => onMakeMap(current, "geopdf"),
-              },
-            ]
-          : [
-              {
-                id: verb.id,
-                label: verb.label,
-                ...(VERB_ICON[verb.id] ? { icon: VERB_ICON[verb.id]! } : {}),
-                ...(verb.danger ? { danger: true } : {}),
-                disabled: busy,
-                onSelect: () => runVerb(verb.id),
-              },
-            ];
-      // A rule sits above the verbs that end the user's relationship with the
-      // place, so parting with something is never adjacent to an ordinary
-      // verb. Not keyed on `danger`: Remove belongs below the rule and
-      // destroys nothing.
-      return verb.separated && index > 0 && !all[index - 1].separated
-        ? [{ id: `${verb.id}-sep`, separator: true } as MenuEntry, ...items]
-        : items;
+  // Exhaustive by type: every verb the contract gives Logjam Web has a runner.
+  const verbRunners: Record<WebPlaceVerbId, () => void> = {
+    open: () => {}, // A row's verb; this page is what it opens.
+    edit: () => setShowEdit(true),
+    logTrip: () => {
+      setEditingTripLog(undefined);
+      setShowTripLogDialog(true);
     },
+    show: () => onFlyToPlace(current.latitude, current.longitude),
+    makeTopo: () => onMakeMap(current, "topo"),
+    makeGeoPdf: () => onMakeMap(current, "geopdf"),
+    share: () => onSharePlace(current.id),
+    copy: () => void handleCopyPlace(false),
+    copyAndRemove: () => setConfirmCopyAndRemove(true),
+    remove: () => setConfirmRemove(true),
+    delete: () => setShowDeleteConfirm(true),
+  };
+
+  const entries = placeVerbEntries(
+    "page",
+    isOwnedPlace,
+    (id) => verbRunners[id](),
+    busy,
   );
 
   const visualMedia = placeMedia.filter(
@@ -686,6 +663,11 @@ function PlaceDetailPanel({
 
   return (
     <>
+      <RunVerbRequest
+        request={verbRequest}
+        run={(id) => verbRunners[id]()}
+        onConsumed={onVerbRequestConsumed}
+      />
       <div className={classes.root}>
         <Hero
           title={current.name}
@@ -1062,15 +1044,8 @@ function PlaceDetailPanel({
 
       <ConfirmDialog
         open={showDeleteConfirm}
-        title="Delete place?"
-        message={
-          <>
-            This permanently deletes {current.name}, along with its photos,
-            tracks and shares. Your trip logs are kept — they&rsquo;ll be
-            unlinked from this place but stay in your logbook. This cannot be
-            undone.
-          </>
-        }
+        title={deleteCopy.confirmTitle}
+        message={deleteCopy.confirmBody}
         confirmLabel="Delete"
         confirmColor="error"
         busy={deleting}
