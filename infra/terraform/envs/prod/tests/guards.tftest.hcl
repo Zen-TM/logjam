@@ -147,7 +147,7 @@ run "contributor_is_read_only_and_mfa_gated" {
       toset(aws_iam_group_policy_attachments_exclusive.contributor.policy_arns) == toset(["arn:aws:iam::aws:policy/ReadOnlyAccess"]) &&
       toset(aws_iam_group_policies_exclusive.contributor.policy_names) == toset([aws_iam_group_policy.contributor.name])
     )
-    error_message = "The contributor group may hold only ReadOnlyAccess and its one inline policy, managed exclusively."
+    error_message = "The contributor group may hold only ReadOnlyAccess and its one inline policy, managed exclusively (docs/decisions/0028)."
   }
 
   # Red when a policy is attached to the user directly in Terraform, or when
@@ -182,7 +182,7 @@ run "contributor_is_read_only_and_mfa_gated" {
       st.Condition == { BoolIfExists = { "aws:MultiFactorAuthPresent" = "false" } } &&
       !contains(st.NotAction, "iam:DeactivateMFADevice") && !contains(st.NotAction, "iam:DeleteVirtualMFADevice")
     ])
-    error_message = "The contributor group must be denied everything but MFA enrolment without MFA."
+    error_message = "The contributor group must be denied everything but MFA enrolment without MFA (docs/decisions/0028)."
   }
 
   # Mutation: an Allow outside the self-service set (his own password and
@@ -192,7 +192,18 @@ run "contributor_is_read_only_and_mfa_gated" {
       for st in jsondecode(aws_iam_group_policy.contributor.policy).Statement :
       st.Effect == "Deny" || alltrue([for a in flatten([st.Action]) : startswith(a, "iam:")])
     ])
-    error_message = "The contributor group policy may Allow only IAM self-service actions."
+    error_message = "The contributor group policy may Allow only IAM self-service actions: a contributor changes AWS through a PR (docs/decisions/0028)."
+  }
+
+  # Mutation: dropping the statement, or narrowing it to one key, lets the
+  # contributor download the Terraform state.
+  assert {
+    condition = anytrue([
+      for st in jsondecode(aws_iam_group_policy.contributor.policy).Statement :
+      st.Effect == "Deny" && try(st.Resource, null) == "arn:aws:s3:::logjam-tfstate-620853681701/*" &&
+      contains(flatten([st.Action]), "s3:GetObject") && contains(flatten([st.Action]), "s3:GetObjectVersion")
+    ])
+    error_message = "The contributor group must be denied every object in the state bucket (docs/decisions/0028)."
   }
 
   # Mutation: growing the policy past the inline group limit (apply fails).

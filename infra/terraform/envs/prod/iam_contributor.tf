@@ -6,7 +6,8 @@
 #
 # The grant is the CI plan role's: ReadOnlyAccess plus the same privacy Deny
 # (local.ci_readonly_privacy_deny, iam.tf), so the contributor reads no user
-# data, secret values, logs or user directory either.
+# data, secret values, logs or user directory either. Why read-only, why a
+# Deny over a managed policy, and why MFA: docs/decisions/0028.
 locals {
   contributor_user  = "collaborator-oliver"
   contributor_group = "logjam-developers"
@@ -19,6 +20,15 @@ locals {
     Statement = concat(
       jsondecode(local.ci_readonly_privacy_deny).Statement,
       [
+        # The plan role reads the state to plan; a person reads the plan in
+        # the PR instead. State holds every attribute of every resource,
+        # including ones a provider marks sensitive.
+        {
+          Sid      = "DenyTerraformState"
+          Effect   = "Deny"
+          Action   = ["s3:GetObject", "s3:GetObjectVersion"]
+          Resource = "arn:aws:s3:::logjam-tfstate-620853681701/*"
+        },
         # Without these the MFA gate below would lock him out of enrolling.
         # Listing is exempt so the console can show which device is enrolled
         # and the password policy it must satisfy.

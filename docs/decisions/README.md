@@ -123,3 +123,4 @@ supersede instead.
 | [0025](0025-github-settings-in-terraform.md) | The repository's GitHub settings are Terraform, applied on merge like prod | 2026-09-29 | Accepted |
 | [0026](0026-plan-fingerprint-covers-planned-values.md) | The apply compares an HMAC of each changed resource's planned values, reporting first and refusing once trusted | 2026-10-02 | Accepted |
 | [0027](0027-pr-plans-run-after-the-maintainer-approves.md) | Pull-request plans run only after the maintainer approves them | 2026-10-03 | Accepted |
+| [0028](0028-contributor-aws-access-is-read-only-behind-the-ci-deny.md) | A contributor's AWS access is read-only, behind the CI privacy Deny and MFA | 2026-10-08 | Accepted |
