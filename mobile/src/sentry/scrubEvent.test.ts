@@ -110,6 +110,18 @@ describe("scrubStructure", () => {
     });
   });
 
+  // Mutation that turns this red: delete any of the four keys from
+  // SENSITIVE_KEYS in scrubEvent.ts.
+  it("censors generic free-text keys", () => {
+    const input = { description: "d", summary: "s", comment: "c", title: "t" };
+    expect(scrubStructure(input)).toEqual({
+      description: "[redacted]",
+      summary: "[redacted]",
+      comment: "[redacted]",
+      title: "[redacted]",
+    });
+  });
+
   it("scrubs URLs inside string values", () => {
     expect(
       scrubStructure({ url: "https://api.logjamnsw.com/places/abc" }),
