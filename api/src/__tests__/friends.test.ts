@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
+import { randomUUID } from "node:crypto";
+import prisma from "../services/prisma";
 import { ALICE_ID, BOB_ID, CAROL_ID, NONEXISTENT_ID } from "./_actors";
 
 // Requires `make dev` running with AUTH_MODE=fake (requests = seeded alice).
@@ -53,12 +55,42 @@ describe("friends routes (fake auth = alice)", () => {
     expect(res.status).toBe(409);
   });
 
-  it("POST /friends/request 404s for an unknown addressee", async () => {
-    const res = await request(API_URL)
+  it("POST /friends/request answers an unknown id exactly as a blocked pair (no user-existence oracle)", async () => {
+    // Mutation that turns this red: restoring the distinct 404 for a missing
+    // addressee in routes/friends.ts.
+    const unknown = await request(API_URL)
       .post("/friends/request")
       .set(AUTH)
       .send({ addresseeId: NONEXISTENT_ID });
-    expect(res.status).toBe(404);
+    // The blocked pair is a throwaway user blocking alice; no API creates one,
+    // and rows of our own leave the seeded users and friendships alone.
+    const tag = randomUUID();
+    const blocker = await prisma.user.create({
+      data: {
+        cognitoId: `blocker-${tag}`,
+        username: `blocker-${tag.slice(0, 8)}`,
+        email: `blocker-${tag}@example.invalid`,
+      },
+    });
+    await prisma.friendship.create({
+      data: {
+        requesterId: blocker.id,
+        addresseeId: ALICE_ID,
+        status: "blocked",
+      },
+    });
+    try {
+      const blocked = await request(API_URL)
+        .post("/friends/request")
+        .set(AUTH)
+        .send({ addresseeId: blocker.id });
+      expect(blocked.status).toBe(403);
+      expect(unknown.status).toBe(blocked.status);
+      // requestId differs per request; the message is what could tell them apart.
+      expect(unknown.body.error).toBe(blocked.body.error);
+    } finally {
+      await prisma.user.delete({ where: { id: blocker.id } });
+    }
   });
 
   it("PATCH /friends/:id/accept 404s for a non-existent friendship", async () => {

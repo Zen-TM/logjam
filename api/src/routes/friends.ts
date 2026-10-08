@@ -121,7 +121,9 @@ router.post(
     const addressee = await prisma.user.findUnique({
       where: { id: addresseeId },
     });
-    if (!addressee) throw new AppError(404, "User not found");
+    // Same refusal a blocked pair gets: a distinct 404 would tell the caller
+    // which user ids exist.
+    if (!addressee) throw new AppError(403, "Unable to send friend request");
 
     // Check for any existing friendship or pending request in either direction
     const existing = await prisma.friendship.findFirst({
