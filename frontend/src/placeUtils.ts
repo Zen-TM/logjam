@@ -35,12 +35,7 @@ import { cacheProfile, cachedProfile } from "./elevationCache";
 // re-exported here, so the mobile client (mobile/src/api/types.ts) and this
 // file cannot drift — they used to be two hand-maintained copies kept in step
 // by a comment. Every existing `from "./placeUtils"` import still resolves.
-export type {
-  TPlace,
-  TNotification,
-  TTripLog,
-  TUser,
-} from "@logjam/shared";
+export type { TPlace, TNotification, TTripLog, TUser } from "@logjam/shared";
 import type { TPlace, TNotification, TTripLog, TUser } from "@logjam/shared";
 
 // A trip's title: an explicit displayName always wins; otherwise it's the
@@ -1510,8 +1505,10 @@ export function useStandaloneTracks(
 
 // ── Friends ───────────────────────────────────────────────────
 
-export function searchUsers(query: string): Promise<TSearchUser[]> {
-  return apiFetch<TSearchUser[]>(
+export function searchUsers(
+  query: string,
+): Promise<{ data: TSearchUser[]; total: number | null }> {
+  return apiFetchWithTotal<TSearchUser[]>(
     `/friends/search?q=${encodeURIComponent(query)}`,
   );
 }

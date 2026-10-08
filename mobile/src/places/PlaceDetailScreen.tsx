@@ -44,6 +44,7 @@ import {
   routeLengthM,
   placeStatus,
   attributeRows,
+  truncationHint,
 } from "@logjam/shared";
 
 import { tripTitle } from "../api/tripTitle";
@@ -77,7 +78,7 @@ import {
   resolveForeignField,
   type ForeignFieldAction,
 } from "../api/foreignFields";
-import { linkablePlaces, truncationHint } from "./linkablePlaces";
+import { linkablePlaces } from "./linkablePlaces";
 import {
   useMirrorPlace,
   useMirrorPlaces,

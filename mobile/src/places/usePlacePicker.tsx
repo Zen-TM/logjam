@@ -17,11 +17,16 @@
 // displacement decision is `routeSlot.ts`'s and nobody else's.
 import { useMemo, useState, type ReactNode } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { TRACK_MIME_TYPES, messageFromError } from "@logjam/shared";
+import {
+  TRACK_MIME_TYPES,
+  messageFromError,
+  truncationHint,
+} from "@logjam/shared";
 
 import { assetHue, fontSize, spacing, theme } from "../theme";
 import { Row, TextField } from "../ui";
 import { fillRouteSlot } from "./fillRouteSlot";
+import { linkablePlaces } from "./linkablePlaces";
 import {
   IMPORT_TO_PLACE_PROMISE,
   TRACK_TO_ROUTE_PROMISE,
@@ -33,9 +38,6 @@ import {
   useMirrorPlaces,
   useMirrorRoutes,
 } from "../sync/useSyncQueries";
-
-/** Beyond this the list is a scroll-hunt; the filter is the way through. */
-const VISIBLE_PLACES = 40;
 
 /** Said where the user is about to act, not argued at each call site. */
 const PROMISE: Partial<Record<WaySource, string>> = {
@@ -83,13 +85,11 @@ export function usePlacePicker({
     if (!active) setQuery("");
   }
 
-  const matches = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    return (places.data ?? [])
-      .filter((place) => place.syncRole !== "shared")
-      .filter((place) => !needle || place.name.toLowerCase().includes(needle))
-      .slice(0, VISIBLE_PLACES);
-  }, [places.data, query]);
+  const { visible: matches, hiddenCount } = useMemo(
+    () => linkablePlaces(places.data ?? [], query),
+    [places.data, query],
+  );
+  const hint = truncationHint(matches.length, hiddenCount);
 
   const linkedPlace = (places.data ?? []).find(
     (place) => place.id === currentPlaceId,
@@ -196,6 +196,7 @@ export function usePlacePicker({
             );
           })
         )}
+        {hint ? <Text style={styles.hint}>{hint}</Text> : null}
       </View>
     ),
   };
