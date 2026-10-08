@@ -256,6 +256,8 @@ const baseSchema = z.object({
   RATE_LIMIT_GLOBAL_MAX: z.coerce.number().int().positive().optional(),
   // Same contract for the per-user write limiter (userPatchLimitMax).
   RATE_LIMIT_USER_PATCH_MAX: z.coerce.number().int().positive().optional(),
+  // Same contract for the import limiter (bulkImportLimitMax).
+  RATE_LIMIT_BULK_IMPORT_MAX: z.coerce.number().int().positive().optional(),
   // Job id for the one-shot GeoPDF worker container (worker/geoPdfWorker.ts
   // CLI entrypoint); unset in the API process.
   GEO_PDF_JOB_ID: z.string().optional(),
