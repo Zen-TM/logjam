@@ -21,6 +21,7 @@
 // is precisely why they must not be kept anywhere else. Nothing here logs one.
 import {
   customFieldDefFromRow,
+  isReservedFieldKey,
   type CustomFieldEntity,
   type ScopedCustomFieldDef,
   asFieldValues,
@@ -110,7 +111,7 @@ export async function saveFieldDefs(
     // The editor refuses the verb; this is the belt to that braces, because
     // the local half of a delete is destructive and runs before the server
     // ever sees the op.
-    if (row.ownerId === null) continue;
+    if (isBuiltIn(row)) continue;
     if (!incomingKeys.has(row.key))
       await removeFieldDefById(row.id, entity, row.key);
   }
@@ -133,7 +134,7 @@ export async function saveFieldDefs(
     }
     // Same rule for an edit: a built-in field's label, bounds and scoping are
     // not this account's to move, and the push would 404 and park a sync issue.
-    if (row.ownerId === null) continue;
+    if (isBuiltIn(row)) continue;
     const patch: Record<string, unknown> = {};
     if (row.label !== def.label) patch.label = def.label;
     if (row.type !== def.type) patch.type = def.type;
@@ -153,6 +154,15 @@ export async function saveFieldDefs(
       await updateCustomFieldDefLocal(row.id, patch);
     }
   }
+}
+
+/**
+ * A built-in row. Not `ownerId === null` alone: a definition made on this
+ * phone has no owner here until it syncs, and that test made it impossible to
+ * edit or delete in the meantime. Same rule as `isSystemFieldDef`, on the row.
+ */
+function isBuiltIn(row: { ownerId: string | null; key: string }): boolean {
+  return row.ownerId === null && isReservedFieldKey(row.key);
 }
 
 /** Set equality over two id lists — order is not meaningful in a scoping. */
@@ -200,7 +210,7 @@ export async function removeFieldDef(
   // place in the account, and the server answered the def delete with
   // "already applied" — so the definition came back on the next pull and the
   // values did not.
-  if (row.ownerId === null) {
+  if (isBuiltIn(row)) {
     throw new Error("A built-in field can't be deleted.");
   }
   return removeFieldDefById(row.id, entity, key);

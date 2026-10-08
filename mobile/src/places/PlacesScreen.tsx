@@ -57,6 +57,8 @@ import {
   placeDeleteConfirm,
   placesCountLabel,
   placesEmptyKind,
+  placeTypeHasTab,
+  isSystemPlaceTypeId,
   listSelectionLabel,
   placesEmptyState,
   placesFilterNote,
@@ -452,10 +454,9 @@ export function PlacesScreen({
   // permanent control, because "which kind of place am I looking at" is the
   // question people arrive with (§5.4).
   //
-  // MEMBERSHIP is decided over the whole collection, not the filtered view: a
-  // type with no places at all never appears (a canyoner should not be offered
-  // a Campsite tab they have never used), but a tab does NOT come and go as the
-  // user types — the bucket rail's rule, for the same reason.
+  // MEMBERSHIP is `placeTypeHasTab`, decided over the whole collection, not
+  // the filtered view: a tab does NOT come and go as the user types — the
+  // bucket rail's rule, for the same reason.
   const typeTotals = useMemo(() => {
     const counts = new Map<string, number>();
     for (const place of places) {
@@ -494,7 +495,12 @@ export function PlacesScreen({
     () => [
       { value: ALL_TYPES, label: copy.anyType, count: withoutType.length },
       ...placeTypes
-        .filter((type) => (typeTotals.get(type.id) ?? 0) > 0)
+        .filter((type) =>
+          placeTypeHasTab({
+            builtIn: isSystemPlaceTypeId(type.id),
+            places: typeTotals.get(type.id) ?? 0,
+          }),
+        )
         .map((type) => ({
           value: type.id,
           label: type.name,

@@ -22,6 +22,7 @@ import {
   isKnownSyncEntityType,
   readMediaMetadata,
   SYSTEM_PLACE_TYPES,
+  isSystemPlaceTypeId,
 } from "@logjam/shared";
 
 import type { TPlace, TTripLog } from "../api/types";
@@ -857,10 +858,8 @@ export async function listMirrorCustomFieldDefs(): Promise<
  * Every place type this device knows: the user's own plus the SYSTEM ones.
  *
  * The ORDER is the server's (`GET /place-types`): system types first, then the
- * user's by position, name as the tiebreak. SQLite sorts NULLs FIRST on a plain
- * ASC, which is what the server had to say `nulls: "first"` to get — spelled
- * out here rather than relied on, because the two engines disagree by default
- * and the tab bar's leftmost tab is decided by it.
+ * user's by position, name as the tiebreak. The tab bar's leftmost tab is
+ * decided by it.
  */
 export async function listMirrorPlaceTypes(): Promise<MirrorPlaceType[]> {
   const db = await getSyncDb();
@@ -876,27 +875,9 @@ export async function listMirrorPlaceTypes(): Promise<MirrorPlaceType[]> {
   }>(
     `SELECT id, owner_id, name, icon_key, color, position, created_at, updated_at
        FROM place_types
-      ORDER BY (owner_id IS NOT NULL) ASC, position ASC, name COLLATE NOCASE ASC`,
+      ORDER BY position ASC, name COLLATE NOCASE ASC`,
   );
-  // NOTHING MIRRORED YET means a guest, or an account before its first pull —
-  // and a type picker with no types in it would make creating a place
-  // impossible for exactly the user who has no way to fix it. The system types
-  // are compiled in (they are global rows with pinned ids), so they are the
-  // honest answer here for the same reason `SYSTEM_FIELD_DEFS` is the honest
-  // answer to "what are this value's bounds" with no signal.
-  if (rows.length === 0) {
-    return SYSTEM_PLACE_TYPES.map((type) => ({
-      id: type.id,
-      ownerId: null,
-      name: type.name,
-      iconKey: type.iconKey,
-      color: type.color,
-      position: type.position,
-      createdAt: "",
-      updatedAt: "",
-    }));
-  }
-  return rows.map((row) => ({
+  const types = rows.map((row) => ({
     id: row.id,
     ownerId: row.owner_id,
     name: row.name,
@@ -906,6 +887,31 @@ export async function listMirrorPlaceTypes(): Promise<MirrorPlaceType[]> {
     createdAt: row.created_at ?? "",
     updatedAt: row.updated_at ?? "",
   }));
+  // Built-ins are told apart by their pinned ids, not by a NULL owner: a type
+  // made on this phone has no owner until it syncs, and sorted in among them.
+  const builtIn = types.filter((type) => isSystemPlaceTypeId(type.id));
+  const own = types.filter((type) => !isSystemPlaceTypeId(type.id));
+  // NO BUILT-IN MIRRORED means a guest, or an account before its first pull —
+  // and a type picker without them would make a canyon impossible to add for
+  // exactly the user who has no way to fix it. The system types are compiled
+  // in (they are global rows with pinned ids), so they are the honest answer
+  // here. Asked of the built-ins, not of the whole table: a guest's first own
+  // type used to be the row that took the three away
+  // (`placeTypeCreate.test.ts`).
+  const builtInOrCompiled =
+    builtIn.length > 0
+      ? builtIn
+      : SYSTEM_PLACE_TYPES.map((type) => ({
+          id: type.id,
+          ownerId: null,
+          name: type.name,
+          iconKey: type.iconKey,
+          color: type.color,
+          position: type.position,
+          createdAt: "",
+          updatedAt: "",
+        }));
+  return [...builtInOrCompiled, ...own];
 }
 
 export async function listMirrorPlaces(): Promise<MirrorPlace[]> {
