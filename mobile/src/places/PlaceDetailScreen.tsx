@@ -45,9 +45,9 @@ import {
   placeStatus,
   attributeRows,
   truncationHint,
+  tripTitle,
 } from "@logjam/shared";
 
-import { tripTitle } from "../api/tripTitle";
 import {
   RecipientRows,
   shareRowSubtitle,
