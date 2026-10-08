@@ -36,6 +36,7 @@ import {
   SwitchRow,
 } from "../ui";
 import { fieldLabel } from "../ui/fieldLabel";
+import { fieldFormKey, seedDraft, type FieldDraft } from "./fieldDraft";
 
 const listCopy = SETTINGS_LIST.copy;
 
@@ -184,7 +185,7 @@ export function useCustomFieldForm({
   // component it replaced it is not unmounted between opens — nine separate
   // `useState` initialisers would each keep the PREVIOUS field's value, and the
   // user would open "Water level" and find "Gate code" in the box.
-  const formKey = editing?.key ?? "__new__";
+  const formKey = fieldFormKey(editing, initialTypeId);
   const [draft, setDraft] = useState<FieldDraft>(() =>
     seedDraft(entity, editing, initialTypeId),
   );
@@ -284,6 +285,9 @@ export function useCustomFieldForm({
     setSaving(true);
     try {
       await saveFieldDefs(entity, next);
+      // The hook outlives the sheet, so an ADD has to hand back an empty form
+      // itself: the next "Add an attribute" otherwise opened on this label.
+      if (!editing) setDraft(seedDraft(entity, null, initialTypeId));
       onSaved(
         next,
         editing
@@ -306,6 +310,7 @@ export function useCustomFieldForm({
     defs,
     editing,
     entity,
+    initialTypeId,
     label,
     max,
     min,
@@ -535,18 +540,6 @@ export function useCustomFieldForm({
  *  UUID — and not a plausible trip tag. */
 const ALL_TYPES_CHIP = "__all__";
 
-/** Everything the form holds while it is being filled in. */
-type FieldDraft = {
-  label: string;
-  type: TripLogCustomFieldType;
-  bounded: boolean;
-  min: string;
-  max: string;
-  appliesToAll: boolean;
-  /** Place type ids for a place field, trip types (tags) for a trip field. */
-  typeIds: string[];
-};
-
 /** First spelling of each tag wins; later case variants are dropped. */
 function dedupeCaseInsensitive(values: readonly string[]): string[] {
   const seen = new Set<string>();
@@ -571,32 +564,6 @@ function dedupeCaseInsensitive(values: readonly string[]): string[] {
  */
 function defRowKey(def: ScopedCustomFieldDef): string {
   return `${def.ownerId ?? "system"}:${def.key}`;
-}
-
-/** The draft a given definition opens with. A NEW field opened from a place's
- *  own form starts scoped to that type — the user asked for it while filling in
- *  a canyon — and from Settings starts on all of them, where the answer is
- *  genuinely theirs to make. */
-function seedDraft(
-  entity: CustomFieldEntity,
-  editing: ScopedCustomFieldDef | null,
-  initialTypeId: string | undefined,
-): FieldDraft {
-  return {
-    label: editing?.label ?? "",
-    type: editing?.type ?? "string",
-    bounded: editing?.min != null,
-    min: editing?.min != null ? String(editing.min) : "",
-    max: editing?.max != null ? String(editing.max) : "",
-    appliesToAll: editing ? editing.appliesToAllTypes : initialTypeId == null,
-    typeIds: editing
-      ? entity === "place"
-        ? editing.placeTypeIds
-        : editing.tripTypes
-      : initialTypeId != null
-        ? [initialTypeId]
-        : [],
-  };
 }
 
 function capitalize(word: string): string {
