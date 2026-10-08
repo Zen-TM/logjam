@@ -161,15 +161,9 @@ resource "aws_ecs_task_definition" "topo_worker" {
         awslogs-stream-prefix = "ecs"
       }
     }
-    mountPoints = []
-    name        = "topo-worker"
-    portMappings = [{
-      appProtocol   = "http"
-      containerPort = 80
-      hostPort      = 80
-      name          = "topo-worker-80-tcp"
-      protocol      = "tcp"
-    }]
+    mountPoints  = []
+    name         = "topo-worker"
+    portMappings = []
     secrets = [{
       name      = "DB_PASSWORD"
       valueFrom = "arn:aws:secretsmanager:ap-southeast-2:620853681701:secret:logjam/app-db-password-bTvuYd:password::"
