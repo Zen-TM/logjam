@@ -103,6 +103,11 @@ import { useToast } from "./feedback/ToastProvider";
 import { messageFromError } from "../errors/messageFromError";
 import { triggerDownload } from "../download";
 
+const currentLayerNames: string[] = TOPO_LAYERS.map((l) => l.name);
+const defaultLayerToggles = Object.fromEntries(
+  currentLayerNames.map((n) => [n, true]),
+);
+
 function App() {
   const toast = useToast();
   // Session-scoped, like the search box beside it: every member of TFilters
@@ -359,32 +364,34 @@ function App() {
     false,
   );
 
-  const currentLayerNames: string[] = TOPO_LAYERS.map((l) => l.name);
-  const defaultLayerToggles = Object.fromEntries(
-    currentLayerNames.map((n) => [n, true]),
-  );
   const [rawLidarLayerToggles, setLidarLayerToggles] = useStoredState<
     Record<string, boolean>
   >("logjam.lidarLayerToggles", defaultLayerToggles);
   // Drop unknown layers, add missing new layers as true
-  const lidarLayerToggles: Record<string, boolean> = {
-    ...defaultLayerToggles,
-    ...Object.fromEntries(
-      Object.entries(rawLidarLayerToggles).filter(([k]) =>
-        currentLayerNames.includes(k),
+  const lidarLayerToggles = useMemo<Record<string, boolean>>(
+    () => ({
+      ...defaultLayerToggles,
+      ...Object.fromEntries(
+        Object.entries(rawLidarLayerToggles).filter(([k]) =>
+          currentLayerNames.includes(k),
+        ),
       ),
-    ),
-  };
+    }),
+    [rawLidarLayerToggles],
+  );
 
   const [rawLidarLayerOrder, setLidarLayerOrder] = useStoredState<string[]>(
     "logjam.lidarLayerOrder",
     currentLayerNames,
   );
   // Drop unknown names, append any new layers at end
-  const lidarLayerOrder: string[] = [
-    ...rawLidarLayerOrder.filter((n) => currentLayerNames.includes(n)),
-    ...currentLayerNames.filter((n) => !rawLidarLayerOrder.includes(n)),
-  ];
+  const lidarLayerOrder = useMemo<string[]>(
+    () => [
+      ...rawLidarLayerOrder.filter((n) => currentLayerNames.includes(n)),
+      ...currentLayerNames.filter((n) => !rawLidarLayerOrder.includes(n)),
+    ],
+    [rawLidarLayerOrder],
+  );
 
   // Per-completed-job visibility. Newly fetched jobs default to true (visible).
   const [lidarJobToggles, setLidarJobToggles] = useStoredState<
